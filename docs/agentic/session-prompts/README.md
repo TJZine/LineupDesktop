@@ -16,6 +16,16 @@ files instead of duplicating policy.
 - [`workflow-harness-review.md`](./workflow-harness-review.md): read-only review
   of workflow, role, verifier, skill, and control-plane behavior
 
+## Launcher Routing Matrix
+
+| Need | Use | Expected Next Gate |
+| --- | --- | --- |
+| Create or refresh a serious feature/design plan. | `lineup-desktop-feature-plan` / `feature-plan.md` | Read-only plan review. |
+| Implement one approved feature/design execution unit. | `lineup-desktop-feature-implement` / `feature-implement.md` | Read-only implementation review. |
+| Review a plan, implementation, diff, or review-fix handoff. | `lineup-desktop-feature-review` / `feature-review.md` | Plan revision, implementation, or closeout. |
+| Orchestrate Tier 3 cross-boundary work across planning, review, implementation, and closeout. | `lineup-desktop-feature-quality-loop` / `feature-quality-loop.md` | Continue the controller state machine until clean closeout or blocked. |
+| Review workflow, role, verifier, launcher, project-skill, or control-plane changes. | `lineup-desktop-workflow-harness-review` / `workflow-harness-review.md` | Adjudicate findings, then rerun `npm run verify:docs`. |
+
 ## Routing
 
 All work routes as feature/design unless this repository later creates its own

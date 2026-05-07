@@ -41,6 +41,27 @@ Keep always-loaded guidance short. Put detailed task workflow in launchers,
 project skills, architecture docs, or tracked plans so sessions load only what
 they need.
 
+## Fresh Chat Bootstrap
+
+When starting a new Codex chat in this repository:
+
+1. Confirm the workspace is rooted at `/Users/tristan/Software/LineupDesktop`
+   or another checkout of this repository.
+2. Read `AGENTS.md`, this runbook, the session-prompt README, skill strategy,
+   current architecture state, and the active plan or handoff named by the user.
+3. Use project skills from `.agents/skills/` when they match the task. They are
+   thin launchers into tracked docs, not hidden policy stores.
+4. Run `git status --short --branch` before planning edits so pre-existing
+   changes are not mistaken for agent work.
+5. For workflow, launcher, project-skill, architecture-reference, or plan edits,
+   expect `npm run verify:docs` before closeout. For source or scaffold work,
+   follow [Verification Routing](#verification-routing).
+
+Do not depend on the original Lineup repo's local skill context being present in
+a fresh Desktop chat. Desktop carries forward the relevant guardrails through
+this runbook, launcher docs, `.agents/skills/`, verifier checks, and desktop
+architecture references.
+
 ## Guidance Baseline
 
 This workflow follows the current official guidance summarized in

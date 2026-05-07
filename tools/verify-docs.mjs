@@ -157,6 +157,45 @@ const featureQualityLoopHeadings = [
   '## Completion Gate',
 ];
 
+const workflowAnchorMarkers = [
+  {
+    path: 'docs/AGENTIC_DEV_WORKFLOW.md',
+    label: 'fresh chat bootstrap',
+    marker: '## Fresh Chat Bootstrap',
+    requiredPhrases: [
+      'Do not depend on the original Lineup repo',
+      'Run `git status --short --branch` before planning edits',
+    ],
+  },
+  {
+    path: 'docs/agentic/session-prompts/README.md',
+    label: 'launcher routing matrix',
+    marker: '## Launcher Routing Matrix',
+    requiredPhrases: [
+      'lineup-desktop-feature-quality-loop',
+      'lineup-desktop-workflow-harness-review',
+    ],
+  },
+  {
+    path: 'docs/agentic/skill-strategy.md',
+    label: 'Codex skill discovery policy',
+    marker: '## Codex Skill Discovery',
+    requiredPhrases: [
+      'Use `.agents/skills/` as the repository-scoped project skill home',
+      'Do not create a parallel `.codex/skills/` tree unless',
+    ],
+  },
+  {
+    path: 'docs/agentic/skill-strategy.md',
+    label: 'legacy skill adaptation audit',
+    marker: '## Legacy Skill Adaptation Audit',
+    requiredPhrases: [
+      'The original Lineup repo',
+      'historical maintenance-program mechanics',
+    ],
+  },
+];
+
 const requiredSkillTargets = {
   '.agents/skills/lineup-desktop-feature-plan/SKILL.md': 'docs/agentic/session-prompts/feature-plan.md',
   '.agents/skills/lineup-desktop-feature-implement/SKILL.md': 'docs/agentic/session-prompts/feature-implement.md',
@@ -303,6 +342,22 @@ function checkWorkflowAnchors(root, errors) {
   const planStandardPath = path.join(root, 'docs/agentic/plan-authoring-standard.md');
   if (!fs.existsSync(guidancePath) || !fs.existsSync(planStandardPath)) {
     return;
+  }
+
+  for (const { path: relativePath, label, marker, requiredPhrases = [] } of workflowAnchorMarkers) {
+    const absolutePath = path.join(root, relativePath);
+    if (!fs.existsSync(absolutePath)) {
+      continue;
+    }
+    const content = fs.readFileSync(absolutePath, 'utf8');
+    if (!content.includes(marker)) {
+      errors.push(`${relativePath}: missing ${label} marker ${marker}`);
+    }
+    for (const phrase of requiredPhrases) {
+      if (!content.includes(phrase)) {
+        errors.push(`${relativePath}: missing ${label} phrase: ${phrase}`);
+      }
+    }
   }
 
   const guidance = fs.readFileSync(guidancePath, 'utf8');

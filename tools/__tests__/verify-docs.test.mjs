@@ -127,6 +127,48 @@ test('verifyDocs rejects workflow docs missing feature-quality anchors', () => {
   assert(errors.some((error) => error.includes('missing active-plan heading reference')));
 });
 
+test('verifyDocs rejects missing fresh-chat and skill adaptation anchors', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, 'docs/AGENTIC_DEV_WORKFLOW.md'), [
+    '# Fixture',
+    'docs/agentic/external-guidance.md',
+  ].join('\n'));
+  fs.writeFileSync(path.join(root, 'docs/agentic/session-prompts/README.md'), '# Fixture\n');
+  fs.writeFileSync(path.join(root, 'docs/agentic/skill-strategy.md'), '# Fixture\n');
+
+  const errors = verifyDocs(root);
+
+  assert(errors.some((error) => error.includes('missing fresh chat bootstrap marker')));
+  assert(errors.some((error) => error.includes('missing launcher routing matrix marker')));
+  assert(errors.some((error) => error.includes('missing Codex skill discovery policy marker')));
+  assert(errors.some((error) => error.includes('missing legacy skill adaptation audit marker')));
+});
+
+test('verifyDocs rejects workflow skill-transfer sections missing semantic phrases', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, 'docs/AGENTIC_DEV_WORKFLOW.md'), [
+    '# Fixture',
+    '## Fresh Chat Bootstrap',
+    'docs/agentic/external-guidance.md',
+  ].join('\n'));
+  fs.writeFileSync(path.join(root, 'docs/agentic/session-prompts/README.md'), [
+    '# Fixture',
+    '## Launcher Routing Matrix',
+  ].join('\n'));
+  fs.writeFileSync(path.join(root, 'docs/agentic/skill-strategy.md'), [
+    '# Fixture',
+    '## Codex Skill Discovery',
+    '## Legacy Skill Adaptation Audit',
+  ].join('\n'));
+
+  const errors = verifyDocs(root);
+
+  assert(errors.some((error) => error.includes('missing fresh chat bootstrap phrase')));
+  assert(errors.some((error) => error.includes('missing launcher routing matrix phrase')));
+  assert(errors.some((error) => error.includes('missing Codex skill discovery policy phrase')));
+  assert(errors.some((error) => error.includes('missing legacy skill adaptation audit phrase')));
+});
+
 test('verifyDocs rejects Tier 3 launcher missing structural headings', () => {
   const root = makeFixture({ complete: true });
   fs.writeFileSync(path.join(root, 'docs/agentic/session-prompts/feature-quality-loop.md'), [
@@ -311,7 +353,10 @@ function fixtureContent(relativePath) {
   if (relativePath === 'docs/AGENTIC_DEV_WORKFLOW.md') {
     return [
       '# Fixture',
+      '## Fresh Chat Bootstrap',
       'docs/agentic/external-guidance.md',
+      'Do not depend on the original Lineup repo',
+      'Run `git status --short --branch` before planning edits',
       'feature-quality-loop.md',
       'Desktop Feature Quality Guardrails',
       'Feature-Quality Loop',
@@ -319,6 +364,27 @@ function fixtureContent(relativePath) {
       'program state, score artifacts',
       'Keep renderer code unprivileged',
       'Record every copied/adapted upstream Lineup slice in the import ledger',
+    ].join('\n');
+  }
+
+  if (relativePath === 'docs/agentic/session-prompts/README.md') {
+    return [
+      '# Fixture',
+      '## Launcher Routing Matrix',
+      'lineup-desktop-feature-quality-loop',
+      'lineup-desktop-workflow-harness-review',
+    ].join('\n');
+  }
+
+  if (relativePath === 'docs/agentic/skill-strategy.md') {
+    return [
+      '# Fixture',
+      '## Codex Skill Discovery',
+      'Use `.agents/skills/` as the repository-scoped project skill home',
+      'Do not create a parallel `.codex/skills/` tree unless',
+      '## Legacy Skill Adaptation Audit',
+      'The original Lineup repo',
+      'historical maintenance-program mechanics',
     ].join('\n');
   }
 
