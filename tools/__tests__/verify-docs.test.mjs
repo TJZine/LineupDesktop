@@ -24,6 +24,30 @@ test('verifyDocs reports broken markdown links', () => {
   assert(errors.some((error) => error.includes('broken link')));
 });
 
+test('verifyDocs reports broken markdown anchors', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, 'README.md'), '[Broken](./docs/AGENTIC_DEV_WORKFLOW.md#missing-anchor)\n');
+  const errors = verifyDocs(root);
+  assert(errors.some((error) => error.includes('broken anchor')));
+});
+
+test('verifyDocs reports broken same-page markdown anchors', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, 'README.md'), [
+    '# Readme',
+    '[Broken](#missing-anchor)',
+  ].join('\n'));
+  const errors = verifyDocs(root);
+  assert(errors.some((error) => error.includes('broken anchor')));
+});
+
+test('verifyDocs requires raw run bundles to stay ignored', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, '.gitignore'), 'node_modules/\n');
+  const errors = verifyDocs(root);
+  assert(errors.some((error) => error.includes('ignore raw docs/runs bundles')));
+});
+
 test('verifyDocs rejects upstream cleanup baggage files', () => {
   const root = makeFixture({ complete: true });
   fs.writeFileSync(path.join(root, 'ARCHITECTURE_CLEANUP_CHECKLIST.md'), '# Not allowed\n');
@@ -66,6 +90,8 @@ test('verifyDocs rejects active plans missing required standard fields', () => {
   ].join('\n'));
   const errors = verifyDocs(root);
   assert(errors.some((error) => error.includes('missing ## Required Reading')));
+  assert(errors.some((error) => error.includes('missing ## Evidence And Discovery')));
+  assert(errors.some((error) => error.includes('missing ## Acceptance Criteria')));
   assert(errors.some((error) => error.includes('missing ## Rollback Notes')));
   assert(errors.some((error) => error.includes('exactly one verification classification')));
 });
@@ -91,6 +117,68 @@ test('verifyDocs rejects score artifacts outside root scorecard image', () => {
   assert(errors.some((error) => error.includes('Forbidden upstream cleanup artifact path')));
 });
 
+test('verifyDocs rejects workflow docs missing feature-quality anchors', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, 'docs/agentic/plan-authoring-standard.md'), '# Missing required headings\n');
+  const errors = verifyDocs(root);
+  assert(errors.some((error) => error.includes('missing active-plan heading reference')));
+});
+
+test('verifyDocs rejects Tier 3 launcher missing structural headings', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, 'docs/agentic/session-prompts/feature-quality-loop.md'), [
+    '# Feature Quality Loop Launcher',
+    '## Output Contract',
+  ].join('\n'));
+  const errors = verifyDocs(root);
+  assert(errors.some((error) => error.includes('missing Tier 3 launcher heading ## Controller State Machine')));
+  assert(errors.some((error) => error.includes('missing Tier 3 launcher heading ## Phase Rules')));
+  assert(errors.some((error) => error.includes('missing Tier 3 launcher heading ## Completion Gate')));
+});
+
+test('verifyDocs ignores local run bundle contents', () => {
+  const root = makeFixture({ complete: true });
+  const runPath = path.join(root, 'docs/runs/local-bundle.md');
+  fs.writeFileSync(runPath, [
+    '# Local',
+    '[Broken](./missing.md)',
+    'smells::ignored-local-note',
+  ].join('\n'));
+  assert.deepEqual(verifyDocs(root), []);
+});
+
+test('verifyDocs rejects project skills that stop pointing at tracked launchers', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, '.agents/skills/lineup-desktop-feature-plan/SKILL.md'), [
+    '---',
+    'name: lineup-desktop-feature-plan',
+    'description: broken',
+    '---',
+    '',
+    'Use this only from the Lineup Desktop repo.',
+  ].join('\n'));
+  const errors = verifyDocs(root);
+  assert(errors.some((error) => error.includes('missing tracked launcher reference')));
+});
+
+test('verifyDocs rejects project skills with wrong frontmatter or missing read order', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, '.agents/skills/lineup-desktop-feature-review/SKILL.md'), [
+    '---',
+    'name: wrong-name',
+    'description: broken',
+    '---',
+    '',
+    '# Broken',
+    'Use this only from the Lineup Desktop repo.',
+    'docs/agentic/session-prompts/feature-review.md',
+    'follow the tracked launcher exactly',
+  ].join('\n'));
+  const errors = verifyDocs(root);
+  assert(errors.some((error) => error.includes('frontmatter name must be lineup-desktop-feature-review')));
+  assert(errors.some((error) => error.includes('missing required read AGENTS.md')));
+});
+
 function makeFixture(options = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-desktop-docs-'));
   if (options.complete) {
@@ -107,33 +195,127 @@ function makeFixture(options = {}) {
       'docs/architecture/security-and-secret-flow.md',
       'docs/architecture/playback-architecture.md',
       'docs/architecture/packaging-release-gates.md',
+      'docs/agentic/external-guidance.md',
       'docs/agentic/plan-authoring-standard.md',
       'docs/agentic/session-prompts/README.md',
       'docs/agentic/session-prompts/feature-plan.md',
       'docs/agentic/session-prompts/feature-implement.md',
       'docs/agentic/session-prompts/feature-review.md',
+      'docs/agentic/session-prompts/feature-quality-loop.md',
       'docs/agentic/session-prompts/workflow-harness-review.md',
+      '.agents/skills/lineup-desktop-feature-plan/SKILL.md',
+      '.agents/skills/lineup-desktop-feature-implement/SKILL.md',
+      '.agents/skills/lineup-desktop-feature-review/SKILL.md',
+      '.agents/skills/lineup-desktop-feature-quality-loop/SKILL.md',
+      '.agents/skills/lineup-desktop-workflow-harness-review/SKILL.md',
       'docs/plans/README.md',
       'docs/runs/README.md',
       'docs/development/testing.md',
       'tools/verify-docs.mjs',
       'tools/verify-redaction.mjs',
     ];
+    fs.writeFileSync(path.join(root, '.gitignore'), [
+      'node_modules/',
+      'docs/runs/*',
+      '!docs/runs/README.md',
+    ].join('\n'));
     for (const relativePath of required) {
       const absolute = path.join(root, relativePath);
       fs.mkdirSync(path.dirname(absolute), { recursive: true });
-      fs.writeFileSync(absolute, relativePath === 'package.json'
-        ? JSON.stringify({ scripts: {
-          typecheck: 'tsc --noEmit',
-          test: 'npm run test:contracts && npm run test:harness-docs',
-          'test:contracts': 'tsx --test src/__tests__/*.test.ts',
-          'test:harness-docs': 'node --test tools/__tests__/*.test.mjs',
-          'verify:docs': 'node tools/verify-docs.mjs',
-          'verify:redaction': 'node tools/verify-redaction.mjs',
-          verify: 'npm run typecheck && npm run test && npm run verify:docs && npm run verify:redaction',
-        } })
-        : '# Fixture\n');
+      fs.writeFileSync(absolute, fixtureContent(relativePath));
     }
   }
   return root;
+}
+
+function fixtureContent(relativePath) {
+  if (relativePath === 'package.json') {
+    return JSON.stringify({ scripts: {
+      typecheck: 'tsc --noEmit',
+      test: 'npm run test:contracts && npm run test:harness-docs',
+      'test:contracts': 'tsx --test src/__tests__/*.test.ts',
+      'test:harness-docs': 'node --test tools/__tests__/*.test.mjs',
+      'verify:docs': 'node tools/verify-docs.mjs',
+      'verify:redaction': 'node tools/verify-redaction.mjs',
+      verify: 'npm run typecheck && npm run test && npm run verify:docs && npm run verify:redaction',
+    } });
+  }
+
+  if (relativePath === 'docs/AGENTIC_DEV_WORKFLOW.md') {
+    return [
+      '# Fixture',
+      'docs/agentic/external-guidance.md',
+      'feature-quality-loop.md',
+      'Desktop Feature Quality Guardrails',
+      'Feature-Quality Loop',
+      'feature-plan -> feature-review -> feature-implement -> feature-review',
+      'program state, score artifacts',
+      'Keep renderer code unprivileged',
+      'Record every copied/adapted upstream Lineup slice in the import ledger',
+    ].join('\n');
+  }
+
+  if (relativePath === 'docs/agentic/external-guidance.md') {
+    return [
+      '# Fixture',
+      'Codex best practices',
+      'Building effective agents',
+      'Claude Code subagents',
+      'Using PLANS.md for multi-hour problem solving',
+    ].join('\n');
+  }
+
+  if (relativePath === 'docs/agentic/plan-authoring-standard.md') {
+    return [
+      '# Fixture',
+      '## Goal',
+      '## Non-Goals',
+      '## Parent Architecture Alignment',
+      '## Required Reading',
+      '## Evidence And Discovery',
+      '## Files In Scope',
+      '## Files Out Of Scope',
+      '## Architecture Seam Decision Gate',
+      '## Verification Commands',
+      '## Acceptance Criteria',
+      '## Replan Triggers',
+      '## Rollback Notes',
+    ].join('\n');
+  }
+
+  if (relativePath === 'docs/agentic/session-prompts/feature-quality-loop.md') {
+    return [
+      '# Feature Quality Loop Launcher',
+      '## Controller State Machine',
+      '## Phase Rules',
+      '## Completion Gate',
+    ].join('\n');
+  }
+
+  const skillTargets = {
+    '.agents/skills/lineup-desktop-feature-plan/SKILL.md': 'docs/agentic/session-prompts/feature-plan.md',
+    '.agents/skills/lineup-desktop-feature-implement/SKILL.md': 'docs/agentic/session-prompts/feature-implement.md',
+    '.agents/skills/lineup-desktop-feature-review/SKILL.md': 'docs/agentic/session-prompts/feature-review.md',
+    '.agents/skills/lineup-desktop-feature-quality-loop/SKILL.md': 'docs/agentic/session-prompts/feature-quality-loop.md',
+    '.agents/skills/lineup-desktop-workflow-harness-review/SKILL.md': 'docs/agentic/session-prompts/workflow-harness-review.md',
+  };
+
+  if (skillTargets[relativePath]) {
+    const skillName = path.basename(path.dirname(relativePath));
+    return [
+      '---',
+      `name: ${skillName}`,
+      'description: fixture',
+      '---',
+      '',
+      '# Fixture',
+      'Use this only from the Lineup Desktop repo.',
+      'AGENTS.md',
+      'docs/AGENTIC_DEV_WORKFLOW.md',
+      skillTargets[relativePath],
+      'follow the tracked launcher exactly',
+    ].join('\n');
+  }
+
+  return '# Fixture\n';
 }

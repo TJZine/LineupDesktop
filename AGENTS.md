@@ -18,6 +18,9 @@ where to look next.
 - Record every copied or adapted upstream Lineup slice in
   [`docs/architecture/import-ledger.md`](./docs/architecture/import-ledger.md)
   before or with the import.
+- Route greenfield desktop delivery through feature/design workflows. Tier 3
+  cross-boundary work uses the desktop feature-quality loop, not historical
+  upstream cleanup program mechanics.
 - Do not claim files changed, commands run, or tests passed unless you observed
   that evidence in this workspace.
 - Run `npm run verify:docs` for workflow, control-plane, launcher, or
@@ -31,6 +34,8 @@ where to look next.
   runbook, precedence, routing, verification, and review rules
 - [`docs/agentic/session-prompts/README.md`](./docs/agentic/session-prompts/README.md):
   launcher templates and routing table
+- [`docs/agentic/external-guidance.md`](./docs/agentic/external-guidance.md):
+  official OpenAI and Anthropic guidance baseline used by this control plane
 - [`docs/architecture/CURRENT_STATE.md`](./docs/architecture/CURRENT_STATE.md):
   current architecture truth
 - [`docs/architecture/import-ledger.md`](./docs/architecture/import-ledger.md):

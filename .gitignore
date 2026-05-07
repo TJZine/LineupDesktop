@@ -9,3 +9,5 @@ coverage/
 logs/
 diagnostics/
 crash-dumps/
+docs/runs/*
+!docs/runs/README.md
