@@ -15,6 +15,8 @@ where to look next.
 - Use [`docs/architecture/desktop-repo-genesis-adr.md`](./docs/architecture/desktop-repo-genesis-adr.md)
   for repo-genesis decisions until those decisions are superseded by a reviewed
   ADR.
+- Prefer Codanna for repo discovery when the index is useful; record fallback
+  to direct reads or `rg` when it is unavailable, stale, or too noisy.
 - Record every copied or adapted upstream Lineup slice in
   [`docs/architecture/import-ledger.md`](./docs/architecture/import-ledger.md)
   before or with the import.
@@ -36,6 +38,10 @@ where to look next.
   launcher templates and routing table
 - [`docs/agentic/external-guidance.md`](./docs/agentic/external-guidance.md):
   official OpenAI and Anthropic guidance baseline used by this control plane
+- [`docs/agentic/codanna-playbook.md`](./docs/agentic/codanna-playbook.md):
+  Codanna-first discovery and fallback rules
+- [`docs/agentic/skill-strategy.md`](./docs/agentic/skill-strategy.md):
+  Desktop role and project skill topology
 - [`docs/architecture/CURRENT_STATE.md`](./docs/architecture/CURRENT_STATE.md):
   current architecture truth
 - [`docs/architecture/import-ledger.md`](./docs/architecture/import-ledger.md):

@@ -1,0 +1,9 @@
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+sandbox_mode = "read-only"
+developer_instructions = """
+Review like an owner.
+Prioritize correctness, regressions, security, missing verification, and scope creep.
+Lead with concrete findings and avoid style-only commentary unless it hides a real defect.
+Apply YAGNI and KISS: flag speculative layers, broad abstractions, and ceremony that does not improve implementation quality.
+"""

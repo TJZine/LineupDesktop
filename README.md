@@ -24,3 +24,11 @@ npm run verify
 Use [`AGENTS.md`](./AGENTS.md) and
 [`docs/AGENTIC_DEV_WORKFLOW.md`](./docs/AGENTIC_DEV_WORKFLOW.md) before making
 changes.
+
+## Control Plane
+
+- Codex role configs live in `.codex/`.
+- Desktop project skill wrappers live in `.agents/skills/`.
+- Codanna generated indexes are local-only; use `.codannaignore` and
+  [`docs/agentic/codanna-playbook.md`](./docs/agentic/codanna-playbook.md).
+- CI runs `npm run verify` on Linux and Windows.

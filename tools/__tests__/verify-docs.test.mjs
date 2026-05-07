@@ -45,7 +45,8 @@ test('verifyDocs requires raw run bundles to stay ignored', () => {
   const root = makeFixture({ complete: true });
   fs.writeFileSync(path.join(root, '.gitignore'), 'node_modules/\n');
   const errors = verifyDocs(root);
-  assert(errors.some((error) => error.includes('ignore raw docs/runs bundles')));
+  assert(errors.some((error) => error.includes('local-only artifact marker: docs/runs/*')));
+  assert(errors.some((error) => error.includes('local-only artifact marker: .codanna/')));
 });
 
 test('verifyDocs rejects upstream cleanup baggage files', () => {
@@ -59,10 +60,12 @@ test('verifyDocs rejects placeholder package scripts', () => {
   const root = makeFixture({ complete: true });
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
     scripts: {
+      lint: 'true',
       typecheck: 'true',
       test: 'true',
       'test:contracts': 'true',
       'test:harness-docs': 'true',
+      'verify:architecture': 'true',
       'verify:docs': 'true',
       'verify:redaction': 'true',
       verify: 'true',
@@ -147,6 +150,18 @@ test('verifyDocs ignores local run bundle contents', () => {
   assert.deepEqual(verifyDocs(root), []);
 });
 
+test('verifyDocs rejects desktop Codex role drift', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, '.codex/config.toml'), [
+    '[agents]',
+    '[agents.cleanup_worker]',
+    'config_file = "agents/cleanup-worker.toml"',
+  ].join('\n'));
+  const errors = verifyDocs(root);
+  assert(errors.some((error) => error.includes('must not declare a desktop cleanup-worker role')));
+  assert(errors.some((error) => error.includes('missing role declaration: explorer')));
+});
+
 test('verifyDocs rejects project skills that stop pointing at tracked launchers', () => {
   const root = makeFixture({ complete: true });
   fs.writeFileSync(path.join(root, '.agents/skills/lineup-desktop-feature-plan/SKILL.md'), [
@@ -183,8 +198,28 @@ function makeFixture(options = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-desktop-docs-'));
   if (options.complete) {
     const required = [
+      '.editorconfig',
+      '.codannaignore',
+      '.coderabbit.yaml',
+      '.github/CODEOWNERS',
+      '.github/PULL_REQUEST_TEMPLATE.md',
+      '.github/ISSUE_TEMPLATE/bug_report.md',
+      '.github/ISSUE_TEMPLATE/config.yml',
+      '.github/ISSUE_TEMPLATE/feature_request.md',
+      '.github/workflows/ci.yml',
+      '.codex/config.toml',
+      '.codex/agents/docs-researcher.toml',
+      '.codex/agents/explorer-fallback.toml',
+      '.codex/agents/explorer.toml',
+      '.codex/agents/monitor-fallback.toml',
+      '.codex/agents/monitor.toml',
+      '.codex/agents/planner.toml',
+      '.codex/agents/reviewer.toml',
+      '.codex/agents/worker.toml',
       'AGENTS.md',
+      'LICENSE',
       'README.md',
+      'SECURITY.md',
       'package.json',
       'tsconfig.json',
       'docs/AGENTIC_DEV_WORKFLOW.md',
@@ -196,7 +231,9 @@ function makeFixture(options = {}) {
       'docs/architecture/playback-architecture.md',
       'docs/architecture/packaging-release-gates.md',
       'docs/agentic/external-guidance.md',
+      'docs/agentic/codanna-playbook.md',
       'docs/agentic/plan-authoring-standard.md',
+      'docs/agentic/skill-strategy.md',
       'docs/agentic/session-prompts/README.md',
       'docs/agentic/session-prompts/feature-plan.md',
       'docs/agentic/session-prompts/feature-implement.md',
@@ -211,6 +248,8 @@ function makeFixture(options = {}) {
       'docs/plans/README.md',
       'docs/runs/README.md',
       'docs/development/testing.md',
+      'tools/architecture-rules/buildEslintArchitectureRules.mjs',
+      'tools/architecture-rules/desktopArchitectureRules.mjs',
       'tools/verify-docs.mjs',
       'tools/verify-redaction.mjs',
     ];
@@ -218,6 +257,11 @@ function makeFixture(options = {}) {
       'node_modules/',
       'docs/runs/*',
       '!docs/runs/README.md',
+      '.codanna/',
+      '.codex/cache/',
+      '.agent/',
+      '.fastembed_cache',
+      '.mcp_sequential_thinking/',
     ].join('\n'));
     for (const relativePath of required) {
       const absolute = path.join(root, relativePath);
@@ -231,14 +275,37 @@ function makeFixture(options = {}) {
 function fixtureContent(relativePath) {
   if (relativePath === 'package.json') {
     return JSON.stringify({ scripts: {
+      lint: 'eslint .',
       typecheck: 'tsc --noEmit',
       test: 'npm run test:contracts && npm run test:harness-docs',
       'test:contracts': 'tsx --test src/__tests__/*.test.ts',
       'test:harness-docs': 'node --test tools/__tests__/*.test.mjs',
+      'verify:architecture': 'npm run lint',
       'verify:docs': 'node tools/verify-docs.mjs',
       'verify:redaction': 'node tools/verify-redaction.mjs',
-      verify: 'npm run typecheck && npm run test && npm run verify:docs && npm run verify:redaction',
+      verify: 'npm run typecheck && npm run verify:architecture && npm run test && npm run verify:docs && npm run verify:redaction',
     } });
+  }
+
+  if (relativePath === '.codex/config.toml') {
+    return [
+      '[agents.explorer]',
+      'config_file = "agents/explorer.toml"',
+      '[agents.explorer_fallback]',
+      'config_file = "agents/explorer-fallback.toml"',
+      '[agents.reviewer]',
+      'config_file = "agents/reviewer.toml"',
+      '[agents.docs_researcher]',
+      'config_file = "agents/docs-researcher.toml"',
+      '[agents.planner]',
+      'config_file = "agents/planner.toml"',
+      '[agents.worker]',
+      'config_file = "agents/worker.toml"',
+      '[agents.monitor]',
+      'config_file = "agents/monitor.toml"',
+      '[agents.monitor_fallback]',
+      'config_file = "agents/monitor-fallback.toml"',
+    ].join('\n');
   }
 
   if (relativePath === 'docs/AGENTIC_DEV_WORKFLOW.md') {

@@ -5,8 +5,20 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const requiredFiles = [
+  '.codannaignore',
+  '.codex/config.toml',
+  '.codex/agents/docs-researcher.toml',
+  '.codex/agents/explorer-fallback.toml',
+  '.codex/agents/explorer.toml',
+  '.codex/agents/monitor-fallback.toml',
+  '.codex/agents/monitor.toml',
+  '.codex/agents/planner.toml',
+  '.codex/agents/reviewer.toml',
+  '.codex/agents/worker.toml',
   'AGENTS.md',
+  'LICENSE',
   'README.md',
+  'SECURITY.md',
   'package.json',
   'tsconfig.json',
   'docs/AGENTIC_DEV_WORKFLOW.md',
@@ -18,7 +30,9 @@ const requiredFiles = [
   'docs/architecture/playback-architecture.md',
   'docs/architecture/packaging-release-gates.md',
   'docs/agentic/external-guidance.md',
+  'docs/agentic/codanna-playbook.md',
   'docs/agentic/plan-authoring-standard.md',
+  'docs/agentic/skill-strategy.md',
   'docs/agentic/session-prompts/README.md',
   'docs/agentic/session-prompts/feature-plan.md',
   'docs/agentic/session-prompts/feature-implement.md',
@@ -33,6 +47,8 @@ const requiredFiles = [
   'docs/plans/README.md',
   'docs/runs/README.md',
   'docs/development/testing.md',
+  'tools/architecture-rules/buildEslintArchitectureRules.mjs',
+  'tools/architecture-rules/desktopArchitectureRules.mjs',
   'tools/verify-docs.mjs',
   'tools/verify-redaction.mjs',
 ];
@@ -71,13 +87,46 @@ const forbiddenContentPatterns = [
 ];
 
 const expectedScripts = {
+  lint: 'eslint .',
   typecheck: 'tsc --noEmit',
   test: 'npm run test:contracts && npm run test:harness-docs',
   'test:contracts': 'tsx --test src/__tests__/*.test.ts',
   'test:harness-docs': 'node --test tools/__tests__/*.test.mjs',
+  'verify:architecture': 'npm run lint',
   'verify:docs': 'node tools/verify-docs.mjs',
   'verify:redaction': 'node tools/verify-redaction.mjs',
-  verify: 'npm run typecheck && npm run test && npm run verify:docs && npm run verify:redaction',
+  verify: 'npm run typecheck && npm run verify:architecture && npm run test && npm run verify:docs && npm run verify:redaction',
+};
+
+const requiredIgnoreMarkers = [
+  'docs/runs/*',
+  '!docs/runs/README.md',
+  '.codanna/',
+  '.codex/cache/',
+  '.agent/',
+  '.fastembed_cache',
+  '.mcp_sequential_thinking/',
+];
+
+const localOnlyDirectoryNames = new Set([
+  '.codanna',
+  '.agent',
+  '.fastembed_cache',
+  '.mcp_sequential_thinking',
+  'dist',
+  'out',
+  'coverage',
+]);
+
+const requiredCodexRoles = {
+  explorer: 'agents/explorer.toml',
+  explorer_fallback: 'agents/explorer-fallback.toml',
+  reviewer: 'agents/reviewer.toml',
+  docs_researcher: 'agents/docs-researcher.toml',
+  planner: 'agents/planner.toml',
+  worker: 'agents/worker.toml',
+  monitor: 'agents/monitor.toml',
+  monitor_fallback: 'agents/monitor-fallback.toml',
 };
 
 const verificationClassificationMarkers = [
@@ -128,6 +177,7 @@ export function verifyDocs(root = repoRoot) {
   const errors = [];
   checkRequiredFiles(root, errors);
   checkRunBundleIgnore(root, errors);
+  checkCodexRoles(root, errors);
   checkForbiddenPaths(root, errors);
   checkMarkdownLinks(root, errors);
   checkActivePlanShape(root, errors);
@@ -192,8 +242,32 @@ function checkRunBundleIgnore(root, errors) {
     return;
   }
   const gitignore = fs.readFileSync(gitignorePath, 'utf8');
-  if (!gitignore.includes('docs/runs/*') || !gitignore.includes('!docs/runs/README.md')) {
-    errors.push('.gitignore must ignore raw docs/runs bundles while keeping docs/runs/README.md tracked');
+  for (const marker of requiredIgnoreMarkers) {
+    if (!gitignore.includes(marker)) {
+      errors.push(`.gitignore missing local-only artifact marker: ${marker}`);
+    }
+  }
+}
+
+function checkCodexRoles(root, errors) {
+  const configPath = path.join(root, '.codex/config.toml');
+  if (!fs.existsSync(configPath)) {
+    return;
+  }
+  const config = fs.readFileSync(configPath, 'utf8');
+  if (config.includes('cleanup_worker')) {
+    errors.push('.codex/config.toml must not declare a desktop cleanup-worker role before this repo owns that workflow');
+  }
+  for (const [role, configFile] of Object.entries(requiredCodexRoles)) {
+    if (!config.includes(`[agents.${role}]`)) {
+      errors.push(`.codex/config.toml missing role declaration: ${role}`);
+    }
+    if (!config.includes(`config_file = "${configFile}"`)) {
+      errors.push(`.codex/config.toml missing config_file for role ${role}: ${configFile}`);
+    }
+    if (!fs.existsSync(path.join(root, '.codex', configFile))) {
+      errors.push(`Missing Codex role config file: .codex/${configFile}`);
+    }
   }
 }
 
@@ -381,11 +455,17 @@ function collectMarkdownFiles(root) {
 
 function walk(root, directory, files, includeFile) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    if (entry.name === '.git' || entry.name === 'node_modules') {
-      continue;
-    }
     const absolute = path.join(directory, entry.name);
     const relative = path.relative(root, absolute);
+    if (
+      entry.name === '.git' ||
+      entry.name === 'node_modules' ||
+      localOnlyDirectoryNames.has(entry.name) ||
+      relative === path.join('.codex', 'cache') ||
+      relative.startsWith(`${path.join('.codex', 'cache')}${path.sep}`)
+    ) {
+      continue;
+    }
     if (relative.startsWith(`docs${path.sep}runs${path.sep}`) && relative !== path.join('docs', 'runs', 'README.md')) {
       continue;
     }

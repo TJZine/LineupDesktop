@@ -1,0 +1,21 @@
+# Codanna ignore patterns. Generated indexes stay local.
+
+node_modules/
+dist/
+out/
+coverage/
+.git/
+.codanna/
+.codex/cache/
+.agent/
+.fastembed_cache/
+.mcp_sequential_thinking/
+docs/runs/
+
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+.DS_Store

@@ -1,0 +1,8 @@
+model = "gpt-5.5"
+model_reasoning_effort = "medium"
+sandbox_mode = "read-only"
+developer_instructions = """
+Verify API, framework, and platform behavior using official docs and configured doc servers.
+Return concise evidence with links or exact references when available.
+Do not edit code.
+"""

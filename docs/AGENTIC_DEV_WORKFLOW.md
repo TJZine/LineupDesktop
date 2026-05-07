@@ -13,6 +13,10 @@ This is the operating runbook for Lineup Desktop.
   plane.
 - [`docs/agentic/plan-authoring-standard.md`](./agentic/plan-authoring-standard.md)
   owns the required shape for durable tracked plans.
+- [`docs/agentic/codanna-playbook.md`](./agentic/codanna-playbook.md) owns
+  Codanna discovery and fallback expectations.
+- [`docs/agentic/skill-strategy.md`](./agentic/skill-strategy.md) owns the
+  Desktop role and project skill topology.
 - [`docs/architecture/CURRENT_STATE.md`](./architecture/CURRENT_STATE.md) is
   current architecture truth.
 - [`docs/architecture/desktop-repo-genesis-adr.md`](./architecture/desktop-repo-genesis-adr.md)
@@ -25,11 +29,13 @@ This is the operating runbook for Lineup Desktop.
 1. [`AGENTS.md`](../AGENTS.md)
 2. this workflow runbook
 3. [`docs/agentic/session-prompts/README.md`](./agentic/session-prompts/README.md)
-4. [`docs/agentic/plan-authoring-standard.md`](./agentic/plan-authoring-standard.md)
+4. [`docs/agentic/skill-strategy.md`](./agentic/skill-strategy.md) when role or
+   project-skill routing matters
+5. [`docs/agentic/plan-authoring-standard.md`](./agentic/plan-authoring-standard.md)
    when authoring or reviewing a durable plan
-5. [`docs/architecture/CURRENT_STATE.md`](./architecture/CURRENT_STATE.md)
-6. the active plan in [`docs/plans/`](./plans/README.md), when one exists
-7. task-specific architecture docs named by the plan or launcher
+6. [`docs/architecture/CURRENT_STATE.md`](./architecture/CURRENT_STATE.md)
+7. the active plan in [`docs/plans/`](./plans/README.md), when one exists
+8. task-specific architecture docs named by the plan or launcher
 
 Keep always-loaded guidance short. Put detailed task workflow in launchers,
 project skills, architecture docs, or tracked plans so sessions load only what
@@ -62,6 +68,15 @@ All desktop delivery routes as `feature/design` unless this repository later
 creates its own reviewed maintenance backlog. Do not import upstream cleanup
 program state, score artifacts, detector issue ids, package fields, or package
 mechanics as active desktop authority.
+
+## Discovery
+
+Use Codanna first when symbol, ownership, or repo-doc discovery matters. Follow
+[`codanna-playbook.md`](./agentic/codanna-playbook.md) for query shaping,
+impact analysis, and fallback logging.
+
+Generated Codanna indexes and model caches are local-only. Do not commit
+`.codanna/`, `.fastembed_cache`, or generated project ids.
 
 Use the smallest tier that keeps the work reliable:
 
@@ -137,6 +152,7 @@ decisions into tracked docs instead of committing raw run logs.
 ## Verification Routing
 
 - Docs, workflow, launcher, architecture, or plan changes: `npm run verify:docs`.
+- Source, contract, or architecture-boundary changes: `npm run verify:architecture`.
 - Contract, IPC payload, or security-boundary changes: `npm run typecheck`,
   `npm run test:contracts`, and `npm run verify:redaction`.
 - Any scaffold or implementation closeout: `npm run verify` unless an approved

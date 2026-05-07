@@ -1,0 +1,16 @@
+# Default owner
+* @TJZine
+
+# Control plane
+AGENTS.md @TJZine
+docs/ @TJZine
+.agents/ @TJZine
+.codex/ @TJZine
+tools/ @TJZine
+
+# Desktop foundations
+src/contracts/ @TJZine
+src/main/ @TJZine
+src/preload/ @TJZine
+src/renderer/ @TJZine
+src/native-helper/ @TJZine
