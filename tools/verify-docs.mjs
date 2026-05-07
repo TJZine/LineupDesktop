@@ -191,7 +191,7 @@ const workflowAnchorMarkers = [
     marker: '## Legacy Skill Adaptation Audit',
     requiredPhrases: [
       'The original Lineup repo',
-      'historical maintenance-program mechanics',
+      'maintenance-program mechanics',
     ],
   },
 ];
@@ -212,6 +212,22 @@ const requiredSkillNames = {
   '.agents/skills/lineup-desktop-workflow-harness-review/SKILL.md': 'lineup-desktop-workflow-harness-review',
 };
 
+const requiredTransferredSkillNames = [
+  'architecture-boundaries',
+  'bounded-worker-execution',
+  'closeout-verification',
+  'debugging-remediation',
+  'execution-plan-authoring',
+  'model-selection',
+  'parallel-sidecars',
+  'persistence-boundaries',
+  'plex-integration-boundaries',
+  'review-adjudication',
+  'review-request',
+  'ui-composition-patterns',
+  'verification-strategy',
+];
+
 export function verifyDocs(root = repoRoot) {
   const errors = [];
   checkRequiredFiles(root, errors);
@@ -222,6 +238,7 @@ export function verifyDocs(root = repoRoot) {
   checkActivePlanShape(root, errors);
   checkWorkflowAnchors(root, errors);
   checkProjectSkills(root, errors);
+  checkTransferredSkills(root, errors);
   checkForbiddenBaggage(root, errors);
   checkPackageScripts(root, errors);
   return errors;
@@ -420,6 +437,34 @@ function checkProjectSkills(root, errors) {
     }
     if (content.split(/\r?\n/u).length > 28) {
       errors.push(`${skillPath}: project skill wrapper must stay thin`);
+    }
+  }
+}
+
+function checkTransferredSkills(root, errors) {
+  for (const skillName of requiredTransferredSkillNames) {
+    const skillPath = `.agents/skills/${skillName}/SKILL.md`;
+    const absolutePath = path.join(root, skillPath);
+    if (!fs.existsSync(absolutePath)) {
+      errors.push(`Missing transferred Lineup skill adaptation: ${skillPath}`);
+      continue;
+    }
+    const content = fs.readFileSync(absolutePath, 'utf8');
+    const frontmatter = parseFrontmatter(content);
+    if (frontmatter.name !== skillName) {
+      errors.push(`${skillPath}: frontmatter name must be ${skillName}`);
+    }
+    if (!frontmatter.description) {
+      errors.push(`${skillPath}: frontmatter description is required`);
+    }
+    if (!content.includes('Use this only from the Lineup Desktop repo.')) {
+      errors.push(`${skillPath}: missing repo-scope rule`);
+    }
+    if (!content.includes('AGENTS.md')) {
+      errors.push(`${skillPath}: missing AGENTS.md read`);
+    }
+    if (!content.includes('docs/AGENTIC_DEV_WORKFLOW.md')) {
+      errors.push(`${skillPath}: missing workflow runbook read`);
     }
   }
 }

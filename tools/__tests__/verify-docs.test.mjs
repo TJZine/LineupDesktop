@@ -236,6 +236,34 @@ test('verifyDocs rejects project skills with wrong frontmatter or missing read o
   assert(errors.some((error) => error.includes('missing required read AGENTS.md')));
 });
 
+test('verifyDocs rejects missing transferred Lineup skill adaptations', () => {
+  const root = makeFixture({ complete: true });
+  fs.rmSync(path.join(root, '.agents/skills/debugging-remediation'), { recursive: true, force: true });
+
+  const errors = verifyDocs(root);
+
+  assert(errors.some((error) => error.includes('Missing transferred Lineup skill adaptation')));
+});
+
+test('verifyDocs rejects transferred Lineup skill adaptation drift', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, '.agents/skills/execution-plan-authoring/SKILL.md'), [
+    '---',
+    'name: wrong-name',
+    'description: fixture',
+    '---',
+    '',
+    '# Broken',
+  ].join('\n'));
+
+  const errors = verifyDocs(root);
+
+  assert(errors.some((error) => error.includes('frontmatter name must be execution-plan-authoring')));
+  assert(errors.some((error) => error.includes('missing repo-scope rule')));
+  assert(errors.some((error) => error.includes('missing AGENTS.md read')));
+  assert(errors.some((error) => error.includes('missing workflow runbook read')));
+});
+
 function makeFixture(options = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-desktop-docs-'));
   if (options.complete) {
@@ -287,6 +315,19 @@ function makeFixture(options = {}) {
       '.agents/skills/lineup-desktop-feature-review/SKILL.md',
       '.agents/skills/lineup-desktop-feature-quality-loop/SKILL.md',
       '.agents/skills/lineup-desktop-workflow-harness-review/SKILL.md',
+      '.agents/skills/architecture-boundaries/SKILL.md',
+      '.agents/skills/bounded-worker-execution/SKILL.md',
+      '.agents/skills/closeout-verification/SKILL.md',
+      '.agents/skills/debugging-remediation/SKILL.md',
+      '.agents/skills/execution-plan-authoring/SKILL.md',
+      '.agents/skills/model-selection/SKILL.md',
+      '.agents/skills/parallel-sidecars/SKILL.md',
+      '.agents/skills/persistence-boundaries/SKILL.md',
+      '.agents/skills/plex-integration-boundaries/SKILL.md',
+      '.agents/skills/review-adjudication/SKILL.md',
+      '.agents/skills/review-request/SKILL.md',
+      '.agents/skills/ui-composition-patterns/SKILL.md',
+      '.agents/skills/verification-strategy/SKILL.md',
       'docs/plans/README.md',
       'docs/runs/README.md',
       'docs/development/testing.md',
@@ -384,7 +425,7 @@ function fixtureContent(relativePath) {
       'Do not create a parallel `.codex/skills/` tree unless',
       '## Legacy Skill Adaptation Audit',
       'The original Lineup repo',
-      'historical maintenance-program mechanics',
+      'maintenance-program mechanics',
     ].join('\n');
   }
 
@@ -447,6 +488,21 @@ function fixtureContent(relativePath) {
       'docs/AGENTIC_DEV_WORKFLOW.md',
       skillTargets[relativePath],
       'follow the tracked launcher exactly',
+    ].join('\n');
+  }
+
+  if (relativePath.startsWith('.agents/skills/') && relativePath.endsWith('/SKILL.md')) {
+    const skillName = path.basename(path.dirname(relativePath));
+    return [
+      '---',
+      `name: ${skillName}`,
+      'description: fixture',
+      '---',
+      '',
+      '# Fixture',
+      'Use this only from the Lineup Desktop repo.',
+      'AGENTS.md',
+      'docs/AGENTIC_DEV_WORKFLOW.md',
     ].join('\n');
   }
 

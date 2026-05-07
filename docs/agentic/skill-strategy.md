@@ -41,18 +41,22 @@ workflow pass.
 
 ## Project Skill Policy
 
-Desktop project skills should stay thin. They should load:
+Desktop project skills have two forms:
 
-1. `AGENTS.md`
-2. `docs/AGENTIC_DEV_WORKFLOW.md`
-3. the matching tracked launcher or architecture doc
+- launcher wrappers named `lineup-desktop-*`
+- same-name Lineup workflow and boundary skills adapted for Desktop
 
-Then they should follow the tracked doc instead of duplicating policy.
+Both forms should load `AGENTS.md`, `docs/AGENTIC_DEV_WORKFLOW.md`, and the
+matching launcher, architecture doc, or plan standard before adding local
+instructions. Keep detailed workflow policy in tracked docs; keep skill bodies
+focused on trigger routing, owner boundaries, and task-local checklists.
 
 Add new project skills only when a repeated workflow or boundary problem needs a
 stable trigger. Prefer architecture docs or launchers for one-off guidance.
 
 ## Current Project Skills
+
+Launcher wrappers:
 
 - `lineup-desktop-feature-plan`
 - `lineup-desktop-feature-implement`
@@ -60,26 +64,42 @@ stable trigger. Prefer architecture docs or launchers for one-off guidance.
 - `lineup-desktop-feature-quality-loop`
 - `lineup-desktop-workflow-harness-review`
 
+Reusable Lineup workflow and boundary skills adapted for Desktop:
+
+- `architecture-boundaries`
+- `bounded-worker-execution`
+- `closeout-verification`
+- `debugging-remediation`
+- `execution-plan-authoring`
+- `model-selection`
+- `parallel-sidecars`
+- `persistence-boundaries`
+- `plex-integration-boundaries`
+- `review-adjudication`
+- `review-request`
+- `ui-composition-patterns`
+- `verification-strategy`
+
 ## Legacy Skill Adaptation Audit
 
-The original Lineup repo's local skills were not copied wholesale. Desktop is a
-greenfield Windows-first Electron repo, so it carries forward the production
-guardrails that apply here and leaves historical maintenance-program mechanics
-behind.
+The original Lineup repo's local skills are not copied byte-for-byte. Desktop is
+a greenfield Windows-first Electron repo, so reusable skill triggers are
+materialized as same-name Desktop adaptations while historical
+maintenance-program mechanics stay behind.
 
 | Original Skill Area | Desktop Adaptation |
 | --- | --- |
-| plan authoring | `docs/agentic/plan-authoring-standard.md` plus `lineup-desktop-feature-plan`; plans still require scope, seam, verification classification, acceptance criteria, rollback, and replan triggers. |
-| verification strategy | `docs/AGENTIC_DEV_WORKFLOW.md#verification-routing` plus active-plan verification classification; use focused contract, architecture, redaction, smoke, or manual proof instead of defaulting every change to brittle tests. |
-| closeout verification | `docs/AGENTIC_DEV_WORKFLOW.md#verification-routing`, `docs/AGENTIC_DEV_WORKFLOW.md#review-before-closeout`, and the feature-quality-loop closeout phase; completion claims require observed evidence. |
-| review request and adjudication | `lineup-desktop-feature-review`, `lineup-desktop-workflow-harness-review`, and the controller's revise phases; reviewers stay read-only and the owning session adjudicates findings. |
-| bounded workers and sidecars | `.codex/agents/*.toml` plus `feature-quality-loop.md`; delegate only bounded, disjoint units after plan/review gates. |
-| architecture boundaries | `docs/AGENTIC_DEV_WORKFLOW.md#desktop-feature-quality-guardrails`, `docs/architecture/CURRENT_STATE.md`, and task-specific architecture docs; Electron main, preload, renderer, helper, Plex, scheduler, and packaging owners must stay narrow. |
-| persistence, Plex, UI, and playback boundaries | `docs/architecture/security-and-secret-flow.md`, `docs/architecture/playback-architecture.md`, `docs/architecture/import-ledger.md`, current-state docs, and active plans; add a new project skill only after repeated Desktop work shows a thinner launcher is not enough. |
-| debugging and model guidance | Use the feature/design workflow, current architecture docs, official docs checks, and Tier 3 model guidance when requested or when the plan is high risk; add dedicated skills later only from observed repeated need. |
+| plan authoring | `execution-plan-authoring`, `docs/agentic/plan-authoring-standard.md`, and `lineup-desktop-feature-plan`; plans still require scope, seam, verification classification, acceptance criteria, rollback, and replan triggers. |
+| verification strategy | `verification-strategy`, `docs/AGENTIC_DEV_WORKFLOW.md#verification-routing`, and active-plan verification classification; use focused contract, architecture, redaction, smoke, or manual proof instead of defaulting every change to brittle tests. |
+| closeout verification | `closeout-verification`, `docs/AGENTIC_DEV_WORKFLOW.md#review-before-closeout`, and the feature-quality-loop closeout phase; completion claims require observed evidence. |
+| review request and adjudication | `review-request`, `review-adjudication`, `lineup-desktop-feature-review`, and `lineup-desktop-workflow-harness-review`; reviewers stay read-only and the owning session adjudicates findings. |
+| bounded workers and sidecars | `bounded-worker-execution`, `parallel-sidecars`, `.codex/agents/*.toml`, and `feature-quality-loop.md`; delegate only bounded, disjoint units after plan/review gates. |
+| architecture boundaries | `architecture-boundaries`, `docs/AGENTIC_DEV_WORKFLOW.md#desktop-feature-quality-guardrails`, `docs/architecture/CURRENT_STATE.md`, and task-specific architecture docs; Electron main, preload, renderer, helper, Plex, scheduler, and packaging owners must stay narrow. |
+| persistence, Plex, UI, and playback boundaries | `persistence-boundaries`, `plex-integration-boundaries`, `ui-composition-patterns`, `docs/architecture/security-and-secret-flow.md`, `docs/architecture/playback-architecture.md`, `docs/architecture/import-ledger.md`, current-state docs, and active plans. |
+| debugging and model guidance | `debugging-remediation`, `model-selection`, the feature/design workflow, current architecture docs, and official docs checks. |
 
-When a future Desktop workflow repeatedly needs one of these areas as a direct
-skill trigger, add a small `.agents/skills/lineup-desktop-*` wrapper in a
+When a future Desktop workflow repeatedly needs a new direct trigger, add a
+small `.agents/skills/lineup-desktop-*` or same-name Lineup adaptation in a
 reviewed workflow pass and update this audit with the new owner.
 
 ## Local-Only Artifacts

@@ -120,8 +120,9 @@ tech debt while it is still proving its platform shape.
 Treat playback and packaging docs as boundary and non-goal context for this
 first slice, not as authorization to implement player or release surfaces.
 Treat `docs/agentic/skill-strategy.md` as the skill-transfer authority for the
-fresh session: Desktop uses `.agents/skills/` launcher wrappers and tracked docs
-rather than relying on the original Lineup repo's local skill context.
+fresh session: Desktop uses `.agents/skills/` for launcher wrappers and
+same-name adapted Lineup workflow skills rather than relying on the original
+Lineup repo's local skill context.
 
 ## Decisions Already Accepted
 

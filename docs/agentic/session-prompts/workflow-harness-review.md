@@ -18,7 +18,9 @@ launcher, project skill, role, or control-plane behavior.
 - Workflow routes desktop work as feature/design.
 - Tier 3 work uses the desktop feature-quality loop.
 - Historical upstream cleanup program mechanics are not active authority.
-- Project skills are thin wrappers over tracked launcher docs.
+- Launcher project skills are thin wrappers over tracked launcher docs.
+- Same-name workflow and boundary skill adaptations stay concise, read tracked
+  docs first, and do not become a second workflow source of truth.
 - Plan standards require evidence, scope, seam decisions, verification
   classification, acceptance criteria, rollback, and replan triggers without
   forcing irrelevant sections.
