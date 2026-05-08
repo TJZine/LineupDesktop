@@ -33,6 +33,12 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
 - [x] RD-04 upstream behavior guardrails completed through
   `docs/architecture/upstream-behavior-guardrails.md`; `npm run verify` passed
   and scoped implementation review was clean on 2026-05-08.
+- [x] RD-05 external `mpv` POC completed through
+  `docs/plans/2026-05-08-rd-05-external-mpv-poc-plan.md`;
+  `tools/mpv-poc/rd-05-external-mpv-poc.mjs` remains a dev-only disposable
+  script, ignored redacted run evidence exists under
+  `docs/runs/rd-05-external-mpv-poc/`, `npm run verify` passed, and
+  implementation review was clean on 2026-05-08.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -79,8 +85,8 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-04 are complete enough to route the next Tier 3 quality-loop
-session to RD-05. Do not import original Lineup product code until a reviewed
+RD-01 through RD-05 are complete enough to route the next Tier 3 quality-loop
+session to RD-06. Do not import original Lineup product code until a reviewed
 product slice plan explicitly authorizes a bounded import.
 
 ## Roadmap Checklist
@@ -258,7 +264,11 @@ Exit gates:
 
 ### RD-05 External mpv POC
 
-Status: not started.
+Status: complete. Implemented through
+`docs/plans/2026-05-08-rd-05-external-mpv-poc-plan.md`,
+`tools/mpv-poc/rd-05-external-mpv-poc.mjs`, and
+`tools/__tests__/rd-05-mpv-poc.test.mjs`; `npm run verify` passed and
+read-only implementation review was clean on 2026-05-08.
 
 Depends on:
 
@@ -282,9 +292,12 @@ Non-goals:
 Exit gates:
 
 - POC results are documented with what was proven, what failed, and whether the
-  POC is deleted or quarantined behind a dev-only flag.
-- Stop/channel-switch behavior does not leave stale playback events in the POC
-  evidence.
+  POC is deleted or quarantined behind a dev-only flag. RD-05 quarantines the
+  script as dev-only with no package script and keeps run evidence ignored.
+- Stop/channel-switch behavior is documented from redacted evidence: `stop`
+  succeeded and cleanup completed, while four sanitized post-stop events before
+  quit remain an RD-06/RD-07 stale-event follow-up risk rather than accepted
+  production behavior.
 - No tokenized URLs or raw auth headers appear in process args, logs, crash
   output, IPC traces, fixtures, docs, or Codex output.
 

@@ -10,7 +10,9 @@ minimal secure Electron shell frame plus docs, workflow, contract, and harness
 scaffolding. There is no Plex integration, native playback host, scheduler,
 secure credential storage, copied TV UI, or installer implementation yet.
 RD-04 adds documentation and harness ownership for upstream behavior guardrails
-only; it does not import product runtime code.
+only; it does not import product runtime code. RD-05 adds a disposable
+dev-only external `mpv` POC tool and ignored redacted local evidence only; it
+does not create production playback architecture.
 
 ## Product Invariants
 
@@ -40,6 +42,7 @@ only; it does not import product runtime code.
 | Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, and diagnostic contract |
 | IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
 | Redaction contract vocabulary | `src/contracts/redaction.ts` | Stub contract only |
+| External `mpv` POC tool | `tools/mpv-poc/rd-05-external-mpv-poc.mjs` | Dev-only disposable RD-05 evidence harness |
 | Docs verifier | `tools/verify-docs.mjs` | Active |
 | Redaction verifier | `tools/verify-redaction.mjs` | Active |
 
@@ -48,7 +51,7 @@ only; it does not import product runtime code.
 - Plex auth/discovery/library/stream imports
 - scheduler/channel imports
 - native playback helper
-- external media POC
+- production playback host or adapter
 - player runtime adapter or preload/main player IPC
 - secure storage implementation
 - packaging/signing/update pipeline
