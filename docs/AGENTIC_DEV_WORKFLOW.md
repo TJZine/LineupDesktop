@@ -9,8 +9,8 @@ This is the operating runbook for Lineup Desktop.
 - This file is the single operating runbook for workflow, precedence, routing,
   verification, review, and where to look next.
 - [`docs/agentic/external-guidance.md`](./agentic/external-guidance.md) records
-  the official OpenAI and Anthropic guidance baseline used by this control
-  plane.
+  the official OpenAI, Anthropic, and Electron guidance baseline used by this
+  control plane.
 - [`docs/agentic/plan-authoring-standard.md`](./agentic/plan-authoring-standard.md)
   owns the required shape for durable tracked plans.
 - [`docs/agentic/codanna-playbook.md`](./agentic/codanna-playbook.md) owns

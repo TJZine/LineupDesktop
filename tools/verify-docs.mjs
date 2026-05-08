@@ -455,10 +455,21 @@ function checkWorkflowAnchors(root, errors) {
 
   const guidance = fs.readFileSync(guidancePath, 'utf8');
   for (const phrase of [
-    'Codex best practices',
+    'How OpenAI uses Codex',
+    'Evaluation best practices',
+    'Safety in building agents',
+    'Agents SDK',
     'Building effective agents',
     'Claude Code subagents',
-    'Using PLANS.md for multi-hour problem solving',
+    'Claude Code memory',
+    'Claude Code hooks',
+    'Electron',
+    'Process model',
+    'Process sandboxing',
+    'Checked on',
+    'renderer sandboxing',
+    'context isolation',
+    'IPC sender/origin validation',
   ]) {
     if (!guidance.includes(phrase)) {
       errors.push(`docs/agentic/external-guidance.md: missing guidance source: ${phrase}`);

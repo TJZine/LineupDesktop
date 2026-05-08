@@ -8,22 +8,25 @@ workflow is shaped the way it is.
 
 OpenAI:
 
-- [Codex best practices](https://developers.openai.com/codex/learn/best-practices)
-- [Prompt engineering for coding and agentic tasks](https://developers.openai.com/api/docs/guides/prompt-engineering#coding)
-- [GPT-5.5 behavioral changes](https://developers.openai.com/api/docs/guides/latest-model#behavioral-changes)
-- [Using PLANS.md for multi-hour problem solving](https://developers.openai.com/cookbook/articles/codex_exec_plans)
+- [How OpenAI uses Codex](https://openai.com/business/guides-and-resources/how-openai-uses-codex/)
+- [Evaluation best practices](https://developers.openai.com/api/docs/guides/evaluation-best-practices)
+- [Safety in building agents](https://developers.openai.com/api/docs/guides/agent-builder-safety)
+- [Agents SDK](https://platform.openai.com/docs/guides/agents-sdk/)
 
 Anthropic:
 
 - [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents)
-- [Claude Code common workflows](https://docs.anthropic.com/en/docs/claude-code/tutorials)
 - [Claude Code memory](https://docs.anthropic.com/en/docs/claude-code/memory)
 - [Claude Code subagents](https://docs.anthropic.com/en/docs/claude-code/sub-agents)
 - [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks)
-- [Writing effective tools for agents](https://www.anthropic.com/engineering/writing-tools-for-agents)
-- [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)
 
-Checked on 2026-05-07.
+Electron:
+
+- [Security](https://www.electronjs.org/docs/latest/tutorial/security)
+- [Process model](https://www.electronjs.org/docs/latest/tutorial/process-model)
+- [Process sandboxing](https://www.electronjs.org/docs/latest/tutorial/sandbox)
+
+Checked on 2026-05-08.
 
 ## Local Conclusions
 
@@ -34,22 +37,39 @@ Checked on 2026-05-07.
 - Treat plans as execution specifications for a fresh session with no hidden
   memory. They must name goal, constraints, ownership, verification, rollback,
   and stop conditions.
+- Scope implementation units tightly enough to review. Large or cross-boundary
+  changes should start with a plan, evidence sweep, review gate, and an explicit
+  next implementation unit rather than a broad code-generation pass.
 - Use explicit progress tracking for long-running work and require observed
   verification before closeout.
 - Use sidecars for bounded research, review, and context isolation when they
   materially improve reliability.
 - Use evaluator-style review loops when criteria are clear and iterative
   improvement is valuable.
+- Keep the owning session responsible for synthesis, scope, verification
+  claims, and final handoff. Sidecars and workers provide bounded evidence or
+  approved implementation slices; they do not choose new architecture seams.
+- Treat workflow verifiers as small repo evals: they should encode durable
+  pass/fail criteria for guidance freshness, handoff shape, required anchors,
+  local-only artifacts, and forbidden baggage without becoming a brittle process
+  scorecard.
 - Keep agent systems simple and composable. Add loops, project skills, hooks,
   or automations only when a manual workflow has proved the need.
 - Treat verifiers, review prompts, and tool descriptions as part of the harness.
   They must be tested and reviewed like product code.
+- Preserve Electron secure defaults in workflow and plans: renderer sandboxing,
+  context isolation, no renderer Node or raw Electron access, narrow preload
+  bridges, IPC sender/origin validation, navigation/new-window containment, and
+  custom local protocol preference over broad `file://` loading.
+- Treat hook-style automation as inspiration for checkpoints only. Do not add
+  privileged hooks or background automations unless a reviewed repo need,
+  sanitization model, and verification path exist.
 
 ## Refresh Triggers
 
 Refresh this document and the workflow docs when:
 
-- official OpenAI or Anthropic guidance changes materially
+- official OpenAI, Anthropic, or Electron guidance changes materially
 - a repeated agent failure shows a local rule is missing or misleading
 - a new reusable workflow graduates into a project skill
 - verifier behavior changes what agents can safely claim
