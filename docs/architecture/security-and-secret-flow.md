@@ -17,6 +17,22 @@ Persistent Plex credentials belong outside the renderer.
 - If an import appears to require renderer token access, stop and replan the
   boundary instead of adding an exception.
 
+## Current Shell Boundary
+
+The initial Electron shell serves local renderer content only from
+`lineup://shell/index.html`. Electron main owns shell/window IPC handlers and
+authorizes calls against the expected `webContents`, main frame, and
+`lineup://shell` origin before acting.
+
+Preload exposes only the typed `window.lineupDesktop` shell/window API. It does
+not expose raw `ipcRenderer`, arbitrary channel names, Node modules, Electron
+objects, filesystem access, native handles, tokens, or auth headers.
+
+The minimal renderer is sandboxed and context-isolated. Runtime smoke
+verification checks that `process`, `require`, `Buffer`, raw Electron bridge
+names, navigation/new-window/permission containment, CSP, and the approved
+preload bridge behave as expected.
+
 ## Release Gates
 
 Before public distribution, this repo must verify:

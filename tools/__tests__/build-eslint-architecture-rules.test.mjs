@@ -77,7 +77,7 @@ test('ESLint rejects renderer dynamic imports across privileged boundaries', asy
 });
 
 test('preload boundary cannot import renderer or native helper implementation', () => {
-  const restriction = getRestrictionFor('src/preload/**/*.ts');
+  const restriction = getRestrictionFor('src/preload/**/*.cts');
 
   assert.equal(restriction.message, architectureRuleMessages.preloadBoundary);
   assert.ok(restriction.group.includes('src/renderer/**'));

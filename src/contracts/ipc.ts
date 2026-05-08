@@ -16,6 +16,14 @@ export interface RendererIntentEnvelope<TPayload = unknown> {
   payload: TPayload;
 }
 
+export const LINEUP_SHELL_GET_CAPABILITIES_CHANNEL =
+  'lineup:shell:getCapabilities' as const;
+
+export const LINEUP_WINDOW_INTENT_CHANNEL = 'lineup:window:intent' as const;
+
+export const LINEUP_SHELL_STATUS_CHANGED_CHANNEL =
+  'lineup:shell:statusChanged' as const;
+
 export const RENDERER_FORBIDDEN_PAYLOAD_KEYS = [
   'persistentToken',
   'rawAuthHeaders',

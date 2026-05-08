@@ -5,10 +5,10 @@
 
 ## Scope
 
-Lineup Desktop is a new Windows-first Electron repository. It is currently a
-docs, workflow, contract, and harness scaffold only. There is no production
-renderer, Electron main process, preload bridge, Plex integration, native
-playback host, or installer implementation yet.
+Lineup Desktop is a new Windows-first Electron repository. It currently has a
+minimal secure Electron shell frame plus docs, workflow, contract, and harness
+scaffolding. There is no Plex integration, native playback host, scheduler,
+secure credential storage, copied TV UI, or installer implementation yet.
 
 ## Product Invariants
 
@@ -30,23 +30,38 @@ playback host, or installer implementation yet.
 | Port roadmap | `docs/roadmap/desktop-port-roadmap.md` | Scaffolded |
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
 | Import provenance | `docs/architecture/import-ledger.md` | Scaffolded |
+| Electron main shell | `src/main/index.ts` and `src/main/protocol.ts` | Minimal secure shell frame |
+| Preload bridge | `src/preload/index.cts` | Narrow shell/window bridge |
+| Renderer shell | `src/renderer/index.ts` and `src/renderer/index.html` | Minimal unprivileged boot proof |
+| Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window bridge contract |
 | Player contract vocabulary | `src/contracts/player.ts` | Stub contract only |
-| IPC contract vocabulary | `src/contracts/ipc.ts` | Stub contract only |
+| IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window IPC literals plus future player intent stubs |
 | Redaction contract vocabulary | `src/contracts/redaction.ts` | Stub contract only |
 | Docs verifier | `tools/verify-docs.mjs` | Active |
 | Redaction verifier | `tools/verify-redaction.mjs` | Active |
 
 ## Not Yet Implemented
 
-- Electron main process
-- preload bridge
-- renderer UI
 - Plex auth/discovery/library/stream imports
 - scheduler/channel imports
 - native playback helper
 - external media POC
 - secure storage implementation
 - packaging/signing/update pipeline
+
+## Electron Shell Frame
+
+The first shell frame registers the `lineup` scheme before app readiness as a
+standard secure scheme and serves the renderer only from
+`lineup://shell/index.html`. Electron main owns the `BrowserWindow`, local
+protocol handler, containment handlers, and shell/window IPC authorization.
+
+The renderer remains unprivileged. It receives only
+`window.lineupDesktop.shell.getCapabilities()`,
+`window.lineupDesktop.shell.onStatusChanged(listener)`, and
+`window.lineupDesktop.window.setFullscreen(enabled)` from preload. Fullscreen
+requests map to the existing `window.enterFullscreen` and
+`window.exitFullscreen` renderer intents.
 
 ## Roadmap
 

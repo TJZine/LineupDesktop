@@ -6,7 +6,9 @@
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
+    "build:electron": "node tools/clean-electron-build.mjs && tsc -p tsconfig.electron.json && node tools/copy-renderer-assets.mjs",
     "lint": "eslint .",
+    "smoke:electron": "npm run build:electron && node tools/smoke-electron.mjs",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:contracts && npm run test:harness-docs",
     "test:contracts": "tsx --test src/__tests__/*.test.ts",
@@ -24,6 +26,7 @@
     "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^8.59.2",
     "@typescript-eslint/parser": "^8.59.2",
+    "electron": "^42.0.0",
     "eslint": "^10.3.0",
     "tsx": "^4.20.6",
     "typescript": "^5.3.3"

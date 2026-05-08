@@ -18,7 +18,7 @@ export const desktopArchitectureRules = {
     ],
   },
   preloadBoundary: {
-    files: ['src/preload/**/*.ts'],
+    files: ['src/preload/**/*.ts', 'src/preload/**/*.cts'],
     forbiddenImportPatterns: [
       'src/renderer/**',
       'src/native-helper/**',

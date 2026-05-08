@@ -22,7 +22,7 @@ export default [
   },
   js.configs.recommended,
   {
-    files: ['src/**/*.ts'],
+    files: ['src/**/*.ts', 'src/**/*.cts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -38,7 +38,30 @@ export default [
       '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': 'off',
       'no-console': ['warn', { allow: ['warn', 'error'] }],
+    },
+  },
+  {
+    files: ['src/main/**/*.ts', 'src/preload/**/*.ts', 'src/preload/**/*.cts'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        require: 'readonly',
+        Response: 'readonly',
+        setTimeout: 'readonly',
+        URL: 'readonly',
+      },
+    },
+  },
+  {
+    files: ['src/renderer/**/*.ts'],
+    languageOptions: {
+      globals: {
+        document: 'readonly',
+        window: 'readonly',
+      },
     },
   },
   {

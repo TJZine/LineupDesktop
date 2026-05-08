@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none';"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lineup Desktop</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <section class="shell-panel" aria-label="Lineup Desktop shell status">
+        <h1>Lineup Desktop</h1>
+        <p data-shell-status>booting</p>
+        <p data-shell-capabilities>loading</p>
+        <button type="button" data-fullscreen-toggle aria-pressed="false">
+          Toggle fullscreen
+        </button>
+      </section>
+    </main>
+    <script type="module" src="./index.js"></script>
+  </body>
+</html>
