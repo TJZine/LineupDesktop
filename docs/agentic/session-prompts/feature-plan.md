@@ -53,3 +53,5 @@ scope.
 - Include a `NEXT_SESSION_HANDOFF` routing the plan to
   `lineup-desktop-feature-review`.
 - Include model guidance only when the user asks for it or the plan is Tier 3.
+- Use the exact handoff shape in
+  [`docs/AGENTIC_DEV_WORKFLOW.md#session-handoffs`](../../AGENTIC_DEV_WORKFLOW.md#session-handoffs).

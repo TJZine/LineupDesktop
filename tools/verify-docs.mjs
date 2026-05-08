@@ -141,14 +141,18 @@ const activePlanHeadings = [
   '## Non-Goals',
   '## Parent Architecture Alignment',
   '## Required Reading',
+  '## Required Skills',
   '## Evidence And Discovery',
+  '## Impact Snapshot',
   '## Files In Scope',
   '## Files Out Of Scope',
+  '## Planner Self-Check',
   '## Architecture Seam Decision Gate',
   '## Verification Commands',
   '## Acceptance Criteria',
   '## Replan Triggers',
   '## Rollback Notes',
+  '## Commit Checkpoints',
 ];
 
 const featureQualityLoopHeadings = [
@@ -165,6 +169,33 @@ const workflowAnchorMarkers = [
     requiredPhrases: [
       'Do not depend on the original Lineup repo',
       'Run `git status --short --branch` before planning edits',
+    ],
+  },
+  {
+    path: 'docs/AGENTIC_DEV_WORKFLOW.md',
+    label: 'default workflow',
+    marker: '## Default Workflow',
+    requiredPhrases: [
+      'Plan explicitly before multi-step work',
+      'Do not freeze a plan while ownership',
+    ],
+  },
+  {
+    path: 'docs/AGENTIC_DEV_WORKFLOW.md',
+    label: 'multi-agent usage',
+    marker: '## Multi-Agent Usage',
+    requiredPhrases: [
+      'Keep read-only roles read-only',
+      'Do not let a worker invent architecture seams',
+    ],
+  },
+  {
+    path: 'docs/AGENTIC_DEV_WORKFLOW.md',
+    label: 'session handoff format',
+    marker: '## Session Handoffs',
+    requiredPhrases: [
+      'NEXT_SESSION_HANDOFF',
+      'MODEL_SUGGESTION',
     ],
   },
   {
@@ -337,19 +368,64 @@ function checkActivePlanShape(root, errors) {
     if (!content.includes('**Plan Status:** active')) {
       continue;
     }
+    const planStatusIndex = content.indexOf('**Plan Status:** active');
+    const firstSectionIndex = content.indexOf('## ');
+    if (firstSectionIndex !== -1 && planStatusIndex > firstSectionIndex) {
+      errors.push(`${relativePath}: active plan status marker must appear before the first ## heading`);
+    }
+    let previousHeadingIndex = -1;
     for (const heading of activePlanHeadings) {
-      if (!content.includes(heading)) {
+      const headingIndex = content.indexOf(heading);
+      if (headingIndex === -1) {
         errors.push(`${relativePath}: active plan missing ${heading}`);
+        continue;
       }
+      if (headingIndex < previousHeadingIndex) {
+        errors.push(`${relativePath}: active plan heading out of order: ${heading}`);
+      }
+      previousHeadingIndex = headingIndex;
     }
     if (!content.includes('**Task family:** feature/design')) {
       errors.push(`${relativePath}: active plan missing feature/design task family`);
+    }
+    if (content.includes('**Tier:** Tier 3')) {
+      checkTier3Handoff(relativePath, content, errors);
     }
     const markerCount = verificationClassificationMarkers
       .filter((marker) => content.includes(marker))
       .length;
     if (markerCount !== 1) {
       errors.push(`${relativePath}: active plan must include exactly one verification classification marker`);
+    }
+  }
+}
+
+function checkTier3Handoff(relativePath, content, errors) {
+  const modelIndex = content.indexOf('MODEL_SUGGESTION');
+  const handoffIndex = content.indexOf('NEXT_SESSION_HANDOFF');
+  if (modelIndex === -1) {
+    errors.push(`${relativePath}: Tier 3 active plan missing MODEL_SUGGESTION`);
+  }
+  if (handoffIndex === -1) {
+    errors.push(`${relativePath}: Tier 3 active plan missing NEXT_SESSION_HANDOFF`);
+    return;
+  }
+  if (modelIndex !== -1 && modelIndex > handoffIndex) {
+    errors.push(`${relativePath}: MODEL_SUGGESTION must appear before NEXT_SESSION_HANDOFF`);
+  }
+  for (const field of [
+    'NEXT_SESSION_LAUNCHER:',
+    'TASK:',
+    'TASK_FAMILY:',
+    'TIER:',
+    'PLAN:',
+    'ARTIFACT:',
+    'FILES:',
+    'BLOCKERS:',
+    'MESSAGE:',
+  ]) {
+    if (!content.includes(field)) {
+      errors.push(`${relativePath}: NEXT_SESSION_HANDOFF missing field ${field}`);
     }
   }
 }

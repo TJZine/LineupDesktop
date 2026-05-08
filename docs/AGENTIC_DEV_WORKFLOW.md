@@ -24,6 +24,24 @@ This is the operating runbook for Lineup Desktop.
 - [`docs/architecture/import-ledger.md`](./architecture/import-ledger.md) owns
   provenance for copied or adapted upstream Lineup code and docs.
 
+## Document Precedence
+
+When tracked docs conflict, use this order:
+
+1. this runbook for operating workflow, routing, review, verification, and
+   closeout rules
+2. `AGENTS.md` for always-on defaults and entrypoint links
+3. `docs/agentic/session-prompts/README.md` for launcher routing and invocation
+4. `docs/agentic/plan-authoring-standard.md` for active tracked plan structure
+5. `docs/agentic/skill-strategy.md` for project skill topology and role policy
+6. `docs/agentic/codanna-playbook.md` for Codanna query and fallback practice
+7. `docs/architecture/CURRENT_STATE.md` for current architecture claims
+8. task-specific architecture docs and active plans named by the task
+
+Historical upstream Lineup cleanup program artifacts are not Desktop authority.
+If a useful lesson from them matters, promote the lesson into a Desktop doc
+instead of importing old package state or detector tokens.
+
 ## Default Read Order
 
 1. [`AGENTS.md`](../AGENTS.md)
@@ -40,6 +58,18 @@ This is the operating runbook for Lineup Desktop.
 Keep always-loaded guidance short. Put detailed task workflow in launchers,
 project skills, architecture docs, or tracked plans so sessions load only what
 they need.
+
+## Goals
+
+- keep agent context explicit, inspectable, and reproducible in fresh sessions
+- keep the control plane small but not under-specified
+- preserve the original Lineup workflow lessons that prevent low-quality code:
+  evidence before planning, decision-complete plans, bounded implementation,
+  observed verification, and adversarial review
+- keep renderer, preload, main, helper, Plex, storage, UI, and packaging owners
+  narrow from the first implementation slice
+- use verifiers and review loops as part of the harness, not as optional
+  cleanup after implementation
 
 ## Fresh Chat Bootstrap
 
@@ -115,6 +145,84 @@ Tier 3 is required by default for Electron IPC/security, native playback,
 storage/secrets, packaging/release, broad upstream imports, or any change where
 implementation would otherwise need to invent ownership or verification policy.
 
+## Default Workflow
+
+1. Start with the relevant project skills.
+   - Use `architecture-boundaries` for process ownership, shared contracts,
+     module boundaries, or cross-surface wiring.
+   - Use `persistence-boundaries` for app paths, secure storage, credentials,
+     selected server state, local files, or browser storage.
+   - Use `plex-integration-boundaries` for Plex auth, discovery, library, stream
+     resolution, subtitles, selected server state, tokens, or playback URL setup.
+   - Use `ui-composition-patterns` for renderer UI, focus, keyboard/remote
+     behavior, motion, accessibility, or media presentation.
+   - Use `verification-strategy` before freezing proof depth when the correct
+     test/manual/static proof is not obvious.
+   - Use `execution-plan-authoring` for serious plans and bounded execution
+     briefs.
+2. Run an evidence sweep before freezing scope.
+   - Prefer Codanna for symbols, ownership, and repo-doc discovery.
+   - Use `semantic_search_with_context`, `semantic_search_docs` or document
+     search, and impact analysis when shared/public symbols or risky owners are
+     involved.
+   - Fall back to `rg` and direct reads when Codanna is unavailable, stale, or
+     not the right tool, and record that fallback in the plan.
+   - Use official docs for external framework, Electron, packaging, signing,
+     native player, or agent-control claims.
+3. Load the right source-of-truth docs.
+   - current architecture: `docs/architecture/CURRENT_STATE.md`
+   - security and secrets: `docs/architecture/security-and-secret-flow.md`
+   - playback: `docs/architecture/playback-architecture.md`
+   - packaging and release gates: `docs/architecture/packaging-release-gates.md`
+   - copied/adapted source provenance: `docs/architecture/import-ledger.md`
+4. Choose the smallest reliable tier before editing.
+   - Tier 1 stays in one session with risk-matched verification and review when
+     the change affects a review-required surface.
+   - Tier 2 uses `feature-plan -> feature-review -> feature-implement ->
+     feature-review`.
+   - Tier 3 uses a task-specific run bundle when repeated handoff memory is
+     likely and the desktop feature-quality loop for plan, review,
+     implementation, implementation review, and closeout.
+5. Plan explicitly before multi-step work.
+   - Keep live state in `update_plan`.
+   - Create or refresh a tracked plan in `docs/plans/` only when durable fresh
+     session memory is needed.
+   - Serious tracked plans must satisfy
+     `docs/agentic/plan-authoring-standard.md`.
+   - Do not freeze a plan while ownership, security, IPC, playback, persistence,
+     packaging, import, or verification policy is still unresolved.
+6. Implement narrowly.
+   - Execute one approved unit at a time.
+   - Keep implementation inside the approved files, owner, and seam.
+   - Prefer small durable owners over broad helpers, no-value forwarding,
+     compatibility wrappers, or framework setup that cannot be reviewed for
+     behavior.
+   - Do not add old upstream path shims or fallback API variants unless the
+     approved plan names the owner, reason, verification, and removal trigger.
+7. Verify based on risk.
+   - Run the commands named by the plan and read the output.
+   - Use `npm run verify` for source, scaffold, IPC/security, runtime, or
+     implementation closeout unless an approved plan names a narrower proof.
+   - Use `npm run verify:docs` for docs, workflow, launcher, skill, plan, or
+     reference changes.
+   - Add manual, smoke, visual, or browser evidence when automation cannot prove
+     the behavior.
+8. Review before closeout.
+   - Use `review-request` to send bounded packets to read-only reviewers.
+   - Use `review-adjudication` before acting on review findings.
+   - Do not advance while material plan or implementation findings remain.
+9. Update the right memory surface in the same pass.
+   - Update current-state or architecture docs when ownership changes.
+   - Update the import ledger before or with copied/adapted upstream Lineup code.
+   - Update active plans, handoffs, or run-bundle summaries when they are the
+     next fresh-session surface.
+10. Close workflow/control-plane changes deliberately.
+   - Keep launchers, skill strategy, verifier tests, and this runbook aligned.
+   - Do not claim a workflow-quality improvement from prose alone; pair it with
+     verifier coverage and read-only adversarial review.
+   - Commit workflow/control-plane changes separately from product
+     implementation when practical.
+
 ## Desktop Feature Quality Guardrails
 
 For every non-trivial code change, check the planned diff and final diff against
@@ -152,6 +260,34 @@ not advance while material findings remain.
 
 Use `docs/runs/` only for gitignored local run bundles. Promote durable
 decisions into tracked docs instead of committing raw run logs.
+
+## Multi-Agent Usage
+
+Use multi-agent support only when it improves reliability, context hygiene, or
+throughput. Do not replace the default workflow with always-on delegation.
+
+- Keep immediate critical-path work local when the next action depends on it.
+- Use `explorer` for bounded read-only source and repo-doc discovery.
+- Use `docs_researcher` for official external documentation checks with a clear
+  deliverable.
+- Use `planner` for durable planning artifacts and execution-ready handoffs.
+- Use `worker` only for approved, bounded implementation units with disjoint
+  write scopes.
+- Use `reviewer` for read-only adversarial review of plans, diffs, workflow
+  artifacts, and handoffs.
+- Use `monitor` for waits, polling, and long-running verification status.
+- Keep read-only roles read-only. Do not route edits through explorer,
+  docs_researcher, reviewer, or monitor.
+- Do not let a worker invent architecture seams, broaden scope, or choose
+  verification depth.
+- Once a delegated planner is active, do not draft a competing local plan unless
+  the planner blocks, fails, or is explicitly abandoned.
+- Keep delegation shallow; do not spawn nested worker trees.
+- Wait on a sidecar only when the next critical-path decision depends on its
+  result.
+
+Use `parallel-sidecars` for optional read-only sidecars and
+`bounded-worker-execution` for approved implementation slices.
 
 ## Implementation Rules
 
@@ -202,6 +338,53 @@ Reviewers should lead with findings, cite files and lines, prioritize security,
 boundary, verification, and scope issues, and state explicitly when no blockers
 remain. The owning session adjudicates reviewer findings before editing.
 
+## Session Handoffs
+
+Planner, reviewer, implementer, and controller sessions should end with a
+pasteable handoff whenever another session is expected. Prefer one exact next
+step over several possible next actions.
+
+Include model guidance only when the user asks for it or when the outgoing
+handoff is Tier 3 or high risk because it touches Electron IPC/security, native
+playback, storage/secrets, packaging/release, broad imports, or multiple owner
+boundaries.
+
+Use this optional block immediately before the handoff when the trigger applies:
+
+```text
+MODEL_SUGGESTION
+PLANNER: <model or "n/a">
+IMPLEMENTER: <model or "n/a">
+REVIEWER: <model or "n/a">
+WHY: <short reason tied to the risk signals>
+```
+
+Use this handoff shape:
+
+```text
+NEXT_SESSION_HANDOFF
+NEXT_SESSION_LAUNCHER: <launcher skill name or "normal repo workflow">
+TASK: <short task title>
+TASK_FAMILY: feature/design
+TIER: <Tier 1|Tier 2|Tier 3>
+PLAN: <plan path or "none">
+ARTIFACT: <reviewed artifact, diff target, or "none">
+FILES:
+- <key file or artifact path>
+BLOCKERS: <none or short blocker summary>
+MESSAGE:
+<pasteable next-session message>
+```
+
+Rules:
+
+- If review findings block progress, route the handoff to the session type that
+  must resolve them.
+- If no further session is needed, say so instead of emitting a fake handoff.
+- Keep the block short enough to paste directly into a fresh session.
+- Keep `TASK`, `PLAN`, `ARTIFACT`, and `FILES` concrete enough that the next
+  session does not need to reconstruct scope from prose.
+
 ## Redaction Rules
 
 Never put raw Plex tokens, tokenized URLs, raw auth headers, native media logs,
@@ -218,3 +401,15 @@ surfaces, persisted logs, diagnostics, tests, docs, or Codex output.
   explicitly promotes a curated summary into a tracked doc.
 - Commit workflow/control-plane changes separately from product implementation
   when practical.
+
+## Quality Loop
+
+- Plan, review, implement, verify, review, close out.
+- Treat verifier failures, reviewer blockers, and contradicted architecture
+  assumptions as stop conditions, not as notes to work around.
+- Keep run bundles local and promote only durable conclusions into tracked docs.
+- Periodically review completed plans and workflow failures for reusable
+  lessons; update the runbook, plan standard, skills, launchers, or verifier
+  tests in the same pass.
+- When this repo adds a repeated workflow failure mode, add a small Desktop
+  eval or verifier rule before relying on prose guidance alone.

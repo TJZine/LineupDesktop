@@ -1,8 +1,10 @@
 # Session Launcher Templates
 
-This directory contains the tracked Lineup Desktop launcher templates. Local
-project skills in `.agents/skills/` should stay thin and point back to these
-files instead of duplicating policy.
+This directory contains the tracked Lineup Desktop launcher templates. Launcher
+skills in `.agents/skills/lineup-desktop-*` should stay thin and point back to
+these files instead of duplicating policy. Same-name workflow and boundary
+skills may add concise Desktop-specific checklists, but this directory and the
+main runbook remain the launcher authority.
 
 ## Launcher Template Set
 
@@ -55,3 +57,11 @@ Recommended project skill entrypoints:
 
 Each skill should load `AGENTS.md`, `docs/AGENTIC_DEV_WORKFLOW.md`, and the
 matching launcher in this directory, then follow the tracked launcher exactly.
+
+## Handoff Format
+
+When another session is expected, launchers should emit the
+`NEXT_SESSION_HANDOFF` shape defined in
+[`docs/AGENTIC_DEV_WORKFLOW.md#session-handoffs`](../../AGENTIC_DEV_WORKFLOW.md#session-handoffs).
+Do not make users reconstruct the next launcher, plan path, files, or message
+from prose.

@@ -52,3 +52,6 @@ If another session is needed, end with one `NEXT_SESSION_HANDOFF`:
 - clean plan review routes to `lineup-desktop-feature-implement`
 - fixable implementation findings route to `lineup-desktop-feature-implement`
 - plan/decision implementation findings route to `lineup-desktop-feature-plan`
+
+Use the exact handoff shape in
+[`docs/AGENTIC_DEV_WORKFLOW.md#session-handoffs`](../../AGENTIC_DEV_WORKFLOW.md#session-handoffs).

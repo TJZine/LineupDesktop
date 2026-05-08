@@ -39,3 +39,5 @@ review status. Do not claim verification that was not observed.
 
 End with a `NEXT_SESSION_HANDOFF` routing the implementation to
 `lineup-desktop-feature-review` unless the task is blocked before code changes.
+Use the exact handoff shape in
+[`docs/AGENTIC_DEV_WORKFLOW.md#session-handoffs`](../../AGENTIC_DEV_WORKFLOW.md#session-handoffs).

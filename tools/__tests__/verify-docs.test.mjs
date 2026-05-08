@@ -93,10 +93,82 @@ test('verifyDocs rejects active plans missing required standard fields', () => {
   ].join('\n'));
   const errors = verifyDocs(root);
   assert(errors.some((error) => error.includes('missing ## Required Reading')));
+  assert(errors.some((error) => error.includes('missing ## Required Skills')));
   assert(errors.some((error) => error.includes('missing ## Evidence And Discovery')));
+  assert(errors.some((error) => error.includes('missing ## Impact Snapshot')));
+  assert(errors.some((error) => error.includes('missing ## Planner Self-Check')));
   assert(errors.some((error) => error.includes('missing ## Acceptance Criteria')));
   assert(errors.some((error) => error.includes('missing ## Rollback Notes')));
+  assert(errors.some((error) => error.includes('missing ## Commit Checkpoints')));
   assert(errors.some((error) => error.includes('exactly one verification classification')));
+});
+
+test('verifyDocs rejects active plans with late status marker or heading order drift', () => {
+  const root = makeFixture({ complete: true });
+  const planPath = path.join(root, 'docs/plans/active.md');
+  fs.writeFileSync(planPath, [
+    '# Active Plan',
+    '## Goal',
+    '**Plan Status:** active',
+    '**Task family:** feature/design',
+    'new regression/contract test required',
+    '## Non-Goals',
+    '## Parent Architecture Alignment',
+    '## Required Reading',
+    '## Required Skills',
+    '## Evidence And Discovery',
+    '## Impact Snapshot',
+    '## Files In Scope',
+    '## Files Out Of Scope',
+    '## Architecture Seam Decision Gate',
+    '## Planner Self-Check',
+    '## Verification Commands',
+    '## Acceptance Criteria',
+    '## Replan Triggers',
+    '## Rollback Notes',
+    '## Commit Checkpoints',
+  ].join('\n'));
+
+  const errors = verifyDocs(root);
+
+  assert(errors.some((error) => error.includes('status marker must appear before the first ## heading')));
+  assert(errors.some((error) => error.includes('heading out of order: ## Architecture Seam Decision Gate')));
+});
+
+test('verifyDocs rejects Tier 3 active plans missing model and handoff shape', () => {
+  const root = makeFixture({ complete: true });
+  const planPath = path.join(root, 'docs/plans/active.md');
+  fs.writeFileSync(planPath, [
+    '# Active Plan',
+    '**Plan Status:** active',
+    '**Task family:** feature/design',
+    '**Tier:** Tier 3',
+    'new regression/contract test required',
+    '## Goal',
+    '## Non-Goals',
+    '## Parent Architecture Alignment',
+    '## Required Reading',
+    '## Required Skills',
+    '## Evidence And Discovery',
+    '## Impact Snapshot',
+    '## Files In Scope',
+    '## Files Out Of Scope',
+    '## Planner Self-Check',
+    '## Architecture Seam Decision Gate',
+    '## Verification Commands',
+    '## Acceptance Criteria',
+    '## Replan Triggers',
+    '## Rollback Notes',
+    '## Commit Checkpoints',
+    'NEXT_SESSION_HANDOFF',
+    'TASK: fixture',
+  ].join('\n'));
+
+  const errors = verifyDocs(root);
+
+  assert(errors.some((error) => error.includes('missing MODEL_SUGGESTION')));
+  assert(errors.some((error) => error.includes('NEXT_SESSION_HANDOFF missing field NEXT_SESSION_LAUNCHER:')));
+  assert(errors.some((error) => error.includes('NEXT_SESSION_HANDOFF missing field MESSAGE:')));
 });
 
 test('verifyDocs rejects detector ids and cleanup package fields', () => {
@@ -164,6 +236,9 @@ test('verifyDocs rejects workflow skill-transfer sections missing semantic phras
   const errors = verifyDocs(root);
 
   assert(errors.some((error) => error.includes('missing fresh chat bootstrap phrase')));
+  assert(errors.some((error) => error.includes('missing default workflow phrase')));
+  assert(errors.some((error) => error.includes('missing multi-agent usage phrase')));
+  assert(errors.some((error) => error.includes('missing session handoff format phrase')));
   assert(errors.some((error) => error.includes('missing launcher routing matrix phrase')));
   assert(errors.some((error) => error.includes('missing Codex skill discovery policy phrase')));
   assert(errors.some((error) => error.includes('missing legacy skill adaptation audit phrase')));
@@ -398,6 +473,15 @@ function fixtureContent(relativePath) {
       'docs/agentic/external-guidance.md',
       'Do not depend on the original Lineup repo',
       'Run `git status --short --branch` before planning edits',
+      '## Default Workflow',
+      'Plan explicitly before multi-step work',
+      'Do not freeze a plan while ownership',
+      '## Multi-Agent Usage',
+      'Keep read-only roles read-only',
+      'Do not let a worker invent architecture seams',
+      '## Session Handoffs',
+      'NEXT_SESSION_HANDOFF',
+      'MODEL_SUGGESTION',
       'feature-quality-loop.md',
       'Desktop Feature Quality Guardrails',
       'Feature-Quality Loop',
@@ -446,14 +530,18 @@ function fixtureContent(relativePath) {
       '## Non-Goals',
       '## Parent Architecture Alignment',
       '## Required Reading',
+      '## Required Skills',
       '## Evidence And Discovery',
+      '## Impact Snapshot',
       '## Files In Scope',
       '## Files Out Of Scope',
+      '## Planner Self-Check',
       '## Architecture Seam Decision Gate',
       '## Verification Commands',
       '## Acceptance Criteria',
       '## Replan Triggers',
       '## Rollback Notes',
+      '## Commit Checkpoints',
     ].join('\n');
   }
 
