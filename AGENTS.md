@@ -15,6 +15,9 @@ where to look next.
 - Use [`docs/architecture/desktop-repo-genesis-adr.md`](./docs/architecture/desktop-repo-genesis-adr.md)
   for repo-genesis decisions until those decisions are superseded by a reviewed
   ADR.
+- Use [`docs/roadmap/desktop-port-roadmap.md`](./docs/roadmap/desktop-port-roadmap.md)
+  for the ordered port checklist after the current active plan or handoff is
+  understood.
 - Prefer Codanna for repo discovery when the index is useful; record fallback
   to direct reads or `rg` when it is unavailable, stale, or too noisy.
 - Record every copied or adapted upstream Lineup slice in
@@ -45,5 +48,7 @@ where to look next.
   Desktop role and project skill topology
 - [`docs/architecture/CURRENT_STATE.md`](./docs/architecture/CURRENT_STATE.md):
   current architecture truth
+- [`docs/roadmap/desktop-port-roadmap.md`](./docs/roadmap/desktop-port-roadmap.md):
+  ordered desktop port roadmap, reuse map, and global gates
 - [`docs/architecture/import-ledger.md`](./docs/architecture/import-ledger.md):
   copied/adapted upstream source ledger

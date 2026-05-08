@@ -25,6 +25,7 @@ const requiredFiles = [
   'package.json',
   'tsconfig.json',
   'docs/AGENTIC_DEV_WORKFLOW.md',
+  'docs/roadmap/desktop-port-roadmap.md',
   'docs/architecture/README.md',
   'docs/architecture/CURRENT_STATE.md',
   'docs/architecture/desktop-repo-genesis-adr.md',

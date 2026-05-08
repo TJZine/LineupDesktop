@@ -27,6 +27,7 @@ playback host, or installer implementation yet.
 | --- | --- | --- |
 | Workflow/control plane | `AGENTS.md` and `docs/AGENTIC_DEV_WORKFLOW.md` | Scaffolded |
 | Architecture truth | `docs/architecture/CURRENT_STATE.md` | Scaffolded |
+| Port roadmap | `docs/roadmap/desktop-port-roadmap.md` | Scaffolded |
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
 | Import provenance | `docs/architecture/import-ledger.md` | Scaffolded |
 | Player contract vocabulary | `src/contracts/player.ts` | Stub contract only |
@@ -46,3 +47,12 @@ playback host, or installer implementation yet.
 - external media POC
 - secure storage implementation
 - packaging/signing/update pipeline
+
+## Roadmap
+
+Use [`docs/roadmap/desktop-port-roadmap.md`](../roadmap/desktop-port-roadmap.md)
+for the ordered port checklist after the current active plan or handoff is
+understood. It records what comes next after the secure Electron shell
+foundation, which original Lineup slices are likely reusable, which surfaces
+must be newly designed for Desktop, and the global gates that block broad port
+work.

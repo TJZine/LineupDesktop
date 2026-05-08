@@ -19,6 +19,9 @@ This is the operating runbook for Lineup Desktop.
   Desktop role and project skill topology.
 - [`docs/architecture/CURRENT_STATE.md`](./architecture/CURRENT_STATE.md) is
   current architecture truth.
+- [`docs/roadmap/desktop-port-roadmap.md`](./roadmap/desktop-port-roadmap.md)
+  owns the ordered port roadmap, reuse map, and global gates between tracked
+  plans.
 - [`docs/architecture/desktop-repo-genesis-adr.md`](./architecture/desktop-repo-genesis-adr.md)
   owns accepted repo-genesis decisions.
 - [`docs/architecture/import-ledger.md`](./architecture/import-ledger.md) owns
@@ -37,6 +40,14 @@ When tracked docs conflict, use this order:
 6. `docs/agentic/codanna-playbook.md` for Codanna query and fallback practice
 7. `docs/architecture/CURRENT_STATE.md` for current architecture claims
 8. task-specific architecture docs and active plans named by the task
+9. `docs/roadmap/desktop-port-roadmap.md` for sequencing the next major port
+   slice after the current active plan is reviewed, implemented, or explicitly
+   superseded
+
+Active plans own the current execution unit. The roadmap owns sequence, reuse
+strategy, and global gates between plans; it must not override exact scope,
+protocol, IPC, security, or verification decisions in the active plan unless a
+reviewed replan updates that plan.
 
 Historical upstream Lineup cleanup program artifacts are not Desktop authority.
 If a useful lesson from them matters, promote the lesson into a Desktop doc
@@ -53,7 +64,9 @@ instead of importing old package state or detector tokens.
    when authoring or reviewing a durable plan
 6. [`docs/architecture/CURRENT_STATE.md`](./architecture/CURRENT_STATE.md)
 7. the active plan in [`docs/plans/`](./plans/README.md), when one exists
-8. task-specific architecture docs named by the plan or launcher
+8. [`docs/roadmap/desktop-port-roadmap.md`](./roadmap/desktop-port-roadmap.md)
+   when choosing what comes after the current active plan
+9. task-specific architecture docs named by the plan or launcher
 
 Keep always-loaded guidance short. Put detailed task workflow in launchers,
 project skills, architecture docs, or tracked plans so sessions load only what
@@ -198,6 +211,7 @@ implementation would otherwise need to invent ownership or verification policy.
      native player, or agent-control claims.
 3. Load the right source-of-truth docs.
    - current architecture: `docs/architecture/CURRENT_STATE.md`
+   - ordered port roadmap: `docs/roadmap/desktop-port-roadmap.md`
    - security and secrets: `docs/architecture/security-and-secret-flow.md`
    - playback: `docs/architecture/playback-architecture.md`
    - packaging and release gates: `docs/architecture/packaging-release-gates.md`
