@@ -66,10 +66,14 @@ Dependency and build-tool choices are frozen for the first unit:
   renderer boot artifacts. Prefer a dedicated TypeScript build config plus a
   small asset-copy script over introducing Vite, React, Electron Forge,
   Electron Builder, or packaging tools in this unit.
-- Serve the built renderer through an Electron-owned local app protocol such as
-  `lineup://shell` if the implementation can do so without adding a framework.
-  If the worker cannot support a custom local protocol in this first unit, it
-  must stop and replan before falling back to a broader `file` load policy.
+- Serve the built renderer through the Electron-owned local app origin
+  `lineup://shell` at the initial URL `lineup://shell/index.html`. The `lineup`
+  scheme must be registered before app ready as a privileged standard, secure
+  scheme, and the handler may serve only files from the built renderer output
+  root. Path traversal, remote hosts, additional hosts, query strings used as
+  file selectors, and fallback to `file://` are forbidden. If the worker cannot
+  support this local protocol in the first unit, stop and replan before using any
+  broader load policy.
 - Do not introduce UI framework, router, state library, native media package,
   secure-storage package, installer package, or release tooling.
 
@@ -92,6 +96,14 @@ Dependency and build-tool choices are frozen for the first unit:
 - [docs/development/testing.md](../development/testing.md)
 - [docs/plans/2026-05-07-electron-shell-security-foundation-handoff.md](./2026-05-07-electron-shell-security-foundation-handoff.md)
 - [Electron Security](https://www.electronjs.org/docs/latest/tutorial/security)
+
+Freshness gate: before implementation starts, rerun `git status --short
+--branch` and re-read the files named in Required Reading plus
+`src/contracts/ipc.ts`, `package.json`, `tsconfig.json`, `eslint.config.js`,
+`tools/architecture-rules/*`, and `tools/verify-redaction.mjs`. If any
+referenced file, owner boundary, dependency behavior, Electron security guidance,
+or verifier expectation changed materially since this plan was last reviewed,
+stop and update or re-review this plan before editing product code.
 
 ## Required Skills
 
@@ -119,9 +131,11 @@ Dependency and build-tool choices are frozen for the first unit:
 - Required docs were read in the user-requested order: `AGENTS.md`, workflow
   runbook, feature-quality-loop launcher, plan standard, skill strategy,
   Codanna playbook, current architecture state, and the Electron shell handoff.
-- Desktop skills loaded for this plan: `lineup-desktop-feature-quality-loop`,
-  `lineup-desktop-feature-plan`, `execution-plan-authoring`,
-  `verification-strategy`, `architecture-boundaries`, `review-request`, and
+- Desktop skills loaded or reapplied for this plan:
+  `lineup-desktop-feature-quality-loop`, `lineup-desktop-feature-plan`,
+  `execution-plan-authoring`, `verification-strategy`,
+  `architecture-boundaries`, `persistence-boundaries`,
+  `plex-integration-boundaries`, `review-request`, `review-adjudication`, and
   `closeout-verification`.
 - `git status --short --branch` showed the repo on `main` with no pre-existing
   worktree changes before this plan file was added.
@@ -225,6 +239,9 @@ First implementation unit scope:
 - Product scope is resolved: shell frame only.
 - Ownership is resolved: main lifecycle/privileged IPC, preload bridge, renderer
   minimal UI, contracts renderer-safe shapes, helper reserved only.
+- Freshness is explicit: material changes to referenced docs, source contracts,
+  dependencies, Electron security guidance, or verifiers require plan update or
+  re-review before implementation.
 - Adjacent files are named in or out of scope; no hidden Plex/playback/storage
   wiring is required.
 - The first unit uses existing repo owners and avoids growing native-helper,
@@ -245,14 +262,42 @@ coupled enough that one worker should own the slice end to end after plan review
 
 Preload API shape is frozen to shell/window proof only:
 
-- `window.lineupDesktop.shell.getCapabilities()` returns renderer-safe static
-  shell capabilities such as app name, app version, platform family, and whether
-  the shell is running in smoke mode.
+- `window.lineupDesktop.shell.getCapabilities()` returns
+  `Promise<ShellIpcResult<ShellCapabilities>>`.
 - `window.lineupDesktop.shell.onStatusChanged(listener)` subscribes only to a
-  renderer-safe shell status event and returns an unsubscribe function.
+  renderer-safe `ShellStatusEvent` and returns an unsubscribe function.
 - `window.lineupDesktop.window.setFullscreen(enabled)` requests fullscreen
-  changes through main-owned IPC and returns a success/failure result without
-  exposing `BrowserWindow`.
+  changes through main-owned IPC and returns
+  `Promise<ShellIpcResult<WindowFullscreenState>>` without exposing
+  `BrowserWindow`.
+
+The shell contract shapes are frozen for the first unit:
+
+- `ShellCapabilities`: `{ appName: 'Lineup Desktop'; appVersion: string;
+  platform: 'darwin' | 'linux' | 'win32' | 'unknown'; shellMode: 'development' |
+  'smoke' | 'production'; protocolOrigin: 'lineup://shell' }`.
+- `ShellStatusEvent`: `{ status: 'booting' | 'ready' | 'closing'; timestampMs:
+  number }`.
+- `WindowFullscreenState`: `{ enabled: boolean }`.
+- `ShellIpcResult<T>`: `{ ok: true; value: T; requestId: string } | { ok:
+  false; error: { code: 'unauthorized' | 'validation-failed' |
+  'operation-failed'; message: string }; requestId: string }`.
+
+The first unit must use these exact IPC channel and event literals:
+
+- Request channel `lineup:shell:getCapabilities` with no payload.
+- Request channel `lineup:window:intent` with a `RendererIntentEnvelope` whose
+  intent is exactly `window.enterFullscreen` or `window.exitFullscreen` and whose
+  payload is `{}`.
+- Main-to-preload event channel `lineup:shell:statusChanged` carrying a
+  `ShellStatusEvent`.
+
+`window.lineupDesktop.window.setFullscreen(true)` maps to the existing
+`window.enterFullscreen` intent. `setFullscreen(false)` maps to the existing
+`window.exitFullscreen` intent. Do not add a third `window.setFullscreen`
+intent. If these existing window intents cannot support the bridge without
+semantic ambiguity, stop and replan `src/contracts/ipc.ts` before wiring main or
+preload.
 
 The existing `player.*` values in `src/contracts/ipc.ts` remain future contract
 stubs only. They must not be wired to preload, main IPC handlers, renderer calls,
@@ -269,7 +314,7 @@ IPC security contract:
   payload keys fail closed.
 - Main IPC handlers must authorize the caller before acting. Authorization is
   limited to the one expected shell `webContents`, expected main frame, and
-  expected local app origin such as `lineup://shell`; calls from any other
+  exact local app origin `lineup://shell`; calls from any other
   `event.sender`, frame, origin, or destroyed/replaced window fail closed with a
   redacted error.
 - The smoke proof and contract tests must cover unauthorized IPC sender/origin
@@ -295,9 +340,10 @@ Renderer privilege limits:
 - The renderer must include or receive a restrictive CSP for the minimal shell:
   default deny, scripts and styles from self only, no object/embed/base URI, and
   no remote connect sources unless a reviewed future plan names one.
-- Main must verify the loaded renderer URL/origin before exposing shell IPC as
-  usable and must treat any navigation away from the approved local shell origin
-  as a stop condition for IPC.
+- Main must verify the loaded renderer URL is `lineup://shell/index.html` and
+  origin is `lineup://shell` before exposing shell IPC as usable, and must treat
+  any navigation away from that approved local shell origin as a stop condition
+  for IPC.
 - The renderer must not import Electron, Node builtins, main implementation,
   preload implementation, native-helper implementation, filesystem, process, or
   OS modules.
@@ -411,10 +457,16 @@ Stop and return to planning if implementation requires any of the following:
 - Main importing renderer implementation or renderer importing main/preload
   implementation.
 - Shell IPC that cannot reliably authenticate the expected `webContents`, frame,
-  and local shell origin before acting.
+  exact `lineup://shell` origin, and `lineup://shell/index.html` initial URL
+  before acting.
 - Any need to allow navigation, new windows, permission prompts, webviews,
   external URL opening, remote content, missing CSP, or broad file loading in the
   first shell unit.
+- Any need to load renderer content outside the registered `lineup://shell`
+  origin, serve resources outside the built renderer output root, use additional
+  custom protocol hosts, or fall back to `file://` without a reviewed replan.
+- Any need to invent new shell IPC channels, event names, result shapes, or
+  fullscreen intents beyond the exact literals and shapes named in this plan.
 - Shell boot depending on Plex, scheduler, playback, secure storage, native
   helper, installer, signing, release automation, or upstream UI imports.
 - Renderer TypeScript that depends on ambient Node globals/types. Prefer a
@@ -466,7 +518,7 @@ renderer, contracts, architecture lint, redaction, and runtime smoke proof.
 
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: `lineup-desktop-feature-review`
-TASK: Review the active Tier 3 Electron shell security foundation plan.
+TASK: Review the revised active Tier 3 Electron shell security foundation plan.
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: `docs/plans/2026-05-07-electron-shell-security-foundation-plan.md`
@@ -482,8 +534,9 @@ FILES:
 - `src/contracts/*`
 - `tools/architecture-rules/*`
 - `tools/verify-redaction.mjs`
-BLOCKERS: none before review; implementation remains blocked until read-only
-plan review is clean.
+BLOCKERS: implementation remains blocked until read-only plan review confirms
+the freshness gate, IPC/preload vocabulary, and local protocol/origin policy are
+decision-complete.
 MESSAGE: Use `lineup-desktop-feature-review` for read-only adversarial review.
 Prioritize renderer privilege leaks, preload/raw IPC exposure, Electron
 `BrowserWindow` security gaps, scope creep beyond the shell frame, missing
