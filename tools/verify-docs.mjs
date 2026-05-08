@@ -15,6 +15,9 @@ const requiredFiles = [
   '.codex/agents/planner.toml',
   '.codex/agents/reviewer.toml',
   '.codex/agents/worker.toml',
+  '.github/CODEOWNERS',
+  '.github/PULL_REQUEST_TEMPLATE.md',
+  '.github/workflows/ci.yml',
   'AGENTS.md',
   'LICENSE',
   'README.md',
@@ -182,6 +185,16 @@ const workflowAnchorMarkers = [
   },
   {
     path: 'docs/AGENTIC_DEV_WORKFLOW.md',
+    label: 'production engineering guardrails',
+    marker: '## Production Engineering Guardrails',
+    requiredPhrases: [
+      'Dependency changes must name the runtime owner',
+      'Configuration, credentials, app paths, diagnostics, logs',
+      'Keep every committed checkpoint buildable and reversible',
+    ],
+  },
+  {
+    path: 'docs/AGENTIC_DEV_WORKFLOW.md',
     label: 'multi-agent usage',
     marker: '## Multi-Agent Usage',
     requiredPhrases: [
@@ -196,6 +209,16 @@ const workflowAnchorMarkers = [
     requiredPhrases: [
       'NEXT_SESSION_HANDOFF',
       'MODEL_SUGGESTION',
+    ],
+  },
+  {
+    path: '.github/PULL_REQUEST_TEMPLATE.md',
+    label: 'PR code health checklist',
+    marker: '## Code Health',
+    requiredPhrases: [
+      'Change is self-contained and reviewable',
+      'New dependencies, build tools, config, diagnostics, or logging behavior are justified and verified',
+      'Tests protect public seams or stable behavior',
     ],
   },
   {
@@ -466,10 +489,15 @@ function checkWorkflowAnchors(root, errors) {
     'Electron',
     'Process model',
     'Process sandboxing',
+    'Google Engineering Practices',
+    'OWASP Developer Guide',
+    'Twelve-Factor App',
     'Checked on',
     'renderer sandboxing',
     'context isolation',
     'IPC sender/origin validation',
+    'production code health',
+    'dependency, build-tool, configuration, diagnostics, and logging changes',
   ]) {
     if (!guidance.includes(phrase)) {
       errors.push(`docs/agentic/external-guidance.md: missing guidance source: ${phrase}`);
@@ -480,6 +508,14 @@ function checkWorkflowAnchors(root, errors) {
   for (const heading of activePlanHeadings) {
     if (!planStandard.includes(heading)) {
       errors.push(`docs/agentic/plan-authoring-standard.md: missing active-plan heading reference ${heading}`);
+    }
+  }
+  for (const phrase of [
+    'dependency, build-tool, configuration, or lockfile changes',
+    'security/licensing/provenance considerations',
+  ]) {
+    if (!planStandard.includes(phrase)) {
+      errors.push(`docs/agentic/plan-authoring-standard.md: missing production-engineering plan phrase ${phrase}`);
     }
   }
 

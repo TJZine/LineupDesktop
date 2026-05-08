@@ -110,6 +110,8 @@ State the expected blast radius before implementation:
 
 - owners that may change
 - public contracts that may change
+- dependency, build-tool, configuration, or lockfile changes and why they are
+  needed now
 - commands/tests/docs that must change
 - user-visible or runtime behavior that must not change
 - local-only artifacts that must stay untracked
@@ -153,6 +155,8 @@ If any answer exposes a live ambiguity, resolve it before implementation.
 - State which architecture boundary the task advances.
 - Preserve renderer privilege limits, preload narrowness, main/helper ownership,
   redaction, and import provenance whenever implicated.
+- For dependency or build-tool changes, name the owner, reason, lockfile impact,
+  security/licensing/provenance considerations, and rollback or revisit trigger.
 - For UI/runtime work, include preservation contracts for focus, keyboard/remote
   behavior, timers/listeners, accessibility, motion, media surface lifecycle, and
   startup/shutdown ordering when relevant.

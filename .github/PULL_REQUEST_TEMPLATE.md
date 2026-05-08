@@ -18,6 +18,13 @@ List the commands and manual checks you ran.
 - [ ] `npm run verify:docs` for docs/workflow-only changes
 - [ ] Manual proof recorded when Electron, UI, playback, or packaging behavior is involved
 
+## Code Health
+
+- [ ] Change is self-contained and reviewable, or the plan explains why it must be larger
+- [ ] New dependencies, build tools, config, diagnostics, or logging behavior are justified and verified
+- [ ] No speculative abstractions, unused public APIs, compatibility shims, or broad framework setup without an approved owner and revisit trigger
+- [ ] Tests protect public seams or stable behavior rather than brittle private implementation details
+
 ## Desktop Boundary Checklist
 
 - [ ] Renderer remains unprivileged

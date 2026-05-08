@@ -37,8 +37,8 @@ where to look next.
 - [`docs/agentic/session-prompts/README.md`](./docs/agentic/session-prompts/README.md):
   launcher templates and routing table
 - [`docs/agentic/external-guidance.md`](./docs/agentic/external-guidance.md):
-  official OpenAI, Anthropic, and Electron guidance baseline used by this
-  control plane
+  official agentic, Electron, and production-engineering guidance baseline used
+  by this control plane
 - [`docs/agentic/codanna-playbook.md`](./docs/agentic/codanna-playbook.md):
   Codanna-first discovery and fallback rules
 - [`docs/agentic/skill-strategy.md`](./docs/agentic/skill-strategy.md):

@@ -9,8 +9,8 @@ This is the operating runbook for Lineup Desktop.
 - This file is the single operating runbook for workflow, precedence, routing,
   verification, review, and where to look next.
 - [`docs/agentic/external-guidance.md`](./agentic/external-guidance.md) records
-  the official OpenAI, Anthropic, and Electron guidance baseline used by this
-  control plane.
+  the official agentic, Electron, and production-engineering guidance baseline
+  used by this control plane.
 - [`docs/agentic/plan-authoring-standard.md`](./agentic/plan-authoring-standard.md)
   owns the required shape for durable tracked plans.
 - [`docs/agentic/codanna-playbook.md`](./agentic/codanna-playbook.md) owns
@@ -70,6 +70,8 @@ they need.
   narrow from the first implementation slice
 - use verifiers and review loops as part of the harness, not as optional
   cleanup after implementation
+- keep code health improving over time by rejecting avoidable complexity,
+  unjustified dependencies, hidden configuration, and unreviewable change size
 
 ## Fresh Chat Bootstrap
 
@@ -112,6 +114,31 @@ This workflow follows the current official guidance summarized in
 When official guidance changes materially, update
 [`docs/agentic/external-guidance.md`](./agentic/external-guidance.md), this
 runbook, launchers, project skills, and verifier tests in one reviewed pass.
+
+## Production Engineering Guardrails
+
+Every non-trivial code change should improve or preserve long-term code health,
+not merely make the next check pass.
+
+- Keep changes self-contained and reviewable. Separate broad refactors,
+  dependency swaps, generated output, and feature behavior unless an approved
+  plan explains why a single atomic change is safer.
+- Do not introduce unused public APIs, placeholder abstractions, speculative
+  extension points, or framework scaffolding without a near-term caller and a
+  verification path.
+- Dependency changes must name the runtime owner, why the package is needed now,
+  lockfile impact, licensing/provenance risk, security posture, and verification
+  command. Prefer no new dependency when existing platform or repo code is
+  adequate.
+- Configuration, credentials, app paths, diagnostics, logs, and generated
+  artifacts are architecture surfaces. Do not hide environment-specific behavior
+  in constants, renderer storage, checked-in local files, or unredacted logs.
+- Tests should protect stable behavior and public seams with actionable failure
+  output. Avoid brittle private probes, broad snapshots, or tests that only
+  bless current implementation shape.
+- Keep every committed checkpoint buildable and reversible. If a sequence of
+  commits depends on ordering, each committed step must preserve the verified
+  architecture boundary or record an approved exception and rollback trigger.
 
 ## Routing
 

@@ -244,6 +244,70 @@ test('verifyDocs rejects workflow skill-transfer sections missing semantic phras
   assert(errors.some((error) => error.includes('missing legacy skill adaptation audit phrase')));
 });
 
+test('verifyDocs rejects missing production engineering guardrails', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, 'docs/AGENTIC_DEV_WORKFLOW.md'), [
+    '# Fixture',
+    '## Fresh Chat Bootstrap',
+    'docs/agentic/external-guidance.md',
+    'Do not depend on the original Lineup repo',
+    'Run `git status --short --branch` before planning edits',
+    '## Default Workflow',
+    'Plan explicitly before multi-step work',
+    'Do not freeze a plan while ownership',
+    '## Production Engineering Guardrails',
+    '## Multi-Agent Usage',
+    'Keep read-only roles read-only',
+    'Do not let a worker invent architecture seams',
+    '## Session Handoffs',
+    'NEXT_SESSION_HANDOFF',
+    'MODEL_SUGGESTION',
+  ].join('\n'));
+
+  const errors = verifyDocs(root);
+
+  assert(errors.some((error) => error.includes('missing production engineering guardrails phrase')));
+});
+
+test('verifyDocs rejects plan standard missing dependency governance', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, 'docs/agentic/plan-authoring-standard.md'), [
+    '# Fixture',
+    '## Goal',
+    '## Non-Goals',
+    '## Parent Architecture Alignment',
+    '## Required Reading',
+    '## Required Skills',
+    '## Evidence And Discovery',
+    '## Impact Snapshot',
+    '## Files In Scope',
+    '## Files Out Of Scope',
+    '## Planner Self-Check',
+    '## Architecture Seam Decision Gate',
+    '## Verification Commands',
+    '## Acceptance Criteria',
+    '## Replan Triggers',
+    '## Rollback Notes',
+    '## Commit Checkpoints',
+  ].join('\n'));
+
+  const errors = verifyDocs(root);
+
+  assert(errors.some((error) => error.includes('missing production-engineering plan phrase')));
+});
+
+test('verifyDocs rejects PR template missing code health checklist', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, '.github/PULL_REQUEST_TEMPLATE.md'), [
+    '## Verification',
+    '- [ ] `npm run verify`',
+  ].join('\n'));
+
+  const errors = verifyDocs(root);
+
+  assert(errors.some((error) => error.includes('missing PR code health checklist marker')));
+});
+
 test('verifyDocs rejects Tier 3 launcher missing structural headings', () => {
   const root = makeFixture({ complete: true });
   fs.writeFileSync(path.join(root, 'docs/agentic/session-prompts/feature-quality-loop.md'), [
@@ -466,6 +530,15 @@ function fixtureContent(relativePath) {
     ].join('\n');
   }
 
+  if (relativePath === '.github/PULL_REQUEST_TEMPLATE.md') {
+    return [
+      '## Code Health',
+      'Change is self-contained and reviewable',
+      'New dependencies, build tools, config, diagnostics, or logging behavior are justified and verified',
+      'Tests protect public seams or stable behavior',
+    ].join('\n');
+  }
+
   if (relativePath === 'docs/AGENTIC_DEV_WORKFLOW.md') {
     return [
       '# Fixture',
@@ -476,6 +549,10 @@ function fixtureContent(relativePath) {
       '## Default Workflow',
       'Plan explicitly before multi-step work',
       'Do not freeze a plan while ownership',
+      '## Production Engineering Guardrails',
+      'Dependency changes must name the runtime owner',
+      'Configuration, credentials, app paths, diagnostics, logs',
+      'Keep every committed checkpoint buildable and reversible',
       '## Multi-Agent Usage',
       'Keep read-only roles read-only',
       'Do not let a worker invent architecture seams',
@@ -527,10 +604,15 @@ function fixtureContent(relativePath) {
       'Electron',
       'Process model',
       'Process sandboxing',
+      'Google Engineering Practices',
+      'OWASP Developer Guide',
+      'Twelve-Factor App',
       'Checked on',
       'renderer sandboxing',
       'context isolation',
       'IPC sender/origin validation',
+      'production code health',
+      'dependency, build-tool, configuration, diagnostics, and logging changes',
     ].join('\n');
   }
 
@@ -544,10 +626,12 @@ function fixtureContent(relativePath) {
       '## Required Skills',
       '## Evidence And Discovery',
       '## Impact Snapshot',
+      'dependency, build-tool, configuration, or lockfile changes',
       '## Files In Scope',
       '## Files Out Of Scope',
       '## Planner Self-Check',
       '## Architecture Seam Decision Gate',
+      'security/licensing/provenance considerations',
       '## Verification Commands',
       '## Acceptance Criteria',
       '## Replan Triggers',

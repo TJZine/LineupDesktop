@@ -56,6 +56,10 @@ Dependency and build-tool choices are frozen for the first unit:
 
 - Add `electron` as a development dependency because the unit must run a real
   Electron shell and verify Chromium renderer privileges.
+- The Electron dependency change must record the exact installed version,
+  `package-lock.json` impact, npm audit result, license/provenance notes for the
+  npm package, and any security advisory or platform-runtime caveat found during
+  implementation closeout.
 - Keep TypeScript, ESLint, Node test runner, and npm scripts as the build and
   verification baseline.
 - Add only the minimum Electron build wiring needed to emit main, preload, and
@@ -329,6 +333,7 @@ npm run verify:architecture
 npm run test:contracts
 npm run verify:redaction
 npm run smoke:electron
+npm audit --audit-level=moderate
 npm run verify:docs
 npm run verify
 ```
@@ -348,6 +353,8 @@ Expected outcomes:
   minimal renderer boot, proves the approved preload API works, proves forbidden
   renderer globals/APIs are absent, proves navigation/new-window/permission/CSP
   containment is active, and exits cleanly.
+- `npm audit --audit-level=moderate` reports no moderate-or-higher
+  vulnerabilities after adding Electron and any supporting build dependency.
 - `npm run verify:docs` passes after this active plan and any architecture or
   testing doc updates.
 - `npm run verify` passes as the final scaffold/source closeout command. If

@@ -26,6 +26,14 @@ Electron:
 - [Process model](https://www.electronjs.org/docs/latest/tutorial/process-model)
 - [Process sandboxing](https://www.electronjs.org/docs/latest/tutorial/sandbox)
 
+Production engineering:
+
+- [Google Engineering Practices: code review](https://google.github.io/eng-practices/review/)
+- [Google Engineering Practices: small CLs](https://google.github.io/eng-practices/review/developer/small-cls.html)
+- [Google Engineering Practices: what to look for in a code review](https://google.github.io/eng-practices/review/reviewer/looking-for.html)
+- [OWASP Developer Guide: secure coding](https://devguide.owasp.org/en/12-appendices/01-implementation-dos-donts/02-secure-coding/)
+- [Twelve-Factor App: config](https://www.12factor.net/config)
+
 Checked on 2026-05-08.
 
 ## Local Conclusions
@@ -61,6 +69,13 @@ Checked on 2026-05-08.
   context isolation, no renderer Node or raw Electron access, narrow preload
   bridges, IPC sender/origin validation, navigation/new-window containment, and
   custom local protocol preference over broad `file://` loading.
+- Preserve production code health: prefer small self-contained changes, keep the
+  build green after each committed checkpoint, test stable behavior, separate
+  broad refactors from feature changes, and reject avoidable complexity even
+  when it arrives in small increments.
+- Treat dependency, build-tool, configuration, diagnostics, and logging changes
+  as architecture decisions when they alter runtime behavior, security posture,
+  provenance, or long-term maintenance cost.
 - Treat hook-style automation as inspiration for checkpoints only. Do not add
   privileged hooks or background automations unless a reviewed repo need,
   sanitization model, and verification path exist.
@@ -69,7 +84,8 @@ Checked on 2026-05-08.
 
 Refresh this document and the workflow docs when:
 
-- official OpenAI, Anthropic, or Electron guidance changes materially
+- official agentic, Electron, security, or production-engineering guidance
+  changes materially
 - a repeated agent failure shows a local rule is missing or misleading
 - a new reusable workflow graduates into a project skill
 - verifier behavior changes what agents can safely claim
