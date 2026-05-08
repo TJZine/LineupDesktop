@@ -29,6 +29,7 @@ const requiredFiles = [
   'docs/architecture/README.md',
   'docs/architecture/CURRENT_STATE.md',
   'docs/architecture/desktop-repo-genesis-adr.md',
+  'docs/architecture/upstream-behavior-guardrails.md',
   'docs/architecture/import-ledger.md',
   'docs/architecture/security-and-secret-flow.md',
   'docs/architecture/playback-architecture.md',
@@ -251,6 +252,25 @@ const workflowAnchorMarkers = [
   },
 ];
 
+const upstreamBehaviorGuardrailPath = 'docs/architecture/upstream-behavior-guardrails.md';
+
+const upstreamBehaviorGuardrailMarkers = [
+  'Original Lineup behavior is reference evidence',
+  'not Desktop architecture truth',
+  '## Guardrail Matrix',
+  'Preserved Behavior Evidence',
+  'Required Desktop Proof Surface',
+  'Intentional Divergence Policy',
+  'Forbidden Shortcuts',
+  'RD-07/RD-08 player and stream behavior',
+  'RD-10 Plex auth/discovery/library',
+  'RD-11 scheduler/channel/content',
+  'RD-13 UI/navigation/settings',
+  'RD-20 reference compatibility',
+  'Source audits are temporary proof only until a Desktop owner exists',
+  'convert source audits into Desktop tests or fixtures',
+];
+
 const requiredSkillTargets = {
   '.agents/skills/lineup-desktop-feature-plan/SKILL.md': 'docs/agentic/session-prompts/feature-plan.md',
   '.agents/skills/lineup-desktop-feature-implement/SKILL.md': 'docs/agentic/session-prompts/feature-implement.md',
@@ -292,6 +312,7 @@ export function verifyDocs(root = repoRoot) {
   checkMarkdownLinks(root, errors);
   checkActivePlanShape(root, errors);
   checkWorkflowAnchors(root, errors);
+  checkUpstreamBehaviorGuardrails(root, errors);
   checkProjectSkills(root, errors);
   checkTransferredSkills(root, errors);
   checkForbiddenBaggage(root, errors);
@@ -527,6 +548,20 @@ function checkWorkflowAnchors(root, errors) {
       if (!featureQualityLoop.includes(heading)) {
         errors.push(`docs/agentic/session-prompts/feature-quality-loop.md: missing Tier 3 launcher heading ${heading}`);
       }
+    }
+  }
+}
+
+function checkUpstreamBehaviorGuardrails(root, errors) {
+  const absolutePath = path.join(root, upstreamBehaviorGuardrailPath);
+  if (!fs.existsSync(absolutePath)) {
+    return;
+  }
+  const content = fs.readFileSync(absolutePath, 'utf8');
+  const normalizedContent = content.replace(/\s+/gu, ' ');
+  for (const marker of upstreamBehaviorGuardrailMarkers) {
+    if (!normalizedContent.includes(marker)) {
+      errors.push(`${upstreamBehaviorGuardrailPath}: missing upstream behavior guardrail marker: ${marker}`);
     }
   }
 }

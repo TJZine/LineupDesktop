@@ -26,11 +26,17 @@ Before production playback design hardens, a Windows spike must prove:
 
 ## Contract First
 
-Player integration must start from `src/contracts/player.ts` and its tests.
-Concrete playback adapters must not leak native handles, raw media URLs, raw auth
-headers, or engine-specific track ids into renderer-facing state without an
-explicit reviewed contract.
+Player integration starts from `src/contracts/player.ts` and its tests. RD-03
+defines the renderer-safe contract vocabulary for commands, request ids,
+snapshots, events, capability profiles, opaque track ids, error taxonomy, and
+diagnostics before any runtime playback adapter exists.
+
+Concrete playback adapters must not leak native handles, raw media URLs, raw
+auth headers, tokenized URLs, raw Plex payloads, Electron or Node APIs,
+libmpv-specific objects, or engine-specific track ids into renderer-facing state
+without an explicit reviewed contract.
 
 Renderer-facing track state uses opaque UI ids only. Privileged mappings to
-engine ids or Plex stream ids belong behind main/helper or domain-owned
-boundaries and require a reviewed contract before they are introduced.
+engine ids, Plex stream ids, Plex part keys, stream keys, URLs, headers, or
+native handles belong behind main/helper or domain-owned boundaries and require
+a reviewed plan before they are introduced.

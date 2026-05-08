@@ -5,6 +5,10 @@ export type RendererIntent =
   | 'player.play'
   | 'player.pause'
   | 'player.stop'
+  | 'player.seekAbsolute'
+  | 'player.seekRelative'
+  | 'player.setVolume'
+  | 'player.setMute'
   | 'player.selectAudio'
   | 'player.selectSubtitle'
   | 'window.enterFullscreen'
@@ -25,10 +29,21 @@ export const LINEUP_SHELL_STATUS_CHANGED_CHANNEL =
   'lineup:shell:statusChanged' as const;
 
 export const RENDERER_FORBIDDEN_PAYLOAD_KEYS = [
-  'persistentToken',
-  'rawAuthHeaders',
+  'rawMediaUrl',
   'tokenizedUrl',
+  'authHeaders',
+  'rawAuthHeaders',
+  'persistentToken',
+  'credentialMaterial',
   'nativeHandle',
+  'libmpvObject',
+  'engineId',
+  'electronApi',
+  'nodeApi',
+  'rawPlexPayload',
+  'streamKey',
+  'partKey',
+  'secretDiagnostics',
 ] as const;
 
 export type RendererForbiddenPayloadKey =

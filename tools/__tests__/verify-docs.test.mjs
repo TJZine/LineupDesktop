@@ -269,6 +269,34 @@ test('verifyDocs rejects missing production engineering guardrails', () => {
   assert(errors.some((error) => error.includes('missing production engineering guardrails phrase')));
 });
 
+test('verifyDocs requires upstream behavior guardrail document and slice coverage', () => {
+  const root = makeFixture({ complete: true });
+  fs.rmSync(path.join(root, 'docs/architecture/upstream-behavior-guardrails.md'));
+
+  const missingErrors = verifyDocs(root);
+
+  assert(missingErrors.some((error) => error.includes('Missing required file: docs/architecture/upstream-behavior-guardrails.md')));
+
+  fs.writeFileSync(path.join(root, 'docs/architecture/upstream-behavior-guardrails.md'), [
+    '# Upstream Behavior Guardrails',
+    'Original Lineup behavior is reference evidence',
+    'not Desktop architecture truth',
+    '## Guardrail Matrix',
+    'Preserved Behavior Evidence',
+    'Required Desktop Proof Surface',
+    'Intentional Divergence Policy',
+    'Forbidden Shortcuts',
+  ].join('\n'));
+
+  const coverageErrors = verifyDocs(root);
+
+  assert(coverageErrors.some((error) => error.includes('RD-07/RD-08 player and stream behavior')));
+  assert(coverageErrors.some((error) => error.includes('RD-10 Plex auth/discovery/library')));
+  assert(coverageErrors.some((error) => error.includes('RD-11 scheduler/channel/content')));
+  assert(coverageErrors.some((error) => error.includes('RD-13 UI/navigation/settings')));
+  assert(coverageErrors.some((error) => error.includes('RD-20 reference compatibility')));
+});
+
 test('verifyDocs rejects plan standard missing dependency governance', () => {
   const root = makeFixture({ complete: true });
   fs.writeFileSync(path.join(root, 'docs/agentic/plan-authoring-standard.md'), [
@@ -436,6 +464,7 @@ function makeFixture(options = {}) {
       'docs/architecture/README.md',
       'docs/architecture/CURRENT_STATE.md',
       'docs/architecture/desktop-repo-genesis-adr.md',
+      'docs/architecture/upstream-behavior-guardrails.md',
       'docs/architecture/import-ledger.md',
       'docs/architecture/security-and-secret-flow.md',
       'docs/architecture/playback-architecture.md',
@@ -647,6 +676,25 @@ function fixtureContent(relativePath) {
       '## Controller State Machine',
       '## Phase Rules',
       '## Completion Gate',
+    ].join('\n');
+  }
+
+  if (relativePath === 'docs/architecture/upstream-behavior-guardrails.md') {
+    return [
+      '# Upstream Behavior Guardrails',
+      'Original Lineup behavior is reference evidence, not Desktop architecture truth.',
+      'Source audits are temporary proof only until a Desktop owner exists.',
+      'Future plans should convert source audits into Desktop tests or fixtures.',
+      '## Guardrail Matrix',
+      'Preserved Behavior Evidence',
+      'Required Desktop Proof Surface',
+      'Intentional Divergence Policy',
+      'Forbidden Shortcuts',
+      'RD-07/RD-08 player and stream behavior',
+      'RD-10 Plex auth/discovery/library',
+      'RD-11 scheduler/channel/content',
+      'RD-13 UI/navigation/settings',
+      'RD-20 reference compatibility',
     ].join('\n');
   }
 

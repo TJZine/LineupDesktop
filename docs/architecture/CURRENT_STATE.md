@@ -9,6 +9,8 @@ Lineup Desktop is a new Windows-first Electron repository. It currently has a
 minimal secure Electron shell frame plus docs, workflow, contract, and harness
 scaffolding. There is no Plex integration, native playback host, scheduler,
 secure credential storage, copied TV UI, or installer implementation yet.
+RD-04 adds documentation and harness ownership for upstream behavior guardrails
+only; it does not import product runtime code.
 
 ## Product Invariants
 
@@ -28,14 +30,15 @@ secure credential storage, copied TV UI, or installer implementation yet.
 | Workflow/control plane | `AGENTS.md` and `docs/AGENTIC_DEV_WORKFLOW.md` | Scaffolded |
 | Architecture truth | `docs/architecture/CURRENT_STATE.md` | Scaffolded |
 | Port roadmap | `docs/roadmap/desktop-port-roadmap.md` | Scaffolded |
+| Upstream behavior guardrails | `docs/architecture/upstream-behavior-guardrails.md` | RD-04 docs/harness owner |
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
 | Import provenance | `docs/architecture/import-ledger.md` | Scaffolded |
 | Electron main shell | `src/main/index.ts` and `src/main/protocol.ts` | Minimal secure shell frame |
 | Preload bridge | `src/preload/index.cts` | Narrow shell/window bridge |
 | Renderer shell | `src/renderer/index.ts` and `src/renderer/index.html` | Minimal unprivileged boot proof |
 | Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window bridge contract |
-| Player contract vocabulary | `src/contracts/player.ts` | Stub contract only |
-| IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window IPC literals plus future player intent stubs |
+| Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, and diagnostic contract |
+| IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
 | Redaction contract vocabulary | `src/contracts/redaction.ts` | Stub contract only |
 | Docs verifier | `tools/verify-docs.mjs` | Active |
 | Redaction verifier | `tools/verify-redaction.mjs` | Active |
@@ -46,6 +49,7 @@ secure credential storage, copied TV UI, or installer implementation yet.
 - scheduler/channel imports
 - native playback helper
 - external media POC
+- player runtime adapter or preload/main player IPC
 - secure storage implementation
 - packaging/signing/update pipeline
 

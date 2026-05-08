@@ -19,9 +19,20 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
   verifier, and architecture lint scaffolded.
 - [x] First active implementation plan created:
   `docs/plans/2026-05-07-electron-shell-security-foundation-plan.md`.
-- [ ] First active implementation plan reviewed.
-- [ ] Secure Electron shell foundation implemented and reviewed.
-- [ ] Product reuse/import sequence formalized through follow-up tracked plans.
+- [x] First active implementation plan reviewed.
+- [x] Secure Electron shell foundation implemented at `b8fb948`; `npm run
+  smoke:electron` and `npm run verify` passed on 2026-05-08.
+- [x] Secure Electron shell foundation implementation reviewed and clean after
+  one blocker fix, per RD-01 agent closeout report provided on 2026-05-08.
+- [x] Product reuse/import sequence formalized through follow-up tracked plan
+  `docs/plans/2026-05-08-rd-02-source-reuse-inventory-import-strategy-plan.md`.
+- [x] Player contract and capability model completed through RD-03 quality loop:
+  `src/contracts/player.ts`, `src/contracts/ipc.ts`, and
+  `src/__tests__/contracts.test.ts`; `npm run verify` passed and
+  implementation review was clean on 2026-05-08.
+- [x] RD-04 upstream behavior guardrails completed through
+  `docs/architecture/upstream-behavior-guardrails.md`; `npm run verify` passed
+  and scoped implementation review was clean on 2026-05-08.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -35,10 +46,13 @@ after that shell proves the main/preload/renderer boundary.
 2. Finish the current active plan first. Active plans own the current execution
    unit; this roadmap owns sequencing between plans.
 3. Pick the next unchecked roadmap slice whose `Depends on` gates are complete.
-4. Create or update one tracked plan for that slice in `docs/plans/`.
-5. Keep implementation limited to that plan's current unit.
-6. On closeout, update this roadmap only for observed status changes.
-7. End the session with the workflow runbook's `NEXT_SESSION_HANDOFF` shape,
+4. Route Tier 3 roadmap slices through the feature-quality-loop controller so
+   the next session owns planning, plan review, bounded implementation,
+   implementation review, and closeout unless a blocker stops the loop.
+5. Create or update one tracked plan for that slice in `docs/plans/`.
+6. Keep implementation limited to that plan's current unit.
+7. On closeout, update this roadmap only for observed status changes.
+8. End the session with the workflow runbook's `NEXT_SESSION_HANDOFF` shape,
    routing the next session to the next roadmap slice's plan, review, or
    implementation step.
 
@@ -54,6 +68,10 @@ When a roadmap slice reaches its exit gates:
 - update architecture docs or the import ledger when the slice changes ownership
   or imports/adapts upstream Lineup source
 - emit one pasteable `NEXT_SESSION_HANDOFF`
+- route to `lineup-desktop-feature-quality-loop` when the next roadmap slice is
+  Tier 3 and should be carried through planning, review, bounded
+  implementation, implementation review, and closeout in one orchestrated
+  workflow
 - route to `lineup-desktop-feature-plan` when the next slice does not yet have a
   tracked plan
 - route to `lineup-desktop-feature-review` when a plan or implementation needs
@@ -61,9 +79,9 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-After RD-01 is implemented and reviewed, the expected next handoff is to create
-the RD-02 source reuse and import strategy plan. Do not import product code
-before RD-02 is complete.
+RD-01 through RD-04 are complete enough to route the next Tier 3 quality-loop
+session to RD-05. Do not import original Lineup product code until a reviewed
+product slice plan explicitly authorizes a bounded import.
 
 ## Roadmap Checklist
 
@@ -88,8 +106,9 @@ Exit gates:
 
 ### RD-01 Secure Electron Shell Foundation
 
-Status: active plan exists; implementation is blocked until plan review is
-clean.
+Status: complete. Implemented at `b8fb948`; `npm run smoke:electron` and
+`npm run verify` passed on 2026-05-08; implementation review was clean after one
+blocker fix, per RD-01 agent closeout report provided on 2026-05-08.
 
 Depends on:
 
@@ -126,7 +145,8 @@ Next handoff:
 
 ### RD-02 Source Reuse Inventory And Import Strategy
 
-Status: not started.
+Status: complete. Tracked plan exists, plan review is clean, and docs-only
+implementation review is clean.
 
 Depends on:
 
@@ -168,7 +188,10 @@ Stop and replan if:
 
 ### RD-03 Player Contract And Capability Model
 
-Status: not started.
+Status: complete. Implemented through
+`docs/plans/2026-05-08-rd-03-player-contract-capability-model-plan.md`;
+`npm run verify` passed and read-only implementation review was clean on
+2026-05-08.
 
 Depends on:
 
@@ -202,7 +225,10 @@ Exit gates:
 
 ### RD-04 Upstream Behavior Guardrails
 
-Status: not started.
+Status: complete. Implemented through
+`docs/plans/2026-05-08-rd-04-upstream-behavior-guardrails-plan.md` and
+`docs/architecture/upstream-behavior-guardrails.md`; `npm run verify` passed
+and scoped implementation review was clean on 2026-05-08.
 
 Depends on:
 
@@ -227,6 +253,8 @@ Exit gates:
 - Any intentional Desktop divergence is documented before implementation.
 - Original Lineup behavior is treated as reference evidence, not automatic
   Desktop architecture truth.
+- `docs/architecture/upstream-behavior-guardrails.md` exists and docs
+  verification fails if required slice coverage is removed.
 
 ### RD-05 External mpv POC
 
