@@ -5,8 +5,8 @@ turns the GPT Pro handoff report and the accepted repo-genesis decisions into an
 ordered path for future plans.
 
 This is not an implementation plan for any single slice. Each serious slice
-still needs its own tracked plan under `docs/plans/` that follows
-`docs/agentic/plan-authoring-standard.md`.
+still needs its own tracked plan under [`docs/plans/`](../plans/README.md) that
+follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-standard.md).
 
 ## Current Position
 
@@ -21,25 +21,49 @@ still needs its own tracked plan under `docs/plans/` that follows
   `docs/plans/2026-05-07-electron-shell-security-foundation-plan.md`.
 - [ ] First active implementation plan reviewed.
 - [ ] Secure Electron shell foundation implemented and reviewed.
-- [ ] Product reuse/import sequence formalized through this roadmap and
-  follow-up tracked plans.
+- [ ] Product reuse/import sequence formalized through follow-up tracked plans.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
-slice is the secure Electron shell foundation. The report's product-port phases
-begin after the Desktop shell has a proven main/preload/renderer boundary.
+slice is the secure Electron shell foundation. Product-port work starts only
+after that shell proves the main/preload/renderer boundary.
 
 ## How To Use This Roadmap
 
-1. Before starting a new major slice, read this roadmap after `AGENTS.md`, the
-   workflow runbook, current architecture state, and the active plan.
-2. Pick the next unchecked roadmap slice whose dependencies are satisfied.
-3. Create or update one tracked plan for that slice in `docs/plans/`.
-4. Keep implementation limited to that plan's current unit.
-5. On closeout, update this roadmap only for observed status changes.
+1. Read this roadmap after `AGENTS.md`, the workflow runbook, current
+   architecture state, and the active plan.
+2. Finish the current active plan first. Active plans own the current execution
+   unit; this roadmap owns sequencing between plans.
+3. Pick the next unchecked roadmap slice whose `Depends on` gates are complete.
+4. Create or update one tracked plan for that slice in `docs/plans/`.
+5. Keep implementation limited to that plan's current unit.
+6. On closeout, update this roadmap only for observed status changes.
+7. End the session with the workflow runbook's `NEXT_SESSION_HANDOFF` shape,
+   routing the next session to the next roadmap slice's plan, review, or
+   implementation step.
 
 Do not use this roadmap to batch multiple product slices into one broad
 implementation. Its purpose is sequencing and dependency clarity.
+
+## Next-Handoff Rule
+
+When a roadmap slice reaches its exit gates:
+
+- update `Status` only when the evidence was observed in this repo or explicitly
+  recorded as unavailable
+- update architecture docs or the import ledger when the slice changes ownership
+  or imports/adapts upstream Lineup source
+- emit one pasteable `NEXT_SESSION_HANDOFF`
+- route to `lineup-desktop-feature-plan` when the next slice does not yet have a
+  tracked plan
+- route to `lineup-desktop-feature-review` when a plan or implementation needs
+  adversarial review
+- route to `lineup-desktop-feature-implement` only after the relevant plan
+  review is clean
+
+After RD-01 is implemented and reviewed, the expected next handoff is to create
+the RD-02 source reuse and import strategy plan. Do not import product code
+before RD-02 is complete.
 
 ## Roadmap Checklist
 
@@ -47,13 +71,17 @@ implementation. Its purpose is sequencing and dependency clarity.
 
 Status: complete.
 
-Scope:
+Depends on:
 
-- Separate repo, Desktop-specific architecture docs, import ledger, workflow
-  runbook, project skills, Codex role config, verifier scripts, baseline
-  contracts, and active first plan.
+- none
 
-Exit evidence:
+Objective:
+
+- Establish the separate Desktop repo, control plane, architecture docs, import
+  ledger, role config, verifier scripts, baseline contracts, and active first
+  plan.
+
+Exit gates:
 
 - `npm run verify` passed for the control-plane scaffold before product
   implementation.
@@ -63,9 +91,11 @@ Exit evidence:
 Status: active plan exists; implementation is blocked until plan review is
 clean.
 
-Plan:
+Depends on:
 
-- `docs/plans/2026-05-07-electron-shell-security-foundation-plan.md`
+- RD-00 complete.
+- Active plan review clean for
+  `docs/plans/2026-05-07-electron-shell-security-foundation-plan.md`.
 
 Objective:
 
@@ -75,23 +105,32 @@ Objective:
 
 Exit gates:
 
-- Plan review clean.
-- Electron main/preload/renderer shell implemented.
+- Electron main/preload/renderer shell implemented inside the active plan scope.
 - Architecture lint covers new directories.
 - Contract/redaction tests cover renderer-safe API and forbidden privileged
   fields.
-- Electron smoke proof passes or records a real environment blocker.
+- `smoke:electron` proves boot, bridge availability, renderer privilege denial,
+  navigation containment, new-window denial, permission denial, CSP containment,
+  and clean exit.
+- If the local environment cannot run `smoke:electron`, the slice is not
+  complete; record the blocker and hand off to resolve the smoke environment or
+  rerun proof in a capable environment.
 - `npm run verify` passes.
+- Implementation review is clean.
 
-Next action after completion:
+Next handoff:
 
-- Update `docs/architecture/CURRENT_STATE.md`.
-- Mark this roadmap slice complete.
+- Mark RD-01 complete only after the smoke proof and implementation review are
+  complete.
 - Create the RD-02 tracked plan before importing product code.
 
 ### RD-02 Source Reuse Inventory And Import Strategy
 
 Status: not started.
+
+Depends on:
+
+- RD-01 complete.
 
 Objective:
 
@@ -105,12 +144,13 @@ Likely source references:
 - Original Lineup player, platform, navigation, EPG, OSD, settings, storage, and
   redaction modules.
 - Original Lineup tests that protect stable behavior.
-- GPT Pro handoff report sections on reusable slices, risk register, and phase
-  table.
+- GPT Pro handoff report sections on reusable slices, risk register, phase
+  table, and first-task recommendations.
 
 Exit gates:
 
-- A tracked plan or architecture note names the first product import order.
+- A tracked plan or architecture note names the first product import order and
+  this roadmap is updated if that order differs from the current sequence.
 - Import-ledger obligations are explicit for every copied or adapted slice.
 - Original Lineup behavior used as a functionality target is separated from code
   that will actually be copied.
@@ -120,7 +160,7 @@ Exit gates:
 Stop and replan if:
 
 - A proposed import requires renderer custody of credentials, raw auth headers,
-  tokenized media URLs, native handles, Node APIs, or Electron APIs.
+  tokenized media URLs, native handles, Node APIs, Electron APIs, or raw IPC.
 - The import would force broad compatibility shims, root barrels, or old path
   mirrors.
 - The import would make Desktop architecture depend on webOS playback constants
@@ -129,6 +169,11 @@ Stop and replan if:
 ### RD-03 Player Contract And Capability Model
 
 Status: not started.
+
+Depends on:
+
+- RD-01 complete.
+- RD-02 complete enough to identify reusable player and stream concepts.
 
 Objective:
 
@@ -146,8 +191,8 @@ New Desktop design:
 - Opaque renderer-facing track ids.
 - No raw media URLs, headers, engine ids, native handles, or libmpv-specific
   objects in renderer-facing state.
-- Capability-driven stream policy surface that can support webOS, external POC,
-  and native libmpv without conflating them.
+- Capability-driven stream policy surface that can support webOS reference
+  behavior, external POC behavior, and native libmpv without conflating them.
 
 Exit gates:
 
@@ -158,6 +203,11 @@ Exit gates:
 ### RD-04 Upstream Behavior Guardrails
 
 Status: not started.
+
+Depends on:
+
+- RD-02 complete.
+- RD-03 complete for player-facing contracts.
 
 Objective:
 
@@ -172,13 +222,131 @@ Reuse target:
 
 Exit gates:
 
-- For each imported product slice, Desktop has a test, fixture, source audit, or
-  explicit rationale showing how preserved behavior will be protected.
+- For each planned imported product slice, Desktop has a test, fixture, source
+  audit, or explicit rationale showing how preserved behavior will be protected.
 - Any intentional Desktop divergence is documented before implementation.
+- Original Lineup behavior is treated as reference evidence, not automatic
+  Desktop architecture truth.
 
-### RD-05 Secure Storage And Persistence Boundary
+### RD-05 External mpv POC
 
 Status: not started.
+
+Depends on:
+
+- RD-03 complete.
+- RD-04 complete enough to know which playback behaviors need proof.
+
+Objective:
+
+- Run a short, disposable, dev-only external `mpv` IPC POC to learn media facts:
+  stream loading, safe header handling, start offsets, channel-switch timing,
+  subtitle/audio track enumeration, command/event loop behavior, and cleanup
+  behavior.
+
+Non-goals:
+
+- No production architecture commitment.
+- No installer/package changes.
+- No UI redesign.
+- No broad Plex, scheduler, or renderer UI import.
+
+Exit gates:
+
+- POC results are documented with what was proven, what failed, and whether the
+  POC is deleted or quarantined behind a dev-only flag.
+- Stop/channel-switch behavior does not leave stale playback events in the POC
+  evidence.
+- No tokenized URLs or raw auth headers appear in process args, logs, crash
+  output, IPC traces, fixtures, docs, or Codex output.
+
+### RD-06 Native libmpv Host Spike
+
+Status: not started.
+
+Depends on:
+
+- RD-05 complete, unless a reviewed plan explains why the POC is unnecessary.
+
+Objective:
+
+- Prove the production playback path on Windows before broad product imports:
+  helper-hosted native libmpv first, with addon exploration only if the helper
+  path cannot meet overlay or surface requirements.
+
+Required proof:
+
+- Local file playback.
+- Plex-like HTTP playback using safe dummy credentials.
+- Windowed and borderless fullscreen rendering.
+- Overlay visibility above video.
+- Renderer focus/input continuity.
+- Audio/subtitle track observation and selection.
+- Command/event loop behavior, including stop and channel-switch ordering.
+- Helper crash detection without killing the Electron UI.
+- Stale native events cannot corrupt the current playback request.
+- DPI and multi-monitor behavior acceptable for MVP.
+- Redacted native logs.
+
+Exit gates:
+
+- Helper-vs-addon decision recorded from evidence.
+- Licensing/provenance questions captured before public packaging work.
+- Native video/overlay/focus risk is either accepted with evidence or triggers a
+  replan before broad renderer UI, Plex/player integration, or packaging work.
+
+### RD-07 Desktop VideoPlayer Adapter
+
+Status: not started.
+
+Depends on:
+
+- RD-03 complete.
+- RD-06 complete.
+
+Objective:
+
+- Implement the Desktop player adapter against the approved player contract and
+  bridge/native-host boundary.
+
+Exit gates:
+
+- Adapter tests cover command mapping, state, events, errors, stale request
+  handling, diagnostics, helper crash behavior, and request cleanup.
+- Renderer receives only renderer-safe player state.
+- `App.ts` and orchestration owners do not absorb native process policy.
+
+### RD-08 Desktop Stream Policy
+
+Status: not started.
+
+Depends on:
+
+- RD-03 complete.
+- RD-04 complete.
+- RD-07 complete enough to define player capability facts.
+
+Objective:
+
+- Add Desktop capability-driven Plex stream decisions while preserving the
+  original webOS/browser behavior as a separate capability profile or upstream
+  reference.
+
+Exit gates:
+
+- Desktop decisions are driven by capability profile, not webOS constants.
+- Direct play, direct stream, transcode, subtitle fallback, audio fallback, and
+  HDR decisions have tested reasons or explicit unknowns.
+- No Plex HTPC parity claim exists without sample-matrix evidence.
+
+### RD-09 Secure Storage And Persistence Boundary
+
+Status: not started.
+
+Depends on:
+
+- RD-01 complete.
+- RD-02 complete enough to identify credential and storage owners.
 
 Objective:
 
@@ -203,9 +371,15 @@ Exit gates:
 - Backup/restore, unavailable secure-storage behavior, and redacted diagnostics
   expectations are documented.
 
-### RD-06 Plex Auth, Discovery, And Library Import
+### RD-10 Plex Auth, Discovery, And Library Import
 
 Status: not started.
+
+Depends on:
+
+- RD-02 complete.
+- RD-04 complete for Plex behavior guardrails.
+- RD-09 complete.
 
 Objective:
 
@@ -231,9 +405,15 @@ Exit gates:
 - Redaction verifier covers imported files and new fixtures.
 - No renderer credential custody.
 
-### RD-07 Scheduler, Channel, And Content Domain Import
+### RD-11 Scheduler, Channel, And Content Domain Import
 
 Status: not started.
+
+Depends on:
+
+- RD-02 complete.
+- RD-04 complete for scheduler/channel behavior guardrails.
+- RD-09 complete enough to define channel/settings persistence ownership.
 
 Objective:
 
@@ -247,124 +427,21 @@ Reuse target:
 
 Exit gates:
 
+- Import ledger updated before or with the import.
 - Deterministic schedule behavior is protected by tests.
 - Channel persistence is behind typed owners.
 - No scheduler or channel logic enters Electron main/preload.
 
-### RD-08 Renderer UI And Navigation Import
+### RD-12 Plex To Player Integration
 
 Status: not started.
 
-Objective:
+Depends on:
 
-- Bring over the existing DOM TV UI as the Desktop renderer experience without
-  redesigning it: app shell, navigation, EPG, OSD, mini guide, settings, channel
-  setup, overlays, and relevant assets/styles.
-
-Reuse target:
-
-- Original Lineup DOM UI modules, navigation/focus model, EPG virtualization,
-  settings state controllers, and UI design language.
-
-New Desktop design:
-
-- Desktop platform adapters for keyboard, gamepad, media keys, window commands,
-  and app lifecycle.
-- Renderer remains unprivileged.
-
-Exit gates:
-
-- Renderer smoke verifies primary UI routes/workflows reachable in Electron.
-- Focus/navigation tests cover Desktop input mapping where feasible.
-- WebOS-only UI copy or settings are gated or renamed before they become
-  Desktop product truth.
-
-### RD-09 External mpv POC
-
-Status: not started.
-
-Objective:
-
-- Run a short, disposable, dev-only external `mpv` IPC POC to learn media facts:
-  stream loading, header handling, start offsets, channel-switch timing,
-  subtitle/audio track enumeration, and cleanup behavior.
-
-Non-goals:
-
-- No production architecture commitment.
-- No installer/package changes.
-- No UI redesign.
-
-Exit gates:
-
-- POC results are documented with what was proven, what failed, and whether the
-  POC is deleted or quarantined behind a dev-only flag.
-- No tokenized URLs or raw auth headers appear in process args, logs, crash
-  output, IPC traces, fixtures, docs, or Codex output.
-
-### RD-10 Native libmpv Host Spike
-
-Status: not started.
-
-Objective:
-
-- Prove the production playback path on Windows: helper-hosted native libmpv
-  first, with addon exploration only if the helper path cannot meet overlay or
-  surface requirements.
-
-Required proof:
-
-- Local file playback.
-- Plex-like HTTP playback using safe dummy credentials.
-- Windowed and borderless fullscreen rendering.
-- Overlay visibility above video.
-- Renderer focus/input continuity.
-- Audio/subtitle track observation and selection.
-- Helper crash detection without killing the Electron UI.
-- DPI and multi-monitor behavior acceptable for MVP.
-- Redacted native logs.
-
-Exit gates:
-
-- Helper-vs-addon decision recorded from evidence.
-- Licensing/provenance questions captured before public packaging work.
-
-### RD-11 Desktop VideoPlayer Adapter
-
-Status: not started.
-
-Objective:
-
-- Implement the Desktop player adapter against the approved player contract and
-  bridge/native-host boundary.
-
-Exit gates:
-
-- Adapter tests cover command mapping, state, events, errors, stale request
-  handling, diagnostics, and helper crash behavior.
-- Renderer receives only renderer-safe player state.
-- `App.ts` and orchestration owners do not absorb native process policy.
-
-### RD-12 Desktop Stream Policy
-
-Status: not started.
-
-Objective:
-
-- Add Desktop capability-driven Plex stream decisions while preserving the
-  original webOS/browser behavior as a separate capability profile or upstream
-  reference.
-
-Exit gates:
-
-- Desktop decisions are driven by capability profile, not webOS constants.
-- Direct play, direct stream, transcode, subtitle fallback, audio fallback, and
-  HDR decisions have tested reasons or explicit unknowns.
-- No Plex HTPC parity claim exists without sample-matrix evidence.
-
-### RD-13 Plex To Player Integration
-
-Status: not started.
+- RD-07 complete.
+- RD-08 complete.
+- RD-10 complete enough to resolve stream inputs.
+- RD-11 complete enough to provide scheduled playback inputs.
 
 Objective:
 
@@ -379,9 +456,55 @@ Exit gates:
 - Orchestration wiring remains a thin factory/platform seam.
 - Tokens do not reach renderer or logs.
 
+### RD-13 Renderer UI And Navigation Import
+
+Status: not started.
+
+Depends on:
+
+- RD-06 complete, so native overlay/focus feasibility is known before broad UI
+  import.
+- RD-10 and RD-11 complete enough to support UI workflows, or a reviewed plan
+  authorizes mocks/fakes for an earlier UI import.
+
+Objective:
+
+- Bring over the existing DOM TV UI as the Desktop renderer experience without
+  redesigning it: app shell, navigation, EPG, OSD, mini guide, settings, channel
+  setup, overlays, and relevant assets/styles.
+
+Scope rule:
+
+- RD-13 is a parent slice. It should be split into sub-plans for app shell,
+  navigation/input-facing UI, settings/channel setup, EPG, OSD/overlays, and
+  assets/styles whenever one tracked plan would become too broad to review.
+
+Reuse target:
+
+- Original Lineup DOM UI modules, navigation/focus model, EPG virtualization,
+  settings state controllers, and UI design language.
+
+New Desktop design:
+
+- Renderer remains unprivileged.
+- WebOS-only UI copy or settings are gated or renamed before they become
+  Desktop product truth.
+
+Exit gates:
+
+- Renderer smoke verifies primary UI routes/workflows reachable in Electron.
+- Focus/navigation tests cover Desktop input mapping where feasible.
+- No webOS lifecycle, player, or packaging assumption becomes Desktop truth.
+
 ### RD-14 Window, Input, And Fullscreen UX
 
 Status: not started.
+
+Depends on:
+
+- RD-01 complete.
+- RD-06 complete for native surface constraints.
+- RD-13 complete enough to exercise renderer navigation.
 
 Objective:
 
@@ -398,6 +521,12 @@ Exit gates:
 
 Status: not started.
 
+Depends on:
+
+- RD-06 complete.
+- RD-13 complete enough to render overlays and EPG.
+- RD-14 complete enough to test fullscreen/focus behavior.
+
 Objective:
 
 - Ensure EPG, OSD, mini guide, channel badge, settings, channel setup, and
@@ -412,6 +541,12 @@ Exit gates:
 ### RD-16 Subtitle, Audio, And HDR Hardening
 
 Status: not started.
+
+Depends on:
+
+- RD-08 complete.
+- RD-12 complete.
+- RD-15 complete enough to expose media controls.
 
 Objective:
 
@@ -430,6 +565,12 @@ Exit gates:
 
 Status: not started.
 
+Depends on:
+
+- RD-07 complete for player/helper diagnostics.
+- RD-09 complete for secret boundaries.
+- RD-12 complete enough to exercise stream/playback failures.
+
 Objective:
 
 - Add redacted local diagnostics across renderer, main, and native host; crash
@@ -445,6 +586,12 @@ Exit gates:
 ### RD-18 Windows Packaging And Release Pipeline
 
 Status: not started.
+
+Depends on:
+
+- RD-01 complete for Electron packaging shape.
+- RD-06 complete for native binary layout direction.
+- RD-17 complete before public distribution.
 
 Objective:
 
@@ -465,6 +612,10 @@ Exit gates:
 
 Status: not started.
 
+Depends on:
+
+- RD-10 through RD-18 complete enough for a private MVP build.
+
 Objective:
 
 - Run private validation as the maintainer/tester using a structured blocker
@@ -479,14 +630,43 @@ Exit gates:
   playback.
 - Known issues are classified as release blocker, beta blocker, or deferred.
 
-### RD-20 Compatibility And Future Platform Review
+### RD-20 Original Lineup Reference Compatibility Pass
 
-Status: not started.
+Status: triggered review slice; not started.
+
+Depends on:
+
+- Any Desktop slice that copied/adapted upstream product code or intentionally
+  diverged from original Lineup behavior.
 
 Objective:
 
-- After Windows MVP stabilizes, review what remains coupled to Windows and what
-  needs to change before macOS/Linux work.
+- Check that Desktop imports preserve intended original Lineup behavior or record
+  explicit Desktop divergence. Because this is a separate repo, this is a
+  reference-compatibility review, not an automatic requirement to run upstream
+  webOS packaging in every Desktop session.
+
+Exit gates:
+
+- Import ledger entries are current for every copied/adapted upstream slice.
+- Preserved behavior has Desktop tests, fixtures, or source-audit evidence.
+- Intentional divergences are documented in the roadmap, active plan, import
+  ledger, or architecture docs.
+- If a session also changes the original Lineup repo, that repo's own required
+  verification is run there and recorded separately.
+
+### RD-21 Future Platform Review
+
+Status: not started.
+
+Depends on:
+
+- Windows MVP stabilized through RD-19.
+
+Objective:
+
+- Review what remains coupled to Windows and what needs to change before
+  macOS/Linux work.
 
 Exit gates:
 
@@ -538,6 +718,8 @@ Exit gates:
   native handles, Node APIs, Electron APIs, or raw IPC.
 - No webOS media constants as Desktop capability truth.
 - No external `mpv` POC as production architecture.
+- No broad renderer UI, Plex/player integration, or packaging work before the
+  native video/overlay/focus risk is resolved or explicitly replanned.
 - No broad repo moves, root barrels, compatibility shims, or old upstream path
   mirrors unless a reviewed plan names the removal trigger.
 - No new dependency, build tool, packaging tool, diagnostic surface, or logging
@@ -571,7 +753,8 @@ Stop and replan when:
 - Native video/overlay composition cannot meet MVP requirements.
 - Electron/native/storage logic starts moving into renderer or broad
   orchestration owners.
-- Shared policy changes unexpectedly alter upstream webOS behavior.
+- Shared policy changes unexpectedly alter original Lineup behavior without a
+  documented Desktop divergence.
 - Licensing posture conflicts with intended distribution.
 - Raw credential material appears in logs, IPC traces, crash output, fixtures,
   docs, or Codex output.

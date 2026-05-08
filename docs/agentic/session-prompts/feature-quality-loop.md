@@ -12,6 +12,8 @@ state machine rather than a one-pass planner/implementer handoff.
 4. [`docs/agentic/plan-authoring-standard.md`](../plan-authoring-standard.md)
 5. [`docs/architecture/CURRENT_STATE.md`](../../architecture/CURRENT_STATE.md)
 6. active run bundle or tracked plan named by the user
+7. [`docs/roadmap/desktop-port-roadmap.md`](../../roadmap/desktop-port-roadmap.md)
+   when selecting or handing off the next major port slice
 
 ## Use For
 
@@ -59,7 +61,8 @@ state machine rather than a one-pass planner/implementer handoff.
 - `implementation-revise`: fix accepted findings inside the approved unit. Route
   missing decisions or changed boundaries back to planning.
 - `closeout`: rerun required verification, audit the diff, update required docs,
-  and ensure import ledger and redaction rules are satisfied.
+  ensure import ledger and redaction rules are satisfied, and consult the
+  roadmap before emitting the next-session handoff.
 - `done`: use only when review is clean, verification passed, and closeout
   memory surfaces are current.
 - `blocked`: use when progress requires user input, a boundary decision, or a
@@ -74,6 +77,8 @@ The controller may call the task complete only when:
 - required verification commands were observed
 - import ledger, architecture docs, plan status, and run-bundle conclusions are
   current where applicable
+- roadmap status and next roadmap-slice routing are current when the task closes
+  or hands off to a new major port slice
 - no material desktop feature quality guardrail finding remains
 
 ## Output Contract
@@ -86,3 +91,8 @@ Return:
 4. review status and any blocking findings
 5. next exact action if not complete
 6. whether the task is `done`, `closeout pending`, or `blocked`
+
+When the task is done and another major port slice should follow, end with the
+workflow runbook's `NEXT_SESSION_HANDOFF` shape and route to the next roadmap
+slice. Use `lineup-desktop-feature-plan` when that slice does not yet have a
+tracked plan.
