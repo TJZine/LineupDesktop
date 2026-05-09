@@ -13,6 +13,17 @@ No RD-06 source, spike tooling, native helper, product runtime, package
 metadata, dependency, architecture status, roadmap status, or run evidence was
 implemented in this session.
 
+**Windows prerequisite gate status:** blocked on 2026-05-09. A Windows proof
+host was available and reported `win32 x64`, Node `v22.21.1`, npm `11.13.0`,
+and .NET SDK `7.0.317` / host `8.0.26` on Windows `10.0.19045` x64. The gate
+stopped before implementation because repo Electron dependencies were missing
+and no local `mpv` / `mpv-1.dll` availability was found. The Windows
+proof-runner changed no files, produced no local RD-06 run evidence, ran no
+preflight/WID smoke/verification commands beyond prerequisite checks, and left
+only a pre-existing `.codex/config.toml` dirty state in that checkout. The next
+step is prerequisite provisioning outside the RD-06 implementation task, then a
+fresh Windows proof-runner resume.
+
 **Verification classification:** broader integration/manual proof required
 
 ## Goal
@@ -28,11 +39,12 @@ through `wid`, with a minimal dev-only Electron harness only because RD-06 must
 prove BrowserWindow surface, overlay, fullscreen, focus, track, crash, and
 redaction behavior in the shape closest to the production hypothesis.
 
-The current controller host observed `darwin arm64`. No Windows proof runner is
-available in the parent context. Therefore this controller may complete plan
-drafting and route to clean plan review, but implementation must stop as
-blocked/replan unless a Windows proof environment is provided. A macOS-only
-proof is not RD-06 completion.
+The initial controller host observed `darwin arm64`. A later Windows
+proof-runner reached only prerequisite checks and stopped because repo Electron
+dependencies and local mpv/libmpv were unavailable. Implementation must remain
+blocked/replan unless a Windows proof environment with all prerequisites already
+present is provided. A macOS-only proof, or a Windows host that fails
+prerequisite gates, is not RD-06 completion.
 
 Owner path after clean plan review only:
 
@@ -672,6 +684,16 @@ Rollback for reviewed implementation work:
   if those tracked docs were updated by the reviewed RD-06 unit and the
   controller explicitly chooses rollback.
 
+Rollback for prerequisite provisioning outside RD-06:
+
+- Do not treat outside-task dependency installation as RD-06 implementation.
+- If `npm install`, local mpv/libmpv provisioning, PATH changes, or Windows
+  environment setup changes package metadata, lockfiles, global tools, native
+  libraries, or machine state, verify those changes separately before resuming
+  this plan.
+- RD-06 resumes only after the Windows proof-runner starts with prerequisites
+  already present.
+
 ## Commit Checkpoints
 
 Checkpoint 1: plan artifact only.
@@ -707,7 +729,7 @@ WHY: RD-06 touches native playback, Electron process ownership, helper boundarie
 
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
-TASK: Resume RD-06 Native libmpv Host Spike on a Windows proof host
+TASK: Resume RD-06 after Windows prerequisite provisioning
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-05-08-rd-06-native-libmpv-host-spike-plan.md
@@ -721,6 +743,6 @@ FILES:
 - docs/roadmap/desktop-port-roadmap.md
 - src/contracts/player.ts
 - src/contracts/ipc.ts
-BLOCKERS: Current controller host was macOS (`darwin arm64`); RD-06 implementation proof is blocked until a Windows desktop proof environment with display/GPU, Node >=22.12.0, repo Electron install, pre-existing .NET SDK, and local libmpv/mpv availability is provided.
+BLOCKERS: Windows proof-runner host exists, but the 2026-05-09 prerequisite gate found repo Electron dependencies missing and no local mpv/libmpv availability. RD-06 implementation proof remains blocked until prerequisite provisioning happens outside the task and the Windows session starts with display/GPU, Node >=22.12.0, repo Electron install, pre-existing .NET SDK, and local mpv/libmpv availability already present.
 MESSAGE:
-Resume the RD-06 feature quality loop from `execution-unit-select` only on a Windows desktop proof host. The active plan has clean final plan review and authorizes only the `windows-libmpv-environment-and-wid-smoke` first unit. Do not implement on macOS or any non-Windows host, do not use Codanna, and do not install dependencies, native libraries, .NET, mpv/libmpv, NuGet packages, build tools, helper binaries, or package metadata. If the Windows proof host cannot satisfy the pre-existing .NET SDK and local libmpv/mpv provenance checks, keep RD-06 blocked/replan. If the Windows proof host is available, implement only the reviewed dev-only `tools/libmpv-spike/` unit with dummy data, private one-shot helper parent-window custody, RD-06-specific redaction tests, local ignored evidence only, and the plan's exact verification commands.
+Resume the RD-06 feature quality loop from `execution-unit-select` only after Windows prerequisite provisioning has happened outside the RD-06 task. A prior Windows proof-runner confirmed `win32 x64`, Node `v22.21.1`, npm `11.13.0`, and .NET SDK `7.0.317`, but blocked because repo Electron dependencies were not installed and no local mpv/libmpv was available. Do not use Codanna. Do not install dependencies, native libraries, .NET, mpv/libmpv, NuGet packages, build tools, helper binaries, package scripts, package metadata, or lockfile changes inside the RD-06 implementation task. If the Windows proof host still cannot satisfy repo Electron install plus local libmpv/mpv provenance checks at task start, keep RD-06 blocked/replan. If prerequisites are already present, implement only the reviewed dev-only `tools/libmpv-spike/` `windows-libmpv-environment-and-wid-smoke` unit with dummy data, private one-shot helper parent-window custody, RD-06-specific redaction tests, local ignored evidence only, and the plan's exact verification commands.
