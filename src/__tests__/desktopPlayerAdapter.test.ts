@@ -36,6 +36,29 @@ class FakeNativePlayerHost implements NativePlayerHostPort {
   }
 }
 
+class DeferredNativePlayerHost implements NativePlayerHostPort {
+  readonly commands: PlayerCommand[] = [];
+  readonly cleanupRequestIds: Array<string | null> = [];
+  readonly resolvers: Array<(result: NativePlayerHostCommandResult) => void> = [];
+
+  async execute(command: PlayerCommand): Promise<NativePlayerHostCommandResult> {
+    this.commands.push(command);
+    return new Promise<NativePlayerHostCommandResult>((resolve) => {
+      this.resolvers.push(resolve);
+    });
+  }
+
+  async cleanup(requestId: string | null): Promise<void> {
+    this.cleanupRequestIds.push(requestId);
+  }
+
+  resolveNext(result: NativePlayerHostCommandResult = { ok: true }): void {
+    const resolve = this.resolvers.shift();
+    assert.ok(resolve, 'expected pending native host command');
+    resolve(result);
+  }
+}
+
 const media: PlayerMediaSummary = {
   id: 'media-1',
   title: 'Episode 1',
@@ -227,6 +250,37 @@ test('desktop player adapter ignores stale host events by request id', async () 
   assertNoForbiddenKeys(events);
 });
 
+test('desktop player adapter quarantines older pending load events from newer snapshots', async () => {
+  const host = new DeferredNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+
+  const oldDispatch = adapter.dispatchRendererIntent(loadEnvelope('request-older'));
+  const newDispatch = adapter.dispatchRendererIntent(loadEnvelope('request-newer'));
+
+  assert.equal(adapter.getPendingRequestCount(), 2);
+  assert.equal(adapter.getSnapshot().requestId, 'request-newer');
+
+  const events = adapter.handleHostEvent({
+    type: 'media.loaded',
+    requestId: 'request-older',
+    media: { ...media, id: 'media-older' },
+    durationMs: 120_000,
+    tracks: [audioTrack],
+  } satisfies NativePlayerHostEvent);
+
+  assert.equal(adapter.getSnapshot().requestId, 'request-newer');
+  assert.notEqual(adapter.getSnapshot().media?.id, 'media-older');
+  assert.equal(events[0]?.event, 'warning');
+  if (events[0]?.event === 'warning') {
+    assert.equal(events[0].warning.category, 'stale-request');
+  }
+
+  host.resolveNext();
+  host.resolveNext();
+  await Promise.all([oldDispatch, newDispatch]);
+  assertNoForbiddenKeys(events);
+});
+
 test('desktop player adapter quarantines stale host events after cleanup', async () => {
   const host = new FakeNativePlayerHost();
   const adapter = new DesktopPlayerAdapter(host);
@@ -293,6 +347,24 @@ test('desktop player adapter redacts diagnostics and maps helper crash safely', 
   }
   assert.equal(adapter.getSnapshot().status, 'error');
   assertNoForbiddenKeys(adapter.getSnapshot());
+});
+
+test('desktop player adapter clears pending request ids on helper crash', async () => {
+  const host = new DeferredNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+
+  const pendingDispatch = adapter.dispatchRendererIntent(loadEnvelope('request-crashing'));
+
+  assert.equal(adapter.getPendingRequestCount(), 1);
+  const events = adapter.handleHelperCrash();
+
+  assert.equal(adapter.getPendingRequestCount(), 0);
+  assertErrorEvent(events, 'helper-failure');
+  assert.equal(adapter.getSnapshot().status, 'error');
+
+  host.resolveNext();
+  await pendingDispatch;
+  assertNoForbiddenKeys(events);
 });
 
 test('desktop player adapter cleans up requests and maps cleanup failure safely', async () => {

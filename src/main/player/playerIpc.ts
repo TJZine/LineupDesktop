@@ -6,7 +6,6 @@ import {
   LINEUP_PLAYER_CLEANUP_CHANNEL,
   LINEUP_PLAYER_COMMAND_CHANNEL,
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
-  type RendererIntentEnvelope,
 } from '../../contracts/ipc.js';
 import type {
   PlayerCommand,
@@ -22,6 +21,7 @@ import { DesktopPlayerAdapter } from './desktopPlayerAdapter.js';
 import type {
   NativePlayerHostCommandResult,
   NativePlayerHostEvent,
+  NativePlayerHostFactory,
   NativePlayerHostPort,
 } from './nativePlayerHostPort.js';
 
@@ -32,10 +32,12 @@ export interface RegisterPlayerIpcHandlersOptions {
   isAuthorizedEvent(event: IpcMainInvokeEvent): boolean;
   sendPlayerEvent(event: PlayerEvent): void;
   createRequestId(prefix: string): string;
+  reportDiagnostic?(message: string, error: unknown): void;
+  nativeHostFactory?: NativePlayerHostFactory;
   ipcMain?: PlayerIpcMain;
 }
 
-export type PlayerIpcTeardown = () => void;
+export type PlayerIpcTeardown = () => Promise<void>;
 
 const PLAYER_IPC_CHANNELS = [
   LINEUP_PLAYER_COMMAND_CHANNEL,
@@ -49,7 +51,7 @@ export function registerPlayerIpcHandlers(
   const ipcMain = options.ipcMain ?? getElectronIpcMain();
   const runtime =
     options.shellMode === 'development' || options.shellMode === 'smoke'
-      ? { adapter: new DesktopPlayerAdapter(new InertNativePlayerHost()) }
+      ? { adapter: new DesktopPlayerAdapter(createDevelopmentHost(options)) }
       : { adapter: null };
 
   ipcMain.handle(LINEUP_PLAYER_COMMAND_CHANNEL, async (event, payload: unknown) => {
@@ -63,9 +65,7 @@ export function registerPlayerIpcHandlers(
       return playerFailure(requestId, error);
     }
 
-    const result = await runtime.adapter.dispatchRendererIntent(
-      payload as RendererIntentEnvelope<unknown>,
-    );
+    const result = await runtime.adapter.dispatchRendererIntent(payload);
     emitEvents(options, result.events);
 
     if (!result.accepted) {
@@ -95,7 +95,14 @@ export function registerPlayerIpcHandlers(
       return playerSuccess(requestId, createInertSnapshot());
     }
 
-    const result = await runtime.adapter.cleanup();
+    let result: Awaited<ReturnType<DesktopPlayerAdapter['cleanup']>>;
+    try {
+      result = await runtime.adapter.cleanup();
+    } catch (error: unknown) {
+      options.reportDiagnostic?.('Player IPC cleanup failed', error);
+      return playerFailure(requestId, cleanupError(requestId));
+    }
+
     emitEvents(options, result.events);
 
     if (!result.accepted) {
@@ -108,12 +115,29 @@ export function registerPlayerIpcHandlers(
     return playerSuccess(requestId, result.snapshot);
   });
 
-  return () => {
-    runtime.adapter?.cleanup().catch(() => undefined);
-    for (const channel of PLAYER_IPC_CHANNELS) {
-      ipcMain.removeHandler(channel);
+  return async () => {
+    try {
+      const result = await runtime.adapter?.cleanup();
+      if (result !== undefined && !result.accepted) {
+        options.reportDiagnostic?.(
+          'Player IPC cleanup failed',
+          findResultError(result.events) ?? cleanupError(result.snapshot.requestId ?? 'player-cleanup'),
+        );
+      }
+    } catch (error) {
+      options.reportDiagnostic?.('Player IPC cleanup failed', error);
+    } finally {
+      for (const channel of PLAYER_IPC_CHANNELS) {
+        ipcMain.removeHandler(channel);
+      }
     }
   };
+}
+
+function createDevelopmentHost(
+  options: Pick<RegisterPlayerIpcHandlersOptions, 'nativeHostFactory'>,
+): NativePlayerHostPort {
+  return options.nativeHostFactory?.() ?? new InertNativePlayerHost();
 }
 
 function emitEvents(

@@ -17,7 +17,11 @@ import {
 import { REDACTION_BOUNDARY } from '../contracts/redaction.js';
 import {
   PLAYER_ERROR_CATEGORIES,
+  PLAYER_COMMAND_VALUES,
   PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
+  PLAYER_STATUS_VALUES,
+  PLAYER_TRACK_DELIVERY_TYPE_VALUES,
+  PLAYER_TRACK_KIND_VALUES,
   isRendererSafePlayerEvent,
   type PlaybackCapabilityProfile,
   type PlayerCommand,
@@ -32,6 +36,7 @@ import {
 import {
   LINEUP_PROTOCOL_ORIGIN,
   LINEUP_SHELL_URL,
+  SHELL_STATUS_VALUES,
   isShellStatusEvent,
   isWindowFullscreenIntentEnvelope,
   shellFailure,
@@ -44,6 +49,18 @@ import {
   isAllowedShellUrl,
   isAuthorizedShellIpcRequest,
 } from '../main/shellSecurity.js';
+import preloadVocabulary from '../preload/vocabulary.cjs';
+
+const {
+  PLAYER_COMMAND_VALUES: PRELOAD_PLAYER_COMMAND_VALUES,
+  PLAYER_ERROR_CATEGORIES: PRELOAD_PLAYER_ERROR_CATEGORIES,
+  PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS: PRELOAD_PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
+  PLAYER_RENDERER_INTENT_VALUES: PRELOAD_PLAYER_RENDERER_INTENT_VALUES,
+  PLAYER_STATUS_VALUES: PRELOAD_PLAYER_STATUS_VALUES,
+  PLAYER_TRACK_DELIVERY_TYPE_VALUES: PRELOAD_PLAYER_TRACK_DELIVERY_TYPE_VALUES,
+  PLAYER_TRACK_KIND_VALUES: PRELOAD_PLAYER_TRACK_KIND_VALUES,
+  SHELL_STATUS_VALUES: PRELOAD_SHELL_STATUS_VALUES,
+} = preloadVocabulary;
 
 function assertNoForbiddenKeys(value: unknown): void {
   if (Array.isArray(value)) {
@@ -188,6 +205,23 @@ test('player renderer intents are closed and separate from shell window intents'
     'player.selectSubtitle',
   ]);
   assert.equal((PLAYER_RENDERER_INTENTS as readonly string[]).includes('window.enterFullscreen'), false);
+});
+
+test('preload guard vocabulary matches contract vocabulary', () => {
+  assert.deepEqual([...PRELOAD_SHELL_STATUS_VALUES], [...SHELL_STATUS_VALUES]);
+  assert.deepEqual([...PRELOAD_PLAYER_ERROR_CATEGORIES], [...PLAYER_ERROR_CATEGORIES]);
+  assert.deepEqual(
+    [...PRELOAD_PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS],
+    [...PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS],
+  );
+  assert.deepEqual([...PRELOAD_PLAYER_STATUS_VALUES], [...PLAYER_STATUS_VALUES]);
+  assert.deepEqual([...PRELOAD_PLAYER_COMMAND_VALUES], [...PLAYER_COMMAND_VALUES]);
+  assert.deepEqual([...PRELOAD_PLAYER_RENDERER_INTENT_VALUES], [...PLAYER_RENDERER_INTENTS]);
+  assert.deepEqual([...PRELOAD_PLAYER_TRACK_KIND_VALUES], [...PLAYER_TRACK_KIND_VALUES]);
+  assert.deepEqual(
+    [...PRELOAD_PLAYER_TRACK_DELIVERY_TYPE_VALUES],
+    [...PLAYER_TRACK_DELIVERY_TYPE_VALUES],
+  );
 });
 
 test('player events make stale updates identifiable without engine state', () => {

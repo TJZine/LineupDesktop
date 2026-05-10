@@ -338,7 +338,7 @@ export type PlayerEvent =
       error: PlayerError;
     };
 
-const PLAYER_STATUS_VALUES = [
+export const PLAYER_STATUS_VALUES = [
   'idle',
   'loading',
   'ready',
@@ -352,7 +352,7 @@ const PLAYER_STATUS_VALUES = [
   'destroyed',
 ] as const satisfies readonly PlayerStatus[];
 
-const PLAYER_COMMAND_NAME_VALUES = [
+export const PLAYER_COMMAND_VALUES = [
   'load',
   'play',
   'pause',
@@ -365,13 +365,13 @@ const PLAYER_COMMAND_NAME_VALUES = [
   'track.subtitle.select',
 ] as const satisfies readonly PlayerCommandName[];
 
-const PLAYER_TRACK_KIND_VALUES = [
+export const PLAYER_TRACK_KIND_VALUES = [
   'audio',
   'subtitle',
   'video',
 ] as const satisfies readonly PlayerTrackKind[];
 
-const PLAYER_TRACK_DELIVERY_TYPE_VALUES = [
+export const PLAYER_TRACK_DELIVERY_TYPE_VALUES = [
   'embedded',
   'sidecar',
   'external',
@@ -388,7 +388,7 @@ export function isRendererSafePlayerEvent(value: unknown): value is PlayerEvent 
     case 'state.changed':
       return (
         hasOnlyKeys(value, ['event', 'requestId', 'snapshot']) &&
-        isNullableString(value.requestId) &&
+        isNullableNonEmptyString(value.requestId) &&
         isRendererSafePlayerSnapshot(value.snapshot)
       );
     case 'time.updated':
@@ -427,14 +427,14 @@ export function isRendererSafePlayerEvent(value: unknown): value is PlayerEvent 
           'videoTrackId',
         ]) &&
         isNonEmptyString(value.requestId) &&
-        isNullableString(value.audioTrackId) &&
-        isNullableString(value.subtitleTrackId) &&
-        isNullableString(value.videoTrackId)
+        isNullableNonEmptyString(value.audioTrackId) &&
+        isNullableNonEmptyString(value.subtitleTrackId) &&
+        isNullableNonEmptyString(value.videoTrackId)
       );
     case 'command.settled': {
       if (
         !isNonEmptyString(value.requestId) ||
-        !isStringInSet(value.command, PLAYER_COMMAND_NAME_VALUES) ||
+        !isStringInSet(value.command, PLAYER_COMMAND_VALUES) ||
         typeof value.ok !== 'boolean'
       ) {
         return false;
@@ -455,13 +455,13 @@ export function isRendererSafePlayerEvent(value: unknown): value is PlayerEvent 
     case 'warning':
       return (
         hasOnlyKeys(value, ['event', 'requestId', 'warning']) &&
-        isNullableString(value.requestId) &&
+        isNullableNonEmptyString(value.requestId) &&
         isRendererSafePlayerError(value.warning)
       );
     case 'error':
       return (
         hasOnlyKeys(value, ['event', 'requestId', 'error']) &&
-        isNullableString(value.requestId) &&
+        isNullableNonEmptyString(value.requestId) &&
         isRendererSafePlayerError(value.error)
       );
     default:
@@ -506,7 +506,7 @@ function isRendererSafePlayerSnapshot(value: unknown): value is PlayerSnapshot {
       'tracks',
       'lastError',
     ]) &&
-    isNullableString(value.requestId) &&
+    isNullableNonEmptyString(value.requestId) &&
     isStringInSet(value.status, PLAYER_STATUS_VALUES) &&
     (value.media === null || isRendererSafeMediaSummary(value.media)) &&
     (value.capabilityProfileId === null || isNonEmptyString(value.capabilityProfileId)) &&
@@ -517,9 +517,9 @@ function isRendererSafePlayerSnapshot(value: unknown): value is PlayerSnapshot {
     isFiniteRangeNumber(value.volume, 0, 1) &&
     typeof value.muted === 'boolean' &&
     isFiniteNonNegativeNumber(value.playbackRate) &&
-    isNullableString(value.selectedAudioTrackId) &&
-    isNullableString(value.selectedSubtitleTrackId) &&
-    isNullableString(value.selectedVideoTrackId) &&
+    isNullableNonEmptyString(value.selectedAudioTrackId) &&
+    isNullableNonEmptyString(value.selectedSubtitleTrackId) &&
+    isNullableNonEmptyString(value.selectedVideoTrackId) &&
     isRendererSafeTracks(value.tracks) &&
     (value.lastError === null || isRendererSafePlayerError(value.lastError))
   );
@@ -671,7 +671,7 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function isNullableString(value: unknown): value is string | null {
+function isNullableNonEmptyString(value: unknown): value is string | null {
   return value === null || isNonEmptyString(value);
 }
 

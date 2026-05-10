@@ -28,6 +28,7 @@ import {
 } from '../contracts/shell.js';
 import type { PlayerEvent } from '../contracts/player.js';
 import { LINEUP_CSP, registerLineupProtocolHandler, registerLineupProtocolScheme } from './protocol.js';
+import { redactMainProcessError, reportMainProcessDiagnostic } from './redactedDiagnostics.js';
 import {
   isAllowedShellUrl,
   isAuthorizedShellIpcRequest,
@@ -46,6 +47,8 @@ const smokeMode = shellMode === 'smoke';
 
 let shellWindow: BrowserWindow | null = null;
 let teardownPlayerIpc: PlayerIpcTeardown | null = null;
+let playerIpcQuitTeardownInProgress = false;
+let playerIpcQuitTeardownComplete = false;
 let containmentCounters = {
   navigationDenied: 0,
   windowOpenDenied: 0,
@@ -65,6 +68,7 @@ app.whenReady()
       isAuthorizedEvent,
       sendPlayerEvent,
       createRequestId,
+      reportDiagnostic: reportMainProcessDiagnostic,
     });
     shellWindow = createShellWindow();
     attachContainmentHandlers(shellWindow);
@@ -87,10 +91,29 @@ app.on('window-all-closed', () => {
   app.quit();
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
   publishShellStatus('closing');
-  teardownPlayerIpc?.();
+  const teardown = teardownPlayerIpc;
+  if (playerIpcQuitTeardownComplete || teardown === null) {
+    return;
+  }
+  if (playerIpcQuitTeardownInProgress) {
+    event.preventDefault();
+    return;
+  }
+
+  event.preventDefault();
   teardownPlayerIpc = null;
+  playerIpcQuitTeardownInProgress = true;
+  teardown()
+    .catch((error: unknown) => {
+      reportMainProcessDiagnostic('Player IPC cleanup failed during quit', error);
+    })
+    .finally(() => {
+      playerIpcQuitTeardownComplete = true;
+      playerIpcQuitTeardownInProgress = false;
+      app.quit();
+    });
 });
 
 function createShellWindow(): BrowserWindow {
@@ -213,14 +236,32 @@ function getShellCapabilities(): ShellCapabilities {
 }
 
 function publishShellStatus(status: ShellStatusEvent['status']): void {
-  shellWindow?.webContents.send(LINEUP_SHELL_STATUS_CHANGED_CHANNEL, {
+  sendToShellWindow(LINEUP_SHELL_STATUS_CHANGED_CHANNEL, {
     status,
     timestampMs: Date.now(),
   } satisfies ShellStatusEvent);
 }
 
 function sendPlayerEvent(event: PlayerEvent): void {
-  shellWindow?.webContents.send(LINEUP_PLAYER_EVENT_CHANNEL, event);
+  sendToShellWindow(LINEUP_PLAYER_EVENT_CHANNEL, event);
+}
+
+function sendToShellWindow(channel: string, payload: unknown): void {
+  const window = shellWindow;
+  if (window === null || window.isDestroyed()) {
+    return;
+  }
+
+  const { webContents } = window;
+  if (webContents.isDestroyed()) {
+    return;
+  }
+
+  try {
+    webContents.send(channel, payload);
+  } catch (error) {
+    reportMainProcessDiagnostic('Shell event delivery failed', error);
+  }
 }
 
 function getShellMode(): ShellMode {
@@ -250,10 +291,7 @@ function createRequestId(prefix: string): string {
 }
 
 function redactError(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'Electron shell startup failed.';
+  return redactMainProcessError(error, 'Electron shell startup failed.');
 }
 
 async function runSmokeAssertions(window: BrowserWindow): Promise<void> {

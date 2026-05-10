@@ -1,101 +1,95 @@
-**Plan Status:** active
+# RD-07 Desktop VideoPlayer Adapter Plan
+
+**Plan Status:** complete
 
 **Task family:** feature/design
 
 **Tier:** Tier 3
 
-**Controller phase:** implementation closeout
+**Controller phase:** done
 
-**Verification classification:** new regression/contract test required
+**Verification classification:** broader integration/manual proof required
 
 ## Goal
 
-Continue RD-07 Desktop VideoPlayer Adapter after the reviewed
-`desktop-player-adapter-boundary-core` baseline.
+Finish RD-07 after the reviewed adapter core, runtime IPC/preload bridge, and
+Mac-reviewed native-host process seam by authorizing one Windows closeout unit:
+`desktop-player-windows-native-host-proof`.
 
-Completed baseline to preserve:
+Preserved baseline:
 
-- `src/main/player/desktopPlayerAdapter.ts` owns the main-process adapter core.
-- `src/main/player/nativePlayerHostPort.ts` defines the private fakeable native
-  host port.
-- `src/__tests__/desktopPlayerAdapter.test.ts` covers command mapping,
-  renderer-intent validation, host-event validation, renderer-safe errors,
-  request cleanup, helper crash normalization, stale-event quarantine, and
-  forbidden-field exclusion.
+- Commit `75062e0` wires the reviewed runtime player IPC/preload bridge through
+  `src/main/player/playerIpc.ts` and `window.lineupDesktop.player`.
+- Commit `e2df530` closes out the RD-07 runtime bridge docs and roadmap state.
+- The existing `DesktopPlayerAdapter`, `NativePlayerHostPort`, and player IPC
+  bridge remain the reviewed public seam.
 
-RD-07 continuation work is split into two bounded units:
-
-1. `desktop-player-runtime-ipc-preload-delivery`: implemented and read-only
-   implementation re-reviewed clean on 2026-05-10. This Mac-verifiable unit
-   wires narrow runtime main/preload player IPC against the existing
-   `DesktopPlayerAdapter` and a development/smoke fake host seam, with
-   production unsupported/noop behavior.
-2. `desktop-player-windows-native-host-proof`: a later Windows-only native host
-   integration/proof unit against the RD-06 app-owned native presentation
-   direction. This must be reviewed separately and must not be implemented by
-   the Mac first pass except through handoff/testing instructions.
-
-The next remaining RD-07 gate is a separate reviewed plan or execution packet
-for `desktop-player-windows-native-host-proof`.
+The plan review completed with no blockers. The Mac-bounded process-seam unit
+was implemented, verified, reviewed, fixed, and re-reviewed with no remaining
+blockers. The next RD-07 gate is Windows native-host proof and RD-07 closeout.
+This unit must prove the reviewed process seam on Windows with a real spawned
+helper test double, rerun the RD-06 app-owned native-presentation smoke as the
+native surface proof inherited by RD-07, update closeout docs, and leave
+production player commands renderer-safe unsupported until a later product
+native-helper plan enables real Plex-backed playback.
 
 ## Non-Goals
 
-- Do not edit product source in this planning pass.
-- Do not begin runtime IPC/preload implementation until read-only plan review
-  reports no blockers.
-- Do not reopen the completed adapter boundary core except for narrow changes
-  directly required by the reviewed runtime IPC/preload unit.
-- Do not implement a real native helper, native binary, native addon, libmpv
-  binding, helper process manager, Windows presentation host, package script,
-  dependency, or lockfile change in the Mac runtime IPC/preload unit.
-- Do not contact Plex, import Plex modules, implement stream policy, resolve
-  media URLs, move tokens, add secure storage, import scheduler/channel code,
-  import renderer UI, or add packaging/signing/update work.
-- Do not expose raw media URLs, tokenized URLs, auth headers, Plex payloads,
-  stream keys, part keys, native handles, libmpv objects, engine ids, Electron
-  APIs, Node APIs, broad IPC, arbitrary channel strings, filesystem access, or
-  secret diagnostics to renderer-facing contracts, preload APIs, tests, logs,
-  docs, or Codex output.
-- Do not make Windows proof claims from macOS. Windows native-host proof remains
-  a later targeted lane with its own commands and redacted evidence.
-- Do not update unrelated dirty files. Existing unrelated dirty/untracked plan
-  files from `git status --short --branch` are not RD-07 evidence.
+- Do not claim Windows proof from macOS or from source audit alone.
+- Do not reopen WID or helper-owned render API directions.
+- Do not change renderer, preload, shared renderer-facing player contracts, or
+  `src/main/index.ts` in this Windows closeout unit.
+- Do not expose raw URLs, tokens, auth headers, native handles, libmpv objects,
+  engine ids, raw Plex payloads, stream keys, part keys, Electron APIs, Node
+  APIs, or secret diagnostics to renderer-facing state, tests, logs, docs, or
+  Codex output.
+- Do not move native process policy into `src/main/index.ts`, `App.ts`, future
+  orchestration owners, renderer UI, Plex owners, scheduler owners, or storage
+  owners.
+- Do not add production native helper binaries, native addons, libmpv bindings,
+  package scripts, dependencies, lockfile changes, packaging, signing, or
+  installer work.
+- Do not contact Plex, implement stream setup, resolve media URLs, move tokens,
+  import scheduler/channel code, import renderer UI, or update secure storage.
+- Do not edit RD-05/RD-06 spike tools as part of this RD-07 closeout unit.
+- Do not update unrelated dirty files, stage unrelated work, or treat local
+  generated artifacts as RD-07 proof.
 
 ## Parent Architecture Alignment
 
-Current architecture records a secure Electron shell, renderer-safe player
-contracts, shell/window preload bridge, and the completed RD-07 adapter core.
-It also records that production Plex integration, runtime player IPC/preload
-delivery, real native helper integration, scheduler, secure storage, and
-packaging are not implemented.
+`docs/architecture/CURRENT_STATE.md` and
+`docs/architecture/playback-architecture.md` record that RD-07 currently has a
+main-owned adapter core and narrow runtime IPC/preload delivery backed by a
+development/smoke fake host. Production commands still return renderer-safe
+unsupported failures. Plex stream setup, renderer UI wiring, and a real native
+helper remain unimplemented.
 
-RD-03 owns renderer-safe player contracts in `src/contracts/player.ts` and
-`src/contracts/ipc.ts`. RD-07 must keep these contracts closed and
-renderer-safe. Additions may define narrow player IPC channel/result/event
-vocabulary only when needed for the runtime delivery unit.
-
-RD-06 routes native playback toward app-owned native presentation. The WID and
-helper-owned render API spike directions remain closed unless a later reviewed
-plan reopens them. The Mac runtime IPC/preload unit may instantiate
-`DesktopPlayerAdapter` with a fake host only; it must not create production
-native playback.
+RD-06 routes future real native playback toward app-owned native presentation.
+The Windows closeout unit may use the existing RD-06 native-presentation smoke
+to prove the native surface direction on this Windows host, and may harden
+`NativePlayerHostProcess` tests so the RD-07 adapter/process seam starts and
+cleans up a real child process on Windows. It must not assert that a production
+Plex-backed native helper or renderer UI has landed in product code.
 
 Ownership alignment:
 
-- Renderer owns UI consumption of renderer-safe player state only. No renderer
-  UI import is in the next unit.
-- Preload owns a narrow `window.lineupDesktop.player` bridge if reviewed. It
-  must validate method inputs enough to avoid broad RPC and must not expose raw
-  `ipcRenderer` or arbitrary channels.
-- Electron main owns player IPC authorization, adapter lifetime, event/result
-  translation, and cleanup registration. Within main, the player IPC owner in
-  `src/main/player/playerIpc.ts` owns fake-host activation policy and adapter
-  factory selection from a plain shell mode option.
-- `src/main/index.ts` remains a composition root. It may call a player IPC
-  registrar and pass plain data/callbacks, but it must not absorb fake-host
-  activation policy, native process policy, or adapter business rules.
-- Future native-host code owns app-owned native presentation only in the later
-  Windows proof unit after separate review.
+- `src/main/player/playerIpc.ts` remains the player host policy and factory
+  owner. It may select the existing development/smoke fake host, production
+  unsupported behavior, or the reviewed process seam only through reviewed plain
+  options.
+- `src/main/player/nativePlayerHostPort.ts` remains the private adapter-facing
+  host contract. Additions must stay renderer-safe and must not expose native
+  handles or engine objects.
+- `src/main/player/nativePlayerHostProcess.ts` owns process lifecycle plumbing,
+  adapter-to-process command translation, line/message parsing, cleanup/reap
+  behavior, and redacted diagnostics for test doubles.
+- `src/main/player/desktopPlayerAdapter.ts` may change only if the host port
+  needs a narrow lifecycle or event callback seam.
+- `src/main/index.ts` remains out of scope for this unit. It already passes
+  `shellMode` and callbacks into `playerIpc.ts`; native process policy must not
+  move there.
+- Renderer, preload, contract, Plex, scheduler, secure storage, and packaging
+  owners remain unchanged.
 
 ## Required Reading
 
@@ -103,367 +97,266 @@ Read in this order before review or implementation:
 
 1. `AGENTS.md`
 2. `docs/AGENTIC_DEV_WORKFLOW.md`
-3. `docs/agentic/session-prompts/feature-plan.md`
-4. `docs/agentic/plan-authoring-standard.md`
-5. `docs/architecture/CURRENT_STATE.md`
-6. `docs/roadmap/desktop-port-roadmap.md`
-7. `docs/architecture/playback-architecture.md`
-8. `docs/architecture/security-and-secret-flow.md`
-9. `docs/architecture/upstream-behavior-guardrails.md`
-10. This plan
-11. `src/contracts/player.ts`
-12. `src/contracts/ipc.ts`
-13. `src/contracts/shell.ts`
-14. `src/main/player/desktopPlayerAdapter.ts`
-15. `src/main/player/nativePlayerHostPort.ts`
-16. `src/preload/index.cts`
-17. `src/main/index.ts`
-18. `src/__tests__/desktopPlayerAdapter.test.ts`
-19. `src/__tests__/contracts.test.ts`
-20. `package.json`
+3. `docs/agentic/session-prompts/feature-quality-loop.md`
+4. `docs/agentic/session-prompts/feature-plan.md`
+5. `docs/agentic/session-prompts/feature-review.md`
+6. `docs/agentic/session-prompts/feature-implement.md`
+7. `docs/agentic/plan-authoring-standard.md`
+8. `docs/architecture/CURRENT_STATE.md`
+9. `docs/architecture/playback-architecture.md`
+10. `docs/architecture/security-and-secret-flow.md`
+11. `docs/architecture/upstream-behavior-guardrails.md`
+12. `docs/roadmap/desktop-port-roadmap.md`
+13. This plan
+14. `src/contracts/player.ts`
+15. `src/contracts/ipc.ts`
+16. `src/contracts/shell.ts`
+17. `src/main/player/desktopPlayerAdapter.ts`
+18. `src/main/player/nativePlayerHostPort.ts`
+19. `src/main/player/playerIpc.ts`
+20. `src/preload/index.cts`
+21. `src/main/index.ts`
+22. `src/__tests__/desktopPlayerAdapter.test.ts`
+23. `src/__tests__/playerIpc.test.ts`
+24. `src/__tests__/nativePlayerHostProcess.test.ts`
+25. `src/__tests__/contracts.test.ts`
+26. `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`
+27. `tools/libmpv-spike/rd-06-native-libmpv-host-spike-helper.cs`
+28. `package.json`
 
-Freshness gate: before review or implementation, rerun
-`git status --short --branch` and reread the files above if architecture docs,
-contracts, roadmap status, verifier behavior, package scripts, runtime source,
-or this plan changed materially after 2026-05-10. Stop for plan update or
-re-review if any assumption is contradicted.
+Freshness gate: rerun `git status --short --branch` before implementation.
+Stop for plan update and re-review if architecture docs, roadmap status,
+contract files, player source, package scripts, verifier behavior, or this plan
+changed materially after this refresh.
 
 ## Required Skills
 
-- `lineup-desktop-feature-plan`: required launcher for this Tier 3 planner
-  refresh.
-- `execution-plan-authoring`: required for durable scope, ownership,
-  invariants, verification, rollback, and stop conditions.
-- `architecture-boundaries`: required because the next unit touches contracts,
-  preload, Electron main composition, player IPC ownership, and the future
-  native-helper seam.
-- `verification-strategy`: required because the next unit needs contract tests,
-  IPC/preload tests, Electron smoke proof, and explicit Windows proof limits.
-- `plex-integration-boundaries`: required as a constraint because future player
-  setup will receive Plex-derived stream material, while this unit must keep
-  Plex, tokens, URLs, headers, and stream policy out of scope.
-- `review-request`: the next gate is read-only adversarial plan review through
-  `lineup-desktop-feature-review`.
-- `closeout-verification`: required before calling the refreshed plan ready or
-  later calling implementation complete.
+- `lineup-desktop-feature-quality-loop`: required Tier 3 controller for native
+  playback and IPC/security boundary work.
+- `lineup-desktop-feature-plan`: used for this plan refresh.
+- `execution-plan-authoring`: required for durable seam, scope, verification,
+  rollback, and stop conditions.
+- `architecture-boundaries`: required because the work touches main/player host
+  process ownership and adapter boundaries.
+- `verification-strategy`: required because the Windows closeout combines
+  focused adapter/process tests, Electron smoke, RD-06 native-presentation
+  proof, redaction, and manual/source audit evidence without overclaiming a
+  production native helper.
+- `plex-integration-boundaries`: required as a constraint because future stream
+  setup will be Plex-derived, while this unit must keep Plex URLs, tokens,
+  headers, and payloads out of scope.
+- `review-request`: required for the fresh read-only plan and implementation
+  reviews.
+- `review-adjudication`: required before acting on review findings.
+- `closeout-verification`: required before committing, staging, or handing off.
 
 ## Evidence And Discovery
 
-- `semantic_search_with_context`: not used as authoritative evidence. The
-  controller reported Codanna results were invalid/noisy because Codanna was
-  pointed at the wrong repo or had no useful embeddings for this checkout.
-- `semantic_search_docs` or repo-doc search: not used as authoritative
-  evidence for the same reason.
-- Impact analysis: not used because noisy Codanna ownership results would risk
-  misrouting the plan. Ownership was determined from direct reads.
-- Direct reads / `rg`: the required workflow docs, plan standard, current
-  architecture, roadmap, playback/security/upstream guardrail docs, active
-  RD-07 plan, contracts, adapter core, fake host port, preload, main
-  composition root, adapter tests, contract tests, `package.json`, and
-  `git status --short --branch` were read directly. This direct-read fallback
-  is the evidence path for this plan refresh.
-- Official docs: no new external Electron, native, packaging, signing, or
-  dependency behavior is frozen by this planner pass. If implementation needs
-  new Electron behavior beyond existing `ipcMain`, `ipcRenderer`, and
-  `contextBridge` patterns already present in the repo, stop for a bounded
-  official-doc check or reviewed replan.
+- `semantic_search_with_context`: attempted by the controller. Codanna returned
+  stale or wrong-repo results from `/Users/tristan/Software/Lineup` rather than
+  useful Lineup Desktop ownership evidence, so it is not authoritative for this
+  refresh.
+- `semantic_search_docs` and repo-document search: attempted by the controller
+  and likewise returned stale or wrong-repo context. Direct reads are the
+  authoritative evidence path for this plan.
+- Impact analysis: not used because the available semantic index was noisy for
+  this checkout. Ownership was determined by direct source and doc reads.
+- Direct reads / `rg`: read `AGENTS.md`, workflow runbook, feature quality
+  loop, feature plan/review/implement launchers, plan standard, current
+  architecture, playback architecture, security and secret flow, upstream
+  guardrails, roadmap, active RD-07 plan, contracts, preload, main composition,
+  player adapter, host port, player IPC owner, contract tests, adapter tests,
+  native host process tests, RD-06 native-presentation spike tooling, player IPC
+  tests, `package.json`, architecture lint rules, commit stats for `75062e0`,
+  `e2df530`, `f1c73af`, and `7850b47`, and `git status --short --branch`.
+- Official docs: no new external Electron, Node, libmpv, packaging, signing, or
+  dependency behavior is frozen by this plan refresh. The real child-process
+  proof may use Node's existing `node:child_process` API in a test only; if it
+  needs new runtime policy, product helper launch behavior, package scripts, or
+  native dependency behavior, stop for official-doc research and reviewed
+  replan.
 
-Observed local baseline provided by the controller before this refresh:
+Observed source state:
 
-- `npm run typecheck` passed.
-- `npm run test:contracts` passed with 25 tests.
-- `npm run verify:docs` passed.
-- `npm run verify:redaction` passed.
-
-Direct evidence summary:
-
-- `docs/roadmap/desktop-port-roadmap.md` marks RD-07 in progress: the boundary
-  core is implemented and reviewed clean; runtime player IPC wiring and real
-  native host integration remain unimplemented.
-- `docs/architecture/CURRENT_STATE.md` and
-  `docs/architecture/playback-architecture.md` record the completed adapter
-  core and explicitly list runtime preload/main player IPC and real native
-  helper work as not implemented.
-- `docs/architecture/security-and-secret-flow.md` requires renderer/preload
-  APIs to stay narrow and token-bearing playback setup to remain inside
-  privileged main/helper ownership.
-- `docs/architecture/upstream-behavior-guardrails.md` requires RD-07/RD-08
-  player and stream work to preserve command/state/event, stale-load, track,
-  error, diagnostic, teardown, and cleanup lessons without leaking raw URLs,
-  headers, native handles, engine ids, libmpv objects, or webOS constants.
-- `src/contracts/player.ts` already defines renderer-safe command, snapshot,
-  event, error, diagnostic, capability, opaque track, and forbidden privileged
-  field vocabulary.
-- `src/contracts/ipc.ts` defines closed player renderer intents and shell/window
-  channels, but no player runtime IPC channels yet.
-- `src/contracts/shell.ts` currently defines `LineupDesktopPreloadApi` with
-  only `shell` and `window` APIs.
-- `src/preload/index.cts` exposes only shell/window methods and validates shell
-  status events and fullscreen arguments locally.
-- `src/main/index.ts` owns shell lifecycle, shell/window IPC authorization, and
-  smoke assertions. It has no player IPC registrar and should remain thin.
-- Fresh direct reads on 2026-05-10 found no existing local pattern that should
-  replace the accepted review decisions below. The runtime IPC/preload unit must
-  add the concrete player contract, registrar, and fake-host activation policy
-  frozen in this plan.
-- `src/main/player/desktopPlayerAdapter.ts` accepts
-  `RendererIntentEnvelope<unknown>`, maps closed player intents, validates
-  renderer payloads and host events, normalizes failures, sanitizes
-  diagnostics, handles cleanup, and quarantines stale request ids.
-- `src/main/player/nativePlayerHostPort.ts` is a private fakeable host port, not
-  a production native process owner.
-- `src/__tests__/desktopPlayerAdapter.test.ts` covers the completed boundary
-  core with fakes and forbidden-field assertions.
-- `src/__tests__/contracts.test.ts` currently asserts the preload API exposes
-  only shell/window methods; the runtime IPC/preload unit must update this
-  public contract expectation if `player` is added.
-- `package.json` already has `typecheck`, `test:contracts`,
-  `smoke:electron`, `verify:docs`, `verify:redaction`, and `verify` scripts.
-  No package, dependency, script, or lockfile change is authorized.
+- `src/contracts/player.ts`, `src/contracts/ipc.ts`, and
+  `src/contracts/shell.ts` already contain the renderer-safe player, IPC, and
+  preload API shapes needed by RD-07 closeout. They are out of scope.
+- `src/preload/index.cts` already exposes the narrow player API and runtime
+  guards player events. It is out of scope.
+- `src/main/index.ts` already wires `registerPlayerIpcHandlers` with
+  `shellMode`, authorization, event-send, and request-id callbacks. It is out of
+  scope for native process policy.
+- `src/main/player/playerIpc.ts` currently owns development/smoke fake-host
+  activation and production unsupported behavior. It is the correct owner for
+  native-host factory selection.
+- `src/main/player/nativePlayerHostPort.ts` currently defines `execute()` and
+  `cleanup()` as the fakeable adapter-facing host seam.
+- `src/main/player/desktopPlayerAdapter.ts` already validates renderer intents,
+  host events, helper failures, cleanup, stale events, and forbidden fields.
+- `src/__tests__/playerIpc.test.ts` proves closed player IPC handlers,
+  development/smoke fake-host dispatch, invalid payload rejection,
+  authorization, production unsupported behavior, cleanup, teardown, and
+  forbidden-field exclusion.
+- `src/__tests__/nativePlayerHostProcess.test.ts` proves process message
+  translation, lifecycle failure normalization, cleanup/reap behavior, stale
+  output quarantine, and forbidden-field exclusion with in-memory doubles. It
+  may add a Windows-friendly real spawned helper test double without product
+  native helper changes.
+- `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` already owns the
+  dev-only RD-06 app-owned native-presentation proof command and writes redacted
+  local evidence under ignored `docs/runs/rd-06-native-libmpv-host-spike/`.
+- `package.json` already has `typecheck`, `test:contracts`, `smoke:electron`,
+  `verify:docs`, `verify:redaction`, and `verify`. No package or dependency
+  change is authorized.
 
 ## Impact Snapshot
 
-Expected blast radius for the next reviewed execution unit:
+Expected blast radius for `desktop-player-windows-native-host-proof`:
 
-- Owners that may change: renderer-safe player/IPC/preload contract vocabulary,
-  preload player bridge, a new main-owned player IPC registrar/factory, minimal
-  main composition registration, and focused tests/smoke assertions.
-- Owners that must not change: Plex auth/discovery/library/stream setup,
-  scheduler/channel/content, renderer UI import, secure storage, native helper
-  runtime, native spike tools, packaging/release, package metadata, lockfiles,
-  dependencies, and copied/adapted upstream product source.
-- Public contracts that may change: `src/contracts/ipc.ts` may add closed
-  player IPC channel literals and result/event vocabulary exactly as frozen in
-  this plan; `src/contracts/shell.ts` must add the narrow `player` member to
-  `LineupDesktopPreloadApi`; `src/contracts/player.ts` or another renderer-safe
-  contract owner must define or reuse `PlayerIpcResult<T>` and
-  `PlayerDispatchResult`. No privileged values may be introduced.
-- Runtime behavior that may change: in Electron smoke mode, the renderer may be
-  able to call a fake-host-backed `window.lineupDesktop.player` API and receive
-  renderer-safe command results/snapshots/events. There is no real media
-  playback.
-- User-visible production behavior: no real playback is claimed. Production
-  player command attempts must return renderer-safe player failures using the
-  existing `unsupported-capability` category with a player error code such as
-  `PLAYER_UNSUPPORTED_CAPABILITY` or `PLAYER_OPERATION_UNAVAILABLE` when a
-  generic player failure code is needed, until a reviewed Windows native-host unit
-  replaces the factory.
+- Owners that may change: focused main/player process-seam tests, closeout docs,
+  and roadmap/current playback status after observed proof. A source fix inside
+  `src/main/player/nativePlayerHostProcess.ts`, `nativePlayerHostPort.ts`,
+  `playerIpc.ts`, or `desktopPlayerAdapter.ts` is allowed only if the Windows
+  proof exposes a defect inside the approved RD-07 native-host unit.
+- Owners that must not change: contracts, preload API, main composition root,
+  renderer UI, Plex, scheduler, stream policy, secure storage, RD-05/RD-06
+  spike tools, packaging/release, package metadata, lockfiles, dependencies,
+  and copied/adapted upstream product source.
+- Public renderer-facing contracts: no changes authorized.
+- Runtime behavior: development/smoke may still use the existing fake host for
+  Electron smoke. The process seam may be exercised through unit tests and
+  explicit test doubles only. Production must continue to avoid fake playback
+  success; this unit does not enable Plex-backed native playback in production.
 - Dependency/build impact: none authorized.
-- Local-only artifacts: none expected. Any accidental logs, screenshots,
-  native traces, media, or run evidence must remain untracked and must not be
-  required for the Mac runtime IPC/preload unit.
+- Local-only artifacts: RD-06 proof output may be refreshed under ignored
+  `docs/runs/rd-06-native-libmpv-host-spike/`. Any other accidental logs,
+  process traces, screenshots, media, or run evidence must remain untracked.
 
 ## Files In Scope
 
-Planning pass write scope:
+Planning refresh write scope:
 
 - `docs/plans/2026-05-10-rd-07-desktop-videoplayer-adapter-plan.md`
 
-After clean read-only plan review, next execution unit write scope for
-`desktop-player-runtime-ipc-preload-delivery`:
+After clean read-only plan review, implementation/proof write scope for
+`desktop-player-windows-native-host-proof`:
 
-- `src/contracts/ipc.ts`
-- `src/contracts/player.ts`
-- `src/contracts/shell.ts`
-- `src/preload/index.cts`
-- `src/main/player/playerIpc.ts` (new main-owned player IPC registrar/factory)
-- `src/main/player/desktopPlayerAdapter.ts` only if a narrow public seam change
-  is required for runtime delivery
-- `src/main/player/nativePlayerHostPort.ts` only if a narrow fake-host type
-  change is required for runtime delivery
-- `src/main/index.ts` only for minimal composition registration and smoke
-  assertions
-- `src/__tests__/contracts.test.ts`
-- `src/__tests__/desktopPlayerAdapter.test.ts` only if adapter public behavior
-  changes
-- `src/__tests__/playerIpc.test.ts` or an equivalently focused new test file
+- `src/__tests__/nativePlayerHostProcess.test.ts`
+- `src/main/player/nativePlayerHostProcess.ts` only for a Windows proof defect
+  inside process lifecycle, cleanup/reap, message parsing, or redaction.
+- `src/main/player/nativePlayerHostPort.ts` only if a narrow private host seam
+  fix is required by an observed Windows proof defect.
+- `src/main/player/playerIpc.ts` only if factory policy incorrectly exposes
+  fake/test-double success outside approved development/smoke behavior.
+- `src/main/player/desktopPlayerAdapter.ts` only if host event/failure handling
+  fails renderer-safe validation, cleanup, crash, or stale-event behavior.
+- `docs/plans/2026-05-10-rd-07-desktop-videoplayer-adapter-plan.md`
+- `docs/architecture/CURRENT_STATE.md`
+- `docs/architecture/playback-architecture.md`
+- `docs/roadmap/desktop-port-roadmap.md`
 
 Scope limits:
 
-- Favor `src/main/player/playerIpc.ts` as the owner of player IPC registration,
-  shell-mode-based fake-host-backed adapter factory wiring, production
-  unsupported/noop factory behavior, result translation, event delivery, cleanup
-  registration, and handler teardown.
-- Keep `src/main/index.ts` to composition only: construct/register the player
-  IPC owner with the existing `shellMode` value and include smoke assertions.
-  Do not place fake-host activation policy, production unsupported policy,
-  native process policy, adapter rules, validation rules, or broad player
-  orchestration there.
-- Preload may expose explicit methods such as command dispatch, snapshot read,
-  event subscription, and cleanup only if they are typed and channel-bound. It
-  must not expose raw `ipcRenderer`, arbitrary channels, or a general RPC
-  function.
-- Fake-host activation must be development/smoke-only. Production command
-  attempts must return renderer-safe player failures using
-  `unsupported-capability` with a player error code such as
-  `PLAYER_UNSUPPORTED_CAPABILITY` or `PLAYER_OPERATION_UNAVAILABLE` and must not report
-  fake playback success.
-- Tests must prove public IPC/preload contract behavior with fakes and smoke,
-  not real native media.
-
-Later `desktop-player-windows-native-host-proof` scope is intentionally not
-authorized for implementation by this plan. A future reviewed execution unit
-must name exact native-host files, Windows commands, redacted evidence paths,
-and rollback before editing product native-host code.
+- Keep native process lifecycle policy in `src/main/player/nativePlayerHostProcess.ts`
+  and host factory selection in `src/main/player/playerIpc.ts`.
+- Process tests may use in-memory or spawned Node-script test doubles, but
+  test-double protocol payloads must be renderer-safe and must not resemble
+  secret-bearing production Plex or libmpv values.
+- RD-06 native-presentation proof output must remain ignored local evidence
+  under `docs/runs/rd-06-native-libmpv-host-spike/`; tracked docs may summarize
+  only redacted conclusions after proof is observed.
 
 ## Files Out Of Scope
 
-- Any file outside the planning-pass write scope during this planner pass.
-- Any file outside the next execution unit write scope during the Mac runtime
-  IPC/preload implementation.
-- `package.json`, lockfiles, package manager metadata, dependency manifests,
-  build tooling, installer, signing, updater, release, or packaging config.
-- `src/renderer/**`, except no renderer UI import is authorized; smoke
-  assertions may inspect the exposed preload API through the existing Electron
-  shell only.
-- `src/native-helper/**`, native helper runtime paths, native binaries, native
-  addons, generated bindings, NuGet packages, mpv/libmpv headers, or checked-in
-  native examples.
-- RD-05/RD-06 evidence tooling under `tools/mpv-poc/**` and
-  `tools/libmpv-spike/**`.
-- Plex auth, discovery, selected-server state, library, stream resolution,
-  subtitles, token handling, URL/header setup, secure storage, scheduler,
-  channel, settings, EPG, OSD, navigation, broad UI import, or copied/adapted
-  upstream Lineup source.
-- `docs/architecture/import-ledger.md`; no copied/adapted upstream source is in
-  scope.
-- Roadmap or architecture docs during this planning pass. During later
-  implementation closeout, update architecture/roadmap memory only if the
-  reviewed implementation unit requires it and after product verification and
-  implementation review/adjudication.
-- Unrelated dirty files already present before this RD-07 planner refresh.
+- `src/contracts/player.ts`
+- `src/contracts/ipc.ts`
+- `src/contracts/shell.ts`
+- `src/preload/index.cts`
+- `src/main/index.ts`
+- `src/renderer/**`
+- `src/native-helper/**`
+- `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`
+- `tools/libmpv-spike/rd-06-native-libmpv-host-spike-helper.cs`
+- `tools/mpv-poc/rd-05-external-mpv-poc.mjs`
+- `package.json`
+- lockfiles and package manager metadata
+- `docs/architecture/import-ledger.md`
+- Plex auth/discovery/library/stream setup, scheduler/channel/content, secure
+  storage, packaging, installer, signing, native binaries, native addons, NuGet
+  packages, libmpv headers, generated bindings, or copied/adapted upstream
+  Lineup source
+- Unrelated dirty files already present before this RD-07 refresh
 
 ## Planner Self-Check
 
 1. Product, architecture, ownership, dependency, and verification decisions for
-   the next execution unit are resolved: main owns player IPC registration,
-   preload exposes a narrow API, the adapter remains the player core, and the
-   host remains fake on Mac.
-2. The next unit does not depend on Plex, scheduler, stream policy, renderer UI,
-   secure storage, native helper runtime, package changes, or Windows native
-   proof.
-3. Files frozen out of scope are not relied on for hidden wiring. Native-host
-   integration is explicitly deferred to a later reviewed Windows unit.
-4. Evidence path records the Codanna fallback and direct reads.
-5. The plan avoids growing `src/main/index.ts` into a hotspot by favoring a new
-   main player IPC owner.
-6. A fresh implementer should not need to invent Electron IPC, preload,
-   security, playback, persistence, packaging, import, native proof, or
-   verification policy.
+   the Windows closeout unit are resolved: `playerIpc.ts` owns host factory policy,
+   `nativePlayerHostProcess.ts` owns lifecycle plumbing, and renderer-facing
+   contracts do not change.
+2. The unit depends on Windows proof access and existing dev-only RD-06
+   native-presentation tooling, but does not depend on Plex, scheduler, stream
+   policy, renderer UI, secure storage, product native binaries, or package
+   changes.
+3. Files frozen out of scope are not relied on for hidden wiring. `src/main/index.ts`
+   already passes plain callbacks and remains out of scope.
+4. Evidence path records Codanna fallback and direct reads.
+5. The plan avoids growing `src/main/index.ts` or future orchestration owners
+   into native process policy hotspots.
+6. A fresh implementer should not need to invent Electron, IPC, security,
+   playback, persistence, packaging, import, native proof, or verification
+   policy.
 7. Exact verification commands, expected outcomes, acceptance criteria,
    rollback, and stop/replan triggers are recorded.
 
 ## Architecture Seam Decision Gate
 
-Chosen seam for the next unit: a main-owned player IPC registrar/factory in
-`src/main/player/playerIpc.ts` bridges authorized renderer player intents from
-preload to the existing `DesktopPlayerAdapter`. `src/main/index.ts` passes the
-existing `shellMode` value as plain data; `playerIpc.ts` owns factory selection,
-instantiating an inert fake native host only for development/smoke runtime
-delivery proof and using a renderer-safe unsupported/noop production path
-otherwise.
+Chosen seam: preserve the main-owned native-host process adapter in
+`src/main/player/nativePlayerHostProcess.ts` behind `NativePlayerHostPort`.
+`src/main/player/playerIpc.ts` remains the only host factory policy owner and
+may opt into that seam only through reviewed options that are testable without
+production helper activation.
+`DesktopPlayerAdapter` continues to receive only `NativePlayerHostPort` and
+renderer-safe `NativePlayerHostEvent` / `NativePlayerHostFailure` values.
 
 Frozen decisions:
 
-| Decision | RD-07 continuation choice |
+| Decision | RD-07 Windows closeout choice |
 | --- | --- |
-| Completed baseline | Preserve `desktop-player-adapter-boundary-core` as implemented and reviewed clean |
-| Next execution unit | `desktop-player-runtime-ipc-preload-delivery` |
-| Runtime IPC owner | New `src/main/player/playerIpc.ts`, not `src/main/index.ts` |
-| Main composition | `src/main/index.ts` only performs minimal registration and smoke assertions |
-| Mode/policy handoff | `src/main/index.ts` passes `shellMode`; `src/main/player/playerIpc.ts` owns fake-host activation and production unsupported behavior |
-| Preload boundary | Add explicit typed player methods/subscriptions only; no broad RPC |
-| Adapter boundary | Reuse `DesktopPlayerAdapter` and `NativePlayerHostPort` fake seam |
-| Host boundary | Fake host is development/smoke-only for contract delivery; production must not claim real playback |
-| Renderer boundary | Renderer receives only `PlayerSnapshot`, `PlayerEvent`, `PlayerError`, and narrow result shapes |
-| IPC vocabulary | Closed channel/result/event vocabulary only; no arbitrary channel strings |
-| Plex/stream boundary | No Plex or stream policy implementation |
-| Native direction | Future Windows proof targets RD-06 app-owned native presentation |
+| Execution unit | `desktop-player-windows-native-host-proof` |
+| Process seam owner | `src/main/player/nativePlayerHostProcess.ts` |
+| Host factory owner | `src/main/player/playerIpc.ts` |
+| Adapter owner | Preserve `DesktopPlayerAdapter`; narrow seam change only if required |
+| Main composition | `src/main/index.ts` out of scope |
+| Renderer/preload/contracts | Out of scope; no public shape changes |
+| Process proof | Windows real spawned test helper through `NativePlayerHostProcess` and adapter |
+| Native surface proof | Existing RD-06 app-owned native-presentation smoke rerun on Windows |
+| Native direction | Preserve RD-06 app-owned native presentation |
 | Dependency boundary | No package, lockfile, dependency, native addon, or build-tool change |
 
-Frozen public IPC/preload contract for `desktop-player-runtime-ipc-preload-delivery`:
+Required Windows closeout behavior:
 
-- `src/contracts/ipc.ts` must add only these player runtime channel literals:
-  `LINEUP_PLAYER_COMMAND_CHANNEL = 'lineup:player:command'`,
-  `LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL = 'lineup:player:getSnapshot'`,
-  `LINEUP_PLAYER_CLEANUP_CHANNEL = 'lineup:player:cleanup'`, and
-  `LINEUP_PLAYER_EVENT_CHANNEL = 'lineup:player:event'`.
-- `src/contracts/shell.ts` must extend `LineupDesktopPreloadApi` with
-  `player.dispatch(envelope: RendererIntentEnvelope<unknown>) =>
-  Promise<PlayerIpcResult<PlayerDispatchResult>>`,
-  `player.getSnapshot() => Promise<PlayerIpcResult<PlayerSnapshot>>`,
-  `player.cleanup() => Promise<PlayerIpcResult<PlayerSnapshot>>`, and
-  `player.onEvent(listener: (event: PlayerEvent) => void) => () => void`.
-- `PlayerIpcResult<T>` must be defined or reused from the renderer-safe
-  contracts as exactly a success branch with `ok: true`, `value: T`, and
-  `requestId`, or a failure branch with `ok: false`, renderer-safe `error`, and
-  `requestId`. The failure branch must use renderer-safe player error
-  vocabulary and must not introduce shell-only, native-only, or privileged
-  error details.
-- `PlayerDispatchResult` must be renderer-safe and must not include internal
-  `PlayerCommand`. It must include `accepted`, `events`, and `snapshot`, where
-  `events` is a readonly list of `PlayerEvent` payloads emitted or settled by
-  the adapter dispatch and `snapshot` is the latest `PlayerSnapshot`.
-- Request-id ownership is fixed: renderer/caller supplies `requestId` in
-  command envelopes passed to `player.dispatch`; preload may generate request
-  ids only for its own `cleanup` and `getSnapshot` wrapper requests if the main
-  handler needs a request id for result shaping; main validates through
-  `DesktopPlayerAdapter` and never trusts preload-only validation.
-- Event subscription semantics are fixed: main sends only `PlayerEvent` payloads
-  on `LINEUP_PLAYER_EVENT_CHANNEL` after adapter dispatch, cleanup, host, or
-  crash events; preload runs a conservative runtime player-event guard before
-  invoking listeners; the returned unsubscribe removes only that listener; no
-  raw `IpcRendererEvent`, Electron channel, arbitrary channel, or raw IPC object
-  is exposed.
-- `player.cleanup()` must invoke `LINEUP_PLAYER_CLEANUP_CHANNEL`, return the
-  latest `PlayerSnapshot` through `PlayerIpcResult<PlayerSnapshot>`, emit only
-  renderer-safe state/error events through `LINEUP_PLAYER_EVENT_CHANNEL`, and
-  must not expose host cleanup internals, native handles, engine ids, or helper
-  lifecycle details.
-
-Frozen main authorization and registrar contract:
-
-- `src/main/player/playerIpc.ts` must own the player IPC registration and export
-  `registerPlayerIpcHandlers(options)` or an equivalent single registrar owner.
-  The options contract must receive `shellMode: ShellMode`,
-  `isAuthorizedEvent(event): boolean`, `sendPlayerEvent(event: PlayerEvent):
-  void`, and `createRequestId(prefix): string` if the registrar needs fallback
-  request ids. It must not require `src/main/index.ts` to pass
-  `createAdapter()` or otherwise encode development/smoke/production player host
-  policy in main. The registrar returns a teardown function that unregisters the
-  player handlers and cleans up only the player IPC owner resources it
-  registered.
-- `src/main/index.ts` only calls this registrar after shell setup and passes the
-  existing `shellMode` value plus authorization and event-send callbacks. It may
-  close over `shellWindow?.webContents.send(LINEUP_PLAYER_EVENT_CHANNEL, event)`
-  through the callback, but it must not own adapter rules, fake-host activation
-  policy, production unsupported/noop behavior, native process policy,
-  command/result translation, event validation, cleanup behavior, or handler
-  teardown internals.
-- Authorization is checked in main for every command, snapshot, and cleanup
-  handler before adapter access. Unauthorized or invalid requests return
-  `PlayerIpcResult` failures with renderer-safe player error vocabulary and a
-  request id chosen from the caller envelope when valid or a generated fallback
-  when needed.
-
-Frozen fake-host activation policy:
-
-- The Mac runtime IPC/preload unit may instantiate an inert fake
-  `NativePlayerHostPort` only inside `src/main/player/playerIpc.ts` and only
-  when the registrar option `shellMode` is `development` or `smoke`. This is a
-  contract-delivery and smoke-verification host, not production playback.
-- In `production`, the player IPC path must not claim real playback. Until the
-  later Windows native-host unit replaces the factory with a reviewed production
-  host, `src/main/player/playerIpc.ts` must select an unsupported/noop adapter
-  or factory path. Player command attempts must return renderer-safe
-  `PlayerError` failures using the existing `unsupported-capability` category
-  with a player error code such as `PLAYER_UNSUPPORTED_CAPABILITY` or
-  `PLAYER_OPERATION_UNAVAILABLE`, and must not activate the fake host.
-  Snapshot and cleanup may return renderer-safe inert state if needed, but no
-  playback success may be claimed.
-- Electron smoke proof may exercise the development/smoke fake host through the
-  public preload API. macOS smoke success is evidence for IPC/preload contract
-  delivery only, not native playback.
+- A host process adapter must translate `PlayerCommand` into a private
+  process-facing message shape without exposing that shape to renderer-facing
+  contracts.
+- It must accept only renderer-safe host events/failures back into the adapter
+  seam and rely on `DesktopPlayerAdapter` for final event validation.
+- It must normalize process spawn, exit, stderr, malformed message, timeout, and
+  cleanup failures into existing renderer-safe `PlayerError` categories without
+  echoing raw process output, local paths, native handles, URLs, headers, or
+  secret-like fields.
+- It must support cleanup/reap behavior and reject or quarantine late process
+  events after cleanup through the existing request-id/stale-event model.
+- It must prove the process seam with a real spawned helper test double on
+  Windows without adding a production native helper, native addon, package
+  script, Plex stream, or local media dependency.
+- It must rerun the RD-06 app-owned native-presentation preflight and smoke on
+  Windows to prove inherited native surface behavior: real local/dummy HTTP
+  playback, fullscreen/composition, focus/input continuity, helper crash
+  detection, helper cleanup/reap, redacted diagnostics, and forbidden-field
+  exclusion.
+- It must not create a production-visible fake success path. Production command
+  attempts must remain renderer-safe unsupported until a later product native
+  helper plan enables real native-host behavior.
 
 Forbidden shortcuts:
 
@@ -471,40 +364,51 @@ Forbidden shortcuts:
 - No raw `ipcRenderer`, Electron, Node, filesystem, native, libmpv, graphics,
   token, URL, header, Plex, stream key, part key, or secret diagnostic values in
   renderer-facing state.
-- No general `invoke(channel, payload)` or broad player RPC bridge.
-- No real native helper launch hidden behind the fake-host seam.
-- No production-visible fake-host playback success.
+- No general RPC bridge or arbitrary channel strings.
+- No native process policy in `src/main/index.ts`, `App.ts`, renderer UI, Plex,
+  scheduler, storage, or orchestration owners.
 - No WID or helper-owned render API revival.
-- No product Plex, scheduler, renderer UI, secure storage, package, or upstream
-  import work.
-- No stale event delivery without request-id gating.
-- No claiming track/subtitle production support beyond opaque id delivery and
-  safe error/result propagation.
+- No hidden real native helper launch behind development/smoke fake-host
+  behavior.
+- No package, dependency, lockfile, native addon, native binary, packaging, or
+  installer changes.
 
-Windows native-host proof gate:
+Windows execution packet:
 
-- The later `desktop-player-windows-native-host-proof` unit must be reviewed
-  before implementation.
-- It must run on Windows and produce redacted evidence for app-owned native
-  presentation against the runtime adapter/IPC seam.
-- It must prove at minimum: local dummy visual playback, dummy HTTP playback
-  with only approved non-secret headers, windowed and fullscreen active video
-  pixels, overlay/composition behavior, renderer focus/input continuity,
-  command/event ordering including stop/switch cleanup, helper crash detection,
-  stale native event quarantine, helper cleanup/reap, redacted diagnostics, and
-  no forbidden renderer-facing fields.
-- It must name exact Windows commands and evidence paths. macOS implementation
-  may only prepare handoff/testing instructions, not product native-host code.
-
-Stop before implementation if plan review finds the seam too broad, if player
-runtime delivery cannot be tested without real native playback, if preload
-requires broad RPC, if `src/main/index.ts` would absorb player host-mode policy
-instead of passing `shellMode` into `playerIpc.ts`, or if contracts require
-privileged values.
+- Files: `src/__tests__/nativePlayerHostProcess.test.ts` for a real spawned
+  helper process proof; existing `src/main/player/*` only for observed in-scope
+  defects; existing RD-06 proof tooling read-only.
+- Helper prerequisites: Windows host with Node/npm dependencies installed,
+  Electron available from the existing dev dependency, `dotnet` available for
+  the RD-06 helper build, and local libmpv/mpv prerequisites already required by
+  RD-06 native-presentation smoke. No Plex server, credentials, package script,
+  native addon, checked-in binary, NuGet package, or generated binding is
+  authorized.
+- Commands: rerun baseline `npm run verify`, add/fix only scoped tests if the
+  real spawned helper proof fails, run `npm run test:contracts`,
+  `npm run smoke:electron`, RD-06 native-presentation preflight and smoke,
+  `npm run verify:redaction`, and final `npm run verify`.
+- Redacted evidence path: ignored local files under
+  `docs/runs/rd-06-native-libmpv-host-spike/`. Tracked docs may record only the
+  manifest-level redacted conclusion and command results.
+- Manual/source audit: inspect diff scope; confirm contracts/preload/main
+  composition/renderer/Plex/package files did not change; confirm production
+  player IPC remains unsupported/noop; confirm no forbidden privileged fields
+  appear in renderer-facing test results, tracked docs, or Codex output.
+- Rollback: revert only this Windows closeout packet changes in
+  `src/__tests__/nativePlayerHostProcess.test.ts`, any approved in-scope
+  `src/main/player/*` fix, and closeout docs. Delete accidental ignored run
+  output only if it was created by a failed proof and is not needed for local
+  evidence.
+- Stop conditions: stop for replan if real product helper launch, renderer or
+  preload contract changes, `src/main/index.ts` native policy, package/dependency
+  changes, RD-06 spike edits, Plex stream setup, unredacted diagnostics, WID or
+  helper-owned render API revival, or unavailable Windows native proof is
+  required.
 
 ## Verification Commands
 
-Planner commands:
+Planner refresh commands:
 
 ```sh
 git status --short --branch
@@ -520,7 +424,7 @@ npm run verify:docs
 Expected outcome: passes after this active plan is refreshed. If it fails, fix
 only the RD-07 plan unless the output proves a pre-existing unrelated issue.
 
-Next execution unit commands after clean plan review:
+Windows closeout commands after clean plan review:
 
 ```sh
 git status --short --branch
@@ -532,35 +436,44 @@ Expected outcome: dirty state is understood; unrelated files are left alone.
 npm run typecheck
 ```
 
-Expected outcome: TypeScript compiles with the new player IPC/preload contract
-and no accidental public signature drift.
+Expected outcome: TypeScript compiles with the reviewed main/player process seam
+and no renderer-facing contract drift.
 
 ```sh
 npm run test:contracts
 ```
 
-Expected outcome: existing contract and adapter tests pass; new tests prove
-the exact closed player IPC literals named in this plan, the
-`window.lineupDesktop.player` method names and signatures, renderer/caller
-request-id ownership for command envelopes, preload-generated request ids only
-for wrapper snapshot/cleanup requests when needed, renderer-safe
-`PlayerIpcResult<T>` and `PlayerDispatchResult` shapes, invalid payload
-rejection, authorized main-only validation through `DesktopPlayerAdapter`,
-development/smoke fake-host-backed adapter dispatch, production unsupported
-mode policy, snapshot/event delivery, cleanup, per-listener unsubscribe, handler
-teardown, forbidden-field exclusion, and no broad RPC/channel exposure.
+Expected outcome: existing contract, adapter, player IPC, and native host
+process tests pass; the Windows closeout proof includes a real spawned helper
+test double plus lifecycle success/failure paths, cleanup/reap, malformed
+process output handling, stale/late event quarantine, production unsupported
+behavior, and forbidden-field exclusion.
 
 ```sh
 npm run smoke:electron
 ```
 
-Expected outcome: Electron smoke still proves shell containment and additionally
-proves the player preload API is present, does not expose raw IPC/Electron/Node
-objects, can drive a fake-host-backed player command through authorized main IPC,
-can read renderer-safe state/result data, can subscribe/unsubscribe without
-exposing raw event/channel objects, can cleanup through the public cleanup API,
-and exits cleanly. Smoke proof is development/smoke fake-host contract evidence
-only and does not claim production native playback.
+Expected outcome: existing Electron smoke still proves shell containment and
+fake-host-backed player preload delivery. Smoke proof remains IPC/preload
+contract evidence only, not native playback proof.
+
+```sh
+node tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs --mode native-presentation-preflight --out docs/runs/rd-06-native-libmpv-host-spike
+```
+
+Expected outcome: Windows native-presentation prerequisites are present and the
+redacted preflight manifest records no raw paths, URLs, native handles, auth
+headers, or secret-shaped diagnostics.
+
+```sh
+node tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs --mode native-presentation-smoke --out docs/runs/rd-06-native-libmpv-host-spike --duration-ms 5000 --dummy-input local-and-http --fullscreen-mode native-presentation-host
+```
+
+Expected outcome: RD-06 app-owned native-presentation smoke passes on Windows
+with redacted evidence for local and dummy HTTP native playback,
+fullscreen/composition through the native-presentation host, focus/input
+continuity, helper crash detection, helper cleanup/reap, and forbidden-field
+exclusion. This is RD-07 native surface proof, not production Plex playback.
 
 ```sh
 npm run verify:redaction
@@ -574,160 +487,103 @@ key, part key, or secret diagnostic content.
 npm run verify
 ```
 
-Expected outcome: passes before the runtime IPC/preload unit is called
-complete.
+Expected outcome: passes before RD-07 is called complete.
 
 Manual/source-audit proof after implementation:
 
-- Inspect `git diff -- src/contracts src/preload/index.cts src/main/index.ts src/main/player src/__tests__`
-  and confirm only reviewed RD-07 runtime IPC/preload files changed.
-- Confirm `src/main/index.ts` only performs minimal composition and smoke
-  assertions, passing the existing `shellMode` value plus callbacks without
-  creating adapters or encoding host-mode policy.
-- Confirm `src/main/player/playerIpc.ts` owns player IPC registration/factory
-  behavior, authorization handoff, result translation, event emission, cleanup,
-  shell-mode-based fake-host activation policy, production unsupported/noop
-  behavior, and teardown while using the existing adapter plus fake host seam
-  only in development/smoke.
-- Confirm preload exposes explicit typed player methods/subscriptions and no
-  raw `ipcRenderer`, arbitrary channel, Electron, Node, filesystem, native, or
-  secret-bearing access.
-- Confirm production mode cannot activate fake-host playback success and returns
-  renderer-safe player errors using the `unsupported-capability` category with
-  `PLAYER_UNSUPPORTED_CAPABILITY` or `PLAYER_OPERATION_UNAVAILABLE` for command
-  attempts until the reviewed Windows native-host unit replaces the factory.
-- Confirm no package metadata, lockfile, Plex, scheduler, stream policy,
-  renderer UI import, native helper runtime, RD-06 tooling, or copied upstream
-  source changed.
-
-Later Windows native-host proof commands must be added by that future reviewed
-execution unit. They are not authorized or satisfied by this Mac plan refresh.
+- Inspect `git diff -- src/main/player src/__tests__ docs/plans/2026-05-10-rd-07-desktop-videoplayer-adapter-plan.md docs/architecture/CURRENT_STATE.md docs/architecture/playback-architecture.md docs/roadmap/desktop-port-roadmap.md`
+  and confirm only reviewed RD-07 files changed.
+- Confirm `src/main/index.ts`, preload, renderer, and contracts did not change.
+- Confirm `playerIpc.ts` remains the host factory policy owner.
+- Confirm `nativePlayerHostProcess.ts` owns lifecycle plumbing and returns only
+  renderer-safe adapter-facing values.
+- Confirm production mode cannot activate fake or test-double playback success.
+- Confirm no package, lockfile, Plex, scheduler, stream policy, renderer UI,
+  native helper binary/addon, RD-06 tool, or copied upstream source changed.
+- Confirm ignored RD-06 run evidence remains under
+  `docs/runs/rd-06-native-libmpv-host-spike/` and is not staged.
 
 ## Acceptance Criteria
 
 Plan acceptance:
 
-- This file is the only file edited by the RD-07 planner refresh.
-- The plan remains active, feature/design, and Tier 3.
-- The completed adapter boundary core is preserved as baseline, not replanned as
-  future work.
-- Remaining RD-07 work is split into Mac-verifiable runtime IPC/preload delivery
-  and later Windows native-host proof.
-- The next execution unit names exact files in scope and out of scope.
-- The plan favors a new `src/main/player/playerIpc.ts` owner and keeps
-  `src/main/index.ts` minimal.
-- The plan freezes exact player IPC channel literals, `window.lineupDesktop.player`
-  method names and signatures, request-id ownership, result shapes, event
-  subscription semantics, cleanup behavior, registrar options/teardown,
-  `shellMode` policy handoff, and fake-host activation policy for the next
-  execution unit.
-- The plan records direct-read fallback because Codanna results were invalid or
-  noisy for this checkout.
-- The plan records the observed local baseline commands provided by the
-  controller without claiming fresh reruns.
-- The runtime IPC/preload unit passed read-only implementation re-review; the
-  next RD-07 gate is a reviewed Windows native-host proof plan or execution
-  packet.
+- This plan is refreshed for `desktop-player-windows-native-host-proof` and
+  names exact files, commands, redacted evidence paths, stop conditions, and
+  rollback for Windows native-host proof.
+- The plan remains active, feature/design, Tier 3, and routes next to read-only
+  plan review before source edits.
+- Commits `75062e0` and `e2df530` remain the preserved baseline.
+- Files in scope and out of scope are exact.
+- The plan keeps contracts, preload, main composition, renderer, Plex,
+  scheduler, secure storage, packaging, and product native binaries out of
+  scope.
+- The plan records Codanna fallback and direct-read evidence.
 - `npm run verify:docs` passes after this refresh, or the exact failure is
   reported without a false success claim.
 
-Next execution unit acceptance after clean plan review:
+Implementation acceptance after clean plan review:
 
-- Implementation is limited to `desktop-player-runtime-ipc-preload-delivery`.
-- Source/test changes are limited to the files in scope unless a reviewed replan
-  expands scope.
-- A narrow player preload API is exposed under the existing
-  `window.lineupDesktop` contract without raw IPC, arbitrary channels, Electron,
-  Node, filesystem, native, or secret-bearing access.
-- `src/contracts/ipc.ts` exports exactly the reviewed player runtime channel
-  literals:
-  `lineup:player:command`, `lineup:player:getSnapshot`,
-  `lineup:player:cleanup`, and `lineup:player:event`.
-- `LineupDesktopPreloadApi.player` exposes exactly `dispatch`, `getSnapshot`,
-  `cleanup`, and `onEvent` with the result and listener semantics frozen above.
-- `PlayerIpcResult<T>` and `PlayerDispatchResult` are renderer-safe, exclude
-  internal `PlayerCommand`, and carry only accepted/events/snapshot result data
-  plus request-id/error wrapper fields.
-- Renderer/caller-owned command request ids are preserved; preload-generated
-  request ids are limited to snapshot/cleanup wrapper requests when needed; main
-  validates every request through the adapter path and does not rely on preload
-  validation as authority.
-- Main player IPC registration lives in `src/main/player/playerIpc.ts`;
-  `src/main/index.ts` only wires it into the shell composition, passes the
-  existing `shellMode` value and callbacks, and adds smoke checks.
-- Runtime player commands flow through authorized main IPC into
-  `DesktopPlayerAdapter` with a fake `NativePlayerHostPort` only in
-  development/smoke.
-- Production player command attempts are handled by the `playerIpc.ts`
-  unsupported/noop path, do not activate fake-host playback, and return
-  renderer-safe player failures using the `unsupported-capability` category with
-  `PLAYER_UNSUPPORTED_CAPABILITY` or `PLAYER_OPERATION_UNAVAILABLE` until the
-  Windows native-host unit replaces the factory.
+- Implementation/proof is limited to `desktop-player-windows-native-host-proof`.
+- Source/test/doc changes stay within the approved file list unless a reviewed
+  replan expands scope.
+- `nativePlayerHostProcess.ts` provides a fakeable main-owned process seam
+  behind `NativePlayerHostPort`.
+- Lifecycle cleanup/reap, process/test-double failure normalization, malformed
+  output handling, redaction, stale/late event quarantine, real spawned helper
+  startup/lifecycle, and production unsupported behavior are covered by focused
+  tests.
 - Renderer-facing results, snapshots, events, errors, and diagnostics remain
-  contract-bound and forbidden-field-free.
-- Invalid renderer payloads do not reach the fake host and produce
-  renderer-safe validation failures.
-- Event subscription/cleanup behavior sends only guarded `PlayerEvent` payloads,
-  removes only the unsubscribed listener, returns the latest cleanup snapshot,
-  emits state/error events through the player event channel, does not expose host
-  cleanup internals, and does not leak stale listeners or corrupt adapter state
-  after cleanup.
-- No real native helper, Plex, stream policy, scheduler, renderer UI import,
-  secure storage, package, lockfile, dependency, native smoke, or upstream import
-  file changes.
+  existing contract-bound shapes and forbidden-field-free.
+- `playerIpc.ts` remains the host policy owner and `src/main/index.ts` remains
+  unchanged.
+- RD-06 app-owned native-presentation preflight and smoke pass on Windows, and
+  tracked docs describe that as native surface proof only, not production
+  Plex-backed playback.
 - `npm run typecheck`, `npm run test:contracts`, `npm run smoke:electron`,
-  `npm run verify:redaction`, and `npm run verify` pass before implementation
-  closeout.
-- Read-only implementation review is clean before RD-07 advances to the Windows
-  native-host proof unit or is marked complete for the runtime delivery lane.
+  RD-06 native-presentation preflight/smoke, `npm run verify:redaction`, and
+  `npm run verify` pass before closeout.
+- Read-only implementation review is clean, and accepted findings are fixed or
+  routed back to planning before commit.
 
-Windows native-host proof acceptance for the later unit:
+Closeout acceptance:
 
-- A separate reviewed plan or execution packet names exact Windows files,
-  commands, evidence paths, stop conditions, and rollback.
-- Proof runs on Windows against the RD-06 app-owned native presentation
-  direction and the runtime adapter/IPC seam.
-- Redacted evidence proves native playback, fullscreen/composition, focus,
-  cleanup, crash/stale-event handling, and forbidden-field exclusion.
-- macOS-only evidence is not used to claim Windows native-host completion.
+- Roadmap, current architecture, and playback architecture mark RD-07 complete
+  only after observed Windows proof, final verification, and clean
+  implementation review.
+- Closeout preserves app-owned native presentation and does not reopen WID or
+  helper-owned render API without reviewed replan.
+- The next handoff routes to RD-08/RD-12 planning as appropriate and states that
+  RD-07 still has no Plex stream setup, renderer UI, or production native
+  helper.
 
 ## Replan Triggers
 
 Stop and replan if any of the following occurs:
 
-- Read-only plan review finds the runtime IPC/preload seam too broad,
-  under-specified, or inconsistent with current contracts.
+- Plan review finds the Windows closeout proof under-specified, too broad, or
+  inconsistent with current architecture.
 - Current architecture, roadmap, contract files, preload/main source, package
   scripts, verifier behavior, or baseline tests changed materially after this
-  plan refresh.
-- Implementation needs real native helper runtime, Windows native proof, Plex,
-  stream policy, scheduler, secure storage, renderer UI import, package,
-  lockfile, dependency, packaging, installer, signing, or upstream import
-  changes.
-- `src/main/index.ts` would need to absorb player lifecycle, fake-host
-  activation policy, production unsupported/noop behavior, or native process
-  policy instead of delegating to a player IPC owner with a plain `shellMode`
-  option.
-- Preload requires a broad RPC bridge, arbitrary channel strings, raw
-  `ipcRenderer`, Electron/Node objects, filesystem access, or secret-bearing
-  values.
-- The implementation cannot preserve the exact player IPC channel literals,
-  preload method names/signatures, request-id ownership, `PlayerIpcResult` /
-  `PlayerDispatchResult` shapes, event subscription semantics, cleanup behavior,
-  `shellMode` registrar handoff, or registrar options/teardown contract frozen
-  above.
-- Contracts appear to require raw media URLs, headers, tokens, native handles,
-  libmpv objects, engine ids, raw Plex payloads, stream keys, part keys, or
-  secret diagnostics.
-- The fake host seam becomes a hidden production native implementation or
-  production player commands would appear to succeed against the fake host.
-- Smoke proof cannot exercise the player preload/main path without real native
-  playback.
-- Player event delivery cannot avoid stale listener/state corruption after
-  cleanup.
+  refresh.
+- Implementation needs contract, preload, renderer API, `src/main/index.ts`, or
+  shared IPC shape changes.
+- Implementation needs production native helper binaries, native addons, libmpv
+  bindings, package/dependency/lockfile changes, packaging, signing, installer
+  work, or new Windows proof tooling outside the reviewed RD-06 smoke.
+- `src/main/index.ts`, `App.ts`, renderer UI, Plex, scheduler, storage, or
+  orchestration owners would need native process policy.
+- WID or helper-owned render API would need to be reopened.
+- Any renderer-facing shape requires raw URLs, tokens, auth headers, native
+  handles, libmpv objects, engine ids, raw Plex payloads, stream keys, part
+  keys, Electron APIs, Node APIs, or secret diagnostics.
+- Smoke or contract proof cannot exercise the RD-07 process seam without
+  overclaiming native playback.
+- RD-06 native-presentation preflight or smoke fails for an in-scope reason that
+  invalidates app-owned native presentation as the RD-07 native surface proof.
+- Production behavior would appear to succeed through fake/test-double playback.
 - `npm run verify:docs`, `npm run typecheck`, `npm run test:contracts`,
   `npm run smoke:electron`, `npm run verify:redaction`, or `npm run verify`
-  fails for an in-scope reason that cannot be fixed inside the reviewed scope.
+  fails for an in-scope reason that cannot be fixed inside reviewed scope.
 - Unrelated dirty files would need to be modified, staged, reverted, or
   interpreted as RD-07 evidence.
 
@@ -743,107 +599,109 @@ Rollback for this planner refresh:
 - Rerun `git status --short --branch` and `npm run verify:docs` after any plan
   rollback or replacement.
 
-Rollback for the next reviewed runtime IPC/preload unit:
+Rollback for the Mac process-seam unit:
 
 - Revert only reviewed RD-07 changes in the files listed for
-  `desktop-player-runtime-ipc-preload-delivery`.
-- Remove `src/main/player/playerIpc.ts` and any focused new test file only if
-  they were created by that unit and are no longer used.
-- Restore the previous `LineupDesktopPreloadApi` shape and smoke assertions if
-  player preload delivery is rolled back.
-- Remove the reviewed player IPC channel literals and `PlayerIpcResult` /
-  `PlayerDispatchResult` additions only if no reviewed follow-up depends on
-  them.
-- Restore the pre-player production policy if the runtime unit is rolled back,
-  ensuring no fake-host production success path remains.
-- Do not revert the completed adapter boundary core unless the reviewed
-  rollback explicitly identifies a regression introduced by the runtime unit.
-- No package, lockfile, Plex, scheduler, renderer UI, native helper, RD-06 tool,
-  import ledger, or upstream source rollback should be needed because those
-  files are out of scope. If they changed, stop and adjudicate before reverting
-  anything not created by the RD-07 unit.
+  `desktop-player-mac-native-host-process-seam`.
+- Remove `src/main/player/nativePlayerHostProcess.ts` and
+  `src/__tests__/nativePlayerHostProcess.test.ts` only if they were created by
+  that unit and no reviewed follow-up depends on them.
+- Restore prior `NativePlayerHostPort`, `playerIpc.ts`, and adapter behavior
+  only for changes made by the Mac unit.
+- Do not revert the reviewed adapter core or runtime IPC/preload bridge unless
+  the reviewed rollback explicitly identifies a regression introduced by the
+  Mac unit.
 - Delete accidental local-only scratch output or ignored run artifacts created
   during implementation. Do not stage generated artifacts.
-- Rerun `git status --short --branch` and the verification commands named above
-  before closeout.
+- Rerun `git status --short --branch` and the verification commands named
+  above before closeout.
 
-Rollback for the later Windows native-host proof unit must be defined in that
-future reviewed packet. Do not reuse the Mac runtime rollback notes for native
-process or Windows evidence work.
+Rollback for the Windows native-host proof unit:
+
+- Revert only `src/__tests__/nativePlayerHostProcess.test.ts` additions for the
+  spawned-helper proof and any reviewed in-scope `src/main/player/*` fix made
+  during this unit.
+- Revert only RD-07 closeout updates in this plan,
+  `docs/architecture/CURRENT_STATE.md`,
+  `docs/architecture/playback-architecture.md`, and
+  `docs/roadmap/desktop-port-roadmap.md`.
+- Do not revert the reviewed adapter core, runtime IPC/preload bridge, Mac
+  process seam, RD-06 native-presentation tooling, package metadata, lockfiles,
+  contracts, preload, `src/main/index.ts`, renderer, Plex, scheduler, storage,
+  packaging, or upstream import docs.
+- Delete accidental ignored run output only when it was produced by a failed
+  proof and is not needed for local diagnosis. Do not stage `docs/runs/`
+  evidence.
+- Rerun `git status --short --branch`, `npm run verify:docs`, and the relevant
+  failed verification command after rollback.
 
 ## Commit Checkpoints
 
-Checkpoint 1: RD-07 continuation plan refresh only.
+Checkpoint 1: RD-07 Mac process-seam plan refresh only.
 
 - Commit only after this plan is refreshed, `npm run verify:docs` passes, and
   read-only plan review is clean.
-- Suggested commit: `docs: refresh rd-07 player runtime plan`
+- Suggested commit: `docs: refresh rd-07 native host plan`
 - Include only
   `docs/plans/2026-05-10-rd-07-desktop-videoplayer-adapter-plan.md`.
 - Do not include unrelated dirty plans or user work.
 
-Checkpoint 2: reviewed Mac runtime IPC/preload delivery only.
+Checkpoint 2: reviewed Mac process-seam implementation only.
 
-- Commit only after clean plan review, scoped implementation,
-  `npm run typecheck`, `npm run test:contracts`, `npm run smoke:electron`,
-  `npm run verify:redaction`, and `npm run verify` pass, and read-only
-  implementation review is clean.
-- Suggested commit: `feat: wire player ipc preload runtime`
-- Include only reviewed RD-07 runtime IPC/preload files. Do not include package,
-  lockfile, Plex, scheduler, renderer UI import, native helper, upstream import,
-  generated, local-only, or unrelated dirty files.
+- Commit only after clean plan review, scoped implementation, required
+  verification passes, and read-only implementation review is clean.
+- Suggested commit: `feat(player): add native host process seam`
+- Include only reviewed RD-07 Mac process-seam files. Do not include package,
+  lockfile, Plex, scheduler, renderer UI import, native binary/addon, upstream
+  import, generated, local-only, or unrelated dirty files.
 
-Checkpoint 3: later Windows native-host proof.
+Checkpoint 3: Windows native-host proof and RD-07 closeout.
 
-- Do not start from this Mac implementation pass.
-- A separate reviewed execution unit must define its own commit scope,
-  verification, redacted evidence, rollback, and handoff.
-
-Checkpoint 4: blocked closeout.
-
-- If runtime IPC/preload delivery cannot stay bounded, stop without product
-  implementation commits.
-- Update this plan only if the controller explicitly asks for a blocked replan
-  artifact, then run `npm run verify:docs`.
-- Suggested commit if a blocked plan update is applied:
-  `docs: mark rd-07 runtime player ipc blocked`
+- Commit only after clean plan review, scoped proof/fixes, required Windows
+  native-presentation proof, full verification, closeout docs, and clean
+  read-only implementation review.
+- Suggested commit: `test(player): prove rd-07 native host on windows`
+- Include only reviewed RD-07 Windows proof/test fixes and closeout docs. Do not
+  include ignored run evidence, package/lockfile changes, Plex, scheduler,
+  renderer UI import, production native binary/addon, upstream import, generated
+  output, or unrelated dirty files.
 
 MODEL_SUGGESTION
-PLANNER: planner with high reasoning; exact `gpt-5-codex` may be approximated by available models.
-IMPLEMENTER: worker with high reasoning; exact `gpt-5-codex` may be approximated by available models.
-REVIEWER: reviewer with high reasoning; exact `gpt-5-codex` may be approximated by available models.
-WHY: RD-07 touches Electron IPC/security, preload API shape, main composition ownership, player contracts, native playback boundaries, redaction, and Tier 3 review gates.
+PLANNER: planner with high reasoning
+IMPLEMENTER: worker with high reasoning
+REVIEWER: reviewer with high reasoning
+WHY: RD-07 touches native playback boundaries, Electron main/player ownership, process lifecycle seams, renderer-safe player contracts, redaction, and cross-machine proof.
 
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-plan
-TASK: Plan RD-07 Windows native-host proof
+TASK: Plan RD-08 Desktop Stream Policy
 TASK_FAMILY: feature/design
 TIER: Tier 3
-PLAN: docs/plans/2026-05-10-rd-07-desktop-videoplayer-adapter-plan.md
-ARTIFACT: reviewed RD-07 boundary core and runtime IPC/preload implementation
+PLAN: none
+ARTIFACT: completed RD-07 Windows native-host proof and closeout
 FILES:
-- docs/plans/2026-05-10-rd-07-desktop-videoplayer-adapter-plan.md
 - AGENTS.md
 - docs/AGENTIC_DEV_WORKFLOW.md
+- docs/agentic/session-prompts/feature-quality-loop.md
 - docs/agentic/session-prompts/feature-plan.md
 - docs/agentic/plan-authoring-standard.md
 - docs/architecture/CURRENT_STATE.md
-- docs/roadmap/desktop-port-roadmap.md
 - docs/architecture/playback-architecture.md
 - docs/architecture/security-and-secret-flow.md
 - docs/architecture/upstream-behavior-guardrails.md
+- docs/roadmap/desktop-port-roadmap.md
 - src/contracts/player.ts
 - src/contracts/ipc.ts
 - src/contracts/shell.ts
 - src/main/player/desktopPlayerAdapter.ts
 - src/main/player/nativePlayerHostPort.ts
+- src/main/player/nativePlayerHostProcess.ts
 - src/main/player/playerIpc.ts
-- src/preload/index.cts
-- src/main/index.ts
 - src/__tests__/desktopPlayerAdapter.test.ts
-- src/__tests__/contracts.test.ts
+- src/__tests__/nativePlayerHostProcess.test.ts
 - src/__tests__/playerIpc.test.ts
+- src/__tests__/contracts.test.ts
 - package.json
-BLOCKERS: none for planning; Windows native-host implementation must not begin until its plan or execution packet is reviewed clean.
+BLOCKERS: none for RD-08 planning; RD-07 intentionally did not implement Plex stream setup, renderer UI, or a production native helper.
 MESSAGE:
-Plan the remaining RD-07 `desktop-player-windows-native-host-proof` unit. Preserve the reviewed `desktop-player-adapter-boundary-core` and `desktop-player-runtime-ipc-preload-delivery` surfaces. The next unit must target the RD-06 app-owned native presentation direction on Windows, name exact native-host files, commands, redacted evidence paths, manual/proof expectations, rollback, and stop conditions, and must prove real native-host integration without exposing Plex tokens, raw URLs, auth headers, native handles, libmpv objects, engine ids, raw Plex payloads, stream keys, part keys, or secret diagnostics to renderer-facing state. It must not reopen WID or helper-owned render API without a separate reviewed replan, and it must not treat macOS IPC/preload smoke as native playback proof.
+Create the RD-08 Desktop Stream Policy plan. Start from the completed RD-07 adapter/process boundary and Windows native surface proof: renderer-facing player contracts are in `src/contracts/player.ts`, runtime player IPC/preload delivery exists but remains development/smoke fake-host-backed, production player commands still return renderer-safe unsupported failures, and no Plex stream setup, renderer UI, secure storage, or production native helper exists yet. RD-08 should define Desktop capability-driven stream decisions without webOS constants as Desktop truth, preserve raw URL/header/token custody outside renderer-facing contracts, and name exact Plex/stream-policy evidence, files in scope, verification, redaction, rollback, and stop conditions before implementation.

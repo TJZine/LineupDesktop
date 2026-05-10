@@ -17,7 +17,7 @@ import {
   type PlayerTrackKind,
   type PlayerTrackSummary,
 } from '../../contracts/player.js';
-import type { PlayerRendererIntent, RendererIntentEnvelope } from '../../contracts/ipc.js';
+import type { PlayerRendererIntent } from '../../contracts/ipc.js';
 import type {
   NativePlayerHostEvent,
   NativePlayerHostFailure,
@@ -93,9 +93,7 @@ export class DesktopPlayerAdapter {
     return this.#pendingCommands.size;
   }
 
-  async dispatchRendererIntent(
-    envelope: RendererIntentEnvelope<unknown>,
-  ): Promise<DesktopPlayerAdapterDispatchResult> {
+  async dispatchRendererIntent(envelope: unknown): Promise<DesktopPlayerAdapterDispatchResult> {
     const commandResult = mapRendererIntentToCommand(envelope);
     if ('error' in commandResult) {
       const events = this.#emitBoundaryError(commandResult.error);
@@ -184,49 +182,16 @@ export class DesktopPlayerAdapter {
 
     const hostEvent = validation.event;
     const hostRequestId = hostEvent.requestId;
-    if (
-      this.#snapshot.requestId === null &&
-      (hostRequestId === null || !this.#pendingCommands.has(hostRequestId))
-    ) {
-      return [
-        {
-          event: 'warning',
-          requestId: null,
-          warning: createPlayerError({
-            code: 'PLAYER_STALE_HOST_EVENT',
-            category: 'stale-request',
-            message: 'A stale player event was ignored.',
-            requestId: hostRequestId ?? undefined,
-            diagnostic: {
-              component: 'desktop-player-adapter',
-              operation: hostEvent.type,
-              status: 'ignored',
-              reason: 'no active player request',
-            },
-          }),
-        },
-      ];
+    if (this.#snapshot.requestId === null) {
+      return this.#staleHostEventWarning(hostEvent, hostRequestId, 'no active player request');
     }
 
-    if (hostEvent.requestId !== null && this.#isStale(hostEvent.requestId)) {
-      return [
-        {
-          event: 'warning',
-          requestId: this.#snapshot.requestId,
-          warning: createPlayerError({
-            code: 'PLAYER_STALE_HOST_EVENT',
-            category: 'stale-request',
-            message: 'A stale player event was ignored.',
-            requestId: hostEvent.requestId,
-            diagnostic: {
-              component: 'desktop-player-adapter',
-              operation: hostEvent.type,
-              status: 'ignored',
-              reason: 'request id did not match current playback state',
-            },
-          }),
-        },
-      ];
+    if (hostRequestId !== null && hostRequestId !== this.#snapshot.requestId) {
+      return this.#staleHostEventWarning(
+        hostEvent,
+        hostRequestId,
+        'request id did not match current playback state',
+      );
     }
 
     switch (hostEvent.type) {
@@ -327,6 +292,7 @@ export class DesktopPlayerAdapter {
   }
 
   handleHelperCrash(requestId: PlayerRequestId | null = this.#snapshot.requestId): readonly PlayerEvent[] {
+    this.#pendingCommands.clear();
     return this.#recordError(
       createPlayerError({
         code: 'PLAYER_HELPER_CRASHED',
@@ -417,14 +383,33 @@ export class DesktopPlayerAdapter {
     };
   }
 
-  #isStale(requestId: PlayerRequestId): boolean {
-    return requestId !== this.#snapshot.requestId && !this.#pendingCommands.has(requestId);
+  #staleHostEventWarning(
+    hostEvent: NativePlayerHostEvent,
+    requestId: PlayerRequestId | null,
+    reason: string,
+  ): readonly PlayerEvent[] {
+    return [
+      {
+        event: 'warning',
+        requestId: this.#snapshot.requestId,
+        warning: createPlayerError({
+          code: 'PLAYER_STALE_HOST_EVENT',
+          category: 'stale-request',
+          message: 'A stale player event was ignored.',
+          requestId: requestId ?? undefined,
+          diagnostic: {
+            component: 'desktop-player-adapter',
+            operation: hostEvent.type,
+            status: 'ignored',
+            reason,
+          },
+        }),
+      },
+    ];
   }
 }
 
-function mapRendererIntentToCommand(
-  envelope: RendererIntentEnvelope<unknown>,
-): CommandMappingResult | ValidationFailure {
+function mapRendererIntentToCommand(envelope: unknown): CommandMappingResult | ValidationFailure {
   if (!isRecord(envelope)) {
     return validationFailure(undefined, 'renderer envelope must be an object');
   }
@@ -611,9 +596,9 @@ function validateHostEvent(
       const requestId = event.requestId;
       if (
         !isNonEmptyString(requestId) ||
-        !isNullableString(event.audioTrackId) ||
-        !isNullableString(event.subtitleTrackId) ||
-        !isNullableString(event.videoTrackId)
+        !isNullableNonEmptyString(event.audioTrackId) ||
+        !isNullableNonEmptyString(event.subtitleTrackId) ||
+        !isNullableNonEmptyString(event.videoTrackId)
       ) {
         return validationFailure(readRequestId(event), 'track selection host event was invalid');
       }
@@ -698,13 +683,13 @@ function validateLoadPolicy(
   }
   if (
     payload.value.preferredAudioTrackId !== undefined &&
-    !isNullableString(payload.value.preferredAudioTrackId)
+    !isNullableNonEmptyString(payload.value.preferredAudioTrackId)
   ) {
     return { error: 'load policy preferredAudioTrackId must be opaque or null' };
   }
   if (
     payload.value.preferredSubtitleTrackId !== undefined &&
-    !isNullableString(payload.value.preferredSubtitleTrackId)
+    !isNullableNonEmptyString(payload.value.preferredSubtitleTrackId)
   ) {
     return { error: 'load policy preferredSubtitleTrackId must be opaque or null' };
   }
@@ -1176,7 +1161,7 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function isNullableString(value: unknown): value is string | null {
+function isNullableNonEmptyString(value: unknown): value is string | null {
   return value === null || isNonEmptyString(value);
 }
 
@@ -1207,8 +1192,8 @@ function isPlayerErrorCategory(value: unknown): value is PlayerErrorCategory {
   return isStringInSet(value, PLAYER_ERROR_CATEGORIES);
 }
 
-function isPlayerRendererIntent(value: RendererIntentEnvelope<unknown>['intent']): value is PlayerRendererIntent {
-  return Object.hasOwn(PLAYER_INTENT_TO_COMMAND, value);
+function isPlayerRendererIntent(value: unknown): value is PlayerRendererIntent {
+  return typeof value === 'string' && Object.hasOwn(PLAYER_INTENT_TO_COMMAND, value);
 }
 
 function assertNever(value: never): never {
