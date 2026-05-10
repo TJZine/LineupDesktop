@@ -1,4 +1,4 @@
-import type { PlayerRendererIntentEnvelope, RendererIntentEnvelope } from './ipc.js';
+import type { RendererIntentEnvelope } from './ipc.js';
 import type {
   PlayerDispatchResult,
   PlayerEvent,
@@ -65,7 +65,7 @@ export interface LineupDesktopPreloadApi {
   };
   player: {
     dispatch: (
-      envelope: PlayerRendererIntentEnvelope<unknown>,
+      envelope: RendererIntentEnvelope<unknown>,
     ) => Promise<PlayerIpcResult<PlayerDispatchResult>>;
     getSnapshot: () => Promise<PlayerIpcResult<PlayerSnapshot>>;
     cleanup: () => Promise<PlayerIpcResult<PlayerSnapshot>>;

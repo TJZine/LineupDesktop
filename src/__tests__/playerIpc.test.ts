@@ -9,15 +9,9 @@ import {
 } from '../contracts/ipc.js';
 import {
   PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
-  type PlayerCommand,
   type PlayerEvent,
 } from '../contracts/player.js';
 import { registerPlayerIpcHandlers } from '../main/player/playerIpc.js';
-import { redactMainProcessError } from '../main/redactedDiagnostics.js';
-import type {
-  NativePlayerHostCommandResult,
-  NativePlayerHostPort,
-} from '../main/player/nativePlayerHostPort.js';
 
 type Handler = (event: IpcMainInvokeEvent, payload?: unknown) => unknown;
 
@@ -36,24 +30,6 @@ class FakeIpcMain {
     const handler = this.handlers.get(channel);
     assert.ok(handler, `missing handler for ${channel}`);
     return handler(event as IpcMainInvokeEvent, payload);
-  }
-}
-
-class ConfigurableNativeHost implements NativePlayerHostPort {
-  readonly commands: PlayerCommand[] = [];
-  executeResult: NativePlayerHostCommandResult = { ok: true };
-  cleanupError: Error | null = null;
-
-  async execute(command: PlayerCommand): Promise<NativePlayerHostCommandResult> {
-    this.commands.push(command);
-    return this.executeResult;
-  }
-
-  async cleanup(): Promise<void> {
-    if (this.cleanupError !== null) {
-      throw this.cleanupError;
-    }
-    return undefined;
   }
 }
 
@@ -124,7 +100,7 @@ function assertNoForbiddenKeys(value: unknown): void {
   }
 }
 
-test('player IPC registers closed handlers and tears them down', async () => {
+test('player IPC registers closed handlers and tears them down', () => {
   const ipcMain = new FakeIpcMain();
   const teardown = registerPlayerIpcHandlers({
     shellMode: 'smoke',
@@ -140,56 +116,9 @@ test('player IPC registers closed handlers and tears them down', async () => {
     LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
   ]);
 
-  await teardown();
+  teardown();
 
   assert.deepEqual([...ipcMain.handlers.keys()], []);
-});
-
-test('player IPC reports cleanup failures and still removes handlers', async () => {
-  const ipcMain = new FakeIpcMain();
-  const host = new ConfigurableNativeHost();
-  const diagnostics: Array<{ message: string; error: unknown }> = [];
-  host.cleanupError = new Error('nativeHandle=secret');
-  const teardown = registerPlayerIpcHandlers({
-    shellMode: 'development',
-    isAuthorizedEvent,
-    sendPlayerEvent: () => undefined,
-    createRequestId,
-    nativeHostFactory: () => host,
-    reportDiagnostic: (message, error) => diagnostics.push({ message, error }),
-    ipcMain,
-  });
-
-  assert.deepEqual([...ipcMain.handlers.keys()].sort(), [
-    LINEUP_PLAYER_CLEANUP_CHANNEL,
-    LINEUP_PLAYER_COMMAND_CHANNEL,
-    LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
-  ]);
-
-  await teardown();
-
-  assert.deepEqual([...ipcMain.handlers.keys()], []);
-  assert.equal(diagnostics.length, 1);
-  assert.equal(diagnostics[0]?.message, 'Player IPC cleanup failed');
-  assert.equal((diagnostics[0]?.error as { category?: string }).category, 'cleanup-failure');
-  assert.equal(JSON.stringify(diagnostics[0]?.error).includes('nativeHandle'), false);
-});
-
-test('main process diagnostics redact privileged key-value pairs and URLs', () => {
-  const message = redactMainProcessError(
-    new Error(
-      'nativeHandle=secret tokenizedUrl=http://secret.example/media "authHeaders":"json-secret" rawPlexPayload: bare-secret',
-    ),
-  );
-
-  assert.equal(message.includes('nativeHandle'), false);
-  assert.equal(message.includes('tokenizedUrl'), false);
-  assert.equal(message.includes('authHeaders'), false);
-  assert.equal(message.includes('rawPlexPayload'), false);
-  assert.equal(message.includes('secret'), false);
-  assert.equal(message.includes('json-secret'), false);
-  assert.equal(message.includes('bare-secret'), false);
-  assert.equal(message.includes('secret.example'), false);
 });
 
 test('development and smoke player IPC dispatches through fake host and emits safe events', async () => {
@@ -293,16 +222,11 @@ test('player IPC enforces main authorization before adapter access', async () =>
 test('production player IPC returns unsupported failures and does not activate fake playback', async () => {
   const ipcMain = new FakeIpcMain();
   const events: PlayerEvent[] = [];
-  let nativeHostCreated = false;
   registerPlayerIpcHandlers({
     shellMode: 'production',
     isAuthorizedEvent,
     sendPlayerEvent: (event) => events.push(event),
     createRequestId,
-    nativeHostFactory: () => {
-      nativeHostCreated = true;
-      return new ConfigurableNativeHost();
-    },
     ipcMain,
   });
 
@@ -323,7 +247,6 @@ test('production player IPC returns unsupported failures and does not activate f
   );
 
   assert.equal((commandResult as { ok: boolean }).ok, false);
-  assert.equal(nativeHostCreated, false);
   assert.equal(
     (commandResult as { error: { category: string; code: string } }).error.category,
     'unsupported-capability',
@@ -341,79 +264,4 @@ test('production player IPC returns unsupported failures and does not activate f
   assertNoForbiddenKeys(snapshotResult);
   assertNoForbiddenKeys(cleanupResult);
   assertNoForbiddenKeys(events);
-});
-
-test('player IPC cleanup returns a safe failure envelope when host cleanup fails', async () => {
-  const ipcMain = new FakeIpcMain();
-  const host = new ConfigurableNativeHost();
-  const events: PlayerEvent[] = [];
-  host.cleanupError = new Error('nativeHandle=cleanup-secret');
-  registerPlayerIpcHandlers({
-    shellMode: 'development',
-    isAuthorizedEvent,
-    sendPlayerEvent: (event) => events.push(event),
-    createRequestId,
-    nativeHostFactory: () => host,
-    ipcMain,
-  });
-
-  await ipcMain.invoke(
-    LINEUP_PLAYER_COMMAND_CHANNEL,
-    authorizedEvent(),
-    loadEnvelope('player-cleanup-load-1'),
-  );
-  const result = await ipcMain.invoke(
-    LINEUP_PLAYER_CLEANUP_CHANNEL,
-    authorizedEvent(),
-    { requestId: 'player-cleanup-fails-1' },
-  );
-
-  assert.equal((result as { ok: boolean }).ok, false);
-  assert.equal((result as { requestId: string }).requestId, 'player-cleanup-fails-1');
-  assert.equal((result as { error: { category: string } }).error.category, 'cleanup-failure');
-  assert.equal(events.some((event) => event.event === 'error'), true);
-  assert.equal(JSON.stringify(result).includes('cleanup-secret'), false);
-  assertNoForbiddenKeys(result);
-  assertNoForbiddenKeys(events);
-});
-
-test('player IPC can use an explicit development host factory without changing production policy', async () => {
-  const ipcMain = new FakeIpcMain();
-  const host = new ConfigurableNativeHost();
-  host.executeResult = {
-    ok: false,
-    error: {
-      code: 'PLAYER_HELPER_TIMEOUT',
-      category: 'timeout',
-      message: 'The player helper did not respond in time.',
-      recoverable: true,
-      retryable: true,
-    },
-  };
-
-  registerPlayerIpcHandlers({
-    shellMode: 'development',
-    isAuthorizedEvent,
-    sendPlayerEvent: () => undefined,
-    createRequestId,
-    nativeHostFactory: () => host,
-    ipcMain,
-  });
-
-  const result = await ipcMain.invoke(
-    LINEUP_PLAYER_COMMAND_CHANNEL,
-    authorizedEvent(),
-    loadEnvelope('player-dev-process-1'),
-  );
-
-  assert.equal(host.commands.length, 1);
-  assert.equal(host.commands[0]?.requestId, 'player-dev-process-1');
-  assert.equal((result as { ok: boolean }).ok, true);
-  assert.equal(
-    (result as { value: { events: PlayerEvent[] } }).value.events.some(
-      (event) => event.event === 'command.settled' && !event.ok,
-    ),
-    true,
-  );
-  assertNoForbiddenKeys(result);
 });

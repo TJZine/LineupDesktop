@@ -89,5 +89,3 @@ export interface NativePlayerHostPort {
   execute(command: PlayerCommand): Promise<NativePlayerHostCommandResult>;
   cleanup(requestId: PlayerRequestId | null): Promise<void>;
 }
-
-export type NativePlayerHostFactory = () => NativePlayerHostPort;

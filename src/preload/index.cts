@@ -13,17 +13,7 @@ import type {
   PlayerIpcResult,
   PlayerSnapshot,
 } from '../contracts/player.js';
-import type { PlayerRendererIntentEnvelope } from '../contracts/ipc.js';
-import {
-  PLAYER_COMMAND_VALUES,
-  PLAYER_ERROR_CATEGORIES,
-  PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
-  PLAYER_RENDERER_INTENT_VALUES,
-  PLAYER_STATUS_VALUES,
-  PLAYER_TRACK_DELIVERY_TYPE_VALUES,
-  PLAYER_TRACK_KIND_VALUES,
-  SHELL_STATUS_VALUES,
-} from './vocabulary.cjs';
+import type { RendererIntentEnvelope } from '../contracts/ipc.js';
 
 const { contextBridge, ipcRenderer } = require('electron') as typeof Electron;
 
@@ -34,6 +24,75 @@ const LINEUP_PLAYER_COMMAND_CHANNEL = 'lineup:player:command';
 const LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL = 'lineup:player:getSnapshot';
 const LINEUP_PLAYER_CLEANUP_CHANNEL = 'lineup:player:cleanup';
 const LINEUP_PLAYER_EVENT_CHANNEL = 'lineup:player:event';
+const SHELL_STATUS_VALUES = ['booting', 'ready', 'closing'];
+const PLAYER_ERROR_CATEGORIES = [
+  'source',
+  'authentication',
+  'authorization',
+  'network',
+  'unsupported-media',
+  'unsupported-capability',
+  'timeout',
+  'aborted',
+  'stale-request',
+  'engine-failure',
+  'helper-failure',
+  'render-failure',
+  'track-failure',
+  'cleanup-failure',
+  'validation-failure',
+  'unknown',
+];
+const PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS = [
+  'rawMediaUrl',
+  'tokenizedUrl',
+  'authHeaders',
+  'rawAuthHeaders',
+  'persistentToken',
+  'credentialMaterial',
+  'nativeHandle',
+  'libmpvObject',
+  'engineId',
+  'electronApi',
+  'nodeApi',
+  'rawPlexPayload',
+  'streamKey',
+  'partKey',
+  'secretDiagnostics',
+];
+const PLAYER_STATUS_VALUES = [
+  'idle',
+  'loading',
+  'ready',
+  'buffering',
+  'playing',
+  'paused',
+  'seeking',
+  'stalled',
+  'ended',
+  'error',
+  'destroyed',
+];
+const PLAYER_COMMAND_VALUES = [
+  'load',
+  'play',
+  'pause',
+  'stop',
+  'seek.absolute',
+  'seek.relative',
+  'volume.set',
+  'mute.set',
+  'track.audio.select',
+  'track.subtitle.select',
+];
+const PLAYER_TRACK_KIND_VALUES = ['audio', 'subtitle', 'video'];
+const PLAYER_TRACK_DELIVERY_TYPE_VALUES = [
+  'embedded',
+  'sidecar',
+  'external',
+  'burned-in',
+  'unknown',
+];
 
 function createRequestId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -58,14 +117,16 @@ function isShellStatusEvent(value: unknown): value is ShellStatusEvent {
   return (
     typeof value.timestampMs === 'number' &&
     Number.isFinite(value.timestampMs) &&
-    isStringInSet(value.status, SHELL_STATUS_VALUES)
+    typeof value.status === 'string' &&
+    SHELL_STATUS_VALUES.includes(value.status)
   );
 }
 
-function isPlayerRendererIntentEnvelope(value: unknown): value is PlayerRendererIntentEnvelope<unknown> {
+function isRendererIntentEnvelope(value: unknown): value is RendererIntentEnvelope<unknown> {
   return (
     isPlainRecord(value) &&
-    isStringInSet(value.intent, PLAYER_RENDERER_INTENT_VALUES) &&
+    typeof value.intent === 'string' &&
+    value.intent.startsWith('player.') &&
     typeof value.requestId === 'string' &&
     value.requestId.trim().length > 0 &&
     Object.hasOwn(value, 'payload')
@@ -81,7 +142,7 @@ function isPlayerEvent(value: unknown): value is PlayerEvent {
     case 'state.changed':
       return (
         hasOnlyKeys(value, ['event', 'requestId', 'snapshot']) &&
-        isNullableNonEmptyString(value.requestId) &&
+        isNullableString(value.requestId) &&
         isPlayerSnapshot(value.snapshot)
       );
     case 'time.updated':
@@ -120,9 +181,9 @@ function isPlayerEvent(value: unknown): value is PlayerEvent {
           'videoTrackId',
         ]) &&
         isNonEmptyString(value.requestId) &&
-        isNullableNonEmptyString(value.audioTrackId) &&
-        isNullableNonEmptyString(value.subtitleTrackId) &&
-        isNullableNonEmptyString(value.videoTrackId)
+        isNullableString(value.audioTrackId) &&
+        isNullableString(value.subtitleTrackId) &&
+        isNullableString(value.videoTrackId)
       );
     case 'command.settled': {
       if (
@@ -148,13 +209,13 @@ function isPlayerEvent(value: unknown): value is PlayerEvent {
     case 'warning':
       return (
         hasOnlyKeys(value, ['event', 'requestId', 'warning']) &&
-        isNullableNonEmptyString(value.requestId) &&
+        isNullableString(value.requestId) &&
         isPlayerError(value.warning)
       );
     case 'error':
       return (
         hasOnlyKeys(value, ['event', 'requestId', 'error']) &&
-        isNullableNonEmptyString(value.requestId) &&
+        isNullableString(value.requestId) &&
         isPlayerError(value.error)
       );
     default:
@@ -183,7 +244,7 @@ function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
       'tracks',
       'lastError',
     ]) &&
-    isNullableNonEmptyString(value.requestId) &&
+    isNullableString(value.requestId) &&
     isStringInSet(value.status, PLAYER_STATUS_VALUES) &&
     (value.media === null || isPlayerMediaSummary(value.media)) &&
     (value.capabilityProfileId === null || isNonEmptyString(value.capabilityProfileId)) &&
@@ -194,9 +255,9 @@ function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
     isFiniteRangeNumber(value.volume, 0, 1) &&
     typeof value.muted === 'boolean' &&
     isFiniteNonNegativeNumber(value.playbackRate) &&
-    isNullableNonEmptyString(value.selectedAudioTrackId) &&
-    isNullableNonEmptyString(value.selectedSubtitleTrackId) &&
-    isNullableNonEmptyString(value.selectedVideoTrackId) &&
+    isNullableString(value.selectedAudioTrackId) &&
+    isNullableString(value.selectedSubtitleTrackId) &&
+    isNullableString(value.selectedVideoTrackId) &&
     isPlayerTracks(value.tracks) &&
     (value.lastError === null || isPlayerError(value.lastError))
   );
@@ -364,7 +425,7 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function isNullableNonEmptyString(value: unknown): value is string | null {
+function isNullableString(value: unknown): value is string | null {
   return value === null || isNonEmptyString(value);
 }
 
@@ -409,10 +470,7 @@ function hasForbiddenPrivilegedField(value: unknown): boolean {
     return false;
   }
   return Object.entries(value).some(([key, child]) => {
-    return (
-      (PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS as readonly string[]).includes(key) ||
-      hasForbiddenPrivilegedField(child)
-    );
+    return PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS.includes(key) || hasForbiddenPrivilegedField(child);
   });
 }
 
@@ -459,7 +517,7 @@ const lineupDesktop: LineupDesktopPreloadApi = {
   },
   player: {
     dispatch: (envelope) => {
-      if (!isPlayerRendererIntentEnvelope(envelope)) {
+      if (!isRendererIntentEnvelope(envelope)) {
         return Promise.resolve(
           playerValidationFailure<PlayerDispatchResult>(
             readCommandRequestId(envelope),

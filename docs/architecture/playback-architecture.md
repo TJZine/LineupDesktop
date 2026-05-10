@@ -1,14 +1,11 @@
 # Playback Architecture
 
 Lineup Desktop runtime playback is only partially wired. RD-07 adds a
-main-owned Desktop player adapter boundary core, a narrow runtime main/preload
-player IPC bridge backed by a development/smoke fake host, and a native-host
-process seam behind the adapter host port. Windows closeout proof covers the
-process seam with a real spawned helper test double and reruns the RD-06
-app-owned native-presentation smoke as RD-07's native surface proof. Production
-player commands currently return renderer-safe unsupported failures. Production
-Plex stream setup, renderer UI integration, and the product native helper remain
-unimplemented.
+main-owned Desktop player adapter boundary core and a narrow runtime
+main/preload player IPC bridge backed by a development/smoke fake host.
+Production player commands currently return renderer-safe unsupported failures.
+Production Plex stream setup, renderer UI integration, and the real native
+helper remain unimplemented.
 
 ## Current Hypothesis
 
@@ -149,31 +146,6 @@ only shell mode and authorization/event callbacks into the registrar. The
 registrar owns development/smoke fake-host activation and production
 unsupported/noop behavior. Preload guards player events at runtime before
 invoking renderer listeners, including nested forbidden-field checks.
-
-RD-07 adds a native-host process seam in
-`src/main/player/nativePlayerHostProcess.ts`. The seam translates private
-main-owned process messages behind `NativePlayerHostPort`, normalizes spawn,
-exit, timeout, malformed-output, cleanup, and helper failures into
-renderer-safe host failures, ignores late process output after cleanup, and is
-covered with in-memory and real spawned helper test doubles at
-`src/__tests__/nativePlayerHostProcess.test.ts`. Windows RD-07 closeout also
-reran the RD-06 app-owned native-presentation smoke successfully, observing
-local and dummy HTTP native playback, fullscreen/composition through the
-native-presentation host, focus/input continuity, helper crash detection,
-helper cleanup/reap, and redacted diagnostics. This does not ship a production
-native helper binary, bind libmpv in product code, wire Plex streams, or change
-renderer, preload, or contract shapes.
-
-RD-08 adds a deterministic main/player stream policy fixture core in
-`src/main/player/streamPolicy/*`, covered by
-`src/__tests__/desktopStreamPolicy.test.ts`. It evaluates safe capability
-profiles and normalized candidate facts to choose direct play, direct stream,
-transcode, or unsupported outcomes with stable reason codes and explicit
-unknowns. The fixture core covers audio fallback, subtitle fallback, HDR/Dolby
-Vision handling, direct-stream remediation rules, and recursive forbidden-field
-invariants. It does not contact Plex, normalize real Plex payloads, create
-playback URLs, start native playback, wire runtime IPC, or change renderer,
-preload, adapter, native-host, storage, package, or dependency behavior.
 
 Concrete playback adapters must not leak native handles, raw media URLs, raw
 auth headers, tokenized URLs, raw Plex payloads, Electron or Node APIs,
