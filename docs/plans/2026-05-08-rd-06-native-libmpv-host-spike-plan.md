@@ -1,16 +1,17 @@
-**Plan Status:** active
+**Plan Status:** complete
 
 **Task family:** feature/design
 
 **Tier:** Tier 3
 
-**Controller phase:** implementation-review
+**Controller phase:** done
 
 **Plan review status:** clean read-only review reported no blockers for this
 app-owned native presentation replan after `npm run verify:docs` passed. The
 previous reviewed WID and helper-owned render API implementations were attempted
 on a Windows proof host, and both failed the required fullscreen video-surface
-proof. RD-06 is not complete.
+proof. The app-owned native presentation execution unit completed after clean
+implementation review and required verification.
 
 **Windows WID smoke adjudication:** WID is blocked as the native surface
 strategy for RD-07 unless a later reviewed plan reopens it with new evidence.
@@ -53,12 +54,14 @@ pixels.
 
 **Chosen next execution unit:** `windows-libmpv-app-owned-presentation-boundary-probe`
 
-**Native presentation implementation status:** implemented on the Windows proof
-runner with redacted passing smoke evidence for dummy local/HTTP playback,
-fullscreen active video pixels from the app-owned native presentation host,
-same-boundary overlay/composition, render-thread discipline, app-owned input
-simulation, helper crash detection, cleanup, and redaction. RD-06 is not
-complete until read-only implementation review is clean.
+**Native presentation implementation status:** implemented, revised for the
+latest reviewer blockers, and rerun on the Windows proof runner. The revised
+smoke records fresh fullscreen and fullscreen-composition proof after native
+fullscreen entry and settle, helper cleanup/reap evidence after child exit,
+render-thread discipline from fresh bounded nonblocking render-loop progress,
+redaction, helper crash detection, and dummy local/HTTP playback. Read-only
+implementation re-review reported no material blockers, so the app-owned native
+presentation boundary is the reviewed RD-07 native surface direction.
 
 **Verification classification:** broader integration/manual proof required
 

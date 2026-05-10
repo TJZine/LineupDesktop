@@ -538,6 +538,18 @@ async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, rende
     const requiredProofs = collectProofs(events);
     const fullscreenProof = requiredProofs.get('fullscreen');
     const fullscreenNativeCaptureProof = requiredProofs.get('fullscreen-native-capture');
+    const fullscreenCompositionProof = requiredProofs.get('fullscreen-composition');
+    const helperCleanupFailed = events.some((event) => (
+      event.proof === 'helper-cleanup' &&
+      (event.cleanupObserved !== true || event.kind !== 'observed')
+    ));
+    const fullscreenCompositionObserved = !nativePresentation || (
+      fullscreenCompositionProof?.visiblePixelsObserved === true &&
+      fullscreenCompositionProof?.nativePresentationFullscreen === true
+    );
+    const helperCleanupObserved = !nativePresentation || (
+      requiredProofs.get('helper-cleanup')?.cleanupObserved === true
+    );
     const fullscreenVideoPixelsObserved =
       (
         fullscreenProof?.visiblePixelsObserved === true &&
@@ -572,13 +584,18 @@ async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, rende
       requiredProofs.get('overlay')?.visiblePixelsObserved === true &&
       focusOrNativeInputObserved &&
       fullscreenVideoPixelsObserved &&
+      fullscreenCompositionObserved &&
       nativePresentationProofObserved &&
+      helperCleanupObserved &&
+      !helperCleanupFailed &&
       (!renderApi || (
         requiredProofs.get('libmpv-render-api-symbols')?.category === 'available' &&
         requiredProofs.get('render-context')?.renderContextCreated === true &&
         requiredProofs.get('render-frame')?.renderFrameObserved === true &&
         requiredProofs.get('render-thread-discipline')?.category === 'proven' &&
-        requiredProofs.get('composition')?.visiblePixelsObserved === true &&
+        (nativePresentation
+          ? fullscreenCompositionProof?.visiblePixelsObserved === true
+          : requiredProofs.get('composition')?.visiblePixelsObserved === true) &&
         requiredProofs.get('render-input')?.category === 'app-owned-input-simulated'
       ))
       ? 'passed'
@@ -612,6 +629,7 @@ async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, rende
         forbiddenHeaderObserved: requestFacts.forbiddenHeaderSeen,
         overlay: summarizeProof(requiredProofs.get('overlay')),
         fullscreen: summarizeProof(requiredProofs.get('fullscreen')),
+        fullscreenComposition: nativePresentation ? summarizeProof(requiredProofs.get('fullscreen-composition')) : 'not-requested',
         fullscreenNativeCapture: summarizeFullscreenNativeCaptureProof(requiredProofs.get('fullscreen-native-capture')),
         nativePresentationHost: nativePresentation ? summarizeNativePresentationHostProof(requiredProofs.get('native-presentation-host')) : 'not-requested',
         focus: summarizeProof(requiredProofs.get('focus')),
@@ -622,7 +640,7 @@ async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, rende
         composition: renderApi ? summarizeProof(requiredProofs.get('composition')) : 'not-requested',
         inputSimulation: renderApi ? summarizeProof(requiredProofs.get('render-input')) : 'not-requested',
         helperCrash: summarizeProof(requiredProofs.get('helper-crash')),
-        cleanup: 'temp-only',
+        cleanup: nativePresentation ? summarizeProof(requiredProofs.get('helper-cleanup')) : 'temp-only',
         dpi: 'noted-redacted',
         multiMonitor: 'noted-redacted',
         tracks: 'not-proven-by-dummy-visual-media',
@@ -789,7 +807,7 @@ async function runElectronHarness(config) {
     }
   });
 
-  const exitCode = await waitForChildExit(child, Math.max(15000, config.durationMs * 4));
+  const exitCode = await waitForChildExit(child, Math.max(30000, config.durationMs * 7));
   return { exitCode, events };
 }
 
@@ -864,6 +882,7 @@ function collectProofs(events) {
       nativeCaptureObserved: current.nativeCaptureObserved === true || event.nativeCaptureObserved === true,
       browserWindowFullscreen: current.browserWindowFullscreen === true || event.browserWindowFullscreen === true,
       nativePresentationFullscreen: current.nativePresentationFullscreen === true || event.nativePresentationFullscreen === true,
+      cleanupObserved: current.cleanupObserved === true || event.cleanupObserved === true,
     });
   }
   return proofs;
@@ -889,8 +908,53 @@ function runHelper(window, crashAfterInitialize = false) {
       windowsHide: true,
     });
     let activePlayback = false;
+    let settled = false;
+    let timeoutCleanupStarted = false;
+    let timeoutGraceTimer = null;
     let fullscreenNativeCapture = null;
     const fullscreenNativeCaptureWaiters = [];
+    const helperTimeoutMs = Math.max(12000, Math.min(30000, (config.durationMs * 4) - 1000));
+    const timeoutCleanupGraceMs = 3000;
+    const cleanupTimer = setTimeout(() => {
+      beginTimeoutCleanup();
+    }, helperTimeoutMs);
+    function emitHelperCleanup(kind, category, cleanupObserved) {
+      process.stdout.write(JSON.stringify({
+        kind,
+        proof: 'helper-cleanup',
+        category,
+        cleanupObserved,
+      }) + '\n');
+    }
+    function finishHelper(category, code, signal, cleanupObserved) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(cleanupTimer);
+      if (timeoutGraceTimer !== null) {
+        clearTimeout(timeoutGraceTimer);
+      }
+      try {
+        child.stdin.destroy();
+      } catch {
+        // Helper cleanup evidence is best effort after process teardown starts.
+      }
+      emitHelperCleanup(cleanupObserved ? 'observed' : 'failed', category, cleanupObserved);
+      resolve({ code: code ?? 1, signal });
+    }
+    function beginTimeoutCleanup() {
+      if (settled) {
+        return;
+      }
+      timeoutCleanupStarted = true;
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill();
+      }
+      timeoutGraceTimer = setTimeout(() => {
+        finishHelper('timeout-cleanup-not-observed', 1, 'timeout', false);
+      }, timeoutCleanupGraceMs);
+    }
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', async (chunk) => {
       process.stdout.write(chunk);
@@ -939,7 +1003,11 @@ function runHelper(window, crashAfterInitialize = false) {
     if (crashAfterInitialize) {
       child.stdin.end();
     }
-    child.once('exit', (code, signal) => resolve({ code, signal }));
+    child.once('exit', (code, signal) => {
+      const category = timeoutCleanupStarted ? 'timeout-reaped' : crashAfterInitialize ? 'crash-exit' : 'normal-exit';
+      finishHelper(category, code, signal, true);
+    });
+    child.once('error', () => finishHelper('spawn-error-reaped', 1, null, false));
   });
 }
 
@@ -1098,7 +1166,10 @@ app.whenReady().then(async () => {
     '</style>',
     '<button autofocus>RD06</button><div id="overlay" aria-label="rd06-overlay"></div>',
   ].join('')));
-  await new Promise((resolve) => window.once('ready-to-show', resolve));
+  await Promise.race([
+    new Promise((resolve) => window.once('ready-to-show', resolve)),
+    new Promise((resolve) => setTimeout(resolve, 1000)),
+  ]);
   window.show();
   const normal = await runHelper(window, false);
   const crash = await runHelper(window, true);

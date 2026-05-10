@@ -18,11 +18,11 @@ with ignored redacted local evidence only. The spike must use dummy visual
 media, active-playback overlay/focus/fullscreen checks, and libmpv client API
 evidence. The Windows WID and helper-owned render API proofs are blocked on
 fullscreen video-surface evidence; render API also failed composition and
-render-thread-discipline proof. The Windows app-owned native presentation probe
-records redacted evidence of fullscreen active video pixels, same-boundary
-overlay/composition, render-thread discipline, helper crash detection, cleanup,
-and dummy local/HTTP playback. RD-06 still requires clean implementation review
-before it can be called complete or used to route RD-07.
+render-thread-discipline proof. The revised Windows app-owned native
+presentation probe records fresh redacted proof under the stricter fullscreen,
+cleanup, and render-thread semantics. Clean implementation re-review reported no
+material blockers, so RD-06 can route RD-07 toward the app-owned native
+presentation boundary while keeping production playback architecture uncreated.
 
 ## Product Invariants
 

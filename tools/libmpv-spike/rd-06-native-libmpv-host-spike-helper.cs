@@ -469,6 +469,7 @@ internal static class Rd06NativeLibmpvHostSpikeHelper
 
             bool fullscreenHost = surface.EnterFullscreenHost();
             Thread.Sleep(600);
+            renderThread.ResetProofWindow();
             RenderSnapshot fullscreenSnapshot = renderThread.WaitForPixels(Math.Max(1000, init.durationMs));
             DesktopProofPixels desktopPixels = surface.CaptureDesktopProofPixels();
             bool fullscreenVideoObserved = fullscreenHost && (fullscreenSnapshot.VideoPixelsObserved || desktopPixels.RedPixelsObserved);
@@ -484,16 +485,19 @@ internal static class Rd06NativeLibmpvHostSpikeHelper
             });
             WriteEvent(fullscreenCompositionObserved ? "observed" : "failed", new Dictionary<string, object?>
             {
-                ["proof"] = "composition",
+                ["proof"] = "fullscreen-composition",
                 ["category"] = fullscreenCompositionObserved ? "native-boundary-composited" : "not-captured",
                 ["visiblePixelsObserved"] = fullscreenCompositionObserved,
+                ["nativePresentationFullscreen"] = fullscreenHost,
             });
 
             LoadAndObserve(mpv, init.httpMedia, "dummy-http", init.dummyHeaderName, init.dummyHeaderValue, init.durationMs);
+            bool renderThreadDisciplineProven = renderThread.WaitForFreshRenderProgress(3, Math.Max(1000, Math.Min(init.durationMs, 3000)));
             WriteEvent("observed", new Dictionary<string, object?>
             {
                 ["proof"] = "render-thread-discipline",
-                ["category"] = "proven",
+                ["category"] = renderThreadDisciplineProven ? "proven" : "not-proven",
+                ["renderFrameObserved"] = renderThreadDisciplineProven,
             });
             Command(mpv, "stop");
             return 0;
@@ -1047,6 +1051,7 @@ internal static class Rd06NativeLibmpvHostSpikeHelper
         private bool frameObserved;
         private bool videoPixelsObserved;
         private bool overlayPixelsObserved;
+        private int observedFrameCount;
 
         public RenderThreadProbe(IntPtr renderContext, RenderSurface surface)
         {
@@ -1088,6 +1093,38 @@ internal static class Rd06NativeLibmpvHostSpikeHelper
             }
         }
 
+        public void ResetProofWindow()
+        {
+            lock (sync)
+            {
+                frameObserved = false;
+                videoPixelsObserved = false;
+                overlayPixelsObserved = false;
+                observedFrameCount = 0;
+            }
+        }
+
+        public bool WaitForFreshRenderProgress(int minimumFrameCount, int timeoutMs)
+        {
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (DateTime.UtcNow < deadline)
+            {
+                lock (sync)
+                {
+                    if (thread.IsAlive && observedFrameCount >= minimumFrameCount)
+                    {
+                        return true;
+                    }
+                }
+                Thread.Sleep(25);
+            }
+
+            lock (sync)
+            {
+                return thread.IsAlive && observedFrameCount >= minimumFrameCount;
+            }
+        }
+
         private void RenderLoop()
         {
             while (running)
@@ -1098,6 +1135,7 @@ internal static class Rd06NativeLibmpvHostSpikeHelper
                     frameObserved = frameObserved || snapshot.FrameObserved;
                     videoPixelsObserved = videoPixelsObserved || snapshot.VideoPixelsObserved;
                     overlayPixelsObserved = overlayPixelsObserved || snapshot.OverlayPixelsObserved;
+                    observedFrameCount += snapshot.FrameObserved ? 1 : 0;
                 }
                 PumpWindowMessages();
                 Thread.Sleep(16);
@@ -1259,8 +1297,7 @@ internal static class Rd06NativeLibmpvHostSpikeHelper
             NativeMethods.glClear(GlColorBufferBit);
             IntPtr renderParams = AllocRenderParams(
                 new MpvRenderParam { type = MpvRenderParamOpenGlFbo, data = FboParam },
-                new MpvRenderParam { type = MpvRenderParamFlipY, data = FlipYParam },
-                new MpvRenderParam { type = MpvRenderParamBlockForTargetTime, data = BlockForTargetTimeParam });
+                new MpvRenderParam { type = MpvRenderParamFlipY, data = FlipYParam });
             try
             {
                 NativeMethods.mpv_render_context_update(renderContext);

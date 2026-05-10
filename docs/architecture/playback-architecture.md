@@ -85,17 +85,18 @@ presentation boundary. That path must prove fullscreen active video pixels,
 native-boundary overlay/composition, render-thread discipline, cleanup, and
 redaction before RD-06 can route RD-07 toward a native surface direction.
 
-The Windows app-owned native presentation probe now records a passing redacted
-smoke for the bounded RD-06 proof path. It observed local dummy visual playback,
-dummy HTTP visual playback with only `X-Lineup-RD06: dummy`, fullscreen active
-video pixels from the native presentation host, overlay/composition inside that
-same native boundary, render-thread discipline through a dedicated render
-thread, app-owned input simulation, helper crash detection, temp cleanup,
-libmpv client API/version evidence, render API symbol evidence, and no
-forbidden header observation. This evidence is still dev-only and does not
-create production playback architecture; RD-06 needs clean implementation
-review before the native presentation boundary can be treated as the reviewed
-RD-07 direction.
+The revised Windows app-owned native presentation probe records a passing
+redacted smoke under the stricter proof semantics. It observed local dummy
+visual playback, dummy HTTP visual playback with only `X-Lineup-RD06: dummy`,
+fullscreen active video pixels and distinct fullscreen-composition evidence
+after the native host entered fullscreen and settled, render-thread discipline
+through fresh bounded nonblocking render-loop progress, app-owned input
+simulation, helper crash detection, helper cleanup/reap evidence after child
+exit, temp cleanup, libmpv client API/version evidence, render API symbol
+evidence, and no forbidden header observation. This remains dev-only and does
+not create production playback architecture. Clean implementation re-review
+reported no material blockers, so the native presentation boundary is the
+reviewed RD-07 direction.
 
 Track selection and subtitle behavior remain unproven by the tiny dummy visual
 input. DPI and multi-monitor behavior are noted only as redacted smoke
