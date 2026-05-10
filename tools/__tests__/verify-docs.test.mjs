@@ -403,6 +403,48 @@ test('verifyDocs rejects project skills with wrong frontmatter or missing read o
   assert(errors.some((error) => error.includes('missing required read AGENTS.md')));
 });
 
+test('verifyDocs accepts CRLF skill frontmatter and scans normalized plan paths', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, '.agents/skills/lineup-desktop-feature-plan/SKILL.md'), [
+    '---',
+    'name: lineup-desktop-feature-plan',
+    'description: fixture',
+    '---',
+    '',
+    '# Fixture',
+    'Use this only from the Lineup Desktop repo.',
+    'AGENTS.md',
+    'docs/AGENTIC_DEV_WORKFLOW.md',
+    'docs/agentic/session-prompts/feature-plan.md',
+    'follow the tracked launcher exactly',
+  ].join('\r\n'));
+  fs.writeFileSync(path.join(root, 'docs/plans/active.md'), [
+    '**Plan Status:** active',
+    '**Task family:** feature/design',
+    'new regression/contract test required',
+    '## Goal',
+    '## Non-Goals',
+    '## Parent Architecture Alignment',
+    '## Required Skills',
+    '## Evidence And Discovery',
+    '## Impact Snapshot',
+    '## Files In Scope',
+    '## Files Out Of Scope',
+    '## Planner Self-Check',
+    '## Architecture Seam Decision Gate',
+    '## Verification Commands',
+    '## Acceptance Criteria',
+    '## Replan Triggers',
+    '## Rollback Notes',
+    '## Commit Checkpoints',
+  ].join('\r\n'));
+
+  const errors = verifyDocs(root);
+  assert(!errors.some((error) => error.includes('frontmatter name must be lineup-desktop-feature-plan')));
+  assert(!errors.some((error) => error.includes('frontmatter description is required')));
+  assert(errors.some((error) => error.includes('docs/plans/active.md: active plan missing ## Required Reading')));
+});
+
 test('verifyDocs rejects missing transferred Lineup skill adaptations', () => {
   const root = makeFixture({ complete: true });
   fs.rmSync(path.join(root, '.agents/skills/debugging-remediation'), { recursive: true, force: true });

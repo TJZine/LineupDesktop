@@ -629,7 +629,7 @@ function checkTransferredSkills(root, errors) {
 }
 
 function parseFrontmatter(content) {
-  const match = /^---\n([\s\S]*?)\n---/u.exec(content);
+  const match = /^---\r?\n([\s\S]*?)\r?\n---/u.exec(content);
   if (!match) {
     return {};
   }
@@ -715,23 +715,24 @@ function collectMarkdownFiles(root) {
 function walk(root, directory, files, includeFile) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const absolute = path.join(directory, entry.name);
-    const relative = path.relative(root, absolute);
+    const nativeRelative = path.relative(root, absolute);
+    const relative = nativeRelative.split(path.sep).join('/');
     if (
       entry.name === '.git' ||
       entry.name === 'node_modules' ||
       localOnlyDirectoryNames.has(entry.name) ||
-      relative === path.join('.codex', 'cache') ||
-      relative.startsWith(`${path.join('.codex', 'cache')}${path.sep}`)
+      relative === '.codex/cache' ||
+      relative.startsWith('.codex/cache/')
     ) {
       continue;
     }
-    if (relative.startsWith(`docs${path.sep}runs${path.sep}`) && relative !== path.join('docs', 'runs', 'README.md')) {
+    if (relative.startsWith('docs/runs/') && relative !== 'docs/runs/README.md') {
       continue;
     }
     if (entry.isDirectory()) {
       walk(root, absolute, files, includeFile);
     } else if (entry.isFile() && includeFile(entry.name)) {
-      files.push(path.relative(root, absolute));
+      files.push(relative);
     }
   }
 }
