@@ -179,6 +179,24 @@ test('desktop stream policy records audio fallback without exposing internals', 
   ]);
 });
 
+test('desktop stream policy falls back when requested audio exists but is incompatible', () => {
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.audioFallback,
+    preferredAudioTrackId: 'audio-track-requested-flac',
+  });
+
+  assert.equal(decision.kind, 'direct-stream');
+  assert.equal(decision.selectedTrackIds.audio, 'audio-track-fallback-aac');
+  assert.equal(decision.summary.audioCodec, 'aac');
+  assert.deepEqual(decision.reasonCodes, [
+    'direct-stream-audio-fallback',
+    'audio-fallback-selected',
+    'no-subtitle-selected',
+  ]);
+  assert.equal(decision.reasonCodes.includes('direct-stream-audio-transcode'), false);
+  assert.equal(decision.reasonCodes.includes('requested-audio-unavailable'), false);
+});
+
 test('desktop stream policy records subtitle fallback through supported delivery', () => {
   const decision = decideFixture('subtitleFallback');
 
@@ -190,6 +208,23 @@ test('desktop stream policy records subtitle fallback through supported delivery
     'requested-subtitle-unavailable',
     'subtitle-fallback-selected',
   ]);
+});
+
+test('desktop stream policy falls back when requested subtitle exists but has unsupported delivery', () => {
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.subtitleFallback,
+    preferredSubtitleTrackId: 'subtitle-track-requested-burn',
+  });
+
+  assert.equal(decision.kind, 'direct-stream');
+  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-sidecar');
+  assert.equal(decision.summary.subtitleDelivery, 'sidecar');
+  assert.deepEqual(decision.reasonCodes, [
+    'direct-stream-subtitle-fallback',
+    'subtitle-fallback-selected',
+  ]);
+  assert.equal(decision.reasonCodes.includes('direct-stream-subtitle-conversion'), false);
+  assert.equal(decision.reasonCodes.includes('requested-subtitle-unavailable'), false);
 });
 
 test('desktop stream policy does not use audio fallback when switching is unsupported', () => {
