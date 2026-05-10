@@ -37,6 +37,28 @@ function assertOrder(source, orderedNeedles) {
   }
 }
 
+function sliceMethodSource(source, signature) {
+  const signatureIndex = source.indexOf(signature);
+  assert.notEqual(signatureIndex, -1, `missing method signature: ${signature}`);
+  const bodyStart = source.indexOf('{', signatureIndex);
+  assert.notEqual(bodyStart, -1, `missing method body: ${signature}`);
+
+  let depth = 0;
+  for (let index = bodyStart; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === '{') {
+      depth += 1;
+    } else if (character === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(signatureIndex, index + 1);
+      }
+    }
+  }
+
+  assert.fail(`missing method closing brace: ${signature}`);
+}
+
 test('parseArgs accepts RD-06 preflight, WID smoke, render API, and native presentation modes', () => {
   assert.deepEqual(parseArgs(['--mode', 'preflight', '--out', 'docs/runs/rd-06-native-libmpv-host-spike']), {
     mode: 'preflight',
@@ -262,15 +284,22 @@ test('native presentation smoke records render-thread discipline without helper-
 });
 
 test('render-thread discipline requires fresh bounded render progress after proof reset', () => {
-  const disciplineStart = helperSource.indexOf(
+  const nativePresentationSource = sliceMethodSource(
+    helperSource,
+    'private static int RunNativePresentationSmoke',
+  );
+  const disciplineStart = nativePresentationSource.indexOf(
     'LoadAndObserve(mpv, init.httpMedia, "dummy-http", init.dummyHeaderName, init.dummyHeaderValue, init.durationMs);',
   );
-  assert.notEqual(disciplineStart, -1, 'missing dummy-http load marker');
-  const disciplineSource = helperSource.slice(disciplineStart);
+  assert.notEqual(disciplineStart, -1, 'missing native-presentation dummy-http load marker');
+  const disciplineSource = nativePresentationSource.slice(disciplineStart);
   assert.match(helperSource, /public bool WaitForFreshRenderProgress\(int minimumFrameCount, int timeoutMs\)/u);
   assert.match(helperSource, /observedFrameCount >= minimumFrameCount/u);
   assert.match(helperSource, /thread\.IsAlive && observedFrameCount >= minimumFrameCount/u);
-  assert.match(helperSource, /renderThread\.WaitForFreshRenderProgress\(3, Math\.Max\(1000, Math\.Min\(init\.durationMs, 3000\)\)\)/u);
+  assert.match(
+    nativePresentationSource,
+    /renderThread\.WaitForFreshRenderProgress\(3, Math\.Max\(1000, Math\.Min\(init\.durationMs, 3000\)\)\)/u,
+  );
   assertOrder(disciplineSource, [
     'LoadAndObserve(mpv, init.httpMedia, "dummy-http", init.dummyHeaderName, init.dummyHeaderValue, init.durationMs);',
     'renderThread.ResetProofWindow();',
