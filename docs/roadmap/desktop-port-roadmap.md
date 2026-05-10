@@ -85,6 +85,21 @@ durable completion summary.
   network transport, scheduler/channel persistence, backup/restore
   implementation, package/dependency changes, or copied/adapted upstream
   source.
+- [x] RD-10 Plex Auth, Discovery, And Library Import implemented through
+  `src/contracts/plex.ts`, `src/main/plex/library/*`,
+  `src/main/plex/auth/*`, `src/main/plex/discovery/*`,
+  `src/__tests__/plexLibrary.test.ts`, `src/__tests__/plexAuth.test.ts`, and
+  `src/__tests__/plexDiscovery.test.ts`; `npm run verify` passed on
+  2026-05-10 with 113 contract tests and 69 harness-doc tests. The unit adds
+  imported/adapted main-owned Plex library parsers/domain helpers, auth
+  parsers/service/storage seam, discovery/selected-server domain, recursive
+  renderer-safe forbidden-field checks, and import-ledger rows. All runtime
+  Plex behavior remains behind injected fakes/seams; no live Plex transport,
+  preload/renderer Plex API, `src/main/index.ts` composition, real Electron
+  safeStorage/app-path runtime wiring, package/dependency change, stream
+  resolver/runtime playback URL setup, scheduler/channel persistence, or
+  backup/restore implementation landed. Platform proof remained Mac/local
+  automated only, and no Windows gate was triggered.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -154,10 +169,10 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-09 are complete enough to route the next Tier 3 session to
-complete RD-10 Plex auth, discovery, and library through the quality loop. Do
-not import original Lineup product code until a reviewed product slice plan
-explicitly authorizes a bounded import.
+RD-01 through RD-10 are complete enough to route the next Tier 3 session to
+complete RD-11 scheduler, channel, and content domain import through the quality
+loop. Do not import additional original Lineup product code until a reviewed
+product slice plan explicitly authorizes a bounded import.
 
 ## Roadmap Checklist
 
@@ -559,7 +574,12 @@ Exit gates:
 
 ### RD-10 Plex Auth, Discovery, And Library Import
 
-Status: not started.
+Status: complete. Implemented through the RD-10 Tier 3 quality loop with clean
+Unit 1, Unit 2, and Unit 3 implementation reviews, plus Mac/local automated
+proof. No Windows proof was required because the completed scope remained pure
+main-owned domain/storage-seam code with injected fake transport/storage and no
+real Electron app-path/safeStorage runtime, live Plex auth/discovery, or
+OS-specific credential behavior.
 
 Depends on:
 
@@ -594,6 +614,28 @@ Exit gates:
   domain/storage-seam units. Windows proof is required before closeout if the
   RD-10 plan wires real Electron safeStorage runtime, app paths, live Plex
   auth/discovery, or any OS-specific credential behavior.
+
+Observed closeout:
+
+- `npm run verify` passed on 2026-05-10 with 113 contract tests and 69
+  harness-doc tests.
+- `src/main/plex/library/*` owns library metadata parsing, pagination/search,
+  collections, playlists, tag directories, and renderer-safe summaries without
+  live fetch/cache/image URL or stream resolver runtime.
+- `src/main/plex/auth/*` owns injected-transport PIN/profile/token validation,
+  Plex Home users, profile switching, sanitized errors, and fail-closed RD-09
+  credential storage behavior without live Plex transport or renderer/preload
+  auth API.
+- `src/main/plex/discovery/*` owns injected-transport resource discovery,
+  connection probing policy, health classification, stale-context invalidation,
+  and selected-server restore by server id plus fresh probing. Selected
+  connection details remain main-memory only and are not persisted or returned
+  through renderer-safe contracts.
+- `src/contracts/plex.ts` owns renderer-safe Plex summary contracts and
+  recursive forbidden-field checks.
+- `docs/architecture/import-ledger.md` records the upstream Plex
+  library/auth/discovery and selected-server source adaptations at the pinned
+  upstream commit.
 
 ### RD-11 Scheduler, Channel, And Content Domain Import
 
