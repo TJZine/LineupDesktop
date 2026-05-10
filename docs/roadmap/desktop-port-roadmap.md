@@ -54,8 +54,11 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
   main/preload player IPC delivery is also implemented through
   `src/main/player/playerIpc.ts` and `window.lineupDesktop.player`, backed only
   by a development/smoke fake host with production unsupported/noop behavior.
-  Renderer UI wiring, Plex stream setup, and a real native helper remain future
-  RD-07/RD-12 work.
+  A Mac-verifiable native-host process seam now exists at
+  `src/main/player/nativePlayerHostProcess.ts` with lifecycle, cleanup/reap,
+  failure-normalization, stale/late output, and redaction tests. Renderer UI
+  wiring, Plex stream setup, Windows native-host proof, and a real native helper
+  remain future RD-07/RD-12 work.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -403,8 +406,11 @@ Observed RD-06 proof:
 Status: in progress. The `desktop-player-adapter-boundary-core` unit is
 implemented and reviewed clean. The `desktop-player-runtime-ipc-preload-delivery`
 unit is implemented and reviewed clean with development/smoke fake-host
-delivery and production unsupported/noop behavior. Real native host integration
-is not implemented.
+delivery and production unsupported/noop behavior. The Mac-bounded
+`desktop-player-mac-native-host-process-seam` unit adds fakeable process
+lifecycle plumbing, cleanup/reap behavior, safe failure normalization, stale/late
+output handling, and redaction tests without claiming Windows native playback.
+Windows native-host proof and the real native helper remain unimplemented.
 
 Depends on:
 
@@ -426,6 +432,9 @@ Exit gates:
   adapter core and narrow runtime player preload bridge. The bridge remains
   fake-host-backed only in development/smoke until real native host integration
   lands.
+- Mac-verifiable process-seam tests cover native-host lifecycle, cleanup/reap,
+  failure normalization, malformed output, stale/late output, and forbidden-field
+  exclusion without Windows proof claims.
 - `App.ts` and orchestration owners do not absorb native process policy.
 
 ### RD-08 Desktop Stream Policy
