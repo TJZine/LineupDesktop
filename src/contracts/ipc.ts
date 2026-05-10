@@ -52,6 +52,15 @@ export const LINEUP_WINDOW_INTENT_CHANNEL = 'lineup:window:intent' as const;
 export const LINEUP_SHELL_STATUS_CHANGED_CHANNEL =
   'lineup:shell:statusChanged' as const;
 
+export const LINEUP_PLAYER_COMMAND_CHANNEL = 'lineup:player:command' as const;
+
+export const LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL =
+  'lineup:player:getSnapshot' as const;
+
+export const LINEUP_PLAYER_CLEANUP_CHANNEL = 'lineup:player:cleanup' as const;
+
+export const LINEUP_PLAYER_EVENT_CHANNEL = 'lineup:player:event' as const;
+
 export const RENDERER_FORBIDDEN_PAYLOAD_KEYS = [
   'rawMediaUrl',
   'tokenizedUrl',

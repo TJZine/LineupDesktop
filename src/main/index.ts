@@ -10,6 +10,7 @@ import {
 } from 'electron';
 
 import {
+  LINEUP_PLAYER_EVENT_CHANNEL,
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
@@ -25,12 +26,14 @@ import {
   shellFailure,
   shellSuccess,
 } from '../contracts/shell.js';
+import type { PlayerEvent } from '../contracts/player.js';
 import { LINEUP_CSP, registerLineupProtocolHandler, registerLineupProtocolScheme } from './protocol.js';
 import {
   isAllowedShellUrl,
   isAuthorizedShellIpcRequest,
   type ShellIpcAuthorizationDetails,
 } from './shellSecurity.js';
+import { registerPlayerIpcHandlers, type PlayerIpcTeardown } from './player/playerIpc.js';
 
 registerLineupProtocolScheme();
 
@@ -42,6 +45,7 @@ const shellMode = getShellMode();
 const smokeMode = shellMode === 'smoke';
 
 let shellWindow: BrowserWindow | null = null;
+let teardownPlayerIpc: PlayerIpcTeardown | null = null;
 let containmentCounters = {
   navigationDenied: 0,
   windowOpenDenied: 0,
@@ -56,6 +60,12 @@ app.whenReady()
     registerLineupProtocolHandler(rendererRoot);
     configurePermissionContainment();
     registerShellIpcHandlers();
+    teardownPlayerIpc = registerPlayerIpcHandlers({
+      shellMode,
+      isAuthorizedEvent,
+      sendPlayerEvent,
+      createRequestId,
+    });
     shellWindow = createShellWindow();
     attachContainmentHandlers(shellWindow);
     await shellWindow.loadURL(LINEUP_SHELL_URL);
@@ -79,6 +89,8 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   publishShellStatus('closing');
+  teardownPlayerIpc?.();
+  teardownPlayerIpc = null;
 });
 
 function createShellWindow(): BrowserWindow {
@@ -207,6 +219,10 @@ function publishShellStatus(status: ShellStatusEvent['status']): void {
   } satisfies ShellStatusEvent);
 }
 
+function sendPlayerEvent(event: PlayerEvent): void {
+  shellWindow?.webContents.send(LINEUP_PLAYER_EVENT_CHANNEL, event);
+}
+
 function getShellMode(): ShellMode {
   if (process.env.LINEUP_DESKTOP_SMOKE === '1') {
     return 'smoke';
@@ -266,11 +282,73 @@ async function runSmokeAssertions(window: BrowserWindow): Promise<void> {
       if (!window.lineupDesktop?.shell?.getCapabilities) failures.push('shell api');
       if (!window.lineupDesktop?.shell?.onStatusChanged) failures.push('status api');
       if (!window.lineupDesktop?.window?.setFullscreen) failures.push('window api');
+      if (!window.lineupDesktop?.player?.dispatch) failures.push('player dispatch api');
+      if (!window.lineupDesktop?.player?.getSnapshot) failures.push('player snapshot api');
+      if (!window.lineupDesktop?.player?.cleanup) failures.push('player cleanup api');
+      if (!window.lineupDesktop?.player?.onEvent) failures.push('player event api');
       if ('ipcRenderer' in window.lineupDesktop) failures.push('raw ipc bridge');
+      if ('invoke' in window.lineupDesktop) failures.push('raw invoke bridge');
 
       const capabilities = await window.lineupDesktop.shell.getCapabilities();
       if (!capabilities.ok || capabilities.value.protocolOrigin !== 'lineup://shell') {
         failures.push('capabilities ' + JSON.stringify(capabilities));
+      }
+      const playerEvents = [];
+      const unsubscribe = window.lineupDesktop.player.onEvent((event) => {
+        playerEvents.push(event);
+        if (event && typeof event === 'object' && ('sender' in event || 'ports' in event)) {
+          failures.push('raw player event object');
+        }
+      });
+      const playerResult = await window.lineupDesktop.player.dispatch({
+        intent: 'player.load',
+        requestId: 'smoke-player-load',
+        payload: {
+          media: {
+            id: 'smoke-media',
+            title: 'Smoke Media',
+            durationMs: 1000,
+            container: 'smoke',
+          },
+          policy: {
+            autoplay: true,
+            startPositionMs: 0,
+            preferredAudioTrackId: null,
+            preferredSubtitleTrackId: null,
+          },
+          capabilityProfileId: 'smoke-fake-host',
+        },
+      });
+      const invalidPlayerResult = await window.lineupDesktop.player.dispatch({
+        intent: 'player.play',
+        requestId: 'smoke-player-invalid',
+      });
+      const playerSnapshot = await window.lineupDesktop.player.getSnapshot();
+      const cleanup = await window.lineupDesktop.player.cleanup();
+      unsubscribe();
+      const beforeUnsubscribeCount = playerEvents.length;
+      await window.lineupDesktop.player.dispatch({
+        intent: 'player.play',
+        requestId: 'smoke-player-after-unsubscribe',
+        payload: {},
+      });
+      if (playerEvents.length !== beforeUnsubscribeCount) {
+        failures.push('player unsubscribe');
+      }
+      if (!playerResult.ok || !playerResult.value.accepted || playerResult.requestId !== 'smoke-player-load') {
+        failures.push('player dispatch ' + JSON.stringify(playerResult));
+      }
+      if (invalidPlayerResult.ok || invalidPlayerResult.requestId !== 'smoke-player-invalid') {
+        failures.push('player invalid request id ' + JSON.stringify(invalidPlayerResult));
+      }
+      if (!playerSnapshot.ok || playerSnapshot.value.media?.id !== 'smoke-media') {
+        failures.push('player snapshot ' + JSON.stringify(playerSnapshot));
+      }
+      if (!cleanup.ok || cleanup.value.status !== 'idle') {
+        failures.push('player cleanup ' + JSON.stringify(cleanup));
+      }
+      if (!playerEvents.some((event) => event.event === 'state.changed')) {
+        failures.push('player event delivery');
       }
       const fullscreenOn = await window.lineupDesktop.window.setFullscreen(true);
       const fullscreenOff = await window.lineupDesktop.window.setFullscreen(false);
