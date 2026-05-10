@@ -22,7 +22,22 @@ const helperSource = fs.readFileSync(
   'utf8',
 );
 
-test('parseArgs accepts RD-06 preflight, WID smoke, and render API modes', () => {
+const harnessSource = fs.readFileSync(
+  new URL('../libmpv-spike/rd-06-native-libmpv-host-spike.mjs', import.meta.url),
+  'utf8',
+);
+
+function assertOrder(source, orderedNeedles) {
+  let previousIndex = -1;
+  for (const needle of orderedNeedles) {
+    const index = source.indexOf(needle);
+    assert.notEqual(index, -1, `missing source marker: ${needle}`);
+    assert.ok(index > previousIndex, `source marker out of order: ${needle}`);
+    previousIndex = index;
+  }
+}
+
+test('parseArgs accepts RD-06 preflight, WID smoke, render API, and native presentation modes', () => {
   assert.deepEqual(parseArgs(['--mode', 'preflight', '--out', 'docs/runs/rd-06-native-libmpv-host-spike']), {
     mode: 'preflight',
     out: 'docs/runs/rd-06-native-libmpv-host-spike',
@@ -53,16 +68,36 @@ test('parseArgs accepts RD-06 preflight, WID smoke, and render API modes', () =>
   ]);
   assert.equal(renderSmoke.mode, 'render-api-smoke');
   assert.equal(renderSmoke.fullscreenMode, 'browser-window');
+
+  const nativePresentationPreflight = parseArgs(['--mode', 'native-presentation-preflight']);
+  assert.equal(nativePresentationPreflight.mode, 'native-presentation-preflight');
+
+  const nativePresentationSmoke = parseArgs([
+    '--mode',
+    'native-presentation-smoke',
+    '--duration-ms',
+    '5000',
+    '--dummy-input',
+    'local-and-http',
+    '--fullscreen-mode',
+    'native-presentation-host',
+  ]);
+  assert.equal(nativePresentationSmoke.mode, 'native-presentation-smoke');
+  assert.equal(nativePresentationSmoke.fullscreenMode, 'native-presentation-host');
 });
 
 test('parseArgs rejects unsupported modes and dummy input policies', () => {
-  assert.throws(() => parseArgs(['--mode', 'external-mpv']), /render-api-preflight/u);
+  assert.throws(() => parseArgs(['--mode', 'external-mpv']), /native-presentation-preflight/u);
   assert.throws(() => parseArgs(['--mode', 'wid-smoke', '--dummy-input', 'real-server']), /local-and-http/u);
   assert.throws(() => parseArgs(['--mode', 'wid-smoke', '--duration-ms', '100']), /duration-ms/u);
   assert.throws(() => parseArgs(['--mode', 'render-api-smoke']), /fullscreen-mode browser-window/u);
   assert.throws(
     () => parseArgs(['--mode', 'render-api-smoke', '--fullscreen-mode', 'native-window']),
-    /fullscreen-mode must be browser-window/u,
+    /fullscreen-mode must be browser-window or native-presentation-host/u,
+  );
+  assert.throws(
+    () => parseArgs(['--mode', 'native-presentation-smoke', '--fullscreen-mode', 'browser-window']),
+    /fullscreen-mode native-presentation-host/u,
   );
 });
 
@@ -134,31 +169,23 @@ test('helper source probes public libmpv render API symbols', () => {
 });
 
 test('render API smoke does not overclaim render-thread or composition proof', () => {
-  const source = fs.readFileSync(
-    new URL('../libmpv-spike/rd-06-native-libmpv-host-spike.mjs', import.meta.url),
-    'utf8',
-  );
   assert.match(helperSource, /"render-thread-discipline"/u);
   assert.match(helperSource, /"not-proven-blocking-helper-loop"/u);
-  assert.match(source, /not-proven-merged-capture-sources/u);
-  assert.match(source, /requiredProofs\.get\('render-thread-discipline'\)\?\.category === 'proven'/u);
-  assert.match(source, /requiredProofs\.get\('composition'\)\?\.visiblePixelsObserved === true/u);
-  assert.doesNotMatch(source, /active-playback-composited/u);
+  assert.match(harnessSource, /not-proven-merged-capture-sources/u);
+  assert.match(harnessSource, /requiredProofs\.get\('render-thread-discipline'\)\?\.category === 'proven'/u);
+  assert.match(harnessSource, /requiredProofs\.get\('composition'\)\?\.visiblePixelsObserved === true/u);
+  assert.doesNotMatch(harnessSource, /active-playback-composited/u);
 });
 
 test('render API smoke gates fullscreen native capture on BrowserWindow fullscreen', () => {
-  const source = fs.readFileSync(
-    new URL('../libmpv-spike/rd-06-native-libmpv-host-spike.mjs', import.meta.url),
-    'utf8',
-  );
-  assert.match(source, /control: 'fullscreen-native-capture'/u);
-  assert.match(source, /browserWindowFullscreen: true/u);
-  assert.match(source, /config\.renderApi === true/u);
-  assert.match(source, /fullscreenActive && useNativeFullscreenCapture/u);
-  assert.match(source, /fullscreenProof\?\.browserWindowFullscreen === true/u);
-  assert.match(source, /fullscreenNativeCaptureProof\?\.browserWindowFullscreen === true/u);
-  assert.match(source, /fullscreenNativeCapture: summarizeFullscreenNativeCaptureProof/u);
-  assert.match(source, /nativeCaptureObserved/u);
+  assert.match(harnessSource, /control: 'fullscreen-native-capture'/u);
+  assert.match(harnessSource, /browserWindowFullscreen: true/u);
+  assert.match(harnessSource, /config\.renderApi === true/u);
+  assert.match(harnessSource, /fullscreenActive && useNativeFullscreenCapture/u);
+  assert.match(harnessSource, /fullscreenProof\?\.browserWindowFullscreen === true/u);
+  assert.match(harnessSource, /fullscreenNativeCaptureProof\?\.browserWindowFullscreen === true/u);
+  assert.match(harnessSource, /fullscreenNativeCapture: summarizeFullscreenNativeCaptureProof/u);
+  assert.match(harnessSource, /nativeCaptureObserved/u);
 });
 
 test('helper source handles private fullscreen native capture control', () => {
@@ -174,7 +201,7 @@ test('helper source uses Win32 GDI desktop capture scoped to the render child su
   assert.match(helperSource, /GetWindowRect\(window, out NativeMethods\.RECT bounds\)/u);
   assert.match(helperSource, /CaptureDesktopRedPixels\(bounds\)/u);
   assert.match(helperSource, /private const int SurfaceTop = 140/u);
-  assert.match(helperSource, /SetWindowPos\(window, IntPtr\.Zero, 0, SurfaceTop, 640, 360, SwpShowWindow\)/u);
+  assert.match(helperSource, /nativePresentation \? HwndTopmost : IntPtr\.Zero/u);
   assert.match(helperSource, /GetDC\(IntPtr\.Zero\)/u);
   assert.match(helperSource, /CreateCompatibleDC/u);
   assert.match(helperSource, /CreateCompatibleBitmap/u);
@@ -182,6 +209,117 @@ test('helper source uses Win32 GDI desktop capture scoped to the render child su
   assert.match(helperSource, /GetDIBits/u);
   assert.match(helperSource, /Srccopy \| Captureblt/u);
   assert.doesNotMatch(helperSource, /GetSystemMetrics/u);
+});
+
+test('native presentation smoke uses app-owned fullscreen host and same-boundary composition proof', () => {
+  assert.match(harnessSource, /native-presentation-preflight/u);
+  assert.match(harnessSource, /native-presentation-smoke/u);
+  assert.match(harnessSource, /native-presentation-host/u);
+  assert.match(harnessSource, /nativePresentationFullscreen/u);
+  assert.match(harnessSource, /requiredProofs\.get\('fullscreen-composition'\)/u);
+  assert.match(harnessSource, /fullscreenCompositionProof\?\.nativePresentationFullscreen === true/u);
+  assert.match(harnessSource, /fullscreenCompositionObserved/u);
+  assert.match(harnessSource, /nativePresentationHost: nativePresentation/u);
+  assert.match(helperSource, /RunNativePresentationSmoke/u);
+  assert.match(helperSource, /LineupRd06NativePresentationHost/u);
+  assert.match(helperSource, /EnterFullscreenHost/u);
+  assert.match(helperSource, /MonitorFromWindow/u);
+  assert.match(helperSource, /\["proof"\] = "fullscreen-composition"/u);
+  assert.match(helperSource, /\["nativePresentationFullscreen"\] = fullscreenHost/u);
+  assert.match(helperSource, /native-boundary-composited/u);
+  assert.match(helperSource, /DrawOverlay/u);
+  assert.match(helperSource, /glScissor/u);
+});
+
+test('native presentation fullscreen proof resets only after fullscreen entry and settle', () => {
+  assertOrder(helperSource, [
+    'bool fullscreenHost = surface.EnterFullscreenHost();',
+    'Thread.Sleep(600);',
+    'renderThread.ResetProofWindow();',
+    'RenderSnapshot fullscreenSnapshot = renderThread.WaitForPixels',
+    'DesktopProofPixels desktopPixels = surface.CaptureDesktopProofPixels();',
+    '["proof"] = "fullscreen"',
+    '["proof"] = "fullscreen-composition"',
+  ]);
+  assert.doesNotMatch(helperSource, /renderThread\.ResetProofWindow\(\);\s*bool fullscreenHost = surface\.EnterFullscreenHost\(\)/u);
+});
+
+test('native presentation smoke records render-thread discipline without helper-owned blocking loop claim', () => {
+  const renderPresentationStart = helperSource.indexOf('public RenderSnapshot RenderPresentationFrame');
+  const renderPresentationEnd = helperSource.indexOf('public bool EnterFullscreenHost', renderPresentationStart);
+  const renderPresentationFrame = helperSource.slice(renderPresentationStart, renderPresentationEnd);
+  assert.match(helperSource, /new Thread\(RenderLoop\)/u);
+  assert.match(helperSource, /rd06-native-presentation-render/u);
+  assert.match(helperSource, /WaitForFreshRenderProgress\(3,/u);
+  assert.match(helperSource, /\["proof"\] = "render-thread-discipline"/u);
+  assert.match(helperSource, /\["category"\] = renderThreadDisciplineProven \? "proven" : "not-proven"/u);
+  assert.match(renderPresentationFrame, /new MpvRenderParam \{ type = MpvRenderParamOpenGlFbo/u);
+  assert.match(renderPresentationFrame, /new MpvRenderParam \{ type = MpvRenderParamFlipY/u);
+  assert.match(renderPresentationFrame, /NativeMethods\.mpv_render_context_render/u);
+  assert.doesNotMatch(renderPresentationFrame, /MpvRenderParamBlockForTargetTime/u);
+  assert.match(helperSource, /LoadAndObserve\(mpv, init\.localMedia/u);
+  assert.match(helperSource, /RenderThreadProbe/u);
+});
+
+test('render-thread discipline requires fresh bounded render progress after proof reset', () => {
+  assert.match(helperSource, /public bool WaitForFreshRenderProgress\(int minimumFrameCount, int timeoutMs\)/u);
+  assert.match(helperSource, /observedFrameCount >= minimumFrameCount/u);
+  assert.match(helperSource, /thread\.IsAlive && observedFrameCount >= minimumFrameCount/u);
+  assert.match(helperSource, /renderThread\.WaitForFreshRenderProgress\(3, Math\.Max\(1000, Math\.Min\(init\.durationMs, 3000\)\)\)/u);
+  assert.doesNotMatch(helperSource, /thread\.IsAlive && observedFrameCount > 0/u);
+});
+
+test('native presentation render thread stops before render context cleanup', () => {
+  assert.match(helperSource, /private volatile bool running;/u);
+  assert.match(helperSource, /thread\.Join\(\);/u);
+  assert.doesNotMatch(helperSource, /thread\.Join\(\d+\)/u);
+});
+
+test('native presentation smoke requires distinct fullscreen composition and helper cleanup evidence', () => {
+  assert.match(harnessSource, /const fullscreenCompositionProof = requiredProofs\.get\('fullscreen-composition'\)/u);
+  assert.match(harnessSource, /fullscreenCompositionProof\?\.visiblePixelsObserved === true/u);
+  assert.match(harnessSource, /fullscreenCompositionProof\?\.nativePresentationFullscreen === true/u);
+  assert.match(harnessSource, /nativePresentation\s*\?\s*fullscreenCompositionProof\?\.visiblePixelsObserved === true/u);
+  assert.match(harnessSource, /const helperCleanupObserved = !nativePresentation \|\|/u);
+  assert.match(harnessSource, /requiredProofs\.get\('helper-cleanup'\)\?\.cleanupObserved === true/u);
+  assert.match(harnessSource, /cleanupObserved: current\.cleanupObserved === true \|\| event\.cleanupObserved === true/u);
+  assert.match(harnessSource, /proof: 'helper-cleanup'/u);
+  assert.match(harnessSource, /const helperTimeoutMs = Math\.max\(12000, Math\.min\(30000, \(config\.durationMs \* 4\) - 1000\)\)/u);
+  assert.match(harnessSource, /beginTimeoutCleanup\(\)/u);
+  assert.match(harnessSource, /child\.kill\(\)/u);
+});
+
+test('timeout cleanup reports success only after child exit is observed', () => {
+  assertOrder(harnessSource, [
+    'function beginTimeoutCleanup()',
+    'timeoutCleanupStarted = true;',
+    'child.kill();',
+    "finishHelper('timeout-cleanup-not-observed', 1, 'timeout', false);",
+    "child.once('exit', (code, signal) => {",
+    "const category = timeoutCleanupStarted ? 'timeout-reaped'",
+    'finishHelper(category, code, signal, true);',
+  ]);
+  assert.doesNotMatch(harnessSource, /finishHelper\('timeout-reaped', null, 'timeout', true\)/u);
+});
+
+test('electron harness does not hang forever on ready-to-show ordering', () => {
+  const source = fs.readFileSync(
+    new URL('../libmpv-spike/rd-06-native-libmpv-host-spike.mjs', import.meta.url),
+    'utf8',
+  );
+  const harnessSource = source.slice(source.indexOf('function buildHarnessScript()'));
+  assert.match(harnessSource, /Promise\.race\(\[/u);
+  assert.match(harnessSource, /window\.once\('ready-to-show', resolve\)/u);
+  assert.match(harnessSource, /setTimeout\(resolve, 1000\)/u);
+  assert.match(harnessSource, /window\.show\(\)/u);
+});
+
+test('failed timeout cleanup prevents native presentation smoke from passing', () => {
+  assert.match(harnessSource, /const helperCleanupFailed = events\.some/u);
+  assert.match(harnessSource, /event\.proof === 'helper-cleanup'/u);
+  assert.match(harnessSource, /event\.cleanupObserved !== true \|\| event\.kind !== 'observed'/u);
+  assert.match(harnessSource, /!helperCleanupFailed/u);
+  assert.match(harnessSource, /finishHelper\('timeout-cleanup-not-observed', 1, 'timeout', false\)/u);
 });
 
 test('helper source defines minimal render API interop without vendored headers', () => {
@@ -215,6 +353,7 @@ test('native prerequisite evidence records provenance without local paths', () =
     mpvVersion: ['mpv v0.41.0-524-g5921fe50b'],
     libmpvClientApiVersion: 'requires-helper-preflight',
     renderApiSymbols: 'requires-render-api-preflight',
+    nativePresentationHost: 'not-requested',
     provenance: 'official-installation-page-linked-shinchiro-windows-build',
     redistribution: 'not-redistributed-local-proof-only',
     packageMetadataChanged: false,
@@ -240,6 +379,18 @@ test('helper init policy keeps private values out of args and env and uses stdin
   assert.equal(spawnPolicy.stdio[2], 'ignore');
   assert.doesNotThrow(() => assertHelperInitPolicy(spawnPolicy, init));
   assert.equal(init.renderApi, true);
+
+  const nativePresentationInit = buildHelperInitPayload({
+    requestId: 'rd06-native-presentation-test',
+    libmpvDll: '<local-libmpv>',
+    localMedia: '<dummy-local-media>',
+    httpMedia: '<dummy-http-media>',
+    durationMs: 5000,
+    renderApi: true,
+    nativePresentation: true,
+  });
+  assert.equal(nativePresentationInit.nativePresentation, true);
+  assert.equal('parentWid' in nativePresentationInit, false);
 
   assert.throws(
     () => assertHelperInitPolicy({ ...spawnPolicy, args: [spawnPolicy.args[0], init.parentWid] }, init),

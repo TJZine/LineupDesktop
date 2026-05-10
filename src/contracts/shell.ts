@@ -1,4 +1,10 @@
 import type { RendererIntentEnvelope } from './ipc.js';
+import type {
+  PlayerDispatchResult,
+  PlayerEvent,
+  PlayerIpcResult,
+  PlayerSnapshot,
+} from './player.js';
 
 export const LINEUP_PROTOCOL_ORIGIN = 'lineup://shell' as const;
 export const LINEUP_SHELL_URL = 'lineup://shell/index.html' as const;
@@ -56,6 +62,14 @@ export interface LineupDesktopPreloadApi {
     setFullscreen: (
       enabled: boolean,
     ) => Promise<ShellIpcResult<WindowFullscreenState>>;
+  };
+  player: {
+    dispatch: (
+      envelope: RendererIntentEnvelope<unknown>,
+    ) => Promise<PlayerIpcResult<PlayerDispatchResult>>;
+    getSnapshot: () => Promise<PlayerIpcResult<PlayerSnapshot>>;
+    cleanup: () => Promise<PlayerIpcResult<PlayerSnapshot>>;
+    onEvent: (listener: (event: PlayerEvent) => void) => () => void;
   };
 }
 

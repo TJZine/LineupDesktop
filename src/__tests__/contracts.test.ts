@@ -2,20 +2,29 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  LINEUP_PLAYER_CLEANUP_CHANNEL,
+  LINEUP_PLAYER_COMMAND_CHANNEL,
+  LINEUP_PLAYER_EVENT_CHANNEL,
+  LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
+  PLAYER_RENDERER_INTENTS,
   RENDERER_FORBIDDEN_PAYLOAD_KEYS,
+  type PlayerRendererIntent,
   type RendererIntent,
 } from '../contracts/ipc.js';
 import { REDACTION_BOUNDARY } from '../contracts/redaction.js';
 import {
   PLAYER_ERROR_CATEGORIES,
   PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
+  isRendererSafePlayerEvent,
   type PlaybackCapabilityProfile,
   type PlayerCommand,
+  type PlayerDispatchResult,
   type PlayerError,
   type PlayerEvent,
+  type PlayerIpcResult,
   type PlayerRendererSafeDiagnostic,
   type PlayerSnapshot,
   type PlayerTrackSummary,
@@ -106,6 +115,7 @@ test('redaction boundary keeps renderer unprivileged', () => {
 
 test('player command, event, and snapshot contracts carry request ids', () => {
   const intent: RendererIntent = 'player.play';
+  const playerIntent: PlayerRendererIntent = 'player.load';
   const loadCommand: PlayerCommand = {
     command: 'load',
     requestId: 'player-request-1',
@@ -155,12 +165,29 @@ test('player command, event, and snapshot contracts carry request ids', () => {
   };
 
   assert.equal(intent, 'player.play');
+  assert.equal(playerIntent, 'player.load');
   assert.equal(loadCommand.requestId, 'player-request-1');
   assert.equal(seekCommand.payload.positionMs, 60_000);
   assert.equal(event.requestId, snapshot.requestId);
   assertNoForbiddenKeys(loadCommand);
   assertNoForbiddenKeys(snapshot);
   assertNoForbiddenKeys(event);
+});
+
+test('player renderer intents are closed and separate from shell window intents', () => {
+  assert.deepEqual([...PLAYER_RENDERER_INTENTS], [
+    'player.load',
+    'player.play',
+    'player.pause',
+    'player.stop',
+    'player.seekAbsolute',
+    'player.seekRelative',
+    'player.setVolume',
+    'player.setMute',
+    'player.selectAudio',
+    'player.selectSubtitle',
+  ]);
+  assert.equal((PLAYER_RENDERER_INTENTS as readonly string[]).includes('window.enterFullscreen'), false);
 });
 
 test('player events make stale updates identifiable without engine state', () => {
@@ -299,20 +326,168 @@ test('shell IPC channel vocabulary uses the approved literals', () => {
   assert.equal(LINEUP_SHELL_GET_CAPABILITIES_CHANNEL, 'lineup:shell:getCapabilities');
   assert.equal(LINEUP_WINDOW_INTENT_CHANNEL, 'lineup:window:intent');
   assert.equal(LINEUP_SHELL_STATUS_CHANGED_CHANNEL, 'lineup:shell:statusChanged');
+  assert.equal(LINEUP_PLAYER_COMMAND_CHANNEL, 'lineup:player:command');
+  assert.equal(LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL, 'lineup:player:getSnapshot');
+  assert.equal(LINEUP_PLAYER_CLEANUP_CHANNEL, 'lineup:player:cleanup');
+  assert.equal(LINEUP_PLAYER_EVENT_CHANNEL, 'lineup:player:event');
 });
 
-test('preload API contract exposes only shell and window methods', () => {
+test('preload API contract exposes shell, window, and player methods only', () => {
   type ApiKeys = keyof LineupDesktopPreloadApi;
-  const apiKeys: ApiKeys[] = ['shell', 'window'];
+  const apiKeys: ApiKeys[] = ['shell', 'window', 'player'];
   const shellKeys: Array<keyof LineupDesktopPreloadApi['shell']> = [
     'getCapabilities',
     'onStatusChanged',
   ];
   const windowKeys: Array<keyof LineupDesktopPreloadApi['window']> = ['setFullscreen'];
+  const playerKeys: Array<keyof LineupDesktopPreloadApi['player']> = [
+    'dispatch',
+    'getSnapshot',
+    'cleanup',
+    'onEvent',
+  ];
 
-  assert.deepEqual(apiKeys, ['shell', 'window']);
+  assert.deepEqual(apiKeys, ['shell', 'window', 'player']);
   assert.deepEqual(shellKeys, ['getCapabilities', 'onStatusChanged']);
   assert.deepEqual(windowKeys, ['setFullscreen']);
+  assert.deepEqual(playerKeys, ['dispatch', 'getSnapshot', 'cleanup', 'onEvent']);
+});
+
+test('player IPC result and dispatch contracts stay renderer-safe', () => {
+  const snapshot: PlayerSnapshot = {
+    requestId: 'player-request-1',
+    status: 'playing',
+    media: { id: 'media-1', title: 'Episode 1' },
+    capabilityProfileId: 'profile-contract-safe',
+    positionMs: 1,
+    durationMs: null,
+    bufferedRanges: [],
+    playing: true,
+    volume: 1,
+    muted: false,
+    playbackRate: 1,
+    selectedAudioTrackId: null,
+    selectedSubtitleTrackId: null,
+    selectedVideoTrackId: null,
+    tracks: [],
+    lastError: null,
+  };
+  const dispatch: PlayerDispatchResult = {
+    accepted: true,
+    events: [{ event: 'state.changed', requestId: 'player-request-1', snapshot }],
+    snapshot,
+  };
+  const success: PlayerIpcResult<PlayerDispatchResult> = {
+    ok: true,
+    value: dispatch,
+    requestId: 'player-request-1',
+  };
+  const failure: PlayerIpcResult<PlayerDispatchResult> = {
+    ok: false,
+    requestId: 'player-request-2',
+    error: {
+      code: 'PLAYER_UNSUPPORTED_CAPABILITY',
+      category: 'unsupported-capability',
+      message: 'Playback is not available.',
+      recoverable: false,
+      retryable: false,
+      requestId: 'player-request-2',
+    },
+  };
+
+  assert.equal(Object.hasOwn(dispatch, 'command'), false);
+  assert.deepEqual(Object.keys(success).sort(), ['ok', 'requestId', 'value']);
+  assert.deepEqual(Object.keys(failure).sort(), ['error', 'ok', 'requestId']);
+  assertNoForbiddenKeys(success);
+  assertNoForbiddenKeys(failure);
+});
+
+test('player event runtime guard rejects unsafe renderer-facing payloads', () => {
+  const snapshot: PlayerSnapshot = {
+    requestId: 'player-request-1',
+    status: 'playing',
+    media: { id: 'media-1', title: 'Episode 1' },
+    capabilityProfileId: 'profile-contract-safe',
+    positionMs: 1,
+    durationMs: null,
+    bufferedRanges: [],
+    playing: true,
+    volume: 1,
+    muted: false,
+    playbackRate: 1,
+    selectedAudioTrackId: null,
+    selectedSubtitleTrackId: null,
+    selectedVideoTrackId: null,
+    tracks: [],
+    lastError: null,
+  };
+
+  assert.equal(
+    isRendererSafePlayerEvent({
+      event: 'state.changed',
+      requestId: 'player-request-1',
+      snapshot,
+    }),
+    true,
+  );
+  assert.equal(
+    isRendererSafePlayerEvent({
+      event: 'state.changed',
+      requestId: 'player-request-1',
+      snapshot: {
+        ...snapshot,
+        media: { id: 'media-1', title: 'Episode 1', rawMediaUrl: 'redacted' },
+      },
+    }),
+    false,
+  );
+  assert.equal(
+    isRendererSafePlayerEvent({
+      event: 'tracks.changed',
+      requestId: 'player-request-1',
+      tracks: [
+        {
+          id: 'audio-ui-1',
+          kind: 'audio',
+          label: 'English',
+          selected: true,
+          available: true,
+          nativeHandle: 'redacted',
+        },
+      ],
+    }),
+    false,
+  );
+  assert.equal(
+    isRendererSafePlayerEvent({
+      event: 'error',
+      requestId: 'player-request-1',
+      error: {
+        code: 'PLAYER_BAD',
+        category: 'native-secret',
+        message: 'Bad payload',
+        recoverable: false,
+        retryable: false,
+      },
+    }),
+    false,
+  );
+  assert.equal(
+    isRendererSafePlayerEvent({
+      event: 'command.settled',
+      requestId: 'player-request-1',
+      command: 'play',
+      ok: true,
+      error: {
+        code: 'PLAYER_BAD',
+        category: 'unknown',
+        message: 'Should not be attached to ok command.',
+        recoverable: false,
+        retryable: false,
+      },
+    }),
+    false,
+  );
 });
 
 test('shell capability and result contracts are renderer-safe', () => {

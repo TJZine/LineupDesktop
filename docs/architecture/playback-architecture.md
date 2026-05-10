@@ -1,6 +1,11 @@
 # Playback Architecture
 
-Lineup Desktop playback is not implemented yet.
+Lineup Desktop runtime playback is only partially wired. RD-07 adds a
+main-owned Desktop player adapter boundary core and a narrow runtime
+main/preload player IPC bridge backed by a development/smoke fake host.
+Production player commands currently return renderer-safe unsupported failures.
+Production Plex stream setup, renderer UI integration, and the real native
+helper remain unimplemented.
 
 ## Current Hypothesis
 
@@ -35,7 +40,7 @@ production behavior. Subtitle behavior remains unproven by the dummy audio-only
 input and must be proved by RD-06 or a reviewed follow-up plan before product
 contracts or adapters rely on it.
 
-## RD-06 Native libmpv Spike Observations
+## RD-06 Native libmpv Spike Observations (WID, Render API, App-owned Native Presentation)
 
 RD-06 added a dev-only Windows native libmpv WID/render API spike under
 `tools/libmpv-spike/`. It remains evidence tooling only: no product IPC,
@@ -85,6 +90,19 @@ presentation boundary. That path must prove fullscreen active video pixels,
 native-boundary overlay/composition, render-thread discipline, cleanup, and
 redaction before RD-06 can route RD-07 toward a native surface direction.
 
+The revised Windows app-owned native presentation probe records a passing
+redacted smoke under the stricter proof semantics. It observed local dummy
+visual playback, dummy HTTP visual playback with only `X-Lineup-RD06: dummy`,
+fullscreen active video pixels and distinct fullscreen-composition evidence
+after the native host entered fullscreen and settled, render-thread discipline
+through fresh bounded nonblocking render-loop progress, app-owned input
+simulation, helper crash detection, helper cleanup/reap evidence after child
+exit, temp cleanup, libmpv client API/version evidence, render API symbol
+evidence, and no forbidden header observation. This remains dev-only and does
+not create production playback architecture. Clean implementation re-review
+reported no material blockers, so the native presentation boundary is the
+reviewed RD-07 direction.
+
 Track selection and subtitle behavior remain unproven by the tiny dummy visual
 input. DPI and multi-monitor behavior are noted only as redacted smoke
 observations rather than an MVP manual matrix.
@@ -105,9 +123,29 @@ Before production playback design hardens, a Windows spike must prove:
 ## Contract First
 
 Player integration starts from `src/contracts/player.ts` and its tests. RD-03
-defines the renderer-safe contract vocabulary for commands, request ids,
+defined the renderer-safe contract vocabulary for commands, request ids,
 snapshots, events, capability profiles, opaque track ids, error taxonomy, and
-diagnostics before any runtime playback adapter exists.
+diagnostics before the first adapter boundary existed.
+
+RD-07 now defines the first main-owned Desktop adapter core in
+`src/main/player/desktopPlayerAdapter.ts` with a private fakeable host port in
+`src/main/player/nativePlayerHostPort.ts`. The adapter accepts
+renderer-originating `RendererIntentEnvelope<unknown>` values at the boundary,
+validates closed player intents before host calls or state mutation, validates
+fake-host events before state mutation, quarantines stale request ids including
+late post-cleanup events, and normalizes helper failures into renderer-safe
+`PlayerError` values. The boundary is tested at
+`src/__tests__/desktopPlayerAdapter.test.ts`.
+
+RD-07 also wires the adapter through a main-owned player IPC registrar in
+`src/main/player/playerIpc.ts` and the narrow `window.lineupDesktop.player`
+preload API. The bridge exposes only `dispatch`, `getSnapshot`, `cleanup`, and
+`onEvent`; it returns renderer-safe `PlayerIpcResult` values and dispatch
+results without internal `PlayerCommand` objects. `src/main/index.ts` passes
+only shell mode and authorization/event callbacks into the registrar. The
+registrar owns development/smoke fake-host activation and production
+unsupported/noop behavior. Preload guards player events at runtime before
+invoking renderer listeners, including nested forbidden-field checks.
 
 Concrete playback adapters must not leak native handles, raw media URLs, raw
 auth headers, tokenized URLs, raw Plex payloads, Electron or Node APIs,

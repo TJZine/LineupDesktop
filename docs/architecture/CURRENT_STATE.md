@@ -7,20 +7,28 @@
 
 Lineup Desktop is a new Windows-first Electron repository. It currently has a
 minimal secure Electron shell frame plus docs, workflow, contract, and harness
-scaffolding. There is no Plex integration, native playback host, scheduler,
-secure credential storage, copied TV UI, or installer implementation yet.
+scaffolding. There is no Plex integration, production native playback host,
+scheduler, secure credential storage, copied TV UI, or installer implementation
+yet.
 RD-04 adds documentation and harness ownership for upstream behavior guardrails
 only; it does not import product runtime code. RD-05 adds a disposable
 dev-only external `mpv` POC tool and ignored redacted local evidence only; it
 does not create production playback architecture. RD-06 adds dev-only Windows
-native libmpv WID and render API spike modes with ignored redacted local
-evidence only. The spike must use dummy visual media, active-playback
-overlay/focus/fullscreen checks, and libmpv client API evidence. The current
-Windows WID and helper-owned render API proof is blocked on fullscreen
-video-surface evidence; render API also failed composition and
-render-thread-discipline proof. The active RD-06 plan routes the next bounded
-proof to an app-owned native presentation boundary, so RD-06 does not create a
-production playback host or settle the RD-07 native surface direction.
+native libmpv WID, render API, and app-owned native presentation spike modes
+with ignored redacted local evidence only. The spike must use dummy visual
+media, active-playback overlay/focus/fullscreen checks, and libmpv client API
+evidence. The Windows WID and helper-owned render API proofs are blocked on
+fullscreen video-surface evidence; render API also failed composition and
+render-thread-discipline proof. The revised Windows app-owned native
+presentation probe records fresh redacted proof under the stricter fullscreen,
+cleanup, and render-thread semantics. Clean implementation re-review reported no
+material blockers, so RD-06 can route RD-07 toward the app-owned native
+presentation boundary. RD-07 adds the first main-owned Desktop player adapter
+boundary core with a fakeable native host port and public-seam tests, plus
+runtime main/preload player IPC delivery through a development/smoke fake host.
+Production player commands return renderer-safe unsupported failures until a
+reviewed native-host unit replaces that fake-host path. RD-07 does not wire
+renderer UI, Plex stream setup, or a real native helper.
 
 ## Product Invariants
 
@@ -44,11 +52,12 @@ production playback host or settle the RD-07 native surface direction.
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
 | Import provenance | `docs/architecture/import-ledger.md` | Scaffolded |
 | Electron main shell | `src/main/index.ts` and `src/main/protocol.ts` | Minimal secure shell frame |
-| Preload bridge | `src/preload/index.cts` | Narrow shell/window bridge |
+| Preload bridge | `src/preload/index.cts` | Narrow shell/window/player bridge with runtime payload guards |
 | Renderer shell | `src/renderer/index.ts` and `src/renderer/index.html` | Minimal unprivileged boot proof |
-| Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window bridge contract |
-| Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, and diagnostic contract |
-| IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
+| Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window/player bridge contract |
+| Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, diagnostic, IPC result, and runtime event-guard contract |
+| IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window/player IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
+| Desktop player adapter boundary | `src/main/player/desktopPlayerAdapter.ts`, `src/main/player/nativePlayerHostPort.ts`, and `src/main/player/playerIpc.ts` | Main-owned RD-07 adapter core and player IPC owner with renderer-intent validation, fakeable native-host event validation, request-id stale-event quarantine, helper failure normalization, cleanup handling, runtime main/preload delivery, development/smoke fake-host activation, production unsupported/noop behavior, and renderer-safe diagnostics |
 | Redaction contract vocabulary | `src/contracts/redaction.ts` | Stub contract only |
 | External `mpv` POC tool | `tools/mpv-poc/rd-05-external-mpv-poc.mjs` | Dev-only disposable RD-05 evidence harness |
 | Native libmpv spike tool | `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` | Dev-only disposable RD-06 Windows WID/render API evidence harness |
@@ -59,9 +68,9 @@ production playback host or settle the RD-07 native surface direction.
 
 - Plex auth/discovery/library/stream imports
 - scheduler/channel imports
-- native playback helper
-- production playback host or adapter
-- player runtime adapter or preload/main player IPC
+- production native playback helper
+- production playback host
+- production renderer player UI wiring
 - secure storage implementation
 - packaging/signing/update pipeline
 
@@ -75,9 +84,13 @@ protocol handler, containment handlers, and shell/window IPC authorization.
 The renderer remains unprivileged. It receives only
 `window.lineupDesktop.shell.getCapabilities()`,
 `window.lineupDesktop.shell.onStatusChanged(listener)`, and
-`window.lineupDesktop.window.setFullscreen(enabled)` from preload. Fullscreen
-requests map to the existing `window.enterFullscreen` and
-`window.exitFullscreen` renderer intents.
+`window.lineupDesktop.window.setFullscreen(enabled)` from preload for shell
+behavior. RD-07 also exposes the narrow `window.lineupDesktop.player` methods
+`dispatch(envelope)`, `getSnapshot()`, `cleanup()`, and `onEvent(listener)`.
+Player preload events are runtime-guarded before listener invocation, and
+runtime commands are backed only by a development/smoke fake host until the
+reviewed Windows native-host unit lands. Fullscreen requests map to the
+existing `window.enterFullscreen` and `window.exitFullscreen` renderer intents.
 
 ## Roadmap
 

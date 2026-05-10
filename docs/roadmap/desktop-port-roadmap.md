@@ -39,11 +39,23 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
   script, ignored redacted run evidence exists under
   `docs/runs/rd-05-external-mpv-poc/`, `npm run verify` passed, and
   implementation review was clean on 2026-05-08.
-- [ ] RD-06 Windows native libmpv WID and render API smokes have partial local
+- [x] RD-06 Windows native libmpv WID and render API smokes have partial local
   redacted proof through
-  `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`, but both currently
-  fail fullscreen video-surface proof. The active RD-06 plan routes the next
-  proof to an app-owned native presentation boundary before RD-07.
+  `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`, but both fail
+  fullscreen video-surface proof. The revised app-owned native presentation
+  probe now records passing Windows proof under the stricter fullscreen,
+  cleanup, and render-thread semantics. Clean implementation re-review reported
+  no material blockers, so RD-06 can route RD-07.
+- [x] RD-07 Desktop VideoPlayer Adapter boundary core implemented through
+  `src/main/player/desktopPlayerAdapter.ts`,
+  `src/main/player/nativePlayerHostPort.ts`, and
+  `src/__tests__/desktopPlayerAdapter.test.ts`; `npm run verify` passed and
+  read-only implementation re-review was clean on 2026-05-10. Runtime
+  main/preload player IPC delivery is also implemented through
+  `src/main/player/playerIpc.ts` and `window.lineupDesktop.player`, backed only
+  by a development/smoke fake host with production unsupported/noop behavior.
+  Renderer UI wiring, Plex stream setup, and a real native helper remain future
+  RD-07/RD-12 work.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -90,8 +102,8 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-05 are complete enough to route the next Tier 3 quality-loop
-session to RD-06. Do not import original Lineup product code until a reviewed
+RD-01 through RD-06 are complete enough to route the next Tier 3 quality-loop
+session to RD-07. Do not import original Lineup product code until a reviewed
 product slice plan explicitly authorizes a bounded import.
 
 ## Roadmap Checklist
@@ -308,16 +320,18 @@ Exit gates:
 
 ### RD-06 Native libmpv Host Spike
 
-Status: blocked/replan. Revised Windows WID and render API smokes prove
-windowed active video, overlay pixels, focus, dummy HTTP, helper crash
-detection, redaction, and libmpv API evidence, but both fail the required
+Status: complete. Revised Windows WID and render API
+smokes prove windowed active video, overlay pixels, focus, dummy HTTP, helper
+crash detection, redaction, and libmpv API evidence, but both fail the required
 fullscreen video-surface proof. The amended render API helper-owned Win32
 screen-pixel fallback was scoped to the render child surface and gated on
 BrowserWindow fullscreen, but it also reported fullscreen pixels as not
 captured. The render API smoke also records render-thread discipline and
-composition proof as not proven by this helper loop.
-The active RD-06 plan routes the next unit to an app-owned native presentation
-boundary.
+composition proof as not proven by this helper loop. The revised app-owned
+native presentation probe records passing Windows smoke proof under stricter
+fullscreen, cleanup, and render-thread semantics, and clean implementation
+re-review reported no material blockers. RD-07 can rely on the app-owned native
+presentation boundary as its native surface direction.
 
 Depends on:
 
@@ -375,6 +389,10 @@ Observed RD-06 proof:
 - The same evidence records fullscreen video-surface proof as not captured,
   including through the amended native fallback, so the WID and render API
   smokes exit failed instead of overclaiming RD-06 completion.
+- Revised app-owned native presentation evidence records fullscreen active
+  video pixels and fullscreen-composition only after native fullscreen entry and
+  settle, fresh bounded render-loop progress, helper cleanup/reap evidence after
+  child exit, and no forbidden persisted fields.
 - Track selection and subtitle behavior are not proven by the tiny dummy visual
   input.
 - DPI and multi-monitor behavior still need a stronger manual matrix before
@@ -382,7 +400,11 @@ Observed RD-06 proof:
 
 ### RD-07 Desktop VideoPlayer Adapter
 
-Status: not started.
+Status: in progress. The `desktop-player-adapter-boundary-core` unit is
+implemented and reviewed clean. The `desktop-player-runtime-ipc-preload-delivery`
+unit is implemented and reviewed clean with development/smoke fake-host
+delivery and production unsupported/noop behavior. Real native host integration
+is not implemented.
 
 Depends on:
 
@@ -396,9 +418,14 @@ Objective:
 
 Exit gates:
 
-- Adapter tests cover command mapping, state, events, errors, stale request
-  handling, diagnostics, helper crash behavior, and request cleanup.
-- Renderer receives only renderer-safe player state.
+- Adapter boundary tests cover command mapping, state, events, errors, stale
+  request handling, diagnostics, helper crash behavior, request cleanup,
+  renderer intent validation, fake-host event validation, and renderer-safe
+  validation failures for the core fake-host seam.
+- Renderer receives only renderer-safe player state through the contract-bound
+  adapter core and narrow runtime player preload bridge. The bridge remains
+  fake-host-backed only in development/smoke until real native host integration
+  lands.
 - `App.ts` and orchestration owners do not absorb native process policy.
 
 ### RD-08 Desktop Stream Policy

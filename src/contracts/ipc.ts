@@ -14,6 +14,30 @@ export type RendererIntent =
   | 'window.enterFullscreen'
   | 'window.exitFullscreen';
 
+type RendererPlayerIntent = Extract<RendererIntent, `player.${string}`>;
+type IsExactUnion<TActual, TExpected> =
+  [TActual] extends [TExpected] ? ([TExpected] extends [TActual] ? true : false) : false;
+type AssertTrue<TValue extends true> = TValue;
+
+export const PLAYER_RENDERER_INTENTS = [
+  'player.load',
+  'player.play',
+  'player.pause',
+  'player.stop',
+  'player.seekAbsolute',
+  'player.seekRelative',
+  'player.setVolume',
+  'player.setMute',
+  'player.selectAudio',
+  'player.selectSubtitle',
+] as const satisfies readonly RendererPlayerIntent[];
+
+export type PlayerRendererIntent = (typeof PLAYER_RENDERER_INTENTS)[number];
+
+export type PlayerRendererIntentCoverage = AssertTrue<
+  IsExactUnion<PlayerRendererIntent, RendererPlayerIntent>
+>;
+
 export interface RendererIntentEnvelope<TPayload = unknown> {
   intent: RendererIntent;
   requestId: string;
@@ -27,6 +51,15 @@ export const LINEUP_WINDOW_INTENT_CHANNEL = 'lineup:window:intent' as const;
 
 export const LINEUP_SHELL_STATUS_CHANGED_CHANNEL =
   'lineup:shell:statusChanged' as const;
+
+export const LINEUP_PLAYER_COMMAND_CHANNEL = 'lineup:player:command' as const;
+
+export const LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL =
+  'lineup:player:getSnapshot' as const;
+
+export const LINEUP_PLAYER_CLEANUP_CHANNEL = 'lineup:player:cleanup' as const;
+
+export const LINEUP_PLAYER_EVENT_CHANNEL = 'lineup:player:event' as const;
 
 export const RENDERER_FORBIDDEN_PAYLOAD_KEYS = [
   'rawMediaUrl',
