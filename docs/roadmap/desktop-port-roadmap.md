@@ -39,10 +39,11 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
   script, ignored redacted run evidence exists under
   `docs/runs/rd-05-external-mpv-poc/`, `npm run verify` passed, and
   implementation review was clean on 2026-05-08.
-- [ ] RD-06 Windows native libmpv WID smoke has partial local redacted proof
-  through `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`, but the
-  revised smoke currently fails fullscreen video-surface proof and requires
-  replan before RD-07.
+- [ ] RD-06 Windows native libmpv WID and helper-owned render API smokes have
+  partial local redacted proof through
+  `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`, but both currently
+  fail required fullscreen video-surface proof. The active RD-06 plan routes the
+  next proof to an app-owned native presentation boundary before RD-07.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -310,6 +311,10 @@ Exit gates:
 Status: blocked/replan. Revised Windows WID smoke proves windowed active video,
 overlay pixels, focus, dummy HTTP, helper crash detection, redaction, and
 libmpv API evidence, but fails the required fullscreen video-surface proof.
+Helper-owned render API also proves internal render API progress and windowed
+evidence, but fails fullscreen native capture, composition, and render-thread
+discipline proof. The active RD-06 plan routes the next unit to an app-owned
+native presentation boundary.
 
 Depends on:
 
@@ -338,9 +343,11 @@ Required proof:
 
 Exit gates:
 
-- Helper-vs-addon decision recorded from evidence. The current WID smoke does
-  not prove enough to route directly to RD-07; render API or addon exploration
-  should be considered in a reviewed replan.
+- Helper-vs-addon/native-surface decision recorded from evidence. The current
+  WID and helper-owned render API smokes do not prove enough to route directly
+  to RD-07; the next reviewed proof must decide whether an app-owned native
+  presentation boundary is viable or whether RD-06 needs another blocked
+  conclusion/replan.
 - Licensing/provenance questions captured before public packaging work.
 - Native video/overlay/focus risk is either accepted with evidence or triggers a
   replan before broad renderer UI, Plex/player integration, or packaging work.
@@ -357,6 +364,11 @@ Observed RD-06 proof:
   observation.
 - The same evidence records fullscreen video-surface proof as not captured, so
   the WID smoke exits failed instead of overclaiming RD-06 completion.
+- Helper-owned render API evidence records render API symbols, render context,
+  render frame, windowed pixels, overlay pixels, focus, crash detection, cleanup,
+  redaction, and libmpv API evidence, but fullscreen and fullscreenNativeCapture
+  are not captured. Composition and render-thread discipline remain unproven, so
+  helper-owned render API exits failed instead of overclaiming RD-06 completion.
 - Track selection and subtitle behavior are not proven by the tiny dummy visual
   input.
 - DPI and multi-monitor behavior still need a stronger manual matrix before
