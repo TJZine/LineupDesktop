@@ -61,6 +61,16 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
   native-presentation preflight/smoke on Windows and observed passing redacted
   native surface proof. Renderer UI wiring, Plex stream setup, and a production
   native helper remain future RD-12/RD-13 work.
+- [ ] RD-08 Desktop Stream Policy Mac-first fixture core implemented through
+  `src/main/player/streamPolicy/desktopStreamPolicy.ts`,
+  `src/main/player/streamPolicy/types.ts`, and
+  `src/__tests__/desktopStreamPolicy.test.ts`; `npm run verify` passed and
+  read-only implementation review was clean on 2026-05-10. Final RD-08
+  closeout still needs the requested Windows capability/sample-matrix proof and
+  any fixes it reveals. The Mac-first unit is deterministic and fixture-driven
+  only: no live Plex contact, secure storage, renderer UI, native helper,
+  package/dependency change, runtime IPC wiring, or copied/adapted upstream
+  source landed.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -448,7 +458,16 @@ Exit gates:
 
 ### RD-08 Desktop Stream Policy
 
-Status: not started.
+Status: Mac-first implementation complete; Windows closeout pending. The
+deterministic `desktop-stream-policy-fixture-core` unit is implemented and
+reviewed clean. It adds a main/player-owned pure policy module plus focused
+fixtures/tests for direct play, direct stream, transcode, unsupported decisions,
+audio fallback, subtitle fallback, HDR/Dolby Vision handling, stable reason
+codes, explicit unknowns, and recursive forbidden-field invariants. No Plex
+runtime, secure storage, renderer UI, native helper, package/dependency change,
+runtime IPC wiring, or copied/adapted upstream source was introduced. Final
+RD-08 closeout is reserved for the requested Windows capability/sample-matrix
+proof and any follow-up fixes.
 
 Depends on:
 

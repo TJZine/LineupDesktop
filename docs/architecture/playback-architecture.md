@@ -164,6 +164,17 @@ helper cleanup/reap, and redacted diagnostics. This does not ship a production
 native helper binary, bind libmpv in product code, wire Plex streams, or change
 renderer, preload, or contract shapes.
 
+RD-08 adds a deterministic main/player stream policy fixture core in
+`src/main/player/streamPolicy/*`, covered by
+`src/__tests__/desktopStreamPolicy.test.ts`. It evaluates safe capability
+profiles and normalized candidate facts to choose direct play, direct stream,
+transcode, or unsupported outcomes with stable reason codes and explicit
+unknowns. The fixture core covers audio fallback, subtitle fallback, HDR/Dolby
+Vision handling, direct-stream remediation rules, and recursive forbidden-field
+invariants. It does not contact Plex, normalize real Plex payloads, create
+playback URLs, start native playback, wire runtime IPC, or change renderer,
+preload, adapter, native-host, storage, package, or dependency behavior.
+
 Concrete playback adapters must not leak native handles, raw media URLs, raw
 auth headers, tokenized URLs, raw Plex payloads, Electron or Node APIs,
 libmpv-specific objects, or engine-specific track ids into renderer-facing state
