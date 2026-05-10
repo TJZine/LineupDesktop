@@ -269,6 +269,12 @@ test('render-thread discipline requires fresh bounded render progress after proo
   assert.doesNotMatch(helperSource, /thread\.IsAlive && observedFrameCount > 0/u);
 });
 
+test('native presentation render thread stops before render context cleanup', () => {
+  assert.match(helperSource, /private volatile bool running;/u);
+  assert.match(helperSource, /thread\.Join\(\);/u);
+  assert.doesNotMatch(helperSource, /thread\.Join\(\d+\)/u);
+});
+
 test('native presentation smoke requires distinct fullscreen composition and helper cleanup evidence', () => {
   assert.match(harnessSource, /const fullscreenCompositionProof = requiredProofs\.get\('fullscreen-composition'\)/u);
   assert.match(harnessSource, /fullscreenCompositionProof\?\.visiblePixelsObserved === true/u);

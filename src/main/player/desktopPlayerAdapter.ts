@@ -17,7 +17,7 @@ import {
   type PlayerTrackKind,
   type PlayerTrackSummary,
 } from '../../contracts/player.js';
-import type { RendererIntentEnvelope } from '../../contracts/ipc.js';
+import type { PlayerRendererIntent, RendererIntentEnvelope } from '../../contracts/ipc.js';
 import type {
   NativePlayerHostEvent,
   NativePlayerHostFailure,
@@ -55,7 +55,7 @@ const PLAYER_INTENT_TO_COMMAND = {
   'player.setMute': 'mute.set',
   'player.selectAudio': 'track.audio.select',
   'player.selectSubtitle': 'track.subtitle.select',
-} as const satisfies Record<string, PlayerCommandName>;
+} as const satisfies Record<PlayerRendererIntent, PlayerCommandName>;
 
 const HOST_PLAYBACK_STATUSES = [
   'ready',
@@ -183,7 +183,11 @@ export class DesktopPlayerAdapter {
     }
 
     const hostEvent = validation.event;
-    if (this.#snapshot.requestId === null && !this.#pendingCommands.has(hostEvent.requestId ?? '')) {
+    const hostRequestId = hostEvent.requestId;
+    if (
+      this.#snapshot.requestId === null &&
+      (hostRequestId === null || !this.#pendingCommands.has(hostRequestId))
+    ) {
       return [
         {
           event: 'warning',
@@ -192,7 +196,7 @@ export class DesktopPlayerAdapter {
             code: 'PLAYER_STALE_HOST_EVENT',
             category: 'stale-request',
             message: 'A stale player event was ignored.',
-            requestId: hostEvent.requestId ?? undefined,
+            requestId: hostRequestId ?? undefined,
             diagnostic: {
               component: 'desktop-player-adapter',
               operation: hostEvent.type,
@@ -434,10 +438,11 @@ function mapRendererIntentToCommand(
     return validationFailure(undefined, 'renderer envelope request id must be a non-empty string');
   }
 
-  const commandName = PLAYER_INTENT_TO_COMMAND[envelope.intent as keyof typeof PLAYER_INTENT_TO_COMMAND];
-  if (commandName === undefined) {
+  if (!isPlayerRendererIntent(envelope.intent)) {
     return validationFailure(requestId, 'renderer envelope intent is not a player intent');
   }
+
+  const commandName = PLAYER_INTENT_TO_COMMAND[envelope.intent];
 
   switch (commandName) {
     case 'load': {
@@ -982,8 +987,14 @@ function hostFailureCode(category: PlayerErrorCategory): string {
       return 'PLAYER_HOST_TRACK_FAILURE';
     case 'cleanup-failure':
       return 'PLAYER_HOST_CLEANUP_FAILURE';
-    default:
+    case 'stale-request':
+      return 'PLAYER_HOST_STALE_REQUEST';
+    case 'validation-failure':
+      return 'PLAYER_HOST_VALIDATION_FAILURE';
+    case 'unknown':
       return 'PLAYER_HOST_FAILURE';
+    default:
+      return assertNever(category);
   }
 }
 
@@ -1014,8 +1025,14 @@ function hostFailureMessage(category: PlayerErrorCategory): string {
       return 'The player helper could not apply the requested track change.';
     case 'cleanup-failure':
       return 'The player helper could not clean up safely.';
-    default:
+    case 'stale-request':
+      return 'The player helper reported a stale playback request.';
+    case 'validation-failure':
+      return 'The player helper returned an invalid playback payload.';
+    case 'unknown':
       return 'The player helper reported a playback failure.';
+    default:
+      return assertNever(category);
   }
 }
 
@@ -1188,6 +1205,14 @@ function isStringInSet<TValue extends string>(
 
 function isPlayerErrorCategory(value: unknown): value is PlayerErrorCategory {
   return isStringInSet(value, PLAYER_ERROR_CATEGORIES);
+}
+
+function isPlayerRendererIntent(value: RendererIntentEnvelope<unknown>['intent']): value is PlayerRendererIntent {
+  return Object.hasOwn(PLAYER_INTENT_TO_COMMAND, value);
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled player error category: ${String(value)}`);
 }
 
 function hasForbiddenPrivilegedField(value: unknown): boolean {

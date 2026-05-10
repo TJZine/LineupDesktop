@@ -1047,7 +1047,7 @@ internal static class Rd06NativeLibmpvHostSpikeHelper
         private readonly RenderSurface surface;
         private readonly Thread thread;
         private readonly object sync = new object();
-        private bool running;
+        private volatile bool running;
         private bool frameObserved;
         private bool videoPixelsObserved;
         private bool overlayPixelsObserved;
@@ -1148,7 +1148,7 @@ internal static class Rd06NativeLibmpvHostSpikeHelper
             running = false;
             if (thread.IsAlive)
             {
-                thread.Join(1000);
+                thread.Join();
             }
         }
     }

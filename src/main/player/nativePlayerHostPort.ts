@@ -1,6 +1,7 @@
 import type {
   PlayerCommand,
   PlayerError,
+  PlayerErrorCategory,
   PlayerMediaSummary,
   PlayerRequestId,
   PlayerStatus,
@@ -12,6 +13,11 @@ import type {
 export type NativePlayerHostStatus = Extract<
   PlayerStatus,
   'ready' | 'buffering' | 'playing' | 'paused' | 'seeking' | 'stalled'
+>;
+
+export type NativePlayerHostFailureCategory = Exclude<
+  PlayerErrorCategory,
+  'stale-request' | 'validation-failure'
 >;
 
 export type NativePlayerHostEvent =
@@ -64,21 +70,7 @@ export type NativePlayerHostEvent =
 export interface NativePlayerHostFailure {
   code: string;
   message: string;
-  category:
-    | 'source'
-    | 'authentication'
-    | 'authorization'
-    | 'network'
-    | 'unsupported-media'
-    | 'unsupported-capability'
-    | 'timeout'
-    | 'aborted'
-    | 'engine-failure'
-    | 'helper-failure'
-    | 'render-failure'
-    | 'track-failure'
-    | 'cleanup-failure'
-    | 'unknown';
+  category: NativePlayerHostFailureCategory;
   recoverable: boolean;
   retryable: boolean;
 }

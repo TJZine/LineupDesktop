@@ -14,6 +14,11 @@ export type RendererIntent =
   | 'window.enterFullscreen'
   | 'window.exitFullscreen';
 
+type RendererPlayerIntent = Extract<RendererIntent, `player.${string}`>;
+type IsExactUnion<TActual, TExpected> =
+  [TActual] extends [TExpected] ? ([TExpected] extends [TActual] ? true : false) : false;
+type AssertTrue<TValue extends true> = TValue;
+
 export const PLAYER_RENDERER_INTENTS = [
   'player.load',
   'player.play',
@@ -25,9 +30,13 @@ export const PLAYER_RENDERER_INTENTS = [
   'player.setMute',
   'player.selectAudio',
   'player.selectSubtitle',
-] as const satisfies readonly RendererIntent[];
+] as const satisfies readonly RendererPlayerIntent[];
 
 export type PlayerRendererIntent = (typeof PLAYER_RENDERER_INTENTS)[number];
+
+export type PlayerRendererIntentCoverage = AssertTrue<
+  IsExactUnion<PlayerRendererIntent, RendererPlayerIntent>
+>;
 
 export interface RendererIntentEnvelope<TPayload = unknown> {
   intent: RendererIntent;
