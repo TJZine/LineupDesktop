@@ -54,11 +54,13 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
   main/preload player IPC delivery is also implemented through
   `src/main/player/playerIpc.ts` and `window.lineupDesktop.player`, backed only
   by a development/smoke fake host with production unsupported/noop behavior.
-  A Mac-verifiable native-host process seam now exists at
+  A native-host process seam exists at
   `src/main/player/nativePlayerHostProcess.ts` with lifecycle, cleanup/reap,
-  failure-normalization, stale/late output, and redaction tests. Renderer UI
-  wiring, Plex stream setup, Windows native-host proof, and a real native helper
-  remain future RD-07/RD-12 work.
+  failure-normalization, stale/late output, real spawned helper test-double
+  proof, and redaction tests. RD-07 closeout reran the RD-06 app-owned
+  native-presentation preflight/smoke on Windows and observed passing redacted
+  native surface proof. Renderer UI wiring, Plex stream setup, and a production
+  native helper remain future RD-12/RD-13 work.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -105,9 +107,10 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-06 are complete enough to route the next Tier 3 quality-loop
-session to RD-07. Do not import original Lineup product code until a reviewed
-product slice plan explicitly authorizes a bounded import.
+RD-01 through RD-07 are complete enough to route the next Tier 3 quality-loop
+session to RD-08 or RD-12 planning depending on whether stream policy or
+integration sequencing is being selected. Do not import original Lineup product
+code until a reviewed product slice plan explicitly authorizes a bounded import.
 
 ## Roadmap Checklist
 
@@ -403,14 +406,17 @@ Observed RD-06 proof:
 
 ### RD-07 Desktop VideoPlayer Adapter
 
-Status: in progress. The `desktop-player-adapter-boundary-core` unit is
-implemented and reviewed clean. The `desktop-player-runtime-ipc-preload-delivery`
-unit is implemented and reviewed clean with development/smoke fake-host
-delivery and production unsupported/noop behavior. The Mac-bounded
+Status: complete. The `desktop-player-adapter-boundary-core` unit is implemented
+and reviewed clean. The `desktop-player-runtime-ipc-preload-delivery` unit is
+implemented and reviewed clean with development/smoke fake-host delivery and
+production unsupported/noop behavior. The
 `desktop-player-mac-native-host-process-seam` unit adds fakeable process
 lifecycle plumbing, cleanup/reap behavior, safe failure normalization, stale/late
-output handling, and redaction tests without claiming Windows native playback.
-Windows native-host proof and the real native helper remain unimplemented.
+output handling, and redaction tests. The Windows closeout unit adds real
+spawned helper process proof for the RD-07 process seam and reruns the RD-06
+app-owned native-presentation preflight/smoke as passing redacted native surface
+proof. The real production native helper, Plex stream setup, and renderer UI
+remain unimplemented.
 
 Depends on:
 
@@ -432,9 +438,12 @@ Exit gates:
   adapter core and narrow runtime player preload bridge. The bridge remains
   fake-host-backed only in development/smoke until real native host integration
   lands.
-- Mac-verifiable process-seam tests cover native-host lifecycle, cleanup/reap,
-  failure normalization, malformed output, stale/late output, and forbidden-field
-  exclusion without Windows proof claims.
+- Process-seam tests cover native-host lifecycle, cleanup/reap, real spawned
+  helper startup/exit, failure normalization, malformed output, stale/late
+  output, and forbidden-field exclusion.
+- Windows native surface proof is observed through the existing RD-06 app-owned
+  native-presentation preflight/smoke without reopening WID, helper-owned render
+  API, product native helper, Plex, renderer, package, or dependency scope.
 - `App.ts` and orchestration owners do not absorb native process policy.
 
 ### RD-08 Desktop Stream Policy

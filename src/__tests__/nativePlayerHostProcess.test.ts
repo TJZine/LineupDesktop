@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Buffer } from 'node:buffer';
+import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import process from 'node:process';
 import { PassThrough } from 'node:stream';
 import { setImmediate } from 'node:timers';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -14,6 +16,10 @@ import {
   NativePlayerHostProcess,
   type NativePlayerHostChildProcess,
 } from '../main/player/nativePlayerHostProcess.js';
+
+type SpawnedNativeHostChildProcess = NativePlayerHostChildProcess & {
+  readonly exitCode: number | null;
+};
 
 class FakeHostChildProcess extends EventEmitter implements NativePlayerHostChildProcess {
   readonly stdin = new PassThrough();
@@ -105,6 +111,69 @@ function assertTextAbsent(value: unknown, text: string): void {
   assert.equal(JSON.stringify(value).includes(text), false, `unexpected renderer-facing text ${text}`);
 }
 
+function spawnNodeHost(script: string): SpawnedNativeHostChildProcess {
+  return spawn(process.execPath, ['-e', script], {
+    stdio: 'pipe',
+    windowsHide: true,
+  }) as unknown as SpawnedNativeHostChildProcess;
+}
+
+const spawnedSuccessHostScript = String.raw`
+let buffer = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  buffer += chunk;
+  let newlineIndex = buffer.indexOf('\n');
+  while (newlineIndex >= 0) {
+    const line = buffer.slice(0, newlineIndex).trim();
+    buffer = buffer.slice(newlineIndex + 1);
+    if (line.length > 0) {
+      const message = JSON.parse(line);
+      if (message.type === 'command') {
+        process.stdout.write(JSON.stringify({
+          type: 'event',
+          event: {
+            type: 'playback.state',
+            requestId: message.requestId,
+            status: 'buffering',
+            playing: false,
+          },
+        }) + '\n');
+        process.stdout.write(JSON.stringify({
+          type: 'result',
+          requestId: message.requestId,
+          ok: true,
+          events: [
+            {
+              type: 'media.loaded',
+              requestId: message.requestId,
+              media: message.payload.media,
+              durationMs: message.payload.media.durationMs ?? null,
+              tracks: [],
+            },
+            {
+              type: 'playback.state',
+              requestId: message.requestId,
+              status: 'playing',
+              playing: true,
+            },
+          ],
+        }) + '\n');
+      }
+      if (message.type === 'cleanup') {
+        setTimeout(() => process.exit(0), 5);
+      }
+    }
+    newlineIndex = buffer.indexOf('\n');
+  }
+});
+`;
+
+const spawnedCrashHostScript = String.raw`
+process.stdin.resume();
+process.stdin.once('data', () => process.exit(42));
+`;
+
 test('native host process translates commands and returns safe host events', async () => {
   const child = new FakeHostChildProcess();
   const host = new NativePlayerHostProcess({
@@ -152,6 +221,53 @@ test('native host process translates commands and returns safe host events', asy
   assert.equal(result.ok ? result.events?.length : 0, 2);
   assertNoForbiddenKeys(child.writes);
   assertNoForbiddenKeys(result);
+});
+
+test('native host process starts a real helper process and reaps it on cleanup', async () => {
+  const child = spawnNodeHost(spawnedSuccessHostScript);
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 5_000,
+    cleanupGraceMs: 100,
+  });
+
+  try {
+    const result = await host.execute(loadCommand);
+
+    assert.equal(result.ok, true);
+    assert.equal(result.ok ? result.events?.length : 0, 3);
+    assert.equal(child.killed, false);
+    assertNoForbiddenKeys(result);
+
+    await host.cleanup('native-load-1');
+    assert.equal(child.killed, true);
+  } finally {
+    if (!child.killed && child.exitCode === null) {
+      child.kill('SIGKILL');
+    }
+  }
+});
+
+test('native host process normalizes real helper process exits without raw details', async () => {
+  const child = spawnNodeHost(spawnedCrashHostScript);
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 5_000,
+    cleanupGraceMs: 100,
+  });
+
+  try {
+    const result = await host.execute(loadCommand);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.ok ? null : result.error.code, 'PLAYER_HELPER_EXITED');
+    assert.equal(JSON.stringify(result).includes(process.execPath), false);
+    assertNoForbiddenKeys(result);
+  } finally {
+    if (!child.killed && child.exitCode === null) {
+      child.kill('SIGKILL');
+    }
+  }
 });
 
 test('native host process normalizes malformed and privileged output', async () => {
