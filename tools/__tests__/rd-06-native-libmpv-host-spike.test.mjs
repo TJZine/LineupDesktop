@@ -262,10 +262,20 @@ test('native presentation smoke records render-thread discipline without helper-
 });
 
 test('render-thread discipline requires fresh bounded render progress after proof reset', () => {
+  const disciplineStart = helperSource.indexOf(
+    'LoadAndObserve(mpv, init.httpMedia, "dummy-http", init.dummyHeaderName, init.dummyHeaderValue, init.durationMs);',
+  );
+  assert.notEqual(disciplineStart, -1, 'missing dummy-http load marker');
+  const disciplineSource = helperSource.slice(disciplineStart);
   assert.match(helperSource, /public bool WaitForFreshRenderProgress\(int minimumFrameCount, int timeoutMs\)/u);
   assert.match(helperSource, /observedFrameCount >= minimumFrameCount/u);
   assert.match(helperSource, /thread\.IsAlive && observedFrameCount >= minimumFrameCount/u);
   assert.match(helperSource, /renderThread\.WaitForFreshRenderProgress\(3, Math\.Max\(1000, Math\.Min\(init\.durationMs, 3000\)\)\)/u);
+  assertOrder(disciplineSource, [
+    'LoadAndObserve(mpv, init.httpMedia, "dummy-http", init.dummyHeaderName, init.dummyHeaderValue, init.durationMs);',
+    'renderThread.ResetProofWindow();',
+    'renderThread.WaitForFreshRenderProgress(3, Math.Max(1000, Math.Min(init.durationMs, 3000)))',
+  ]);
   assert.doesNotMatch(helperSource, /thread\.IsAlive && observedFrameCount > 0/u);
 });
 

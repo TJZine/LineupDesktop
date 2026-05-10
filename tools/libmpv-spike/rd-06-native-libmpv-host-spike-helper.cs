@@ -492,6 +492,7 @@ internal static class Rd06NativeLibmpvHostSpikeHelper
             });
 
             LoadAndObserve(mpv, init.httpMedia, "dummy-http", init.dummyHeaderName, init.dummyHeaderValue, init.durationMs);
+            renderThread.ResetProofWindow();
             bool renderThreadDisciplineProven = renderThread.WaitForFreshRenderProgress(3, Math.Max(1000, Math.Min(init.durationMs, 3000)));
             WriteEvent("observed", new Dictionary<string, object?>
             {
