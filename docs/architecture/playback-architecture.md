@@ -35,7 +35,7 @@ production behavior. Subtitle behavior remains unproven by the dummy audio-only
 input and must be proved by RD-06 or a reviewed follow-up plan before product
 contracts or adapters rely on it.
 
-## RD-06 Native libmpv Spike Observations
+## RD-06 Native libmpv WID Spike Observations
 
 RD-06 added a dev-only Windows native libmpv WID/render API spike under
 `tools/libmpv-spike/`. It remains evidence tooling only: no product IPC,
@@ -60,27 +60,13 @@ Redacted local evidence under ignored
 - evidence redaction checks passed for raw local paths, raw URLs, raw native
   values, and raw diagnostics
 
-The revised Windows WID smoke failed the full RD-06 proof because
+The revised Windows WID smoke currently fails the full RD-06 proof because
 active-playback fullscreen video pixels were not captured even though windowed
 video pixels, overlay pixels, focus, dummy HTTP loading, helper crash detection,
-and redaction checks were observed. WID is therefore blocked as the RD-07
-production direction unless a later reviewed plan reopens it with new evidence.
-
-The later Windows helper-owned render API smoke proved local dummy media, dummy
-HTTP with only `X-Lineup-RD06: dummy`, windowed video pixels, overlay pixels,
-focus, render API symbols, render context, render frame, helper crash detection,
-cleanup, redaction, and libmpv API evidence. It failed the full RD-06 proof
-because fullscreen and fullscreenNativeCapture were not captured while
-`BrowserWindow` fullscreen was true, composition remained
-`not-proven-merged-capture-sources`, and render-thread discipline remained
-`not-proven-blocking-helper-loop`. Helper-owned render API is therefore also
-blocked as the RD-07 production direction unless a later reviewed plan reopens
-it with new evidence.
-
-The active RD-06 plan now routes the next bounded proof to an app-owned native
-presentation boundary. That path must prove fullscreen active video pixels,
-native-boundary overlay/composition, render-thread discipline, cleanup, and
-redaction before RD-06 can route RD-07 toward a native surface direction.
+and redaction checks were observed. RD-06 therefore does not yet accept WID as
+the RD-07 production direction. The next playback plan should replan the native
+surface strategy, with render API or addon exploration back on the table unless
+a reviewed Windows proof can close the fullscreen gap.
 
 The Windows render API smoke also fails the full RD-06 proof. It observed
 render API symbol availability, render-context creation, app-owned input
