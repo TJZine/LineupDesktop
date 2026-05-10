@@ -38,7 +38,7 @@ production behavior. Subtitle behavior remains unproven by the dummy audio-only
 input and must be proved by RD-06 or a reviewed follow-up plan before product
 contracts or adapters rely on it.
 
-## RD-06 Native libmpv WID Spike Observations
+## RD-06 Native libmpv Spike Observations (WID, Render API, App-owned Native Presentation)
 
 RD-06 added a dev-only Windows native libmpv WID/render API spike under
 `tools/libmpv-spike/`. It remains evidence tooling only: no product IPC,

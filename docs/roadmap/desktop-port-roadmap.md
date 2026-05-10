@@ -99,8 +99,8 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-05 are complete enough to route the next Tier 3 quality-loop
-session to RD-06. Do not import original Lineup product code until a reviewed
+RD-01 through RD-06 are complete enough to route the next Tier 3 quality-loop
+session to RD-07. Do not import original Lineup product code until a reviewed
 product slice plan explicitly authorizes a bounded import.
 
 ## Roadmap Checklist

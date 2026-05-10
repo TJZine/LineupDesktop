@@ -572,7 +572,7 @@ function fixtureContent(relativePath) {
       lint: 'eslint .',
       typecheck: 'tsc --noEmit',
       test: 'npm run test:contracts && npm run test:harness-docs',
-      'test:contracts': 'tsx --test src/__tests__/*.test.ts',
+      'test:contracts': 'node --import tsx --test src/__tests__/*.test.ts',
       'test:harness-docs': 'node --test tools/__tests__/*.test.mjs',
       'verify:architecture': 'npm run lint',
       'verify:docs': 'node tools/verify-docs.mjs',
