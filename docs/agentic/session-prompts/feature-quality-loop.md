@@ -8,8 +8,9 @@ For roadmap work, the controller owns the entire roadmap item named by the
 handoff, not just the first implementation slice. The tracked plan should cover
 the whole item and may split implementation into bounded execution units with
 separate review and verification gates. Do not advance to the next roadmap item
-until the current item's exit gates and platform-proof requirement are complete
-or explicitly blocked.
+until the current item's exit gates and platform-proof requirement (see the
+[Platform Proof Convention](../../roadmap/desktop-port-roadmap.md#platform-proof-convention))
+are complete or explicitly blocked.
 
 ## Read Order
 

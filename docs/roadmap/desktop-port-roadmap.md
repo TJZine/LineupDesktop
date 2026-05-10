@@ -126,7 +126,7 @@ when useful, in this checklist. Use one of these labels:
 - `Windows proof required before closeout`: the item cannot be marked complete
   until a Windows run observes the named behavior.
 - `Windows proof deferred to <RD item>`: the item may close without Windows
-  proof only because a later named roadmap item owns that platform evidence.
+  proof only because a later-named roadmap item owns that platform evidence.
 
 If a roadmap item touches Electron OS behavior, native playback, Windows app
 paths, credential availability, packaging, signing, installer behavior, or

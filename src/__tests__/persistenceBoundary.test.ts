@@ -90,7 +90,27 @@ test('desktop persistence store encrypts credentials and returns renderer-safe s
 
   const persisted = await fs.readFile(path.join(temporaryDirectory, 'persistence.json'), 'utf8');
   assert.equal(persisted.includes('rd09-secret-value'), false);
-  assert.equal(persisted.includes('encryptedSecretBase64'), true);
+  const persistedFile = JSON.parse(persisted) as {
+    credentials?: readonly {
+      credentialId?: unknown;
+      accountId?: unknown;
+      kind?: unknown;
+    }[];
+  };
+  assert.deepEqual(
+    persistedFile.credentials?.map(({ credentialId, accountId, kind }) => ({
+      credentialId,
+      accountId,
+      kind,
+    })),
+    [
+      {
+        credentialId: 'plex-account:account-1',
+        accountId: 'account-1',
+        kind: 'plex-account',
+      },
+    ],
+  );
 
   const readResult = await store.readPlexCredentialSecret('account-1');
   assert.equal(readResult.status, 'present');

@@ -24,8 +24,6 @@ Plan the expensive decisions, not every local helper:
 - verification classification, commands, and expected outcomes
 - acceptance criteria, rollback notes, and stop/replan triggers
 
-Use tracked plans in `docs/plans/` only while active durable handoff memory is
-needed. After closeout, archive completed full plan bodies locally and keep only
-durable conclusions in tracked roadmap, architecture, import-ledger, workflow,
-or verifier docs. For Tier 3 work, route the finished plan to read-only review
-before implementation.
+See AGENTS.md and docs/AGENTIC_DEV_WORKFLOW.md for lifecycle and archival
+policy, including `docs/plans/` archival guidance. For Tier 3 work, route
+through the feature-quality loop before implementation.
