@@ -4,107 +4,76 @@
 
 **Tier:** Tier 3
 
-**Controller phase:** blocked
+**Controller phase:** execution-unit-select
 
-**Plan review status:** clean final read-only review reported no plan blockers
-after revision. The reviewed first implementation unit was attempted on a
-Windows proof host and is now blocked/replan because WID failed the required
-fullscreen video-surface proof. RD-06 is not complete.
+**Plan review status:** clean read-only review reported no blockers for this
+render API replan after `npm run verify:docs` passed. The previous reviewed WID
+implementation was attempted on a Windows proof host, and the required
+fullscreen video-surface proof failed. RD-06 is not complete.
 
-**Windows prerequisite gate status:** blocked on 2026-05-09. A Windows proof
-host was available and reported `win32 x64`, Node `v22.21.1`, npm `11.13.0`,
-and .NET SDK `7.0.317` / host `8.0.26` on Windows `10.0.19045` x64. The gate
-stopped before implementation because repo Electron dependencies were missing
-and no local `mpv` / `mpv-1.dll` availability was found. The Windows
-proof-runner changed no files, produced no local RD-06 run evidence, ran no
-preflight/WID smoke/verification commands beyond prerequisite checks, and left
-only a pre-existing `.codex/config.toml` dirty state in that checkout. The next
-step is prerequisite provisioning outside the RD-06 implementation task, then a
-fresh Windows proof-runner resume.
+**Windows WID smoke adjudication:** WID is blocked as the native surface
+strategy for RD-07 unless a later reviewed plan reopens it with new evidence.
+The Windows WID smoke proved windowed active video, overlay pixels, renderer
+focus, dummy HTTP loading, helper crash detection, cleanup, libmpv API/version
+evidence, and redaction, but did not capture active fullscreen video pixels.
+That failure is material because RD-06 requires fullscreen video-surface proof
+before RD-07 can harden native playback direction.
 
-**Windows WID smoke status:** blocked/replan after reviewed implementation unit
-on 2026-05-09. The Windows proof-runner reported `win32 x64`, Node `v22.21.1`,
-npm `11.13.0`, .NET SDK `7.0.317`, Electron resolved from `node_modules`, mpv
-`v0.41.0-524-g5921fe50b`, and local `libmpv-2.dll` with client API `2.5` from a
-local shinchiro build outside the repo. The RD-06 static test passed with 12
-tests, preflight passed, `verify:redaction` passed, and the WID smoke failed
-without overclaiming because fullscreen video pixels were not captured.
-Windowed active video, overlay pixels, focus, dummy HTTP loading, helper crash
-detection, cleanup, and redaction checks were recorded in ignored local
-evidence on the Windows host. Full `npm run verify` on Windows was blocked by
-pre-existing docs-verifier skill-frontmatter failures outside RD-06 scope.
-Tracked conclusion surfaces were updated in `docs/architecture/CURRENT_STATE.md`,
-`docs/architecture/playback-architecture.md`, and
-`docs/roadmap/desktop-port-roadmap.md`. Next step is a reviewed replan for
-native surface strategy before RD-07, with mpv render API or addon exploration
-back on the table.
+**Chosen next execution unit:** `windows-libmpv-render-api-surface-probe`.
 
 **Verification classification:** broader integration/manual proof required
 
 ## Goal
 
-Create the RD-06 Native libmpv Host Spike plan for the first Windows-first
-native playback proof after RD-05.
+Replan RD-06 after the reviewed Windows WID smoke failed fullscreen
+video-surface proof, and freeze one next bounded proof unit before RD-07.
 
-First execution unit: `windows-libmpv-environment-and-wid-smoke`.
+The next unit is `windows-libmpv-render-api-surface-probe`. It must test whether
+mpv's render API can satisfy the missing Windows fullscreen video-surface proof
+without moving production renderer, preload, main, contract, Plex, scheduler,
+package, or import-ledger ownership. The unit remains dev-only and evidence
+only.
 
-The unit must prove or block Windows native playback feasibility before RD-07.
-It targets a helper-hosted libmpv path using Windows native window embedding
-through `wid`, with a minimal dev-only Electron harness only because RD-06 must
-prove BrowserWindow surface, overlay, fullscreen, focus, track, crash, and
-redaction behavior in the shape closest to the production hypothesis.
+The unit should extend the existing RD-06 spike surface only after clean
+read-only review. It may add render-API-specific modes to
+`tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` and the C# helper, plus
+focused harness tests. It must not create product playback architecture.
 
-The initial controller host observed `darwin arm64`. A later Windows
-proof-runner passed prerequisites and attempted the reviewed WID smoke, but
-fullscreen video pixels were not captured. Implementation must remain
-blocked/replan until a reviewed native surface strategy proves the missing
-fullscreen video-surface requirement. A macOS-only proof, a failed prerequisite
-gate, or a WID smoke that fails fullscreen proof is not RD-06 completion.
-
-Owner path after clean plan review only:
-
-- Source-controlled dev-only spike tooling:
-  `tools/libmpv-spike/rd-06-native-libmpv-host-spike.*`
-- Optional focused static/unit proof:
-  `tools/__tests__/rd-06-native-libmpv-host-spike.test.mjs`
-- Local-only redacted evidence:
-  `docs/runs/rd-06-native-libmpv-host-spike/`
-
-Source-control decision:
-
-- The tracked plan lives at
-  `docs/plans/2026-05-08-rd-06-native-libmpv-host-spike-plan.md`.
-- Dev-only spike source may be source-controlled only after clean plan review.
-- No helper binaries, native libraries, generated media, screenshots, crash
-  dumps, raw logs, raw native traces, or run evidence may be committed.
-- Generated evidence stays local-only under the gitignored
-  `docs/runs/rd-06-native-libmpv-host-spike/`.
+RD-06 remains incomplete until Windows evidence proves the required native
+surface behavior, or until the plan records a reviewed blocked conclusion that
+routes native playback to another strategy before RD-07.
 
 ## Non-Goals
 
-- Do not complete RD-06 from macOS-only evidence.
-- Do not implement RD-07 player adapter behavior, production player runtime,
-  production helper protocol, product renderer UI, preload bridge, main IPC,
-  Plex integration, stream policy, scheduler, secure storage, packaging,
-  signing, or installer work.
-- Do not add package metadata, package scripts, lockfile changes, npm
-  dependencies, native addons, helper binaries, build-tool installs, native
-  library installs, or system-library bindings unless a reviewed replan or
-  clean review explicitly accepts the owner, provenance, licensing, ABI,
-  platform, lockfile, rollback, and verification decision.
+- Do not implement a new Windows proof unit in this planning pass.
+- Do not run Windows proof commands in this planning pass.
+- Do not complete RD-06 from WID, macOS, prerequisite, or docs-only evidence.
+- Do not continue into RD-07 until RD-06 has a reviewed native surface
+  conclusion.
+- Do not add production player adapter behavior, production helper protocol,
+  product renderer UI, preload bridge, main IPC, Plex integration, stream
+  policy, scheduler, secure storage, packaging, signing, installer, or release
+  work.
+- Do not touch `src/main/**`, `src/preload/**`, `src/renderer/**`,
+  `src/contracts/**`, Plex, scheduler, package metadata, lockfiles, packaging
+  config, installer config, or `docs/architecture/import-ledger.md` in the next
+  unit.
+- Do not add a Node native addon in the next unit. Addon exploration is not the
+  chosen execution unit because Node-API does not stabilize external libmpv ABI,
+  and an addon would introduce package/build/signing/provenance decisions before
+  the native surface strategy is proved.
 - Do not install .NET, Visual Studio, Windows SDK, mpv/libmpv, NuGet packages,
-  native headers, generated bindings, helper binaries, or any other build/native
-  dependency in RD-06. The first unit may use only tools and native libraries
-  already present on the Windows proof host and must block if they are missing.
+  native headers, generated bindings, helper binaries, npm dependencies, or
+  build tools as RD-06 implementation.
+- Do not copy or adapt upstream Lineup source in RD-06 unless a reviewed replan
+  authorizes the exact import and updates
+  `docs/architecture/import-ledger.md` before or with the import.
 - Do not contact real Plex servers or use real Plex tokens, tokenized URLs,
   auth headers, raw Plex payloads, checked-in media, raw native logs, native
   handles in renderer-facing state, libmpv objects in contracts, engine ids in
   renderer-facing state, broad IPC, or production renderer UI changes.
-- Do not copy or adapt upstream Lineup source in RD-06 unless a reviewed replan
-  authorizes the exact import and updates `docs/architecture/import-ledger.md`
-  before or with the import.
-- Do not use external `mpv` JSON IPC as production architecture. RD-05 remains a
-  disposable POC only.
+- Do not treat external `mpv` JSON IPC as production architecture. RD-05
+  remains a disposable POC only.
 
 ## Parent Architecture Alignment
 
@@ -112,66 +81,73 @@ RD-06 is Tier 3 native playback architecture work and is Windows-first.
 
 Current architecture alignment:
 
-- `docs/architecture/CURRENT_STATE.md` says there is no native playback host
-  yet. RD-05 added only a disposable external `mpv` POC and ignored redacted
-  local evidence.
-- `docs/architecture/playback-architecture.md` keeps the production hypothesis
-  at Electron plus helper-hosted native libmpv. External `mpv` is disposable POC
-  only.
-- RD-05 observed local dummy HTTP/header/audio/start/stop/cleanup behavior and
-  four sanitized events after stop. Those stale post-stop events are RD-06/RD-07
-  risk evidence, not accepted production behavior.
-- `docs/architecture/playback-architecture.md` requires Windows proof for local
-  media, dummy Plex-like stream without renderer secrets, overlay, focus,
-  tracks, helper crash, redacted logs, DPI, and multi-monitor behavior.
-- `docs/architecture/security-and-secret-flow.md` keeps Plex credentials,
-  token-bearing URLs, and token-bearing headers inside privileged main/helper
-  setup and outside renderer ownership.
+- `docs/architecture/CURRENT_STATE.md` says RD-06 remains blocked on
+  fullscreen video-surface evidence and does not create a production playback
+  host or settle the RD-07 native surface direction.
+- `docs/architecture/playback-architecture.md` records that the dev-only WID
+  spike proved several Windows behaviors but failed fullscreen video-surface
+  proof; render API or addon exploration is back on the table.
+- `docs/roadmap/desktop-port-roadmap.md` records RD-06 as blocked/replan and
+  says the current WID smoke does not prove enough to route directly to RD-07.
+- `docs/architecture/security-and-secret-flow.md` keeps token-bearing playback
+  material inside privileged main/helper setup and outside renderer ownership.
 - `docs/architecture/upstream-behavior-guardrails.md` forbids raw URLs, headers,
   native handles, engine ids, libmpv objects, and webOS constants through
   renderer-facing state.
-- `docs/roadmap/desktop-port-roadmap.md` requires RD-06 Windows production
-  playback proof and helper-vs-addon decision evidence before RD-07.
 - `src/contracts/player.ts` and `src/contracts/ipc.ts` already define
-  renderer-safe player/IPC vocabulary and forbidden privileged keys.
-- `package.json` currently uses Electron `^42.0.0`, Node `>=22.12.0`, and
-  existing `verify:docs` / `verify` scripts.
+  renderer-safe player/IPC vocabulary and forbidden privileged keys; the next
+  unit must not change those contracts.
+- `package.json` currently uses Electron `^42.0.0`, Node `>=22.12.0`, and the
+  existing verifier scripts. The next unit must not add package scripts,
+  dependencies, or lockfile changes.
 
-Architecture direction:
+Native surface decision:
 
-- Helper boundary shape: a dev-only privileged helper child owns libmpv calls,
-  libmpv handles, native playback state, dummy media loading, and crash
-  isolation.
-- Electron harness shape: a minimal dev-only Electron harness under
-  `tools/libmpv-spike/` creates a BrowserWindow only to provide a Windows native
-  parent window and overlay/focus/fullscreen test surface.
-- Renderer shape: the dev harness renderer is not product renderer code and
-  must not receive secrets, raw URLs, raw headers, native handles, libmpv
-  objects, engine ids, or broad IPC.
-- Helper launch shape: Electron-launched for the WID smoke because the smoke
-  needs a BrowserWindow HWND and overlay/focus/fullscreen proof. Preflight mode
-  may run standalone.
-- Helper custody shape: the dev Electron harness main process obtains the
-  BrowserWindow native parent identifier and sends it once over a private
-  one-shot `child_process` stdio channel to the helper. The value is never sent
-  through renderer, preload, product IPC, process args, environment variables,
-  logs, tests, tracked docs beyond this conceptual policy, diagnostics, or
-  evidence files. The helper accepts it only during initialization for the
-  current request id, validates the platform is Windows, keeps it in memory, and
-  drops it during stop/crash/cleanup.
-- Libmpv option: first unit uses native window embedding via libmpv `wid` on
-  Windows because it is the smallest proof of the helper-hosted production
-  hypothesis. The render API is not first-unit scope; it is the replan path if
-  WID cannot satisfy overlay, focus, fullscreen, DPI, or crash isolation needs.
-- Electron/render harness decision: required for the smoke unit, but strictly
-  dev-only and scoped to `tools/libmpv-spike/`.
-- Native binding/toolchain decision: the first implementation unit uses a
-  source-controlled C# P/Invoke helper compiled locally in a temporary output
-  directory with a pre-existing Windows .NET SDK only. It must not use NuGet,
-  vendored headers, copied bindings, generated source, checked-in binaries,
-  package metadata, or lockfiles. `dotnet --info` and the local `mpv-1.dll` /
-  libmpv provenance must be recorded in redacted local evidence before
-  compilation. If .NET SDK or libmpv is unavailable, the unit blocks/replans.
+- WID is no longer the chosen route for the next unit because the reviewed
+  Windows smoke failed the exact fullscreen video-surface proof RD-06 required.
+- The next unit uses mpv render API as the only selected route because official
+  mpv examples describe it as more flexible for app-owned composition and UI
+  over video than raw window embedding.
+- Addon exploration is deferred. It may become necessary only after render API
+  evidence shows that the surface strategy is viable but the helper/process
+  boundary cannot satisfy performance, lifecycle, packaging, or IPC needs.
+
+Boundary decision for the next unit:
+
+- Dev-only tool owner: `tools/libmpv-spike/`.
+- Helper owner: a privileged dev helper owns libmpv, render context lifecycle,
+  native graphics context/window state, dummy media loading, app-owned input
+  simulation for mpv, crash behavior, and redacted proof event emission.
+- Electron harness owner: a dev-only Electron harness creates the BrowserWindow
+  proof surface, controls windowed/fullscreen transitions, focuses the
+  renderer, captures proof pixels with Electron capture primitives, starts and
+  reaps the helper, and writes only redacted local evidence.
+- Renderer owner: dev-only renderer content may expose a dummy overlay/focus
+  target for proof, but it must not receive secrets, raw URLs, raw headers,
+  native handles, libmpv objects, engine ids, arbitrary IPC, or production
+  bridge access.
+- Product owners: production renderer/preload/main/contracts/Plex/scheduler and
+  package/import-ledger files remain out of scope.
+
+Dependency/provenance/licensing/ABI/platform decision:
+
+- Platform scope is Windows x64 only for the next proof.
+- The Windows proof-runner facts already recorded for the failed WID smoke are:
+  `win32 x64`, Node `v22.21.1`, npm `11.13.0`, .NET SDK `7.0.317`, Electron
+  resolved from `node_modules`, mpv `v0.41.0-524-g5921fe50b`, and
+  `libmpv-2.dll` client API `2.5` from a local shinchiro build outside the repo.
+- The next unit may use only the already-present local Windows .NET SDK,
+  Electron from repo `node_modules`, and local shinchiro mpv/libmpv files. It
+  must record version, path-redacted provenance, no-redistribution status, and
+  licensing notes in ignored local evidence.
+- No Node-API addon is authorized. Node-API ABI stability is noted only as
+  future evidence: it can stabilize an addon boundary across Node versions, but
+  official Node docs warn that external libraries used by the addon do not
+  automatically share that stability.
+- No copied mpv example source, copied mpv headers, generated bindings, NuGet
+  packages, npm packages, checked-in binaries, or package metadata changes are
+  authorized. If implementation cannot call the required public libmpv render
+  API from the existing dev helper without those additions, stop and replan.
 
 ## Required Reading
 
@@ -193,131 +169,147 @@ Read in this order before review or implementation:
 14. `docs/runs/README.md`
 15. `.gitignore`
 16. `package.json`
-17. Official Electron docs via Context7 `/electron/electron`, checked
-    2026-05-08
-18. Official mpv manual, checked 2026-05-08: https://mpv.io/manual/stable/
-19. Official mpv libmpv examples, checked 2026-05-08:
+17. `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`
+18. `tools/libmpv-spike/rd-06-native-libmpv-host-spike-helper.cs`
+19. `tools/__tests__/rd-06-native-libmpv-host-spike.test.mjs`
+20. Official Electron BrowserWindow docs, checked 2026-05-10:
+    https://www.electronjs.org/docs/latest/api/browser-window
+21. Official Electron desktopCapturer docs, checked 2026-05-10:
+    https://www.electronjs.org/docs/latest/api/desktop-capturer
+22. Official mpv manual, checked 2026-05-10:
+    https://mpv.io/manual/stable/
+23. Official mpv libmpv examples, checked 2026-05-10:
     https://github.com/mpv-player/mpv-examples/blob/master/libmpv/README.md
-20. Official mpv headers, checked 2026-05-08:
+24. Official mpv headers, checked 2026-05-10:
     - https://github.com/mpv-player/mpv/blob/master/include/mpv/client.h
     - https://github.com/mpv-player/mpv/blob/master/include/mpv/render.h
+25. Official Node-API docs, checked 2026-05-10:
+    https://nodejs.org/api/n-api.html
 
 Freshness gate: before implementation, rerun `git status --short --branch` and
-reread the files above if architecture, contracts, roadmap status, package
-metadata, Electron version, mpv/libmpv documentation, verifier behavior, or
-local Windows proof prerequisites changed materially. Stop for plan update or
-re-review when assumptions are contradicted.
+reread the files above if architecture docs, contracts, roadmap status, package
+metadata, Electron version, mpv/libmpv documentation, Node native-addon
+documentation, verifier behavior, or Windows proof prerequisites changed
+materially. Stop for plan update or re-review when assumptions are
+contradicted.
 
 ## Required Skills
 
 - `lineup-desktop-feature-plan`: required launcher for this Tier 3
-  feature/design plan.
+  feature/design replan.
 - `execution-plan-authoring`: freezes scope, owner path, seam, verification,
   rollback, and stop conditions without pseudo-code.
-- `architecture-boundaries`: applies because RD-06 changes native helper,
-  Electron process ownership, and renderer/preload/main non-ownership
-  decisions.
-- `plex-integration-boundaries`: applies because dummy Plex-like stream setup
-  must preserve token/header/URL custody rules.
-- `persistence-boundaries`: applies because RD-06 may inspect app paths and
-  local files for dummy-only evidence, while credentials and durable settings
-  remain out of scope.
+- `architecture-boundaries`: applies because RD-06 decides native helper,
+  Electron harness, renderer non-ownership, and future addon non-ownership
+  boundaries.
+- `plex-integration-boundaries`: applies because dummy Plex-like HTTP proof must
+  preserve token/header/URL custody rules even though real Plex is out of
+  scope.
+- `persistence-boundaries`: applies because local evidence, generated dummy
+  media, helper output, and path redaction are implicated while credentials and
+  durable settings remain out of scope.
 - `ui-composition-patterns`: applies because overlay, focus, fullscreen, and
-  input continuity are explicit proof targets.
+  input continuity remain proof targets.
 - `verification-strategy`: applies because native playback needs Windows
-  smoke/manual evidence plus redaction/static proof.
-- `model-selection`: applies because the user requested model guidance and the
-  task is Tier 3 native playback architecture work.
+  smoke/manual evidence plus static and redaction proof.
 - `review-request`: next gate is read-only adversarial plan review.
-- `closeout-verification`: required before staging, committing, calling the plan
-  ready, or calling implementation complete.
+- `closeout-verification`: required before staging, committing, calling the
+  plan ready, or calling implementation complete.
 
 ## Evidence And Discovery
 
-Codanna is not used for RD-06 plan decisions. One controller probe ran before
-the user corrected the route; that output was disregarded. Discovery for this
-plan uses direct repo reads and official docs evidence only.
+Codanna is not used for this replan. Discovery uses direct repo reads and
+official docs evidence only.
 
 Direct reads:
 
-- `AGENTS.md`: durable plans are local by default, `docs/plans/*` is for
-  durable handoff memory, `npm run verify:docs` applies to plan/control-plane
-  changes, and `npm run verify` applies before implementation closeout unless
-  narrowed by plan.
-- `docs/AGENTIC_DEV_WORKFLOW.md`: native playback is Tier 3, helper-hosted
-  libmpv remains a hypothesis until Windows proof, external `mpv` IPC is
-  disposable POC only, and native playback changes require read-only review.
+- `AGENTS.md`: use `update_plan`, keep durable plans in `docs/plans/*` when
+  needed, do not claim commands or tests without observed evidence, run
+  `npm run verify:docs` for plan/control-plane changes, and run `npm run verify`
+  before implementation closeout unless a plan narrows proof.
+- `docs/AGENTIC_DEV_WORKFLOW.md`: native playback is Tier 3, active plans own
+  current execution units, native playback changes require review, and source
+  implementation must remain bounded to approved owners.
 - `docs/agentic/plan-authoring-standard.md`: active tracked plans require this
-  heading set, decision-complete seams, exact verification commands/outcomes,
-  and stop/replan triggers.
-- `docs/architecture/CURRENT_STATE.md`: no native playback host exists; RD-05
-  is only a disposable external `mpv` POC.
-- `docs/architecture/playback-architecture.md`: production hypothesis is
-  helper-hosted native libmpv; required spike proof includes Windows local
-  media, dummy Plex-like stream, overlay, focus, track selection, crash, logs,
-  DPI, and multi-monitor.
+  heading set, exact verification commands/outcomes, and explicit replan
+  triggers.
+- `docs/architecture/CURRENT_STATE.md`: RD-06 has a dev-only WID spike but is
+  blocked on fullscreen video-surface proof and does not create production
+  playback architecture.
+- `docs/architecture/playback-architecture.md`: WID evidence proves windowed
+  video, overlay, focus, dummy HTTP, helper crash, cleanup, libmpv API/version,
+  and redaction, but not fullscreen video-surface.
+- `docs/roadmap/desktop-port-roadmap.md`: RD-06 is blocked/replan and cannot
+  route directly to RD-07 until helper-vs-addon/native-surface evidence is
+  recorded.
 - `docs/architecture/security-and-secret-flow.md`: token-bearing headers and
   URLs stay inside privileged main/helper setup.
 - `docs/architecture/upstream-behavior-guardrails.md`: renderer-facing state
   must not expose raw URLs, headers, native handles, engine ids, libmpv objects,
   or webOS constants.
-- `docs/roadmap/desktop-port-roadmap.md`: RD-06 must record helper-vs-addon
-  decision evidence before RD-07.
-- `src/contracts/player.ts` and `src/contracts/ipc.ts`: renderer-safe vocabulary
-  exists; forbidden privileged keys already include raw media URLs, tokenized
-  URLs, auth headers, native handles, libmpv objects, engine ids, Electron/Node
-  APIs, raw Plex payloads, stream keys, part keys, and secret diagnostics.
-- `.gitignore` ignores `docs/runs/*` except `docs/runs/README.md`.
-- `docs/runs/README.md` says raw run bundles are ignored and durable conclusions
-  must be promoted into tracked docs when needed; raw logs, media samples, crash
-  dumps, diagnostics containing secrets, and local-only scratch output must not
-  be committed.
-- `package.json` has no current native dependency or package script for RD-06.
-  Electron is already present as a devDependency.
+- `src/contracts/player.ts` and `src/contracts/ipc.ts`: renderer-safe player
+  and IPC vocabularies already exist; no contract change is needed for this
+  dev-only proof unit.
+- `.gitignore` and `docs/runs/README.md`: raw run bundles are ignored; durable
+  conclusions belong in tracked docs; raw logs, media samples, crash dumps, and
+  diagnostics containing secrets must not be committed.
+- `package.json`: no native dependency, package script, or lockfile change is
+  authorized for RD-06.
 
 Workspace evidence:
 
-- `git status --short --branch` observed branch `main` with pre-existing
-  unrelated dirty state:
-  - modified `docs/plans/2026-05-07-electron-shell-security-foundation-plan.md`
-  - untracked RD-02/RD-03/RD-04 plans
-- Current controller host observed with `node -p "process.platform + ' ' +
-  process.arch"`: `darwin arm64`.
-- Those unrelated dirty files must not be edited, staged, reverted, or used as
-  RD-06 implementation evidence.
+- `git status --short --branch` observed branch `main` ahead of `origin/main`
+  with pre-existing unrelated dirty plan files. Those files must not be edited,
+  staged, reverted, or treated as RD-06 evidence by this plan.
+- Current controller host is not the Windows proof host. This planning pass did
+  not run Windows proof commands.
 
-Official docs evidence checked 2026-05-08:
+Observed Windows WID proof-runner facts supplied to this planner:
 
-- Electron `/electron/electron` docs via Context7: `BrowserWindow` exposes
-  `getNativeWindowHandle()`, Windows message hook APIs, fullscreen APIs, and
-  secure BrowserWindow practices using preload and context isolation.
-- mpv manual: libmpv is generally recommended for applications using mpv as a
-  playback backend; JSON IPC is explicitly not secure and is suitable only for
-  local control/POC-style use.
-- mpv manual and client API docs: libmpv client API supports embedding mpv in
-  applications, event loops via `mpv_wait_event`, asynchronous command replies,
-  and API version considerations.
-- mpv examples: native window embedding via `wid` is OS-dependent but on win32
-  fills the parent window; `input-vo-keyboard` may be needed for keyboard input;
-  render API gives overlay flexibility but requires simulated input and more
-  rendering responsibility.
-- mpv examples: the C# Windows example uses `mpv-1.dll` with native window
-  embedding.
-- mpv `render.h`: render API should use separate render-thread discipline;
-  normal libmpv API calls from the render thread can deadlock.
-- mpv `client.h`: event-loop, asynchronous request, API version, and termination
-  semantics must be considered before production helper design or packaging.
+- Environment: `win32 x64`, Node `v22.21.1`, npm `11.13.0`, .NET SDK
+  `7.0.317`, Electron from `node_modules`, mpv
+  `v0.41.0-524-g5921fe50b`, and `libmpv-2.dll` client API `2.5` from a local
+  shinchiro build outside the repo.
+- Commands/results: RD-06 static test passed with 12 tests, preflight passed,
+  WID smoke failed because fullscreen video pixels were not captured, and
+  `verify:redaction` passed.
+- Later macOS ingest passed the RD-06 static test, `verify:redaction`,
+  `verify:docs`, and `verify`; those macOS results do not complete RD-06.
+- Tracked docs already record WID's positive evidence and its missing
+  fullscreen video-surface proof.
+
+Official docs evidence checked 2026-05-10:
+
+- Electron BrowserWindow docs: `getNativeWindowHandle()` is the Windows HWND
+  source, `setFullScreen()` / `isFullScreen()` are window APIs, and
+  `capturePage()` is a BrowserWindow capture primitive.
+- Electron desktopCapturer docs: `desktopCapturer` is a main-process capture
+  primitive for screen/window sources.
+- mpv manual: libmpv is the recommended backend integration path for a
+  different application; JSON IPC is not secure and remains POC-only here.
+- mpv examples: native window embedding through `wid` is OS-dependent; on
+  win32 it fills the parent; `input-vo-keyboard` may be needed; render API uses
+  OpenGL/ANGLE, requires app-owned input simulation, and offers flexibility to
+  render UI over video. The examples generally recommend render API over window
+  embedding, while noting both can be useful.
+- mpv `render.h`: render API requires render-thread discipline; normal libmpv
+  calls from the render thread can deadlock, and advanced control can make
+  violations fatal.
+- Node-API docs: Node-API gives ABI stability for addons using Node-API, but
+  external libraries do not automatically share that stability; native addons
+  require C/C++ build and packaging decisions.
 
 Evidence conclusion:
 
-- WID embedding is the correct first smoke because it directly tests the
-  helper-hosted production hypothesis with the smallest Windows surface.
-- The render API remains a replan candidate if WID cannot satisfy
-  overlay/focus/fullscreen/DPI requirements.
-- Any native binding, helper source, build tool use, or local libmpv use must be
-  constrained to the planned C# P/Invoke helper and pre-existing Windows .NET
-  SDK/libmpv environment. It must not add package metadata, NuGet packages,
-  generated bindings, copied headers, or checked-in binaries.
+- The failed WID fullscreen proof is not a capture-tool flake to waive. It
+  blocks WID as the next native surface direction because RD-06 explicitly
+  requires fullscreen video-surface proof.
+- The next unit should probe mpv render API, not addon work, because render API
+  directly addresses surface ownership and composition while addon work mainly
+  changes the JavaScript/native binding and packaging/ABI burden.
+- If render API cannot be probed with the current dev helper and local Windows
+  prerequisites, stop and replan. Do not smuggle addon/package/build decisions
+  into implementation.
 
 ## Impact Snapshot
 
@@ -325,35 +317,37 @@ Expected blast radius after clean plan review:
 
 - May change:
   - `docs/plans/2026-05-08-rd-06-native-libmpv-host-spike-plan.md`
-  - `tools/libmpv-spike/rd-06-native-libmpv-host-spike.*`
+  - `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`
+  - `tools/libmpv-spike/rd-06-native-libmpv-host-spike-helper.cs`
   - `tools/__tests__/rd-06-native-libmpv-host-spike.test.mjs`
-  - `docs/architecture/playback-architecture.md` after observed Windows proof
-    or blocked RD-06 conclusion only
-  - `docs/roadmap/desktop-port-roadmap.md` after observed Windows proof or
-    blocked RD-06 conclusion only
-  - `docs/architecture/CURRENT_STATE.md` after observed Windows proof only, if
-    the dev-only spike changes current architecture truth
-  - local ignored evidence under `docs/runs/rd-06-native-libmpv-host-spike/`
+  - `docs/architecture/playback-architecture.md` only after observed Windows
+    render API proof or blocked conclusion
+  - `docs/roadmap/desktop-port-roadmap.md` only after observed Windows render
+    API proof or blocked conclusion
+  - `docs/architecture/CURRENT_STATE.md` only if tracked current architecture
+    truth changes after observed Windows proof
+  - ignored local evidence under `docs/runs/rd-06-native-libmpv-host-spike/`
 - Must not change:
   - product renderer, preload, main, shared contracts, Plex owners, scheduler
     owners, package metadata, lockfiles, packaging config, installer config,
-    import ledger, or upstream Lineup source.
-- Public contracts: no changes in the first unit.
+    import ledger, copied upstream Lineup source, or native addon paths.
+- Public contracts: no changes.
 - Dependency/build impact: no npm dependency, package script, lockfile, native
-  addon, NuGet package, helper binary, native library install, or system install
-  is authorized. A pre-existing Windows .NET SDK is allowed only as a local proof
-  tool after its version/provenance are recorded in redacted local evidence.
-- Native library impact: local Windows libmpv may be used only if already
-  available in the proof environment and provenance/version/API evidence is
-  recorded. No redistribution.
+  addon, NuGet package, helper binary, native library install, copied header,
+  generated binding, or system install is authorized.
+- Native library impact: local Windows mpv/libmpv may be used only if already
+  available in the proof environment; record path-redacted provenance, version,
+  API, licensing note, and no-redistribution status.
+- ABI impact: no Node addon ABI commitment is made. libmpv API/version evidence
+  is recorded as local proof only.
 - Runtime behavior: no user-visible product behavior changes.
 - Local artifacts: redacted dummy-only evidence stays ignored; raw scratch,
-  logs, screenshots, and crash output must be deleted or quarantined by
-  closeout.
+  logs, screenshots, crash output, compiled helper output, generated dummy
+  media, and native traces must be deleted or kept in a clearly local ignored
+  quarantine and never staged.
 
-The first unit is cross-boundary in what it proves, but implementation
-ownership stays dev-tool-only under `tools/libmpv-spike/`. It must not wire
-product IPC or production runtime owners.
+The next unit is cross-boundary in what it proves, but implementation ownership
+stays dev-tool-only under `tools/libmpv-spike/`.
 
 ## Files In Scope
 
@@ -361,22 +355,20 @@ product IPC or production runtime owners.
 - `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` after clean plan
   review only
 - `tools/libmpv-spike/rd-06-native-libmpv-host-spike-helper.cs` after clean
-  plan review only; this is the only approved helper binding path for the first
-  unit
+  plan review only
 - `tools/__tests__/rd-06-native-libmpv-host-spike.test.mjs` after clean plan
   review only
-- `docs/architecture/playback-architecture.md` after observed Windows proof or
-  blocked RD-06 conclusion only
-- `docs/roadmap/desktop-port-roadmap.md` after observed Windows proof or blocked
-  RD-06 conclusion only
-- `docs/architecture/CURRENT_STATE.md` after observed Windows proof only, if the
-  dev-only spike changes current architecture truth
+- `docs/architecture/playback-architecture.md` after observed Windows render
+  API proof or blocked conclusion only
+- `docs/roadmap/desktop-port-roadmap.md` after observed Windows render API
+  proof or blocked conclusion only
+- `docs/architecture/CURRENT_STATE.md` after observed Windows proof only, if
+  current architecture truth changes
 - `docs/runs/rd-06-native-libmpv-host-spike/manifest.redacted.json` local-only
 - `docs/runs/rd-06-native-libmpv-host-spike/events.redacted.ndjson` local-only
 - `docs/runs/rd-06-native-libmpv-host-spike/summary.redacted.md` local-only
 - `docs/runs/rd-06-native-libmpv-host-spike/quarantine/` local-only only when
-  raw dummy-only troubleshooting artifacts must be retained temporarily; delete
-  instead when artifacts are not needed
+  raw dummy-only troubleshooting artifacts must be retained temporarily
 
 ## Files Out Of Scope
 
@@ -389,63 +381,65 @@ product IPC or production runtime owners.
 - `src/contracts/**`
 - `src/__tests__/contracts.test.ts`
 - production `src/native-helper/**` or equivalent helper runtime paths
+- Node native addon source or build configuration
 - Plex auth, discovery, library, stream, selected-server, subtitle, token, URL,
   header, or secure-storage implementation
 - scheduler, channel, settings, UI, and RD-07 player adapter implementation
-- `docs/architecture/import-ledger.md`, unless a reviewed replan authorizes
-  copied/adapted upstream source
+- `docs/architecture/import-ledger.md`, unless a later reviewed replan
+  authorizes copied/adapted upstream Lineup source
 - checked-in media fixtures, helper binaries, native libraries, generated
-  screenshots, generated logs, crash dumps, or raw run evidence
-- unrelated dirty files already present before RD-06:
-  - `docs/plans/2026-05-07-electron-shell-security-foundation-plan.md`
-  - untracked RD-02/RD-03/RD-04 plan files
+  screenshots, generated logs, crash dumps, raw run evidence, copied mpv
+  examples, copied mpv headers, generated bindings, or NuGet packages
+- unrelated dirty files already present before this RD-06 replan
 
 ## Planner Self-Check
 
-1. No product, architecture, ownership, dependency, or verification decision is
-   left unresolved for the first unit. Implementation is blocked on this macOS
-   controller unless a Windows proof environment with pre-existing .NET SDK and
-   local libmpv is provided.
-2. The first unit does not depend on product contract or type changes.
+1. No ownership or verification decision is unresolved for the next unit:
+   render API surface probe is chosen; addon exploration is deferred.
+2. The next unit does not depend on product contract or type changes.
 3. Product files are out of scope and the plan does not rely on hidden wiring
    inside them.
-4. Evidence path is recorded: direct reads only, no Codanna plan reliance, plus
-   official Electron/mpv docs checked on 2026-05-08.
-5. The owner path is dev-tool-only, avoiding product hot spots until Windows
-   evidence proves the native seam.
+4. Evidence path is recorded: direct repo reads, supplied Windows proof-runner
+   facts, and official Electron/mpv/Node docs checked on 2026-05-10.
+5. The owner path is dev-tool-only and avoids product hot spots until Windows
+   evidence proves the native surface direction.
 6. A fresh implementer should not need to invent security, IPC, playback,
-   persistence, packaging, import, or verification policy.
+   persistence, packaging, import, dependency, ABI, or verification policy.
 7. Verification commands, expected outcomes, stop/replan triggers, evidence
-   format, deletion/quarantine rules, and rollback are explicit.
+   format, redaction rules, and rollback are explicit.
 
 ## Architecture Seam Decision Gate
 
-Chosen seam: dev-only Electron-launched Windows helper-hosted libmpv WID smoke
-under `tools/libmpv-spike/`.
+Chosen seam: dev-only Windows mpv render API surface probe under
+`tools/libmpv-spike/`, driven by an Electron proof harness and a privileged
+helper, with no production owner changes.
 
 Frozen decisions:
 
-| Decision | RD-06 first-unit choice |
+| Decision | RD-06 next-unit choice |
 | --- | --- |
+| Execution unit | `windows-libmpv-render-api-surface-probe` |
 | Owner path | `tools/libmpv-spike/rd-06-native-libmpv-host-spike.*` |
-| Source-controlled status | Dev-only source and optional test may be tracked after clean review; generated evidence stays local-only |
-| Helper boundary | Separate privileged helper child owns libmpv, native handles, dummy media load, events, crash behavior, and redaction |
-| Helper custody channel | One-shot private `child_process` stdio initialization channel from dev Electron harness main to helper; no renderer/preload/product IPC, args/env, logs, tests, tracked docs beyond conceptual policy, diagnostics, or evidence exposure of raw native values |
-| Helper payload lifetime | Current request only; helper validates Windows mode, rejects missing/duplicate/late parent attachment, keeps the value in memory only, and drops it during stop/crash/cleanup |
-| Standalone vs Electron-launched | Preflight may be standalone; WID smoke is Electron-launched to provide BrowserWindow parent surface and overlay/focus/fullscreen proof |
-| Electron/render harness | Required, minimal, dev-only, not product renderer/preload/main |
-| Libmpv mode | `wid` native window embedding first; render API only after reviewed replan |
-| Binding/toolchain path | Source-controlled C# P/Invoke helper compiled to a temp output with pre-existing Windows .NET SDK only; no NuGet, generated bindings, copied headers, package metadata, lockfile, or checked-in binary |
-| Windows proof environment | Windows desktop session with display/GPU, Node `>=22.12.0`, Electron install from repo, pre-existing .NET SDK, and local libmpv/mpv availability |
-| Local library/tool proof | Record local libmpv version/API/provenance and `dotnet --info` before smoke; no install or redistribution authorized |
-| Dummy input policy | Generated local dummy media and local dummy HTTP only |
+| Strategy | mpv render API, not another WID proof and not addon exploration |
+| Source-controlled status | Dev-only source and focused tests may be tracked after clean review; generated evidence stays local-only |
+| Helper boundary | Separate privileged dev helper owns libmpv, render context lifecycle, native graphics context/window state, dummy media loading, input simulation, events, crash behavior, and redaction |
+| Electron harness boundary | Dev Electron main owns BrowserWindow creation, windowed/fullscreen transitions, focus/capture orchestration, helper launch/reap, and redacted local evidence writing |
+| Renderer boundary | Dev-only renderer may provide dummy overlay/focus target only; no product renderer/preload/main or privileged data |
+| Libmpv mode | Render API via app-owned OpenGL/ANGLE-capable rendering path; software rendering is not accepted as RD-06 completion unless a later reviewed replan narrows it to diagnostics only |
+| Addon decision | No Node-API addon, node-gyp, CMake.js, prebuild, package metadata, or lockfile work in this unit |
+| Platform scope | Windows x64 desktop session with display/GPU |
+| Toolchain scope | Pre-existing Windows .NET SDK and local shinchiro mpv/libmpv only; no installs or redistribution |
+| API/provenance scope | Record mpv executable version, libmpv client API/version, path-redacted shinchiro provenance, .NET SDK version, Electron version, and no-redistribution/licensing notes |
+| Dummy input policy | Generated local dummy visual media and local dummy HTTP only |
 | Dummy header policy | Dummy non-secret header only, for example `X-Lineup-RD06: dummy`; no `Authorization`, `Cookie`, Plex, token, bearer, credential, or real server headers |
-| Args/env policy | No media URLs, headers, tokens, native parent identifiers, native handles, libmpv object ids, or secret material in process args/env; use the private one-shot helper channel and redact all local paths |
+| Args/env policy | No media URLs, headers, tokens, native handles, libmpv object ids, graphics context values, or secret material in process args/env |
 | Log policy | Persist only redacted summary/events/manifest; raw logs deleted or quarantined locally |
+| Capture proof | Use Electron `capturePage()` and/or `desktopCapturer` as proof primitives; fullscreen proof must show active video pixels while the BrowserWindow is fullscreen |
+| Overlay proof | Must prove overlay/composition appropriate to the chosen render path while video is active in windowed and fullscreen modes, or fail the unit |
+| Input proof | Because render API requires app-owned input simulation, record only renderer-safe dummy input/focus outcomes and no raw native input payloads |
 | Crash policy | Induce helper crash only with dummy media; prove Electron harness survives, helper is reaped, temp files are cleaned, and no raw crash output is committed |
 | Evidence format | Redacted JSON manifest, redacted NDJSON events, redacted Markdown summary |
-| Redaction proof | Mandatory RD-06 schema/static unit tests assert evidence contains only approved redacted fields and no raw URLs, headers, local paths, parent-window values, native handles, libmpv objects, engine ids, process args/env, raw IPC payloads, or crash/log bodies |
-| Durable conclusion target | `docs/architecture/playback-architecture.md` records helper-vs-addon conclusion from redacted evidence; `docs/roadmap/desktop-port-roadmap.md` records RD-06 status before RD-07 handoff |
+| Durable conclusion target | `docs/architecture/playback-architecture.md` and `docs/roadmap/desktop-port-roadmap.md` only after observed Windows proof or blocked conclusion |
 | Verification closeout | `npm run verify` before implementation complete; `npm run verify:docs` for plan/status doc changes |
 
 Forbidden shortcuts:
@@ -453,16 +447,19 @@ Forbidden shortcuts:
 - No renderer privilege concession.
 - No broad preload RPC.
 - No arbitrary channel strings from renderer code.
-- No raw media URL/header/native-handle/libmpv object/engine id in
-  renderer-facing state.
+- No raw media URL/header/native-handle/graphics-context/libmpv object/engine id
+  in renderer-facing state.
 - No real Plex access.
-- No package metadata or dependency changes.
-- No checked-in native binaries or copied upstream source.
-- No claiming helper-vs-addon direction from macOS proof.
+- No package metadata, lockfile, or dependency changes.
+- No Node native addon in this unit.
+- No checked-in native binaries, copied mpv headers/examples, generated
+  bindings, or copied upstream Lineup source.
+- No claiming RD-06 complete unless fullscreen active video-surface proof is
+  captured on Windows.
 
-Stop before implementation if plan review finds the helper/WID seam too broad,
+Stop before implementation if plan review finds the render API seam too broad,
 if Windows proof access is unavailable, or if the unit requires unplanned
-dependency/install/package/lockfile changes.
+dependency/install/package/lockfile/addon changes.
 
 ## Verification Commands
 
@@ -472,77 +469,74 @@ Plan/review commands:
 git status --short --branch
 ```
 
-Expected outcome: shows branch `main`; unrelated dirty plan files may remain,
-but no RD-06 implementation files should exist before reviewed implementation.
+Expected outcome: shows branch state and any unrelated dirty files; no RD-06
+implementation files should be changed by the planning pass except this plan.
 
 ```sh
 npm run verify:docs
 ```
 
-Expected outcome: passes after the plan is applied to
-`docs/plans/2026-05-08-rd-06-native-libmpv-host-spike-plan.md`.
+Expected outcome: passes after the revised active plan is applied. If not run
+by the planner, the reviewer or committer must run it before calling the plan
+ready.
 
-Current-host blocker command:
-
-```sh
-node -p "process.platform + ' ' + process.arch"
-```
-
-Expected outcome on this controller: `darwin arm64`. This means RD-06
-implementation proof is blocked here and must not be called complete.
-
-Windows preflight commands after clean plan review only:
+Windows proof-runner commands after clean plan review and implementation only:
 
 ```sh
 node -p "process.platform + ' ' + process.arch"
 ```
 
-Expected outcome: `win32 x64` unless a reviewed replan explicitly accepts
-another Windows architecture.
+Expected outcome: `win32 x64`.
 
 ```sh
+node -v
+npm -v
 dotnet --info
 ```
 
-Expected outcome on Windows with prerequisites: exits 0 and records only
-redacted SDK version/provenance in local evidence. If unavailable, RD-06 blocks
-without implementation.
+Expected outcome: exits 0 and records only redacted version/provenance evidence.
+The known WID proof-runner baseline was Node `v22.21.1`, npm `11.13.0`, and
+.NET SDK `7.0.317`; materially different versions do not fail automatically
+but must be recorded in local evidence.
 
 ```sh
-node tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs --mode preflight --out docs/runs/rd-06-native-libmpv-host-spike
+node tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs --mode render-api-preflight --out docs/runs/rd-06-native-libmpv-host-spike
 ```
 
 Expected outcome on Windows with prerequisites: writes only redacted local
-evidence showing OS/arch, Node/Electron versions, local libmpv availability,
-libmpv API/version, local library provenance, licensing note, and no forbidden
-persisted fields. On non-Windows, missing .NET SDK, or missing libmpv, exits
-blocked with a clear blocked reason and no partial success claim.
-
-Windows WID smoke command after successful preflight only:
+evidence showing OS/arch, Node/Electron versions, .NET SDK version, local mpv
+version, local libmpv availability, libmpv client API/version, path-redacted
+local shinchiro provenance, licensing/no-redistribution note, render API symbol
+availability, and no forbidden persisted fields. On non-Windows, missing
+display/GPU, missing .NET SDK, missing local mpv/libmpv, or missing render API
+availability, exits blocked with a clear blocked reason and no success claim.
 
 ```sh
-node tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs --mode wid-smoke --out docs/runs/rd-06-native-libmpv-host-spike --duration-ms 5000 --dummy-input local-and-http
+node tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs --mode render-api-smoke --out docs/runs/rd-06-native-libmpv-host-spike --duration-ms 5000 --dummy-input local-and-http --fullscreen-mode browser-window
 ```
 
 Expected outcome: on Windows only, with dummy data only, records redacted proof
-of local playback, dummy HTTP playback without renderer secrets, overlay
-visibility, windowed and borderless fullscreen behavior, renderer focus/input
-continuity, audio/subtitle track observation and selection if dummy media
-exposes tracks, stop/channel-switch ordering, stale event handling, helper
-crash detection, helper cleanup, DPI/multi-monitor notes, and redacted logs. If
-any required proof cannot run, output is blocked or failed, not complete.
+of local dummy visual playback, dummy HTTP visual playback with only the
+approved non-secret header, active windowed video pixels, active fullscreen
+video pixels while `BrowserWindow` fullscreen is true, overlay/composition proof
+in windowed and fullscreen modes, renderer focus/input continuity, app-owned
+input simulation notes, stop/channel-switch ordering, stale event handling,
+helper crash detection, helper cleanup, DPI/multi-monitor notes when available,
+and redacted logs. If fullscreen video pixels are not captured, if overlay or
+focus proof fails, or if render-thread discipline cannot be maintained, the
+command exits failed/blocked and RD-06 remains incomplete.
 
 Static/local proof commands after implementation source exists:
 
 ```sh
-npm run test:harness-docs
+npm run test:harness-docs -- --test-name-pattern=rd-06
 npm run verify:redaction
 ```
 
-Expected outcome: tests pass, including RD-06 schema/static tests proving
-command construction, helper initialization policy, and evidence redaction
-fields; redaction verifier reports no forbidden content in tracked
-docs/tests/tools.
+Expected outcome: RD-06 focused tests pass, including render API argument
+policy, mode parsing, evidence schema, forbidden field checks, and redaction
+coverage; redaction verifier reports no forbidden content in tracked docs,
+tests, or tools.
 
 Closeout command before implementation is called complete:
 
@@ -551,7 +545,8 @@ npm run verify
 ```
 
 Expected outcome: passes on the implementation host after RD-06 source/status
-changes. If Windows-only smoke cannot run in that environment, RD-06 remains
+changes. If Windows-only render API smoke cannot run in that environment, or if
+the smoke fails fullscreen active video-surface proof, RD-06 remains
 blocked/replan and must not be marked complete.
 
 Evidence closeout checks:
@@ -561,8 +556,8 @@ git status --short --branch
 ```
 
 Expected outcome: no generated `docs/runs/rd-06-native-libmpv-host-spike/*`
-files staged; no package metadata, lockfile, product runtime, or unrelated
-dirty files touched.
+files staged; no package metadata, lockfile, product runtime, native addon, or
+unrelated dirty files touched.
 
 On Windows PowerShell, inspect local evidence before closeout:
 
@@ -572,102 +567,98 @@ Get-ChildItem -Recurse docs/runs/rd-06-native-libmpv-host-spike | Select-Object 
 
 Expected outcome: only redacted evidence files remain outside any explicitly
 local quarantine folder. Raw scratch logs, screenshots, crash output, helper
-binaries, temp media, and native traces are deleted or quarantined and never
-staged.
+binaries, generated dummy media, temp output, and native traces are deleted or
+quarantined and never staged.
 
 ## Acceptance Criteria
 
 Plan acceptance:
 
 - This plan exists as the active tracked RD-06 plan with the required headings.
+- The plan adjudicates WID fullscreen failure as a native surface strategy
+  blocker.
+- The plan chooses exactly one next execution unit:
+  `windows-libmpv-render-api-surface-probe`.
+- The plan records why addon exploration is not selected for the next unit.
 - Read-only plan review via `lineup-desktop-feature-review` reports no
-  blockers.
-- The plan explicitly blocks implementation completion on the current macOS
-  controller unless a Windows proof runner is provided.
+  blockers before implementation.
+- RD-06 remains not complete.
 
-First-unit implementation acceptance after clean review and Windows proof
-access:
+Next-unit implementation acceptance after clean review and Windows proof access:
 
-- The first implementation unit is limited to
-  `windows-libmpv-environment-and-wid-smoke`.
+- Implementation is limited to `windows-libmpv-render-api-surface-probe`.
 - The unit runs only on Windows for native proof and blocks cleanly elsewhere.
-- Local libmpv/mpv availability, version, API, provenance, licensing concern,
-  ABI/platform, pre-existing .NET SDK version/provenance, and
+- Local mpv/libmpv availability, version, client API, provenance, licensing
+  concern, ABI/platform scope, pre-existing .NET SDK version/provenance, and
   no-redistribution/no-install status are recorded in redacted local evidence
   before smoke.
-- The only approved helper binding path is the source-controlled C# P/Invoke
-  helper compiled locally with a pre-existing Windows .NET SDK into a temporary
-  output directory. No NuGet packages, copied headers, generated bindings,
-  package metadata, lockfiles, or checked-in binaries are introduced.
-- The dev-only Electron harness and helper prove or fail WID native window
-  embedding with dummy local and dummy HTTP media.
-- The dev Electron harness main sends the native parent attachment to the helper
-  once over a private stdio initialization channel; the renderer/preload/product
-  IPC, args/env, logs, tests, diagnostics, tracked docs beyond conceptual
-  policy, and evidence never receive or persist the raw value.
+- No Node native addon, npm dependency, package script, lockfile, NuGet package,
+  copied header, generated binding, checked-in binary, or package metadata is
+  introduced.
+- The dev-only Electron harness and helper prove or fail mpv render API
+  playback with dummy local and dummy HTTP media.
+- Fullscreen active video-surface pixels are captured on Windows while the
+  BrowserWindow is fullscreen.
+- Overlay/composition and renderer focus/input continuity are proved in
+  windowed and fullscreen modes while video is active, or the unit fails.
+- App-owned input simulation required by render API is recorded as redacted
+  behavior only, with no raw native input payloads in renderer-facing state or
+  evidence.
 - Renderer-facing state and persisted evidence contain no real Plex data,
   tokens, tokenized URLs, auth headers, raw media URLs, raw Plex payloads,
-  native handles, libmpv objects, engine ids, Electron/Node APIs, or secret
-  diagnostics.
-- Process args/env do not carry media URLs, headers, tokens, native HWNDs,
-  native handles, libmpv object ids, or secret material.
+  native handles, graphics context values, libmpv objects, engine ids,
+  Electron/Node APIs, or secret diagnostics.
+- Process args/env do not carry media URLs, headers, tokens, native handles,
+  graphics context values, libmpv object ids, or secret material.
 - RD-06-specific static/schema tests prove evidence manifests/events/summaries
   contain only allowed redacted fields and no raw URLs, headers, local paths,
-  native parent values, native handles, libmpv objects, engine ids, process
-  args/env, raw helper IPC payloads, raw logs, or crash bodies.
-- Redacted evidence records local media, dummy HTTP/header behavior, overlay,
-  fullscreen, focus/input, tracks when available, stop/stale event ordering,
-  helper crash, cleanup, DPI/multi-monitor observations, and redaction proof.
-- Raw scratch/logs/screenshots/crash output is deleted or quarantined before
-  closeout.
-- Helper-vs-addon decision evidence is recorded before RD-07. If WID passes all
-  required proof, helper-hosted WID remains viable for RD-07 planning. If WID
-  fails overlay/focus/fullscreen/DPI/crash requirements, stop and replan toward
-  render API or addon exploration.
-- `docs/architecture/playback-architecture.md` records the durable
-  helper-vs-addon conclusion from redacted evidence, and
-  `docs/roadmap/desktop-port-roadmap.md` records RD-06 status before any RD-07
-  handoff.
+  native parent values, native handles, graphics context values, libmpv objects,
+  engine ids, process args/env, raw helper IPC payloads, raw logs, or crash
+  bodies.
+- Raw scratch/logs/screenshots/crash output/generated media/temp output is
+  deleted or quarantined before closeout.
+- If render API passes all required proof, `docs/architecture/playback-architecture.md`
+  and `docs/roadmap/desktop-port-roadmap.md` record the durable native surface
+  conclusion before RD-07 handoff.
+- If render API fails fullscreen/overlay/focus/threading/dependency constraints,
+  RD-06 records a blocked conclusion and replans before RD-07.
 - `npm run verify` passes before implementation closeout.
-
-Controller acceptance on this macOS host:
-
-- Clean plan review can be the only completion claim.
-- Implementation remains blocked/replan, not complete, until a Windows proof
-  environment runs the required proof.
 
 ## Replan Triggers
 
 Stop and replan if any of the following occurs:
 
 - No Windows proof runner is available after clean plan review.
-- The proof host is not Windows desktop with a usable display/GPU.
-- Local libmpv/mpv is unavailable or provenance/version/API cannot be recorded.
+- The proof host is not Windows x64 desktop with a usable display/GPU.
+- Local mpv/libmpv is unavailable or provenance/version/API cannot be recorded.
 - Pre-existing Windows .NET SDK is unavailable or its version/provenance cannot
   be recorded.
+- Render API symbols or required graphics backend support are unavailable in
+  the local libmpv build.
 - Implementation requires installing a native library, helper binary, build
   tool, npm dependency, NuGet package, native addon, package script, package
-  metadata, or lockfile change.
-- The C# P/Invoke helper needs copied headers, generated bindings, vendored
-  binaries, or unreviewed ABI assumptions.
-- The private helper initialization channel would need to persist or expose the
-  raw native parent value through renderer, preload, product IPC, args/env,
-  logs, tests, diagnostics, or evidence.
-- WID embedding cannot prove overlay visibility, renderer focus/input
-  continuity, windowed/fullscreen behavior, DPI/multi-monitor behavior, or
-  acceptable crash cleanup.
-- Render API becomes necessary. That requires a reviewed replan because
-  official mpv docs impose render-thread constraints and deadlock risks.
+  metadata, lockfile, copied header, generated binding, or checked-in binary.
+- The C# helper cannot maintain mpv render-thread discipline without deadlock
+  risk, blocking waits, or raw libmpv calls from the render thread.
+- The render API proof cannot capture active fullscreen video pixels through
+  Electron capture primitives.
+- Overlay/composition or renderer focus/input continuity fails in windowed or
+  fullscreen modes.
+- App-owned input simulation requires exposing raw native events, native
+  handles, graphics context values, or broad IPC to renderer/preload/product
+  code.
+- Node native addon work becomes necessary. That requires a reviewed replan
+  with package/build/signing/provenance/ABI decisions.
 - Real Plex servers, tokens, tokenized URLs, auth headers, raw Plex payloads,
   checked-in media, raw native logs, crash dumps, native handles in
-  renderer-facing state, libmpv objects, or engine ids appear in code, evidence,
-  docs, tests, logs, screenshots, or Codex output.
+  renderer-facing state, libmpv objects, graphics context values, or engine ids
+  appear in code, evidence, docs, tests, logs, screenshots, or Codex output.
 - Product renderer/preload/main/contracts/Plex/scheduler/package/import-ledger
   files need changes.
 - Any RD-05 stale post-stop behavior appears capable of corrupting the current
   playback request without a bounded mitigation plan.
-- `npm run verify:docs`, redaction checks, smoke proof, or `npm run verify`
-  fails and cannot be resolved inside the reviewed scope.
+- `npm run verify:docs`, redaction checks, render API smoke proof, or
+  `npm run verify` fails and cannot be resolved inside the reviewed scope.
 - Unrelated dirty files would need to be modified, staged, reverted, or
   interpreted as RD-06 evidence.
 
@@ -680,10 +671,14 @@ Rollback for plan-only work:
   by the RD-06 planner.
 - Do not touch unrelated dirty plans or user work.
 
-Rollback for reviewed implementation work:
+Rollback for reviewed render API implementation work:
 
-- Delete `tools/libmpv-spike/rd-06-native-libmpv-host-spike.*`.
-- Delete `tools/__tests__/rd-06-native-libmpv-host-spike.test.mjs` if added.
+- Revert only the render API changes in
+  `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`.
+- Revert only the render API changes in
+  `tools/libmpv-spike/rd-06-native-libmpv-host-spike-helper.cs`.
+- Revert only the RD-06 render API test additions in
+  `tools/__tests__/rd-06-native-libmpv-host-spike.test.mjs`.
 - Delete local ignored evidence under
   `docs/runs/rd-06-native-libmpv-host-spike/`.
 - Delete any temporary helper binaries, compiled artifacts, generated media,
@@ -694,10 +689,11 @@ Rollback for reviewed implementation work:
 - No package or lockfile rollback should be needed because those files are out
   of scope. If they changed, stop and replan/adjudicate before reverting
   anything not created by this unit.
-- Revert only RD-06 conclusion updates in `docs/architecture/playback-architecture.md`,
-  `docs/roadmap/desktop-port-roadmap.md`, or `docs/architecture/CURRENT_STATE.md`
-  if those tracked docs were updated by the reviewed RD-06 unit and the
-  controller explicitly chooses rollback.
+- Revert only RD-06 conclusion updates in
+  `docs/architecture/playback-architecture.md`,
+  `docs/roadmap/desktop-port-roadmap.md`, or
+  `docs/architecture/CURRENT_STATE.md` if those tracked docs were updated by
+  the reviewed RD-06 unit and the controller explicitly chooses rollback.
 
 Rollback for prerequisite provisioning outside RD-06:
 
@@ -711,44 +707,47 @@ Rollback for prerequisite provisioning outside RD-06:
 
 ## Commit Checkpoints
 
-Checkpoint 1: plan artifact only.
+Checkpoint 1: replan artifact only.
 
-- Commit only after the plan is applied and `npm run verify:docs` passes.
-- Suggested commit: `docs: add rd-06 native libmpv host spike plan`
+- Commit only after the plan is applied, read-only plan review is clean, and
+  `npm run verify:docs` passes.
+- Suggested commit: `docs: replan rd-06 native surface proof`
 - Do not include unrelated dirty plans unless the owning session explicitly
   asks.
 
-Checkpoint 2: reviewed Windows spike tooling only.
+Checkpoint 2: reviewed render API spike tooling only.
 
-- Commit only after clean plan review, Windows proof execution, redaction
-  cleanup, and `npm run verify` pass.
-- Suggested commit: `test: add rd-06 windows libmpv smoke spike`
+- Commit only after clean plan review, Windows render API proof execution,
+  redaction cleanup, tracked conclusion updates, and `npm run verify` pass.
+- Suggested commit: `test: add rd-06 windows render api surface probe`
 - Include only reviewed dev-only tooling/tests and tracked status updates. Do
   not include `docs/runs/*`, helper binaries, native libraries, generated
-  screenshots, crash dumps, package metadata, or lockfiles.
+  screenshots, crash dumps, package metadata, lockfiles, native addon work, or
+  product runtime files.
 
-Checkpoint 3: blocked closeout, if no Windows runner is available.
+Checkpoint 3: blocked closeout, if render API cannot be proved.
 
-- If plan review is clean but no Windows runner exists, do not create
-  implementation commits.
-- Record blocked/replan status in the plan only if the controller is authorized
-  to edit the file, then run `npm run verify:docs`.
+- If render API cannot be implemented or proved inside this scope, do not
+  create product implementation commits.
+- Record blocked/replan status in the plan and relevant architecture/roadmap
+  docs only if the controller authorizes those tracked doc updates, then run
+  `npm run verify:docs`.
 - Suggested commit if a blocked status update is applied:
-  `docs: mark rd-06 windows proof blocked`
+  `docs: mark rd-06 render api proof blocked`
 
 MODEL_SUGGESTION
 PLANNER: planner with high reasoning; exact `gpt-5-codex` may be approximated by available models.
 IMPLEMENTER: worker with high reasoning on a Windows host; exact `gpt-5-codex` may be approximated by available models.
 REVIEWER: reviewer with high reasoning; exact `gpt-5-codex` may be approximated by available models.
-WHY: RD-06 touches native playback, Electron process ownership, helper boundaries, security/redaction, and Windows proof gates.
+WHY: RD-06 touches native playback, Electron process ownership, helper boundaries, render-thread safety, security/redaction, dependency/ABI policy, and Windows proof gates.
 
 NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
-TASK: Replan RD-06 native playback surface after WID fullscreen proof failure
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-implement
+TASK: Implement RD-06 windows-libmpv-render-api-surface-probe
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-05-08-rd-06-native-libmpv-host-spike-plan.md
-ARTIFACT: RD-06 Windows WID smoke blocked evidence and tracked conclusion docs
+ARTIFACT: clean read-only plan review for `windows-libmpv-render-api-surface-probe`
 FILES:
 - docs/plans/2026-05-08-rd-06-native-libmpv-host-spike-plan.md
 - docs/architecture/CURRENT_STATE.md
@@ -761,6 +760,6 @@ FILES:
 - tools/__tests__/rd-06-native-libmpv-host-spike.test.mjs
 - src/contracts/player.ts
 - src/contracts/ipc.ts
-BLOCKERS: WID smoke fails required fullscreen video-surface proof; full Windows verify was also blocked by pre-existing docs verifier skill-frontmatter failures outside RD-06 scope. RD-06 is blocked/replan, not complete.
+BLOCKERS: none for the reviewed next implementation unit. RD-06 is still not complete; WID failed required fullscreen video-surface proof and is adjudicated as a native surface strategy blocker.
 MESSAGE:
-Continue RD-06 from implementation-review/replan. The reviewed Windows WID smoke implementation exists under `tools/libmpv-spike/` with focused tests under `tools/__tests__/`. Windows proof-runner facts: `win32 x64`, Node `v22.21.1`, npm `11.13.0`, .NET SDK `7.0.317`, Electron resolved from `node_modules`, mpv `v0.41.0-524-g5921fe50b`, and `libmpv-2.dll` with client API `2.5` from the local shinchiro build outside the repo. Observed commands: RD-06 static test passed with 12 tests, preflight passed, WID smoke failed because fullscreen video pixels were not captured, and `verify:redaction` passed. Local ignored evidence on Windows recorded manifest/events/summary under `docs/runs/rd-06-native-libmpv-host-spike/`. Tracked architecture/current-state/roadmap docs already record that WID proved windowed active video, overlay pixels, focus, dummy HTTP, helper crash detection, cleanup, libmpv API/version evidence, and redaction, but did not prove fullscreen video-surface. Do not call RD-06 complete or continue into RD-07. Replan the native surface strategy before RD-07, considering mpv render API or addon exploration. Do not use Codanna.
+Implement exactly `windows-libmpv-render-api-surface-probe` from the active RD-06 plan on the Windows proof-runner. Do not use Codanna. Do not change product renderer/preload/main/contracts/Plex/scheduler/package/import-ledger files, do not add a Node addon or package/build dependency, and stop/replan if render API proof requires copied headers/examples, NuGet/npm dependencies, lockfile changes, or unplanned native setup. Run the plan's Windows proof-runner commands: platform/version checks, `--mode render-api-preflight`, then `--mode render-api-smoke --duration-ms 5000 --dummy-input local-and-http --fullscreen-mode browser-window`, followed by the focused RD-06 static tests, `npm run verify:redaction`, and closeout verification named in the plan. Expected outcome is redacted evidence of dummy local and HTTP playback, active windowed video pixels, active fullscreen video pixels while `BrowserWindow` is fullscreen, overlay/composition proof, focus/input continuity, helper crash detection, cleanup, and no forbidden persisted fields. Do not call RD-06 complete unless the reviewed Windows proof captures active fullscreen video-surface pixels and the required verification passes.
