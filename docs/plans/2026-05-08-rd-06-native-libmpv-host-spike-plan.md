@@ -7,11 +7,9 @@
 **Controller phase:** blocked
 
 **Plan review status:** clean final read-only review reported no plan blockers
-after revision. Implementation is blocked in this session because the observed
-controller host is `darwin arm64` and no Windows proof environment is available.
-No RD-06 source, spike tooling, native helper, product runtime, package
-metadata, dependency, architecture status, roadmap status, or run evidence was
-implemented in this session.
+after revision. The reviewed first implementation unit was attempted on a
+Windows proof host and is now blocked/replan because WID failed the required
+fullscreen video-surface proof. RD-06 is not complete.
 
 **Windows prerequisite gate status:** blocked on 2026-05-09. A Windows proof
 host was available and reported `win32 x64`, Node `v22.21.1`, npm `11.13.0`,
@@ -23,6 +21,23 @@ preflight/WID smoke/verification commands beyond prerequisite checks, and left
 only a pre-existing `.codex/config.toml` dirty state in that checkout. The next
 step is prerequisite provisioning outside the RD-06 implementation task, then a
 fresh Windows proof-runner resume.
+
+**Windows WID smoke status:** blocked/replan after reviewed implementation unit
+on 2026-05-09. The Windows proof-runner reported `win32 x64`, Node `v22.21.1`,
+npm `11.13.0`, .NET SDK `7.0.317`, Electron resolved from `node_modules`, mpv
+`v0.41.0-524-g5921fe50b`, and local `libmpv-2.dll` with client API `2.5` from a
+local shinchiro build outside the repo. The RD-06 static test passed with 12
+tests, preflight passed, `verify:redaction` passed, and the WID smoke failed
+without overclaiming because fullscreen video pixels were not captured.
+Windowed active video, overlay pixels, focus, dummy HTTP loading, helper crash
+detection, cleanup, and redaction checks were recorded in ignored local
+evidence on the Windows host. Full `npm run verify` on Windows was blocked by
+pre-existing docs-verifier skill-frontmatter failures outside RD-06 scope.
+Tracked conclusion surfaces were updated in `docs/architecture/CURRENT_STATE.md`,
+`docs/architecture/playback-architecture.md`, and
+`docs/roadmap/desktop-port-roadmap.md`. Next step is a reviewed replan for
+native surface strategy before RD-07, with mpv render API or addon exploration
+back on the table.
 
 **Verification classification:** broader integration/manual proof required
 
@@ -40,11 +55,11 @@ prove BrowserWindow surface, overlay, fullscreen, focus, track, crash, and
 redaction behavior in the shape closest to the production hypothesis.
 
 The initial controller host observed `darwin arm64`. A later Windows
-proof-runner reached only prerequisite checks and stopped because repo Electron
-dependencies and local mpv/libmpv were unavailable. Implementation must remain
-blocked/replan unless a Windows proof environment with all prerequisites already
-present is provided. A macOS-only proof, or a Windows host that fails
-prerequisite gates, is not RD-06 completion.
+proof-runner passed prerequisites and attempted the reviewed WID smoke, but
+fullscreen video pixels were not captured. Implementation must remain
+blocked/replan until a reviewed native surface strategy proves the missing
+fullscreen video-surface requirement. A macOS-only proof, a failed prerequisite
+gate, or a WID smoke that fails fullscreen proof is not RD-06 completion.
 
 Owner path after clean plan review only:
 
@@ -729,11 +744,11 @@ WHY: RD-06 touches native playback, Electron process ownership, helper boundarie
 
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
-TASK: Resume RD-06 after Windows prerequisite provisioning
+TASK: Replan RD-06 native playback surface after WID fullscreen proof failure
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-05-08-rd-06-native-libmpv-host-spike-plan.md
-ARTIFACT: docs/plans/2026-05-08-rd-06-native-libmpv-host-spike-plan.md
+ARTIFACT: RD-06 Windows WID smoke blocked evidence and tracked conclusion docs
 FILES:
 - docs/plans/2026-05-08-rd-06-native-libmpv-host-spike-plan.md
 - docs/architecture/CURRENT_STATE.md
@@ -741,8 +756,11 @@ FILES:
 - docs/architecture/security-and-secret-flow.md
 - docs/architecture/upstream-behavior-guardrails.md
 - docs/roadmap/desktop-port-roadmap.md
+- tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs
+- tools/libmpv-spike/rd-06-native-libmpv-host-spike-helper.cs
+- tools/__tests__/rd-06-native-libmpv-host-spike.test.mjs
 - src/contracts/player.ts
 - src/contracts/ipc.ts
-BLOCKERS: Windows proof-runner host exists, but the 2026-05-09 prerequisite gate found repo Electron dependencies missing and no local mpv/libmpv availability. RD-06 implementation proof remains blocked until prerequisite provisioning happens outside the task and the Windows session starts with display/GPU, Node >=22.12.0, repo Electron install, pre-existing .NET SDK, and local mpv/libmpv availability already present.
+BLOCKERS: WID smoke fails required fullscreen video-surface proof; full Windows verify was also blocked by pre-existing docs verifier skill-frontmatter failures outside RD-06 scope. RD-06 is blocked/replan, not complete.
 MESSAGE:
-Resume the RD-06 feature quality loop from `execution-unit-select` only after Windows prerequisite provisioning has happened outside the RD-06 task. A prior Windows proof-runner confirmed `win32 x64`, Node `v22.21.1`, npm `11.13.0`, and .NET SDK `7.0.317`, but blocked because repo Electron dependencies were not installed and no local mpv/libmpv was available. Do not use Codanna. Do not install dependencies, native libraries, .NET, mpv/libmpv, NuGet packages, build tools, helper binaries, package scripts, package metadata, or lockfile changes inside the RD-06 implementation task. If the Windows proof host still cannot satisfy repo Electron install plus local libmpv/mpv provenance checks at task start, keep RD-06 blocked/replan. If prerequisites are already present, implement only the reviewed dev-only `tools/libmpv-spike/` `windows-libmpv-environment-and-wid-smoke` unit with dummy data, private one-shot helper parent-window custody, RD-06-specific redaction tests, local ignored evidence only, and the plan's exact verification commands.
+Continue RD-06 from implementation-review/replan. The reviewed Windows WID smoke implementation exists under `tools/libmpv-spike/` with focused tests under `tools/__tests__/`. Windows proof-runner facts: `win32 x64`, Node `v22.21.1`, npm `11.13.0`, .NET SDK `7.0.317`, Electron resolved from `node_modules`, mpv `v0.41.0-524-g5921fe50b`, and `libmpv-2.dll` with client API `2.5` from the local shinchiro build outside the repo. Observed commands: RD-06 static test passed with 12 tests, preflight passed, WID smoke failed because fullscreen video pixels were not captured, and `verify:redaction` passed. Local ignored evidence on Windows recorded manifest/events/summary under `docs/runs/rd-06-native-libmpv-host-spike/`. Tracked architecture/current-state/roadmap docs already record that WID proved windowed active video, overlay pixels, focus, dummy HTTP, helper crash detection, cleanup, libmpv API/version evidence, and redaction, but did not prove fullscreen video-surface. Do not call RD-06 complete or continue into RD-07. Replan the native surface strategy before RD-07, considering mpv render API or addon exploration. Do not use Codanna.
