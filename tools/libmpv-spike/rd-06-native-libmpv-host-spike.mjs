@@ -52,6 +52,7 @@ export function parseArgs(args) {
     out: defaultOutDir,
     durationMs: 5000,
     dummyInput: 'local-and-http',
+    fullscreenMode: null,
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -69,19 +70,28 @@ export function parseArgs(args) {
     } else if (arg === '--dummy-input' && value) {
       options.dummyInput = value;
       index += 1;
+    } else if (arg === '--fullscreen-mode' && value) {
+      options.fullscreenMode = value;
+      index += 1;
     } else {
       throw new Error(`unknown or incomplete argument: ${arg}`);
     }
   }
 
-  if (options.mode !== 'preflight' && options.mode !== 'wid-smoke') {
-    throw new Error('--mode must be preflight or wid-smoke');
+  if (!['preflight', 'wid-smoke', 'render-api-preflight', 'render-api-smoke'].includes(options.mode)) {
+    throw new Error('--mode must be preflight, wid-smoke, render-api-preflight, or render-api-smoke');
   }
   if (!Number.isInteger(options.durationMs) || options.durationMs < 500 || options.durationMs > 15000) {
     throw new Error('--duration-ms must be an integer from 500 to 15000');
   }
   if (options.dummyInput !== 'local-and-http') {
     throw new Error('--dummy-input must be local-and-http');
+  }
+  if (options.fullscreenMode !== null && options.fullscreenMode !== 'browser-window') {
+    throw new Error('--fullscreen-mode must be browser-window when provided');
+  }
+  if (options.mode === 'render-api-smoke' && options.fullscreenMode !== 'browser-window') {
+    throw new Error('--mode render-api-smoke requires --fullscreen-mode browser-window');
   }
 
   return options;
@@ -137,7 +147,7 @@ export function validatePreflightFacts(facts) {
   };
 }
 
-export function buildHelperInitPayload({ requestId, libmpvDll, parentWid, localMedia, httpMedia, durationMs }) {
+export function buildHelperInitPayload({ requestId, libmpvDll, parentWid, localMedia, httpMedia, durationMs, renderApi = false }) {
   if (!parentWid || typeof parentWid !== 'string') {
     throw new Error('helper init requires private parent attachment');
   }
@@ -151,6 +161,7 @@ export function buildHelperInitPayload({ requestId, libmpvDll, parentWid, localM
     dummyHeaderName: dummyHeader.name,
     dummyHeaderValue: dummyHeader.value,
     durationMs,
+    renderApi,
   };
 }
 
@@ -200,7 +211,17 @@ export function sanitizeHelperEvent(event) {
       sanitized[key] = normalizeShortField(event[key]);
     }
   }
-  for (const key of ['fileLoaded', 'endFileObserved', 'activePlayback', 'visiblePixelsObserved']) {
+  for (const key of [
+    'fileLoaded',
+    'endFileObserved',
+    'activePlayback',
+    'visiblePixelsObserved',
+    'nativeCaptureObserved',
+    'renderContextCreated',
+    'renderFrameObserved',
+    'browserWindowFullscreen',
+    'cleanupObserved',
+  ]) {
     if (typeof event[key] === 'boolean') {
       sanitized[key] = event[key];
     }
@@ -254,25 +275,38 @@ async function runCli() {
   const outDir = path.resolve(repoRoot, options.out);
 
   if (options.mode === 'preflight') {
-    const result = await runPreflight({ outDir });
+    const result = await runPreflight({ outDir, renderApi: false });
     process.exitCode = result.status === 'passed' ? 0 : 2;
     return;
   }
 
-  const result = await runWidSmoke({ outDir, durationMs: options.durationMs });
+  if (options.mode === 'render-api-preflight') {
+    const result = await runPreflight({ outDir, renderApi: true });
+    process.exitCode = result.status === 'passed' ? 0 : 2;
+    return;
+  }
+
+  const result = options.mode === 'render-api-smoke'
+    ? await runRenderApiSmoke({ outDir, durationMs: options.durationMs, fullscreenMode: options.fullscreenMode })
+    : await runWidSmoke({ outDir, durationMs: options.durationMs });
   process.exitCode = result.status === 'passed' ? 0 : result.status === 'blocked' ? 2 : 1;
 }
 
-async function runPreflight({ outDir }) {
+async function runPreflight({ outDir, renderApi }) {
   await fsp.mkdir(outDir, { recursive: true });
   const facts = discoverPrerequisites();
   const validation = validatePreflightFacts(facts);
   const dotnet = facts.dotnetExecutable ? getToolVersion(facts.dotnetExecutable, ['--info'], /^\.NET SDK/mu) : [];
   const mpv = fs.existsSync(facts.mpvExecutable) ? getToolVersion(facts.mpvExecutable, ['--version'], /^mpv /mu) : [];
-  const libmpvApiEvents = validation.status === 'passed' ? await runLibmpvApiProbe(facts) : [];
+  const libmpvApiEvents = validation.status === 'passed' ? await runLibmpvApiProbe(facts, { renderApi }) : [];
   const libmpvApiStatus = libmpvApiEvents.some((event) => event.proof === 'libmpv-client-api' && event.kind === 'observed')
     ? 'passed'
     : 'blocked';
+  const renderApiStatus = !renderApi
+    ? 'not-requested'
+    : libmpvApiEvents.some((event) => event.proof === 'libmpv-render-api-symbols' && event.kind === 'observed')
+      ? 'passed'
+      : 'blocked';
   const events = validation.checks.map((check) => ({
     kind: 'preflight-check',
     check: check.name,
@@ -281,13 +315,21 @@ async function runPreflight({ outDir }) {
     kind: 'preflight-check',
     check: 'libmpv-client-api',
     status: libmpvApiStatus,
-  }, libmpvApiEvents);
+  }, renderApi ? {
+    kind: 'preflight-check',
+    check: 'libmpv-render-api-symbols',
+    status: renderApiStatus,
+  } : [], libmpvApiEvents);
   const libmpvClientApiVersion = summarizeLibmpvClientApiVersion(libmpvApiEvents);
-  const status = validation.status === 'passed' && libmpvApiStatus === 'passed' ? 'passed' : 'blocked';
+  const status = validation.status === 'passed' &&
+    libmpvApiStatus === 'passed' &&
+    (!renderApi || renderApiStatus === 'passed')
+    ? 'passed'
+    : 'blocked';
 
   const manifest = {
     spike: 'rd-06-native-libmpv-host',
-    mode: 'preflight',
+    mode: renderApi ? 'render-api-preflight' : 'preflight',
     status,
     environment: {
       platform: facts.platform,
@@ -296,13 +338,49 @@ async function runPreflight({ outDir }) {
       electron: facts.electronExecutable ? 'resolved' : 'missing',
       dotnet: facts.dotnetExecutable ? summarizeTool(dotnet) : 'missing',
     },
-    nativePrerequisites: buildNativePrerequisiteEvidence({ ...facts, libmpvClientApiVersion }, mpv),
+    nativePrerequisites: buildNativePrerequisiteEvidence({
+      ...facts,
+      libmpvClientApiVersion,
+      renderApiSymbols: renderApi ? renderApiStatus : 'not-requested',
+    }, mpv),
     policy: buildEvidencePolicy(),
   };
 
   await writeEvidence(outDir, manifest, events);
   await assertEvidenceClean(outDir);
   return { status };
+}
+
+async function runRenderApiSmoke({ outDir, durationMs, fullscreenMode }) {
+  await fsp.mkdir(outDir, { recursive: true });
+  const preflightFacts = discoverPrerequisites();
+  const validation = validatePreflightFacts(preflightFacts);
+  if (validation.status !== 'passed') {
+    const manifest = {
+      spike: 'rd-06-native-libmpv-host',
+      mode: 'render-api-smoke',
+      status: 'blocked',
+      blockedReason: 'preflight-not-passed',
+      fullscreenMode,
+      policy: buildEvidencePolicy(),
+    };
+    await writeEvidence(outDir, manifest, validation.checks.map((check) => ({
+      kind: 'preflight-check',
+      check: check.name,
+      status: check.ok ? 'passed' : 'blocked',
+    })));
+    await assertEvidenceClean(outDir);
+    return { status: 'blocked' };
+  }
+
+  return await runSmokeHarness({
+    mode: 'render-api-smoke',
+    outDir,
+    durationMs,
+    fullscreenMode,
+    renderApi: true,
+    preflightFacts,
+  });
 }
 
 async function runWidSmoke({ outDir, durationMs }) {
@@ -326,6 +404,17 @@ async function runWidSmoke({ outDir, durationMs }) {
     return { status: 'blocked' };
   }
 
+  return await runSmokeHarness({
+    mode: 'wid-smoke',
+    outDir,
+    durationMs,
+    fullscreenMode: null,
+    renderApi: false,
+    preflightFacts,
+  });
+}
+
+async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, renderApi, preflightFacts }) {
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'lineup-rd06-'));
   const cleanup = {
     tempInputs: 'not-started',
@@ -356,6 +445,7 @@ async function runWidSmoke({ outDir, durationMs }) {
       localMedia,
       httpMedia: `${['ht', 'tp'].join('')}://127.0.0.1:${server.address().port}/dummy.gif`,
       durationMs,
+      renderApi,
     });
 
     events = [
@@ -369,6 +459,19 @@ async function runWidSmoke({ outDir, durationMs }) {
     ];
 
     const requiredProofs = collectProofs(events);
+    const fullscreenProof = requiredProofs.get('fullscreen');
+    const fullscreenNativeCaptureProof = requiredProofs.get('fullscreen-native-capture');
+    const fullscreenVideoPixelsObserved =
+      (
+        fullscreenProof?.visiblePixelsObserved === true &&
+        fullscreenProof?.browserWindowFullscreen === true
+      ) ||
+      (
+        fullscreenNativeCaptureProof?.nativeCaptureObserved === true &&
+        fullscreenNativeCaptureProof?.visiblePixelsObserved === true &&
+        fullscreenNativeCaptureProof?.browserWindowFullscreen === true
+      );
+
     status = harnessResult.exitCode === 0 &&
       requestFacts.count > 0 &&
       requestFacts.dummyHeaderReceived &&
@@ -380,14 +483,23 @@ async function runWidSmoke({ outDir, durationMs }) {
       requiredProofs.get('video-surface')?.visiblePixelsObserved === true &&
       requiredProofs.get('overlay')?.visiblePixelsObserved === true &&
       requiredProofs.get('focus')?.category === 'active-playback-focused' &&
-      requiredProofs.get('fullscreen')?.visiblePixelsObserved === true
+      fullscreenVideoPixelsObserved &&
+      (!renderApi || (
+        requiredProofs.get('libmpv-render-api-symbols')?.category === 'available' &&
+        requiredProofs.get('render-context')?.renderContextCreated === true &&
+        requiredProofs.get('render-frame')?.renderFrameObserved === true &&
+        requiredProofs.get('render-thread-discipline')?.category === 'proven' &&
+        requiredProofs.get('composition')?.visiblePixelsObserved === true &&
+        requiredProofs.get('render-input')?.category === 'app-owned-input-simulated'
+      ))
       ? 'passed'
       : 'failed';
 
     manifest = {
       spike: 'rd-06-native-libmpv-host',
-      mode: 'wid-smoke',
+      mode,
       status,
+      fullscreenMode,
       environment: {
         platform: preflightFacts.platform,
         arch: preflightFacts.arch,
@@ -395,7 +507,11 @@ async function runWidSmoke({ outDir, durationMs }) {
         electron: 'resolved',
       },
       nativePrerequisites: buildNativePrerequisiteEvidence(
-        { ...preflightFacts, libmpvClientApiVersion: summarizeLibmpvClientApiVersion(harnessResult.events) },
+        {
+          ...preflightFacts,
+          libmpvClientApiVersion: summarizeLibmpvClientApiVersion(harnessResult.events),
+          renderApiSymbols: renderApi ? summarizeProof(requiredProofs.get('libmpv-render-api-symbols')) : 'not-requested',
+        },
         getToolVersion(preflightFacts.mpvExecutable, ['--version'], /^mpv /mu),
       ),
       observations: {
@@ -407,7 +523,13 @@ async function runWidSmoke({ outDir, durationMs }) {
         forbiddenHeaderObserved: requestFacts.forbiddenHeaderSeen,
         overlay: summarizeProof(requiredProofs.get('overlay')),
         fullscreen: summarizeProof(requiredProofs.get('fullscreen')),
+        fullscreenNativeCapture: summarizeFullscreenNativeCaptureProof(requiredProofs.get('fullscreen-native-capture')),
         focus: summarizeProof(requiredProofs.get('focus')),
+        renderApiSymbols: renderApi ? summarizeProof(requiredProofs.get('libmpv-render-api-symbols')) : 'not-requested',
+        renderContext: renderApi ? summarizeRenderContextProof(requiredProofs.get('render-context')) : 'not-requested',
+        renderFrame: renderApi ? summarizeRenderFrameProof(requiredProofs.get('render-frame')) : 'not-requested',
+        composition: renderApi ? summarizeProof(requiredProofs.get('composition')) : 'not-requested',
+        inputSimulation: renderApi ? summarizeProof(requiredProofs.get('render-input')) : 'not-requested',
         helperCrash: summarizeProof(requiredProofs.get('helper-crash')),
         cleanup: 'temp-only',
         dpi: 'noted-redacted',
@@ -428,7 +550,7 @@ async function runWidSmoke({ outDir, durationMs }) {
   if (!manifest) {
     manifest = {
       spike: 'rd-06-native-libmpv-host',
-      mode: 'wid-smoke',
+      mode,
       status,
       blockedReason: 'smoke-did-not-produce-manifest',
       policy: buildEvidencePolicy(),
@@ -509,6 +631,7 @@ export function buildNativePrerequisiteEvidence(facts, mpvVersionLines = []) {
     libmpvDllName: path.basename(facts.libmpvDll ?? '') || 'missing',
     mpvVersion: summarizeTool(mpvVersionLines),
     libmpvClientApiVersion: facts.libmpvClientApiVersion ?? 'requires-helper-preflight',
+    renderApiSymbols: facts.renderApiSymbols ?? 'requires-render-api-preflight',
     provenance: 'official-installation-page-linked-shinchiro-windows-build',
     redistribution: 'not-redistributed-local-proof-only',
     packageMetadataChanged: false,
@@ -578,7 +701,7 @@ async function runElectronHarness(config) {
   return { exitCode, events };
 }
 
-async function runLibmpvApiProbe(facts) {
+async function runLibmpvApiProbe(facts, { renderApi = false } = {}) {
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'lineup-rd06-api-'));
   try {
     const helperDll = await compileHelper(tempDir);
@@ -607,6 +730,7 @@ async function runLibmpvApiProbe(facts) {
       requestId: 'libmpv-api-preflight',
       libmpvDll: facts.libmpvDll,
       apiProbe: true,
+      renderApiProbe: renderApi,
     }) + '\n');
     const exitCode = await waitForChildExit(child, 10000);
     if (exitCode !== 0 || !events.some((event) => event.proof === 'libmpv-client-api')) {
@@ -645,6 +769,8 @@ function collectProofs(events) {
       endFileObserved: current.endFileObserved === true || event.endFileObserved === true,
       activePlayback: current.activePlayback === true || event.activePlayback === true,
       visiblePixelsObserved: current.visiblePixelsObserved === true || event.visiblePixelsObserved === true,
+      nativeCaptureObserved: current.nativeCaptureObserved === true || event.nativeCaptureObserved === true,
+      browserWindowFullscreen: current.browserWindowFullscreen === true || event.browserWindowFullscreen === true,
     });
   }
   return proofs;
@@ -670,6 +796,8 @@ function runHelper(window, crashAfterInitialize = false) {
       windowsHide: true,
     });
     let activePlayback = false;
+    let fullscreenNativeCapture = null;
+    const fullscreenNativeCaptureWaiters = [];
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', async (chunk) => {
       process.stdout.write(chunk);
@@ -679,9 +807,17 @@ function runHelper(window, crashAfterInitialize = false) {
         }
         try {
           const event = JSON.parse(line);
+          if (event.proof === 'fullscreen-native-capture') {
+            fullscreenNativeCapture = event;
+            while (fullscreenNativeCaptureWaiters.length > 0) {
+              fullscreenNativeCaptureWaiters.shift()(event);
+            }
+          }
           if (!crashAfterInitialize && event.proof === 'local-media' && event.activePlayback === true && !activePlayback) {
             activePlayback = true;
-            await observeActivePlayback(window);
+            await observeActivePlayback(window, child, () => fullscreenNativeCapture, (resolveNativeCapture) => {
+              fullscreenNativeCaptureWaiters.push(resolveNativeCapture);
+            }, config.renderApi === true);
             child.stdin.write(JSON.stringify({ control: 'continue' }) + '\n');
           }
         } catch {
@@ -698,6 +834,7 @@ function runHelper(window, crashAfterInitialize = false) {
       dummyHeaderName: 'X-Lineup-RD06',
       dummyHeaderValue: 'dummy',
       durationMs: config.durationMs,
+      renderApi: config.renderApi === true,
       crashAfterInitialize,
     };
     child.stdin.write(JSON.stringify(init) + '\n');
@@ -708,7 +845,7 @@ function runHelper(window, crashAfterInitialize = false) {
   });
 }
 
-async function observeActivePlayback(window) {
+async function observeActivePlayback(window, child, getFullscreenNativeCapture, onFullscreenNativeCapture, useNativeFullscreenCapture) {
   const windowedPixels = await captureActivePlaybackPixels(window);
   process.stdout.write(JSON.stringify({
     kind: 'observed',
@@ -731,15 +868,50 @@ async function observeActivePlayback(window) {
   window.setFullScreen(true);
   await waitForWindowState(() => window.isFullScreen(), 2000);
   await new Promise((resolve) => setTimeout(resolve, 600));
-  const fullscreenPixels = await captureActivePlaybackPixels(window);
   const fullscreenActive = window.isFullScreen();
+  const nativeCapture = fullscreenActive && useNativeFullscreenCapture
+    ? await requestFullscreenNativeCapture(child, getFullscreenNativeCapture, onFullscreenNativeCapture)
+    : null;
+  const fullscreenPixels = await captureActivePlaybackPixels(window);
   window.setFullScreen(false);
+  const nativeFullscreenPixelsObserved =
+    nativeCapture?.nativeCaptureObserved === true &&
+    nativeCapture?.visiblePixelsObserved === true &&
+    nativeCapture?.browserWindowFullscreen === true;
   process.stdout.write(JSON.stringify({
     kind: 'observed',
     proof: 'fullscreen',
-    category: fullscreenActive && fullscreenPixels.videoPixelsObserved ? 'active-playback-toggled' : 'not-captured',
-    visiblePixelsObserved: fullscreenActive && fullscreenPixels.videoPixelsObserved,
+    category: fullscreenActive && (fullscreenPixels.videoPixelsObserved || nativeFullscreenPixelsObserved)
+      ? nativeFullscreenPixelsObserved ? 'active-playback-native-captured' : 'active-playback-toggled'
+      : 'not-captured',
+    visiblePixelsObserved: fullscreenActive && (fullscreenPixels.videoPixelsObserved || nativeFullscreenPixelsObserved),
+    browserWindowFullscreen: fullscreenActive,
   }) + '\n');
+  process.stdout.write(JSON.stringify({
+    kind: 'blocked',
+    proof: 'composition',
+    category: 'not-proven-merged-capture-sources',
+    visiblePixelsObserved: false,
+  }) + '\n');
+}
+
+async function requestFullscreenNativeCapture(child, getFullscreenNativeCapture, onFullscreenNativeCapture) {
+  const existing = getFullscreenNativeCapture();
+  if (existing) {
+    return existing;
+  }
+  const waitForCapture = new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(null), 1500);
+    onFullscreenNativeCapture((event) => {
+      clearTimeout(timeout);
+      resolve(event);
+    });
+  });
+  child.stdin.write(JSON.stringify({
+    control: 'fullscreen-native-capture',
+    browserWindowFullscreen: true,
+  }) + '\n');
+  return await waitForCapture;
 }
 
 async function captureActivePlaybackPixels(window) {
@@ -883,6 +1055,34 @@ function summarizeProof(event) {
     return event.category;
   }
   return normalizeKind(event.kind);
+}
+
+function summarizeRenderContextProof(event) {
+  if (!event) {
+    return 'unavailable';
+  }
+  return event.renderContextCreated === true ? 'observed' : summarizeProof(event);
+}
+
+function summarizeRenderFrameProof(event) {
+  if (!event) {
+    return 'unavailable';
+  }
+  return event.renderFrameObserved === true ? 'observed' : summarizeProof(event);
+}
+
+function summarizeFullscreenNativeCaptureProof(event) {
+  if (!event) {
+    return 'unavailable';
+  }
+  if (
+    event.nativeCaptureObserved === true &&
+    event.visiblePixelsObserved === true &&
+    event.browserWindowFullscreen === true
+  ) {
+    return 'observed';
+  }
+  return summarizeProof(event);
 }
 
 async function writeEvidence(outDir, manifest, events) {

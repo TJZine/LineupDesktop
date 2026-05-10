@@ -22,25 +22,48 @@ const helperSource = fs.readFileSync(
   'utf8',
 );
 
-test('parseArgs accepts RD-06 preflight and WID smoke modes', () => {
+test('parseArgs accepts RD-06 preflight, WID smoke, and render API modes', () => {
   assert.deepEqual(parseArgs(['--mode', 'preflight', '--out', 'docs/runs/rd-06-native-libmpv-host-spike']), {
     mode: 'preflight',
     out: 'docs/runs/rd-06-native-libmpv-host-spike',
     durationMs: 5000,
     dummyInput: 'local-and-http',
+    fullscreenMode: null,
   });
 
   const widSmoke = parseArgs(['--mode', 'wid-smoke', '--duration-ms', '7500', '--dummy-input', 'local-and-http']);
   assert.equal(widSmoke.mode, 'wid-smoke');
   assert.equal(widSmoke.durationMs, 7500);
   assert.equal(widSmoke.dummyInput, 'local-and-http');
+  assert.equal(widSmoke.fullscreenMode, null);
   assert.match(widSmoke.out, /rd-06-native-libmpv-host-spike/u);
+
+  const renderPreflight = parseArgs(['--mode', 'render-api-preflight']);
+  assert.equal(renderPreflight.mode, 'render-api-preflight');
+
+  const renderSmoke = parseArgs([
+    '--mode',
+    'render-api-smoke',
+    '--duration-ms',
+    '5000',
+    '--dummy-input',
+    'local-and-http',
+    '--fullscreen-mode',
+    'browser-window',
+  ]);
+  assert.equal(renderSmoke.mode, 'render-api-smoke');
+  assert.equal(renderSmoke.fullscreenMode, 'browser-window');
 });
 
 test('parseArgs rejects unsupported modes and dummy input policies', () => {
-  assert.throws(() => parseArgs(['--mode', 'external-mpv']), /preflight or wid-smoke/u);
+  assert.throws(() => parseArgs(['--mode', 'external-mpv']), /render-api-preflight/u);
   assert.throws(() => parseArgs(['--mode', 'wid-smoke', '--dummy-input', 'real-server']), /local-and-http/u);
   assert.throws(() => parseArgs(['--mode', 'wid-smoke', '--duration-ms', '100']), /duration-ms/u);
+  assert.throws(() => parseArgs(['--mode', 'render-api-smoke']), /fullscreen-mode browser-window/u);
+  assert.throws(
+    () => parseArgs(['--mode', 'render-api-smoke', '--fullscreen-mode', 'native-window']),
+    /fullscreen-mode must be browser-window/u,
+  );
 });
 
 test('validatePreflightFacts requires Windows, Electron, dotnet, mpv, and libmpv', () => {
@@ -101,6 +124,73 @@ test('helper source exposes libmpv client API version evidence', () => {
   assert.match(helperSource, /"libmpvClientApiMinor"/u);
 });
 
+test('helper source probes public libmpv render API symbols', () => {
+  assert.match(helperSource, /mpv_render_context_create/u);
+  assert.match(helperSource, /mpv_render_context_render/u);
+  assert.match(helperSource, /mpv_render_context_update/u);
+  assert.match(helperSource, /mpv_render_context_free/u);
+  assert.match(helperSource, /"libmpv-render-api-symbols"/u);
+  assert.match(helperSource, /NativeLibrary\.TryGetExport\(library, "mpv_render_context_create"/u);
+});
+
+test('render API smoke does not overclaim render-thread or composition proof', () => {
+  const source = fs.readFileSync(
+    new URL('../libmpv-spike/rd-06-native-libmpv-host-spike.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(helperSource, /"render-thread-discipline"/u);
+  assert.match(helperSource, /"not-proven-blocking-helper-loop"/u);
+  assert.match(source, /not-proven-merged-capture-sources/u);
+  assert.match(source, /requiredProofs\.get\('render-thread-discipline'\)\?\.category === 'proven'/u);
+  assert.match(source, /requiredProofs\.get\('composition'\)\?\.visiblePixelsObserved === true/u);
+  assert.doesNotMatch(source, /active-playback-composited/u);
+});
+
+test('render API smoke gates fullscreen native capture on BrowserWindow fullscreen', () => {
+  const source = fs.readFileSync(
+    new URL('../libmpv-spike/rd-06-native-libmpv-host-spike.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /control: 'fullscreen-native-capture'/u);
+  assert.match(source, /browserWindowFullscreen: true/u);
+  assert.match(source, /config\.renderApi === true/u);
+  assert.match(source, /fullscreenActive && useNativeFullscreenCapture/u);
+  assert.match(source, /fullscreenProof\?\.browserWindowFullscreen === true/u);
+  assert.match(source, /fullscreenNativeCaptureProof\?\.browserWindowFullscreen === true/u);
+  assert.match(source, /fullscreenNativeCapture: summarizeFullscreenNativeCaptureProof/u);
+  assert.match(source, /nativeCaptureObserved/u);
+});
+
+test('helper source handles private fullscreen native capture control', () => {
+  assert.match(helperSource, /controlValue == "fullscreen-native-capture"/u);
+  assert.match(helperSource, /browserWindowFullscreen = document\.RootElement\.TryGetProperty\("browserWindowFullscreen"/u);
+  assert.match(helperSource, /browserWindowFullscreen && surface\.HasVisibleDesktopPixels\(\)/u);
+  assert.match(helperSource, /"fullscreen-native-capture"/u);
+  assert.match(helperSource, /"desktop-composited-red-pixels"/u);
+  assert.match(helperSource, /"nativeCaptureObserved"/u);
+});
+
+test('helper source uses Win32 GDI desktop capture scoped to the render child surface', () => {
+  assert.match(helperSource, /GetWindowRect\(window, out NativeMethods\.RECT bounds\)/u);
+  assert.match(helperSource, /CaptureDesktopRedPixels\(bounds\)/u);
+  assert.match(helperSource, /private const int SurfaceTop = 140/u);
+  assert.match(helperSource, /SetWindowPos\(window, IntPtr\.Zero, 0, SurfaceTop, 640, 360, SwpShowWindow\)/u);
+  assert.match(helperSource, /GetDC\(IntPtr\.Zero\)/u);
+  assert.match(helperSource, /CreateCompatibleDC/u);
+  assert.match(helperSource, /CreateCompatibleBitmap/u);
+  assert.match(helperSource, /BitBlt/u);
+  assert.match(helperSource, /GetDIBits/u);
+  assert.match(helperSource, /Srccopy \| Captureblt/u);
+  assert.doesNotMatch(helperSource, /GetSystemMetrics/u);
+});
+
+test('helper source defines minimal render API interop without vendored headers', () => {
+  assert.match(helperSource, /private struct MpvRenderParam/u);
+  assert.match(helperSource, /private struct MpvOpenGlFbo/u);
+  assert.match(helperSource, /private struct MpvOpenGlInitParams/u);
+  assert.doesNotMatch(helperSource, /Copyright \(c\).*mpv/iu);
+});
+
 test('WID smoke source merges repeated proof events before pass/fail evaluation', () => {
   const source = fs.readFileSync(
     new URL('../libmpv-spike/rd-06-native-libmpv-host-spike.mjs', import.meta.url),
@@ -124,6 +214,7 @@ test('native prerequisite evidence records provenance without local paths', () =
     libmpvDllName: path.basename(process.execPath),
     mpvVersion: ['mpv v0.41.0-524-g5921fe50b'],
     libmpvClientApiVersion: 'requires-helper-preflight',
+    renderApiSymbols: 'requires-render-api-preflight',
     provenance: 'official-installation-page-linked-shinchiro-windows-build',
     redistribution: 'not-redistributed-local-proof-only',
     packageMetadataChanged: false,
@@ -140,6 +231,7 @@ test('helper init policy keeps private values out of args and env and uses stdin
     localMedia: '<dummy-local-media>',
     httpMedia: '<dummy-http-media>',
     durationMs: 5000,
+    renderApi: true,
   });
   const spawnPolicy = buildHelperSpawn('dotnet', '<temp-helper>');
 
@@ -147,6 +239,7 @@ test('helper init policy keeps private values out of args and env and uses stdin
   assert.equal(spawnPolicy.stdio[0], 'pipe');
   assert.equal(spawnPolicy.stdio[2], 'ignore');
   assert.doesNotThrow(() => assertHelperInitPolicy(spawnPolicy, init));
+  assert.equal(init.renderApi, true);
 
   assert.throws(
     () => assertHelperInitPolicy({ ...spawnPolicy, args: [spawnPolicy.args[0], init.parentWid] }, init),
@@ -161,11 +254,11 @@ test('helper init policy keeps private values out of args and env and uses stdin
 test('sanitizeHelperEvent drops raw helper payload fields', () => {
   const sanitized = sanitizeHelperEvent({
     kind: 'observed',
-    proof: 'local-media',
-    category: 'success',
-    fileLoaded: true,
-    activePlayback: true,
+    proof: 'fullscreen-native-capture',
+    category: 'desktop-composited-red-pixels',
+    nativeCaptureObserved: true,
     visiblePixelsObserved: true,
+    browserWindowFullscreen: true,
     libmpvClientApiMajor: 2,
     libmpvClientApiMinor: 5,
     parentWid: '<private-parent-attachment>',
@@ -176,11 +269,11 @@ test('sanitizeHelperEvent drops raw helper payload fields', () => {
 
   assert.deepEqual(sanitized, {
     kind: 'observed',
-    proof: 'local-media',
-    category: 'success',
-    fileLoaded: true,
-    activePlayback: true,
+    proof: 'fullscreen-native-capture',
+    category: 'desktop-composited-red-pixels',
+    nativeCaptureObserved: true,
     visiblePixelsObserved: true,
+    browserWindowFullscreen: true,
     libmpvClientApiMajor: 2,
     libmpvClientApiMinor: 5,
   });

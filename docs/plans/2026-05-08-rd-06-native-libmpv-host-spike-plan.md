@@ -4,7 +4,7 @@
 
 **Tier:** Tier 3
 
-**Controller phase:** execution-unit-select
+**Controller phase:** blocked
 
 **Plan review status:** clean read-only review reported no blockers for this
 render API replan after `npm run verify:docs` passed. The previous reviewed WID
@@ -19,7 +19,39 @@ evidence, and redaction, but did not capture active fullscreen video pixels.
 That failure is material because RD-06 requires fullscreen video-surface proof
 before RD-07 can harden native playback direction.
 
-**Chosen next execution unit:** `windows-libmpv-render-api-surface-probe`.
+**Windows render API smoke adjudication:** The reviewed
+`windows-libmpv-render-api-surface-probe` unit was implemented and attempted on
+the Windows proof runner, then a narrow amended proof-path fix was attempted in
+the same dev-only spike files. The render API smoke proved render API symbol
+availability, render-context creation, app-owned input simulation, dummy local
+and HTTP playback, windowed active video pixels, overlay pixels, renderer
+focus, helper crash detection, cleanup, libmpv API/version evidence, and
+redaction, but it did not capture active fullscreen video pixels while the
+BrowserWindow was fullscreen. The amended helper-owned Win32 screen-pixel
+fallback was requested only after Electron confirmed BrowserWindow fullscreen,
+was scoped to the helper render child surface, and also reported
+`not-captured`. The implementation records render-thread discipline and
+composition proof as not proven by this helper loop, so RD-06 remains
+blocked/replan and does not settle the RD-07 native surface direction.
+
+**Implementation review status:** clean after amended re-review. The first
+fallback diff had review blockers; the current session accepted the findings,
+scoped the fallback to render API smoke only, removed stale clean-review
+wording, kept RD-06 routed to replan, and re-review reported no scoped RD-06
+blockers.
+
+**Narrow proof-path amendment:** The current session made one bounded follow-up
+attempt inside the same `windows-libmpv-render-api-surface-probe` unit:
+Electron still owns BrowserWindow fullscreen state, but the privileged dev
+helper can emit a redacted Win32 screen-pixel proof for its own rendered child
+surface while Electron has confirmed `BrowserWindow` fullscreen. The fallback
+adds no dependencies, product code, package changes, native addons, copied
+headers/examples, or privileged renderer exposure, but the Windows proof still
+failed because that scoped native capture did not observe fullscreen video
+pixels.
+
+**Chosen next execution unit:** none. RD-06 routes back to feature planning for
+the next native surface decision.
 
 **Verification classification:** broader integration/manual proof required
 
@@ -120,8 +152,9 @@ Boundary decision for the next unit:
   simulation for mpv, crash behavior, and redacted proof event emission.
 - Electron harness owner: a dev-only Electron harness creates the BrowserWindow
   proof surface, controls windowed/fullscreen transitions, focuses the
-  renderer, captures proof pixels with Electron capture primitives, starts and
-  reaps the helper, and writes only redacted local evidence.
+  renderer, captures proof pixels with Electron capture primitives, may request
+  a private helper-owned Win32 screen-pixel fallback while fullscreen is true,
+  starts and reaps the helper, and writes only redacted local evidence.
 - Renderer owner: dev-only renderer content may expose a dummy overlay/focus
   target for proof, but it must not receive secrets, raw URLs, raw headers,
   native handles, libmpv objects, engine ids, arbitrary IPC, or production
@@ -434,7 +467,7 @@ Frozen decisions:
 | Dummy header policy | Dummy non-secret header only, for example `X-Lineup-RD06: dummy`; no `Authorization`, `Cookie`, Plex, token, bearer, credential, or real server headers |
 | Args/env policy | No media URLs, headers, tokens, native handles, libmpv object ids, graphics context values, or secret material in process args/env |
 | Log policy | Persist only redacted summary/events/manifest; raw logs deleted or quarantined locally |
-| Capture proof | Use Electron `capturePage()` and/or `desktopCapturer` as proof primitives; fullscreen proof must show active video pixels while the BrowserWindow is fullscreen |
+| Capture proof | Use Electron `capturePage()` and/or `desktopCapturer` first; for the amended proof fix, allow a private helper-owned Win32 screen-pixel fallback only when Electron has confirmed BrowserWindow fullscreen. Fullscreen proof must show active video pixels while the BrowserWindow is fullscreen |
 | Overlay proof | Must prove overlay/composition appropriate to the chosen render path while video is active in windowed and fullscreen modes, or fail the unit |
 | Input proof | Because render API requires app-owned input simulation, record only renderer-safe dummy input/focus outcomes and no raw native input payloads |
 | Crash policy | Induce helper crash only with dummy media; prove Electron harness survives, helper is reaped, temp files are cleaned, and no raw crash output is committed |
@@ -518,13 +551,15 @@ node tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs --mode render-api-smo
 Expected outcome: on Windows only, with dummy data only, records redacted proof
 of local dummy visual playback, dummy HTTP visual playback with only the
 approved non-secret header, active windowed video pixels, active fullscreen
-video pixels while `BrowserWindow` fullscreen is true, overlay/composition proof
-in windowed and fullscreen modes, renderer focus/input continuity, app-owned
-input simulation notes, stop/channel-switch ordering, stale event handling,
-helper crash detection, helper cleanup, DPI/multi-monitor notes when available,
-and redacted logs. If fullscreen video pixels are not captured, if overlay or
-focus proof fails, or if render-thread discipline cannot be maintained, the
-command exits failed/blocked and RD-06 remains incomplete.
+video pixels while `BrowserWindow` fullscreen is true, and the proof source
+must distinguish Electron capture from the private helper-owned Win32
+screen-pixel fallback. It also records overlay/composition proof in windowed and
+fullscreen modes, renderer focus/input continuity, app-owned input simulation
+notes, stop/channel-switch ordering, stale event handling, helper crash
+detection, helper cleanup, DPI/multi-monitor notes when available, and redacted
+logs. If fullscreen video pixels are not captured, if overlay or focus proof
+fails, or if render-thread discipline cannot be maintained, the command exits
+failed/blocked and RD-06 remains incomplete.
 
 Static/local proof commands after implementation source exists:
 
@@ -641,7 +676,8 @@ Stop and replan if any of the following occurs:
 - The C# helper cannot maintain mpv render-thread discipline without deadlock
   risk, blocking waits, or raw libmpv calls from the render thread.
 - The render API proof cannot capture active fullscreen video pixels through
-  Electron capture primitives.
+  either Electron capture primitives or the amended private helper-owned Win32
+  screen-pixel fallback while BrowserWindow fullscreen is confirmed.
 - Overlay/composition or renderer focus/input continuity fails in windowed or
   fullscreen modes.
 - App-owned input simulation requires exposing raw native events, native
@@ -742,12 +778,12 @@ REVIEWER: reviewer with high reasoning; exact `gpt-5-codex` may be approximated 
 WHY: RD-06 touches native playback, Electron process ownership, helper boundaries, render-thread safety, security/redaction, dependency/ABI policy, and Windows proof gates.
 
 NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-implement
-TASK: Implement RD-06 windows-libmpv-render-api-surface-probe
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-plan
+TASK: Replan RD-06 native surface after WID and render API proof failures
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-05-08-rd-06-native-libmpv-host-spike-plan.md
-ARTIFACT: clean read-only plan review for `windows-libmpv-render-api-surface-probe`
+ARTIFACT: blocked render API probe with amended scoped Win32 fallback evidence; WID and render API both failed fullscreen video-surface proof
 FILES:
 - docs/plans/2026-05-08-rd-06-native-libmpv-host-spike-plan.md
 - docs/architecture/CURRENT_STATE.md
@@ -760,6 +796,6 @@ FILES:
 - tools/__tests__/rd-06-native-libmpv-host-spike.test.mjs
 - src/contracts/player.ts
 - src/contracts/ipc.ts
-BLOCKERS: none for the reviewed next implementation unit. RD-06 is still not complete; WID failed required fullscreen video-surface proof and is adjudicated as a native surface strategy blocker.
+BLOCKERS: RD-06 is still not complete; WID and render API smokes both failed required fullscreen video-surface proof. The amended helper-owned Win32 fallback was gated on BrowserWindow fullscreen and scoped to the render child surface, but also reported fullscreen pixels as not captured. Render API composition/render-thread discipline are not proven by this helper loop.
 MESSAGE:
-Implement exactly `windows-libmpv-render-api-surface-probe` from the active RD-06 plan on the Windows proof-runner. Do not use Codanna. Do not change product renderer/preload/main/contracts/Plex/scheduler/package/import-ledger files, do not add a Node addon or package/build dependency, and stop/replan if render API proof requires copied headers/examples, NuGet/npm dependencies, lockfile changes, or unplanned native setup. Run the plan's Windows proof-runner commands: platform/version checks, `--mode render-api-preflight`, then `--mode render-api-smoke --duration-ms 5000 --dummy-input local-and-http --fullscreen-mode browser-window`, followed by the focused RD-06 static tests, `npm run verify:redaction`, and closeout verification named in the plan. Expected outcome is redacted evidence of dummy local and HTTP playback, active windowed video pixels, active fullscreen video pixels while `BrowserWindow` is fullscreen, overlay/composition proof, focus/input continuity, helper crash detection, cleanup, and no forbidden persisted fields. Do not call RD-06 complete unless the reviewed Windows proof captures active fullscreen video-surface pixels and the required verification passes.
+Replan RD-06 after the `windows-libmpv-render-api-surface-probe` remained blocked even with the amended scoped Win32 fallback. Do not use Codanna unless the new plan explicitly reopens discovery; current evidence is direct repo reads plus official docs. WID is blocked as the RD-07 native surface direction because fullscreen active video pixels were not captured. Render API evidence observed symbol availability, render-context creation, app-owned input simulation, dummy local/HTTP playback, windowed video pixels, overlay pixels, focus, helper crash detection, cleanup, libmpv API/version, and redaction, but fullscreen video pixels were not captured while BrowserWindow fullscreen was true. The helper-owned Win32 screen-pixel fallback was requested only after Electron confirmed BrowserWindow fullscreen and was scoped to the helper render child surface; it also reported not captured. Composition is not proven because capture sources were merged, and render-thread discipline is not proven by the blocking helper loop. Do not change product renderer/preload/main/contracts/Plex/scheduler/package/import-ledger files or add package/build dependencies, native addons, copied headers/examples, generated bindings, checked-in binaries, or unplanned native setup without a reviewed replan. The next plan should choose whether addon exploration, a different render API architecture, another native surface strategy, or a blocked native-playback conclusion is the next bounded unit before RD-07.

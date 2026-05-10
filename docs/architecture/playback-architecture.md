@@ -35,9 +35,9 @@ production behavior. Subtitle behavior remains unproven by the dummy audio-only
 input and must be proved by RD-06 or a reviewed follow-up plan before product
 contracts or adapters rely on it.
 
-## RD-06 Native libmpv WID Spike Observations
+## RD-06 Native libmpv Spike Observations
 
-RD-06 added a dev-only Windows native libmpv WID spike under
+RD-06 added a dev-only Windows native libmpv WID/render API spike under
 `tools/libmpv-spike/`. It remains evidence tooling only: no product IPC,
 renderer, preload, main, Plex, scheduler, adapter, package metadata, lockfile,
 native binary, or packaging ownership changed.
@@ -67,6 +67,20 @@ and redaction checks were observed. RD-06 therefore does not yet accept WID as
 the RD-07 production direction. The next playback plan should replan the native
 surface strategy, with render API or addon exploration back on the table unless
 a reviewed Windows proof can close the fullscreen gap.
+
+The Windows render API smoke also fails the full RD-06 proof. It observed
+render API symbol availability, render-context creation, app-owned input
+simulation, local dummy visual media, dummy HTTP visual media with the approved
+non-secret header, windowed active-playback video pixels, overlay pixels, focus,
+helper crash detection, temp cleanup, libmpv client API/version evidence, and
+no forbidden header observation. It records render-thread discipline and
+composition proof as not proven by this helper loop, and it still did not
+capture active fullscreen video pixels while the BrowserWindow was fullscreen.
+The amended helper-owned Win32 screen-pixel fallback was requested only after
+Electron confirmed BrowserWindow fullscreen and was scoped to the helper render
+child surface; it also reported fullscreen video pixels as not captured. Render
+API therefore does not currently close the native surface proof gap or unlock
+RD-07.
 
 Track selection and subtitle behavior remain unproven by the tiny dummy visual
 input. DPI and multi-monitor behavior are noted only as redacted smoke

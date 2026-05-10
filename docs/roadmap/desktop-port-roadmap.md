@@ -39,10 +39,10 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
   script, ignored redacted run evidence exists under
   `docs/runs/rd-05-external-mpv-poc/`, `npm run verify` passed, and
   implementation review was clean on 2026-05-08.
-- [ ] RD-06 Windows native libmpv WID smoke has partial local redacted proof
-  through `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`, but the
-  revised smoke currently fails fullscreen video-surface proof and requires
-  replan before RD-07.
+- [ ] RD-06 Windows native libmpv WID and render API smokes have partial local
+  redacted proof through
+  `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`, but both currently
+  fail fullscreen video-surface proof and require replan before RD-07.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -307,9 +307,14 @@ Exit gates:
 
 ### RD-06 Native libmpv Host Spike
 
-Status: blocked/replan. Revised Windows WID smoke proves windowed active video,
-overlay pixels, focus, dummy HTTP, helper crash detection, redaction, and
-libmpv API evidence, but fails the required fullscreen video-surface proof.
+Status: blocked/replan. Revised Windows WID and render API smokes prove
+windowed active video, overlay pixels, focus, dummy HTTP, helper crash
+detection, redaction, and libmpv API evidence, but both fail the required
+fullscreen video-surface proof. The amended render API helper-owned Win32
+screen-pixel fallback was scoped to the render child surface and gated on
+BrowserWindow fullscreen, but it also reported fullscreen pixels as not
+captured. The render API smoke also records render-thread discipline and
+composition proof as not proven by this helper loop.
 
 Depends on:
 
@@ -338,9 +343,9 @@ Required proof:
 
 Exit gates:
 
-- Helper-vs-addon decision recorded from evidence. The current WID smoke does
-  not prove enough to route directly to RD-07; render API or addon exploration
-  should be considered in a reviewed replan.
+- Helper-vs-addon decision recorded from evidence. The current WID and render
+  API smokes do not prove enough to route directly to RD-07; addon exploration
+  or another native surface strategy requires a reviewed replan.
 - Licensing/provenance questions captured before public packaging work.
 - Native video/overlay/focus risk is either accepted with evidence or triggers a
   replan before broad renderer UI, Plex/player integration, or packaging work.
@@ -355,8 +360,16 @@ Observed RD-06 proof:
   active-playback video pixels, overlay pixels, focus, helper crash detection,
   temp cleanup, libmpv client API/version evidence, and no forbidden header
   observation.
-- The same evidence records fullscreen video-surface proof as not captured, so
-  the WID smoke exits failed instead of overclaiming RD-06 completion.
+- Render API evidence additionally records render API symbol availability,
+  render-context creation, app-owned input simulation, render-frame proof, and
+  the failed helper-owned Win32 screen-pixel fallback scoped to the render child
+  surface.
+- Render API evidence does not prove render-thread discipline or composition
+  because this helper loop mixes blocking libmpv/event calls with render API
+  work and merged capture sources are not sufficient z-order proof.
+- The same evidence records fullscreen video-surface proof as not captured,
+  including through the amended native fallback, so the WID and render API
+  smokes exit failed instead of overclaiming RD-06 completion.
 - Track selection and subtitle behavior are not proven by the tiny dummy visual
   input.
 - DPI and multi-monitor behavior still need a stronger manual matrix before
