@@ -4,7 +4,7 @@
 
 **Tier:** Tier 3
 
-**Controller phase:** execution-unit-select
+**Controller phase:** implementation-review
 
 **Plan review status:** clean read-only review reported no blockers for this
 app-owned native presentation replan after `npm run verify:docs` passed. The
@@ -52,6 +52,13 @@ failed because that scoped native capture did not observe fullscreen video
 pixels.
 
 **Chosen next execution unit:** `windows-libmpv-app-owned-presentation-boundary-probe`
+
+**Native presentation implementation status:** implemented on the Windows proof
+runner with redacted passing smoke evidence for dummy local/HTTP playback,
+fullscreen active video pixels from the app-owned native presentation host,
+same-boundary overlay/composition, render-thread discipline, app-owned input
+simulation, helper crash detection, cleanup, and redaction. RD-06 is not
+complete until read-only implementation review is clean.
 
 **Verification classification:** broader integration/manual proof required
 

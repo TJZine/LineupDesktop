@@ -85,6 +85,18 @@ presentation boundary. That path must prove fullscreen active video pixels,
 native-boundary overlay/composition, render-thread discipline, cleanup, and
 redaction before RD-06 can route RD-07 toward a native surface direction.
 
+The Windows app-owned native presentation probe now records a passing redacted
+smoke for the bounded RD-06 proof path. It observed local dummy visual playback,
+dummy HTTP visual playback with only `X-Lineup-RD06: dummy`, fullscreen active
+video pixels from the native presentation host, overlay/composition inside that
+same native boundary, render-thread discipline through a dedicated render
+thread, app-owned input simulation, helper crash detection, temp cleanup,
+libmpv client API/version evidence, render API symbol evidence, and no
+forbidden header observation. This evidence is still dev-only and does not
+create production playback architecture; RD-06 needs clean implementation
+review before the native presentation boundary can be treated as the reviewed
+RD-07 direction.
+
 Track selection and subtitle behavior remain unproven by the tiny dummy visual
 input. DPI and multi-monitor behavior are noted only as redacted smoke
 observations rather than an MVP manual matrix.

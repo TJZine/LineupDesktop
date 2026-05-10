@@ -13,14 +13,16 @@ RD-04 adds documentation and harness ownership for upstream behavior guardrails
 only; it does not import product runtime code. RD-05 adds a disposable
 dev-only external `mpv` POC tool and ignored redacted local evidence only; it
 does not create production playback architecture. RD-06 adds dev-only Windows
-native libmpv WID and render API spike modes with ignored redacted local
-evidence only. The spike must use dummy visual media, active-playback
-overlay/focus/fullscreen checks, and libmpv client API evidence. The current
-Windows WID and helper-owned render API proof is blocked on fullscreen
-video-surface evidence; render API also failed composition and
-render-thread-discipline proof. The active RD-06 plan routes the next bounded
-proof to an app-owned native presentation boundary, so RD-06 does not create a
-production playback host or settle the RD-07 native surface direction.
+native libmpv WID, render API, and app-owned native presentation spike modes
+with ignored redacted local evidence only. The spike must use dummy visual
+media, active-playback overlay/focus/fullscreen checks, and libmpv client API
+evidence. The Windows WID and helper-owned render API proofs are blocked on
+fullscreen video-surface evidence; render API also failed composition and
+render-thread-discipline proof. The Windows app-owned native presentation probe
+records redacted evidence of fullscreen active video pixels, same-boundary
+overlay/composition, render-thread discipline, helper crash detection, cleanup,
+and dummy local/HTTP playback. RD-06 still requires clean implementation review
+before it can be called complete or used to route RD-07.
 
 ## Product Invariants
 

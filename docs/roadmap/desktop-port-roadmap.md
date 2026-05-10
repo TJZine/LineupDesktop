@@ -41,9 +41,12 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
   implementation review was clean on 2026-05-08.
 - [ ] RD-06 Windows native libmpv WID and render API smokes have partial local
   redacted proof through
-  `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`, but both currently
-  fail fullscreen video-surface proof. The active RD-06 plan routes the next
-  proof to an app-owned native presentation boundary before RD-07.
+  `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`, but both fail
+  fullscreen video-surface proof. The app-owned native presentation probe now
+  records a passing Windows smoke for fullscreen video pixels,
+  same-boundary overlay/composition, render-thread discipline, helper crash
+  detection, cleanup, redaction, and dummy local/HTTP playback. RD-06 remains
+  pending clean implementation review before it can route RD-07.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -308,16 +311,19 @@ Exit gates:
 
 ### RD-06 Native libmpv Host Spike
 
-Status: blocked/replan. Revised Windows WID and render API smokes prove
-windowed active video, overlay pixels, focus, dummy HTTP, helper crash
-detection, redaction, and libmpv API evidence, but both fail the required
+Status: implementation-review pending. Revised Windows WID and render API
+smokes prove windowed active video, overlay pixels, focus, dummy HTTP, helper
+crash detection, redaction, and libmpv API evidence, but both fail the required
 fullscreen video-surface proof. The amended render API helper-owned Win32
 screen-pixel fallback was scoped to the render child surface and gated on
 BrowserWindow fullscreen, but it also reported fullscreen pixels as not
 captured. The render API smoke also records render-thread discipline and
-composition proof as not proven by this helper loop.
-The active RD-06 plan routes the next unit to an app-owned native presentation
-boundary.
+composition proof as not proven by this helper loop. The app-owned native
+presentation probe records a passing Windows smoke for fullscreen active video
+pixels, same-boundary overlay/composition, render-thread discipline, helper
+crash detection, cleanup, redaction, and dummy local/HTTP playback. RD-06 still
+needs clean implementation review before RD-07 can rely on that native surface
+direction.
 
 Depends on:
 
@@ -375,6 +381,10 @@ Observed RD-06 proof:
 - The same evidence records fullscreen video-surface proof as not captured,
   including through the amended native fallback, so the WID and render API
   smokes exit failed instead of overclaiming RD-06 completion.
+- App-owned native presentation evidence records fullscreen active video pixels
+  from the native presentation host, overlay/composition inside that native
+  boundary, a dedicated render-thread proof, app-owned input simulation, helper
+  crash detection, temp cleanup, and no forbidden persisted fields.
 - Track selection and subtitle behavior are not proven by the tiny dummy visual
   input.
 - DPI and multi-monitor behavior still need a stronger manual matrix before
