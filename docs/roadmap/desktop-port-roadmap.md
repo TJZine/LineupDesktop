@@ -39,6 +39,10 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
   script, ignored redacted run evidence exists under
   `docs/runs/rd-05-external-mpv-poc/`, `npm run verify` passed, and
   implementation review was clean on 2026-05-08.
+- [ ] RD-06 Windows native libmpv WID smoke has partial local redacted proof
+  through `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`, but the
+  revised smoke currently fails fullscreen video-surface proof and requires
+  replan before RD-07.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -303,7 +307,9 @@ Exit gates:
 
 ### RD-06 Native libmpv Host Spike
 
-Status: not started.
+Status: blocked/replan. Revised Windows WID smoke proves windowed active video,
+overlay pixels, focus, dummy HTTP, helper crash detection, redaction, and
+libmpv API evidence, but fails the required fullscreen video-surface proof.
 
 Depends on:
 
@@ -317,8 +323,8 @@ Objective:
 
 Required proof:
 
-- Local file playback.
-- Plex-like HTTP playback using safe dummy credentials.
+- Local dummy visual file playback.
+- Plex-like dummy HTTP playback using only the approved non-secret dummy header.
 - Windowed and borderless fullscreen rendering.
 - Overlay visibility above video.
 - Renderer focus/input continuity.
@@ -328,13 +334,33 @@ Required proof:
 - Stale native events cannot corrupt the current playback request.
 - DPI and multi-monitor behavior acceptable for MVP.
 - Redacted native logs.
+- libmpv client API/version evidence.
 
 Exit gates:
 
-- Helper-vs-addon decision recorded from evidence.
+- Helper-vs-addon decision recorded from evidence. The current WID smoke does
+  not prove enough to route directly to RD-07; render API or addon exploration
+  should be considered in a reviewed replan.
 - Licensing/provenance questions captured before public packaging work.
 - Native video/overlay/focus risk is either accepted with evidence or triggers a
   replan before broad renderer UI, Plex/player integration, or packaging work.
+
+Observed RD-06 proof:
+
+- Dev-only source-controlled spike tooling exists under `tools/libmpv-spike/`
+  with a focused harness test under `tools/__tests__/`.
+- Ignored redacted evidence under
+  `docs/runs/rd-06-native-libmpv-host-spike/` records local dummy visual media,
+  dummy HTTP visual media with the approved non-secret header, windowed
+  active-playback video pixels, overlay pixels, focus, helper crash detection,
+  temp cleanup, libmpv client API/version evidence, and no forbidden header
+  observation.
+- The same evidence records fullscreen video-surface proof as not captured, so
+  the WID smoke exits failed instead of overclaiming RD-06 completion.
+- Track selection and subtitle behavior are not proven by the tiny dummy visual
+  input.
+- DPI and multi-monitor behavior still need a stronger manual matrix before
+  packaging or UI-over-video hardening.
 
 ### RD-07 Desktop VideoPlayer Adapter
 

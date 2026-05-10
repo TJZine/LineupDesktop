@@ -12,7 +12,12 @@ secure credential storage, copied TV UI, or installer implementation yet.
 RD-04 adds documentation and harness ownership for upstream behavior guardrails
 only; it does not import product runtime code. RD-05 adds a disposable
 dev-only external `mpv` POC tool and ignored redacted local evidence only; it
-does not create production playback architecture.
+does not create production playback architecture. RD-06 adds a dev-only Windows
+native libmpv WID spike tool and ignored redacted local evidence only. The
+spike must use dummy visual media, active-playback overlay/focus/fullscreen
+checks, and libmpv client API evidence. The current Windows proof is blocked on
+fullscreen video-surface evidence, so it does not create a production playback
+host or settle the RD-07 native surface direction.
 
 ## Product Invariants
 
@@ -43,6 +48,7 @@ does not create production playback architecture.
 | IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
 | Redaction contract vocabulary | `src/contracts/redaction.ts` | Stub contract only |
 | External `mpv` POC tool | `tools/mpv-poc/rd-05-external-mpv-poc.mjs` | Dev-only disposable RD-05 evidence harness |
+| Native libmpv WID spike tool | `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` | Dev-only disposable RD-06 Windows evidence harness |
 | Docs verifier | `tools/verify-docs.mjs` | Active |
 | Redaction verifier | `tools/verify-redaction.mjs` | Active |
 

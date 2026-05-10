@@ -35,6 +35,43 @@ production behavior. Subtitle behavior remains unproven by the dummy audio-only
 input and must be proved by RD-06 or a reviewed follow-up plan before product
 contracts or adapters rely on it.
 
+## RD-06 Native libmpv WID Spike Observations
+
+RD-06 added a dev-only Windows native libmpv WID spike under
+`tools/libmpv-spike/`. It remains evidence tooling only: no product IPC,
+renderer, preload, main, Plex, scheduler, adapter, package metadata, lockfile,
+native binary, or packaging ownership changed.
+
+Redacted local evidence under ignored
+`docs/runs/rd-06-native-libmpv-host-spike/` observed:
+
+- local dummy visual media loaded through helper-hosted libmpv
+- dummy HTTP media loaded with only the non-secret `X-Lineup-RD06: dummy`
+  header
+- forbidden header observation was false
+- libmpv client API version evidence was recorded in addition to local
+  prerequisite and `mpv` executable version evidence
+- overlay visibility, renderer focus, fullscreen toggle, and in-memory video
+  surface pixel checks run only while helper local playback is active
+- helper crash detection was observed without product renderer/preload/main IPC
+  involvement
+- helper build output, dummy inputs, and local HTTP server cleanup were
+  temporary/local only
+- evidence redaction checks passed for raw local paths, raw URLs, raw native
+  values, and raw diagnostics
+
+The revised Windows WID smoke currently fails the full RD-06 proof because
+active-playback fullscreen video pixels were not captured even though windowed
+video pixels, overlay pixels, focus, dummy HTTP loading, helper crash detection,
+and redaction checks were observed. RD-06 therefore does not yet accept WID as
+the RD-07 production direction. The next playback plan should replan the native
+surface strategy, with render API or addon exploration back on the table unless
+a reviewed Windows proof can close the fullscreen gap.
+
+Track selection and subtitle behavior remain unproven by the tiny dummy visual
+input. DPI and multi-monitor behavior are noted only as redacted smoke
+observations rather than an MVP manual matrix.
+
 ## Required Spike Proof
 
 Before production playback design hardens, a Windows spike must prove:
