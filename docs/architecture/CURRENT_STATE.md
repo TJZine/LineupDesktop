@@ -37,9 +37,13 @@ first deterministic Desktop stream policy fixture core under
 `src/main/player/streamPolicy/*`. The policy is capability-driven and
 fixture-only, with tests for direct play, direct stream, transcode, unsupported
 decisions, audio/subtitle fallback, HDR/Dolby Vision, stable reasons, explicit
-unknowns, and forbidden-field invariants. RD-08 does not contact Plex, add
-secure storage, wire renderer UI, launch native playback, change
-package/dependencies, or import/adapt upstream source.
+unknowns, and forbidden-field invariants. Windows closeout adds a conservative
+RD-06/RD-07 capability/sample matrix and keeps container, codec, audio,
+subtitle, direct stream, transcode, track switching, HDR, Dolby Vision, and
+Plex HTPC parity as unknown or unsupported where the Windows proof does not
+establish them. RD-08 does not contact Plex, add secure storage, wire renderer
+UI, launch native playback, change package/dependencies, or import/adapt
+upstream source.
 
 ## Product Invariants
 
@@ -69,7 +73,7 @@ package/dependencies, or import/adapt upstream source.
 | Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, diagnostic, IPC result, and runtime event-guard contract |
 | IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window/player IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
 | Desktop player adapter boundary | `src/main/player/desktopPlayerAdapter.ts`, `src/main/player/nativePlayerHostPort.ts`, `src/main/player/nativePlayerHostProcess.ts`, and `src/main/player/playerIpc.ts` | Main-owned RD-07 adapter core, fakeable native-host process seam, and player IPC owner with renderer-intent validation, fakeable native-host event validation, request-id stale-event quarantine, real spawned helper test-double proof, helper/process failure normalization, cleanup/reap handling, runtime main/preload delivery, development/smoke fake-host activation, production unsupported/noop behavior, and renderer-safe diagnostics |
-| Desktop stream policy | `src/main/player/streamPolicy/desktopStreamPolicy.ts` and `src/main/player/streamPolicy/types.ts` | Main/player-owned RD-08 deterministic fixture policy for capability-driven direct play, direct stream, transcode, unsupported decisions, audio/subtitle fallback, HDR/Dolby Vision handling, stable reason codes, explicit unknowns, and safe policy outputs; not wired to Plex runtime, renderer UI, native helper, secure storage, or runtime IPC |
+| Desktop stream policy | `src/main/player/streamPolicy/desktopStreamPolicy.ts` and `src/main/player/streamPolicy/types.ts` | Main/player-owned RD-08 deterministic fixture policy for capability-driven direct play, direct stream, transcode, unsupported decisions, audio/subtitle fallback, HDR/Dolby Vision handling, stable reason codes, explicit unknowns, Windows RD-06/RD-07 sample-matrix proof, and safe policy outputs; not wired to Plex runtime, renderer UI, native helper, secure storage, or runtime IPC |
 | Redaction contract vocabulary | `src/contracts/redaction.ts` | Stub contract only |
 | External `mpv` POC tool | `tools/mpv-poc/rd-05-external-mpv-poc.mjs` | Dev-only disposable RD-05 evidence harness |
 | Native libmpv spike tool | `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` | Dev-only disposable RD-06 Windows WID/render API evidence harness |

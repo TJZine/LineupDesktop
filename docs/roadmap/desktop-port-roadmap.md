@@ -61,16 +61,17 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
   native-presentation preflight/smoke on Windows and observed passing redacted
   native surface proof. Renderer UI wiring, Plex stream setup, and a production
   native helper remain future RD-12/RD-13 work.
-- [ ] RD-08 Desktop Stream Policy Mac-first fixture core implemented through
+- [x] RD-08 Desktop Stream Policy fixture core implemented through
   `src/main/player/streamPolicy/desktopStreamPolicy.ts`,
   `src/main/player/streamPolicy/types.ts`, and
   `src/__tests__/desktopStreamPolicy.test.ts`; `npm run verify` passed and
-  read-only implementation review was clean on 2026-05-10. Final RD-08
-  closeout still needs the requested Windows capability/sample-matrix proof and
-  any fixes it reveals. The Mac-first unit is deterministic and fixture-driven
-  only: no live Plex contact, secure storage, renderer UI, native helper,
-  package/dependency change, runtime IPC wiring, or copied/adapted upstream
-  source landed.
+  read-only implementation review was clean on 2026-05-10. Windows closeout
+  added a conservative RD-06/RD-07 capability/sample matrix that preserves
+  unknowns instead of claiming exact Windows codec/container/audio support, and
+  fixed unsupported fallback reason preservation. The unit is deterministic and
+  fixture-driven only: no live Plex contact, secure storage, renderer UI,
+  native helper, package/dependency change, runtime IPC wiring, Plex HTPC parity
+  claim, or copied/adapted upstream source landed.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -117,10 +118,10 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-07 are complete enough to route the next Tier 3 quality-loop
-session to RD-08 or RD-12 planning depending on whether stream policy or
-integration sequencing is being selected. Do not import original Lineup product
-code until a reviewed product slice plan explicitly authorizes a bounded import.
+RD-01 through RD-08 are complete enough to route the next Tier 3 session to
+RD-09 secure storage and persistence-boundary planning. Do not import original
+Lineup product code until a reviewed product slice plan explicitly authorizes a
+bounded import.
 
 ## Roadmap Checklist
 
@@ -458,16 +459,17 @@ Exit gates:
 
 ### RD-08 Desktop Stream Policy
 
-Status: Mac-first implementation complete; Windows closeout pending. The
-deterministic `desktop-stream-policy-fixture-core` unit is implemented and
-reviewed clean. It adds a main/player-owned pure policy module plus focused
-fixtures/tests for direct play, direct stream, transcode, unsupported decisions,
-audio fallback, subtitle fallback, HDR/Dolby Vision handling, stable reason
-codes, explicit unknowns, and recursive forbidden-field invariants. No Plex
-runtime, secure storage, renderer UI, native helper, package/dependency change,
-runtime IPC wiring, or copied/adapted upstream source was introduced. Final
-RD-08 closeout is reserved for the requested Windows capability/sample-matrix
-proof and any follow-up fixes.
+Status: complete. The deterministic `desktop-stream-policy-fixture-core` unit is
+implemented and reviewed clean. It adds a main/player-owned pure policy module
+plus focused fixtures/tests for direct play, direct stream, transcode,
+unsupported decisions, audio fallback, subtitle fallback, HDR/Dolby Vision
+handling, stable reason codes, explicit unknowns, and recursive forbidden-field
+invariants. Windows closeout adds a conservative RD-06/RD-07 capability/sample
+matrix that preserves unknowns instead of claiming exact Windows
+codec/container/audio, direct stream, transcode, track switching, subtitle,
+HDR, Dolby Vision, or Plex HTPC parity support. No Plex runtime, secure storage,
+renderer UI, native helper, package/dependency change, runtime IPC wiring, Plex
+HTPC parity claim, or copied/adapted upstream source was introduced.
 
 Depends on:
 

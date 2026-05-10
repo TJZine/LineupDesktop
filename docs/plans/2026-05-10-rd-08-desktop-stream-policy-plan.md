@@ -1,12 +1,12 @@
 # RD-08 Desktop Stream Policy Plan
 
-**Plan Status:** active
+**Plan Status:** complete
 
 **Task family:** feature/design
 
 **Tier:** Tier 3
 
-**Controller phase:** closeout pending
+**Controller phase:** done
 
 **Verification classification:** new regression/contract test required
 
@@ -148,6 +148,21 @@ Plan-review adjudication:
   RD-08 fixture/result invariant and source audit in addition to the existing
   verifier.
 
+Windows closeout adjudication:
+
+- Accepted finding: the Mac-first fixture core did not lock a Windows
+  RD-06/RD-07 capability/sample matrix. The closeout pass added a conservative
+  Windows matrix derived from the available player capability facts and
+  redacted native-presentation proof. Because the Windows proof does not
+  establish exact container, codec, audio, subtitle, HDR, Dolby Vision, direct
+  stream, transcode, or Plex HTPC parity support, the Windows sample matrix
+  keeps those outcomes explicit unknown or unsupported instead of promoting the
+  generic policy fixture facts to Windows capability truth.
+- Accepted finding: unsupported outcomes dropped fallback-selection reason
+  codes in one path. The policy now preserves base fallback reasons on
+  unsupported decisions, so failed audio/subtitle fallback attempts remain
+  deterministic and reviewable.
+
 ## Evidence And Discovery
 
 - `semantic_search_with_context`: attempted in this planning controller.
@@ -186,6 +201,15 @@ Evidence conclusions:
   source audit, or explicit rationale.
 - RD-08 should therefore create a pure policy owner and fixtures before any
   runtime Plex import, secure storage, production helper, or renderer UI work.
+- Windows closeout proof used the existing RD-06/RD-07 facts without contacting
+  Plex: RD-06 native-presentation evidence on `win32`/`x64` records dummy local
+  and dummy HTTP playback, only the approved non-secret dummy header, no
+  forbidden header observation, native-boundary fullscreen/composition, helper
+  crash detection, cleanup, and track behavior not proven by the dummy visual
+  sample. RD-07 production player behavior remains renderer-safe unsupported.
+  RD-08 therefore treats Windows container, codec, audio, subtitle, track
+  switching, direct stream, transcode, HDR, Dolby Vision, and parity support as
+  unknown/unproven in the Windows sample matrix.
 
 ## Impact Snapshot
 
@@ -444,7 +468,7 @@ Manual/source-audit proof after implementation:
 
 ## Acceptance Criteria
 
-- `docs/plans/2026-05-10-rd-08-desktop-stream-policy-plan.md` is active,
+- `docs/plans/2026-05-10-rd-08-desktop-stream-policy-plan.md` is complete,
   feature/design, Tier 3, and passes `npm run verify:docs` before review.
 - Plan review is clean before implementation begins.
 - The first implementation unit creates a pure deterministic stream-policy
@@ -471,6 +495,10 @@ Manual/source-audit proof after implementation:
   closeout.
 - Read-only implementation review is clean before RD-08 is marked complete or
   roadmap/current-state docs advance.
+- Windows closeout adds a conservative Windows RD-06/RD-07 capability/sample
+  matrix test and keeps unsupported fallback reasons, explicit unknowns,
+  forbidden-field invariants, no-Plex-contact behavior, and no Plex HTPC parity
+  claim intact.
 
 ## Replan Triggers
 
@@ -550,47 +578,42 @@ MODEL_SUGGESTION
 PLANNER: planner with high reasoning
 IMPLEMENTER: worker with high reasoning
 REVIEWER: reviewer with high reasoning
-WHY: RD-08 closeout still needs Windows capability/sample-matrix proof across stream-policy decisions, player capability facts, redaction, and no-parity-claim guardrails.
+WHY: RD-09 will define credential and app-data persistence boundaries before Plex auth/import work, so it touches storage/secrets, renderer custody, redaction, and future Plex integration.
 
 NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
-TASK: RD-08 Desktop Stream Policy Windows closeout proof
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-plan
+TASK: Plan RD-09 Secure Storage And Persistence Boundary
 TASK_FAMILY: feature/design
 TIER: Tier 3
-PLAN: docs/plans/2026-05-10-rd-08-desktop-stream-policy-plan.md
-ARTIFACT: Mac-first RD-08 stream policy fixture core with clean implementation review
+PLAN: none
+ARTIFACT: completed RD-08 Desktop stream policy fixture core and Windows capability/sample-matrix closeout
 FILES:
 - AGENTS.md
 - docs/AGENTIC_DEV_WORKFLOW.md
 - docs/agentic/session-prompts/feature-quality-loop.md
 - docs/agentic/plan-authoring-standard.md
 - docs/architecture/CURRENT_STATE.md
-- docs/architecture/playback-architecture.md
 - docs/architecture/security-and-secret-flow.md
-- docs/architecture/upstream-behavior-guardrails.md
+- docs/architecture/playback-architecture.md
 - docs/architecture/import-ledger.md
 - docs/roadmap/desktop-port-roadmap.md
 - docs/plans/2026-05-10-rd-08-desktop-stream-policy-plan.md
-- docs/plans/2026-05-10-rd-07-desktop-videoplayer-adapter-plan.md
-- docs/plans/2026-05-08-rd-03-player-contract-capability-model-plan.md
 - src/contracts/player.ts
 - src/main/player/streamPolicy/desktopStreamPolicy.ts
 - src/main/player/streamPolicy/types.ts
 - src/__tests__/desktopStreamPolicy.test.ts
 - src/__tests__/fixtures/desktopStreamPolicyFixtures.ts
 - package.json
-BLOCKERS: Mac-first implementation is complete and clean; final RD-08 closeout is blocked on Windows capability/sample-matrix proof and any fixes it reveals.
+BLOCKERS: none for RD-09 planning; RD-08 intentionally did not contact Plex, wire runtime playback, add secure storage, expose transport fields, or claim Plex HTPC parity.
 MESSAGE:
-Run the Tier 3 quality loop for RD-08 Windows closeout. Start from the
-Mac-first deterministic stream policy fixture core and its clean implementation
-review. On Windows, prove the policy's capability/sample matrix against the
-available RD-07/RD-06 player capability facts without contacting real Plex
-servers or claiming Plex HTPC parity. Verify direct play, direct stream,
-transcode, unsupported, audio fallback, subtitle fallback, HDR/Dolby Vision,
-explicit unknowns, and forbidden-field invariants remain correct. Keep raw URLs,
-tokenized URLs, auth headers, Plex tokens, raw Plex payloads, stream keys, part
-keys, native handles, libmpv objects, engine ids, Electron APIs, Node APIs, and
-secret diagnostics out of renderer-facing contracts, logs, docs, tests,
-fixtures, and Codex output. Fix any Windows/sample-matrix findings inside the
-reviewed RD-08 scope, rerun required verification, get fresh implementation
-review, and only then mark RD-08 complete and route to the next roadmap slice.
+Create the RD-09 Secure Storage And Persistence Boundary plan. Start from the
+completed RD-08 stream policy closeout: Desktop stream decisions are
+deterministic and fixture-only, Windows capability/sample-matrix proof
+conservatively preserves unknowns instead of claiming codec/container/audio or
+Plex HTPC parity, production playback remains unsupported, and there is still
+no Plex auth/discovery/library runtime, secure storage, selected-server state,
+renderer UI, native helper production path, package/dependency change, or
+copied/adapted upstream source. RD-09 should define main-owned credential and
+app-data persistence boundaries before Plex auth/import work begins, keep the
+renderer unprivileged, preserve redaction rules, and name exact files,
+verification, rollback, and stop conditions before implementation.

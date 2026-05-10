@@ -3,11 +3,18 @@ import assert from 'node:assert/strict';
 
 import { PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS } from '../contracts/player.js';
 import { decideDesktopStreamPolicy } from '../main/player/streamPolicy/desktopStreamPolicy.js';
-import type { DesktopStreamPolicyDecision } from '../main/player/streamPolicy/types.js';
+import type {
+  DesktopStreamPolicyDecision,
+  DesktopStreamPolicyDecisionKind,
+  DesktopStreamPolicyReasonCode,
+  DesktopStreamPolicyUnknownCode,
+} from '../main/player/streamPolicy/types.js';
 import {
   audioFallbackCandidate,
   allDesktopStreamPolicyFixtureValues,
   desktopStreamPolicyInputs,
+  windowsRd07CapabilityFacts,
+  windowsStreamPolicyMatrixInputs,
 } from './fixtures/desktopStreamPolicyFixtures.js';
 
 const RD08_FORBIDDEN_FIELD_KEYS = [
@@ -86,6 +93,15 @@ function decideFixture(name: keyof typeof desktopStreamPolicyInputs): DesktopStr
     'expected explicit unproven desktop parity unknown',
   );
   return decision;
+}
+
+function assertHasUnknowns(
+  decision: DesktopStreamPolicyDecision,
+  unknowns: readonly DesktopStreamPolicyUnknownCode[],
+): void {
+  for (const unknown of unknowns) {
+    assert.ok(decision.unknowns.includes(unknown), `expected unknown ${unknown}`);
+  }
 }
 
 test('desktop stream policy chooses direct play for fully supported facts', () => {
@@ -337,6 +353,131 @@ test('desktop stream policy returns explicit unknowns for incomplete profile and
     'profile-transcode-support-unknown',
     'profile-video-support-unknown',
   ]);
+});
+
+test('desktop stream policy does not promote Windows RD-06/RD-07 sample facts to codec parity', () => {
+  assert.equal(windowsRd07CapabilityFacts.headerAuthSetup, 'supported');
+  assert.equal(windowsRd07CapabilityFacts.livePlayback, 'unsupported');
+  assert.equal(windowsRd07CapabilityFacts.audioTrackSwitching, 'unknown');
+  assert.equal(windowsRd07CapabilityFacts.subtitleTrackSwitching, 'unknown');
+  assert.deepEqual(windowsRd07CapabilityFacts.containerFormats, []);
+  assert.deepEqual(windowsRd07CapabilityFacts.videoCodecs, []);
+  assert.deepEqual(windowsRd07CapabilityFacts.audioCodecs, []);
+  assert.deepEqual(windowsRd07CapabilityFacts.subtitleDeliveryModes, ['unknown']);
+
+  const profileUnknowns = [
+    'desktop-parity-unproven',
+    'profile-container-support-unknown',
+    'profile-video-support-unknown',
+    'profile-audio-support-unknown',
+    'profile-subtitle-support-unknown',
+    'profile-audio-switching-support-unknown',
+    'profile-subtitle-switching-support-unknown',
+    'profile-direct-stream-support-unknown',
+    'profile-transcode-support-unknown',
+    'profile-hdr-support-unknown',
+    'profile-dolby-vision-support-unknown',
+  ] as const satisfies readonly DesktopStreamPolicyUnknownCode[];
+  const cases = [
+    {
+      name: 'directPlay',
+      kind: 'unsupported',
+      reasonCodes: [
+        'profile-facts-incomplete',
+        'unsupported-container',
+        'unsupported-video-codec',
+        'unsupported-audio-codec',
+        'no-subtitle-selected',
+      ],
+    },
+    {
+      name: 'remuxUnproven',
+      kind: 'unsupported',
+      reasonCodes: [
+        'profile-facts-incomplete',
+        'unsupported-container',
+        'unsupported-video-codec',
+        'unsupported-audio-codec',
+        'no-subtitle-selected',
+      ],
+    },
+    {
+      name: 'audioFallbackUnproven',
+      kind: 'unsupported',
+      reasonCodes: [
+        'profile-facts-incomplete',
+        'unsupported-container',
+        'unsupported-video-codec',
+        'unsupported-audio-codec',
+        'requested-audio-unavailable',
+        'no-audio-compatible',
+        'no-subtitle-selected',
+      ],
+    },
+    {
+      name: 'subtitleFallbackUnproven',
+      kind: 'unsupported',
+      reasonCodes: [
+        'profile-facts-incomplete',
+        'unsupported-container',
+        'unsupported-video-codec',
+        'unsupported-audio-codec',
+        'unsupported-subtitle-delivery',
+        'requested-subtitle-unavailable',
+        'no-subtitle-compatible',
+      ],
+    },
+    {
+      name: 'videoTranscodeUnproven',
+      kind: 'unsupported',
+      reasonCodes: [
+        'profile-facts-incomplete',
+        'unsupported-container',
+        'unsupported-video-codec',
+        'unsupported-audio-codec',
+        'no-subtitle-selected',
+      ],
+    },
+    {
+      name: 'hdrUnproven',
+      kind: 'unsupported',
+      reasonCodes: [
+        'profile-facts-incomplete',
+        'unsupported-container',
+        'unsupported-video-codec',
+        'unsupported-audio-codec',
+        'unsupported-hdr',
+        'no-subtitle-selected',
+      ],
+    },
+    {
+      name: 'dolbyVisionUnproven',
+      kind: 'unsupported',
+      reasonCodes: [
+        'profile-facts-incomplete',
+        'unsupported-container',
+        'unsupported-video-codec',
+        'unsupported-audio-codec',
+        'unsupported-hdr',
+        'unsupported-dolby-vision',
+        'no-subtitle-selected',
+      ],
+    },
+  ] as const satisfies readonly {
+    name: keyof typeof windowsStreamPolicyMatrixInputs;
+    kind: DesktopStreamPolicyDecisionKind;
+    reasonCodes: readonly DesktopStreamPolicyReasonCode[];
+  }[];
+
+  for (const matrixCase of cases) {
+    const decision = decideDesktopStreamPolicy(windowsStreamPolicyMatrixInputs[matrixCase.name]);
+
+    assert.equal(decision.kind, matrixCase.kind, matrixCase.name);
+    assert.deepEqual(decision.reasonCodes, matrixCase.reasonCodes, matrixCase.name);
+    assertHasUnknowns(decision, profileUnknowns);
+    assertNoForbiddenFields(decision, `windowsMatrix.${matrixCase.name}`);
+    assertNoForbiddenText(decision);
+  }
 });
 
 test('desktop stream policy fixture inputs and outputs exclude forbidden fields recursively', () => {
