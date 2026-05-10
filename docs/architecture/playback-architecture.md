@@ -1,6 +1,9 @@
 # Playback Architecture
 
-Lineup Desktop playback is not implemented yet.
+Lineup Desktop runtime playback is not wired yet. RD-07 adds a main-owned
+Desktop player adapter boundary core, but production Plex stream setup,
+preload/player IPC wiring, renderer UI integration, and the real native helper
+remain unimplemented.
 
 ## Current Hypothesis
 
@@ -118,9 +121,19 @@ Before production playback design hardens, a Windows spike must prove:
 ## Contract First
 
 Player integration starts from `src/contracts/player.ts` and its tests. RD-03
-defines the renderer-safe contract vocabulary for commands, request ids,
+defined the renderer-safe contract vocabulary for commands, request ids,
 snapshots, events, capability profiles, opaque track ids, error taxonomy, and
-diagnostics before any runtime playback adapter exists.
+diagnostics before the first adapter boundary existed.
+
+RD-07 now defines the first main-owned Desktop adapter core in
+`src/main/player/desktopPlayerAdapter.ts` with a private fakeable host port in
+`src/main/player/nativePlayerHostPort.ts`. The adapter accepts
+renderer-originating `RendererIntentEnvelope<unknown>` values at the boundary,
+validates closed player intents before host calls or state mutation, validates
+fake-host events before state mutation, quarantines stale request ids including
+late post-cleanup events, and normalizes helper failures into renderer-safe
+`PlayerError` values. The boundary is tested at
+`src/__tests__/desktopPlayerAdapter.test.ts`.
 
 Concrete playback adapters must not leak native handles, raw media URLs, raw
 auth headers, tokenized URLs, raw Plex payloads, Electron or Node APIs,

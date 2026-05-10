@@ -14,6 +14,21 @@ export type RendererIntent =
   | 'window.enterFullscreen'
   | 'window.exitFullscreen';
 
+export const PLAYER_RENDERER_INTENTS = [
+  'player.load',
+  'player.play',
+  'player.pause',
+  'player.stop',
+  'player.seekAbsolute',
+  'player.seekRelative',
+  'player.setVolume',
+  'player.setMute',
+  'player.selectAudio',
+  'player.selectSubtitle',
+] as const satisfies readonly RendererIntent[];
+
+export type PlayerRendererIntent = (typeof PLAYER_RENDERER_INTENTS)[number];
+
 export interface RendererIntentEnvelope<TPayload = unknown> {
   intent: RendererIntent;
   requestId: string;

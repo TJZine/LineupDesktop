@@ -7,8 +7,9 @@
 
 Lineup Desktop is a new Windows-first Electron repository. It currently has a
 minimal secure Electron shell frame plus docs, workflow, contract, and harness
-scaffolding. There is no Plex integration, native playback host, scheduler,
-secure credential storage, copied TV UI, or installer implementation yet.
+scaffolding. There is no Plex integration, production native playback host,
+scheduler, secure credential storage, copied TV UI, or installer implementation
+yet.
 RD-04 adds documentation and harness ownership for upstream behavior guardrails
 only; it does not import product runtime code. RD-05 adds a disposable
 dev-only external `mpv` POC tool and ignored redacted local evidence only; it
@@ -22,7 +23,10 @@ render-thread-discipline proof. The revised Windows app-owned native
 presentation probe records fresh redacted proof under the stricter fullscreen,
 cleanup, and render-thread semantics. Clean implementation re-review reported no
 material blockers, so RD-06 can route RD-07 toward the app-owned native
-presentation boundary while keeping production playback architecture uncreated.
+presentation boundary. RD-07 adds the first main-owned Desktop player adapter
+boundary core with a fakeable native host port and public-seam tests; it does
+not wire production preload IPC, renderer UI, Plex stream setup, or a real
+native helper.
 
 ## Product Invariants
 
@@ -51,6 +55,7 @@ presentation boundary while keeping production playback architecture uncreated.
 | Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window bridge contract |
 | Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, and diagnostic contract |
 | IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
+| Desktop player adapter boundary | `src/main/player/desktopPlayerAdapter.ts` and `src/main/player/nativePlayerHostPort.ts` | Main-owned RD-07 adapter core with renderer-intent validation, fakeable native-host event validation, request-id stale-event quarantine, helper failure normalization, cleanup handling, and renderer-safe diagnostics |
 | Redaction contract vocabulary | `src/contracts/redaction.ts` | Stub contract only |
 | External `mpv` POC tool | `tools/mpv-poc/rd-05-external-mpv-poc.mjs` | Dev-only disposable RD-05 evidence harness |
 | Native libmpv spike tool | `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` | Dev-only disposable RD-06 Windows WID/render API evidence harness |
@@ -61,9 +66,9 @@ presentation boundary while keeping production playback architecture uncreated.
 
 - Plex auth/discovery/library/stream imports
 - scheduler/channel imports
-- native playback helper
-- production playback host or adapter
-- player runtime adapter or preload/main player IPC
+- production native playback helper
+- production playback host
+- preload/main player IPC runtime wiring
 - secure storage implementation
 - packaging/signing/update pipeline
 

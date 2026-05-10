@@ -5,7 +5,9 @@ import {
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
+  PLAYER_RENDERER_INTENTS,
   RENDERER_FORBIDDEN_PAYLOAD_KEYS,
+  type PlayerRendererIntent,
   type RendererIntent,
 } from '../contracts/ipc.js';
 import { REDACTION_BOUNDARY } from '../contracts/redaction.js';
@@ -106,6 +108,7 @@ test('redaction boundary keeps renderer unprivileged', () => {
 
 test('player command, event, and snapshot contracts carry request ids', () => {
   const intent: RendererIntent = 'player.play';
+  const playerIntent: PlayerRendererIntent = 'player.load';
   const loadCommand: PlayerCommand = {
     command: 'load',
     requestId: 'player-request-1',
@@ -155,12 +158,29 @@ test('player command, event, and snapshot contracts carry request ids', () => {
   };
 
   assert.equal(intent, 'player.play');
+  assert.equal(playerIntent, 'player.load');
   assert.equal(loadCommand.requestId, 'player-request-1');
   assert.equal(seekCommand.payload.positionMs, 60_000);
   assert.equal(event.requestId, snapshot.requestId);
   assertNoForbiddenKeys(loadCommand);
   assertNoForbiddenKeys(snapshot);
   assertNoForbiddenKeys(event);
+});
+
+test('player renderer intents are closed and separate from shell window intents', () => {
+  assert.deepEqual([...PLAYER_RENDERER_INTENTS], [
+    'player.load',
+    'player.play',
+    'player.pause',
+    'player.stop',
+    'player.seekAbsolute',
+    'player.seekRelative',
+    'player.setVolume',
+    'player.setMute',
+    'player.selectAudio',
+    'player.selectSubtitle',
+  ]);
+  assert.equal((PLAYER_RENDERER_INTENTS as readonly string[]).includes('window.enterFullscreen'), false);
 });
 
 test('player events make stale updates identifiable without engine state', () => {

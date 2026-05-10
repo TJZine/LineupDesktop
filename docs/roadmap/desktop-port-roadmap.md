@@ -46,6 +46,13 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
   probe now records passing Windows proof under the stricter fullscreen,
   cleanup, and render-thread semantics. Clean implementation re-review reported
   no material blockers, so RD-06 can route RD-07.
+- [x] RD-07 Desktop VideoPlayer Adapter boundary core implemented through
+  `src/main/player/desktopPlayerAdapter.ts`,
+  `src/main/player/nativePlayerHostPort.ts`, and
+  `src/__tests__/desktopPlayerAdapter.test.ts`; `npm run verify` passed and
+  read-only implementation re-review was clean on 2026-05-10. Runtime preload
+  IPC, renderer wiring, Plex stream setup, and a real native helper remain
+  future RD-07/RD-12 work.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -390,7 +397,9 @@ Observed RD-06 proof:
 
 ### RD-07 Desktop VideoPlayer Adapter
 
-Status: not started.
+Status: in progress. The `desktop-player-adapter-boundary-core` unit is
+implemented and reviewed clean. Runtime player IPC wiring and real native host
+integration are not implemented.
 
 Depends on:
 
@@ -404,9 +413,12 @@ Objective:
 
 Exit gates:
 
-- Adapter tests cover command mapping, state, events, errors, stale request
-  handling, diagnostics, helper crash behavior, and request cleanup.
-- Renderer receives only renderer-safe player state.
+- Adapter boundary tests cover command mapping, state, events, errors, stale
+  request handling, diagnostics, helper crash behavior, request cleanup,
+  renderer intent validation, fake-host event validation, and renderer-safe
+  validation failures for the core fake-host seam.
+- Renderer receives only renderer-safe player state through the contract-bound
+  adapter core. Runtime renderer/preload delivery remains unwired.
 - `App.ts` and orchestration owners do not absorb native process policy.
 
 ### RD-08 Desktop Stream Policy
