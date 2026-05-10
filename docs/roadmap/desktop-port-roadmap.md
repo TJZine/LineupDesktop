@@ -4,9 +4,12 @@ This is the durable checklist for the Windows-first Lineup Desktop port. It
 turns the GPT Pro handoff report and the accepted repo-genesis decisions into an
 ordered path for future plans.
 
-This is not an implementation plan for any single slice. Each serious slice
-still needs its own tracked plan under [`docs/plans/`](../plans/README.md) that
-follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-standard.md).
+This is not an implementation plan for any single slice. Each serious in-flight
+slice still needs its own active tracked plan under
+[`docs/plans/`](../plans/README.md) that follows
+[`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-standard.md).
+Completed full plan bodies are local archive material; this roadmap keeps the
+durable completion summary.
 
 ## Current Position
 
@@ -17,15 +20,15 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
 - [x] Single-package repo shape accepted for the initial port.
 - [x] Workflow, skills, launchers, role config, docs verifier, redaction
   verifier, and architecture lint scaffolded.
-- [x] First active implementation plan created:
-  `docs/plans/2026-05-07-electron-shell-security-foundation-plan.md`.
+- [x] First active implementation plan created for the Electron shell security
+  foundation, then closed and archived locally after completion.
 - [x] First active implementation plan reviewed.
 - [x] Secure Electron shell foundation implemented at `b8fb948`; `npm run
   smoke:electron` and `npm run verify` passed on 2026-05-08.
 - [x] Secure Electron shell foundation implementation reviewed and clean after
   one blocker fix, per RD-01 agent closeout report provided on 2026-05-08.
-- [x] Product reuse/import sequence formalized through follow-up tracked plan
-  `docs/plans/2026-05-08-rd-02-source-reuse-inventory-import-strategy-plan.md`.
+- [x] Product reuse/import sequence formalized through the RD-02 source
+  reuse/import strategy and archived locally after completion.
 - [x] Player contract and capability model completed through RD-03 quality loop:
   `src/contracts/player.ts`, `src/contracts/ipc.ts`, and
   `src/__tests__/contracts.test.ts`; `npm run verify` passed and
@@ -33,8 +36,7 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
 - [x] RD-04 upstream behavior guardrails completed through
   `docs/architecture/upstream-behavior-guardrails.md`; `npm run verify` passed
   and scoped implementation review was clean on 2026-05-08.
-- [x] RD-05 external `mpv` POC completed through
-  `docs/plans/2026-05-08-rd-05-external-mpv-poc-plan.md`;
+- [x] RD-05 external `mpv` POC completed through its reviewed plan;
   `tools/mpv-poc/rd-05-external-mpv-poc.mjs` remains a dev-only disposable
   script, ignored redacted run evidence exists under
   `docs/runs/rd-05-external-mpv-poc/`, `npm run verify` passed, and
@@ -100,11 +102,13 @@ after that shell proves the main/preload/renderer boundary.
    the next session owns the whole roadmap item: planning, plan review, bounded
    execution-unit selection, implementation, implementation review, verification,
    closeout, and platform proof unless a blocker stops the loop.
-5. Create or update one tracked plan for that roadmap item in `docs/plans/`.
-   The plan should cover the whole item and split implementation into bounded
-   execution units only when that improves reviewability.
+5. Create or update one active tracked plan for that roadmap item in
+   `docs/plans/`. The plan should cover the whole item and split implementation
+   into bounded execution units only when that improves reviewability.
 6. Keep implementation limited to the plan's current approved execution unit.
-7. On closeout, update this roadmap only for observed status changes.
+7. On closeout, update this roadmap only for observed status changes. Archive
+   completed full plan bodies locally after durable conclusions are reflected in
+   tracked docs.
 8. End the session with the workflow runbook's `NEXT_SESSION_HANDOFF` shape,
    routing the next session to the next roadmap slice's plan, review, or
    implementation step.
@@ -185,8 +189,7 @@ blocker fix, per RD-01 agent closeout report provided on 2026-05-08.
 Depends on:
 
 - RD-00 complete.
-- Active plan review clean for
-  `docs/plans/2026-05-07-electron-shell-security-foundation-plan.md`.
+- Active plan review was clean before implementation.
 
 Objective:
 
@@ -260,10 +263,8 @@ Stop and replan if:
 
 ### RD-03 Player Contract And Capability Model
 
-Status: complete. Implemented through
-`docs/plans/2026-05-08-rd-03-player-contract-capability-model-plan.md`;
-`npm run verify` passed and read-only implementation review was clean on
-2026-05-08.
+Status: complete. `npm run verify` passed and read-only implementation review
+was clean on 2026-05-08.
 
 Depends on:
 
@@ -298,7 +299,6 @@ Exit gates:
 ### RD-04 Upstream Behavior Guardrails
 
 Status: complete. Implemented through
-`docs/plans/2026-05-08-rd-04-upstream-behavior-guardrails-plan.md` and
 `docs/architecture/upstream-behavior-guardrails.md`; `npm run verify` passed
 and scoped implementation review was clean on 2026-05-08.
 
@@ -331,8 +331,7 @@ Exit gates:
 ### RD-05 External mpv POC
 
 Status: complete. Implemented through
-`docs/plans/2026-05-08-rd-05-external-mpv-poc-plan.md`,
-`tools/mpv-poc/rd-05-external-mpv-poc.mjs`, and
+`tools/mpv-poc/rd-05-external-mpv-poc.mjs` and
 `tools/__tests__/rd-05-mpv-poc.test.mjs`; `npm run verify` passed and
 read-only implementation review was clean on 2026-05-08.
 
@@ -524,9 +523,7 @@ Exit gates:
 
 ### RD-09 Secure Storage And Persistence Boundary
 
-Status: complete. Implemented through
-`docs/plans/2026-05-10-rd-09-secure-storage-persistence-boundary-plan.md`;
-`npm run verify` passed on 2026-05-10.
+Status: complete. `npm run verify` passed on 2026-05-10.
 
 Depends on:
 
