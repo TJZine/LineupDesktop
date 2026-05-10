@@ -42,7 +42,8 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
 - [ ] RD-06 Windows native libmpv WID and render API smokes have partial local
   redacted proof through
   `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`, but both currently
-  fail fullscreen video-surface proof and require replan before RD-07.
+  fail fullscreen video-surface proof. The active RD-06 plan routes the next
+  proof to an app-owned native presentation boundary before RD-07.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -315,6 +316,8 @@ screen-pixel fallback was scoped to the render child surface and gated on
 BrowserWindow fullscreen, but it also reported fullscreen pixels as not
 captured. The render API smoke also records render-thread discipline and
 composition proof as not proven by this helper loop.
+The active RD-06 plan routes the next unit to an app-owned native presentation
+boundary.
 
 Depends on:
 
@@ -343,9 +346,11 @@ Required proof:
 
 Exit gates:
 
-- Helper-vs-addon decision recorded from evidence. The current WID and render
-  API smokes do not prove enough to route directly to RD-07; addon exploration
-  or another native surface strategy requires a reviewed replan.
+- Helper-vs-addon/native-surface decision recorded from evidence. The current
+  WID and helper-owned render API smokes do not prove enough to route directly
+  to RD-07; the next reviewed proof must decide whether an app-owned native
+  presentation boundary is viable or whether RD-06 needs another blocked
+  conclusion/replan.
 - Licensing/provenance questions captured before public packaging work.
 - Native video/overlay/focus risk is either accepted with evidence or triggers a
   replan before broad renderer UI, Plex/player integration, or packaging work.

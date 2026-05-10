@@ -16,11 +16,11 @@ does not create production playback architecture. RD-06 adds dev-only Windows
 native libmpv WID and render API spike modes with ignored redacted local
 evidence only. The spike must use dummy visual media, active-playback
 overlay/focus/fullscreen checks, and libmpv client API evidence. The current
-Windows WID and render API proof is blocked on fullscreen video-surface
-evidence. An amended helper-owned Win32 screen-pixel fallback scoped to the
-render child surface also reported fullscreen pixels as not captured, so RD-06
-does not create a production playback host or settle the RD-07 native surface
-direction.
+Windows WID and helper-owned render API proof is blocked on fullscreen
+video-surface evidence; render API also failed composition and
+render-thread-discipline proof. The active RD-06 plan routes the next bounded
+proof to an app-owned native presentation boundary, so RD-06 does not create a
+production playback host or settle the RD-07 native surface direction.
 
 ## Product Invariants
 

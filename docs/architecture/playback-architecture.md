@@ -60,13 +60,11 @@ Redacted local evidence under ignored
 - evidence redaction checks passed for raw local paths, raw URLs, raw native
   values, and raw diagnostics
 
-The revised Windows WID smoke currently fails the full RD-06 proof because
+The revised Windows WID smoke fails the full RD-06 proof because
 active-playback fullscreen video pixels were not captured even though windowed
 video pixels, overlay pixels, focus, dummy HTTP loading, helper crash detection,
-and redaction checks were observed. RD-06 therefore does not yet accept WID as
-the RD-07 production direction. The next playback plan should replan the native
-surface strategy, with render API or addon exploration back on the table unless
-a reviewed Windows proof can close the fullscreen gap.
+and redaction checks were observed. WID is therefore blocked as the RD-07
+production direction unless a later reviewed plan reopens it with new evidence.
 
 The Windows render API smoke also fails the full RD-06 proof. It observed
 render API symbol availability, render-context creation, app-owned input
@@ -81,6 +79,11 @@ Electron confirmed BrowserWindow fullscreen and was scoped to the helper render
 child surface; it also reported fullscreen video pixels as not captured. Render
 API therefore does not currently close the native surface proof gap or unlock
 RD-07.
+
+The active RD-06 plan now routes the next bounded proof to an app-owned native
+presentation boundary. That path must prove fullscreen active video pixels,
+native-boundary overlay/composition, render-thread discipline, cleanup, and
+redaction before RD-06 can route RD-07 toward a native surface direction.
 
 Track selection and subtitle behavior remain unproven by the tiny dummy visual
 input. DPI and multi-monitor behavior are noted only as redacted smoke
