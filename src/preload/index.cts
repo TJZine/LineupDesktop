@@ -14,6 +14,16 @@ import type {
   PlayerSnapshot,
 } from '../contracts/player.js';
 import type { PlayerRendererIntentEnvelope } from '../contracts/ipc.js';
+import {
+  PLAYER_COMMAND_VALUES,
+  PLAYER_ERROR_CATEGORIES,
+  PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
+  PLAYER_RENDERER_INTENT_VALUES,
+  PLAYER_STATUS_VALUES,
+  PLAYER_TRACK_DELIVERY_TYPE_VALUES,
+  PLAYER_TRACK_KIND_VALUES,
+  SHELL_STATUS_VALUES,
+} from './vocabulary.cjs';
 
 const { contextBridge, ipcRenderer } = require('electron') as typeof Electron;
 
@@ -24,87 +34,6 @@ const LINEUP_PLAYER_COMMAND_CHANNEL = 'lineup:player:command';
 const LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL = 'lineup:player:getSnapshot';
 const LINEUP_PLAYER_CLEANUP_CHANNEL = 'lineup:player:cleanup';
 const LINEUP_PLAYER_EVENT_CHANNEL = 'lineup:player:event';
-const SHELL_STATUS_VALUES = ['booting', 'ready', 'closing'];
-const PLAYER_ERROR_CATEGORIES = [
-  'source',
-  'authentication',
-  'authorization',
-  'network',
-  'unsupported-media',
-  'unsupported-capability',
-  'timeout',
-  'aborted',
-  'stale-request',
-  'engine-failure',
-  'helper-failure',
-  'render-failure',
-  'track-failure',
-  'cleanup-failure',
-  'validation-failure',
-  'unknown',
-];
-const PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS = [
-  'rawMediaUrl',
-  'tokenizedUrl',
-  'authHeaders',
-  'rawAuthHeaders',
-  'persistentToken',
-  'credentialMaterial',
-  'nativeHandle',
-  'libmpvObject',
-  'engineId',
-  'electronApi',
-  'nodeApi',
-  'rawPlexPayload',
-  'streamKey',
-  'partKey',
-  'secretDiagnostics',
-];
-const PLAYER_STATUS_VALUES = [
-  'idle',
-  'loading',
-  'ready',
-  'buffering',
-  'playing',
-  'paused',
-  'seeking',
-  'stalled',
-  'ended',
-  'error',
-  'destroyed',
-];
-const PLAYER_COMMAND_VALUES = [
-  'load',
-  'play',
-  'pause',
-  'stop',
-  'seek.absolute',
-  'seek.relative',
-  'volume.set',
-  'mute.set',
-  'track.audio.select',
-  'track.subtitle.select',
-];
-const PLAYER_RENDERER_INTENT_VALUES = [
-  'player.load',
-  'player.play',
-  'player.pause',
-  'player.stop',
-  'player.seekAbsolute',
-  'player.seekRelative',
-  'player.setVolume',
-  'player.setMute',
-  'player.selectAudio',
-  'player.selectSubtitle',
-];
-const PLAYER_TRACK_KIND_VALUES = ['audio', 'subtitle', 'video'];
-const PLAYER_TRACK_DELIVERY_TYPE_VALUES = [
-  'embedded',
-  'sidecar',
-  'external',
-  'burned-in',
-  'unknown',
-];
 
 function createRequestId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -129,16 +58,14 @@ function isShellStatusEvent(value: unknown): value is ShellStatusEvent {
   return (
     typeof value.timestampMs === 'number' &&
     Number.isFinite(value.timestampMs) &&
-    typeof value.status === 'string' &&
-    SHELL_STATUS_VALUES.includes(value.status)
+    isStringInSet(value.status, SHELL_STATUS_VALUES)
   );
 }
 
 function isPlayerRendererIntentEnvelope(value: unknown): value is PlayerRendererIntentEnvelope<unknown> {
   return (
     isPlainRecord(value) &&
-    typeof value.intent === 'string' &&
-    PLAYER_RENDERER_INTENT_VALUES.includes(value.intent) &&
+    isStringInSet(value.intent, PLAYER_RENDERER_INTENT_VALUES) &&
     typeof value.requestId === 'string' &&
     value.requestId.trim().length > 0 &&
     Object.hasOwn(value, 'payload')
@@ -482,7 +409,10 @@ function hasForbiddenPrivilegedField(value: unknown): boolean {
     return false;
   }
   return Object.entries(value).some(([key, child]) => {
-    return PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS.includes(key) || hasForbiddenPrivilegedField(child);
+    return (
+      (PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS as readonly string[]).includes(key) ||
+      hasForbiddenPrivilegedField(child)
+    );
   });
 }
 
