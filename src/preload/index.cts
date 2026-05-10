@@ -13,7 +13,7 @@ import type {
   PlayerIpcResult,
   PlayerSnapshot,
 } from '../contracts/player.js';
-import type { RendererIntentEnvelope } from '../contracts/ipc.js';
+import type { PlayerRendererIntentEnvelope } from '../contracts/ipc.js';
 
 const { contextBridge, ipcRenderer } = require('electron') as typeof Electron;
 
@@ -85,6 +85,18 @@ const PLAYER_COMMAND_VALUES = [
   'track.audio.select',
   'track.subtitle.select',
 ];
+const PLAYER_RENDERER_INTENT_VALUES = [
+  'player.load',
+  'player.play',
+  'player.pause',
+  'player.stop',
+  'player.seekAbsolute',
+  'player.seekRelative',
+  'player.setVolume',
+  'player.setMute',
+  'player.selectAudio',
+  'player.selectSubtitle',
+];
 const PLAYER_TRACK_KIND_VALUES = ['audio', 'subtitle', 'video'];
 const PLAYER_TRACK_DELIVERY_TYPE_VALUES = [
   'embedded',
@@ -122,11 +134,11 @@ function isShellStatusEvent(value: unknown): value is ShellStatusEvent {
   );
 }
 
-function isRendererIntentEnvelope(value: unknown): value is RendererIntentEnvelope<unknown> {
+function isPlayerRendererIntentEnvelope(value: unknown): value is PlayerRendererIntentEnvelope<unknown> {
   return (
     isPlainRecord(value) &&
     typeof value.intent === 'string' &&
-    value.intent.startsWith('player.') &&
+    PLAYER_RENDERER_INTENT_VALUES.includes(value.intent) &&
     typeof value.requestId === 'string' &&
     value.requestId.trim().length > 0 &&
     Object.hasOwn(value, 'payload')
@@ -142,7 +154,7 @@ function isPlayerEvent(value: unknown): value is PlayerEvent {
     case 'state.changed':
       return (
         hasOnlyKeys(value, ['event', 'requestId', 'snapshot']) &&
-        isNullableString(value.requestId) &&
+        isNullableNonEmptyString(value.requestId) &&
         isPlayerSnapshot(value.snapshot)
       );
     case 'time.updated':
@@ -181,9 +193,9 @@ function isPlayerEvent(value: unknown): value is PlayerEvent {
           'videoTrackId',
         ]) &&
         isNonEmptyString(value.requestId) &&
-        isNullableString(value.audioTrackId) &&
-        isNullableString(value.subtitleTrackId) &&
-        isNullableString(value.videoTrackId)
+        isNullableNonEmptyString(value.audioTrackId) &&
+        isNullableNonEmptyString(value.subtitleTrackId) &&
+        isNullableNonEmptyString(value.videoTrackId)
       );
     case 'command.settled': {
       if (
@@ -209,13 +221,13 @@ function isPlayerEvent(value: unknown): value is PlayerEvent {
     case 'warning':
       return (
         hasOnlyKeys(value, ['event', 'requestId', 'warning']) &&
-        isNullableString(value.requestId) &&
+        isNullableNonEmptyString(value.requestId) &&
         isPlayerError(value.warning)
       );
     case 'error':
       return (
         hasOnlyKeys(value, ['event', 'requestId', 'error']) &&
-        isNullableString(value.requestId) &&
+        isNullableNonEmptyString(value.requestId) &&
         isPlayerError(value.error)
       );
     default:
@@ -244,7 +256,7 @@ function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
       'tracks',
       'lastError',
     ]) &&
-    isNullableString(value.requestId) &&
+    isNullableNonEmptyString(value.requestId) &&
     isStringInSet(value.status, PLAYER_STATUS_VALUES) &&
     (value.media === null || isPlayerMediaSummary(value.media)) &&
     (value.capabilityProfileId === null || isNonEmptyString(value.capabilityProfileId)) &&
@@ -255,9 +267,9 @@ function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
     isFiniteRangeNumber(value.volume, 0, 1) &&
     typeof value.muted === 'boolean' &&
     isFiniteNonNegativeNumber(value.playbackRate) &&
-    isNullableString(value.selectedAudioTrackId) &&
-    isNullableString(value.selectedSubtitleTrackId) &&
-    isNullableString(value.selectedVideoTrackId) &&
+    isNullableNonEmptyString(value.selectedAudioTrackId) &&
+    isNullableNonEmptyString(value.selectedSubtitleTrackId) &&
+    isNullableNonEmptyString(value.selectedVideoTrackId) &&
     isPlayerTracks(value.tracks) &&
     (value.lastError === null || isPlayerError(value.lastError))
   );
@@ -425,7 +437,7 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function isNullableString(value: unknown): value is string | null {
+function isNullableNonEmptyString(value: unknown): value is string | null {
   return value === null || isNonEmptyString(value);
 }
 
@@ -517,7 +529,7 @@ const lineupDesktop: LineupDesktopPreloadApi = {
   },
   player: {
     dispatch: (envelope) => {
-      if (!isRendererIntentEnvelope(envelope)) {
+      if (!isPlayerRendererIntentEnvelope(envelope)) {
         return Promise.resolve(
           playerValidationFailure<PlayerDispatchResult>(
             readCommandRequestId(envelope),

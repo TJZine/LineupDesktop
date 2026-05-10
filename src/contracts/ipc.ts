@@ -44,6 +44,11 @@ export interface RendererIntentEnvelope<TPayload = unknown> {
   payload: TPayload;
 }
 
+export type PlayerRendererIntentEnvelope<TPayload = unknown> =
+  RendererIntentEnvelope<TPayload> & {
+    intent: PlayerRendererIntent;
+  };
+
 export const LINEUP_SHELL_GET_CAPABILITIES_CHANNEL =
   'lineup:shell:getCapabilities' as const;
 

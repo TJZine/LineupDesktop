@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 
 import {
   LINEUP_PLAYER_CLEANUP_CHANNEL,
@@ -17,7 +19,11 @@ import {
 import { REDACTION_BOUNDARY } from '../contracts/redaction.js';
 import {
   PLAYER_ERROR_CATEGORIES,
+  PLAYER_COMMAND_VALUES,
   PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
+  PLAYER_STATUS_VALUES,
+  PLAYER_TRACK_DELIVERY_TYPE_VALUES,
+  PLAYER_TRACK_KIND_VALUES,
   isRendererSafePlayerEvent,
   type PlaybackCapabilityProfile,
   type PlayerCommand,
@@ -32,6 +38,7 @@ import {
 import {
   LINEUP_PROTOCOL_ORIGIN,
   LINEUP_SHELL_URL,
+  SHELL_STATUS_VALUES,
   isShellStatusEvent,
   isWindowFullscreenIntentEnvelope,
   shellFailure,
@@ -44,6 +51,22 @@ import {
   isAllowedShellUrl,
   isAuthorizedShellIpcRequest,
 } from '../main/shellSecurity.js';
+
+const preloadSource = readFileSync(new URL('../preload/index.cts', import.meta.url), 'utf8');
+
+function readPreloadStringArray(name: string): readonly string[] {
+  const match = new RegExp(`const\\s+${name}\\s*=\\s*(\\[[\\s\\S]*?\\]);`, 'u').exec(preloadSource);
+  assert.ok(match, `missing preload constant ${name}`);
+
+  const value = vm.runInNewContext(match[1], Object.create(null)) as unknown;
+  assert.ok(Array.isArray(value), `preload constant ${name} must be an array`);
+  assert.equal(
+    value.every((item) => typeof item === 'string'),
+    true,
+    `preload constant ${name} must contain strings only`,
+  );
+  return [...value];
+}
 
 function assertNoForbiddenKeys(value: unknown): void {
   if (Array.isArray(value)) {
@@ -188,6 +211,23 @@ test('player renderer intents are closed and separate from shell window intents'
     'player.selectSubtitle',
   ]);
   assert.equal((PLAYER_RENDERER_INTENTS as readonly string[]).includes('window.enterFullscreen'), false);
+});
+
+test('preload duplicated guard constants match contract vocabulary', () => {
+  assert.deepEqual(readPreloadStringArray('SHELL_STATUS_VALUES'), [...SHELL_STATUS_VALUES]);
+  assert.deepEqual(readPreloadStringArray('PLAYER_ERROR_CATEGORIES'), [...PLAYER_ERROR_CATEGORIES]);
+  assert.deepEqual(
+    readPreloadStringArray('PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS'),
+    [...PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS],
+  );
+  assert.deepEqual(readPreloadStringArray('PLAYER_STATUS_VALUES'), [...PLAYER_STATUS_VALUES]);
+  assert.deepEqual(readPreloadStringArray('PLAYER_COMMAND_VALUES'), [...PLAYER_COMMAND_VALUES]);
+  assert.deepEqual(readPreloadStringArray('PLAYER_RENDERER_INTENT_VALUES'), [...PLAYER_RENDERER_INTENTS]);
+  assert.deepEqual(readPreloadStringArray('PLAYER_TRACK_KIND_VALUES'), [...PLAYER_TRACK_KIND_VALUES]);
+  assert.deepEqual(
+    readPreloadStringArray('PLAYER_TRACK_DELIVERY_TYPE_VALUES'),
+    [...PLAYER_TRACK_DELIVERY_TYPE_VALUES],
+  );
 });
 
 test('player events make stale updates identifiable without engine state', () => {
