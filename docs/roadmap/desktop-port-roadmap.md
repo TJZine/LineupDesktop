@@ -97,10 +97,13 @@ after that shell proves the main/preload/renderer boundary.
    unit; this roadmap owns sequencing between plans.
 3. Pick the next unchecked roadmap slice whose `Depends on` gates are complete.
 4. Route Tier 3 roadmap slices through the feature-quality-loop controller so
-   the next session owns planning, plan review, bounded implementation,
-   implementation review, and closeout unless a blocker stops the loop.
-5. Create or update one tracked plan for that slice in `docs/plans/`.
-6. Keep implementation limited to that plan's current unit.
+   the next session owns the whole roadmap item: planning, plan review, bounded
+   execution-unit selection, implementation, implementation review, verification,
+   closeout, and platform proof unless a blocker stops the loop.
+5. Create or update one tracked plan for that roadmap item in `docs/plans/`.
+   The plan should cover the whole item and split implementation into bounded
+   execution units only when that improves reviewability.
+6. Keep implementation limited to the plan's current approved execution unit.
 7. On closeout, update this roadmap only for observed status changes.
 8. End the session with the workflow runbook's `NEXT_SESSION_HANDOFF` shape,
    routing the next session to the next roadmap slice's plan, review, or
@@ -108,6 +111,24 @@ after that shell proves the main/preload/renderer boundary.
 
 Do not use this roadmap to batch multiple product slices into one broad
 implementation. Its purpose is sequencing and dependency clarity.
+
+## Platform Proof Convention
+
+Each roadmap item should make platform proof explicit in its tracked plan and,
+when useful, in this checklist. Use one of these labels:
+
+- `Mac/local automated proof sufficient`: local typecheck, lint, contract,
+  verifier, and source-audit proof can close the item.
+- `Windows proof required before closeout`: the item cannot be marked complete
+  until a Windows run observes the named behavior.
+- `Windows proof deferred to <RD item>`: the item may close without Windows
+  proof only because a later named roadmap item owns that platform evidence.
+
+If a roadmap item touches Electron OS behavior, native playback, Windows app
+paths, credential availability, packaging, signing, installer behavior, or
+live Plex/network behavior that cannot be proven by injected seams, assume
+Windows proof is required unless the tracked plan records a narrower reviewed
+reason.
 
 ## Next-Handoff Rule
 
@@ -119,9 +140,9 @@ When a roadmap slice reaches its exit gates:
   or imports/adapts upstream Lineup source
 - emit one pasteable `NEXT_SESSION_HANDOFF`
 - route to `lineup-desktop-feature-quality-loop` when the next roadmap slice is
-  Tier 3 and should be carried through planning, review, bounded
-  implementation, implementation review, and closeout in one orchestrated
-  workflow
+  Tier 3 and should be carried through whole-item planning, review, bounded
+  implementation units, implementation review, verification, platform proof,
+  and closeout in one orchestrated workflow
 - route to `lineup-desktop-feature-plan` when the next slice does not yet have a
   tracked plan
 - route to `lineup-desktop-feature-review` when a plan or implementation needs
@@ -130,9 +151,9 @@ When a roadmap slice reaches its exit gates:
   review is clean
 
 RD-01 through RD-09 are complete enough to route the next Tier 3 session to
-RD-10 Plex auth, discovery, and library planning. Do not import original
-Lineup product code until a reviewed product slice plan explicitly authorizes a
-bounded import.
+complete RD-10 Plex auth, discovery, and library through the quality loop. Do
+not import original Lineup product code until a reviewed product slice plan
+explicitly authorizes a bounded import.
 
 ## Roadmap Checklist
 
@@ -572,6 +593,10 @@ Exit gates:
 - Auth/discovery/library tests pass.
 - Redaction verifier covers imported files and new fixtures.
 - No renderer credential custody.
+- Platform proof: Mac/local automated proof is sufficient for pure imported
+  domain/storage-seam units. Windows proof is required before closeout if the
+  RD-10 plan wires real Electron safeStorage runtime, app paths, live Plex
+  auth/discovery, or any OS-specific credential behavior.
 
 ### RD-11 Scheduler, Channel, And Content Domain Import
 

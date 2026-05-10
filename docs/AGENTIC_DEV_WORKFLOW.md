@@ -421,6 +421,14 @@ Rules:
 
 - If review findings block progress, route the handoff to the session type that
   must resolve them.
+- For Tier 3 roadmap work, make `TASK` name the whole roadmap item and the loop
+  objective, for example `Complete RD-10 ... Through Quality Loop`. The
+  `MESSAGE` should name the current phase, current execution unit when one has
+  been selected, remaining required units, and the platform-proof requirement.
+- Mid-item handoffs route back to the same roadmap item. Route to the next
+  roadmap item only after the current item's exit gates, review gates,
+  verification, memory updates, and platform-proof requirement are complete or
+  explicitly blocked/deferred by a reviewed replan.
 - If no further session is needed, say so instead of emitting a fake handoff.
 - Keep the block short enough to paste directly into a fresh session.
 - Keep `TASK`, `PLAN`, `ARTIFACT`, and `FILES` concrete enough that the next

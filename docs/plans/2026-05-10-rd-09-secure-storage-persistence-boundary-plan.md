@@ -14,7 +14,7 @@ MODEL_SUGGESTION: GPT-5.5, high reasoning for review; GPT-5.5, medium reasoning 
 
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: [$lineup-desktop-feature-quality-loop](/Users/tristan/Software/LineupDesktop/.agents/skills/lineup-desktop-feature-quality-loop/SKILL.md)
-TASK: Plan RD-10 Plex Auth, Discovery, And Library Import
+TASK: Complete RD-10 Plex Auth, Discovery, And Library Import Through Quality Loop
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: none
@@ -35,7 +35,7 @@ FILES:
 - src/__tests__/persistenceBoundary.test.ts
 - package.json
 BLOCKERS: none known.
-MESSAGE: Create the RD-10 Plex Auth, Discovery, And Library Import plan. Start from completed RD-09: main-owned persistence now has renderer-safe account/server/credential-handle contracts, app-data path ownership, an injected Electron safeStorage codec seam, encrypted Plex credential records, selected-server state, unavailable/corrupt classification, fail-closed no-plaintext behavior, and tests. RD-09 does not wire Plex auth/discovery/library runtime, preload/renderer APIs, network transport, scheduler/channel persistence, backup/restore implementation, package/dependency changes, or copied/adapted upstream source. RD-10 should plan the first bounded Plex auth/discovery/library import behind this storage/redaction boundary, update the import ledger before or with any copied/adapted source, and keep tokens, raw headers, tokenized URLs, raw Plex payloads, and transport diagnostics out of renderer-facing contracts, logs, fixtures, docs, and Codex output.
+MESSAGE: Complete the RD-10 Plex Auth, Discovery, And Library Import roadmap item through the Tier 3 quality loop. Plan the entire RD-10 item first, split implementation into bounded execution units if needed, and keep the same RD-10 controller active until all required units, reviews, verification, docs, import-ledger updates, and the platform-proof gate are complete or explicitly blocked. Start from completed RD-09: main-owned persistence now has renderer-safe account/server/credential-handle contracts, app-data path ownership, an injected Electron safeStorage codec seam, encrypted Plex credential records, selected-server state, unavailable/corrupt classification, fail-closed no-plaintext behavior, and tests. RD-09 does not wire Plex auth/discovery/library runtime, preload/renderer APIs, network transport, scheduler/channel persistence, backup/restore implementation, package/dependency changes, or copied/adapted upstream source. RD-10 should import/adapt Plex auth/discovery/library only behind this storage/redaction boundary, update the import ledger before or with any copied/adapted source, and keep tokens, raw headers, tokenized URLs, raw Plex payloads, and transport diagnostics out of renderer-facing contracts, logs, fixtures, docs, and Codex output. Platform proof: Mac/local automated proof is sufficient for pure imported domain/storage-seam units; Windows proof is required before RD-10 closeout if the plan wires real Electron safeStorage runtime, app paths, live Plex auth/discovery, or any OS-specific credential behavior.
 
 ## Goal
 
