@@ -72,6 +72,17 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
   fixture-driven only: no live Plex contact, secure storage, renderer UI,
   native helper, package/dependency change, runtime IPC wiring, Plex HTPC parity
   claim, or copied/adapted upstream source landed.
+- [x] RD-09 Secure Storage And Persistence Boundary implemented through
+  `src/contracts/persistence.ts`, `src/main/persistence/*`, and
+  `src/__tests__/persistenceBoundary.test.ts`; `npm run verify` passed on
+  2026-05-10. The unit adds main-owned app-data path resolution, an injected
+  Electron safeStorage codec seam, encrypted Plex credential records,
+  selected-server state, unavailable/corrupt classification, fail-closed
+  no-plaintext fallback, renderer-safe snapshots, and forbidden-field tests.
+  It does not wire Plex auth/discovery/library runtime, preload/renderer APIs,
+  network transport, scheduler/channel persistence, backup/restore
+  implementation, package/dependency changes, or copied/adapted upstream
+  source.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -118,8 +129,8 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-08 are complete enough to route the next Tier 3 session to
-RD-09 secure storage and persistence-boundary planning. Do not import original
+RD-01 through RD-09 are complete enough to route the next Tier 3 session to
+RD-10 Plex auth, discovery, and library planning. Do not import original
 Lineup product code until a reviewed product slice plan explicitly authorizes a
 bounded import.
 
@@ -492,7 +503,9 @@ Exit gates:
 
 ### RD-09 Secure Storage And Persistence Boundary
 
-Status: not started.
+Status: complete. Implemented through
+`docs/plans/2026-05-10-rd-09-secure-storage-persistence-boundary-plan.md`;
+`npm run verify` passed on 2026-05-10.
 
 Depends on:
 
@@ -517,9 +530,13 @@ New Desktop design:
 
 Exit gates:
 
-- Credential/store interfaces are typed and tested.
-- Renderer-facing contracts cannot carry credential-like secret material.
-- Backup/restore, unavailable secure-storage behavior, and redacted diagnostics
+- Credential/store interfaces are typed and tested through
+  `src/contracts/persistence.ts`, `src/main/persistence/*`, and
+  `src/__tests__/persistenceBoundary.test.ts`.
+- Renderer-facing contracts cannot carry credential-like secret material; tests
+  recursively reject forbidden persistence fields.
+- Backup/restore, unavailable secure-storage behavior, fail-closed
+  no-plaintext fallback, corruption handling, and redacted diagnostics
   expectations are documented.
 
 ### RD-10 Plex Auth, Discovery, And Library Import
