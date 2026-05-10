@@ -1,3 +1,5 @@
+# RD-07 Desktop VideoPlayer Adapter Plan
+
 **Plan Status:** complete
 
 **Task family:** feature/design

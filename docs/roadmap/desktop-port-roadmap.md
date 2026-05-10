@@ -410,7 +410,7 @@ Status: complete. The `desktop-player-adapter-boundary-core` unit is implemented
 and reviewed clean. The `desktop-player-runtime-ipc-preload-delivery` unit is
 implemented and reviewed clean with development/smoke fake-host delivery and
 production unsupported/noop behavior. The
-`desktop-player-mac-native-host-process-seam` unit adds fakeable process
+`desktop-player-native-host-process-seam` unit adds fakeable process
 lifecycle plumbing, cleanup/reap behavior, safe failure normalization, stale/late
 output handling, and redaction tests. The Windows closeout unit adds real
 spawned helper process proof for the RD-07 process seam and reruns the RD-06
