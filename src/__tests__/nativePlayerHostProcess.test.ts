@@ -1,0 +1,358 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import type { Buffer } from 'node:buffer';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import { setImmediate } from 'node:timers';
+import { setTimeout as delay } from 'node:timers/promises';
+
+import {
+  PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
+  type PlayerCommand,
+} from '../contracts/player.js';
+import {
+  NativePlayerHostProcess,
+  type NativePlayerHostChildProcess,
+} from '../main/player/nativePlayerHostProcess.js';
+
+class FakeHostChildProcess extends EventEmitter implements NativePlayerHostChildProcess {
+  readonly stdin = new PassThrough();
+  readonly stdout = new PassThrough();
+  readonly stderr = new PassThrough();
+  readonly writes: unknown[] = [];
+  killed = false;
+  readonly killSignals: string[] = [];
+  autoCloseOnKill = true;
+
+  constructor() {
+    super();
+    this.stdin.on('data', (chunk: Buffer) => {
+      for (const line of chunk.toString().trim().split('\n')) {
+        if (line.length > 0) {
+          this.writes.push(JSON.parse(line));
+        }
+      }
+    });
+  }
+
+  kill(signal?: string): boolean {
+    this.killed = true;
+    this.killSignals.push(signal ?? 'SIGTERM');
+    if (this.autoCloseOnKill) {
+      setImmediate(() => this.emitClose(signal));
+    }
+    return true;
+  }
+
+  emitClose(signal: string | null = null): void {
+    this.emit('close', 0, signal);
+  }
+
+  send(value: unknown): void {
+    this.stdout.write(`${JSON.stringify(value)}\n`);
+  }
+
+  sendRaw(value: string): void {
+    this.stdout.write(`${value}\n`);
+  }
+}
+
+const loadCommand: PlayerCommand = {
+  command: 'load',
+  requestId: 'native-load-1',
+  payload: {
+    media: {
+      id: 'media-1',
+      title: 'Episode 1',
+      durationMs: 1_000,
+      container: 'mkv',
+    },
+    policy: {
+      autoplay: true,
+      startPositionMs: 0,
+      preferredAudioTrackId: null,
+      preferredSubtitleTrackId: null,
+    },
+    capabilityProfileId: 'native-process-test',
+  },
+};
+
+function assertNoForbiddenKeys(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      assertNoForbiddenKeys(item);
+    }
+    return;
+  }
+
+  if (value === null || typeof value !== 'object') {
+    return;
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    assert.equal(
+      PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS.includes(
+        key as (typeof PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS)[number],
+      ),
+      false,
+      `native host process value contains forbidden key ${key}`,
+    );
+    assertNoForbiddenKeys(child);
+  }
+}
+
+function assertTextAbsent(value: unknown, text: string): void {
+  assert.equal(JSON.stringify(value).includes(text), false, `unexpected renderer-facing text ${text}`);
+}
+
+test('native host process translates commands and returns safe host events', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+
+  const pending = host.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(child.writes[0], {
+    type: 'command',
+    requestId: 'native-load-1',
+    command: 'load',
+    payload: loadCommand.payload,
+  });
+
+  child.send({
+    type: 'event',
+    event: {
+      type: 'playback.state',
+      requestId: 'native-load-1',
+      status: 'buffering',
+      playing: false,
+    },
+  });
+  child.send({
+    type: 'result',
+    requestId: 'native-load-1',
+    ok: true,
+    events: [
+      {
+        type: 'media.loaded',
+        requestId: 'native-load-1',
+        media: loadCommand.payload.media,
+        durationMs: 1_000,
+        tracks: [],
+      },
+    ],
+  });
+
+  const result = await pending;
+
+  assert.equal(result.ok, true);
+  assert.equal(result.ok ? result.events?.length : 0, 2);
+  assertNoForbiddenKeys(child.writes);
+  assertNoForbiddenKeys(result);
+});
+
+test('native host process normalizes malformed and privileged output', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+
+  const malformed = host.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.sendRaw('{not-json');
+  const malformedResult = await malformed;
+
+  assert.equal(malformedResult.ok, false);
+  assert.equal(malformedResult.ok ? null : malformedResult.error.category, 'helper-failure');
+  assert.equal(JSON.stringify(malformedResult).includes('not-json'), false);
+
+  const privileged = host.execute({ ...loadCommand, requestId: 'native-load-2' });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.send({
+    type: 'result',
+    requestId: 'native-load-2',
+    ok: false,
+    error: {
+      code: 'PLAYER_NATIVE_RAW_FAILURE',
+      category: 'helper-failure',
+      message: 'do not expose this raw detail',
+      nativeHandle: 'native-secret',
+    },
+  });
+  const privilegedResult = await privileged;
+
+  assert.equal(privilegedResult.ok, false);
+  assert.equal(privilegedResult.ok ? null : privilegedResult.error.code, 'PLAYER_HELPER_MALFORMED_OUTPUT');
+  assertTextAbsent(privilegedResult, 'native-secret');
+  assertTextAbsent(privilegedResult, 'do not expose this raw detail');
+  assertNoForbiddenKeys(privilegedResult);
+
+  const failed = host.execute({ ...loadCommand, requestId: 'native-load-3' });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.send({
+    type: 'result',
+    requestId: 'native-load-3',
+    ok: false,
+    error: {
+      code: 'PLAYER_HELPER_TEST_FAILURE',
+      category: 'helper-failure',
+      message: 'raw helper process detail',
+      recoverable: false,
+      retryable: false,
+    },
+  });
+  const failedResult = await failed;
+
+  assert.equal(failedResult.ok, false);
+  assert.equal(failedResult.ok ? null : failedResult.error.code, 'PLAYER_HELPER_TEST_FAILURE');
+  assertTextAbsent(failedResult, 'raw helper process detail');
+  assertNoForbiddenKeys(failedResult);
+});
+
+test('native host process normalizes timeout, spawn failure, and exit failure', async () => {
+  const timeoutChild = new FakeHostChildProcess();
+  const timeoutHost = new NativePlayerHostProcess({
+    spawnHostProcess: () => timeoutChild,
+    requestTimeoutMs: 1,
+  });
+
+  const timeoutResult = await timeoutHost.execute(loadCommand);
+  assert.equal(timeoutResult.ok, false);
+  assert.equal(timeoutResult.ok ? null : timeoutResult.error.category, 'timeout');
+
+  const spawnHost = new NativePlayerHostProcess({
+    spawnHostProcess: () => {
+      throw new Error('local path /tmp/helper-secret');
+    },
+  });
+  const spawnResult = await spawnHost.execute(loadCommand);
+  assert.equal(spawnResult.ok, false);
+  assert.equal(spawnResult.ok ? null : spawnResult.error.code, 'PLAYER_HELPER_SPAWN_FAILED');
+  assertTextAbsent(spawnResult, '/tmp/helper-secret');
+
+  const exitChild = new FakeHostChildProcess();
+  const exitHost = new NativePlayerHostProcess({
+    spawnHostProcess: () => exitChild,
+    requestTimeoutMs: 100,
+  });
+  const exitPending = exitHost.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  exitChild.emit('close', 1, null);
+  const exitResult = await exitPending;
+  assert.equal(exitResult.ok, false);
+  assert.equal(exitResult.ok ? null : exitResult.error.code, 'PLAYER_HELPER_EXITED');
+  assertNoForbiddenKeys([timeoutResult, spawnResult, exitResult]);
+});
+
+test('native host process cleanup reaps child and ignores late output', async () => {
+  const firstChild = new FakeHostChildProcess();
+  const secondChild = new FakeHostChildProcess();
+  const children = [firstChild, secondChild];
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => {
+      const child = children.shift();
+      assert.ok(child, 'expected a fake child process');
+      return child;
+    },
+    requestTimeoutMs: 100,
+    cleanupGraceMs: 10,
+  });
+
+  const pending = host.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  await host.cleanup('native-load-1');
+  const result = await pending;
+
+  firstChild.send({
+    type: 'result',
+    requestId: 'native-load-1',
+    ok: true,
+    events: [
+      {
+        type: 'time.updated',
+        requestId: 'native-load-1',
+        positionMs: 500,
+        durationMs: 1_000,
+      },
+    ],
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? null : result.error.category, 'aborted');
+  assert.equal(firstChild.killSignals.includes('SIGTERM'), true);
+  assert.deepEqual(firstChild.writes[1], { type: 'cleanup', requestId: 'native-load-1' });
+  assertNoForbiddenKeys(result);
+
+  const nextPending = host.execute({ ...loadCommand, requestId: 'native-load-2' });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  secondChild.send({ type: 'result', requestId: 'native-load-2', ok: true, events: [] });
+  assert.equal((await nextPending).ok, true);
+  assert.deepEqual(secondChild.writes[0], {
+    type: 'command',
+    requestId: 'native-load-2',
+    command: 'load',
+    payload: loadCommand.payload,
+  });
+});
+
+test('native host process escalates cleanup and waits for close before resolving', async () => {
+  const child = new FakeHostChildProcess();
+  child.autoCloseOnKill = false;
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+    cleanupGraceMs: 10,
+  });
+
+  const pending = host.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  let cleanupResolved = false;
+  const cleanup = host.cleanup('native-load-1').then(() => {
+    cleanupResolved = true;
+  });
+  const result = await pending;
+  await delay(15);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? null : result.error.category, 'aborted');
+  assert.deepEqual(child.killSignals, ['SIGTERM', 'SIGKILL']);
+  assert.equal(cleanupResolved, false);
+
+  child.emitClose('SIGKILL');
+  await cleanup;
+  assert.equal(cleanupResolved, true);
+  assertNoForbiddenKeys(result);
+});
+
+test('native host process normalizes stdio stream errors without raw details', async () => {
+  for (const streamName of ['stdin', 'stdout', 'stderr'] as const) {
+    const child = new FakeHostChildProcess();
+    child.autoCloseOnKill = false;
+    const host = new NativePlayerHostProcess({
+      spawnHostProcess: () => child,
+      requestTimeoutMs: 100,
+      cleanupGraceMs: 10,
+    });
+
+    const pending = host.execute({ ...loadCommand, requestId: `native-${streamName}-error` });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    child[streamName].emit('error', new Error('nativeHandle=secret tokenizedUrl=http://secret.example'));
+    const result = await pending;
+    await delay(15);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.ok ? null : result.error.code, 'PLAYER_HELPER_STREAM_FAILED');
+    assert.deepEqual(child.killSignals, ['SIGTERM', 'SIGKILL']);
+    assert.equal(JSON.stringify(result).includes('nativeHandle'), false);
+    assert.equal(JSON.stringify(result).includes('tokenizedUrl'), false);
+    assert.equal(JSON.stringify(result).includes('secret.example'), false);
+    assertNoForbiddenKeys(result);
+    child.emitClose('SIGKILL');
+  }
+});

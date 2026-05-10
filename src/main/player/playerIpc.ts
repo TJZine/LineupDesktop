@@ -22,6 +22,7 @@ import { DesktopPlayerAdapter } from './desktopPlayerAdapter.js';
 import type {
   NativePlayerHostCommandResult,
   NativePlayerHostEvent,
+  NativePlayerHostFactory,
   NativePlayerHostPort,
 } from './nativePlayerHostPort.js';
 
@@ -32,6 +33,7 @@ export interface RegisterPlayerIpcHandlersOptions {
   isAuthorizedEvent(event: IpcMainInvokeEvent): boolean;
   sendPlayerEvent(event: PlayerEvent): void;
   createRequestId(prefix: string): string;
+  nativeHostFactory?: NativePlayerHostFactory;
   ipcMain?: PlayerIpcMain;
 }
 
@@ -49,7 +51,7 @@ export function registerPlayerIpcHandlers(
   const ipcMain = options.ipcMain ?? getElectronIpcMain();
   const runtime =
     options.shellMode === 'development' || options.shellMode === 'smoke'
-      ? { adapter: new DesktopPlayerAdapter(new InertNativePlayerHost()) }
+      ? { adapter: new DesktopPlayerAdapter(createDevelopmentHost(options)) }
       : { adapter: null };
 
   ipcMain.handle(LINEUP_PLAYER_COMMAND_CHANNEL, async (event, payload: unknown) => {
@@ -114,6 +116,12 @@ export function registerPlayerIpcHandlers(
       ipcMain.removeHandler(channel);
     }
   };
+}
+
+function createDevelopmentHost(
+  options: Pick<RegisterPlayerIpcHandlersOptions, 'nativeHostFactory'>,
+): NativePlayerHostPort {
+  return options.nativeHostFactory?.() ?? new InertNativePlayerHost();
 }
 
 function emitEvents(

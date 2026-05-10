@@ -9,9 +9,14 @@ import {
 } from '../contracts/ipc.js';
 import {
   PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
+  type PlayerCommand,
   type PlayerEvent,
 } from '../contracts/player.js';
 import { registerPlayerIpcHandlers } from '../main/player/playerIpc.js';
+import type {
+  NativePlayerHostCommandResult,
+  NativePlayerHostPort,
+} from '../main/player/nativePlayerHostPort.js';
 
 type Handler = (event: IpcMainInvokeEvent, payload?: unknown) => unknown;
 
@@ -30,6 +35,20 @@ class FakeIpcMain {
     const handler = this.handlers.get(channel);
     assert.ok(handler, `missing handler for ${channel}`);
     return handler(event as IpcMainInvokeEvent, payload);
+  }
+}
+
+class ConfigurableNativeHost implements NativePlayerHostPort {
+  readonly commands: PlayerCommand[] = [];
+  executeResult: NativePlayerHostCommandResult = { ok: true };
+
+  async execute(command: PlayerCommand): Promise<NativePlayerHostCommandResult> {
+    this.commands.push(command);
+    return this.executeResult;
+  }
+
+  async cleanup(): Promise<void> {
+    return undefined;
   }
 }
 
@@ -222,11 +241,16 @@ test('player IPC enforces main authorization before adapter access', async () =>
 test('production player IPC returns unsupported failures and does not activate fake playback', async () => {
   const ipcMain = new FakeIpcMain();
   const events: PlayerEvent[] = [];
+  let nativeHostCreated = false;
   registerPlayerIpcHandlers({
     shellMode: 'production',
     isAuthorizedEvent,
     sendPlayerEvent: (event) => events.push(event),
     createRequestId,
+    nativeHostFactory: () => {
+      nativeHostCreated = true;
+      return new ConfigurableNativeHost();
+    },
     ipcMain,
   });
 
@@ -247,6 +271,7 @@ test('production player IPC returns unsupported failures and does not activate f
   );
 
   assert.equal((commandResult as { ok: boolean }).ok, false);
+  assert.equal(nativeHostCreated, false);
   assert.equal(
     (commandResult as { error: { category: string; code: string } }).error.category,
     'unsupported-capability',
@@ -264,4 +289,45 @@ test('production player IPC returns unsupported failures and does not activate f
   assertNoForbiddenKeys(snapshotResult);
   assertNoForbiddenKeys(cleanupResult);
   assertNoForbiddenKeys(events);
+});
+
+test('player IPC can use an explicit development host factory without changing production policy', async () => {
+  const ipcMain = new FakeIpcMain();
+  const host = new ConfigurableNativeHost();
+  host.executeResult = {
+    ok: false,
+    error: {
+      code: 'PLAYER_HELPER_TIMEOUT',
+      category: 'timeout',
+      message: 'The player helper did not respond in time.',
+      recoverable: true,
+      retryable: true,
+    },
+  };
+
+  registerPlayerIpcHandlers({
+    shellMode: 'development',
+    isAuthorizedEvent,
+    sendPlayerEvent: () => undefined,
+    createRequestId,
+    nativeHostFactory: () => host,
+    ipcMain,
+  });
+
+  const result = await ipcMain.invoke(
+    LINEUP_PLAYER_COMMAND_CHANNEL,
+    authorizedEvent(),
+    loadEnvelope('player-dev-process-1'),
+  );
+
+  assert.equal(host.commands.length, 1);
+  assert.equal(host.commands[0]?.requestId, 'player-dev-process-1');
+  assert.equal((result as { ok: boolean }).ok, true);
+  assert.equal(
+    (result as { value: { events: PlayerEvent[] } }).value.events.some(
+      (event) => event.event === 'command.settled' && !event.ok,
+    ),
+    true,
+  );
+  assertNoForbiddenKeys(result);
 });
