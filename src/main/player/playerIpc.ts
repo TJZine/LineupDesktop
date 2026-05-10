@@ -95,7 +95,14 @@ export function registerPlayerIpcHandlers(
       return playerSuccess(requestId, createInertSnapshot());
     }
 
-    const result = await runtime.adapter.cleanup();
+    let result: Awaited<ReturnType<DesktopPlayerAdapter['cleanup']>>;
+    try {
+      result = await runtime.adapter.cleanup();
+    } catch (error: unknown) {
+      options.reportDiagnostic?.('Player IPC cleanup failed', error);
+      return playerFailure(requestId, cleanupError(requestId));
+    }
+
     emitEvents(options, result.events);
 
     if (!result.accepted) {

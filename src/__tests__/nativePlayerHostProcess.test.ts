@@ -271,24 +271,34 @@ test('native host process normalizes real helper process exits without raw detai
 });
 
 test('native host process normalizes malformed and privileged output', async () => {
-  const child = new FakeHostChildProcess();
+  const malformedChild = new FakeHostChildProcess();
+  const privilegedChild = new FakeHostChildProcess();
+  const failedChild = new FakeHostChildProcess();
+  const children = [malformedChild, privilegedChild, failedChild];
   const host = new NativePlayerHostProcess({
-    spawnHostProcess: () => child,
+    spawnHostProcess: () => {
+      const child = children.shift();
+      assert.ok(child, 'expected a fake child process');
+      return child;
+    },
     requestTimeoutMs: 100,
+    cleanupGraceMs: 10,
   });
 
   const malformed = host.execute(loadCommand);
   await new Promise<void>((resolve) => setImmediate(resolve));
-  child.sendRaw('{not-json');
+  malformedChild.sendRaw('{not-json');
   const malformedResult = await malformed;
+  await delay(15);
 
   assert.equal(malformedResult.ok, false);
   assert.equal(malformedResult.ok ? null : malformedResult.error.category, 'helper-failure');
   assert.equal(JSON.stringify(malformedResult).includes('not-json'), false);
+  assert.deepEqual(malformedChild.killSignals, ['SIGTERM']);
 
   const privileged = host.execute({ ...loadCommand, requestId: 'native-load-2' });
   await new Promise<void>((resolve) => setImmediate(resolve));
-  child.send({
+  privilegedChild.send({
     type: 'result',
     requestId: 'native-load-2',
     ok: false,
@@ -306,10 +316,12 @@ test('native host process normalizes malformed and privileged output', async () 
   assertTextAbsent(privilegedResult, 'native-secret');
   assertTextAbsent(privilegedResult, 'do not expose this raw detail');
   assertNoForbiddenKeys(privilegedResult);
+  await delay(15);
+  assert.deepEqual(privilegedChild.killSignals, ['SIGTERM']);
 
   const failed = host.execute({ ...loadCommand, requestId: 'native-load-3' });
   await new Promise<void>((resolve) => setImmediate(resolve));
-  child.send({
+  failedChild.send({
     type: 'result',
     requestId: 'native-load-3',
     ok: false,
@@ -327,18 +339,76 @@ test('native host process normalizes malformed and privileged output', async () 
   assert.equal(failedResult.ok ? null : failedResult.error.code, 'PLAYER_HELPER_TEST_FAILURE');
   assertTextAbsent(failedResult, 'raw helper process detail');
   assertNoForbiddenKeys(failedResult);
+  assert.deepEqual(failedChild.killSignals, []);
+});
+
+test('native host process quarantines oversized output before the next command', async () => {
+  const oversizedChild = new FakeHostChildProcess();
+  const replacementChild = new FakeHostChildProcess();
+  const children = [oversizedChild, replacementChild];
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => {
+      const child = children.shift();
+      assert.ok(child, 'expected a fake child process');
+      return child;
+    },
+    requestTimeoutMs: 100,
+    cleanupGraceMs: 10,
+  });
+
+  const oversized = host.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  oversizedChild.stdout.write('x'.repeat(64 * 1024 + 1));
+  const oversizedResult = await oversized;
+  await delay(15);
+
+  assert.equal(oversizedResult.ok, false);
+  assert.equal(oversizedResult.ok ? null : oversizedResult.error.code, 'PLAYER_HELPER_MALFORMED_OUTPUT');
+  assert.deepEqual(oversizedChild.killSignals, ['SIGTERM']);
+  assertNoForbiddenKeys(oversizedResult);
+
+  const replacement = host.execute({ ...loadCommand, requestId: 'native-load-after-oversized' });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  replacementChild.send({ type: 'result', requestId: 'native-load-after-oversized', ok: true, events: [] });
+  assert.equal((await replacement).ok, true);
+  assert.deepEqual(replacementChild.writes[0], {
+    type: 'command',
+    requestId: 'native-load-after-oversized',
+    command: 'load',
+    payload: loadCommand.payload,
+  });
 });
 
 test('native host process normalizes timeout, spawn failure, and exit failure', async () => {
   const timeoutChild = new FakeHostChildProcess();
+  const replacementChild = new FakeHostChildProcess();
+  const timeoutChildren = [timeoutChild, replacementChild];
   const timeoutHost = new NativePlayerHostProcess({
-    spawnHostProcess: () => timeoutChild,
+    spawnHostProcess: () => {
+      const child = timeoutChildren.shift();
+      assert.ok(child, 'expected a fake child process');
+      return child;
+    },
     requestTimeoutMs: 1,
+    cleanupGraceMs: 10,
   });
 
   const timeoutResult = await timeoutHost.execute(loadCommand);
+  await delay(15);
   assert.equal(timeoutResult.ok, false);
   assert.equal(timeoutResult.ok ? null : timeoutResult.error.category, 'timeout');
+  assert.deepEqual(timeoutChild.killSignals, ['SIGTERM']);
+
+  const replacementResult = timeoutHost.execute({ ...loadCommand, requestId: 'native-load-after-timeout' });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  replacementChild.send({ type: 'result', requestId: 'native-load-after-timeout', ok: true, events: [] });
+  assert.equal((await replacementResult).ok, true);
+  assert.deepEqual(replacementChild.writes[0], {
+    type: 'command',
+    requestId: 'native-load-after-timeout',
+    command: 'load',
+    payload: loadCommand.payload,
+  });
 
   const spawnHost = new NativePlayerHostProcess({
     spawnHostProcess: () => {

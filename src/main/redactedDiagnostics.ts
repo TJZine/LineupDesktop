@@ -1,21 +1,39 @@
+const REDACTED_DIAGNOSTIC_KEYS = [
+  'rawMediaUrl',
+  'tokenizedUrl',
+  'authHeaders',
+  'rawAuthHeaders',
+  'persistentToken',
+  'credentialMaterial',
+  'nativeHandle',
+  'libmpvObject',
+  'engineId',
+  'electronApi',
+  'nodeApi',
+  'rawPlexPayload',
+  'streamKey',
+  'partKey',
+  'secretDiagnostics',
+] as const;
+
+const REDACTED_DIAGNOSTIC_KEY_PATTERN = REDACTED_DIAGNOSTIC_KEYS
+  .map(escapeRegExp)
+  .join('|');
+
 const REDACTED_DIAGNOSTIC_PATTERNS = [
-  /\brawMediaUrl\b/giu,
-  /\btokenizedUrl\b/giu,
-  /\bauthHeaders\b/giu,
-  /\brawAuthHeaders\b/giu,
-  /\bpersistentToken\b/giu,
-  /\bcredentialMaterial\b/giu,
-  /\bnativeHandle\b/giu,
-  /\blibmpvObject\b/giu,
-  /\bengineId\b/giu,
-  /\belectronApi\b/giu,
-  /\bnodeApi\b/giu,
-  /\brawPlexPayload\b/giu,
-  /\bstreamKey\b/giu,
-  /\bpartKey\b/giu,
-  /\bsecretDiagnostics\b/giu,
+  new RegExp(
+    String.raw`(?:"(?:${REDACTED_DIAGNOSTIC_KEY_PATTERN})"|'(?:${REDACTED_DIAGNOSTIC_KEY_PATTERN})'|(?:${REDACTED_DIAGNOSTIC_KEY_PATTERN}))\s*(?:=|:)\s*(?:"[^"]*"|'[^']*'|[^\s,}]+)`,
+    'giu',
+  ),
+  ...REDACTED_DIAGNOSTIC_KEYS.map(
+    (key) => new RegExp(String.raw`\b${escapeRegExp(key)}\b`, 'giu'),
+  ),
   /https?:\/\/[^\s"')]+/giu,
 ] as const;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
 
 export function redactMainProcessError(
   error: unknown,

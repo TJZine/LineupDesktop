@@ -175,13 +175,20 @@ test('player IPC reports cleanup failures and still removes handlers', async () 
   assert.equal(JSON.stringify(diagnostics[0]?.error).includes('nativeHandle'), false);
 });
 
-test('main process diagnostics redact privileged field names and URLs', () => {
+test('main process diagnostics redact privileged key-value pairs and URLs', () => {
   const message = redactMainProcessError(
-    new Error('nativeHandle=secret tokenizedUrl=http://secret.example/media'),
+    new Error(
+      'nativeHandle=secret tokenizedUrl=http://secret.example/media "authHeaders":"json-secret" rawPlexPayload: bare-secret',
+    ),
   );
 
   assert.equal(message.includes('nativeHandle'), false);
   assert.equal(message.includes('tokenizedUrl'), false);
+  assert.equal(message.includes('authHeaders'), false);
+  assert.equal(message.includes('rawPlexPayload'), false);
+  assert.equal(message.includes('secret'), false);
+  assert.equal(message.includes('json-secret'), false);
+  assert.equal(message.includes('bare-secret'), false);
   assert.equal(message.includes('secret.example'), false);
 });
 
@@ -333,6 +340,40 @@ test('production player IPC returns unsupported failures and does not activate f
   assertNoForbiddenKeys(commandResult);
   assertNoForbiddenKeys(snapshotResult);
   assertNoForbiddenKeys(cleanupResult);
+  assertNoForbiddenKeys(events);
+});
+
+test('player IPC cleanup returns a safe failure envelope when host cleanup fails', async () => {
+  const ipcMain = new FakeIpcMain();
+  const host = new ConfigurableNativeHost();
+  const events: PlayerEvent[] = [];
+  host.cleanupError = new Error('nativeHandle=cleanup-secret');
+  registerPlayerIpcHandlers({
+    shellMode: 'development',
+    isAuthorizedEvent,
+    sendPlayerEvent: (event) => events.push(event),
+    createRequestId,
+    nativeHostFactory: () => host,
+    ipcMain,
+  });
+
+  await ipcMain.invoke(
+    LINEUP_PLAYER_COMMAND_CHANNEL,
+    authorizedEvent(),
+    loadEnvelope('player-cleanup-load-1'),
+  );
+  const result = await ipcMain.invoke(
+    LINEUP_PLAYER_CLEANUP_CHANNEL,
+    authorizedEvent(),
+    { requestId: 'player-cleanup-fails-1' },
+  );
+
+  assert.equal((result as { ok: boolean }).ok, false);
+  assert.equal((result as { requestId: string }).requestId, 'player-cleanup-fails-1');
+  assert.equal((result as { error: { category: string } }).error.category, 'cleanup-failure');
+  assert.equal(events.some((event) => event.event === 'error'), true);
+  assert.equal(JSON.stringify(result).includes('cleanup-secret'), false);
+  assertNoForbiddenKeys(result);
   assertNoForbiddenKeys(events);
 });
 

@@ -82,13 +82,13 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       return { ok: false, error: child.error };
     }
 
+    const activeChild = child.child;
     return new Promise<NativePlayerHostCommandResult>((resolve) => {
       const timeout = setTimeout(() => {
-        this.#pending.delete(command.requestId);
-        resolve({
-          ok: false,
-          error: safeFailure('PLAYER_HELPER_TIMEOUT', 'timeout', true, true),
-        });
+        this.#quarantineChild(
+          activeChild,
+          safeFailure('PLAYER_HELPER_TIMEOUT', 'timeout', true, true),
+        );
       }, this.#requestTimeoutMs);
       const pending: PendingCommand = {
         requestId: command.requestId,
@@ -103,7 +103,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       this.#pending.set(command.requestId, pending);
 
       try {
-        child.child.stdin.write(`${JSON.stringify(toProcessCommand(command))}\n`, (error) => {
+        activeChild.stdin.write(`${JSON.stringify(toProcessCommand(command))}\n`, (error) => {
           if (error !== null && error !== undefined) {
             this.#resolvePending(
               command.requestId,
@@ -194,8 +194,10 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
 
     this.#lineBuffer += chunk.toString();
     if (this.#lineBuffer.length > MAX_LINE_LENGTH) {
-      this.#lineBuffer = '';
-      this.#rejectAllPending(safeFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true));
+      this.#quarantineChild(
+        child,
+        safeFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true),
+      );
       return;
     }
 
@@ -204,16 +206,16 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       const line = this.#lineBuffer.slice(0, newlineIndex).trim();
       this.#lineBuffer = this.#lineBuffer.slice(newlineIndex + 1);
       if (line.length > 0) {
-        this.#handleLine(line);
+        this.#handleLine(child, line);
       }
       newlineIndex = this.#lineBuffer.indexOf('\n');
     }
   }
 
-  #handleLine(line: string): void {
+  #handleLine(child: NativePlayerHostChildProcess, line: string): void {
     const message = parseProcessMessage(line);
     if ('error' in message) {
-      this.#rejectAllPending(message.error);
+      this.#quarantineChild(child, message.error);
       return;
     }
 
@@ -260,6 +262,20 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       pending.resolve({ ok: false, error });
       this.#pending.delete(requestId);
     }
+  }
+
+  #quarantineChild(
+    child: NativePlayerHostChildProcess,
+    error: NativePlayerHostFailure,
+  ): void {
+    if (this.#child !== child) {
+      return;
+    }
+
+    this.#child = null;
+    this.#lineBuffer = '';
+    this.#rejectAllPending(error);
+    this.#reapChild(child).catch(() => undefined);
   }
 
   async #reapChild(child: NativePlayerHostChildProcess): Promise<void> {

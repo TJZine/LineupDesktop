@@ -47,6 +47,8 @@ const smokeMode = shellMode === 'smoke';
 
 let shellWindow: BrowserWindow | null = null;
 let teardownPlayerIpc: PlayerIpcTeardown | null = null;
+let playerIpcQuitTeardownInProgress = false;
+let playerIpcQuitTeardownComplete = false;
 let containmentCounters = {
   navigationDenied: 0,
   windowOpenDenied: 0,
@@ -89,11 +91,29 @@ app.on('window-all-closed', () => {
   app.quit();
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
   publishShellStatus('closing');
   const teardown = teardownPlayerIpc;
+  if (playerIpcQuitTeardownComplete || teardown === null) {
+    return;
+  }
+  if (playerIpcQuitTeardownInProgress) {
+    event.preventDefault();
+    return;
+  }
+
+  event.preventDefault();
   teardownPlayerIpc = null;
-  void teardown?.();
+  playerIpcQuitTeardownInProgress = true;
+  teardown()
+    .catch((error: unknown) => {
+      reportMainProcessDiagnostic('Player IPC cleanup failed during quit', error);
+    })
+    .finally(() => {
+      playerIpcQuitTeardownComplete = true;
+      playerIpcQuitTeardownInProgress = false;
+      app.quit();
+    });
 });
 
 function createShellWindow(): BrowserWindow {
