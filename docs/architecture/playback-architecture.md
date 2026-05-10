@@ -1,9 +1,11 @@
 # Playback Architecture
 
-Lineup Desktop runtime playback is not wired yet. RD-07 adds a main-owned
-Desktop player adapter boundary core, but production Plex stream setup,
-preload/player IPC wiring, renderer UI integration, and the real native helper
-remain unimplemented.
+Lineup Desktop runtime playback is only partially wired. RD-07 adds a
+main-owned Desktop player adapter boundary core and a narrow runtime
+main/preload player IPC bridge backed by a development/smoke fake host.
+Production player commands currently return renderer-safe unsupported failures.
+Production Plex stream setup, renderer UI integration, and the real native
+helper remain unimplemented.
 
 ## Current Hypothesis
 
@@ -134,6 +136,16 @@ fake-host events before state mutation, quarantines stale request ids including
 late post-cleanup events, and normalizes helper failures into renderer-safe
 `PlayerError` values. The boundary is tested at
 `src/__tests__/desktopPlayerAdapter.test.ts`.
+
+RD-07 also wires the adapter through a main-owned player IPC registrar in
+`src/main/player/playerIpc.ts` and the narrow `window.lineupDesktop.player`
+preload API. The bridge exposes only `dispatch`, `getSnapshot`, `cleanup`, and
+`onEvent`; it returns renderer-safe `PlayerIpcResult` values and dispatch
+results without internal `PlayerCommand` objects. `src/main/index.ts` passes
+only shell mode and authorization/event callbacks into the registrar. The
+registrar owns development/smoke fake-host activation and production
+unsupported/noop behavior. Preload guards player events at runtime before
+invoking renderer listeners, including nested forbidden-field checks.
 
 Concrete playback adapters must not leak native handles, raw media URLs, raw
 auth headers, tokenized URLs, raw Plex payloads, Electron or Node APIs,
