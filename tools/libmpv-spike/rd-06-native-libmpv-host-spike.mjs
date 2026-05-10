@@ -78,8 +78,15 @@ export function parseArgs(args) {
     }
   }
 
-  if (!['preflight', 'wid-smoke', 'render-api-preflight', 'render-api-smoke'].includes(options.mode)) {
-    throw new Error('--mode must be preflight, wid-smoke, render-api-preflight, or render-api-smoke');
+  if (![
+    'preflight',
+    'wid-smoke',
+    'render-api-preflight',
+    'render-api-smoke',
+    'native-presentation-preflight',
+    'native-presentation-smoke',
+  ].includes(options.mode)) {
+    throw new Error('--mode must be preflight, wid-smoke, render-api-preflight, render-api-smoke, native-presentation-preflight, or native-presentation-smoke');
   }
   if (!Number.isInteger(options.durationMs) || options.durationMs < 500 || options.durationMs > 15000) {
     throw new Error('--duration-ms must be an integer from 500 to 15000');
@@ -87,11 +94,17 @@ export function parseArgs(args) {
   if (options.dummyInput !== 'local-and-http') {
     throw new Error('--dummy-input must be local-and-http');
   }
-  if (options.fullscreenMode !== null && options.fullscreenMode !== 'browser-window') {
-    throw new Error('--fullscreen-mode must be browser-window when provided');
+  if (options.fullscreenMode !== null && !['browser-window', 'native-presentation-host'].includes(options.fullscreenMode)) {
+    throw new Error('--fullscreen-mode must be browser-window or native-presentation-host when provided');
   }
   if (options.mode === 'render-api-smoke' && options.fullscreenMode !== 'browser-window') {
     throw new Error('--mode render-api-smoke requires --fullscreen-mode browser-window');
+  }
+  if (options.mode === 'native-presentation-smoke' && options.fullscreenMode !== 'native-presentation-host') {
+    throw new Error('--mode native-presentation-smoke requires --fullscreen-mode native-presentation-host');
+  }
+  if (options.mode !== 'render-api-smoke' && options.mode !== 'native-presentation-smoke' && options.fullscreenMode !== null) {
+    throw new Error('--fullscreen-mode is supported only for render-api-smoke and native-presentation-smoke');
   }
 
   return options;
@@ -147,21 +160,31 @@ export function validatePreflightFacts(facts) {
   };
 }
 
-export function buildHelperInitPayload({ requestId, libmpvDll, parentWid, localMedia, httpMedia, durationMs, renderApi = false }) {
-  if (!parentWid || typeof parentWid !== 'string') {
+export function buildHelperInitPayload({
+  requestId,
+  libmpvDll,
+  parentWid,
+  localMedia,
+  httpMedia,
+  durationMs,
+  renderApi = false,
+  nativePresentation = false,
+}) {
+  if (!nativePresentation && (!parentWid || typeof parentWid !== 'string')) {
     throw new Error('helper init requires private parent attachment');
   }
   assertDummyHeaderPolicy();
   return {
     requestId,
     libmpvDll,
-    parentWid,
+    ...(nativePresentation ? {} : { parentWid }),
     localMedia,
     httpMedia,
     dummyHeaderName: dummyHeader.name,
     dummyHeaderValue: dummyHeader.value,
     durationMs,
     renderApi,
+    nativePresentation,
   };
 }
 
@@ -220,6 +243,7 @@ export function sanitizeHelperEvent(event) {
     'renderContextCreated',
     'renderFrameObserved',
     'browserWindowFullscreen',
+    'nativePresentationFullscreen',
     'cleanupObserved',
   ]) {
     if (typeof event[key] === 'boolean') {
@@ -286,13 +310,21 @@ async function runCli() {
     return;
   }
 
+  if (options.mode === 'native-presentation-preflight') {
+    const result = await runPreflight({ outDir, renderApi: true, nativePresentation: true });
+    process.exitCode = result.status === 'passed' ? 0 : 2;
+    return;
+  }
+
   const result = options.mode === 'render-api-smoke'
     ? await runRenderApiSmoke({ outDir, durationMs: options.durationMs, fullscreenMode: options.fullscreenMode })
-    : await runWidSmoke({ outDir, durationMs: options.durationMs });
+    : options.mode === 'native-presentation-smoke'
+      ? await runNativePresentationSmoke({ outDir, durationMs: options.durationMs, fullscreenMode: options.fullscreenMode })
+      : await runWidSmoke({ outDir, durationMs: options.durationMs });
   process.exitCode = result.status === 'passed' ? 0 : result.status === 'blocked' ? 2 : 1;
 }
 
-async function runPreflight({ outDir, renderApi }) {
+async function runPreflight({ outDir, renderApi, nativePresentation = false }) {
   await fsp.mkdir(outDir, { recursive: true });
   const facts = discoverPrerequisites();
   const validation = validatePreflightFacts(facts);
@@ -307,6 +339,11 @@ async function runPreflight({ outDir, renderApi }) {
     : libmpvApiEvents.some((event) => event.proof === 'libmpv-render-api-symbols' && event.kind === 'observed')
       ? 'passed'
       : 'blocked';
+  const nativePresentationStatus = !nativePresentation
+    ? 'not-requested'
+    : validation.status === 'passed' && renderApiStatus === 'passed'
+      ? 'passed'
+      : 'blocked';
   const events = validation.checks.map((check) => ({
     kind: 'preflight-check',
     check: check.name,
@@ -319,17 +356,22 @@ async function runPreflight({ outDir, renderApi }) {
     kind: 'preflight-check',
     check: 'libmpv-render-api-symbols',
     status: renderApiStatus,
+  } : [], nativePresentation ? {
+    kind: 'preflight-check',
+    check: 'native-presentation-host-support',
+    status: nativePresentationStatus,
   } : [], libmpvApiEvents);
   const libmpvClientApiVersion = summarizeLibmpvClientApiVersion(libmpvApiEvents);
   const status = validation.status === 'passed' &&
     libmpvApiStatus === 'passed' &&
-    (!renderApi || renderApiStatus === 'passed')
+    (!renderApi || renderApiStatus === 'passed') &&
+    (!nativePresentation || nativePresentationStatus === 'passed')
     ? 'passed'
     : 'blocked';
 
   const manifest = {
     spike: 'rd-06-native-libmpv-host',
-    mode: renderApi ? 'render-api-preflight' : 'preflight',
+    mode: nativePresentation ? 'native-presentation-preflight' : renderApi ? 'render-api-preflight' : 'preflight',
     status,
     environment: {
       platform: facts.platform,
@@ -342,6 +384,7 @@ async function runPreflight({ outDir, renderApi }) {
       ...facts,
       libmpvClientApiVersion,
       renderApiSymbols: renderApi ? renderApiStatus : 'not-requested',
+      nativePresentationHost: nativePresentation ? nativePresentationStatus : 'not-requested',
     }, mpv),
     policy: buildEvidencePolicy(),
   };
@@ -383,6 +426,39 @@ async function runRenderApiSmoke({ outDir, durationMs, fullscreenMode }) {
   });
 }
 
+async function runNativePresentationSmoke({ outDir, durationMs, fullscreenMode }) {
+  await fsp.mkdir(outDir, { recursive: true });
+  const preflightFacts = discoverPrerequisites();
+  const validation = validatePreflightFacts(preflightFacts);
+  if (validation.status !== 'passed') {
+    const manifest = {
+      spike: 'rd-06-native-libmpv-host',
+      mode: 'native-presentation-smoke',
+      status: 'blocked',
+      blockedReason: 'preflight-not-passed',
+      fullscreenMode,
+      policy: buildEvidencePolicy(),
+    };
+    await writeEvidence(outDir, manifest, validation.checks.map((check) => ({
+      kind: 'preflight-check',
+      check: check.name,
+      status: check.ok ? 'passed' : 'blocked',
+    })));
+    await assertEvidenceClean(outDir);
+    return { status: 'blocked' };
+  }
+
+  return await runSmokeHarness({
+    mode: 'native-presentation-smoke',
+    outDir,
+    durationMs,
+    fullscreenMode,
+    renderApi: true,
+    nativePresentation: true,
+    preflightFacts,
+  });
+}
+
 async function runWidSmoke({ outDir, durationMs }) {
   await fsp.mkdir(outDir, { recursive: true });
   const preflightFacts = discoverPrerequisites();
@@ -414,7 +490,7 @@ async function runWidSmoke({ outDir, durationMs }) {
   });
 }
 
-async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, renderApi, preflightFacts }) {
+async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, renderApi, nativePresentation = false, preflightFacts }) {
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'lineup-rd06-'));
   const cleanup = {
     tempInputs: 'not-started',
@@ -446,6 +522,7 @@ async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, rende
       httpMedia: `${['ht', 'tp'].join('')}://127.0.0.1:${server.address().port}/dummy.gif`,
       durationMs,
       renderApi,
+      nativePresentation,
     });
 
     events = [
@@ -467,10 +544,21 @@ async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, rende
         fullscreenProof?.browserWindowFullscreen === true
       ) ||
       (
+        fullscreenProof?.visiblePixelsObserved === true &&
+        fullscreenProof?.nativePresentationFullscreen === true
+      ) ||
+      (
         fullscreenNativeCaptureProof?.nativeCaptureObserved === true &&
         fullscreenNativeCaptureProof?.visiblePixelsObserved === true &&
         fullscreenNativeCaptureProof?.browserWindowFullscreen === true
       );
+    const focusOrNativeInputObserved = nativePresentation
+      ? requiredProofs.get('render-input')?.category === 'app-owned-input-simulated'
+      : requiredProofs.get('focus')?.category === 'active-playback-focused';
+    const nativePresentationProofObserved = !nativePresentation || (
+      requiredProofs.get('native-presentation-host')?.category === 'app-owned-native-boundary' &&
+      requiredProofs.get('native-presentation-host')?.visiblePixelsObserved === true
+    );
 
     status = harnessResult.exitCode === 0 &&
       requestFacts.count > 0 &&
@@ -482,8 +570,9 @@ async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, rende
       requiredProofs.get('dummy-http')?.fileLoaded === true &&
       requiredProofs.get('video-surface')?.visiblePixelsObserved === true &&
       requiredProofs.get('overlay')?.visiblePixelsObserved === true &&
-      requiredProofs.get('focus')?.category === 'active-playback-focused' &&
+      focusOrNativeInputObserved &&
       fullscreenVideoPixelsObserved &&
+      nativePresentationProofObserved &&
       (!renderApi || (
         requiredProofs.get('libmpv-render-api-symbols')?.category === 'available' &&
         requiredProofs.get('render-context')?.renderContextCreated === true &&
@@ -524,10 +613,12 @@ async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, rende
         overlay: summarizeProof(requiredProofs.get('overlay')),
         fullscreen: summarizeProof(requiredProofs.get('fullscreen')),
         fullscreenNativeCapture: summarizeFullscreenNativeCaptureProof(requiredProofs.get('fullscreen-native-capture')),
+        nativePresentationHost: nativePresentation ? summarizeNativePresentationHostProof(requiredProofs.get('native-presentation-host')) : 'not-requested',
         focus: summarizeProof(requiredProofs.get('focus')),
         renderApiSymbols: renderApi ? summarizeProof(requiredProofs.get('libmpv-render-api-symbols')) : 'not-requested',
         renderContext: renderApi ? summarizeRenderContextProof(requiredProofs.get('render-context')) : 'not-requested',
         renderFrame: renderApi ? summarizeRenderFrameProof(requiredProofs.get('render-frame')) : 'not-requested',
+        renderThreadDiscipline: renderApi ? summarizeProof(requiredProofs.get('render-thread-discipline')) : 'not-requested',
         composition: renderApi ? summarizeProof(requiredProofs.get('composition')) : 'not-requested',
         inputSimulation: renderApi ? summarizeProof(requiredProofs.get('render-input')) : 'not-requested',
         helperCrash: summarizeProof(requiredProofs.get('helper-crash')),
@@ -632,6 +723,7 @@ export function buildNativePrerequisiteEvidence(facts, mpvVersionLines = []) {
     mpvVersion: summarizeTool(mpvVersionLines),
     libmpvClientApiVersion: facts.libmpvClientApiVersion ?? 'requires-helper-preflight',
     renderApiSymbols: facts.renderApiSymbols ?? 'requires-render-api-preflight',
+    nativePresentationHost: facts.nativePresentationHost ?? 'not-requested',
     provenance: 'official-installation-page-linked-shinchiro-windows-build',
     redistribution: 'not-redistributed-local-proof-only',
     packageMetadataChanged: false,
@@ -771,6 +863,7 @@ function collectProofs(events) {
       visiblePixelsObserved: current.visiblePixelsObserved === true || event.visiblePixelsObserved === true,
       nativeCaptureObserved: current.nativeCaptureObserved === true || event.nativeCaptureObserved === true,
       browserWindowFullscreen: current.browserWindowFullscreen === true || event.browserWindowFullscreen === true,
+      nativePresentationFullscreen: current.nativePresentationFullscreen === true || event.nativePresentationFullscreen === true,
     });
   }
   return proofs;
@@ -815,9 +908,13 @@ function runHelper(window, crashAfterInitialize = false) {
           }
           if (!crashAfterInitialize && event.proof === 'local-media' && event.activePlayback === true && !activePlayback) {
             activePlayback = true;
-            await observeActivePlayback(window, child, () => fullscreenNativeCapture, (resolveNativeCapture) => {
-              fullscreenNativeCaptureWaiters.push(resolveNativeCapture);
-            }, config.renderApi === true);
+            if (config.nativePresentation !== true) {
+              await observeActivePlayback(window, child, () => fullscreenNativeCapture, (resolveNativeCapture) => {
+                fullscreenNativeCaptureWaiters.push(resolveNativeCapture);
+              }, config.renderApi === true);
+            } else {
+              observeNativePresentationFocus(window);
+            }
             child.stdin.write(JSON.stringify({ control: 'continue' }) + '\n');
           }
         } catch {
@@ -826,15 +923,16 @@ function runHelper(window, crashAfterInitialize = false) {
       }
     });
     const init = {
-      requestId: crashAfterInitialize ? 'helper-crash' : 'wid-smoke',
+      requestId: crashAfterInitialize ? 'helper-crash' : config.nativePresentation === true ? 'native-presentation-smoke' : 'wid-smoke',
       libmpvDll: config.libmpvDll,
-      parentWid: widFromWindow(window),
+      ...(config.nativePresentation === true ? {} : { parentWid: widFromWindow(window) }),
       localMedia: config.localMedia,
       httpMedia: config.httpMedia,
       dummyHeaderName: 'X-Lineup-RD06',
       dummyHeaderValue: 'dummy',
       durationMs: config.durationMs,
       renderApi: config.renderApi === true,
+      nativePresentation: config.nativePresentation === true,
       crashAfterInitialize,
     };
     child.stdin.write(JSON.stringify(init) + '\n');
@@ -843,6 +941,14 @@ function runHelper(window, crashAfterInitialize = false) {
     }
     child.once('exit', (code, signal) => resolve({ code, signal }));
   });
+}
+
+function observeNativePresentationFocus(window) {
+  process.stdout.write(JSON.stringify({
+    kind: 'observed',
+    proof: 'focus',
+    category: window.webContents.isFocused() ? 'renderer-focus-sentinel' : 'native-presentation-focus-owned',
+  }) + '\n');
 }
 
 async function observeActivePlayback(window, child, getFullscreenNativeCapture, onFullscreenNativeCapture, useNativeFullscreenCapture) {
@@ -1079,6 +1185,19 @@ function summarizeFullscreenNativeCaptureProof(event) {
     event.nativeCaptureObserved === true &&
     event.visiblePixelsObserved === true &&
     event.browserWindowFullscreen === true
+  ) {
+    return 'observed';
+  }
+  return summarizeProof(event);
+}
+
+function summarizeNativePresentationHostProof(event) {
+  if (!event) {
+    return 'unavailable';
+  }
+  if (
+    event.visiblePixelsObserved === true &&
+    event.nativePresentationFullscreen === true
   ) {
     return 'observed';
   }

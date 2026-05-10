@@ -22,7 +22,7 @@ const helperSource = fs.readFileSync(
   'utf8',
 );
 
-test('parseArgs accepts RD-06 preflight, WID smoke, and render API modes', () => {
+test('parseArgs accepts RD-06 preflight, WID smoke, render API, and native presentation modes', () => {
   assert.deepEqual(parseArgs(['--mode', 'preflight', '--out', 'docs/runs/rd-06-native-libmpv-host-spike']), {
     mode: 'preflight',
     out: 'docs/runs/rd-06-native-libmpv-host-spike',
@@ -53,16 +53,36 @@ test('parseArgs accepts RD-06 preflight, WID smoke, and render API modes', () =>
   ]);
   assert.equal(renderSmoke.mode, 'render-api-smoke');
   assert.equal(renderSmoke.fullscreenMode, 'browser-window');
+
+  const nativePresentationPreflight = parseArgs(['--mode', 'native-presentation-preflight']);
+  assert.equal(nativePresentationPreflight.mode, 'native-presentation-preflight');
+
+  const nativePresentationSmoke = parseArgs([
+    '--mode',
+    'native-presentation-smoke',
+    '--duration-ms',
+    '5000',
+    '--dummy-input',
+    'local-and-http',
+    '--fullscreen-mode',
+    'native-presentation-host',
+  ]);
+  assert.equal(nativePresentationSmoke.mode, 'native-presentation-smoke');
+  assert.equal(nativePresentationSmoke.fullscreenMode, 'native-presentation-host');
 });
 
 test('parseArgs rejects unsupported modes and dummy input policies', () => {
-  assert.throws(() => parseArgs(['--mode', 'external-mpv']), /render-api-preflight/u);
+  assert.throws(() => parseArgs(['--mode', 'external-mpv']), /native-presentation-preflight/u);
   assert.throws(() => parseArgs(['--mode', 'wid-smoke', '--dummy-input', 'real-server']), /local-and-http/u);
   assert.throws(() => parseArgs(['--mode', 'wid-smoke', '--duration-ms', '100']), /duration-ms/u);
   assert.throws(() => parseArgs(['--mode', 'render-api-smoke']), /fullscreen-mode browser-window/u);
   assert.throws(
     () => parseArgs(['--mode', 'render-api-smoke', '--fullscreen-mode', 'native-window']),
-    /fullscreen-mode must be browser-window/u,
+    /fullscreen-mode must be browser-window or native-presentation-host/u,
+  );
+  assert.throws(
+    () => parseArgs(['--mode', 'native-presentation-smoke', '--fullscreen-mode', 'browser-window']),
+    /fullscreen-mode native-presentation-host/u,
   );
 });
 
@@ -174,7 +194,7 @@ test('helper source uses Win32 GDI desktop capture scoped to the render child su
   assert.match(helperSource, /GetWindowRect\(window, out NativeMethods\.RECT bounds\)/u);
   assert.match(helperSource, /CaptureDesktopRedPixels\(bounds\)/u);
   assert.match(helperSource, /private const int SurfaceTop = 140/u);
-  assert.match(helperSource, /SetWindowPos\(window, IntPtr\.Zero, 0, SurfaceTop, 640, 360, SwpShowWindow\)/u);
+  assert.match(helperSource, /nativePresentation \? HwndTopmost : IntPtr\.Zero/u);
   assert.match(helperSource, /GetDC\(IntPtr\.Zero\)/u);
   assert.match(helperSource, /CreateCompatibleDC/u);
   assert.match(helperSource, /CreateCompatibleBitmap/u);
@@ -182,6 +202,34 @@ test('helper source uses Win32 GDI desktop capture scoped to the render child su
   assert.match(helperSource, /GetDIBits/u);
   assert.match(helperSource, /Srccopy \| Captureblt/u);
   assert.doesNotMatch(helperSource, /GetSystemMetrics/u);
+});
+
+test('native presentation smoke uses app-owned fullscreen host and same-boundary composition proof', () => {
+  const source = fs.readFileSync(
+    new URL('../libmpv-spike/rd-06-native-libmpv-host-spike.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /native-presentation-preflight/u);
+  assert.match(source, /native-presentation-smoke/u);
+  assert.match(source, /native-presentation-host/u);
+  assert.match(source, /nativePresentationFullscreen/u);
+  assert.match(source, /nativePresentationHost: nativePresentation/u);
+  assert.match(helperSource, /RunNativePresentationSmoke/u);
+  assert.match(helperSource, /LineupRd06NativePresentationHost/u);
+  assert.match(helperSource, /EnterFullscreenHost/u);
+  assert.match(helperSource, /MonitorFromWindow/u);
+  assert.match(helperSource, /native-boundary-composited/u);
+  assert.match(helperSource, /DrawOverlay/u);
+  assert.match(helperSource, /glScissor/u);
+});
+
+test('native presentation smoke records render-thread discipline without helper-owned blocking loop claim', () => {
+  assert.match(helperSource, /new Thread\(RenderLoop\)/u);
+  assert.match(helperSource, /rd06-native-presentation-render/u);
+  assert.match(helperSource, /\["proof"\] = "render-thread-discipline"/u);
+  assert.match(helperSource, /\["category"\] = "proven"/u);
+  assert.match(helperSource, /LoadAndObserve\(mpv, init\.localMedia/u);
+  assert.match(helperSource, /RenderThreadProbe/u);
 });
 
 test('helper source defines minimal render API interop without vendored headers', () => {
@@ -215,6 +263,7 @@ test('native prerequisite evidence records provenance without local paths', () =
     mpvVersion: ['mpv v0.41.0-524-g5921fe50b'],
     libmpvClientApiVersion: 'requires-helper-preflight',
     renderApiSymbols: 'requires-render-api-preflight',
+    nativePresentationHost: 'not-requested',
     provenance: 'official-installation-page-linked-shinchiro-windows-build',
     redistribution: 'not-redistributed-local-proof-only',
     packageMetadataChanged: false,
@@ -240,6 +289,18 @@ test('helper init policy keeps private values out of args and env and uses stdin
   assert.equal(spawnPolicy.stdio[2], 'ignore');
   assert.doesNotThrow(() => assertHelperInitPolicy(spawnPolicy, init));
   assert.equal(init.renderApi, true);
+
+  const nativePresentationInit = buildHelperInitPayload({
+    requestId: 'rd06-native-presentation-test',
+    libmpvDll: '<local-libmpv>',
+    localMedia: '<dummy-local-media>',
+    httpMedia: '<dummy-http-media>',
+    durationMs: 5000,
+    renderApi: true,
+    nativePresentation: true,
+  });
+  assert.equal(nativePresentationInit.nativePresentation, true);
+  assert.equal('parentWid' in nativePresentationInit, false);
 
   assert.throws(
     () => assertHelperInitPolicy({ ...spawnPolicy, args: [spawnPolicy.args[0], init.parentWid] }, init),
