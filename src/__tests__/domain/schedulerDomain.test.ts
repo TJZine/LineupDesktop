@@ -436,6 +436,41 @@ test('scheduler domain resume immediately syncs stale state before rearming time
   assert.equal(timers.handlers.size, 1);
 });
 
+test('scheduler domain recalculation emits transition events around installed state', () => {
+  const clock = new FakeClock(1_000_000);
+  const scheduler = new ChannelScheduler({ clock });
+  const events: string[] = [];
+
+  scheduler.on('programEnd', (program) => {
+    events.push(`end:${program.item.ratingKey}:${scheduler.getState().currentProgram?.item.ratingKey ?? 'none'}`);
+  });
+  scheduler.on('programStart', (program) => {
+    const state = scheduler.getState();
+    events.push(
+      `start:${program.item.ratingKey}:${state.currentProgram?.item.ratingKey ?? 'none'}:${state.nextProgram?.item.ratingKey ?? 'none'}:${String(state.lastSyncTime)}`,
+    );
+  });
+
+  scheduler.loadChannel(config());
+  events.length = 0;
+  clock.currentTime = 1_015_500;
+
+  scheduler.recalculateFromTime(1_015_000);
+
+  assert.deepEqual(events, [
+    'end:a:a',
+    'start:b:b:c:1015500',
+  ]);
+  events.length = 0;
+
+  scheduler.recalculateFromTime(1_016_000);
+
+  assert.deepEqual(events, []);
+  assert.equal(scheduler.getState().currentProgram?.item.ratingKey, 'b');
+  assert.equal(scheduler.getState().nextProgram?.item.ratingKey, 'c');
+  assert.equal(scheduler.getState().lastSyncTime, 1_015_500);
+});
+
 test('scheduler domain hard resync reports measured timer drift', () => {
   const clock = new FakeClock(1_000_000);
   const timers = new FakeTimers();

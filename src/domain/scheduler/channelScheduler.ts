@@ -392,15 +392,15 @@ export class ChannelScheduler implements IChannelScheduler {
     );
   }
 
-  private updateCurrentProgram(newProgram: ScheduledProgram, currentTime = this.clock.now()): boolean {
+  private updateCurrentProgram(newProgram: ScheduledProgram, currentTime = this.clock.now()): void {
+    const previousProgram = this.currentProgram;
     const programChanged =
-      this.currentProgram !== null &&
-      (newProgram.scheduledStartTime !== this.currentProgram.scheduledStartTime ||
-        newProgram.scheduledEndTime !== this.currentProgram.scheduledEndTime);
+      previousProgram === null ||
+      newProgram.scheduledStartTime !== previousProgram.scheduledStartTime ||
+      newProgram.scheduledEndTime !== previousProgram.scheduledEndTime;
 
-    if (programChanged) {
-      this.emitter.emit('programEnd', this.currentProgram as ScheduledProgram);
-      this.emitter.emit('programStart', newProgram);
+    if (programChanged && previousProgram) {
+      this.emitter.emit('programEnd', previousProgram);
     }
 
     this.currentProgram = newProgram;
@@ -412,7 +412,9 @@ export class ChannelScheduler implements IChannelScheduler {
     );
     this.lastSyncTime = currentTime;
 
-    return programChanged;
+    if (programChanged) {
+      this.emitter.emit('programStart', newProgram);
+    }
   }
 
   private detachActiveState(): ScheduledProgram | null {
