@@ -532,6 +532,45 @@ test('channel domain source cache aborts in-flight waiters and transport after i
   assert.equal(fresh[0]?.ratingKey, 'fresh');
 });
 
+test('channel domain source cache keeps caller abort local to shared in-flight waiters', async () => {
+  const clock = new FakeClock(10);
+  const sourceCache = new SourceResolutionCache(clock);
+  const source = librarySource();
+  const callerController = new AbortController();
+  const deferred = new Deferred<ResolvedContentItem[]>();
+  let calls = 0;
+  let transportSignal: ChannelAbortSignal | null = null;
+
+  const first = sourceCache.resolve(
+    source,
+    async (_source, options) => {
+      calls++;
+      transportSignal = options.signal;
+      options.signal.addEventListener?.('abort', () => deferred.reject(new Error('transport aborted')));
+      return deferred.promise;
+    },
+    { signal: callerController.signal },
+  );
+  const second = sourceCache.resolve(source, async () => {
+    calls++;
+    return [resolvedItem('unexpected')];
+  });
+
+  const firstRejected = assert.rejects(first, /Aborted/);
+  await Promise.resolve();
+  const signal = assertPresentSignal(transportSignal);
+  callerController.abort();
+
+  await firstRejected;
+  assert.equal(signal.aborted, false);
+  assert.equal(calls, 1);
+
+  deferred.resolve([resolvedItem('shared')]);
+  const secondItems = await second;
+  assert.deepEqual(secondItems.map((item) => item.ratingKey), ['shared']);
+  assert.equal(calls, 1);
+});
+
 test('channel domain source cache clear aborts in-flight waiters and transport', async () => {
   const clock = new FakeClock(10);
   const sourceCache = new SourceResolutionCache(clock);

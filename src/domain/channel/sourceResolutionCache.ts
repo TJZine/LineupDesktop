@@ -71,67 +71,6 @@ class SourceResolutionAbortController {
   }
 }
 
-class CompositeChannelAbortSignal implements ChannelAbortSignal {
-  private readonly registrations = new Map<
-    () => void,
-    { first?: () => void; second?: () => void }
-  >();
-
-  public constructor(
-    private readonly first: ChannelAbortSignal,
-    private readonly second: ChannelAbortSignal,
-  ) {}
-
-  public get aborted(): boolean {
-    return this.first.aborted || this.second.aborted;
-  }
-
-  public addEventListener(event: 'abort', handler: () => void, options?: { once?: boolean }): void {
-    if (event !== 'abort') {
-      return;
-    }
-    if (this.aborted) {
-      handler();
-      return;
-    }
-
-    const wrapped = options?.once
-      ? (): void => {
-          this.removeEventListener('abort', handler);
-          handler();
-        }
-      : handler;
-
-    if (this.first.addEventListener) {
-      this.first.addEventListener('abort', wrapped, options);
-    }
-    if (this.second.addEventListener) {
-      this.second.addEventListener('abort', wrapped, options);
-    }
-    this.registrations.set(handler, {
-      ...(this.first.addEventListener ? { first: wrapped } : {}),
-      ...(this.second.addEventListener ? { second: wrapped } : {}),
-    });
-  }
-
-  public removeEventListener(event: 'abort', handler: () => void): void {
-    if (event !== 'abort') {
-      return;
-    }
-    const registration = this.registrations.get(handler);
-    if (!registration) {
-      return;
-    }
-    if (registration.first) {
-      this.first.removeEventListener?.('abort', registration.first);
-    }
-    if (registration.second) {
-      this.second.removeEventListener?.('abort', registration.second);
-    }
-    this.registrations.delete(handler);
-  }
-}
-
 export class SourceResolutionCache {
   private cacheEpoch = 0;
   private readonly sourceCacheGenerationByKey = new Map<string, number>();
@@ -198,11 +137,8 @@ export class SourceResolutionCache {
     }
 
     const abortController = new SourceResolutionAbortController();
-    const transportSignal = callerSignal
-      ? new CompositeChannelAbortSignal(abortController.signal, callerSignal)
-      : abortController.signal;
     const uncachedPromise = Promise.resolve().then(() =>
-      resolveUncached(source, { signal: transportSignal }));
+      resolveUncached(source, { signal: abortController.signal }));
     const resolvePromise = raceWithAbortSignal(
       uncachedPromise,
       abortController.signal,
