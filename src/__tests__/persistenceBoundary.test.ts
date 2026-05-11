@@ -57,6 +57,74 @@ class FakeSecureStringCodec implements SecureStringCodec {
   }
 }
 
+class DeferredFirstEncryptCodec extends FakeSecureStringCodec {
+  private readonly deferredEncryptions: ReadonlySet<number>;
+  private readonly deferred = new Map<number, { resolve(): void; promise: Promise<void> }>();
+  private readonly started = new Map<number, { resolve(): void; promise: Promise<void> }>();
+
+  constructor(deferredEncryptions: readonly number[] = [1]) {
+    super();
+    this.deferredEncryptions = new Set(deferredEncryptions);
+    for (const encryptionNumber of deferredEncryptions) {
+      this.started.set(encryptionNumber, createDeferred());
+    }
+  }
+
+  async encryptString(value: string): Promise<Buffer> {
+    const encryptionNumber = this.encryptions + 1;
+    if (this.deferredEncryptions.has(encryptionNumber)) {
+      const deferred = createDeferred();
+      this.deferred.set(encryptionNumber, deferred);
+      this.started.get(encryptionNumber)?.resolve();
+      await deferred.promise;
+    }
+    return super.encryptString(value);
+  }
+
+  async waitForFirstEncrypt(): Promise<void> {
+    await this.waitForEncrypt(1);
+  }
+
+  releaseFirstEncrypt(): void {
+    this.releaseEncrypt(1);
+  }
+
+  async waitForEncrypt(encryptionNumber: number): Promise<void> {
+    const started = this.started.get(encryptionNumber);
+    assert.ok(started, `expected encryption ${encryptionNumber} to be deferred`);
+    await started.promise;
+  }
+
+  releaseEncrypt(encryptionNumber: number): void {
+    const deferred = this.deferred.get(encryptionNumber);
+    assert.ok(deferred, `expected encryption ${encryptionNumber} to be waiting`);
+    deferred.resolve();
+  }
+}
+
+class DeferredFirstDecryptCodec extends FakeSecureStringCodec {
+  private readonly firstDecryptStarted = createDeferred();
+  private readonly firstDecryptRelease = createDeferred();
+  private decryptions = 0;
+
+  async decryptString(encrypted: Buffer): Promise<SecureStringDecryptResult> {
+    this.decryptions += 1;
+    if (this.decryptions === 1) {
+      this.firstDecryptStarted.resolve();
+      await this.firstDecryptRelease.promise;
+    }
+    return super.decryptString(encrypted);
+  }
+
+  async waitForFirstDecrypt(): Promise<void> {
+    await this.firstDecryptStarted.promise;
+  }
+
+  releaseFirstDecrypt(): void {
+    this.firstDecryptRelease.resolve();
+  }
+}
+
 test('desktop persistence store encrypts credentials and returns renderer-safe snapshots', async () => {
   const temporaryDirectory = await createTemporaryDirectory();
   const codec = new FakeSecureStringCodec();
@@ -152,6 +220,55 @@ test('desktop persistence store records selected server state without secure sto
   assert.equal(containsPersistenceForbiddenRendererField(snapshot), false);
 });
 
+test('desktop persistence store serializes concurrent credential and selected-server mutations', async () => {
+  const temporaryDirectory = await createTemporaryDirectory();
+  const codec = new DeferredFirstEncryptCodec([1]);
+  const persistenceFilePath = path.join(temporaryDirectory, 'persistence.json');
+  const store = new DesktopPersistenceStore({
+    persistenceFilePath,
+    secureStringCodec: codec,
+    nowMs: () => 3_000,
+  });
+  const selectedServer: PlexSelectedServerSummary = {
+    serverId: 'server-concurrent',
+    name: 'Concurrent Server',
+    source: 'manual',
+    lastSelectedAtMs: 3_000,
+  };
+
+  const firstSave = store.savePlexCredential({
+    accountId: 'account-1',
+    secretValue: 'rd09-secret-one',
+  });
+  const secondSave = store.savePlexCredential({
+    accountId: 'account-2',
+    secretValue: 'rd09-secret-two',
+  });
+  const selected = store.setSelectedPlexServer(selectedServer);
+
+  await codec.waitForFirstEncrypt();
+  codec.releaseFirstEncrypt();
+  const results = await Promise.all([firstSave, secondSave, selected]);
+
+  assert.equal(results[0].ok, true);
+  assert.equal(results[1].ok, true);
+  assert.deepEqual(results[2].selectedServer, selectedServer);
+
+  const persisted = JSON.parse(await fs.readFile(persistenceFilePath, 'utf8')) as {
+    credentials?: Array<{ accountId: string }>;
+    selectedServer?: PlexSelectedServerSummary | null;
+  };
+  assert.deepEqual(
+    persisted.credentials?.map((credential) => credential.accountId).sort(),
+    ['account-1', 'account-2'],
+  );
+  assert.deepEqual(persisted.selectedServer, selectedServer);
+  assert.equal(JSON.stringify(persisted).includes('rd09-secret-one'), false);
+  assert.equal(JSON.stringify(persisted).includes('rd09-secret-two'), false);
+  const temporaryFiles = (await fs.readdir(temporaryDirectory)).filter((file) => file.endsWith('.tmp'));
+  assert.deepEqual(temporaryFiles, []);
+});
+
 test('desktop persistence store fails closed when secure storage is unavailable', async () => {
   const temporaryDirectory = await createTemporaryDirectory();
   const codec = new FakeSecureStringCodec();
@@ -242,6 +359,85 @@ test('desktop persistence store reencrypts credentials when secure storage reque
   if (readResult.status === 'present') {
     assert.equal(readResult.shouldReencrypt, true);
   }
+});
+
+test('desktop persistence store preserves concurrent selected-server changes during reencrypt', async () => {
+  const temporaryDirectory = await createTemporaryDirectory();
+  const codec = new DeferredFirstEncryptCodec([1, 2]);
+  const persistenceFilePath = path.join(temporaryDirectory, 'persistence.json');
+  const store = new DesktopPersistenceStore({
+    persistenceFilePath,
+    secureStringCodec: codec,
+    nowMs: () => 4_000,
+  });
+  const firstSave = store.savePlexCredential({
+    accountId: 'account-1',
+    secretValue: 'rd09-secret-value',
+  });
+  await codec.waitForFirstEncrypt();
+  codec.releaseFirstEncrypt();
+  await firstSave;
+
+  const selectedServer: PlexSelectedServerSummary = {
+    serverId: 'server-reencrypt',
+    name: 'Reencrypt Server',
+    source: 'discovery',
+    lastSelectedAtMs: 4_000,
+  };
+  codec.shouldReencrypt = true;
+
+  const read = store.readPlexCredentialSecret('account-1');
+  const selected = store.setSelectedPlexServer(selectedServer);
+  await codec.waitForEncrypt(2);
+  codec.releaseEncrypt(2);
+  const [readResult, selectedResult] = await Promise.all([read, selected]);
+
+  assert.equal(readResult.status, 'present');
+  assert.deepEqual(selectedResult.selectedServer, selectedServer);
+
+  const persisted = JSON.parse(await fs.readFile(persistenceFilePath, 'utf8')) as {
+    selectedServer?: PlexSelectedServerSummary | null;
+  };
+  assert.deepEqual(persisted.selectedServer, selectedServer);
+  assert.equal(codec.encryptions, 2);
+});
+
+test('desktop persistence store does not reencrypt stale secret over newer same-account save', async () => {
+  const temporaryDirectory = await createTemporaryDirectory();
+  const codec = new DeferredFirstDecryptCodec();
+  const persistenceFilePath = path.join(temporaryDirectory, 'persistence.json');
+  const store = new DesktopPersistenceStore({
+    persistenceFilePath,
+    secureStringCodec: codec,
+    nowMs: () => 5_000,
+  });
+
+  await store.savePlexCredential({
+    accountId: 'account-1',
+    secretValue: 'rd09-old-secret',
+  });
+  codec.shouldReencrypt = true;
+
+  const staleRead = store.readPlexCredentialSecret('account-1');
+  await codec.waitForFirstDecrypt();
+  const newerSave = store.savePlexCredential({
+    accountId: 'account-1',
+    secretValue: 'rd09-new-secret',
+  });
+  await newerSave;
+  codec.releaseFirstDecrypt();
+  await staleRead;
+
+  codec.shouldReencrypt = false;
+  const currentRead = await store.readPlexCredentialSecret('account-1');
+  assert.equal(currentRead.status, 'present');
+  if (currentRead.status === 'present') {
+    assert.equal(currentRead.secretValue, 'rd09-new-secret');
+  }
+
+  const persisted = await fs.readFile(persistenceFilePath, 'utf8');
+  assert.equal(persisted.includes('rd09-old-secret'), false);
+  assert.equal(persisted.includes('rd09-new-secret'), false);
 });
 
 test('persistence contracts recursively reject renderer-forbidden fields', () => {
@@ -353,4 +549,13 @@ class FakeElectronSafeStorage implements ElectronSafeStorageLike {
 
 async function createTemporaryDirectory(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'lineup-rd09-'));
+}
+
+function createDeferred(): { resolve(): void; promise: Promise<void> } {
+  let resolve: (() => void) | undefined;
+  const promise = new Promise<void>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  assert.ok(resolve, 'expected deferred resolver');
+  return { resolve, promise };
 }

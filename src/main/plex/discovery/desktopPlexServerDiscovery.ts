@@ -2,6 +2,7 @@ import type {
   PlexServerSelectionSummary,
   PlexServerSummary,
 } from '../../../contracts/plex.js';
+import { throwIfPlexRequestAborted } from '../abort.js';
 import type { DesktopPlexSelectedServerStore } from './desktopPlexSelectedServerStore.js';
 import {
   createHealthRecord,
@@ -281,7 +282,8 @@ function mapProbeSummaryToFailureReason(
 }
 
 function throwIfAborted(signal?: AbortSignal | null): void {
-  if (signal?.aborted) {
-    throw new PlexDiscoveryError('aborted', 'Plex discovery request was aborted');
-  }
+  throwIfPlexRequestAborted(
+    signal,
+    () => new PlexDiscoveryError('aborted', 'Plex discovery request was aborted'),
+  );
 }

@@ -16,6 +16,8 @@ import { registerPlayerIpcHandlers } from '../main/player/playerIpc.js';
 import { redactMainProcessError } from '../main/redactedDiagnostics.js';
 import type {
   NativePlayerHostCommandResult,
+  NativePlayerHostFailure,
+  NativePlayerHostLifecycleFailure,
   NativePlayerHostPort,
 } from '../main/player/nativePlayerHostPort.js';
 
@@ -54,6 +56,23 @@ class ConfigurableNativeHost implements NativePlayerHostPort {
       throw this.cleanupError;
     }
     return undefined;
+  }
+}
+
+class LifecycleNativeHost extends ConfigurableNativeHost {
+  private readonly listeners = new Set<(failure: NativePlayerHostLifecycleFailure) => void>();
+
+  onLifecycleFailure(listener: (failure: NativePlayerHostLifecycleFailure) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  emitLifecycleFailure(failure: NativePlayerHostLifecycleFailure): void {
+    for (const listener of [...this.listeners]) {
+      listener(failure);
+    }
   }
 }
 
@@ -97,6 +116,16 @@ function loadEnvelope(requestId = 'player-load-1'): unknown {
       },
       capabilityProfileId: 'desktop-ipc-test',
     },
+  };
+}
+
+function helperFailure(): NativePlayerHostFailure {
+  return {
+    code: 'PLAYER_HELPER_EXITED',
+    category: 'helper-failure',
+    message: 'raw process exit 123',
+    recoverable: true,
+    retryable: true,
   };
 }
 
@@ -176,9 +205,36 @@ test('player IPC reports cleanup failures and still removes handlers', async () 
 });
 
 test('main process diagnostics redact privileged key-value pairs and URLs', () => {
+  const plexTokenHeader = ['X-Plex', 'Token'].join('-');
+  const authorizationHeader = ['Authorization'].join('');
+  const bearerScheme = ['Bearer'].join('');
   const message = redactMainProcessError(
     new Error(
-      'nativeHandle=secret tokenizedUrl=http://secret.example/media "authHeaders":"json-secret" rawPlexPayload: bare-secret',
+      [
+        'nativeHandle=secret',
+        'tokenizedUrl=http://secret.example/media',
+        '"authHeaders":"json-secret"',
+        'rawPlexPayload: bare-secret',
+        'token=raw-token',
+        'authToken: raw-auth-token',
+        'authenticationToken=raw-authentication-token',
+        'accountToken=raw-account-token',
+        'activeToken=raw-active-token',
+        'plexToken=raw-plex-token',
+        'clientSecret=raw-client-secret',
+        'pin=raw-pin',
+        'header=raw-header',
+        'headers=raw-headers',
+        `${authorizationHeader}=raw-authorization`,
+        'secret=raw-secret',
+        'credential=raw-credential',
+        'password=raw-password',
+        `${plexTokenHeader}=raw-plex-header-token`,
+        `${authorizationHeader}: ${bearerScheme} rawbearertoken12345`,
+        `https://server.example/video?${plexTokenHeader}=raw-query-token&other=1`,
+        '\\"authToken\\":\\"raw-escaped-auth-token\\"',
+        'standalone nativeHandle rawMediaUrl rawPlexPayload',
+      ].join(' '),
     ),
   );
 
@@ -190,6 +246,23 @@ test('main process diagnostics redact privileged key-value pairs and URLs', () =
   assert.equal(message.includes('json-secret'), false);
   assert.equal(message.includes('bare-secret'), false);
   assert.equal(message.includes('secret.example'), false);
+  assert.equal(message.includes('raw-token'), false);
+  assert.equal(message.includes('raw-auth-token'), false);
+  assert.equal(message.includes('raw-authentication-token'), false);
+  assert.equal(message.includes('raw-account-token'), false);
+  assert.equal(message.includes('raw-active-token'), false);
+  assert.equal(message.includes('raw-plex-token'), false);
+  assert.equal(message.includes('raw-client-secret'), false);
+  assert.equal(message.includes('raw-pin'), false);
+  assert.equal(message.includes('raw-header'), false);
+  assert.equal(message.includes('raw-headers'), false);
+  assert.equal(message.includes('raw-authorization'), false);
+  assert.equal(message.includes('raw-credential'), false);
+  assert.equal(message.includes('raw-password'), false);
+  assert.equal(message.includes('raw-plex-header-token'), false);
+  assert.equal(message.includes('raw-query-token'), false);
+  assert.equal(message.includes('raw-escaped-auth-token'), false);
+  assert.equal(message.includes('rawbearertoken12345'), false);
 });
 
 test('development and smoke player IPC dispatches through fake host and emits safe events', async () => {
@@ -232,6 +305,97 @@ test('development and smoke player IPC dispatches through fake host and emits sa
   assertNoForbiddenKeys(result);
   assertNoForbiddenKeys(snapshot);
   assertNoForbiddenKeys(events);
+});
+
+test('player IPC emits renderer-safe error when helper lifecycle fails asynchronously', async () => {
+  const ipcMain = new FakeIpcMain();
+  const host = new LifecycleNativeHost();
+  const events: PlayerEvent[] = [];
+  registerPlayerIpcHandlers({
+    shellMode: 'development',
+    isAuthorizedEvent,
+    sendPlayerEvent: (event) => events.push(event),
+    createRequestId,
+    nativeHostFactory: () => host,
+    ipcMain,
+  });
+
+  await ipcMain.invoke(
+    LINEUP_PLAYER_COMMAND_CHANNEL,
+    authorizedEvent(),
+    loadEnvelope('player-load-lifecycle'),
+  );
+
+  host.emitLifecycleFailure({
+    requestId: null,
+    error: helperFailure(),
+  });
+
+  const snapshot = await ipcMain.invoke(
+    LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
+    authorizedEvent(),
+    { requestId: 'snapshot-after-lifecycle' },
+  );
+  const errorEvent = [...events].reverse().find((event) => event.event === 'error');
+
+  assert.ok(errorEvent);
+  assert.equal(errorEvent.error.category, 'helper-failure');
+  assert.equal(errorEvent.error.message, 'The player helper stopped unexpectedly.');
+  assert.equal((snapshot as { value: { status: string } }).value.status, 'error');
+  assert.equal(
+    (snapshot as { value: { lastError: { category: string } | null } }).value.lastError?.category,
+    'helper-failure',
+  );
+  assertNoForbiddenKeys(events);
+  assertNoForbiddenKeys(snapshot);
+});
+
+test('player IPC keeps helper lifecycle reporting after cleanup and later reuse', async () => {
+  const ipcMain = new FakeIpcMain();
+  const host = new LifecycleNativeHost();
+  const events: PlayerEvent[] = [];
+  registerPlayerIpcHandlers({
+    shellMode: 'development',
+    isAuthorizedEvent,
+    sendPlayerEvent: (event) => events.push(event),
+    createRequestId,
+    nativeHostFactory: () => host,
+    ipcMain,
+  });
+
+  await ipcMain.invoke(
+    LINEUP_PLAYER_COMMAND_CHANNEL,
+    authorizedEvent(),
+    loadEnvelope('player-load-before-cleanup'),
+  );
+  await ipcMain.invoke(
+    LINEUP_PLAYER_CLEANUP_CHANNEL,
+    authorizedEvent(),
+    { requestId: 'cleanup-before-reuse' },
+  );
+  await ipcMain.invoke(
+    LINEUP_PLAYER_COMMAND_CHANNEL,
+    authorizedEvent(),
+    loadEnvelope('player-load-after-cleanup'),
+  );
+
+  host.emitLifecycleFailure({
+    requestId: null,
+    error: helperFailure(),
+  });
+
+  const snapshot = await ipcMain.invoke(
+    LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
+    authorizedEvent(),
+    { requestId: 'snapshot-after-cleanup-lifecycle' },
+  );
+  const errorEvent = [...events].reverse().find((event) => event.event === 'error');
+
+  assert.ok(errorEvent);
+  assert.equal(errorEvent.error.category, 'helper-failure');
+  assert.equal((snapshot as { value: { status: string } }).value.status, 'error');
+  assertNoForbiddenKeys(events);
+  assertNoForbiddenKeys(snapshot);
 });
 
 test('player IPC rejects invalid renderer payloads as failures without host success', async () => {

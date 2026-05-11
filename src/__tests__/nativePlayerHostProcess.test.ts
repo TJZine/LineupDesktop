@@ -16,6 +16,7 @@ import {
   NativePlayerHostProcess,
   type NativePlayerHostChildProcess,
 } from '../main/player/nativePlayerHostProcess.js';
+import type { NativePlayerHostLifecycleFailure } from '../main/player/nativePlayerHostPort.js';
 
 type SpawnedNativeHostChildProcess = NativePlayerHostChildProcess & {
   readonly exitCode: number | null;
@@ -220,6 +221,49 @@ test('native host process translates commands and returns safe host events', asy
   assert.equal(result.ok, true);
   assert.equal(result.ok ? result.events?.length : 0, 2);
   assertNoForbiddenKeys(child.writes);
+  assertNoForbiddenKeys(result);
+});
+
+test('native host process reports idle helper lifecycle failures to subscribers', async () => {
+  const child = new FakeHostChildProcess();
+  const lifecycleFailures: NativePlayerHostLifecycleFailure[] = [];
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+  const unsubscribe = host.onLifecycleFailure((failure) => lifecycleFailures.push(failure));
+
+  const pending = host.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.send({ type: 'result', requestId: 'native-load-1', ok: true, events: [] });
+  assert.equal((await pending).ok, true);
+
+  child.emit('close', 1, null);
+
+  assert.equal(lifecycleFailures.length, 1);
+  assert.equal(lifecycleFailures[0]?.requestId, null);
+  assert.equal(lifecycleFailures[0]?.error.code, 'PLAYER_HELPER_EXITED');
+  assertNoForbiddenKeys(lifecycleFailures);
+  unsubscribe();
+});
+
+test('native host process keeps active command close failures on the command result', async () => {
+  const child = new FakeHostChildProcess();
+  const lifecycleFailures: NativePlayerHostLifecycleFailure[] = [];
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+  host.onLifecycleFailure((failure) => lifecycleFailures.push(failure));
+
+  const pending = host.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.emit('close', 1, null);
+  const result = await pending;
+
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? null : result.error.code, 'PLAYER_HELPER_EXITED');
+  assert.equal(lifecycleFailures.length, 0);
   assertNoForbiddenKeys(result);
 });
 

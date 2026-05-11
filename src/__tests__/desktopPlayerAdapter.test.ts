@@ -5,6 +5,7 @@ import { DesktopPlayerAdapter } from '../main/player/desktopPlayerAdapter.js';
 import type {
   NativePlayerHostCommandResult,
   NativePlayerHostEvent,
+  NativePlayerHostLifecycleFailure,
   NativePlayerHostPort,
 } from '../main/player/nativePlayerHostPort.js';
 import {
@@ -32,6 +33,23 @@ class FakeNativePlayerHost implements NativePlayerHostPort {
     this.cleanupRequestIds.push(requestId);
     if (this.cleanupError !== null) {
       throw this.cleanupError;
+    }
+  }
+}
+
+class LifecycleFakeNativePlayerHost extends FakeNativePlayerHost {
+  private readonly listeners = new Set<(failure: NativePlayerHostLifecycleFailure) => void>();
+
+  onLifecycleFailure(listener: (failure: NativePlayerHostLifecycleFailure) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  emitLifecycleFailure(failure: NativePlayerHostLifecycleFailure): void {
+    for (const listener of [...this.listeners]) {
+      listener(failure);
     }
   }
 }
@@ -227,6 +245,70 @@ test('desktop player adapter emits renderer-safe snapshots and host events', asy
   assert.equal(result.events.some((event) => event.event === 'time.updated'), true);
   assert.equal(result.events.some((event) => event.event === 'command.settled' && event.ok), true);
   assertNoForbiddenKeys(result);
+});
+
+test('desktop player adapter records helper lifecycle failures without raw process details', async () => {
+  const host = new LifecycleFakeNativePlayerHost();
+  const emittedEvents: PlayerEvent[] = [];
+  const adapter = new DesktopPlayerAdapter(host, {
+    onEvents: (events) => emittedEvents.push(...events),
+  });
+
+  await adapter.dispatchRendererIntent(loadEnvelope('request-lifecycle'));
+
+  host.emitLifecycleFailure({
+    requestId: null,
+    error: {
+      code: 'PLAYER_HELPER_EXITED',
+      category: 'helper-failure',
+      message: 'raw exit code 123',
+      recoverable: true,
+      retryable: true,
+    },
+  });
+
+  const snapshot = adapter.getSnapshot();
+  const errorEvent = emittedEvents.find((event) => event.event === 'error');
+
+  assert.ok(errorEvent);
+  assert.equal(errorEvent.error.category, 'helper-failure');
+  assert.equal(errorEvent.error.message, 'The player helper stopped unexpectedly.');
+  assert.equal(snapshot.status, 'error');
+  assert.equal(snapshot.lastError?.category, 'helper-failure');
+  assertTextAbsent(emittedEvents, 'raw exit code');
+  assertNoForbiddenKeys(emittedEvents);
+  assertNoForbiddenKeys(snapshot);
+});
+
+test('desktop player adapter keeps lifecycle reporting after normal cleanup and reuse', async () => {
+  const host = new LifecycleFakeNativePlayerHost();
+  const emittedEvents: PlayerEvent[] = [];
+  const adapter = new DesktopPlayerAdapter(host, {
+    onEvents: (events) => emittedEvents.push(...events),
+  });
+
+  await adapter.dispatchRendererIntent(loadEnvelope('request-before-cleanup'));
+  const cleanup = await adapter.cleanup();
+  assert.equal(cleanup.accepted, true);
+  await adapter.dispatchRendererIntent(loadEnvelope('request-after-cleanup'));
+
+  host.emitLifecycleFailure({
+    requestId: null,
+    error: {
+      code: 'PLAYER_HELPER_EXITED',
+      category: 'helper-failure',
+      message: 'raw exit code after cleanup',
+      recoverable: true,
+      retryable: true,
+    },
+  });
+
+  const errorEvent = [...emittedEvents].reverse().find((event) => event.event === 'error');
+  assert.ok(errorEvent);
+  assert.equal(errorEvent.error.category, 'helper-failure');
+  assert.equal(adapter.getSnapshot().status, 'error');
+  assertTextAbsent(emittedEvents, 'raw exit code after cleanup');
+  assertNoForbiddenKeys(emittedEvents);
 });
 
 test('desktop player adapter ignores stale host events by request id', async () => {

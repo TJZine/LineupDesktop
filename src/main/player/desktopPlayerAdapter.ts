@@ -21,6 +21,7 @@ import type { PlayerRendererIntent } from '../../contracts/ipc.js';
 import type {
   NativePlayerHostEvent,
   NativePlayerHostFailure,
+  NativePlayerHostLifecycleFailure,
   NativePlayerHostPort,
   NativePlayerHostStatus,
 } from './nativePlayerHostPort.js';
@@ -40,6 +41,10 @@ export interface DesktopPlayerAdapterDispatchResult {
   command: PlayerCommand | null;
   events: readonly PlayerEvent[];
   snapshot: PlayerSnapshot;
+}
+
+export interface DesktopPlayerAdapterOptions {
+  onEvents?: (events: readonly PlayerEvent[]) => void;
 }
 
 const EMPTY_PAYLOAD: Record<string, never> = {};
@@ -78,11 +83,19 @@ const PLAYER_TRACK_DELIVERY_TYPES = [
 
 export class DesktopPlayerAdapter {
   readonly #host: NativePlayerHostPort;
+  readonly #onEvents?: (events: readonly PlayerEvent[]) => void;
   #snapshot: PlayerSnapshot = createInitialSnapshot();
   #pendingCommands = new Map<PlayerRequestId, PlayerCommandName>();
 
-  constructor(host: NativePlayerHostPort) {
+  constructor(host: NativePlayerHostPort, options: DesktopPlayerAdapterOptions = {}) {
     this.#host = host;
+    this.#onEvents = options.onEvents;
+    host.onLifecycleFailure?.((failure) => {
+      const events = this.handleHostLifecycleFailure(failure);
+      if (events.length > 0) {
+        this.#onEvents?.(events);
+      }
+    });
   }
 
   getSnapshot(): PlayerSnapshot {
@@ -307,6 +320,12 @@ export class DesktopPlayerAdapter {
         },
       }),
     );
+  }
+
+  handleHostLifecycleFailure(failure: NativePlayerHostLifecycleFailure): readonly PlayerEvent[] {
+    const requestId = failure.requestId ?? this.#snapshot.requestId;
+    this.#pendingCommands.clear();
+    return this.#recordError(hostLifecycleFailureToError(requestId, failure.error));
   }
 
   async cleanup(): Promise<DesktopPlayerAdapterDispatchResult> {
@@ -919,6 +938,29 @@ function hostFailureToError(requestId: PlayerRequestId, failure: NativePlayerHos
   });
 }
 
+function hostLifecycleFailureToError(
+  requestId: PlayerRequestId | null,
+  failure: NativePlayerHostFailure,
+): PlayerError {
+  const hostFailure: UnknownRecord =
+    isRecord(failure) && !hasForbiddenPrivilegedField(failure) ? failure : {};
+  const category = isPlayerErrorCategory(hostFailure.category) ? hostFailure.category : 'helper-failure';
+  return createPlayerError({
+    code: hostFailureCode(category),
+    category,
+    message: hostLifecycleFailureMessage(category),
+    recoverable: typeof hostFailure.recoverable === 'boolean' ? hostFailure.recoverable : true,
+    retryable: typeof hostFailure.retryable === 'boolean' ? hostFailure.retryable : true,
+    requestId: requestId ?? undefined,
+    diagnostic: {
+      component: 'desktop-player-adapter',
+      operation: 'helper.lifecycle',
+      status: 'failed',
+      reason: 'helper lifecycle failure',
+    },
+  });
+}
+
 function normalizeHostErrorPayload(
   value: unknown,
   requestId: PlayerRequestId | null,
@@ -1019,6 +1061,13 @@ function hostFailureMessage(category: PlayerErrorCategory): string {
     default:
       return assertNever(category);
   }
+}
+
+function hostLifecycleFailureMessage(category: PlayerErrorCategory): string {
+  if (category === 'helper-failure') {
+    return 'The player helper stopped unexpectedly.';
+  }
+  return hostFailureMessage(category);
 }
 
 function sanitizePlayerError(value: unknown, fallbackCode: string): PlayerError {

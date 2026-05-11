@@ -51,7 +51,11 @@ export function registerPlayerIpcHandlers(
   const ipcMain = options.ipcMain ?? getElectronIpcMain();
   const runtime =
     options.shellMode === 'development' || options.shellMode === 'smoke'
-      ? { adapter: new DesktopPlayerAdapter(createDevelopmentHost(options)) }
+      ? {
+          adapter: new DesktopPlayerAdapter(createDevelopmentHost(options), {
+            onEvents: (events) => emitEvents(options, events),
+          }),
+        }
       : { adapter: null };
 
   ipcMain.handle(LINEUP_PLAYER_COMMAND_CHANNEL, async (event, payload: unknown) => {

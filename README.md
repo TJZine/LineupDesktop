@@ -17,9 +17,11 @@ checks before product implementation begins.
 ## First Checks
 
 ```sh
-npm install
+npm ci
 npm run verify
 ```
+
+Use the Node version pinned by [`.nvmrc`](./.nvmrc) before installing.
 
 Use [`AGENTS.md`](./AGENTS.md) and
 [`docs/AGENTIC_DEV_WORKFLOW.md`](./docs/AGENTIC_DEV_WORKFLOW.md) before making
