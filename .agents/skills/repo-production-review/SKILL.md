@@ -7,6 +7,8 @@ description: Lineup Desktop wrapper for the global repo-production-review suite.
 
 Thin Lineup Desktop wrapper for the global `repo-production-review` skill suite.
 
+Use this only from the Lineup Desktop repo.
+
 ## Local Required Reads
 
 Before running the universal review, read and honor:

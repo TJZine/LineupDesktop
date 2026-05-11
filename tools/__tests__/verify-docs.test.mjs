@@ -535,6 +535,7 @@ function makeFixture(options = {}) {
       '.agents/skills/parallel-sidecars/SKILL.md',
       '.agents/skills/persistence-boundaries/SKILL.md',
       '.agents/skills/plex-integration-boundaries/SKILL.md',
+      '.agents/skills/repo-production-review/SKILL.md',
       '.agents/skills/review-adjudication/SKILL.md',
       '.agents/skills/review-request/SKILL.md',
       '.agents/skills/ui-composition-patterns/SKILL.md',
