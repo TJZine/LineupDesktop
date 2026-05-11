@@ -71,6 +71,31 @@ exist only in main-owned runtime memory. RD-10 does not wire live Plex
 transport, preload/renderer Plex APIs, real Electron safeStorage/app paths, or
 OS-specific credential behavior.
 
+## Current Plex Playback Boundary
+
+RD-12 adds a main-owned Plex-to-player boundary without adding renderer or
+preload Plex APIs. The stream resolver may consume selected-connection,
+credential, media-detail, and PMS-session ports inside main-owned code, but it
+projects only renderer-safe player load payloads, policy decisions, safe
+diagnostics, and request-scoped PMS lease summaries across public seams.
+Private playback descriptors may contain privileged playback setup for future
+main/helper use, but they are not persisted, logged, returned through contracts,
+included in renderer-facing fixtures, or exposed to preload/renderer code.
+
+The playback runtime owns PMS cleanup and stale-event custody. It binds PMS
+leases to the active player request, releases stale or rejected leases, rejects
+mismatched leases before player dispatch, and normalizes cleanup, resolver, and
+player failures into renderer-safe player events. Stop, switch, error, logout,
+server change, profile change, helper crash, teardown, failed resolver/player
+load, and stale candidate paths are all covered by injected tests.
+
+RD-12 keeps raw tokens, auth headers, raw Plex payloads, tokenized URLs,
+runtime filesystem paths, Electron/Node objects, and native/helper internals
+out of renderer-facing contracts, fixtures, diagnostics, docs, and Codex
+output. Production native-helper playback, live Plex transport composition,
+real Electron app-path or `safeStorage` wiring, packaging, and
+Windows-specific proof surfaces remain future replanning triggers.
+
 ## Release Gates
 
 Before public distribution, this repo must verify:

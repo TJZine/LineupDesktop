@@ -6,9 +6,10 @@ player IPC bridge backed by a development/smoke fake host, and a native-host
 process seam behind the adapter host port. Windows closeout proof covers the
 process seam with a real spawned helper test double and reruns the RD-06
 app-owned native-presentation smoke as RD-07's native surface proof. Production
-player commands currently return renderer-safe unsupported failures. Production
-Plex stream setup, renderer UI integration, and the product native helper remain
-unimplemented.
+player commands currently return renderer-safe unsupported failures. RD-12 adds
+an injected main-owned Plex stream resolver and playback runtime, but production
+native-helper playback, live Plex transport composition, renderer UI
+integration, and product helper wiring remain unimplemented.
 
 ## Current Hypothesis
 
@@ -178,6 +179,37 @@ unknown or unsupported where the Windows proof does not establish them. It does
 not contact Plex, normalize real Plex payloads, create playback URLs, start
 native playback, wire runtime IPC, or change renderer, preload, adapter,
 native-host, storage, package, or dependency behavior.
+
+RD-12 adds the first main-owned Plex-to-player runtime boundary without turning
+on production native-helper playback. `src/main/plex/streamResolver.ts`
+resolves injected selected-connection, active-credential, media-detail, and
+PMS-session ports into two separate outputs: a private privileged playback
+descriptor for future main/helper setup and a renderer-safe
+`PlayerLoadCommandPayload` for the existing player adapter boundary. The
+resolver applies the RD-08 stream policy and keeps raw credentials, auth
+headers, raw Plex payloads, token-bearing URLs, connection URI details, Plex
+part/stream keys, and private track ids out of public diagnostics and fixtures.
+
+`src/main/player/plexPlaybackRuntime.ts` owns request/epoch custody and PMS
+cleanup. It asks an injected scheduler/channel port for the current scheduled
+selection, resolves a safe playback candidate, rejects unsafe payloads and
+mismatched PMS leases before player dispatch, releases rejected/stale leases,
+dispatches only safe player commands, quarantines stale player/helper events,
+and cleans PMS/player state for stop, switch, error, logout, server change,
+profile change, helper crash, teardown, failed resolver/player paths, and stale
+candidate paths. `src/main/player/plexPlaybackBridge.ts` maps pure RD-11
+scheduler/channel current-program state into resolver input without giving the
+domain Plex credentials, URLs, Electron objects, Node objects, helper internals,
+or cleanup policy. `src/main/player/plexPlaybackComposition.ts` is only a thin
+injected factory and adapter port mapper.
+
+RD-12 proof is Mac/local automated proof sufficient: the runtime, resolver,
+bridge, and composition seams are injected and fakeable, and `npm run verify`
+passed on 2026-05-11. RD-12 does not add preload or renderer Plex APIs, live
+Plex transport composition, real Electron app-path or `safeStorage` wiring,
+package/dependency changes, Windows-specific proof surfaces, or production
+native-helper playback. Future production native playback must replan before
+using the private playback descriptor with a real helper.
 
 Concrete playback adapters must not leak native handles, raw media URLs, raw
 auth headers, tokenized URLs, raw Plex payloads, Electron or Node APIs,
