@@ -23,9 +23,11 @@ Before running the universal review, read and honor:
 - `docs/architecture/import-ledger.md`
 - the tracked production-review launcher document, if present
 
-Also open and follow the global orchestrator at:
+Also open and follow the global `repo-production-review` orchestrator by skill
+name. If a filesystem fallback is necessary, resolve it from the local Codex
+home directory instead of committing user-specific absolute paths, for example:
 
-- `/Users/tristan/.codex/skills/repo-production-review/SKILL.md`
+- `${CODEX_HOME:-$HOME/.codex}/skills/repo-production-review/SKILL.md`
 
 ## Local Role Constraints
 

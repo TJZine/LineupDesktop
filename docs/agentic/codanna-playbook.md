@@ -31,20 +31,25 @@ Useful starting anchors for this repo:
 
 ## Local Semantic Model
 
-For this Desktop repo, prefer the code-specialized local model used by the
-original Lineup checkout when initializing or refreshing local Codanna settings:
+For this Desktop repo, prefer the Desktop repo's local code-specialized Codanna
+model configuration when initializing or refreshing local settings. This is a
+Desktop-local choice for fast code-oriented lookup, tailored discovery, and
+offline use; it is not an instruction to import or depend on upstream Lineup
+tooling.
 
 - `model = "JinaEmbeddingsV2BaseCode"`
 - `threshold = 0.45`
 
 Changing the model requires `codanna index --force` and a document collection
-refresh. If `get_index_info` reports semantic search enabled with `0`
-embeddings after a successful force index, treat that as an eligible symbol
-documentation signal, not an indexing failure: Codanna creates code embeddings
-from symbol doc comments, and early Desktop slices intentionally have little
-symbol-level documentation. Use `search_documents` for indexed repo docs and
-`search_symbols`/direct reads for code until documented production symbols
-exist.
+refresh. After a successful force index, `get_index_info` may report semantic
+search enabled with `0` embeddings; treat that as an eligible symbol
+documentation signal, not an indexing failure.
+
+Codanna creates code embeddings from symbol doc comments, and early Desktop
+code often has little symbol-level documentation.
+
+Use `search_documents` for indexed repository docs. Use `search_symbols` or
+direct file reads for code until documented production symbols exist.
 
 ## Planning Evidence
 
