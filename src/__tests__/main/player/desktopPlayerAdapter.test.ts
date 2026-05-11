@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DesktopPlayerAdapter } from '../main/player/desktopPlayerAdapter.js';
+import { DesktopPlayerAdapter } from '../../../main/player/desktopPlayerAdapter.js';
 import type {
   NativePlayerHostCommandResult,
   NativePlayerHostEvent,
   NativePlayerHostLifecycleFailure,
   NativePlayerHostPort,
-} from '../main/player/nativePlayerHostPort.js';
+} from '../../../main/player/nativePlayerHostPort.js';
 import {
   PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
   type PlayerCommand,
@@ -15,8 +15,8 @@ import {
   type PlayerEvent,
   type PlayerMediaSummary,
   type PlayerTrackSummary,
-} from '../contracts/player.js';
-import type { RendererIntentEnvelope } from '../contracts/ipc.js';
+} from '../../../contracts/player.js';
+import type { RendererIntentEnvelope } from '../../../contracts/ipc.js';
 
 class FakeNativePlayerHost implements NativePlayerHostPort {
   readonly commands: PlayerCommand[] = [];

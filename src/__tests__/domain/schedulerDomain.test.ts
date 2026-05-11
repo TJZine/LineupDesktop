@@ -16,7 +16,7 @@ import {
   calculatePreviousProgram,
   calculateProgramAtTime,
   generateScheduleWindow,
-} from '../domain/scheduler/index.js';
+} from '../../domain/scheduler/index.js';
 import type {
   IShuffleGenerator,
   ResolvedContentItem,
@@ -24,7 +24,7 @@ import type {
   SchedulerClock,
   SchedulerTimerHandle,
   SchedulerTimerPort,
-} from '../domain/scheduler/index.js';
+} from '../../domain/scheduler/index.js';
 
 class FakeClock implements SchedulerClock {
   public currentTime: number;

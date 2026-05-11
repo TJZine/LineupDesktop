@@ -9,9 +9,9 @@ import {
   PERSISTENCE_FORBIDDEN_RENDERER_FIELD_KEYS,
   containsPersistenceForbiddenRendererField,
   type PlexSelectedServerSummary,
-} from '../contracts/persistence.js';
-import { resolveDesktopAppDataPaths } from '../main/persistence/appDataPaths.js';
-import { DesktopPersistenceStore } from '../main/persistence/desktopPersistenceStore.js';
+} from '../../contracts/persistence.js';
+import { resolveDesktopAppDataPaths } from '../../main/persistence/appDataPaths.js';
+import { DesktopPersistenceStore } from '../../main/persistence/desktopPersistenceStore.js';
 import {
   SecureStorageUnavailableError,
   createElectronSafeStorageCodec,
@@ -19,7 +19,7 @@ import {
   type SecureStorageAvailability,
   type SecureStringCodec,
   type SecureStringDecryptResult,
-} from '../main/persistence/secureStorageCodec.js';
+} from '../../main/persistence/secureStorageCodec.js';
 
 class FakeSecureStringCodec implements SecureStringCodec {
   public availability: SecureStorageAvailability = {

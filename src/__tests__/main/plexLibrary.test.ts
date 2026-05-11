@@ -5,8 +5,8 @@ import {
   containsPlexForbiddenRendererField,
   PLEX_FORBIDDEN_RENDERER_FIELD_KEYS,
   type PlexMediaItemSummary,
-} from '../contracts/plex.js';
-import { PlexLibraryError, redactLibraryErrorText } from '../main/plex/library/plexLibraryError.js';
+} from '../../contracts/plex.js';
+import { PlexLibraryError, redactLibraryErrorText } from '../../main/plex/library/plexLibraryError.js';
 import {
   extractDirectoryArray,
   extractSearchHubMetadata,
@@ -26,8 +26,8 @@ import {
   toRendererSafeMediaItemSummary,
   toRendererSafePlaylistSummary,
   toRendererSafeTagDirectorySummary,
-} from '../main/plex/library/index.js';
-import { PLEX_LIBRARY_CONSTANTS, PLEX_MEDIA_TYPES } from '../main/plex/library/constants.js';
+} from '../../main/plex/library/index.js';
+import { PLEX_LIBRARY_CONSTANTS, PLEX_MEDIA_TYPES } from '../../main/plex/library/constants.js';
 import type {
   PlexMediaContainer,
   RawCollection,
@@ -36,7 +36,7 @@ import type {
   RawMediaItem,
   RawPlaylist,
   RawSeason,
-} from '../main/plex/library/types.js';
+} from '../../main/plex/library/types.js';
 
 const placeholderAuthValue = ['placeholder', 'auth', 'value'].join('-');
 const placeholderSecret = ['placeholder', 'secret'].join('-');

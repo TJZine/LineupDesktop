@@ -12,9 +12,9 @@ import {
   isValidChannelConfig,
   isValidContentSource,
   SourceResolutionCache,
-} from '../domain/channel/index.js';
-import { applyPlaybackOrdering } from '../domain/scheduler/shared/playbackOrdering.js';
-import { shuffleWithSeed } from '../domain/scheduler/shared/prng.js';
+} from '../../domain/channel/index.js';
+import { applyPlaybackOrdering } from '../../domain/scheduler/shared/playbackOrdering.js';
+import { shuffleWithSeed } from '../../domain/scheduler/shared/prng.js';
 import type {
   ChannelAbortSignal,
   ChannelClock,
@@ -24,13 +24,13 @@ import type {
   ChannelPersistencePort,
   IPlexLibraryMinimal,
   PlexMediaItemMinimal,
-} from '../domain/channel/index.js';
+} from '../../domain/channel/index.js';
 import type {
   ChannelConfig,
   ChannelContentSource,
   ResolvedContentItem,
   StoredChannelData,
-} from '../domain/channel/index.js';
+} from '../../domain/channel/index.js';
 
 class FakeClock implements ChannelClock {
   public currentTime: number;
@@ -1696,6 +1696,7 @@ test('channel domain validates complete channel config numeric fields strictly',
   assert.equal(isValidChannelConfig({ ...valid, phaseSeed: Number.POSITIVE_INFINITY }), false);
   assert.equal(isValidChannelConfig({ ...valid, lineupReplicaIndex: -1 }), false);
   assert.equal(isValidChannelConfig({ ...valid, lineupReplicaIndex: 1.5 }), true);
+
 });
 
 test('channel domain safety audit catches forbidden renderer persistence fields in outputs and fixtures', async () => {
