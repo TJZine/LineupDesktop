@@ -216,6 +216,16 @@ test('plex home and switch parsers accept JSON and XML payload shapes', () => {
   }
 });
 
+test('plex home switch parser handles self-referential arrays without recursing forever', () => {
+  const payload: unknown[] = [];
+  payload.push(payload);
+
+  assert.throws(() => parseSwitchResponsePayload({ kind: 'json', data: payload }), {
+    name: 'PlexAuthError',
+    code: 'parse-error',
+  });
+});
+
 test('plex auth parse and HTTP errors are classified without raw cause leakage', () => {
   assert.throws(
     () => parsePinResponse({ id: 1, code: 'ABCD', expiresAt: 'not-a-date' }, 'fallback-client'),
@@ -258,6 +268,23 @@ test('plex auth errors recursively sanitize auth fields and cyclic cause/context
   assert.equal(serialized.includes('[Circular]'), true);
   assert.match(serialized, /"authToken":"\[redacted\]"/u);
   assert.match(serialized, /"headers":"\[redacted\]"/u);
+});
+
+test('plex auth errors sanitize cyclic Error causes without stack leakage', () => {
+  const cause = new Error('failed with secret=placeholder-secret');
+  cause.stack = 'Error: failed\n    at /Users/example/lineup/auth.ts:1:1';
+  Object.assign(cause, { cause });
+
+  const error = new PlexAuthError('server-unreachable', 'failed token=placeholder-auth-value', 500, {
+    cause,
+  });
+  const serialized = JSON.stringify({ cause: error.cause });
+
+  assert.equal(serialized.includes('placeholder-secret'), false);
+  assert.equal(serialized.includes('placeholder-auth-value'), false);
+  assert.equal(serialized.includes('/Users/example'), false);
+  assert.equal(serialized.includes('"stack"'), false);
+  assert.equal(serialized.includes('[Circular]'), true);
 });
 
 test('plex auth errors redact serialized JSON-like auth fields in strings', () => {
@@ -698,6 +725,52 @@ test('desktop plex auth service validates tokens, home users, switches profiles,
   assert.equal(transport.requests.at(-1)?.action, 'cancel-pin');
 });
 
+test('desktop plex auth service rejects already-aborted home and switch calls before transport', async () => {
+  const transport = new FakePlexAuthTransport();
+  const service = new DesktopPlexAuthService({
+    config: createDesktopPlexAuthConfig({ clientIdentifier: 'desktop-client' }),
+    transport,
+    credentialStore: createSuccessfulCredentialStore(),
+  });
+
+  transport.enqueue('check-pin-status', {
+    status: 200,
+    payload: {
+      id: 8,
+      code: 'ZZZZ',
+      expiresAt: '2026-05-10T12:05:00.000Z',
+      authToken: 'placeholder-auth-value',
+      clientIdentifier: 'desktop-client',
+    },
+  });
+  transport.enqueue('validate-token', {
+    status: 200,
+    payload: {
+      id: 'account-1',
+      username: 'viewer',
+      email: 'viewer@example.invalid',
+    },
+  });
+  await service.checkPinStatus(8);
+
+  const requestCount = transport.requests.length;
+  const getUsersController = new AbortController();
+  getUsersController.abort();
+  await assert.rejects(() => service.getHomeUsers({ signal: getUsersController.signal }), {
+    name: 'PlexAuthError',
+    code: 'aborted',
+  });
+  assert.equal(transport.requests.length, requestCount);
+
+  const switchController = new AbortController();
+  switchController.abort();
+  await assert.rejects(() => service.switchHomeUser('kid', { signal: switchController.signal }), {
+    name: 'PlexAuthError',
+    code: 'aborted',
+  });
+  assert.equal(transport.requests.length, requestCount);
+});
+
 test('desktop plex auth service does not commit account state after credential save cancellation', async () => {
   const transport = new FakePlexAuthTransport();
   const controller = new AbortController();
@@ -840,6 +913,64 @@ test('desktop plex auth service polling honors abort cancellation', async () => 
   });
 });
 
+test('desktop plex auth service polling removes abort listeners after successful sleeps', async () => {
+  const transport = new FakePlexAuthTransport();
+  const controller = new AbortController();
+  const signal = controller.signal;
+  const originalAddEventListener = signal.addEventListener.bind(signal);
+  const originalRemoveEventListener = signal.removeEventListener.bind(signal);
+  let addedAbortListeners = 0;
+  let removedAbortListeners = 0;
+  let nowMs = 0;
+
+  signal.addEventListener = ((...args: Parameters<AbortSignal['addEventListener']>) => {
+    if (args[0] === 'abort') {
+      addedAbortListeners += 1;
+    }
+    return originalAddEventListener(...args);
+  }) as AbortSignal['addEventListener'];
+  signal.removeEventListener = ((...args: Parameters<AbortSignal['removeEventListener']>) => {
+    if (args[0] === 'abort') {
+      removedAbortListeners += 1;
+    }
+    return originalRemoveEventListener(...args);
+  }) as AbortSignal['removeEventListener'];
+
+  transport.onRequest = (request) => {
+    if (request.action === 'check-pin-status') {
+      nowMs += 2;
+    }
+  };
+
+  const service = new DesktopPlexAuthService({
+    config: createDesktopPlexAuthConfig({ clientIdentifier: 'desktop-client' }),
+    transport,
+    nowMs: () => nowMs,
+    pollIntervalMs: 1,
+    pinTimeoutMs: 5,
+  });
+
+  for (let index = 0; index < 3; index += 1) {
+    transport.enqueue('check-pin-status', {
+      status: 200,
+      payload: {
+        id: 9,
+        code: 'WAIT',
+        expiresAt: '2026-05-10T12:05:00.000Z',
+        authToken: null,
+        clientIdentifier: 'desktop-client',
+      },
+    });
+  }
+
+  await assert.rejects(() => service.pollForPin(9, { signal }), {
+    name: 'PlexAuthError',
+    code: 'pin-timeout',
+  });
+  assert.equal(addedAbortListeners, 3);
+  assert.equal(removedAbortListeners, 3);
+});
+
 test('desktop plex credential store returns renderer-safe save and read summaries', async () => {
   const temporaryDirectory = await createTemporaryDirectory();
   const persistenceStore = new DesktopPersistenceStore({
@@ -877,6 +1008,45 @@ test('desktop plex credential store returns renderer-safe save and read summarie
 
   const persisted = await fs.readFile(path.join(temporaryDirectory, 'persistence.json'), 'utf8');
   assert.equal(persisted.includes('placeholder-secret'), false);
+});
+
+test('desktop plex credential store reports snapshot handle mismatches before using stub handle', async () => {
+  const credentialStore = new DesktopPlexCredentialStore({
+    persistenceStore: {
+      async readPlexCredentialSecret() {
+        return {
+          status: 'present',
+          accountId: 'account-1',
+          credentialId: 'plex-account:account-1',
+          secretValue: 'placeholder-secret',
+          shouldReencrypt: false,
+          diagnostics: [],
+        } as const;
+      },
+      async getRendererSafeSnapshot() {
+        return {
+          storage: { credentials: 'available', appData: 'available' },
+          accounts: [],
+          credentialHandles: [],
+          selectedServer: null,
+          diagnostics: [],
+        } as const;
+      },
+      async savePlexCredential() {
+        return { ok: false, status: 'corrupt', diagnostics: [] } as const;
+      },
+    },
+  });
+
+  const readResult = await credentialStore.readAccountCredential('account-1');
+
+  assert.equal(readResult.status, 'present');
+  assertRendererSafe(readResult);
+  if (readResult.status === 'present') {
+    assert.equal(readResult.credentialHandle.createdAtMs, 0);
+    assert.equal(readResult.credentialHandle.updatedAtMs, 0);
+    assert.equal(readResult.diagnostics.some((diagnostic) => diagnostic.reason?.includes('stub handle')), true);
+  }
 });
 
 test('desktop plex credential store normalizes mismatched profile account ids to storage account id', async () => {

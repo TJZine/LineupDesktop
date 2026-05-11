@@ -1,5 +1,8 @@
 import type { DesktopPersistenceStore } from '../../persistence/desktopPersistenceStore.js';
-import type { PlexAccountProfileSummary } from '../../../contracts/persistence.js';
+import type {
+  PersistenceRendererSafeDiagnostic,
+  PlexAccountProfileSummary,
+} from '../../../contracts/persistence.js';
 import type {
   DesktopPlexCredentialReadResult,
   DesktopPlexCredentialSaveResult,
@@ -67,15 +70,30 @@ export class DesktopPlexCredentialStore {
 
     const profile = toAuthProfileSummary(accountId, readResult.profile);
     const snapshot = await this.persistenceStore.getRendererSafeSnapshot();
-    const credentialHandle = snapshot.credentialHandles.find(
+    const snapshotCredentialHandle = snapshot.credentialHandles.find(
       (handle) => handle.credentialId === readResult.credentialId,
-    ) ?? {
+    );
+    const credentialHandle = snapshotCredentialHandle ?? {
       credentialId: readResult.credentialId,
       accountId: readResult.accountId,
       kind: 'plex-account' as const,
       createdAtMs: 0,
       updatedAtMs: 0,
     };
+    const handleDiagnostics: readonly PersistenceRendererSafeDiagnostic[] =
+      snapshotCredentialHandle === undefined
+        ? [
+            {
+              component: 'desktop-plex-credential-store',
+              operation: 'read-account-credential',
+              status: 'present',
+              reason:
+                'credential handle missing from renderer-safe snapshot; stub handle with zero timestamps used',
+              credentialId: readResult.credentialId,
+              accountId: readResult.accountId,
+            },
+          ]
+        : [];
 
     return {
       status: 'present',
@@ -84,7 +102,7 @@ export class DesktopPlexCredentialStore {
       profile,
       credentialHandle,
       shouldReencrypt: readResult.shouldReencrypt,
-      diagnostics: [...readResult.diagnostics, ...snapshot.diagnostics],
+      diagnostics: [...readResult.diagnostics, ...snapshot.diagnostics, ...handleDiagnostics],
     };
   }
 }

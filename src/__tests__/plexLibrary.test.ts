@@ -6,8 +6,9 @@ import {
   PLEX_FORBIDDEN_RENDERER_FIELD_KEYS,
   type PlexMediaItemSummary,
 } from '../contracts/plex.js';
-import { PlexLibraryError } from '../main/plex/library/plexLibraryError.js';
+import { PlexLibraryError, redactLibraryErrorText } from '../main/plex/library/plexLibraryError.js';
 import {
+  extractDirectoryArray,
   extractSearchHubMetadata,
   extractSearchHubs,
   getPlexRequestIntentForChannelSetup,
@@ -126,6 +127,21 @@ test('plex media parser parses media files, streams, roles, and renderer-safe it
   assertRendererSafe(summary);
 });
 
+test('plex media parser preserves absent watch-state fields through renderer summaries', () => {
+  const rawItem = createRawEpisode();
+  delete rawItem.viewOffset;
+  delete rawItem.viewCount;
+
+  const item = parseMediaItem(rawItem);
+  const summary = toRendererSafeMediaItemSummary(item);
+
+  assert.equal(item.viewOffset, undefined);
+  assert.equal(item.viewCount, undefined);
+  assert.equal(Object.hasOwn(summary, 'viewOffset'), false);
+  assert.equal(Object.hasOwn(summary, 'viewCount'), false);
+  assertRendererSafe(summary);
+});
+
 test('plex parser throws sanitized typed parse errors for invalid payloads', () => {
   assert.throws(
     () => parseLibrarySections([null] as unknown as RawLibrarySection[]),
@@ -142,6 +158,43 @@ test('plex parser throws sanitized typed parse errors for invalid payloads', () 
       error.code === 'parse-error' &&
       error.message === 'Invalid media item payload: title is required',
   );
+});
+
+test('plex library errors redact broad bearer tokens and summarize unserializable context', () => {
+  const redacted = redactLibraryErrorText(
+    'request failed bearer ABC_def-123= and Bearer abc+/def== secret=placeholder-secret',
+  );
+  assert.equal(redacted.includes('ABC_def-123='), false);
+  assert.equal(redacted.includes('abc+/def=='), false);
+  assert.equal(redacted.includes('placeholder-secret'), false);
+
+  const context: Record<string, unknown> = { token: 'placeholder-auth-value' };
+  context.self = context;
+  const cause = new Error('failed bearer ABC_def-123= credential=placeholder-secret');
+  cause.stack = 'Error: failed\n    at /Users/example/lineup/library.ts:1:1';
+  const error = new PlexLibraryError('server-error', 'failed bearer ABC_def-123=', 500, {
+    cause,
+    context,
+  });
+  const serialized = JSON.stringify({
+    message: error.message,
+    cause: error.cause,
+    context: error.context,
+  });
+
+  assert.equal(serialized.includes('ABC_def-123='), false);
+  assert.equal(serialized.includes('placeholder-auth-value'), false);
+  assert.equal(serialized.includes('placeholder-secret'), false);
+  assert.equal(serialized.includes('/Users/example'), false);
+  assert.equal(serialized.includes('"stack"'), false);
+  assert.equal(serialized.includes('unserializable object'), true);
+
+  const structured = new PlexLibraryError('server-error', 'structured context failed', 500, {
+    context: { token: 'placeholder-auth-value', headers: 'placeholder-secret' },
+  });
+  const serializedStructured = JSON.stringify({ context: structured.context });
+  assert.equal(serializedStructured.includes('placeholder-auth-value'), false);
+  assert.equal(serializedStructured.includes('placeholder-secret'), false);
 });
 
 test('plex listing parsers cover seasons, collections, playlists, and tag directories', () => {
@@ -246,6 +299,24 @@ test('plex search hub extraction returns typed hub metadata and validates malfor
   assert.throws(
     () => extractSearchHubs({ MediaContainer: { Hub: null } } as never, 'search'),
     PlexLibraryError,
+  );
+});
+
+test('plex directory extraction treats missing Directory as empty and validates malformed values', () => {
+  assert.deepEqual(
+    extractDirectoryArray<RawDirectoryTag>({ MediaContainer: {} }, 'tag directory'),
+    [],
+  );
+  assert.throws(
+    () =>
+      extractDirectoryArray<RawDirectoryTag>(
+        { MediaContainer: { Directory: null } as never },
+        'tag directory',
+      ),
+    {
+      name: 'PlexLibraryError',
+      code: 'parse-error',
+    },
   );
 });
 

@@ -48,8 +48,8 @@ function buildMediaMetadata(
     updatedAt: toPlexDate(data.updatedAt),
     thumb: data.thumb ?? null,
     art: data.art ?? null,
-    viewOffset: data.viewOffset ?? 0,
-    viewCount: data.viewCount ?? 0,
+    viewOffset: data.viewOffset,
+    viewCount: data.viewCount,
     media: parseMediaFiles(data.Media),
   };
 }

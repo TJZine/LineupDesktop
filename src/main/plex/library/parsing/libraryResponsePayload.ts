@@ -61,6 +61,10 @@ export function extractDirectoryArray<T>(response: PlexMediaContainer<T>, contex
   const mediaContainer = extractMediaContainer(response, context);
   const directory = (mediaContainer as { Directory?: unknown }).Directory;
 
+  if (directory === undefined) {
+    return [];
+  }
+
   if (!Array.isArray(directory)) {
     throw new PlexLibraryError('parse-error', `Invalid ${context} payload: Directory must be an array`);
   }

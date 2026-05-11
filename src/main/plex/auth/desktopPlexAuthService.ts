@@ -207,6 +207,7 @@ export class DesktopPlexAuthService {
     if (!this.accountToken) {
       throw new PlexAuthError('auth-required', 'Plex account token not available');
     }
+    throwIfAborted(options.signal);
 
     const response = await this.requestTransport({
       action: 'get-home-users',
@@ -231,6 +232,7 @@ export class DesktopPlexAuthService {
     if (!this.accountToken) {
       throw new PlexAuthError('auth-required', 'Plex account token not available');
     }
+    throwIfAborted(options.signal);
 
     const response = await this.requestTransport({
       action: 'switch-home-user',
@@ -368,14 +370,14 @@ function sleepWithAbort(durationMs: number, signal?: AbortSignal | null): Promis
       return;
     }
 
-    const timeout = setTimeout(resolve, durationMs);
-    signal?.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timeout);
-        reject(new PlexAuthError('aborted', 'Plex auth request was aborted'));
-      },
-      { once: true },
-    );
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(new PlexAuthError('aborted', 'Plex auth request was aborted'));
+    };
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, durationMs);
+    signal?.addEventListener('abort', onAbort, { once: true });
   });
 }

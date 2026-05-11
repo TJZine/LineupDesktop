@@ -51,9 +51,6 @@ function sanitizeDiscoveryErrorValue(value: unknown): unknown {
     return {
       name: value.name,
       message: redactAuthErrorText(value.message),
-      ...(typeof value.stack === 'string'
-        ? { stack: redactAuthErrorText(value.stack).slice(0, 8000) }
-        : {}),
     };
   }
 
@@ -62,8 +59,29 @@ function sanitizeDiscoveryErrorValue(value: unknown): unknown {
   }
 
   if (typeof value === 'object' && value !== null) {
-    return { summary: redactAuthErrorText(JSON.stringify(value).slice(0, 8000)) };
+    return { summary: summarizeDiscoveryErrorObject(value) };
   }
 
   return value;
+}
+
+function summarizeDiscoveryErrorObject(value: object): string {
+  try {
+    return redactAuthErrorText(JSON.stringify(value).slice(0, 8000));
+  } catch (error) {
+    const reason = describeSanitizerFailure(error);
+    return redactAuthErrorText(`unserializable object: ${reason}`).slice(0, 8000);
+  }
+}
+
+function describeSanitizerFailure(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  try {
+    return String(error);
+  } catch {
+    return 'unknown serialization failure';
+  }
 }

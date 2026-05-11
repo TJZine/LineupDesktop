@@ -140,6 +140,11 @@ function findSwitchTokenInPayload(payload: unknown, seen: WeakSet<object>): stri
   }
 
   if (Array.isArray(payload)) {
+    if (seen.has(payload)) {
+      return null;
+    }
+    seen.add(payload);
+
     for (const entry of payload) {
       const token = findSwitchTokenInPayload(entry, seen);
       if (token) {

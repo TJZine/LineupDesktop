@@ -1,3 +1,5 @@
+import { redactAuthErrorText } from '../auth/plexAuthError.js';
+
 export type PlexLibraryErrorCode =
   | 'parse-error'
   | 'network-error'
@@ -29,10 +31,12 @@ export class PlexLibraryError extends Error {
 }
 
 export function redactLibraryErrorText(value: string): string {
-  return value
-    .replace(/([?&][^=]*token[^=]*=)[^&\s]+/giu, '$1[redacted]')
-    .replace(/\b(bearer)\s+[a-z0-9._~-]+/giu, '$1 [redacted]')
-    .replace(/\b(secret|credential|password)=\S+/giu, '$1=[redacted]');
+  return redactAuthErrorText(
+    value
+      .replace(/([?&][^=]*token[^=]*=)[^&\s]+/giu, '$1[redacted]')
+      .replace(/\b(bearer)\s+[-A-Za-z0-9._~+/=]+/giu, '$1 [redacted]')
+      .replace(/\b(secret|credential|password)=\S+/giu, '$1=[redacted]'),
+  );
 }
 
 function sanitizePlexLibraryErrorValue(value: unknown): unknown {
@@ -54,9 +58,6 @@ function sanitizePlexLibraryErrorValue(value: unknown): unknown {
     return {
       name: value.name,
       message: redactLibraryErrorText(value.message),
-      ...(typeof value.stack === 'string'
-        ? { stack: redactLibraryErrorText(value.stack).slice(0, 8000) }
-        : {}),
     };
   }
 
@@ -65,8 +66,29 @@ function sanitizePlexLibraryErrorValue(value: unknown): unknown {
   }
 
   if (typeof value === 'object' && value !== null) {
-    return { summary: redactLibraryErrorText(JSON.stringify(value).slice(0, 8000)) };
+    return { summary: summarizeLibraryErrorObject(value) };
   }
 
   return value;
+}
+
+function summarizeLibraryErrorObject(value: object): string {
+  try {
+    return redactLibraryErrorText(JSON.stringify(value).slice(0, 8000));
+  } catch (error) {
+    const reason = describeSanitizerFailure(error);
+    return redactLibraryErrorText(`unserializable object: ${reason}`).slice(0, 8000);
+  }
+}
+
+function describeSanitizerFailure(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  try {
+    return String(error);
+  } catch {
+    return 'unknown serialization failure';
+  }
 }

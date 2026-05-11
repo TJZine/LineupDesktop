@@ -149,6 +149,11 @@ function sanitizePlexAuthErrorValue(
   }
 
   if (value instanceof PlexAuthError) {
+    if (seen.has(value)) {
+      return '[Circular]';
+    }
+    seen.add(value);
+
     return {
       name: value.name,
       code: value.code,
@@ -159,13 +164,15 @@ function sanitizePlexAuthErrorValue(
   }
 
   if (value instanceof Error) {
+    if (seen.has(value)) {
+      return '[Circular]';
+    }
+    seen.add(value);
+
     const cause = (value as Error & { cause?: unknown }).cause;
     return {
       name: value.name,
       message: redactAuthErrorText(value.message),
-      ...(typeof value.stack === 'string'
-        ? { stack: redactAuthErrorText(value.stack).slice(0, 8000) }
-        : {}),
       ...(cause !== undefined ? { cause: sanitizePlexAuthErrorValue(cause, seen) } : {}),
     };
   }
