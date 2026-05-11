@@ -1,3 +1,4 @@
+import { applyPlaybackOrdering } from '../scheduler/shared/playbackOrdering.js';
 import { shuffleWithSeed } from '../scheduler/shared/prng.js';
 import type {
   ContentFilter,
@@ -67,11 +68,15 @@ export class ContentSelectionPolicy {
   ): ResolvedContentItem[] {
     switch (mode) {
       case 'sequential':
-        return normalizeScheduledIndexes(items);
       case 'shuffle':
-        return normalizeScheduledIndexes(shuffleWithSeed(items, seed));
       case 'block':
-        return applyBlockOrdering(items, seed, blockSize);
+        return applyPlaybackOrdering({
+          items,
+          mode,
+          seed,
+          blockSize,
+          shuffleItems: shuffleWithSeed,
+        });
       case 'random':
         return shuffleWithSeed(items, seed).map((item, index) => ({
           ...item,
@@ -133,48 +138,6 @@ export class ContentSelectionPolicy {
         return false;
     }
   }
-}
-
-function normalizeScheduledIndexes(items: ResolvedContentItem[]): ResolvedContentItem[] {
-  return items.map((item, index) => ({
-    ...item,
-    scheduledIndex: index,
-  }));
-}
-
-function applyBlockOrdering(
-  items: ResolvedContentItem[],
-  seed: number,
-  blockSize: number | undefined,
-): ResolvedContentItem[] {
-  const size = normalizeBlockSize(blockSize);
-  const groups = new Map<string, ResolvedContentItem[]>();
-  for (const item of items) {
-    const key = item.showTitle || item.title;
-    const group = groups.get(key) ?? [];
-    group.push(item);
-    groups.set(key, group);
-  }
-
-  const orderedKeys = shuffleWithSeed([...groups.keys()], seed);
-  const result: ResolvedContentItem[] = [];
-  let hasItems = true;
-  while (hasItems) {
-    hasItems = false;
-    for (const key of orderedKeys) {
-      const group = groups.get(key);
-      if (!group || group.length === 0) continue;
-      hasItems = true;
-      result.push(...group.splice(0, size));
-    }
-  }
-  return normalizeScheduledIndexes(result);
-}
-
-function normalizeBlockSize(blockSize: number | undefined): number {
-  const normalizedBlockSize =
-    typeof blockSize === 'number' && Number.isFinite(blockSize) ? blockSize : 3;
-  return Math.max(1, Math.floor(normalizedBlockSize));
 }
 
 function matchesStringArrayFilter(values: string[], filter: ContentFilter): boolean {

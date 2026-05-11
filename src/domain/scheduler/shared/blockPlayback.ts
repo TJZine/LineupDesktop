@@ -1,22 +1,26 @@
-import type { ResolvedContentItem } from '../types.js';
+export interface BlockPlaybackItem {
+  ratingKey: string;
+  showTitle?: string;
+  showThumb?: string | null;
+}
 
-export function getBlockGroupKey(item: ResolvedContentItem): string {
+export function getBlockGroupKey(item: BlockPlaybackItem): string {
   return item.showThumb ?? item.showTitle ?? item.ratingKey;
 }
 
-export function applyBlockPlaybackMode(options: {
-  items: ResolvedContentItem[];
+export function applyBlockPlaybackMode<TItem extends BlockPlaybackItem>(options: {
+  items: TItem[];
   seed: number;
   blockSize: number;
   shuffleKeys: (keys: string[], seed: number) => string[];
-}): ResolvedContentItem[] {
+}): TItem[] {
   const { items, seed, blockSize, shuffleKeys } = options;
 
   if (!Number.isInteger(blockSize) || blockSize <= 0) {
     throw new RangeError(`[applyBlockPlaybackMode] Invalid blockSize=${String(blockSize)}`);
   }
 
-  const groups = new Map<string, ResolvedContentItem[]>();
+  const groups = new Map<string, TItem[]>();
   for (const item of items) {
     const key = getBlockGroupKey(item);
     const group = groups.get(key);
@@ -33,7 +37,7 @@ export function applyBlockPlaybackMode(options: {
     offset: 0,
   }));
 
-  const result: ResolvedContentItem[] = [];
+  const result: TItem[] = [];
   while (queues.length > 0) {
     for (let index = 0; index < queues.length; index++) {
       const queue = queues[index];

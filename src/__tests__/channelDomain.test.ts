@@ -6,11 +6,15 @@ import {
   ChannelError,
   ChannelManager,
   ChannelResolutionCache,
+  ContentSelectionPolicy,
   ContentResolver,
   isValidContentSource,
   SourceResolutionCache,
 } from '../domain/channel/index.js';
+import { applyPlaybackOrdering } from '../domain/scheduler/shared/playbackOrdering.js';
+import { shuffleWithSeed } from '../domain/scheduler/shared/prng.js';
 import type {
+  ChannelAbortSignal,
   ChannelClock,
   ChannelTimerHandle,
   ChannelTimerPort,
@@ -193,6 +197,13 @@ test('channel domain validates content sources and rejects malformed channel aut
   assert.equal(isValidContentSource(librarySource()), true);
   assert.equal(
     isValidContentSource({
+      ...librarySource(),
+      libraryFilter: { authHeaders: 'blocked' },
+    }),
+    false,
+  );
+  assert.equal(
+    isValidContentSource({
       type: 'manual',
       items: [{ ratingKey: 'm1', title: 'Manual', durationMs: 10 }],
     }),
@@ -318,6 +329,52 @@ test('channel domain resolves content through injected library port and applies 
   assert.equal(library.libraryCalls, 1);
 });
 
+test('channel domain block playback follows shared scheduler grouping', () => {
+  const items: ResolvedContentItem[] = [
+    resolvedItem('dup-a', 'Duplicate'),
+    resolvedItem('other', 'Other'),
+    resolvedItem('dup-b', 'Duplicate'),
+    {
+      ...resolvedItem('ep1', 'Episode 1'),
+      type: 'episode',
+      fullTitle: 'Show A - Episode 1',
+      showTitle: 'Show A',
+      showThumb: 'thumb-a',
+      seasonNumber: 1,
+      episodeNumber: 1,
+    },
+    {
+      ...resolvedItem('ep2', 'Episode 2'),
+      type: 'episode',
+      fullTitle: 'Show A - Episode 2',
+      showTitle: 'Show A',
+      showThumb: 'thumb-b',
+      seasonNumber: 1,
+      episodeNumber: 2,
+    },
+  ];
+
+  const channelOrder = new ContentSelectionPolicy()
+    .applyPlaybackMode(items, 'block', 1, 2)
+    .map((item) => [item.ratingKey, item.scheduledIndex]);
+  const schedulerOrder = applyPlaybackOrdering({
+    items,
+    mode: 'block',
+    seed: 1,
+    blockSize: 2,
+    shuffleItems: shuffleWithSeed,
+  }).map((item) => [item.ratingKey, item.scheduledIndex]);
+
+  assert.deepEqual(channelOrder, schedulerOrder);
+  assert.deepEqual(channelOrder, [
+    ['ep2', 0],
+    ['dup-b', 1],
+    ['other', 2],
+    ['dup-a', 3],
+    ['ep1', 4],
+  ]);
+});
+
 test('channel domain expands show content and mixed sources through injected ports only', async () => {
   const clock = new FakeClock(1_000);
   const library = new FakeLibrary();
@@ -432,14 +489,25 @@ test('channel domain cache helpers clone entries and honor TTL through injected 
   assert.equal(second[0]?.title, 'Movie 2');
 });
 
-test('channel domain source cache rejects in-flight waiters after invalidation', async () => {
+test('channel domain source cache aborts in-flight waiters and transport after invalidation', async () => {
   const clock = new FakeClock(10);
   const sourceCache = new SourceResolutionCache(clock);
   const source = librarySource();
   const deferred = new Deferred<ResolvedContentItem[]>();
+  let transportSignal: ChannelAbortSignal | null = null;
 
-  const pending = sourceCache.resolve(source, async () => deferred.promise);
+  const pending = sourceCache.resolve(source, async (_source, options) => {
+    transportSignal = options.signal;
+    return deferred.promise;
+  });
+  const rejected = assert.rejects(pending, /Source resolution invalidated/);
+  await Promise.resolve();
+  const signal = assertPresentSignal(transportSignal);
+  assert.equal(signal.aborted, false);
   sourceCache.invalidate(source);
+  assert.equal(signal.aborted, true);
+  await rejected;
+
   deferred.resolve([{
     ratingKey: 'late',
     type: 'movie',
@@ -451,7 +519,6 @@ test('channel domain source cache rejects in-flight waiters after invalidation',
     scheduledIndex: 0,
   }]);
 
-  await assert.rejects(pending, /Source resolution invalidated/);
   const fresh = await sourceCache.resolve(source, async () => [{
     ratingKey: 'fresh',
     type: 'movie',
@@ -463,6 +530,26 @@ test('channel domain source cache rejects in-flight waiters after invalidation',
     scheduledIndex: 0,
   }]);
   assert.equal(fresh[0]?.ratingKey, 'fresh');
+});
+
+test('channel domain source cache clear aborts in-flight waiters and transport', async () => {
+  const clock = new FakeClock(10);
+  const sourceCache = new SourceResolutionCache(clock);
+  const deferred = new Deferred<ResolvedContentItem[]>();
+  let transportSignal: ChannelAbortSignal | null = null;
+
+  const pending = sourceCache.resolve(librarySource(), async (_source, options) => {
+    transportSignal = options.signal;
+    return deferred.promise;
+  });
+  const rejected = assert.rejects(pending, /Source resolution invalidated/);
+  await Promise.resolve();
+  const signal = assertPresentSignal(transportSignal);
+  sourceCache.clear();
+
+  assert.equal(signal.aborted, true);
+  await rejected;
+  deferred.resolve([resolvedItem('late')]);
 });
 
 test('channel domain does not reinsert stale resolved channels after replacement', async () => {
@@ -479,9 +566,9 @@ test('channel domain does not reinsert stale resolved channels after replacement
   await manager.replaceAllChannels([completeChannel('replacement', 3)], {
     currentChannelId: 'replacement',
   });
+  await assert.rejects(pendingRefresh, /Source resolution invalidated/);
   deferred.resolve([movie('late')]);
 
-  await assert.rejects(pendingRefresh, /Source resolution invalidated/);
   assert.equal(manager.getChannel(oldChannel.id), null);
   assert.deepEqual(manager.getAllChannels().map((channel) => channel.id), ['replacement']);
 });
@@ -524,7 +611,18 @@ test('channel domain replaceAllChannels normalizes duplicate numbers and current
 test('channel domain safety audit catches forbidden renderer persistence fields in outputs and fixtures', async () => {
   const { manager, library } = createManager();
   library.libraryItems.set('lib', [movie('m1')]);
-  const channel = await manager.createChannel({ contentSource: librarySource() });
+  const channel = await manager.createChannel({
+    contentSource: {
+      type: 'manual',
+      items: [{
+        ratingKey: 'manual-safe',
+        title: 'Manual Safe',
+        durationMs: 60_000,
+        rawMediaUrl: 'blocked',
+      }],
+      tokenizedUrl: 'blocked',
+    } as unknown as ChannelContentSource,
+  });
   const content = await manager.resolveChannelContent(channel.id);
 
   assert.deepEqual(auditChannelDomainValueForForbiddenFields(channel), []);
@@ -556,15 +654,20 @@ function completeChannel(id: string, number: number): ChannelConfig {
   };
 }
 
-function resolvedItem(ratingKey: string): ResolvedContentItem {
+function resolvedItem(ratingKey: string, title = ratingKey): ResolvedContentItem {
   return {
     ratingKey,
     type: 'movie',
-    title: ratingKey,
-    fullTitle: ratingKey,
+    title,
+    fullTitle: title,
     durationMs: 10,
     thumb: null,
     year: 2024,
     scheduledIndex: 0,
   };
+}
+
+function assertPresentSignal(signal: ChannelAbortSignal | null): ChannelAbortSignal {
+  assert.ok(signal, 'expected source cache to pass a transport signal');
+  return signal;
 }

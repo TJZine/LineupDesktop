@@ -137,9 +137,47 @@ test('channel persistence repository normalizes malformed persisted channel stat
   });
   storage.storedChannelData = JSON.stringify({
     channels: [
-      { ...channel('alpha', 9), shuffleSeed: Number.NaN, phaseSeed: undefined },
+      {
+        ...channel('alpha', 9),
+        shuffleSeed: Number.NaN,
+        phaseSeed: undefined,
+        rawMediaUrl: 'blocked',
+        contentSource: {
+          type: 'manual',
+          items: [{
+            ratingKey: 'item-alpha',
+            title: 'Item alpha',
+            durationMs: 60_000,
+            rawPlexPayload: 'blocked',
+          }],
+          tokenizedUrl: 'blocked',
+        },
+        contentFilters: [{
+          field: 'genre',
+          operator: 'contains',
+          value: 'Drama',
+          authHeaders: 'blocked',
+        }],
+        sortOrder: 'not-a-sort',
+      },
       channel('beta', 9),
       { ...channel('drop-invalid-source', 10), contentSource: { type: 'library' } },
+      {
+        id: 'drop-missing-name',
+        number: 12,
+        contentSource: channel('drop-missing-name', 12).contentSource,
+        playbackMode: 'sequential',
+        startTimeAnchor: 1_000,
+        skipIntros: false,
+        skipCredits: false,
+        createdAt: 1_000,
+        updatedAt: 1_000,
+        lastContentRefresh: 0,
+        itemCount: 1,
+        totalDurationMs: 60_000,
+      },
+      { ...channel('drop-missing-mode', 13), playbackMode: undefined },
+      { ...channel('drop-missing-skips', 14), skipIntros: undefined },
       { ...channel('alpha', 11), name: 'Duplicate id' },
       null,
     ],
@@ -159,6 +197,8 @@ test('channel persistence repository normalizes malformed persisted channel stat
   assert.equal(loaded.data.savedAt, 9_000);
   assert.equal(Number.isFinite(loaded.data.channels[0]?.shuffleSeed), true);
   assert.equal(Number.isFinite(loaded.data.channels[0]?.phaseSeed), true);
+  assert.equal(loaded.data.channels[0]?.sortOrder, undefined);
+  assert.deepEqual(auditChannelDomainValueForForbiddenFields(loaded.data.channels[0]), []);
 });
 
 test('channel persistence coordinator repairs invalid separate current-channel pointers', async () => {

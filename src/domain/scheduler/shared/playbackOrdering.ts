@@ -1,15 +1,17 @@
-import type { ResolvedContentItem } from '../types.js';
-import { applyBlockPlaybackMode } from './blockPlayback.js';
+import { applyBlockPlaybackMode, type BlockPlaybackItem } from './blockPlayback.js';
 
 export type SharedPlaybackOrderingMode = 'sequential' | 'shuffle' | 'block';
+export type SharedPlaybackItem = BlockPlaybackItem & {
+  scheduledIndex: number;
+};
 
-export function applyPlaybackOrdering(options: {
-  items: ResolvedContentItem[];
+export function applyPlaybackOrdering<TItem extends SharedPlaybackItem>(options: {
+  items: TItem[];
   mode: SharedPlaybackOrderingMode;
   seed: number;
   blockSize: number | undefined;
   shuffleItems: <T>(items: T[], seed: number) => T[];
-}): ResolvedContentItem[] {
+}): TItem[] {
   const { items, mode, seed, blockSize, shuffleItems } = options;
 
   switch (mode) {
@@ -31,7 +33,7 @@ export function applyPlaybackOrdering(options: {
   }
 }
 
-function normalizeScheduledIndexes(items: ResolvedContentItem[]): ResolvedContentItem[] {
+function normalizeScheduledIndexes<TItem extends SharedPlaybackItem>(items: TItem[]): TItem[] {
   return items.map((item, index) => ({
     ...item,
     scheduledIndex: index,

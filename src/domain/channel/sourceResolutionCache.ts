@@ -1,6 +1,6 @@
 import { cloneResolvedItem, cloneResolvedItems } from './channelDomainClone.js';
 import { SOURCE_CACHE_MAX_ENTRIES, SOURCE_CACHE_TTL_MS } from './constants.js';
-import type { ChannelClock } from './interfaces.js';
+import type { ChannelAbortSignal, ChannelClock } from './interfaces.js';
 import type { ChannelContentSource, ResolvedContentItem } from './types.js';
 
 type SourceCacheEntry = {
@@ -14,11 +14,123 @@ type SourceInFlightEntry = {
   promise: Promise<ResolvedContentItem[]>;
   epoch: number;
   generation: number;
+  abortController: SourceResolutionAbortController;
 };
 
 type ResolveSourceUncached = (
   source: ChannelContentSource,
+  options: { signal: ChannelAbortSignal },
 ) => Promise<ResolvedContentItem[]>;
+
+class SourceResolutionAbortSignal implements ChannelAbortSignal {
+  public aborted = false;
+  private readonly abortHandlers = new Set<() => void>();
+
+  public addEventListener(event: 'abort', handler: () => void, options?: { once?: boolean }): void {
+    if (event !== 'abort') {
+      return;
+    }
+    if (this.aborted) {
+      handler();
+      return;
+    }
+    if (options?.once) {
+      const onceHandler = (): void => {
+        this.removeEventListener('abort', onceHandler);
+        handler();
+      };
+      this.abortHandlers.add(onceHandler);
+      return;
+    }
+    this.abortHandlers.add(handler);
+  }
+
+  public removeEventListener(event: 'abort', handler: () => void): void {
+    if (event === 'abort') {
+      this.abortHandlers.delete(handler);
+    }
+  }
+
+  public abort(): void {
+    if (this.aborted) {
+      return;
+    }
+    this.aborted = true;
+    for (const handler of [...this.abortHandlers]) {
+      handler();
+    }
+    this.abortHandlers.clear();
+  }
+}
+
+class SourceResolutionAbortController {
+  public readonly signal = new SourceResolutionAbortSignal();
+
+  public abort(): void {
+    this.signal.abort();
+  }
+}
+
+class CompositeChannelAbortSignal implements ChannelAbortSignal {
+  private readonly registrations = new Map<
+    () => void,
+    { first?: () => void; second?: () => void }
+  >();
+
+  public constructor(
+    private readonly first: ChannelAbortSignal,
+    private readonly second: ChannelAbortSignal,
+  ) {}
+
+  public get aborted(): boolean {
+    return this.first.aborted || this.second.aborted;
+  }
+
+  public addEventListener(event: 'abort', handler: () => void, options?: { once?: boolean }): void {
+    if (event !== 'abort') {
+      return;
+    }
+    if (this.aborted) {
+      handler();
+      return;
+    }
+
+    const wrapped = options?.once
+      ? (): void => {
+          this.removeEventListener('abort', handler);
+          handler();
+        }
+      : handler;
+
+    if (this.first.addEventListener) {
+      this.first.addEventListener('abort', wrapped, options);
+    }
+    if (this.second.addEventListener) {
+      this.second.addEventListener('abort', wrapped, options);
+    }
+    this.registrations.set(handler, {
+      ...(this.first.addEventListener ? { first: wrapped } : {}),
+      ...(this.second.addEventListener ? { second: wrapped } : {}),
+    });
+  }
+
+  public removeEventListener(event: 'abort', handler: () => void): void {
+    if (event !== 'abort') {
+      return;
+    }
+    const registration = this.registrations.get(handler);
+    if (!registration) {
+      return;
+    }
+    if (registration.first) {
+      this.first.removeEventListener?.('abort', registration.first);
+    }
+    if (registration.second) {
+      this.second.removeEventListener?.('abort', registration.second);
+    }
+    this.registrations.delete(handler);
+  }
+}
 
 export class SourceResolutionCache {
   private cacheEpoch = 0;
@@ -35,6 +147,9 @@ export class SourceResolutionCache {
 
   public clear(): void {
     this.cacheEpoch += 1;
+    for (const entry of this.sourceInFlight.values()) {
+      entry.abortController.abort();
+    }
     this.sourceCache.clear();
     this.sourceCacheGenerationByKey.clear();
     this.parentKeysByChildKey.clear();
@@ -50,7 +165,13 @@ export class SourceResolutionCache {
   public async resolve(
     source: ChannelContentSource,
     resolveUncached: ResolveSourceUncached,
+    options?: { signal?: ChannelAbortSignal | null },
   ): Promise<ResolvedContentItem[]> {
+    const callerSignal = options?.signal ?? null;
+    if (callerSignal?.aborted) {
+      throw createCallerAbortedError();
+    }
+
     const cacheKey = this.buildKey(source);
     const epoch = this.cacheEpoch;
     const generation = this.getSourceCacheGeneration(cacheKey);
@@ -61,7 +182,11 @@ export class SourceResolutionCache {
 
     const inFlight = this.sourceInFlight.get(cacheKey);
     if (inFlight && inFlight.epoch === epoch && inFlight.generation === generation) {
-      const items = await inFlight.promise;
+      const items = await raceWithAbortSignal(
+        inFlight.promise,
+        callerSignal,
+        createCallerAbortedError,
+      );
       this.assertCurrentScope(cacheKey, {
         epoch: inFlight.epoch,
         generation: inFlight.generation,
@@ -72,7 +197,17 @@ export class SourceResolutionCache {
       this.sourceInFlight.delete(cacheKey);
     }
 
-    const resolvePromise = resolveUncached(source)
+    const abortController = new SourceResolutionAbortController();
+    const transportSignal = callerSignal
+      ? new CompositeChannelAbortSignal(abortController.signal, callerSignal)
+      : abortController.signal;
+    const uncachedPromise = Promise.resolve().then(() =>
+      resolveUncached(source, { signal: transportSignal }));
+    const resolvePromise = raceWithAbortSignal(
+      uncachedPromise,
+      abortController.signal,
+      createSourceInvalidatedError,
+    )
       .then((items) => {
         this.setCachedSourceItems(cacheKey, source, items, { epoch, generation });
         return items;
@@ -84,8 +219,8 @@ export class SourceResolutionCache {
         }
       });
 
-    this.sourceInFlight.set(cacheKey, { promise: resolvePromise, epoch, generation });
-    const items = await resolvePromise;
+    this.sourceInFlight.set(cacheKey, { promise: resolvePromise, epoch, generation, abortController });
+    const items = await raceWithAbortSignal(resolvePromise, callerSignal, createCallerAbortedError);
     this.assertCurrentScope(cacheKey, { epoch, generation });
     return cloneResolvedItems(items);
   }
@@ -122,7 +257,11 @@ export class SourceResolutionCache {
     this.bumpSourceCacheGeneration(key);
     this.sourceCache.delete(key);
     this.unregisterParentDependencies(key);
-    this.sourceInFlight.delete(key);
+    const inFlight = this.sourceInFlight.get(key);
+    if (inFlight) {
+      inFlight.abortController.abort();
+      this.sourceInFlight.delete(key);
+    }
 
     for (const parentKey of parentKeys) {
       this.invalidateSourceKey(parentKey, invalidatedKeys);
@@ -274,7 +413,51 @@ export class SourceResolutionCache {
 
   private assertCurrentScope(key: string, scope: { epoch: number; generation: number }): void {
     if (scope.epoch !== this.cacheEpoch || scope.generation !== this.getSourceCacheGeneration(key)) {
-      throw new Error('Source resolution invalidated');
+      throw createSourceInvalidatedError();
     }
   }
+}
+
+function raceWithAbortSignal<T>(
+  promise: Promise<T>,
+  signal: ChannelAbortSignal | null,
+  createAbortError: () => Error,
+): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    return Promise.reject(createAbortError());
+  }
+  const addAbortListener = signal.addEventListener;
+  const removeAbortListener = signal.removeEventListener;
+  if (!addAbortListener || !removeAbortListener) {
+    return promise;
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const abort = (): void => {
+      removeAbortListener.call(signal, 'abort', abort);
+      reject(createAbortError());
+    };
+    addAbortListener.call(signal, 'abort', abort, { once: true });
+    promise.then(
+      (value) => {
+        removeAbortListener.call(signal, 'abort', abort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        removeAbortListener.call(signal, 'abort', abort);
+        reject(error);
+      },
+    );
+  });
+}
+
+function createSourceInvalidatedError(): Error {
+  return new Error('Source resolution invalidated');
+}
+
+function createCallerAbortedError(): Error {
+  return new Error('Aborted');
 }

@@ -55,8 +55,11 @@ export class ContentResolver {
     if (options?.signal?.aborted) {
       throw new Error('Aborted');
     }
-    return this.sourceCache.resolve(source, (sourceToResolve) =>
-      this.resolveSourceUncached(sourceToResolve, options));
+    return this.sourceCache.resolve(
+      source,
+      (sourceToResolve, cacheOptions) => this.resolveSourceUncached(sourceToResolve, cacheOptions),
+      options,
+    );
   }
 
   public applyFilters(items: ResolvedContentItem[], filters: ContentFilter[]): ResolvedContentItem[] {

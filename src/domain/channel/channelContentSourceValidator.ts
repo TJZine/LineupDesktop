@@ -1,3 +1,4 @@
+import { CHANNEL_DOMAIN_FORBIDDEN_KEYS } from './channelSafety.js';
 import type { ChannelContentSource } from './types.js';
 
 const MAX_CONTENT_SOURCE_DEPTH = 25;
@@ -28,6 +29,21 @@ const isValidSeasonFilter = (value: unknown): boolean => {
   );
 };
 
+const isValidLibraryFilter = (value: unknown): boolean => {
+  if (value === undefined) {
+    return true;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  return Object.entries(value).every(
+    ([key, entry]) =>
+      !isForbiddenContentSourceKey(key) &&
+      (typeof entry === 'string' ||
+        (typeof entry === 'number' && Number.isFinite(entry))),
+  );
+};
+
 const isValidManualItem = (item: unknown): boolean => {
   if (!item || typeof item !== 'object') {
     return false;
@@ -50,13 +66,11 @@ const isValidManualItem = (item: unknown): boolean => {
 };
 
 const isValidLibrarySource = (source: Record<string, unknown>): boolean => {
-  const libraryFilter = source.libraryFilter;
   return (
     isValidIdString(source.libraryId) &&
     (source.libraryType === 'movie' || source.libraryType === 'show') &&
     typeof source.includeWatched === 'boolean' &&
-    (libraryFilter === undefined ||
-      (libraryFilter !== null && typeof libraryFilter === 'object' && !Array.isArray(libraryFilter)))
+    isValidLibraryFilter(source.libraryFilter)
   );
 };
 
@@ -111,4 +125,8 @@ export function isValidContentSource(
 
   const validator = CONTENT_SOURCE_VALIDATORS[src.type as ContentSourceType];
   return validator(src, depth);
+}
+
+function isForbiddenContentSourceKey(value: string): boolean {
+  return (CHANNEL_DOMAIN_FORBIDDEN_KEYS as readonly string[]).includes(value);
 }
