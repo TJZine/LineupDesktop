@@ -25,15 +25,30 @@ type ChannelPersistenceFileReadResult =
 
 export interface DesktopChannelPersistenceStoreOptions {
   persistenceFilePath: string;
+  fileSystem?: DesktopChannelPersistenceFileSystem;
+}
+
+export interface DesktopChannelPersistenceFileSystem {
+  readFile(filePath: string, encoding: 'utf8'): Promise<string>;
+  mkdir(directoryPath: string, options: { recursive: true }): Promise<void>;
+  writeFile(
+    filePath: string,
+    content: string,
+    options: { encoding: 'utf8'; mode: number },
+  ): Promise<void>;
+  rename(sourcePath: string, destinationPath: string): Promise<void>;
+  chmod(filePath: string, mode: number): Promise<void>;
 }
 
 export class DesktopChannelPersistenceStore implements ChannelPersistenceStoragePort {
   private readonly persistenceFilePath: string;
+  private readonly fileSystem: DesktopChannelPersistenceFileSystem;
   private mutationChain: Promise<void> = Promise.resolve();
   private temporaryWriteCounter = 0;
 
   public constructor(options: DesktopChannelPersistenceStoreOptions) {
     this.persistenceFilePath = options.persistenceFilePath;
+    this.fileSystem = options.fileSystem ?? NODE_CHANNEL_PERSISTENCE_FILE_SYSTEM;
   }
 
   public async readStoredChannelData(): Promise<string | null> {
@@ -108,7 +123,7 @@ export class DesktopChannelPersistenceStore implements ChannelPersistenceStorage
   private async readPersistenceFile(): Promise<ChannelPersistenceFileReadResult> {
     let content: string;
     try {
-      content = await fs.readFile(this.persistenceFilePath, 'utf8');
+      content = await this.fileSystem.readFile(this.persistenceFilePath, 'utf8');
     } catch (error) {
       if (isNodeFileError(error, 'ENOENT')) {
         return { status: 'missing', value: createEmptyChannelPersistenceFile() };
@@ -132,15 +147,15 @@ export class DesktopChannelPersistenceStore implements ChannelPersistenceStorage
   }
 
   private async writePersistenceFile(value: ChannelPersistenceFile): Promise<void> {
-    await fs.mkdir(path.dirname(this.persistenceFilePath), { recursive: true });
+    await this.fileSystem.mkdir(path.dirname(this.persistenceFilePath), { recursive: true });
     this.temporaryWriteCounter += 1;
     const temporaryPath = `${this.persistenceFilePath}.${String(process.pid)}.${String(this.temporaryWriteCounter)}.tmp`;
-    await fs.writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
+    await this.fileSystem.writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
       encoding: 'utf8',
       mode: 0o600,
     });
-    await fs.rename(temporaryPath, this.persistenceFilePath);
-    await fs.chmod(this.persistenceFilePath, 0o600);
+    await this.fileSystem.rename(temporaryPath, this.persistenceFilePath);
+    await this.fileSystem.chmod(this.persistenceFilePath, 0o600);
   }
 
   private enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
@@ -152,6 +167,22 @@ export class DesktopChannelPersistenceStore implements ChannelPersistenceStorage
     return run;
   }
 }
+
+const NODE_CHANNEL_PERSISTENCE_FILE_SYSTEM: DesktopChannelPersistenceFileSystem = {
+  readFile: (filePath, encoding) => fs.readFile(filePath, encoding),
+  mkdir: async (directoryPath, options) => {
+    await fs.mkdir(directoryPath, options);
+  },
+  writeFile: async (filePath, content, options) => {
+    await fs.writeFile(filePath, content, options);
+  },
+  rename: async (sourcePath, destinationPath) => {
+    await fs.rename(sourcePath, destinationPath);
+  },
+  chmod: async (filePath, mode) => {
+    await fs.chmod(filePath, mode);
+  },
+};
 
 function createEmptyChannelPersistenceFile(): ChannelPersistenceFile {
   return {

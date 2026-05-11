@@ -26,7 +26,10 @@ import type {
   ChannelTimerPort,
 } from '../domain/channel/interfaces.js';
 import type { StoredChannelData } from '../domain/channel/types.js';
-import { DesktopChannelPersistenceStore } from '../main/persistence/desktopChannelPersistenceStore.js';
+import {
+  DesktopChannelPersistenceStore,
+  type DesktopChannelPersistenceFileSystem,
+} from '../main/persistence/desktopChannelPersistenceStore.js';
 
 class FakeClock implements ChannelClock {
   public currentTime: number;
@@ -94,6 +97,27 @@ class MemoryChannelStorage implements ChannelPersistenceStoragePort {
   public async writeCurrentChannelId(channelId: string | null): Promise<void> {
     this.currentChannelId = channelId;
   }
+}
+
+function createNodeBackedChannelFileSystem(
+  overrides: Partial<DesktopChannelPersistenceFileSystem>,
+): DesktopChannelPersistenceFileSystem {
+  return {
+    readFile: (filePath, encoding) => fs.readFile(filePath, encoding),
+    mkdir: async (directoryPath, options) => {
+      await fs.mkdir(directoryPath, options);
+    },
+    writeFile: async (filePath, content, options) => {
+      await fs.writeFile(filePath, content, options);
+    },
+    rename: async (sourcePath, destinationPath) => {
+      await fs.rename(sourcePath, destinationPath);
+    },
+    chmod: async (filePath, mode) => {
+      await fs.chmod(filePath, mode);
+    },
+    ...overrides,
+  };
 }
 
 test('channel persistence codec decodes only stored channel data shape', () => {
@@ -850,9 +874,16 @@ test('desktop channel persistence store preserves data when top-level current po
 
 test('desktop channel persistence store propagates top-level current pointer repair write failures', async () => {
   const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-channel-persistence-'));
-  const unwritableDirectory = path.join(temporaryDirectory, 'blocked');
-  const persistenceFilePath = path.join(unwritableDirectory, 'channels.json');
-  const adapter = new DesktopChannelPersistenceStore({ persistenceFilePath });
+  const persistenceFilePath = path.join(temporaryDirectory, 'channels.json');
+  const repairFailure = new Error('repair rename failed');
+  const adapter = new DesktopChannelPersistenceStore({
+    persistenceFilePath,
+    fileSystem: createNodeBackedChannelFileSystem({
+      rename: async () => {
+        throw repairFailure;
+      },
+    }),
+  });
   const data = storedData({
     channels: [channel('one', 1)],
     channelOrder: ['one'],
@@ -865,15 +896,12 @@ test('desktop channel persistence store propagates top-level current pointer rep
     currentChannelId: 7,
   });
 
-  await fs.mkdir(unwritableDirectory);
   await fs.writeFile(persistenceFilePath, originalContent);
-  await fs.chmod(unwritableDirectory, 0o500);
-  try {
-    await assert.rejects(() => adapter.readCurrentChannelId());
-    assert.equal(await fs.readFile(persistenceFilePath, 'utf8'), originalContent);
-  } finally {
-    await fs.chmod(unwritableDirectory, 0o700);
-  }
+  await assert.rejects(
+    () => adapter.readCurrentChannelId(),
+    (error: unknown) => error === repairFailure,
+  );
+  assert.equal(await fs.readFile(persistenceFilePath, 'utf8'), originalContent);
 });
 
 test('desktop channel persistence store preserves explicit null current-channel clears', async () => {
