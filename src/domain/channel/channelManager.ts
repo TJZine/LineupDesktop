@@ -11,6 +11,12 @@ import {
   MAX_CHANNEL_NUMBER,
   MIN_CHANNEL_NUMBER,
 } from './constants.js';
+import {
+  isValidBuildStrategy,
+  isValidContentFilterArray,
+  isValidPlaybackMode,
+  isValidSortOrder,
+} from './channelValueValidators.js';
 import type {
   ChannelCreateOptions,
   ChannelLogger,
@@ -908,34 +914,79 @@ function fnv1a32Uint(input: string): number {
 export function isValidChannelConfig(value: unknown): value is ChannelConfig {
   if (!value || typeof value !== 'object') return false;
   const channel = value as Partial<ChannelConfig>;
-  return (
-    typeof channel.id === 'string' &&
-    typeof channel.number === 'number' &&
-    Number.isInteger(channel.number) &&
-    channel.number >= MIN_CHANNEL_NUMBER &&
-    channel.number <= MAX_CHANNEL_NUMBER &&
-    typeof channel.name === 'string' &&
-    typeof channel.startTimeAnchor === 'number' &&
-    Number.isFinite(channel.startTimeAnchor) &&
-    channel.startTimeAnchor >= 0 &&
-    typeof channel.createdAt === 'number' &&
-    Number.isFinite(channel.createdAt) &&
-    channel.createdAt >= 0 &&
-    typeof channel.updatedAt === 'number' &&
-    Number.isFinite(channel.updatedAt) &&
-    channel.updatedAt >= 0 &&
-    typeof channel.lastContentRefresh === 'number' &&
-    Number.isFinite(channel.lastContentRefresh) &&
-    channel.lastContentRefresh >= 0 &&
-    typeof channel.itemCount === 'number' &&
-    Number.isFinite(channel.itemCount) &&
-    channel.itemCount >= 0 &&
-    typeof channel.totalDurationMs === 'number' &&
-    Number.isFinite(channel.totalDurationMs) &&
-    channel.totalDurationMs >= 0 &&
-    typeof channel.skipIntros === 'boolean' &&
-    typeof channel.skipCredits === 'boolean' &&
-    typeof channel.playbackMode === 'string' &&
-    isValidContentSource(channel.contentSource)
-  );
+  if (
+    !(
+      typeof channel.id === 'string' &&
+      typeof channel.number === 'number' &&
+      Number.isInteger(channel.number) &&
+      channel.number >= MIN_CHANNEL_NUMBER &&
+      channel.number <= MAX_CHANNEL_NUMBER &&
+      typeof channel.name === 'string' &&
+      typeof channel.startTimeAnchor === 'number' &&
+      Number.isFinite(channel.startTimeAnchor) &&
+      channel.startTimeAnchor >= 0 &&
+      typeof channel.createdAt === 'number' &&
+      Number.isFinite(channel.createdAt) &&
+      channel.createdAt >= 0 &&
+      typeof channel.updatedAt === 'number' &&
+      Number.isFinite(channel.updatedAt) &&
+      channel.updatedAt >= 0 &&
+      typeof channel.lastContentRefresh === 'number' &&
+      Number.isFinite(channel.lastContentRefresh) &&
+      channel.lastContentRefresh >= 0 &&
+      typeof channel.itemCount === 'number' &&
+      Number.isFinite(channel.itemCount) &&
+      channel.itemCount >= 0 &&
+      typeof channel.totalDurationMs === 'number' &&
+      Number.isFinite(channel.totalDurationMs) &&
+      channel.totalDurationMs >= 0 &&
+      typeof channel.skipIntros === 'boolean' &&
+      typeof channel.skipCredits === 'boolean' &&
+      isValidPlaybackMode(channel.playbackMode) &&
+      isValidContentSource(channel.contentSource)
+    )
+  ) {
+    return false;
+  }
+
+  if (channel.sortOrder !== undefined && !isValidSortOrder(channel.sortOrder)) return false;
+  if (channel.buildStrategy !== undefined && !isValidBuildStrategy(channel.buildStrategy)) return false;
+  if (channel.contentFilters !== undefined && !isValidContentFilterArray(channel.contentFilters)) return false;
+  if (channel.minEpisodeRunTimeMs !== undefined && !isPositiveInteger(channel.minEpisodeRunTimeMs)) return false;
+  if (channel.maxEpisodeRunTimeMs !== undefined && !isPositiveInteger(channel.maxEpisodeRunTimeMs)) return false;
+  if (
+    channel.minEpisodeRunTimeMs !== undefined &&
+    channel.maxEpisodeRunTimeMs !== undefined &&
+    channel.minEpisodeRunTimeMs > channel.maxEpisodeRunTimeMs
+  ) {
+    return false;
+  }
+  if (channel.lineupReplicaIndex !== undefined && !isNonNegativeFiniteNumber(channel.lineupReplicaIndex)) {
+    return false;
+  }
+  if (channel.shuffleSeed !== undefined && !isFiniteNumber(channel.shuffleSeed)) return false;
+  if (channel.phaseSeed !== undefined && !isFiniteNumber(channel.phaseSeed)) return false;
+  if (channel.blockSize !== undefined) {
+    return (
+      channel.playbackMode === 'block' &&
+      typeof channel.blockSize === 'number' &&
+      Number.isFinite(channel.blockSize) &&
+      Number.isInteger(channel.blockSize) &&
+      channel.blockSize >= 1
+    );
+  }
+
+  return true;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= 0;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return isFiniteNumber(value) && Number.isInteger(value) && value > 0;
 }

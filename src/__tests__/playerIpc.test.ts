@@ -265,6 +265,36 @@ test('main process diagnostics redact privileged key-value pairs and URLs', () =
   assert.equal(message.includes('rawbearertoken12345'), false);
 });
 
+test('main process diagnostics preserve safe token and bearer prefixes', () => {
+  const plexTokenHeader = ['X-Plex', 'Token'].join('-');
+  const bearerScheme = ['Bearer'].join('');
+  assert.equal(
+    redactMainProcessError(new Error(`?${plexTokenHeader}=raw-token&other=1`)),
+    `?${plexTokenHeader}=[redacted]&other=1`,
+  );
+  assert.equal(
+    redactMainProcessError(new Error(`${bearerScheme} rawbearertoken12345`)),
+    `${bearerScheme} [redacted]`,
+  );
+});
+
+test('main process diagnostics redact multipart auth and header values', () => {
+  const authorizationHeader = ['Authorization'].join('');
+  const plexTokenHeader = ['X-Plex', 'Token'].join('-');
+  const tokenScheme = ['Token'].join('');
+  const cases = [
+    `${authorizationHeader}: ${tokenScheme} rawtoken12345`,
+    `headers: ${plexTokenHeader}: placeholder-secret`,
+    `${plexTokenHeader}: ${tokenScheme} placeholder-secret`,
+  ];
+
+  for (const value of cases) {
+    const message = redactMainProcessError(new Error(value));
+    assert.equal(message.includes('rawtoken12345'), false);
+    assert.equal(message.includes('placeholder-secret'), false);
+  }
+});
+
 test('development and smoke player IPC dispatches through fake host and emits safe events', async () => {
   const ipcMain = new FakeIpcMain();
   const events: PlayerEvent[] = [];

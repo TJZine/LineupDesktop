@@ -54,15 +54,14 @@ export class ChannelRepository {
     }
 
     const savedCurrentChannelId = await this.store.readCurrentChannelId();
-    const savedAt =
-      typeof stored.savedAt === 'number' && Number.isFinite(stored.savedAt)
-        ? stored.savedAt
-        : this.clock.now();
+    const storedSavedAt = stored.savedAt;
+    const hasValidSavedAt = typeof storedSavedAt === 'number' && Number.isFinite(storedSavedAt);
+    const savedAt = hasValidSavedAt ? storedSavedAt : this.clock.now();
     const dataCurrentChannelId =
       typeof stored.currentChannelId === 'string' ? stored.currentChannelId.trim() : null;
 
     const channelCandidates: ChannelConfig[] = [];
-    let didMutate = false;
+    let didMutate = !hasValidSavedAt;
     for (const raw of stored.channels) {
       if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
         didMutate = true;
@@ -283,8 +282,17 @@ function applyPersistedOptionalFields(
   didMutate = assignOptionalBoolean(channel, record, 'isPlaybackModeVariant', didMutate);
   didMutate = assignOptionalFiniteNumber(channel, record, 'shuffleSeed', didMutate);
   didMutate = assignOptionalFiniteNumber(channel, record, 'phaseSeed', didMutate);
-  didMutate = assignOptionalNonNegativeNumber(channel, record, 'maxEpisodeRunTimeMs', didMutate);
-  didMutate = assignOptionalNonNegativeNumber(channel, record, 'minEpisodeRunTimeMs', didMutate);
+  didMutate = assignOptionalPositiveInteger(channel, record, 'maxEpisodeRunTimeMs', didMutate);
+  didMutate = assignOptionalPositiveInteger(channel, record, 'minEpisodeRunTimeMs', didMutate);
+  if (
+    channel.minEpisodeRunTimeMs !== undefined &&
+    channel.maxEpisodeRunTimeMs !== undefined &&
+    channel.minEpisodeRunTimeMs > channel.maxEpisodeRunTimeMs
+  ) {
+    delete channel.minEpisodeRunTimeMs;
+    delete channel.maxEpisodeRunTimeMs;
+    didMutate = true;
+  }
 
   if (record.buildStrategy !== undefined) {
     if (isValidBuildStrategy(record.buildStrategy)) {
@@ -573,7 +581,7 @@ function assignOptionalFiniteNumber<K extends OptionalNumberChannelKey>(
   return didMutate;
 }
 
-function assignOptionalNonNegativeNumber<K extends OptionalNumberChannelKey>(
+function assignOptionalPositiveInteger<K extends OptionalNumberChannelKey>(
   channel: ChannelConfig,
   record: Record<string, unknown>,
   key: K,
@@ -583,11 +591,15 @@ function assignOptionalNonNegativeNumber<K extends OptionalNumberChannelKey>(
   if (value === undefined) {
     return didMutate;
   }
-  const number = readNonNegativeFiniteNumber(value);
-  if (number === null) {
+  if (
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    !Number.isInteger(value) ||
+    value <= 0
+  ) {
     return true;
   }
-  channel[key] = number;
+  channel[key] = value;
   return didMutate;
 }
 

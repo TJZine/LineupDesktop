@@ -1637,6 +1637,25 @@ test('channel domain validates complete channel config numeric fields strictly',
   assert.equal(isValidChannelConfig({ ...valid, number: 0 }), false);
   assert.equal(isValidChannelConfig({ ...valid, number: 501 }), false);
   assert.equal(isValidChannelConfig({ ...valid, number: 1.5 }), false);
+  assert.equal(isValidChannelConfig({ ...valid, playbackMode: 'bad' as never }), false);
+  assert.equal(isValidChannelConfig({ ...valid, sortOrder: 'bad' as never }), false);
+  assert.equal(isValidChannelConfig({ ...valid, buildStrategy: 'bad' as never }), false);
+  assert.equal(isValidChannelConfig({ ...valid, contentFilters: { field: 'genre' } as never }), false);
+  assert.equal(isValidChannelConfig({ ...valid, contentFilters: [{ field: 'bad' }] as never }), false);
+  assert.equal(
+    isValidChannelConfig({
+      ...valid,
+      contentFilters: [{ field: 'genre', operator: 'contains', value: 'Drama', extra: 'legacy' }] as never,
+    }),
+    false,
+  );
+  assert.equal(
+    isValidChannelConfig({
+      ...valid,
+      contentFilters: [{ field: 'genre', operator: 'contains', value: 'Drama' }],
+    }),
+    true,
+  );
 
   for (const field of [
     'startTimeAnchor',
@@ -1650,6 +1669,27 @@ test('channel domain validates complete channel config numeric fields strictly',
     assert.equal(isValidChannelConfig({ ...valid, [field]: Number.POSITIVE_INFINITY }), false);
     assert.equal(isValidChannelConfig({ ...valid, [field]: -1 }), false);
   }
+
+  for (const field of ['minEpisodeRunTimeMs', 'maxEpisodeRunTimeMs'] as const) {
+    for (const value of [0, 1.5, Number.NaN, -1, Number.POSITIVE_INFINITY]) {
+      assert.equal(isValidChannelConfig({ ...valid, [field]: value }), false);
+    }
+  }
+  assert.equal(
+    isValidChannelConfig({ ...valid, minEpisodeRunTimeMs: 20_000, maxEpisodeRunTimeMs: 10_000 }),
+    false,
+  );
+  assert.equal(
+    isValidChannelConfig({ ...valid, minEpisodeRunTimeMs: 10_000, maxEpisodeRunTimeMs: 20_000 }),
+    true,
+  );
+  assert.equal(isValidChannelConfig({ ...valid, playbackMode: 'sequential', blockSize: 2 }), false);
+  assert.equal(isValidChannelConfig({ ...valid, playbackMode: 'block', blockSize: 2 }), true);
+  assert.equal(isValidChannelConfig({ ...valid, playbackMode: 'block', blockSize: 2.5 }), false);
+  assert.equal(isValidChannelConfig({ ...valid, shuffleSeed: Number.NaN }), false);
+  assert.equal(isValidChannelConfig({ ...valid, phaseSeed: Number.POSITIVE_INFINITY }), false);
+  assert.equal(isValidChannelConfig({ ...valid, lineupReplicaIndex: -1 }), false);
+  assert.equal(isValidChannelConfig({ ...valid, lineupReplicaIndex: 1.5 }), true);
 });
 
 test('channel domain safety audit catches forbidden renderer persistence fields in outputs and fixtures', async () => {

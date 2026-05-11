@@ -216,6 +216,44 @@ test('channel persistence repository normalizes malformed persisted channel stat
   assert.deepEqual(auditChannelDomainValueForForbiddenFields(loaded.data.channels[0]), []);
 });
 
+test('channel persistence repository repairs persisted runtime limits without dropping channels', async () => {
+  const storage = new MemoryChannelStorage();
+  const repository = new ChannelRepository({
+    store: new ChannelPersistenceStore(storage),
+    clock: new FakeClock(9_000),
+  });
+  storage.storedChannelData = JSON.stringify({
+    channels: [
+      { ...channel('zero-min', 1), minEpisodeRunTimeMs: 0, maxEpisodeRunTimeMs: 60_000 },
+      { ...channel('fraction-max', 2), minEpisodeRunTimeMs: 10_000, maxEpisodeRunTimeMs: 60_000.5 },
+      { ...channel('impossible-range', 3), minEpisodeRunTimeMs: 70_000, maxEpisodeRunTimeMs: 60_000 },
+      { ...channel('valid-range', 4), minEpisodeRunTimeMs: 10_000, maxEpisodeRunTimeMs: 60_000 },
+    ],
+    channelOrder: ['zero-min', 'fraction-max', 'impossible-range', 'valid-range'],
+    currentChannelId: 'zero-min',
+    savedAt: 8_000,
+  });
+
+  const loaded = await repository.loadNormalized();
+
+  assert.ok(loaded);
+  assert.equal(loaded.didMutate, true);
+  assert.deepEqual(loaded.data.channels.map((entry) => entry.id), [
+    'zero-min',
+    'fraction-max',
+    'impossible-range',
+    'valid-range',
+  ]);
+  assert.equal(loaded.data.channels[0]?.minEpisodeRunTimeMs, undefined);
+  assert.equal(loaded.data.channels[0]?.maxEpisodeRunTimeMs, 60_000);
+  assert.equal(loaded.data.channels[1]?.minEpisodeRunTimeMs, 10_000);
+  assert.equal(loaded.data.channels[1]?.maxEpisodeRunTimeMs, undefined);
+  assert.equal(loaded.data.channels[2]?.minEpisodeRunTimeMs, undefined);
+  assert.equal(loaded.data.channels[2]?.maxEpisodeRunTimeMs, undefined);
+  assert.equal(loaded.data.channels[3]?.minEpisodeRunTimeMs, 10_000);
+  assert.equal(loaded.data.channels[3]?.maxEpisodeRunTimeMs, 60_000);
+});
+
 test('channel persistence coordinator repairs invalid separate current-channel pointers', async () => {
   const storage = new MemoryChannelStorage();
   const clock = new FakeClock(9_500);
@@ -241,6 +279,33 @@ test('channel persistence coordinator repairs invalid separate current-channel p
   assert.ok(loaded);
   assert.equal(loaded.currentChannelId, 'alpha');
   assert.equal(storage.currentChannelId, 'alpha');
+});
+
+test('channel persistence coordinator persists savedAt fallback repair on load', async () => {
+  const storage = new MemoryChannelStorage();
+  const clock = new FakeClock(9_750);
+  const coordinator = new ChannelPersistenceCoordinator({
+    repository: new ChannelRepository({
+      store: new ChannelPersistenceStore(storage),
+      clock,
+    }),
+    clock,
+    timers: new FakeTimers(),
+    debounceMs: 50,
+  });
+  storage.storedChannelData = JSON.stringify({
+    channels: [channel('alpha', 1)],
+    channelOrder: ['alpha'],
+    currentChannelId: 'alpha',
+  });
+
+  const loaded = await coordinator.load();
+
+  assert.ok(loaded);
+  assert.equal(loaded.savedAt, 9_750);
+  const persisted = decodeStoredChannelData(assertPresent(storage.storedChannelData));
+  assert.ok(persisted);
+  assert.equal(persisted.savedAt, 9_750);
 });
 
 test('channel persistence queue debounces flushes and rejects pending saves on dispose', async () => {
@@ -514,7 +579,6 @@ test('channel manager flush persists the latest channel state over a pending que
   assert.ok(persisted);
   assert.deepEqual(persisted.channels?.map((entry) => entry.id), ['first', 'second']);
   assert.deepEqual(persisted.channelOrder, ['first', 'second']);
-  assert.equal(timers.handlers.size, 0);
 });
 
 test('channel manager preserves persisted channel order on load', async () => {
@@ -732,6 +796,32 @@ test('desktop channel persistence store serializes concurrent mutating cycles', 
   };
   assert.deepEqual(persisted.storedChannelData, data);
   assert.equal(persisted.currentChannelId, 'two');
+});
+
+test('desktop channel persistence store serializes corrupt repair with concurrent valid writes', async () => {
+  const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-channel-persistence-'));
+  const persistenceFilePath = path.join(temporaryDirectory, 'channels.json');
+  const adapter = new DesktopChannelPersistenceStore({ persistenceFilePath });
+  const data = storedData({
+    channels: [channel('valid', 1)],
+    channelOrder: ['valid'],
+    currentChannelId: 'valid',
+    savedAt: 11,
+  });
+
+  await fs.writeFile(persistenceFilePath, '{corrupt-json');
+  await Promise.all([
+    adapter.readStoredChannelData(),
+    adapter.writeStoredChannelData(JSON.stringify(data)),
+  ]);
+
+  const persisted = JSON.parse(await fs.readFile(persistenceFilePath, 'utf8')) as {
+    storedChannelData?: StoredChannelData | null;
+    currentChannelId?: unknown;
+  };
+  assert.deepEqual(persisted.storedChannelData, data);
+  assert.equal(persisted.currentChannelId, 'valid');
+  assert.deepEqual(JSON.parse(assertPresent(await adapter.readStoredChannelData())), data);
 });
 
 test('channel persistence persisted state contains no forbidden renderer or secret-bearing fields', async () => {

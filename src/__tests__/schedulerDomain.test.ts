@@ -6,8 +6,10 @@ import {
   getBlockGroupKey,
   applyPlaybackOrdering,
   ChannelScheduler,
+  RESYNC_THRESHOLD_MS,
   SCHEDULER_ERROR_MESSAGES,
   ShuffleGenerator,
+  SYNC_INTERVAL_MS,
   applyPlaybackMode,
   buildScheduleIndex,
   calculateNextProgram,
@@ -403,6 +405,62 @@ test('scheduler domain emits events and injected timers can be paused and unload
   scheduler.unloadChannel();
   assert.equal(timers.handlers.size, 0);
   assert.equal(timers.clearCount, 2);
+});
+
+test('scheduler domain resume immediately syncs stale state before rearming timer', () => {
+  const clock = new FakeClock(1_000_000);
+  const timers = new FakeTimers();
+  const scheduler = new ChannelScheduler({ clock, timers });
+  const started: string[] = [];
+  const ended: string[] = [];
+  const syncPrograms: string[] = [];
+
+  scheduler.on('programStart', (program) => started.push(program.item.ratingKey));
+  scheduler.on('programEnd', (program) => ended.push(program.item.ratingKey));
+  scheduler.on('scheduleSync', (state) => {
+    syncPrograms.push(state.currentProgram?.item.ratingKey ?? 'none');
+  });
+
+  scheduler.loadChannel(config());
+  scheduler.pauseSyncTimer();
+  clock.currentTime = 1_015_000;
+
+  scheduler.resumeSyncTimer();
+
+  assert.deepEqual(ended, ['a']);
+  assert.deepEqual(started, ['a', 'b']);
+  assert.deepEqual(syncPrograms, ['b']);
+  assert.equal(scheduler.getState().currentProgram?.item.ratingKey, 'b');
+  assert.equal(scheduler.getState().nextProgram?.item.ratingKey, 'c');
+  assert.equal(scheduler.getState().lastSyncTime, 1_015_000);
+  assert.equal(timers.handlers.size, 1);
+});
+
+test('scheduler domain hard resync reports measured timer drift', () => {
+  const clock = new FakeClock(1_000_000);
+  const timers = new FakeTimers();
+  const scheduler = new ChannelScheduler({ clock, timers });
+  const hardSyncs: Array<{ wasHardResync?: boolean; detectedDriftMs?: number }> = [];
+
+  scheduler.on('scheduleSync', (state) => {
+    hardSyncs.push({
+      wasHardResync: state.wasHardResync,
+      detectedDriftMs: state.detectedDriftMs,
+    });
+  });
+
+  scheduler.loadChannel(config());
+  clock.currentTime = 1_000_000 + SYNC_INTERVAL_MS + RESYNC_THRESHOLD_MS + 250;
+  timers.tickAll();
+
+  assert.deepEqual(hardSyncs, [{
+    wasHardResync: true,
+    detectedDriftMs: RESYNC_THRESHOLD_MS + 250,
+  }]);
+  clock.currentTime += SYNC_INTERVAL_MS;
+  timers.tickAll();
+  assert.equal(hardSyncs.length, 2);
+  assert.equal(hardSyncs[1]?.wasHardResync, undefined);
 });
 
 test('scheduler domain preserves active timer and state when replacement load fails', () => {

@@ -31,15 +31,17 @@ export class DesktopChannelPersistenceStore implements ChannelPersistenceStorage
   }
 
   public async readStoredChannelData(): Promise<string | null> {
-    const readResult = await this.readPersistenceFile();
-    if (readResult.status === 'corrupt') {
-      await this.clearStoredChannelData();
-      return null;
-    }
-    if (readResult.value.storedChannelData === null) {
-      return null;
-    }
-    return JSON.stringify(readResult.value.storedChannelData);
+    return this.enqueueMutation(async () => {
+      const readResult = await this.readPersistenceFile();
+      if (readResult.status === 'corrupt') {
+        await this.writePersistenceFile(createEmptyChannelPersistenceFile());
+        return null;
+      }
+      if (readResult.value.storedChannelData === null) {
+        return null;
+      }
+      return JSON.stringify(readResult.value.storedChannelData);
+    });
   }
 
   public async writeStoredChannelData(encoded: string): Promise<void> {
@@ -128,9 +130,12 @@ export class DesktopChannelPersistenceStore implements ChannelPersistenceStorage
     await fs.chmod(this.persistenceFilePath, 0o600);
   }
 
-  private enqueueMutation(operation: () => Promise<void>): Promise<void> {
+  private enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
     const run = this.mutationChain.then(operation, operation);
-    this.mutationChain = run.catch(() => undefined);
+    this.mutationChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
     return run;
   }
 }

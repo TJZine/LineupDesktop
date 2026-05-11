@@ -167,6 +167,7 @@ export class ChannelScheduler implements IChannelScheduler {
     if (!this.isActive || !this.config || !this.index || this.syncTimerState.interval !== null) {
       return;
     }
+    this.syncToCurrentTime();
     this.startSyncTimer();
   }
 
@@ -431,7 +432,7 @@ export class ChannelScheduler implements IChannelScheduler {
       }
 
       if (drift > this.syncTimerState.resyncThreshold) {
-        this.hardResync();
+        this.hardResync(drift);
         this.syncTimerState.expectedNextTick = now + SYNC_INTERVAL_MS;
         return;
       }
@@ -453,20 +454,18 @@ export class ChannelScheduler implements IChannelScheduler {
     this.syncTimerState.interval = null;
   }
 
-  private hardResync(): void {
+  private hardResync(detectedDriftMs: number): void {
     if (!this.config || !this.index) {
       return;
     }
 
     const now = this.clock.now();
-    const previousCurrent = this.currentProgram;
     this.updateCurrentProgram(this.getProgramAtTimeForCurrentTime(now, now), now);
 
-    const previousEndTime = previousCurrent ? previousCurrent.scheduledEndTime : now;
     this.emitter.emit('scheduleSync', {
       ...this.getState(),
       wasHardResync: true,
-      detectedDriftMs: now - previousEndTime,
+      detectedDriftMs,
     });
   }
 }
