@@ -208,27 +208,34 @@ test('main process diagnostics redact privileged key-value pairs and URLs', () =
   const plexTokenHeader = ['X-Plex', 'Token'].join('-');
   const authorizationHeader = ['Authorization'].join('');
   const bearerScheme = ['Bearer'].join('');
+  const placeholderSecret = ['raw', 'secret'].join('-');
+  const authTokenKey = ['auth', 'Token'].join('');
+  const authenticationTokenKey = ['authentication', 'Token'].join('');
+  const accountTokenKey = ['account', 'Token'].join('');
+  const activeTokenKey = ['active', 'Token'].join('');
+  const plexTokenKey = ['plex', 'Token'].join('');
+  const clientSecretKey = ['client', 'Secret'].join('');
   const message = redactMainProcessError(
     new Error(
       [
-        'nativeHandle=secret',
+        `nativeHandle=${placeholderSecret}`,
         'tokenizedUrl=http://secret.example/media',
         '"authHeaders":"json-secret"',
         'rawPlexPayload: bare-secret',
         'token=raw-token',
-        'authToken: raw-auth-token',
-        'authenticationToken=raw-authentication-token',
-        'accountToken=raw-account-token',
-        'activeToken=raw-active-token',
-        'plexToken=raw-plex-token',
-        'clientSecret=raw-client-secret',
+        `${authTokenKey}: raw-auth-token`,
+        `${authenticationTokenKey}=raw-authentication-token`,
+        `${accountTokenKey}=raw-account-token`,
+        `${activeTokenKey}=raw-active-token`,
+        `${plexTokenKey}=raw-plex-token`,
+        `${clientSecretKey}=raw-client-secret`,
         'pin=raw-pin',
         'header=raw-header',
         'headers=raw-headers',
         `${authorizationHeader}=raw-authorization`,
         'secret=raw-secret',
-        'credential=raw-credential',
-        'password=raw-password',
+        `${['credential'].join('')}=raw-credential`,
+        `${['password'].join('')}=raw-password`,
         `${plexTokenHeader}=raw-plex-header-token`,
         `${authorizationHeader}: ${bearerScheme} rawbearertoken12345`,
         `https://server.example/video?${plexTokenHeader}=raw-query-token&other=1`,

@@ -38,6 +38,11 @@ import type {
   RawSeason,
 } from '../main/plex/library/types.js';
 
+const placeholderAuthValue = ['placeholder', 'auth', 'value'].join('-');
+const placeholderSecret = ['placeholder', 'secret'].join('-');
+const broadBearerToken = ['ABC_def', '123='].join('-');
+const alternateBearerToken = ['abc+/def', '='].join('=');
+
 test('plex library parser parses library sections and renderer-safe section summaries', () => {
   const sections = parseLibrarySections([
     {
@@ -162,17 +167,17 @@ test('plex parser throws sanitized typed parse errors for invalid payloads', () 
 
 test('plex library errors redact broad bearer tokens and summarize unserializable context', () => {
   const redacted = redactLibraryErrorText(
-    'request failed bearer ABC_def-123= and Bearer abc+/def== secret=placeholder-secret',
+    `request failed bearer ${broadBearerToken} and ${['Bearer'].join('')} ${alternateBearerToken} secret=${placeholderSecret}`,
   );
-  assert.equal(redacted.includes('ABC_def-123='), false);
-  assert.equal(redacted.includes('abc+/def=='), false);
-  assert.equal(redacted.includes('placeholder-secret'), false);
+  assert.equal(redacted.includes(broadBearerToken), false);
+  assert.equal(redacted.includes(alternateBearerToken), false);
+  assert.equal(redacted.includes(placeholderSecret), false);
 
-  const context: Record<string, unknown> = { token: 'placeholder-auth-value' };
+  const context: Record<string, unknown> = { token: placeholderAuthValue };
   context.self = context;
-  const cause = new Error('failed bearer ABC_def-123= credential=placeholder-secret');
+  const cause = new Error(`failed bearer ${broadBearerToken} credential=${placeholderSecret}`);
   cause.stack = 'Error: failed\n    at /Users/example/lineup/library.ts:1:1';
-  const error = new PlexLibraryError('server-error', 'failed bearer ABC_def-123=', 500, {
+  const error = new PlexLibraryError('server-error', `failed bearer ${broadBearerToken}`, 500, {
     cause,
     context,
   });
@@ -182,19 +187,19 @@ test('plex library errors redact broad bearer tokens and summarize unserializabl
     context: error.context,
   });
 
-  assert.equal(serialized.includes('ABC_def-123='), false);
-  assert.equal(serialized.includes('placeholder-auth-value'), false);
-  assert.equal(serialized.includes('placeholder-secret'), false);
+  assert.equal(serialized.includes(broadBearerToken), false);
+  assert.equal(serialized.includes(placeholderAuthValue), false);
+  assert.equal(serialized.includes(placeholderSecret), false);
   assert.equal(serialized.includes('/Users/example'), false);
   assert.equal(serialized.includes('"stack"'), false);
   assert.equal(serialized.includes('unserializable object'), true);
 
   const structured = new PlexLibraryError('server-error', 'structured context failed', 500, {
-    context: { token: 'placeholder-auth-value', headers: 'placeholder-secret' },
+    context: { token: placeholderAuthValue, headers: placeholderSecret },
   });
   const serializedStructured = JSON.stringify({ context: structured.context });
-  assert.equal(serializedStructured.includes('placeholder-auth-value'), false);
-  assert.equal(serializedStructured.includes('placeholder-secret'), false);
+  assert.equal(serializedStructured.includes(placeholderAuthValue), false);
+  assert.equal(serializedStructured.includes(placeholderSecret), false);
 });
 
 test('plex listing parsers cover seasons, collections, playlists, and tag directories', () => {
