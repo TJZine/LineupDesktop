@@ -154,15 +154,19 @@ function evaluateCandidate(
       'unsupported',
       candidate,
       selection,
-      buildUnsupportedReasons({
-        containerSupported,
-        videoSupported,
-        audioSupported,
-        subtitleSupported,
-        hdrSupported,
-        selection,
-        dolbyVisionUnsupported: candidate.video.dynamicRange === 'dolby-vision',
-      }),
+      [
+        ...incompleteReasons,
+        ...buildUnsupportedReasons({
+          containerSupported,
+          videoSupported,
+          audioSupported,
+          subtitleSupported,
+          hdrSupported,
+          selection,
+          dolbyVisionUnsupported: candidate.video.dynamicRange === 'dolby-vision',
+        }),
+        ...baseReasons,
+      ],
       unknowns,
     ),
     rank: DECISION_RANK.unsupported,
@@ -193,27 +197,32 @@ function selectAudio(
   reasons: DesktopStreamPolicyReasonCode[],
   unknowns: DesktopStreamPolicyUnknownCode[],
 ): { track: DesktopStreamAudioCandidate | null; fallback: boolean } {
-  const requested = input.preferredAudioTrackId
-    ? candidate.audioTracks.find((track) => track.id === input.preferredAudioTrackId)
+  const preferredAudioTrackId = input.preferredAudioTrackId;
+  const hasPreferredAudioTrack =
+    preferredAudioTrackId !== undefined && preferredAudioTrackId !== null;
+  const requested = hasPreferredAudioTrack
+    ? candidate.audioTracks.find((track) => track.id === preferredAudioTrackId)
     : undefined;
-  if (requested) {
+  if (requested && isAudioSupported(input.capabilityProfile, requested)) {
     return { track: requested, fallback: false };
   }
-  if (input.preferredAudioTrackId) {
+  if (hasPreferredAudioTrack && !requested) {
     reasons.push('requested-audio-unavailable');
   }
 
   const defaultCompatible = candidate.audioTracks.find(
-    (track) =>
-      track.default === true &&
-      isKnownSupported(track.codec, input.capabilityProfile.directPlayAudioCodecs),
+    (track) => track.default === true && isAudioSupported(input.capabilityProfile, track),
   );
-  if (defaultCompatible) {
-    return { track: defaultCompatible, fallback: input.preferredAudioTrackId != null };
+  if (defaultCompatible && !hasPreferredAudioTrack) {
+    return { track: defaultCompatible, fallback: false };
+  }
+  if (defaultCompatible && input.capabilityProfile.audioTrackSwitching === 'supported') {
+    reasons.push('audio-fallback-selected');
+    return { track: defaultCompatible, fallback: true };
   }
 
   const compatible = candidate.audioTracks.find((track) =>
-    isKnownSupported(track.codec, input.capabilityProfile.directPlayAudioCodecs),
+    isAudioSupported(input.capabilityProfile, track),
   );
   if (compatible && input.capabilityProfile.audioTrackSwitching === 'supported') {
     reasons.push('audio-fallback-selected');
@@ -222,6 +231,9 @@ function selectAudio(
 
   if (candidate.audioTracks.some((track) => !track.codec)) {
     unknowns.push('candidate-audio-codec-unknown');
+  }
+  if (requested) {
+    return { track: requested, fallback: false };
   }
   reasons.push('no-audio-compatible');
   return { track: candidate.audioTracks[0] ?? null, fallback: false };
@@ -241,26 +253,35 @@ function selectSubtitle(
   const requested = input.preferredSubtitleTrackId
     ? candidate.subtitleTracks.find((track) => track.id === input.preferredSubtitleTrackId)
     : undefined;
-  if (requested) {
+  const hasPreferredSubtitleTrack = input.preferredSubtitleTrackId !== undefined;
+  if (requested && isSubtitleSupported(input.capabilityProfile, requested)) {
     return { track: requested, fallback: false };
   }
-  if (input.preferredSubtitleTrackId) {
+  if (input.preferredSubtitleTrackId && !requested) {
     reasons.push('requested-subtitle-unavailable');
   }
 
   const forcedCompatible = candidate.subtitleTracks.find(
     (track) => track.forced === true && isSubtitleSupported(input.capabilityProfile, track),
   );
-  if (forcedCompatible) {
+  if (forcedCompatible && !hasPreferredSubtitleTrack) {
     reasons.push('forced-subtitle-selected');
-    return { track: forcedCompatible, fallback: input.preferredSubtitleTrackId !== undefined };
+    return { track: forcedCompatible, fallback: false };
+  }
+  if (forcedCompatible && input.capabilityProfile.subtitleTrackSwitching === 'supported') {
+    reasons.push('forced-subtitle-selected', 'subtitle-fallback-selected');
+    return { track: forcedCompatible, fallback: true };
   }
 
   const defaultCompatible = candidate.subtitleTracks.find(
     (track) => track.default === true && isSubtitleSupported(input.capabilityProfile, track),
   );
-  if (defaultCompatible) {
-    return { track: defaultCompatible, fallback: input.preferredSubtitleTrackId !== undefined };
+  if (defaultCompatible && !hasPreferredSubtitleTrack) {
+    return { track: defaultCompatible, fallback: false };
+  }
+  if (defaultCompatible && input.capabilityProfile.subtitleTrackSwitching === 'supported') {
+    reasons.push('subtitle-fallback-selected');
+    return { track: defaultCompatible, fallback: true };
   }
 
   const compatible = candidate.subtitleTracks.find((track) =>
@@ -279,6 +300,9 @@ function selectSubtitle(
     return { track: null, fallback: false };
   }
 
+  if (requested) {
+    return { track: requested, fallback: false };
+  }
   reasons.push('no-subtitle-compatible');
   return { track: candidate.subtitleTracks[0] ?? null, fallback: false };
 }
@@ -568,6 +592,13 @@ function unsupportedDecision(
 
 function isKnownSupported(value: string | null | undefined, supported: readonly string[]): boolean {
   return Boolean(value && supported.includes(value));
+}
+
+function isAudioSupported(
+  profile: DesktopStreamCapabilityProfile,
+  track: DesktopStreamAudioCandidate,
+): boolean {
+  return isKnownSupported(track.codec, profile.directPlayAudioCodecs);
 }
 
 function isSubtitleSupported(

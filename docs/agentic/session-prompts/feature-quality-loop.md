@@ -4,6 +4,14 @@ Use this launcher for Tier 3 Lineup Desktop feature/design work. Tier 3 work is
 cross-boundary, multi-session, or high-risk enough that it needs a controller
 state machine rather than a one-pass planner/implementer handoff.
 
+For roadmap work, the controller owns the entire roadmap item named by the
+handoff, not just the first implementation slice. The tracked plan should cover
+the whole item and may split implementation into bounded execution units with
+separate review and verification gates. Do not advance to the next roadmap item
+until the current item's exit gates and platform-proof requirement (see the
+[Platform Proof Convention](../../roadmap/desktop-port-roadmap.md#platform-proof-convention))
+are complete or explicitly blocked.
+
 ## Read Order
 
 1. [`AGENTS.md`](../../../AGENTS.md)
@@ -51,8 +59,10 @@ state machine rather than a one-pass planner/implementer handoff.
   material plan findings remain.
 - `plan-revise`: route findings back to planning. Require a clean final review
   when material plan blockers were fixed.
-- `execution-unit-select`: choose one approved bounded unit from the plan.
-  Parallel units require explicit disjoint owners, files, and verification.
+- `execution-unit-select`: choose one approved bounded unit from the plan. If
+  the plan contains multiple required units, keep the same roadmap item active
+  and record which units are complete, current, blocked, or remaining. Parallel
+  units require explicit disjoint owners, files, and verification.
 - `implement`: use a tracked `worker` pass for the approved execution unit. If
   the work is small enough for controller-local editing, downgrade the task out
   of this Tier 3 loop before editing.
@@ -61,8 +71,9 @@ state machine rather than a one-pass planner/implementer handoff.
 - `implementation-revise`: fix accepted findings inside the approved unit. Route
   missing decisions or changed boundaries back to planning.
 - `closeout`: rerun required verification, audit the diff, update required docs,
-  ensure import ledger and redaction rules are satisfied, and consult the
-  roadmap before emitting the next-session handoff.
+  ensure import ledger and redaction rules are satisfied, satisfy or record the
+  roadmap item's platform-proof requirement, and consult the roadmap before
+  emitting the next-session handoff.
 - `done`: use only when review is clean, verification passed, and closeout
   memory surfaces are current.
 - `blocked`: use when progress requires user input, a boundary decision, or a
@@ -74,9 +85,13 @@ The controller may call the task complete only when:
 
 - plan review is clean
 - every implemented execution unit has clean implementation review
+- every required execution unit for the current roadmap item is complete or a
+  reviewed replan has explicitly removed/deferred it
 - required verification commands were observed
 - import ledger, architecture docs, plan status, and run-bundle conclusions are
   current where applicable
+- the roadmap item's platform-proof requirement is satisfied, deferred to a
+  named later roadmap item, or recorded as a blocker
 - roadmap status and next roadmap-slice routing are current when the task closes
   or hands off to a new major port slice
 - no material desktop feature quality guardrail finding remains
@@ -92,7 +107,9 @@ Return:
 5. next exact action if not complete
 6. whether the task is `done`, `closeout pending`, or `blocked`
 
-When the task is done and another major port slice should follow, end with the
-workflow runbook's `NEXT_SESSION_HANDOFF` shape and route to the next roadmap
-slice. Use `lineup-desktop-feature-plan` when that slice does not yet have a
-tracked plan.
+When the current roadmap item is not done, end with the workflow runbook's
+`NEXT_SESSION_HANDOFF` shape and route back to the same item with the current
+phase, current execution unit, remaining units, and platform-proof requirement.
+When the item is done and another major roadmap item should follow, route to
+the next roadmap item through `lineup-desktop-feature-quality-loop` so the next
+controller plans the whole item first, then slices implementation if needed.

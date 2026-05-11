@@ -4,9 +4,12 @@ This is the durable checklist for the Windows-first Lineup Desktop port. It
 turns the GPT Pro handoff report and the accepted repo-genesis decisions into an
 ordered path for future plans.
 
-This is not an implementation plan for any single slice. Each serious slice
-still needs its own tracked plan under [`docs/plans/`](../plans/README.md) that
-follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-standard.md).
+This is not an implementation plan for any single slice. Each serious in-flight
+slice still needs its own active tracked plan under
+[`docs/plans/`](../plans/README.md) that follows
+[`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-standard.md).
+Completed full plan bodies are local archive material; this roadmap keeps the
+durable completion summary.
 
 ## Current Position
 
@@ -17,15 +20,15 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
 - [x] Single-package repo shape accepted for the initial port.
 - [x] Workflow, skills, launchers, role config, docs verifier, redaction
   verifier, and architecture lint scaffolded.
-- [x] First active implementation plan created:
-  `docs/plans/2026-05-07-electron-shell-security-foundation-plan.md`.
+- [x] First active implementation plan created for the Electron shell security
+  foundation, then closed and archived locally after completion.
 - [x] First active implementation plan reviewed.
 - [x] Secure Electron shell foundation implemented at `b8fb948`; `npm run
   smoke:electron` and `npm run verify` passed on 2026-05-08.
 - [x] Secure Electron shell foundation implementation reviewed and clean after
   one blocker fix, per RD-01 agent closeout report provided on 2026-05-08.
-- [x] Product reuse/import sequence formalized through follow-up tracked plan
-  `docs/plans/2026-05-08-rd-02-source-reuse-inventory-import-strategy-plan.md`.
+- [x] Product reuse/import sequence formalized through the RD-02 source
+  reuse/import strategy and archived locally after completion.
 - [x] Player contract and capability model completed through RD-03 quality loop:
   `src/contracts/player.ts`, `src/contracts/ipc.ts`, and
   `src/__tests__/contracts.test.ts`; `npm run verify` passed and
@@ -33,8 +36,7 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
 - [x] RD-04 upstream behavior guardrails completed through
   `docs/architecture/upstream-behavior-guardrails.md`; `npm run verify` passed
   and scoped implementation review was clean on 2026-05-08.
-- [x] RD-05 external `mpv` POC completed through
-  `docs/plans/2026-05-08-rd-05-external-mpv-poc-plan.md`;
+- [x] RD-05 external `mpv` POC completed through its reviewed plan;
   `tools/mpv-poc/rd-05-external-mpv-poc.mjs` remains a dev-only disposable
   script, ignored redacted run evidence exists under
   `docs/runs/rd-05-external-mpv-poc/`, `npm run verify` passed, and
@@ -61,16 +63,28 @@ follows [`docs/agentic/plan-authoring-standard.md`](../agentic/plan-authoring-st
   native-presentation preflight/smoke on Windows and observed passing redacted
   native surface proof. Renderer UI wiring, Plex stream setup, and a production
   native helper remain future RD-12/RD-13 work.
-- [ ] RD-08 Desktop Stream Policy Mac-first fixture core implemented through
+- [x] RD-08 Desktop Stream Policy fixture core implemented through
   `src/main/player/streamPolicy/desktopStreamPolicy.ts`,
   `src/main/player/streamPolicy/types.ts`, and
   `src/__tests__/desktopStreamPolicy.test.ts`; `npm run verify` passed and
-  read-only implementation review was clean on 2026-05-10. Final RD-08
-  closeout still needs the requested Windows capability/sample-matrix proof and
-  any fixes it reveals. The Mac-first unit is deterministic and fixture-driven
-  only: no live Plex contact, secure storage, renderer UI, native helper,
-  package/dependency change, runtime IPC wiring, or copied/adapted upstream
-  source landed.
+  read-only implementation review was clean on 2026-05-10. Windows closeout
+  added a conservative RD-06/RD-07 capability/sample matrix that preserves
+  unknowns instead of claiming exact Windows codec/container/audio support, and
+  fixed unsupported fallback reason preservation. The unit is deterministic and
+  fixture-driven only: no live Plex contact, secure storage, renderer UI,
+  native helper, package/dependency change, runtime IPC wiring, Plex HTPC parity
+  claim, or copied/adapted upstream source landed.
+- [x] RD-09 Secure Storage And Persistence Boundary implemented through
+  `src/contracts/persistence.ts`, `src/main/persistence/*`, and
+  `src/__tests__/persistenceBoundary.test.ts`; `npm run verify` passed on
+  2026-05-10. The unit adds main-owned app-data path resolution, an injected
+  Electron safeStorage codec seam, encrypted Plex credential records,
+  selected-server state, unavailable/corrupt classification, fail-closed
+  no-plaintext fallback, renderer-safe snapshots, and forbidden-field tests.
+  It does not wire Plex auth/discovery/library runtime, preload/renderer APIs,
+  network transport, scheduler/channel persistence, backup/restore
+  implementation, package/dependency changes, or copied/adapted upstream
+  source.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -85,17 +99,40 @@ after that shell proves the main/preload/renderer boundary.
    unit; this roadmap owns sequencing between plans.
 3. Pick the next unchecked roadmap slice whose `Depends on` gates are complete.
 4. Route Tier 3 roadmap slices through the feature-quality-loop controller so
-   the next session owns planning, plan review, bounded implementation,
-   implementation review, and closeout unless a blocker stops the loop.
-5. Create or update one tracked plan for that slice in `docs/plans/`.
-6. Keep implementation limited to that plan's current unit.
-7. On closeout, update this roadmap only for observed status changes.
+   the next session owns the whole roadmap item: planning, plan review, bounded
+   execution-unit selection, implementation, implementation review, verification,
+   closeout, and platform proof unless a blocker stops the loop.
+5. Create or update one active tracked plan for that roadmap item in
+   `docs/plans/`. The plan should cover the whole item and split implementation
+   into bounded execution units only when that improves reviewability.
+6. Keep implementation limited to the plan's current approved execution unit.
+7. On closeout, update this roadmap only for observed status changes. Archive
+   completed full plan bodies locally after durable conclusions are reflected in
+   tracked docs.
 8. End the session with the workflow runbook's `NEXT_SESSION_HANDOFF` shape,
    routing the next session to the next roadmap slice's plan, review, or
    implementation step.
 
 Do not use this roadmap to batch multiple product slices into one broad
 implementation. Its purpose is sequencing and dependency clarity.
+
+## Platform Proof Convention
+
+Each roadmap item should make platform proof explicit in its tracked plan and,
+when useful, in this checklist. Use one of these labels:
+
+- `Mac/local automated proof sufficient`: local typecheck, lint, contract,
+  verifier, and source-audit proof can close the item.
+- `Windows proof required before closeout`: the item cannot be marked complete
+  until a Windows run observes the named behavior.
+- `Windows proof deferred to <RD item>`: the item may close without Windows
+  proof only because a later-named roadmap item owns that platform evidence.
+
+If a roadmap item touches Electron OS behavior, native playback, Windows app
+paths, credential availability, packaging, signing, installer behavior, or
+live Plex/network behavior that cannot be proven by injected seams, assume
+Windows proof is required unless the tracked plan records a narrower reviewed
+reason.
 
 ## Next-Handoff Rule
 
@@ -107,9 +144,9 @@ When a roadmap slice reaches its exit gates:
   or imports/adapts upstream Lineup source
 - emit one pasteable `NEXT_SESSION_HANDOFF`
 - route to `lineup-desktop-feature-quality-loop` when the next roadmap slice is
-  Tier 3 and should be carried through planning, review, bounded
-  implementation, implementation review, and closeout in one orchestrated
-  workflow
+  Tier 3 and should be carried through whole-item planning, review, bounded
+  implementation units, implementation review, verification, platform proof,
+  and closeout in one orchestrated workflow
 - route to `lineup-desktop-feature-plan` when the next slice does not yet have a
   tracked plan
 - route to `lineup-desktop-feature-review` when a plan or implementation needs
@@ -117,10 +154,10 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-07 are complete enough to route the next Tier 3 quality-loop
-session to RD-08 or RD-12 planning depending on whether stream policy or
-integration sequencing is being selected. Do not import original Lineup product
-code until a reviewed product slice plan explicitly authorizes a bounded import.
+RD-01 through RD-09 are complete enough to route the next Tier 3 session to
+complete RD-10 Plex auth, discovery, and library through the quality loop. Do
+not import original Lineup product code until a reviewed product slice plan
+explicitly authorizes a bounded import.
 
 ## Roadmap Checklist
 
@@ -152,8 +189,7 @@ blocker fix, per RD-01 agent closeout report provided on 2026-05-08.
 Depends on:
 
 - RD-00 complete.
-- Active plan review clean for
-  `docs/plans/2026-05-07-electron-shell-security-foundation-plan.md`.
+- Active plan review was clean before implementation.
 
 Objective:
 
@@ -227,10 +263,8 @@ Stop and replan if:
 
 ### RD-03 Player Contract And Capability Model
 
-Status: complete. Implemented through
-`docs/plans/2026-05-08-rd-03-player-contract-capability-model-plan.md`;
-`npm run verify` passed and read-only implementation review was clean on
-2026-05-08.
+Status: complete. `npm run verify` passed and read-only implementation review
+was clean on 2026-05-08.
 
 Depends on:
 
@@ -265,7 +299,6 @@ Exit gates:
 ### RD-04 Upstream Behavior Guardrails
 
 Status: complete. Implemented through
-`docs/plans/2026-05-08-rd-04-upstream-behavior-guardrails-plan.md` and
 `docs/architecture/upstream-behavior-guardrails.md`; `npm run verify` passed
 and scoped implementation review was clean on 2026-05-08.
 
@@ -298,8 +331,7 @@ Exit gates:
 ### RD-05 External mpv POC
 
 Status: complete. Implemented through
-`docs/plans/2026-05-08-rd-05-external-mpv-poc-plan.md`,
-`tools/mpv-poc/rd-05-external-mpv-poc.mjs`, and
+`tools/mpv-poc/rd-05-external-mpv-poc.mjs` and
 `tools/__tests__/rd-05-mpv-poc.test.mjs`; `npm run verify` passed and
 read-only implementation review was clean on 2026-05-08.
 
@@ -458,16 +490,17 @@ Exit gates:
 
 ### RD-08 Desktop Stream Policy
 
-Status: Mac-first implementation complete; Windows closeout pending. The
-deterministic `desktop-stream-policy-fixture-core` unit is implemented and
-reviewed clean. It adds a main/player-owned pure policy module plus focused
-fixtures/tests for direct play, direct stream, transcode, unsupported decisions,
-audio fallback, subtitle fallback, HDR/Dolby Vision handling, stable reason
-codes, explicit unknowns, and recursive forbidden-field invariants. No Plex
-runtime, secure storage, renderer UI, native helper, package/dependency change,
-runtime IPC wiring, or copied/adapted upstream source was introduced. Final
-RD-08 closeout is reserved for the requested Windows capability/sample-matrix
-proof and any follow-up fixes.
+Status: complete. The deterministic `desktop-stream-policy-fixture-core` unit is
+implemented and reviewed clean. It adds a main/player-owned pure policy module
+plus focused fixtures/tests for direct play, direct stream, transcode,
+unsupported decisions, audio fallback, subtitle fallback, HDR/Dolby Vision
+handling, stable reason codes, explicit unknowns, and recursive forbidden-field
+invariants. Windows closeout adds a conservative RD-06/RD-07 capability/sample
+matrix that preserves unknowns instead of claiming exact Windows
+codec/container/audio, direct stream, transcode, track switching, subtitle,
+HDR, Dolby Vision, or Plex HTPC parity support. No Plex runtime, secure storage,
+renderer UI, native helper, package/dependency change, runtime IPC wiring, Plex
+HTPC parity claim, or copied/adapted upstream source was introduced.
 
 Depends on:
 
@@ -490,7 +523,7 @@ Exit gates:
 
 ### RD-09 Secure Storage And Persistence Boundary
 
-Status: not started.
+Status: complete. `npm run verify` passed on 2026-05-10.
 
 Depends on:
 
@@ -515,9 +548,13 @@ New Desktop design:
 
 Exit gates:
 
-- Credential/store interfaces are typed and tested.
-- Renderer-facing contracts cannot carry credential-like secret material.
-- Backup/restore, unavailable secure-storage behavior, and redacted diagnostics
+- Credential/store interfaces are typed and tested through
+  `src/contracts/persistence.ts`, `src/main/persistence/*`, and
+  `src/__tests__/persistenceBoundary.test.ts`.
+- Renderer-facing contracts cannot carry credential-like secret material; tests
+  recursively reject forbidden persistence fields.
+- Backup/restore, unavailable secure-storage behavior, fail-closed
+  no-plaintext fallback, corruption handling, and redacted diagnostics
   expectations are documented.
 
 ### RD-10 Plex Auth, Discovery, And Library Import
@@ -553,6 +590,10 @@ Exit gates:
 - Auth/discovery/library tests pass.
 - Redaction verifier covers imported files and new fixtures.
 - No renderer credential custody.
+- Platform proof: Mac/local automated proof is sufficient for pure imported
+  domain/storage-seam units. Windows proof is required before closeout if the
+  RD-10 plan wires real Electron safeStorage runtime, app paths, live Plex
+  auth/discovery, or any OS-specific credential behavior.
 
 ### RD-11 Scheduler, Channel, And Content Domain Import
 

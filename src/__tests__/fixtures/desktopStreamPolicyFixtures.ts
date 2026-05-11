@@ -3,6 +3,7 @@ import type {
   DesktopStreamMediaCandidate,
   DesktopStreamPolicyInput,
 } from '../../main/player/streamPolicy/types.js';
+import type { PlaybackCapabilityProfile } from '../../contracts/player.js';
 
 export const desktopPolicyProfile: DesktopStreamCapabilityProfile = {
   id: 'desktop-policy-safe-profile',
@@ -25,6 +26,48 @@ export const desktopPolicyProfile: DesktopStreamCapabilityProfile = {
     audio: 'supported',
     subtitles: 'supported',
     hdr: 'supported',
+  },
+  unknowns: ['desktop-parity-unproven'],
+};
+
+export const windowsRd07CapabilityFacts: PlaybackCapabilityProfile = {
+  id: 'windows-rd07-native-presentation-facts',
+  containerFormats: [],
+  videoCodecs: [],
+  audioCodecs: [],
+  subtitleDeliveryModes: ['unknown'],
+  headerAuthSetup: 'supported',
+  seek: 'supported',
+  volume: 'supported',
+  audioTrackSwitching: 'unknown',
+  subtitleTrackSwitching: 'unknown',
+  overlayComposition: 'unproven',
+  fullscreenHandling: 'supported',
+  livePlayback: 'unsupported',
+  diagnostics: 'supported',
+};
+
+export const windowsNativePresentationPolicyProfile: DesktopStreamCapabilityProfile = {
+  id: 'windows-rd08-native-presentation-policy',
+  directPlayContainers: windowsRd07CapabilityFacts.containerFormats,
+  directPlayVideoCodecs: windowsRd07CapabilityFacts.videoCodecs,
+  directPlayAudioCodecs: windowsRd07CapabilityFacts.audioCodecs,
+  subtitleDeliveryModes: windowsRd07CapabilityFacts.subtitleDeliveryModes,
+  headerAuthSetup: windowsRd07CapabilityFacts.headerAuthSetup,
+  audioTrackSwitching: windowsRd07CapabilityFacts.audioTrackSwitching,
+  subtitleTrackSwitching: windowsRd07CapabilityFacts.subtitleTrackSwitching,
+  hdr: 'unproven',
+  dolbyVision: 'unproven',
+  directStream: {
+    containerRemux: 'unknown',
+    audioTranscode: 'unknown',
+    subtitleConversion: 'unknown',
+  },
+  transcode: {
+    video: 'unknown',
+    audio: 'unknown',
+    subtitles: 'unknown',
+    hdr: 'unknown',
   },
   unknowns: ['desktop-parity-unproven'],
 };
@@ -363,8 +406,55 @@ export const desktopStreamPolicyInputs: Record<string, DesktopStreamPolicyInput>
   },
 };
 
+export const windowsStreamPolicyMatrixInputs: Record<string, DesktopStreamPolicyInput> = {
+  directPlay: {
+    capabilityProfile: windowsNativePresentationPolicyProfile,
+    candidates: [directPlayCandidate],
+    preferredAudioTrackId: 'audio-track-en-aac',
+    preferredSubtitleTrackId: null,
+  },
+  remuxUnproven: {
+    capabilityProfile: windowsNativePresentationPolicyProfile,
+    candidates: [remuxCandidate],
+    preferredAudioTrackId: 'audio-track-en-aac',
+    preferredSubtitleTrackId: null,
+  },
+  audioFallbackUnproven: {
+    capabilityProfile: windowsNativePresentationPolicyProfile,
+    candidates: [audioFallbackCandidate],
+    preferredAudioTrackId: 'audio-track-missing',
+    preferredSubtitleTrackId: null,
+  },
+  subtitleFallbackUnproven: {
+    capabilityProfile: windowsNativePresentationPolicyProfile,
+    candidates: [subtitleFallbackCandidate],
+    preferredAudioTrackId: 'audio-track-en-aac',
+    preferredSubtitleTrackId: 'subtitle-track-missing',
+  },
+  videoTranscodeUnproven: {
+    capabilityProfile: windowsNativePresentationPolicyProfile,
+    candidates: [transcodeCandidate],
+    preferredAudioTrackId: 'audio-track-en-aac',
+    preferredSubtitleTrackId: null,
+  },
+  hdrUnproven: {
+    capabilityProfile: windowsNativePresentationPolicyProfile,
+    candidates: [hdrCandidate],
+    preferredAudioTrackId: 'audio-track-en-aac',
+    preferredSubtitleTrackId: null,
+  },
+  dolbyVisionUnproven: {
+    capabilityProfile: windowsNativePresentationPolicyProfile,
+    candidates: [dolbyVisionCandidate],
+    preferredAudioTrackId: 'audio-track-en-aac',
+    preferredSubtitleTrackId: null,
+  },
+};
+
 export const allDesktopStreamPolicyFixtureValues = [
   desktopPolicyProfile,
+  windowsRd07CapabilityFacts,
+  windowsNativePresentationPolicyProfile,
   directPlayCandidate,
   remuxCandidate,
   audioFallbackCandidate,
@@ -375,4 +465,5 @@ export const allDesktopStreamPolicyFixtureValues = [
   dolbyVisionCandidate,
   unknownFactsCandidate,
   desktopStreamPolicyInputs,
+  windowsStreamPolicyMatrixInputs,
 ] as const;

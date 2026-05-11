@@ -8,8 +8,7 @@
 Lineup Desktop is a new Windows-first Electron repository. It currently has a
 minimal secure Electron shell frame plus docs, workflow, contract, and harness
 scaffolding. There is no Plex integration, production native playback host,
-scheduler, secure credential storage, copied TV UI, or installer implementation
-yet.
+scheduler, copied TV UI, or installer implementation yet.
 RD-04 adds documentation and harness ownership for upstream behavior guardrails
 only; it does not import product runtime code. RD-05 adds a disposable
 dev-only external `mpv` POC tool and ignored redacted local evidence only; it
@@ -37,9 +36,22 @@ first deterministic Desktop stream policy fixture core under
 `src/main/player/streamPolicy/*`. The policy is capability-driven and
 fixture-only, with tests for direct play, direct stream, transcode, unsupported
 decisions, audio/subtitle fallback, HDR/Dolby Vision, stable reasons, explicit
-unknowns, and forbidden-field invariants. RD-08 does not contact Plex, add
-secure storage, wire renderer UI, launch native playback, change
-package/dependencies, or import/adapt upstream source.
+unknowns, and forbidden-field invariants. Windows closeout adds a conservative
+RD-06/RD-07 capability/sample matrix and keeps container, codec, audio,
+subtitle, direct stream, transcode, track switching, HDR, Dolby Vision, and
+Plex HTPC parity as unknown or unsupported where the Windows proof does not
+establish them. RD-08 does not contact Plex, add secure storage, wire renderer
+UI, launch native playback, change package/dependencies, or import/adapt
+upstream source. RD-09 adds the first main-owned secure storage and persistence
+boundary core under `src/main/persistence/*`, plus renderer-safe persistence
+summary contracts in `src/contracts/persistence.ts`. The boundary uses an
+injected Electron `safeStorage` codec seam, app-data path resolver,
+file-backed encrypted Plex credential records, selected-server state,
+unavailable/corrupt classification, fail-closed behavior with no plaintext
+fallback, and tests for renderer-safe snapshots and forbidden fields. RD-09
+does not wire Plex auth/discovery/library runtime, preload or renderer APIs,
+network transport, scheduler/channel persistence, backup/restore
+implementation, package/dependency changes, or copied/adapted upstream source.
 
 ## Product Invariants
 
@@ -68,8 +80,10 @@ package/dependencies, or import/adapt upstream source.
 | Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window/player bridge contract |
 | Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, diagnostic, IPC result, and runtime event-guard contract |
 | IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window/player IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
+| Persistence contract vocabulary | `src/contracts/persistence.ts` | Renderer-safe account, credential-handle, selected-server, storage-status, diagnostic, and persistence forbidden-field vocabulary |
 | Desktop player adapter boundary | `src/main/player/desktopPlayerAdapter.ts`, `src/main/player/nativePlayerHostPort.ts`, `src/main/player/nativePlayerHostProcess.ts`, and `src/main/player/playerIpc.ts` | Main-owned RD-07 adapter core, fakeable native-host process seam, and player IPC owner with renderer-intent validation, fakeable native-host event validation, request-id stale-event quarantine, real spawned helper test-double proof, helper/process failure normalization, cleanup/reap handling, runtime main/preload delivery, development/smoke fake-host activation, production unsupported/noop behavior, and renderer-safe diagnostics |
-| Desktop stream policy | `src/main/player/streamPolicy/desktopStreamPolicy.ts` and `src/main/player/streamPolicy/types.ts` | Main/player-owned RD-08 deterministic fixture policy for capability-driven direct play, direct stream, transcode, unsupported decisions, audio/subtitle fallback, HDR/Dolby Vision handling, stable reason codes, explicit unknowns, and safe policy outputs; not wired to Plex runtime, renderer UI, native helper, secure storage, or runtime IPC |
+| Desktop stream policy | `src/main/player/streamPolicy/desktopStreamPolicy.ts` and `src/main/player/streamPolicy/types.ts` | Main/player-owned RD-08 deterministic fixture policy for capability-driven direct play, direct stream, transcode, unsupported decisions, audio/subtitle fallback, HDR/Dolby Vision handling, stable reason codes, explicit unknowns, Windows RD-06/RD-07 sample-matrix proof, and safe policy outputs; not wired to Plex runtime, renderer UI, native helper, secure storage, or runtime IPC |
+| Desktop persistence boundary | `src/main/persistence/appDataPaths.ts`, `src/main/persistence/secureStorageCodec.ts`, and `src/main/persistence/desktopPersistenceStore.ts` | Main-owned RD-09 app-data path, Electron safeStorage codec, encrypted Plex credential record, selected-server state, unavailable/corrupt classification, fail-closed no-plaintext fallback, and renderer-safe snapshot owner; not wired to Plex runtime, preload, renderer, scheduler/channel persistence, backup/restore, or production IPC |
 | Redaction contract vocabulary | `src/contracts/redaction.ts` | Stub contract only |
 | External `mpv` POC tool | `tools/mpv-poc/rd-05-external-mpv-poc.mjs` | Dev-only disposable RD-05 evidence harness |
 | Native libmpv spike tool | `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` | Dev-only disposable RD-06 Windows WID/render API evidence harness |
@@ -78,12 +92,13 @@ package/dependencies, or import/adapt upstream source.
 
 ## Not Yet Implemented
 
-- Plex auth/discovery/library/stream imports
-- scheduler/channel imports
+- Runtime Plex auth/discovery/library/stream imports
+- Scheduler/channel imports and persistence
 - Windows-proven production native playback helper
 - Windows-proven production playback host
 - production renderer player UI wiring
-- secure storage implementation
+- preload/renderer persistence IPC wiring
+- encrypted credential backup/restore implementation
 - packaging/signing/update pipeline
 
 ## Electron Shell Frame

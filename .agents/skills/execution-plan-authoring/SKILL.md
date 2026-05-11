@@ -24,6 +24,6 @@ Plan the expensive decisions, not every local helper:
 - verification classification, commands, and expected outcomes
 - acceptance criteria, rollback notes, and stop/replan triggers
 
-Use tracked plans in `docs/plans/` only when durable handoff memory is needed.
-For the foundation and other Tier 3 work, route the finished plan to read-only
-review before implementation.
+See AGENTS.md and docs/AGENTIC_DEV_WORKFLOW.md for lifecycle and archival
+policy, including `docs/plans/` archival guidance. For Tier 3 work, route
+through the feature-quality loop before implementation.

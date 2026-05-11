@@ -226,8 +226,8 @@ implementation would otherwise need to invent ownership or verification policy.
      implementation, implementation review, and closeout.
 5. Plan explicitly before multi-step work.
    - Keep live state in `update_plan`.
-   - Create or refresh a tracked plan in `docs/plans/` only when durable fresh
-     session memory is needed.
+   - Create or refresh a tracked plan in `docs/plans/` only while active
+     durable fresh-session memory is needed.
    - Serious tracked plans must satisfy
      `docs/agentic/plan-authoring-standard.md`.
    - Do not freeze a plan while ownership, security, IPC, playback, persistence,
@@ -257,6 +257,9 @@ implementation would otherwise need to invent ownership or verification policy.
    - Update the import ledger before or with copied/adapted upstream Lineup code.
    - Update active plans, handoffs, or run-bundle summaries when they are the
      next fresh-session surface.
+   - After a roadmap item closes, move completed full plan bodies to the local
+     ignored archive and keep only durable conclusions in tracked roadmap,
+     architecture, import-ledger, workflow, or verifier docs.
 10. Close workflow/control-plane changes deliberately.
    - Keep launchers, skill strategy, verifier tests, and this runbook aligned.
    - Do not claim a workflow-quality improvement from prose alone; pair it with
@@ -299,8 +302,9 @@ The invariant is simple: plan with a tracked planner, review read-only, implemen
 one approved bounded unit with a tracked worker, review read-only again, and do
 not advance while material findings remain.
 
-Use `docs/runs/` only for gitignored local run bundles. Promote durable
-decisions into tracked docs instead of committing raw run logs.
+Use `docs/runs/` only for gitignored local run bundles and completed-plan
+archives. Promote durable decisions into tracked docs instead of committing raw
+run logs or completed full plan bodies.
 
 ## Multi-Agent Usage
 
@@ -421,6 +425,14 @@ Rules:
 
 - If review findings block progress, route the handoff to the session type that
   must resolve them.
+- For Tier 3 roadmap work, make `TASK` name the whole roadmap item and the loop
+  objective, for example `Complete RD-10 ... Through Quality Loop`. The
+  `MESSAGE` should name the current phase, current execution unit when one has
+  been selected, remaining required units, and the platform-proof requirement.
+- Mid-item handoffs route back to the same roadmap item. Route to the next
+  roadmap item only after the current item's exit gates, review gates,
+  verification, memory updates, and platform-proof requirement are complete or
+  explicitly blocked/deferred by a reviewed replan.
 - If no further session is needed, say so instead of emitting a fake handoff.
 - Keep the block short enough to paste directly into a fresh session.
 - Keep `TASK`, `PLAN`, `ARTIFACT`, and `FILES` concrete enough that the next

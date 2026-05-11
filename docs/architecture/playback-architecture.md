@@ -171,9 +171,13 @@ profiles and normalized candidate facts to choose direct play, direct stream,
 transcode, or unsupported outcomes with stable reason codes and explicit
 unknowns. The fixture core covers audio fallback, subtitle fallback, HDR/Dolby
 Vision handling, direct-stream remediation rules, and recursive forbidden-field
-invariants. It does not contact Plex, normalize real Plex payloads, create
-playback URLs, start native playback, wire runtime IPC, or change renderer,
-preload, adapter, native-host, storage, package, or dependency behavior.
+invariants. Windows closeout adds a conservative RD-06/RD-07 capability/sample
+matrix that keeps exact container, codec, audio, subtitle, direct stream,
+transcode, track switching, HDR, Dolby Vision, and Plex HTPC parity support
+unknown or unsupported where the Windows proof does not establish them. It does
+not contact Plex, normalize real Plex payloads, create playback URLs, start
+native playback, wire runtime IPC, or change renderer, preload, adapter,
+native-host, storage, package, or dependency behavior.
 
 Concrete playback adapters must not leak native handles, raw media URLs, raw
 auth headers, tokenized URLs, raw Plex payloads, Electron or Node APIs,

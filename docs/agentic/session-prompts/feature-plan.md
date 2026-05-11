@@ -33,8 +33,10 @@ scope.
   the right surface.
 - Resolve architecture, IPC, renderer/preload/main/helper, playback, storage,
   packaging, and import decisions before implementation steps are locked.
-- Produce or refresh a tracked plan in `docs/plans/` only when durable handoff
-  memory is needed.
+- Produce or refresh a tracked plan in `docs/plans/` only while active durable
+  handoff memory is needed; after closeout, durable conclusions move to roadmap,
+  architecture, import-ledger, workflow, or verifier docs and the full plan body
+  moves to the local ignored archive.
 - For Tier 3, identify the first bounded execution unit and whether any
   parallelism is allowed.
 - Run the Planner Self-Check from the plan standard before calling the plan

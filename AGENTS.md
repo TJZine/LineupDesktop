@@ -8,8 +8,10 @@ where to look next.
 ## Always-On Defaults
 
 - Keep the authoritative execution state in Codex `update_plan`.
-- Treat implementation plans as local by default; promote them into
-  `docs/plans/*` only when durable handoff memory is needed.
+- Treat implementation plans as local by default; promote only active durable
+  handoff plans into `docs/plans/*`, then archive completed plan bodies locally
+  after their durable conclusions are reflected in roadmap, architecture,
+  import-ledger, workflow, or verifier docs.
 - Use [`docs/architecture/CURRENT_STATE.md`](./docs/architecture/CURRENT_STATE.md)
   for current architecture truth.
 - Use [`docs/architecture/desktop-repo-genesis-adr.md`](./docs/architecture/desktop-repo-genesis-adr.md)

@@ -133,13 +133,25 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       return;
     }
 
+    let writeError: unknown;
     try {
       child.stdin.write(`${JSON.stringify({ type: 'cleanup', requestId })}\n`, () => undefined);
-    } catch {
-      throw new Error('Native player host cleanup failed.');
+    } catch (error: unknown) {
+      writeError = error;
     }
 
-    await this.#reapChild(child);
+    try {
+      await this.#reapChild(child);
+    } catch (reapError: unknown) {
+      if (writeError !== undefined) {
+        throw writeError;
+      }
+      throw reapError;
+    }
+
+    if (writeError !== undefined) {
+      throw writeError;
+    }
   }
 
   #getOrSpawnChild():

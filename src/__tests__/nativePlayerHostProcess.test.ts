@@ -516,6 +516,29 @@ test('native host process escalates cleanup and waits for close before resolving
   assertNoForbiddenKeys(result);
 });
 
+test('native host process reaps child when cleanup write throws', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+    cleanupGraceMs: 10,
+  });
+
+  const pending = host.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.stdin.write = (() => {
+    throw new Error('cleanup write failed');
+  }) as typeof child.stdin.write;
+
+  await assert.rejects(host.cleanup('native-load-1'), /cleanup write failed/);
+  const result = await pending;
+
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? null : result.error.category, 'aborted');
+  assert.deepEqual(child.killSignals, ['SIGTERM']);
+  assertNoForbiddenKeys(result);
+});
+
 test('native host process normalizes stdio stream errors without raw details', async () => {
   for (const streamName of ['stdin', 'stdout', 'stderr'] as const) {
     const child = new FakeHostChildProcess();
