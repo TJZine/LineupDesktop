@@ -5,7 +5,11 @@ import {
   isValidPlaybackMode,
   isValidSortOrder,
 } from './channelValueValidators.js';
-import { CHANNEL_ERROR_MESSAGES } from './constants.js';
+import {
+  CHANNEL_ERROR_MESSAGES,
+  MAX_CHANNEL_NUMBER,
+  MIN_CHANNEL_NUMBER,
+} from './constants.js';
 import type { ChannelCreateInput } from './types.js';
 
 export type ChannelImportNormalizationResult =
@@ -51,7 +55,7 @@ export class ChannelImportNormalizer {
 
     const channel: ChannelCreateInput = { contentSource };
 
-    if (typeof record.number === 'number' && Number.isInteger(record.number)) {
+    if (isValidChannelNumber(record.number)) {
       channel.number = record.number;
     }
     if (typeof record.name === 'string') channel.name = record.name;
@@ -76,8 +80,7 @@ export class ChannelImportNormalizer {
     }
     if (
       playbackMode === 'block' &&
-      typeof record.blockSize === 'number' &&
-      Number.isFinite(record.blockSize)
+      isPositiveInteger(record.blockSize)
     ) {
       channel.blockSize = record.blockSize;
     }
@@ -95,10 +98,10 @@ export class ChannelImportNormalizer {
     }
     if (typeof record.skipIntros === 'boolean') channel.skipIntros = record.skipIntros;
     if (typeof record.skipCredits === 'boolean') channel.skipCredits = record.skipCredits;
-    if (typeof record.maxEpisodeRunTimeMs === 'number' && Number.isFinite(record.maxEpisodeRunTimeMs)) {
+    if (isPositiveInteger(record.maxEpisodeRunTimeMs)) {
       channel.maxEpisodeRunTimeMs = record.maxEpisodeRunTimeMs;
     }
-    if (typeof record.minEpisodeRunTimeMs === 'number' && Number.isFinite(record.minEpisodeRunTimeMs)) {
+    if (isPositiveInteger(record.minEpisodeRunTimeMs)) {
       channel.minEpisodeRunTimeMs = record.minEpisodeRunTimeMs;
     }
 
@@ -111,4 +114,18 @@ export class ChannelImportNormalizer {
     }
     return String(error);
   }
+}
+
+function isValidChannelNumber(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Number.isInteger(value) &&
+    value >= MIN_CHANNEL_NUMBER &&
+    value <= MAX_CHANNEL_NUMBER
+  );
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value > 0;
 }

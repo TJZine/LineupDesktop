@@ -5,7 +5,16 @@ export interface BlockPlaybackItem {
 }
 
 export function getBlockGroupKey(item: BlockPlaybackItem): string {
-  return item.showThumb ?? item.showTitle ?? item.ratingKey;
+  return firstNonEmptyString(item.showThumb, item.showTitle, item.ratingKey);
+}
+
+function firstNonEmptyString(...values: Array<string | null | undefined>): string {
+  for (const value of values) {
+    if (typeof value === 'string' && value.length > 0) {
+      return value;
+    }
+  }
+  return '';
 }
 
 export function applyBlockPlaybackMode<TItem extends BlockPlaybackItem>(options: {

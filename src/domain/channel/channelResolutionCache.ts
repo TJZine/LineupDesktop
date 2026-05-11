@@ -29,7 +29,7 @@ export class ChannelResolutionCache {
   }
 
   public isFresh(channelId: string): boolean {
-    const cached = this.get(channelId);
+    const cached = this.getRaw(channelId);
     return cached !== null && !this.isStale(cached);
   }
 
@@ -46,5 +46,9 @@ export class ChannelResolutionCache {
     overrides?: Partial<Pick<ResolvedChannelContent, 'fromCache' | 'isStale' | 'cacheReason'>>,
   ): ResolvedChannelContent {
     return cloneResolvedContent(content, overrides);
+  }
+
+  private getRaw(channelId: string): ResolvedChannelContent | null {
+    return this.resolvedContent.get(channelId) ?? null;
   }
 }

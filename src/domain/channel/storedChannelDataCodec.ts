@@ -6,7 +6,19 @@ function isStoredChannelDataShape(value: unknown): value is Partial<StoredChanne
   }
 
   const candidate = value as Partial<StoredChannelData>;
-  return Array.isArray(candidate.channels) && Array.isArray(candidate.channelOrder);
+  return (
+    Array.isArray(candidate.channels) &&
+    Array.isArray(candidate.channelOrder) &&
+    (
+      candidate.currentChannelId === undefined ||
+      candidate.currentChannelId === null ||
+      typeof candidate.currentChannelId === 'string'
+    ) &&
+    (
+      candidate.savedAt === undefined ||
+      (typeof candidate.savedAt === 'number' && Number.isFinite(candidate.savedAt))
+    )
+  );
 }
 
 export function decodeStoredChannelData(raw: string): Partial<StoredChannelData> | null {

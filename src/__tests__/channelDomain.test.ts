@@ -26,6 +26,7 @@ import type {
   ChannelConfig,
   ChannelContentSource,
   ResolvedContentItem,
+  StoredChannelData,
 } from '../domain/channel/index.js';
 
 class FakeClock implements ChannelClock {
@@ -58,7 +59,8 @@ class FakeTimers implements ChannelTimerPort {
   }
 
   public tickAll(): void {
-    for (const handler of [...this.handlers.values()]) {
+    for (const [handle, handler] of [...this.handlers.entries()]) {
+      this.handlers.delete(handle);
       handler();
     }
   }
@@ -202,12 +204,51 @@ test('channel domain validates content sources and rejects malformed channel aut
     }),
     false,
   );
+  assert.equal(isValidContentSource({ ...librarySource(), tokenizedUrl: 'blocked' }), false);
+  assert.equal(isValidContentSource({ ...librarySource(), authHeaders: { value: 'blocked' } }), false);
+  assert.equal(
+    isValidContentSource({
+      type: 'manual',
+      items: [{ ratingKey: 'm1', title: 'Manual', durationMs: 10, rawPlexPayload: 'blocked' }],
+    }),
+    false,
+  );
+  assert.equal(
+    isValidContentSource({
+      type: 'manual',
+      items: [{ ratingKey: 'm1', title: 'Manual', durationMs: 10, authHeaders: 'blocked' }],
+    }),
+    false,
+  );
+  assert.equal(
+    isValidContentSource({
+      type: 'mixed',
+      mixMode: 'sequential',
+      sources: [{ ...librarySource(), tokenizedUrl: 'blocked' }],
+    }),
+    false,
+  );
+  assert.equal(isValidContentSource([librarySource()]), false);
+  assert.equal(
+    isValidContentSource({
+      type: 'manual',
+      items: [['not-an-item']],
+    }),
+    false,
+  );
   assert.equal(
     isValidContentSource({
       type: 'manual',
       items: [{ ratingKey: 'm1', title: 'Manual', durationMs: 10 }],
     }),
     true,
+  );
+  assert.equal(
+    isValidContentSource({
+      type: 'manual',
+      items: [{ ratingKey: 'm1', title: 'Manual', durationMs: 10.5 }],
+    }),
+    false,
   );
   assert.equal(isValidContentSource({ type: 'library', libraryId: 'undefined' }), false);
 
@@ -284,16 +325,30 @@ test('channel domain normalizes imports and replaces duplicate channel numbers',
     { number: 1, name: 'Imported duplicate', contentSource: librarySource() },
     { name: 'Imported next', contentSource: librarySource() },
     { name: 'Invalid source', contentSource: { type: 'library' } },
+    {
+      number: 501,
+      name: 'Invalid number ignored',
+      playbackMode: 'block',
+      blockSize: 1.5,
+      minEpisodeRunTimeMs: 0,
+      maxEpisodeRunTimeMs: Number.NaN,
+      contentSource: librarySource(),
+    },
   ]));
 
   assert.equal(result.success, true);
-  assert.equal(result.importedCount, 2);
+  assert.equal(result.importedCount, 3);
   assert.equal(result.skippedCount, 1);
-  assert.deepEqual(manager.getAllChannels().map((channel) => channel.number), [1, 2, 3]);
+  assert.deepEqual(manager.getAllChannels().map((channel) => channel.number), [1, 2, 3, 4]);
   assert.deepEqual(
     manager.getAllChannels().map((channel) => channel.name),
-    ['Existing', 'Imported duplicate', 'Imported next'],
+    ['Existing', 'Imported duplicate', 'Imported next', 'Invalid number ignored'],
   );
+  const numericImport = manager.getAllChannels().find((channel) => channel.name === 'Invalid number ignored');
+  assert.ok(numericImport);
+  assert.equal(numericImport.blockSize, undefined);
+  assert.equal(numericImport.minEpisodeRunTimeMs, undefined);
+  assert.equal(numericImport.maxEpisodeRunTimeMs, undefined);
 
   const invalid = await manager.importChannels('{not-json');
   assert.equal(invalid.success, false);
@@ -397,6 +452,34 @@ test('channel domain expands show content and mixed sources through injected por
     items.map((item) => item.fullTitle),
     ['Manual', 'The Show - S01E01 - Episode 1', 'The Show - S01E02 - Episode 2'],
   );
+});
+
+test('channel domain propagates abort during collection expansion without caching partial results', async () => {
+  const clock = new FakeClock(1_000);
+  const library = new FakeLibrary();
+  const abortError = new Error('aborted');
+  abortError.name = 'AbortError';
+  library.collectionItems.set('collection-1', [
+    { ...movie('show-container', 'Show Container', 0), type: 'show' },
+  ]);
+  library.getShowEpisodes = async () => {
+    throw abortError;
+  };
+  const resolver = new ContentResolver(library, clock, { warn: () => undefined, error: () => undefined });
+  const source: ChannelContentSource = {
+    type: 'collection',
+    collectionKey: 'collection-1',
+    collectionName: 'Collection',
+  };
+
+  await assert.rejects(
+    () => resolver.resolveSource(source, { signal: { aborted: false } }),
+    { name: 'AbortError' },
+  );
+
+  library.getShowEpisodes = async () => [episode('e1', 'Recovered Show', 1, 1)];
+  const recovered = await resolver.resolveSource(source);
+  assert.deepEqual(recovered.map((item) => item.ratingKey), ['e1']);
 });
 
 test('channel domain uses stale fallback for network errors and never falls back for access denied', async () => {
@@ -591,6 +674,67 @@ test('channel domain source cache clear aborts in-flight waiters and transport',
   deferred.resolve([resolvedItem('late')]);
 });
 
+test('channel domain source cache once abort listeners can be removed and fire once', async () => {
+  const clock = new FakeClock(10);
+  const sourceCache = new SourceResolutionCache(clock);
+  const source = librarySource();
+  const firstDeferred = new Deferred<ResolvedContentItem[]>();
+  let removedCount = 0;
+
+  const firstPending = sourceCache.resolve(source, async (_source, options) => {
+    const handler = (): void => {
+      removedCount++;
+    };
+    options.signal.addEventListener?.('abort', handler, { once: true });
+    options.signal.removeEventListener?.('abort', handler);
+    return firstDeferred.promise;
+  });
+  const firstRejected = assert.rejects(firstPending, /Source resolution invalidated/);
+  await Promise.resolve();
+  sourceCache.invalidate(source);
+  await firstRejected;
+  firstDeferred.resolve([resolvedItem('removed-late')]);
+  assert.equal(removedCount, 0);
+
+  const secondDeferred = new Deferred<ResolvedContentItem[]>();
+  let onceCount = 0;
+  const secondPending = sourceCache.resolve(source, async (_source, options) => {
+    options.signal.addEventListener?.('abort', () => {
+      onceCount++;
+    }, { once: true });
+    return secondDeferred.promise;
+  });
+  const secondRejected = assert.rejects(secondPending, /Source resolution invalidated/);
+  await Promise.resolve();
+  sourceCache.invalidate(source);
+  sourceCache.clear();
+  await secondRejected;
+  secondDeferred.resolve([resolvedItem('once-late')]);
+  assert.equal(onceCount, 1);
+});
+
+test('channel domain source cache invalidates cached mixed parents when a child source changes', async () => {
+  const clock = new FakeClock(10);
+  const sourceCache = new SourceResolutionCache(clock);
+  const childSource = librarySource('child');
+  const mixedSource: ChannelContentSource = {
+    type: 'mixed',
+    mixMode: 'sequential',
+    sources: [childSource],
+  };
+  let calls = 0;
+  const resolve = async (): Promise<ResolvedContentItem[]> => {
+    calls++;
+    return [resolvedItem(`mixed-${String(calls)}`)];
+  };
+
+  assert.equal((await sourceCache.resolve(mixedSource, resolve))[0]?.ratingKey, 'mixed-1');
+  assert.equal((await sourceCache.resolve(mixedSource, resolve))[0]?.ratingKey, 'mixed-1');
+  sourceCache.invalidate(childSource);
+  assert.equal((await sourceCache.resolve(mixedSource, resolve))[0]?.ratingKey, 'mixed-2');
+  assert.equal(calls, 2);
+});
+
 test('channel domain does not reinsert stale resolved channels after replacement', async () => {
   const deferred = new Deferred<PlexMediaItemMinimal[]>();
   const library = new FakeLibrary();
@@ -612,7 +756,7 @@ test('channel domain does not reinsert stale resolved channels after replacement
   assert.deepEqual(manager.getAllChannels().map((channel) => channel.id), ['replacement']);
 });
 
-test('channel domain does not reinsert a deleted channel after pending update resolution', async () => {
+test('channel domain serializes same-channel delete after pending update resolution', async () => {
   const deferred = new Deferred<PlexMediaItemMinimal[]>();
   const library = new FakeLibrary();
   const { manager } = createManager({ library });
@@ -625,13 +769,578 @@ test('channel domain does not reinsert a deleted channel after pending update re
   const pendingUpdate = manager.updateChannel(channel.id, {
     contentSource: librarySource('updated-lib'),
   });
-  await manager.deleteChannel(channel.id);
+  let deleteSettled = false;
+  const pendingDelete = manager.deleteChannel(channel.id).then(() => {
+    deleteSettled = true;
+  });
+  await Promise.resolve();
+
+  assert.equal(deleteSettled, false);
   deferred.resolve([movie('late-update')]);
 
   const updated = await pendingUpdate;
+  await pendingDelete;
   assert.equal(updated.id, channel.id);
+  assert.equal(deleteSettled, true);
   assert.equal(manager.getChannel(channel.id), null);
   assert.deepEqual(manager.getAllChannels(), []);
+});
+
+test('channel manager immediate persistence failures leave state unchanged and suppress events', async () => {
+  let shouldFailSave = false;
+  const durableSnapshots: StoredSnapshot[] = [];
+  const persistence: ChannelPersistencePort = {
+    load: async () => null,
+    save: async (data) => {
+      if (shouldFailSave) {
+        throw new Error('save failed');
+      }
+      durableSnapshots.push(snapshotStoredData(data));
+    },
+  };
+  const { manager, library } = createManager({ persistence });
+  const events: string[] = [];
+  manager.on('channelCreated', (channel) => events.push(`created:${channel.id}`));
+  manager.on('channelUpdated', (channel) => events.push(`updated:${channel.id}`));
+  manager.on('channelDeleted', (id) => events.push(`deleted:${id}`));
+  manager.on('contentResolved', (content) => events.push(`resolved:${content.channelId}:${String(content.items.length)}`));
+
+  const one = await manager.createChannel(
+    { number: 1, name: 'One', contentSource: librarySource() },
+    { initialContent: [resolvedItem('one')] },
+  );
+  const two = await manager.createChannel(
+    { number: 2, name: 'Two', contentSource: librarySource('lib-two') },
+    { initialContent: [resolvedItem('two')] },
+  );
+  events.length = 0;
+  shouldFailSave = true;
+
+  await assert.rejects(
+    () => manager.createChannel(
+      { number: 3, name: 'Three', contentSource: librarySource('lib-three') },
+      { initialContent: [resolvedItem('three')] },
+    ),
+    /save failed/,
+  );
+  assert.deepEqual(manager.getAllChannels().map((channel) => channel.name), ['One', 'Two']);
+  assert.deepEqual(events, []);
+
+  await assert.rejects(() => manager.updateChannel(one.id, { name: 'One Updated' }), /save failed/);
+  assert.equal(manager.getChannel(one.id)?.name, 'One');
+  assert.deepEqual(events, []);
+  assert.equal(durableSnapshots.at(-1)?.channels.some((channel) => channel.name === 'One Updated'), false);
+
+  await assert.rejects(() => manager.deleteChannel(two.id), /save failed/);
+  assert.deepEqual(manager.getAllChannels().map((channel) => channel.id), [one.id, two.id]);
+  assert.deepEqual(events, []);
+
+  await assert.rejects(() => manager.reorderChannels([two.id, one.id]), /save failed/);
+  assert.deepEqual(manager.getAllChannels().map((channel) => channel.id), [one.id, two.id]);
+  assert.deepEqual(events, []);
+
+  library.libraryItems.set('lib', [movie('fresh-one'), movie('fresh-two')]);
+  await assert.rejects(() => manager.refreshChannelContent(one.id), /save failed/);
+  assert.equal(manager.getChannel(one.id)?.itemCount, 1);
+  assert.deepEqual(events, []);
+});
+
+test('channel manager includes queued current-channel switches in update persistence', async () => {
+  const deferred = new Deferred<PlexMediaItemMinimal[]>();
+  const saves: StoredSnapshot[] = [];
+  const library = new FakeLibrary();
+  let slowResolutionCalls = 0;
+  library.getLibraryItems = async (libraryId) => {
+    if (libraryId === 'slow-current') {
+      slowResolutionCalls++;
+      return deferred.promise;
+    }
+    return [movie(`${libraryId}-item`)];
+  };
+  const persistence: ChannelPersistencePort = {
+    load: async () => null,
+    save: async (data) => {
+      saves.push(snapshotStoredData(data));
+    },
+  };
+  const { manager } = createManager({ library, persistence });
+  const one = await manager.createChannel(
+    { number: 1, name: 'One', contentSource: librarySource() },
+    { initialContent: [resolvedItem('one')] },
+  );
+  const two = await manager.createChannel(
+    { number: 2, name: 'Two', contentSource: librarySource('two') },
+    { initialContent: [resolvedItem('two')] },
+  );
+  manager.setCurrentChannel(one.id);
+  await Promise.resolve();
+  saves.length = 0;
+
+  const pendingUpdate = manager.updateChannel(one.id, {
+    name: 'One Updated',
+    contentSource: librarySource('slow-current'),
+  });
+  await waitForCondition(() => slowResolutionCalls === 1, 'slow current-switch update resolution to start');
+  manager.setCurrentChannel(two.id);
+  await Promise.resolve();
+
+  assert.equal(manager.getCurrentChannel()?.id, two.id);
+  deferred.resolve([movie('slow-current-one')]);
+  await pendingUpdate;
+
+  assert.equal(manager.getCurrentChannel()?.id, two.id);
+  assert.equal(manager.getChannel(one.id)?.name, 'One Updated');
+  const updateSaves = saves.filter((save) =>
+    save.channels.some((channel) => channel.id === one.id && channel.name === 'One Updated'),
+  );
+  assert.ok(updateSaves.length >= 1);
+  assert.equal(updateSaves[0]?.currentChannelId, two.id);
+  assert.equal(updateSaves.at(-1)?.currentChannelId, two.id);
+});
+
+test('channel manager preserves current switch made during delayed update save', async () => {
+  const gate = new Deferred<void>();
+  const saves: StoredSnapshot[] = [];
+  let shouldBlockNextSave = false;
+  const persistence: ChannelPersistencePort = {
+    load: async () => null,
+    save: async (data) => {
+      saves.push(snapshotStoredData(data));
+      if (shouldBlockNextSave) {
+        shouldBlockNextSave = false;
+        await gate.promise;
+      }
+    },
+  };
+  const { manager } = createManager({ persistence });
+  const updatedEvents: string[] = [];
+  manager.on('channelUpdated', (channel) => {
+    updatedEvents.push(channel.name);
+  });
+  const one = await manager.createChannel(
+    { number: 1, name: 'One', contentSource: librarySource() },
+    { initialContent: [resolvedItem('one')] },
+  );
+  const two = await manager.createChannel(
+    { number: 2, name: 'Two', contentSource: librarySource('two') },
+    { initialContent: [resolvedItem('two')] },
+  );
+  manager.setCurrentChannel(one.id);
+  await waitForSaveCount(saves, 3);
+  saves.length = 0;
+  updatedEvents.length = 0;
+
+  shouldBlockNextSave = true;
+  const pendingUpdate = manager.updateChannel(one.id, { name: 'One Updated' });
+  await waitForSaveCount(saves, 1);
+  manager.setCurrentChannel(two.id);
+  await Promise.resolve();
+
+  assert.equal(manager.getCurrentChannel()?.id, two.id);
+  assert.deepEqual(updatedEvents, []);
+  gate.resolve();
+  await pendingUpdate;
+  await waitForSaveCount(saves, 2);
+
+  assert.equal(manager.getCurrentChannel()?.id, two.id);
+  assert.equal(manager.getChannel(one.id)?.name, 'One Updated');
+  assert.deepEqual(updatedEvents, ['One Updated']);
+  const latestSave = saves.at(-1);
+  assert.ok(latestSave);
+  assert.equal(latestSave.currentChannelId, two.id);
+  assert.deepEqual(latestSave.channels.map((channel) => [channel.id, channel.name]), [
+    [one.id, 'One Updated'],
+    [two.id, 'Two'],
+  ]);
+});
+
+test('channel manager serializes delayed load before later mutations', async () => {
+  const loadGate = new Deferred<StoredChannelData | null>();
+  const saves: StoredSnapshot[] = [];
+  let loadCalls = 0;
+  const diskChannel = completeChannel('disk-channel', 1);
+  const persistence: ChannelPersistencePort = {
+    load: async () => {
+      loadCalls++;
+      return loadGate.promise;
+    },
+    save: async (data) => {
+      saves.push(snapshotStoredData(data));
+    },
+  };
+  const { manager } = createManager({ persistence });
+
+  const pendingLoad = manager.loadChannels();
+  await waitForCondition(() => loadCalls === 1, 'delayed load to start');
+  let createSettled = false;
+  const pendingCreate = manager.createChannel(
+    { number: 2, name: 'Created After Load', contentSource: librarySource('created') },
+    { initialContent: [resolvedItem('created')] },
+  ).then((channel) => {
+    createSettled = true;
+    return channel;
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(createSettled, false);
+  loadGate.resolve({
+    channels: [diskChannel],
+    channelOrder: [diskChannel.id],
+    currentChannelId: diskChannel.id,
+    savedAt: 1_000,
+  });
+  await pendingLoad;
+  const created = await pendingCreate;
+
+  assert.deepEqual(manager.getAllChannels().map((channel) => [channel.id, channel.name]), [
+    [diskChannel.id, diskChannel.name],
+    [created.id, 'Created After Load'],
+  ]);
+  assert.deepEqual(saves.at(-1)?.channelOrder, [diskChannel.id, created.id]);
+});
+
+test('channel manager resolves update content inside serialized same-channel mutation', async () => {
+  const deferred = new Deferred<PlexMediaItemMinimal[]>();
+  const saves: StoredSnapshot[] = [];
+  const library = new FakeLibrary();
+  let slowResolutionCalls = 0;
+  library.getLibraryItems = async (libraryId) => {
+    if (libraryId === 'slow') {
+      slowResolutionCalls++;
+      return deferred.promise;
+    }
+    return [movie(`${libraryId}-item`)];
+  };
+  const persistence: ChannelPersistencePort = {
+    load: async () => null,
+    save: async (data) => {
+      saves.push(snapshotStoredData(data));
+    },
+  };
+  const { manager } = createManager({ library, persistence });
+  const events: string[] = [];
+  manager.on('contentResolved', (content) => {
+    events.push(`resolved:${content.channelId}:${String(content.items.length)}`);
+  });
+  manager.on('channelUpdated', (channel) => {
+    events.push(`updated:${channel.name}`);
+  });
+  const channel = await manager.createChannel(
+    { number: 1, name: 'Base', contentSource: librarySource('base') },
+    { initialContent: [resolvedItem('seed')] },
+  );
+  saves.length = 0;
+  events.length = 0;
+
+  let firstSettled = false;
+  let secondSettled = false;
+  const firstUpdate = manager.updateChannel(channel.id, {
+    name: 'Slow Library',
+    contentSource: librarySource('slow'),
+  }).then((updated) => {
+    firstSettled = true;
+    return updated;
+  });
+  await waitForCondition(() => slowResolutionCalls === 1, 'slow update resolution to start');
+
+  const secondUpdate = manager.updateChannel(channel.id, { name: 'Fast Name' }).then((updated) => {
+    secondSettled = true;
+    return updated;
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(firstSettled, false);
+  assert.equal(secondSettled, false);
+  assert.equal(saves.length, 0);
+  assert.equal(events.length, 0);
+
+  deferred.resolve([movie('slow-one'), movie('slow-two')]);
+  const firstResult = await firstUpdate;
+  const secondResult = await secondUpdate;
+
+  assert.equal(firstResult.name, 'Slow Library');
+  assert.equal(firstResult.itemCount, 2);
+  assert.equal(firstResult.contentSource.type, 'library');
+  if (firstResult.contentSource.type === 'library') {
+    assert.equal(firstResult.contentSource.libraryId, 'slow');
+  }
+  assert.equal(secondResult.name, 'Fast Name');
+  assert.equal(secondResult.itemCount, 2);
+  assert.equal(manager.getChannel(channel.id)?.name, 'Fast Name');
+  assert.equal(manager.getChannel(channel.id)?.itemCount, 2);
+  assert.deepEqual(events, [
+    `resolved:${channel.id}:2`,
+    'updated:Slow Library',
+    'updated:Fast Name',
+  ]);
+  assert.deepEqual(saves.map((save) => save.channels.map((saved) => [saved.id, saved.name, saved.itemCount])), [
+    [[channel.id, 'Slow Library', 2]],
+    [[channel.id, 'Fast Name', 2]],
+  ]);
+});
+
+test('channel manager preserves newer current selection for a queued current-channel delete', async () => {
+  const deferred = new Deferred<PlexMediaItemMinimal[]>();
+  const library = new FakeLibrary();
+  let slowResolutionCalls = 0;
+  library.getLibraryItems = async (libraryId) => {
+    if (libraryId === 'slow-before-delete') {
+      slowResolutionCalls++;
+      return deferred.promise;
+    }
+    return [movie(`${libraryId}-item`)];
+  };
+  const saves: Array<{ currentChannelId: string | null }> = [];
+  const persistence: ChannelPersistencePort = {
+    load: async () => null,
+    save: async (data) => {
+      saves.push({ currentChannelId: data.currentChannelId });
+    },
+  };
+  const { manager } = createManager({ library, persistence });
+  const one = await manager.createChannel(
+    { number: 1, name: 'One', contentSource: librarySource() },
+    { initialContent: [resolvedItem('one')] },
+  );
+  const two = await manager.createChannel(
+    { number: 2, name: 'Two', contentSource: librarySource('two') },
+    { initialContent: [resolvedItem('two')] },
+  );
+  const three = await manager.createChannel(
+    { number: 3, name: 'Three', contentSource: librarySource('three') },
+    { initialContent: [resolvedItem('three')] },
+  );
+  manager.setCurrentChannel(two.id);
+  await Promise.resolve();
+  saves.length = 0;
+
+  const pendingUpdate = manager.updateChannel(one.id, { contentSource: librarySource('slow-before-delete') });
+  await waitForCondition(() => slowResolutionCalls === 1, 'pre-delete update resolution to start');
+  const pendingDelete = manager.deleteChannel(two.id);
+  manager.setCurrentChannel(three.id);
+  await Promise.resolve();
+
+  assert.equal(manager.getCurrentChannel()?.id, three.id);
+  deferred.resolve([movie('slow-before-delete-one')]);
+  await pendingUpdate;
+  await pendingDelete;
+
+  assert.equal(manager.getChannel(two.id), null);
+  assert.equal(manager.getCurrentChannel()?.id, three.id);
+  assert.deepEqual(manager.getAllChannels().map((channel) => channel.id), [one.id, three.id]);
+  assert.equal(saves.at(-1)?.currentChannelId, three.id);
+});
+
+test('channel manager recomputes a pending update after unrelated update delete and reorder commits', async () => {
+  const gate = new Deferred<void>();
+  const saves: StoredSnapshot[] = [];
+  let shouldBlockNextSave = false;
+  const persistence: ChannelPersistencePort = {
+    load: async () => null,
+    save: async (data) => {
+      saves.push(snapshotStoredData(data));
+      if (shouldBlockNextSave) {
+        shouldBlockNextSave = false;
+        await gate.promise;
+      }
+    },
+  };
+  const { manager } = createManager({ persistence });
+  const channelA = await manager.createChannel(
+    { number: 1, name: 'A', contentSource: librarySource('a') },
+    { initialContent: [resolvedItem('a-seed')] },
+  );
+  const channelB = await manager.createChannel(
+    { number: 2, name: 'B', contentSource: librarySource('b') },
+    { initialContent: [resolvedItem('b-seed')] },
+  );
+  const channelC = await manager.createChannel(
+    { number: 3, name: 'C', contentSource: librarySource('c') },
+    { initialContent: [resolvedItem('c-seed')] },
+  );
+  saves.length = 0;
+
+  shouldBlockNextSave = true;
+  const pendingUpdate = manager.updateChannel(channelA.id, { name: 'A Updated' });
+  await waitForSaveCount(saves, 1);
+  const pendingBUpdate = manager.updateChannel(channelB.id, { name: 'B Updated' });
+  const pendingDelete = manager.deleteChannel(channelC.id);
+  const pendingReorder = manager.reorderChannels([channelB.id, channelA.id]);
+  gate.resolve();
+  await Promise.all([pendingUpdate, pendingBUpdate, pendingDelete, pendingReorder]);
+
+  assert.deepEqual(
+    manager.getAllChannels().map((channel) => [channel.id, channel.name]),
+    [
+      [channelB.id, 'B Updated'],
+      [channelA.id, 'A Updated'],
+    ],
+  );
+  const latestSave = saves.at(-1);
+  assert.ok(latestSave);
+  assert.deepEqual(latestSave.channelOrder, [channelB.id, channelA.id]);
+  assert.deepEqual(latestSave.channels.map((channel) => [channel.id, channel.name]), [
+    [channelA.id, 'A Updated'],
+    [channelB.id, 'B Updated'],
+  ]);
+});
+
+test('channel manager keeps in-flight refresh applicable after unrelated commits', async () => {
+  const deferred = new Deferred<PlexMediaItemMinimal[]>();
+  const library = new FakeLibrary();
+  const { manager } = createManager({
+    library,
+    persistence: {
+      load: async () => null,
+      save: async () => undefined,
+    },
+  });
+  const resolvedEvents: string[] = [];
+  manager.on('contentResolved', (content) => {
+    resolvedEvents.push(content.channelId);
+  });
+  const channelA = await manager.createChannel(
+    { number: 1, name: 'A', contentSource: librarySource('a') },
+    { initialContent: [resolvedItem('a-seed')] },
+  );
+  const channelB = await manager.createChannel(
+    { number: 2, name: 'B', contentSource: librarySource('b') },
+    { initialContent: [resolvedItem('b-seed')] },
+  );
+  resolvedEvents.length = 0;
+  library.getLibraryItems = async (libraryId) => {
+    if (libraryId === 'a') {
+      return deferred.promise;
+    }
+    return [movie('b-updated')];
+  };
+
+  const pendingRefresh = manager.refreshChannelContent(channelA.id);
+  await Promise.resolve();
+  await manager.updateChannel(channelB.id, { name: 'B Updated' });
+  await manager.reorderChannels([channelB.id, channelA.id]);
+  deferred.resolve([movie('a-one'), movie('a-two')]);
+  const refreshed = await pendingRefresh;
+
+  assert.deepEqual(refreshed.items.map((item) => item.ratingKey), ['a-one', 'a-two']);
+  assert.equal(manager.getChannel(channelA.id)?.itemCount, 2);
+  assert.equal(manager.getChannel(channelB.id)?.name, 'B Updated');
+  assert.deepEqual(resolvedEvents, [channelA.id]);
+});
+
+test('channel manager recomputes a pending refresh metadata commit after unrelated update commits', async () => {
+  const gate = new Deferred<void>();
+  const saves: StoredSnapshot[] = [];
+  let shouldBlockNextSave = false;
+  const persistence: ChannelPersistencePort = {
+    load: async () => null,
+    save: async (data) => {
+      saves.push(snapshotStoredData(data));
+      if (shouldBlockNextSave) {
+        shouldBlockNextSave = false;
+        await gate.promise;
+      }
+    },
+  };
+  const library = new FakeLibrary();
+  const { manager } = createManager({ library, persistence });
+  const resolvedEvents: string[] = [];
+  manager.on('contentResolved', (content) => {
+    resolvedEvents.push(content.channelId);
+  });
+  const channelA = await manager.createChannel(
+    { number: 1, name: 'A', contentSource: librarySource('a') },
+    { initialContent: [resolvedItem('a-seed')] },
+  );
+  const channelB = await manager.createChannel(
+    { number: 2, name: 'B', contentSource: librarySource('b') },
+    { initialContent: [resolvedItem('b-seed')] },
+  );
+  resolvedEvents.length = 0;
+  saves.length = 0;
+  library.libraryItems.set('a', [movie('a-one'), movie('a-two')]);
+
+  shouldBlockNextSave = true;
+  const pendingRefresh = manager.refreshChannelContent(channelA.id);
+  await waitForSaveCount(saves, 1);
+  const pendingUpdate = manager.updateChannel(channelB.id, { name: 'B Updated' });
+  gate.resolve();
+  const [refreshed] = await Promise.all([pendingRefresh, pendingUpdate]);
+
+  assert.deepEqual(refreshed.items.map((item) => item.ratingKey), ['a-one', 'a-two']);
+  assert.equal(manager.getChannel(channelA.id)?.itemCount, 2);
+  assert.equal(manager.getChannel(channelB.id)?.name, 'B Updated');
+  assert.deepEqual(resolvedEvents, [channelA.id]);
+  const latestSave = saves.at(-1);
+  assert.ok(latestSave);
+  assert.deepEqual(latestSave.channels.map((channel) => [channel.id, channel.name, channel.itemCount]), [
+    [channelA.id, 'A', 2],
+    [channelB.id, 'B Updated', 1],
+  ]);
+});
+
+test('channel manager serializes concurrent creates with duplicate explicit numbers', async () => {
+  const { manager } = createManager();
+
+  const [first, second] = await Promise.allSettled([
+    manager.createChannel(
+      { number: 7, name: 'First', contentSource: librarySource('first') },
+      { initialContent: [resolvedItem('first')] },
+    ),
+    manager.createChannel(
+      { number: 7, name: 'Second', contentSource: librarySource('second') },
+      { initialContent: [resolvedItem('second')] },
+    ),
+  ]);
+
+  assert.equal(first.status, 'fulfilled');
+  assert.equal(second.status, 'rejected');
+  if (second.status === 'rejected') {
+    assert.equal(second.reason?.code, 'DUPLICATE_CHANNEL_NUMBER');
+  }
+  assert.deepEqual(manager.getAllChannels().map((channel) => channel.number), [7]);
+});
+
+test('channel manager rejects pending update number when serialized create takes it first', async () => {
+  const gate = new Deferred<void>();
+  let shouldBlockNextSave = false;
+  const persistence: ChannelPersistencePort = {
+    load: async () => null,
+    save: async () => {
+      if (shouldBlockNextSave) {
+        shouldBlockNextSave = false;
+        await gate.promise;
+      }
+    },
+  };
+  const { manager } = createManager({ persistence });
+  const one = await manager.createChannel(
+    { number: 1, name: 'One', contentSource: librarySource('one') },
+    { initialContent: [resolvedItem('one')] },
+  );
+  const two = await manager.createChannel(
+    { number: 2, name: 'Two', contentSource: librarySource('two') },
+    { initialContent: [resolvedItem('two')] },
+  );
+
+  shouldBlockNextSave = true;
+  const pendingCreate = manager.createChannel(
+    { number: 3, name: 'Three', contentSource: librarySource('three') },
+    { initialContent: [resolvedItem('three')] },
+  );
+  await Promise.resolve();
+  const pendingUpdate = manager.updateChannel(two.id, { number: 3 });
+  gate.resolve();
+
+  await pendingCreate;
+  await assert.rejects(pendingUpdate, { name: 'ChannelError', code: 'DUPLICATE_CHANNEL_NUMBER' });
+  assert.deepEqual(manager.getAllChannels().map((channel) => [channel.id, channel.number]), [
+    [one.id, 1],
+    [two.id, 2],
+    ['channel-3', 3],
+  ]);
 });
 
 test('channel domain replaceAllChannels normalizes duplicate numbers and current selection atomically', async () => {
@@ -657,9 +1366,7 @@ test('channel domain safety audit catches forbidden renderer persistence fields 
         ratingKey: 'manual-safe',
         title: 'Manual Safe',
         durationMs: 60_000,
-        rawMediaUrl: 'blocked',
       }],
-      tokenizedUrl: 'blocked',
     } as unknown as ChannelContentSource,
   });
   const content = await manager.resolveChannelContent(channel.id);
@@ -704,6 +1411,42 @@ function resolvedItem(ratingKey: string, title = ratingKey): ResolvedContentItem
     year: 2024,
     scheduledIndex: 0,
   };
+}
+
+type StoredSnapshot = Pick<StoredChannelData, 'channelOrder' | 'currentChannelId'> & {
+  channels: Array<Pick<ChannelConfig, 'id' | 'name' | 'itemCount'>>;
+};
+
+function snapshotStoredData(data: StoredChannelData): StoredSnapshot {
+  return {
+    channels: data.channels.map((channel) => ({
+      id: channel.id,
+      name: channel.name,
+      itemCount: channel.itemCount,
+    })),
+    channelOrder: [...data.channelOrder],
+    currentChannelId: data.currentChannelId,
+  };
+}
+
+async function waitForSaveCount(saves: readonly unknown[], count: number): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (saves.length >= count) {
+      return;
+    }
+    await Promise.resolve();
+  }
+  assert.fail(`Expected at least ${String(count)} save(s), saw ${String(saves.length)}`);
+}
+
+async function waitForCondition(predicate: () => boolean, description: string): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (predicate()) {
+      return;
+    }
+    await Promise.resolve();
+  }
+  assert.fail(`Expected ${description}`);
 }
 
 function assertPresentSignal(signal: ChannelAbortSignal | null): ChannelAbortSignal {

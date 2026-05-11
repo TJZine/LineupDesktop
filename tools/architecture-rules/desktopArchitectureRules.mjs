@@ -17,6 +17,23 @@ export const desktopArchitectureRules = {
       'global',
       '__dirname',
       '__filename',
+      'AbortController',
+      'AbortSignal',
+      'fetch',
+      'setTimeout',
+      'clearTimeout',
+      'setInterval',
+      'clearInterval',
+      'URL',
+      'URLSearchParams',
+      'Headers',
+      'Request',
+      'Response',
+      'WebSocket',
+      'EventSource',
+      'crypto',
+      'navigator',
+      'performance',
     ],
     forbiddenImportPatterns: [
       'electron',
@@ -49,6 +66,7 @@ export const desktopArchitectureRules = {
   rendererBoundary: {
     files: ['src/renderer/**/*.ts', 'src/renderer/**/*.tsx'],
     forbidNodeBuiltins: true,
+    forbidNonLiteralDynamicImports: true,
     forbiddenGlobals: ['Buffer', 'process', 'require', '__dirname', '__filename', 'global'],
     forbiddenImportPatterns: [
       'electron',
@@ -74,6 +92,7 @@ export const desktopArchitectureRules = {
   },
   preloadBoundary: {
     files: ['src/preload/**/*.ts', 'src/preload/**/*.cts'],
+    forbidNonLiteralDynamicImports: true,
     forbiddenImportPatterns: [
       'src/renderer',
       'src/renderer/**',
@@ -91,6 +110,7 @@ export const desktopArchitectureRules = {
   },
   mainBoundary: {
     files: ['src/main/**/*.ts'],
+    forbidNonLiteralDynamicImports: true,
     forbiddenImportPatterns: [
       'src/renderer',
       'src/renderer/**',
@@ -102,6 +122,7 @@ export const desktopArchitectureRules = {
   },
   nativeHelperBoundary: {
     files: ['src/native-helper/**/*.ts'],
+    forbidNonLiteralDynamicImports: true,
     forbiddenImportPatterns: [
       'src/renderer',
       'src/renderer/**',

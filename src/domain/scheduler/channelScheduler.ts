@@ -27,13 +27,9 @@ import type {
 
 export interface ChannelSchedulerOptions {
   shuffler?: IShuffleGenerator;
-  clock?: SchedulerClock;
+  clock: SchedulerClock;
   timers?: SchedulerTimerPort;
 }
-
-const ZERO_CLOCK: SchedulerClock = {
-  now: () => 0,
-};
 
 class SchedulerEventOwner {
   private readonly handlers: {
@@ -103,12 +99,15 @@ export class ChannelScheduler implements IChannelScheduler {
   };
 
   public constructor(shufflerOrOptions?: IShuffleGenerator | ChannelSchedulerOptions) {
-    const options =
-      shufflerOrOptions && isShuffleGenerator(shufflerOrOptions)
-        ? { shuffler: shufflerOrOptions }
-        : shufflerOrOptions;
+    if (shufflerOrOptions && isShuffleGenerator(shufflerOrOptions)) {
+      throw new Error(SCHEDULER_ERROR_MESSAGES.CLOCK_REQUIRED);
+    }
+    const options = shufflerOrOptions;
+    if (!options?.clock) {
+      throw new Error(SCHEDULER_ERROR_MESSAGES.CLOCK_REQUIRED);
+    }
     this.shuffler = options?.shuffler ?? new ShuffleGenerator();
-    this.clock = options?.clock ?? ZERO_CLOCK;
+    this.clock = options.clock;
     this.timers = options?.timers ?? null;
   }
 

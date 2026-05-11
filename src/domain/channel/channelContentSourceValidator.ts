@@ -45,7 +45,7 @@ const isValidLibraryFilter = (value: unknown): boolean => {
 };
 
 const isValidManualItem = (item: unknown): boolean => {
-  if (!item || typeof item !== 'object') {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) {
     return false;
   }
   const obj = item as Record<string, unknown>;
@@ -54,6 +54,7 @@ const isValidManualItem = (item: unknown): boolean => {
   const durationMs = obj.durationMs;
 
   return (
+    !hasForbiddenContentSourceKeys(obj) &&
     typeof ratingKey === 'string' &&
     ratingKey.length > 0 &&
     ratingKey !== 'undefined' &&
@@ -61,6 +62,7 @@ const isValidManualItem = (item: unknown): boolean => {
     title.length > 0 &&
     typeof durationMs === 'number' &&
     Number.isFinite(durationMs) &&
+    Number.isInteger(durationMs) &&
     durationMs > 0
   );
 };
@@ -112,10 +114,13 @@ export function isValidContentSource(
   if (depth > MAX_CONTENT_SOURCE_DEPTH) {
     return false;
   }
-  if (!source || typeof source !== 'object') {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
     return false;
   }
   const src = source as ContentSourceRecord;
+  if (hasForbiddenContentSourceKeys(src)) {
+    return false;
+  }
   if (typeof src.type !== 'string') {
     return false;
   }
@@ -129,4 +134,8 @@ export function isValidContentSource(
 
 function isForbiddenContentSourceKey(value: string): boolean {
   return (CHANNEL_DOMAIN_FORBIDDEN_KEYS as readonly string[]).includes(value);
+}
+
+function hasForbiddenContentSourceKeys(value: Record<string, unknown>): boolean {
+  return Object.keys(value).some(isForbiddenContentSourceKey);
 }

@@ -281,6 +281,7 @@ export class ContentResolver {
             continue;
           }
         } catch (error) {
+          if (isAbortLike(error, options?.signal ?? undefined)) throw error;
           this.logger.warn('Failed to expand show collection item', { ratingKey: item.ratingKey, error: summarizeError(error) });
         }
       }
@@ -323,6 +324,7 @@ export class ContentResolver {
         manualItem.title.length === 0 ||
         typeof manualItem.durationMs !== 'number' ||
         !Number.isFinite(manualItem.durationMs) ||
+        !Number.isInteger(manualItem.durationMs) ||
         manualItem.durationMs <= 0
       ) {
         continue;

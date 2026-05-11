@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   applyBlockPlaybackMode,
+  getBlockGroupKey,
   applyPlaybackOrdering,
   ChannelScheduler,
   SCHEDULER_ERROR_MESSAGES,
@@ -144,6 +145,15 @@ test('scheduler domain resolves deterministic anchor-time programs and wraps bef
   assert.equal(beforeAnchor.item.ratingKey, 'c');
   assert.equal(beforeAnchor.elapsedMs, 25_000);
   assert.equal(beforeAnchor.loopNumber, -1);
+});
+
+test('scheduler domain requires an injected clock', () => {
+  assert.throws(() => new ChannelScheduler(), {
+    message: SCHEDULER_ERROR_MESSAGES.CLOCK_REQUIRED,
+  });
+  assert.throws(() => new ChannelScheduler(new ShuffleGenerator()), {
+    message: SCHEDULER_ERROR_MESSAGES.CLOCK_REQUIRED,
+  });
 });
 
 test('scheduler domain preserves current next previous lookup and schedule windows', () => {
@@ -344,6 +354,8 @@ test('scheduler domain validates and normalizes block sizes', () => {
     normalized.map((contentItem) => contentItem.ratingKey),
     ['a1', 'b1'],
   );
+  assert.equal(getBlockGroupKey({ ratingKey: 'rating', showThumb: '', showTitle: 'Show Title' }), 'Show Title');
+  assert.equal(getBlockGroupKey({ ratingKey: 'rating', showThumb: '', showTitle: '' }), 'rating');
 });
 
 test('scheduler domain emits events and injected timers can be paused and unloaded without leaks', () => {
@@ -382,23 +394,25 @@ test('scheduler domain emits events and injected timers can be paused and unload
   assert.equal(timers.clearCount, 2);
 });
 
-test('scheduler domain rejects empty channels invalid windows and zero-duration schedules', () => {
+test('scheduler domain rejects empty channels invalid windows and invalid item durations', () => {
   const shuffler = new ShuffleGenerator();
   assert.throws(() => buildScheduleIndex(config({ content: [] }), shuffler), {
     message: SCHEDULER_ERROR_MESSAGES.EMPTY_CHANNEL,
   });
-  assert.throws(
-    () =>
-      buildScheduleIndex(
-        config({
-          content: [item('zero', 'Zero', 'zero', 0, 0)],
-        }),
-        shuffler,
-      ),
-    {
-      message: SCHEDULER_ERROR_MESSAGES.INVALID_SCHEDULE_DURATION,
-    },
-  );
+  for (const durationMs of [0, -1, Number.NaN, 1.5]) {
+    assert.throws(
+      () =>
+        buildScheduleIndex(
+          config({
+            content: [item(`duration-${String(durationMs)}`, 'Invalid', 'invalid', 0, durationMs)],
+          }),
+          shuffler,
+        ),
+      {
+        message: SCHEDULER_ERROR_MESSAGES.INVALID_ITEM_DURATION,
+      },
+    );
+  }
 
   const scheduler = new ChannelScheduler({ clock: new FakeClock(1_000_000) });
   assert.throws(() => scheduler.getCurrentProgram(), {

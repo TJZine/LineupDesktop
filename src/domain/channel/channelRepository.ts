@@ -139,7 +139,6 @@ export class ChannelRepository {
 
   public async saveStoredChannelData(data: StoredChannelData): Promise<void> {
     await this.store.writeStoredChannelData(data);
-    await this.store.writeCurrentChannelId(data.currentChannelId);
   }
 
   public async saveCurrentChannelId(channelId: string | null): Promise<void> {

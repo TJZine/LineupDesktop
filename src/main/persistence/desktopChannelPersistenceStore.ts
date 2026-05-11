@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import process from 'node:process';
 
 import type { ChannelPersistenceStoragePort } from '../../domain/channel/channelPersistenceStore.js';
 import type { StoredChannelData } from '../../domain/channel/types.js';
@@ -22,6 +23,8 @@ export interface DesktopChannelPersistenceStoreOptions {
 
 export class DesktopChannelPersistenceStore implements ChannelPersistenceStoragePort {
   private readonly persistenceFilePath: string;
+  private mutationChain: Promise<void> = Promise.resolve();
+  private temporaryWriteCounter = 0;
 
   public constructor(options: DesktopChannelPersistenceStoreOptions) {
     this.persistenceFilePath = options.persistenceFilePath;
@@ -36,26 +39,33 @@ export class DesktopChannelPersistenceStore implements ChannelPersistenceStorage
   }
 
   public async writeStoredChannelData(encoded: string): Promise<void> {
-    const parsed = JSON.parse(encoded) as StoredChannelData;
-    const readResult = await this.readPersistenceFile();
-    const existing = readResult.status === 'present' || readResult.status === 'missing'
-      ? readResult.value
-      : createEmptyChannelPersistenceFile();
-    await this.writePersistenceFile({
-      schemaVersion: CHANNEL_PERSISTENCE_SCHEMA_VERSION,
-      storedChannelData: parsed,
-      currentChannelId: normalizeCurrentChannelId(parsed.currentChannelId ?? existing.currentChannelId),
+    await this.enqueueMutation(async () => {
+      const parsed = JSON.parse(encoded) as StoredChannelData;
+      const readResult = await this.readPersistenceFile();
+      const existing = readResult.status === 'present' || readResult.status === 'missing'
+        ? readResult.value
+        : createEmptyChannelPersistenceFile();
+      const hasCurrentChannelId = Object.prototype.hasOwnProperty.call(parsed, 'currentChannelId');
+      await this.writePersistenceFile({
+        schemaVersion: CHANNEL_PERSISTENCE_SCHEMA_VERSION,
+        storedChannelData: parsed,
+        currentChannelId: normalizeCurrentChannelId(
+          hasCurrentChannelId ? parsed.currentChannelId : existing.currentChannelId,
+        ),
+      });
     });
   }
 
   public async clearStoredChannelData(): Promise<void> {
-    const readResult = await this.readPersistenceFile();
-    const existing = readResult.status === 'present' || readResult.status === 'missing'
-      ? readResult.value
-      : createEmptyChannelPersistenceFile();
-    await this.writePersistenceFile({
-      ...existing,
-      storedChannelData: null,
+    await this.enqueueMutation(async () => {
+      const readResult = await this.readPersistenceFile();
+      const existing = readResult.status === 'present' || readResult.status === 'missing'
+        ? readResult.value
+        : createEmptyChannelPersistenceFile();
+      await this.writePersistenceFile({
+        ...existing,
+        storedChannelData: null,
+      });
     });
   }
 
@@ -68,13 +78,15 @@ export class DesktopChannelPersistenceStore implements ChannelPersistenceStorage
   }
 
   public async writeCurrentChannelId(channelId: string | null): Promise<void> {
-    const readResult = await this.readPersistenceFile();
-    const existing = readResult.status === 'present' || readResult.status === 'missing'
-      ? readResult.value
-      : createEmptyChannelPersistenceFile();
-    await this.writePersistenceFile({
-      ...existing,
-      currentChannelId: normalizeCurrentChannelId(channelId),
+    await this.enqueueMutation(async () => {
+      const readResult = await this.readPersistenceFile();
+      const existing = readResult.status === 'present' || readResult.status === 'missing'
+        ? readResult.value
+        : createEmptyChannelPersistenceFile();
+      await this.writePersistenceFile({
+        ...existing,
+        currentChannelId: normalizeCurrentChannelId(channelId),
+      });
     });
   }
 
@@ -86,7 +98,7 @@ export class DesktopChannelPersistenceStore implements ChannelPersistenceStorage
       if (isNodeFileError(error, 'ENOENT')) {
         return { status: 'missing', value: createEmptyChannelPersistenceFile() };
       }
-      return { status: 'corrupt' };
+      throw error;
     }
 
     try {
@@ -101,13 +113,20 @@ export class DesktopChannelPersistenceStore implements ChannelPersistenceStorage
 
   private async writePersistenceFile(value: ChannelPersistenceFile): Promise<void> {
     await fs.mkdir(path.dirname(this.persistenceFilePath), { recursive: true });
-    const temporaryPath = `${this.persistenceFilePath}.tmp`;
+    this.temporaryWriteCounter += 1;
+    const temporaryPath = `${this.persistenceFilePath}.${String(process.pid)}.${String(this.temporaryWriteCounter)}.tmp`;
     await fs.writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
       encoding: 'utf8',
       mode: 0o600,
     });
     await fs.rename(temporaryPath, this.persistenceFilePath);
     await fs.chmod(this.persistenceFilePath, 0o600);
+  }
+
+  private enqueueMutation(operation: () => Promise<void>): Promise<void> {
+    const run = this.mutationChain.then(operation, operation);
+    this.mutationChain = run.catch(() => undefined);
+    return run;
   }
 }
 
@@ -148,7 +167,8 @@ function isStoredChannelData(value: unknown): value is StoredChannelData {
     Array.isArray(candidate.channels) &&
     Array.isArray(candidate.channelOrder) &&
     (candidate.currentChannelId === null || typeof candidate.currentChannelId === 'string') &&
-    typeof candidate.savedAt === 'number'
+    typeof candidate.savedAt === 'number' &&
+    Number.isFinite(candidate.savedAt)
   );
 }
 

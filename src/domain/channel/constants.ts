@@ -1,3 +1,5 @@
+import type { ChannelErrorCode } from './channelError.js';
+
 export const CACHE_TTL_MS = 60 * 60 * 1000;
 
 export const SOURCE_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -24,11 +26,19 @@ export const PLEX_MEDIA_TYPES = {
 
 export const CHANNEL_ERROR_MESSAGES = {
   CHANNEL_NOT_FOUND: 'Channel not found',
-  CONTENT_SOURCE_REQUIRED: 'Content source is required',
-  CONTENT_SOURCE_INVALID: 'Content source is invalid',
+  CHANNEL_CONTENT_SOURCE_REQUIRED: 'Content source is required',
+  CHANNEL_CONTENT_SOURCE_INVALID: 'Content source is invalid',
   MAX_CHANNELS_REACHED: 'Maximum number of channels reached',
   INVALID_CHANNEL_NUMBER: 'Channel number must be an integer between 1 and 500',
   DUPLICATE_CHANNEL_NUMBER: 'Channel number already in use',
   INVALID_IMPORT_DATA: 'Import file is invalid',
-  EMPTY_CONTENT: 'No playable content found after filtering',
-} as const;
+  SCHEDULER_EMPTY_CHANNEL: 'No playable content found after filtering',
+  CONTENT_UNAVAILABLE: 'Content source is unavailable',
+  ACCESS_DENIED: 'Profile does not have access to this content',
+  RESOURCE_NOT_FOUND: 'Content resource was not found',
+  NETWORK_TIMEOUT: 'Network request timed out',
+  NETWORK_OFFLINE: 'Network is offline',
+  SERVER_UNREACHABLE: 'Server is unreachable',
+  NETWORK_UNAVAILABLE: 'Network is unavailable',
+  STORAGE_VALIDATION_FAILED: 'Channel storage validation failed',
+} as const satisfies Record<ChannelErrorCode, string>;

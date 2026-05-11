@@ -3,6 +3,11 @@ import type { StoredChannelData } from './types.js';
 
 export interface ChannelPersistenceStoragePort {
   readStoredChannelData(): Promise<string | null>;
+  /**
+   * Persists the complete stored channel snapshot. Implementations that keep a
+   * separate current-channel index must update that index from the encoded
+   * snapshot in the same mutation.
+   */
   writeStoredChannelData(encoded: string): Promise<void>;
   clearStoredChannelData(): Promise<void>;
   readCurrentChannelId(): Promise<string | null>;

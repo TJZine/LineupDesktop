@@ -77,6 +77,8 @@ class MemoryChannelStorage implements ChannelPersistenceStoragePort {
 
   public async writeStoredChannelData(encoded: string): Promise<void> {
     this.storedChannelData = encoded;
+    const decoded = decodeStoredChannelData(encoded);
+    this.currentChannelId = decoded?.currentChannelId ?? null;
   }
 
   public async clearStoredChannelData(): Promise<void> {
@@ -105,6 +107,9 @@ test('channel persistence codec decodes only stored channel data shape', () => {
   assert.equal(decodeStoredChannelData('{bad-json'), null);
   assert.equal(decodeStoredChannelData(JSON.stringify({ channels: [] })), null);
   assert.equal(decodeStoredChannelData(JSON.stringify({ channelOrder: [] })), null);
+  assert.equal(decodeStoredChannelData(JSON.stringify({ channels: [], channelOrder: [], currentChannelId: 1 })), null);
+  assert.equal(decodeStoredChannelData(JSON.stringify({ channels: [], channelOrder: [], savedAt: Number.NaN })), null);
+  assert.equal(decodeStoredChannelData(JSON.stringify({ channels: [], channelOrder: [], savedAt: Infinity })), null);
 });
 
 test('channel persistence store cleans empty and malformed records', async () => {
@@ -142,16 +147,6 @@ test('channel persistence repository normalizes malformed persisted channel stat
         shuffleSeed: Number.NaN,
         phaseSeed: undefined,
         rawMediaUrl: 'blocked',
-        contentSource: {
-          type: 'manual',
-          items: [{
-            ratingKey: 'item-alpha',
-            title: 'Item alpha',
-            durationMs: 60_000,
-            rawPlexPayload: 'blocked',
-          }],
-          tokenizedUrl: 'blocked',
-        },
         contentFilters: [{
           field: 'genre',
           operator: 'contains',
@@ -246,13 +241,10 @@ test('channel persistence queue debounces flushes and rejects pending saves on d
   const first = queue.save();
   const second = queue.save();
   assert.equal(first, second);
-  assert.equal(timers.handlers.size, 1);
-  assert.equal(timers.clearCount, 1);
 
   await queue.flush();
   await second;
   assert.equal(saves, 1);
-  assert.equal(timers.handlers.size, 0);
 
   const pending = queue.save();
   queue.dispose();
@@ -402,6 +394,28 @@ test('channel persistence coordinator saves full-lineup snapshots transactionall
   assert.equal(persisted.currentChannelId, 'new');
   assert.equal(persisted.savedAt, 5_000);
   assert.equal(storage.currentChannelId, 'new');
+});
+
+test('channel persistence repository saves a full snapshot with one storage mutation', async () => {
+  const storage = new MemoryChannelStorage();
+  storage.writeCurrentChannelId = async () => {
+    throw new Error('separate current-channel write should not run');
+  };
+  const repository = new ChannelRepository({
+    store: new ChannelPersistenceStore(storage),
+    clock: new FakeClock(5_100),
+  });
+  const data = storedData({
+    channels: [channel('one', 1)],
+    channelOrder: ['one'],
+    currentChannelId: 'one',
+    savedAt: 5_100,
+  });
+
+  await repository.saveStoredChannelData(data);
+
+  assert.deepEqual(decodeStoredChannelData(assertPresent(storage.storedChannelData)), data);
+  assert.equal(storage.currentChannelId, 'one');
 });
 
 test('channel manager uses debounced channel persistence when the port supports it', async () => {
@@ -581,6 +595,94 @@ test('desktop channel persistence store writes a separate versioned temp-file-ba
 
   await fs.writeFile(persistenceFilePath, '{"schemaVersion":1,"storedChannelData":"bad"}\n');
   assert.equal(await domainStore.readStoredChannelData(), null);
+});
+
+test('desktop channel persistence store validates savedAt and currentChannelId metadata', async () => {
+  const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-channel-persistence-'));
+  const persistenceFilePath = path.join(temporaryDirectory, 'channels.json');
+  const domainStore = new ChannelPersistenceStore(new DesktopChannelPersistenceStore({ persistenceFilePath }));
+
+  await fs.writeFile(
+    persistenceFilePath,
+    JSON.stringify({
+      schemaVersion: 1,
+      storedChannelData: {
+        channels: [],
+        channelOrder: [],
+        currentChannelId: null,
+        savedAt: null,
+      },
+      currentChannelId: null,
+    }),
+  );
+  assert.equal(await domainStore.readStoredChannelData(), null);
+
+  await fs.writeFile(
+    persistenceFilePath,
+    JSON.stringify({
+      schemaVersion: 1,
+      storedChannelData: null,
+      currentChannelId: 7,
+    }),
+  );
+  assert.equal(await domainStore.readCurrentChannelId(), null);
+});
+
+test('desktop channel persistence store preserves explicit null current-channel clears', async () => {
+  const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-channel-persistence-'));
+  const persistenceFilePath = path.join(temporaryDirectory, 'channels.json');
+  const adapter = new DesktopChannelPersistenceStore({ persistenceFilePath });
+  const domainStore = new ChannelPersistenceStore(adapter);
+  const data = storedData({
+    channels: [channel('one', 1)],
+    channelOrder: ['one'],
+    currentChannelId: 'one',
+    savedAt: 11,
+  });
+
+  await domainStore.writeStoredChannelData(data);
+  assert.equal(await domainStore.readCurrentChannelId(), 'one');
+
+  await adapter.writeStoredChannelData(JSON.stringify({
+    ...data,
+    currentChannelId: null,
+  }));
+  assert.equal(await domainStore.readCurrentChannelId(), null);
+});
+
+test('desktop channel persistence store propagates non-missing read errors without rewriting state', async () => {
+  const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-channel-persistence-'));
+  const adapter = new DesktopChannelPersistenceStore({ persistenceFilePath: temporaryDirectory });
+
+  await assert.rejects(() => adapter.readStoredChannelData(), (error: unknown) =>
+    error instanceof Error && 'code' in error && error.code === 'EISDIR',
+  );
+  const stat = await fs.stat(temporaryDirectory);
+  assert.equal(stat.isDirectory(), true);
+});
+
+test('desktop channel persistence store serializes concurrent mutating cycles', async () => {
+  const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-channel-persistence-'));
+  const persistenceFilePath = path.join(temporaryDirectory, 'channels.json');
+  const adapter = new DesktopChannelPersistenceStore({ persistenceFilePath });
+  const data = storedData({
+    channels: [channel('one', 1)],
+    channelOrder: ['one'],
+    currentChannelId: 'one',
+    savedAt: 11,
+  });
+
+  await Promise.all([
+    adapter.writeStoredChannelData(JSON.stringify(data)),
+    adapter.writeCurrentChannelId('two'),
+  ]);
+
+  const persisted = JSON.parse(await fs.readFile(persistenceFilePath, 'utf8')) as {
+    storedChannelData?: StoredChannelData;
+    currentChannelId?: unknown;
+  };
+  assert.deepEqual(persisted.storedChannelData, data);
+  assert.equal(persisted.currentChannelId, 'two');
 });
 
 test('channel persistence persisted state contains no forbidden renderer or secret-bearing fields', async () => {

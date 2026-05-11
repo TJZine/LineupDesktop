@@ -70,6 +70,23 @@ test('domain boundary blocks browser and runtime globals', () => {
       'global',
       '__dirname',
       '__filename',
+      'AbortController',
+      'AbortSignal',
+      'fetch',
+      'setTimeout',
+      'clearTimeout',
+      'setInterval',
+      'clearInterval',
+      'URL',
+      'URLSearchParams',
+      'Headers',
+      'Request',
+      'Response',
+      'WebSocket',
+      'EventSource',
+      'crypto',
+      'navigator',
+      'performance',
     ],
   );
 });
@@ -115,6 +132,33 @@ test('ESLint rejects domain runtime imports and globals', async () => {
     result.messages.filter((message) => message.ruleId === 'no-restricted-globals').length,
     6,
   );
+});
+
+test('ESLint rejects non-literal dynamic imports in runtime boundaries', async () => {
+  const eslint = new ESLint({
+    overrideConfigFile: true,
+    overrideConfig: buildEslintArchitectureRules(desktopArchitectureRules),
+  });
+  const samples = [
+    'src/renderer/View.ts',
+    'src/preload/index.cts',
+    'src/main/index.ts',
+    'src/native-helper/host.ts',
+  ];
+
+  for (const filePath of samples) {
+    const [result] = await eslint.lintText([
+      'const target = "./dynamic";',
+      'const loaded = await import(target);',
+      'void loaded;',
+    ].join('\n'), { filePath });
+
+    assert.equal(
+      result.messages.filter((message) => message.ruleId === 'no-restricted-syntax').length,
+      1,
+      `expected computed dynamic import rejection for ${filePath}`,
+    );
+  }
 });
 
 test('ESLint rejects domain globalThis runtime access', async () => {

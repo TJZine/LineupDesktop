@@ -25,6 +25,7 @@ type ResolveSourceUncached = (
 class SourceResolutionAbortSignal implements ChannelAbortSignal {
   public aborted = false;
   private readonly abortHandlers = new Set<() => void>();
+  private readonly onceHandlersByOriginal = new Map<() => void, () => void>();
 
   public addEventListener(event: 'abort', handler: () => void, options?: { once?: boolean }): void {
     if (event !== 'abort') {
@@ -36,9 +37,10 @@ class SourceResolutionAbortSignal implements ChannelAbortSignal {
     }
     if (options?.once) {
       const onceHandler = (): void => {
-        this.removeEventListener('abort', onceHandler);
+        this.removeEventListener('abort', handler);
         handler();
       };
+      this.onceHandlersByOriginal.set(handler, onceHandler);
       this.abortHandlers.add(onceHandler);
       return;
     }
@@ -47,6 +49,12 @@ class SourceResolutionAbortSignal implements ChannelAbortSignal {
 
   public removeEventListener(event: 'abort', handler: () => void): void {
     if (event === 'abort') {
+      const onceHandler = this.onceHandlersByOriginal.get(handler);
+      if (onceHandler) {
+        this.onceHandlersByOriginal.delete(handler);
+        this.abortHandlers.delete(onceHandler);
+        return;
+      }
       this.abortHandlers.delete(handler);
     }
   }
@@ -60,6 +68,7 @@ class SourceResolutionAbortSignal implements ChannelAbortSignal {
       handler();
     }
     this.abortHandlers.clear();
+    this.onceHandlersByOriginal.clear();
   }
 }
 

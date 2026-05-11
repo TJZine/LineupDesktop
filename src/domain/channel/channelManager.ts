@@ -113,6 +113,7 @@ export class ChannelManager implements IChannelManager {
     currentChannelId: null,
     channelOrder: [],
   };
+  private mutationChain: Promise<void> = Promise.resolve();
 
   public constructor(private readonly config: ChannelManagerConfig) {
     this.logger = config.logger ?? NOOP_LOGGER;
@@ -143,67 +144,83 @@ export class ChannelManager implements IChannelManager {
     channels: ChannelConfig[],
     options?: { currentChannelId?: string | null },
   ): Promise<void> {
-    const replacement = this.authoring.buildReplacementState(channels, this.logger);
-    const nextChannels = replacement.channels;
-    const nextChannelOrder = replacement.channelOrder;
-    const requestedCurrent = options?.currentChannelId ?? null;
-    const fallbackCurrent = nextChannelOrder[0] ?? null;
-    const nextCurrentChannelId =
-      requestedCurrent && nextChannels.has(requestedCurrent) ? requestedCurrent : fallbackCurrent;
+    await this.enqueueMutation(async () => {
+      const replacement = this.authoring.buildReplacementState(channels, this.logger);
+      const nextChannels = replacement.channels;
+      const nextChannelOrder = replacement.channelOrder;
+      const requestedCurrent = options?.currentChannelId ?? null;
+      const fallbackCurrent = nextChannelOrder[0] ?? null;
+      const nextCurrentChannelId =
+        requestedCurrent && nextChannels.has(requestedCurrent) ? requestedCurrent : fallbackCurrent;
 
-    await this.persistStoredChannelData({
-      channels: Array.from(nextChannels.values()),
-      channelOrder: nextChannelOrder,
-      currentChannelId: nextCurrentChannelId,
-      savedAt: this.config.clock.now(),
+      const acceptedCandidate = await this.acceptCandidateState({
+        channels: nextChannels,
+        channelOrder: nextChannelOrder,
+        currentChannelId: nextCurrentChannelId,
+      });
+
+      this.retryScheduler.cancelAll();
+      this.contentResolver.clearCaches();
+      this.commitState(
+        acceptedCandidate.channels,
+        acceptedCandidate.channelOrder,
+        acceptedCandidate.currentChannelId,
+      );
+      this.resolutionCache.clear();
     });
-
-    this.retryScheduler.cancelAll();
-    this.contentResolver.clearCaches();
-    this.state.channels = nextChannels;
-    this.resolutionCache.clear();
-    this.state.channelOrder = nextChannelOrder;
-    this.state.currentChannelId = nextCurrentChannelId;
   }
 
   public async createChannel(
     config: ChannelCreateInput,
     options?: ChannelCreateOptions,
   ): Promise<ChannelConfig> {
-    const channel = this.authoring.createChannel(config, this.state.channels.values());
-    let resolvedContent: ResolvedChannelContent | null = null;
-    let shouldEmitContentResolved = false;
+    let createdChannel: ChannelConfig | null = null;
+    await this.enqueueMutation(async () => {
+      const channel = this.authoring.createChannel(config, this.state.channels.values());
+      let resolvedContent: ResolvedChannelContent | null = null;
+      let shouldEmitContentResolved = false;
 
-    try {
-      if (options?.initialContent) {
-        const initialItems = this.resolutionCache.cloneItems(options.initialContent);
-        resolvedContent = this.createResolvedContent(channel, initialItems);
-        this.applyResolvedContentMetadata(channel, resolvedContent);
-      } else {
-        resolvedContent = await this.resolveContentForAuthoring(channel, options);
-        this.applyResolvedContentMetadata(channel, resolvedContent);
-        shouldEmitContentResolved = !resolvedContent.fromCache;
+      try {
+        if (options?.initialContent) {
+          const initialItems = this.resolutionCache.cloneItems(options.initialContent);
+          resolvedContent = this.createResolvedContent(channel, initialItems);
+          this.applyResolvedContentMetadata(channel, resolvedContent);
+        } else {
+          resolvedContent = await this.resolveContentForAuthoring(channel, options);
+          this.applyResolvedContentMetadata(channel, resolvedContent);
+          shouldEmitContentResolved = !resolvedContent.fromCache;
+        }
+      } catch (error) {
+        if (!isGracefulAuthoringResolutionError(error)) {
+          throw error;
+        }
+        this.logger.warn(`Failed initial content resolution for channel ${channel.id}`, summarizeError(error));
       }
-    } catch (error) {
-      if (!isGracefulAuthoringResolutionError(error)) {
-        throw error;
+
+      const candidateChannels = new Map(this.state.channels);
+      candidateChannels.set(channel.id, channel);
+      const candidateOrder = [...this.state.channelOrder, channel.id];
+      const acceptedCandidate = await this.acceptCandidateState({
+        channels: candidateChannels,
+        channelOrder: candidateOrder,
+        currentChannelId: this.state.currentChannelId,
+      });
+
+      this.commitState(
+        acceptedCandidate.channels,
+        acceptedCandidate.channelOrder,
+        acceptedCandidate.currentChannelId,
+      );
+      if (resolvedContent) {
+        this.resolutionCache.set(resolvedContent);
+        if (shouldEmitContentResolved) {
+          this.emitter.emit('contentResolved', resolvedContent);
+        }
       }
-      this.logger.warn(`Failed initial content resolution for channel ${channel.id}`, summarizeError(error));
-    }
-
-    this.state.channels.set(channel.id, channel);
-    this.state.channelOrder.push(channel.id);
-
-    if (resolvedContent) {
-      this.resolutionCache.set(resolvedContent);
-      if (shouldEmitContentResolved) {
-        this.emitter.emit('contentResolved', resolvedContent);
-      }
-    }
-
-    await this.queueSave();
-    this.emitter.emit('channelCreated', channel);
-    return cloneChannelForOwnership(channel);
+      this.emitter.emit('channelCreated', channel);
+      createdChannel = channel;
+    });
+    return cloneChannelForOwnership(assertCreatedChannel(createdChannel));
   }
 
   public async updateChannel(id: string, updates: ChannelUpdateInput): Promise<ChannelConfig> {
@@ -211,49 +228,69 @@ export class ChannelManager implements IChannelManager {
     if (!channel) throw createChannelNotFoundError();
 
     const filteredUpdates = omitUndefinedChannelUpdates(updates);
-    const peerChannels = Array.from(this.state.channels.values()).filter((candidate) => candidate.id !== id);
-    const updated = this.authoring.updateChannel(channel, filteredUpdates, peerChannels);
-    let resolvedContent: ResolvedChannelContent | null = null;
 
-    if (affectsResolvedContent(filteredUpdates)) {
-      try {
-        resolvedContent = await this.resolveContentForAuthoring(updated);
-        if (this.state.channels.get(id) !== channel) {
-          return cloneChannelForOwnership(updated);
+    let committedChannel: ChannelConfig | null = null;
+    await this.enqueueMutation(async () => {
+      const latestChannel = this.state.channels.get(id);
+      if (!latestChannel) throw createChannelNotFoundError();
+      const peerChannels = Array.from(this.state.channels.values()).filter((candidate) => candidate.id !== id);
+      const updated = this.authoring.updateChannel(latestChannel, filteredUpdates, peerChannels);
+      let resolvedContent: ResolvedChannelContent | null = null;
+      if (affectsResolvedContent(filteredUpdates)) {
+        try {
+          resolvedContent = await this.resolveContentForAuthoring(updated);
+          this.applyResolvedContentMetadata(updated, resolvedContent);
+        } catch (error) {
+          if (!isGracefulAuthoringResolutionError(error)) throw error;
+          this.logger.warn(`Failed content resolution during update for ${id}`, summarizeError(error));
         }
-        this.applyResolvedContentMetadata(updated, resolvedContent);
-      } catch (error) {
-        if (!isGracefulAuthoringResolutionError(error)) throw error;
-        this.logger.warn(`Failed content resolution during update for ${id}`, summarizeError(error));
       }
-    }
+      const candidateChannels = new Map(this.state.channels);
+      candidateChannels.set(id, updated);
+      const acceptedCandidate = await this.acceptCandidateState({
+        channels: candidateChannels,
+        channelOrder: [...this.state.channelOrder],
+        currentChannelId: this.state.currentChannelId,
+      });
 
-    if (this.state.channels.get(id) !== channel) {
-      return cloneChannelForOwnership(updated);
-    }
+      this.commitState(
+        acceptedCandidate.channels,
+        acceptedCandidate.channelOrder,
+        acceptedCandidate.currentChannelId,
+      );
+      if (resolvedContent) {
+        this.resolutionCache.set(resolvedContent);
+        if (!resolvedContent.fromCache) this.emitter.emit('contentResolved', resolvedContent);
+      }
 
-    this.state.channels.set(id, updated);
-    if (resolvedContent) {
-      this.resolutionCache.set(resolvedContent);
-      if (!resolvedContent.fromCache) this.emitter.emit('contentResolved', resolvedContent);
-    }
-
-    await this.queueSave();
-    this.emitter.emit('channelUpdated', updated);
-    return cloneChannelForOwnership(updated);
+      this.emitter.emit('channelUpdated', updated);
+      committedChannel = updated;
+    });
+    return cloneChannelForOwnership(assertUpdatedChannel(committedChannel));
   }
 
   public async deleteChannel(id: string): Promise<void> {
-    if (!this.state.channels.has(id)) throw createChannelNotFoundError();
+    await this.enqueueMutation(async () => {
+      if (!this.state.channels.has(id)) throw createChannelNotFoundError();
+      const candidateChannels = new Map(this.state.channels);
+      candidateChannels.delete(id);
+      const candidateOrder = this.state.channelOrder.filter((cid) => cid !== id);
+      const candidateCurrentChannelId =
+        this.state.currentChannelId === id ? candidateOrder[0] ?? null : this.state.currentChannelId;
+      const acceptedCandidate = await this.acceptCandidateState({
+        channels: candidateChannels,
+        channelOrder: candidateOrder,
+        currentChannelId: candidateCurrentChannelId,
+      });
 
-    this.state.channels.delete(id);
-    this.resolutionCache.delete(id);
-    this.state.channelOrder = this.state.channelOrder.filter((cid) => cid !== id);
-    if (this.state.currentChannelId === id) {
-      this.state.currentChannelId = this.state.channelOrder[0] ?? null;
-    }
-    await this.queueSave();
-    this.emitter.emit('channelDeleted', id);
+      this.commitState(
+        acceptedCandidate.channels,
+        acceptedCandidate.channelOrder,
+        acceptedCandidate.currentChannelId,
+      );
+      this.resolutionCache.delete(id);
+      this.emitter.emit('channelDeleted', id);
+    });
   }
 
   public getChannel(id: string): ChannelConfig | null {
@@ -323,19 +360,33 @@ export class ChannelManager implements IChannelManager {
   }
 
   public async reorderChannels(orderedIds: string[]): Promise<void> {
-    this.assertExactChannelOrder(orderedIds);
-    this.state.channelOrder = [...orderedIds];
-    await this.queueSave();
+    await this.enqueueMutation(async () => {
+      this.assertExactChannelOrder(orderedIds);
+      const acceptedCandidate = await this.acceptCandidateState({
+        channels: new Map(this.state.channels),
+        channelOrder: [...orderedIds],
+        currentChannelId: this.state.currentChannelId,
+      });
+      this.commitState(
+        acceptedCandidate.channels,
+        acceptedCandidate.channelOrder,
+        acceptedCandidate.currentChannelId,
+      );
+    });
   }
 
   public setCurrentChannel(channelId: string): void {
     const channel = this.state.channels.get(channelId);
     if (!channel) throw createChannelNotFoundError();
 
-    this.state.currentChannelId = channelId;
+    if (this.state.currentChannelId !== channelId) {
+      this.state.currentChannelId = channelId;
+    }
     const index = this.state.channelOrder.indexOf(channelId);
     this.emitter.emit('channelSwitch', { channel: cloneChannelForOwnership(channel), index });
-    void this.queueSave().catch((error) => {
+    void this.enqueueMutation(async () => {
+      await this.queueSave();
+    }).catch((error) => {
       this.logger.error('Failed to persist current channel', summarizeError(error));
     });
   }
@@ -393,26 +444,26 @@ export class ChannelManager implements IChannelManager {
   }
 
   public async loadChannels(): Promise<void> {
-    try {
-      const data = await this.persistence?.load();
-      if (!data) return;
-      const replacement = this.authoring.buildReplacementState(
-        orderChannelsForStoredOrder(data.channels, data.channelOrder),
-        this.logger,
-      );
-      const currentChannelId =
-        data.currentChannelId && replacement.channels.has(data.currentChannelId)
-          ? data.currentChannelId
-          : replacement.channelOrder[0] ?? null;
-      this.retryScheduler.cancelAll();
-      this.contentResolver.clearCaches();
-      this.resolutionCache.clear();
-      this.state.channels = replacement.channels;
-      this.state.channelOrder = replacement.channelOrder;
-      this.state.currentChannelId = currentChannelId;
-    } catch (error) {
-      this.logger.error('Failed to load channels from storage', summarizeError(error));
-    }
+    await this.enqueueMutation(async () => {
+      try {
+        const data = await this.persistence?.load();
+        if (!data) return;
+        const replacement = this.authoring.buildReplacementState(
+          orderChannelsForStoredOrder(data.channels, data.channelOrder),
+          this.logger,
+        );
+        const currentChannelId =
+          data.currentChannelId && replacement.channels.has(data.currentChannelId)
+            ? data.currentChannelId
+            : replacement.channelOrder[0] ?? null;
+        this.retryScheduler.cancelAll();
+        this.contentResolver.clearCaches();
+        this.resolutionCache.clear();
+        this.commitState(replacement.channels, replacement.channelOrder, currentChannelId);
+      } catch (error) {
+        this.logger.error('Failed to load channels from storage', summarizeError(error));
+      }
+    });
   }
 
   public on<K extends keyof ChannelManagerEventMap>(
@@ -432,11 +483,59 @@ export class ChannelManager implements IChannelManager {
   }
 
   private getStoredChannelData(): StoredChannelData {
+    return this.buildStoredChannelData(this.state.channels, this.state.channelOrder, this.state.currentChannelId);
+  }
+
+  private buildStoredChannelData(
+    channels: ReadonlyMap<string, ChannelConfig>,
+    channelOrder: readonly string[],
+    currentChannelId: string | null,
+  ): StoredChannelData {
     return {
-      channels: this.getAllChannels(),
-      channelOrder: [...this.state.channelOrder],
-      currentChannelId: this.state.currentChannelId,
+      channels: Array.from(channels.values(), cloneChannelForOwnership),
+      channelOrder: [...channelOrder],
+      currentChannelId,
       savedAt: this.config.clock.now(),
+    };
+  }
+
+  private enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const run = this.mutationChain.then(operation, operation);
+    this.mutationChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private async acceptCandidateState(candidate: ChannelManagerState): Promise<ChannelManagerState> {
+    if (this.persistence?.queueSave) {
+      const accepted: ChannelManagerState = {
+        channels: candidate.channels,
+        channelOrder: [...candidate.channelOrder],
+        currentChannelId: candidate.currentChannelId,
+      };
+      this.persistence.queueSave(
+        this.buildStoredChannelData(accepted.channels, accepted.channelOrder, accepted.currentChannelId),
+      );
+      return accepted;
+    }
+
+    const accepted: ChannelManagerState = {
+      channels: candidate.channels,
+      channelOrder: [...candidate.channelOrder],
+      currentChannelId: this.getLatestCandidateCurrentChannelId(candidate.channels, candidate.currentChannelId),
+    };
+    await this.persistStoredChannelData(
+      this.buildStoredChannelData(accepted.channels, accepted.channelOrder, accepted.currentChannelId),
+    );
+    const latestCurrentChannelId = this.getLatestCandidateCurrentChannelId(
+      accepted.channels,
+      accepted.currentChannelId,
+    );
+    return {
+      ...accepted,
+      currentChannelId: latestCurrentChannelId,
     };
   }
 
@@ -444,6 +543,27 @@ export class ChannelManager implements IChannelManager {
     if (this.persistence) {
       await this.persistence.save(data);
     }
+  }
+
+  private commitState(
+    channels: Map<string, ChannelConfig>,
+    channelOrder: string[],
+    currentChannelId: string | null,
+  ): void {
+    this.state.channels = channels;
+    this.state.channelOrder = channelOrder;
+    this.state.currentChannelId = currentChannelId;
+  }
+
+  private getLatestCandidateCurrentChannelId(
+    channels: ReadonlyMap<string, ChannelConfig>,
+    fallbackCurrentChannelId: string | null,
+  ): string | null {
+    const latestCurrentChannelId = this.state.currentChannelId;
+    if (latestCurrentChannelId && channels.has(latestCurrentChannelId)) {
+      return latestCurrentChannelId;
+    }
+    return fallbackCurrentChannelId;
   }
 
   private assertExactChannelOrder(orderedIds: string[]): void {
@@ -494,7 +614,7 @@ export class ChannelManager implements IChannelManager {
     }
 
     if (items.length === 0) {
-      throw new ChannelError('SCHEDULER_EMPTY_CHANNEL', CHANNEL_ERROR_MESSAGES.EMPTY_CONTENT);
+      throw new ChannelError('SCHEDULER_EMPTY_CHANNEL', CHANNEL_ERROR_MESSAGES.SCHEDULER_EMPTY_CHANNEL);
     }
 
     return items;
@@ -586,12 +706,30 @@ export class ChannelManager implements IChannelManager {
       const result = this.createResolvedContent(channel, items);
       if (!this.canApplyResolvedContent(channel, options?.shouldApply)) return result;
 
-      this.retryScheduler.cancel(channel.id);
-      this.resolutionCache.set(result);
-      this.emitter.emit('contentResolved', result);
-      this.applyResolvedContentMetadata(channel, result);
-      this.state.channels.set(channel.id, channel);
-      await this.queueSave();
+      const updatedChannel = cloneChannelForOwnership(channel);
+      this.applyResolvedContentMetadata(updatedChannel, result);
+
+      await this.enqueueMutation(async () => {
+        if (!this.canApplyResolvedContent(channel, options?.shouldApply)) return result;
+        const candidateChannels = new Map(this.state.channels);
+        candidateChannels.set(channel.id, updatedChannel);
+        const acceptedCandidate = await this.acceptCandidateState({
+          channels: candidateChannels,
+          channelOrder: [...this.state.channelOrder],
+          currentChannelId: this.state.currentChannelId,
+        });
+        if (!this.canApplyResolvedContent(channel, options?.shouldApply)) return result;
+        this.commitState(
+          acceptedCandidate.channels,
+          acceptedCandidate.channelOrder,
+          acceptedCandidate.currentChannelId,
+        );
+        this.retryScheduler.cancel(channel.id);
+        this.resolutionCache.set(result);
+        this.emitter.emit('contentResolved', result);
+        return result;
+      });
+
       return this.resolutionCache.cloneContent(result);
     } catch (error) {
       if (options?.shouldApply && !options.shouldApply()) throw error;
@@ -669,6 +807,20 @@ function orderChannelsForStoredOrder(
 
 function createChannelNotFoundError(): ChannelError {
   return new ChannelError('CHANNEL_NOT_FOUND', CHANNEL_ERROR_MESSAGES.CHANNEL_NOT_FOUND);
+}
+
+function assertCreatedChannel(channel: ChannelConfig | null): ChannelConfig {
+  if (!channel) {
+    throw new ChannelError('STORAGE_VALIDATION_FAILED', 'Channel create did not commit');
+  }
+  return channel;
+}
+
+function assertUpdatedChannel(channel: ChannelConfig | null): ChannelConfig {
+  if (!channel) {
+    throw new ChannelError('CHANNEL_NOT_FOUND', CHANNEL_ERROR_MESSAGES.CHANNEL_NOT_FOUND);
+  }
+  return channel;
 }
 
 function isNetworkError(error: unknown): boolean {

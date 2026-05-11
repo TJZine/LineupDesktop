@@ -34,6 +34,9 @@ export function buildScheduleIndex(
   let cumulativeOffset = 0;
 
   for (const item of orderedItems) {
+    if (!isValidItemDuration(item.durationMs)) {
+      throw new Error(SCHEDULER_ERROR_MESSAGES.INVALID_ITEM_DURATION);
+    }
     itemStartOffsets.push(cumulativeOffset);
     cumulativeOffset += item.durationMs;
   }
@@ -49,6 +52,10 @@ export function buildScheduleIndex(
     itemStartOffsets,
     orderedItems,
   };
+}
+
+function isValidItemDuration(value: number): boolean {
+  return Number.isFinite(value) && Number.isInteger(value) && value > 0;
 }
 
 export function binarySearchForItem(positionInLoop: number, itemStartOffsets: number[]): number {

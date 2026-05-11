@@ -58,7 +58,7 @@ export class ChannelAuthoringService {
     if (!input.contentSource) {
       throw new ChannelError(
         'CHANNEL_CONTENT_SOURCE_REQUIRED',
-        CHANNEL_ERROR_MESSAGES.CONTENT_SOURCE_REQUIRED,
+        CHANNEL_ERROR_MESSAGES.CHANNEL_CONTENT_SOURCE_REQUIRED,
       );
     }
     const contentSource = this.validateContentSource(input.contentSource);
@@ -256,7 +256,7 @@ export class ChannelAuthoringService {
     if (!isValidContentSource(source)) {
       throw new ChannelError(
         'CHANNEL_CONTENT_SOURCE_INVALID',
-        CHANNEL_ERROR_MESSAGES.CONTENT_SOURCE_INVALID,
+        CHANNEL_ERROR_MESSAGES.CHANNEL_CONTENT_SOURCE_INVALID,
       );
     }
     return source;
