@@ -169,8 +169,8 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-11 are complete enough to route the next Tier 3 session to
-complete RD-12 Plex-to-player integration through the quality loop. Do not
+RD-01 through RD-12 are complete enough to route the next Tier 3 session to
+complete RD-13 Renderer UI And Navigation Import through the quality loop. Do not
 import additional original Lineup product code until a reviewed product slice
 plan explicitly authorizes a bounded import.
 
@@ -722,7 +722,7 @@ Closeout:
   `src/main/plex/streamResolver.ts`, `src/main/player/plexPlaybackBridge.ts`,
   and `src/main/player/plexPlaybackComposition.ts`.
 - Proof: `npm run verify` passed on 2026-05-11 with typecheck, architecture
-  lint, 248 contract tests, 88 harness-doc tests, docs verification, and
+  lint, 249 contract tests, 88 harness-doc tests, docs verification, and
   redaction verification.
 - Platform proof label: Mac/local automated proof sufficient. RD-12 remains
   injected/fakeable and does not enable production native-helper playback, real
