@@ -484,6 +484,88 @@ test('scheduler domain preserves active timer and state when replacement load fa
   assert.equal(scheduler.getState().currentProgram?.item.ratingKey, oldState.currentProgram?.item.ratingKey);
 });
 
+test('scheduler domain emits balanced program events when active channel is replaced', () => {
+  const clock = new FakeClock(1_000_000);
+  const scheduler = new ChannelScheduler({ clock });
+  const events: string[] = [];
+
+  scheduler.on('programStart', (program) => events.push(`start:${program.item.ratingKey}`));
+  scheduler.on('programEnd', (program) => events.push(`end:${program.item.ratingKey}`));
+
+  scheduler.loadChannel(config());
+  scheduler.loadChannel(config({
+    channelId: 'replacement',
+    content: [item('replacement-a', 'Replacement A', 'movie', 0, 10_000)],
+  }));
+
+  assert.deepEqual(events, ['start:a', 'end:a', 'start:replacement-a']);
+});
+
+test('scheduler domain prevents reentrant resume timer leaks during active replacement end events', () => {
+  const clock = new FakeClock(1_000_000);
+  const timers = new FakeTimers();
+  const scheduler = new ChannelScheduler({ clock, timers });
+  const statesDuringEnd: boolean[] = [];
+
+  scheduler.on('programEnd', () => {
+    statesDuringEnd.push(scheduler.getState().isActive);
+    scheduler.resumeSyncTimer();
+  });
+
+  scheduler.loadChannel(config());
+  assert.equal(timers.handlers.size, 1);
+
+  scheduler.loadChannel(config({
+    channelId: 'replacement',
+    content: [item('replacement-a', 'Replacement A', 'movie', 0, 10_000)],
+  }));
+
+  assert.deepEqual(statesDuringEnd, [false]);
+  assert.equal(scheduler.getState().isActive, true);
+  assert.equal(scheduler.getState().channelId, 'replacement');
+  assert.equal(timers.handlers.size, 1);
+
+  scheduler.unloadChannel();
+  assert.equal(timers.handlers.size, 0);
+  assert.equal(scheduler.getState().isActive, false);
+});
+
+test('scheduler domain emits balanced program events when active channel is unloaded', () => {
+  const clock = new FakeClock(1_000_000);
+  const scheduler = new ChannelScheduler({ clock });
+  const events: string[] = [];
+
+  scheduler.on('programStart', (program) => events.push(`start:${program.item.ratingKey}`));
+  scheduler.on('programEnd', (program) => events.push(`end:${program.item.ratingKey}`));
+
+  scheduler.loadChannel(config());
+  scheduler.unloadChannel();
+  scheduler.unloadChannel();
+
+  assert.deepEqual(events, ['start:a', 'end:a']);
+});
+
+test('scheduler domain prevents reentrant resume timer leaks during active unload end events', () => {
+  const clock = new FakeClock(1_000_000);
+  const timers = new FakeTimers();
+  const scheduler = new ChannelScheduler({ clock, timers });
+  const statesDuringEnd: boolean[] = [];
+
+  scheduler.on('programEnd', () => {
+    statesDuringEnd.push(scheduler.getState().isActive);
+    scheduler.resumeSyncTimer();
+  });
+
+  scheduler.loadChannel(config());
+  assert.equal(timers.handlers.size, 1);
+
+  scheduler.unloadChannel();
+
+  assert.deepEqual(statesDuringEnd, [false]);
+  assert.equal(scheduler.getState().isActive, false);
+  assert.equal(timers.handlers.size, 0);
+});
+
 test('scheduler domain isolates event handler failures', () => {
   const errors: Array<{ message: string; detail?: unknown }> = [];
   const scheduler = new ChannelScheduler({

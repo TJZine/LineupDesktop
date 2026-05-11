@@ -295,6 +295,24 @@ test('main process diagnostics redact multipart auth and header values', () => {
   }
 });
 
+test('main process diagnostics redact brace-delimited header maps', () => {
+  const plexTokenHeader = ['X-Plex', 'Token'].join('-');
+  for (const value of [
+    `headers={${plexTokenHeader}: abc123}`,
+    `headers: {${plexTokenHeader}: abc123}`,
+    `headers={foo: bar, ${plexTokenHeader}: abc123}`,
+  ]) {
+    const message = redactMainProcessError(new Error(value));
+    assert.equal(message.includes('abc123'), false);
+    assert.equal(message.includes('bar'), false);
+    assert.equal(message.includes(plexTokenHeader), false);
+  }
+  assert.equal(
+    redactMainProcessError(new Error(`?${plexTokenHeader}=abc123&other=1 headers={foo: bar}`)),
+    `?${plexTokenHeader}=[redacted]&other=1 [redacted]`,
+  );
+});
+
 test('development and smoke player IPC dispatches through fake host and emits safe events', async () => {
   const ipcMain = new FakeIpcMain();
   const events: PlayerEvent[] = [];
@@ -375,6 +393,16 @@ test('player IPC emits renderer-safe error when helper lifecycle fails asynchron
   assert.equal(
     (snapshot as { value: { lastError: { category: string } | null } }).value.lastError?.category,
     'helper-failure',
+  );
+  assert.equal(
+    (snapshot as { value: { lastError: { message: string } | null } }).value.lastError?.message,
+    errorEvent.error.message,
+  );
+  assert.equal(
+    (snapshot as { value: { lastError: { message: string } | null } }).value.lastError?.message.includes(
+      'raw process exit 123',
+    ),
+    false,
   );
   assertNoForbiddenKeys(events);
   assertNoForbiddenKeys(snapshot);

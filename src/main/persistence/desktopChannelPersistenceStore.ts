@@ -13,8 +13,14 @@ interface ChannelPersistenceFile {
   currentChannelId: string | null;
 }
 
+interface RawChannelPersistenceFile {
+  schemaVersion?: unknown;
+  storedChannelData?: unknown;
+  currentChannelId?: unknown;
+}
+
 type ChannelPersistenceFileReadResult =
-  | { status: 'present' | 'missing'; value: ChannelPersistenceFile }
+  | { status: 'present' | 'missing'; value: ChannelPersistenceFile; needsCurrentChannelIdRepair?: boolean }
   | { status: 'corrupt' };
 
 export interface DesktopChannelPersistenceStoreOptions {
@@ -77,11 +83,13 @@ export class DesktopChannelPersistenceStore implements ChannelPersistenceStorage
   }
 
   public async readCurrentChannelId(): Promise<string | null> {
-    const readResult = await this.readPersistenceFile();
-    if (readResult.status === 'corrupt') {
-      return null;
-    }
-    return normalizeCurrentChannelId(readResult.value.currentChannelId);
+    return this.enqueueMutation(async () => {
+      const readResult = await this.readPersistenceFile();
+      if (readResult.status === 'corrupt') {
+        return null;
+      }
+      return normalizeCurrentChannelId(readResult.value.currentChannelId);
+    });
   }
 
   public async writeCurrentChannelId(channelId: string | null): Promise<void> {
@@ -108,14 +116,19 @@ export class DesktopChannelPersistenceStore implements ChannelPersistenceStorage
       throw error;
     }
 
+    let parsed: ReturnType<typeof parseChannelPersistenceFile>;
     try {
-      return {
-        status: 'present',
-        value: parseChannelPersistenceFile(content),
-      };
+      parsed = parseChannelPersistenceFile(content);
     } catch {
       return { status: 'corrupt' };
     }
+    if (parsed.needsCurrentChannelIdRepair) {
+      await this.writePersistenceFile(parsed.value);
+    }
+    return {
+      status: 'present',
+      value: parsed.value,
+    };
   }
 
   private async writePersistenceFile(value: ChannelPersistenceFile): Promise<void> {
@@ -148,23 +161,35 @@ function createEmptyChannelPersistenceFile(): ChannelPersistenceFile {
   };
 }
 
-function parseChannelPersistenceFile(content: string): ChannelPersistenceFile {
+function parseChannelPersistenceFile(content: string): {
+  value: ChannelPersistenceFile;
+  needsCurrentChannelIdRepair: boolean;
+} {
   const parsed: unknown = JSON.parse(content);
   if (!isChannelPersistenceFile(parsed)) {
     throw new Error('Channel persistence file schema is invalid.');
   }
-  return parsed;
+  return {
+    value: {
+      schemaVersion: CHANNEL_PERSISTENCE_SCHEMA_VERSION,
+      storedChannelData: parsed.storedChannelData,
+      currentChannelId: normalizeRawCurrentChannelId(parsed.currentChannelId),
+    },
+    needsCurrentChannelIdRepair: !isRawCurrentChannelIdValid(parsed.currentChannelId),
+  };
 }
 
-function isChannelPersistenceFile(value: unknown): value is ChannelPersistenceFile {
+function isChannelPersistenceFile(value: unknown): value is RawChannelPersistenceFile & {
+  schemaVersion: typeof CHANNEL_PERSISTENCE_SCHEMA_VERSION;
+  storedChannelData: StoredChannelData | null;
+} {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return false;
   }
-  const candidate = value as Partial<ChannelPersistenceFile>;
+  const candidate = value as RawChannelPersistenceFile;
   return (
     candidate.schemaVersion === CHANNEL_PERSISTENCE_SCHEMA_VERSION &&
-    (candidate.storedChannelData === null || isStoredChannelData(candidate.storedChannelData)) &&
-    (candidate.currentChannelId === null || typeof candidate.currentChannelId === 'string')
+    (candidate.storedChannelData === null || isStoredChannelData(candidate.storedChannelData))
   );
 }
 
@@ -187,6 +212,14 @@ function isStoredChannelData(value: unknown): value is StoredChannelData {
 function normalizeCurrentChannelId(channelId: string | null | undefined): string | null {
   const normalized = channelId?.trim() ?? '';
   return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeRawCurrentChannelId(channelId: unknown): string | null {
+  return typeof channelId === 'string' ? normalizeCurrentChannelId(channelId) : null;
+}
+
+function isRawCurrentChannelIdValid(channelId: unknown): boolean {
+  return channelId === null || typeof channelId === 'string';
 }
 
 function isNodeFileError(error: unknown, code: string): boolean {

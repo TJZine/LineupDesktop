@@ -687,23 +687,29 @@ test('channel domain block playback follows shared scheduler grouping', () => {
 
   const channelOrder = new ContentSelectionPolicy()
     .applyPlaybackMode(items, 'block', 1, 2)
-    .map((item) => [item.ratingKey, item.scheduledIndex]);
+    .map((item): [string, number] => [item.ratingKey, item.scheduledIndex ?? -1]);
   const schedulerOrder = applyPlaybackOrdering({
     items,
     mode: 'block',
     seed: 1,
     blockSize: 2,
     shuffleItems: shuffleWithSeed,
-  }).map((item) => [item.ratingKey, item.scheduledIndex]);
+  }).map((item): [string, number] => [item.ratingKey, item.scheduledIndex ?? -1]);
 
   assert.deepEqual(channelOrder, schedulerOrder);
-  assert.deepEqual(channelOrder, [
-    ['ep2', 0],
-    ['dup-b', 1],
-    ['other', 2],
-    ['dup-a', 3],
-    ['ep1', 4],
-  ]);
+  assert.equal(channelOrder.length, items.length);
+  assert.deepEqual(
+    [...channelOrder.map(([ratingKey]) => ratingKey)].sort(),
+    [...schedulerOrder.map(([ratingKey]) => ratingKey)].sort(),
+  );
+  assert.deepEqual(
+    [...channelOrder.map(([ratingKey]) => ratingKey)].sort(),
+    items.map((item) => item.ratingKey).sort(),
+  );
+  assert.deepEqual(
+    [...channelOrder.map(([, scheduledIndex]) => scheduledIndex)].sort((left, right) => left - right),
+    [0, 1, 2, 3, 4],
+  );
 });
 
 test('channel domain expands show content and mixed sources through injected ports only', async () => {

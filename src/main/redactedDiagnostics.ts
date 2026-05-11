@@ -57,6 +57,10 @@ const AUTH_HEADER_KEY_VALUE_PAIR_PATTERN = new RegExp(
   String.raw`(?<![?&\w-])\b(${REDACTED_DIAGNOSTIC_AUTH_HEADER_KEY_PATTERN})\s*[:=]\s*(?:(?:${REDACTED_DIAGNOSTIC_KEY_PATTERN})\s*:\s*)?(?:(?:bearer|token)\s+)?[-A-Za-z0-9._~+/=]+`,
   'giu',
 );
+const AUTH_HEADER_OBJECT_LITERAL_PATTERN = new RegExp(
+  String.raw`(?<![?&\w-])\b(${REDACTED_DIAGNOSTIC_AUTH_HEADER_KEY_PATTERN})\s*[:=]\s*\{[^{}\r\n]*\}`,
+  'giu',
+);
 const KEY_VALUE_PAIR_PATTERN = new RegExp(
   String.raw`(?<![?&\w-])\b(${REDACTED_DIAGNOSTIC_KEY_PATTERN})\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,}]+)`,
   'giu',
@@ -84,6 +88,7 @@ export function redactMainProcessError(
   const redactedStructuredValues = message
     .replace(JSON_QUOTED_ESCAPED_KEY_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
     .replace(JSON_QUOTED_KEY_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
+    .replace(AUTH_HEADER_OBJECT_LITERAL_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
     .replace(AUTH_HEADER_KEY_VALUE_PAIR_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
     .replace(BEARER_TOKEN_PREFIX_PATTERN, `$1 ${REDACTED_DIAGNOSTIC_VALUE}`)
     .replace(TOKEN_QUERY_PARAM_PATTERN, `$1${REDACTED_DIAGNOSTIC_VALUE}`)

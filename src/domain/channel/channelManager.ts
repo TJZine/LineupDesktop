@@ -441,12 +441,14 @@ export class ChannelManager implements IChannelManager {
   }
 
   public async flushSaves(): Promise<void> {
-    const data = this.getStoredChannelData();
-    if (this.persistence?.flush) {
-      await this.persistence.flush(data);
-      return;
-    }
-    await this.persistStoredChannelData(data);
+    return this.enqueueMutation(async () => {
+      const data = this.getStoredChannelData();
+      if (this.persistence?.flush) {
+        await this.persistence.flush(data);
+        return;
+      }
+      await this.persistStoredChannelData(data);
+    });
   }
 
   public dispose(): void {
@@ -457,7 +459,9 @@ export class ChannelManager implements IChannelManager {
   }
 
   public saveChannels(): Promise<void> {
-    return this.persistStoredChannelData(this.getStoredChannelData());
+    return this.enqueueMutation(async () => {
+      await this.persistStoredChannelData(this.getStoredChannelData());
+    });
   }
 
   public async loadChannels(): Promise<void> {

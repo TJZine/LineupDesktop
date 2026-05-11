@@ -581,6 +581,83 @@ test('channel manager flush persists the latest channel state over a pending que
   assert.deepEqual(persisted.channelOrder, ['first', 'second']);
 });
 
+test('channel manager saveChannels waits for pending mutations before snapshotting', async () => {
+  const clock = new FakeClock(6_250);
+  const firstSave = createDeferred<void>();
+  const saves: StoredChannelData[] = [];
+  const manager = new ChannelManager({
+    plexLibrary: createUnusedLibrary(),
+    clock,
+    generateId: () => 'created',
+    persistence: {
+      load: async () => null,
+      save: async (data) => {
+        saves.push(data);
+        if (saves.length === 1) {
+          await firstSave.promise;
+        }
+      },
+    },
+  });
+
+  const created = manager.createChannel({
+    contentSource: {
+      type: 'manual',
+      items: [{ ratingKey: 'manual-1', title: 'Manual One', durationMs: 60_000 }],
+    },
+  });
+  await sleep(0);
+  assert.equal(saves.length, 1);
+
+  const saved = manager.saveChannels();
+  firstSave.resolve();
+  await created;
+  await saved;
+
+  assert.equal(saves.length, 2);
+  assert.deepEqual(saves[1]?.channels.map((entry) => entry.id), ['created']);
+  assert.deepEqual(saves[1]?.channelOrder, ['created']);
+});
+
+test('channel manager flushSaves waits for pending mutations before snapshotting', async () => {
+  const clock = new FakeClock(6_500);
+  const firstSave = createDeferred<void>();
+  const flushes: StoredChannelData[] = [];
+  const manager = new ChannelManager({
+    plexLibrary: createUnusedLibrary(),
+    clock,
+    generateId: () => 'created',
+    persistence: {
+      load: async () => null,
+      save: async () => {
+        await firstSave.promise;
+      },
+      flush: async (data) => {
+        if (data) {
+          flushes.push(data);
+        }
+      },
+    },
+  });
+
+  const created = manager.createChannel({
+    contentSource: {
+      type: 'manual',
+      items: [{ ratingKey: 'manual-1', title: 'Manual One', durationMs: 60_000 }],
+    },
+  });
+  await sleep(0);
+
+  const flushed = manager.flushSaves();
+  firstSave.resolve();
+  await created;
+  await flushed;
+
+  assert.equal(flushes.length, 1);
+  assert.deepEqual(flushes[0]?.channels.map((entry) => entry.id), ['created']);
+  assert.deepEqual(flushes[0]?.channelOrder, ['created']);
+});
+
 test('channel manager preserves persisted channel order on load', async () => {
   const manager = new ChannelManager({
     plexLibrary: createUnusedLibrary(),
@@ -739,6 +816,64 @@ test('desktop channel persistence store validates savedAt and currentChannelId m
     }),
   );
   assert.equal(await domainStore.readCurrentChannelId(), null);
+});
+
+test('desktop channel persistence store preserves data when top-level current pointer is malformed', async () => {
+  const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-channel-persistence-'));
+  const persistenceFilePath = path.join(temporaryDirectory, 'channels.json');
+  const domainStore = new ChannelPersistenceStore(new DesktopChannelPersistenceStore({ persistenceFilePath }));
+  const data = storedData({
+    channels: [channel('one', 1)],
+    channelOrder: ['one'],
+    currentChannelId: 'one',
+    savedAt: 11,
+  });
+
+  await fs.writeFile(
+    persistenceFilePath,
+    JSON.stringify({
+      schemaVersion: 1,
+      storedChannelData: data,
+      currentChannelId: 7,
+    }),
+  );
+
+  assert.deepEqual(await domainStore.readStoredChannelData(), data);
+  assert.equal(await domainStore.readCurrentChannelId(), null);
+  const persisted = JSON.parse(await fs.readFile(persistenceFilePath, 'utf8')) as {
+    storedChannelData?: StoredChannelData | null;
+    currentChannelId?: unknown;
+  };
+  assert.deepEqual(persisted.storedChannelData, data);
+  assert.equal(persisted.currentChannelId, null);
+});
+
+test('desktop channel persistence store propagates top-level current pointer repair write failures', async () => {
+  const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-channel-persistence-'));
+  const unwritableDirectory = path.join(temporaryDirectory, 'blocked');
+  const persistenceFilePath = path.join(unwritableDirectory, 'channels.json');
+  const adapter = new DesktopChannelPersistenceStore({ persistenceFilePath });
+  const data = storedData({
+    channels: [channel('one', 1)],
+    channelOrder: ['one'],
+    currentChannelId: 'one',
+    savedAt: 11,
+  });
+  const originalContent = JSON.stringify({
+    schemaVersion: 1,
+    storedChannelData: data,
+    currentChannelId: 7,
+  });
+
+  await fs.mkdir(unwritableDirectory);
+  await fs.writeFile(persistenceFilePath, originalContent);
+  await fs.chmod(unwritableDirectory, 0o500);
+  try {
+    await assert.rejects(() => adapter.readCurrentChannelId());
+    assert.equal(await fs.readFile(persistenceFilePath, 'utf8'), originalContent);
+  } finally {
+    await fs.chmod(unwritableDirectory, 0o700);
+  }
 });
 
 test('desktop channel persistence store preserves explicit null current-channel clears', async () => {

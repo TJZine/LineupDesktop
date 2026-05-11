@@ -136,8 +136,11 @@ export class ChannelScheduler implements IChannelScheduler {
     const nextIndex = buildScheduleIndex(nextConfig, this.shuffler, now);
     const nextCurrentProgram = calculateProgramAtTime(now, nextIndex, nextConfig.anchorTime, now);
     const nextProgram = calculateNextProgram(nextCurrentProgram, nextIndex, nextConfig.anchorTime, now);
+    const previousProgram = this.detachActiveState();
 
-    this.stopSyncTimer();
+    if (previousProgram) {
+      this.emitter.emit('programEnd', previousProgram);
+    }
     this.config = nextConfig;
     this.index = nextIndex;
     this.isActive = true;
@@ -150,13 +153,10 @@ export class ChannelScheduler implements IChannelScheduler {
   }
 
   public unloadChannel(): void {
-    this.stopSyncTimer();
-    this.config = null;
-    this.index = null;
-    this.isActive = false;
-    this.currentProgram = null;
-    this.nextProgram = null;
-    this.lastSyncTime = 0;
+    const previousProgram = this.detachActiveState();
+    if (previousProgram) {
+      this.emitter.emit('programEnd', previousProgram);
+    }
   }
 
   public pauseSyncTimer(): void {
@@ -415,8 +415,23 @@ export class ChannelScheduler implements IChannelScheduler {
     return programChanged;
   }
 
+  private detachActiveState(): ScheduledProgram | null {
+    const previousProgram = this.isActive ? this.currentProgram : null;
+    this.stopSyncTimer();
+    this.config = null;
+    this.index = null;
+    this.isActive = false;
+    this.currentProgram = null;
+    this.nextProgram = null;
+    this.lastSyncTime = 0;
+    return previousProgram;
+  }
+
   private startSyncTimer(): void {
     if (!this.timers) {
+      return;
+    }
+    if (this.syncTimerState.interval !== null) {
       return;
     }
 
