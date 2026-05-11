@@ -75,6 +75,7 @@ Reusable Lineup workflow and boundary skills adapted for Desktop:
 - `parallel-sidecars`
 - `persistence-boundaries`
 - `plex-integration-boundaries`
+- `repo-production-review`
 - `review-adjudication`
 - `review-request`
 - `ui-composition-patterns`
