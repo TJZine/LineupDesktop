@@ -32,7 +32,11 @@ export class DesktopChannelPersistenceStore implements ChannelPersistenceStorage
 
   public async readStoredChannelData(): Promise<string | null> {
     const readResult = await this.readPersistenceFile();
-    if (readResult.status === 'corrupt' || readResult.value.storedChannelData === null) {
+    if (readResult.status === 'corrupt') {
+      await this.clearStoredChannelData();
+      return null;
+    }
+    if (readResult.value.storedChannelData === null) {
       return null;
     }
     return JSON.stringify(readResult.value.storedChannelData);
@@ -65,6 +69,7 @@ export class DesktopChannelPersistenceStore implements ChannelPersistenceStorage
       await this.writePersistenceFile({
         ...existing,
         storedChannelData: null,
+        currentChannelId: null,
       });
     });
   }
@@ -147,7 +152,7 @@ function parseChannelPersistenceFile(content: string): ChannelPersistenceFile {
 }
 
 function isChannelPersistenceFile(value: unknown): value is ChannelPersistenceFile {
-  if (value === null || typeof value !== 'object') {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return false;
   }
   const candidate = value as Partial<ChannelPersistenceFile>;
@@ -159,13 +164,15 @@ function isChannelPersistenceFile(value: unknown): value is ChannelPersistenceFi
 }
 
 function isStoredChannelData(value: unknown): value is StoredChannelData {
-  if (value === null || typeof value !== 'object') {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return false;
   }
   const candidate = value as Partial<StoredChannelData>;
   return (
     Array.isArray(candidate.channels) &&
+    candidate.channels.every((channel) => channel !== null && typeof channel === 'object' && !Array.isArray(channel)) &&
     Array.isArray(candidate.channelOrder) &&
+    candidate.channelOrder.every((channelId) => typeof channelId === 'string') &&
     (candidate.currentChannelId === null || typeof candidate.currentChannelId === 'string') &&
     typeof candidate.savedAt === 'number' &&
     Number.isFinite(candidate.savedAt)

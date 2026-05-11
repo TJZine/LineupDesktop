@@ -8,7 +8,9 @@ function isStoredChannelDataShape(value: unknown): value is Partial<StoredChanne
   const candidate = value as Partial<StoredChannelData>;
   return (
     Array.isArray(candidate.channels) &&
+    candidate.channels.every((channel) => channel !== null && typeof channel === 'object' && !Array.isArray(channel)) &&
     Array.isArray(candidate.channelOrder) &&
+    candidate.channelOrder.every((channelId) => typeof channelId === 'string') &&
     (
       candidate.currentChannelId === undefined ||
       candidate.currentChannelId === null ||

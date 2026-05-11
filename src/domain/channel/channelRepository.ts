@@ -5,6 +5,7 @@ import {
   cloneContentSource,
 } from './channelDomainClone.js';
 import type { ChannelPersistenceStore } from './channelPersistenceStore.js';
+import { CHANNEL_DOMAIN_FORBIDDEN_KEYS } from './channelSafety.js';
 import {
   isValidBuildStrategy,
   isValidContentFilterArray,
@@ -13,7 +14,13 @@ import {
 } from './channelValueValidators.js';
 import { MAX_CHANNEL_NUMBER, MIN_CHANNEL_NUMBER } from './constants.js';
 import type { ChannelClock, ChannelLogger } from './interfaces.js';
-import type { ChannelConfig, ChannelContentSource, ContentFilter, StoredChannelData } from './types.js';
+import type {
+  ChannelConfig,
+  ChannelContentSource,
+  ContentFilter,
+  ManualContentItem,
+  StoredChannelData,
+} from './types.js';
 
 export type LoadedChannelState = {
   data: StoredChannelData;
@@ -332,10 +339,162 @@ function applyPersistedOptionalFields(
 }
 
 function readContentSource(value: unknown): ChannelContentSource | null {
-  if (!isValidContentSource(value)) {
+  const clean = readPersistedContentSource(value);
+  if (clean === null || !isValidContentSource(clean)) {
     return null;
   }
-  return cloneContentSource(value);
+  return cloneContentSource(clean);
+}
+
+const MAX_PERSISTED_CONTENT_SOURCE_DEPTH = 25;
+
+function readPersistedContentSource(value: unknown, depth = 0): ChannelContentSource | null {
+  if (depth > MAX_PERSISTED_CONTENT_SOURCE_DEPTH) {
+    return null;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (hasForbiddenKeys(record)) {
+    return null;
+  }
+
+  switch (record.type) {
+    case 'library':
+      return readPersistedLibrarySource(record);
+    case 'collection':
+      return readPersistedCollectionSource(record);
+    case 'show':
+      return readPersistedShowSource(record);
+    case 'playlist':
+      return readPersistedPlaylistSource(record);
+    case 'manual':
+      return readPersistedManualSource(record);
+    case 'mixed':
+      return readPersistedMixedSource(record, depth);
+    default:
+      return null;
+  }
+}
+
+function readPersistedLibrarySource(record: Record<string, unknown>): ChannelContentSource | null {
+  const libraryFilter = readPersistedLibraryFilter(record.libraryFilter);
+  if (record.libraryFilter !== undefined && libraryFilter === null) {
+    return null;
+  }
+  return {
+    type: 'library',
+    libraryId: record.libraryId,
+    libraryType: record.libraryType,
+    includeWatched: record.includeWatched,
+    ...(libraryFilter !== undefined ? { libraryFilter } : {}),
+  } as ChannelContentSource;
+}
+
+function readPersistedCollectionSource(record: Record<string, unknown>): ChannelContentSource {
+  return {
+    type: 'collection',
+    collectionKey: record.collectionKey,
+    collectionName: record.collectionName,
+  } as ChannelContentSource;
+}
+
+function readPersistedShowSource(record: Record<string, unknown>): ChannelContentSource {
+  return {
+    type: 'show',
+    showKey: record.showKey,
+    showName: record.showName,
+    ...(record.seasonFilter !== undefined ? { seasonFilter: record.seasonFilter } : {}),
+  } as ChannelContentSource;
+}
+
+function readPersistedPlaylistSource(record: Record<string, unknown>): ChannelContentSource {
+  return {
+    type: 'playlist',
+    playlistKey: record.playlistKey,
+    playlistName: record.playlistName,
+  } as ChannelContentSource;
+}
+
+function readPersistedManualSource(record: Record<string, unknown>): ChannelContentSource | null {
+  if (!Array.isArray(record.items)) {
+    return null;
+  }
+  const items: ManualContentItem[] = [];
+  for (const item of record.items) {
+    const cleanItem = readPersistedManualItem(item);
+    if (cleanItem === null) {
+      return null;
+    }
+    items.push(cleanItem);
+  }
+  return { type: 'manual', items };
+}
+
+function readPersistedManualItem(value: unknown): ManualContentItem | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (hasForbiddenKeys(record)) {
+    return null;
+  }
+  return {
+    ratingKey: record.ratingKey,
+    title: record.title,
+    durationMs: record.durationMs,
+  } as ManualContentItem;
+}
+
+function readPersistedMixedSource(
+  record: Record<string, unknown>,
+  depth: number,
+): ChannelContentSource | null {
+  if (!Array.isArray(record.sources)) {
+    return null;
+  }
+  const sources: ChannelContentSource[] = [];
+  for (const source of record.sources) {
+    const cleanSource = readPersistedContentSource(source, depth + 1);
+    if (cleanSource === null) {
+      return null;
+    }
+    sources.push(cleanSource);
+  }
+  return {
+    type: 'mixed',
+    sources,
+    mixMode: record.mixMode,
+  } as ChannelContentSource;
+}
+
+function readPersistedLibraryFilter(value: unknown): Record<string, string | number> | undefined | null {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (hasForbiddenKeys(record)) {
+    return null;
+  }
+  const filter: Record<string, string | number> = {};
+  for (const [key, entry] of Object.entries(record)) {
+    if (typeof entry === 'string') {
+      filter[key] = entry;
+    } else if (typeof entry === 'number' && Number.isFinite(entry)) {
+      filter[key] = entry;
+    } else {
+      return null;
+    }
+  }
+  return filter;
+}
+
+function hasForbiddenKeys(record: Record<string, unknown>): boolean {
+  return Object.keys(record).some((key) => (CHANNEL_DOMAIN_FORBIDDEN_KEYS as readonly string[]).includes(key));
 }
 
 function readTrimmedNonEmptyString(value: unknown): string | null {

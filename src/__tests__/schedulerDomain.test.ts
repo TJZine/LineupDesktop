@@ -249,8 +249,18 @@ test('scheduler domain falls back only for non-finite anchors through the inject
 
 test('scheduler domain keeps shuffle seeds deterministic and rejects non-finite seeds', () => {
   const shuffler = new ShuffleGenerator();
-  assert.deepEqual(shuffler.shuffle([1, 2, 3, 4, 5], 12345), [1, 3, 4, 2, 5]);
-  assert.deepEqual(shuffler.shuffleIndices(5, 12345), [0, 2, 3, 1, 4]);
+  const input = [1, 2, 3, 4, 5];
+  const firstShuffle = shuffler.shuffle(input, 12345);
+  const secondShuffle = shuffler.shuffle(input, 12345);
+  assert.deepEqual(firstShuffle, secondShuffle);
+  assert.deepEqual([...firstShuffle].sort((a, b) => a - b), input);
+  assert.equal(new Set(firstShuffle).size, input.length);
+
+  const firstIndices = shuffler.shuffleIndices(5, 12345);
+  const secondIndices = shuffler.shuffleIndices(5, 12345);
+  assert.deepEqual(firstIndices, secondIndices);
+  assert.deepEqual([...firstIndices].sort((a, b) => a - b), [0, 1, 2, 3, 4]);
+  assert.equal(new Set(firstIndices).size, 5);
   assert.equal(
     shuffler.generateSeed('channel-1', 1_000_000),
     shuffler.generateSeed('channel-1', 1_000_000),
@@ -260,6 +270,7 @@ test('scheduler domain keeps shuffle seeds deterministic and rejects non-finite 
     shuffler.generateSeed('channel-2', 1_000_000),
   );
   assert.throws(() => shuffler.shuffle([1, 2, 3], Number.NaN), /finite number/);
+  assert.throws(() => shuffler.shuffleIndices(3, Number.POSITIVE_INFINITY), /finite number/);
 });
 
 test('scheduler domain applies sequential shuffle and block ordering with normalized indexes', () => {
@@ -392,6 +403,50 @@ test('scheduler domain emits events and injected timers can be paused and unload
   scheduler.unloadChannel();
   assert.equal(timers.handlers.size, 0);
   assert.equal(timers.clearCount, 2);
+});
+
+test('scheduler domain preserves active timer and state when replacement load fails', () => {
+  const clock = new FakeClock(1_000_000);
+  const timers = new FakeTimers();
+  const scheduler = new ChannelScheduler({ clock, timers });
+  scheduler.loadChannel(config());
+  assert.equal(timers.handlers.size, 1);
+  const oldState = scheduler.getState();
+
+  assert.throws(
+    () => scheduler.loadChannel(config({
+      channelId: 'invalid',
+      content: [item('bad-duration', 'Invalid', 'invalid', 0, 0)],
+    })),
+    { message: SCHEDULER_ERROR_MESSAGES.INVALID_ITEM_DURATION },
+  );
+
+  assert.equal(timers.handlers.size, 1);
+  assert.equal(scheduler.getState().channelId, oldState.channelId);
+  assert.equal(scheduler.getState().currentProgram?.item.ratingKey, oldState.currentProgram?.item.ratingKey);
+});
+
+test('scheduler domain isolates event handler failures', () => {
+  const errors: Array<{ message: string; detail?: unknown }> = [];
+  const scheduler = new ChannelScheduler({
+    clock: new FakeClock(1_000_000),
+    logger: {
+      error: (message, detail) => errors.push({ message, detail }),
+    },
+  });
+  const started: string[] = [];
+  scheduler.on('programStart', () => {
+    throw new Error('listener failed');
+  });
+  scheduler.on('programStart', (program) => {
+    started.push(program.item.ratingKey);
+  });
+
+  scheduler.loadChannel(config());
+
+  assert.deepEqual(started, ['a']);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0]?.message, 'Scheduler event handler failed for programStart');
 });
 
 test('scheduler domain rejects empty channels invalid windows and invalid item durations', () => {

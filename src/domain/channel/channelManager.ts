@@ -6,7 +6,11 @@ import { ChannelImportExportService } from './channelImportExportService.js';
 import { ChannelResolutionCache } from './channelResolutionCache.js';
 import { ChannelRetryScheduler } from './channelRetryScheduler.js';
 import { ContentResolver } from './contentResolver.js';
-import { CHANNEL_ERROR_MESSAGES } from './constants.js';
+import {
+  CHANNEL_ERROR_MESSAGES,
+  MAX_CHANNEL_NUMBER,
+  MIN_CHANNEL_NUMBER,
+} from './constants.js';
 import type {
   ChannelCreateOptions,
   ChannelLogger,
@@ -63,6 +67,8 @@ class ChannelEventOwner {
     persistenceWarning: [],
   };
 
+  public constructor(private readonly logger: ChannelLogger) {}
+
   public on<K extends keyof ChannelManagerEventMap>(
     event: K,
     handler: (payload: ChannelManagerEventMap[K]) => void,
@@ -75,7 +81,11 @@ class ChannelEventOwner {
 
   public emit<K extends keyof ChannelManagerEventMap>(event: K, payload: ChannelManagerEventMap[K]): void {
     for (const handler of [...this.handlers[event]]) {
-      handler(payload);
+      try {
+        handler(payload);
+      } catch (error) {
+        this.logger.error(`Channel event handler failed for ${event}`, summarizeError(error));
+      }
     }
   }
 
@@ -99,7 +109,7 @@ class ChannelEventOwner {
 }
 
 export class ChannelManager implements IChannelManager {
-  private readonly emitter = new ChannelEventOwner();
+  private readonly emitter: ChannelEventOwner;
   private readonly contentResolver: ContentResolver;
   private readonly authoring: ChannelAuthoringService;
   private readonly importExport: ChannelImportExportService;
@@ -117,6 +127,7 @@ export class ChannelManager implements IChannelManager {
 
   public constructor(private readonly config: ChannelManagerConfig) {
     this.logger = config.logger ?? NOOP_LOGGER;
+    this.emitter = new ChannelEventOwner(this.logger);
     this.persistence = config.persistence ?? null;
     this.contentResolver = new ContentResolver(config.plexLibrary, config.clock, this.logger);
     this.authoring = new ChannelAuthoringService({
@@ -203,7 +214,7 @@ export class ChannelManager implements IChannelManager {
       const acceptedCandidate = await this.acceptCandidateState({
         channels: candidateChannels,
         channelOrder: candidateOrder,
-        currentChannelId: this.state.currentChannelId,
+        currentChannelId: this.state.currentChannelId ?? channel.id,
       });
 
       this.commitState(
@@ -901,13 +912,27 @@ export function isValidChannelConfig(value: unknown): value is ChannelConfig {
     typeof channel.id === 'string' &&
     typeof channel.number === 'number' &&
     Number.isInteger(channel.number) &&
+    channel.number >= MIN_CHANNEL_NUMBER &&
+    channel.number <= MAX_CHANNEL_NUMBER &&
     typeof channel.name === 'string' &&
     typeof channel.startTimeAnchor === 'number' &&
+    Number.isFinite(channel.startTimeAnchor) &&
+    channel.startTimeAnchor >= 0 &&
     typeof channel.createdAt === 'number' &&
+    Number.isFinite(channel.createdAt) &&
+    channel.createdAt >= 0 &&
     typeof channel.updatedAt === 'number' &&
+    Number.isFinite(channel.updatedAt) &&
+    channel.updatedAt >= 0 &&
     typeof channel.lastContentRefresh === 'number' &&
+    Number.isFinite(channel.lastContentRefresh) &&
+    channel.lastContentRefresh >= 0 &&
     typeof channel.itemCount === 'number' &&
+    Number.isFinite(channel.itemCount) &&
+    channel.itemCount >= 0 &&
     typeof channel.totalDurationMs === 'number' &&
+    Number.isFinite(channel.totalDurationMs) &&
+    channel.totalDurationMs >= 0 &&
     typeof channel.skipIntros === 'boolean' &&
     typeof channel.skipCredits === 'boolean' &&
     typeof channel.playbackMode === 'string' &&

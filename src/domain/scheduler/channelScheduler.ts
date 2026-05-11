@@ -29,7 +29,12 @@ export interface ChannelSchedulerOptions {
   shuffler?: IShuffleGenerator;
   clock: SchedulerClock;
   timers?: SchedulerTimerPort;
+  logger?: { error(message: string, detail?: unknown): void };
 }
+
+const NOOP_LOGGER: Required<Pick<ChannelSchedulerOptions, 'logger'>>['logger'] = {
+  error: () => undefined,
+};
 
 class SchedulerEventOwner {
   private readonly handlers: {
@@ -39,6 +44,8 @@ class SchedulerEventOwner {
     programEnd: [],
     scheduleSync: [],
   };
+
+  public constructor(private readonly logger: { error(message: string, detail?: unknown): void }) {}
 
   public on<K extends keyof SchedulerEventMap>(
     event: K,
@@ -60,7 +67,11 @@ class SchedulerEventOwner {
 
   public emit<K extends keyof SchedulerEventMap>(event: K, payload: SchedulerEventMap[K]): void {
     for (const handler of [...this.handlers[event]]) {
-      handler(payload);
+      try {
+        handler(payload);
+      } catch (error) {
+        this.logger.error(`Scheduler event handler failed for ${event}`, summarizeError(error));
+      }
     }
   }
 
@@ -79,10 +90,11 @@ function isShuffleGenerator(value: IShuffleGenerator | ChannelSchedulerOptions):
 }
 
 export class ChannelScheduler implements IChannelScheduler {
-  private readonly emitter = new SchedulerEventOwner();
+  private readonly emitter: SchedulerEventOwner;
   private readonly shuffler: IShuffleGenerator;
   private readonly clock: SchedulerClock;
   private readonly timers: SchedulerTimerPort | null;
+  private readonly logger: { error(message: string, detail?: unknown): void };
 
   private config: ScheduleConfig | null = null;
   private index: ScheduleIndex | null = null;
@@ -109,6 +121,8 @@ export class ChannelScheduler implements IChannelScheduler {
     this.shuffler = options?.shuffler ?? new ShuffleGenerator();
     this.clock = options.clock;
     this.timers = options?.timers ?? null;
+    this.logger = options.logger ?? NOOP_LOGGER;
+    this.emitter = new SchedulerEventOwner(this.logger);
   }
 
   public loadChannel(config: ScheduleConfig): void {
@@ -116,16 +130,20 @@ export class ChannelScheduler implements IChannelScheduler {
       throw new Error(SCHEDULER_ERROR_MESSAGES.EMPTY_CHANNEL);
     }
 
-    this.stopSyncTimer();
-
     const now = this.clock.now();
     const anchorTime = Number.isFinite(config.anchorTime) ? config.anchorTime : now;
-    this.config = { ...config, anchorTime };
-    this.index = buildScheduleIndex(this.config, this.shuffler, now);
+    const nextConfig = { ...config, anchorTime };
+    const nextIndex = buildScheduleIndex(nextConfig, this.shuffler, now);
+    const nextCurrentProgram = calculateProgramAtTime(now, nextIndex, nextConfig.anchorTime, now);
+    const nextProgram = calculateNextProgram(nextCurrentProgram, nextIndex, nextConfig.anchorTime, now);
+
+    this.stopSyncTimer();
+    this.config = nextConfig;
+    this.index = nextIndex;
     this.isActive = true;
     this.lastSyncTime = now;
-    this.currentProgram = this.getProgramAtTimeForCurrentTime(now, now);
-    this.nextProgram = calculateNextProgram(this.currentProgram, this.index, this.config.anchorTime);
+    this.currentProgram = nextCurrentProgram;
+    this.nextProgram = nextProgram;
 
     this.startSyncTimer();
     this.emitter.emit('programStart', this.currentProgram);
@@ -451,4 +469,11 @@ export class ChannelScheduler implements IChannelScheduler {
       detectedDriftMs: now - previousEndTime,
     });
   }
+}
+
+function summarizeError(error: unknown): unknown {
+  if (error instanceof Error) {
+    return { name: error.name, message: error.message };
+  }
+  return error;
 }

@@ -84,6 +84,7 @@ class MemoryChannelStorage implements ChannelPersistenceStoragePort {
   public async clearStoredChannelData(): Promise<void> {
     this.clearCount++;
     this.storedChannelData = null;
+    this.currentChannelId = null;
   }
 
   public async readCurrentChannelId(): Promise<string | null> {
@@ -107,6 +108,9 @@ test('channel persistence codec decodes only stored channel data shape', () => {
   assert.equal(decodeStoredChannelData('{bad-json'), null);
   assert.equal(decodeStoredChannelData(JSON.stringify({ channels: [] })), null);
   assert.equal(decodeStoredChannelData(JSON.stringify({ channelOrder: [] })), null);
+  assert.equal(decodeStoredChannelData(JSON.stringify({ channels: [null], channelOrder: [] })), null);
+  assert.equal(decodeStoredChannelData(JSON.stringify({ channels: [[]], channelOrder: [] })), null);
+  assert.equal(decodeStoredChannelData(JSON.stringify({ channels: [], channelOrder: [1] })), null);
   assert.equal(decodeStoredChannelData(JSON.stringify({ channels: [], channelOrder: [], currentChannelId: 1 })), null);
   assert.equal(decodeStoredChannelData(JSON.stringify({ channels: [], channelOrder: [], savedAt: Number.NaN })), null);
   assert.equal(decodeStoredChannelData(JSON.stringify({ channels: [], channelOrder: [], savedAt: Infinity })), null);
@@ -117,12 +121,16 @@ test('channel persistence store cleans empty and malformed records', async () =>
   const store = new ChannelPersistenceStore(storage);
 
   storage.storedChannelData = '';
+  storage.currentChannelId = 'stale-current';
   assert.equal(await store.readStoredChannelData(), null);
   assert.equal(storage.clearCount, 1);
+  assert.equal(storage.currentChannelId, null);
 
   storage.storedChannelData = '{bad-json';
+  storage.currentChannelId = 'stale-current';
   assert.equal(await store.readStoredChannelData(), null);
   assert.equal(storage.clearCount, 2);
+  assert.equal(storage.currentChannelId, null);
 
   storage.currentChannelId = '  channel-1  ';
   assert.equal(await store.readCurrentChannelId(), 'channel-1');
@@ -144,6 +152,10 @@ test('channel persistence repository normalizes malformed persisted channel stat
     channels: [
       {
         ...channel('alpha', 9),
+        contentSource: {
+          ...channel('alpha', 9).contentSource,
+          extra: 'legacy',
+        },
         shuffleSeed: Number.NaN,
         phaseSeed: undefined,
         rawMediaUrl: 'blocked',
@@ -158,8 +170,15 @@ test('channel persistence repository normalizes malformed persisted channel stat
       channel('beta', 9),
       { ...channel('drop-invalid-source', 10), contentSource: { type: 'library' } },
       {
+        ...channel('drop-forbidden-source', 11),
+        contentSource: {
+          ...channel('drop-forbidden-source', 11).contentSource,
+          authHeaders: 'blocked',
+        },
+      },
+      {
         id: 'drop-missing-name',
-        number: 12,
+        number: 13,
         contentSource: channel('drop-missing-name', 12).contentSource,
         playbackMode: 'sequential',
         startTimeAnchor: 1_000,
@@ -171,10 +190,9 @@ test('channel persistence repository normalizes malformed persisted channel stat
         itemCount: 1,
         totalDurationMs: 60_000,
       },
-      { ...channel('drop-missing-mode', 13), playbackMode: undefined },
-      { ...channel('drop-missing-skips', 14), skipIntros: undefined },
-      { ...channel('alpha', 11), name: 'Duplicate id' },
-      null,
+      { ...channel('drop-missing-mode', 14), playbackMode: undefined },
+      { ...channel('drop-missing-skips', 15), skipIntros: undefined },
+      { ...channel('alpha', 16), name: 'Duplicate id' },
     ],
     channelOrder: ['missing', 'beta', 'beta', 'alpha'],
     currentChannelId: 'missing',
@@ -193,6 +211,8 @@ test('channel persistence repository normalizes malformed persisted channel stat
   assert.equal(Number.isFinite(loaded.data.channels[0]?.shuffleSeed), true);
   assert.equal(Number.isFinite(loaded.data.channels[0]?.phaseSeed), true);
   assert.equal(loaded.data.channels[0]?.sortOrder, undefined);
+  assert.equal(loaded.data.channels[0]?.contentFilters, undefined);
+  assert.equal(Object.prototype.hasOwnProperty.call(loaded.data.channels[0]?.contentSource, 'extra'), false);
   assert.deepEqual(auditChannelDomainValueForForbiddenFields(loaded.data.channels[0]), []);
 });
 
@@ -595,6 +615,35 @@ test('desktop channel persistence store writes a separate versioned temp-file-ba
 
   await fs.writeFile(persistenceFilePath, '{"schemaVersion":1,"storedChannelData":"bad"}\n');
   assert.equal(await domainStore.readStoredChannelData(), null);
+});
+
+test('desktop channel persistence store clears separate current-channel pointer with malformed stored data', async () => {
+  const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-channel-persistence-'));
+  const persistenceFilePath = path.join(temporaryDirectory, 'channels.json');
+  const domainStore = new ChannelPersistenceStore(new DesktopChannelPersistenceStore({ persistenceFilePath }));
+
+  await fs.writeFile(
+    persistenceFilePath,
+    JSON.stringify({
+      schemaVersion: 1,
+      storedChannelData: {
+        channels: [null],
+        channelOrder: [],
+        currentChannelId: 'one',
+        savedAt: 11,
+      },
+      currentChannelId: 'one',
+    }),
+  );
+
+  assert.equal(await domainStore.readStoredChannelData(), null);
+  assert.equal(await domainStore.readCurrentChannelId(), null);
+  const persisted = JSON.parse(await fs.readFile(persistenceFilePath, 'utf8')) as {
+    storedChannelData?: unknown;
+    currentChannelId?: unknown;
+  };
+  assert.equal(persisted.storedChannelData, null);
+  assert.equal(persisted.currentChannelId, null);
 });
 
 test('desktop channel persistence store validates savedAt and currentChannelId metadata', async () => {

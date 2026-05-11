@@ -60,6 +60,8 @@ const FILTER_OPERATORS = [
   'notContains',
 ] as const satisfies readonly FilterOperator[];
 
+const CONTENT_FILTER_KEYS = ['field', 'operator', 'value'] as const;
+
 function includesValue<const T extends readonly string[]>(values: T, value: unknown): value is T[number] {
   return typeof value === 'string' && (values as readonly string[]).includes(value);
 }
@@ -97,6 +99,7 @@ export function isValidContentFilter(value: unknown): value is ContentFilter {
   }
   const filter = value as Record<string, unknown>;
   return (
+    Object.keys(filter).every((key) => (CONTENT_FILTER_KEYS as readonly string[]).includes(key)) &&
     isValidFilterField(filter.field) &&
     isValidFilterOperator(filter.operator) &&
     isValidFilterValue(filter.value)

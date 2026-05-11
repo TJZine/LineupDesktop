@@ -11,11 +11,21 @@ import {
   MAX_CHANNEL_NUMBER,
   MIN_CHANNEL_NUMBER,
 } from './constants.js';
+import {
+  isValidBuildStrategy,
+  isValidContentFilterArray,
+  isValidPlaybackMode,
+  isValidSortOrder,
+} from './channelValueValidators.js';
 import type {
+  BuildStrategy,
   ChannelConfig,
   ChannelContentSource,
   ChannelCreateInput,
   ChannelUpdateInput,
+  ContentFilter,
+  PlaybackMode,
+  SortOrder,
 } from './types.js';
 
 type ChannelAuthoringServiceConfig = {
@@ -67,20 +77,25 @@ export class ChannelAuthoringService {
       throw new ChannelError('MAX_CHANNELS_REACHED', CHANNEL_ERROR_MESSAGES.MAX_CHANNELS_REACHED);
     }
 
-    const channelNumber =
-      typeof input.number === 'number'
-        ? this.validateRequestedNumber(input.number, channels)
-        : this.getNextAvailableNumber(channels);
     const now = this.now();
+    const playbackMode = this.validatePlaybackMode(input.playbackMode, 'playbackMode') ?? 'sequential';
+    const startTimeAnchor = this.validateStartTimeAnchor(input.startTimeAnchor, now);
+    const validatedInput = this.validateOptionalFields(input, playbackMode, 'create');
+    const channelNumber =
+      validatedInput.number !== undefined
+        ? this.validateRequestedNumber(validatedInput.number, channels)
+        : this.getNextAvailableNumber(channels);
     const channel: ChannelConfig = {
       id: this.generateId(),
       number: channelNumber,
-      name: typeof input.name === 'string' && input.name.length > 0 ? input.name : `Channel ${channelNumber}`,
+      name: typeof validatedInput.name === 'string' && validatedInput.name.length > 0
+        ? validatedInput.name
+        : `Channel ${channelNumber}`,
       contentSource: cloneContentSource(contentSource),
-      playbackMode: input.playbackMode || 'sequential',
-      startTimeAnchor: typeof input.startTimeAnchor === 'number' ? input.startTimeAnchor : now,
-      skipIntros: input.skipIntros === true,
-      skipCredits: input.skipCredits === true,
+      playbackMode,
+      startTimeAnchor,
+      skipIntros: validatedInput.skipIntros === true,
+      skipCredits: validatedInput.skipCredits === true,
       createdAt: now,
       updatedAt: now,
       lastContentRefresh: 0,
@@ -88,7 +103,7 @@ export class ChannelAuthoringService {
       totalDurationMs: 0,
     };
 
-    this.applyOptionalFields(channel, input);
+    this.applyOptionalFields(channel, validatedInput);
     this.applySeedDefaults(channel);
     return channel;
   }
@@ -152,21 +167,19 @@ export class ChannelAuthoringService {
     existingChannels: Iterable<ChannelConfig>,
   ): ChannelConfig {
     const filteredUpdates = omitUndefinedChannelUpdates(updates);
-    if (typeof filteredUpdates.number === 'number' && filteredUpdates.number !== channel.number) {
-      this.validateRequestedNumber(filteredUpdates.number, existingChannels);
-    }
-
     const hasContentSourceUpdate = Object.prototype.hasOwnProperty.call(filteredUpdates, 'contentSource');
     const contentSourceUpdate = hasContentSourceUpdate
       ? this.validateContentSource(filteredUpdates.contentSource)
       : undefined;
+    const playbackMode = this.validatePlaybackMode(filteredUpdates.playbackMode, 'playbackMode') ?? channel.playbackMode;
+    const validatedUpdates = this.validateOptionalFields(filteredUpdates, playbackMode, 'update', channel);
+    if (validatedUpdates.number !== undefined && validatedUpdates.number !== channel.number) {
+      this.validateRequestedNumber(validatedUpdates.number, existingChannels);
+    }
     const clonedUpdates: ChannelUpdateInput = {
-      ...filteredUpdates,
+      ...validatedUpdates,
       ...(hasContentSourceUpdate && contentSourceUpdate
         ? { contentSource: cloneContentSource(contentSourceUpdate) }
-        : {}),
-      ...(filteredUpdates.contentFilters
-        ? { contentFilters: cloneContentFilters(filteredUpdates.contentFilters) }
         : {}),
     };
 
@@ -243,6 +256,8 @@ export class ChannelAuthoringService {
       Number.isFinite(input.blockSize)
     ) {
       channel.blockSize = Math.max(1, Math.floor(input.blockSize));
+    } else if (channel.playbackMode !== 'block') {
+      delete channel.blockSize;
     }
     if (input.contentFilters !== undefined) {
       channel.contentFilters = cloneContentFilters(input.contentFilters);
@@ -250,6 +265,210 @@ export class ChannelAuthoringService {
     if (input.sortOrder !== undefined) channel.sortOrder = input.sortOrder;
     if (input.maxEpisodeRunTimeMs !== undefined) channel.maxEpisodeRunTimeMs = input.maxEpisodeRunTimeMs;
     if (input.minEpisodeRunTimeMs !== undefined) channel.minEpisodeRunTimeMs = input.minEpisodeRunTimeMs;
+  }
+
+  private validateOptionalFields(
+    input: Partial<ChannelCreateInput>,
+    finalPlaybackMode: PlaybackMode,
+    mode: 'create' | 'update',
+    existingChannel?: ChannelConfig,
+  ): Partial<ChannelCreateInput> {
+    const validated: Partial<ChannelCreateInput> = {};
+
+    if (input.number !== undefined) {
+      validated.number = this.requireNumberInput(input.number);
+    }
+    if (input.name !== undefined) {
+      validated.name = mode === 'create'
+        ? this.requireString(input.name, 'name')
+        : this.requireNonEmptyString(input.name, 'name');
+    }
+    if (input.description !== undefined) {
+      validated.description = this.requireString(input.description, 'description');
+    }
+    if (input.icon !== undefined) {
+      validated.icon = this.requireString(input.icon, 'icon');
+    }
+    if (input.color !== undefined) {
+      validated.color = this.requireString(input.color, 'color');
+    }
+    if (input.sourceLibraryId !== undefined) {
+      validated.sourceLibraryId = this.requireString(input.sourceLibraryId, 'sourceLibraryId');
+    }
+    if (input.sourceLibraryName !== undefined) {
+      validated.sourceLibraryName = this.requireString(input.sourceLibraryName, 'sourceLibraryName');
+    }
+    if (input.isAutoGenerated !== undefined) {
+      validated.isAutoGenerated = this.requireBoolean(input.isAutoGenerated, 'isAutoGenerated');
+    }
+    if (input.isPlaybackModeVariant !== undefined) {
+      validated.isPlaybackModeVariant = this.requireBoolean(
+        input.isPlaybackModeVariant,
+        'isPlaybackModeVariant',
+      );
+    }
+    if (input.skipIntros !== undefined) {
+      validated.skipIntros = this.requireBoolean(input.skipIntros, 'skipIntros');
+    }
+    if (input.skipCredits !== undefined) {
+      validated.skipCredits = this.requireBoolean(input.skipCredits, 'skipCredits');
+    }
+
+    if (input.playbackMode !== undefined) {
+      validated.playbackMode = this.requirePlaybackMode(input.playbackMode, 'playbackMode');
+    }
+    if (input.startTimeAnchor !== undefined) {
+      validated.startTimeAnchor = this.requireNonNegativeFiniteNumber(input.startTimeAnchor, 'startTimeAnchor');
+    }
+    if (input.buildStrategy !== undefined) {
+      validated.buildStrategy = this.requireBuildStrategy(input.buildStrategy, 'buildStrategy');
+    }
+    if (input.contentFilters !== undefined) {
+      validated.contentFilters = this.requireContentFilters(input.contentFilters, 'contentFilters');
+    }
+    if (input.sortOrder !== undefined) {
+      validated.sortOrder = this.requireSortOrder(input.sortOrder, 'sortOrder');
+    }
+    if (input.lineupReplicaIndex !== undefined) {
+      validated.lineupReplicaIndex = this.requireNonNegativeFiniteNumber(
+        input.lineupReplicaIndex,
+        'lineupReplicaIndex',
+      );
+    }
+    if (input.shuffleSeed !== undefined) {
+      validated.shuffleSeed = this.requireFiniteNumber(input.shuffleSeed, 'shuffleSeed');
+    }
+    if (input.phaseSeed !== undefined) {
+      validated.phaseSeed = this.requireFiniteNumber(input.phaseSeed, 'phaseSeed');
+    }
+    if (input.blockSize !== undefined) {
+      if (finalPlaybackMode !== 'block') {
+        this.throwStorageValidation('blockSize may only be provided when playbackMode is block');
+      }
+      validated.blockSize = this.requireFiniteNumber(input.blockSize, 'blockSize');
+    }
+    if (input.maxEpisodeRunTimeMs !== undefined) {
+      validated.maxEpisodeRunTimeMs = this.requirePositiveInteger(
+        input.maxEpisodeRunTimeMs,
+        'maxEpisodeRunTimeMs',
+      );
+    }
+    if (input.minEpisodeRunTimeMs !== undefined) {
+      validated.minEpisodeRunTimeMs = this.requirePositiveInteger(
+        input.minEpisodeRunTimeMs,
+        'minEpisodeRunTimeMs',
+      );
+    }
+
+    const finalMin = validated.minEpisodeRunTimeMs ?? existingChannel?.minEpisodeRunTimeMs;
+    const finalMax = validated.maxEpisodeRunTimeMs ?? existingChannel?.maxEpisodeRunTimeMs;
+    if (finalMin !== undefined && finalMax !== undefined && finalMin > finalMax) {
+      this.throwStorageValidation('minEpisodeRunTimeMs must be less than or equal to maxEpisodeRunTimeMs');
+    }
+
+    return validated;
+  }
+
+  private validatePlaybackMode(value: unknown, fieldName: string): PlaybackMode | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+    return this.requirePlaybackMode(value, fieldName);
+  }
+
+  private validateStartTimeAnchor(value: unknown, fallback: number): number {
+    if (value === undefined) {
+      return fallback;
+    }
+    return this.requireNonNegativeFiniteNumber(value, 'startTimeAnchor');
+  }
+
+  private requirePlaybackMode(value: unknown, fieldName: string): PlaybackMode {
+    if (!isValidPlaybackMode(value)) {
+      this.throwStorageValidation(`${fieldName} must be a valid playback mode`);
+    }
+    return value;
+  }
+
+  private requireNumberInput(value: unknown): number {
+    if (typeof value !== 'number') {
+      this.throwStorageValidation('number must be a number');
+    }
+    return value;
+  }
+
+  private requireString(value: unknown, fieldName: string): string {
+    if (typeof value !== 'string') {
+      this.throwStorageValidation(`${fieldName} must be a string`);
+    }
+    return value;
+  }
+
+  private requireNonEmptyString(value: unknown, fieldName: string): string {
+    const stringValue = this.requireString(value, fieldName);
+    if (stringValue.length === 0) {
+      this.throwStorageValidation(`${fieldName} must be non-empty`);
+    }
+    return stringValue;
+  }
+
+  private requireBoolean(value: unknown, fieldName: string): boolean {
+    if (typeof value !== 'boolean') {
+      this.throwStorageValidation(`${fieldName} must be a boolean`);
+    }
+    return value;
+  }
+
+  private requireBuildStrategy(value: unknown, fieldName: string): BuildStrategy {
+    if (!isValidBuildStrategy(value)) {
+      this.throwStorageValidation(`${fieldName} must be a valid build strategy`);
+    }
+    return value;
+  }
+
+  private requireContentFilters(value: unknown, fieldName: string): ContentFilter[] {
+    if (!isValidContentFilterArray(value)) {
+      this.throwStorageValidation(`${fieldName} must be an array of valid content filters`);
+    }
+    return cloneContentFilters(value);
+  }
+
+  private requireSortOrder(value: unknown, fieldName: string): SortOrder {
+    if (!isValidSortOrder(value)) {
+      this.throwStorageValidation(`${fieldName} must be a valid sort order`);
+    }
+    return value;
+  }
+
+  private requireFiniteNumber(value: unknown, fieldName: string): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      this.throwStorageValidation(`${fieldName} must be a finite number`);
+    }
+    return value;
+  }
+
+  private requireNonNegativeFiniteNumber(value: unknown, fieldName: string): number {
+    const numberValue = this.requireFiniteNumber(value, fieldName);
+    if (numberValue < 0) {
+      this.throwStorageValidation(`${fieldName} must be greater than or equal to 0`);
+    }
+    return numberValue;
+  }
+
+  private requirePositiveInteger(value: unknown, fieldName: string): number {
+    if (
+      typeof value !== 'number' ||
+      !Number.isFinite(value) ||
+      !Number.isInteger(value) ||
+      value <= 0
+    ) {
+      this.throwStorageValidation(`${fieldName} must be a positive integer`);
+    }
+    return value;
+  }
+
+  private throwStorageValidation(message: string): never {
+    throw new ChannelError('STORAGE_VALIDATION_FAILED', message);
   }
 
   private validateContentSource(source: unknown): ChannelContentSource {

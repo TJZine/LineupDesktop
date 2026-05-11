@@ -9,6 +9,10 @@ export interface ChannelPersistenceStoragePort {
    * snapshot in the same mutation.
    */
   writeStoredChannelData(encoded: string): Promise<void>;
+  /**
+   * Clears the stored channel snapshot and any separate current-channel pointer
+   * in one storage mutation.
+   */
   clearStoredChannelData(): Promise<void>;
   readCurrentChannelId(): Promise<string | null>;
   writeCurrentChannelId(channelId: string | null): Promise<void>;

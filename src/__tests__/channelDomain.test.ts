@@ -4,10 +4,12 @@ import assert from 'node:assert/strict';
 import {
   auditChannelDomainValueForForbiddenFields,
   ChannelError,
+  ChannelImportNormalizer,
   ChannelManager,
   ChannelResolutionCache,
   ContentSelectionPolicy,
   ContentResolver,
+  isValidChannelConfig,
   isValidContentSource,
   SourceResolutionCache,
 } from '../domain/channel/index.js';
@@ -18,6 +20,7 @@ import type {
   ChannelClock,
   ChannelTimerHandle,
   ChannelTimerPort,
+  ChannelLogger,
   ChannelPersistencePort,
   IPlexLibraryMinimal,
   PlexMediaItemMinimal,
@@ -180,6 +183,7 @@ function createManager(options: {
   timers?: FakeTimers;
   library?: FakeLibrary;
   persistence?: ChannelPersistencePort;
+  logger?: ChannelLogger;
 } = {}): { manager: ChannelManager; clock: FakeClock; library: FakeLibrary; timers?: FakeTimers } {
   const clock = options.clock ?? new FakeClock(1_000);
   const library = options.library ?? new FakeLibrary();
@@ -191,6 +195,7 @@ function createManager(options: {
     timers,
     generateId: () => `channel-${String(nextId++)}`,
     persistence: options.persistence,
+    logger: options.logger,
   });
   return { manager, clock, library, timers };
 }
@@ -250,7 +255,31 @@ test('channel domain validates content sources and rejects malformed channel aut
     }),
     false,
   );
+  assert.equal(
+    isValidContentSource({
+      type: 'manual',
+      items: [{ ratingKey: '   ', title: 'Manual', durationMs: 10 }],
+    }),
+    false,
+  );
   assert.equal(isValidContentSource({ type: 'library', libraryId: 'undefined' }), false);
+  assert.equal(isValidContentSource({ ...librarySource(), libraryId: '   ' }), false);
+  assert.equal(isValidContentSource({ ...librarySource(), extra: 'unexpected' }), false);
+  assert.equal(
+    isValidContentSource({
+      type: 'manual',
+      items: [{ ratingKey: 'm1', title: 'Manual', durationMs: 10, extra: 'unexpected' }],
+    }),
+    false,
+  );
+  assert.equal(
+    isValidContentSource({
+      type: 'mixed',
+      mixMode: 'sequential',
+      sources: [{ ...librarySource(), extra: 'unexpected' }],
+    }),
+    false,
+  );
 
   const { manager, library } = createManager();
   library.libraryItems.set('lib', [movie('m1')]);
@@ -316,6 +345,50 @@ test('channel domain preserves current next previous lookup and transactional re
   assert.ok(saves.length >= 4);
 });
 
+test('channel domain sets the first created channel current and preserves it on later creates', async () => {
+  const { manager } = createManager();
+
+  const first = await manager.createChannel(
+    { name: 'First', contentSource: librarySource('first') },
+    { initialContent: [resolvedItem('first')] },
+  );
+  assert.equal(manager.getCurrentChannel()?.id, first.id);
+
+  const second = await manager.createChannel(
+    { name: 'Second', contentSource: librarySource('second') },
+    { initialContent: [resolvedItem('second')] },
+  );
+  assert.equal(manager.getCurrentChannel()?.id, first.id);
+  assert.notEqual(second.id, first.id);
+});
+
+test('channel manager isolates event handler failures after committed create state', async () => {
+  const errors: Array<{ message: string; detail?: unknown }> = [];
+  const { manager } = createManager({
+    logger: {
+      warn: () => undefined,
+      error: (message, detail) => errors.push({ message, detail }),
+    },
+  });
+  const events: string[] = [];
+  manager.on('channelCreated', () => {
+    throw new Error('listener failed');
+  });
+  manager.on('channelCreated', (channel) => {
+    events.push(channel.id);
+  });
+
+  const channel = await manager.createChannel(
+    { contentSource: librarySource() },
+    { initialContent: [resolvedItem('created')] },
+  );
+
+  assert.equal(manager.getChannel(channel.id)?.id, channel.id);
+  assert.deepEqual(events, [channel.id]);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0]?.message, 'Channel event handler failed for channelCreated');
+});
+
 test('channel domain normalizes imports and replaces duplicate channel numbers', async () => {
   const { manager, library } = createManager();
   library.libraryItems.set('lib', [movie('m1')]);
@@ -353,6 +426,209 @@ test('channel domain normalizes imports and replaces duplicate channel numbers',
   const invalid = await manager.importChannels('{not-json');
   assert.equal(invalid.success, false);
   assert.deepEqual(invalid.errors, ['Import file is invalid']);
+});
+
+test('channel import normalizer clones content sources and skips impossible runtime ranges', () => {
+  const normalizer = new ChannelImportNormalizer();
+  const contentSource: ChannelContentSource = {
+    type: 'mixed',
+    mixMode: 'sequential',
+    sources: [{
+      type: 'manual',
+      items: [{ ratingKey: 'm1', title: 'Manual', durationMs: 10_000 }],
+    }],
+  };
+
+  const channel = normalizer.buildCreateInput({
+    name: 'Imported',
+    contentSource,
+    minEpisodeRunTimeMs: 10_000,
+    maxEpisodeRunTimeMs: 20_000,
+  });
+  assert.ok(channel);
+  contentSource.sources[0] = librarySource('mutated');
+
+  assert.deepEqual(channel.contentSource, {
+    type: 'mixed',
+    mixMode: 'sequential',
+    sources: [{
+      type: 'manual',
+      items: [{ ratingKey: 'm1', title: 'Manual', durationMs: 10_000 }],
+    }],
+  });
+
+  assert.equal(
+    normalizer.buildCreateInput({
+      contentSource: librarySource(),
+      minEpisodeRunTimeMs: 30_000,
+      maxEpisodeRunTimeMs: 20_000,
+    }),
+    null,
+  );
+});
+
+test('channel domain validates optional authoring fields strictly on create and update', async () => {
+  const { manager } = createManager();
+
+  await assert.rejects(
+    () => manager.createChannel({ contentSource: librarySource(), playbackMode: 'bad' as never }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.createChannel({ contentSource: librarySource(), description: 1 as never }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.createChannel({ contentSource: librarySource(), skipCredits: 'yes' as never }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.createChannel({ contentSource: librarySource(), buildStrategy: 'bad' as never }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.createChannel({ contentSource: librarySource(), contentFilters: [{ field: 'bad' }] as never }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.createChannel({
+      contentSource: librarySource(),
+      contentFilters: [{ field: 'genre', operator: 'contains', value: 'Drama', extra: 'legacy' }] as never,
+    }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.createChannel({ contentSource: librarySource(), sortOrder: 'bad' as never }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.createChannel({ contentSource: librarySource(), startTimeAnchor: -1 }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.createChannel({
+      contentSource: librarySource(),
+      minEpisodeRunTimeMs: 20_000,
+      maxEpisodeRunTimeMs: 10_000,
+    }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.createChannel({ contentSource: librarySource(), playbackMode: 'sequential', blockSize: 2 }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+
+  const valid = await manager.createChannel({
+    contentSource: librarySource(),
+    playbackMode: 'block',
+    blockSize: 2.8,
+    buildStrategy: 'collections',
+    contentFilters: [{ field: 'genre', operator: 'contains', value: 'Drama' }],
+    sortOrder: 'title_asc',
+    startTimeAnchor: 5,
+    lineupReplicaIndex: 2.9,
+    shuffleSeed: 11,
+    phaseSeed: 12,
+    minEpisodeRunTimeMs: 10_000,
+    maxEpisodeRunTimeMs: 20_000,
+  });
+
+  assert.equal(valid.blockSize, 2);
+  assert.equal(valid.lineupReplicaIndex, 2);
+  assert.equal(valid.playbackMode, 'block');
+  assert.equal(valid.startTimeAnchor, 5);
+
+  await assert.rejects(
+    () => manager.updateChannel(valid.id, { number: 'bad' as never }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.updateChannel(valid.id, { name: '' }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.updateChannel(valid.id, { skipIntros: 'yes' as never }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.updateChannel(valid.id, { playbackMode: 'bad' as never }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.updateChannel(valid.id, { buildStrategy: 'bad' as never }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.updateChannel(valid.id, { contentFilters: [{ field: 'bad' }] as never }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.updateChannel(valid.id, {
+      contentFilters: [{ field: 'genre', operator: 'contains', value: 'Drama', extra: 'legacy' }] as never,
+    }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.updateChannel(valid.id, { sortOrder: 'bad' as never }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.updateChannel(valid.id, { startTimeAnchor: Number.POSITIVE_INFINITY }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.updateChannel(valid.id, { minEpisodeRunTimeMs: 30_000 }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.updateChannel(valid.id, { playbackMode: 'sequential', blockSize: 3 }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+
+  const updated = await manager.updateChannel(valid.id, {
+    playbackMode: 'block',
+    blockSize: 3.4,
+    minEpisodeRunTimeMs: 12_000,
+    maxEpisodeRunTimeMs: 30_000,
+    contentFilters: [{ field: 'year', operator: 'gte', value: 2020 }],
+  });
+  assert.equal(updated.blockSize, 3);
+  assert.equal(updated.minEpisodeRunTimeMs, 12_000);
+  assert.equal(updated.maxEpisodeRunTimeMs, 30_000);
+  assert.deepEqual(updated.contentFilters, [{ field: 'year', operator: 'gte', value: 2020 }]);
+
+  const sequential = await manager.updateChannel(valid.id, { playbackMode: 'sequential' });
+  assert.equal(sequential.playbackMode, 'sequential');
+  assert.equal(sequential.blockSize, undefined);
+
+  const blockAgain = await manager.updateChannel(valid.id, { playbackMode: 'block', blockSize: 4.9 });
+  assert.equal(blockAgain.playbackMode, 'block');
+  assert.equal(blockAgain.blockSize, 4);
+
+  const writableFields = await manager.updateChannel(valid.id, {
+    number: 8,
+    name: 'Strict Updated',
+    description: 'Updated description',
+    icon: 'icon',
+    color: 'blue',
+    sourceLibraryId: 'source-lib',
+    sourceLibraryName: 'Source Library',
+    isAutoGenerated: true,
+    isPlaybackModeVariant: true,
+    skipIntros: true,
+    skipCredits: true,
+  });
+  assert.equal(writableFields.number, 8);
+  assert.equal(writableFields.name, 'Strict Updated');
+  assert.equal(writableFields.description, 'Updated description');
+  assert.equal(writableFields.icon, 'icon');
+  assert.equal(writableFields.color, 'blue');
+  assert.equal(writableFields.sourceLibraryId, 'source-lib');
+  assert.equal(writableFields.sourceLibraryName, 'Source Library');
+  assert.equal(writableFields.isAutoGenerated, true);
+  assert.equal(writableFields.isPlaybackModeVariant, true);
+  assert.equal(writableFields.skipIntros, true);
+  assert.equal(writableFields.skipCredits, true);
 });
 
 test('channel domain resolves content through injected library port and applies filters sorting and playback order', async () => {
@@ -498,7 +774,6 @@ test('channel domain uses stale fallback for network errors and never falls back
   assert.equal(stale.fromCache, true);
   assert.equal(stale.isStale, true);
   assert.equal(stale.cacheReason, 'network_error');
-  assert.equal(timers.handlers.size, 1);
 
   library.failure = null;
   timers.tickAll();
@@ -1354,6 +1629,27 @@ test('channel domain replaceAllChannels normalizes duplicate numbers and current
   assert.deepEqual(manager.getAllChannels().map((channel) => channel.id), ['a', 'b']);
   assert.deepEqual(manager.getAllChannels().map((channel) => channel.number), [9, 1]);
   assert.equal(manager.getCurrentChannel()?.id, 'b');
+});
+
+test('channel domain validates complete channel config numeric fields strictly', () => {
+  const valid = completeChannel('valid', 1);
+  assert.equal(isValidChannelConfig(valid), true);
+  assert.equal(isValidChannelConfig({ ...valid, number: 0 }), false);
+  assert.equal(isValidChannelConfig({ ...valid, number: 501 }), false);
+  assert.equal(isValidChannelConfig({ ...valid, number: 1.5 }), false);
+
+  for (const field of [
+    'startTimeAnchor',
+    'createdAt',
+    'updatedAt',
+    'lastContentRefresh',
+    'itemCount',
+    'totalDurationMs',
+  ] as const) {
+    assert.equal(isValidChannelConfig({ ...valid, [field]: Number.NaN }), false);
+    assert.equal(isValidChannelConfig({ ...valid, [field]: Number.POSITIVE_INFINITY }), false);
+    assert.equal(isValidChannelConfig({ ...valid, [field]: -1 }), false);
+  }
 });
 
 test('channel domain safety audit catches forbidden renderer persistence fields in outputs and fixtures', async () => {

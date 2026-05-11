@@ -1,4 +1,5 @@
 import { isValidContentSource } from './channelContentSourceValidator.js';
+import { cloneContentSource } from './channelDomainClone.js';
 import {
   isValidBuildStrategy,
   isValidContentFilterArray,
@@ -53,7 +54,21 @@ export class ChannelImportNormalizer {
       return null;
     }
 
-    const channel: ChannelCreateInput = { contentSource };
+    const minEpisodeRunTimeMs = isPositiveInteger(record.minEpisodeRunTimeMs)
+      ? record.minEpisodeRunTimeMs
+      : undefined;
+    const maxEpisodeRunTimeMs = isPositiveInteger(record.maxEpisodeRunTimeMs)
+      ? record.maxEpisodeRunTimeMs
+      : undefined;
+    if (
+      minEpisodeRunTimeMs !== undefined &&
+      maxEpisodeRunTimeMs !== undefined &&
+      minEpisodeRunTimeMs > maxEpisodeRunTimeMs
+    ) {
+      return null;
+    }
+
+    const channel: ChannelCreateInput = { contentSource: cloneContentSource(contentSource) };
 
     if (isValidChannelNumber(record.number)) {
       channel.number = record.number;
@@ -98,11 +113,11 @@ export class ChannelImportNormalizer {
     }
     if (typeof record.skipIntros === 'boolean') channel.skipIntros = record.skipIntros;
     if (typeof record.skipCredits === 'boolean') channel.skipCredits = record.skipCredits;
-    if (isPositiveInteger(record.maxEpisodeRunTimeMs)) {
-      channel.maxEpisodeRunTimeMs = record.maxEpisodeRunTimeMs;
+    if (maxEpisodeRunTimeMs !== undefined) {
+      channel.maxEpisodeRunTimeMs = maxEpisodeRunTimeMs;
     }
-    if (isPositiveInteger(record.minEpisodeRunTimeMs)) {
-      channel.minEpisodeRunTimeMs = record.minEpisodeRunTimeMs;
+    if (minEpisodeRunTimeMs !== undefined) {
+      channel.minEpisodeRunTimeMs = minEpisodeRunTimeMs;
     }
 
     return channel;

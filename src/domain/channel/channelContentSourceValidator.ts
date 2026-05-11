@@ -7,11 +7,22 @@ type ContentSourceRecord = Record<string, unknown> & { type?: unknown };
 type ContentSourceType = ChannelContentSource['type'];
 type ContentSourceValidator = (source: ContentSourceRecord, depth: number) => boolean;
 
+const CONTENT_SOURCE_ALLOWED_KEYS: Record<ContentSourceType, readonly string[]> = {
+  library: ['type', 'libraryId', 'libraryType', 'includeWatched', 'libraryFilter'],
+  collection: ['type', 'collectionKey', 'collectionName'],
+  show: ['type', 'showKey', 'showName', 'seasonFilter'],
+  playlist: ['type', 'playlistKey', 'playlistName'],
+  manual: ['type', 'items'],
+  mixed: ['type', 'sources', 'mixMode'],
+};
+
+const MANUAL_ITEM_ALLOWED_KEYS = ['ratingKey', 'title', 'durationMs'] as const;
+
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0;
 
 const isValidIdString = (value: unknown): value is string =>
-  isNonEmptyString(value) && value !== 'undefined';
+  typeof value === 'string' && value.trim().length > 0 && value !== 'undefined';
 
 const isValidSeasonFilter = (value: unknown): boolean => {
   if (value === undefined) {
@@ -55,9 +66,8 @@ const isValidManualItem = (item: unknown): boolean => {
 
   return (
     !hasForbiddenContentSourceKeys(obj) &&
-    typeof ratingKey === 'string' &&
-    ratingKey.length > 0 &&
-    ratingKey !== 'undefined' &&
+    hasOnlyAllowedKeys(obj, MANUAL_ITEM_ALLOWED_KEYS) &&
+    isValidIdString(ratingKey) &&
     typeof title === 'string' &&
     title.length > 0 &&
     typeof durationMs === 'number' &&
@@ -127,8 +137,12 @@ export function isValidContentSource(
   if (!Object.prototype.hasOwnProperty.call(CONTENT_SOURCE_VALIDATORS, src.type)) {
     return false;
   }
+  const sourceType = src.type as ContentSourceType;
+  if (!hasOnlyAllowedKeys(src, CONTENT_SOURCE_ALLOWED_KEYS[sourceType])) {
+    return false;
+  }
 
-  const validator = CONTENT_SOURCE_VALIDATORS[src.type as ContentSourceType];
+  const validator = CONTENT_SOURCE_VALIDATORS[sourceType];
   return validator(src, depth);
 }
 
@@ -138,4 +152,8 @@ function isForbiddenContentSourceKey(value: string): boolean {
 
 function hasForbiddenContentSourceKeys(value: Record<string, unknown>): boolean {
   return Object.keys(value).some(isForbiddenContentSourceKey);
+}
+
+function hasOnlyAllowedKeys(value: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowedKeys.includes(key));
 }
