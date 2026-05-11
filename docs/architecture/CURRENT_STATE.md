@@ -6,9 +6,10 @@
 ## Scope
 
 Lineup Desktop is a new Windows-first Electron repository. It currently has a
-minimal secure Electron shell frame plus docs, workflow, contract, and harness
-scaffolding. There is no Plex integration, production native playback host,
-scheduler, copied TV UI, or installer implementation yet.
+minimal secure Electron shell frame plus docs, workflow, contract, harness
+scaffolding, and main-owned Plex auth/discovery/library domain seams. There is
+no production native playback host, scheduler, copied TV UI, installer
+implementation, live Plex transport wiring, or renderer Plex API yet.
 RD-04 adds documentation and harness ownership for upstream behavior guardrails
 only; it does not import product runtime code. RD-05 adds a disposable
 dev-only external `mpv` POC tool and ignored redacted local evidence only; it
@@ -52,6 +53,17 @@ fallback, and tests for renderer-safe snapshots and forbidden fields. RD-09
 does not wire Plex auth/discovery/library runtime, preload or renderer APIs,
 network transport, scheduler/channel persistence, backup/restore
 implementation, package/dependency changes, or copied/adapted upstream source.
+RD-10 adds main-owned Plex library, auth, discovery, selected-server, and
+renderer-safe Plex contract seams under `src/main/plex/*` and
+`src/contracts/plex.ts`. The imported/adapted upstream behavior is kept behind
+injected transports and RD-09 storage adapters: library parsing is metadata and
+summary only, auth uses injected transport plus fail-closed credential storage,
+and discovery restores by persisted server id plus fresh probing while keeping
+connection details in main-owned memory only. RD-10 does not wire live Plex
+network transport, preload/renderer Plex APIs, `src/main/index.ts`
+composition, real Electron safeStorage/app paths, package/dependency changes,
+stream resolver/runtime playback URL setup, scheduler/channel persistence, or
+backup/restore implementation.
 
 ## Product Invariants
 
@@ -81,9 +93,13 @@ implementation, package/dependency changes, or copied/adapted upstream source.
 | Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, diagnostic, IPC result, and runtime event-guard contract |
 | IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window/player IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
 | Persistence contract vocabulary | `src/contracts/persistence.ts` | Renderer-safe account, credential-handle, selected-server, storage-status, diagnostic, and persistence forbidden-field vocabulary |
+| Plex contract vocabulary | `src/contracts/plex.ts` | Renderer-safe Plex profile, home-user, server, health, selection, library, media, collection, playlist, tag-directory summaries plus recursive forbidden-field checks for raw credentials, headers, URI-like fields, raw payloads, filesystem paths, and image keys |
 | Desktop player adapter boundary | `src/main/player/desktopPlayerAdapter.ts`, `src/main/player/nativePlayerHostPort.ts`, `src/main/player/nativePlayerHostProcess.ts`, and `src/main/player/playerIpc.ts` | Main-owned RD-07 adapter core, fakeable native-host process seam, and player IPC owner with renderer-intent validation, fakeable native-host event validation, request-id stale-event quarantine, real spawned helper test-double proof, helper/process failure normalization, cleanup/reap handling, runtime main/preload delivery, development/smoke fake-host activation, production unsupported/noop behavior, and renderer-safe diagnostics |
 | Desktop stream policy | `src/main/player/streamPolicy/desktopStreamPolicy.ts` and `src/main/player/streamPolicy/types.ts` | Main/player-owned RD-08 deterministic fixture policy for capability-driven direct play, direct stream, transcode, unsupported decisions, audio/subtitle fallback, HDR/Dolby Vision handling, stable reason codes, explicit unknowns, Windows RD-06/RD-07 sample-matrix proof, and safe policy outputs; not wired to Plex runtime, renderer UI, native helper, secure storage, or runtime IPC |
 | Desktop persistence boundary | `src/main/persistence/appDataPaths.ts`, `src/main/persistence/secureStorageCodec.ts`, and `src/main/persistence/desktopPersistenceStore.ts` | Main-owned RD-09 app-data path, Electron safeStorage codec, encrypted Plex credential record, selected-server state, unavailable/corrupt classification, fail-closed no-plaintext fallback, and renderer-safe snapshot owner; not wired to Plex runtime, preload, renderer, scheduler/channel persistence, backup/restore, or production IPC |
+| Desktop Plex library domain | `src/main/plex/library/*` | Main-owned RD-10 imported/adapted Plex library parser/domain owner for library sections, media metadata, seasons, collections, playlists, tag directories, search hubs, pagination, request intent, and renderer-safe summaries; no live fetch/cache runtime, image URL construction, stream resolver runtime, preload, renderer, or playback URL setup |
+| Desktop Plex auth domain | `src/main/plex/auth/*` | Main-owned RD-10 imported/adapted Plex auth owner for PIN/profile/token validation, Plex Home users, profile switching, injected auth transport, sanitized errors, Desktop identity metadata, and RD-09 credential storage adapter; no live Plex transport composition, preload/renderer auth API, real Electron safeStorage/app-path wiring, package change, or OS-specific runtime behavior |
+| Desktop Plex discovery domain | `src/main/plex/discovery/*` | Main-owned RD-10 imported/adapted Plex discovery and selected-server owner for resource parsing, connection probe policy, health classification, stale discovery-context invalidation, RD-09 selected-server summary persistence, and in-memory selected connection custody; restores by server id plus fresh probing and never persists or returns connection URI/server URI state |
 | Redaction contract vocabulary | `src/contracts/redaction.ts` | Stub contract only |
 | External `mpv` POC tool | `tools/mpv-poc/rd-05-external-mpv-poc.mjs` | Dev-only disposable RD-05 evidence harness |
 | Native libmpv spike tool | `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` | Dev-only disposable RD-06 Windows WID/render API evidence harness |
@@ -92,7 +108,7 @@ implementation, package/dependency changes, or copied/adapted upstream source.
 
 ## Not Yet Implemented
 
-- Runtime Plex auth/discovery/library/stream imports
+- Live Plex auth/discovery/library transport and runtime composition
 - Scheduler/channel imports and persistence
 - Windows-proven production native playback helper
 - Windows-proven production playback host

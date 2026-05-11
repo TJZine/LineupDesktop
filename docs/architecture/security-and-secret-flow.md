@@ -56,6 +56,21 @@ after machine, profile, or password-manager changes. A future release plan must
 prove restore behavior, recovery UX, and credential cleanup before public
 distribution.
 
+## Current Plex Domain Boundary
+
+RD-10 adds main-owned Plex library, auth, and discovery modules under
+`src/main/plex/*`. Auth and discovery remain behind injected transport seams,
+and credential persistence goes through the RD-09 store adapter only. Renderer
+contracts in `src/contracts/plex.ts` expose profile, home-user, server, health,
+selection, and library summaries without raw credentials, headers, tokenized
+URLs, connection URIs, raw Plex payloads, filesystem paths, or image keys.
+
+Selected-server restore persists and restores only the RD-09 selected-server
+summary. The current connection is resolved by fresh discovery/probing and may
+exist only in main-owned runtime memory. RD-10 does not wire live Plex
+transport, preload/renderer Plex APIs, real Electron safeStorage/app paths, or
+OS-specific credential behavior.
+
 ## Release Gates
 
 Before public distribution, this repo must verify:
