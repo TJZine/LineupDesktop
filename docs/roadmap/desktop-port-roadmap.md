@@ -169,10 +169,10 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-10 are complete enough to route the next Tier 3 session to
-complete RD-11 scheduler, channel, and content domain import through the quality
-loop. Do not import additional original Lineup product code until a reviewed
-product slice plan explicitly authorizes a bounded import.
+RD-01 through RD-11 are complete enough to route the next Tier 3 session to
+complete RD-12 Plex-to-player integration through the quality loop. Do not
+import additional original Lineup product code until a reviewed product slice
+plan explicitly authorizes a bounded import.
 
 ## Roadmap Checklist
 
@@ -639,7 +639,7 @@ Observed closeout:
 
 ### RD-11 Scheduler, Channel, And Content Domain Import
 
-Status: not started.
+Status: complete.
 
 Depends on:
 
@@ -663,6 +663,26 @@ Exit gates:
 - Deterministic schedule behavior is protected by tests.
 - Channel persistence is behind typed owners.
 - No scheduler or channel logic enters Electron main/preload.
+
+Completion notes:
+
+- Imported/adapted pure scheduler, playback ordering, channel authoring,
+  content resolution, lineup navigation, cache, retry, import/export
+  normalization, channel repository/store, save queue, coordinator, and separate
+  main-owned channel persistence adapter under reviewed Desktop owners.
+- Added `src/domain/**` architecture linting to keep domain logic free of
+  Electron, Node, main/preload/renderer/native-helper imports, dynamic owner
+  imports, and runtime globals.
+- Protected anchor-time scheduling, loop wrapping, current/next/previous lookup,
+  schedule windows, shuffle seed behavior, block validation, channel authoring
+  validation, content resolution, stale fallback, import normalization,
+  transactional updates, cache cloning, persistence queues, malformed storage
+  recovery, and forbidden persistence fields with local automated tests and
+  implementation review.
+- Platform proof: Mac/local automated proof is sufficient because RD-11 did not
+  wire Electron app paths, real safeStorage, preload/renderer APIs, live Plex
+  network transport, native playback, packaging, installer behavior, or Windows
+  runtime behavior.
 
 ### RD-12 Plex To Player Integration
 
@@ -913,7 +933,8 @@ Exit gates:
 - Plex auth, discovery, library, stream resolver flow, typed errors, and
   redacted diagnostics.
 - Scheduler, channel manager, content resolver, deterministic schedule behavior,
-  and channel persistence owner patterns.
+  and channel persistence owner patterns already imported/adapted through RD-11;
+  revisit only for upstream behavior changes or runtime composition needs.
 - DOM TV UI, EPG virtualization, OSD, mini guide, settings, channel setup, and
   navigation/focus model.
 - Playback descriptor-building concepts and UI-facing playback expectations.
