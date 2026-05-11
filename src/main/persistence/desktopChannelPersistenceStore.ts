@@ -23,6 +23,13 @@ type ChannelPersistenceFileReadResult =
   | { status: 'present' | 'missing'; value: ChannelPersistenceFile; needsCurrentChannelIdRepair?: boolean }
   | { status: 'corrupt' };
 
+class UnsupportedChannelPersistenceSchemaError extends Error {
+  public constructor(schemaVersion: number) {
+    super(`Unsupported channel persistence schema version ${String(schemaVersion)}.`);
+    this.name = 'UnsupportedChannelPersistenceSchemaError';
+  }
+}
+
 export interface DesktopChannelPersistenceStoreOptions {
   persistenceFilePath: string;
   fileSystem?: DesktopChannelPersistenceFileSystem;
@@ -134,7 +141,10 @@ export class DesktopChannelPersistenceStore implements ChannelPersistenceStorage
     let parsed: ReturnType<typeof parseChannelPersistenceFile>;
     try {
       parsed = parseChannelPersistenceFile(content);
-    } catch {
+    } catch (error) {
+      if (error instanceof UnsupportedChannelPersistenceSchemaError) {
+        throw error;
+      }
       return { status: 'corrupt' };
     }
     if (parsed.needsCurrentChannelIdRepair) {
@@ -197,6 +207,7 @@ function parseChannelPersistenceFile(content: string): {
   needsCurrentChannelIdRepair: boolean;
 } {
   const parsed: unknown = JSON.parse(content);
+  assertSupportedChannelPersistenceSchema(parsed);
   if (!isChannelPersistenceFile(parsed)) {
     throw new Error('Channel persistence file schema is invalid.');
   }
@@ -208,6 +219,20 @@ function parseChannelPersistenceFile(content: string): {
     },
     needsCurrentChannelIdRepair: !isRawCurrentChannelIdValid(parsed.currentChannelId),
   };
+}
+
+function assertSupportedChannelPersistenceSchema(value: unknown): void {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return;
+  }
+  const candidate = value as RawChannelPersistenceFile;
+  if (
+    typeof candidate.schemaVersion === 'number' &&
+    Number.isFinite(candidate.schemaVersion) &&
+    candidate.schemaVersion > CHANNEL_PERSISTENCE_SCHEMA_VERSION
+  ) {
+    throw new UnsupportedChannelPersistenceSchemaError(candidate.schemaVersion);
+  }
 }
 
 function isChannelPersistenceFile(value: unknown): value is RawChannelPersistenceFile & {
