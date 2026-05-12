@@ -169,12 +169,10 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-13 are complete enough to route the next Tier 3 session to
-ARCH-01 Architecture Health Stabilization Before RD-14 through the quality loop.
-Do not start RD-14 Window, Input, And Fullscreen UX until ARCH-01 is complete
-or a reviewed ARCH-01 replan explicitly defers a remaining hotspot. Do not
-import additional original Lineup product code until a reviewed product slice
-plan explicitly authorizes a bounded import.
+RD-01 through ARCH-01 are complete enough to route the next Tier 3 session to
+RD-14 Window, Input, And Fullscreen UX through the quality loop. Do not import
+additional original Lineup product code until a reviewed product slice plan
+explicitly authorizes a bounded import.
 
 ## Roadmap Checklist
 
@@ -803,7 +801,19 @@ Exit gates:
 
 ### ARCH-01 Architecture Health Stabilization Before RD-14
 
-Status: not started.
+Status: complete. ARCH-01 completed through the feature-quality loop on
+2026-05-12. It added a reviewed architecture-health plan with classifications
+for every then-current file-shape guardrail row, remediated the renderer
+composition, renderer static asset, main composition, and overlay prepare-now
+hotspots through behavior-preserving same-owner splits, and hardened preload
+bridge growth policy through the existing source-shape/parity harness without
+adding preload APIs, preload bundling, Electron behavior, dependencies, or
+runtime product behavior. `npm run verify:maintainability`,
+`npm run verify:docs`, `npm run smoke:electron`, and `npm run verify` passed.
+Plan review and every implementation-unit review were clean before closeout.
+Remaining allowlisted hotspots have reviewed deferral or leave-alone triggers
+that do not require RD-14 to grow monolithic renderer, main, preload, player,
+Plex, or channel owners.
 
 Depends on:
 
