@@ -311,34 +311,85 @@ async function runSmokeAssertions(window: BrowserWindow): Promise<void> {
         Function('return 1')();
         failures.push('csp unsafe eval');
       } catch {}
+      const rootStyle = getComputedStyle(document.documentElement);
+      const appShell = document.querySelector('[data-style-surface="app-shell"]');
+      const routeRail = document.querySelector('[data-style-surface="route-rail"]');
+      const styledPlayerScreen = document.querySelector('[data-screen="player"]');
+      const playerRouteButton = document.querySelector('[data-route-button="player"]');
+      const stylesheetTexts = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        try {
+          stylesheetTexts.push(...Array.from(sheet.cssRules ?? [], (rule) => rule.cssText));
+        } catch {
+          failures.push('stylesheet rules readable');
+        }
+      }
+      const stylesheetText = stylesheetTexts.join('\\n');
+      if (rootStyle.getPropertyValue('--lineup-style-ready').trim() !== 'unit-6') {
+        failures.push('unit 6 stylesheet token');
+      }
+      if (rootStyle.getPropertyValue('--color-focus').trim() !== '#79c7ff') {
+        failures.push('focus token');
+      }
+      if (!(appShell instanceof HTMLElement) || getComputedStyle(appShell).display !== 'grid') {
+        failures.push('app shell style loaded');
+      }
+      if (!(routeRail instanceof HTMLElement) || getComputedStyle(routeRail).gridArea !== 'rail') {
+        failures.push('route rail style loaded');
+      }
+      if (
+        !(styledPlayerScreen instanceof HTMLElement) ||
+        getComputedStyle(styledPlayerScreen).borderRadius !== '8px'
+      ) {
+        failures.push('screen style loaded');
+      }
+      if (!(playerRouteButton instanceof HTMLButtonElement)) {
+        failures.push('focus style target');
+      } else {
+        playerRouteButton.classList.add('is-focused');
+        const focusStyle = getComputedStyle(playerRouteButton);
+        if (focusStyle.outlineStyle !== 'solid' || focusStyle.outlineWidth !== '3px') {
+          failures.push('focus style loaded');
+        }
+        playerRouteButton.classList.remove('is-focused');
+      }
+      if (!stylesheetText.includes('@media (prefers-reduced-motion: reduce)')) {
+        failures.push('reduced motion style policy');
+      }
+      if (!stylesheetText.includes('@media (forced-colors: active)')) {
+        failures.push('forced colors style policy');
+      }
       for (const name of ['process', 'require', 'Buffer']) {
         if (typeof window[name] !== 'undefined') failures.push(name);
       }
       for (const name of ['ipcRenderer', 'electron']) {
         if (typeof window[name] !== 'undefined') failures.push(name);
       }
-      if (!window.lineupDesktop?.shell?.getCapabilities) failures.push('shell api');
-      if (!window.lineupDesktop?.shell?.onStatusChanged) failures.push('status api');
-      if (!window.lineupDesktop?.window?.setFullscreen) failures.push('window api');
-      if (!window.lineupDesktop?.player?.dispatch) failures.push('player dispatch api');
-      if (!window.lineupDesktop?.player?.getSnapshot) failures.push('player snapshot api');
-      if (!window.lineupDesktop?.player?.cleanup) failures.push('player cleanup api');
-      if (!window.lineupDesktop?.player?.onEvent) failures.push('player event api');
-      if ('ipcRenderer' in window.lineupDesktop) failures.push('raw ipc bridge');
-      if ('invoke' in window.lineupDesktop) failures.push('raw invoke bridge');
+      const bridge = window.lineupDesktop;
+      if (!bridge || typeof bridge !== 'object') failures.push('lineupDesktop bridge');
+      if (!bridge?.shell?.getCapabilities) failures.push('shell api');
+      if (!bridge?.shell?.onStatusChanged) failures.push('status api');
+      if (!bridge?.window?.setFullscreen) failures.push('window api');
+      if (!bridge?.player?.dispatch) failures.push('player dispatch api');
+      if (!bridge?.player?.getSnapshot) failures.push('player snapshot api');
+      if (!bridge?.player?.cleanup) failures.push('player cleanup api');
+      if (!bridge?.player?.onEvent) failures.push('player event api');
+      if (bridge && typeof bridge === 'object' && 'ipcRenderer' in bridge) failures.push('raw ipc bridge');
+      if (bridge && typeof bridge === 'object' && 'invoke' in bridge) failures.push('raw invoke bridge');
+      if (failures.length > 0) return { failures };
 
-      const capabilities = await window.lineupDesktop.shell.getCapabilities();
+      const capabilities = await bridge.shell.getCapabilities();
       if (!capabilities.ok || capabilities.value.protocolOrigin !== 'lineup://shell') {
         failures.push('capabilities ' + JSON.stringify(capabilities));
       }
       const playerEvents = [];
-      const unsubscribe = window.lineupDesktop.player.onEvent((event) => {
+      const unsubscribe = bridge.player.onEvent((event) => {
         playerEvents.push(event);
         if (event && typeof event === 'object' && ('sender' in event || 'ports' in event)) {
           failures.push('raw player event object');
         }
       });
-      const playerResult = await window.lineupDesktop.player.dispatch({
+      const playerResult = await bridge.player.dispatch({
         intent: 'player.load',
         requestId: 'smoke-player-load',
         payload: {
@@ -357,15 +408,15 @@ async function runSmokeAssertions(window: BrowserWindow): Promise<void> {
           capabilityProfileId: 'smoke-fake-host',
         },
       });
-      const invalidPlayerResult = await window.lineupDesktop.player.dispatch({
+      const invalidPlayerResult = await bridge.player.dispatch({
         intent: 'player.play',
         requestId: 'smoke-player-invalid',
       });
-      const playerSnapshot = await window.lineupDesktop.player.getSnapshot();
-      const cleanup = await window.lineupDesktop.player.cleanup();
+      const playerSnapshot = await bridge.player.getSnapshot();
+      const cleanup = await bridge.player.cleanup();
       unsubscribe();
       const beforeUnsubscribeCount = playerEvents.length;
-      await window.lineupDesktop.player.dispatch({
+      await bridge.player.dispatch({
         intent: 'player.play',
         requestId: 'smoke-player-after-unsubscribe',
         payload: {},
@@ -388,14 +439,75 @@ async function runSmokeAssertions(window: BrowserWindow): Promise<void> {
       if (!playerEvents.some((event) => event.event === 'state.changed')) {
         failures.push('player event delivery');
       }
-      const fullscreenOn = await window.lineupDesktop.window.setFullscreen(true);
-      const fullscreenOff = await window.lineupDesktop.window.setFullscreen(false);
+      const fullscreenOn = await bridge.window.setFullscreen(true);
+      const fullscreenOff = await bridge.window.setFullscreen(false);
       if (!fullscreenOn.ok || fullscreenOn.value.enabled !== true) {
         failures.push('fullscreen on ' + JSON.stringify(fullscreenOn));
       }
       if (!fullscreenOff.ok || fullscreenOff.value.enabled !== false) {
         failures.push('fullscreen off ' + JSON.stringify(fullscreenOff));
       }
+
+      const guideButton = document.querySelector('[data-route-button="guide"]');
+      if (!(guideButton instanceof HTMLButtonElement)) {
+        failures.push('guide route button');
+      } else {
+        guideButton.click();
+      }
+      const guideScreen = document.querySelector('[data-screen="guide"]');
+      const guideGrid = document.querySelector('[data-epg-grid]');
+      const guideActions = Array.from(document.querySelectorAll('[data-epg-action]'));
+      const detailChannel = document.querySelector('[data-epg-detail-channel]')?.textContent ?? '';
+      const detailTitle = document.querySelector('[data-epg-detail-title]')?.textContent ?? '';
+      const detailTime = document.querySelector('[data-epg-detail-time]')?.textContent ?? '';
+      const guideGridText = guideGrid?.textContent ?? '';
+      if (document.documentElement.dataset.activeRoute !== 'guide') failures.push('guide route activation');
+      if (!(guideScreen instanceof HTMLElement) || guideScreen.hidden) failures.push('guide screen visible');
+      if (!detailChannel.includes('101 Liminal One')) failures.push('guide detail channel ' + detailChannel);
+      if (detailTitle !== 'The Midnight Archive') failures.push('guide detail title ' + detailTitle);
+      if (detailTime !== 'Signal Lost - 8:30 PM - 9:30 PM') failures.push('guide detail time ' + detailTime);
+      if (!guideGridText.includes('8:00 PM') || !guideGridText.includes('The Midnight Archive')) {
+        failures.push('guide grid fake data');
+      }
+      if (guideActions.length !== 6) failures.push('guide actions ' + guideActions.length);
+
+      const playerButton = document.querySelector('[data-route-button="player"]');
+      if (!(playerButton instanceof HTMLButtonElement)) {
+        failures.push('player route button');
+      } else {
+        playerButton.click();
+      }
+      const playerScreen = document.querySelector('[data-screen="player"]');
+      const osdOverlay = document.querySelector('[data-overlay="playerOsd"]');
+      const nowPlayingTitle = document.querySelector('[data-overlay-now-playing-title]')?.textContent ?? '';
+      const miniGuideButton = document.querySelector('[data-overlay-action="openMiniGuide"]');
+      if (!(miniGuideButton instanceof HTMLButtonElement)) {
+        failures.push('mini guide action');
+      } else {
+        miniGuideButton.click();
+      }
+      const miniGuideOverlay = document.querySelector('[data-overlay="miniGuide"]');
+      const miniGuideText = document.querySelector('[data-overlay-mini-guide]')?.textContent ?? '';
+      const channelNumberButton = document.querySelector('[data-overlay-action="channelDigit4"]');
+      if (!(channelNumberButton instanceof HTMLButtonElement)) {
+        failures.push('channel number action');
+      } else {
+        channelNumberButton.click();
+      }
+      const channelNumberOverlay = document.querySelector('[data-overlay="channelNumber"]');
+      const channelNumberValue = document.querySelector('[data-overlay-channel-number-value]')?.textContent ?? '';
+      if (document.documentElement.dataset.activeRoute !== 'player') failures.push('player route activation');
+      if (!(playerScreen instanceof HTMLElement) || playerScreen.hidden) failures.push('player screen visible');
+      if (!(osdOverlay instanceof HTMLElement) || osdOverlay.hidden) failures.push('OSD visible');
+      if (nowPlayingTitle !== 'The Midnight Archive') failures.push('now playing title ' + nowPlayingTitle);
+      if (!(miniGuideOverlay instanceof HTMLElement) || miniGuideOverlay.hidden) failures.push('mini guide visible');
+      if (!miniGuideText.includes('101') || !miniGuideText.includes('The Midnight Archive')) {
+        failures.push('mini guide fake data');
+      }
+      if (!(channelNumberOverlay instanceof HTMLElement) || channelNumberOverlay.hidden) {
+        failures.push('channel number visible');
+      }
+      if (channelNumberValue !== '4--') failures.push('channel number value ' + channelNumberValue);
 
       window.open('https://example.com');
       navigator.permissions?.query?.({ name: 'geolocation' }).catch(() => undefined);
