@@ -31,6 +31,7 @@ const requiredFiles = [
   'docs/architecture/desktop-repo-genesis-adr.md',
   'docs/architecture/upstream-behavior-guardrails.md',
   'docs/architecture/import-ledger.md',
+  'docs/architecture/file-shape-guardrails.md',
   'docs/architecture/security-and-secret-flow.md',
   'docs/architecture/playback-architecture.md',
   'docs/architecture/packaging-release-gates.md',
@@ -55,6 +56,7 @@ const requiredFiles = [
   'tools/architecture-rules/buildEslintArchitectureRules.mjs',
   'tools/architecture-rules/desktopArchitectureRules.mjs',
   'tools/verify-docs.mjs',
+  'tools/verify-maintainability.mjs',
   'tools/verify-redaction.mjs',
 ];
 
@@ -97,8 +99,9 @@ const expectedScripts = {
   test: 'npm run test:contracts && npm run test:harness-docs',
   'test:contracts': 'node --import tsx --test "src/__tests__/**/*.test.ts"',
   'test:harness-docs': 'node --test tools/__tests__/*.test.mjs',
-  'verify:architecture': 'npm run lint',
+  'verify:architecture': 'npm run lint && npm run verify:maintainability',
   'verify:docs': 'node tools/verify-docs.mjs',
+  'verify:maintainability': 'node tools/verify-maintainability.mjs',
   'verify:redaction': 'node tools/verify-redaction.mjs',
   verify: 'npm run typecheck && npm run verify:architecture && npm run test && npm run verify:docs && npm run verify:redaction',
 };
@@ -192,6 +195,7 @@ const workflowAnchorMarkers = [
     requiredPhrases: [
       'Dependency changes must name the runtime owner',
       'Configuration, credentials, app paths, diagnostics, logs',
+      'Architecture Health',
       'Keep every committed checkpoint buildable and reversible',
     ],
   },
@@ -434,8 +438,9 @@ function checkActivePlanShape(root, errors) {
     if (!content.includes('**Task family:** feature/design')) {
       errors.push(`${relativePath}: active plan missing feature/design task family`);
     }
-    if (content.includes('**Tier:** Tier 3')) {
+    if (isTier3Plan(content)) {
       checkTier3Handoff(relativePath, content, errors);
+      checkTier3MaintainabilityPreflight(relativePath, content, errors);
     }
     const markerCount = verificationClassificationMarkers
       .filter((marker) => content.includes(marker))
@@ -444,6 +449,10 @@ function checkActivePlanShape(root, errors) {
       errors.push(`${relativePath}: active plan must include exactly one verification classification marker`);
     }
   }
+}
+
+function isTier3Plan(content) {
+  return /(?:\*\*Tier:\*\*|^TIER:)\s*Tier 3\b/imu.test(content);
 }
 
 function checkTier3Handoff(relativePath, content, errors) {
@@ -474,6 +483,49 @@ function checkTier3Handoff(relativePath, content, errors) {
       errors.push(`${relativePath}: NEXT_SESSION_HANDOFF missing field ${field}`);
     }
   }
+}
+
+function checkTier3MaintainabilityPreflight(relativePath, content, errors) {
+  const section = markdownSection(content, '## Architecture Health')
+    ?? markdownSection(content, '## File Shape Preflight');
+  if (!section) {
+    errors.push(`${relativePath}: Tier 3 active plan missing ## Architecture Health or ## File Shape Preflight section`);
+    return;
+  }
+
+  if (!/file-shape-guardrails\.md|file[- ]shape|large[- ]file|oversized|owner hotspot/iu.test(section)) {
+    errors.push(`${relativePath}: Tier 3 architecture health section missing file-shape evidence`);
+  }
+  if (!/verify:maintainability|maintainability verification|npm run verify/iu.test(section)) {
+    errors.push(`${relativePath}: Tier 3 architecture health section missing maintainability verification route`);
+  }
+  if (!/(?:no\s+(?:oversized|guarded|large[- ]file|owner hotspot)|avoid|decompos|split|extract|allowlist|temporary row|guardrail row)/iu.test(section)) {
+    errors.push(`${relativePath}: Tier 3 architecture health section missing decomposition, avoidance, or allowlist decision`);
+  }
+}
+
+function markdownSection(content, heading) {
+  const headingParts = /^(#{1,6})\s+(.+)$/u.exec(heading);
+  if (!headingParts) {
+    return null;
+  }
+  const [, hashes, title] = headingParts;
+  const headingPattern = new RegExp(`^${hashes}\\s+${escapeRegExp(title)}\\s*$`, 'mu');
+  const match = headingPattern.exec(content);
+  if (!match) {
+    return null;
+  }
+  const start = match.index;
+  const bodyStart = start + match[0].length;
+  const level = hashes.length;
+  const nextHeadingPattern = new RegExp(`\\n#{1,${level}}\\s+`, 'u');
+  const nextHeading = nextHeadingPattern.exec(content.slice(bodyStart));
+  const end = nextHeading ? bodyStart + nextHeading.index : content.length;
+  return content.slice(start, end);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
 function checkWorkflowAnchors(root, errors) {
@@ -536,6 +588,9 @@ function checkWorkflowAnchors(root, errors) {
   for (const phrase of [
     'dependency, build-tool, configuration, or lockfile changes',
     'security/licensing/provenance considerations',
+    'Architecture Health',
+    'file-shape evidence',
+    'pre-authorize future growth',
   ]) {
     if (!planStandard.includes(phrase)) {
       errors.push(`docs/agentic/plan-authoring-standard.md: missing production-engineering plan phrase ${phrase}`);
@@ -549,6 +604,9 @@ function checkWorkflowAnchors(root, errors) {
       if (!featureQualityLoop.includes(heading)) {
         errors.push(`docs/agentic/session-prompts/feature-quality-loop.md: missing Tier 3 launcher heading ${heading}`);
       }
+    }
+    if (!featureQualityLoop.includes('## Architecture Health')) {
+      errors.push('docs/agentic/session-prompts/feature-quality-loop.md: missing Tier 3 Architecture Health plan section marker');
     }
   }
 }

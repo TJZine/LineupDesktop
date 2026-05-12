@@ -814,6 +814,14 @@ Objective:
 - Implement Desktop keyboard/gamepad/media-key handling, cursor behavior,
   display selection, and borderless fullscreen/window behavior.
 
+Scope rule:
+
+- Before implementation, the tracked RD-14 plan must include an
+  `## Architecture Health` preflight using
+  `docs/architecture/file-shape-guardrails.md`, and it must split work so
+  window/input/fullscreen behavior does not grow renderer, main, preload, or CSS
+  hotspots without a reviewed decomposition or temporary allowlist decision.
+
 Exit gates:
 
 - Manual matrix covers focus over video, multi-monitor, DPI, fullscreen restore,
