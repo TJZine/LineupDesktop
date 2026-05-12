@@ -170,7 +170,9 @@ When a roadmap slice reaches its exit gates:
   review is clean
 
 RD-01 through RD-13 are complete enough to route the next Tier 3 session to
-start RD-14 Window, Input, And Fullscreen UX through the quality loop. Do not
+ARCH-01 Architecture Health Stabilization Before RD-14 through the quality loop.
+Do not start RD-14 Window, Input, And Fullscreen UX until ARCH-01 is complete
+or a reviewed ARCH-01 replan explicitly defers a remaining hotspot. Do not
 import additional original Lineup product code until a reviewed product slice
 plan explicitly authorizes a bounded import.
 
@@ -799,6 +801,77 @@ Exit gates:
 - Focus/navigation tests cover Desktop input mapping where feasible.
 - No webOS lifecycle, player, or packaging assumption becomes Desktop truth.
 
+### ARCH-01 Architecture Health Stabilization Before RD-14
+
+Status: not started.
+
+Depends on:
+
+- RD-13 complete enough to expose current renderer, style, main, preload,
+  contract, Plex, player, scheduler, and channel owner hotspots.
+- File-shape guardrails are active through
+  `docs/architecture/file-shape-guardrails.md` and
+  `npm run verify:maintainability`.
+
+Objective:
+
+- Stabilize the codebase architecture shape before new RD-14 product behavior
+  lands. Audit all current file-shape and owner-boundary hotspots created before
+  the guardrails existed, then remediate or explicitly defer them with reviewed
+  owner, rationale, verification, and revisit triggers.
+
+Scope rule:
+
+- Assessment is repo-wide, but implementation must be split into bounded
+  execution units. The plan must classify every current row in
+  `docs/architecture/file-shape-guardrails.md` as fix now, prepare now, defer
+  with trigger, or leave alone with rationale.
+- Classification semantics are binding for closeout. `Fix now` means the
+  hotspot must be remediated in ARCH-01. `Prepare now` means ARCH-01 must land
+  the owner split, extraction seam, test harness, or other enabling change
+  needed to keep the next roadmap items from growing that hotspot. `Defer with
+  trigger` means the hotspot remains but has a reviewed owner, reason, and
+  future condition that forces action. `Leave alone with rationale` means review
+  accepts the current shape as cohesive for this roadmap point. Any `fix now` or
+  `prepare now` item not completed before closeout must be reclassified through
+  a reviewed replan.
+- Fix-now work should prioritize hard-overage or near-term roadmap pressure
+  points, especially renderer composition, renderer CSS/HTML, main composition,
+  preload bridge shape, and any large owner that would otherwise absorb RD-14 or
+  RD-15 behavior.
+- This item must not become a product rewrite, framework migration, dependency
+  migration, upstream import, compatibility-shim pass, or cosmetic file shuffle.
+  Keep behavior stable and preserve current Electron security, renderer
+  privilege, preload narrowness, Plex secrecy, player/runtime, scheduler, and
+  channel contracts unless a reviewed replan proves a boundary change is
+  necessary for maintainability.
+
+Platform proof:
+
+- Mac/local automated proof is sufficient when units are behavior-preserving
+  source-shape changes. Stop and obtain a reviewed replan before touching
+  Windows-specific behavior, native video/fullscreen behavior, live Plex
+  transport, production native-helper playback, packaging/signing/update
+  behavior, app-path or safeStorage runtime wiring, or new preload/renderer
+  APIs.
+
+Exit gates:
+
+- Tracked plan includes an `## Architecture Health` section with current
+  large-file evidence, owner-boundary risks, and a classification for every
+  allowlisted file.
+- Every implemented cleanup unit is behavior-preserving or has explicit
+  contract/test proof for any public seam it changes.
+- `docs/architecture/file-shape-guardrails.md` is updated for any remediated,
+  deferred, or newly identified hotspot.
+- `npm run verify:maintainability`, `npm run verify:docs`, and `npm run verify`
+  pass unless the reviewed plan names a narrower proof for a docs-only unit.
+- Read-only adversarial review is clean for the plan and for every implemented
+  unit.
+- RD-14 may start only after remaining deferred hotspots have reviewed triggers
+  that will not force RD-14 to grow monolithic owners, and no `fix now` or
+  `prepare now` classifications remain incomplete.
+
 ### RD-14 Window, Input, And Fullscreen UX
 
 Status: not started.
@@ -808,6 +881,7 @@ Depends on:
 - RD-01 complete.
 - RD-06 complete for native surface constraints.
 - RD-13 complete enough to exercise renderer navigation.
+- ARCH-01 complete or explicitly deferred by a reviewed ARCH-01 replan.
 
 Objective:
 
