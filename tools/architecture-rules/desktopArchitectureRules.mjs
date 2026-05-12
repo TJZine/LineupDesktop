@@ -265,14 +265,14 @@ export const desktopArchitectureRules = {
     {
       label: 'preload-contract-vocabulary-parity',
       files: ['src/__tests__/integration/preloadContractVocabulary.test.ts'],
-      allowedNodeBuiltins: ['node:test', 'node:assert', 'node:assert/strict'],
+      allowedNodeBuiltins: ['node:test', 'node:assert', 'node:assert/strict', 'node:fs'],
       allowedImportPatterns: [
+        'typescript',
         '../../contracts/**',
-        '../../preload/vocabulary.cjs',
       ],
       ownerPair: ['preload', 'contracts'],
       rationale:
-        'Preload runtime guard vocabulary must stay in lockstep with renderer-safe contract vocabulary.',
+        'Preload entrypoint runtime guard vocabulary must stay in lockstep with renderer-safe contract vocabulary.',
       proofTestPath: 'src/__tests__/integration/preloadContractVocabulary.test.ts',
     },
   ],
