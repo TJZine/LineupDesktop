@@ -279,9 +279,7 @@ export class ChannelAuthoringService {
       validated.number = this.requireNumberInput(input.number);
     }
     if (input.name !== undefined) {
-      validated.name = mode === 'create'
-        ? this.requireString(input.name, 'name')
-        : this.requireNonEmptyString(input.name, 'name');
+      validated.name = this.requireNonBlankString(input.name, 'name');
     }
     if (input.description !== undefined) {
       validated.description = this.requireString(input.description, 'description');
@@ -404,10 +402,10 @@ export class ChannelAuthoringService {
     return value;
   }
 
-  private requireNonEmptyString(value: unknown, fieldName: string): string {
+  private requireNonBlankString(value: unknown, fieldName: string): string {
     const stringValue = this.requireString(value, fieldName);
-    if (stringValue.length === 0) {
-      this.throwStorageValidation(`${fieldName} must be non-empty`);
+    if (stringValue.trim().length === 0) {
+      this.throwStorageValidation(`${fieldName} must be non-blank`);
     }
     return stringValue;
   }

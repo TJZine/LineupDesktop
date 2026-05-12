@@ -6,15 +6,15 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { containsPlexForbiddenRendererField } from '../contracts/plex.js';
-import type { PlexSelectedServerSummary } from '../contracts/persistence.js';
-import { DesktopPersistenceStore } from '../main/persistence/desktopPersistenceStore.js';
+import { containsPlexForbiddenRendererField } from '../../contracts/plex.js';
+import type { PlexSelectedServerSummary } from '../../contracts/persistence.js';
+import { DesktopPersistenceStore } from '../../main/persistence/desktopPersistenceStore.js';
 import {
   SecureStorageUnavailableError,
   type SecureStorageAvailability,
   type SecureStringCodec,
   type SecureStringDecryptResult,
-} from '../main/persistence/secureStorageCodec.js';
+} from '../../main/persistence/secureStorageCodec.js';
 import {
   DesktopPlexSelectedServerStore,
   DesktopPlexServerDiscovery,
@@ -25,7 +25,7 @@ import {
   type PlexConnection,
   type PlexServerSelectionSource,
   type PlexServer,
-} from '../main/plex/discovery/index.js';
+} from '../../main/plex/discovery/index.js';
 
 class FakeSecureStringCodec implements SecureStringCodec {
   public availability: SecureStorageAvailability = {

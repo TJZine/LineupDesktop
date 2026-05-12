@@ -11,6 +11,10 @@ const BOUNDARY_MESSAGES = Object.freeze({
     'Electron main must not import renderer implementation.',
   nativeHelperBoundary:
     'Native helper code must not import renderer or preload implementation.',
+  testOwner:
+    'Tests must stay inside their declared architecture owner. Move cross-owner assertions to an approved integration seam.',
+  integrationSeam:
+    'Integration tests must use an approved named architecture seam and may import only that seam vocabulary.',
 });
 
 export const architectureRuleMessages = BOUNDARY_MESSAGES;
@@ -32,6 +36,9 @@ export function buildEslintArchitectureRules(rules) {
     buildBoundaryRule(rules.preloadBoundary, BOUNDARY_MESSAGES.preloadBoundary),
     buildBoundaryRule(rules.mainBoundary, BOUNDARY_MESSAGES.mainBoundary),
     buildBoundaryRule(rules.nativeHelperBoundary, BOUNDARY_MESSAGES.nativeHelperBoundary),
+    ...(rules.testOwners ?? []).map((owner) => buildTestOwnerRule(owner)),
+    buildIntegrationTestRule(rules.integrationTests, rules.integrationSeams ?? []),
+    ...(rules.integrationSeams ?? []).map((seam) => buildIntegrationSeamRule(seam)),
   ].filter(Boolean);
 }
 
@@ -97,9 +104,150 @@ function buildBoundaryRule(boundary, message) {
 
   return {
     files: boundary.files,
-    ignores: ['src/**/__tests__/**'],
     rules,
   };
+}
+
+function buildTestOwnerRule(owner) {
+  if (!owner || owner.files.length === 0) {
+    return null;
+  }
+
+  const forbiddenImportPatterns = [
+    ...(owner.forbiddenImportPatterns ?? []),
+    ...('allowedNodeBuiltins' in owner ? nodeBuiltinImportPatternsExcept(owner.allowedNodeBuiltins) : []),
+  ];
+  const forbiddenExactImports =
+    'allowedNodeBuiltins' in owner && !forbiddenImportPatterns.includes('**/domain') ? ['domain'] : [];
+  const forbiddenDynamicImportPatterns = [
+    ...forbiddenImportPatterns,
+    ...(forbiddenImportPatterns.includes('**/domain') ? [] : forbiddenExactImports),
+  ];
+
+  return buildRestrictedImportEntry({
+    files: owner.files,
+    forbiddenImportPatterns,
+    forbiddenExactImports,
+    forbiddenDynamicImportPatterns,
+    message: owner.message ?? BOUNDARY_MESSAGES.testOwner,
+    restrictDynamicImports: true,
+  });
+}
+
+function buildIntegrationSeamRule(seam) {
+  if (!seam || seam.files.length === 0) {
+    return null;
+  }
+
+  const allowedImportRegex = buildAllowedIntegrationImportRegex(seam);
+  const rules = {
+    'no-restricted-syntax': [
+      'error',
+      {
+        selector: `ImportDeclaration:not([source.value=/${allowedImportRegex}/])`,
+        message: seam.message ?? BOUNDARY_MESSAGES.integrationSeam,
+      },
+      {
+        selector: 'ImportExpression',
+        message: seam.message ?? BOUNDARY_MESSAGES.integrationSeam,
+      },
+    ],
+  };
+
+  return {
+    files: seam.files,
+    rules,
+  };
+}
+
+function buildIntegrationTestRule(integrationTests, seams) {
+  if (!integrationTests || integrationTests.files.length === 0) {
+    return null;
+  }
+
+  const allowedImportRegex = buildAllowedImportRegex(integrationTests.allowedNodeBuiltins ?? []);
+  return {
+    files: integrationTests.files,
+    ignores: seams.flatMap((seam) => seam.files ?? []),
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: `ImportDeclaration:not([source.value=/${allowedImportRegex}/])`,
+          message: integrationTests.message ?? BOUNDARY_MESSAGES.integrationSeam,
+        },
+        {
+          selector: 'ImportExpression',
+          message: integrationTests.message ?? BOUNDARY_MESSAGES.integrationSeam,
+        },
+      ],
+    },
+  };
+}
+
+function buildRestrictedImportEntry({
+  files,
+  forbiddenImportPatterns,
+  forbiddenExactImports = [],
+  forbiddenDynamicImportPatterns = forbiddenImportPatterns,
+  message,
+  restrictDynamicImports = false,
+}) {
+  const rules = {};
+
+  if (forbiddenImportPatterns.length > 0 || forbiddenExactImports.length > 0) {
+    const restriction = {};
+    if (forbiddenImportPatterns.length > 0) {
+      restriction.patterns = [
+        {
+          group: Array.from(new Set(forbiddenImportPatterns)).sort(),
+          message,
+        },
+      ];
+    }
+    if (forbiddenExactImports.length > 0) {
+      restriction.paths = Array.from(new Set(forbiddenExactImports)).sort().map((name) => ({
+        name,
+        message,
+      }));
+    }
+    rules['no-restricted-imports'] = [
+      'error',
+      restriction,
+    ];
+  }
+
+  if (restrictDynamicImports) {
+    const restrictedSyntax = [
+      {
+        selector: 'ImportExpression:not([source.type="Literal"])',
+        message,
+      },
+      ...buildDynamicImportRegexes({ forbiddenImportPatterns: forbiddenDynamicImportPatterns }).map((regex) => ({
+        selector: `ImportExpression[source.value=/${regex}/]`,
+        message,
+      })),
+    ];
+
+    if (restrictedSyntax.length > 0) {
+      rules['no-restricted-syntax'] = [
+        'error',
+        ...restrictedSyntax,
+      ];
+    }
+  }
+
+  return {
+    files,
+    rules,
+  };
+}
+
+function nodeBuiltinImportPatternsExcept(allowed = []) {
+  const allowedSet = new Set(allowed);
+  return nodeBuiltinImportPatterns.filter((pattern) =>
+    pattern !== 'node:*' && pattern !== 'domain' && !allowedSet.has(pattern),
+  );
 }
 
 function buildDynamicImportRegexes(boundary) {
@@ -122,6 +270,11 @@ function buildDynamicImportRegexes(boundary) {
       regexes.push(`(?:^|\\/)${escapeSelectorRegexLiteral(segment)}(?:\\/|$)`);
       continue;
     }
+    if (pattern.startsWith('**/')) {
+      const segment = pattern.slice(3);
+      regexes.push(`(?:^|\\/)${escapeSelectorRegexLiteral(segment)}$`);
+      continue;
+    }
     if (pattern.endsWith('/**')) {
       const prefix = pattern.slice(0, -3);
       regexes.push(`^${escapeSelectorRegexLiteral(prefix)}(?:\\/|$)`);
@@ -139,4 +292,23 @@ function escapeSelectorRegexLiteral(text) {
   return text
     .replace(/[\\^$+?.()|[\]{}]/gu, '\\$&')
     .replace(/\//gu, '\\/');
+}
+
+function buildAllowedIntegrationImportRegex(seam) {
+  const allowed = [
+    ...(seam.allowedNodeBuiltins ?? []),
+    ...(seam.allowedImportPatterns ?? []),
+  ];
+  return buildAllowedImportRegex(allowed);
+}
+
+function buildAllowedImportRegex(allowed) {
+  const patterns = allowed.map((pattern) => {
+    if (pattern.endsWith('/**')) {
+      return `${escapeSelectorRegexLiteral(pattern.slice(0, -3))}(?:\\/.*)?`;
+    }
+    return escapeSelectorRegexLiteral(pattern);
+  });
+
+  return `^(?:${patterns.join('|')})$`;
 }

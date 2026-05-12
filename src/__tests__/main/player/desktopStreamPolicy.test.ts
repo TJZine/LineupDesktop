@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS } from '../contracts/player.js';
-import { decideDesktopStreamPolicy } from '../main/player/streamPolicy/desktopStreamPolicy.js';
+import { PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS } from '../../../contracts/player.js';
+import { decideDesktopStreamPolicy } from '../../../main/player/streamPolicy/desktopStreamPolicy.js';
 import type {
   DesktopStreamPolicyDecision,
   DesktopStreamPolicyDecisionKind,
   DesktopStreamPolicyReasonCode,
   DesktopStreamPolicyUnknownCode,
-} from '../main/player/streamPolicy/types.js';
+} from '../../../main/player/streamPolicy/types.js';
 import {
   audioFallbackCandidate,
   allDesktopStreamPolicyFixtureValues,

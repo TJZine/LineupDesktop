@@ -12,9 +12,9 @@ import {
   isValidChannelConfig,
   isValidContentSource,
   SourceResolutionCache,
-} from '../domain/channel/index.js';
-import { applyPlaybackOrdering } from '../domain/scheduler/shared/playbackOrdering.js';
-import { shuffleWithSeed } from '../domain/scheduler/shared/prng.js';
+} from '../../domain/channel/index.js';
+import { applyPlaybackOrdering } from '../../domain/scheduler/shared/playbackOrdering.js';
+import { shuffleWithSeed } from '../../domain/scheduler/shared/prng.js';
 import type {
   ChannelAbortSignal,
   ChannelClock,
@@ -24,13 +24,13 @@ import type {
   ChannelPersistencePort,
   IPlexLibraryMinimal,
   PlexMediaItemMinimal,
-} from '../domain/channel/index.js';
+} from '../../domain/channel/index.js';
 import type {
   ChannelConfig,
   ChannelContentSource,
   ResolvedContentItem,
   StoredChannelData,
-} from '../domain/channel/index.js';
+} from '../../domain/channel/index.js';
 
 class FakeClock implements ChannelClock {
   public currentTime: number;
@@ -475,6 +475,14 @@ test('channel domain validates optional authoring fields strictly on create and 
     { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
   );
   await assert.rejects(
+    () => manager.createChannel({ contentSource: librarySource(), name: '' }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.createChannel({ contentSource: librarySource(), name: '   ' }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
     () => manager.createChannel({ contentSource: librarySource(), description: 1 as never }),
     { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
   );
@@ -544,6 +552,10 @@ test('channel domain validates optional authoring fields strictly on create and 
   );
   await assert.rejects(
     () => manager.updateChannel(valid.id, { name: '' }),
+    { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
+  );
+  await assert.rejects(
+    () => manager.updateChannel(valid.id, { name: '\t ' }),
     { name: 'ChannelError', code: 'STORAGE_VALIDATION_FAILED' },
   );
   await assert.rejects(
@@ -1562,6 +1574,36 @@ test('channel manager recomputes a pending refresh metadata commit after unrelat
   ]);
 });
 
+test('channel manager emits owned contentResolved payloads', async () => {
+  const library = new FakeLibrary();
+  const { manager } = createManager({ library });
+  const channel = await manager.createChannel(
+    { number: 1, name: 'Owned Payload', contentSource: librarySource('owned') },
+    { initialContent: [resolvedItem('seed')] },
+  );
+  const observed: { eventItems?: ResolvedContentItem[] } = {};
+  manager.on('contentResolved', (content) => {
+    observed.eventItems = content.items;
+    const first = content.items[0];
+    if (first) {
+      first.ratingKey = 'listener-mutated';
+    }
+    content.orderedItems.length = 0;
+  });
+  library.libraryItems.set('owned', [movie('fresh-one'), movie('fresh-two')]);
+
+  const refreshed = await manager.refreshChannelContent(channel.id);
+  const cached = await manager.resolveChannelContent(channel.id);
+  const eventItems = observed.eventItems;
+
+  assert.ok(eventItems);
+  assert.equal(eventItems[0]?.ratingKey, 'listener-mutated');
+  assert.deepEqual(refreshed.items.map((item) => item.ratingKey), ['fresh-one', 'fresh-two']);
+  assert.deepEqual(refreshed.orderedItems.map((item) => item.ratingKey), ['fresh-one', 'fresh-two']);
+  assert.deepEqual(cached.items.map((item) => item.ratingKey), ['fresh-one', 'fresh-two']);
+  assert.deepEqual(cached.orderedItems.map((item) => item.ratingKey), ['fresh-one', 'fresh-two']);
+});
+
 test('channel manager serializes concurrent creates with duplicate explicit numbers', async () => {
   const { manager } = createManager();
 
@@ -1640,6 +1682,10 @@ test('channel domain replaceAllChannels normalizes duplicate numbers and current
 test('channel domain validates complete channel config numeric fields strictly', () => {
   const valid = completeChannel('valid', 1);
   assert.equal(isValidChannelConfig(valid), true);
+  assert.equal(isValidChannelConfig({ ...valid, id: '' }), false);
+  assert.equal(isValidChannelConfig({ ...valid, id: '   ' }), false);
+  assert.equal(isValidChannelConfig({ ...valid, name: '' }), false);
+  assert.equal(isValidChannelConfig({ ...valid, name: '\t ' }), false);
   assert.equal(isValidChannelConfig({ ...valid, number: 0 }), false);
   assert.equal(isValidChannelConfig({ ...valid, number: 501 }), false);
   assert.equal(isValidChannelConfig({ ...valid, number: 1.5 }), false);
@@ -1696,6 +1742,7 @@ test('channel domain validates complete channel config numeric fields strictly',
   assert.equal(isValidChannelConfig({ ...valid, phaseSeed: Number.POSITIVE_INFINITY }), false);
   assert.equal(isValidChannelConfig({ ...valid, lineupReplicaIndex: -1 }), false);
   assert.equal(isValidChannelConfig({ ...valid, lineupReplicaIndex: 1.5 }), true);
+
 });
 
 test('channel domain safety audit catches forbidden renderer persistence fields in outputs and fixtures', async () => {

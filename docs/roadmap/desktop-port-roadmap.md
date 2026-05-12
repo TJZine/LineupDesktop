@@ -169,8 +169,8 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-11 are complete enough to route the next Tier 3 session to
-complete RD-12 Plex-to-player integration through the quality loop. Do not
+RD-01 through RD-12 are complete enough to route the next Tier 3 session to
+complete RD-13 Renderer UI And Navigation Import through the quality loop. Do not
 import additional original Lineup product code until a reviewed product slice
 plan explicitly authorizes a bounded import.
 
@@ -686,7 +686,7 @@ Completion notes:
 
 ### RD-12 Plex To Player Integration
 
-Status: not started.
+Status: complete.
 
 Depends on:
 
@@ -703,10 +703,32 @@ Objective:
 
 Exit gates:
 
-- Stop, switch, error, logout, server change, profile change, and helper crash
-  paths clean up transcode sessions and stale events.
-- Orchestration wiring remains a thin factory/platform seam.
-- Tokens do not reach renderer or logs.
+- Stop, switch, error, logout, server change, profile change, helper crash,
+  teardown, failed resolver, failed player load, stale candidate, and rejected
+  lease paths are covered by the main-owned playback runtime with request/epoch
+  custody and PMS cleanup.
+- The Plex stream resolver applies RD-08 policy through injected selected
+  connection, credential, media-detail, and PMS-session ports, then separates
+  private playback setup from renderer-safe player load payloads.
+- Scheduler/channel playback mapping stays behind a main/player bridge, and
+  orchestration wiring is exposed as a thin injected composition seam.
+- Tokens, auth headers, raw Plex payloads, tokenized URLs, runtime filesystem
+  paths, Electron/Node objects, and native/helper internals do not reach
+  renderer-facing contracts, fixtures, diagnostics, or docs.
+
+Closeout:
+
+- Implementation: `src/main/player/plexPlaybackRuntime.ts`,
+  `src/main/plex/streamResolver.ts`, `src/main/player/plexPlaybackBridge.ts`,
+  and `src/main/player/plexPlaybackComposition.ts`.
+- Proof: `npm run verify` passed on 2026-05-11 with typecheck, architecture
+  lint, 249 contract tests, 88 harness-doc tests, docs verification, and
+  redaction verification.
+- Platform proof label: Mac/local automated proof sufficient. RD-12 remains
+  injected/fakeable and does not enable production native-helper playback, real
+  Electron app-path or `safeStorage` runtime wiring, packaging, Windows-specific
+  proof surfaces, preload/renderer Plex APIs, or additional upstream product
+  imports.
 
 ### RD-13 Renderer UI And Navigation Import
 

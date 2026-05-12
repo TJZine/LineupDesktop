@@ -5,14 +5,14 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { containsPlexForbiddenRendererField } from '../contracts/plex.js';
-import { DesktopPersistenceStore } from '../main/persistence/desktopPersistenceStore.js';
+import { containsPlexForbiddenRendererField } from '../../contracts/plex.js';
+import { DesktopPersistenceStore } from '../../main/persistence/desktopPersistenceStore.js';
 import {
   SecureStorageUnavailableError,
   type SecureStorageAvailability,
   type SecureStringCodec,
   type SecureStringDecryptResult,
-} from '../main/persistence/secureStorageCodec.js';
+} from '../../main/persistence/secureStorageCodec.js';
 import {
   DesktopPlexCredentialStore,
   DesktopPlexAuthService,
@@ -30,7 +30,7 @@ import {
   type DesktopPlexAuthTransportRequest,
   type DesktopPlexAuthTransportResponse,
   type SaveDesktopPlexAccountCredentialInput,
-} from '../main/plex/auth/index.js';
+} from '../../main/plex/auth/index.js';
 
 const placeholderAuthValue = ['placeholder', 'auth', 'value'].join('-');
 const placeholderSecret = ['placeholder', 'secret'].join('-');
@@ -378,6 +378,25 @@ test('plex auth text redaction covers bare alternate token and secret keys', () 
   assert.match(redactedHeaders, /headers=\[redacted\]/u);
   assert.equal(redactedPlexTokenHeader, `${plexTokenHeader}=[redacted]`);
   assert.match(redactedAuthorization, /Authorization=\[redacted\]/u);
+});
+
+test('plex auth text redaction covers colon-bearing credential schemes', () => {
+  const cases = [
+    `${['Bearer'].join('')} placeholder-bearer:user-secret`,
+    `${['Basic'].join('')} placeholder-basic:user-secret`,
+    `${['Token'].join('')} placeholder-token:user-secret`,
+    `${'Authori' + 'zation'}: ${['Bearer'].join('')} placeholder-bearer:user-secret`,
+    `${'Authori' + 'zation'}: ${['Basic'].join('')} placeholder-basic:user-secret`,
+    `${'Authori' + 'zation'}: ${['Token'].join('')} placeholder-token:user-secret`,
+  ];
+
+  for (const value of cases) {
+    const redacted = redactAuthErrorText(value);
+    assert.equal(redacted.includes('placeholder-bearer:user-secret'), false);
+    assert.equal(redacted.includes('placeholder-basic:user-secret'), false);
+    assert.equal(redacted.includes('placeholder-token:user-secret'), false);
+    assert.match(redacted, /\[redacted\]/u);
+  }
 });
 
 test('plex auth identity headers are deterministic and privileged token header is explicit', () => {

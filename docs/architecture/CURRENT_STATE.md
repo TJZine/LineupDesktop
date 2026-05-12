@@ -64,6 +64,24 @@ network transport, preload/renderer Plex APIs, `src/main/index.ts`
 composition, real Electron safeStorage/app paths, package/dependency changes,
 stream resolver/runtime playback URL setup, scheduler/channel persistence, or
 backup/restore implementation.
+RD-11 adds pure scheduler and channel/content domains plus a main-owned channel
+persistence adapter; these owners remain runtime-free, use injected
+clocks/timers/library/persistence ports, and keep Electron, Node, browser
+globals, live Plex transport, raw Plex payloads, auth headers, tokenized URLs,
+and native playback details out of domain state. RD-12 adds the first
+main-owned Plex-to-player runtime path through
+`src/main/player/plexPlaybackRuntime.ts`, `src/main/plex/streamResolver.ts`,
+`src/main/player/plexPlaybackBridge.ts`, and
+`src/main/player/plexPlaybackComposition.ts`. The runtime resolves current
+scheduled/channel media through injected main-owned seams, applies the RD-08
+policy, dispatches renderer-safe load payloads through the RD-07 player adapter
+boundary, and owns PMS cleanup for stop, switch, error, logout, server change,
+profile change, helper crash, teardown, failed resolver/player paths, stale
+events, and rejected leases. RD-12 keeps private Plex playback descriptors and
+PMS lease custody out of renderer-facing contracts and does not add
+preload/renderer Plex APIs, live transport composition, real Electron
+safeStorage/app-path wiring, production native-helper playback, packaging, or
+additional copied/adapted upstream product code.
 
 ## Product Invariants
 
@@ -96,11 +114,13 @@ backup/restore implementation.
 | Plex contract vocabulary | `src/contracts/plex.ts` | Renderer-safe Plex profile, home-user, server, health, selection, library, media, collection, playlist, tag-directory summaries plus recursive forbidden-field checks for raw credentials, headers, URI-like fields, raw payloads, filesystem paths, and image keys |
 | Desktop player adapter boundary | `src/main/player/desktopPlayerAdapter.ts`, `src/main/player/nativePlayerHostPort.ts`, `src/main/player/nativePlayerHostProcess.ts`, and `src/main/player/playerIpc.ts` | Main-owned RD-07 adapter core, fakeable native-host process seam, and player IPC owner with renderer-intent validation, fakeable native-host event validation, request-id stale-event quarantine, real spawned helper test-double proof, helper/process failure normalization, cleanup/reap handling, runtime main/preload delivery, development/smoke fake-host activation, production unsupported/noop behavior, and renderer-safe diagnostics |
 | Desktop stream policy | `src/main/player/streamPolicy/desktopStreamPolicy.ts` and `src/main/player/streamPolicy/types.ts` | Main/player-owned RD-08 deterministic fixture policy for capability-driven direct play, direct stream, transcode, unsupported decisions, audio/subtitle fallback, HDR/Dolby Vision handling, stable reason codes, explicit unknowns, Windows RD-06/RD-07 sample-matrix proof, and safe policy outputs; not wired to Plex runtime, renderer UI, native helper, secure storage, or runtime IPC |
+| Plex stream resolver boundary | `src/main/plex/streamResolver.ts` | Main-owned RD-12 resolver that consumes injected selected-connection, active-credential, media-detail, and PMS-session ports; maps Plex media details into RD-08 stream-policy candidates; returns a private privileged playback descriptor separately from renderer-safe player load payloads, safe diagnostics, and request-scoped PMS leases |
+| Plex playback runtime boundary | `src/main/player/plexPlaybackRuntime.ts`, `src/main/player/plexPlaybackBridge.ts`, and `src/main/player/plexPlaybackComposition.ts` | Main-owned RD-12 runtime, scheduler/channel bridge, and thin composition seam for resolving current scheduled Plex media into safe player loads, applying request id plus epoch stale-event custody, cleaning PMS/player state on stop/switch/error/logout/server-change/profile-change/helper-crash/teardown/failure paths, rejecting unsafe or mismatched leases before player dispatch, and keeping private playback setup out of renderer/preload contracts |
 | Desktop persistence boundary | `src/main/persistence/appDataPaths.ts`, `src/main/persistence/secureStorageCodec.ts`, and `src/main/persistence/desktopPersistenceStore.ts` | Main-owned RD-09 app-data path, Electron safeStorage codec, encrypted Plex credential record, selected-server state, unavailable/corrupt classification, fail-closed no-plaintext fallback, and renderer-safe snapshot owner; not wired to Plex runtime, preload, renderer, scheduler/channel persistence, backup/restore, or production IPC |
 | Desktop Plex library domain | `src/main/plex/library/*` | Main-owned RD-10 imported/adapted Plex library parser/domain owner for library sections, media metadata, seasons, collections, playlists, tag directories, search hubs, pagination, request intent, and renderer-safe summaries; no live fetch/cache runtime, image URL construction, stream resolver runtime, preload, renderer, or playback URL setup |
 | Desktop Plex auth domain | `src/main/plex/auth/*` | Main-owned RD-10 imported/adapted Plex auth owner for PIN/profile/token validation, Plex Home users, profile switching, injected auth transport, sanitized errors, Desktop identity metadata, and RD-09 credential storage adapter; no live Plex transport composition, preload/renderer auth API, real Electron safeStorage/app-path wiring, package change, or OS-specific runtime behavior |
 | Desktop Plex discovery domain | `src/main/plex/discovery/*` | Main-owned RD-10 imported/adapted Plex discovery and selected-server owner for resource parsing, connection probe policy, health classification, stale discovery-context invalidation, RD-09 selected-server summary persistence, and in-memory selected connection custody; restores by server id plus fresh probing and never persists or returns connection URI/server URI state |
-| Domain architecture verifier | `tools/architecture-rules/*` and `tools/__tests__/build-eslint-architecture-rules.test.mjs` | RD-11 domain-boundary verifier for `src/domain/**`; blocks Electron, Node, main/preload/renderer/native-helper imports, dynamic owner imports, and browser/runtime globals including direct `globalThis` runtime access |
+| Domain architecture verifier | `tools/architecture-rules/*` and `tools/__tests__/build-eslint-architecture-rules.test.mjs` | RD-11 domain-boundary verifier for `src/domain/**`; blocks Electron, Node, main/preload/renderer/native-helper imports, dynamic owner imports, and browser/runtime globals including direct `globalThis` runtime access. F-004 removes the blanket `src/**/__tests__/**` production-boundary exemption and adds explicit test-owner coverage for `src/__tests__/contracts/**`, `src/__tests__/domain/**`, `src/__tests__/main/**`, `src/__tests__/preload/**`, and `src/__tests__/renderer/**`; `src/__tests__/integration/**` is denied by default except for data-declared named seams. The only current integration exception is `preload-contract-vocabulary-parity` at `src/__tests__/integration/preloadContractVocabulary.test.ts`, which may compare `src/preload/vocabulary.cjs` with renderer-safe contract vocabulary. |
 | Scheduler domain | `src/domain/scheduler/**` | Pure RD-11 imported/adapted deterministic scheduler and playback-ordering owner for anchor-time schedule calculation, loop wrapping, current/next/previous lookup, schedule windows, shuffle seeds, block playback validation, injected clock/timer ports, and event emission; not wired to Electron main/preload, renderer, Plex runtime, stream resolution, or native playback |
 | Channel and content domain | `src/domain/channel/**` | Pure RD-11 imported/adapted channel authoring, import/export normalization, content resolution through injected domain-safe library ports, stale fallback, source/channel resolution caches, retry scheduling, lineup navigation, and channel persistence port owner; no raw Plex payload, tokenized URL, auth header, Electron, Node, browser storage, preload, renderer, or live network ownership |
 | Channel persistence adapter | `src/main/persistence/desktopChannelPersistenceStore.ts` | Main-owned RD-11 separate versioned channel persistence file adapter behind an injected file path, temp-file write, mode hardening, and typed domain storage port; not wired to Electron app paths, existing credential/selected-server persistence, preload/renderer APIs, backup/restore, or runtime composition |
@@ -115,6 +135,8 @@ backup/restore implementation.
 - Live Plex auth/discovery/library transport and runtime composition
 - Windows-proven production native playback helper
 - Windows-proven production playback host
+- Production Plex-to-native-helper playback setup using the private RD-12
+  playback descriptor
 - production renderer player UI wiring
 - preload/renderer persistence IPC wiring
 - encrypted credential backup/restore implementation

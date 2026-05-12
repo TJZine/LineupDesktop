@@ -11,12 +11,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import {
   PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
   type PlayerCommand,
-} from '../contracts/player.js';
+} from '../../../contracts/player.js';
 import {
   NativePlayerHostProcess,
   type NativePlayerHostChildProcess,
-} from '../main/player/nativePlayerHostProcess.js';
-import type { NativePlayerHostLifecycleFailure } from '../main/player/nativePlayerHostPort.js';
+} from '../../../main/player/nativePlayerHostProcess.js';
+import type { NativePlayerHostLifecycleFailure } from '../../../main/player/nativePlayerHostPort.js';
 
 type SpawnedNativeHostChildProcess = NativePlayerHostChildProcess & {
   readonly exitCode: number | null;

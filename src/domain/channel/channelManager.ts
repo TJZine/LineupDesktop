@@ -231,7 +231,7 @@ export class ChannelManager implements IChannelManager {
       if (resolvedContent) {
         this.resolutionCache.set(resolvedContent);
         if (shouldEmitContentResolved) {
-          this.emitter.emit('contentResolved', resolvedContent);
+          this.emitContentResolved(resolvedContent);
         }
       }
       this.emitter.emit('channelCreated', cloneChannelForOwnership(channel));
@@ -277,7 +277,7 @@ export class ChannelManager implements IChannelManager {
       );
       if (resolvedContent) {
         this.resolutionCache.set(resolvedContent);
-        if (!resolvedContent.fromCache) this.emitter.emit('contentResolved', resolvedContent);
+        if (!resolvedContent.fromCache) this.emitContentResolved(resolvedContent);
       }
 
       this.emitter.emit('channelUpdated', cloneChannelForOwnership(updated));
@@ -673,6 +673,10 @@ export class ChannelManager implements IChannelManager {
     channel.totalDurationMs = content.totalDurationMs;
   }
 
+  private emitContentResolved(content: ResolvedChannelContent): void {
+    this.emitter.emit('contentResolved', this.resolutionCache.cloneContent(content));
+  }
+
   private createAccessDeniedResolutionError(channel: ChannelConfig, error: unknown): ChannelError {
     this.logger.warn('Access denied resolving channel content', {
       channelId: channel.id,
@@ -747,7 +751,7 @@ export class ChannelManager implements IChannelManager {
         );
         this.retryScheduler.cancel(channel.id);
         this.resolutionCache.set(result);
-        this.emitter.emit('contentResolved', result);
+        this.emitContentResolved(result);
         return result;
       });
 
@@ -920,12 +924,12 @@ export function isValidChannelConfig(value: unknown): value is ChannelConfig {
   const channel = value as Partial<ChannelConfig>;
   if (
     !(
-      typeof channel.id === 'string' &&
+      isNonBlankString(channel.id) &&
       typeof channel.number === 'number' &&
       Number.isInteger(channel.number) &&
       channel.number >= MIN_CHANNEL_NUMBER &&
       channel.number <= MAX_CHANNEL_NUMBER &&
-      typeof channel.name === 'string' &&
+      isNonBlankString(channel.name) &&
       typeof channel.startTimeAnchor === 'number' &&
       Number.isFinite(channel.startTimeAnchor) &&
       channel.startTimeAnchor >= 0 &&
@@ -1002,6 +1006,10 @@ function isNonNegativeFiniteNumber(value: unknown): value is number {
 
 function isValidIdString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0 && value.trim() !== 'undefined';
+}
+
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 function isPositiveInteger(value: unknown): value is number {

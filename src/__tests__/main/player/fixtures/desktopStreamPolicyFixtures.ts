@@ -2,8 +2,8 @@ import type {
   DesktopStreamCapabilityProfile,
   DesktopStreamMediaCandidate,
   DesktopStreamPolicyInput,
-} from '../../main/player/streamPolicy/types.js';
-import type { PlaybackCapabilityProfile } from '../../contracts/player.js';
+} from '../../../../main/player/streamPolicy/types.js';
+import type { PlaybackCapabilityProfile } from '../../../../contracts/player.js';
 
 export const desktopPolicyProfile: DesktopStreamCapabilityProfile = {
   id: 'desktop-policy-safe-profile',

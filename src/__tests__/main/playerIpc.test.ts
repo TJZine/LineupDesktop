@@ -6,20 +6,20 @@ import {
   LINEUP_PLAYER_CLEANUP_CHANNEL,
   LINEUP_PLAYER_COMMAND_CHANNEL,
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
-} from '../contracts/ipc.js';
+} from '../../contracts/ipc.js';
 import {
   PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
   type PlayerCommand,
   type PlayerEvent,
-} from '../contracts/player.js';
-import { registerPlayerIpcHandlers } from '../main/player/playerIpc.js';
-import { redactMainProcessError } from '../main/redactedDiagnostics.js';
+} from '../../contracts/player.js';
+import { registerPlayerIpcHandlers } from '../../main/player/playerIpc.js';
+import { redactMainProcessError } from '../../main/redactedDiagnostics.js';
 import type {
   NativePlayerHostCommandResult,
   NativePlayerHostFailure,
   NativePlayerHostLifecycleFailure,
   NativePlayerHostPort,
-} from '../main/player/nativePlayerHostPort.js';
+} from '../../main/player/nativePlayerHostPort.js';
 
 type Handler = (event: IpcMainInvokeEvent, payload?: unknown) => unknown;
 
@@ -288,9 +288,14 @@ test('main process diagnostics preserve safe token and bearer prefixes', () => {
 test('main process diagnostics redact multipart auth and header values', () => {
   const authorizationHeader = ['Authorization'].join('');
   const plexTokenHeader = ['X-Plex', 'Token'].join('-');
+  const bearerScheme = ['Bearer'].join('');
+  const basicScheme = ['Basic'].join('');
   const tokenScheme = ['Token'].join('');
   const cases = [
     `${authorizationHeader}: ${tokenScheme} rawtoken12345`,
+    `${authorizationHeader}: ${bearerScheme} rawbearer:user-secret`,
+    `${authorizationHeader}: ${basicScheme} rawbasic:user-secret`,
+    `${authorizationHeader}: ${tokenScheme} rawtoken:user-secret`,
     `headers: ${plexTokenHeader}: placeholder-secret`,
     `${plexTokenHeader}: ${tokenScheme} placeholder-secret`,
   ];
@@ -298,7 +303,26 @@ test('main process diagnostics redact multipart auth and header values', () => {
   for (const value of cases) {
     const message = redactMainProcessError(new Error(value));
     assert.equal(message.includes('rawtoken12345'), false);
+    assert.equal(message.includes('rawbearer:user-secret'), false);
+    assert.equal(message.includes('rawbasic:user-secret'), false);
+    assert.equal(message.includes('rawtoken:user-secret'), false);
     assert.equal(message.includes('placeholder-secret'), false);
+  }
+});
+
+test('main process diagnostics redact standalone colon-bearing credential schemes', () => {
+  const cases = [
+    `${['Bearer'].join('')} rawbearer:user-secret`,
+    `${['Basic'].join('')} rawbasic:user-secret`,
+    `${['Token'].join('')} rawtoken:user-secret`,
+  ];
+
+  for (const value of cases) {
+    const message = redactMainProcessError(new Error(value));
+    assert.equal(message.includes('rawbearer:user-secret'), false);
+    assert.equal(message.includes('rawbasic:user-secret'), false);
+    assert.equal(message.includes('rawtoken:user-secret'), false);
+    assert.match(message, /\[redacted\]/u);
   }
 });
 
