@@ -1,0 +1,100 @@
+@media (max-width: 720px) {
+  body {
+    overflow: auto;
+  }
+
+  .app-shell {
+    grid-template:
+      "topbar" auto
+      "rail" auto
+      "screens" 1fr / 1fr;
+    padding: 16px;
+  }
+
+  .app-shell__topbar {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .shell-status {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .route-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .screen {
+    min-height: 420px;
+  }
+
+  .epg-grid__header,
+  .epg-grid__row {
+    grid-template-columns: 104px minmax(420px, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  :root {
+    --color-app-bg: Canvas;
+    --color-app-bg-elevated: Canvas;
+    --color-surface: Canvas;
+    --color-surface-raised: Canvas;
+    --color-surface-raised-hover: Canvas;
+    --color-surface-overlay: Canvas;
+    --color-text: CanvasText;
+    --color-text-muted: CanvasText;
+    --color-text-subtle: CanvasText;
+    --color-inverse-bg: Highlight;
+    --color-inverse-text: HighlightText;
+    --color-focus: Highlight;
+    --color-selected-muted: CanvasText;
+    --color-border: CanvasText;
+    --color-border-strong: CanvasText;
+    --color-focus-border: Highlight;
+    --color-focus-surface: Canvas;
+    --color-focus-border-strong: Highlight;
+  }
+
+  body,
+  .player-surface {
+    background: Canvas;
+  }
+
+  button,
+  .screen,
+  .now-playing-overlay,
+  .mini-guide,
+  .playback-options,
+  .channel-number-overlay,
+  .program-summary div,
+  .settings-summary div,
+  .setup-summary div,
+  .channel-list__item,
+  .channel-draft-list__item,
+  .settings-section,
+  .setup-steps li,
+  .guide-detail,
+  .epg-grid__channel,
+  .epg-grid__program {
+    border: 1px solid CanvasText;
+    forced-color-adjust: auto;
+  }
+
+  button:focus-visible,
+  .is-focused {
+    outline-color: Highlight;
+  }
+}
