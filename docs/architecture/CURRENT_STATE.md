@@ -6,10 +6,12 @@
 ## Scope
 
 Lineup Desktop is a new Windows-first Electron repository. It currently has a
-minimal secure Electron shell frame plus docs, workflow, contract, harness
-scaffolding, and main-owned Plex auth/discovery/library domain seams. There is
-no production native playback host, scheduler, copied TV UI, installer
-implementation, live Plex transport wiring, or renderer Plex API yet.
+secure Electron shell frame, the RD-13 renderer app shell/navigation, workflow,
+settings/channel setup, fake-backed EPG, fake-backed overlay, and CSS/theme
+style surfaces, docs, workflow, contract, harness scaffolding, and main-owned
+Plex auth/discovery/library domain seams. There is no production native playback
+host, copied/adapted upstream TV UI source, installer implementation, live Plex
+transport wiring, or renderer Plex API yet.
 RD-04 adds documentation and harness ownership for upstream behavior guardrails
 only; it does not import product runtime code. RD-05 adds a disposable
 dev-only external `mpv` POC tool and ignored redacted local evidence only; it
@@ -81,7 +83,40 @@ events, and rejected leases. RD-12 keeps private Plex playback descriptors and
 PMS lease custody out of renderer-facing contracts and does not add
 preload/renderer Plex APIs, live transport composition, real Electron
 safeStorage/app-path wiring, production native-helper playback, packaging, or
-additional copied/adapted upstream product code.
+additional copied/adapted upstream product code. RD-13 Unit 1 adds a
+renderer-owned app shell/navigation foundation under `src/renderer/**`: primary
+route rail, player/guide/settings/channel-setup screen containers,
+renderer-local route and focus state, Desktop key mapping, accessible primary
+navigation, and Node-safe navigation tests. It also resolves the existing
+sandboxed-preload smoke blocker by keeping preload guard vocabulary
+single-file-compatible with Electron sandboxed preload runtime while preserving
+the existing shell/window/player preload API shape and smoke containment checks.
+RD-13 Unit 2 adds a renderer-local fake-backed route/workflow skeleton for the
+player, guide, settings, and channel-setup routes. It uses renderer-safe fake
+view models, local route action transitions, and Node-safe workflow tests; it
+does not import domain code, add preload/main contracts, contact Plex, persist
+settings, or wire runtime playback. RD-13 Unit 3 adds renderer-local
+settings/channel setup details with fake settings sections, channel setup draft
+state, local-only settings/setup actions, validation copy, and Node-safe tests.
+It does not persist settings, use browser storage, contact Plex, add selected
+server runtime, or import domain code. RD-13 Unit 4 adds a renderer-local
+fake-backed EPG surface with deterministic UTC fake schedule formatting,
+schedule slots, program span calculation, guide detail/grid rendering, guide
+route smoke reachability assertions, and Node-safe EPG tests. It does not import
+domain code, contact Plex, add renderer/preload APIs, load remote/tokenized
+assets, or wire scheduler/runtime playback. RD-13 Unit 5 adds renderer-local
+fake-backed player overlays: OSD controls, now-playing, mini guide, channel
+number entry, channel badge, playback options, overlay stack state, focus
+fallback behavior, smoke reachability assertions, and Node-safe overlay tests.
+It uses renderer-safe player snapshot vocabulary only and does not wire runtime
+playback, expose native/helper internals, contact Plex, or add preload APIs.
+RD-13 Unit 6 adds renderer-local CSS-only assets/styles completion through CSS
+custom-property tokens, theme hooks, focus-visible styling, reduced-motion and
+forced-colors policies, responsive constraints, loaded-style smoke assertions,
+and no protocol, static asset, dependency, or lockfile expansion. Units 1
+through 6 used upstream Lineup UI/navigation/assets only as reference; no
+copied/adapted upstream source landed, so no RD-13 import-ledger row was needed.
+RD-13 is complete at the renderer UI and navigation import level.
 
 ## Product Invariants
 
@@ -105,8 +140,8 @@ additional copied/adapted upstream product code.
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
 | Import provenance | `docs/architecture/import-ledger.md` | Scaffolded |
 | Electron main shell | `src/main/index.ts` and `src/main/protocol.ts` | Minimal secure shell frame |
-| Preload bridge | `src/preload/index.cts` | Narrow shell/window/player bridge with runtime payload guards |
-| Renderer shell | `src/renderer/index.ts` and `src/renderer/index.html` | Minimal unprivileged boot proof |
+| Preload bridge | `src/preload/index.cts` | Narrow shell/window/player bridge with runtime payload guards; guard vocabulary is kept in the sandbox-compatible preload entrypoint and parity-tested against renderer-safe contracts |
+| Renderer shell | `src/renderer/index.ts`, `src/renderer/index.html`, `src/renderer/styles.css`, `src/renderer/navigation.ts`, `src/renderer/workflow.ts`, `src/renderer/settingsSetup.ts`, `src/renderer/epg.ts`, and `src/renderer/overlays.ts` | RD-13 Units 1-6 unprivileged app shell/navigation foundation, fake-backed route/workflow skeleton, settings/channel setup details, fake-backed EPG, fake-backed player overlays, and CSS/theme style surface with primary route rail, screen containers, renderer-local route/focus/workflow/settings/EPG/overlay state, Desktop key mapping, accessible primary navigation, renderer-safe fake view models, local-only setup/guide/overlay actions, deterministic UTC fake schedule formatting, overlay focus fallback behavior, CSS token/theme hooks, reduced-motion and forced-colors policies, responsive constraints, and smoke reachability/style proof |
 | Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window/player bridge contract |
 | Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, diagnostic, IPC result, and runtime event-guard contract |
 | IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window/player IPC literals plus renderer-safe player intent and forbidden-field vocabulary |

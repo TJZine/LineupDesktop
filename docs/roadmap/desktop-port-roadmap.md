@@ -169,8 +169,8 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-12 are complete enough to route the next Tier 3 session to
-complete RD-13 Renderer UI And Navigation Import through the quality loop. Do not
+RD-01 through RD-13 are complete enough to route the next Tier 3 session to
+start RD-14 Window, Input, And Fullscreen UX through the quality loop. Do not
 import additional original Lineup product code until a reviewed product slice
 plan explicitly authorizes a bounded import.
 
@@ -732,7 +732,36 @@ Closeout:
 
 ### RD-13 Renderer UI And Navigation Import
 
-Status: not started.
+Status: complete. Unit 1 app shell/navigation foundation completed on
+2026-05-12 through the RD-13 quality loop: renderer-owned shell/routes/focus,
+Node-safe navigation tests, and the narrow sandboxed-preload smoke unblocker
+landed with clean implementation review. Unit 2 fake-backed route/workflow
+skeleton also completed on 2026-05-12 with renderer-local fake view models,
+route action transitions, Node-safe workflow tests, and clean implementation
+review after one status-text fix. Unit 3 settings/channel setup details
+completed on 2026-05-12 with renderer-local fake settings/setup state,
+Desktop-safe copy, local-only settings/setup actions, Node-safe workflow tests,
+and clean implementation review. Unit 4 fake-backed EPG completed on
+2026-05-12 with renderer-local schedule state, deterministic UTC fake schedule
+formatting, guide grid/detail rendering, Node-safe EPG tests, and clean
+implementation re-review after fixing time-format and smoke-reachability
+findings. `npm run smoke:electron`, the RD-13 renderer/domain source audit, and
+`npm run verify` passed locally after Unit 4, with smoke now asserting Guide/EPG
+route reachability. Unit 5 fake-backed OSD/mini-guide/overlays completed on
+2026-05-12 with renderer-local overlay state, now-playing, mini guide, channel
+number, channel badge, playback options, focus fallback behavior, Node-safe
+overlay tests, and clean implementation re-review after two focus fixes.
+`npm run smoke:electron`, the RD-13 renderer/domain source audit, and `npm run
+verify` passed locally after Unit 5, with smoke asserting overlay reachability.
+Unit 6 assets/styles completed on 2026-05-12 with renderer-local CSS
+custom-property tokens, theme hooks, focus-visible normalization,
+reduced-motion and forced-colors policy, responsive constraints, and loaded
+style smoke assertions. `npm run smoke:electron`, the exact RD-13
+renderer/domain source audit, `npm run verify:redaction`, and `npm run verify`
+passed locally after Unit 6 with 283 contract tests and 88 harness-doc tests.
+No upstream UI source or assets were copied or adapted in Units 1 through 6, so
+no import-ledger row was needed. Platform proof label: Mac/local automated proof
+sufficient.
 
 Depends on:
 
