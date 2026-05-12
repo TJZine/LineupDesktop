@@ -33,6 +33,8 @@ export type PlayerOverlayActionId =
   | 'clearChannelNumber'
   | 'closeTopOverlay';
 
+type PlayerOverlayDigitActionId = Extract<PlayerOverlayActionId, `channelDigit${number}`>;
+
 export interface OverlayChannelViewModel {
   id: string;
   number: string;
@@ -212,8 +214,21 @@ export function applyPlayerOverlayAction(
       };
     case 'closeTopOverlay':
       return closeTopOverlay(state);
-    default:
+    case 'channelDigit0':
+    case 'channelDigit1':
+    case 'channelDigit2':
+    case 'channelDigit3':
+    case 'channelDigit4':
+    case 'channelDigit5':
+    case 'channelDigit6':
+    case 'channelDigit7':
+    case 'channelDigit8':
+    case 'channelDigit9':
       return appendChannelNumberDigit(state, readChannelDigit(actionId), nowMs);
+    default: {
+      const exhaustiveCheck: never = actionId;
+      return exhaustiveCheck;
+    }
   }
 }
 
@@ -316,8 +331,8 @@ function createNowPlayingSummary(
   snapshot: PlayerSnapshot,
   channel: OverlayChannelViewModel,
 ): NowPlayingOverlayViewModel {
-  const durationMs = snapshot.durationMs ?? snapshot.media?.durationMs ?? 0;
-  const positionMs = Math.min(snapshot.positionMs, durationMs);
+  const durationMs = Math.max(0, snapshot.durationMs ?? snapshot.media?.durationMs ?? 0);
+  const positionMs = Math.min(Math.max(snapshot.positionMs ?? 0, 0), durationMs);
   return {
     title: snapshot.media?.title ?? channel.currentTitle,
     subtitle: snapshot.media?.subtitle ?? channel.name,
@@ -485,7 +500,7 @@ function findChannel(channelId: string): OverlayChannelViewModel | undefined {
   return FAKE_OVERLAY_CHANNELS.find((channel) => channel.id === channelId);
 }
 
-function readChannelDigit(actionId: PlayerOverlayActionId): string {
+function readChannelDigit(actionId: PlayerOverlayDigitActionId): string {
   return actionId.replace('channelDigit', '');
 }
 

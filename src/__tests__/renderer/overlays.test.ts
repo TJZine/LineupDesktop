@@ -149,6 +149,39 @@ test('overlay view can summarize a renderer-safe player snapshot', () => {
   assert.equal(view.nowPlaying.progressPercent, 50);
 });
 
+test('overlay view clamps now-playing progress to the visible media duration', () => {
+  const baseSnapshot = createFakePlayerSnapshot();
+  const negativePositionView = createPlayerOverlayView(createPlayerOverlayState(), {
+    ...baseSnapshot,
+    positionMs: -30_000,
+    durationMs: 60_000,
+    media: {
+      id: 'clamped-media',
+      title: 'Clamped Media',
+      durationMs: 60_000,
+    },
+  });
+
+  assert.equal(negativePositionView.nowPlaying.positionLabel, '0:00');
+  assert.equal(negativePositionView.nowPlaying.durationLabel, '1:00');
+  assert.equal(negativePositionView.nowPlaying.progressPercent, 0);
+
+  const beyondDurationView = createPlayerOverlayView(createPlayerOverlayState(), {
+    ...baseSnapshot,
+    positionMs: 90_000,
+    durationMs: 60_000,
+    media: {
+      id: 'clamped-media',
+      title: 'Clamped Media',
+      durationMs: 60_000,
+    },
+  });
+
+  assert.equal(beyondDurationView.nowPlaying.positionLabel, '1:00');
+  assert.equal(beyondDurationView.nowPlaying.durationLabel, '1:00');
+  assert.equal(beyondDurationView.nowPlaying.progressPercent, 100);
+});
+
 test('fake overlay view models avoid privileged renderer fields', () => {
   const view = createPlayerOverlayView(createPlayerOverlayState());
 
