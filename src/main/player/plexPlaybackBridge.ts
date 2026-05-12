@@ -110,7 +110,8 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
   #readChannelId(): string | null {
     try {
       const state = this.#scheduler.getState();
-      return state.isActive && state.channelId.trim() !== '' ? state.channelId : null;
+      const channelId = state.channelId.trim();
+      return state.isActive && channelId !== '' ? channelId : null;
     } catch {
       return null;
     }

@@ -158,10 +158,20 @@ export class PlexPlaybackRuntime {
 
     events.push(...(await this.#cleanupActive('switch', { invalidateEpoch: false })));
 
-    const selection = await this.#scheduler.getCurrentPlayback({
-      nowMs: this.#clock.now(),
-      reason,
-    });
+    let selection: PlexPlaybackScheduleSelection | null;
+    try {
+      selection = await this.#scheduler.getCurrentPlayback({
+        nowMs: this.#clock.now(),
+        reason,
+      });
+    } catch {
+      if (!this.#isCurrentEpoch(epoch)) {
+        return this.#staleStartResult(epoch, null, events, 'scheduler failure arrived after cleanup');
+      }
+      events.push(this.#schedulerSelectionError());
+      this.#emit(events);
+      return { accepted: false, epoch, requestId: null, events };
+    }
     if (!this.#isCurrentEpoch(epoch)) {
       return this.#staleStartResult(epoch, null, events, 'scheduler result arrived after cleanup');
     }
@@ -445,18 +455,20 @@ export class PlexPlaybackRuntime {
     message: string,
     diagnostic: Omit<PlayerRendererSafeDiagnostic, 'component'>,
   ): PlayerEvent {
+    const warning: PlayerError = {
+      code,
+      category: 'stale-request',
+      message,
+      recoverable: true,
+      retryable: false,
+      requestId: requestId ?? undefined,
+      diagnostic: { component: 'plex-playback-runtime', ...diagnostic },
+    };
+
     return {
       event: 'warning',
-      requestId: this.#active?.requestId ?? null,
-      warning: {
-        code,
-        category: 'stale-request',
-        message,
-        recoverable: true,
-        retryable: false,
-        requestId: requestId ?? undefined,
-        diagnostic: { component: 'plex-playback-runtime', ...diagnostic },
-      },
+      requestId: warning.requestId ?? null,
+      warning,
     };
   }
 
@@ -488,6 +500,19 @@ export class PlexPlaybackRuntime {
       reason: 'player load failed',
       media: projectDiagnosticMedia(media),
     });
+  }
+
+  #schedulerSelectionError(): PlayerEvent {
+    return this.#error(
+      undefined,
+      'PLAYER_PLAYBACK_SELECTION_UNAVAILABLE',
+      'The playback runtime could not resolve the scheduled playback.',
+      {
+        operation: 'schedule.resolve',
+        status: 'failed',
+        reason: 'scheduler selection failed',
+      },
+    );
   }
 
   #boundaryError(requestId: PlayerRequestId | undefined, reason: string): PlayerEvent {

@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  hasPlayerForbiddenPrivilegedField,
   isRendererSafePlayerEvent,
   type PlayerCommand,
   type PlayerError,
@@ -21,6 +20,7 @@ import {
 } from '../../../main/player/plexPlaybackRuntime.js';
 import type { DesktopStreamCapabilityProfile } from '../../../main/player/streamPolicy/types.js';
 import type { PlexStreamResolverInput, PlexStreamResolverResult } from '../../../main/plex/streamResolver.js';
+import { assertPublicSafe } from './playerPublicSafetyAssertions.js';
 
 const rawPrivateValues = [
   'raw-stream-id-main',
@@ -252,6 +252,23 @@ test('RD-12 bridge returns no selection for inactive or unloaded scheduler state
   assertPublicSafe(result, rawPrivateValues);
 });
 
+test('RD-12 bridge trims scheduler channel id before projecting selections', async () => {
+  const scheduler = new FakeScheduler();
+  scheduler.state = { ...scheduler.state, channelId: '  channel-safe  ' };
+  const resolver = new FakeResolver();
+  const bridge = new PlexPlaybackBridge({ scheduler, resolver, capabilityProfile });
+
+  const selection = await bridge.getCurrentPlayback({
+    nowMs: 1_090_000,
+    reason: 'schedule-tick',
+  });
+
+  assert.notEqual(selection, null);
+  assert.equal(selection?.channelId, 'channel-safe');
+  assert.equal(selection?.programId.startsWith('program-channel-safe-'), true);
+  assertPublicSafe(selection, rawPrivateValues);
+});
+
 test('RD-12 bridge normalizes resolver failure before player dispatch', async () => {
   const scheduler = new FakeScheduler();
   const resolver = new FakeResolver();
@@ -479,13 +496,5 @@ function createSafeResolverError(requestId: string): PlayerError {
 function assertRendererSafePlayerEvents(events: readonly PlayerEvent[]): void {
   for (const event of events) {
     assert.equal(isRendererSafePlayerEvent(event), true, `unsafe player event ${event.event}`);
-  }
-}
-
-function assertPublicSafe(value: unknown, forbiddenValues: readonly string[]): void {
-  assert.equal(hasPlayerForbiddenPrivilegedField(value), false);
-  const serialized = JSON.stringify(value);
-  for (const forbiddenValue of forbiddenValues) {
-    assert.equal(serialized.includes(forbiddenValue), false, `public value leaked ${forbiddenValue}`);
   }
 }

@@ -45,6 +45,7 @@ const loadPayload: PlayerLoadCommandPayload = {
 
 class FakeSchedulerPort implements PlexPlaybackRuntimeSchedulerPort {
   current: PlexPlaybackScheduleSelection | null = selection;
+  failure: Error | null = null;
   readonly calls: Array<{ nowMs: number; reason: string }> = [];
 
   async getCurrentPlayback(input: {
@@ -52,6 +53,9 @@ class FakeSchedulerPort implements PlexPlaybackRuntimeSchedulerPort {
     reason: 'startup' | 'schedule-tick' | 'manual-switch';
   }): Promise<PlexPlaybackScheduleSelection | null> {
     this.calls.push(input);
+    if (this.failure !== null) {
+      throw this.failure;
+    }
     return this.current;
   }
 }
@@ -295,6 +299,7 @@ test('RD-12 plex playback runtime quarantines stale player events by epoch', asy
   assert.equal(runtime.getActiveRequestId(), 'request-2');
   assert.equal(staleEvents[0]?.event, 'warning');
   if (staleEvents[0]?.event === 'warning') {
+    assert.equal(staleEvents[0].requestId, 'request-1');
     assert.equal(staleEvents[0].warning.category, 'stale-request');
     assert.equal(staleEvents[0].warning.requestId, 'request-1');
   }
@@ -361,6 +366,43 @@ test('RD-12 plex playback runtime normalizes rejecting player dispatch and clean
   }
   assertTextAbsent(result, 'raw native helper failure');
   assertTextAbsent(result, 'https://secret.example');
+  assertNoForbiddenKeys(result);
+  assertNoForbiddenKeys(emitted);
+  assertRendererSafePlayerEvents(result.events);
+  assertRendererSafePlayerEvents(emitted);
+});
+
+test('RD-12 plex playback runtime normalizes scheduler selection failures', async () => {
+  const { runtime, scheduler, channel, player, pms, emitted } = createRuntime();
+  scheduler.failure = new Error('rawPlexPayload tokenizedUrl=https://secret.example');
+
+  const result = await runtime.startCurrentPlayback('schedule-tick');
+
+  assert.equal(result.accepted, false);
+  assert.equal(result.epoch, 1);
+  assert.equal(result.requestId, null);
+  assert.equal(runtime.getActiveRequestId(), null);
+  assert.deepEqual(scheduler.calls, [{ nowMs: 42_000, reason: 'schedule-tick' }]);
+  assert.equal(channel.selections.length, 0);
+  assert.equal(player.commands.length, 0);
+  assert.equal(pms.releases.length, 0);
+  assert.equal(result.events.length, 1);
+  const event = result.events[0];
+  assert.equal(event?.event, 'error');
+  if (event?.event === 'error') {
+    assert.equal(event.requestId, null);
+    assert.equal(event.error.code, 'PLAYER_PLAYBACK_SELECTION_UNAVAILABLE');
+    assert.equal(event.error.category, 'source');
+    assert.equal(event.error.requestId, undefined);
+    assert.equal(event.error.diagnostic?.component, 'plex-playback-runtime');
+    assert.equal(event.error.diagnostic?.operation, 'schedule.resolve');
+    assert.equal(event.error.diagnostic?.status, 'failed');
+    assert.equal(event.error.diagnostic?.reason, 'scheduler selection failed');
+  }
+  assertTextAbsent(result, 'rawPlexPayload');
+  assertTextAbsent(result, 'https://secret.example');
+  assertTextAbsent(emitted, 'rawPlexPayload');
+  assertTextAbsent(emitted, 'https://secret.example');
   assertNoForbiddenKeys(result);
   assertNoForbiddenKeys(emitted);
   assertRendererSafePlayerEvents(result.events);

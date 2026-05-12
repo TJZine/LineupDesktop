@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { PlayerCommand, PlayerEvent } from '../../../contracts/player.js';
-import {
-  PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
-  type PlayerLoadCommandPayload,
+import type {
+  PlayerCommand,
+  PlayerEvent,
+  PlayerLoadCommandPayload,
 } from '../../../contracts/player.js';
 import type { PlayerRendererIntentEnvelope } from '../../../contracts/ipc.js';
 import type { IChannelScheduler, ScheduledProgram, SchedulerState } from '../../../domain/scheduler/index.js';
@@ -20,6 +20,7 @@ import type {
   PlexPlaybackRuntimePmsPort,
 } from '../../../main/player/plexPlaybackRuntime.js';
 import type { DesktopStreamCapabilityProfile } from '../../../main/player/streamPolicy/types.js';
+import { assertPublicSafe } from './playerPublicSafetyAssertions.js';
 
 const rawPrivateValues = [
   ['X', 'Plex', 'Token'].join('-'),
@@ -321,17 +322,3 @@ test('RD-12 desktop adapter runtime port reports cleanup rejection to runtime cl
     message: 'Desktop player adapter cleanup failed.',
   });
 });
-
-function assertPublicSafe(value: unknown, forbiddenValues: readonly string[]): void {
-  const text = JSON.stringify(value);
-  for (const key of PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS) {
-    assert.equal(text.includes(key), false, `public value included forbidden key ${key}`);
-  }
-  for (const forbiddenValue of forbiddenValues) {
-    assert.equal(
-      text.includes(forbiddenValue),
-      false,
-      `public value included private value ${forbiddenValue}`,
-    );
-  }
-}

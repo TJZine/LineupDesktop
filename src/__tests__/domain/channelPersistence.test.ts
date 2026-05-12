@@ -787,6 +787,9 @@ function createUnusedLibrary() {
   };
 }
 
+// flushMicrotasks intentionally advances several nested promise turns. Ten
+// ticks covers the chained async work in these persistence tests with a small
+// safety margin; increase it if future tests introduce deeper chains.
 async function flushMicrotasks(): Promise<void> {
   for (let index = 0; index < 10; index++) {
     await Promise.resolve();
