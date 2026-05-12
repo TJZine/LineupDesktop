@@ -1,6 +1,8 @@
 import { builtinModules } from 'node:module';
 
 const BOUNDARY_MESSAGES = Object.freeze({
+  domainBoundary:
+    'Domain code must stay deterministic and runtime-agnostic. Do not import Node, Electron, main, preload, renderer, native-helper, or browser/runtime globals.',
   rendererBoundary:
     'Renderer code must stay unprivileged. Use the typed preload API instead of Node, Electron, main, or native-helper imports.',
   preloadBoundary:
@@ -25,6 +27,7 @@ const nodeBuiltinImportPatterns = Array.from(new Set(
 
 export function buildEslintArchitectureRules(rules) {
   return [
+    buildBoundaryRule(rules.domainBoundary, BOUNDARY_MESSAGES.domainBoundary),
     buildBoundaryRule(rules.rendererBoundary, BOUNDARY_MESSAGES.rendererBoundary),
     buildBoundaryRule(rules.preloadBoundary, BOUNDARY_MESSAGES.preloadBoundary),
     buildBoundaryRule(rules.mainBoundary, BOUNDARY_MESSAGES.mainBoundary),
@@ -66,15 +69,30 @@ function buildBoundaryRule(boundary, message) {
     ];
   }
 
+  const restrictedSyntax = [];
+  if (boundary.forbidNonLiteralDynamicImports) {
+    restrictedSyntax.push({
+      selector: 'ImportExpression:not([source.type="Literal"])',
+      message,
+    });
+  }
+  if (boundary.forbidGlobalThisProperties) {
+    restrictedSyntax.push({
+      selector: 'MemberExpression[object.name="globalThis"]',
+      message,
+    });
+  }
+
   const dynamicImportRegexes = buildDynamicImportRegexes(boundary);
-  if (dynamicImportRegexes.length > 0) {
-    rules['no-restricted-syntax'] = [
-      'error',
-      ...dynamicImportRegexes.map((regex) => ({
+  restrictedSyntax.push(
+    ...dynamicImportRegexes.map((regex) => ({
         selector: `ImportExpression[source.value=/${regex}/]`,
         message,
       })),
-    ];
+  );
+
+  if (restrictedSyntax.length > 0) {
+    rules['no-restricted-syntax'] = ['error', ...restrictedSyntax];
   }
 
   return {
@@ -101,12 +119,12 @@ function buildDynamicImportRegexes(boundary) {
     }
     if (pattern.startsWith('**/') && pattern.endsWith('/**')) {
       const segment = pattern.slice(3, -3);
-      regexes.push(`(?:^|\\/)${escapeSelectorRegexLiteral(segment)}\\/`);
+      regexes.push(`(?:^|\\/)${escapeSelectorRegexLiteral(segment)}(?:\\/|$)`);
       continue;
     }
     if (pattern.endsWith('/**')) {
       const prefix = pattern.slice(0, -3);
-      regexes.push(`^${escapeSelectorRegexLiteral(prefix)}\\/`);
+      regexes.push(`^${escapeSelectorRegexLiteral(prefix)}(?:\\/|$)`);
       continue;
     }
     if (!pattern.includes('*')) {

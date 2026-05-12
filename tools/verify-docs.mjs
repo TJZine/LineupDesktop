@@ -297,6 +297,7 @@ const requiredTransferredSkillNames = [
   'parallel-sidecars',
   'persistence-boundaries',
   'plex-integration-boundaries',
+  'repo-production-review',
   'review-adjudication',
   'review-request',
   'ui-composition-patterns',

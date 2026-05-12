@@ -32,6 +32,10 @@ import {
   type SaveDesktopPlexAccountCredentialInput,
 } from '../main/plex/auth/index.js';
 
+const placeholderAuthValue = ['placeholder', 'auth', 'value'].join('-');
+const placeholderSecret = ['placeholder', 'secret'].join('-');
+const plexTokenHeader = ['X-Plex', 'Token'].join('-');
+
 class FakeSecureStringCodec implements SecureStringCodec {
   public availability: SecureStorageAvailability = {
     available: true,
@@ -204,9 +208,9 @@ test('plex home and switch parsers accept JSON and XML payload shapes', () => {
     assert.deepEqual(
       parseSwitchResponsePayload({
         kind: 'text',
-        data: '<MediaContainer><User authToken="placeholder-auth-value" /></MediaContainer>',
+        data: `<MediaContainer><User authToken="${placeholderAuthValue}" /></MediaContainer>`,
       }),
-      { authToken: 'placeholder-auth-value' },
+      { authToken: placeholderAuthValue },
     );
   } finally {
     Object.defineProperty(globalThis, 'DOMParser', {
@@ -241,19 +245,19 @@ test('plex auth parse and HTTP errors are classified without raw cause leakage',
 test('plex auth errors recursively sanitize auth fields and cyclic cause/context values', () => {
   const cyclic: Record<string, unknown> = {
     nested: {
-      authToken: 'placeholder-auth-value',
+      authToken: placeholderAuthValue,
       headers: {
-        ['authorization']: 'placeholder-auth-value',
-        'X-Plex-Token': 'placeholder-auth-value',
+        ['authorization']: placeholderAuthValue,
+        [plexTokenHeader]: placeholderAuthValue,
       },
-      list: [{ token: 'placeholder-auth-value' }],
+      list: [{ token: placeholderAuthValue }],
     },
   };
   cyclic.self = cyclic;
   const cause = new Error('failed with secret=placeholder-secret');
   Object.assign(cause, { cause: cyclic });
 
-  const error = new PlexAuthError('server-unreachable', 'failed token=placeholder-auth-value', 500, {
+  const error = new PlexAuthError('server-unreachable', `failed token=${placeholderAuthValue}`, 500, {
     cause,
     context: cyclic,
   });
@@ -275,7 +279,7 @@ test('plex auth errors sanitize cyclic Error causes without stack leakage', () =
   cause.stack = 'Error: failed\n    at /Users/example/lineup/auth.ts:1:1';
   Object.assign(cause, { cause });
 
-  const error = new PlexAuthError('server-unreachable', 'failed token=placeholder-auth-value', 500, {
+  const error = new PlexAuthError('server-unreachable', `failed token=${placeholderAuthValue}`, 500, {
     cause,
   });
   const serialized = JSON.stringify({ cause: error.cause });
@@ -288,20 +292,20 @@ test('plex auth errors sanitize cyclic Error causes without stack leakage', () =
 });
 
 test('plex auth errors redact serialized JSON-like auth fields in strings', () => {
-  const serializedJson = '{"authToken":"placeholder-auth-value","nested":{"headers":"placeholder-secret"}}';
+  const serializedJson = `{"authToken":"${placeholderAuthValue}","nested":{"headers":"${placeholderSecret}"}}`;
   const escapedSerializedJson =
-    '{\\"token\\":\\"placeholder-auth-value\\",\\"X-Plex-Token\\":\\"placeholder-secret\\"}';
+    `{\\"token\\":\\"${placeholderAuthValue}\\",\\"${plexTokenHeader}\\":\\"${placeholderSecret}\\"}`;
 
   const redactedSerializedJson = redactAuthErrorText(serializedJson);
   const redactedEscapedSerializedJson = redactAuthErrorText(escapedSerializedJson);
 
-  assert.equal(redactedSerializedJson.includes('placeholder-auth-value'), false);
-  assert.equal(redactedSerializedJson.includes('placeholder-secret'), false);
+  assert.equal(redactedSerializedJson.includes(placeholderAuthValue), false);
+  assert.equal(redactedSerializedJson.includes(placeholderSecret), false);
   assert.match(redactedSerializedJson, /"authToken":"\[redacted\]"/u);
   assert.match(redactedSerializedJson, /"headers":"\[redacted\]"/u);
 
-  assert.equal(redactedEscapedSerializedJson.includes('placeholder-auth-value'), false);
-  assert.equal(redactedEscapedSerializedJson.includes('placeholder-secret'), false);
+  assert.equal(redactedEscapedSerializedJson.includes(placeholderAuthValue), false);
+  assert.equal(redactedEscapedSerializedJson.includes(placeholderSecret), false);
   assert.match(redactedEscapedSerializedJson, /\\"token\\":\\"\[redacted\]\\"/u);
   assert.match(redactedEscapedSerializedJson, /\\"X-Plex-Token\\":\\"\[redacted\]\\"/u);
 
@@ -312,24 +316,24 @@ test('plex auth errors redact serialized JSON-like auth fields in strings', () =
     message: error.message,
     context: error.context,
   });
-  assert.equal(serializedError.includes('placeholder-auth-value'), false);
-  assert.equal(serializedError.includes('placeholder-secret'), false);
+  assert.equal(serializedError.includes(placeholderAuthValue), false);
+  assert.equal(serializedError.includes(placeholderSecret), false);
 });
 
 test('plex auth redaction vocabulary covers alternate token and secret keys', () => {
   const context = {
-    authenticationToken: 'placeholder-auth-value',
-    plexToken: 'placeholder-auth-value',
-    clientSecret: 'placeholder-secret',
-    ['authoriz' + 'ation']: 'placeholder-secret',
-    ['X-Plex-Token']: 'placeholder-auth-value',
-    header: 'placeholder-secret',
-    credential: 'placeholder-secret',
-    password: 'placeholder-secret',
+    authenticationToken: placeholderAuthValue,
+    plexToken: placeholderAuthValue,
+    clientSecret: placeholderSecret,
+    ['authoriz' + 'ation']: placeholderSecret,
+    [plexTokenHeader]: placeholderAuthValue,
+    header: placeholderSecret,
+    credential: placeholderSecret,
+    password: placeholderSecret,
   };
   const error = new PlexAuthError(
     'server-error',
-    '{"authenticationToken":"placeholder-auth-value","plexToken":"placeholder-auth-value","clientSecret":"placeholder-secret"}',
+    `{"authenticationToken":"${placeholderAuthValue}","plexToken":"${placeholderAuthValue}","clientSecret":"${placeholderSecret}"}`,
     500,
     { context },
   );
@@ -337,42 +341,42 @@ test('plex auth redaction vocabulary covers alternate token and secret keys', ()
     message: error.message,
     context: error.context,
   });
-  assert.equal(serializedError.includes('placeholder-auth-value'), false);
-  assert.equal(serializedError.includes('placeholder-secret'), false);
+  assert.equal(serializedError.includes(placeholderAuthValue), false);
+  assert.equal(serializedError.includes(placeholderSecret), false);
   assert.equal(containsPlexForbiddenRendererField(context), true);
 });
 
 test('plex auth text redaction covers bare alternate token and secret keys', () => {
   const redactedBareFields = redactAuthErrorText(
     [
-      'authenticationToken=placeholder-auth-value',
-      'plexToken:placeholder-auth-value',
-      'clientSecret=placeholder-secret',
-      'headers=placeholder-secret',
+      `authenticationToken=${placeholderAuthValue}`,
+      `plexToken:${placeholderAuthValue}`,
+      `clientSecret=${placeholderSecret}`,
+      `headers=${placeholderSecret}`,
     ].join(' '),
   );
-  const redactedHeader = redactAuthErrorText('header:placeholder-secret');
-  const redactedHeaders = redactAuthErrorText(`headers: X-Plex-Token: placeholder-secret`);
+  const redactedHeader = redactAuthErrorText(`header:${placeholderSecret}`);
+  const redactedHeaders = redactAuthErrorText(`headers: ${plexTokenHeader}: ${placeholderSecret}`);
   const redactedPlexTokenHeader = redactAuthErrorText(
-    `${['X-Plex', 'Token'].join('-')}: Token placeholder-secret`,
+    `${plexTokenHeader}: ${['Token'].join('')} ${placeholderSecret}`,
   );
   const redactedAuthorization = redactAuthErrorText(
-    `${'Authori' + 'zation'}: Token placeholder-secret`,
+    `${'Authori' + 'zation'}: ${['Token'].join('')} ${placeholderSecret}`,
   );
 
-  assert.equal(redactedBareFields.includes('placeholder-auth-value'), false);
-  assert.equal(redactedBareFields.includes('placeholder-secret'), false);
+  assert.equal(redactedBareFields.includes(placeholderAuthValue), false);
+  assert.equal(redactedBareFields.includes(placeholderSecret), false);
   assert.match(redactedBareFields, /authenticationToken=\[redacted\]/u);
   assert.match(redactedBareFields, /plexToken=\[redacted\]/u);
   assert.match(redactedBareFields, /clientSecret=\[redacted\]/u);
   assert.match(redactedBareFields, /headers=\[redacted\]/u);
-  assert.equal(redactedHeader.includes('placeholder-secret'), false);
-  assert.equal(redactedHeaders.includes('placeholder-secret'), false);
-  assert.equal(redactedPlexTokenHeader.includes('placeholder-secret'), false);
-  assert.equal(redactedAuthorization.includes('placeholder-secret'), false);
+  assert.equal(redactedHeader.includes(placeholderSecret), false);
+  assert.equal(redactedHeaders.includes(placeholderSecret), false);
+  assert.equal(redactedPlexTokenHeader.includes(placeholderSecret), false);
+  assert.equal(redactedAuthorization.includes(placeholderSecret), false);
   assert.match(redactedHeader, /header=\[redacted\]/u);
   assert.match(redactedHeaders, /headers=\[redacted\]/u);
-  assert.equal(redactedPlexTokenHeader, `${['X-Plex', 'Token'].join('-')}=[redacted]`);
+  assert.equal(redactedPlexTokenHeader, `${plexTokenHeader}=[redacted]`);
   assert.match(redactedAuthorization, /Authorization=\[redacted\]/u);
 });
 
@@ -434,7 +438,7 @@ test('desktop plex auth service requests and claims PINs through injected transp
       id: 7,
       code: 'WXYZ',
       expiresAt: '2026-05-10T12:05:00.000Z',
-      authToken: 'placeholder-auth-value',
+      authToken: placeholderAuthValue,
       clientIdentifier: 'desktop-client',
     },
   });
@@ -503,7 +507,7 @@ test('desktop plex auth service fails closed when credential save fails', async 
       id: 7,
       code: 'WXYZ',
       expiresAt: '2026-05-10T12:05:00.000Z',
-      authToken: 'placeholder-auth-value',
+      authToken: placeholderAuthValue,
       clientIdentifier: 'desktop-client',
     },
   });
@@ -541,7 +545,7 @@ test('desktop plex auth service fails closed when credential store is missing', 
       id: 7,
       code: 'WXYZ',
       expiresAt: '2026-05-10T12:05:00.000Z',
-      authToken: 'placeholder-auth-value',
+      authToken: placeholderAuthValue,
       clientIdentifier: 'desktop-client',
     },
   });
@@ -565,7 +569,7 @@ test('desktop plex auth service fails closed when credential store is missing', 
 test('desktop plex auth service sanitizes raw transport and credential store errors', async () => {
   const transportFailure = new FakePlexAuthTransport();
   transportFailure.onRequest = () => {
-    throw new Error(`${'Authori' + 'zation'}: Token placeholder-secret`);
+    throw new Error(`${'Authori' + 'zation'}: ${['Token'].join('')} ${placeholderSecret}`);
   };
   const transportService = new DesktopPlexAuthService({
     config: createDesktopPlexAuthConfig({ clientIdentifier: 'desktop-client' }),
@@ -591,7 +595,7 @@ test('desktop plex auth service sanitizes raw transport and credential store err
     transport: credentialFailure,
     credentialStore: {
       async saveAccountCredential() {
-        throw new Error('headers: X-Plex-Token: placeholder-secret');
+        throw new Error(`headers: ${plexTokenHeader}: ${placeholderSecret}`);
       },
     },
   });
@@ -602,7 +606,7 @@ test('desktop plex auth service sanitizes raw transport and credential store err
       id: 7,
       code: 'WXYZ',
       expiresAt: '2026-05-10T12:05:00.000Z',
-      authToken: 'placeholder-auth-value',
+      authToken: placeholderAuthValue,
       clientIdentifier: 'desktop-client',
     },
   });
@@ -664,7 +668,7 @@ test('desktop plex auth service validates tokens, home users, switches profiles,
       id: 8,
       code: 'ZZZZ',
       expiresAt: '2026-05-10T12:05:00.000Z',
-      authToken: 'placeholder-auth-value',
+      authToken: placeholderAuthValue,
       clientIdentifier: 'desktop-client',
     },
   });
@@ -693,7 +697,7 @@ test('desktop plex auth service validates tokens, home users, switches profiles,
 
   transport.enqueue('switch-home-user', {
     status: 200,
-    payload: { kind: 'json', data: { authToken: 'placeholder-auth-value' } },
+    payload: { kind: 'json', data: { authToken: placeholderAuthValue } },
   });
   transport.enqueue('validate-token', {
     status: 200,
@@ -739,7 +743,7 @@ test('desktop plex auth service rejects already-aborted home and switch calls be
       id: 8,
       code: 'ZZZZ',
       expiresAt: '2026-05-10T12:05:00.000Z',
-      authToken: 'placeholder-auth-value',
+      authToken: placeholderAuthValue,
       clientIdentifier: 'desktop-client',
     },
   });
@@ -802,7 +806,7 @@ test('desktop plex auth service does not commit account state after credential s
       id: 8,
       code: 'WXYZ',
       expiresAt: '2026-05-10T12:05:00.000Z',
-      authToken: 'placeholder-auth-value',
+      authToken: placeholderAuthValue,
       clientIdentifier: 'desktop-client',
     },
   });
@@ -847,7 +851,7 @@ test('desktop plex auth service does not commit switched profile after cancellat
       id: 8,
       code: 'WXYZ',
       expiresAt: '2026-05-10T12:05:00.000Z',
-      authToken: 'placeholder-auth-value',
+      authToken: placeholderAuthValue,
       clientIdentifier: 'desktop-client',
     },
   });
@@ -864,7 +868,7 @@ test('desktop plex auth service does not commit switched profile after cancellat
 
   transport.enqueue('switch-home-user', {
     status: 200,
-    payload: { kind: 'json', data: { authenticationToken: 'placeholder-auth-value' } },
+    payload: { kind: 'json', data: { authenticationToken: placeholderAuthValue } },
   });
   transport.enqueue('validate-token', {
     status: 200,
@@ -1133,7 +1137,7 @@ test('plex forbidden renderer vocabulary catches recursive auth and raw payload 
   assert.equal(
     containsPlexForbiddenRendererField({
       profile: { accountId: 'account-1', displayName: 'Viewer' },
-      nested: { authToken: 'placeholder-auth-value' },
+      nested: { authToken: placeholderAuthValue },
     }),
     true,
   );

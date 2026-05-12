@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import process from 'node:process';
 
 import type {
   PersistenceRecordStatus,
@@ -86,6 +87,8 @@ export class DesktopPersistenceStore {
   private readonly persistenceFilePath: string;
   private readonly secureStringCodec: SecureStringCodec;
   private readonly nowMs: () => number;
+  private mutationChain: Promise<void> = Promise.resolve();
+  private temporaryWriteCounter = 0;
 
   constructor(options: DesktopPersistenceStoreOptions) {
     this.persistenceFilePath = options.persistenceFilePath;
@@ -96,67 +99,69 @@ export class DesktopPersistenceStore {
   async savePlexCredential(
     input: SavePlexCredentialInput,
   ): Promise<SavePlexCredentialResult> {
-    const readResult = await this.readPersistenceFile();
-    if (readResult.status === 'corrupt') {
-      return { ok: false, status: 'corrupt', diagnostics: readResult.diagnostics };
-    }
+    return this.enqueueMutation(async () => {
+      const readResult = await this.readPersistenceFile();
+      if (readResult.status === 'corrupt') {
+        return { ok: false, status: 'corrupt', diagnostics: readResult.diagnostics };
+      }
 
-    try {
-      const encrypted = await this.secureStringCodec.encryptString(input.secretValue);
-      const nowMs = this.nowMs();
-      const credentialId = createPlexCredentialId(input.accountId);
-      const existing = readResult.value.credentials.find(
-        (credential) => credential.credentialId === credentialId,
-      );
-      const record: StoredPlexCredential = {
-        schemaVersion: PERSISTENCE_SCHEMA_VERSION,
-        credentialId,
-        accountId: input.accountId,
-        kind: 'plex-account',
-        encryptedSecretBase64: encrypted.toString('base64'),
-        createdAtMs: existing?.createdAtMs ?? nowMs,
-        updatedAtMs: nowMs,
-        profile: input.profile,
-      };
-      const credentials = [
-        ...readResult.value.credentials.filter(
-          (credential) => credential.credentialId !== credentialId,
-        ),
-        record,
-      ].sort((left, right) => left.credentialId.localeCompare(right.credentialId));
+      try {
+        const encrypted = await this.secureStringCodec.encryptString(input.secretValue);
+        const nowMs = this.nowMs();
+        const credentialId = createPlexCredentialId(input.accountId);
+        const existing = readResult.value.credentials.find(
+          (credential) => credential.credentialId === credentialId,
+        );
+        const record: StoredPlexCredential = {
+          schemaVersion: PERSISTENCE_SCHEMA_VERSION,
+          credentialId,
+          accountId: input.accountId,
+          kind: 'plex-account',
+          encryptedSecretBase64: encrypted.toString('base64'),
+          createdAtMs: existing?.createdAtMs ?? nowMs,
+          updatedAtMs: nowMs,
+          profile: input.profile,
+        };
+        const credentials = [
+          ...readResult.value.credentials.filter(
+            (credential) => credential.credentialId !== credentialId,
+          ),
+          record,
+        ].sort((left, right) => left.credentialId.localeCompare(right.credentialId));
 
-      await this.writePersistenceFile({ ...readResult.value, credentials });
+        await this.writePersistenceFile({ ...readResult.value, credentials });
 
-      return {
-        ok: true,
-        handle: toCredentialHandle(record),
-        diagnostics: [
-          {
-            component: 'desktop-persistence-store',
-            operation: 'save-plex-credential',
-            status: 'present',
-            credentialId,
-            accountId: input.accountId,
-            timestampMs: nowMs,
-          },
-        ],
-      };
-    } catch (error) {
-      const unavailable = error instanceof SecureStorageUnavailableError;
-      return {
-        ok: false,
-        status: unavailable ? 'unavailable' : 'corrupt',
-        diagnostics: [
-          {
-            component: 'desktop-persistence-store',
-            operation: 'save-plex-credential',
-            status: unavailable ? 'unavailable' : 'corrupt',
-            reason: unavailable ? 'secure storage unavailable' : 'secure storage encryption failed',
-            accountId: input.accountId,
-          },
-        ],
-      };
-    }
+        return {
+          ok: true,
+          handle: toCredentialHandle(record),
+          diagnostics: [
+            {
+              component: 'desktop-persistence-store',
+              operation: 'save-plex-credential',
+              status: 'present',
+              credentialId,
+              accountId: input.accountId,
+              timestampMs: nowMs,
+            },
+          ],
+        };
+      } catch (error) {
+        const unavailable = error instanceof SecureStorageUnavailableError;
+        return {
+          ok: false,
+          status: unavailable ? 'unavailable' : 'corrupt',
+          diagnostics: [
+            {
+              component: 'desktop-persistence-store',
+              operation: 'save-plex-credential',
+              status: unavailable ? 'unavailable' : 'corrupt',
+              reason: unavailable ? 'secure storage unavailable' : 'secure storage encryption failed',
+              accountId: input.accountId,
+            },
+          ],
+        };
+      }
+    });
   }
 
   async readPlexCredentialSecret(accountId: string): Promise<ReadPlexCredentialSecretResult> {
@@ -189,7 +194,11 @@ export class DesktopPersistenceStore {
         Buffer.from(record.encryptedSecretBase64, 'base64'),
       );
       if (decrypted.shouldReencrypt) {
-        await this.reencryptCredential(readResult.value, record, decrypted.value);
+        await this.reencryptCredential(
+          record.credentialId,
+          record.encryptedSecretBase64,
+          decrypted.value,
+        );
       }
       return {
         status: 'present',
@@ -229,13 +238,15 @@ export class DesktopPersistenceStore {
   async setSelectedPlexServer(
     selectedServer: PlexSelectedServerSummary | null,
   ): Promise<PersistenceRendererSafeSnapshot> {
-    const readResult = await this.readPersistenceFile();
-    if (readResult.status === 'corrupt') {
-      return createCorruptSnapshot(readResult.diagnostics);
-    }
-    const value = { ...readResult.value, selectedServer };
-    await this.writePersistenceFile(value);
-    return this.getRendererSafeSnapshot();
+    return this.enqueueMutation(async () => {
+      const readResult = await this.readPersistenceFile();
+      if (readResult.status === 'corrupt') {
+        return createCorruptSnapshot(readResult.diagnostics);
+      }
+      const value = { ...readResult.value, selectedServer };
+      await this.writePersistenceFile(value);
+      return this.getRendererSafeSnapshot();
+    });
   }
 
   async getRendererSafeSnapshot(): Promise<PersistenceRendererSafeSnapshot> {
@@ -276,21 +287,36 @@ export class DesktopPersistenceStore {
   }
 
   private async reencryptCredential(
-    persistenceFile: PersistenceFile,
-    record: StoredPlexCredential,
+    credentialId: string,
+    expectedEncryptedSecretBase64: string,
     secretValue: string,
   ): Promise<void> {
-    const encrypted = await this.secureStringCodec.encryptString(secretValue);
-    const updatedRecord: StoredPlexCredential = {
-      ...record,
-      encryptedSecretBase64: encrypted.toString('base64'),
-      updatedAtMs: this.nowMs(),
-    };
-    await this.writePersistenceFile({
-      ...persistenceFile,
-      credentials: persistenceFile.credentials.map((credential) =>
-        credential.credentialId === record.credentialId ? updatedRecord : credential,
-      ),
+    await this.enqueueMutation(async () => {
+      const readResult = await this.readPersistenceFile();
+      if (readResult.status === 'corrupt') {
+        return;
+      }
+      const record = readResult.value.credentials.find(
+        (credential) => credential.credentialId === credentialId,
+      );
+      if (record === undefined) {
+        return;
+      }
+      if (record.encryptedSecretBase64 !== expectedEncryptedSecretBase64) {
+        return;
+      }
+      const encrypted = await this.secureStringCodec.encryptString(secretValue);
+      const updatedRecord: StoredPlexCredential = {
+        ...record,
+        encryptedSecretBase64: encrypted.toString('base64'),
+        updatedAtMs: this.nowMs(),
+      };
+      await this.writePersistenceFile({
+        ...readResult.value,
+        credentials: readResult.value.credentials.map((credential) =>
+          credential.credentialId === credentialId ? updatedRecord : credential,
+        ),
+      });
     });
   }
 
@@ -342,13 +368,20 @@ export class DesktopPersistenceStore {
 
   private async writePersistenceFile(value: PersistenceFile): Promise<void> {
     await fs.mkdir(path.dirname(this.persistenceFilePath), { recursive: true });
-    const temporaryPath = `${this.persistenceFilePath}.tmp`;
+    this.temporaryWriteCounter += 1;
+    const temporaryPath = `${this.persistenceFilePath}.${String(process.pid)}.${String(this.temporaryWriteCounter)}.tmp`;
     await fs.writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
       encoding: 'utf8',
       mode: 0o600,
     });
     await fs.rename(temporaryPath, this.persistenceFilePath);
     await fs.chmod(this.persistenceFilePath, 0o600);
+  }
+
+  private enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const run = this.mutationChain.then(operation, operation);
+    this.mutationChain = run.then(() => undefined, () => undefined);
+    return run;
   }
 }
 

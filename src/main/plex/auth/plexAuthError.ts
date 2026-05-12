@@ -39,9 +39,9 @@ export class PlexAuthError extends Error {
 export function redactAuthErrorText(value: string): string {
   return redactQuotedAuthFields(value)
     .replace(/([?&][^=]*token[^=]*=)[^&\s]+/giu, '$1[redacted]')
-    .replace(/\b(bearer)\s+[a-z0-9._~+/-]+/giu, '$1 [redacted]')
     .replace(MULTIPART_AUTH_HEADER_FIELD_PATTERN, '$1=[redacted]')
-    .replace(BARE_AUTH_SECRET_FIELD_PATTERN, '$1=[redacted]');
+    .replace(BARE_AUTH_SECRET_FIELD_PATTERN, '$1=[redacted]')
+    .replace(AUTH_CREDENTIAL_SCHEME_PATTERN, '$1 [redacted]');
 }
 
 const AUTH_SECRET_FIELD_PATTERN =
@@ -59,6 +59,13 @@ const BARE_AUTH_SECRET_FIELD_PATTERN = new RegExp(
 
 const MULTIPART_AUTH_HEADER_FIELD_PATTERN =
   /\b(headers?|authorization|x-plex-token)\s*[:=]\s*[^\r\n]+/giu;
+
+const AUTH_CREDENTIAL_VALUE_PATTERN =
+  String.raw`(?:(?=\S*[:0-9._~+/=-])\S+|[A-Za-z]{16,})`;
+const AUTH_CREDENTIAL_SCHEME_PATTERN = new RegExp(
+  String.raw`\b(bearer|basic|token)\s+${AUTH_CREDENTIAL_VALUE_PATTERN}`,
+  'giu',
+);
 
 const QUOTED_AUTH_SECRET_FIELD_PATTERN = new RegExp(
   `(")\\s*(${AUTH_SECRET_FIELD_PATTERN})\\s*(")(\\s*:\\s*)(")([^"\\\\]*(?:\\\\.[^"\\\\]*)*)(")`,

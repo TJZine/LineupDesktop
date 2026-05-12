@@ -13,6 +13,7 @@ import type {
   NativePlayerHostCommandResult,
   NativePlayerHostEvent,
   NativePlayerHostFailure,
+  NativePlayerHostLifecycleFailure,
   NativePlayerHostPort,
 } from './nativePlayerHostPort.js';
 
@@ -69,6 +70,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
   #child: NativePlayerHostChildProcess | null = null;
   #pending = new Map<PlayerRequestId, PendingCommand>();
   #lineBuffer = '';
+  #lifecycleFailureListeners = new Set<(failure: NativePlayerHostLifecycleFailure) => void>();
 
   constructor(options: NativePlayerHostProcessOptions) {
     this.#spawnHostProcess = options.spawnHostProcess;
@@ -154,6 +156,15 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     }
   }
 
+  onLifecycleFailure(
+    listener: (failure: NativePlayerHostLifecycleFailure) => void,
+  ): () => void {
+    this.#lifecycleFailureListeners.add(listener);
+    return () => {
+      this.#lifecycleFailureListeners.delete(listener);
+    };
+  }
+
   #getOrSpawnChild():
     | { child: NativePlayerHostChildProcess }
     | { error: NativePlayerHostFailure } {
@@ -171,14 +182,16 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       child.stderr.on('error', () => this.#handleChildStreamError(child));
       child.once('error', () => {
         if (this.#child === child) {
+          const failure = safeFailure('PLAYER_HELPER_SPAWN_FAILED', 'helper-failure', true, true);
           this.#child = null;
-          this.#rejectAllPending(safeFailure('PLAYER_HELPER_SPAWN_FAILED', 'helper-failure', true, true));
+          this.#settleProcessFailure(failure);
         }
       });
       child.once('close', () => {
         if (this.#child === child) {
+          const failure = safeFailure('PLAYER_HELPER_EXITED', 'helper-failure', true, true);
           this.#child = null;
-          this.#rejectAllPending(safeFailure('PLAYER_HELPER_EXITED', 'helper-failure', true, true));
+          this.#settleProcessFailure(failure);
         }
       });
       return { child };
@@ -195,7 +208,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     }
     this.#child = null;
     this.#lineBuffer = '';
-    this.#rejectAllPending(safeFailure('PLAYER_HELPER_STREAM_FAILED', 'helper-failure', true, true));
+    this.#settleProcessFailure(safeFailure('PLAYER_HELPER_STREAM_FAILED', 'helper-failure', true, true));
     this.#reapChild(child).catch(() => undefined);
   }
 
@@ -286,8 +299,26 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
 
     this.#child = null;
     this.#lineBuffer = '';
-    this.#rejectAllPending(error);
+    this.#settleProcessFailure(error);
     this.#reapChild(child).catch(() => undefined);
+  }
+
+  #settleProcessFailure(error: NativePlayerHostFailure): void {
+    if (this.#pending.size > 0) {
+      this.#rejectAllPending(error);
+      return;
+    }
+    this.#emitLifecycleFailure({ requestId: null, error });
+  }
+
+  #emitLifecycleFailure(failure: NativePlayerHostLifecycleFailure): void {
+    for (const listener of [...this.#lifecycleFailureListeners]) {
+      try {
+        listener(failure);
+      } catch {
+        // Lifecycle failure delivery is best effort; one observer must not block the rest.
+      }
+    }
   }
 
   async #reapChild(child: NativePlayerHostChildProcess): Promise<void> {

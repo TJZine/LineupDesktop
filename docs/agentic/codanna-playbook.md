@@ -29,6 +29,23 @@ Useful starting anchors for this repo:
 - `Electron main secure storage window lifecycle`
 - `import ledger copied Lineup slice`
 
+## Local Semantic Model
+
+For this Desktop repo, prefer the code-specialized local model used by the
+original Lineup checkout when initializing or refreshing local Codanna settings:
+
+- `model = "JinaEmbeddingsV2BaseCode"`
+- `threshold = 0.45`
+
+Changing the model requires `codanna index --force` and a document collection
+refresh. If `get_index_info` reports semantic search enabled with `0`
+embeddings after a successful force index, treat that as an eligible symbol
+documentation signal, not an indexing failure: Codanna creates code embeddings
+from symbol doc comments, and early Desktop slices intentionally have little
+symbol-level documentation. Use `search_documents` for indexed repo docs and
+`search_symbols`/direct reads for code until documented production symbols
+exist.
+
 ## Planning Evidence
 
 For serious plans, record:

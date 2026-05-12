@@ -100,6 +100,10 @@ backup/restore implementation.
 | Desktop Plex library domain | `src/main/plex/library/*` | Main-owned RD-10 imported/adapted Plex library parser/domain owner for library sections, media metadata, seasons, collections, playlists, tag directories, search hubs, pagination, request intent, and renderer-safe summaries; no live fetch/cache runtime, image URL construction, stream resolver runtime, preload, renderer, or playback URL setup |
 | Desktop Plex auth domain | `src/main/plex/auth/*` | Main-owned RD-10 imported/adapted Plex auth owner for PIN/profile/token validation, Plex Home users, profile switching, injected auth transport, sanitized errors, Desktop identity metadata, and RD-09 credential storage adapter; no live Plex transport composition, preload/renderer auth API, real Electron safeStorage/app-path wiring, package change, or OS-specific runtime behavior |
 | Desktop Plex discovery domain | `src/main/plex/discovery/*` | Main-owned RD-10 imported/adapted Plex discovery and selected-server owner for resource parsing, connection probe policy, health classification, stale discovery-context invalidation, RD-09 selected-server summary persistence, and in-memory selected connection custody; restores by server id plus fresh probing and never persists or returns connection URI/server URI state |
+| Domain architecture verifier | `tools/architecture-rules/*` and `tools/__tests__/build-eslint-architecture-rules.test.mjs` | RD-11 domain-boundary verifier for `src/domain/**`; blocks Electron, Node, main/preload/renderer/native-helper imports, dynamic owner imports, and browser/runtime globals including direct `globalThis` runtime access |
+| Scheduler domain | `src/domain/scheduler/**` | Pure RD-11 imported/adapted deterministic scheduler and playback-ordering owner for anchor-time schedule calculation, loop wrapping, current/next/previous lookup, schedule windows, shuffle seeds, block playback validation, injected clock/timer ports, and event emission; not wired to Electron main/preload, renderer, Plex runtime, stream resolution, or native playback |
+| Channel and content domain | `src/domain/channel/**` | Pure RD-11 imported/adapted channel authoring, import/export normalization, content resolution through injected domain-safe library ports, stale fallback, source/channel resolution caches, retry scheduling, lineup navigation, and channel persistence port owner; no raw Plex payload, tokenized URL, auth header, Electron, Node, browser storage, preload, renderer, or live network ownership |
+| Channel persistence adapter | `src/main/persistence/desktopChannelPersistenceStore.ts` | Main-owned RD-11 separate versioned channel persistence file adapter behind an injected file path, temp-file write, mode hardening, and typed domain storage port; not wired to Electron app paths, existing credential/selected-server persistence, preload/renderer APIs, backup/restore, or runtime composition |
 | Redaction contract vocabulary | `src/contracts/redaction.ts` | Stub contract only |
 | External `mpv` POC tool | `tools/mpv-poc/rd-05-external-mpv-poc.mjs` | Dev-only disposable RD-05 evidence harness |
 | Native libmpv spike tool | `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` | Dev-only disposable RD-06 Windows WID/render API evidence harness |
@@ -109,7 +113,6 @@ backup/restore implementation.
 ## Not Yet Implemented
 
 - Live Plex auth/discovery/library transport and runtime composition
-- Scheduler/channel imports and persistence
 - Windows-proven production native playback helper
 - Windows-proven production playback host
 - production renderer player UI wiring

@@ -75,6 +75,11 @@ export interface NativePlayerHostFailure {
   retryable: boolean;
 }
 
+export interface NativePlayerHostLifecycleFailure {
+  requestId: PlayerRequestId | null;
+  error: NativePlayerHostFailure;
+}
+
 export type NativePlayerHostCommandResult =
   | {
       ok: true;
@@ -88,6 +93,9 @@ export type NativePlayerHostCommandResult =
 export interface NativePlayerHostPort {
   execute(command: PlayerCommand): Promise<NativePlayerHostCommandResult>;
   cleanup(requestId: PlayerRequestId | null): Promise<void>;
+  onLifecycleFailure?(
+    listener: (failure: NativePlayerHostLifecycleFailure) => void,
+  ): () => void;
 }
 
 export type NativePlayerHostFactory = () => NativePlayerHostPort;

@@ -1,6 +1,5 @@
-import { clearTimeout, setTimeout } from 'node:timers';
-
 import type { PlexAuthProfileSummary, PlexHomeUserSummary } from '../../../contracts/plex.js';
+import { sleepWithPlexAbort, throwIfPlexRequestAborted } from '../abort.js';
 import { PlexAuthError, createPlexAuthHttpError } from './plexAuthError.js';
 import {
   parseHomeUsersPayload,
@@ -358,26 +357,13 @@ function toPinSummary(pin: PlexPinRequest): DesktopPlexPinSummary {
 }
 
 function throwIfAborted(signal?: AbortSignal | null): void {
-  if (signal?.aborted) {
-    throw new PlexAuthError('aborted', 'Plex auth request was aborted');
-  }
+  throwIfPlexRequestAborted(signal, createAbortedError);
 }
 
 function sleepWithAbort(durationMs: number, signal?: AbortSignal | null): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new PlexAuthError('aborted', 'Plex auth request was aborted'));
-      return;
-    }
+  return sleepWithPlexAbort(durationMs, signal, createAbortedError);
+}
 
-    const onAbort = () => {
-      clearTimeout(timeout);
-      reject(new PlexAuthError('aborted', 'Plex auth request was aborted'));
-    };
-    const timeout = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, durationMs);
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
+function createAbortedError(): PlexAuthError {
+  return new PlexAuthError('aborted', 'Plex auth request was aborted');
 }
