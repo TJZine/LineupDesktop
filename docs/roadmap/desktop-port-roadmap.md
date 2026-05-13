@@ -142,6 +142,20 @@ durable completion summary.
   focus, while leaving production native-helper playback, live Plex transport,
   preload/contracts, product IPC, packaging, and live renderer Plex APIs
   unimplemented.
+- [x] RD-16 Subtitle, Audio, And HDR Hardening completed on 2026-05-13 after
+  Units 1, 2, and 4 and clean implementation reviews. The stream-policy and
+  Plex resolver seams now preserve renderer-safe public track ids separately
+  from private Plex/native setup, add deterministic forced/default subtitle,
+  subtitle-off, burn-in/conversion, audio fallback, language metadata, HDR10,
+  Dolby Vision, and unknown dynamic-range coverage, and keep unsupported cases
+  explicit and redacted. Windows preflight and native-presentation smoke passed
+  under `docs/runs/rd-16-subtitle-audio-hdr-hardening/` with the RD-16 media
+  matrix reporting `multi-audio`, `subtitle-bearing`, `hdr`, and
+  `hdr-unavailable` as observed; `npm run test:harness-docs`, `npm run
+  verify:redaction`, and `npm run verify` passed during closeout. RD-16 adds no
+  production native-helper playback, live Plex transport, preload/contracts,
+  product IPC, packaging behavior, dependency or lockfile change, live renderer
+  Plex API, preferred-language selection, or upstream source import.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -211,8 +225,9 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-15 are complete enough to route the next Tier 3 session to
-RD-16 Subtitle, Audio, And HDR Hardening through the quality loop. Do not import
+RD-01 through RD-16 are complete enough to route the next Tier 3 session to
+RD-17 Diagnostics, Crash Recovery, And Support Bundle through the quality loop.
+Do not import
 additional original Lineup product code until a reviewed product slice plan
 explicitly authorizes a bounded import.
 
@@ -1020,7 +1035,34 @@ Exit gates:
 
 ### RD-16 Subtitle, Audio, And HDR Hardening
 
-Status: not started.
+Status: complete. RD-16 completed through the feature-quality loop on
+2026-05-13. Unit 1 hardened the main/player stream-policy matrix with
+deterministic forced/default subtitle handling, preferred subtitle off,
+requested missing/incompatible audio and subtitles, language metadata
+preservation without language-preference selection, burn-in/conversion
+decisions, HDR10, Dolby Vision, unknown dynamic range, and explicit safe
+unsupported/unknown reasons. Unit 2 hardened Plex resolver projection so public
+renderer-safe track ids stay distinct from private Plex stream ids and future
+engine/native ids while preserving selected-track custody in private setup.
+Unit 3 was intentionally not selected because no reviewed replan required
+runtime/adapter membership or handoff changes. Unit 4 extended the dev-only
+native-presentation harness for RD-16 media-matrix proof while preserving
+RD-06/RD-15 guardrails.
+
+Windows proof closed the platform gate: `npm run test:harness-docs`, the
+native-presentation preflight, the native-presentation smoke with the ignored
+local RD-16 media-matrix descriptor, and `npm run verify:redaction` passed. The
+smoke summary records `RD-15 native presentation UI: 16/16 observed` and
+`RD-16 media matrix: observed (multi-audio:observed,
+subtitle-bearing:observed, hdr:observed, hdr-unavailable:observed)`. `npm run
+verify` passed during closeout. The completed full plan body was archived
+locally under `docs/runs/archive/plans/` and removed from tracked active plans.
+
+No production native-helper playback, live Plex transport, preload method,
+contract expansion, product IPC, package/dependency/lockfile change, packaging
+behavior, live renderer Plex API, preferred-language selection, adapter
+current-request membership validation, or upstream source import landed in
+RD-16.
 
 Depends on:
 

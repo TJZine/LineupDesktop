@@ -182,6 +182,25 @@ renderer/dev-harness integration closeout only: it adds no production
 native-helper playback, live Plex transport, preload or contract expansion,
 product IPC, packaging behavior, dependency or lockfile change, live renderer
 Plex API, or upstream source import.
+RD-16 is complete. Units 1 and 2 hardened the main/player stream-policy and
+main/Plex resolver seams for subtitle, audio, HDR, and track identity behavior:
+forced/default subtitles, subtitle-off, requested missing/incompatible audio
+and subtitles, burn-in/conversion decisions, audio fallback, language metadata
+preservation without language-preference selection, HDR10, Dolby Vision,
+unknown dynamic range, explicit unsupported/unknown reasons, and public/private
+track id separation are covered by deterministic tests. Unit 4 extended and ran
+the dev-only RD-06 native-presentation harness for RD-16 proof: Windows
+preflight passed, Windows native-presentation smoke passed under
+`docs/runs/rd-16-subtitle-audio-hdr-hardening/`, and the summary records
+`RD-16 media matrix: observed (multi-audio:observed,
+subtitle-bearing:observed, hdr:observed, hdr-unavailable:observed)` while
+keeping `tracks: not-proven-by-dummy-visual-media`. `npm run
+test:harness-docs`, `npm run verify:redaction`, and `npm run verify` passed
+during closeout. RD-16 remains policy/resolver/dev-harness hardening only: it
+adds no production native-helper playback, live Plex transport, preload or
+contract expansion, product IPC, packaging behavior, dependency or lockfile
+change, live renderer Plex API, preferred-language selection, adapter
+current-request membership validation, or upstream source import.
 
 ## Product Invariants
 
@@ -214,8 +233,8 @@ Plex API, or upstream source import.
 | Persistence contract vocabulary | `src/contracts/persistence.ts` | Renderer-safe account, credential-handle, selected-server, storage-status, diagnostic, and persistence forbidden-field vocabulary |
 | Plex contract vocabulary | `src/contracts/plex.ts` | Renderer-safe Plex profile, home-user, server, health, selection, library, media, collection, playlist, tag-directory summaries plus recursive forbidden-field checks for raw credentials, headers, URI-like fields, raw payloads, filesystem paths, and image keys |
 | Desktop player adapter boundary | `src/main/player/desktopPlayerAdapter.ts`, `src/main/player/nativePlayerHostPort.ts`, `src/main/player/nativePlayerHostProcess.ts`, and `src/main/player/playerIpc.ts` | Main-owned RD-07 adapter core, fakeable native-host process seam, and player IPC owner with renderer-intent validation, fakeable native-host event validation, request-id stale-event quarantine, real spawned helper test-double proof, helper/process failure normalization, cleanup/reap handling, runtime main/preload delivery, development/smoke fake-host activation, production unsupported/noop behavior, and renderer-safe diagnostics |
-| Desktop stream policy | `src/main/player/streamPolicy/desktopStreamPolicy.ts` and `src/main/player/streamPolicy/types.ts` | Main/player-owned RD-08 deterministic fixture policy for capability-driven direct play, direct stream, transcode, unsupported decisions, audio/subtitle fallback, HDR/Dolby Vision handling, stable reason codes, explicit unknowns, Windows RD-06/RD-07 sample-matrix proof, and safe policy outputs; not wired to Plex runtime, renderer UI, native helper, secure storage, or runtime IPC |
-| Plex stream resolver boundary | `src/main/plex/streamResolver.ts` | Main-owned RD-12 resolver that consumes injected selected-connection, active-credential, media-detail, and PMS-session ports; maps Plex media details into RD-08 stream-policy candidates; returns a private privileged playback descriptor separately from renderer-safe player load payloads, safe diagnostics, and request-scoped PMS leases |
+| Desktop stream policy | `src/main/player/streamPolicy/desktopStreamPolicy.ts` and `src/main/player/streamPolicy/types.ts` | Main/player-owned deterministic fixture policy for capability-driven direct play, direct stream, transcode, unsupported decisions, RD-16 forced/default subtitle handling, subtitle-off, requested missing/incompatible audio and subtitles, burn-in/conversion decisions, audio fallback, language metadata preservation without language-preference selection, HDR/Dolby Vision/unknown dynamic-range handling, stable reason codes, explicit unknowns, Windows RD-06/RD-07 sample-matrix proof, RD-16 redacted media-matrix proof, and safe policy outputs; not wired to Plex runtime, renderer UI, native helper, secure storage, or runtime IPC |
+| Plex stream resolver boundary | `src/main/plex/streamResolver.ts` | Main-owned RD-12/RD-16 resolver that consumes injected selected-connection, active-credential, media-detail, and PMS-session ports; maps Plex media details into stream-policy candidates; returns a private privileged playback descriptor separately from renderer-safe player load payloads, safe diagnostics, public renderer-safe track ids, and request-scoped PMS leases while keeping private Plex stream ids and future native/engine ids out of public surfaces |
 | Plex playback runtime boundary | `src/main/player/plexPlaybackRuntime.ts`, `src/main/player/plexPlaybackBridge.ts`, and `src/main/player/plexPlaybackComposition.ts` | Main-owned RD-12 runtime, scheduler/channel bridge, and thin composition seam for resolving current scheduled Plex media into safe player loads, applying request id plus epoch stale-event custody, cleaning PMS/player state on stop/switch/error/logout/server-change/profile-change/helper-crash/teardown/failure paths, rejecting unsafe or mismatched leases before player dispatch, and keeping private playback setup out of renderer/preload contracts |
 | Desktop persistence boundary | `src/main/persistence/appDataPaths.ts`, `src/main/persistence/secureStorageCodec.ts`, and `src/main/persistence/desktopPersistenceStore.ts` | Main-owned RD-09 app-data path, Electron safeStorage codec, encrypted Plex credential record, selected-server state, unavailable/corrupt classification, fail-closed no-plaintext fallback, and renderer-safe snapshot owner; not wired to Plex runtime, preload, renderer, scheduler/channel persistence, backup/restore, or production IPC |
 | Desktop Plex library domain | `src/main/plex/library/*` | Main-owned RD-10 imported/adapted Plex library parser/domain owner for library sections, media metadata, seasons, collections, playlists, tag directories, search hubs, pagination, request intent, and renderer-safe summaries; no live fetch/cache runtime, image URL construction, stream resolver runtime, preload, renderer, or playback URL setup |
