@@ -17,6 +17,7 @@ import type {
   PlayerSnapshot,
 } from '../../contracts/player.js';
 import type { ShellMode } from '../../contracts/shell.js';
+import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.js';
 import { DesktopPlayerAdapter } from './desktopPlayerAdapter.js';
 import type {
   NativePlayerHostCommandResult,
@@ -33,6 +34,7 @@ export interface RegisterPlayerIpcHandlersOptions {
   sendPlayerEvent(event: PlayerEvent): void;
   createRequestId(prefix: string): string;
   reportDiagnostic?(message: string, error: unknown): void;
+  diagnosticEventStore?: DiagnosticEventStore;
   nativeHostFactory?: NativePlayerHostFactory;
   ipcMain?: PlayerIpcMain;
 }
@@ -59,6 +61,7 @@ export function registerPlayerIpcHandlers(
       ? {
           adapter: new DesktopPlayerAdapter(createDevelopmentHost(options), {
             onEvents: (events) => emitEvents(options, events),
+            diagnosticEventStore: options.diagnosticEventStore,
           }),
         }
       : { adapter: null };
@@ -70,6 +73,7 @@ export function registerPlayerIpcHandlers(
     }
     if (runtime.adapter === null) {
       const error = unsupportedCapabilityError(requestId);
+      recordPlayerIpcDiagnostic(options.diagnosticEventStore, requestId, 'dispatch', 'failed', error.code);
       emitEvents(options, [{ event: 'error', requestId, error }]);
       return playerFailure(requestId, error);
     }
@@ -109,6 +113,13 @@ export function registerPlayerIpcHandlers(
       result = await runtime.adapter.cleanup();
     } catch (error: unknown) {
       options.reportDiagnostic?.('Player IPC cleanup failed', error);
+      recordPlayerIpcDiagnostic(
+        options.diagnosticEventStore,
+        requestId,
+        'cleanup',
+        'failed',
+        'PLAYER_OPERATION_UNAVAILABLE',
+      );
       return playerFailure(requestId, cleanupError(requestId));
     }
 
@@ -135,12 +146,39 @@ export function registerPlayerIpcHandlers(
       }
     } catch (error) {
       options.reportDiagnostic?.('Player IPC cleanup failed', error);
+      recordPlayerIpcDiagnostic(
+        options.diagnosticEventStore,
+        'player-cleanup',
+        'cleanup',
+        'failed',
+        'PLAYER_OPERATION_UNAVAILABLE',
+      );
     } finally {
       for (const channel of PLAYER_IPC_CHANNELS) {
         ipcMain.removeHandler(channel);
       }
     }
   };
+}
+
+function recordPlayerIpcDiagnostic(
+  eventStore: DiagnosticEventStore | undefined,
+  requestId: PlayerRequestId,
+  operation: 'dispatch' | 'cleanup',
+  status: 'failed',
+  code: string,
+): void {
+  eventStore?.record({
+    surface: 'player-ipc',
+    category: operation === 'cleanup' ? 'cleanup' : 'playback',
+    severity: 'error',
+    status,
+    operation,
+    message: operation === 'cleanup' ? 'Player IPC cleanup failed.' : 'Player IPC dispatch failed.',
+    requestId,
+    result: 'failure',
+    context: { code },
+  });
 }
 
 function createDevelopmentHost(

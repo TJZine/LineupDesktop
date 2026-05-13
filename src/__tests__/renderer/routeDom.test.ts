@@ -10,9 +10,11 @@ class ElementDouble {
   hidden = false;
   disabled = false;
   textContent = '';
+  className = '';
   readonly dataset: Record<string, string> = {};
   readonly attributes = new Map<string, string>();
   readonly style = { setProperty: () => undefined };
+  readonly children: ElementDouble[] = [];
 
   setAttribute(name: string, value: string): void {
     this.attributes.set(name, value);
@@ -22,12 +24,16 @@ class ElementDouble {
     return this.attributes.get(name) ?? null;
   }
 
-  replaceChildren(): void {
-    return undefined;
+  append(...children: ElementDouble[]): void {
+    this.children.push(...children);
+  }
+
+  replaceChildren(...children: ElementDouble[]): void {
+    this.children.splice(0, this.children.length, ...children);
   }
 }
 
-test('workflow rendering hides and disables player overlays away from the player route', () => {
+test('route DOM workflow rendering hides and disables player overlays away from the player route', () => {
   const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   const documentDataset: Record<string, string> = {};
   const documentDouble = {
@@ -98,6 +104,56 @@ test('workflow rendering hides and disables player overlays away from the player
     }
   }
 });
+
+test('route DOM renders support bundle status without filesystem paths', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDataset: Record<string, string> = {};
+  const documentDouble = {
+    documentElement: { dataset: documentDataset },
+    querySelector: () => null,
+    createElement: () => new ElementDouble(),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const settingsSectionsElement = new ElementDouble();
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.settingsSectionsElement = settingsSectionsElement as unknown as HTMLElement;
+
+    renderWorkflowDom(
+      createWorkflowState('settings'),
+      createPlayerOverlayState(),
+      createFakePlayerSnapshot(),
+      dom,
+    );
+
+    const renderedText = collectText(settingsSectionsElement);
+    assert.match(renderedText, /Support bundle/u);
+    assert.match(renderedText, /Ready/u);
+    assert.doesNotMatch(renderedText, /\/Users\/|[A-Za-z]:\\/u);
+    assert.doesNotMatch(renderedText, /\bpath\b|\bdirectory\b/u);
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+});
+
+function collectText(element: ElementDouble): string {
+  return [element.textContent, ...element.children.map(collectText)].join(' ');
+}
 
 function createOverlayDomBindings({
   overlayStack,

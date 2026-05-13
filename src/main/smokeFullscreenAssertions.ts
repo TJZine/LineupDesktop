@@ -7,6 +7,7 @@ export async function assertFullscreenContinuity(
   failures: string[],
 ): Promise<void> {
   try {
+    await ensureVisibleForFullscreen(window);
     const fullscreenOn = await setRendererFullscreen(window, true);
     if (!isExpectedFullscreenResult(fullscreenOn, true)) {
       failures.push('fullscreen on ' + JSON.stringify(fullscreenOn));
@@ -59,6 +60,25 @@ export async function assertFullscreenContinuity(
       failures.push('fullscreen leave BrowserWindow state');
     }
   }
+}
+
+function ensureVisibleForFullscreen(window: BrowserWindow): Promise<void> {
+  if (window.isDestroyed() || window.isVisible()) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    let completed = false;
+    const finish = (): void => {
+      if (completed) return;
+      completed = true;
+      globalThis.clearTimeout(timeout);
+      window.off('show', finish);
+      resolve();
+    };
+    const timeout = setTimeout(finish, 1000);
+    window.once('show', finish);
+    window.show();
+  });
 }
 
 async function setRendererFullscreen(window: BrowserWindow, enabled: boolean): Promise<unknown> {

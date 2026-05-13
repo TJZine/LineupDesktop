@@ -104,6 +104,27 @@ test('verifyDocs rejects active plans missing required standard fields', () => {
   assert(errors.some((error) => error.includes('exactly one verification classification')));
 });
 
+test('verifyDocs requires active plan fields to be real markdown headings', () => {
+  const root = makeFixture({ complete: true });
+  const planPath = path.join(root, 'docs/plans/active.md');
+  fs.writeFileSync(planPath, [
+    '**Plan Status:** active',
+    '**Task family:** feature/design',
+    'new regression/contract test required',
+    'This prose mentions `## Goal`, `## Non-Goals`, `## Parent Architecture Alignment`,',
+    '`## Required Reading`, `## Required Skills`, `## Evidence And Discovery`,',
+    '`## Impact Snapshot`, `## Files In Scope`, `## Files Out Of Scope`,',
+    '`## Planner Self-Check`, `## Architecture Seam Decision Gate`,',
+    '`## Verification Commands`, `## Acceptance Criteria`, `## Replan Triggers`,',
+    '`## Rollback Notes`, and `## Commit Checkpoints` without declaring sections.',
+  ].join('\n'));
+
+  const errors = verifyDocs(root);
+
+  assert(errors.some((error) => error.includes('missing ## Goal')));
+  assert(errors.some((error) => error.includes('missing ## Commit Checkpoints')));
+});
+
 test('verifyDocs rejects active plans with late status marker or heading order drift', () => {
   const root = makeFixture({ complete: true });
   const planPath = path.join(root, 'docs/plans/active.md');

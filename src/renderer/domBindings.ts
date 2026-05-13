@@ -175,6 +175,7 @@ export function readSettingsActionId(value: string | undefined): SettingsActionI
     case 'cycleGuideDensity':
     case 'togglePreviewBadges':
     case 'toggleSetupReminder':
+    case 'exportSupportBundle':
       return value;
     default:
       return null;

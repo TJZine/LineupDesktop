@@ -10,6 +10,7 @@ import {
 import {
   applyChannelSetupAction,
   applySettingsAction,
+  applySupportBundleExportStatus,
   createChannelSetupDraftState,
   createChannelSetupSteps,
   createSettingsDraftState,
@@ -24,6 +25,7 @@ import {
   type SettingsActionId,
   type SettingsDraftState,
   type SettingsSectionViewModel,
+  type SupportBundleExportStatusViewModel,
 } from './settingsSetup.js';
 
 export type { ChannelSetupActionId, SettingsActionId } from './settingsSetup.js';
@@ -325,6 +327,16 @@ export function applyWorkflowSettingsAction(
   return {
     ...state,
     settingsDraft: applySettingsAction(state.settingsDraft, actionId),
+  };
+}
+
+export function applyWorkflowSupportBundleExportStatus(
+  state: WorkflowState,
+  status: SupportBundleExportStatusViewModel,
+): WorkflowState {
+  return {
+    ...state,
+    settingsDraft: applySupportBundleExportStatus(state.settingsDraft, status),
   };
 }
 

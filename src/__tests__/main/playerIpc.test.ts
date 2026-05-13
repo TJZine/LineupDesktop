@@ -14,6 +14,7 @@ import {
 } from '../../contracts/player.js';
 import { registerPlayerIpcHandlers } from '../../main/player/playerIpc.js';
 import { redactMainProcessError } from '../../main/redactedDiagnostics.js';
+import { DiagnosticEventStore } from '../../main/diagnostics/diagnosticEventStore.js';
 import type {
   NativePlayerHostCommandResult,
   NativePlayerHostFailure,
@@ -177,6 +178,10 @@ test('player IPC registers closed handlers and tears them down', async () => {
 test('player IPC reports cleanup failures and still removes handlers', async () => {
   const ipcMain = new FakeIpcMain();
   const host = new ConfigurableNativeHost();
+  const diagnosticEventStore = new DiagnosticEventStore({
+    clock: () => 1_000,
+    idGenerator: () => 'ipc-cleanup',
+  });
   const diagnostics: Array<{ message: string; error: unknown }> = [];
   host.cleanupError = new Error('nativeHandle=secret');
   const teardown = registerPlayerIpcHandlers({
@@ -186,6 +191,7 @@ test('player IPC reports cleanup failures and still removes handlers', async () 
     createRequestId,
     nativeHostFactory: () => host,
     reportDiagnostic: (message, error) => diagnostics.push({ message, error }),
+    diagnosticEventStore,
     ipcMain,
   });
 
@@ -202,6 +208,8 @@ test('player IPC reports cleanup failures and still removes handlers', async () 
   assert.equal(diagnostics[0]?.message, 'Player IPC cleanup failed');
   assert.equal((diagnostics[0]?.error as { category?: string }).category, 'cleanup-failure');
   assert.equal(JSON.stringify(diagnostics[0]?.error).includes('nativeHandle'), false);
+  assert.equal(diagnosticEventStore.getCrashRecoverySummary().cleanupFailureCount, 1);
+  assert.equal(JSON.stringify(diagnosticEventStore.getRecords()).includes('nativeHandle'), false);
 });
 
 test('main process diagnostics redact privileged key-value pairs and URLs', () => {

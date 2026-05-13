@@ -2,7 +2,8 @@ export type SettingsActionId =
   | 'cycleLaunchMode'
   | 'cycleGuideDensity'
   | 'togglePreviewBadges'
-  | 'toggleSetupReminder';
+  | 'toggleSetupReminder'
+  | 'exportSupportBundle';
 
 export type ChannelSetupActionId =
   | 'advanceSetupStep'
@@ -17,6 +18,14 @@ export interface SettingsDraftState {
   guideDensity: 'comfortable' | 'compact';
   previewBadgesEnabled: boolean;
   setupReminderEnabled: boolean;
+  supportBundleExport: SupportBundleExportStatusViewModel;
+}
+
+export interface SupportBundleExportStatusViewModel {
+  status: 'ready' | 'exporting' | 'succeeded' | 'failed' | 'cancelled';
+  bundleDirectoryName: string | null;
+  fileCount: number | null;
+  redactionStatus: 'passed' | 'failed' | null;
 }
 
 export interface SettingsItemViewModel {
@@ -96,6 +105,12 @@ export function createSettingsDraftState(): SettingsDraftState {
     guideDensity: 'comfortable',
     previewBadgesEnabled: true,
     setupReminderEnabled: true,
+    supportBundleExport: {
+      status: 'ready',
+      bundleDirectoryName: null,
+      fileCount: null,
+      redactionStatus: null,
+    },
   };
 }
 
@@ -126,7 +141,27 @@ export function applySettingsAction(
       return { ...state, previewBadgesEnabled: !state.previewBadgesEnabled };
     case 'toggleSetupReminder':
       return { ...state, setupReminderEnabled: !state.setupReminderEnabled };
+    case 'exportSupportBundle':
+      return {
+        ...state,
+        supportBundleExport: {
+          status: 'exporting',
+          bundleDirectoryName: null,
+          fileCount: null,
+          redactionStatus: null,
+        },
+      };
   }
+}
+
+export function applySupportBundleExportStatus(
+  state: SettingsDraftState,
+  status: SupportBundleExportStatusViewModel,
+): SettingsDraftState {
+  return {
+    ...state,
+    supportBundleExport: sanitizeSupportBundleExportStatus(status),
+  };
 }
 
 export function applyChannelSetupAction(
@@ -212,9 +247,75 @@ export function createSettingsSections(
           valueLabel: state.setupReminderEnabled ? 'On' : 'Off',
           description: 'Keeps the local channel setup route visible without writing preferences.',
         },
+        {
+          id: 'support-bundle-export',
+          label: 'Support bundle',
+          valueLabel: formatSupportBundleStatus(state.supportBundleExport),
+          description: 'Main-owned diagnostics export with redaction scan status.',
+        },
       ],
     },
   ];
+}
+
+function formatSupportBundleStatus(status: SupportBundleExportStatusViewModel): string {
+  switch (status.status) {
+    case 'ready':
+      return 'Ready';
+    case 'exporting':
+      return 'Exporting';
+    case 'succeeded': {
+      const redactionLabel = status.redactionStatus === 'failed'
+        ? ' (redaction failed)'
+        : status.redactionStatus === null ? ' (redaction pending)' : '';
+      return `${status.bundleDirectoryName ?? 'Bundle'} - ${String(status.fileCount ?? 0)} files${redactionLabel}`;
+    }
+    case 'failed':
+      return 'Failed';
+    case 'cancelled':
+      return 'Cancelled';
+  }
+}
+
+function sanitizeSupportBundleExportStatus(
+  status: SupportBundleExportStatusViewModel,
+): SupportBundleExportStatusViewModel {
+  return {
+    status: status.status,
+    bundleDirectoryName: status.status === 'succeeded'
+      ? sanitizeSupportBundleDirectoryName(status.bundleDirectoryName)
+      : null,
+    fileCount: status.status === 'succeeded' && isFiniteNonNegativeNumber(status.fileCount)
+      ? Math.floor(status.fileCount)
+      : null,
+    redactionStatus: status.redactionStatus === 'passed' || status.redactionStatus === 'failed'
+      ? status.redactionStatus
+      : null,
+  };
+}
+
+function sanitizeSupportBundleDirectoryName(value: string | null): string | null {
+  if (value === null) {
+    return null;
+  }
+  const parts = value.split(/[\\/]/u);
+  const baseName = parts[parts.length - 1] ?? '';
+  const safeName = baseName
+    .split('')
+    .filter(isPrintableAscii)
+    .join('')
+    .replace(/[^A-Za-z0-9.-]/gu, '-')
+    .slice(0, 120);
+  return /^lineup-desktop-support-[A-Za-z0-9-]{1,80}$/u.test(safeName) ? safeName : null;
+}
+
+function isFiniteNonNegativeNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function isPrintableAscii(value: string): boolean {
+  const codePoint = value.charCodeAt(0);
+  return codePoint >= 0x20 && codePoint < 0x7f;
 }
 
 export function createChannelSetupSteps(

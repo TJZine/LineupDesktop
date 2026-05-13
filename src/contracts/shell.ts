@@ -1,5 +1,11 @@
 import type { PlayerRendererIntentEnvelope, RendererIntentEnvelope } from './ipc.js';
 import type {
+  DiagnosticsExportSupportBundleResult,
+  DiagnosticsGetSummaryResult,
+  DiagnosticsRecordRendererEventResult,
+  DiagnosticsRendererEventEnvelope,
+} from './diagnostics.js';
+import type {
   PlayerDispatchResult,
   PlayerEvent,
   PlayerIpcResult,
@@ -75,6 +81,13 @@ export interface LineupDesktopPreloadApi {
     getSnapshot: () => Promise<PlayerIpcResult<PlayerSnapshot>>;
     cleanup: () => Promise<PlayerIpcResult<PlayerSnapshot>>;
     onEvent: (listener: (event: PlayerEvent) => void) => () => void;
+  };
+  diagnostics: {
+    recordRendererEvent: (
+      envelope: DiagnosticsRendererEventEnvelope,
+    ) => Promise<DiagnosticsRecordRendererEventResult>;
+    getSummary: () => Promise<DiagnosticsGetSummaryResult>;
+    exportSupportBundle: () => Promise<DiagnosticsExportSupportBundleResult>;
   };
 }
 

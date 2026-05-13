@@ -201,6 +201,20 @@ adds no production native-helper playback, live Plex transport, preload or
 contract expansion, product IPC, packaging behavior, dependency or lockfile
 change, live renderer Plex API, preferred-language selection, adapter
 current-request membership validation, or upstream source import.
+RD-17 is complete. It adds renderer-safe diagnostics contracts, RD-17 redaction
+vocabulary, a main-owned diagnostic event store, support-bundle path/export
+owners, diagnostics IPC/preload methods, a renderer settings export action, and
+player/native-host/runtime diagnostic hooks for helper crash/restart and cleanup
+reporting. Windows proof passed under ignored local evidence at
+`docs/runs/rd-17-diagnostics-crash-recovery-support-bundle/windows-smoke`: the
+summary records platform `win32`, status `passed`, helper crash detected, main
+process alive, safe failed request state, helper cleanup/reap, replacement
+helper use, a main-created bundle target under the injected parent,
+renderer-visible output limited to bundle identity, completed-bundle scan status
+`passed`, and no forbidden material. RD-17 adds no telemetry/cloud upload,
+production native-helper playback, live Plex transport, packaging/signing or
+release behavior, dependency or lockfile change, persisted credential/settings
+schema change, or upstream source import.
 
 ## Product Invariants
 
@@ -225,13 +239,15 @@ current-request membership validation, or upstream source import.
 | Import provenance | `docs/architecture/import-ledger.md` | Scaffolded |
 | File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size guardrails, temporary oversized-file allowlist rationale, decomposition/revisit triggers, and Tier 3 file-shape verification |
 | Electron main shell | `src/main/index.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with smoke-only assertion ownership split out of the startup/composition entrypoint, plus RD-14 Unit 2 main-owned BrowserWindow/fullscreen/display/restore controller and Unit 3 foreground app-command controller while `src/main/index.ts` remains composition and IPC wiring |
-| Preload bridge | `src/preload/index.cts` | Narrow shell/window/player bridge with runtime payload guards; guard vocabulary is kept in the sandbox-compatible preload entrypoint, and the integration seam reads preload source text plus renderer-safe contracts to parity-test guard vocabulary, channel constants, the single `lineupDesktop` exposure, and approved `ipcRenderer` method/channel pairs without importing or executing preload |
+| Preload bridge | `src/preload/index.cts` | Narrow shell/window/player/diagnostics bridge with runtime payload guards; guard vocabulary is kept in the sandbox-compatible preload entrypoint, and the integration seam reads preload source text plus renderer-safe contracts to parity-test guard vocabulary, channel constants, the single `lineupDesktop` exposure, and approved `ipcRenderer` method/channel pairs without importing or executing preload |
 | Renderer shell | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md) | RD-13/ARCH-01 unprivileged app shell with route, workflow, EPG, overlay, focus, and style surfaces; RD-14 focused desktop input and DOM cursor owners; and RD-15 fake-backed UI-over-player-surface composition for overlays, guide/EPG, settings, channel setup, z-order, fullscreen bridge continuity, and deterministic renderer focus |
 | Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window/player bridge contract |
 | Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, diagnostic, IPC result, and runtime event-guard contract |
-| IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window/player IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
+| IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window/player/diagnostics IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
 | Persistence contract vocabulary | `src/contracts/persistence.ts` | Renderer-safe account, credential-handle, selected-server, storage-status, diagnostic, and persistence forbidden-field vocabulary |
 | Plex contract vocabulary | `src/contracts/plex.ts` | Renderer-safe Plex profile, home-user, server, health, selection, library, media, collection, playlist, tag-directory summaries plus recursive forbidden-field checks for raw credentials, headers, URI-like fields, raw payloads, filesystem paths, and image keys |
+| Diagnostics contract vocabulary | `src/contracts/diagnostics.ts` | Renderer-safe RD-17 diagnostic schema, result/error, summary, support-bundle export, redaction-scan, renderer-event, truncation, and sanitizer vocabulary |
+| Main diagnostics and support bundle | `src/main/diagnostics/*` | Main-owned RD-17 diagnostic event store, support-bundle target/path creation, export assembly, redaction scanning, IPC authorization, renderer-event validation, and safe support-bundle result/failure envelopes; renderer never receives absolute export paths or raw diagnostic material |
 | Desktop player adapter boundary | `src/main/player/desktopPlayerAdapter.ts`, `src/main/player/nativePlayerHostPort.ts`, `src/main/player/nativePlayerHostProcess.ts`, and `src/main/player/playerIpc.ts` | Main-owned RD-07 adapter core, fakeable native-host process seam, and player IPC owner with renderer-intent validation, fakeable native-host event validation, request-id stale-event quarantine, real spawned helper test-double proof, helper/process failure normalization, cleanup/reap handling, runtime main/preload delivery, development/smoke fake-host activation, production unsupported/noop behavior, and renderer-safe diagnostics |
 | Desktop stream policy | `src/main/player/streamPolicy/desktopStreamPolicy.ts` and `src/main/player/streamPolicy/types.ts` | Main/player-owned deterministic fixture policy for capability-driven direct play, direct stream, transcode, unsupported decisions, RD-16 forced/default subtitle handling, subtitle-off, requested missing/incompatible audio and subtitles, burn-in/conversion decisions, audio fallback, language metadata preservation without language-preference selection, HDR/Dolby Vision/unknown dynamic-range handling, stable reason codes, explicit unknowns, Windows RD-06/RD-07 sample-matrix proof, RD-16 redacted media-matrix proof, and safe policy outputs; not wired to Plex runtime, renderer UI, native helper, secure storage, or runtime IPC |
 | Plex stream resolver boundary | `src/main/plex/streamResolver.ts` | Main-owned RD-12/RD-16 resolver that consumes injected selected-connection, active-credential, media-detail, and PMS-session ports; maps Plex media details into stream-policy candidates; returns a private privileged playback descriptor separately from renderer-safe player load payloads, safe diagnostics, public renderer-safe track ids, and request-scoped PMS leases while keeping private Plex stream ids and future native/engine ids out of public surfaces |
@@ -244,11 +260,12 @@ current-request membership validation, or upstream source import.
 | Scheduler domain | `src/domain/scheduler/**` | Pure RD-11 imported/adapted deterministic scheduler and playback-ordering owner for anchor-time schedule calculation, loop wrapping, current/next/previous lookup, schedule windows, shuffle seeds, block playback validation, injected clock/timer ports, and event emission; not wired to Electron main/preload, renderer, Plex runtime, stream resolution, or native playback |
 | Channel and content domain | `src/domain/channel/**` | Pure RD-11 imported/adapted channel authoring, import/export normalization, content resolution through injected domain-safe library ports, stale fallback, source/channel resolution caches, retry scheduling, lineup navigation, and channel persistence port owner; no raw Plex payload, tokenized URL, auth header, Electron, Node, browser storage, preload, renderer, or live network ownership |
 | Channel persistence adapter | `src/main/persistence/desktopChannelPersistenceStore.ts` | Main-owned RD-11 separate versioned channel persistence file adapter behind an injected file path, temp-file write, mode hardening, and typed domain storage port; not wired to Electron app paths, existing credential/selected-server persistence, preload/renderer APIs, backup/restore, or runtime composition |
-| Redaction contract vocabulary | `src/contracts/redaction.ts` | Stub contract only |
+| Redaction contract vocabulary | `src/contracts/redaction.ts` | RD-17 redaction boundary and forbidden diagnostic field vocabulary shared by diagnostics contracts, scanner, and tests |
 | External `mpv` POC tool | `tools/mpv-poc/rd-05-external-mpv-poc.mjs` | Dev-only disposable RD-05 evidence harness |
 | Native libmpv spike tool | `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` | Dev-only disposable RD-06 Windows WID/render API evidence harness |
 | Docs verifier | `tools/verify-docs.mjs` | Active |
-| Redaction verifier | `tools/verify-redaction.mjs` | Active |
+| Redaction verifier | `tools/verify-redaction.mjs` | Active RD-17-aware scanner for secret-shaped values, raw auth/header material, privileged diagnostic fields, raw filesystem paths, process data, native handles, and raw IPC frames |
+| RD-17 diagnostics smoke | `tools/rd17-diagnostics-smoke.mjs` | Windows-only ignored-evidence proof for diagnostics crash recovery and support-bundle redaction closeout |
 
 ## Not Yet Implemented
 
@@ -259,6 +276,7 @@ current-request membership validation, or upstream source import.
   playback descriptor
 - live renderer Plex APIs and production renderer-to-Plex/player API wiring
 - preload, contract, and product IPC expansion for live Plex/player runtime
+  beyond the RD-17 local diagnostics surface
 - preload/renderer persistence IPC wiring
 - encrypted credential backup/restore implementation
 - packaging/signing/update pipeline
@@ -281,6 +299,12 @@ commands remain backed by a development/smoke fake host by default, and the
 main/player process seam is covered by in-memory and real spawned helper
 test-double proof. Fullscreen requests map to the existing
 `window.enterFullscreen` and `window.exitFullscreen` renderer intents.
+RD-17 also exposes `window.lineupDesktop.diagnostics.recordRendererEvent()`,
+`window.lineupDesktop.diagnostics.getSummary()`, and
+`window.lineupDesktop.diagnostics.exportSupportBundle()` through preload; those
+methods return renderer-safe diagnostics envelopes and never expose absolute
+paths, raw helper output, process identifiers, native handles, raw Plex payloads,
+credentials, auth headers, tokenized URLs, or raw IPC traces.
 
 ## Roadmap
 

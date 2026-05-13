@@ -118,6 +118,7 @@ const STATIC_SCREEN_MARKUP = `
         <button type="button" data-settings-action="cycleGuideDensity" data-focus-id="settings-guide-density">Guide density</button>
         <button type="button" data-settings-action="togglePreviewBadges" data-focus-id="settings-preview-badges">Preview badges</button>
         <button type="button" data-settings-action="toggleSetupReminder" data-focus-id="settings-setup-reminder">Setup reminder</button>
+        <button type="button" data-settings-action="exportSupportBundle" data-focus-id="settings-support-bundle">Export support bundle</button>
       </div>
       <div class="workflow-actions" data-workflow-actions="settings">
         <button type="button" data-route-action="openChannelSetup" data-focus-id="settings-setup">Channel setup</button>

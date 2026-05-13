@@ -506,19 +506,20 @@ function mapSubtitleTracks(
   part: PlexMediaPart,
   trackScope: TrackIdScope,
 ): DesktopStreamMediaCandidate['subtitleTracks'] {
-  return part.streams
-    .filter((candidate) => candidate.streamType === 3)
-    .map((stream, index) => ({
-      id: toTrackId(trackScope, 'subtitle', index),
-      label: labelTrack('Subtitle', stream.displayTitle ?? stream.title ?? stream.codec, stream.language),
-      ...(stream.languageCode !== undefined || stream.language !== undefined
-        ? { language: stream.languageCode ?? stream.language }
-        : {}),
-      delivery: mapSubtitleDelivery(stream),
-      ...(stream.format !== undefined ? { format: stream.format } : {}),
-      forced: stream.forced === true,
-      default: stream.default === true || stream.selected === true,
-    }));
+  const streams = part.streams.filter((candidate) => candidate.streamType === 3);
+  const hasSelectedStream = streams.some((stream) => stream.selected === true);
+  return streams.map((stream, index) => ({
+    id: toTrackId(trackScope, 'subtitle', index),
+    label: labelTrack('Subtitle', stream.displayTitle ?? stream.title ?? stream.codec, stream.language),
+    ...(stream.languageCode !== undefined || stream.language !== undefined
+      ? { language: stream.languageCode ?? stream.language }
+      : {}),
+    delivery: mapSubtitleDelivery(stream),
+    ...(stream.format !== undefined ? { format: stream.format } : {}),
+    forced: stream.forced === true,
+    default: hasSelectedStream ? stream.selected === true : stream.default === true,
+    ...(stream.selected === true ? { selected: true } : {}),
+  }));
 }
 
 function mapSubtitleDelivery(stream: PlexStream): PlayerSubtitleDeliveryMode {

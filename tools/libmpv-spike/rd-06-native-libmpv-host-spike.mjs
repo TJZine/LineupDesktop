@@ -303,6 +303,38 @@ export function scanForbiddenEvidenceContent(content) {
   return findings;
 }
 
+export function createSanitizedEventCollector({ malformedKind = 'harness-event' } = {}) {
+  const events = [];
+  let pending = '';
+
+  const collectLine = (line) => {
+    if (!line.trim()) {
+      return;
+    }
+    try {
+      events.push(sanitizeHelperEvent(JSON.parse(line)));
+    } catch {
+      events.push({ kind: malformedKind, category: 'unparseable' });
+    }
+  };
+
+  return {
+    events,
+    consume(chunk) {
+      pending += String(chunk);
+      const lines = pending.split(/\r?\n/u);
+      pending = lines.pop() ?? '';
+      for (const line of lines) {
+        collectLine(line);
+      }
+    },
+    flush() {
+      collectLine(pending);
+      pending = '';
+    },
+  };
+}
+
 export async function scanEvidenceDirectory(outDir) {
   const findings = [];
   for (const fileName of evidenceFiles) {
@@ -698,6 +730,7 @@ async function runSmokeHarness({
         hasRd15NativePresentationProof(rd15UiProofs, proof, presentationMode)
       ))
     ));
+    const rd16MediaMatrixObserved = !nativePresentation || rd16MediaMatrix?.status === 'observed';
 
     status = harnessResult.exitCode === 0 &&
       requestFacts.count > 0 &&
@@ -714,6 +747,7 @@ async function runSmokeHarness({
       fullscreenCompositionObserved &&
       nativePresentationProofObserved &&
       rd15UiProofsObserved &&
+      rd16MediaMatrixObserved &&
       helperCleanupObserved &&
       !helperCleanupFailed &&
       (!renderApi || (
@@ -958,23 +992,13 @@ async function runElectronHarness(config) {
     windowsHide: true,
   });
 
-  const events = [];
+  const collector = createSanitizedEventCollector({ malformedKind: 'harness-event' });
   child.stdout.setEncoding('utf8');
-  child.stdout.on('data', (chunk) => {
-    for (const line of chunk.split(/\r?\n/u)) {
-      if (!line.trim()) {
-        continue;
-      }
-      try {
-        events.push(sanitizeHelperEvent(JSON.parse(line)));
-      } catch {
-        events.push({ kind: 'harness-event', category: 'unparseable' });
-      }
-    }
-  });
+  child.stdout.on('data', (chunk) => collector.consume(chunk));
 
   const exitCode = await waitForChildExit(child, Math.max(30000, config.durationMs * 7));
-  return { exitCode, events };
+  collector.flush();
+  return { exitCode, events: collector.events };
 }
 
 async function runLibmpvApiProbe(facts, { renderApi = false } = {}) {
@@ -988,20 +1012,9 @@ async function runLibmpvApiProbe(facts, { renderApi = false } = {}) {
       shell: false,
       windowsHide: true,
     });
-    const events = [];
+    const collector = createSanitizedEventCollector({ malformedKind: 'helper-event' });
     child.stdout.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => {
-      for (const line of chunk.split(/\r?\n/u)) {
-        if (!line.trim()) {
-          continue;
-        }
-        try {
-          events.push(sanitizeHelperEvent(JSON.parse(line)));
-        } catch {
-          events.push({ kind: 'helper-event', category: 'unparseable' });
-        }
-      }
-    });
+    child.stdout.on('data', (chunk) => collector.consume(chunk));
     child.stdin.end(JSON.stringify({
       requestId: 'libmpv-api-preflight',
       libmpvDll: facts.libmpvDll,
@@ -1009,6 +1022,8 @@ async function runLibmpvApiProbe(facts, { renderApi = false } = {}) {
       renderApiProbe: renderApi,
     }) + '\n');
     const exitCode = await waitForChildExit(child, 10000);
+    collector.flush();
+    const { events } = collector;
     if (exitCode !== 0 || !events.some((event) => event.proof === 'libmpv-client-api')) {
       return [{ kind: 'failed', proof: 'libmpv-client-api', category: 'unavailable' }];
     }
@@ -1115,6 +1130,8 @@ function runHelper(window, crashAfterInitialize = false) {
     let timeoutGraceTimer = null;
     let fullscreenNativeCapture = null;
     let fullscreenRd15UiObserved = false;
+    let helperStdoutBuffer = '';
+    let stdoutEventChain = Promise.resolve();
     const fullscreenNativeCaptureWaiters = [];
     const helperTimeoutMs = Math.max(12000, Math.min(30000, (config.durationMs * 4) - 1000));
     const timeoutCleanupGraceMs = 3000;
@@ -1146,6 +1163,9 @@ function runHelper(window, crashAfterInitialize = false) {
       emitHelperCleanup(cleanupObserved ? 'observed' : 'failed', category, cleanupObserved);
       resolve({ code: code ?? 1, signal });
     }
+    function finishHelperAfterStdout(category, code, signal, cleanupObserved) {
+      void stdoutEventChain.finally(() => finishHelper(category, code, signal, cleanupObserved));
+    }
     function beginTimeoutCleanup() {
       if (settled) {
         return;
@@ -1155,49 +1175,64 @@ function runHelper(window, crashAfterInitialize = false) {
         child.kill();
       }
       timeoutGraceTimer = setTimeout(() => {
-        finishHelper('timeout-cleanup-not-observed', 1, 'timeout', false);
+        finishHelperAfterStdout('timeout-cleanup-not-observed', 1, 'timeout', false);
       }, timeoutCleanupGraceMs);
     }
-    child.stdout.setEncoding('utf8');
-    child.stdout.on('data', async (chunk) => {
-      process.stdout.write(chunk);
-      for (const line of chunk.split(/\r?\n/u)) {
-        if (!line.trim()) {
-          continue;
-        }
-        try {
-          const event = JSON.parse(line);
-          if (event.proof === 'fullscreen-native-capture') {
-            fullscreenNativeCapture = event;
-            while (fullscreenNativeCaptureWaiters.length > 0) {
-              fullscreenNativeCaptureWaiters.shift()(event);
-            }
-          }
-          if (
-            config.nativePresentation === true &&
-            !fullscreenRd15UiObserved &&
-            event.proof === 'fullscreen-composition' &&
-            event.nativePresentationFullscreen === true &&
-            event.visiblePixelsObserved === true
-          ) {
-            fullscreenRd15UiObserved = true;
-            await observeRd15NativePresentationUi(window, 'fullscreen');
-          }
-          if (!crashAfterInitialize && event.proof === 'local-media' && event.activePlayback === true && !activePlayback) {
-            activePlayback = true;
-            if (config.nativePresentation !== true) {
-              await observeActivePlayback(window, child, () => fullscreenNativeCapture, (resolveNativeCapture) => {
-                fullscreenNativeCaptureWaiters.push(resolveNativeCapture);
-              }, config.renderApi === true);
-            } else {
-              await observeNativePresentationFocus(window);
-            }
-            child.stdin.write(JSON.stringify({ control: 'continue' }) + '\n');
-          }
-        } catch {
-          // Ignore malformed helper output; the parent sanitizer records it.
-        }
+    function enqueueHelperStdoutLine(line) {
+      if (!line.trim()) {
+        return;
       }
+      stdoutEventChain = stdoutEventChain
+        .then(() => handleHelperStdoutLine(line))
+        .catch(() => undefined);
+    }
+    async function handleHelperStdoutLine(line) {
+      try {
+        const event = JSON.parse(line);
+        if (event.proof === 'fullscreen-native-capture') {
+          fullscreenNativeCapture = event;
+          while (fullscreenNativeCaptureWaiters.length > 0) {
+            fullscreenNativeCaptureWaiters.shift()(event);
+          }
+        }
+        if (
+          config.nativePresentation === true &&
+          !fullscreenRd15UiObserved &&
+          event.proof === 'fullscreen-composition' &&
+          event.nativePresentationFullscreen === true &&
+          event.visiblePixelsObserved === true
+        ) {
+          fullscreenRd15UiObserved = true;
+          await observeRd15NativePresentationUi(window, 'fullscreen');
+        }
+        if (!crashAfterInitialize && event.proof === 'local-media' && event.activePlayback === true && !activePlayback) {
+          activePlayback = true;
+          if (config.nativePresentation !== true) {
+            await observeActivePlayback(window, child, () => fullscreenNativeCapture, (resolveNativeCapture) => {
+              fullscreenNativeCaptureWaiters.push(resolveNativeCapture);
+            }, config.renderApi === true);
+          } else {
+            await observeNativePresentationFocus(window);
+          }
+          child.stdin.write(JSON.stringify({ control: 'continue' }) + '\n');
+        }
+      } catch {
+        // Ignore malformed helper output; the parent sanitizer records it.
+      }
+    }
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      process.stdout.write(chunk);
+      helperStdoutBuffer += chunk;
+      const lines = helperStdoutBuffer.split(/\r?\n/u);
+      helperStdoutBuffer = lines.pop() ?? '';
+      for (const line of lines) {
+        enqueueHelperStdoutLine(line);
+      }
+    });
+    child.stdout.on('end', () => {
+      enqueueHelperStdoutLine(helperStdoutBuffer);
+      helperStdoutBuffer = '';
     });
     const init = {
       requestId: crashAfterInitialize ? 'helper-crash' : config.nativePresentation === true ? 'native-presentation-smoke' : 'wid-smoke',
@@ -1218,11 +1253,11 @@ function runHelper(window, crashAfterInitialize = false) {
     }
     child.once('exit', (code, signal) => {
       const category = timeoutCleanupStarted ? 'timeout-reaped' : crashAfterInitialize ? 'crash-exit' : 'normal-exit';
-      finishHelper(category, code, signal, true);
+      finishHelperAfterStdout(category, code, signal, true);
     });
-    child.once('error', () => finishHelper('spawn-error-reaped', 1, null, false));
-  });
-}
+    child.once('error', () => finishHelperAfterStdout('spawn-error-reaped', 1, null, false));
+    });
+  }
 
 async function observeNativePresentationFocus(window) {
   await observeRd15NativePresentationUi(window, 'windowed');

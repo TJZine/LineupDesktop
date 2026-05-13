@@ -16,6 +16,7 @@ import {
   NativePlayerHostProcess,
   type NativePlayerHostChildProcess,
 } from '../../../main/player/nativePlayerHostProcess.js';
+import { DiagnosticEventStore } from '../../../main/diagnostics/diagnosticEventStore.js';
 import type { NativePlayerHostLifecycleFailure } from '../../../main/player/nativePlayerHostPort.js';
 
 type SpawnedNativeHostChildProcess = NativePlayerHostChildProcess & {
@@ -227,9 +228,11 @@ test('native host process translates commands and returns safe host events', asy
 test('native host process reports idle helper lifecycle failures to subscribers', async () => {
   const child = new FakeHostChildProcess();
   const lifecycleFailures: NativePlayerHostLifecycleFailure[] = [];
+  const diagnostics = new DiagnosticEventStore({ clock: () => 1_000, idGenerator: () => 'idle-close' });
   const host = new NativePlayerHostProcess({
     spawnHostProcess: () => child,
     requestTimeoutMs: 100,
+    diagnosticEventStore: diagnostics,
   });
   const unsubscribe = host.onLifecycleFailure((failure) => lifecycleFailures.push(failure));
 
@@ -243,6 +246,8 @@ test('native host process reports idle helper lifecycle failures to subscribers'
   assert.equal(lifecycleFailures.length, 1);
   assert.equal(lifecycleFailures[0]?.requestId, null);
   assert.equal(lifecycleFailures[0]?.error.code, 'PLAYER_HELPER_EXITED');
+  assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 1);
+  assert.equal(diagnostics.getRecords().some((record) => record.operation === 'helper.lifecycle'), true);
   assertNoForbiddenKeys(lifecycleFailures);
   unsubscribe();
 });
@@ -250,9 +255,11 @@ test('native host process reports idle helper lifecycle failures to subscribers'
 test('native host process keeps active command close failures on the command result', async () => {
   const child = new FakeHostChildProcess();
   const lifecycleFailures: NativePlayerHostLifecycleFailure[] = [];
+  const diagnostics = new DiagnosticEventStore({ clock: () => 2_000, idGenerator: () => 'pending-close' });
   const host = new NativePlayerHostProcess({
     spawnHostProcess: () => child,
     requestTimeoutMs: 100,
+    diagnosticEventStore: diagnostics,
   });
   host.onLifecycleFailure((failure) => lifecycleFailures.push(failure));
 
@@ -264,6 +271,7 @@ test('native host process keeps active command close failures on the command res
   assert.equal(result.ok, false);
   assert.equal(result.ok ? null : result.error.code, 'PLAYER_HELPER_EXITED');
   assert.equal(lifecycleFailures.length, 0);
+  assert.equal(diagnostics.getRecords().some((record) => record.requestId === 'native-load-1'), true);
   assertNoForbiddenKeys(result);
 });
 
@@ -315,6 +323,7 @@ test('native host process normalizes real helper process exits without raw detai
 });
 
 test('native host process normalizes malformed and privileged output', async () => {
+  const diagnostics = new DiagnosticEventStore({ clock: () => 3_000, idGenerator: () => 'malformed-output' });
   const malformedChild = new FakeHostChildProcess();
   const privilegedChild = new FakeHostChildProcess();
   const failedChild = new FakeHostChildProcess();
@@ -327,6 +336,7 @@ test('native host process normalizes malformed and privileged output', async () 
     },
     requestTimeoutMs: 100,
     cleanupGraceMs: 10,
+    diagnosticEventStore: diagnostics,
   });
 
   const malformed = host.execute(loadCommand);
@@ -359,6 +369,8 @@ test('native host process normalizes malformed and privileged output', async () 
   assert.equal(privilegedResult.ok ? null : privilegedResult.error.code, 'PLAYER_HELPER_MALFORMED_OUTPUT');
   assertTextAbsent(privilegedResult, 'native-secret');
   assertTextAbsent(privilegedResult, 'do not expose this raw detail');
+  assertTextAbsent(diagnostics.getRecords(), 'native-secret');
+  assertTextAbsent(diagnostics.getRecords(), 'do not expose this raw detail');
   assertNoForbiddenKeys(privilegedResult);
   await delay(15);
   assert.deepEqual(privilegedChild.killSignals, ['SIGTERM']);
@@ -387,6 +399,7 @@ test('native host process normalizes malformed and privileged output', async () 
 });
 
 test('native host process quarantines oversized output before the next command', async () => {
+  const diagnostics = new DiagnosticEventStore({ clock: () => 4_000, idGenerator: () => 'oversized-output' });
   const oversizedChild = new FakeHostChildProcess();
   const replacementChild = new FakeHostChildProcess();
   const children = [oversizedChild, replacementChild];
@@ -398,6 +411,7 @@ test('native host process quarantines oversized output before the next command',
     },
     requestTimeoutMs: 100,
     cleanupGraceMs: 10,
+    diagnosticEventStore: diagnostics,
   });
 
   const oversized = host.execute(loadCommand);
@@ -415,6 +429,8 @@ test('native host process quarantines oversized output before the next command',
   await new Promise<void>((resolve) => setImmediate(resolve));
   replacementChild.send({ type: 'result', requestId: 'native-load-after-oversized', ok: true, events: [] });
   assert.equal((await replacement).ok, true);
+  assert.equal(diagnostics.getCrashRecoverySummary().helperRestartCount, 1);
+  assertTextAbsent(diagnostics.getCrashRecoverySummary(), 'x'.repeat(20));
   assert.deepEqual(replacementChild.writes[0], {
     type: 'command',
     requestId: 'native-load-after-oversized',
@@ -424,6 +440,7 @@ test('native host process quarantines oversized output before the next command',
 });
 
 test('native host process normalizes timeout, spawn failure, and exit failure', async () => {
+  const diagnostics = new DiagnosticEventStore({ clock: () => 5_000, idGenerator: () => 'timeout-restart' });
   const timeoutChild = new FakeHostChildProcess();
   const replacementChild = new FakeHostChildProcess();
   const timeoutChildren = [timeoutChild, replacementChild];
@@ -435,6 +452,7 @@ test('native host process normalizes timeout, spawn failure, and exit failure', 
     },
     requestTimeoutMs: 1,
     cleanupGraceMs: 10,
+    diagnosticEventStore: diagnostics,
   });
 
   const timeoutResult = await timeoutHost.execute(loadCommand);
@@ -458,11 +476,14 @@ test('native host process normalizes timeout, spawn failure, and exit failure', 
     spawnHostProcess: () => {
       throw new Error('local path /tmp/helper-secret');
     },
+    diagnosticEventStore: diagnostics,
   });
   const spawnResult = await spawnHost.execute(loadCommand);
   assert.equal(spawnResult.ok, false);
   assert.equal(spawnResult.ok ? null : spawnResult.error.code, 'PLAYER_HELPER_SPAWN_FAILED');
   assertTextAbsent(spawnResult, '/tmp/helper-secret');
+  assertTextAbsent(diagnostics.getRecords(), '/tmp/helper-secret');
+  assert.equal(diagnostics.getCrashRecoverySummary().helperRestartCount, 1);
 
   const exitChild = new FakeHostChildProcess();
   const exitHost = new NativePlayerHostProcess({
@@ -482,6 +503,7 @@ test('native host process cleanup reaps child and ignores late output', async ()
   const firstChild = new FakeHostChildProcess();
   const secondChild = new FakeHostChildProcess();
   const children = [firstChild, secondChild];
+  const diagnostics = new DiagnosticEventStore({ clock: () => 5_500, idGenerator: () => 'cleanup-aborted' });
   const host = new NativePlayerHostProcess({
     spawnHostProcess: () => {
       const child = children.shift();
@@ -490,6 +512,7 @@ test('native host process cleanup reaps child and ignores late output', async ()
     },
     requestTimeoutMs: 100,
     cleanupGraceMs: 10,
+    diagnosticEventStore: diagnostics,
   });
 
   const pending = host.execute(loadCommand);
@@ -514,6 +537,24 @@ test('native host process cleanup reaps child and ignores late output', async ()
 
   assert.equal(result.ok, false);
   assert.equal(result.ok ? null : result.error.category, 'aborted');
+  assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 0);
+  assert.equal(diagnostics.getCrashRecoverySummary().cleanupFailureCount, 0);
+  assert.deepEqual(
+    diagnostics.getCrashRecoverySummary().events.map((event) => ({
+      category: event.category,
+      status: event.status,
+      operation: event.operation,
+      code: event.code,
+    })),
+    [
+      {
+        category: 'cleanup',
+        status: 'cancelled',
+        operation: 'helper.cleanup',
+        code: 'PLAYER_HELPER_CLEANED_UP',
+      },
+    ],
+  );
   assert.equal(firstChild.killSignals.includes('SIGTERM'), true);
   assert.deepEqual(firstChild.writes[1], { type: 'cleanup', requestId: 'native-load-1' });
   assertNoForbiddenKeys(result);
@@ -562,10 +603,12 @@ test('native host process escalates cleanup and waits for close before resolving
 
 test('native host process reaps child when cleanup write throws', async () => {
   const child = new FakeHostChildProcess();
+  const diagnostics = new DiagnosticEventStore({ clock: () => 6_000, idGenerator: () => 'cleanup-failure' });
   const host = new NativePlayerHostProcess({
     spawnHostProcess: () => child,
     requestTimeoutMs: 100,
     cleanupGraceMs: 10,
+    diagnosticEventStore: diagnostics,
   });
 
   const pending = host.execute(loadCommand);
@@ -580,7 +623,29 @@ test('native host process reaps child when cleanup write throws', async () => {
   assert.equal(result.ok, false);
   assert.equal(result.ok ? null : result.error.category, 'aborted');
   assert.deepEqual(child.killSignals, ['SIGTERM']);
+  assert.equal(diagnostics.getCrashRecoverySummary().cleanupFailureCount, 1);
   assertNoForbiddenKeys(result);
+});
+
+test('native host process records quarantine reap failures safely', async () => {
+  const child = new FakeHostChildProcess();
+  child.autoCloseOnKill = false;
+  const diagnostics = new DiagnosticEventStore({ clock: () => 8_000, idGenerator: () => 'quarantine-cleanup' });
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 1,
+    cleanupGraceMs: 5,
+    diagnosticEventStore: diagnostics,
+  });
+
+  const result = await host.execute(loadCommand);
+  await delay(20);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? null : result.error.category, 'timeout');
+  assert.equal(diagnostics.getCrashRecoverySummary().cleanupFailureCount, 1);
+  assert.equal(diagnostics.getRecords().some((record) => record.operation === 'helper.cleanup'), true);
+  assertNoForbiddenKeys(diagnostics.getRecords());
 });
 
 test('native host process normalizes stdio stream errors without raw details', async () => {
@@ -608,4 +673,26 @@ test('native host process normalizes stdio stream errors without raw details', a
     assertNoForbiddenKeys(result);
     child.emitClose('SIGKILL');
   }
+});
+
+test('native host process drops stderr content before diagnostics storage', async () => {
+  const child = new FakeHostChildProcess();
+  const diagnostics = new DiagnosticEventStore({ clock: () => 7_000, idGenerator: () => 'stderr-redacted' });
+  const forbiddenUrl = ['https://', 'secret', '.example'].join('');
+  const forbiddenHandle = ['native', 'Handle'].join('');
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+    diagnosticEventStore: diagnostics,
+  });
+
+  const pending = host.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.stderr.write(`tokenizedUrl=${forbiddenUrl} ${forbiddenHandle}=12345`);
+  child.send({ type: 'result', requestId: 'native-load-1', ok: true, events: [] });
+
+  assert.equal((await pending).ok, true);
+  assert.equal(diagnostics.getRecords().some((record) => record.operation === 'helper.output'), true);
+  assertTextAbsent(diagnostics.getRecords(), forbiddenUrl);
+  assertTextAbsent(diagnostics.getRecords(), forbiddenHandle);
 });

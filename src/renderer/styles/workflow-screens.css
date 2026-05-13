@@ -132,6 +132,10 @@ dd {
   min-width: 0;
 }
 
+.settings-section dd {
+  overflow-wrap: anywhere;
+}
+
 .setup-steps {
   display: grid;
   gap: var(--space-3);

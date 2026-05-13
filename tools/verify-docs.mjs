@@ -486,13 +486,13 @@ function checkActivePlanShape(root, errors) {
       continue;
     }
     const planStatusIndex = content.indexOf('**Plan Status:** active');
-    const firstSectionIndex = content.indexOf('## ');
+    const firstSectionIndex = firstMarkdownSectionIndex(content);
     if (firstSectionIndex !== -1 && planStatusIndex > firstSectionIndex) {
       errors.push(`${relativePath}: active plan status marker must appear before the first ## heading`);
     }
     let previousHeadingIndex = -1;
     for (const heading of activePlanHeadings) {
-      const headingIndex = content.indexOf(heading);
+      const headingIndex = markdownHeadingIndex(content, heading);
       if (headingIndex === -1) {
         errors.push(`${relativePath}: active plan missing ${heading}`);
         continue;
@@ -516,6 +516,22 @@ function checkActivePlanShape(root, errors) {
       errors.push(`${relativePath}: active plan must include exactly one verification classification marker`);
     }
   }
+}
+
+function firstMarkdownSectionIndex(content) {
+  const match = /^##\s+/mu.exec(content);
+  return match?.index ?? -1;
+}
+
+function markdownHeadingIndex(content, heading) {
+  const headingParts = /^(#{1,6})\s+(.+)$/u.exec(heading);
+  if (!headingParts) {
+    return -1;
+  }
+  const [, hashes, title] = headingParts;
+  const headingPattern = new RegExp(`^${hashes}\\s+${escapeRegExp(title)}\\s*$`, 'mu');
+  const match = headingPattern.exec(content);
+  return match?.index ?? -1;
 }
 
 function isTier3Plan(content) {
