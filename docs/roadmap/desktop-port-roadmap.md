@@ -1085,7 +1085,30 @@ Exit gates:
 
 ### RD-17 Diagnostics, Crash Recovery, And Support Bundle
 
-Status: not started.
+Status: complete. RD-17 completed through the feature-quality loop on
+2026-05-13. The implementation added renderer-safe diagnostics contracts,
+main-owned redaction and diagnostic event storage, support-bundle export under
+main-owned path custody, helper/player crash-recovery diagnostic reporting,
+diagnostics IPC/preload methods, and a settings export action that exposes only
+safe export status and bundle identity.
+
+Windows proof closed the platform gate under ignored local evidence at
+`docs/runs/rd-17-diagnostics-crash-recovery-support-bundle/windows-smoke`.
+`npm run test:harness-docs`, `npm run typecheck`, `npm run verify:redaction`,
+`npm run verify:architecture`, `npm run verify:docs`, `npm run smoke:electron`,
+the RD-17 diagnostics smoke command, and `npm run verify` passed on Windows.
+The smoke summary records platform `win32`, status `passed`, helper crash
+detected, main process alive, safe failed request state, helper cleanup/reap,
+replacement helper use, a main-created support-bundle target under the injected
+parent, renderer-visible output limited to bundle identity, completed-bundle
+scan status `passed`, and no forbidden material. The completed full plan body
+was archived locally under `docs/runs/archive/plans/` and removed from tracked
+active plans.
+
+No telemetry/cloud upload, production native-helper playback, live Plex
+transport, packaging/signing/release change, dependency or lockfile change,
+persisted credential/settings schema change, or upstream source import landed
+in RD-17.
 
 Depends on:
 
