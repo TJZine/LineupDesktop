@@ -100,6 +100,23 @@ test('playback options cycle renderer-local track and volume state', () => {
   assert.equal(view.playbackOptions.muted, true);
 });
 
+test('playback options normalize unknown track ids to the first option when cycling', () => {
+  const initial = {
+    ...createPlayerOverlayState(),
+    selectedAudioTrackId: 'unknown-audio-track',
+    selectedSubtitleTrackId: 'unknown-subtitle-track',
+  };
+
+  const audio = applyPlayerOverlayAction(initial, 'cycleAudioTrack');
+  const subtitle = applyPlayerOverlayAction(audio, 'cycleSubtitleTrack');
+  const view = createPlayerOverlayView(subtitle);
+
+  assert.equal(subtitle.selectedAudioTrackId, 'audio-main');
+  assert.equal(subtitle.selectedSubtitleTrackId, null);
+  assert.equal(view.playbackOptions.selectedAudioLabel, 'Main stereo');
+  assert.equal(view.playbackOptions.selectedSubtitleLabel, 'Off');
+});
+
 test('primary playback options action opens options above the visible OSD', () => {
   const options = applyPlayerOverlayAction(createPlayerOverlayState(), 'togglePlaybackOptions');
   const view = createPlayerOverlayView(options);

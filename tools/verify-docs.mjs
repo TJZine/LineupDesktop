@@ -4,6 +4,40 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+const architectureHealthDecisionTerms = [
+  'avoid',
+  'avoids',
+  'avoided',
+  'avoidance',
+  'decompose',
+  'decomposes',
+  'decomposed',
+  'decomposition',
+  'split',
+  'splits',
+  'splitting',
+  'extract',
+  'extracts',
+  'extracted',
+  'extraction',
+  'revisit',
+  'revisits',
+  'revisited',
+  'before',
+  'allowlist',
+  'allowlisted',
+  'allowlisting',
+];
+
+const architectureHealthDecisionPattern = new RegExp(
+  [
+    `\\b(?:${architectureHealthDecisionTerms.join('|')})\\b`,
+    '\\b(?:temporary row|guardrail row)\\b',
+    '\\bno\\s+(?:(?:oversized|guarded)s?|large[- ]files?|owner hotspots?)\\b',
+  ].join('|'),
+  'iu',
+);
+
 const requiredFiles = [
   '.codannaignore',
   '.codex/config.toml',
@@ -499,7 +533,7 @@ function checkTier3MaintainabilityPreflight(relativePath, content, errors) {
   if (!/verify:maintainability|maintainability verification|npm run verify/iu.test(section)) {
     errors.push(`${relativePath}: Tier 3 architecture health section missing maintainability verification route`);
   }
-  if (!/(?:no\s+(?:oversized|guarded|large[- ]file|owner hotspot)|avoid|decompos|split|extract|allowlist|temporary row|guardrail row)/iu.test(section)) {
+  if (!architectureHealthDecisionPattern.test(section)) {
     errors.push(`${relativePath}: Tier 3 architecture health section missing decomposition, avoidance, or allowlist decision`);
   }
 }

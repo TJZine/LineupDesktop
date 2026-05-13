@@ -367,6 +367,15 @@ test('verifyDocs validates Tier 3 Architecture Health section semantically', () 
   assert(missingDecision.some((error) => error.includes('missing decomposition, avoidance, or allowlist decision')));
 
   fs.writeFileSync(planPath, tier3Plan([
+    '## Architecture Health',
+    'File-shape evidence uses docs/architecture/file-shape-guardrails.md.',
+    'Verification route: npm run verify:architecture.',
+    'Current hotspots are recorded with predecomposition notes for review.',
+  ]));
+  const partialDecision = verifyDocs(root);
+  assert(partialDecision.some((error) => error.includes('missing decomposition, avoidance, or allowlist decision')));
+
+  fs.writeFileSync(planPath, tier3Plan([
     '## Architecture Health Notes',
     'File-shape evidence uses docs/architecture/file-shape-guardrails.md.',
     'Verification route: npm run verify:architecture.',
@@ -384,6 +393,15 @@ test('verifyDocs accepts Tier 3 Architecture Health without exact prose markers'
     'Owner hotspot evidence comes from docs/architecture/file-shape-guardrails.md.',
     'Proof route is covered by npm run verify:architecture.',
     'Decision: avoid guarded renderer and preload files in the first unit.',
+  ]));
+
+  assert.deepEqual(verifyDocs(root), []);
+
+  fs.writeFileSync(planPath, tier3Plan([
+    '## Architecture Health',
+    'Owner hotspot evidence comes from docs/architecture/file-shape-guardrails.md.',
+    'Proof route is covered by npm run verify:architecture.',
+    'Decision: use the temporary row because decomposition is deferred before this owner grows again.',
   ]));
 
   assert.deepEqual(verifyDocs(root), []);
