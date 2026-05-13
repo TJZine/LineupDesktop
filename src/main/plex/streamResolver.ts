@@ -496,6 +496,8 @@ function mapAudioTracks(
       : {}),
     codec: stream.codec,
     ...(stream.channels !== undefined ? { channelCount: stream.channels } : {}),
+    // When `hasSelectedStream` is true, `default` mirrors `selected` so stream
+    // policy preserves the user's selected audio track over Plex defaults.
     default: hasSelectedStream ? stream.selected === true : stream.default === true,
   }));
 }

@@ -385,7 +385,12 @@ export async function runSmokeAssertions(
   `) as { failures: string[] };
 
   if (result.failures.length === 0) {
-    await assertFullscreenContinuity(window, result.failures);
+    try {
+      await assertFullscreenContinuity(window, result.failures);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      result.failures.push('fullscreen continuity ' + message);
+    }
   }
 
   await window.webContents.executeJavaScript(`

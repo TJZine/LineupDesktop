@@ -155,9 +155,9 @@ export interface DesktopStreamPolicyDecision {
     container: string | null;
     videoCodec: string | null;
     audioCodec: string | null;
-    audioLanguage?: string | null;
+    audioLanguage: string | null;
     subtitleDelivery: PlayerSubtitleDeliveryMode | null;
-    subtitleLanguage?: string | null;
+    subtitleLanguage: string | null;
     dynamicRange: DesktopStreamDynamicRange | null;
     action: DesktopStreamPolicyDecisionKind;
   };

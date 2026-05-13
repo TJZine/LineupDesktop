@@ -6,13 +6,12 @@ export async function assertFullscreenContinuity(
   window: BrowserWindow,
   failures: string[],
 ): Promise<void> {
-  const fullscreenOn = await setRendererFullscreen(window, true);
-  if (!isExpectedFullscreenResult(fullscreenOn, true)) {
-    failures.push('fullscreen on ' + JSON.stringify(fullscreenOn));
-    return;
-  }
-
   try {
+    const fullscreenOn = await setRendererFullscreen(window, true);
+    if (!isExpectedFullscreenResult(fullscreenOn, true)) {
+      failures.push('fullscreen on ' + JSON.stringify(fullscreenOn));
+      return;
+    }
     if (!(await waitForFullscreenState(window, true))) {
       failures.push('fullscreen enter BrowserWindow state');
       return;
@@ -45,6 +44,8 @@ export async function assertFullscreenContinuity(
       })();
     `) as { failures: string[] };
     failures.push(...fullscreenResult.failures);
+  } catch (error) {
+    failures.push('fullscreen continuity ' + formatSmokeError(error));
   } finally {
     try {
       const fullscreenOff = await setRendererFullscreen(window, false);
@@ -52,8 +53,7 @@ export async function assertFullscreenContinuity(
         failures.push('fullscreen off ' + JSON.stringify(fullscreenOff));
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      failures.push('fullscreen off ' + message);
+      failures.push('fullscreen off ' + formatSmokeError(error));
     }
     if (!(await waitForFullscreenState(window, false))) {
       failures.push('fullscreen leave BrowserWindow state');
@@ -65,6 +65,10 @@ async function setRendererFullscreen(window: BrowserWindow, enabled: boolean): P
   return window.webContents.executeJavaScript(
     `window.lineupDesktop.window.setFullscreen(${JSON.stringify(enabled)});`,
   ) as Promise<unknown>;
+}
+
+function formatSmokeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function isExpectedFullscreenResult(result: unknown, enabled: boolean): boolean {

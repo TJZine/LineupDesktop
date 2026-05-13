@@ -87,6 +87,8 @@ function decideFixture(name: keyof typeof desktopStreamPolicyInputs): DesktopStr
   assertNoForbiddenFields(decision, `decision.${name}`);
   assertNoForbiddenText(decision);
   assert.equal(decision.summary.action, decision.kind);
+  assert.equal(Object.hasOwn(decision.summary, 'audioLanguage'), true);
+  assert.equal(Object.hasOwn(decision.summary, 'subtitleLanguage'), true);
   assert.ok(decision.reasonCodes.length > 0, 'expected stable reason codes');
   assert.ok(
     decision.unknowns.includes('desktop-parity-unproven'),
