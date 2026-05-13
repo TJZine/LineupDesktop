@@ -325,19 +325,19 @@ export function mapPlexMediaDetailsToDesktopStreamCandidates(
       const trackScope = createTrackIdScope(variantIndex, partIndex);
       const video = selectVideoStream(part, variant, trackScope);
       return {
-        candidateId: toCandidateId(variant, part),
+        candidateId: toScopedCandidateId(variantIndex, partIndex),
         media: {
           ...mediaSummary,
           container: part.container || variant.container || mediaSummary.container,
           durationMs: part.duration || variant.duration || mediaSummary.durationMs,
         },
         variant: {
-          id: toVariantId(variant),
+          id: toVariantId(variantIndex),
           container: part.container || variant.container || null,
           durationMs: variant.duration || null,
         },
         part: {
-          id: toPartId(part),
+          id: toPartId(partIndex),
           durationMs: part.duration || null,
         },
         video,
@@ -421,9 +421,9 @@ function findSelectedPrivatePart(
   if (candidate === undefined) {
     return null;
   }
-  for (const variant of mediaDetail.media) {
-    for (const part of variant.parts) {
-      if (toCandidateId(variant, part) === candidate.candidateId) {
+  for (const [variantIndex, variant] of mediaDetail.media.entries()) {
+    for (const [partIndex, part] of variant.parts.entries()) {
+      if (toScopedCandidateId(variantIndex, partIndex) === candidate.candidateId) {
         return part;
       }
     }
@@ -445,17 +445,11 @@ function toPlayerMediaId(media: PlexMediaItem): string {
   return `plex-media-${media.ratingKey}`;
 }
 
-function toCandidateId(variant: PlexMediaFile, part: PlexMediaPart): string {
-  return `plex-candidate-${variant.id}-${part.id}`;
+function toScopedCandidateId(variantIndex: number, partIndex: number): string {
+  return `plex-candidate-${variantIndex + 1}-${partIndex + 1}`;
 }
-
-function toVariantId(variant: PlexMediaFile): string {
-  return `plex-variant-${variant.id}`;
-}
-
-function toPartId(part: PlexMediaPart): string {
-  return `plex-part-${part.id}`;
-}
+function toVariantId(variantIndex: number): string { return `plex-variant-${variantIndex + 1}`; }
+function toPartId(partIndex: number): string { return `plex-part-${partIndex + 1}`; }
 
 function selectVideoStream(
   part: PlexMediaPart,
@@ -493,6 +487,7 @@ function mapAudioTracks(
       },
     ];
   }
+  const hasSelectedStream = streams.some((stream) => stream.selected === true);
   return streams.map((stream, index) => ({
     id: toTrackId(trackScope, 'audio', index),
     label: labelTrack('Audio', stream.displayTitle ?? stream.title ?? stream.codec, stream.language),
@@ -501,7 +496,9 @@ function mapAudioTracks(
       : {}),
     codec: stream.codec,
     ...(stream.channels !== undefined ? { channelCount: stream.channels } : {}),
-    default: stream.default === true || (stream.selected === true && index === 0),
+    // When `hasSelectedStream` is true, `default` mirrors `selected` so stream
+    // policy preserves the user's selected audio track over Plex defaults.
+    default: hasSelectedStream ? stream.selected === true : stream.default === true,
   }));
 }
 

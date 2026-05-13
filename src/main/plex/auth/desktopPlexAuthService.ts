@@ -74,6 +74,11 @@ export interface DesktopPlexSwitchHomeUserResult {
 const DEFAULT_PIN_POLL_INTERVAL_MS = 1_000;
 const DEFAULT_PIN_TIMEOUT_MS = 300_000;
 
+/**
+ * Plex auth keeps transport and credential persistence injected, validates
+ * tokens before profile exposure, and commits in-memory account state only
+ * after credential storage succeeds and the request remains active.
+ */
 export class DesktopPlexAuthService {
   private readonly config: PlexAuthConfig;
   private readonly transport: DesktopPlexAuthTransport;

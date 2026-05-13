@@ -17,6 +17,8 @@ export interface DesktopKeyEventLike {
   code?: string;
 }
 
+export { mapDesktopKeyEvent } from './desktopInput.js';
+
 export interface RouteState {
   activeRoute: AppRouteId;
   previousRoute: AppRouteId | null;
@@ -162,43 +164,4 @@ export function setRoute(state: RouteState, nextRoute: AppRouteId): RouteState {
     activeRoute: nextRoute,
     previousRoute: state.activeRoute,
   };
-}
-
-export function mapDesktopKeyEvent(event: DesktopKeyEventLike): DesktopInputButton | null {
-  switch (event.key) {
-    case 'ArrowUp':
-      return 'up';
-    case 'ArrowDown':
-      return 'down';
-    case 'ArrowLeft':
-      return 'left';
-    case 'ArrowRight':
-      return 'right';
-    case 'Enter':
-    case ' ':
-      return 'ok';
-    case 'Escape':
-    case 'Backspace':
-      return 'back';
-    case 'g':
-    case 'G':
-      return 'guide';
-    case ',':
-    case 's':
-    case 'S':
-      return 'settings';
-    case 'f':
-    case 'F':
-      return 'fullscreen';
-    default:
-      break;
-  }
-
-  if (event.code === 'BrowserBack') {
-    return 'back';
-  }
-  if (event.code === 'Guide') {
-    return 'guide';
-  }
-  return null;
 }

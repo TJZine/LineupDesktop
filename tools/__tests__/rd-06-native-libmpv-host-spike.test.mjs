@@ -1,19 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 import {
   assertDummyHeaderPolicy,
   assertHelperInitPolicy,
+  buildMissingRd16MediaMatrix,
   buildDummyHeaderField,
   buildHelperInitPayload,
   buildHelperSpawn,
   buildNativePrerequisiteEvidence,
   createDummyVisualMediaBuffer,
+  loadRd16MediaMatrixDescriptor,
   parseArgs,
+  rd16MediaMatrixCases,
+  rd15NativePresentationProofs,
   sanitizeHelperEvent,
   scanForbiddenEvidenceContent,
+  summarizeRd15NativePresentationProofs,
+  summarizeRd16MediaMatrixDescriptor,
   validatePreflightFacts,
 } from '../libmpv-spike/rd-06-native-libmpv-host-spike.mjs';
 
@@ -66,6 +74,7 @@ test('parseArgs accepts RD-06 preflight, WID smoke, render API, and native prese
     durationMs: 5000,
     dummyInput: 'local-and-http',
     fullscreenMode: null,
+    rd16MediaMatrix: null,
   });
 
   const widSmoke = parseArgs(['--mode', 'wid-smoke', '--duration-ms', '7500', '--dummy-input', 'local-and-http']);
@@ -106,6 +115,16 @@ test('parseArgs accepts RD-06 preflight, WID smoke, render API, and native prese
   ]);
   assert.equal(nativePresentationSmoke.mode, 'native-presentation-smoke');
   assert.equal(nativePresentationSmoke.fullscreenMode, 'native-presentation-host');
+
+  const nativePresentationSmokeWithMatrix = parseArgs([
+    '--mode',
+    'native-presentation-smoke',
+    '--fullscreen-mode',
+    'native-presentation-host',
+    '--rd16-media-matrix',
+    'docs/runs/rd-16-subtitle-audio-hdr-hardening/media-matrix.local.json',
+  ]);
+  assert.equal(nativePresentationSmokeWithMatrix.rd16MediaMatrix, 'docs/runs/rd-16-subtitle-audio-hdr-hardening/media-matrix.local.json');
 });
 
 test('parseArgs rejects unsupported modes and dummy input policies', () => {
@@ -120,6 +139,10 @@ test('parseArgs rejects unsupported modes and dummy input policies', () => {
   assert.throws(
     () => parseArgs(['--mode', 'native-presentation-smoke', '--fullscreen-mode', 'browser-window']),
     /fullscreen-mode native-presentation-host/u,
+  );
+  assert.throws(
+    () => parseArgs(['--mode', 'native-presentation-preflight', '--rd16-media-matrix', 'media-matrix.local.json']),
+    /rd16-media-matrix is supported only for native-presentation-smoke/u,
   );
 });
 
@@ -253,6 +276,224 @@ test('native presentation smoke uses app-owned fullscreen host and same-boundary
   assert.match(helperSource, /glScissor/u);
 });
 
+test('native presentation smoke uses RD-15 proof mirror instead of only hard-coded RD06 overlay', () => {
+  assert.match(harnessSource, /config\.nativePresentation === true \? buildRd15NativePresentationHtml\(\) : buildRd06OverlayHtml\(\)/u);
+  assert.match(harnessSource, /function buildRd15NativePresentationHtml\(\)/u);
+  assert.match(harnessSource, /data-rd15-proof="epg"/u);
+  assert.match(harnessSource, /data-rd15-proof="osd"/u);
+  assert.match(harnessSource, /data-rd15-proof="mini-guide"/u);
+  assert.match(harnessSource, /data-rd15-proof="channel-badge"/u);
+  assert.match(harnessSource, /data-rd15-proof="settings"/u);
+  assert.match(harnessSource, /data-rd15-proof="channel-setup"/u);
+  assert.match(harnessSource, /data-rd15-proof="overlays"/u);
+  assert.match(harnessSource, /data-rd15-proof-focus/u);
+  assert.match(harnessSource, /#00ff00/u);
+  assert.match(harnessSource, /function buildRd06OverlayHtml\(\)/u);
+  assert.match(harnessSource, /aria-label="rd06-overlay"/u);
+});
+
+test('native presentation smoke requires and summarizes named RD-15 UI surfaces', () => {
+  assert.deepEqual(rd15NativePresentationProofs, [
+    'rd15-ui-epg',
+    'rd15-ui-osd',
+    'rd15-ui-mini-guide',
+    'rd15-ui-channel-badge',
+    'rd15-ui-settings',
+    'rd15-ui-channel-setup',
+    'rd15-ui-overlays',
+    'rd15-ui-focus',
+  ]);
+  assert.match(harnessSource, /const rd15UiProofs = collectRd15NativePresentationProofs\(events\)/u);
+  assert.match(harnessSource, /const rd15UiProofsObserved = !nativePresentation \|\| rd15NativePresentationProofs\.every/u);
+  assert.match(harnessSource, /rd15NativePresentationModes\.every\(\(presentationMode\)/u);
+  assert.match(harnessSource, /hasRd15NativePresentationProof\(rd15UiProofs, proof, presentationMode\)/u);
+  assert.match(harnessSource, /event\.markerPixelsObserved !== true/u);
+  assert.match(harnessSource, /presentationMode === 'fullscreen'\s*\?\s*event\.desktopPixelsObserved === true/u);
+  assert.match(harnessSource, /rd15UiProofsObserved/u);
+  assert.match(harnessSource, /rd15NativePresentationUi: nativePresentation \? summarizeRd15NativePresentationProofs\(rd15UiProofs\) : 'not-requested'/u);
+  assert.match(harnessSource, /RD-15 native presentation UI/u);
+
+  const summary = summarizeRd15NativePresentationProofs(new Map([
+    ['rd15-ui-epg', new Map([
+      ['windowed', {
+        visiblePixelsObserved: true,
+        markerPixelsObserved: true,
+        rendererPixelsObserved: true,
+      }],
+      ['fullscreen', {
+        visiblePixelsObserved: true,
+        markerPixelsObserved: true,
+        desktopPixelsObserved: true,
+      }],
+    ])],
+    ['rd15-ui-focus', new Map([
+      ['windowed', {
+        visiblePixelsObserved: true,
+        markerPixelsObserved: true,
+        rendererPixelsObserved: true,
+        focused: true,
+      }],
+      ['fullscreen', {
+        visiblePixelsObserved: true,
+        markerPixelsObserved: true,
+        desktopPixelsObserved: true,
+        focused: true,
+      }],
+    ])],
+  ]));
+  assert.deepEqual(summary['rd15-ui-epg'], { windowed: 'observed', fullscreen: 'observed' });
+  assert.deepEqual(summary['rd15-ui-focus'], { windowed: 'observed', fullscreen: 'observed' });
+  assert.deepEqual(summary['rd15-ui-osd'], { windowed: 'unavailable', fullscreen: 'unavailable' });
+});
+
+test('RD-16 media matrix descriptor summarizes redacted local sample labels', () => {
+  assert.deepEqual(rd16MediaMatrixCases, [
+    'multi-audio',
+    'subtitle-bearing',
+    'hdr',
+    'hdr-unavailable',
+  ]);
+
+  const summary = summarizeRd16MediaMatrixDescriptor({
+    cases: {
+      'multi-audio': { label: 'multi-audio-safe-sample', status: 'observed' },
+      'subtitle-bearing': { label: 'subtitle-bearing-safe-sample', status: 'unavailable' },
+      hdr: { label: 'hdr-safe-sample', status: 'observed' },
+      'hdr-unavailable': { label: 'hdr-unavailable-safe-sample', status: 'needs-review' },
+    },
+  });
+
+  assert.equal(summary.status, 'blocker');
+  assert.equal(summary.source, 'descriptor');
+  assert.equal(summary.cases['multi-audio'].status, 'observed');
+  assert.equal(summary.cases['multi-audio'].label, 'multi-audio-safe-sample');
+  assert.equal(summary.cases['subtitle-bearing'].status, 'unavailable');
+  assert.equal(summary.cases['hdr-unavailable'].status, 'blocker');
+  assert.deepEqual(scanForbiddenEvidenceContent(JSON.stringify(summary)), []);
+});
+
+test('RD-16 media matrix blocks closeout when no descriptor is supplied', () => {
+  const summary = buildMissingRd16MediaMatrix();
+
+  assert.equal(summary.status, 'blocker');
+  for (const caseName of rd16MediaMatrixCases) {
+    assert.deepEqual(summary.cases[caseName], {
+      label: caseName,
+      status: 'blocker',
+      reason: 'descriptor-not-supplied',
+    });
+  }
+  assert.deepEqual(scanForbiddenEvidenceContent(JSON.stringify(summary)), []);
+});
+
+test('RD-16 media matrix rejects raw paths, URLs, native handles, and secret-shaped labels', async () => {
+  assert.throws(
+    () => summarizeRd16MediaMatrixDescriptor({
+      cases: {
+        'multi-audio': { label: `C:${'\\'}samples${'\\'}multi-audio.mkv`, status: 'observed' },
+      },
+    }),
+    /forbidden evidence/u,
+  );
+  assert.throws(
+    () => summarizeRd16MediaMatrixDescriptor({
+      cases: {
+        'multi-audio': { label: 'C:/samples/multi-audio.mkv', status: 'observed' },
+      },
+    }),
+    /forbidden evidence/u,
+  );
+  assert.throws(
+    () => summarizeRd16MediaMatrixDescriptor({
+      cases: {
+        hdr: { label: `${['ht', 'tp'].join('')}://127.0.0.1/hdr.mkv`, status: 'observed' },
+      },
+    }),
+    /forbidden evidence/u,
+  );
+  assert.throws(
+    () => summarizeRd16MediaMatrixDescriptor({
+      cases: {
+        hdr: { label: 'file:///C:/samples/hdr.mkv', status: 'observed' },
+      },
+    }),
+    /forbidden evidence/u,
+  );
+  assert.throws(
+    () => summarizeRd16MediaMatrixDescriptor({
+      cases: {
+        hdr: { label: 'ftp://example.test/movie.mkv', status: 'observed' },
+      },
+    }),
+    /forbidden evidence/u,
+  );
+  assert.throws(
+    () => summarizeRd16MediaMatrixDescriptor({
+      cases: {
+        'subtitle-bearing': { label: 'hwnd sample', status: 'observed' },
+      },
+    }),
+    /forbidden evidence/u,
+  );
+
+  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'lineup-rd16-matrix-test-'));
+  const descriptorPath = path.join(tempDir, 'media-matrix.local.json');
+  try {
+    await fsp.writeFile(descriptorPath, JSON.stringify({
+      cases: {
+        'multi-audio': { label: 'multi-audio-safe-sample', status: 'observed' },
+        'subtitle-bearing': { label: 'subtitle-bearing-safe-sample', status: 'observed' },
+        hdr: { label: ['plex', 'sample'].join('-'), status: 'observed' },
+        'hdr-unavailable': { label: 'hdr-unavailable-safe-sample', status: 'unavailable' },
+      },
+    }));
+    await assert.rejects(() => loadRd16MediaMatrixDescriptor(descriptorPath), /forbidden evidence/u);
+  } finally {
+    await fsp.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('native presentation evidence records RD-16 matrix without replacing dummy media proof', () => {
+  assert.match(harnessSource, /--rd16-media-matrix/u);
+  assert.match(harnessSource, /rd16MediaMatrix: nativePresentation \? rd16MediaMatrix \?\? buildMissingRd16MediaMatrix\(\) : 'not-requested'/u);
+  assert.match(harnessSource, /tracks: 'not-proven-by-dummy-visual-media'/u);
+  assert.match(harnessSource, /RD-16 media matrix:/u);
+  assert.match(harnessSource, /buildMissingRd16MediaMatrix\('native-presentation-smoke-descriptor-required'\)/u);
+  assert.doesNotMatch(harnessSource, /productIpcUsed: true/u);
+});
+
+test('RD-15 native presentation UI proof uses pixel capture in windowed and fullscreen modes', () => {
+  const rd15ObserverStart = harnessSource.indexOf('async function observeRd15NativePresentationUi');
+  const rd15ObserverEnd = harnessSource.indexOf('async function observeActivePlayback', rd15ObserverStart);
+  const rd15ObserverSource = harnessSource.slice(rd15ObserverStart, rd15ObserverEnd);
+
+  assert.match(rd15ObserverSource, /await prepareRd15ProofWindow\(window, presentationMode\)/u);
+  assert.match(rd15ObserverSource, /window\.setAlwaysOnTop\(true, 'screen-saver'\)/u);
+  assert.match(rd15ObserverSource, /window\.setFullScreen\(true\)/u);
+  assert.match(rd15ObserverSource, /window\.moveTop\(\)/u);
+  assert.match(rd15ObserverSource, /window\.webContents\.capturePage\(\)/u);
+  assert.match(rd15ObserverSource, /captureDesktopBitmapForWindow\(window\)/u);
+  assert.match(rd15ObserverSource, /scanGreenMarkerPixels\(rendererBitmap, rendererSize, surface\.rect\)/u);
+  assert.match(rd15ObserverSource, /scanGreenMarkerPixels\(desktopCapture\.bitmap, desktopCapture\.size, desktopRect\)/u);
+  assert.match(rd15ObserverSource, /presentationMode/u);
+  assert.match(rd15ObserverSource, /markerPixelsObserved/u);
+  assert.match(rd15ObserverSource, /rendererPixelsObserved/u);
+  assert.match(rd15ObserverSource, /desktopPixelsObserved/u);
+  assert.match(rd15ObserverSource, /pixelSource/u);
+  assert.doesNotMatch(rd15ObserverSource, /style\.visibility !== "hidden" && style\.display !== "none"/u);
+
+  assert.match(harnessSource, /await observeRd15NativePresentationUi\(window, 'windowed'\)/u);
+  assert.match(harnessSource, /event\.proof === 'fullscreen-composition'/u);
+  assert.match(harnessSource, /event\.nativePresentationFullscreen === true/u);
+  assert.match(harnessSource, /event\.visiblePixelsObserved === true/u);
+  assert.match(harnessSource, /await observeRd15NativePresentationUi\(window, 'fullscreen'\)/u);
+  assert.match(harnessSource, /data-rd15-proof-focus autofocus style="position:relative">Mini guide<i class="rd15-green-pixel"/u);
+  assertOrder(harnessSource, [
+    "event.proof === 'fullscreen-composition'",
+    "await observeRd15NativePresentationUi(window, 'fullscreen')",
+  ]);
+});
+
 test('native presentation fullscreen proof resets only after fullscreen entry and settle', () => {
   assertOrder(helperSource, [
     'bool fullscreenHost = surface.EnterFullscreenHost();',
@@ -374,8 +615,9 @@ test('WID smoke source merges repeated proof events before pass/fail evaluation'
     'utf8',
   );
   assert.match(source, /const requiredProofs = collectProofs\(events\)/u);
+  assert.match(source, /proofs\.set\(event\.proof, mergeProofEvent\(current, event\)\)/u);
   assert.match(source, /fileLoaded: current\.fileLoaded === true \|\| event\.fileLoaded === true/u);
-  assert.match(source, /activePlayback: current\.activePlayback === true \|\| event\.activePlayback === true/u);
+  assert.match(source, /markerPixelsObserved: current\.markerPixelsObserved === true \|\| event\.markerPixelsObserved === true/u);
   assert.doesNotMatch(source, /new Map\(events\.map\(\(event\) => \[event\.proof, event\]\)\)/u);
 });
 
@@ -467,6 +709,75 @@ test('sanitizeHelperEvent drops raw helper payload fields', () => {
     libmpvClientApiMajor: 2,
     libmpvClientApiMinor: 5,
   });
+});
+
+test('sanitizeHelperEvent keeps RD-15 proof booleans while dropping raw fields', () => {
+  const sanitized = sanitizeHelperEvent({
+    kind: 'observed',
+    proof: 'rd15-ui-focus',
+    category: 'rd15-ui-fullscreen-desktop-pixels',
+    presentationMode: 'fullscreen',
+    pixelSource: 'desktop-capturer',
+    focused: true,
+    visiblePixelsObserved: true,
+    markerPixelsObserved: true,
+    rendererPixelsObserved: true,
+    desktopPixelsObserved: true,
+    productIpcPayload: 'ignored',
+    localMedia: '<dummy-local-media>',
+  });
+
+  assert.deepEqual(sanitized, {
+    kind: 'observed',
+    proof: 'rd15-ui-focus',
+    category: 'rd15-ui-fullscreen-desktop-pixels',
+    presentationMode: 'fullscreen',
+    pixelSource: 'desktop-capturer',
+    visiblePixelsObserved: true,
+    focused: true,
+    markerPixelsObserved: true,
+    rendererPixelsObserved: true,
+    desktopPixelsObserved: true,
+  });
+});
+
+test('RD-15 native presentation proof stays dev-only without product IPC or production helper behavior', () => {
+  const rd15MirrorSource = sliceMethodSource(harnessSource, 'function buildRd15NativePresentationHtml()');
+  assert.match(harnessSource, /productIpcUsed: false/u);
+  assert.match(harnessSource, /dummyInputsOnly: true/u);
+  assert.match(harnessSource, /rendererReceivesPrivilegedValues: false/u);
+  assert.match(harnessSource, /window\.webContents\.executeJavaScript/u);
+  assert.doesNotMatch(rd15MirrorSource, /ipcRenderer/u);
+  assert.doesNotMatch(rd15MirrorSource, /lineupDesktop/u);
+  assert.doesNotMatch(rd15MirrorSource, /native-helper/u);
+  assert.doesNotMatch(rd15MirrorSource, /tokenized/u);
+  assert.doesNotMatch(rd15MirrorSource, /X-Plex/u);
+  assert.deepEqual(scanForbiddenEvidenceContent(JSON.stringify({
+    observations: summarizeRd15NativePresentationProofs(new Map(rd15NativePresentationProofs.map((proof) => [
+      proof,
+      new Map([
+        ['windowed', {
+          visiblePixelsObserved: true,
+          markerPixelsObserved: true,
+          rendererPixelsObserved: true,
+          ...(proof === 'rd15-ui-focus' ? { focused: true } : {}),
+        }],
+        ['fullscreen', {
+          visiblePixelsObserved: true,
+          markerPixelsObserved: true,
+          desktopPixelsObserved: true,
+          ...(proof === 'rd15-ui-focus' ? { focused: true } : {}),
+        }],
+      ]),
+    ]))),
+    policy: {
+      productIpcUsed: false,
+      dummyInputsOnly: true,
+      rawUrlsPersisted: false,
+      rawLocalPathsPersisted: false,
+      rawNativeValuesPersisted: false,
+    },
+  })), []);
 });
 
 test('scanForbiddenEvidenceContent catches raw paths, URLs, native values, and secret-shaped fields', () => {

@@ -35,6 +35,10 @@ export class ChannelPersistenceSaveQueue {
   private readonly activeSaveRejects = new Set<(error: unknown) => void>();
   private isDisposed = false;
 
+  /**
+   * Debounced saves coalesce to the latest snapshot and serialize actual writes;
+   * queued persistence is a follow-up write path, not a commit barrier.
+   */
   public constructor(config: ChannelPersistenceSaveQueueConfig) {
     this.runSave = config.runSave;
     this.createDisposedError = config.createDisposedError;

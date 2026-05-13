@@ -1,3 +1,8 @@
+/**
+ * Data-owned architecture policy: production boundaries, test owners, and
+ * named integration seams stay declarative so verifier behavior is reviewable
+ * without reading ESLint config generation code.
+ */
 export const desktopArchitectureRules = {
   version: '2026-05-11-f-004-test-owner-boundaries',
   domainBoundary: {

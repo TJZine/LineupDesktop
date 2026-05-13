@@ -21,6 +21,24 @@ const evidenceFiles = Object.freeze([
   'events.redacted.ndjson',
   'summary.redacted.md',
 ]);
+export const rd16MediaMatrixCases = Object.freeze([
+  'multi-audio',
+  'subtitle-bearing',
+  'hdr',
+  'hdr-unavailable',
+]);
+const rd16MediaMatrixStatuses = Object.freeze(['observed', 'unavailable', 'blocker']);
+export const rd15NativePresentationProofs = Object.freeze([
+  'rd15-ui-epg',
+  'rd15-ui-osd',
+  'rd15-ui-mini-guide',
+  'rd15-ui-channel-badge',
+  'rd15-ui-settings',
+  'rd15-ui-channel-setup',
+  'rd15-ui-overlays',
+  'rd15-ui-focus',
+]);
+const rd15NativePresentationModes = Object.freeze(['windowed', 'fullscreen']);
 
 const forbiddenHeaderTerms = Object.freeze([
   'authorization',
@@ -34,7 +52,9 @@ const forbiddenHeaderTerms = Object.freeze([
 
 const forbiddenEvidencePatterns = [
   { label: 'raw-url', pattern: /\bhttps?:\/\//iu },
+  { label: 'raw-url-scheme', pattern: /\b(?:file|ftp):\/\//iu },
   { label: 'windows-local-path', pattern: /[A-Z]:\\|\\\\[^\\]+\\/iu },
+  { label: 'windows-forward-local-path', pattern: /[A-Z]:\//iu },
   { label: 'posix-local-path', pattern: /\/(?:Users|Volumes|private|var|tmp)\//iu },
   { label: 'raw-auth-field', pattern: new RegExp(`${['Author', 'ization'].join('')}\\s*:`, 'iu') },
   { label: 'plex-field', pattern: /\bX-Plex\b|\bPlex\b/iu },
@@ -53,6 +73,7 @@ export function parseArgs(args) {
     durationMs: 5000,
     dummyInput: 'local-and-http',
     fullscreenMode: null,
+    rd16MediaMatrix: null,
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -72,6 +93,9 @@ export function parseArgs(args) {
       index += 1;
     } else if (arg === '--fullscreen-mode' && value) {
       options.fullscreenMode = value;
+      index += 1;
+    } else if (arg === '--rd16-media-matrix' && value) {
+      options.rd16MediaMatrix = value;
       index += 1;
     } else {
       throw new Error(`unknown or incomplete argument: ${arg}`);
@@ -105,6 +129,9 @@ export function parseArgs(args) {
   }
   if (options.mode !== 'render-api-smoke' && options.mode !== 'native-presentation-smoke' && options.fullscreenMode !== null) {
     throw new Error('--fullscreen-mode is supported only for render-api-smoke and native-presentation-smoke');
+  }
+  if (options.rd16MediaMatrix !== null && options.mode !== 'native-presentation-smoke') {
+    throw new Error('--rd16-media-matrix is supported only for native-presentation-smoke');
   }
 
   return options;
@@ -229,7 +256,7 @@ export function sanitizeHelperEvent(event) {
   const sanitized = {
     kind: normalizeKind(event.kind),
   };
-  for (const key of ['proof', 'reason', 'category']) {
+  for (const key of ['proof', 'reason', 'category', 'presentationMode', 'pixelSource']) {
     if (typeof event[key] === 'string') {
       sanitized[key] = normalizeShortField(event[key]);
     }
@@ -245,6 +272,10 @@ export function sanitizeHelperEvent(event) {
     'browserWindowFullscreen',
     'nativePresentationFullscreen',
     'cleanupObserved',
+    'focused',
+    'markerPixelsObserved',
+    'rendererPixelsObserved',
+    'desktopPixelsObserved',
   ]) {
     if (typeof event[key] === 'boolean') {
       sanitized[key] = event[key];
@@ -287,6 +318,72 @@ export async function scanEvidenceDirectory(outDir) {
   return findings;
 }
 
+export function summarizeRd16MediaMatrixDescriptor(descriptor, { source = 'descriptor' } = {}) {
+  const inputCases = normalizeRd16InputCases(descriptor);
+  const cases = Object.fromEntries(rd16MediaMatrixCases.map((caseName) => {
+    const rawCase = inputCases.get(caseName);
+    const status = normalizeRd16MediaMatrixStatus(rawCase?.status);
+    const fallbackLabel = rawCase ? caseName : `${caseName}-missing`;
+    const label = normalizeRd16SampleLabel(rawCase?.label ?? rawCase?.sampleLabel, fallbackLabel);
+    const reason = typeof rawCase?.reason === 'string'
+      ? normalizeShortField(rawCase.reason)
+      : rawCase
+        ? undefined
+        : 'descriptor-case-missing';
+    return [caseName, {
+      label,
+      status,
+      ...(status === 'blocker' || reason ? { reason: reason ?? 'descriptor-status-blocker' } : {}),
+    }];
+  }));
+  const statuses = Object.values(cases).map((entry) => entry.status);
+  const status = statuses.includes('blocker')
+    ? 'blocker'
+    : statuses.includes('unavailable')
+      ? 'unavailable'
+      : 'observed';
+  const summary = {
+    status,
+    source: normalizeShortField(source),
+    cases,
+  };
+  const findings = scanForbiddenEvidenceContent(JSON.stringify(summary));
+  if (findings.length > 0) {
+    throw new Error(`RD-16 media matrix contains forbidden evidence: ${findings.join(', ')}`);
+  }
+  return summary;
+}
+
+export function buildMissingRd16MediaMatrix(reason = 'descriptor-not-supplied') {
+  return {
+    status: 'blocker',
+    source: 'not-supplied',
+    cases: Object.fromEntries(rd16MediaMatrixCases.map((caseName) => [
+      caseName,
+      {
+        label: caseName,
+        status: 'blocker',
+        reason: normalizeShortField(reason),
+      },
+    ])),
+  };
+}
+
+export async function loadRd16MediaMatrixDescriptor(filePath) {
+  const content = await fsp.readFile(filePath, 'utf8');
+  const findings = scanForbiddenEvidenceContent(content);
+  if (findings.length > 0) {
+    throw new Error(`RD-16 media matrix descriptor contains forbidden evidence: ${findings.join(', ')}`);
+  }
+  let descriptor;
+  try {
+    descriptor = JSON.parse(content);
+  } catch (error) {
+    throw new Error(`RD-16 media matrix descriptor must be JSON: ${error.message}`, { cause: error });
+  }
+  return summarizeRd16MediaMatrixDescriptor(descriptor, { source: 'ignored-local-json' });
+}
+
 export function createDummyVisualMediaBuffer() {
   return Buffer.from(
     'R0lGODlhAQABAIAAAP8AAAD/ACwAAAAAAQABAAACAkQBADs=',
@@ -319,7 +416,12 @@ async function runCli() {
   const result = options.mode === 'render-api-smoke'
     ? await runRenderApiSmoke({ outDir, durationMs: options.durationMs, fullscreenMode: options.fullscreenMode })
     : options.mode === 'native-presentation-smoke'
-      ? await runNativePresentationSmoke({ outDir, durationMs: options.durationMs, fullscreenMode: options.fullscreenMode })
+      ? await runNativePresentationSmoke({
+        outDir,
+        durationMs: options.durationMs,
+        fullscreenMode: options.fullscreenMode,
+        rd16MediaMatrixPath: options.rd16MediaMatrix,
+      })
       : await runWidSmoke({ outDir, durationMs: options.durationMs });
   process.exitCode = result.status === 'passed' ? 0 : result.status === 'blocked' ? 2 : 1;
 }
@@ -386,6 +488,9 @@ async function runPreflight({ outDir, renderApi, nativePresentation = false }) {
       renderApiSymbols: renderApi ? renderApiStatus : 'not-requested',
       nativePresentationHost: nativePresentation ? nativePresentationStatus : 'not-requested',
     }, mpv),
+    observations: nativePresentation ? {
+      rd16MediaMatrix: buildMissingRd16MediaMatrix('native-presentation-smoke-descriptor-required'),
+    } : undefined,
     policy: buildEvidencePolicy(),
   };
 
@@ -426,8 +531,11 @@ async function runRenderApiSmoke({ outDir, durationMs, fullscreenMode }) {
   });
 }
 
-async function runNativePresentationSmoke({ outDir, durationMs, fullscreenMode }) {
+async function runNativePresentationSmoke({ outDir, durationMs, fullscreenMode, rd16MediaMatrixPath = null }) {
   await fsp.mkdir(outDir, { recursive: true });
+  const rd16MediaMatrix = rd16MediaMatrixPath
+    ? await loadRd16MediaMatrixDescriptor(rd16MediaMatrixPath)
+    : buildMissingRd16MediaMatrix();
   const preflightFacts = discoverPrerequisites();
   const validation = validatePreflightFacts(preflightFacts);
   if (validation.status !== 'passed') {
@@ -437,6 +545,9 @@ async function runNativePresentationSmoke({ outDir, durationMs, fullscreenMode }
       status: 'blocked',
       blockedReason: 'preflight-not-passed',
       fullscreenMode,
+      observations: {
+        rd16MediaMatrix,
+      },
       policy: buildEvidencePolicy(),
     };
     await writeEvidence(outDir, manifest, validation.checks.map((check) => ({
@@ -455,6 +566,7 @@ async function runNativePresentationSmoke({ outDir, durationMs, fullscreenMode }
     fullscreenMode,
     renderApi: true,
     nativePresentation: true,
+    rd16MediaMatrix,
     preflightFacts,
   });
 }
@@ -490,7 +602,16 @@ async function runWidSmoke({ outDir, durationMs }) {
   });
 }
 
-async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, renderApi, nativePresentation = false, preflightFacts }) {
+async function runSmokeHarness({
+  mode,
+  outDir,
+  durationMs,
+  fullscreenMode,
+  renderApi,
+  nativePresentation = false,
+  rd16MediaMatrix = null,
+  preflightFacts,
+}) {
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'lineup-rd06-'));
   const cleanup = {
     tempInputs: 'not-started',
@@ -536,6 +657,7 @@ async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, rende
     ];
 
     const requiredProofs = collectProofs(events);
+    const rd15UiProofs = collectRd15NativePresentationProofs(events);
     const fullscreenProof = requiredProofs.get('fullscreen');
     const fullscreenNativeCaptureProof = requiredProofs.get('fullscreen-native-capture');
     const fullscreenCompositionProof = requiredProofs.get('fullscreen-composition');
@@ -571,6 +693,11 @@ async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, rende
       requiredProofs.get('native-presentation-host')?.category === 'app-owned-native-boundary' &&
       requiredProofs.get('native-presentation-host')?.visiblePixelsObserved === true
     );
+    const rd15UiProofsObserved = !nativePresentation || rd15NativePresentationProofs.every((proof) => (
+      rd15NativePresentationModes.every((presentationMode) => (
+        hasRd15NativePresentationProof(rd15UiProofs, proof, presentationMode)
+      ))
+    ));
 
     status = harnessResult.exitCode === 0 &&
       requestFacts.count > 0 &&
@@ -586,6 +713,7 @@ async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, rende
       fullscreenVideoPixelsObserved &&
       fullscreenCompositionObserved &&
       nativePresentationProofObserved &&
+      rd15UiProofsObserved &&
       helperCleanupObserved &&
       !helperCleanupFailed &&
       (!renderApi || (
@@ -632,6 +760,7 @@ async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, rende
         fullscreenComposition: nativePresentation ? summarizeProof(requiredProofs.get('fullscreen-composition')) : 'not-requested',
         fullscreenNativeCapture: summarizeFullscreenNativeCaptureProof(requiredProofs.get('fullscreen-native-capture')),
         nativePresentationHost: nativePresentation ? summarizeNativePresentationHostProof(requiredProofs.get('native-presentation-host')) : 'not-requested',
+        rd15NativePresentationUi: nativePresentation ? summarizeRd15NativePresentationProofs(rd15UiProofs) : 'not-requested',
         focus: summarizeProof(requiredProofs.get('focus')),
         renderApiSymbols: renderApi ? summarizeProof(requiredProofs.get('libmpv-render-api-symbols')) : 'not-requested',
         renderContext: renderApi ? summarizeRenderContextProof(requiredProofs.get('render-context')) : 'not-requested',
@@ -643,6 +772,7 @@ async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, rende
         cleanup: nativePresentation ? summarizeProof(requiredProofs.get('helper-cleanup')) : 'temp-only',
         dpi: 'noted-redacted',
         multiMonitor: 'noted-redacted',
+        rd16MediaMatrix: nativePresentation ? rd16MediaMatrix ?? buildMissingRd16MediaMatrix() : 'not-requested',
         tracks: 'not-proven-by-dummy-visual-media',
       },
       policy: buildEvidencePolicy(),
@@ -710,6 +840,42 @@ function getToolVersion(command, args, keepPattern) {
     .map((line) => line.replace(/[^\x20-\x7E]/gu, '').trim())
     .filter((line) => line && keepPattern.test(line))
     .slice(0, 3);
+}
+
+function normalizeRd16InputCases(descriptor) {
+  if (!descriptor || typeof descriptor !== 'object') {
+    throw new Error('RD-16 media matrix descriptor must be an object');
+  }
+  const rawCases = descriptor.cases ?? descriptor;
+  if (Array.isArray(rawCases)) {
+    return new Map(rawCases
+      .filter((entry) => entry && typeof entry === 'object')
+      .map((entry) => [normalizeShortField(entry.case ?? entry.name), entry]));
+  }
+  if (rawCases && typeof rawCases === 'object') {
+    return new Map(Object.entries(rawCases).map(([caseName, entry]) => [
+      normalizeShortField(caseName),
+      entry && typeof entry === 'object' ? entry : { status: entry },
+    ]));
+  }
+  throw new Error('RD-16 media matrix descriptor cases must be an object or array');
+}
+
+function normalizeRd16MediaMatrixStatus(value) {
+  if (typeof value !== 'string') {
+    return 'blocker';
+  }
+  const status = normalizeShortField(value);
+  return rd16MediaMatrixStatuses.includes(status) ? status : 'blocker';
+}
+
+function normalizeRd16SampleLabel(value, fallback) {
+  const label = typeof value === 'string' && value.trim() ? value.trim() : fallback;
+  const findings = scanForbiddenEvidenceContent(label);
+  if (findings.length > 0) {
+    throw new Error(`RD-16 media matrix sample label contains forbidden evidence: ${findings.join(', ')}`);
+  }
+  return normalizeShortField(label);
 }
 
 function summarizeTool(lines) {
@@ -872,29 +1038,65 @@ function collectProofs(events) {
       continue;
     }
     const current = proofs.get(event.proof) ?? {};
-    proofs.set(event.proof, {
-      ...current,
-      ...event,
-      fileLoaded: current.fileLoaded === true || event.fileLoaded === true,
-      endFileObserved: current.endFileObserved === true || event.endFileObserved === true,
-      activePlayback: current.activePlayback === true || event.activePlayback === true,
-      visiblePixelsObserved: current.visiblePixelsObserved === true || event.visiblePixelsObserved === true,
-      nativeCaptureObserved: current.nativeCaptureObserved === true || event.nativeCaptureObserved === true,
-      browserWindowFullscreen: current.browserWindowFullscreen === true || event.browserWindowFullscreen === true,
-      nativePresentationFullscreen: current.nativePresentationFullscreen === true || event.nativePresentationFullscreen === true,
-      cleanupObserved: current.cleanupObserved === true || event.cleanupObserved === true,
-    });
+    proofs.set(event.proof, mergeProofEvent(current, event));
   }
   return proofs;
 }
 
+function mergeProofEvent(current, event) {
+  return {
+    ...current,
+    ...event,
+    fileLoaded: current.fileLoaded === true || event.fileLoaded === true,
+    endFileObserved: current.endFileObserved === true || event.endFileObserved === true,
+    activePlayback: current.activePlayback === true || event.activePlayback === true,
+    visiblePixelsObserved: current.visiblePixelsObserved === true || event.visiblePixelsObserved === true,
+    nativeCaptureObserved: current.nativeCaptureObserved === true || event.nativeCaptureObserved === true,
+    browserWindowFullscreen: current.browserWindowFullscreen === true || event.browserWindowFullscreen === true,
+    nativePresentationFullscreen: current.nativePresentationFullscreen === true || event.nativePresentationFullscreen === true,
+    cleanupObserved: current.cleanupObserved === true || event.cleanupObserved === true,
+    focused: current.focused === true || event.focused === true,
+    markerPixelsObserved: current.markerPixelsObserved === true || event.markerPixelsObserved === true,
+    rendererPixelsObserved: current.rendererPixelsObserved === true || event.rendererPixelsObserved === true,
+    desktopPixelsObserved: current.desktopPixelsObserved === true || event.desktopPixelsObserved === true,
+  };
+}
+
+function collectRd15NativePresentationProofs(events) {
+  const proofs = new Map();
+  for (const event of events) {
+    if (!rd15NativePresentationProofs.includes(event.proof) || !rd15NativePresentationModes.includes(event.presentationMode)) {
+      continue;
+    }
+    const byMode = proofs.get(event.proof) ?? new Map();
+    byMode.set(event.presentationMode, mergeProofEvent(byMode.get(event.presentationMode) ?? {}, event));
+    proofs.set(event.proof, byMode);
+  }
+  return proofs;
+}
+
+function hasRd15NativePresentationProof(proofs, proof, presentationMode) {
+  const event = proofs.get(proof)?.get(presentationMode);
+  if (!event || event.markerPixelsObserved !== true || event.visiblePixelsObserved !== true) {
+    return false;
+  }
+  if (proof === 'rd15-ui-focus' && event.focused !== true) {
+    return false;
+  }
+  return presentationMode === 'fullscreen'
+    ? event.desktopPixelsObserved === true
+    : event.rendererPixelsObserved === true;
+}
+
 function buildHarnessScript() {
+  const rd15ProofsJson = JSON.stringify(rd15NativePresentationProofs);
   return String.raw`
-const { app, BrowserWindow, desktopCapturer } = require('electron');
+const { app, BrowserWindow, desktopCapturer, screen } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 
 const config = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const rd15NativePresentationProofs = ${rd15ProofsJson};
 
 function widFromWindow(window) {
   return window.getNativeWindowHandle().readBigUInt64LE(0).toString();
@@ -912,6 +1114,7 @@ function runHelper(window, crashAfterInitialize = false) {
     let timeoutCleanupStarted = false;
     let timeoutGraceTimer = null;
     let fullscreenNativeCapture = null;
+    let fullscreenRd15UiObserved = false;
     const fullscreenNativeCaptureWaiters = [];
     const helperTimeoutMs = Math.max(12000, Math.min(30000, (config.durationMs * 4) - 1000));
     const timeoutCleanupGraceMs = 3000;
@@ -970,6 +1173,16 @@ function runHelper(window, crashAfterInitialize = false) {
               fullscreenNativeCaptureWaiters.shift()(event);
             }
           }
+          if (
+            config.nativePresentation === true &&
+            !fullscreenRd15UiObserved &&
+            event.proof === 'fullscreen-composition' &&
+            event.nativePresentationFullscreen === true &&
+            event.visiblePixelsObserved === true
+          ) {
+            fullscreenRd15UiObserved = true;
+            await observeRd15NativePresentationUi(window, 'fullscreen');
+          }
           if (!crashAfterInitialize && event.proof === 'local-media' && event.activePlayback === true && !activePlayback) {
             activePlayback = true;
             if (config.nativePresentation !== true) {
@@ -977,7 +1190,7 @@ function runHelper(window, crashAfterInitialize = false) {
                 fullscreenNativeCaptureWaiters.push(resolveNativeCapture);
               }, config.renderApi === true);
             } else {
-              observeNativePresentationFocus(window);
+              await observeNativePresentationFocus(window);
             }
             child.stdin.write(JSON.stringify({ control: 'continue' }) + '\n');
           }
@@ -1011,12 +1224,89 @@ function runHelper(window, crashAfterInitialize = false) {
   });
 }
 
-function observeNativePresentationFocus(window) {
+async function observeNativePresentationFocus(window) {
+  await observeRd15NativePresentationUi(window, 'windowed');
   process.stdout.write(JSON.stringify({
     kind: 'observed',
     proof: 'focus',
     category: window.webContents.isFocused() ? 'renderer-focus-sentinel' : 'native-presentation-focus-owned',
   }) + '\n');
+}
+
+async function observeRd15NativePresentationUi(window, presentationMode) {
+  await prepareRd15ProofWindow(window, presentationMode);
+  const proof = await window.webContents.executeJavaScript([
+    '(() => {',
+    '  const surfaces = [',
+    '    ["rd15-ui-epg", "[data-rd15-proof=\\"epg\\"]"],',
+    '    ["rd15-ui-osd", "[data-rd15-proof=\\"osd\\"]"],',
+    '    ["rd15-ui-mini-guide", "[data-rd15-proof=\\"mini-guide\\"]"],',
+    '    ["rd15-ui-channel-badge", "[data-rd15-proof=\\"channel-badge\\"]"],',
+    '    ["rd15-ui-settings", "[data-rd15-proof=\\"settings\\"]"],',
+    '    ["rd15-ui-channel-setup", "[data-rd15-proof=\\"channel-setup\\"]"],',
+    '    ["rd15-ui-overlays", "[data-rd15-proof=\\"overlays\\"]"],',
+    '  ];',
+    '  const describe = (selector) => {',
+    '    const element = document.querySelector(selector);',
+    '    if (!element) return null;',
+    '    const rect = element.getBoundingClientRect();',
+    '    const style = window.getComputedStyle(element);',
+    '    if (rect.width <= 0 || rect.height <= 0 || style.visibility === "hidden" || style.display === "none") return null;',
+    '    return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };',
+    '  };',
+    '  const observations = surfaces.map(([name, selector]) => ({ proof: name, rect: describe(selector) }));',
+    '  const focusTarget = document.querySelector("[data-rd15-proof-focus]");',
+    '  if (focusTarget instanceof HTMLElement) focusTarget.focus();',
+    '  observations.push({ proof: "rd15-ui-focus", rect: describe("[data-rd15-proof-focus]"), focused: document.activeElement === focusTarget });',
+    '  return observations;',
+    '})()',
+  ].join('\n'), true);
+  const rendererImage = await window.webContents.capturePage();
+  const rendererBitmap = rendererImage.toBitmap();
+  const rendererSize = rendererImage.getSize();
+  const desktopCapture = await captureDesktopBitmapForWindow(window);
+  for (const proofName of rd15NativePresentationProofs) {
+    const surface = Array.isArray(proof) ? proof.find((candidate) => candidate.proof === proofName) : null;
+    const rendererPixelsObserved = Boolean(surface?.rect) && scanGreenMarkerPixels(rendererBitmap, rendererSize, surface.rect);
+    const desktopRect = surface?.rect && desktopCapture ? translateClientRectToDesktop(surface.rect, desktopCapture) : null;
+    const desktopPixelsObserved = Boolean(desktopRect && desktopCapture) && scanGreenMarkerPixels(desktopCapture.bitmap, desktopCapture.size, desktopRect);
+    const markerPixelsObserved = presentationMode === 'fullscreen'
+      ? desktopPixelsObserved
+      : rendererPixelsObserved;
+    const focused = proofName === 'rd15-ui-focus' && surface?.focused === true;
+    process.stdout.write(JSON.stringify({
+      kind: markerPixelsObserved ? 'observed' : 'failed',
+      proof: proofName,
+      category: markerPixelsObserved
+        ? presentationMode === 'fullscreen' ? 'rd15-ui-fullscreen-desktop-pixels' : 'rd15-ui-windowed-renderer-pixels'
+        : 'not-observed',
+      presentationMode,
+      pixelSource: desktopPixelsObserved ? 'desktop-capturer' : rendererPixelsObserved ? 'capture-page' : 'none',
+      visiblePixelsObserved: markerPixelsObserved,
+      markerPixelsObserved,
+      rendererPixelsObserved,
+      desktopPixelsObserved,
+      ...(proofName === 'rd15-ui-focus' ? { focused } : {}),
+    }) + '\n');
+  }
+}
+
+async function prepareRd15ProofWindow(window, presentationMode) {
+  window.show();
+  if (presentationMode === 'fullscreen') {
+    window.setAlwaysOnTop(true, 'screen-saver');
+    window.setFullScreen(true);
+    await waitForWindowState(() => window.isFullScreen(), 2000);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+  } else if (window.isFullScreen()) {
+    window.setFullScreen(false);
+    await waitForWindowState(() => !window.isFullScreen(), 2000);
+  }
+  if (typeof window.moveTop === 'function') {
+    window.moveTop();
+  }
+  window.focus();
+  window.webContents.focus();
 }
 
 async function observeActivePlayback(window, child, getFullscreenNativeCapture, onFullscreenNativeCapture, useNativeFullscreenCapture) {
@@ -1107,6 +1397,32 @@ async function captureActivePlaybackPixels(window) {
   return pixels;
 }
 
+async function captureDesktopBitmapForWindow(window) {
+  const contentBounds = window.getContentBounds();
+  const display = screen.getDisplayMatching(contentBounds);
+  const thumbnailSize = {
+    width: Math.max(1, Math.round(display.bounds.width * display.scaleFactor)),
+    height: Math.max(1, Math.round(display.bounds.height * display.scaleFactor)),
+  };
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize,
+  });
+  const source = sources.find((candidate) => candidate.display_id === String(display.id)) ?? sources[0];
+  if (!source?.thumbnail || source.thumbnail.isEmpty()) {
+    return null;
+  }
+  const size = source.thumbnail.getSize();
+  return {
+    bitmap: source.thumbnail.toBitmap(),
+    size,
+    contentBounds,
+    displayBounds: display.bounds,
+    scaleX: size.width / Math.max(1, display.bounds.width),
+    scaleY: size.height / Math.max(1, display.bounds.height),
+  };
+}
+
 function scanProofPixels(bitmap) {
   let videoPixelsObserved = false;
   let overlayPixelsObserved = false;
@@ -1125,6 +1441,37 @@ function scanProofPixels(bitmap) {
     }
   }
   return { videoPixelsObserved, overlayPixelsObserved };
+}
+
+function scanGreenMarkerPixels(bitmap, size, rect) {
+  if (!bitmap || !size || !rect) {
+    return false;
+  }
+  const left = Math.max(0, Math.floor(rect.left));
+  const top = Math.max(0, Math.floor(rect.top));
+  const right = Math.min(size.width, Math.ceil(rect.left + rect.width));
+  const bottom = Math.min(size.height, Math.ceil(rect.top + rect.height));
+  for (let y = top; y < bottom; y += 1) {
+    for (let x = left; x < right; x += 1) {
+      const index = ((y * size.width) + x) * 4;
+      const red = bitmap[index];
+      const green = bitmap[index + 1];
+      const blue = bitmap[index + 2];
+      if (red < 96 && green > 192 && blue < 96) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function translateClientRectToDesktop(rect, desktopCapture) {
+  return {
+    left: (desktopCapture.contentBounds.x - desktopCapture.displayBounds.x + rect.left) * desktopCapture.scaleX,
+    top: (desktopCapture.contentBounds.y - desktopCapture.displayBounds.y + rect.top) * desktopCapture.scaleY,
+    width: rect.width * desktopCapture.scaleX,
+    height: rect.height * desktopCapture.scaleY,
+  };
 }
 
 async function waitForWindowState(predicate, timeoutMs) {
@@ -1157,15 +1504,9 @@ app.whenReady().then(async () => {
       nodeIntegration: false,
     },
   });
-  await window.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent([
-    '<!doctype html>',
-    '<style>',
-    'html,body{margin:0;width:100%;height:100%;background:#202020;overflow:hidden;}',
-    '#overlay{position:fixed;left:32px;top:32px;width:180px;height:90px;background:#00ff00;z-index:2147483647;}',
-    'button{position:fixed;right:32px;top:32px;z-index:2147483647;}',
-    '</style>',
-    '<button autofocus>RD06</button><div id="overlay" aria-label="rd06-overlay"></div>',
-  ].join('')));
+  await window.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(
+    config.nativePresentation === true ? buildRd15NativePresentationHtml() : buildRd06OverlayHtml(),
+  ));
   await Promise.race([
     new Promise((resolve) => window.once('ready-to-show', resolve)),
     new Promise((resolve) => setTimeout(resolve, 1000)),
@@ -1178,6 +1519,53 @@ app.whenReady().then(async () => {
   app.quit();
   process.exit(normal.code === 0 && crash.code !== 0 ? 0 : 1);
 });
+
+function buildRd06OverlayHtml() {
+  return [
+    '<!doctype html>',
+    '<style>',
+    'html,body{margin:0;width:100%;height:100%;background:#202020;overflow:hidden;}',
+    '#overlay{position:fixed;left:32px;top:32px;width:180px;height:90px;background:#00ff00;z-index:2147483647;}',
+    'button{position:fixed;right:32px;top:32px;z-index:2147483647;}',
+    '</style>',
+    '<button autofocus>RD06</button><div id="overlay" aria-label="rd06-overlay"></div>',
+  ].join('');
+}
+
+function buildRd15NativePresentationHtml() {
+  return [
+    '<!doctype html>',
+    '<html><head><meta charset="utf-8"><style>',
+    ':root{--color-app-bg:#0d1014;--color-surface-raised:rgba(255,255,255,.10);--color-surface-overlay:rgba(6,9,13,.90);--color-text:#f5f7fb;--color-text-muted:#c9d6e0;--color-focus:#79c7ff;--color-border:rgba(255,255,255,.14);--radius-control:6px;--radius-panel:8px;font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:var(--color-text);background:var(--color-app-bg);}',
+    '*{box-sizing:border-box;}html,body{margin:0;width:100%;height:100%;overflow:hidden;}button{border:0;border-radius:var(--radius-control);padding:0 14px;min-height:38px;background:#f2f6fb;color:#11161d;font:inherit;font-weight:800;}button:focus-visible{outline:3px solid var(--color-focus);outline-offset:3px;}',
+    '.rd15-proof{position:relative;width:100vw;height:100vh;background:rgba(13,16,20,.22);overflow:hidden;}',
+    '.rd15-green-pixel{position:absolute;width:18px;height:18px;background:#00ff00;z-index:2147483647;}',
+    '.overlay-stack{position:absolute;inset:0;z-index:30;pointer-events:none;}',
+    '.player-overlay{position:absolute;pointer-events:auto;}',
+    '.channel-badge{top:28px;left:28px;display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;align-items:center;width:360px;}',
+    '.channel-badge strong{border-radius:var(--radius-control);background:#f2f6fb;color:#11161d;font-size:24px;font-weight:900;line-height:48px;text-align:center;}',
+    '.now-playing-overlay{right:28px;bottom:92px;display:grid;gap:6px;width:430px;padding:18px;border:1px solid var(--color-border);border-radius:var(--radius-panel);background:rgba(6,9,13,.82);}',
+    '.osd-overlay{right:28px;bottom:28px;display:flex;flex-wrap:wrap;justify-content:end;gap:8px;width:560px;}',
+    '.mini-guide{left:50%;bottom:92px;display:grid;gap:10px;width:620px;padding:14px;border:1px solid rgba(121,199,255,.34);border-radius:var(--radius-panel);background:var(--color-surface-overlay);transform:translateX(-50%);}',
+    '.mini-guide__list{display:grid;gap:8px;}.mini-guide__item{display:grid;grid-template-columns:58px minmax(0,1fr);gap:10px;align-items:center;padding:10px;border:1px solid var(--color-border);border-radius:var(--radius-control);background:var(--color-surface-raised);}.mini-guide__item[data-selected-channel=true]{border-color:var(--color-focus);background:#f2f6fb;color:#11161d;}',
+    '.workflow-panel{position:absolute;z-index:24;display:grid;gap:10px;padding:18px;border:1px solid var(--color-border);border-radius:var(--radius-panel);background:rgba(13,17,24,.88);}',
+    '.epg-panel{left:32px;right:32px;bottom:18px;grid-template-columns:132px repeat(4,minmax(0,1fr));}.settings-panel{left:32px;top:122px;width:360px;}.setup-panel{right:32px;top:122px;width:390px;}',
+    '.tile{min-width:0;padding:10px;border:1px solid var(--color-border);border-radius:var(--radius-control);background:var(--color-surface-raised);}.tile strong,.tile span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.tile span{color:var(--color-text-muted);font-size:13px;}',
+    '</style></head><body>',
+    '<main class="rd15-proof" data-rd15-proof="native-presentation-mirror">',
+    '<div class="overlay-stack" data-rd15-proof="overlays">',
+    '<section class="player-overlay channel-badge" data-rd15-proof="channel-badge" aria-label="Channel badge"><strong>104</strong><div><span>Cinema One</span><p>Feature Preview</p></div><i class="rd15-green-pixel" style="left:4px;top:4px"></i></section>',
+    '<section class="player-overlay now-playing-overlay" aria-label="Now playing"><p>104 Cinema One</p><h3>Feature Preview</h3><p>Local dummy playback proof</p><i class="rd15-green-pixel" style="right:8px;bottom:8px"></i></section>',
+    '<section class="player-overlay osd-overlay" data-rd15-proof="osd" aria-label="Player controls"><button data-rd15-proof-focus autofocus style="position:relative">Mini guide<i class="rd15-green-pixel" style="left:2px;top:2px"></i></button><button>Options</button><button>1</button><button>0</button><button>4</button><i class="rd15-green-pixel" style="right:6px;top:6px"></i></section>',
+    '<section class="player-overlay mini-guide" data-rd15-proof="mini-guide" aria-label="Mini guide"><div><button>Channel up</button> <button>Channel down</button></div><div class="mini-guide__list"><div class="mini-guide__item" data-selected-channel="true"><strong>104</strong><div><span>Cinema One</span><p>Feature Preview</p></div></div><div class="mini-guide__item"><strong>205</strong><div><span>Local News</span><p>Evening Update</p></div></div></div><i class="rd15-green-pixel" style="left:6px;bottom:6px"></i></section>',
+    '</div>',
+    '<section class="workflow-panel epg-panel" data-rd15-proof="epg" aria-label="Guide schedule grid"><div class="tile"><strong>Guide</strong><span>Tonight</span></div><div class="tile"><strong>Feature Preview</strong><span>Now</span></div><div class="tile"><strong>Evening Update</strong><span>Next</span></div><div class="tile"><strong>Archive Hour</strong><span>Later</span></div><div class="tile"><strong>Music Block</strong><span>Late</span></div><i class="rd15-green-pixel" style="right:6px;bottom:6px"></i></section>',
+    '<section class="workflow-panel settings-panel" data-rd15-proof="settings" aria-label="Settings"><h2>Settings</h2><div class="tile"><strong>Source</strong><span>Local preview</span></div><div class="tile"><strong>Channels</strong><span>Fake lineup</span></div><button>Channel setup</button><i class="rd15-green-pixel" style="right:6px;top:6px"></i></section>',
+    '<section class="workflow-panel setup-panel" data-rd15-proof="channel-setup" aria-label="Channel setup"><h2>Channel setup</h2><div class="tile"><strong>Source</strong><span>Draft lineup</span></div><div class="tile"><strong>Enabled</strong><span>3 channels</span></div><button>Preview player</button><i class="rd15-green-pixel" style="right:6px;top:6px"></i></section>',
+    '</main>',
+    '</body></html>',
+  ].join('');
+}
 `;
 }
 
@@ -1275,6 +1663,22 @@ function summarizeNativePresentationHostProof(event) {
   return summarizeProof(event);
 }
 
+export function summarizeRd15NativePresentationProofs(proofs) {
+  return Object.fromEntries(rd15NativePresentationProofs.map((proof) => [
+    proof,
+    Object.fromEntries(rd15NativePresentationModes.map((presentationMode) => {
+      const event = proofs.get(proof)?.get?.(presentationMode);
+      if (!event) {
+        return [presentationMode, 'unavailable'];
+      }
+      if (hasRd15NativePresentationProof(proofs, proof, presentationMode)) {
+        return [presentationMode, 'observed'];
+      }
+      return [presentationMode, summarizeProof(event)];
+    })),
+  ]));
+}
+
 async function writeEvidence(outDir, manifest, events) {
   await fsp.writeFile(path.join(outDir, 'manifest.redacted.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   await fsp.writeFile(
@@ -1299,9 +1703,39 @@ async function writeSummary(outDir, manifest) {
     `- raw local paths persisted: ${manifest.policy.rawLocalPathsPersisted ? 'yes' : 'no'}`,
     `- raw URLs persisted: ${manifest.policy.rawUrlsPersisted ? 'yes' : 'no'}`,
     `- raw native values persisted: ${manifest.policy.rawNativeValuesPersisted ? 'yes' : 'no'}`,
+    `- RD-15 native presentation UI: ${summarizeSummaryObservation(manifest.observations?.rd15NativePresentationUi)}`,
+    `- RD-16 media matrix: ${summarizeRd16SummaryObservation(manifest.observations?.rd16MediaMatrix)}`,
     '',
   ];
   await fsp.writeFile(path.join(outDir, 'summary.redacted.md'), lines.join('\n'));
+}
+
+function summarizeRd16SummaryObservation(observation) {
+  if (!observation || observation === 'not-requested') {
+    return 'not-requested';
+  }
+  if (typeof observation === 'string') {
+    return observation;
+  }
+  const entries = Object.entries(observation.cases ?? {});
+  if (entries.length === 0) {
+    return observation.status ?? 'blocker';
+  }
+  return `${observation.status ?? 'blocker'} (${entries.map(([caseName, entry]) => `${caseName}:${entry.status ?? 'blocker'}`).join(', ')})`;
+}
+
+function summarizeSummaryObservation(observation) {
+  if (!observation || observation === 'not-requested') {
+    return 'not-requested';
+  }
+  if (typeof observation === 'string') {
+    return observation;
+  }
+  const values = Object.values(observation).flatMap((value) => (
+    value && typeof value === 'object' ? Object.values(value) : [value]
+  ));
+  const observed = values.filter((value) => value === 'observed').length;
+  return `${observed}/${values.length} observed`;
 }
 
 async function assertEvidenceClean(outDir) {

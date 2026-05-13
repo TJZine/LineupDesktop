@@ -2,6 +2,7 @@ import type { BrowserWindow } from 'electron';
 
 import { LINEUP_SHELL_URL } from '../contracts/shell.js';
 import { LINEUP_CSP } from './protocol.js';
+import { assertFullscreenContinuity } from './smokeFullscreenAssertions.js';
 
 export interface ShellContainmentCounters {
   navigationDenied: number;
@@ -185,15 +186,43 @@ export async function runSmokeAssertions(
       if (!playerEvents.some((event) => event.event === 'state.changed')) {
         failures.push('player event delivery');
       }
-      const fullscreenOn = await bridge.window.setFullscreen(true);
-      const fullscreenOff = await bridge.window.setFullscreen(false);
-      if (!fullscreenOn.ok || fullscreenOn.value.enabled !== true) {
-        failures.push('fullscreen on ' + JSON.stringify(fullscreenOn));
-      }
-      if (!fullscreenOff.ok || fullscreenOff.value.enabled !== false) {
-        failures.push('fullscreen off ' + JSON.stringify(fullscreenOff));
-      }
-
+      const numericZIndex = (element) => {
+        const value = Number.parseInt(getComputedStyle(element).zIndex, 10);
+        return Number.isFinite(value) ? value : 0;
+      };
+      const assertTopElementAtCenter = (element, label) => {
+        if (!(element instanceof HTMLElement)) {
+          failures.push(label + ' target');
+          return;
+        }
+        const rect = element.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        const topElement = document.elementFromPoint(x, y);
+        if (topElement === null || (topElement !== element && !element.contains(topElement))) {
+          failures.push(
+            label +
+              ' top element ' +
+              JSON.stringify({
+                expected: element.getAttribute('data-overlay') ?? element.className,
+                actual:
+                  topElement instanceof HTMLElement
+                    ? topElement.getAttribute('data-overlay') ?? topElement.className
+                    : null,
+              }),
+          );
+        }
+      };
+      const rectsOverlap = (left, right) => {
+        const leftRect = left.getBoundingClientRect();
+        const rightRect = right.getBoundingClientRect();
+        return (
+          leftRect.left < rightRect.right &&
+          leftRect.right > rightRect.left &&
+          leftRect.top < rightRect.bottom &&
+          leftRect.bottom > rightRect.top
+        );
+      };
       const guideButton = document.querySelector('[data-route-button="guide"]');
       if (!(guideButton instanceof HTMLButtonElement)) {
         failures.push('guide route button');
@@ -203,12 +232,22 @@ export async function runSmokeAssertions(
       const guideScreen = document.querySelector('[data-screen="guide"]');
       const guideGrid = document.querySelector('[data-epg-grid]');
       const guideActions = Array.from(document.querySelectorAll('[data-epg-action]'));
+      const overlayStack = document.querySelector('[data-overlay-stack]');
+      const offRouteOverlayAction = document.querySelector('[data-overlay-action="openMiniGuide"]');
       const detailChannel = document.querySelector('[data-epg-detail-channel]')?.textContent ?? '';
       const detailTitle = document.querySelector('[data-epg-detail-title]')?.textContent ?? '';
       const detailTime = document.querySelector('[data-epg-detail-time]')?.textContent ?? '';
       const guideGridText = guideGrid?.textContent ?? '';
       if (document.documentElement.dataset.activeRoute !== 'guide') failures.push('guide route activation');
       if (!(guideScreen instanceof HTMLElement) || guideScreen.hidden) failures.push('guide screen visible');
+      if (!(overlayStack instanceof HTMLElement) || !overlayStack.hidden) failures.push('guide overlay stack hidden');
+      if (overlayStack instanceof HTMLElement && overlayStack.getAttribute('aria-hidden') !== 'true') {
+        failures.push('guide overlay stack aria hidden');
+      }
+      if (!(offRouteOverlayAction instanceof HTMLButtonElement) || !offRouteOverlayAction.disabled) {
+        failures.push('off-route overlay action disabled');
+      }
+      if (document.documentElement.dataset.activeOverlay !== '') failures.push('off-route active overlay');
       if (!detailChannel.includes('101 Liminal One')) failures.push('guide detail channel ' + detailChannel);
       if (detailTitle !== 'The Midnight Archive') failures.push('guide detail title ' + detailTitle);
       if (detailTime !== 'Signal Lost - 8:30 PM - 9:30 PM') failures.push('guide detail time ' + detailTime);
@@ -217,6 +256,37 @@ export async function runSmokeAssertions(
       }
       if (guideActions.length !== 6) failures.push('guide actions ' + guideActions.length);
 
+      const settingsButton = document.querySelector('[data-route-button="settings"]');
+      if (!(settingsButton instanceof HTMLButtonElement)) {
+        failures.push('settings route button');
+      } else {
+        settingsButton.click();
+      }
+      const settingsScreen = document.querySelector('[data-screen="settings"]');
+      const settingsSections = document.querySelector('[data-settings-sections]')?.textContent ?? '';
+      if (document.documentElement.dataset.activeRoute !== 'settings') failures.push('settings route activation');
+      if (!(settingsScreen instanceof HTMLElement) || settingsScreen.hidden) failures.push('settings screen visible');
+      if (!settingsSections.includes('Desktop') || /webOS|Luna|Palm/i.test(settingsSections)) {
+        failures.push('settings desktop copy');
+      }
+
+      const setupButton = document.querySelector('[data-route-button="channelSetup"]');
+      if (!(setupButton instanceof HTMLButtonElement)) {
+        failures.push('channel setup route button');
+      } else {
+        setupButton.click();
+      }
+      const setupScreen = document.querySelector('[data-screen="channelSetup"]');
+      const setupSteps = document.querySelector('[data-setup-steps]')?.textContent ?? '';
+      const setupValidation = document.querySelector('[data-setup-validation]')?.textContent ?? '';
+      if (document.documentElement.dataset.activeRoute !== 'channelSetup') {
+        failures.push('channel setup route activation');
+      }
+      if (!(setupScreen instanceof HTMLElement) || setupScreen.hidden) failures.push('channel setup screen visible');
+      if (!setupSteps.includes('Arrange channels') || !setupValidation.includes('Draft setup')) {
+        failures.push('channel setup workflow content');
+      }
+
       const playerButton = document.querySelector('[data-route-button="player"]');
       if (!(playerButton instanceof HTMLButtonElement)) {
         failures.push('player route button');
@@ -224,6 +294,7 @@ export async function runSmokeAssertions(
         playerButton.click();
       }
       const playerScreen = document.querySelector('[data-screen="player"]');
+      const playerPresentation = document.querySelector('[data-player-presentation-surface]');
       const osdOverlay = document.querySelector('[data-overlay="playerOsd"]');
       const nowPlayingTitle = document.querySelector('[data-overlay-now-playing-title]')?.textContent ?? '';
       const miniGuideButton = document.querySelector('[data-overlay-action="openMiniGuide"]');
@@ -245,15 +316,66 @@ export async function runSmokeAssertions(
       if (document.documentElement.dataset.activeRoute !== 'player') failures.push('player route activation');
       if (!(playerScreen instanceof HTMLElement) || playerScreen.hidden) failures.push('player screen visible');
       if (!(osdOverlay instanceof HTMLElement) || osdOverlay.hidden) failures.push('OSD visible');
+      if (!(playerPresentation instanceof HTMLElement)) failures.push('player presentation surface');
+      if (!(overlayStack instanceof HTMLElement) || overlayStack.hidden) failures.push('player overlay stack visible');
+      if (
+        playerPresentation instanceof HTMLElement &&
+        playerScreen instanceof HTMLElement &&
+        overlayStack instanceof HTMLElement
+      ) {
+        const presentationZ = numericZIndex(playerPresentation);
+        const screenZ = numericZIndex(playerScreen);
+        const overlayZ = numericZIndex(overlayStack);
+        if (!(presentationZ < screenZ && screenZ < overlayZ)) {
+          failures.push('rd15 z-order ' + JSON.stringify({ presentationZ, screenZ, overlayZ }));
+        }
+      }
       if (nowPlayingTitle !== 'The Midnight Archive') failures.push('now playing title ' + nowPlayingTitle);
       if (!(miniGuideOverlay instanceof HTMLElement) || miniGuideOverlay.hidden) failures.push('mini guide visible');
+      assertTopElementAtCenter(miniGuideOverlay, 'mini guide z-order');
       if (!miniGuideText.includes('101') || !miniGuideText.includes('The Midnight Archive')) {
         failures.push('mini guide fake data');
       }
       if (!(channelNumberOverlay instanceof HTMLElement) || channelNumberOverlay.hidden) {
         failures.push('channel number visible');
       }
+      assertTopElementAtCenter(channelNumberOverlay, 'channel number z-order');
       if (channelNumberValue !== '4--') failures.push('channel number value ' + channelNumberValue);
+      const nowPlayingOverlay = document.querySelector('[data-overlay="nowPlaying"]');
+      if (
+        osdOverlay instanceof HTMLElement &&
+        nowPlayingOverlay instanceof HTMLElement &&
+        rectsOverlap(osdOverlay, nowPlayingOverlay)
+      ) {
+        failures.push('OSD now-playing incoherent overlap');
+      }
+
+      const closeOverlayButton = document.querySelector('[data-overlay-action="closeTopOverlay"]');
+      const playerOsdButton = document.querySelector('[data-focus-id="player-osd"]');
+      if (!(closeOverlayButton instanceof HTMLButtonElement)) {
+        failures.push('close overlay action');
+      } else {
+        closeOverlayButton.click();
+        closeOverlayButton.click();
+        closeOverlayButton.click();
+      }
+      if (
+        !(playerOsdButton instanceof HTMLButtonElement) ||
+        document.activeElement !== playerOsdButton ||
+        playerOsdButton.tabIndex !== 0
+      ) {
+        failures.push(
+          'overlay focus fallback ' +
+            JSON.stringify({
+              activeFocus:
+                document.activeElement instanceof HTMLElement
+                  ? document.activeElement.dataset.focusId ?? ''
+                  : '',
+              playerOsdTabIndex:
+                playerOsdButton instanceof HTMLButtonElement ? playerOsdButton.tabIndex : null,
+            }),
+        );
+      }
 
       window.open('https://example.com');
       navigator.permissions?.query?.({ name: 'geolocation' }).catch(() => undefined);
@@ -261,6 +383,15 @@ export async function runSmokeAssertions(
       return { failures };
     })();
   `) as { failures: string[] };
+
+  if (result.failures.length === 0) {
+    try {
+      await assertFullscreenContinuity(window, result.failures);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      result.failures.push('fullscreen continuity ' + message);
+    }
+  }
 
   await window.webContents.executeJavaScript(`
     location.assign('https://example.com/disallowed-navigation');

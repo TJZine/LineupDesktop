@@ -170,33 +170,34 @@ export function createSettingsSections(
   return [
     {
       id: 'playback',
-      title: 'Playback preview',
-      detail: 'Renderer-only defaults for how the fake player opens.',
+      title: 'Desktop playback preview',
+      detail: 'Renderer-only defaults for the app-owned presentation surface.',
       items: [
         {
           id: 'launch-mode',
           label: 'Startup surface',
-          valueLabel: state.launchMode === 'windowed' ? 'Windowed' : 'Fullscreen preview',
-          description: 'Changes the local preview label only.',
+          valueLabel:
+            state.launchMode === 'windowed' ? 'Windowed' : 'Fullscreen presentation preview',
+          description: 'Changes this renderer session label only; no desktop preference is saved.',
         },
         {
           id: 'preview-badges',
           label: 'Preview badges',
           valueLabel: state.previewBadgesEnabled ? 'Shown' : 'Hidden',
-          description: 'Controls fake status markers in this renderer session.',
+          description: 'Controls local preview markers without changing playback runtime state.',
         },
       ],
     },
     {
       id: 'guide',
       title: 'Guide display',
-      detail: 'Local guide presentation choices that do not contact scheduler runtime.',
+      detail: 'Local guide presentation choices that do not contact live Plex or scheduler runtime.',
       items: [
         {
           id: 'guide-density',
           label: 'Density',
           valueLabel: state.guideDensity === 'comfortable' ? 'Comfortable' : 'Compact',
-          description: 'Adjusts fake guide copy for this session.',
+          description: 'Adjusts renderer guide copy for this session only.',
         },
       ],
     },
@@ -209,7 +210,7 @@ export function createSettingsSections(
           id: 'setup-reminder',
           label: 'Setup reminder',
           valueLabel: state.setupReminderEnabled ? 'On' : 'Off',
-          description: 'Keeps the channel setup route visible in the preview.',
+          description: 'Keeps the local channel setup route visible without writing preferences.',
         },
       ],
     },

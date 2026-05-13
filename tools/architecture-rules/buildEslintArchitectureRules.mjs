@@ -29,6 +29,11 @@ const nodeBuiltinImportPatterns = Array.from(new Set(
   ],
 )).sort();
 
+/**
+ * Transforms data-owned architecture rules into ESLint flat-config
+ * restrictions, including owner fallbacks, denied imports/globals, dynamic
+ * import checks, and named integration seam allowlists.
+ */
 export function buildEslintArchitectureRules(rules) {
   return [
     buildBoundaryRule(rules.domainBoundary, BOUNDARY_MESSAGES.domainBoundary),

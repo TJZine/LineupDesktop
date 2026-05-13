@@ -83,6 +83,7 @@ type PersistenceFileReadResult =
       diagnostics: readonly PersistenceRendererSafeDiagnostic[];
     };
 
+/** Main-owned credential persistence serializes mutations, schema-checks loads, writes by temp-file rename, and keeps plaintext secrets on main-owned read paths. */
 export class DesktopPersistenceStore {
   private readonly persistenceFilePath: string;
   private readonly secureStringCodec: SecureStringCodec;

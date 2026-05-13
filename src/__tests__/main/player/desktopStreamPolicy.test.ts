@@ -87,6 +87,8 @@ function decideFixture(name: keyof typeof desktopStreamPolicyInputs): DesktopStr
   assertNoForbiddenFields(decision, `decision.${name}`);
   assertNoForbiddenText(decision);
   assert.equal(decision.summary.action, decision.kind);
+  assert.equal(Object.hasOwn(decision.summary, 'audioLanguage'), true);
+  assert.equal(Object.hasOwn(decision.summary, 'subtitleLanguage'), true);
   assert.ok(decision.reasonCodes.length > 0, 'expected stable reason codes');
   assert.ok(
     decision.unknowns.includes('desktop-parity-unproven'),
@@ -210,6 +212,42 @@ test('desktop stream policy records subtitle fallback through supported delivery
   ]);
 });
 
+test('desktop stream policy prefers forced subtitles over default subtitles without language matching', () => {
+  const decision = decideFixture('forcedSubtitle');
+
+  assert.equal(decision.kind, 'direct-play');
+  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-es-forced');
+  assert.equal(decision.summary.subtitleLanguage, 'es');
+  assert.deepEqual(decision.reasonCodes, [
+    'direct-play-supported',
+    'forced-subtitle-selected',
+  ]);
+});
+
+test('desktop stream policy selects default subtitles and preserves selected languages', () => {
+  const decision = decideFixture('defaultSubtitle');
+
+  assert.equal(decision.kind, 'direct-play');
+  assert.equal(decision.selectedTrackIds.audio, 'audio-track-fr-aac-default');
+  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-de-default');
+  assert.equal(decision.summary.audioLanguage, 'fr');
+  assert.equal(decision.summary.subtitleLanguage, 'de');
+  assert.deepEqual(decision.reasonCodes, ['direct-play-supported']);
+});
+
+test('desktop stream policy does not use language mismatch alone to replace requested tracks', () => {
+  const decision = decideFixture('languageMismatch');
+
+  assert.equal(decision.kind, 'direct-play');
+  assert.equal(decision.selectedTrackIds.audio, 'audio-track-ja-opus');
+  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-it-sidecar');
+  assert.equal(decision.summary.audioCodec, 'opus');
+  assert.equal(decision.summary.audioLanguage, 'ja');
+  assert.equal(decision.summary.subtitleDelivery, 'sidecar');
+  assert.equal(decision.summary.subtitleLanguage, 'it');
+  assert.deepEqual(decision.reasonCodes, ['direct-play-supported']);
+});
+
 test('desktop stream policy falls back when requested subtitle exists but has unsupported delivery', () => {
   const decision = decideDesktopStreamPolicy({
     ...desktopStreamPolicyInputs.subtitleFallback,
@@ -225,6 +263,16 @@ test('desktop stream policy falls back when requested subtitle exists but has un
   ]);
   assert.equal(decision.reasonCodes.includes('direct-stream-subtitle-conversion'), false);
   assert.equal(decision.reasonCodes.includes('requested-subtitle-unavailable'), false);
+});
+
+test('desktop stream policy converts requested incompatible subtitles when conversion is supported', () => {
+  const decision = decideFixture('subtitleConversion');
+
+  assert.equal(decision.kind, 'direct-stream');
+  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-image-burn');
+  assert.equal(decision.summary.subtitleDelivery, 'burn-in');
+  assert.equal(decision.summary.subtitleLanguage, 'en');
+  assert.deepEqual(decision.reasonCodes, ['direct-stream-subtitle-conversion']);
 });
 
 test('desktop stream policy does not use audio fallback when switching is unsupported', () => {
@@ -388,6 +436,15 @@ test('desktop stream policy returns explicit unknowns for incomplete profile and
     'profile-transcode-support-unknown',
     'profile-video-support-unknown',
   ]);
+});
+
+test('desktop stream policy treats unknown dynamic range as incomplete candidate HDR facts', () => {
+  const decision = decideFixture('unknownDynamicRange');
+
+  assert.equal(decision.kind, 'unsupported');
+  assert.equal(decision.summary.dynamicRange, 'unknown');
+  assert.deepEqual(decision.reasonCodes, ['candidate-facts-incomplete']);
+  assertHasUnknowns(decision, ['candidate-hdr-unknown']);
 });
 
 test('desktop stream policy does not promote Windows RD-06/RD-07 sample facts to codec parity', () => {

@@ -53,6 +53,11 @@ export type WindowFullscreenIntentEnvelope = RendererIntentEnvelope<Record<strin
   intent: 'window.enterFullscreen' | 'window.exitFullscreen';
 };
 
+/**
+ * This is the narrow renderer-facing bridge contract exposed by preload.
+ * Invoke methods return typed result envelopes expected from authorized main
+ * handlers; event subscriptions return an unsubscribe function.
+ */
 export interface LineupDesktopPreloadApi {
   shell: {
     getCapabilities: () => Promise<ShellIpcResult<ShellCapabilities>>;

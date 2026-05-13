@@ -75,6 +75,10 @@ export function binarySearchForItem(positionInLoop: number, itemStartOffsets: nu
   return low;
 }
 
+/**
+ * Program lookup is deterministic from anchor time, cumulative item offsets,
+ * and modular loop position, including wraparound before the anchor.
+ */
 export function calculateProgramAtTime(
   queryTime: number,
   index: ScheduleIndex,

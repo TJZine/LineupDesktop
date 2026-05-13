@@ -38,6 +38,11 @@ export type PlayerRendererIntentCoverage = AssertTrue<
   IsExactUnion<PlayerRendererIntent, RendererPlayerIntent>
 >;
 
+/**
+ * Renderer intent envelopes are the shared renderer-to-main command shape;
+ * additions must be reviewed as cross-process payload surface, not local UI
+ * data.
+ */
 export interface RendererIntentEnvelope<TPayload = unknown> {
   intent: RendererIntent;
   requestId: string;
@@ -66,6 +71,10 @@ export const LINEUP_PLAYER_CLEANUP_CHANNEL = 'lineup:player:cleanup' as const;
 
 export const LINEUP_PLAYER_EVENT_CHANNEL = 'lineup:player:event' as const;
 
+/**
+ * Known privileged renderer payload field names are denied at contract seams.
+ * Review additions/removals with secret-flow and native-handle exposure impact.
+ */
 export const RENDERER_FORBIDDEN_PAYLOAD_KEYS = [
   'rawMediaUrl',
   'tokenizedUrl',

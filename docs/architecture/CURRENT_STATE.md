@@ -130,6 +130,77 @@ video/fullscreen behavior, live Plex transport, production native-helper
 playback, packaging/signing/update behavior, app-path or `safeStorage` runtime
 wiring, new preload/renderer APIs, dependencies, or copied/adapted upstream
 source.
+RD-14 is complete. Unit 1 added the first focused renderer desktop input owner
+under `src/renderer/desktopInput.ts`, keeping the renderer unprivileged and
+fake-backed while preserving RD-13 route/focus behavior. The unit moves keyboard
+shortcut mapping, text-entry bypass for editable targets, browser-safe gamepad
+normalization/polling/repeat policy, fullscreen dispatch, and runtime input
+cleanup out of the renderer composition root. Unit 2 added a focused main-owned
+window controller under `src/main/window/shellWindowController.ts` for
+BrowserWindow creation/options, fullscreen intent execution, normal bounds
+capture, display id custody, and restore/fallback placement policy. It keeps
+`src/main/index.ts` as composition/IPC wiring, preserves the existing
+`window.setFullscreen(boolean)` response shape, waits for stable fullscreen
+leave before restore, and fits restore bounds against current display work
+areas. Unit 3 added a focused main-owned foreground app-command controller under
+`src/main/window/shellAppCommandController.ts`. The controller listens only to
+the shell `BrowserWindow` `app-command` event, uses no `globalShortcut`, maps
+`browser-backward` to the existing renderer back path through synthetic
+`Escape` input, intentionally ignores `browser-forward`, and leaves media app
+commands unhandled by product code. Unit 4 added renderer-owned DOM cursor
+presentation under `src/renderer/desktopCursor.ts`. The cursor state remains
+renderer-local, starts visible, hides after inactivity or mapped desktop
+keyboard/gamepad input, shows on pointer/mouse activity, and restores visible
+state on unload cleanup through scoped CSS. Unit 5 closed the Windows platform
+gate using the dev-only RD-06 native-presentation harness and local ignored
+redacted evidence under `docs/runs/rd-14-window-input-fullscreen-ux/`.
+Preflight and smoke passed on Windows with dummy local and HTTP media, active
+video pixels, renderer overlay/native-boundary composition, fullscreen
+composition, app-owned input/focus simulation, helper crash detection, cleanup,
+no forbidden header, and redacted evidence scan success. The Windows matrix
+records a two-display 100% DPI environment, media-key/gamepad availability
+notes, and the lack of current text-entry controls in the fake settings/channel
+setup UI while preserving Unit 1 automated text-input bypass proof. RD-14 added
+no preload method, IPC channel, contract event, renderer-facing OS command
+payload, main/native cursor control, production native-helper playback, Plex
+runtime behavior, dependency, package, lockfile, or upstream source import.
+RD-15 is complete. Units 1 and 2 hardened the renderer-owned fake-backed UI so
+player overlays, OSD, mini guide, channel badge, guide/EPG, settings, and
+channel setup compose predictably over the player presentation surface with
+stable route reachability, z-order, fullscreen bridge continuity, deterministic
+focus fallback, and Desktop-accurate local settings copy. Unit 3 extended and
+ran the dev-only RD-06 native-presentation harness for RD-15 proof: Windows
+preflight passed, Windows native-presentation smoke passed under
+`docs/runs/rd-15-ui-over-native-video-integration/`, the manifest status is
+`passed`, and the summary records `RD-15 native presentation UI: 16/16
+observed` across windowed and fullscreen native-video composition, EPG, OSD,
+mini guide, channel badge, settings, channel setup, overlays, renderer focus,
+helper cleanup, and redaction gates. `npm run test:harness-docs`, `npm run
+verify:redaction`, and `npm run verify` passed after the Unit 3 harness
+revision, and implementation review found no blockers. RD-15 remains a
+renderer/dev-harness integration closeout only: it adds no production
+native-helper playback, live Plex transport, preload or contract expansion,
+product IPC, packaging behavior, dependency or lockfile change, live renderer
+Plex API, or upstream source import.
+RD-16 is complete. Units 1 and 2 hardened the main/player stream-policy and
+main/Plex resolver seams for subtitle, audio, HDR, and track identity behavior:
+forced/default subtitles, subtitle-off, requested missing/incompatible audio
+and subtitles, burn-in/conversion decisions, audio fallback, language metadata
+preservation without language-preference selection, HDR10, Dolby Vision,
+unknown dynamic range, explicit unsupported/unknown reasons, and public/private
+track id separation are covered by deterministic tests. Unit 4 extended and ran
+the dev-only RD-06 native-presentation harness for RD-16 proof: Windows
+preflight passed, Windows native-presentation smoke passed under
+`docs/runs/rd-16-subtitle-audio-hdr-hardening/`, and the summary records
+`RD-16 media matrix: observed (multi-audio:observed,
+subtitle-bearing:observed, hdr:observed, hdr-unavailable:observed)` while
+keeping `tracks: not-proven-by-dummy-visual-media`. `npm run
+test:harness-docs`, `npm run verify:redaction`, and `npm run verify` passed
+during closeout. RD-16 remains policy/resolver/dev-harness hardening only: it
+adds no production native-helper playback, live Plex transport, preload or
+contract expansion, product IPC, packaging behavior, dependency or lockfile
+change, live renderer Plex API, preferred-language selection, adapter
+current-request membership validation, or upstream source import.
 
 ## Product Invariants
 
@@ -153,17 +224,17 @@ source.
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
 | Import provenance | `docs/architecture/import-ledger.md` | Scaffolded |
 | File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size guardrails, temporary oversized-file allowlist rationale, decomposition/revisit triggers, and Tier 3 file-shape verification |
-| Electron main shell | `src/main/index.ts`, `src/main/protocol.ts`, and `src/main/smokeAssertions.ts` | Minimal secure shell frame with smoke-only assertion ownership split out of the main startup/composition entrypoint |
+| Electron main shell | `src/main/index.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with smoke-only assertion ownership split out of the startup/composition entrypoint, plus RD-14 Unit 2 main-owned BrowserWindow/fullscreen/display/restore controller and Unit 3 foreground app-command controller while `src/main/index.ts` remains composition and IPC wiring |
 | Preload bridge | `src/preload/index.cts` | Narrow shell/window/player bridge with runtime payload guards; guard vocabulary is kept in the sandbox-compatible preload entrypoint, and the integration seam reads preload source text plus renderer-safe contracts to parity-test guard vocabulary, channel constants, the single `lineupDesktop` exposure, and approved `ipcRenderer` method/channel pairs without importing or executing preload |
-| Renderer shell | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md) | RD-13/ARCH-01 unprivileged app shell with route, workflow, EPG, overlay, focus, and style surfaces |
+| Renderer shell | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md) | RD-13/ARCH-01 unprivileged app shell with route, workflow, EPG, overlay, focus, and style surfaces; RD-14 focused desktop input and DOM cursor owners; and RD-15 fake-backed UI-over-player-surface composition for overlays, guide/EPG, settings, channel setup, z-order, fullscreen bridge continuity, and deterministic renderer focus |
 | Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window/player bridge contract |
 | Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, diagnostic, IPC result, and runtime event-guard contract |
 | IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window/player IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
 | Persistence contract vocabulary | `src/contracts/persistence.ts` | Renderer-safe account, credential-handle, selected-server, storage-status, diagnostic, and persistence forbidden-field vocabulary |
 | Plex contract vocabulary | `src/contracts/plex.ts` | Renderer-safe Plex profile, home-user, server, health, selection, library, media, collection, playlist, tag-directory summaries plus recursive forbidden-field checks for raw credentials, headers, URI-like fields, raw payloads, filesystem paths, and image keys |
 | Desktop player adapter boundary | `src/main/player/desktopPlayerAdapter.ts`, `src/main/player/nativePlayerHostPort.ts`, `src/main/player/nativePlayerHostProcess.ts`, and `src/main/player/playerIpc.ts` | Main-owned RD-07 adapter core, fakeable native-host process seam, and player IPC owner with renderer-intent validation, fakeable native-host event validation, request-id stale-event quarantine, real spawned helper test-double proof, helper/process failure normalization, cleanup/reap handling, runtime main/preload delivery, development/smoke fake-host activation, production unsupported/noop behavior, and renderer-safe diagnostics |
-| Desktop stream policy | `src/main/player/streamPolicy/desktopStreamPolicy.ts` and `src/main/player/streamPolicy/types.ts` | Main/player-owned RD-08 deterministic fixture policy for capability-driven direct play, direct stream, transcode, unsupported decisions, audio/subtitle fallback, HDR/Dolby Vision handling, stable reason codes, explicit unknowns, Windows RD-06/RD-07 sample-matrix proof, and safe policy outputs; not wired to Plex runtime, renderer UI, native helper, secure storage, or runtime IPC |
-| Plex stream resolver boundary | `src/main/plex/streamResolver.ts` | Main-owned RD-12 resolver that consumes injected selected-connection, active-credential, media-detail, and PMS-session ports; maps Plex media details into RD-08 stream-policy candidates; returns a private privileged playback descriptor separately from renderer-safe player load payloads, safe diagnostics, and request-scoped PMS leases |
+| Desktop stream policy | `src/main/player/streamPolicy/desktopStreamPolicy.ts` and `src/main/player/streamPolicy/types.ts` | Main/player-owned deterministic fixture policy for capability-driven direct play, direct stream, transcode, unsupported decisions, RD-16 forced/default subtitle handling, subtitle-off, requested missing/incompatible audio and subtitles, burn-in/conversion decisions, audio fallback, language metadata preservation without language-preference selection, HDR/Dolby Vision/unknown dynamic-range handling, stable reason codes, explicit unknowns, Windows RD-06/RD-07 sample-matrix proof, RD-16 redacted media-matrix proof, and safe policy outputs; not wired to Plex runtime, renderer UI, native helper, secure storage, or runtime IPC |
+| Plex stream resolver boundary | `src/main/plex/streamResolver.ts` | Main-owned RD-12/RD-16 resolver that consumes injected selected-connection, active-credential, media-detail, and PMS-session ports; maps Plex media details into stream-policy candidates; returns a private privileged playback descriptor separately from renderer-safe player load payloads, safe diagnostics, public renderer-safe track ids, and request-scoped PMS leases while keeping private Plex stream ids and future native/engine ids out of public surfaces |
 | Plex playback runtime boundary | `src/main/player/plexPlaybackRuntime.ts`, `src/main/player/plexPlaybackBridge.ts`, and `src/main/player/plexPlaybackComposition.ts` | Main-owned RD-12 runtime, scheduler/channel bridge, and thin composition seam for resolving current scheduled Plex media into safe player loads, applying request id plus epoch stale-event custody, cleaning PMS/player state on stop/switch/error/logout/server-change/profile-change/helper-crash/teardown/failure paths, rejecting unsafe or mismatched leases before player dispatch, and keeping private playback setup out of renderer/preload contracts |
 | Desktop persistence boundary | `src/main/persistence/appDataPaths.ts`, `src/main/persistence/secureStorageCodec.ts`, and `src/main/persistence/desktopPersistenceStore.ts` | Main-owned RD-09 app-data path, Electron safeStorage codec, encrypted Plex credential record, selected-server state, unavailable/corrupt classification, fail-closed no-plaintext fallback, and renderer-safe snapshot owner; not wired to Plex runtime, preload, renderer, scheduler/channel persistence, backup/restore, or production IPC |
 | Desktop Plex library domain | `src/main/plex/library/*` | Main-owned RD-10 imported/adapted Plex library parser/domain owner for library sections, media metadata, seasons, collections, playlists, tag directories, search hubs, pagination, request intent, and renderer-safe summaries; no live fetch/cache runtime, image URL construction, stream resolver runtime, preload, renderer, or playback URL setup |
@@ -186,7 +257,8 @@ source.
 - Windows-proven production playback host
 - Production Plex-to-native-helper playback setup using the private RD-12
   playback descriptor
-- production renderer player UI wiring
+- live renderer Plex APIs and production renderer-to-Plex/player API wiring
+- preload, contract, and product IPC expansion for live Plex/player runtime
 - preload/renderer persistence IPC wiring
 - encrypted credential backup/restore implementation
 - packaging/signing/update pipeline

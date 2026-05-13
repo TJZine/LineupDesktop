@@ -1,6 +1,10 @@
 import { PERSISTENCE_FORBIDDEN_RENDERER_FIELD_KEYS } from './persistence.js';
 import { PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS } from './player.js';
 
+/**
+ * Plex renderer summaries must omit credentials, raw connection details,
+ * headers, filesystem paths, raw payloads, and image-key material.
+ */
 export const PLEX_FORBIDDEN_RENDERER_FIELD_KEYS = [
   ...PERSISTENCE_FORBIDDEN_RENDERER_FIELD_KEYS,
   ...PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
@@ -157,6 +161,10 @@ export type PlexServerSelectionSummary =
       persisted: false;
     };
 
+/**
+ * Rejects known forbidden field names case-insensitively; it is not a general
+ * proof that arbitrary values are secret-free.
+ */
 export function containsPlexForbiddenRendererField(value: unknown): boolean {
   if (Array.isArray(value)) {
     return value.some((item) => containsPlexForbiddenRendererField(item));

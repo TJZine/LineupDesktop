@@ -138,6 +138,11 @@ const forbiddenPatterns = [
 
 const textFilePattern = /\.(md|ts|tsx|js|mjs|cjs|json|toml|yaml|yml|txt)$/u;
 
+/**
+ * Repository redaction scan walks text files in deterministic order and applies
+ * best-effort diagnostic redaction patterns for token query params, auth
+ * headers, credential schemes, and secret-shaped fields.
+ */
 export function collectFiles(root = repoRoot) {
   const files = [];
   walkDirectory(root, root, files);

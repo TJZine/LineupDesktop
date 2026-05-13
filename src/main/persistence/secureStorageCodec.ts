@@ -42,6 +42,10 @@ export class SecureStorageUnavailableError extends Error {
   }
 }
 
+/**
+ * The safeStorage seam fails closed when Electron reports unavailable or
+ * failed encryption checks; persistence does not use a plaintext fallback.
+ */
 export function createElectronSafeStorageCodec(
   safeStorage: ElectronSafeStorageLike,
 ): SecureStringCodec {

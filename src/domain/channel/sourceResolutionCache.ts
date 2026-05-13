@@ -105,6 +105,10 @@ export class SourceResolutionCache {
     this.sourceInFlight.clear();
   }
 
+  /**
+   * In-flight source resolution is shared per stable key, while invalidation
+   * bumps the key generation and aborts only the cache-owned transport signal.
+   */
   public invalidate(source: ChannelContentSource): void {
     const invalidatedKeys = new Set<string>();
     this.invalidateSource(source, invalidatedKeys);

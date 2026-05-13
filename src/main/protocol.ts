@@ -7,6 +7,11 @@ import { pathToFileURL } from 'node:url';
 export const LINEUP_CSP =
   "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none';";
 
+/**
+ * The lineup://shell handler serves only files under the renderer root with the
+ * approved MIME allowlist and CSP, rejecting traversal, search params, and
+ * non-shell hosts.
+ */
 const CONTENT_TYPES = new Map<string, string>([
   ['.html', 'text/html; charset=utf-8'],
   ['.js', 'text/javascript; charset=utf-8'],

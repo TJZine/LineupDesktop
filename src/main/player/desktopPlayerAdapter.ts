@@ -81,6 +81,10 @@ const PLAYER_TRACK_DELIVERY_TYPES = [
   'unknown',
 ] as const satisfies readonly PlayerTrackDeliveryType[];
 
+/**
+ * Maps renderer intents into closed host commands, validates host event
+ * semantics, quarantines stale request ids, and normalizes helper failures.
+ */
 export class DesktopPlayerAdapter {
   readonly #host: NativePlayerHostPort;
   readonly #onEvents?: (events: readonly PlayerEvent[]) => void;

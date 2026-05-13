@@ -4,6 +4,12 @@ export type PersistenceStorageAvailability = 'available' | 'unavailable';
 
 export type PersistenceRecordStatus = 'present' | 'missing' | 'corrupt' | 'unavailable';
 
+/**
+ * Persistence renderer snapshots may identify accounts, handles, and status,
+ * but these field-name classes must remain out of renderer/log/diagnostic
+ * surfaces because plaintext secrets may be returned only to main-owned
+ * callers.
+ */
 export const PERSISTENCE_FORBIDDEN_RENDERER_FIELD_KEYS = [
   'rawMediaUrl',
   'tokenizedUrl',
@@ -81,6 +87,10 @@ export interface PersistenceRendererSafeSnapshot {
   diagnostics: readonly PersistenceRendererSafeDiagnostic[];
 }
 
+/**
+ * Recursively rejects known persistence-forbidden renderer field names; callers
+ * still own value-level review for arbitrary strings and unlisted keys.
+ */
 export function containsPersistenceForbiddenRendererField(value: unknown): boolean {
   if (Array.isArray(value)) {
     return value.some((item) => containsPersistenceForbiddenRendererField(item));

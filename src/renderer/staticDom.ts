@@ -1,7 +1,7 @@
 const STATIC_SCREEN_MARKUP = `
 <section class="screen-stack" aria-live="polite" data-static-screens-mounted>
-  <section id="screen-player" class="screen screen--active" data-screen="player" data-style-surface="screen" aria-labelledby="screen-player-title">
-    <div class="player-surface" aria-label="Player surface">
+  <div class="player-presentation" data-player-presentation-surface aria-label="Player presentation surface">
+    <div class="player-surface" aria-hidden="true"></div>
       <div class="overlay-stack" data-overlay-stack>
         <section class="player-overlay channel-badge" data-overlay="channelBadge" aria-label="Channel badge">
           <strong data-overlay-channel-badge-number></strong>
@@ -55,7 +55,8 @@ const STATIC_SCREEN_MARKUP = `
           </div>
         </section>
       </div>
-    </div>
+  </div>
+  <section id="screen-player" class="screen screen--active" data-screen="player" data-style-surface="screen" aria-labelledby="screen-player-title">
     <div class="screen__content">
       <p class="screen__kicker" data-workflow-kicker="player">Now playing</p>
       <h2 id="screen-player-title">Player</h2>
@@ -105,7 +106,7 @@ const STATIC_SCREEN_MARKUP = `
       <p class="screen__kicker" data-workflow-kicker="settings">Settings</p>
       <h2 id="screen-settings-title">Settings</h2>
       <p data-workflow-primary="settings">Desktop preferences.</p>
-      <p data-workflow-secondary="settings">Local preview.</p>
+      <p data-workflow-secondary="settings">Desktop local preview.</p>
       <dl class="settings-summary">
         <div><dt>Source</dt><dd data-settings-source></dd></div>
         <div><dt>Channels</dt><dd data-settings-channels></dd></div>
@@ -129,7 +130,7 @@ const STATIC_SCREEN_MARKUP = `
       <p class="screen__kicker" data-workflow-kicker="channelSetup">Channel setup</p>
       <h2 id="screen-channel-setup-title">Channel setup</h2>
       <p data-workflow-primary="channelSetup">Lineup controls.</p>
-      <p data-workflow-secondary="channelSetup">Draft setup.</p>
+      <p data-workflow-secondary="channelSetup">Draft setup with no persistence.</p>
       <dl class="setup-summary">
         <div><dt>Source</dt><dd data-channel-setup-source></dd></div>
         <div><dt>Enabled</dt><dd data-channel-setup-enabled></dd></div>

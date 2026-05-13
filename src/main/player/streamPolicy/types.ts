@@ -42,6 +42,11 @@ export type DesktopStreamPolicyReasonCode =
   | 'profile-facts-incomplete'
   | 'transcode-unavailable';
 
+/**
+ * `desktop-parity-unproven` is surfaced as an unknown from the deterministic
+ * fixture policy; it informs support decisions without always blocking by
+ * itself.
+ */
 export type DesktopStreamPolicyUnknownCode =
   | 'profile-container-support-unknown'
   | 'profile-video-support-unknown'
@@ -150,7 +155,9 @@ export interface DesktopStreamPolicyDecision {
     container: string | null;
     videoCodec: string | null;
     audioCodec: string | null;
+    audioLanguage: string | null;
     subtitleDelivery: PlayerSubtitleDeliveryMode | null;
+    subtitleLanguage: string | null;
     dynamicRange: DesktopStreamDynamicRange | null;
     action: DesktopStreamPolicyDecisionKind;
   };

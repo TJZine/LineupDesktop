@@ -1,3 +1,8 @@
+/**
+ * Best-effort diagnostic redaction patterns cover token-shaped keys, auth
+ * headers, URLs, native handles, and secret-shaped fields before main-process
+ * errors are logged.
+ */
 const REDACTED_DIAGNOSTIC_KEYS = [
   'token',
   'authToken',

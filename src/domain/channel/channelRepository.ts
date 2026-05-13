@@ -33,6 +33,10 @@ export interface ChannelRepositoryConfig {
   logger?: Pick<ChannelLogger, 'warn'>;
 }
 
+/**
+ * Loads stored channel data through normalization/repair, marking didMutate
+ * when persisted shape, seeds, order, or current-channel pointers are corrected.
+ */
 export class ChannelRepository {
   private readonly store: ChannelPersistenceStore;
   private readonly clock: ChannelClock;

@@ -60,6 +60,11 @@ body {
     var(--color-app-bg);
 }
 
+html[data-desktop-cursor="hidden"],
+html[data-desktop-cursor="hidden"] * {
+  cursor: none !important;
+}
+
 button {
   border: 0;
   border-radius: var(--radius-control);
@@ -191,9 +196,18 @@ h2 {
 .screen-stack {
   display: grid;
   grid-template: "screen" minmax(0, 1fr) / minmax(0, 1fr);
+  position: relative;
   height: 100%;
   min-width: 0;
   min-height: 0;
+}
+
+.player-presentation {
+  grid-area: screen;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .screen-stack > .screen {
@@ -204,6 +218,7 @@ h2 {
 
 .screen {
   position: relative;
+  z-index: 10;
   display: grid;
   min-height: 0;
   overflow: hidden;

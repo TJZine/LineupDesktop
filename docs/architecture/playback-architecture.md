@@ -9,7 +9,13 @@ app-owned native-presentation smoke as RD-07's native surface proof. Production
 player commands currently return renderer-safe unsupported failures. RD-12 adds
 an injected main-owned Plex stream resolver and playback runtime, but production
 native-helper playback, live Plex transport composition, renderer UI
-integration, and product helper wiring remain unimplemented.
+integration with live Plex/player APIs, and product helper wiring remain
+unimplemented. RD-15 proves fake-backed renderer UI composition over the
+reviewed dev-only native-presentation boundary; it does not change production
+playback wiring. RD-16 hardens deterministic subtitle, audio, HDR, and track
+identity policy/resolver behavior and records redacted Windows media-matrix
+proof through the dev-only native-presentation harness, but it still does not
+enable production native-helper playback or live Plex transport.
 
 ## Current Hypothesis
 
@@ -123,6 +129,53 @@ Before production playback design hardens, a Windows spike must prove:
 - helper crash detection without corrupting current player state
 - redacted logs and diagnostics
 - acceptable DPI and multi-monitor behavior for MVP
+
+## RD-15 Native Presentation UI Proof
+
+RD-15 reuses the reviewed app-owned native-presentation direction as a
+dev-only proof boundary. Windows preflight and native-presentation smoke passed
+under `docs/runs/rd-15-ui-over-native-video-integration/`, the manifest status
+is `passed`, and the summary records `RD-15 native presentation UI: 16/16
+observed`.
+
+That proof covers active native video with RD-15 EPG, OSD, mini guide, channel
+badge, settings, channel setup, overlays, windowed composition, fullscreen
+composition, renderer focus, helper cleanup, and redaction gates. It remains
+evidence for renderer/native presentation composition only. Production
+native-helper playback, live Plex transport, preload/contracts, product IPC,
+packaging, and live renderer Plex APIs are still future roadmap work.
+
+## RD-16 Subtitle, Audio, HDR, And Track Identity
+
+RD-16 extends the existing main/player stream-policy and main/Plex resolver
+seams without expanding renderer, preload, product IPC, or production helper
+contracts. Renderer-facing track ids remain opaque public ids scoped to a
+resolved candidate/request. Plex stream ids, part keys, stream keys, URLs,
+headers, future native engine ids, and native handles remain private to
+main/helper setup and are not exposed in player load payloads, diagnostics, or
+renderer-safe events.
+
+The deterministic policy and resolver tests now cover forced/default subtitle
+selection, requested subtitle off, requested missing or incompatible audio and
+subtitles, burn-in/conversion decisions, audio fallback, language metadata
+preservation without preferred-language selection, HDR10, Dolby Vision, unknown
+dynamic range, explicit unsupported/unknown reasons, and public/private track
+id separation.
+
+Windows closeout proof used the dev-only native-presentation harness with an
+ignored redacted RD-16 media-matrix descriptor. Preflight and smoke passed under
+`docs/runs/rd-16-subtitle-audio-hdr-hardening/`; the smoke summary records
+`RD-16 media matrix: observed (multi-audio:observed,
+subtitle-bearing:observed, hdr:observed, hdr-unavailable:observed)`. The
+manifest deliberately keeps `tracks: not-proven-by-dummy-visual-media`; RD-16
+media proof comes from tester-observed safe local samples summarized through the
+redacted descriptor, not from dummy GIF playback.
+
+RD-16 does not add production native-helper playback, live Plex transport,
+preload or contract expansion, product IPC, packaging behavior,
+package/dependency/lockfile changes, live renderer Plex APIs, adapter
+current-request membership validation, preferred-language selection, or a
+Plex HTPC parity claim.
 
 ## Contract First
 
