@@ -4,39 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const architectureHealthDecisionTerms = [
-  'avoid',
-  'avoids',
-  'avoided',
-  'avoidance',
-  'decompose',
-  'decomposes',
-  'decomposed',
-  'decomposition',
-  'split',
-  'splits',
-  'splitting',
-  'extract',
-  'extracts',
-  'extracted',
-  'extraction',
-  'revisit',
-  'revisits',
-  'revisited',
-  'before',
-  'allowlist',
-  'allowlisted',
-  'allowlisting',
-];
-
-const architectureHealthDecisionPattern = new RegExp(
-  [
-    `\\b(?:${architectureHealthDecisionTerms.join('|')})\\b`,
-    '\\b(?:temporary row|guardrail row)\\b',
-    '\\bno\\s+(?:(?:oversized|guarded)s?|large[- ]files?|owner hotspots?)\\b',
-  ].join('|'),
-  'iu',
-);
+const architectureHealthDecisionPattern = /\b(?:Decision|Plan|Scope):[^\n]*(?:\b(?:avoid|avoids|avoided|avoidance|decompose|decomposes|decomposed|decomposition|split|splits|splitting|extract|extracts|extracted|extraction|revisit|revisits|revisited|allowlist|allowlisted|allowlisting)\b|\b(?:temporary row|guardrail row)\b|\bno\s+(?:(?:oversized|guarded)s?|large[- ]files?|owner hotspots?)\b)/iu;
+const maintainabilityVerificationPattern = /\b(?:verify:maintainability|maintainability verification|npm run verify:maintainability|npm run verify:architecture|npm run verify(?!:))\b/iu;
 
 const requiredFiles = [
   '.codannaignore',
@@ -226,11 +195,40 @@ const workflowAnchorMarkers = [
     path: 'docs/AGENTIC_DEV_WORKFLOW.md',
     label: 'production engineering guardrails',
     marker: '## Production Engineering Guardrails',
-    requiredPhrases: [
-      'Dependency changes must name the runtime owner',
-      'Configuration, credentials, app paths, diagnostics, logs',
-      'Architecture Health',
-      'Keep every committed checkpoint buildable and reversible',
+    requiredStructures: [
+      {
+        label: 'dependency governance',
+        test: (content) => sectionHasConcepts(content, '## Production Engineering Guardrails', [
+          /\bdependenc(?:y|ies)\b/iu,
+          /\bruntime owner\b/iu,
+          /\bverification\b|\bverified\b/iu,
+        ]),
+      },
+      {
+        label: 'configuration and diagnostics governance',
+        test: (content) => sectionHasConcepts(content, '## Production Engineering Guardrails', [
+          /\bconfiguration\b/iu,
+          /\bcredentials\b/iu,
+          /\bdiagnostics\b/iu,
+          /\blogs?\b/iu,
+        ]),
+      },
+      {
+        label: 'architecture health file-shape routing',
+        test: (content) => sectionHasConcepts(content, '## Production Engineering Guardrails', [
+          /\bArchitecture Health\b/iu,
+          /\bfile[- ]shape\b|\bowner hotspots?\b|\blarge[- ]files?\b/iu,
+          /\bdecomposition\b|\bavoidance\b|\ballowlist\b/iu,
+        ]),
+      },
+      {
+        label: 'checkpoint reversibility',
+        test: (content) => sectionHasConcepts(content, '## Production Engineering Guardrails', [
+          /\bcommitted checkpoint\b|\bcommit(?:ted)? step\b/iu,
+          /\bbuildable\b/iu,
+          /\breversible\b/iu,
+        ]),
+      },
     ],
   },
   {
@@ -287,6 +285,41 @@ const workflowAnchorMarkers = [
       'The original Lineup repo',
       'maintenance-program mechanics',
     ],
+  },
+];
+
+const planStandardStructures = [
+  {
+    label: 'impact dependency fields',
+    test: (content) => sectionHasConcepts(content, '## Impact Snapshot', [
+      /\bdependenc(?:y|ies)\b/iu,
+      /\bbuild-tool\b/iu,
+      /\bconfiguration\b/iu,
+      /\blockfile\b/iu,
+    ]),
+  },
+  {
+    label: 'dependency security provenance review',
+    test: (content) => sectionHasConcepts(content, '## Invariants And Scope Rules', [
+      /\bsecurity\b/iu,
+      /\blicensing\b/iu,
+      /\bprovenance\b/iu,
+    ]),
+  },
+  {
+    label: 'architecture health file-shape evidence',
+    test: (content) => sectionHasConcepts(content, '## Architecture Health', [
+      /\bfile[- ]shape\b/iu,
+      /\bowner hotspots?\b/iu,
+      /\bdecomposition\b|\bavoidance\b|\btemporary allowlist\b|\ballowlist decision\b/iu,
+    ]),
+  },
+  {
+    label: 'architecture health future-growth guardrail',
+    test: (content) => sectionHasConcepts(content, '## Architecture Health', [
+      /\bpre[- ]authorize\b/iu,
+      /\bfuture growth\b/iu,
+    ]),
   },
 ];
 
@@ -530,7 +563,7 @@ function checkTier3MaintainabilityPreflight(relativePath, content, errors) {
   if (!/file-shape-guardrails\.md|file[- ]shape|large[- ]file|oversized|owner hotspot/iu.test(section)) {
     errors.push(`${relativePath}: Tier 3 architecture health section missing file-shape evidence`);
   }
-  if (!/verify:maintainability|maintainability verification|npm run verify/iu.test(section)) {
+  if (!maintainabilityVerificationPattern.test(section)) {
     errors.push(`${relativePath}: Tier 3 architecture health section missing maintainability verification route`);
   }
   if (!architectureHealthDecisionPattern.test(section)) {
@@ -562,6 +595,14 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
+function sectionHasConcepts(content, heading, patterns) {
+  const section = markdownSection(content, heading);
+  if (section === null) {
+    return false;
+  }
+  return patterns.every((pattern) => pattern.test(section));
+}
+
 function checkWorkflowAnchors(root, errors) {
   const guidancePath = path.join(root, 'docs/agentic/external-guidance.md');
   const planStandardPath = path.join(root, 'docs/agentic/plan-authoring-standard.md');
@@ -569,7 +610,7 @@ function checkWorkflowAnchors(root, errors) {
     return;
   }
 
-  for (const { path: relativePath, label, marker, requiredPhrases = [] } of workflowAnchorMarkers) {
+  for (const { path: relativePath, label, marker, requiredPhrases = [], requiredStructures = [] } of workflowAnchorMarkers) {
     const absolutePath = path.join(root, relativePath);
     if (!fs.existsSync(absolutePath)) {
       continue;
@@ -581,6 +622,11 @@ function checkWorkflowAnchors(root, errors) {
     for (const phrase of requiredPhrases) {
       if (!content.includes(phrase)) {
         errors.push(`${relativePath}: missing ${label} phrase: ${phrase}`);
+      }
+    }
+    for (const structure of requiredStructures) {
+      if (!structure.test(content)) {
+        errors.push(`${relativePath}: missing ${label} structure: ${structure.label}`);
       }
     }
   }
@@ -619,15 +665,9 @@ function checkWorkflowAnchors(root, errors) {
       errors.push(`docs/agentic/plan-authoring-standard.md: missing active-plan heading reference ${heading}`);
     }
   }
-  for (const phrase of [
-    'dependency, build-tool, configuration, or lockfile changes',
-    'security/licensing/provenance considerations',
-    'Architecture Health',
-    'file-shape evidence',
-    'pre-authorize future growth',
-  ]) {
-    if (!planStandard.includes(phrase)) {
-      errors.push(`docs/agentic/plan-authoring-standard.md: missing production-engineering plan phrase ${phrase}`);
+  for (const structure of planStandardStructures) {
+    if (!structure.test(planStandard)) {
+      errors.push(`docs/agentic/plan-authoring-standard.md: missing production-engineering plan structure: ${structure.label}`);
     }
   }
 
