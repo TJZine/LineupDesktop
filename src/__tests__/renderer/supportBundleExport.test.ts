@@ -6,12 +6,16 @@ import {
   type DiagnosticsExportSupportBundleResult,
   type RedactionScanReport,
 } from '../../contracts/diagnostics.js';
-import { createWorkflowState } from '../../renderer/workflow.js';
+import {
+  activateWorkflowRoute,
+  applyWorkflowSettingsAction,
+  createWorkflowState,
+} from '../../renderer/workflow.js';
 import { applySupportBundleExportResult } from '../../renderer/supportBundleExport.js';
 
 test('support bundle export result applies succeeded status through renderer sanitization', async () => {
   const state = await applySupportBundleExportResult(
-    createWorkflowState('settings'),
+    () => createWorkflowState('settings'),
     async (): Promise<DiagnosticsExportSupportBundleResult> => ({
       status: 'succeeded',
       bundleId: 'bundle-1',
@@ -32,9 +36,44 @@ test('support bundle export result applies succeeded status through renderer san
   });
 });
 
+test('support bundle export result applies to the latest workflow state', async () => {
+  let currentState = applyWorkflowSettingsAction(createWorkflowState('settings'), 'exportSupportBundle');
+  const pendingExport = createDeferred<DiagnosticsExportSupportBundleResult>();
+  const pendingState = applySupportBundleExportResult(
+    () => currentState,
+    () => pendingExport.promise,
+  );
+
+  currentState = activateWorkflowRoute(
+    applyWorkflowSettingsAction(currentState, 'cycleGuideDensity'),
+    'guide',
+  );
+  pendingExport.resolve({
+    status: 'succeeded',
+    bundleId: 'bundle-2',
+    bundleDirectoryName: 'lineup-desktop-support-bundle-2',
+    createdAtMs: 1,
+    fileCount: 6,
+    byteCount: 512,
+    includedFiles: ['manifest.json'],
+    redactionReport: createReport(),
+  });
+
+  const state = await pendingState;
+
+  assert.equal(state.routeState.activeRoute, 'guide');
+  assert.equal(state.settingsDraft.guideDensity, 'compact');
+  assert.deepEqual(state.settingsDraft.supportBundleExport, {
+    status: 'succeeded',
+    bundleDirectoryName: 'lineup-desktop-support-bundle-2',
+    fileCount: 6,
+    redactionStatus: 'passed',
+  });
+});
+
 test('support bundle export rejection clears exporting state without exposing details', async () => {
   const state = await applySupportBundleExportResult(
-    createWorkflowState('settings'),
+    () => createWorkflowState('settings'),
     async () => {
       throw new Error('tokenizedUrl=https://secret.example');
     },
@@ -48,6 +87,20 @@ test('support bundle export rejection clears exporting state without exposing de
   });
   assert.equal(JSON.stringify(state).includes('secret.example'), false);
 });
+
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve(value: T): void;
+} {
+  let resolvePromise: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve: resolvePromise,
+  };
+}
 
 function createReport(overrides: Partial<RedactionScanReport> = {}): RedactionScanReport {
   return {

@@ -261,7 +261,7 @@ async function exportSupportBundle(): Promise<void> {
   });
 
   workflowState = await applySupportBundleExportResult(
-    workflowState,
+    () => workflowState,
     () => window.lineupDesktop.diagnostics.exportSupportBundle(),
   );
   renderApp();
