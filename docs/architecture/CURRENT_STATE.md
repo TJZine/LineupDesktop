@@ -130,38 +130,40 @@ video/fullscreen behavior, live Plex transport, production native-helper
 playback, packaging/signing/update behavior, app-path or `safeStorage` runtime
 wiring, new preload/renderer APIs, dependencies, or copied/adapted upstream
 source.
-RD-14 is in progress. Unit 1 adds the first focused renderer desktop input
-owner under `src/renderer/desktopInput.ts`, keeping the renderer unprivileged
-and fake-backed while preserving RD-13 route/focus behavior. The unit moves
-keyboard shortcut mapping, text-entry bypass for editable targets, browser-safe
-gamepad normalization/polling/repeat policy, fullscreen dispatch, and runtime
-input cleanup out of the renderer composition root. It does not add main,
-preload, contract, Plex, native/helper, dependency, CSS, package, lockfile, or
-Windows evidence behavior. Unit 2 adds a focused main-owned window controller
-under `src/main/window/shellWindowController.ts` for BrowserWindow
-creation/options, fullscreen intent execution, normal bounds capture, display
-id custody, and restore/fallback placement policy. It keeps `src/main/index.ts`
-as composition/IPC wiring, preserves the existing `window.setFullscreen(boolean)`
-response shape, waits for stable fullscreen leave before restore, and fits
-restore bounds against current display work areas. It does not add preload,
-contract, renderer-facing Electron object, Plex, native/helper, dependency,
-package, or lockfile behavior. Unit 3 adds a focused main-owned foreground
-app-command controller under `src/main/window/shellAppCommandController.ts`.
-The controller listens only to the shell `BrowserWindow` `app-command` event,
-uses no `globalShortcut`, maps `browser-backward` to the existing renderer back
-path through synthetic `Escape` input, intentionally ignores
-`browser-forward`, and leaves media app commands unhandled for the later
-Windows/manual proof unit. It adds no preload method, IPC channel, contract
-event, renderer-facing OS command payload, Plex/player/native-helper behavior,
-renderer input rewrite, dependency, package, or lockfile behavior. RD-14 parent
-Unit 4 adds renderer-owned DOM cursor presentation under
-`src/renderer/desktopCursor.ts`. The cursor state remains renderer-local,
-starts visible, hides after inactivity or mapped desktop keyboard/gamepad
-input, shows on pointer/mouse activity, and restores visible state on unload
-cleanup through scoped CSS. It adds no main/native cursor control, production
-native surface ownership, preload/contract API, Plex/player/native-helper
-behavior, dependency, package, or lockfile behavior. RD-14 parent closeout still
-requires the Windows native-presentation/manual matrix unit.
+RD-14 is complete. Unit 1 added the first focused renderer desktop input owner
+under `src/renderer/desktopInput.ts`, keeping the renderer unprivileged and
+fake-backed while preserving RD-13 route/focus behavior. The unit moves keyboard
+shortcut mapping, text-entry bypass for editable targets, browser-safe gamepad
+normalization/polling/repeat policy, fullscreen dispatch, and runtime input
+cleanup out of the renderer composition root. Unit 2 added a focused main-owned
+window controller under `src/main/window/shellWindowController.ts` for
+BrowserWindow creation/options, fullscreen intent execution, normal bounds
+capture, display id custody, and restore/fallback placement policy. It keeps
+`src/main/index.ts` as composition/IPC wiring, preserves the existing
+`window.setFullscreen(boolean)` response shape, waits for stable fullscreen
+leave before restore, and fits restore bounds against current display work
+areas. Unit 3 added a focused main-owned foreground app-command controller under
+`src/main/window/shellAppCommandController.ts`. The controller listens only to
+the shell `BrowserWindow` `app-command` event, uses no `globalShortcut`, maps
+`browser-backward` to the existing renderer back path through synthetic
+`Escape` input, intentionally ignores `browser-forward`, and leaves media app
+commands unhandled by product code. Unit 4 added renderer-owned DOM cursor
+presentation under `src/renderer/desktopCursor.ts`. The cursor state remains
+renderer-local, starts visible, hides after inactivity or mapped desktop
+keyboard/gamepad input, shows on pointer/mouse activity, and restores visible
+state on unload cleanup through scoped CSS. Unit 5 closed the Windows platform
+gate using the dev-only RD-06 native-presentation harness and local ignored
+redacted evidence under `docs/runs/rd-14-window-input-fullscreen-ux/`.
+Preflight and smoke passed on Windows with dummy local and HTTP media, active
+video pixels, renderer overlay/native-boundary composition, fullscreen
+composition, app-owned input/focus simulation, helper crash detection, cleanup,
+no forbidden header, and redacted evidence scan success. The Windows matrix
+records a two-display 100% DPI environment, media-key/gamepad availability
+notes, and the lack of current text-entry controls in the fake settings/channel
+setup UI while preserving Unit 1 automated text-input bypass proof. RD-14 added
+no preload method, IPC channel, contract event, renderer-facing OS command
+payload, main/native cursor control, production native-helper playback, Plex
+runtime behavior, dependency, package, lockfile, or upstream source import.
 
 ## Product Invariants
 
