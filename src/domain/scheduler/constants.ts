@@ -1,7 +1,10 @@
+/** Scheduler tick interval used to compare expected and observed timer wakeups. */
 export const SYNC_INTERVAL_MS = 1000;
 
+/** Soft drift threshold below which the scheduler syncs without hard resync. */
 export const MAX_DRIFT_MS = 500;
 
+/** Hard resync threshold for late timer wakeups that exceed normal adjustment. */
 export const RESYNC_THRESHOLD_MS = 2000;
 
 export const SCHEDULER_ERROR_MESSAGES = {
