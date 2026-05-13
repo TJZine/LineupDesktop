@@ -12,8 +12,10 @@ import {
   buildNativePrerequisiteEvidence,
   createDummyVisualMediaBuffer,
   parseArgs,
+  rd15NativePresentationProofs,
   sanitizeHelperEvent,
   scanForbiddenEvidenceContent,
+  summarizeRd15NativePresentationProofs,
   validatePreflightFacts,
 } from '../libmpv-spike/rd-06-native-libmpv-host-spike.mjs';
 
@@ -253,6 +255,103 @@ test('native presentation smoke uses app-owned fullscreen host and same-boundary
   assert.match(helperSource, /glScissor/u);
 });
 
+test('native presentation smoke uses RD-15 proof mirror instead of only hard-coded RD06 overlay', () => {
+  assert.match(harnessSource, /config\.nativePresentation === true \? buildRd15NativePresentationHtml\(\) : buildRd06OverlayHtml\(\)/u);
+  assert.match(harnessSource, /function buildRd15NativePresentationHtml\(\)/u);
+  assert.match(harnessSource, /data-rd15-proof="epg"/u);
+  assert.match(harnessSource, /data-rd15-proof="osd"/u);
+  assert.match(harnessSource, /data-rd15-proof="mini-guide"/u);
+  assert.match(harnessSource, /data-rd15-proof="channel-badge"/u);
+  assert.match(harnessSource, /data-rd15-proof="settings"/u);
+  assert.match(harnessSource, /data-rd15-proof="channel-setup"/u);
+  assert.match(harnessSource, /data-rd15-proof="overlays"/u);
+  assert.match(harnessSource, /data-rd15-proof-focus/u);
+  assert.match(harnessSource, /#00ff00/u);
+  assert.match(harnessSource, /function buildRd06OverlayHtml\(\)/u);
+  assert.match(harnessSource, /aria-label="rd06-overlay"/u);
+});
+
+test('native presentation smoke requires and summarizes named RD-15 UI surfaces', () => {
+  assert.deepEqual(rd15NativePresentationProofs, [
+    'rd15-ui-epg',
+    'rd15-ui-osd',
+    'rd15-ui-mini-guide',
+    'rd15-ui-channel-badge',
+    'rd15-ui-settings',
+    'rd15-ui-channel-setup',
+    'rd15-ui-overlays',
+    'rd15-ui-focus',
+  ]);
+  assert.match(harnessSource, /const rd15UiProofs = collectRd15NativePresentationProofs\(events\)/u);
+  assert.match(harnessSource, /const rd15UiProofsObserved = !nativePresentation \|\| rd15NativePresentationProofs\.every/u);
+  assert.match(harnessSource, /rd15NativePresentationModes\.every\(\(presentationMode\)/u);
+  assert.match(harnessSource, /hasRd15NativePresentationProof\(rd15UiProofs, proof, presentationMode\)/u);
+  assert.match(harnessSource, /event\.markerPixelsObserved !== true/u);
+  assert.match(harnessSource, /presentationMode === 'fullscreen'\s*\?\s*event\.desktopPixelsObserved === true/u);
+  assert.match(harnessSource, /rd15UiProofsObserved/u);
+  assert.match(harnessSource, /rd15NativePresentationUi: nativePresentation \? summarizeRd15NativePresentationProofs\(rd15UiProofs\) : 'not-requested'/u);
+  assert.match(harnessSource, /RD-15 native presentation UI/u);
+
+  const summary = summarizeRd15NativePresentationProofs(new Map([
+    ['rd15-ui-epg', new Map([
+      ['windowed', {
+        visiblePixelsObserved: true,
+        markerPixelsObserved: true,
+        rendererPixelsObserved: true,
+      }],
+      ['fullscreen', {
+        visiblePixelsObserved: true,
+        markerPixelsObserved: true,
+        desktopPixelsObserved: true,
+      }],
+    ])],
+    ['rd15-ui-focus', new Map([
+      ['windowed', {
+        visiblePixelsObserved: true,
+        markerPixelsObserved: true,
+        rendererPixelsObserved: true,
+        focused: true,
+      }],
+      ['fullscreen', {
+        visiblePixelsObserved: true,
+        markerPixelsObserved: true,
+        desktopPixelsObserved: true,
+        focused: true,
+      }],
+    ])],
+  ]));
+  assert.deepEqual(summary['rd15-ui-epg'], { windowed: 'observed', fullscreen: 'observed' });
+  assert.deepEqual(summary['rd15-ui-focus'], { windowed: 'observed', fullscreen: 'observed' });
+  assert.deepEqual(summary['rd15-ui-osd'], { windowed: 'unavailable', fullscreen: 'unavailable' });
+});
+
+test('RD-15 native presentation UI proof uses pixel capture in windowed and fullscreen modes', () => {
+  const rd15ObserverStart = harnessSource.indexOf('async function observeRd15NativePresentationUi');
+  const rd15ObserverEnd = harnessSource.indexOf('async function observeActivePlayback', rd15ObserverStart);
+  const rd15ObserverSource = harnessSource.slice(rd15ObserverStart, rd15ObserverEnd);
+
+  assert.match(rd15ObserverSource, /window\.webContents\.capturePage\(\)/u);
+  assert.match(rd15ObserverSource, /captureDesktopBitmapForWindow\(window\)/u);
+  assert.match(rd15ObserverSource, /scanGreenMarkerPixels\(rendererBitmap, rendererSize, surface\.rect\)/u);
+  assert.match(rd15ObserverSource, /scanGreenMarkerPixels\(desktopCapture\.bitmap, desktopCapture\.size, desktopRect\)/u);
+  assert.match(rd15ObserverSource, /presentationMode/u);
+  assert.match(rd15ObserverSource, /markerPixelsObserved/u);
+  assert.match(rd15ObserverSource, /rendererPixelsObserved/u);
+  assert.match(rd15ObserverSource, /desktopPixelsObserved/u);
+  assert.match(rd15ObserverSource, /pixelSource/u);
+  assert.doesNotMatch(rd15ObserverSource, /style\.visibility !== "hidden" && style\.display !== "none"/u);
+
+  assert.match(harnessSource, /await observeRd15NativePresentationUi\(window, 'windowed'\)/u);
+  assert.match(harnessSource, /event\.proof === 'fullscreen-composition'/u);
+  assert.match(harnessSource, /event\.nativePresentationFullscreen === true/u);
+  assert.match(harnessSource, /event\.visiblePixelsObserved === true/u);
+  assert.match(harnessSource, /await observeRd15NativePresentationUi\(window, 'fullscreen'\)/u);
+  assertOrder(harnessSource, [
+    "event.proof === 'fullscreen-composition'",
+    "await observeRd15NativePresentationUi(window, 'fullscreen')",
+  ]);
+});
+
 test('native presentation fullscreen proof resets only after fullscreen entry and settle', () => {
   assertOrder(helperSource, [
     'bool fullscreenHost = surface.EnterFullscreenHost();',
@@ -467,6 +566,75 @@ test('sanitizeHelperEvent drops raw helper payload fields', () => {
     libmpvClientApiMajor: 2,
     libmpvClientApiMinor: 5,
   });
+});
+
+test('sanitizeHelperEvent keeps RD-15 proof booleans while dropping raw fields', () => {
+  const sanitized = sanitizeHelperEvent({
+    kind: 'observed',
+    proof: 'rd15-ui-focus',
+    category: 'rd15-ui-fullscreen-desktop-pixels',
+    presentationMode: 'fullscreen',
+    pixelSource: 'desktop-capturer',
+    focused: true,
+    visiblePixelsObserved: true,
+    markerPixelsObserved: true,
+    rendererPixelsObserved: true,
+    desktopPixelsObserved: true,
+    productIpcPayload: 'ignored',
+    localMedia: '<dummy-local-media>',
+  });
+
+  assert.deepEqual(sanitized, {
+    kind: 'observed',
+    proof: 'rd15-ui-focus',
+    category: 'rd15-ui-fullscreen-desktop-pixels',
+    presentationMode: 'fullscreen',
+    pixelSource: 'desktop-capturer',
+    visiblePixelsObserved: true,
+    focused: true,
+    markerPixelsObserved: true,
+    rendererPixelsObserved: true,
+    desktopPixelsObserved: true,
+  });
+});
+
+test('RD-15 native presentation proof stays dev-only without product IPC or production helper behavior', () => {
+  const rd15MirrorSource = harnessSource.slice(harnessSource.indexOf('function buildRd15NativePresentationHtml()'));
+  assert.match(harnessSource, /productIpcUsed: false/u);
+  assert.match(harnessSource, /dummyInputsOnly: true/u);
+  assert.match(harnessSource, /rendererReceivesPrivilegedValues: false/u);
+  assert.match(harnessSource, /window\.webContents\.executeJavaScript/u);
+  assert.doesNotMatch(rd15MirrorSource, /ipcRenderer/u);
+  assert.doesNotMatch(rd15MirrorSource, /lineupDesktop/u);
+  assert.doesNotMatch(rd15MirrorSource, /native-helper/u);
+  assert.doesNotMatch(rd15MirrorSource, /tokenized/u);
+  assert.doesNotMatch(rd15MirrorSource, /X-Plex/u);
+  assert.deepEqual(scanForbiddenEvidenceContent(JSON.stringify({
+    observations: summarizeRd15NativePresentationProofs(new Map(rd15NativePresentationProofs.map((proof) => [
+      proof,
+      new Map([
+        ['windowed', {
+          visiblePixelsObserved: true,
+          markerPixelsObserved: true,
+          rendererPixelsObserved: true,
+          ...(proof === 'rd15-ui-focus' ? { focused: true } : {}),
+        }],
+        ['fullscreen', {
+          visiblePixelsObserved: true,
+          markerPixelsObserved: true,
+          desktopPixelsObserved: true,
+          ...(proof === 'rd15-ui-focus' ? { focused: true } : {}),
+        }],
+      ]),
+    ]))),
+    policy: {
+      productIpcUsed: false,
+      dummyInputsOnly: true,
+      rawUrlsPersisted: false,
+      rawLocalPathsPersisted: false,
+      rawNativeValuesPersisted: false,
+    },
+  })), []);
 });
 
 test('scanForbiddenEvidenceContent catches raw paths, URLs, native values, and secret-shaped fields', () => {
