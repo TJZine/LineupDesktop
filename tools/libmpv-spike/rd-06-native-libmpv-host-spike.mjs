@@ -1103,7 +1103,7 @@ async function observeNativePresentationFocus(window) {
 }
 
 async function observeRd15NativePresentationUi(window, presentationMode) {
-  window.webContents.focus();
+  await prepareRd15ProofWindow(window, presentationMode);
   const proof = await window.webContents.executeJavaScript([
     '(() => {',
     '  const surfaces = [',
@@ -1158,6 +1158,24 @@ async function observeRd15NativePresentationUi(window, presentationMode) {
       ...(proofName === 'rd15-ui-focus' ? { focused } : {}),
     }) + '\n');
   }
+}
+
+async function prepareRd15ProofWindow(window, presentationMode) {
+  window.show();
+  if (presentationMode === 'fullscreen') {
+    window.setAlwaysOnTop(true, 'screen-saver');
+    window.setFullScreen(true);
+    await waitForWindowState(() => window.isFullScreen(), 2000);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+  } else if (window.isFullScreen()) {
+    window.setFullScreen(false);
+    await waitForWindowState(() => !window.isFullScreen(), 2000);
+  }
+  if (typeof window.moveTop === 'function') {
+    window.moveTop();
+  }
+  window.focus();
+  window.webContents.focus();
 }
 
 async function observeActivePlayback(window, child, getFullscreenNativeCapture, onFullscreenNativeCapture, useNativeFullscreenCapture) {
@@ -1407,7 +1425,7 @@ function buildRd15NativePresentationHtml() {
     '<div class="overlay-stack" data-rd15-proof="overlays">',
     '<section class="player-overlay channel-badge" data-rd15-proof="channel-badge" aria-label="Channel badge"><strong>104</strong><div><span>Cinema One</span><p>Feature Preview</p></div><i class="rd15-green-pixel" style="left:4px;top:4px"></i></section>',
     '<section class="player-overlay now-playing-overlay" aria-label="Now playing"><p>104 Cinema One</p><h3>Feature Preview</h3><p>Local dummy playback proof</p><i class="rd15-green-pixel" style="right:8px;bottom:8px"></i></section>',
-    '<section class="player-overlay osd-overlay" data-rd15-proof="osd" aria-label="Player controls"><button data-rd15-proof-focus autofocus>Mini guide</button><button>Options</button><button>1</button><button>0</button><button>4</button><i class="rd15-green-pixel" style="right:6px;top:6px"></i></section>',
+    '<section class="player-overlay osd-overlay" data-rd15-proof="osd" aria-label="Player controls"><button data-rd15-proof-focus autofocus style="position:relative">Mini guide<i class="rd15-green-pixel" style="left:2px;top:2px"></i></button><button>Options</button><button>1</button><button>0</button><button>4</button><i class="rd15-green-pixel" style="right:6px;top:6px"></i></section>',
     '<section class="player-overlay mini-guide" data-rd15-proof="mini-guide" aria-label="Mini guide"><div><button>Channel up</button> <button>Channel down</button></div><div class="mini-guide__list"><div class="mini-guide__item" data-selected-channel="true"><strong>104</strong><div><span>Cinema One</span><p>Feature Preview</p></div></div><div class="mini-guide__item"><strong>205</strong><div><span>Local News</span><p>Evening Update</p></div></div></div><i class="rd15-green-pixel" style="left:6px;bottom:6px"></i></section>',
     '</div>',
     '<section class="workflow-panel epg-panel" data-rd15-proof="epg" aria-label="Guide schedule grid"><div class="tile"><strong>Guide</strong><span>Tonight</span></div><div class="tile"><strong>Feature Preview</strong><span>Now</span></div><div class="tile"><strong>Evening Update</strong><span>Next</span></div><div class="tile"><strong>Archive Hour</strong><span>Later</span></div><div class="tile"><strong>Music Block</strong><span>Late</span></div><i class="rd15-green-pixel" style="right:6px;bottom:6px"></i></section>',

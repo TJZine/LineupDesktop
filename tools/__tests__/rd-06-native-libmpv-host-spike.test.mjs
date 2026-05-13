@@ -330,6 +330,10 @@ test('RD-15 native presentation UI proof uses pixel capture in windowed and full
   const rd15ObserverEnd = harnessSource.indexOf('async function observeActivePlayback', rd15ObserverStart);
   const rd15ObserverSource = harnessSource.slice(rd15ObserverStart, rd15ObserverEnd);
 
+  assert.match(rd15ObserverSource, /await prepareRd15ProofWindow\(window, presentationMode\)/u);
+  assert.match(rd15ObserverSource, /window\.setAlwaysOnTop\(true, 'screen-saver'\)/u);
+  assert.match(rd15ObserverSource, /window\.setFullScreen\(true\)/u);
+  assert.match(rd15ObserverSource, /window\.moveTop\(\)/u);
   assert.match(rd15ObserverSource, /window\.webContents\.capturePage\(\)/u);
   assert.match(rd15ObserverSource, /captureDesktopBitmapForWindow\(window\)/u);
   assert.match(rd15ObserverSource, /scanGreenMarkerPixels\(rendererBitmap, rendererSize, surface\.rect\)/u);
@@ -346,6 +350,7 @@ test('RD-15 native presentation UI proof uses pixel capture in windowed and full
   assert.match(harnessSource, /event\.nativePresentationFullscreen === true/u);
   assert.match(harnessSource, /event\.visiblePixelsObserved === true/u);
   assert.match(harnessSource, /await observeRd15NativePresentationUi\(window, 'fullscreen'\)/u);
+  assert.match(harnessSource, /data-rd15-proof-focus autofocus style="position:relative">Mini guide<i class="rd15-green-pixel"/u);
   assertOrder(harnessSource, [
     "event.proof === 'fullscreen-composition'",
     "await observeRd15NativePresentationUi(window, 'fullscreen')",
