@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="lineup-tv">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -11,15 +11,44 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main>
-      <section class="shell-panel" aria-label="Lineup Desktop shell status">
-        <h1>Lineup Desktop</h1>
-        <p data-shell-status>booting</p>
-        <p data-shell-capabilities>loading</p>
-        <button type="button" data-fullscreen-toggle aria-pressed="false">
-          Toggle fullscreen
+    <main
+      class="app-shell"
+      data-app-shell
+      data-style-surface="app-shell"
+      aria-label="Lineup Desktop"
+    >
+      <header class="app-shell__topbar">
+        <div>
+          <p class="app-shell__eyebrow">Lineup Desktop</p>
+          <h1 data-route-title>Player</h1>
+          <p class="route-status" data-route-status>Player preview ready.</p>
+        </div>
+        <div class="shell-status" aria-live="polite">
+          <span data-shell-status>booting</span>
+          <span data-shell-capabilities>loading</span>
+        </div>
+      </header>
+
+      <nav class="route-rail" data-style-surface="route-rail" aria-label="Primary screens">
+        <button type="button" data-route-button="player" data-focus-id="nav-player">
+          Player
         </button>
-      </section>
+        <button type="button" data-route-button="guide" data-focus-id="nav-guide">
+          Guide
+        </button>
+        <button type="button" data-route-button="settings" data-focus-id="nav-settings">
+          Settings
+        </button>
+        <button
+          type="button"
+          data-route-button="channelSetup"
+          data-focus-id="nav-channel-setup"
+        >
+          Channel setup
+        </button>
+      </nav>
+
+      <div data-static-screen-root></div>
     </main>
     <script type="module" src="./index.js"></script>
   </body>

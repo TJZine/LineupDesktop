@@ -9,8 +9,11 @@ checks before product implementation begins.
 - Separate repo for the desktop app.
 - Electron shell and helper-hosted native playback are architecture hypotheses
   recorded in [`docs/architecture/desktop-repo-genesis-adr.md`](./docs/architecture/desktop-repo-genesis-adr.md).
-- No renderer UI, Plex import, native playback host, packaging implementation,
-  or copied product modules exist yet.
+- Renderer shell, Plex auth/discovery/library domains, scheduler/channel domains,
+  persistence adapters, stream policy, and fakeable playback seams now exist
+  behind Desktop contracts and verifiers.
+- Live Plex runtime transport, production native playback host, production
+  renderer player wiring, and packaging implementation are not complete yet.
 - All future copied/adapted Lineup slices must be recorded in
   [`docs/architecture/import-ledger.md`](./docs/architecture/import-ledger.md).
 

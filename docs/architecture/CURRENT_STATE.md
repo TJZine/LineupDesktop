@@ -6,10 +6,12 @@
 ## Scope
 
 Lineup Desktop is a new Windows-first Electron repository. It currently has a
-minimal secure Electron shell frame plus docs, workflow, contract, harness
-scaffolding, and main-owned Plex auth/discovery/library domain seams. There is
-no production native playback host, scheduler, copied TV UI, installer
-implementation, live Plex transport wiring, or renderer Plex API yet.
+secure Electron shell frame, the RD-13 renderer app shell/navigation, workflow,
+settings/channel setup, fake-backed EPG, fake-backed overlay, and CSS/theme
+style surfaces, docs, workflow, contract, harness scaffolding, and main-owned
+Plex auth/discovery/library domain seams. There is no production native playback
+host, copied/adapted upstream TV UI source, installer implementation, live Plex
+transport wiring, or renderer Plex API yet.
 RD-04 adds documentation and harness ownership for upstream behavior guardrails
 only; it does not import product runtime code. RD-05 adds a disposable
 dev-only external `mpv` POC tool and ignored redacted local evidence only; it
@@ -81,7 +83,53 @@ events, and rejected leases. RD-12 keeps private Plex playback descriptors and
 PMS lease custody out of renderer-facing contracts and does not add
 preload/renderer Plex APIs, live transport composition, real Electron
 safeStorage/app-path wiring, production native-helper playback, packaging, or
-additional copied/adapted upstream product code.
+additional copied/adapted upstream product code. RD-13 Unit 1 adds a
+renderer-owned app shell/navigation foundation under `src/renderer/**`: primary
+route rail, player/guide/settings/channel-setup screen containers,
+renderer-local route and focus state, Desktop key mapping, accessible primary
+navigation, and Node-safe navigation tests. It also resolves the existing
+sandboxed-preload smoke blocker by keeping preload guard vocabulary
+single-file-compatible with Electron sandboxed preload runtime while preserving
+the existing shell/window/player preload API shape and smoke containment checks.
+RD-13 Unit 2 adds a renderer-local fake-backed route/workflow skeleton for the
+player, guide, settings, and channel-setup routes. It uses renderer-safe fake
+view models, local route action transitions, and Node-safe workflow tests; it
+does not import domain code, add preload/main contracts, contact Plex, persist
+settings, or wire runtime playback. RD-13 Unit 3 adds renderer-local
+settings/channel setup details with fake settings sections, channel setup draft
+state, local-only settings/setup actions, validation copy, and Node-safe tests.
+It does not persist settings, use browser storage, contact Plex, add selected
+server runtime, or import domain code. RD-13 Unit 4 adds a renderer-local
+fake-backed EPG surface with deterministic UTC fake schedule formatting,
+schedule slots, program span calculation, guide detail/grid rendering, guide
+route smoke reachability assertions, and Node-safe EPG tests. It does not import
+domain code, contact Plex, add renderer/preload APIs, load remote/tokenized
+assets, or wire scheduler/runtime playback. RD-13 Unit 5 adds renderer-local
+fake-backed player overlays: OSD controls, now-playing, mini guide, channel
+number entry, channel badge, playback options, overlay stack state, focus
+fallback behavior, smoke reachability assertions, and Node-safe overlay tests.
+It uses renderer-safe player snapshot vocabulary only and does not wire runtime
+playback, expose native/helper internals, contact Plex, or add preload APIs.
+RD-13 Unit 6 adds renderer-local CSS-only assets/styles completion through CSS
+custom-property tokens, theme hooks, focus-visible styling, reduced-motion and
+forced-colors policies, responsive constraints, loaded-style smoke assertions,
+and no protocol, static asset, dependency, or lockfile expansion. Units 1
+through 6 used upstream Lineup UI/navigation/assets only as reference; no
+copied/adapted upstream source landed, so no RD-13 import-ledger row was needed.
+RD-13 is complete at the renderer UI and navigation import level.
+ARCH-01 adds the architecture-health stabilization pass before RD-14. The pass
+remediates the renderer composition, renderer static asset, main composition,
+and renderer overlay hotspots through behavior-preserving same-owner splits;
+keeps preload single-file-compatible while hardening the preload bridge
+source-shape/parity harness for channel constants, the single `lineupDesktop`
+exposure, and approved `ipcRenderer` method/channel use; and leaves the
+remaining large player, Plex, channel, contract, policy, and native-helper
+owners in `docs/architecture/file-shape-guardrails.md` with reviewed deferral or
+leave-alone triggers. ARCH-01 does not add RD-14 product behavior, native
+video/fullscreen behavior, live Plex transport, production native-helper
+playback, packaging/signing/update behavior, app-path or `safeStorage` runtime
+wiring, new preload/renderer APIs, dependencies, or copied/adapted upstream
+source.
 
 ## Product Invariants
 
@@ -104,9 +152,10 @@ additional copied/adapted upstream product code.
 | Upstream behavior guardrails | `docs/architecture/upstream-behavior-guardrails.md` | RD-04 docs/harness owner |
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
 | Import provenance | `docs/architecture/import-ledger.md` | Scaffolded |
-| Electron main shell | `src/main/index.ts` and `src/main/protocol.ts` | Minimal secure shell frame |
-| Preload bridge | `src/preload/index.cts` | Narrow shell/window/player bridge with runtime payload guards |
-| Renderer shell | `src/renderer/index.ts` and `src/renderer/index.html` | Minimal unprivileged boot proof |
+| File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size guardrails, temporary oversized-file allowlist rationale, decomposition/revisit triggers, and Tier 3 file-shape verification |
+| Electron main shell | `src/main/index.ts`, `src/main/protocol.ts`, and `src/main/smokeAssertions.ts` | Minimal secure shell frame with smoke-only assertion ownership split out of the main startup/composition entrypoint |
+| Preload bridge | `src/preload/index.cts` | Narrow shell/window/player bridge with runtime payload guards; guard vocabulary is kept in the sandbox-compatible preload entrypoint, and the integration seam reads preload source text plus renderer-safe contracts to parity-test guard vocabulary, channel constants, the single `lineupDesktop` exposure, and approved `ipcRenderer` method/channel pairs without importing or executing preload |
+| Renderer shell | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md) | RD-13/ARCH-01 unprivileged app shell with route, workflow, EPG, overlay, focus, and style surfaces |
 | Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window/player bridge contract |
 | Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, diagnostic, IPC result, and runtime event-guard contract |
 | IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window/player IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
@@ -120,7 +169,7 @@ additional copied/adapted upstream product code.
 | Desktop Plex library domain | `src/main/plex/library/*` | Main-owned RD-10 imported/adapted Plex library parser/domain owner for library sections, media metadata, seasons, collections, playlists, tag directories, search hubs, pagination, request intent, and renderer-safe summaries; no live fetch/cache runtime, image URL construction, stream resolver runtime, preload, renderer, or playback URL setup |
 | Desktop Plex auth domain | `src/main/plex/auth/*` | Main-owned RD-10 imported/adapted Plex auth owner for PIN/profile/token validation, Plex Home users, profile switching, injected auth transport, sanitized errors, Desktop identity metadata, and RD-09 credential storage adapter; no live Plex transport composition, preload/renderer auth API, real Electron safeStorage/app-path wiring, package change, or OS-specific runtime behavior |
 | Desktop Plex discovery domain | `src/main/plex/discovery/*` | Main-owned RD-10 imported/adapted Plex discovery and selected-server owner for resource parsing, connection probe policy, health classification, stale discovery-context invalidation, RD-09 selected-server summary persistence, and in-memory selected connection custody; restores by server id plus fresh probing and never persists or returns connection URI/server URI state |
-| Domain architecture verifier | `tools/architecture-rules/*` and `tools/__tests__/build-eslint-architecture-rules.test.mjs` | RD-11 domain-boundary verifier for `src/domain/**`; blocks Electron, Node, main/preload/renderer/native-helper imports, dynamic owner imports, and browser/runtime globals including direct `globalThis` runtime access. F-004 removes the blanket `src/**/__tests__/**` production-boundary exemption and adds explicit test-owner coverage for `src/__tests__/contracts/**`, `src/__tests__/domain/**`, `src/__tests__/main/**`, `src/__tests__/preload/**`, and `src/__tests__/renderer/**`; `src/__tests__/integration/**` is denied by default except for data-declared named seams. The only current integration exception is `preload-contract-vocabulary-parity` at `src/__tests__/integration/preloadContractVocabulary.test.ts`, which may compare `src/preload/vocabulary.cjs` with renderer-safe contract vocabulary. |
+| Domain architecture verifier | `tools/architecture-rules/*` and `tools/__tests__/build-eslint-architecture-rules.test.mjs` | RD-11 domain-boundary verifier for `src/domain/**`; blocks Electron, Node, main/preload/renderer/native-helper imports, dynamic owner imports, and browser/runtime globals including direct `globalThis` runtime access. F-004 removes the blanket `src/**/__tests__/**` production-boundary exemption and adds explicit test-owner coverage for `src/__tests__/contracts/**`, `src/__tests__/domain/**`, `src/__tests__/main/**`, `src/__tests__/preload/**`, and `src/__tests__/renderer/**`; `src/__tests__/integration/**` is denied by default except for data-declared named seams. The current integration exception is `preload-contract-vocabulary-parity` at `src/__tests__/integration/preloadContractVocabulary.test.ts`, which may compare preload source text with renderer-safe contract vocabulary while keeping production preload single-file-compatible. |
 | Scheduler domain | `src/domain/scheduler/**` | Pure RD-11 imported/adapted deterministic scheduler and playback-ordering owner for anchor-time schedule calculation, loop wrapping, current/next/previous lookup, schedule windows, shuffle seeds, block playback validation, injected clock/timer ports, and event emission; not wired to Electron main/preload, renderer, Plex runtime, stream resolution, or native playback |
 | Channel and content domain | `src/domain/channel/**` | Pure RD-11 imported/adapted channel authoring, import/export normalization, content resolution through injected domain-safe library ports, stale fallback, source/channel resolution caches, retry scheduling, lineup navigation, and channel persistence port owner; no raw Plex payload, tokenized URL, auth header, Electron, Node, browser storage, preload, renderer, or live network ownership |
 | Channel persistence adapter | `src/main/persistence/desktopChannelPersistenceStore.ts` | Main-owned RD-11 separate versioned channel persistence file adapter behind an injected file path, temp-file write, mode hardening, and typed domain storage port; not wired to Electron app paths, existing credential/selected-server persistence, preload/renderer APIs, backup/restore, or runtime composition |

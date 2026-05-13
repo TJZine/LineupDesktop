@@ -169,10 +169,10 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-12 are complete enough to route the next Tier 3 session to
-complete RD-13 Renderer UI And Navigation Import through the quality loop. Do not
-import additional original Lineup product code until a reviewed product slice
-plan explicitly authorizes a bounded import.
+RD-01 through ARCH-01 are complete enough to route the next Tier 3 session to
+RD-14 Window, Input, And Fullscreen UX through the quality loop. Do not import
+additional original Lineup product code until a reviewed product slice plan
+explicitly authorizes a bounded import.
 
 ## Roadmap Checklist
 
@@ -732,7 +732,36 @@ Closeout:
 
 ### RD-13 Renderer UI And Navigation Import
 
-Status: not started.
+Status: complete. Unit 1 app shell/navigation foundation completed on
+2026-05-12 through the RD-13 quality loop: renderer-owned shell/routes/focus,
+Node-safe navigation tests, and the narrow sandboxed-preload smoke unblocker
+landed with clean implementation review. Unit 2 fake-backed route/workflow
+skeleton also completed on 2026-05-12 with renderer-local fake view models,
+route action transitions, Node-safe workflow tests, and clean implementation
+review after one status-text fix. Unit 3 settings/channel setup details
+completed on 2026-05-12 with renderer-local fake settings/setup state,
+Desktop-safe copy, local-only settings/setup actions, Node-safe workflow tests,
+and clean implementation review. Unit 4 fake-backed EPG completed on
+2026-05-12 with renderer-local schedule state, deterministic UTC fake schedule
+formatting, guide grid/detail rendering, Node-safe EPG tests, and clean
+implementation re-review after fixing time-format and smoke-reachability
+findings. `npm run smoke:electron`, the RD-13 renderer/domain source audit, and
+`npm run verify` passed locally after Unit 4, with smoke now asserting Guide/EPG
+route reachability. Unit 5 fake-backed OSD/mini-guide/overlays completed on
+2026-05-12 with renderer-local overlay state, now-playing, mini guide, channel
+number, channel badge, playback options, focus fallback behavior, Node-safe
+overlay tests, and clean implementation re-review after two focus fixes.
+`npm run smoke:electron`, the RD-13 renderer/domain source audit, and `npm run
+verify` passed locally after Unit 5, with smoke asserting overlay reachability.
+Unit 6 assets/styles completed on 2026-05-12 with renderer-local CSS
+custom-property tokens, theme hooks, focus-visible normalization,
+reduced-motion and forced-colors policy, responsive constraints, and loaded
+style smoke assertions. `npm run smoke:electron`, the exact RD-13
+renderer/domain source audit, `npm run verify:redaction`, and `npm run verify`
+passed locally after Unit 6 with 283 contract tests and 88 harness-doc tests.
+No upstream UI source or assets were copied or adapted in Units 1 through 6, so
+no import-ledger row was needed. Platform proof label: Mac/local automated proof
+sufficient.
 
 Depends on:
 
@@ -770,6 +799,89 @@ Exit gates:
 - Focus/navigation tests cover Desktop input mapping where feasible.
 - No webOS lifecycle, player, or packaging assumption becomes Desktop truth.
 
+### ARCH-01 Architecture Health Stabilization Before RD-14
+
+Status: complete. ARCH-01 completed through the feature-quality loop on
+2026-05-12. It added a reviewed architecture-health plan with classifications
+for every then-current file-shape guardrail row, remediated the renderer
+composition, renderer static asset, main composition, and overlay prepare-now
+hotspots through behavior-preserving same-owner splits, and hardened preload
+bridge growth policy through the existing source-shape/parity harness without
+adding preload APIs, preload bundling, Electron behavior, dependencies, or
+runtime product behavior. `npm run verify:maintainability`,
+`npm run verify:docs`, `npm run smoke:electron`, and `npm run verify` passed.
+Plan review and every implementation-unit review were clean before closeout.
+Remaining allowlisted hotspots have reviewed deferral or leave-alone triggers
+that do not require RD-14 to grow monolithic renderer, main, preload, player,
+Plex, or channel owners.
+
+Depends on:
+
+- RD-13 complete enough to expose current renderer, style, main, preload,
+  contract, Plex, player, scheduler, and channel owner hotspots.
+- File-shape guardrails are active through
+  `docs/architecture/file-shape-guardrails.md` and
+  `npm run verify:maintainability`.
+
+Objective:
+
+- Stabilize the codebase architecture shape before new RD-14 product behavior
+  lands. Audit all current file-shape and owner-boundary hotspots created before
+  the guardrails existed, then remediate or explicitly defer them with reviewed
+  owner, rationale, verification, and revisit triggers.
+
+Scope rule:
+
+- Assessment is repo-wide, but implementation must be split into bounded
+  execution units. The plan must classify every current row in
+  `docs/architecture/file-shape-guardrails.md` as fix now, prepare now, defer
+  with trigger, or leave alone with rationale.
+- Classification semantics are binding for closeout. `Fix now` means the
+  hotspot must be remediated in ARCH-01. `Prepare now` means ARCH-01 must land
+  the owner split, extraction seam, test harness, or other enabling change
+  needed to keep the next roadmap items from growing that hotspot. `Defer with
+  trigger` means the hotspot remains but has a reviewed owner, reason, and
+  future condition that forces action. `Leave alone with rationale` means review
+  accepts the current shape as cohesive for this roadmap point. Any `fix now` or
+  `prepare now` item not completed before closeout must be reclassified through
+  a reviewed replan.
+- Fix-now work should prioritize hard-overage or near-term roadmap pressure
+  points, especially renderer composition, renderer CSS/HTML, main composition,
+  preload bridge shape, and any large owner that would otherwise absorb RD-14 or
+  RD-15 behavior.
+- This item must not become a product rewrite, framework migration, dependency
+  migration, upstream import, compatibility-shim pass, or cosmetic file shuffle.
+  Keep behavior stable and preserve current Electron security, renderer
+  privilege, preload narrowness, Plex secrecy, player/runtime, scheduler, and
+  channel contracts unless a reviewed replan proves a boundary change is
+  necessary for maintainability.
+
+Platform proof:
+
+- Mac/local automated proof is sufficient when units are behavior-preserving
+  source-shape changes. Stop and obtain a reviewed replan before touching
+  Windows-specific behavior, native video/fullscreen behavior, live Plex
+  transport, production native-helper playback, packaging/signing/update
+  behavior, app-path or safeStorage runtime wiring, or new preload/renderer
+  APIs.
+
+Exit gates:
+
+- Tracked plan includes an `## Architecture Health` section with current
+  large-file evidence, owner-boundary risks, and a classification for every
+  allowlisted file.
+- Every implemented cleanup unit is behavior-preserving or has explicit
+  contract/test proof for any public seam it changes.
+- `docs/architecture/file-shape-guardrails.md` is updated for any remediated,
+  deferred, or newly identified hotspot.
+- `npm run verify:maintainability`, `npm run verify:docs`, and `npm run verify`
+  pass unless the reviewed plan names a narrower proof for a docs-only unit.
+- Read-only adversarial review is clean for the plan and for every implemented
+  unit.
+- RD-14 may start only after remaining deferred hotspots have reviewed triggers
+  that will not force RD-14 to grow monolithic owners, and no `fix now` or
+  `prepare now` classifications remain incomplete.
+
 ### RD-14 Window, Input, And Fullscreen UX
 
 Status: not started.
@@ -779,11 +891,20 @@ Depends on:
 - RD-01 complete.
 - RD-06 complete for native surface constraints.
 - RD-13 complete enough to exercise renderer navigation.
+- ARCH-01 complete or explicitly deferred by a reviewed ARCH-01 replan.
 
 Objective:
 
 - Implement Desktop keyboard/gamepad/media-key handling, cursor behavior,
   display selection, and borderless fullscreen/window behavior.
+
+Scope rule:
+
+- Before implementation, the tracked RD-14 plan must include an
+  `## Architecture Health` preflight using
+  `docs/architecture/file-shape-guardrails.md`, and it must split work so
+  window/input/fullscreen behavior does not grow renderer, main, preload, or CSS
+  hotspots without a reviewed decomposition or temporary allowlist decision.
 
 Exit gates:
 

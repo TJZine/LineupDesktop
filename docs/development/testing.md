@@ -11,6 +11,7 @@ npm run verify:architecture
 npm run test:contracts
 npm run test:harness-docs
 npm run verify:docs
+npm run verify:maintainability
 npm run verify:redaction
 npm run verify
 ```
@@ -32,8 +33,9 @@ new windows and permissions.
 
 ## Lint And Architecture
 
-`npm run verify:architecture` runs ESLint plus the Desktop boundary rules in
-`tools/architecture-rules/`.
+`npm run verify:architecture` runs ESLint, the Desktop boundary rules in
+`tools/architecture-rules/`, and the production file-shape guardrail in
+`tools/verify-maintainability.mjs`.
 
 The initial boundary rules are intentionally narrow:
 
@@ -44,6 +46,13 @@ The initial boundary rules are intentionally narrow:
 
 Expand these rules only when a repeated mistake or approved plan shows the
 extra guardrail is worth the maintenance cost.
+
+`npm run verify:maintainability` checks production `src/**` file size against
+[`docs/architecture/file-shape-guardrails.md`](../architecture/file-shape-guardrails.md).
+Files over the guardrail threshold need a temporary allowlist row with a
+reviewed baseline line count, rationale, and growth/decomposition trigger.
+Shrink below the baseline is allowed; growth above it requires a reviewed row
+update or decomposition.
 
 ## Redaction
 

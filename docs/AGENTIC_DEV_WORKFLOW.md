@@ -146,6 +146,10 @@ not merely make the next check pass.
 - Configuration, credentials, app paths, diagnostics, logs, and generated
   artifacts are architecture surfaces. Do not hide environment-specific behavior
   in constants, renderer storage, checked-in local files, or unredacted logs.
+- Architecture Health is required before Tier 3 scope is frozen. Record current
+  oversized production files, owner hotspots, and the decomposition, avoidance,
+  or temporary allowlist decision using
+  [`docs/architecture/file-shape-guardrails.md`](./architecture/file-shape-guardrails.md).
 - Tests should protect stable behavior and public seams with actionable failure
   output. Avoid brittle private probes, broad snapshots, or tests that only
   bless current implementation shape.
@@ -355,6 +359,8 @@ Use `parallel-sidecars` for optional read-only sidecars and
 
 - Docs, workflow, launcher, architecture, or plan changes: `npm run verify:docs`.
 - Source, contract, or architecture-boundary changes: `npm run verify:architecture`.
+- Production file-shape or module-topology changes: `npm run verify:maintainability`
+  directly, or `npm run verify:architecture` when paired with lint.
 - Contract, IPC payload, or security-boundary changes: `npm run typecheck`,
   `npm run test:contracts`, and `npm run verify:redaction`.
 - Any scaffold or implementation closeout: `npm run verify` unless an approved

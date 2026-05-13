@@ -354,8 +354,8 @@ test('ESLint enforces owner test import boundaries', async () => {
   assert.equal(mainAllowed.messages.length, 0);
 
   const [mainForbidden] = await eslint.lintText([
-    "import preloadVocabulary from '../../preload/vocabulary.cjs';",
-    'void preloadVocabulary;',
+    "import preloadEntry from '../../preload/index.cjs';",
+    'void preloadEntry;',
   ].join('\n'), { filePath: 'src/__tests__/main/shellSecurity.test.ts' });
   assert.equal(
     mainForbidden.messages.filter((message) => message.ruleId === 'no-restricted-imports').length,
@@ -478,12 +478,14 @@ test('integration seam rules are limited to declared proof test paths', async ()
   const [allowed] = await eslint.lintText([
     "import test from 'node:test';",
     "import assert from 'node:assert/strict';",
+    "import { readFileSync } from 'node:fs';",
+    "import ts from 'typescript';",
     "import { PLAYER_RENDERER_INTENTS } from '../../contracts/ipc.js';",
-    "import preloadVocabulary from '../../preload/vocabulary.cjs';",
     'void test;',
     'void assert;',
+    'void readFileSync;',
+    'void ts;',
     'void PLAYER_RENDERER_INTENTS;',
-    'void preloadVocabulary;',
   ].join('\n'), { filePath: 'src/__tests__/integration/preloadContractVocabulary.test.ts' });
   assert.equal(allowed.messages.length, 0);
 

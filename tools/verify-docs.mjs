@@ -4,6 +4,9 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+const architectureHealthDecisionPattern = /\b(?:Decision|Plan|Scope):[^\n]*(?:\b(?:avoid|avoids|avoided|avoidance|decompose|decomposes|decomposed|decomposition|split|splits|splitting|extract|extracts|extracted|extraction|revisit|revisits|revisited|allowlist|allowlisted|allowlisting)\b|\b(?:temporary row|guardrail row)\b|\bno\s+(?:(?:oversized|guarded)s?|large[- ]files?|owner hotspots?)\b)/iu;
+const maintainabilityVerificationPattern = /\b(?:verify:maintainability|maintainability verification|npm run verify:maintainability|npm run verify:architecture|npm run verify(?!:))\b/iu;
+
 const requiredFiles = [
   '.codannaignore',
   '.codex/config.toml',
@@ -31,6 +34,7 @@ const requiredFiles = [
   'docs/architecture/desktop-repo-genesis-adr.md',
   'docs/architecture/upstream-behavior-guardrails.md',
   'docs/architecture/import-ledger.md',
+  'docs/architecture/file-shape-guardrails.md',
   'docs/architecture/security-and-secret-flow.md',
   'docs/architecture/playback-architecture.md',
   'docs/architecture/packaging-release-gates.md',
@@ -55,6 +59,7 @@ const requiredFiles = [
   'tools/architecture-rules/buildEslintArchitectureRules.mjs',
   'tools/architecture-rules/desktopArchitectureRules.mjs',
   'tools/verify-docs.mjs',
+  'tools/verify-maintainability.mjs',
   'tools/verify-redaction.mjs',
 ];
 
@@ -97,8 +102,9 @@ const expectedScripts = {
   test: 'npm run test:contracts && npm run test:harness-docs',
   'test:contracts': 'node --import tsx --test "src/__tests__/**/*.test.ts"',
   'test:harness-docs': 'node --test tools/__tests__/*.test.mjs',
-  'verify:architecture': 'npm run lint',
+  'verify:architecture': 'npm run lint && npm run verify:maintainability',
   'verify:docs': 'node tools/verify-docs.mjs',
+  'verify:maintainability': 'node tools/verify-maintainability.mjs',
   'verify:redaction': 'node tools/verify-redaction.mjs',
   verify: 'npm run typecheck && npm run verify:architecture && npm run test && npm run verify:docs && npm run verify:redaction',
 };
@@ -189,10 +195,40 @@ const workflowAnchorMarkers = [
     path: 'docs/AGENTIC_DEV_WORKFLOW.md',
     label: 'production engineering guardrails',
     marker: '## Production Engineering Guardrails',
-    requiredPhrases: [
-      'Dependency changes must name the runtime owner',
-      'Configuration, credentials, app paths, diagnostics, logs',
-      'Keep every committed checkpoint buildable and reversible',
+    requiredStructures: [
+      {
+        label: 'dependency governance',
+        test: (content) => sectionHasConcepts(content, '## Production Engineering Guardrails', [
+          /\bdependenc(?:y|ies)\b/iu,
+          /\bruntime owner\b/iu,
+          /\bverification\b|\bverified\b/iu,
+        ]),
+      },
+      {
+        label: 'configuration and diagnostics governance',
+        test: (content) => sectionHasConcepts(content, '## Production Engineering Guardrails', [
+          /\bconfiguration\b/iu,
+          /\bcredentials\b/iu,
+          /\bdiagnostics\b/iu,
+          /\blogs?\b/iu,
+        ]),
+      },
+      {
+        label: 'architecture health file-shape routing',
+        test: (content) => sectionHasConcepts(content, '## Production Engineering Guardrails', [
+          /\bArchitecture Health\b/iu,
+          /\bfile[- ]shape\b|\bowner hotspots?\b|\blarge[- ]files?\b/iu,
+          /\bdecomposition\b|\bavoidance\b|\ballowlist\b/iu,
+        ]),
+      },
+      {
+        label: 'checkpoint reversibility',
+        test: (content) => sectionHasConcepts(content, '## Production Engineering Guardrails', [
+          /\bcommitted checkpoint\b|\bcommit(?:ted)? step\b/iu,
+          /\bbuildable\b/iu,
+          /\breversible\b/iu,
+        ]),
+      },
     ],
   },
   {
@@ -249,6 +285,41 @@ const workflowAnchorMarkers = [
       'The original Lineup repo',
       'maintenance-program mechanics',
     ],
+  },
+];
+
+const planStandardStructures = [
+  {
+    label: 'impact dependency fields',
+    test: (content) => sectionHasConcepts(content, '## Impact Snapshot', [
+      /\bdependenc(?:y|ies)\b/iu,
+      /\bbuild-tool\b/iu,
+      /\bconfiguration\b/iu,
+      /\blockfile\b/iu,
+    ]),
+  },
+  {
+    label: 'dependency security provenance review',
+    test: (content) => sectionHasConcepts(content, '## Invariants And Scope Rules', [
+      /\bsecurity\b/iu,
+      /\blicensing\b/iu,
+      /\bprovenance\b/iu,
+    ]),
+  },
+  {
+    label: 'architecture health file-shape evidence',
+    test: (content) => sectionHasConcepts(content, '## Architecture Health', [
+      /\bfile[- ]shape\b/iu,
+      /\bowner hotspots?\b/iu,
+      /\bdecomposition\b|\bavoidance\b|\btemporary allowlist\b|\ballowlist decision\b/iu,
+    ]),
+  },
+  {
+    label: 'architecture health future-growth guardrail',
+    test: (content) => sectionHasConcepts(content, '## Architecture Health', [
+      /\bpre[- ]authorize\b/iu,
+      /\bfuture growth\b/iu,
+    ]),
   },
 ];
 
@@ -434,8 +505,9 @@ function checkActivePlanShape(root, errors) {
     if (!content.includes('**Task family:** feature/design')) {
       errors.push(`${relativePath}: active plan missing feature/design task family`);
     }
-    if (content.includes('**Tier:** Tier 3')) {
+    if (isTier3Plan(content)) {
       checkTier3Handoff(relativePath, content, errors);
+      checkTier3MaintainabilityPreflight(relativePath, content, errors);
     }
     const markerCount = verificationClassificationMarkers
       .filter((marker) => content.includes(marker))
@@ -444,6 +516,10 @@ function checkActivePlanShape(root, errors) {
       errors.push(`${relativePath}: active plan must include exactly one verification classification marker`);
     }
   }
+}
+
+function isTier3Plan(content) {
+  return /(?:\*\*Tier:\*\*|^TIER:)\s*Tier 3\b/imu.test(content);
 }
 
 function checkTier3Handoff(relativePath, content, errors) {
@@ -476,6 +552,57 @@ function checkTier3Handoff(relativePath, content, errors) {
   }
 }
 
+function checkTier3MaintainabilityPreflight(relativePath, content, errors) {
+  const section = markdownSection(content, '## Architecture Health')
+    ?? markdownSection(content, '## File Shape Preflight');
+  if (!section) {
+    errors.push(`${relativePath}: Tier 3 active plan missing ## Architecture Health or ## File Shape Preflight section`);
+    return;
+  }
+
+  if (!/file-shape-guardrails\.md|file[- ]shape|large[- ]file|oversized|owner hotspot/iu.test(section)) {
+    errors.push(`${relativePath}: Tier 3 architecture health section missing file-shape evidence`);
+  }
+  if (!maintainabilityVerificationPattern.test(section)) {
+    errors.push(`${relativePath}: Tier 3 architecture health section missing maintainability verification route`);
+  }
+  if (!architectureHealthDecisionPattern.test(section)) {
+    errors.push(`${relativePath}: Tier 3 architecture health section missing decomposition, avoidance, or allowlist decision`);
+  }
+}
+
+function markdownSection(content, heading) {
+  const headingParts = /^(#{1,6})\s+(.+)$/u.exec(heading);
+  if (!headingParts) {
+    return null;
+  }
+  const [, hashes, title] = headingParts;
+  const headingPattern = new RegExp(`^${hashes}\\s+${escapeRegExp(title)}\\s*$`, 'mu');
+  const match = headingPattern.exec(content);
+  if (!match) {
+    return null;
+  }
+  const start = match.index;
+  const bodyStart = start + match[0].length;
+  const level = hashes.length;
+  const nextHeadingPattern = new RegExp(`\\n#{1,${level}}\\s+`, 'u');
+  const nextHeading = nextHeadingPattern.exec(content.slice(bodyStart));
+  const end = nextHeading ? bodyStart + nextHeading.index : content.length;
+  return content.slice(start, end);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
+
+function sectionHasConcepts(content, heading, patterns) {
+  const section = markdownSection(content, heading);
+  if (section === null) {
+    return false;
+  }
+  return patterns.every((pattern) => pattern.test(section));
+}
+
 function checkWorkflowAnchors(root, errors) {
   const guidancePath = path.join(root, 'docs/agentic/external-guidance.md');
   const planStandardPath = path.join(root, 'docs/agentic/plan-authoring-standard.md');
@@ -483,7 +610,7 @@ function checkWorkflowAnchors(root, errors) {
     return;
   }
 
-  for (const { path: relativePath, label, marker, requiredPhrases = [] } of workflowAnchorMarkers) {
+  for (const { path: relativePath, label, marker, requiredPhrases = [], requiredStructures = [] } of workflowAnchorMarkers) {
     const absolutePath = path.join(root, relativePath);
     if (!fs.existsSync(absolutePath)) {
       continue;
@@ -495,6 +622,11 @@ function checkWorkflowAnchors(root, errors) {
     for (const phrase of requiredPhrases) {
       if (!content.includes(phrase)) {
         errors.push(`${relativePath}: missing ${label} phrase: ${phrase}`);
+      }
+    }
+    for (const structure of requiredStructures) {
+      if (!structure.test(content)) {
+        errors.push(`${relativePath}: missing ${label} structure: ${structure.label}`);
       }
     }
   }
@@ -533,12 +665,9 @@ function checkWorkflowAnchors(root, errors) {
       errors.push(`docs/agentic/plan-authoring-standard.md: missing active-plan heading reference ${heading}`);
     }
   }
-  for (const phrase of [
-    'dependency, build-tool, configuration, or lockfile changes',
-    'security/licensing/provenance considerations',
-  ]) {
-    if (!planStandard.includes(phrase)) {
-      errors.push(`docs/agentic/plan-authoring-standard.md: missing production-engineering plan phrase ${phrase}`);
+  for (const structure of planStandardStructures) {
+    if (!structure.test(planStandard)) {
+      errors.push(`docs/agentic/plan-authoring-standard.md: missing production-engineering plan structure: ${structure.label}`);
     }
   }
 
@@ -549,6 +678,9 @@ function checkWorkflowAnchors(root, errors) {
       if (!featureQualityLoop.includes(heading)) {
         errors.push(`docs/agentic/session-prompts/feature-quality-loop.md: missing Tier 3 launcher heading ${heading}`);
       }
+    }
+    if (!featureQualityLoop.includes('## Architecture Health')) {
+      errors.push('docs/agentic/session-prompts/feature-quality-loop.md: missing Tier 3 Architecture Health plan section marker');
     }
   }
 }

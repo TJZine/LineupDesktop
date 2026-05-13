@@ -50,6 +50,11 @@ Add optional sections for current-unit execution packets, interface snippets, or
 manual QA scripts only when they materially reduce implementation or review
 risk.
 
+Tier 3 active plans must also include `## Architecture Health` before
+implementation unit selection. Lower-tier plans should add that section only
+when their actual diff touches file shape, module topology, or known owner
+hotspots.
+
 ## Fresh-Session Rules
 
 - Assume the implementer starts with no task memory beyond tracked docs.
@@ -119,6 +124,15 @@ State the expected blast radius before implementation:
 If more than one owner boundary is implicated, say whether the first execution
 unit remains single-owner or why the cross-boundary work cannot be split safely.
 
+## Architecture Health
+
+State whether the plan grows, avoids, or decomposes existing architecture
+hotspots. For Tier 3 work, include file-shape evidence from
+`docs/architecture/file-shape-guardrails.md`, the affected owner hotspots, the
+decomposition, avoidance, or temporary allowlist decision for touched files over
+the guardrail threshold, and the maintainability verification route. Do not
+raise file-shape baselines to pre-authorize future growth.
+
 ## Planner Self-Check
 
 Before treating a plan as implementation-ready, answer:
@@ -131,9 +145,11 @@ Before treating a plan as implementation-ready, answer:
    wiring inside it?
 4. Did the plan record the evidence path and fallback reads?
 5. Is the work assigned to the repo-preferred owner, or is it growing a hotspot?
-6. Would a fresh implementer need to invent security, IPC, playback,
+6. Did Tier 3 work include Architecture Health evidence and a decomposition,
+   avoidance, or allowlist decision for any touched owner hotspot?
+7. Would a fresh implementer need to invent security, IPC, playback,
    persistence, packaging, import, or verification policy?
-7. Did the plan record exact verification commands, expected outcomes, and
+8. Did the plan record exact verification commands, expected outcomes, and
    explicit stop/replan triggers?
 
 If any answer exposes a live ambiguity, resolve it before implementation.

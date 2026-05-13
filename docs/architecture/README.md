@@ -14,3 +14,4 @@ Start here for Lineup Desktop architecture truth and repo-genesis decisions.
 | 6 | [`security-and-secret-flow.md`](./security-and-secret-flow.md) | Initial secret-flow and redaction boundary |
 | 7 | [`playback-architecture.md`](./playback-architecture.md) | Playback hypothesis and spike gates |
 | 8 | [`packaging-release-gates.md`](./packaging-release-gates.md) | Release, signing, and provenance gates |
+| 9 | [`renderer-architecture.md`](./renderer-architecture.md) | Renderer shell, DOM module, workflow, overlay, and style ownership detail |

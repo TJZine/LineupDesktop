@@ -67,6 +67,7 @@ test('verifyDocs rejects placeholder package scripts', () => {
       'test:harness-docs': 'true',
       'verify:architecture': 'true',
       'verify:docs': 'true',
+      'verify:maintainability': 'true',
       'verify:redaction': 'true',
       verify: 'true',
     },
@@ -167,6 +168,7 @@ test('verifyDocs rejects Tier 3 active plans missing model and handoff shape', (
   const errors = verifyDocs(root);
 
   assert(errors.some((error) => error.includes('missing MODEL_SUGGESTION')));
+  assert(errors.some((error) => error.includes('missing ## Architecture Health or ## File Shape Preflight section')));
   assert(errors.some((error) => error.includes('NEXT_SESSION_HANDOFF missing field NEXT_SESSION_LAUNCHER:')));
   assert(errors.some((error) => error.includes('NEXT_SESSION_HANDOFF missing field MESSAGE:')));
 });
@@ -266,7 +268,7 @@ test('verifyDocs rejects missing production engineering guardrails', () => {
 
   const errors = verifyDocs(root);
 
-  assert(errors.some((error) => error.includes('missing production engineering guardrails phrase')));
+  assert(errors.some((error) => error.includes('missing production engineering guardrails structure')));
 });
 
 test('verifyDocs requires upstream behavior guardrail document and slice coverage', () => {
@@ -321,7 +323,173 @@ test('verifyDocs rejects plan standard missing dependency governance', () => {
 
   const errors = verifyDocs(root);
 
-  assert(errors.some((error) => error.includes('missing production-engineering plan phrase')));
+  assert(errors.some((error) => error.includes('missing production-engineering plan structure')));
+});
+
+test('verifyDocs rejects Tier 3 active plans missing Architecture Health section', () => {
+  const root = makeFixture({ complete: true });
+  const planPath = path.join(root, 'docs/plans/active.md');
+  fs.writeFileSync(planPath, tier3Plan());
+
+  const errors = verifyDocs(root);
+
+  assert(errors.some((error) => error.includes('missing ## Architecture Health or ## File Shape Preflight section')));
+});
+
+test('verifyDocs validates Tier 3 Architecture Health section semantically', () => {
+  const root = makeFixture({ complete: true });
+  const planPath = path.join(root, 'docs/plans/active.md');
+
+  fs.writeFileSync(planPath, tier3Plan([
+    '## Architecture Health',
+    'General code health is noted.',
+    'Verification route: npm run verify.',
+    'Decision: split if this grows.',
+  ]));
+  const missingEvidence = verifyDocs(root);
+  assert(missingEvidence.some((error) => error.includes('missing file-shape evidence')));
+
+  fs.writeFileSync(planPath, tier3Plan([
+    '## Architecture Health',
+    'File-shape evidence uses docs/architecture/file-shape-guardrails.md.',
+    'Decision: avoid guarded owner hotspots in this unit.',
+  ]));
+  const missingVerification = verifyDocs(root);
+  assert(missingVerification.some((error) => error.includes('missing maintainability verification route')));
+
+  fs.writeFileSync(planPath, tier3Plan([
+    '## Architecture Health',
+    'File-shape evidence uses docs/architecture/file-shape-guardrails.md.',
+    'Verification route: npm run verify:architecture.',
+    'Current hotspots are recorded for review.',
+  ]));
+  const missingDecision = verifyDocs(root);
+  assert(missingDecision.some((error) => error.includes('missing decomposition, avoidance, or allowlist decision')));
+
+  fs.writeFileSync(planPath, tier3Plan([
+    '## Architecture Health',
+    'File-shape evidence uses docs/architecture/file-shape-guardrails.md.',
+    'Verification route: npm run verify:architecture.',
+    'Before implementation, the current owner hotspots are recorded for review.',
+  ]));
+  const beforeOnlyDecision = verifyDocs(root);
+  assert(beforeOnlyDecision.some((error) => error.includes('missing decomposition, avoidance, or allowlist decision')));
+
+  fs.writeFileSync(planPath, tier3Plan([
+    '## Architecture Health',
+    'File-shape evidence uses docs/architecture/file-shape-guardrails.md.',
+    'Verification route: npm run verify:architecture.',
+    'Current hotspots are recorded with predecomposition notes for review.',
+  ]));
+  const partialDecision = verifyDocs(root);
+  assert(partialDecision.some((error) => error.includes('missing decomposition, avoidance, or allowlist decision')));
+
+  fs.writeFileSync(planPath, tier3Plan([
+    '## Architecture Health Notes',
+    'File-shape evidence uses docs/architecture/file-shape-guardrails.md.',
+    'Verification route: npm run verify:architecture.',
+    'Decision: avoid guarded owner hotspots in this unit.',
+  ]));
+  const wrongHeading = verifyDocs(root);
+  assert(wrongHeading.some((error) => error.includes('missing ## Architecture Health or ## File Shape Preflight section')));
+});
+
+test('verifyDocs accepts Tier 3 Architecture Health without exact prose markers', () => {
+  const root = makeFixture({ complete: true });
+  const planPath = path.join(root, 'docs/plans/active.md');
+  fs.writeFileSync(planPath, tier3Plan([
+    '## Architecture Health',
+    'Owner hotspot evidence comes from docs/architecture/file-shape-guardrails.md.',
+    'Proof route is covered by npm run verify:architecture.',
+    'Decision: avoid guarded renderer and preload files in the first unit.',
+  ]));
+
+  assert.deepEqual(verifyDocs(root), []);
+
+  fs.writeFileSync(planPath, tier3Plan([
+    '## Architecture Health',
+    'Owner hotspot evidence comes from docs/architecture/file-shape-guardrails.md.',
+    'Proof route is covered by npm run verify:architecture.',
+    'Decision: use the temporary row because decomposition is deferred before this owner grows again.',
+  ]));
+
+  assert.deepEqual(verifyDocs(root), []);
+});
+
+test('verifyDocs accepts reworded production-engineering structures', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, 'docs/AGENTIC_DEV_WORKFLOW.md'), [
+    '# Fixture',
+    '## Fresh Chat Bootstrap',
+    'docs/agentic/external-guidance.md',
+    'Do not depend on the original Lineup repo',
+    'Run `git status --short --branch` before planning edits',
+    '## Default Workflow',
+    'Plan explicitly before multi-step work',
+    'Do not freeze a plan while ownership',
+    '## Production Engineering Guardrails',
+    'Dependency updates record the runtime owner and the verification that proves the change.',
+    'Configuration, credentials, app paths, diagnostics, and logs are architecture surfaces.',
+    'Architecture Health records file-shape evidence, owner hotspots, and the decomposition, avoidance, or allowlist decision.',
+    'Each committed checkpoint must remain buildable and reversible.',
+    '## Multi-Agent Usage',
+    'Keep read-only roles read-only',
+    'Do not let a worker invent architecture seams',
+    '## Session Handoffs',
+    'NEXT_SESSION_HANDOFF',
+    'MODEL_SUGGESTION',
+    'feature-quality-loop.md',
+    'Desktop Feature Quality Guardrails',
+    'Feature-Quality Loop',
+    'feature-plan -> feature-review -> feature-implement -> feature-review',
+    'program state, score artifacts',
+    'Keep renderer code unprivileged',
+    'Record every copied/adapted upstream Lineup slice in the import ledger',
+  ].join('\n'));
+
+  assert.deepEqual(verifyDocs(root), []);
+});
+
+test('verifyDocs treats handoff TIER field as Tier 3 for active plan checks', () => {
+  const root = makeFixture({ complete: true });
+  const planPath = path.join(root, 'docs/plans/active.md');
+  fs.writeFileSync(planPath, [
+    '# Active Plan',
+    '**Plan Status:** active',
+    '**Task family:** feature/design',
+    'new regression/contract test required',
+    '## Goal',
+    '## Non-Goals',
+    '## Parent Architecture Alignment',
+    '## Required Reading',
+    '## Required Skills',
+    '## Evidence And Discovery',
+    '## Impact Snapshot',
+    '## Files In Scope',
+    '## Files Out Of Scope',
+    '## Planner Self-Check',
+    '## Architecture Seam Decision Gate',
+    '## Verification Commands',
+    '## Acceptance Criteria',
+    '## Replan Triggers',
+    '## Rollback Notes',
+    '## Commit Checkpoints',
+    'NEXT_SESSION_HANDOFF',
+    'NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop',
+    'TASK: fixture',
+    'TASK_FAMILY: feature/design',
+    'TIER: Tier 3',
+    'PLAN: docs/plans/active.md',
+    'ARTIFACT: docs/plans/active.md',
+    'FILES:',
+    'BLOCKERS: none',
+    'MESSAGE:',
+  ].join('\n'));
+
+  const errors = verifyDocs(root);
+
+  assert(errors.some((error) => error.includes('Tier 3 active plan missing MODEL_SUGGESTION')));
+  assert(errors.some((error) => error.includes('missing ## Architecture Health or ## File Shape Preflight section')));
 });
 
 test('verifyDocs rejects PR template missing code health checklist', () => {
@@ -473,6 +641,44 @@ test('verifyDocs rejects transferred Lineup skill adaptation drift', () => {
   assert(errors.some((error) => error.includes('missing workflow runbook read')));
 });
 
+function tier3Plan(architectureHealthLines = []) {
+  return [
+    '# Active Plan',
+    '**Plan Status:** active',
+    '**Task family:** feature/design',
+    '**Tier:** Tier 3',
+    'new regression/contract test required',
+    '## Goal',
+    '## Non-Goals',
+    '## Parent Architecture Alignment',
+    '## Required Reading',
+    '## Required Skills',
+    '## Evidence And Discovery',
+    '## Impact Snapshot',
+    ...architectureHealthLines,
+    '## Files In Scope',
+    '## Files Out Of Scope',
+    '## Planner Self-Check',
+    '## Architecture Seam Decision Gate',
+    '## Verification Commands',
+    '## Acceptance Criteria',
+    '## Replan Triggers',
+    '## Rollback Notes',
+    '## Commit Checkpoints',
+    'MODEL_SUGGESTION',
+    'NEXT_SESSION_HANDOFF',
+    'NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop',
+    'TASK: fixture',
+    'TASK_FAMILY: feature/design',
+    'TIER: Tier 3',
+    'PLAN: docs/plans/active.md',
+    'ARTIFACT: docs/plans/active.md',
+    'FILES:',
+    'BLOCKERS: none',
+    'MESSAGE:',
+  ].join('\n');
+}
+
 function makeFixture(options = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-desktop-docs-'));
   if (options.complete) {
@@ -508,6 +714,7 @@ function makeFixture(options = {}) {
       'docs/architecture/desktop-repo-genesis-adr.md',
       'docs/architecture/upstream-behavior-guardrails.md',
       'docs/architecture/import-ledger.md',
+      'docs/architecture/file-shape-guardrails.md',
       'docs/architecture/security-and-secret-flow.md',
       'docs/architecture/playback-architecture.md',
       'docs/architecture/packaging-release-gates.md',
@@ -546,6 +753,7 @@ function makeFixture(options = {}) {
       'tools/architecture-rules/buildEslintArchitectureRules.mjs',
       'tools/architecture-rules/desktopArchitectureRules.mjs',
       'tools/verify-docs.mjs',
+      'tools/verify-maintainability.mjs',
       'tools/verify-redaction.mjs',
     ];
     fs.writeFileSync(path.join(root, '.gitignore'), [
@@ -575,8 +783,9 @@ function fixtureContent(relativePath) {
       test: 'npm run test:contracts && npm run test:harness-docs',
       'test:contracts': 'node --import tsx --test "src/__tests__/**/*.test.ts"',
       'test:harness-docs': 'node --test tools/__tests__/*.test.mjs',
-      'verify:architecture': 'npm run lint',
+      'verify:architecture': 'npm run lint && npm run verify:maintainability',
       'verify:docs': 'node tools/verify-docs.mjs',
+      'verify:maintainability': 'node tools/verify-maintainability.mjs',
       'verify:redaction': 'node tools/verify-redaction.mjs',
       verify: 'npm run typecheck && npm run verify:architecture && npm run test && npm run verify:docs && npm run verify:redaction',
     } });
@@ -623,8 +832,9 @@ function fixtureContent(relativePath) {
       'Plan explicitly before multi-step work',
       'Do not freeze a plan while ownership',
       '## Production Engineering Guardrails',
-      'Dependency changes must name the runtime owner',
+      'Dependency changes must name the runtime owner and verification route',
       'Configuration, credentials, app paths, diagnostics, logs',
+      'Architecture Health file-shape owner hotspots decomposition avoidance allowlist',
       'Keep every committed checkpoint buildable and reversible',
       '## Multi-Agent Usage',
       'Keep read-only roles read-only',
@@ -700,11 +910,16 @@ function fixtureContent(relativePath) {
       '## Evidence And Discovery',
       '## Impact Snapshot',
       'dependency, build-tool, configuration, or lockfile changes',
+      '## Architecture Health',
+      'file-shape evidence owner hotspots decomposition avoidance allowlist decision',
+      'pre-authorize future growth',
       '## Files In Scope',
       '## Files Out Of Scope',
       '## Planner Self-Check',
       '## Architecture Seam Decision Gate',
       'security/licensing/provenance considerations',
+      '## Invariants And Scope Rules',
+      'dependency build-tool security licensing provenance',
       '## Verification Commands',
       '## Acceptance Criteria',
       '## Replan Triggers',
@@ -719,6 +934,7 @@ function fixtureContent(relativePath) {
       '## Controller State Machine',
       '## Phase Rules',
       '## Completion Gate',
+      '## Architecture Health',
     ].join('\n');
   }
 

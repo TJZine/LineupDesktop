@@ -12,4 +12,8 @@ for (const fileName of ['index.html', 'styles.css']) {
   fs.copyFileSync(path.join(sourceRoot, fileName), path.join(targetRoot, fileName));
 }
 
+fs.cpSync(path.join(sourceRoot, 'styles'), path.join(targetRoot, 'styles'), {
+  recursive: true,
+});
+
 console.log('Renderer assets copied.');

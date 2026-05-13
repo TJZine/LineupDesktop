@@ -1,0 +1,138 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { containsPlexForbiddenRendererField } from '../../contracts/plex.js';
+import {
+  activateWorkflowRoute,
+  applyWorkflowChannelSetupAction,
+  applyWorkflowEpgAction,
+  applyWorkflowAction,
+  applyWorkflowSettingsAction,
+  createWorkflowState,
+  findRouteAction,
+  getRouteWorkflowView,
+} from '../../renderer/workflow.js';
+
+test('workflow state starts on the player route with fake program context', () => {
+  const state = createWorkflowState();
+  const view = getRouteWorkflowView(state);
+
+  assert.deepEqual(state.routeState, { activeRoute: 'player', previousRoute: null });
+  assert.equal(state.settingsDraft.launchMode, 'windowed');
+  assert.equal(state.channelSetupDraft.activeStepId, 'channels');
+  assert.equal(view.route, 'player');
+  assert.equal(view.title, 'Player');
+  assert.equal(view.currentProgram.channelName, 'Liminal One');
+  assert.equal(view.guide.selectedProgram.title, 'The Midnight Archive');
+  assert.equal(view.actions.map((action) => action.id).join(','), 'openGuide,openSettings');
+});
+
+test('route actions move between existing route ids and carry status text', () => {
+  const initial = createWorkflowState();
+  const guide = applyWorkflowAction(initial, 'openGuide');
+  const guideView = getRouteWorkflowView(guide);
+
+  assert.deepEqual(guide.routeState, { activeRoute: 'guide', previousRoute: 'player' });
+  assert.equal(guide.lastActionId, 'openGuide');
+  assert.equal(guide.lastActionRoute, 'player');
+  assert.equal(guideView.statusText, 'Guide opened from the player preview.');
+
+  const setup = applyWorkflowAction(guide, 'openChannelSetup');
+  assert.deepEqual(setup.routeState, { activeRoute: 'channelSetup', previousRoute: 'guide' });
+  assert.equal(getRouteWorkflowView(setup).statusText, 'Channel setup opened for lineup edits.');
+
+  const player = applyWorkflowAction(setup, 'confirmSetup');
+  assert.deepEqual(player.routeState, { activeRoute: 'player', previousRoute: 'channelSetup' });
+  assert.equal(getRouteWorkflowView(player).statusText, 'Player preview opened with the draft lineup.');
+});
+
+test('invalid route action for the active route leaves workflow state unchanged', () => {
+  const initial = createWorkflowState('settings');
+  const next = applyWorkflowAction(initial, 'openGuide');
+
+  assert.equal(next, initial);
+  assert.equal(findRouteAction('settings', 'openGuide'), null);
+});
+
+test('settings channel setup action uses settings-specific status text', () => {
+  const setup = applyWorkflowAction(createWorkflowState('settings'), 'openChannelSetup');
+
+  assert.deepEqual(setup.routeState, { activeRoute: 'channelSetup', previousRoute: 'settings' });
+  assert.equal(setup.lastActionId, 'openChannelSetup');
+  assert.equal(setup.lastActionRoute, 'settings');
+  assert.equal(getRouteWorkflowView(setup).statusText, 'Channel setup opened from settings.');
+});
+
+test('settings player action uses settings-specific status text', () => {
+  const player = applyWorkflowAction(createWorkflowState('settings'), 'resumePlayer');
+
+  assert.deepEqual(player.routeState, { activeRoute: 'player', previousRoute: 'settings' });
+  assert.equal(player.lastActionId, 'resumePlayer');
+  assert.equal(player.lastActionRoute, 'settings');
+  assert.equal(getRouteWorkflowView(player).statusText, 'Returned to player preview from settings.');
+});
+
+test('direct route activation clears action status and preserves previous route', () => {
+  const guide = applyWorkflowAction(createWorkflowState(), 'openGuide');
+  const settings = activateWorkflowRoute(guide, 'settings');
+  const settingsView = getRouteWorkflowView(settings);
+
+  assert.deepEqual(settings.routeState, { activeRoute: 'settings', previousRoute: 'guide' });
+  assert.equal(settings.lastActionId, null);
+  assert.equal(settings.lastActionRoute, null);
+  assert.equal(settingsView.statusText, 'Settings preview is local-only and not persisted.');
+});
+
+test('settings actions update only renderer-local settings draft state', () => {
+  const initial = createWorkflowState('settings');
+  const fullscreen = applyWorkflowSettingsAction(initial, 'cycleLaunchMode');
+  const compact = applyWorkflowSettingsAction(fullscreen, 'cycleGuideDensity');
+  const hiddenBadges = applyWorkflowSettingsAction(compact, 'togglePreviewBadges');
+  const view = getRouteWorkflowView(hiddenBadges);
+
+  assert.deepEqual(hiddenBadges.routeState, initial.routeState);
+  assert.equal(hiddenBadges.settingsDraft.launchMode, 'fullscreen-preview');
+  assert.equal(hiddenBadges.settingsDraft.guideDensity, 'compact');
+  assert.equal(hiddenBadges.settingsDraft.previewBadgesEnabled, false);
+  assert.equal(view.settings.playbackMode, 'Fullscreen desktop preview');
+  assert.equal(view.settings.sections.length, 3);
+});
+
+test('channel setup actions update fake draft summary and validation state', () => {
+  const initial = createWorkflowState('channelSetup');
+  const pausedFeatured = applyWorkflowChannelSetupAction(initial, 'toggleFeaturedChannel');
+  const withDraft = applyWorkflowChannelSetupAction(pausedFeatured, 'addDraftChannel');
+  const review = applyWorkflowChannelSetupAction(withDraft, 'advanceSetupStep');
+  const view = getRouteWorkflowView(review);
+
+  assert.deepEqual(review.routeState, initial.routeState);
+  assert.equal(view.channelDrafts.length, 4);
+  assert.equal(view.channelSetupSummary.enabledChannelCount, 2);
+  assert.equal(view.channelSetupSummary.totalBlockCount, 6);
+  assert.equal(view.setupSteps.find((step) => step.id === 'review')?.state, 'current');
+  assert.deepEqual(view.setupValidationMessages, []);
+
+  const reset = applyWorkflowChannelSetupAction(review, 'resetDraftLineup');
+  assert.equal(getRouteWorkflowView(reset).channelDrafts.length, 3);
+});
+
+test('EPG actions update only renderer-local guide state', () => {
+  const initial = createWorkflowState('guide');
+  const nextChannel = applyWorkflowEpgAction(initial, 'nextChannel');
+  const later = applyWorkflowEpgAction(nextChannel, 'nextWindow');
+  const view = getRouteWorkflowView(later);
+
+  assert.deepEqual(later.routeState, initial.routeState);
+  assert.equal(view.guide.windowStartMs, initial.epg.windowStartMs + 30 * 60 * 1000);
+  assert.equal(view.guide.selectedProgram.channelId, 'channel-vault');
+  assert.equal(view.guide.selectedProgram.title, 'Restored Feature');
+});
+
+test('fake workflow view models avoid Plex and player privileged renderer fields', () => {
+  const routeIds = ['player', 'guide', 'settings', 'channelSetup'] as const;
+
+  for (const routeId of routeIds) {
+    const view = getRouteWorkflowView(createWorkflowState(routeId));
+    assert.equal(containsPlexForbiddenRendererField(view), false, routeId);
+  }
+});
