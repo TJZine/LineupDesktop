@@ -375,7 +375,7 @@ const requiredTransferredSkillNames = [
   'verification-strategy',
 ];
 
-export function verifyDocs(root = repoRoot) {
+/** Docs/control-plane gate: an empty errors array means pass, and check order keeps diagnostics readable for audit. */ export function verifyDocs(root = repoRoot) {
   const errors = [];
   checkRequiredFiles(root, errors);
   checkRunBundleIgnore(root, errors);
