@@ -114,7 +114,12 @@ class ChannelEventOwner {
   }
 }
 
-/** Structural channel mutations run through mutationChain; current-channel switching updates memory immediately and persists best-effort/queued, not as a pre-commit durability barrier. */ export class ChannelManager implements IChannelManager {
+/**
+ * Structural channel mutations run through mutationChain; current-channel
+ * switching updates memory immediately and persists best-effort/queued, not as
+ * a pre-commit durability barrier.
+ */
+export class ChannelManager implements IChannelManager {
   private readonly emitter: ChannelEventOwner;
   private readonly contentResolver: ContentResolver;
   private readonly authoring: ChannelAuthoringService;

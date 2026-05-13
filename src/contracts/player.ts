@@ -85,6 +85,10 @@ export const PLAYER_ERROR_CATEGORIES = [
   'unknown',
 ] as const satisfies readonly PlayerErrorCategory[];
 
+/**
+ * Renderer-safe player validation rejects known privileged field names without
+ * proving arbitrary strings or unlisted keys secret-free.
+ */
 export const PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS = [
   'rawMediaUrl',
   'tokenizedUrl',
@@ -106,7 +110,7 @@ export const PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS = [
 export type PlayerForbiddenPrivilegedFieldKey =
   (typeof PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS)[number];
 
-/** Renderer-safe player validation rejects known privileged field names without proving arbitrary strings or unlisted keys secret-free. */ export interface PlayerMediaSummary {
+export interface PlayerMediaSummary {
   id: PlayerMediaId;
   title: string;
   subtitle?: string;
@@ -379,7 +383,11 @@ export const PLAYER_TRACK_DELIVERY_TYPE_VALUES = [
   'unknown',
 ] as const satisfies readonly PlayerTrackDeliveryType[];
 
-/** Guards player events before renderer delivery by checking expected shapes and recursively rejecting known privileged field names. */ export function isRendererSafePlayerEvent(value: unknown): value is PlayerEvent {
+/**
+ * Guards player events before renderer delivery by checking expected shapes and
+ * recursively rejecting known privileged field names.
+ */
+export function isRendererSafePlayerEvent(value: unknown): value is PlayerEvent {
   if (!isPlainRecord(value) || hasPlayerForbiddenPrivilegedField(value)) {
     return false;
   }

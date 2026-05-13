@@ -30,7 +30,11 @@ const DECISION_RANK: Record<DesktopStreamPolicyDecision['kind'], number> = {
   unsupported: 3,
 };
 
-/** Fixture stream policy ranks deterministic decisions with explicit reasons/unknowns instead of treating candidate or profile unknowns as support. */ export function decideDesktopStreamPolicy(
+/**
+ * Fixture stream policy ranks deterministic decisions with explicit
+ * reasons/unknowns instead of treating candidate or profile unknowns as support.
+ */
+export function decideDesktopStreamPolicy(
   input: DesktopStreamPolicyInput,
 ): DesktopStreamPolicyDecision {
   const evaluations = input.candidates.map((candidate) => evaluateCandidate(input, candidate));

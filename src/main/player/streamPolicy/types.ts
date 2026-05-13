@@ -42,6 +42,11 @@ export type DesktopStreamPolicyReasonCode =
   | 'profile-facts-incomplete'
   | 'transcode-unavailable';
 
+/**
+ * `desktop-parity-unproven` is surfaced as an unknown from the deterministic
+ * fixture policy; it informs support decisions without always blocking by
+ * itself.
+ */
 export type DesktopStreamPolicyUnknownCode =
   | 'profile-container-support-unknown'
   | 'profile-video-support-unknown'
@@ -61,11 +66,6 @@ export type DesktopStreamPolicyUnknownCode =
   | 'candidate-hdr-unknown'
   | 'desktop-parity-unproven';
 
-/**
- * `desktop-parity-unproven` is surfaced as an unknown from the deterministic
- * fixture policy; it informs support decisions without always blocking by
- * itself.
- */
 export type DesktopStreamDynamicRange = 'sdr' | 'hdr10' | 'dolby-vision' | 'unknown';
 
 export interface DesktopStreamCapabilityProfile {
