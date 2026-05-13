@@ -130,6 +130,38 @@ video/fullscreen behavior, live Plex transport, production native-helper
 playback, packaging/signing/update behavior, app-path or `safeStorage` runtime
 wiring, new preload/renderer APIs, dependencies, or copied/adapted upstream
 source.
+RD-14 is in progress. Unit 1 adds the first focused renderer desktop input
+owner under `src/renderer/desktopInput.ts`, keeping the renderer unprivileged
+and fake-backed while preserving RD-13 route/focus behavior. The unit moves
+keyboard shortcut mapping, text-entry bypass for editable targets, browser-safe
+gamepad normalization/polling/repeat policy, fullscreen dispatch, and runtime
+input cleanup out of the renderer composition root. It does not add main,
+preload, contract, Plex, native/helper, dependency, CSS, package, lockfile, or
+Windows evidence behavior. Unit 2 adds a focused main-owned window controller
+under `src/main/window/shellWindowController.ts` for BrowserWindow
+creation/options, fullscreen intent execution, normal bounds capture, display
+id custody, and restore/fallback placement policy. It keeps `src/main/index.ts`
+as composition/IPC wiring, preserves the existing `window.setFullscreen(boolean)`
+response shape, waits for stable fullscreen leave before restore, and fits
+restore bounds against current display work areas. It does not add preload,
+contract, renderer-facing Electron object, Plex, native/helper, dependency,
+package, or lockfile behavior. Unit 3 adds a focused main-owned foreground
+app-command controller under `src/main/window/shellAppCommandController.ts`.
+The controller listens only to the shell `BrowserWindow` `app-command` event,
+uses no `globalShortcut`, maps `browser-backward` to the existing renderer back
+path through synthetic `Escape` input, intentionally ignores
+`browser-forward`, and leaves media app commands unhandled for the later
+Windows/manual proof unit. It adds no preload method, IPC channel, contract
+event, renderer-facing OS command payload, Plex/player/native-helper behavior,
+renderer input rewrite, dependency, package, or lockfile behavior. RD-14 parent
+Unit 4 adds renderer-owned DOM cursor presentation under
+`src/renderer/desktopCursor.ts`. The cursor state remains renderer-local,
+starts visible, hides after inactivity or mapped desktop keyboard/gamepad
+input, shows on pointer/mouse activity, and restores visible state on unload
+cleanup through scoped CSS. It adds no main/native cursor control, production
+native surface ownership, preload/contract API, Plex/player/native-helper
+behavior, dependency, package, or lockfile behavior. RD-14 parent closeout still
+requires the Windows native-presentation/manual matrix unit.
 
 ## Product Invariants
 
@@ -153,9 +185,9 @@ source.
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
 | Import provenance | `docs/architecture/import-ledger.md` | Scaffolded |
 | File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size guardrails, temporary oversized-file allowlist rationale, decomposition/revisit triggers, and Tier 3 file-shape verification |
-| Electron main shell | `src/main/index.ts`, `src/main/protocol.ts`, and `src/main/smokeAssertions.ts` | Minimal secure shell frame with smoke-only assertion ownership split out of the main startup/composition entrypoint |
+| Electron main shell | `src/main/index.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with smoke-only assertion ownership split out of the startup/composition entrypoint, plus RD-14 Unit 2 main-owned BrowserWindow/fullscreen/display/restore controller and Unit 3 foreground app-command controller while `src/main/index.ts` remains composition and IPC wiring |
 | Preload bridge | `src/preload/index.cts` | Narrow shell/window/player bridge with runtime payload guards; guard vocabulary is kept in the sandbox-compatible preload entrypoint, and the integration seam reads preload source text plus renderer-safe contracts to parity-test guard vocabulary, channel constants, the single `lineupDesktop` exposure, and approved `ipcRenderer` method/channel pairs without importing or executing preload |
-| Renderer shell | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md) | RD-13/ARCH-01 unprivileged app shell with route, workflow, EPG, overlay, focus, and style surfaces |
+| Renderer shell | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md) | RD-13/ARCH-01 unprivileged app shell with route, workflow, EPG, overlay, focus, and style surfaces plus RD-14 Unit 1 focused desktop input owner for keyboard, text-entry bypass, browser-safe gamepad policy, fullscreen dispatch, runtime input cleanup, and Unit 4 renderer-owned DOM cursor presentation |
 | Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window/player bridge contract |
 | Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, diagnostic, IPC result, and runtime event-guard contract |
 | IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window/player IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
