@@ -206,8 +206,41 @@ function collectContextBridgeExposureCalls(): ts.CallExpression[] {
   return calls;
 }
 
-function describeNode(node: ts.Node): string {
-  return node.getText(preloadSourceFile).replaceAll(/\s+/gu, ' ');
+function describeNode(node: ts.Node, sourceFile = preloadSourceFile): string {
+  return node.getText(sourceFile).replaceAll(/\s+/gu, ' ');
+}
+
+function assertNoElectronValueImports(sourceFile = preloadSourceFile): void {
+  function visit(node: ts.Node): void {
+    if (
+      ts.isImportDeclaration(node) &&
+      ts.isStringLiteral(node.moduleSpecifier) &&
+      node.moduleSpecifier.text === 'electron' &&
+      node.importClause !== undefined &&
+      !isTypeOnlyImportClause(node.importClause)
+    ) {
+      assert.fail(`Electron value imports are not allowed in preload: ${describeNode(node, sourceFile)}`);
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+}
+
+function isTypeOnlyImportClause(importClause: ts.ImportClause): boolean {
+  if (importClause.isTypeOnly) {
+    return true;
+  }
+  if (importClause.name !== undefined) {
+    return false;
+  }
+  const namedBindings = importClause.namedBindings;
+  return (
+    namedBindings !== undefined &&
+    ts.isNamedImports(namedBindings) &&
+    namedBindings.elements.length > 0 &&
+    namedBindings.elements.every((element) => element.isTypeOnly)
+  );
 }
 
 function isTopLevelConstDeclaration(node: ts.VariableDeclaration): boolean {
@@ -493,7 +526,41 @@ test('preload channel constants match approved IPC contract exports', () => {
   }
 });
 
+test('preload bridge guard rejects Electron value imports while allowing type imports', () => {
+  const typeOnlySource = ts.createSourceFile(
+    'fixture.cts',
+    [
+      "import type { IpcRendererEvent } from 'electron';",
+      "import { type BrowserWindowConstructorOptions } from 'electron';",
+      'const event: IpcRendererEvent | null = null;',
+      'const options: BrowserWindowConstructorOptions | null = null;',
+      'void event;',
+      'void options;',
+    ].join('\n'),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  assert.doesNotThrow(() => assertNoElectronValueImports(typeOnlySource));
+
+  const valueImportSource = ts.createSourceFile(
+    'fixture.cts',
+    [
+      "import { ipcRenderer as unsafeIpc } from 'electron';",
+      "unsafeIpc.invoke('lineup:unsafe');",
+    ].join('\n'),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  assert.throws(
+    () => assertNoElectronValueImports(valueImportSource),
+    /Electron value imports are not allowed in preload/u,
+  );
+});
+
 test('preload bridge exposes only the typed lineupDesktop world', () => {
+  assertNoElectronValueImports();
   assertApprovedElectronRequireBinding();
 
   const exposureCalls = collectContextBridgeExposureCalls();
@@ -532,6 +599,7 @@ test('preload bridge exposes only the typed lineupDesktop world', () => {
 });
 
 test('preload bridge uses ipcRenderer only through approved methods and channels', () => {
+  assertNoElectronValueImports();
   assertApprovedElectronRequireBinding();
 
   const observedCalls: string[] = [];

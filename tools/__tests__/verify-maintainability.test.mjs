@@ -62,6 +62,7 @@ test('verifyMaintainability rejects growth beyond the reviewed baseline', () => 
 test('verifyMaintainability rejects malformed and duplicate allowlist rows', () => {
   const root = makeFixture();
   writeLines(path.join(root, 'src/renderer/index.ts'), 801);
+  writeLines(path.join(root, 'src/main/index.ts'), 801);
   const filePath = path.join(root, 'docs/architecture/file-shape-guardrails.md');
   fs.writeFileSync(filePath, [
     '# File Shape Guardrails',
@@ -70,6 +71,8 @@ test('verifyMaintainability rejects malformed and duplicate allowlist rows', () 
     '| --- | ---: | --- | --- |',
     '| src/renderer/index.ts | unknown | Temporary RD-13 renderer composition root while route modules are split. | Split before adding any RD-14 renderer input or fullscreen behavior. |',
     '| src/renderer/index.ts | 801 | Temporary RD-13 renderer composition root while route modules are split. | Split before adding any RD-14 renderer input or fullscreen behavior. |',
+    '| src/main/index.ts | 801 lines | Temporary main owner row with non-numeric suffix. | Split before adding more main process shell orchestration. |',
+    '| src/main/extra.ts | 801 | Temporary row with an extra column. | Split before more shell orchestration. | extra |',
     '',
   ].join('\n'));
 
@@ -77,6 +80,7 @@ test('verifyMaintainability rejects malformed and duplicate allowlist rows', () 
 
   assert(errors.some((error) => error.includes('duplicate allowlist row for src/renderer/index.ts')));
   assert(errors.some((error) => error.includes('allowlist row needs a numeric baseline line value')));
+  assert(errors.some((error) => error.includes('src/main/extra.ts allowlist row must have exactly four columns')));
 });
 
 test('verifyMaintainability rejects malformed allowlist table headers', () => {

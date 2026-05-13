@@ -99,11 +99,11 @@ function readFileShapeAllowlist(root, errors) {
       }
       continue;
     }
-    if (
-      cells.length < 4 ||
-      /^-+$/u.test(cells[0]) ||
-      !cells[0].startsWith('src/')
-    ) {
+    if (/^-+$/u.test(cells[0]) || !cells[0].startsWith('src/')) {
+      continue;
+    }
+    if (cells.length !== 4) {
+      errors.push(`${guardrailPath}: ${cells[0]} allowlist row must have exactly four columns`);
       continue;
     }
     if (!sawHeader && !reportedHeaderError) {
@@ -119,7 +119,7 @@ function readFileShapeAllowlist(root, errors) {
     if (allowlist.has(cells[0])) {
       errors.push(`${guardrailPath}: duplicate allowlist row for ${cells[0]}`);
     }
-    const recordedLines = Number.parseInt(cells[1] ?? '', 10);
+    const recordedLines = /^\d+$/u.test(cells[1] ?? '') ? Number.parseInt(cells[1], 10) : NaN;
     if (!Number.isInteger(recordedLines)) {
       errors.push(`${guardrailPath}: ${cells[0]} allowlist row needs a numeric baseline line value`);
     }
