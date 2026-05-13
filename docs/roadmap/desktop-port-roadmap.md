@@ -884,35 +884,35 @@ Exit gates:
 
 ### RD-14 Window, Input, And Fullscreen UX
 
-Status: in progress. Active plan:
-`docs/plans/rd-14-window-input-fullscreen-ux.md`. Unit 1, renderer desktop
-input and focus policy, is complete after clean plan review and clean
-implementation review. It added a focused renderer input owner for keyboard,
-text-entry bypass, browser-safe gamepad normalization/polling, and fullscreen
-dispatch over existing renderer navigation/focus behavior. Unit 2, main
-window/fullscreen/display owner module, is complete after clean implementation
-re-review. It moved BrowserWindow creation/options, fullscreen intent
-execution, normal bounds capture, display id custody, and restore/fallback
-placement policy into a focused main-owned controller while preserving the
-existing `window.setFullscreen(boolean)` response shape. `npm run verify`
-passed on 2026-05-13 after both units. Unit 3, foreground
-app-command/media-key bridge, is complete after clean implementation re-review.
-It added a focused main-owned foreground app-command controller that forwards
-`browser-backward` to the existing renderer back path through synthetic
-`Escape` input, intentionally ignores `browser-forward`, leaves media commands
-unhandled for Windows/manual proof, and adds no preload, IPC, contract,
-`globalShortcut`, Plex/player, or renderer-facing OS command surface. `npm run
-verify` passed on 2026-05-13 after Unit 3. Unit 4, renderer cursor and
-fake-backed route/overlay integration, is complete after clean implementation
-review. It added renderer-owned DOM cursor presentation that hides after
-inactivity or mapped desktop input, shows on pointer/mouse activity, cleans up
-listeners and timers on unload, and uses only scoped renderer CSS. `npm run
-verify` passed on 2026-05-13 after Unit 4. Remaining work is the Windows
-manual/native-presentation proof matrix closeout. Unit 5 is selected but
-blocked in the current local workspace because the observed platform is
-`darwin`; local `npm run smoke:electron` passed on 2026-05-13, but RD-14
-parent closeout still requires the Windows native-presentation commands and the
-redacted Windows manual matrix from the active plan.
+Status: complete. RD-14 completed through the feature-quality loop on
+2026-05-13. Unit 1 added a focused renderer desktop input owner for keyboard,
+text-entry bypass, browser-safe gamepad normalization/polling/repeat policy,
+fullscreen dispatch, and runtime cleanup while keeping renderer navigation and
+focus unprivileged. Unit 2 moved BrowserWindow creation/options, fullscreen
+intent execution, normal bounds capture, display id custody, and
+restore/fallback placement policy into a focused main-owned window controller
+while preserving the existing `window.setFullscreen(boolean)` response shape.
+Unit 3 added a focused main-owned foreground app-command controller that uses no
+`globalShortcut`, forwards only foreground `browser-backward` through synthetic
+`Escape` input, intentionally ignores `browser-forward`, and leaves media
+commands unhandled by product code. Unit 4 added renderer-owned DOM cursor
+presentation over the fake-backed routes and overlays. Unit 5 closed the Windows
+proof gate: RD-06 native-presentation preflight and smoke both passed on
+Windows, producing ignored redacted evidence under
+`docs/runs/rd-14-window-input-fullscreen-ux/`; the redacted Windows matrix
+records window/fullscreen/restore, primary/secondary display presence,
+multi-monitor availability, 100% DPI-only local coverage, focus/input over the
+native-presentation surface and renderer overlays, native video surface proof,
+cursor policy, media-key availability policy, local physical-gamepad hardware
+unavailability plus Unit 1 automated browser-safe gamepad proof, text-input
+unavailability in the current fake UI plus Unit 1 automated bypass proof, app
+route/quit proof, helper cleanup, and forbidden-field checks. `npm run
+smoke:electron`, `npm run verify:redaction`, `npm run
+verify:docs`, and `npm run verify` passed on 2026-05-13. The completed full
+plan body was archived locally under `docs/runs/archive/plans/` and removed
+from tracked active plans. No upstream UI/source import, preload API,
+renderer-facing privileged state, production native-helper playback, Plex
+runtime behavior, dependency, package, or lockfile change landed in RD-14.
 
 Depends on:
 
