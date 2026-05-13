@@ -678,18 +678,22 @@ correctly exits 1 with the Windows x64 refusal message.
 
 Windows closeout proof to run on a Windows x64 checkout of this commit:
 
-1. Confirm `node -p "process.platform + ' ' + process.arch"` prints
+1. Confirm the checkout includes packaging implementation commit
+   `eb36ed37ee743d88ea144db75909cde8882f1d88` in `git log --oneline`, then
+   record `git rev-parse HEAD` and `git status --short --branch` before the
+   proof run.
+2. Confirm `node -p "process.platform + ' ' + process.arch"` prints
    `win32 x64`.
-2. Run `npm ci` only if dependencies are not already installed from the
+3. Run `npm ci` only if dependencies are not already installed from the
    committed `package-lock.json`; do not change `package.json` or
    `package-lock.json`.
-3. Run `npm run build:electron`.
-4. Run `node tools/package-windows-internal.mjs --out
+4. Run `npm run build:electron`.
+5. Run `node tools/package-windows-internal.mjs --out
    out/rd-18-windows-internal`.
-5. Run `node tools/verify-windows-internal-package.mjs --package
+6. Run `node tools/verify-windows-internal-package.mjs --package
    out/rd-18-windows-internal/lineup-desktop-0.0.0-win32-x64 --manifest
    out/rd-18-windows-internal/lineup-desktop-0.0.0-win32-x64/resources/lineup-desktop-provenance.json`.
-6. Inspect and summarize, without committing generated artifacts, that the
+7. Inspect and summarize, without committing generated artifacts, that the
    package contains `LineupDesktop.exe`, `resources/app/package.json`,
    `resources/app/dist/**`,
    `resources/native-helper/PRODUCTION_HELPER_BLOCKED.txt`,
@@ -697,11 +701,14 @@ Windows closeout proof to run on a Windows x64 checkout of this commit:
    `resources/lineup-desktop-provenance.json`,
    `resources/checksums.sha256`, and
    `resources/third-party-notices-internal.json`.
-7. Confirm the verifier output is clean, the provenance records Electron/Node
-   runtime versions from the Windows Electron runtime, artifact checksums are
-   deterministic and relative, native helper and media binaries remain blocked
-   placeholders only, generated package evidence is redaction-safe, and public
-   release/signing/update remain blocked.
+8. Confirm the verifier output is clean, the provenance records Electron/Node
+   runtime versions from the Windows Electron runtime, artifact checksum
+   manifest rows use deterministic relative path ordering, native helper and
+   media binaries remain blocked placeholders only, generated package evidence
+   is redaction-safe, and public release/signing/update remain blocked.
+9. Record `git status --short --branch` after the proof run. Expected tracked
+   changes: none. Expected local-only generated output: ignored
+   `out/rd-18-windows-internal/**` and any ignored redacted proof notes.
 
 Do not call RD-18 done until the Windows x64 run observes that real generated
 artifact and records redacted layout/provenance/checksum evidence. Do not add
