@@ -509,6 +509,163 @@ Implementation closeout:
   - Expected: only intended tracked files are modified; ignored RD-16 run-bundle
     evidence remains untracked.
 
+## Windows Proof Handoff
+
+Status entering Windows proof:
+
+- Units 1, 2, and 4 are implemented, locally verified, and reviewed clean.
+- Unit 3 was intentionally not selected because no reviewed replan made
+  runtime/adapter membership or handoff changes required for RD-16.
+- `npm run verify` passed locally after Unit 4. The remaining closeout gate is
+  Windows native-presentation media-matrix proof.
+
+Windows tester setup:
+
+- Use a Windows checkout that includes commits `754532d`, `d413e0e`,
+  `c6b723a`, `21c22f6`, `dd9b2e4`, and this reviewed handoff revision, or a
+  newer commit containing the same RD-16 plan and harness changes.
+- Start from a clean tracked worktree or explicitly report unrelated tracked
+  changes before running proof commands.
+- Install npm dependencies with the existing lockfile, for example `npm ci` if
+  `node_modules` is absent or stale. Do not commit dependency or lockfile
+  changes.
+- Ensure Node, Electron dependencies, a `.NET` SDK capable of `dotnet build`
+  for the harness `net7.0` helper target, `mpv.exe`, and `libmpv-2.dll`
+  satisfy the existing RD-06 native-presentation preflight. The harness uses
+  `RD06_MPV_ROOT` / `RD06_MPV_EXE` / `RD06_LIBMPV_DLL` when those environment
+  variables are set, otherwise it uses the existing RD-06 default path.
+- Do not add package dependencies, lockfile changes, production native-helper
+  wiring, product IPC, preload APIs, live Plex transport, persisted settings, or
+  copied/adapted upstream source during the Windows proof pass.
+
+Create the ignored local descriptor at
+`docs/runs/rd-16-subtitle-audio-hdr-hardening/media-matrix.local.json`.
+The descriptor is tester-observed metadata; the harness records it as redacted
+evidence beside dummy native-presentation proof. The harness does not load raw
+sample paths and does not automatically inspect real media tracks from this
+descriptor.
+
+Descriptor shape policy:
+
+```json
+{
+  "cases": {
+    "multi-audio": {
+      "label": "multi-audio-safe-sample",
+      "status": "observed"
+    },
+    "subtitle-bearing": {
+      "label": "subtitle-bearing-safe-sample",
+      "status": "observed"
+    },
+    "hdr": {
+      "label": "hdr-safe-sample",
+      "status": "observed"
+    },
+    "hdr-unavailable": {
+      "label": "hdr-unavailable-safe-sample",
+      "status": "observed",
+      "reason": "safe-negative-hdr-sample-observed"
+    }
+  }
+}
+```
+
+Descriptor rules:
+
+- The descriptor must provide exactly the known RD-16 case keys
+  `multi-audio`, `subtitle-bearing`, `hdr`, and `hdr-unavailable`. This handoff
+  policy is intentionally stricter than harness parsing: the parser can ignore
+  extra cases and convert missing known cases to `blocker`, but a closeout-ready
+  Windows proof descriptor should not rely on that leniency.
+- Status values must be `observed`, `unavailable`, or `blocker`. Unknown
+  statuses normalize to `blocker`.
+- Labels and reasons must be short, redacted, and path-free. Do not include raw
+  local paths, drive letters, URLs, native handles, Plex field names, token-like
+  text, auth headers, process args/env, or sample filenames that expose private
+  media.
+- Mark `observed` only after the Windows tester has actually observed the named
+  safe local sample behavior outside the descriptor itself. Mark `unavailable`
+  when the safe local sample is missing but the absence is explainable. Mark
+  `blocker` for failed or ambiguous behavior.
+- RD-16 closeout requires all four cases to be `observed`. Any `blocker`,
+  `unavailable`, missing, or unknown-normalized case blocks closeout unless a
+  later reviewed replan changes the Windows proof requirement. If a case is
+  unavailable, record the unavailable matrix explicitly and do not claim support
+  for that behavior.
+
+Run the Windows proof commands from the repo root:
+
+```sh
+npm run test:harness-docs
+node tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs --mode native-presentation-preflight --out docs/runs/rd-16-subtitle-audio-hdr-hardening/native-proof/preflight
+node tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs --mode native-presentation-smoke --fullscreen-mode native-presentation-host --dummy-input local-and-http --rd16-media-matrix docs/runs/rd-16-subtitle-audio-hdr-hardening/media-matrix.local.json --duration-ms 7500 --out docs/runs/rd-16-subtitle-audio-hdr-hardening/native-proof/smoke
+npm run verify:redaction
+```
+
+Expected Windows proof outputs:
+
+- `npm run test:harness-docs` exits 0.
+- Preflight exits 0 and
+  `docs/runs/rd-16-subtitle-audio-hdr-hardening/native-proof/preflight/manifest.redacted.json`
+  records `mode: native-presentation-preflight` and `status: passed`.
+- Smoke exits 0 and
+  `docs/runs/rd-16-subtitle-audio-hdr-hardening/native-proof/smoke/manifest.redacted.json`
+  records
+  `mode: native-presentation-smoke`, `status: passed`,
+  `fullscreenMode: native-presentation-host`, `productIpcUsed: false`,
+  `dummyInputsOnly: true`, `dummyHeaderOnly: true`,
+  `rawLocalPathsPersisted: false`, `rawUrlsPersisted: false`, and
+  `rawNativeValuesPersisted: false`.
+- `docs/runs/rd-16-subtitle-audio-hdr-hardening/native-proof/smoke/summary.redacted.md`
+  includes
+  `RD-15 native presentation UI: 16/16 observed` and an
+  `RD-16 media matrix: observed (...)` line with all four case statuses marked
+  `observed`.
+- The manifest keeps `tracks: not-proven-by-dummy-visual-media`; do not remove
+  or reinterpret this marker. RD-16 media proof comes from the redacted
+  descriptor plus tester observation, not from dummy GIF playback.
+- `npm run verify:redaction` exits 0 after the evidence exists.
+
+Windows tester report-back packet:
+
+```text
+RD-16_WINDOWS_PROOF_RESULT
+branch/commit:
+tracked git status:
+test:harness-docs:
+native-presentation-preflight exit/status:
+native-presentation-smoke exit/status:
+summary RD-15 native presentation UI line:
+summary RD-16 media matrix line:
+matrix case notes:
+- multi-audio:
+- subtitle-bearing:
+- hdr:
+- hdr-unavailable:
+redaction verification:
+blockers/unavailable cases:
+```
+
+Do not paste raw `events.redacted.ndjson` unless a reviewer asks for a redacted
+excerpt, and never paste raw local paths, URLs, headers, token-shaped values,
+native handles, or private sample filenames.
+
+Closeout routing after Windows proof:
+
+- If preflight/smoke pass, redaction passes, and every matrix case is
+  `observed`, route back to `lineup-desktop-feature-quality-loop` for RD-16
+  closeout docs, implementation review if the proof changed tracked files,
+  `npm run verify`, and roadmap/current-state updates.
+- If preflight/smoke fails, redaction fails, descriptor loading rejects the
+  matrix, any case is `blocker` or `unavailable`, any known case is missing, or
+  the tester cannot provide safe local media, keep RD-16 active and blocked. Do
+  not update roadmap/current-state as complete unless a later reviewed replan
+  deliberately relaxes the Windows proof requirement.
+- If satisfying proof requires real media paths in committed files, production
+  helper behavior, live Plex streams, product IPC, dependencies, or broader
+  contract changes, stop and replan before editing.
+
 ## Acceptance Criteria
 
 - Plan review is clean before any implementation unit begins.
@@ -591,7 +748,7 @@ WHY: Tier 3 native playback/Plex boundary work touches renderer-safe contracts,
 track identity, redaction, dev-only native proof, and Windows closeout evidence.
 
 NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
 TASK: Complete RD-16 Subtitle, Audio, And HDR Hardening Through Quality Loop
 TASK_FAMILY: feature/design
 TIER: Tier 3
@@ -599,24 +756,23 @@ PLAN: docs/plans/rd-16-subtitle-audio-hdr-hardening.md
 ARTIFACT: docs/plans/rd-16-subtitle-audio-hdr-hardening.md
 FILES:
 - docs/plans/rd-16-subtitle-audio-hdr-hardening.md
+- tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs
+- tools/__tests__/rd-06-native-libmpv-host-spike.test.mjs
 - docs/roadmap/desktop-port-roadmap.md
 - docs/architecture/CURRENT_STATE.md
 - docs/architecture/playback-architecture.md
-- docs/architecture/file-shape-guardrails.md
-- src/main/player/streamPolicy/desktopStreamPolicy.ts
-- src/main/player/streamPolicy/types.ts
-- src/main/plex/streamResolver.ts
-- src/contracts/player.ts
-- tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs
-BLOCKERS: Unit 1 implementation cannot start until plan review is clean and the Freshness Gate passes.
+BLOCKERS: Windows native-presentation media-matrix proof is required before RD-16 closeout.
 MESSAGE:
-Review the active RD-16 Tier 3 plan read-only. Focus on scope boundaries,
-renderer-safe track identity without adapter current-request membership
-overclaiming, language metadata scope, subtitle/audio/HDR media matrix
-completeness, Windows proof before closeout, Architecture Health freshness
-gate, verification commands, and whether Unit 1 can become implementation-ready
-only after the Freshness Gate passes. Do not implement product code during
-review. If review is clean, route the controller to execution-unit-select for
-Unit 1 only after `git status --short --branch` and
-`npm run verify:maintainability` satisfy the Freshness Gate. If material
-findings remain, route back to lineup-desktop-feature-plan for plan revision.
+Resume RD-16 at the Windows proof gate, not implementation. Units 1, 2, and 4
+are implemented, locally verified, reviewed clean, and committed; Unit 3 was not
+selected. Follow the `Windows Proof Handoff` section exactly. On Windows, create
+the ignored redacted descriptor at
+`docs/runs/rd-16-subtitle-audio-hdr-hardening/media-matrix.local.json`, run
+`npm run test:harness-docs`, the native-presentation preflight, the
+native-presentation smoke with `--rd16-media-matrix`, and
+`npm run verify:redaction`. Report back with the
+`RD-16_WINDOWS_PROOF_RESULT` packet. If proof passes and all four matrix cases
+are `observed`, route to RD-16 closeout docs, read-only implementation/closeout
+review, and `npm run verify`; if proof is unavailable, blocked, incomplete, or
+contains any `unavailable` case, leave RD-16 active and do not update
+roadmap/current-state as complete.
