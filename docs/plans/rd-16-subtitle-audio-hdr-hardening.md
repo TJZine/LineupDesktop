@@ -307,8 +307,10 @@ Implementation scope after clean plan review:
 
 Unit 1: stream policy and media matrix core.
 
-- Status: blocked until read-only plan review is clean and the Freshness Gate
-  passes.
+- Status: complete locally; plan review, Freshness Gate, implementation review,
+  `npm run test:contracts`, `npm run verify:architecture`, and
+  `npm run verify:redaction` passed. Committed in
+  `d413e0e feat(player): harden subtitle audio hdr stream policy`.
 - Write scope: `src/main/player/streamPolicy/types.ts`,
   `src/main/player/streamPolicy/desktopStreamPolicy.ts`,
   `src/__tests__/main/player/desktopStreamPolicy.test.ts`, and
@@ -326,7 +328,10 @@ Unit 1: stream policy and media matrix core.
 
 Unit 2: Plex resolver mapping and private/public track identity custody.
 
-- Status: pending Unit 1 implementation review.
+- Status: complete locally; implementation review, `npm run test:contracts`,
+  `npm run verify:architecture`, and `npm run verify:redaction` passed.
+  Committed in
+  `c6b723a feat(plex): harden playback track identity projection`.
 - Write scope: `src/main/plex/streamResolver.ts` and
   `src/__tests__/main/plexStreamResolver.test.ts`.
 - Required outcome: Plex stream metadata maps to public track ids without raw
@@ -342,7 +347,8 @@ Unit 2: Plex resolver mapping and private/public track identity custody.
 Unit 3: runtime load-handoff proof for selected public ids, only by reviewed
 replan.
 
-- Status: pending Unit 2 implementation review.
+- Status: not selected; no reviewed replan made runtime/adapter membership or
+  handoff changes required for RD-16.
 - Write scope: the existing main/player runtime, bridge, composition, and
   adapter tests named in Files In Scope; production source only if a reviewed
   replan makes Unit 3 required and tests expose a real seam defect.
@@ -355,7 +361,11 @@ replan.
 
 Unit 4: Windows native-presentation media proof tooling.
 
-- Status: pending Units 1-3 clean implementation review.
+- Status: harness tooling complete locally; implementation review,
+  `npm run test:harness-docs`, `npm run verify:docs`, and
+  `npm run verify:redaction` passed. Committed in
+  `21c22f6 test(playback): add rd-16 native media proof harness`. Windows
+  native-presentation proof remains required before RD-16 closeout.
 - Write scope: `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs`,
   `tools/__tests__/rd-06-native-libmpv-host-spike.test.mjs`, and ignored local
   evidence under `docs/runs/rd-16-subtitle-audio-hdr-hardening/`.
