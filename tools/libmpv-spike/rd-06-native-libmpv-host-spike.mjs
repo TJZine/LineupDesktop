@@ -21,6 +21,13 @@ const evidenceFiles = Object.freeze([
   'events.redacted.ndjson',
   'summary.redacted.md',
 ]);
+export const rd16MediaMatrixCases = Object.freeze([
+  'multi-audio',
+  'subtitle-bearing',
+  'hdr',
+  'hdr-unavailable',
+]);
+const rd16MediaMatrixStatuses = Object.freeze(['observed', 'unavailable', 'blocker']);
 export const rd15NativePresentationProofs = Object.freeze([
   'rd15-ui-epg',
   'rd15-ui-osd',
@@ -45,7 +52,9 @@ const forbiddenHeaderTerms = Object.freeze([
 
 const forbiddenEvidencePatterns = [
   { label: 'raw-url', pattern: /\bhttps?:\/\//iu },
+  { label: 'raw-url-scheme', pattern: /\b(?:file|ftp):\/\//iu },
   { label: 'windows-local-path', pattern: /[A-Z]:\\|\\\\[^\\]+\\/iu },
+  { label: 'windows-forward-local-path', pattern: /[A-Z]:\//iu },
   { label: 'posix-local-path', pattern: /\/(?:Users|Volumes|private|var|tmp)\//iu },
   { label: 'raw-auth-field', pattern: new RegExp(`${['Author', 'ization'].join('')}\\s*:`, 'iu') },
   { label: 'plex-field', pattern: /\bX-Plex\b|\bPlex\b/iu },
@@ -64,6 +73,7 @@ export function parseArgs(args) {
     durationMs: 5000,
     dummyInput: 'local-and-http',
     fullscreenMode: null,
+    rd16MediaMatrix: null,
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -83,6 +93,9 @@ export function parseArgs(args) {
       index += 1;
     } else if (arg === '--fullscreen-mode' && value) {
       options.fullscreenMode = value;
+      index += 1;
+    } else if (arg === '--rd16-media-matrix' && value) {
+      options.rd16MediaMatrix = value;
       index += 1;
     } else {
       throw new Error(`unknown or incomplete argument: ${arg}`);
@@ -116,6 +129,9 @@ export function parseArgs(args) {
   }
   if (options.mode !== 'render-api-smoke' && options.mode !== 'native-presentation-smoke' && options.fullscreenMode !== null) {
     throw new Error('--fullscreen-mode is supported only for render-api-smoke and native-presentation-smoke');
+  }
+  if (options.rd16MediaMatrix !== null && options.mode !== 'native-presentation-smoke') {
+    throw new Error('--rd16-media-matrix is supported only for native-presentation-smoke');
   }
 
   return options;
@@ -302,6 +318,72 @@ export async function scanEvidenceDirectory(outDir) {
   return findings;
 }
 
+export function summarizeRd16MediaMatrixDescriptor(descriptor, { source = 'descriptor' } = {}) {
+  const inputCases = normalizeRd16InputCases(descriptor);
+  const cases = Object.fromEntries(rd16MediaMatrixCases.map((caseName) => {
+    const rawCase = inputCases.get(caseName);
+    const status = normalizeRd16MediaMatrixStatus(rawCase?.status);
+    const fallbackLabel = rawCase ? caseName : `${caseName}-missing`;
+    const label = normalizeRd16SampleLabel(rawCase?.label ?? rawCase?.sampleLabel, fallbackLabel);
+    const reason = typeof rawCase?.reason === 'string'
+      ? normalizeShortField(rawCase.reason)
+      : rawCase
+        ? undefined
+        : 'descriptor-case-missing';
+    return [caseName, {
+      label,
+      status,
+      ...(status === 'blocker' || reason ? { reason: reason ?? 'descriptor-status-blocker' } : {}),
+    }];
+  }));
+  const statuses = Object.values(cases).map((entry) => entry.status);
+  const status = statuses.includes('blocker')
+    ? 'blocker'
+    : statuses.includes('unavailable')
+      ? 'unavailable'
+      : 'observed';
+  const summary = {
+    status,
+    source: normalizeShortField(source),
+    cases,
+  };
+  const findings = scanForbiddenEvidenceContent(JSON.stringify(summary));
+  if (findings.length > 0) {
+    throw new Error(`RD-16 media matrix contains forbidden evidence: ${findings.join(', ')}`);
+  }
+  return summary;
+}
+
+export function buildMissingRd16MediaMatrix(reason = 'descriptor-not-supplied') {
+  return {
+    status: 'blocker',
+    source: 'not-supplied',
+    cases: Object.fromEntries(rd16MediaMatrixCases.map((caseName) => [
+      caseName,
+      {
+        label: caseName,
+        status: 'blocker',
+        reason: normalizeShortField(reason),
+      },
+    ])),
+  };
+}
+
+export async function loadRd16MediaMatrixDescriptor(filePath) {
+  const content = await fsp.readFile(filePath, 'utf8');
+  const findings = scanForbiddenEvidenceContent(content);
+  if (findings.length > 0) {
+    throw new Error(`RD-16 media matrix descriptor contains forbidden evidence: ${findings.join(', ')}`);
+  }
+  let descriptor;
+  try {
+    descriptor = JSON.parse(content);
+  } catch (error) {
+    throw new Error(`RD-16 media matrix descriptor must be JSON: ${error.message}`, { cause: error });
+  }
+  return summarizeRd16MediaMatrixDescriptor(descriptor, { source: 'ignored-local-json' });
+}
+
 export function createDummyVisualMediaBuffer() {
   return Buffer.from(
     'R0lGODlhAQABAIAAAP8AAAD/ACwAAAAAAQABAAACAkQBADs=',
@@ -334,7 +416,12 @@ async function runCli() {
   const result = options.mode === 'render-api-smoke'
     ? await runRenderApiSmoke({ outDir, durationMs: options.durationMs, fullscreenMode: options.fullscreenMode })
     : options.mode === 'native-presentation-smoke'
-      ? await runNativePresentationSmoke({ outDir, durationMs: options.durationMs, fullscreenMode: options.fullscreenMode })
+      ? await runNativePresentationSmoke({
+        outDir,
+        durationMs: options.durationMs,
+        fullscreenMode: options.fullscreenMode,
+        rd16MediaMatrixPath: options.rd16MediaMatrix,
+      })
       : await runWidSmoke({ outDir, durationMs: options.durationMs });
   process.exitCode = result.status === 'passed' ? 0 : result.status === 'blocked' ? 2 : 1;
 }
@@ -401,6 +488,9 @@ async function runPreflight({ outDir, renderApi, nativePresentation = false }) {
       renderApiSymbols: renderApi ? renderApiStatus : 'not-requested',
       nativePresentationHost: nativePresentation ? nativePresentationStatus : 'not-requested',
     }, mpv),
+    observations: nativePresentation ? {
+      rd16MediaMatrix: buildMissingRd16MediaMatrix('native-presentation-smoke-descriptor-required'),
+    } : undefined,
     policy: buildEvidencePolicy(),
   };
 
@@ -441,8 +531,11 @@ async function runRenderApiSmoke({ outDir, durationMs, fullscreenMode }) {
   });
 }
 
-async function runNativePresentationSmoke({ outDir, durationMs, fullscreenMode }) {
+async function runNativePresentationSmoke({ outDir, durationMs, fullscreenMode, rd16MediaMatrixPath = null }) {
   await fsp.mkdir(outDir, { recursive: true });
+  const rd16MediaMatrix = rd16MediaMatrixPath
+    ? await loadRd16MediaMatrixDescriptor(rd16MediaMatrixPath)
+    : buildMissingRd16MediaMatrix();
   const preflightFacts = discoverPrerequisites();
   const validation = validatePreflightFacts(preflightFacts);
   if (validation.status !== 'passed') {
@@ -452,6 +545,9 @@ async function runNativePresentationSmoke({ outDir, durationMs, fullscreenMode }
       status: 'blocked',
       blockedReason: 'preflight-not-passed',
       fullscreenMode,
+      observations: {
+        rd16MediaMatrix,
+      },
       policy: buildEvidencePolicy(),
     };
     await writeEvidence(outDir, manifest, validation.checks.map((check) => ({
@@ -470,6 +566,7 @@ async function runNativePresentationSmoke({ outDir, durationMs, fullscreenMode }
     fullscreenMode,
     renderApi: true,
     nativePresentation: true,
+    rd16MediaMatrix,
     preflightFacts,
   });
 }
@@ -505,7 +602,16 @@ async function runWidSmoke({ outDir, durationMs }) {
   });
 }
 
-async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, renderApi, nativePresentation = false, preflightFacts }) {
+async function runSmokeHarness({
+  mode,
+  outDir,
+  durationMs,
+  fullscreenMode,
+  renderApi,
+  nativePresentation = false,
+  rd16MediaMatrix = null,
+  preflightFacts,
+}) {
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'lineup-rd06-'));
   const cleanup = {
     tempInputs: 'not-started',
@@ -666,6 +772,7 @@ async function runSmokeHarness({ mode, outDir, durationMs, fullscreenMode, rende
         cleanup: nativePresentation ? summarizeProof(requiredProofs.get('helper-cleanup')) : 'temp-only',
         dpi: 'noted-redacted',
         multiMonitor: 'noted-redacted',
+        rd16MediaMatrix: nativePresentation ? rd16MediaMatrix ?? buildMissingRd16MediaMatrix() : 'not-requested',
         tracks: 'not-proven-by-dummy-visual-media',
       },
       policy: buildEvidencePolicy(),
@@ -733,6 +840,42 @@ function getToolVersion(command, args, keepPattern) {
     .map((line) => line.replace(/[^\x20-\x7E]/gu, '').trim())
     .filter((line) => line && keepPattern.test(line))
     .slice(0, 3);
+}
+
+function normalizeRd16InputCases(descriptor) {
+  if (!descriptor || typeof descriptor !== 'object') {
+    throw new Error('RD-16 media matrix descriptor must be an object');
+  }
+  const rawCases = descriptor.cases ?? descriptor;
+  if (Array.isArray(rawCases)) {
+    return new Map(rawCases
+      .filter((entry) => entry && typeof entry === 'object')
+      .map((entry) => [normalizeShortField(entry.case ?? entry.name), entry]));
+  }
+  if (rawCases && typeof rawCases === 'object') {
+    return new Map(Object.entries(rawCases).map(([caseName, entry]) => [
+      normalizeShortField(caseName),
+      entry && typeof entry === 'object' ? entry : { status: entry },
+    ]));
+  }
+  throw new Error('RD-16 media matrix descriptor cases must be an object or array');
+}
+
+function normalizeRd16MediaMatrixStatus(value) {
+  if (typeof value !== 'string') {
+    return 'blocker';
+  }
+  const status = normalizeShortField(value);
+  return rd16MediaMatrixStatuses.includes(status) ? status : 'blocker';
+}
+
+function normalizeRd16SampleLabel(value, fallback) {
+  const label = typeof value === 'string' && value.trim() ? value.trim() : fallback;
+  const findings = scanForbiddenEvidenceContent(label);
+  if (findings.length > 0) {
+    throw new Error(`RD-16 media matrix sample label contains forbidden evidence: ${findings.join(', ')}`);
+  }
+  return normalizeShortField(label);
 }
 
 function summarizeTool(lines) {
@@ -1573,9 +1716,24 @@ async function writeSummary(outDir, manifest) {
     `- raw URLs persisted: ${manifest.policy.rawUrlsPersisted ? 'yes' : 'no'}`,
     `- raw native values persisted: ${manifest.policy.rawNativeValuesPersisted ? 'yes' : 'no'}`,
     `- RD-15 native presentation UI: ${summarizeSummaryObservation(manifest.observations?.rd15NativePresentationUi)}`,
+    `- RD-16 media matrix: ${summarizeRd16SummaryObservation(manifest.observations?.rd16MediaMatrix)}`,
     '',
   ];
   await fsp.writeFile(path.join(outDir, 'summary.redacted.md'), lines.join('\n'));
+}
+
+function summarizeRd16SummaryObservation(observation) {
+  if (!observation || observation === 'not-requested') {
+    return 'not-requested';
+  }
+  if (typeof observation === 'string') {
+    return observation;
+  }
+  const entries = Object.entries(observation.cases ?? {});
+  if (entries.length === 0) {
+    return observation.status ?? 'blocker';
+  }
+  return `${observation.status ?? 'blocker'} (${entries.map(([caseName, entry]) => `${caseName}:${entry.status ?? 'blocker'}`).join(', ')})`;
 }
 
 function summarizeSummaryObservation(observation) {

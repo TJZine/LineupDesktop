@@ -1,21 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 import {
   assertDummyHeaderPolicy,
   assertHelperInitPolicy,
+  buildMissingRd16MediaMatrix,
   buildDummyHeaderField,
   buildHelperInitPayload,
   buildHelperSpawn,
   buildNativePrerequisiteEvidence,
   createDummyVisualMediaBuffer,
+  loadRd16MediaMatrixDescriptor,
   parseArgs,
+  rd16MediaMatrixCases,
   rd15NativePresentationProofs,
   sanitizeHelperEvent,
   scanForbiddenEvidenceContent,
   summarizeRd15NativePresentationProofs,
+  summarizeRd16MediaMatrixDescriptor,
   validatePreflightFacts,
 } from '../libmpv-spike/rd-06-native-libmpv-host-spike.mjs';
 
@@ -68,6 +74,7 @@ test('parseArgs accepts RD-06 preflight, WID smoke, render API, and native prese
     durationMs: 5000,
     dummyInput: 'local-and-http',
     fullscreenMode: null,
+    rd16MediaMatrix: null,
   });
 
   const widSmoke = parseArgs(['--mode', 'wid-smoke', '--duration-ms', '7500', '--dummy-input', 'local-and-http']);
@@ -108,6 +115,16 @@ test('parseArgs accepts RD-06 preflight, WID smoke, render API, and native prese
   ]);
   assert.equal(nativePresentationSmoke.mode, 'native-presentation-smoke');
   assert.equal(nativePresentationSmoke.fullscreenMode, 'native-presentation-host');
+
+  const nativePresentationSmokeWithMatrix = parseArgs([
+    '--mode',
+    'native-presentation-smoke',
+    '--fullscreen-mode',
+    'native-presentation-host',
+    '--rd16-media-matrix',
+    'docs/runs/rd-16-subtitle-audio-hdr-hardening/media-matrix.local.json',
+  ]);
+  assert.equal(nativePresentationSmokeWithMatrix.rd16MediaMatrix, 'docs/runs/rd-16-subtitle-audio-hdr-hardening/media-matrix.local.json');
 });
 
 test('parseArgs rejects unsupported modes and dummy input policies', () => {
@@ -122,6 +139,10 @@ test('parseArgs rejects unsupported modes and dummy input policies', () => {
   assert.throws(
     () => parseArgs(['--mode', 'native-presentation-smoke', '--fullscreen-mode', 'browser-window']),
     /fullscreen-mode native-presentation-host/u,
+  );
+  assert.throws(
+    () => parseArgs(['--mode', 'native-presentation-preflight', '--rd16-media-matrix', 'media-matrix.local.json']),
+    /rd16-media-matrix is supported only for native-presentation-smoke/u,
   );
 });
 
@@ -323,6 +344,122 @@ test('native presentation smoke requires and summarizes named RD-15 UI surfaces'
   assert.deepEqual(summary['rd15-ui-epg'], { windowed: 'observed', fullscreen: 'observed' });
   assert.deepEqual(summary['rd15-ui-focus'], { windowed: 'observed', fullscreen: 'observed' });
   assert.deepEqual(summary['rd15-ui-osd'], { windowed: 'unavailable', fullscreen: 'unavailable' });
+});
+
+test('RD-16 media matrix descriptor summarizes redacted local sample labels', () => {
+  assert.deepEqual(rd16MediaMatrixCases, [
+    'multi-audio',
+    'subtitle-bearing',
+    'hdr',
+    'hdr-unavailable',
+  ]);
+
+  const summary = summarizeRd16MediaMatrixDescriptor({
+    cases: {
+      'multi-audio': { label: 'multi-audio-safe-sample', status: 'observed' },
+      'subtitle-bearing': { label: 'subtitle-bearing-safe-sample', status: 'unavailable' },
+      hdr: { label: 'hdr-safe-sample', status: 'observed' },
+      'hdr-unavailable': { label: 'hdr-unavailable-safe-sample', status: 'needs-review' },
+    },
+  });
+
+  assert.equal(summary.status, 'blocker');
+  assert.equal(summary.source, 'descriptor');
+  assert.equal(summary.cases['multi-audio'].status, 'observed');
+  assert.equal(summary.cases['multi-audio'].label, 'multi-audio-safe-sample');
+  assert.equal(summary.cases['subtitle-bearing'].status, 'unavailable');
+  assert.equal(summary.cases['hdr-unavailable'].status, 'blocker');
+  assert.deepEqual(scanForbiddenEvidenceContent(JSON.stringify(summary)), []);
+});
+
+test('RD-16 media matrix blocks closeout when no descriptor is supplied', () => {
+  const summary = buildMissingRd16MediaMatrix();
+
+  assert.equal(summary.status, 'blocker');
+  for (const caseName of rd16MediaMatrixCases) {
+    assert.deepEqual(summary.cases[caseName], {
+      label: caseName,
+      status: 'blocker',
+      reason: 'descriptor-not-supplied',
+    });
+  }
+  assert.deepEqual(scanForbiddenEvidenceContent(JSON.stringify(summary)), []);
+});
+
+test('RD-16 media matrix rejects raw paths, URLs, native handles, and secret-shaped labels', async () => {
+  assert.throws(
+    () => summarizeRd16MediaMatrixDescriptor({
+      cases: {
+        'multi-audio': { label: `C:${'\\'}samples${'\\'}multi-audio.mkv`, status: 'observed' },
+      },
+    }),
+    /forbidden evidence/u,
+  );
+  assert.throws(
+    () => summarizeRd16MediaMatrixDescriptor({
+      cases: {
+        'multi-audio': { label: 'C:/samples/multi-audio.mkv', status: 'observed' },
+      },
+    }),
+    /forbidden evidence/u,
+  );
+  assert.throws(
+    () => summarizeRd16MediaMatrixDescriptor({
+      cases: {
+        hdr: { label: `${['ht', 'tp'].join('')}://127.0.0.1/hdr.mkv`, status: 'observed' },
+      },
+    }),
+    /forbidden evidence/u,
+  );
+  assert.throws(
+    () => summarizeRd16MediaMatrixDescriptor({
+      cases: {
+        hdr: { label: 'file:///C:/samples/hdr.mkv', status: 'observed' },
+      },
+    }),
+    /forbidden evidence/u,
+  );
+  assert.throws(
+    () => summarizeRd16MediaMatrixDescriptor({
+      cases: {
+        hdr: { label: 'ftp://example.test/movie.mkv', status: 'observed' },
+      },
+    }),
+    /forbidden evidence/u,
+  );
+  assert.throws(
+    () => summarizeRd16MediaMatrixDescriptor({
+      cases: {
+        'subtitle-bearing': { label: 'hwnd sample', status: 'observed' },
+      },
+    }),
+    /forbidden evidence/u,
+  );
+
+  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'lineup-rd16-matrix-test-'));
+  const descriptorPath = path.join(tempDir, 'media-matrix.local.json');
+  try {
+    await fsp.writeFile(descriptorPath, JSON.stringify({
+      cases: {
+        'multi-audio': { label: 'multi-audio-safe-sample', status: 'observed' },
+        'subtitle-bearing': { label: 'subtitle-bearing-safe-sample', status: 'observed' },
+        hdr: { label: ['plex', 'sample'].join('-'), status: 'observed' },
+        'hdr-unavailable': { label: 'hdr-unavailable-safe-sample', status: 'unavailable' },
+      },
+    }));
+    await assert.rejects(() => loadRd16MediaMatrixDescriptor(descriptorPath), /forbidden evidence/u);
+  } finally {
+    await fsp.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('native presentation evidence records RD-16 matrix without replacing dummy media proof', () => {
+  assert.match(harnessSource, /--rd16-media-matrix/u);
+  assert.match(harnessSource, /rd16MediaMatrix: nativePresentation \? rd16MediaMatrix \?\? buildMissingRd16MediaMatrix\(\) : 'not-requested'/u);
+  assert.match(harnessSource, /tracks: 'not-proven-by-dummy-visual-media'/u);
+  assert.match(harnessSource, /RD-16 media matrix:/u);
+  assert.match(harnessSource, /buildMissingRd16MediaMatrix\('native-presentation-smoke-descriptor-required'\)/u);
+  assert.doesNotMatch(harnessSource, /productIpcUsed: true/u);
 });
 
 test('RD-15 native presentation UI proof uses pixel capture in windowed and fullscreen modes', () => {
