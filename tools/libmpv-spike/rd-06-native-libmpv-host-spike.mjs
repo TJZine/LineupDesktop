@@ -1038,19 +1038,7 @@ function collectProofs(events) {
       continue;
     }
     const current = proofs.get(event.proof) ?? {};
-    proofs.set(event.proof, {
-      ...current,
-      ...event,
-      fileLoaded: current.fileLoaded === true || event.fileLoaded === true,
-      endFileObserved: current.endFileObserved === true || event.endFileObserved === true,
-      activePlayback: current.activePlayback === true || event.activePlayback === true,
-      visiblePixelsObserved: current.visiblePixelsObserved === true || event.visiblePixelsObserved === true,
-      nativeCaptureObserved: current.nativeCaptureObserved === true || event.nativeCaptureObserved === true,
-      browserWindowFullscreen: current.browserWindowFullscreen === true || event.browserWindowFullscreen === true,
-      nativePresentationFullscreen: current.nativePresentationFullscreen === true || event.nativePresentationFullscreen === true,
-      cleanupObserved: current.cleanupObserved === true || event.cleanupObserved === true,
-      focused: current.focused === true || event.focused === true,
-    });
+    proofs.set(event.proof, mergeProofEvent(current, event));
   }
   return proofs;
 }
@@ -1679,7 +1667,7 @@ export function summarizeRd15NativePresentationProofs(proofs) {
   return Object.fromEntries(rd15NativePresentationProofs.map((proof) => [
     proof,
     Object.fromEntries(rd15NativePresentationModes.map((presentationMode) => {
-      const event = proofs.get(proof)?.get?.(presentationMode) ?? proofs.get(`${proof}:${presentationMode}`);
+      const event = proofs.get(proof)?.get?.(presentationMode);
       if (!event) {
         return [presentationMode, 'unavailable'];
       }

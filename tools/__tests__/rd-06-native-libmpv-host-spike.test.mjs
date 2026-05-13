@@ -615,8 +615,9 @@ test('WID smoke source merges repeated proof events before pass/fail evaluation'
     'utf8',
   );
   assert.match(source, /const requiredProofs = collectProofs\(events\)/u);
+  assert.match(source, /proofs\.set\(event\.proof, mergeProofEvent\(current, event\)\)/u);
   assert.match(source, /fileLoaded: current\.fileLoaded === true \|\| event\.fileLoaded === true/u);
-  assert.match(source, /activePlayback: current\.activePlayback === true \|\| event\.activePlayback === true/u);
+  assert.match(source, /markerPixelsObserved: current\.markerPixelsObserved === true \|\| event\.markerPixelsObserved === true/u);
   assert.doesNotMatch(source, /new Map\(events\.map\(\(event\) => \[event\.proof, event\]\)\)/u);
 });
 
@@ -741,7 +742,7 @@ test('sanitizeHelperEvent keeps RD-15 proof booleans while dropping raw fields',
 });
 
 test('RD-15 native presentation proof stays dev-only without product IPC or production helper behavior', () => {
-  const rd15MirrorSource = harnessSource.slice(harnessSource.indexOf('function buildRd15NativePresentationHtml()'));
+  const rd15MirrorSource = sliceMethodSource(harnessSource, 'function buildRd15NativePresentationHtml()');
   assert.match(harnessSource, /productIpcUsed: false/u);
   assert.match(harnessSource, /dummyInputsOnly: true/u);
   assert.match(harnessSource, /rendererReceivesPrivilegedValues: false/u);

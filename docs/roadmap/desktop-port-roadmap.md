@@ -100,6 +100,36 @@ durable completion summary.
   resolver/runtime playback URL setup, scheduler/channel persistence, or
   backup/restore implementation landed. Platform proof remained Mac/local
   automated only, and no Windows gate was triggered.
+- [x] RD-11 Scheduler, Channel, And Content Domain Import implemented through
+  pure scheduler/channel/content domains plus channel persistence seams; full
+  verification passed on 2026-05-11. RD-11 kept Electron, Node, browser globals,
+  live Plex transport, raw Plex payloads, auth headers, tokenized URLs, native
+  playback details, and renderer state out of domain owners.
+- [x] RD-12 Plex To Player Integration implemented through main-owned Plex
+  stream resolution, playback runtime, bridge, and composition seams; `npm run
+  verify` passed on 2026-05-11. RD-12 resolved scheduled Plex media into
+  renderer-safe player loads while keeping private playback descriptors, PMS
+  leases, tokens, headers, and raw URLs out of renderer/preload contracts.
+- [x] RD-13 Renderer UI And Navigation Import completed on 2026-05-12 through
+  Units 1 through 6. `npm run smoke:electron`, the RD-13 renderer/domain source
+  audit, `npm run verify:redaction`, and `npm run verify` passed after Unit 6.
+  RD-13 added the fake-backed renderer app shell, routes, workflows, EPG,
+  overlays, settings/channel setup, focus, and CSS surfaces without importing
+  upstream UI source, exposing privileged renderer state, or wiring live Plex or
+  native playback behavior.
+- [x] ARCH-01 Architecture Health Stabilization Before RD-14 completed on
+  2026-05-12. It remediated renderer composition, renderer static asset, main
+  composition, and overlay hotspots, hardened preload source-shape guardrails,
+  and left remaining oversized owners with reviewed triggers; `npm run
+  verify:maintainability`, `npm run verify:docs`, `npm run smoke:electron`, and
+  `npm run verify` passed.
+- [x] RD-14 Window, Input, And Fullscreen UX completed on 2026-05-13 through
+  Units 1 through 5. `npm run smoke:electron`, `npm run verify:redaction`,
+  `npm run verify:docs`, and `npm run verify` passed. RD-14 added focused desktop
+  input, BrowserWindow/fullscreen/display, foreground app-command, DOM cursor,
+  and Windows native-presentation proof coverage while leaving production
+  native-helper playback, live Plex runtime, preload expansion, packaging, and
+  upstream source import unimplemented.
 - [x] RD-15 UI Over Native Video Integration completed on 2026-05-13 after
   Units 1 through 3 and clean implementation review. Windows preflight passed;
   Windows native-presentation smoke passed under
