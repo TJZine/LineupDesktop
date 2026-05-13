@@ -1,3 +1,7 @@
+/**
+ * Policy sentinel for renderer and diagnostic redaction expectations. This
+ * stub records the contract surface but is not enforcement by itself.
+ */
 export const REDACTION_BOUNDARY = {
   rendererMayPersistSecrets: false,
   rendererMayReceiveRawAuthHeaders: false,

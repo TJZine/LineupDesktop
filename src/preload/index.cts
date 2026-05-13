@@ -17,7 +17,7 @@ import type { PlayerRendererIntentEnvelope } from '../contracts/ipc.js';
 
 const { contextBridge, ipcRenderer } = require('electron') as typeof Electron;
 
-const LINEUP_SHELL_GET_CAPABILITIES_CHANNEL = 'lineup:shell:getCapabilities';
+/** Sandboxed preload exposes only the typed bridge: main events are runtime-guarded before callbacks, invoke results are typed envelopes expected from authorized handlers, and privileged objects/secrets are not intentionally forwarded. */ const LINEUP_SHELL_GET_CAPABILITIES_CHANNEL = 'lineup:shell:getCapabilities';
 const LINEUP_WINDOW_INTENT_CHANNEL = 'lineup:window:intent';
 const LINEUP_SHELL_STATUS_CHANGED_CHANNEL = 'lineup:shell:statusChanged';
 const LINEUP_PLAYER_COMMAND_CHANNEL = 'lineup:player:command';

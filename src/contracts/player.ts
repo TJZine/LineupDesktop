@@ -106,7 +106,7 @@ export const PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS = [
 export type PlayerForbiddenPrivilegedFieldKey =
   (typeof PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS)[number];
 
-export interface PlayerMediaSummary {
+/** Renderer-safe player validation rejects known privileged field names without proving arbitrary strings or unlisted keys secret-free. */ export interface PlayerMediaSummary {
   id: PlayerMediaId;
   title: string;
   subtitle?: string;
@@ -379,7 +379,7 @@ export const PLAYER_TRACK_DELIVERY_TYPE_VALUES = [
   'unknown',
 ] as const satisfies readonly PlayerTrackDeliveryType[];
 
-export function isRendererSafePlayerEvent(value: unknown): value is PlayerEvent {
+/** Guards player events before renderer delivery by checking expected shapes and recursively rejecting known privileged field names. */ export function isRendererSafePlayerEvent(value: unknown): value is PlayerEvent {
   if (!isPlainRecord(value) || hasPlayerForbiddenPrivilegedField(value)) {
     return false;
   }
