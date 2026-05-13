@@ -13,6 +13,7 @@ import {
   createPlexPlaybackRuntimeComposition,
   type PlexPlaybackCompositionResolverPort,
 } from '../../../main/player/plexPlaybackComposition.js';
+import { DiagnosticEventStore } from '../../../main/diagnostics/diagnosticEventStore.js';
 import type { PlexStreamResolverInput, PlexStreamResolverResult } from '../../../main/plex/streamResolver.js';
 import type {
   PlexPlaybackPmsSessionLease,
@@ -282,6 +283,33 @@ test('RD-12 composition wires scheduler, resolver, runtime, player, and PMS thro
     },
   ]);
   assert.deepEqual(player.cleanupRequestIds, ['request-from-runtime']);
+});
+
+test('RD-17 composition passes diagnostics store into playback runtime', async () => {
+  const scheduler = new FakeScheduler();
+  const resolver = new FakeResolver();
+  const player = new FakePlayerPort();
+  const pms = new FakePmsPort();
+  const diagnostics = new DiagnosticEventStore({
+    clock: () => 17_000,
+    idGenerator: () => 'composition-diagnostic',
+  });
+  const composition = createPlexPlaybackRuntimeComposition({
+    scheduler,
+    resolver,
+    player,
+    pms,
+    capabilityProfile,
+    createRequestId: () => 'request-from-runtime',
+    diagnosticEventStore: diagnostics,
+  });
+
+  await composition.runtime.startCurrentPlayback('schedule-tick');
+  await composition.runtime.handleHelperCrash();
+
+  assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 1);
+  assert.deepEqual(player.cleanupRequestIds, ['request-from-runtime']);
+  assertPublicSafe(diagnostics.getRecords(), rawPrivateValues);
 });
 
 test('RD-12 desktop adapter runtime port maps main-owned player commands without exposing Plex setup', async () => {

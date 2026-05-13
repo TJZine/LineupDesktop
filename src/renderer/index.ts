@@ -42,6 +42,7 @@ import {
   applyWorkflowChannelSetupAction,
   applyWorkflowEpgAction,
   applyWorkflowSettingsAction,
+  applyWorkflowSupportBundleExportStatus,
   createWorkflowState,
   type ChannelSetupActionId,
   type EpgActionId,
@@ -215,6 +216,9 @@ function applyRouteAction(action: RouteWorkflowActionId): void {
 function applySettingsAction(action: SettingsActionId): void {
   workflowState = applyWorkflowSettingsAction(workflowState, action);
   renderApp();
+  if (action === 'exportSupportBundle') {
+    void exportSupportBundle();
+  }
 }
 
 function applyChannelSetupAction(action: ChannelSetupActionId): void {
@@ -240,6 +244,30 @@ async function toggleFullscreen(): Promise<void> {
     fullscreenEnabled = result.value.enabled;
     dom.fullscreenButton?.setAttribute('aria-pressed', String(fullscreenEnabled));
   }
+}
+
+async function exportSupportBundle(): Promise<void> {
+  const requestId = `support-bundle-${Date.now()}`;
+  void window.lineupDesktop.diagnostics.recordRendererEvent({
+    requestId,
+    event: {
+      surface: 'renderer',
+      category: 'support-bundle-export',
+      severity: 'info',
+      operation: 'support-bundle.export.click',
+      message: 'Support bundle export requested from settings.',
+      context: { route: workflowState.routeState.activeRoute },
+    },
+  });
+
+  const result = await window.lineupDesktop.diagnostics.exportSupportBundle();
+  workflowState = applyWorkflowSupportBundleExportStatus(workflowState, {
+    status: result.status,
+    bundleDirectoryName: result.status === 'succeeded' ? result.bundleDirectoryName : null,
+    fileCount: result.status === 'succeeded' ? result.fileCount : null,
+    redactionStatus: result.redactionReport?.status ?? null,
+  });
+  renderApp();
 }
 
 function renderApp(): void {

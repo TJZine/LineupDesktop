@@ -8,7 +8,7 @@ import {
   type PlayerRendererSafeDiagnostic,
   type PlayerRequestId,
 } from '../../contracts/player.js';
-
+import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.js';
 export type PlexPlaybackRuntimeCleanupReason =
   | 'stop'
   | 'switch'
@@ -18,38 +18,32 @@ export type PlexPlaybackRuntimeCleanupReason =
   | 'server-change'
   | 'profile-change'
   | 'teardown';
-
 export interface PlexPlaybackScheduleSelection {
   channelId: string;
   programId: string;
   startedAtMs: number;
   endsAtMs?: number | null;
 }
-
 export interface PlexPlaybackRuntimeSchedulerPort {
   getCurrentPlayback(input: {
     nowMs: number;
     reason: 'startup' | 'schedule-tick' | 'manual-switch';
   }): Promise<PlexPlaybackScheduleSelection | null>;
 }
-
 export interface PlexPlaybackPmsSessionLease {
   id: string;
   requestId: PlayerRequestId;
 }
-
 export interface PlexPlaybackRuntimeCandidate {
   requestId?: PlayerRequestId;
   load: PlayerLoadCommandPayload;
   pmsSession?: PlexPlaybackPmsSessionLease | null;
 }
-
 export interface PlexPlaybackRuntimeChannelPort {
   resolvePlaybackCandidate(
     selection: PlexPlaybackScheduleSelection,
   ): Promise<PlexPlaybackRuntimeCandidate>;
 }
-
 export type PlexPlaybackRuntimePlayerDispatchResult =
   | {
       ok: true;
@@ -59,12 +53,10 @@ export type PlexPlaybackRuntimePlayerDispatchResult =
       ok: false;
       events?: readonly PlayerEvent[];
     };
-
 export interface PlexPlaybackRuntimePlayerPort {
   dispatch(command: PlayerCommand): Promise<PlexPlaybackRuntimePlayerDispatchResult>;
   cleanup(requestId: PlayerRequestId | null): Promise<void>;
 }
-
 export interface PlexPlaybackRuntimePmsPort {
   releaseSession(
     session: PlexPlaybackPmsSessionLease,
@@ -74,11 +66,9 @@ export interface PlexPlaybackRuntimePmsPort {
     },
   ): Promise<void>;
 }
-
 export interface PlexPlaybackRuntimeClockPort {
   now(): number;
 }
-
 export interface PlexPlaybackRuntimeOptions {
   scheduler: PlexPlaybackRuntimeSchedulerPort;
   channel: PlexPlaybackRuntimeChannelPort;
@@ -87,34 +77,29 @@ export interface PlexPlaybackRuntimeOptions {
   clock?: PlexPlaybackRuntimeClockPort;
   createRequestId?: (prefix: string) => PlayerRequestId;
   onEvents?: (events: readonly PlayerEvent[]) => void;
+  diagnosticEventStore?: DiagnosticEventStore;
 }
-
 export interface PlexPlaybackRuntimeStartResult {
   accepted: boolean;
   epoch: number;
   requestId: PlayerRequestId | null;
   events: readonly PlayerEvent[];
 }
-
 export class PlexPlaybackRuntimeCandidateResolutionError extends Error {
   readonly playerError: PlayerError;
-
   constructor(playerError: PlayerError) {
     super('Plex playback candidate resolution failed.');
     this.name = 'PlexPlaybackRuntimeCandidateResolutionError';
     this.playerError = playerError;
   }
 }
-
 interface ActivePlaybackSession {
   epoch: number;
   requestId: PlayerRequestId;
   media: PlayerMediaSummary;
   pmsSession: PlexPlaybackPmsSessionLease | null;
 }
-
 const EMPTY_PAYLOAD: Record<string, never> = {};
-
 export class PlexPlaybackRuntime {
   readonly #scheduler: PlexPlaybackRuntimeSchedulerPort;
   readonly #channel: PlexPlaybackRuntimeChannelPort;
@@ -123,10 +108,10 @@ export class PlexPlaybackRuntime {
   readonly #clock: PlexPlaybackRuntimeClockPort;
   readonly #createRequestId: (prefix: string) => PlayerRequestId;
   readonly #onEvents?: (events: readonly PlayerEvent[]) => void;
+  readonly #diagnosticEventStore?: DiagnosticEventStore;
   #epoch = 0;
   #active: ActivePlaybackSession | null = null;
   #requestCounter = 0;
-
   constructor(options: PlexPlaybackRuntimeOptions) {
     this.#scheduler = options.scheduler;
     this.#channel = options.channel;
@@ -140,24 +125,20 @@ export class PlexPlaybackRuntime {
         return `${prefix}-${this.#requestCounter}`;
       });
     this.#onEvents = options.onEvents;
+    this.#diagnosticEventStore = options.diagnosticEventStore;
   }
-
   getCurrentEpoch(): number {
     return this.#epoch;
   }
-
   getActiveRequestId(): PlayerRequestId | null {
     return this.#active?.requestId ?? null;
   }
-
   async startCurrentPlayback(
     reason: 'startup' | 'schedule-tick' | 'manual-switch' = 'schedule-tick',
   ): Promise<PlexPlaybackRuntimeStartResult> {
     const epoch = this.#nextEpoch();
     const events: PlayerEvent[] = [];
-
     events.push(...(await this.#cleanupActive('switch', { invalidateEpoch: false })));
-
     let selection: PlexPlaybackScheduleSelection | null;
     try {
       selection = await this.#scheduler.getCurrentPlayback({
@@ -189,7 +170,6 @@ export class PlexPlaybackRuntime {
       this.#emit(events);
       return { accepted: false, epoch, requestId: null, events };
     }
-
     let candidate: PlexPlaybackRuntimeCandidate;
     try {
       candidate = await this.#channel.resolvePlaybackCandidate(selection);
@@ -207,7 +187,6 @@ export class PlexPlaybackRuntime {
       this.#emit(events);
       return { accepted: false, epoch, requestId: null, events };
     }
-
     const requestId = candidate.requestId ?? this.#createRequestId('plex-playback');
     if (!isPmsSessionForRequest(candidate.pmsSession ?? null, requestId)) {
       events.push(...(await this.#releaseRejectedSession(candidate.pmsSession ?? null, requestId)));
@@ -215,19 +194,16 @@ export class PlexPlaybackRuntime {
       this.#emit(events);
       return { accepted: false, epoch, requestId, events };
     }
-
     const active: ActivePlaybackSession = {
       epoch,
       requestId,
       media: candidate.load.media,
       pmsSession: candidate.pmsSession ?? null,
     };
-
     if (!this.#isCurrentEpoch(epoch)) {
       events.push(...(await this.#releaseOrphanSession(active, 'stale')));
       return this.#staleStartResult(epoch, requestId, events, 'candidate arrived after cleanup');
     }
-
     this.#active = active;
     const command: PlayerCommand = {
       command: 'load',
@@ -240,16 +216,13 @@ export class PlexPlaybackRuntime {
     } catch {
       playerResult = { ok: false };
     }
-
     if (!this.#isCurrentEpoch(epoch) || this.#active?.requestId !== requestId) {
       events.push(...this.#quarantineEvents(epoch, playerResult.events ?? [], 'player load settled late'));
       return this.#staleStartResult(epoch, requestId, events, 'player load settled after cleanup');
     }
-
     for (const event of playerResult.events ?? []) {
       events.push(...this.handlePlayerEvent(epoch, event));
     }
-
     if (!playerResult.ok) {
       events.push(this.#loadFailedError(requestId, active.media));
       events.push(...(await this.#cleanupActive('error', { invalidateEpoch: false })));
@@ -257,11 +230,9 @@ export class PlexPlaybackRuntime {
       this.#emit(events);
       return { accepted: false, epoch, requestId, events };
     }
-
     this.#emit(events);
     return { accepted: true, epoch, requestId, events };
   }
-
   async cleanup(input: {
     reason: PlexPlaybackRuntimeCleanupReason;
   }): Promise<readonly PlayerEvent[]> {
@@ -269,7 +240,6 @@ export class PlexPlaybackRuntime {
     this.#emit(events);
     return events;
   }
-
   async stop(): Promise<readonly PlayerEvent[]> {
     const active = this.#active;
     if (active !== null) {
@@ -285,16 +255,13 @@ export class PlexPlaybackRuntime {
     }
     return this.cleanup({ reason: 'stop' });
   }
-
   async teardown(): Promise<readonly PlayerEvent[]> {
     return this.cleanup({ reason: 'teardown' });
   }
-
   handlePlayerEvent(epoch: number, event: PlayerEvent): readonly PlayerEvent[] {
     if (hasPlayerForbiddenPrivilegedField(event)) {
       return [this.#boundaryError(readEventRequestId(event) ?? undefined, 'player event contained privileged fields')];
     }
-
     const eventRequestId = readEventRequestId(event);
     if (
       epoch !== this.#epoch ||
@@ -309,23 +276,29 @@ export class PlexPlaybackRuntime {
         }),
       ];
     }
-
     return [event];
   }
-
   async handleHelperCrash(): Promise<readonly PlayerEvent[]> {
+    this.#diagnosticEventStore?.record({
+      surface: 'plex-playback-runtime',
+      category: 'helper-crash',
+      severity: 'error',
+      status: 'observed',
+      operation: 'helper-crash.cleanup',
+      message: 'Playback runtime received a helper crash cleanup request.',
+      requestId: this.#active?.requestId,
+      result: 'ignored',
+      context: { code: 'PLAYER_HELPER_CRASHED' },
+    });
     return this.cleanup({ reason: 'helper-crash' });
   }
-
   #nextEpoch(): number {
     this.#epoch = this.#epoch >= Number.MAX_SAFE_INTEGER ? 1 : this.#epoch + 1;
     return this.#epoch;
   }
-
   #isCurrentEpoch(epoch: number): boolean {
     return epoch === this.#epoch;
   }
-
   async #cleanupActive(
     reason: PlexPlaybackRuntimeCleanupReason,
     options: { invalidateEpoch: boolean },
@@ -333,13 +306,11 @@ export class PlexPlaybackRuntime {
     if (options.invalidateEpoch) {
       this.#nextEpoch();
     }
-
     const active = this.#active;
     if (active === null) {
       return [];
     }
     this.#active = null;
-
     const events: PlayerEvent[] = [];
     if (active.pmsSession !== null) {
       try {
@@ -348,19 +319,18 @@ export class PlexPlaybackRuntime {
           requestId: active.requestId,
         });
       } catch {
+        this.#recordCleanupDiagnostic(active.requestId, reason, 'PLAYER_PLAYBACK_PMS_CLEANUP_FAILED');
         events.push(this.#cleanupFailure(active.requestId, reason, 'pms session release failed'));
       }
     }
-
     try {
       await this.#player.cleanup(active.requestId);
     } catch {
+      this.#recordCleanupDiagnostic(active.requestId, reason, 'PLAYER_PLAYBACK_PLAYER_CLEANUP_FAILED');
       events.push(this.#cleanupFailure(active.requestId, reason, 'player cleanup failed'));
     }
-
     return events;
   }
-
   async #releaseOrphanSession(
     active: ActivePlaybackSession,
     reason: 'stale',
@@ -368,7 +338,6 @@ export class PlexPlaybackRuntime {
     if (active.pmsSession === null) {
       return [];
     }
-
     try {
       await this.#pms.releaseSession(active.pmsSession, {
         reason,
@@ -379,7 +348,6 @@ export class PlexPlaybackRuntime {
       return [this.#cleanupFailure(active.requestId, 'switch', 'stale pms session release failed')];
     }
   }
-
   async #releaseRejectedSession(
     session: PlexPlaybackPmsSessionLease | null,
     requestId: PlayerRequestId,
@@ -387,7 +355,6 @@ export class PlexPlaybackRuntime {
     if (session === null) {
       return [];
     }
-
     try {
       await this.#pms.releaseSession(session, {
         reason: 'stale',
@@ -398,7 +365,6 @@ export class PlexPlaybackRuntime {
       return [this.#cleanupFailure(requestId, 'switch', 'rejected pms session release failed')];
     }
   }
-
   async #releaseUnsafeCandidateSession(
     session: PlexPlaybackPmsSessionLease,
   ): Promise<readonly PlayerEvent[]> {
@@ -412,7 +378,6 @@ export class PlexPlaybackRuntime {
       return [this.#unscopedCleanupFailure('rejected unsafe pms session release failed')];
     }
   }
-
   #quarantineEvents(
     epoch: number,
     events: readonly PlayerEvent[],
@@ -430,7 +395,6 @@ export class PlexPlaybackRuntime {
       }),
     ];
   }
-
   #staleStartResult(
     epoch: number,
     requestId: PlayerRequestId | null,
@@ -448,7 +412,6 @@ export class PlexPlaybackRuntime {
     this.#emit(nextEvents);
     return { accepted: false, epoch, requestId, events: nextEvents };
   }
-
   #warning(
     requestId: PlayerRequestId | null,
     code: string,
@@ -464,14 +427,12 @@ export class PlexPlaybackRuntime {
       requestId: requestId ?? undefined,
       diagnostic: { component: 'plex-playback-runtime', ...diagnostic },
     };
-
     return {
       event: 'warning',
       requestId: warning.requestId ?? null,
       warning,
     };
   }
-
   #error(
     requestId: PlayerRequestId | undefined,
     code: string,
@@ -492,7 +453,6 @@ export class PlexPlaybackRuntime {
       },
     };
   }
-
   #loadFailedError(requestId: PlayerRequestId, media: PlayerMediaSummary): PlayerEvent {
     return this.#error(requestId, 'PLAYER_PLAYBACK_LOAD_FAILED', 'The player could not load the scheduled media.', {
       operation: 'player.load',
@@ -501,7 +461,6 @@ export class PlexPlaybackRuntime {
       media: projectDiagnosticMedia(media),
     });
   }
-
   #schedulerSelectionError(): PlayerEvent {
     return this.#error(
       undefined,
@@ -514,7 +473,6 @@ export class PlexPlaybackRuntime {
       },
     );
   }
-
   #boundaryError(requestId: PlayerRequestId | undefined, reason: string): PlayerEvent {
     return {
       event: 'error',
@@ -535,7 +493,6 @@ export class PlexPlaybackRuntime {
       },
     };
   }
-
   #candidateResolutionError(error: unknown): PlayerEvent {
     if (
       error instanceof PlexPlaybackRuntimeCandidateResolutionError &&
@@ -558,7 +515,6 @@ export class PlexPlaybackRuntime {
       },
     );
   }
-
   #cleanupFailure(
     requestId: PlayerRequestId,
     reason: PlexPlaybackRuntimeCleanupReason,
@@ -584,7 +540,6 @@ export class PlexPlaybackRuntime {
       },
     };
   }
-
   #unscopedCleanupFailure(failureReason: string): PlayerEvent {
     return {
       event: 'error',
@@ -604,14 +559,29 @@ export class PlexPlaybackRuntime {
       },
     };
   }
-
   #emit(events: readonly PlayerEvent[]): void {
     if (events.length > 0) {
       this.#onEvents?.(events);
     }
   }
+  #recordCleanupDiagnostic(
+    requestId: PlayerRequestId,
+    reason: PlexPlaybackRuntimeCleanupReason,
+    code: string,
+  ): void {
+    this.#diagnosticEventStore?.record({
+      surface: 'plex-playback-runtime',
+      category: 'cleanup',
+      severity: 'error',
+      status: 'failed',
+      operation: 'cleanup',
+      message: 'Playback runtime cleanup failed.',
+      requestId,
+      result: 'failure',
+      context: { code, reason },
+    });
+  }
 }
-
 function isSafeScheduleSelection(value: unknown): value is PlexPlaybackScheduleSelection {
   if (!isRecord(value) || hasPlayerForbiddenPrivilegedField(value)) {
     return false;
@@ -624,7 +594,6 @@ function isSafeScheduleSelection(value: unknown): value is PlexPlaybackScheduleS
     (value.endsAtMs === undefined || value.endsAtMs === null || isFiniteNonNegativeNumber(value.endsAtMs))
   );
 }
-
 function isSafeRuntimeCandidate(value: unknown): value is PlexPlaybackRuntimeCandidate {
   if (!isRecord(value) || hasPlayerForbiddenPrivilegedField(value)) {
     return false;
@@ -638,7 +607,6 @@ function isSafeRuntimeCandidate(value: unknown): value is PlexPlaybackRuntimeCan
       isSafePmsSession(value.pmsSession))
   );
 }
-
 function isSafePmsSession(value: unknown): value is PlexPlaybackPmsSessionLease {
   return (
     isRecord(value) &&
@@ -648,21 +616,18 @@ function isSafePmsSession(value: unknown): value is PlexPlaybackPmsSessionLease 
     isNonEmptyString(value.requestId)
   );
 }
-
 function readReleasablePmsSession(value: unknown): PlexPlaybackPmsSessionLease | null {
   if (!isRecord(value) || !('pmsSession' in value)) {
     return null;
   }
   return isSafePmsSession(value.pmsSession) ? value.pmsSession : null;
 }
-
 function isPmsSessionForRequest(
   session: PlexPlaybackPmsSessionLease | null,
   requestId: PlayerRequestId,
 ): boolean {
   return session === null || session.requestId === requestId;
 }
-
 function isSafeLoadPayload(value: unknown): value is PlayerLoadCommandPayload {
   if (!isRecord(value) || hasPlayerForbiddenPrivilegedField(value)) {
     return false;
@@ -674,7 +639,6 @@ function isSafeLoadPayload(value: unknown): value is PlayerLoadCommandPayload {
     (value.capabilityProfileId === undefined || isNonEmptyString(value.capabilityProfileId))
   );
 }
-
 function isSafeMediaSummary(value: unknown): value is PlayerMediaSummary {
   return (
     isRecord(value) &&
@@ -687,7 +651,6 @@ function isSafeMediaSummary(value: unknown): value is PlayerMediaSummary {
     (value.container === undefined || typeof value.container === 'string')
   );
 }
-
 function isSafeLoadPolicy(value: unknown): value is PlayerLoadCommandPayload['policy'] {
   return (
     isRecord(value) &&
@@ -707,7 +670,6 @@ function isSafeLoadPolicy(value: unknown): value is PlayerLoadCommandPayload['po
       isNonEmptyString(value.preferredSubtitleTrackId))
   );
 }
-
 function isSafePlayerError(value: unknown): value is PlayerError {
   if (!isRecord(value) || hasPlayerForbiddenPrivilegedField(value)) {
     return false;
@@ -723,7 +685,6 @@ function isSafePlayerError(value: unknown): value is PlayerError {
     (value.diagnostic === undefined || isSafeDiagnostic(value.diagnostic))
   );
 }
-
 function isSafeDiagnostic(value: unknown): value is PlayerError['diagnostic'] {
   if (!isRecord(value) || hasPlayerForbiddenPrivilegedField(value)) {
     return false;
@@ -746,14 +707,12 @@ function isSafeDiagnostic(value: unknown): value is PlayerError['diagnostic'] {
     (value.timestampMs === undefined || isFiniteNonNegativeNumber(value.timestampMs))
   );
 }
-
 function isSafeCounts(value: unknown): value is Readonly<Record<string, number>> {
   return (
     isRecord(value) &&
     Object.entries(value).every(([key, count]) => isNonEmptyString(key) && isFiniteNonNegativeNumber(count))
   );
 }
-
 function isSafeDiagnosticMedia(value: unknown): value is NonNullable<PlayerError['diagnostic']>['media'] {
   return (
     isRecord(value) &&
@@ -762,19 +721,15 @@ function isSafeDiagnosticMedia(value: unknown): value is NonNullable<PlayerError
     isNonEmptyString(value.title)
   );
 }
-
 function projectDiagnosticMedia(media: PlayerMediaSummary): Pick<PlayerMediaSummary, 'id' | 'title'> {
   return { id: media.id, title: media.title };
 }
-
 function readEventRequestId(event: PlayerEvent): PlayerRequestId | null {
   return 'requestId' in event ? event.requestId : null;
 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
-
 function hasOnlyKeys(
   value: Record<string, unknown>,
   requiredKeys: readonly string[],
@@ -788,11 +743,9 @@ function hasOnlyKeys(
   }
   return requiredKeys.every((key) => Object.hasOwn(value, key));
 }
-
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
-
 function isFiniteNonNegativeNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }

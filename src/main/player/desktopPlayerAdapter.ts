@@ -18,6 +18,7 @@ import {
   type PlayerTrackSummary,
 } from '../../contracts/player.js';
 import type { PlayerRendererIntent } from '../../contracts/ipc.js';
+import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.js';
 import type {
   NativePlayerHostEvent,
   NativePlayerHostFailure,
@@ -25,30 +26,24 @@ import type {
   NativePlayerHostPort,
   NativePlayerHostStatus,
 } from './nativePlayerHostPort.js';
-
 type UnknownRecord = Record<string, unknown>;
-
 interface CommandMappingResult {
   command: PlayerCommand;
 }
-
 interface ValidationFailure {
   error: PlayerError;
 }
-
 export interface DesktopPlayerAdapterDispatchResult {
   accepted: boolean;
   command: PlayerCommand | null;
   events: readonly PlayerEvent[];
   snapshot: PlayerSnapshot;
 }
-
 export interface DesktopPlayerAdapterOptions {
   onEvents?: (events: readonly PlayerEvent[]) => void;
+  diagnosticEventStore?: DiagnosticEventStore;
 }
-
 const EMPTY_PAYLOAD: Record<string, never> = {};
-
 const PLAYER_INTENT_TO_COMMAND = {
   'player.load': 'load',
   'player.play': 'play',
@@ -61,7 +56,6 @@ const PLAYER_INTENT_TO_COMMAND = {
   'player.selectAudio': 'track.audio.select',
   'player.selectSubtitle': 'track.subtitle.select',
 } as const satisfies Record<PlayerRendererIntent, PlayerCommandName>;
-
 const HOST_PLAYBACK_STATUSES = [
   'ready',
   'buffering',
@@ -70,9 +64,7 @@ const HOST_PLAYBACK_STATUSES = [
   'seeking',
   'stalled',
 ] as const satisfies readonly NativePlayerHostStatus[];
-
 const PLAYER_TRACK_KINDS = ['audio', 'subtitle', 'video'] as const satisfies readonly PlayerTrackKind[];
-
 const PLAYER_TRACK_DELIVERY_TYPES = [
   'embedded',
   'sidecar',
@@ -80,7 +72,6 @@ const PLAYER_TRACK_DELIVERY_TYPES = [
   'burned-in',
   'unknown',
 ] as const satisfies readonly PlayerTrackDeliveryType[];
-
 /**
  * Maps renderer intents into closed host commands, validates host event
  * semantics, quarantines stale request ids, and normalizes helper failures.
@@ -88,12 +79,13 @@ const PLAYER_TRACK_DELIVERY_TYPES = [
 export class DesktopPlayerAdapter {
   readonly #host: NativePlayerHostPort;
   readonly #onEvents?: (events: readonly PlayerEvent[]) => void;
+  readonly #diagnosticEventStore?: DiagnosticEventStore;
   #snapshot: PlayerSnapshot = createInitialSnapshot();
   #pendingCommands = new Map<PlayerRequestId, PlayerCommandName>();
-
   constructor(host: NativePlayerHostPort, options: DesktopPlayerAdapterOptions = {}) {
     this.#host = host;
     this.#onEvents = options.onEvents;
+    this.#diagnosticEventStore = options.diagnosticEventStore;
     host.onLifecycleFailure?.((failure) => {
       const events = this.handleHostLifecycleFailure(failure);
       if (events.length > 0) {
@@ -101,26 +93,21 @@ export class DesktopPlayerAdapter {
       }
     });
   }
-
   getSnapshot(): PlayerSnapshot {
     return cloneSnapshot(this.#snapshot);
   }
-
   getPendingRequestCount(): number {
     return this.#pendingCommands.size;
   }
-
   async dispatchRendererIntent(envelope: unknown): Promise<DesktopPlayerAdapterDispatchResult> {
     const commandResult = mapRendererIntentToCommand(envelope);
     if ('error' in commandResult) {
       const events = this.#emitBoundaryError(commandResult.error);
       return this.#result(false, null, events);
     }
-
     const { command } = commandResult;
     this.#pendingCommands.set(command.requestId, command.command);
     const events: PlayerEvent[] = [];
-
     if (command.command === 'load') {
       this.#snapshot = {
         ...this.#snapshot,
@@ -138,7 +125,6 @@ export class DesktopPlayerAdapter {
       };
       events.push(this.#stateChanged());
     }
-
     try {
       const hostResult = await this.#host.execute(command);
       if (hostResult.ok) {
@@ -153,8 +139,8 @@ export class DesktopPlayerAdapter {
         });
         return this.#result(true, command, events);
       }
-
       const error = hostFailureToError(command.requestId, hostResult.error);
+      this.#recordHelperDiagnostic(command.requestId, 'host.command', 'failed', error.code);
       events.push(...this.#recordError(error));
       events.push({
         event: 'command.settled',
@@ -177,6 +163,7 @@ export class DesktopPlayerAdapter {
           reason: 'helper command rejected',
         },
       });
+      this.#recordHelperDiagnostic(command.requestId, 'host.command', 'failed', 'PLAYER_HELPER_COMMAND_FAILED');
       events.push(...this.#recordError(error));
       events.push({
         event: 'command.settled',
@@ -190,19 +177,16 @@ export class DesktopPlayerAdapter {
       this.#pendingCommands.delete(command.requestId);
     }
   }
-
   handleHostEvent(event: unknown): readonly PlayerEvent[] {
     const validation = validateHostEvent(event);
     if ('error' in validation) {
       return this.#emitBoundaryError(validation.error);
     }
-
     const hostEvent = validation.event;
     const hostRequestId = hostEvent.requestId;
     if (this.#snapshot.requestId === null) {
       return this.#staleHostEventWarning(hostEvent, hostRequestId, 'no active player request');
     }
-
     if (hostRequestId !== null && hostRequestId !== this.#snapshot.requestId) {
       return this.#staleHostEventWarning(
         hostEvent,
@@ -210,7 +194,6 @@ export class DesktopPlayerAdapter {
         'request id did not match current playback state',
       );
     }
-
     switch (hostEvent.type) {
       case 'media.loaded':
         this.#snapshot = {
@@ -307,9 +290,9 @@ export class DesktopPlayerAdapter {
         return this.#recordError(hostEvent.error);
     }
   }
-
   handleHelperCrash(requestId: PlayerRequestId | null = this.#snapshot.requestId): readonly PlayerEvent[] {
     this.#pendingCommands.clear();
+    this.#recordHelperDiagnostic(requestId ?? null, 'helper.lifecycle', 'failed', 'PLAYER_HELPER_CRASHED');
     return this.#recordError(
       createPlayerError({
         code: 'PLAYER_HELPER_CRASHED',
@@ -325,13 +308,12 @@ export class DesktopPlayerAdapter {
       }),
     );
   }
-
   handleHostLifecycleFailure(failure: NativePlayerHostLifecycleFailure): readonly PlayerEvent[] {
     const requestId = failure.requestId ?? this.#snapshot.requestId;
     this.#pendingCommands.clear();
+    this.#recordHelperDiagnostic(failure.requestId, 'helper.lifecycle', 'failed', failure.error.code);
     return this.#recordError(hostLifecycleFailureToError(requestId, failure.error));
   }
-
   async cleanup(): Promise<DesktopPlayerAdapterDispatchResult> {
     const requestId = this.#snapshot.requestId;
     try {
@@ -340,6 +322,17 @@ export class DesktopPlayerAdapter {
       this.#snapshot = createInitialSnapshot();
       return this.#result(true, null, [this.#stateChanged()]);
     } catch {
+      this.#diagnosticEventStore?.record({
+        surface: 'desktop-player-adapter',
+        category: 'cleanup',
+        severity: 'error',
+        status: 'failed',
+        operation: 'cleanup',
+        message: 'Player adapter cleanup failed.',
+        requestId: requestId ?? undefined,
+        result: 'failure',
+        context: { code: 'PLAYER_CLEANUP_FAILED' },
+      });
       const error = createPlayerError({
         code: 'PLAYER_CLEANUP_FAILED',
         category: 'cleanup-failure',
@@ -355,7 +348,6 @@ export class DesktopPlayerAdapter {
       return this.#result(false, null, this.#recordError(error));
     }
   }
-
   #emitBoundaryError(error: PlayerError): readonly PlayerEvent[] {
     const safeError = sanitizePlayerError(error, 'PLAYER_VALIDATION_FAILED');
     return [
@@ -366,7 +358,6 @@ export class DesktopPlayerAdapter {
       },
     ];
   }
-
   #recordError(error: PlayerError): readonly PlayerEvent[] {
     const safeError = sanitizePlayerError(error, 'PLAYER_UNKNOWN_ERROR');
     this.#snapshot = {
@@ -384,7 +375,6 @@ export class DesktopPlayerAdapter {
       this.#stateChanged(),
     ];
   }
-
   #stateChanged(): PlayerEvent {
     return {
       event: 'state.changed',
@@ -392,7 +382,6 @@ export class DesktopPlayerAdapter {
       snapshot: cloneSnapshot(this.#snapshot),
     };
   }
-
   #result(
     accepted: boolean,
     command: PlayerCommand | null,
@@ -405,7 +394,6 @@ export class DesktopPlayerAdapter {
       snapshot: cloneSnapshot(this.#snapshot),
     };
   }
-
   #staleHostEventWarning(
     hostEvent: NativePlayerHostEvent,
     requestId: PlayerRequestId | null,
@@ -430,28 +418,40 @@ export class DesktopPlayerAdapter {
       },
     ];
   }
+  #recordHelperDiagnostic(
+    requestId: PlayerRequestId | null,
+    operation: string,
+    status: 'failed' | 'observed',
+    code: string,
+  ): void {
+    this.#diagnosticEventStore?.record({
+      surface: 'desktop-player-adapter',
+      category: 'helper-crash',
+      severity: status === 'failed' ? 'error' : 'warning',
+      status,
+      operation,
+      message: 'Player helper failure was normalized by the adapter.',
+      requestId: requestId ?? undefined,
+      result: status === 'failed' ? 'failure' : 'ignored',
+      context: { code },
+    });
+  }
 }
-
 function mapRendererIntentToCommand(envelope: unknown): CommandMappingResult | ValidationFailure {
   if (!isRecord(envelope)) {
     return validationFailure(undefined, 'renderer envelope must be an object');
   }
-
   if (hasForbiddenPrivilegedField(envelope)) {
     return validationFailure(readRequestId(envelope), 'renderer envelope contained privileged fields');
   }
-
   const requestId = envelope.requestId;
   if (!isNonEmptyString(requestId)) {
     return validationFailure(undefined, 'renderer envelope request id must be a non-empty string');
   }
-
   if (!isPlayerRendererIntent(envelope.intent)) {
     return validationFailure(requestId, 'renderer envelope intent is not a player intent');
   }
-
   const commandName = PLAYER_INTENT_TO_COMMAND[envelope.intent];
-
   switch (commandName) {
     case 'load': {
       const payload = validateLoadPayload(envelope.payload);
@@ -530,23 +530,19 @@ function mapRendererIntentToCommand(envelope: unknown): CommandMappingResult | V
     }
   }
 }
-
 function validateHostEvent(
   event: unknown,
 ): { event: NativePlayerHostEvent } | ValidationFailure {
   if (!isRecord(event)) {
     return validationFailure(undefined, 'host event must be an object');
   }
-
   if (hasForbiddenPrivilegedField(event)) {
     return validationFailure(readRequestId(event), 'host event contained privileged fields');
   }
-
   const type = event.type;
   if (typeof type !== 'string') {
     return validationFailure(readRequestId(event), 'host event type must be a string');
   }
-
   switch (type) {
     case 'media.loaded': {
       const requestId = event.requestId;
@@ -656,7 +652,6 @@ function validateHostEvent(
       return validationFailure(readRequestId(event), 'host event type is unsupported');
   }
 }
-
 function validateLoadPayload(
   value: unknown,
 ): { value: PlayerLoadCommandPayload } | { error: string } {
@@ -664,20 +659,17 @@ function validateLoadPayload(
   if ('error' in payload) {
     return payload;
   }
-
   const media = validateMediaSummary(payload.value.media);
   const policy = validateLoadPolicy(payload.value.policy);
   if ('error' in media || 'error' in policy) {
     return { error: 'load payload must include safe media and policy' };
   }
-
   if (
     payload.value.capabilityProfileId !== undefined &&
     !isNonEmptyString(payload.value.capabilityProfileId)
   ) {
     return { error: 'load payload capabilityProfileId must be a string when present' };
   }
-
   return {
     value: {
       media: media.value,
@@ -686,7 +678,6 @@ function validateLoadPayload(
     },
   };
 }
-
 function validateLoadPolicy(
   value: unknown,
 ): { value: PlayerLoadCommandPayload['policy'] } | { error: string } {
@@ -725,7 +716,6 @@ function validateLoadPolicy(
     },
   };
 }
-
 function validateMediaSummary(value: unknown): { value: PlayerMediaSummary } | { error: string } {
   const payload = validateObjectPayload(value, ['id', 'title'], ['subtitle', 'durationMs', 'container']);
   if ('error' in payload || !isNonEmptyString(payload.value.id) || !isNonEmptyString(payload.value.title)) {
@@ -753,12 +743,10 @@ function validateMediaSummary(value: unknown): { value: PlayerMediaSummary } | {
     },
   };
 }
-
 function validateTracks(value: unknown): { value: readonly PlayerTrackSummary[] } | { error: string } {
   if (!Array.isArray(value)) {
     return { error: 'tracks must be an array' };
   }
-
   const tracks: PlayerTrackSummary[] = [];
   for (const item of value) {
     const track = validateTrack(item);
@@ -769,7 +757,6 @@ function validateTracks(value: unknown): { value: readonly PlayerTrackSummary[] 
   }
   return { value: tracks };
 }
-
 function validateTrack(value: unknown): { value: PlayerTrackSummary } | { error: string } {
   const payload = validateObjectPayload(
     value,
@@ -813,7 +800,6 @@ function validateTrack(value: unknown): { value: PlayerTrackSummary } | { error:
   if (payload.value.default !== undefined && typeof payload.value.default !== 'boolean') {
     return { error: 'track default flag must be boolean' };
   }
-
   return {
     value: {
       id: payload.value.id,
@@ -831,12 +817,10 @@ function validateTrack(value: unknown): { value: PlayerTrackSummary } | { error:
     },
   };
 }
-
 function validateTimeRanges(value: unknown): { value: readonly PlayerTimeRange[] } | { error: string } {
   if (!Array.isArray(value)) {
     return { error: 'buffered ranges must be an array' };
   }
-
   const ranges: PlayerTimeRange[] = [];
   for (const item of value) {
     const payload = validateObjectPayload(item, ['startMs', 'endMs']);
@@ -852,7 +836,6 @@ function validateTimeRanges(value: unknown): { value: readonly PlayerTimeRange[]
   }
   return { value: ranges };
 }
-
 function validateObjectPayload(
   value: unknown,
   requiredKeys: readonly string[],
@@ -864,7 +847,6 @@ function validateObjectPayload(
   if (hasForbiddenPrivilegedField(value)) {
     return { error: 'payload contained privileged fields' };
   }
-
   const allowed = new Set([...requiredKeys, ...optionalKeys]);
   for (const key of Object.keys(value)) {
     if (!allowed.has(key)) {
@@ -878,11 +860,9 @@ function validateObjectPayload(
   }
   return { value };
 }
-
 function isEmptyPayload(value: unknown): boolean {
   return isRecord(value) && Object.keys(value).length === 0 && !hasForbiddenPrivilegedField(value);
 }
-
 function applyTrackSnapshot(
   snapshot: PlayerSnapshot,
   requestId: PlayerRequestId,
@@ -897,14 +877,12 @@ function applyTrackSnapshot(
     selectedVideoTrackId: findSelectedTrackId(tracks, 'video'),
   };
 }
-
 function findSelectedTrackId(
   tracks: readonly PlayerTrackSummary[],
   kind: PlayerTrackKind,
 ): PlayerTrackId | null {
   return tracks.find((track) => track.kind === kind && track.selected)?.id ?? null;
 }
-
 function validationFailure(requestId: PlayerRequestId | undefined, reason: string): ValidationFailure {
   return {
     error: createPlayerError({
@@ -921,7 +899,6 @@ function validationFailure(requestId: PlayerRequestId | undefined, reason: strin
     }),
   };
 }
-
 function hostFailureToError(requestId: PlayerRequestId, failure: NativePlayerHostFailure): PlayerError {
   const hostFailure: UnknownRecord =
     isRecord(failure) && !hasForbiddenPrivilegedField(failure) ? failure : {};
@@ -941,7 +918,6 @@ function hostFailureToError(requestId: PlayerRequestId, failure: NativePlayerHos
     },
   });
 }
-
 function hostLifecycleFailureToError(
   requestId: PlayerRequestId | null,
   failure: NativePlayerHostFailure,
@@ -964,7 +940,6 @@ function hostLifecycleFailureToError(
     },
   });
 }
-
 function normalizeHostErrorPayload(
   value: unknown,
   requestId: PlayerRequestId | null,
@@ -972,7 +947,6 @@ function normalizeHostErrorPayload(
   if (!isRecord(value) || hasForbiddenPrivilegedField(value)) {
     return validationFailure(requestId ?? undefined, 'host error payload was invalid');
   }
-
   const category = isPlayerErrorCategory(value.category) ? value.category : 'unknown';
   return createPlayerError({
     code: hostFailureCode(category),
@@ -989,7 +963,6 @@ function normalizeHostErrorPayload(
     },
   });
 }
-
 function hostFailureCode(category: PlayerErrorCategory): string {
   switch (category) {
     case 'source':
@@ -1028,7 +1001,6 @@ function hostFailureCode(category: PlayerErrorCategory): string {
       return assertNever(category);
   }
 }
-
 function hostFailureMessage(category: PlayerErrorCategory): string {
   switch (category) {
     case 'source':
@@ -1066,14 +1038,12 @@ function hostFailureMessage(category: PlayerErrorCategory): string {
       return assertNever(category);
   }
 }
-
 function hostLifecycleFailureMessage(category: PlayerErrorCategory): string {
   if (category === 'helper-failure') {
     return 'The player helper stopped unexpectedly.';
   }
   return hostFailureMessage(category);
 }
-
 function sanitizePlayerError(value: unknown, fallbackCode: string): PlayerError {
   if (!isRecord(value) || hasForbiddenPrivilegedField(value)) {
     return createPlayerError({
@@ -1088,7 +1058,6 @@ function sanitizePlayerError(value: unknown, fallbackCode: string): PlayerError 
       },
     });
   }
-
   return createPlayerError({
     code: isNonEmptyString(value.code) ? value.code : fallbackCode,
     category: isPlayerErrorCategory(value.category) ? value.category : 'unknown',
@@ -1099,7 +1068,6 @@ function sanitizePlayerError(value: unknown, fallbackCode: string): PlayerError 
     diagnostic: sanitizeDiagnostic(value.diagnostic),
   });
 }
-
 function createPlayerError(input: {
   code: string;
   category: PlayerErrorCategory;
@@ -1119,12 +1087,10 @@ function createPlayerError(input: {
     diagnostic: sanitizeDiagnostic(input.diagnostic),
   };
 }
-
 function sanitizeDiagnostic(value: unknown): PlayerRendererSafeDiagnostic | undefined {
   if (!isRecord(value) || hasForbiddenPrivilegedField(value)) {
     return undefined;
   }
-
   const counts = isRecord(value.counts) ? sanitizeCounts(value.counts) : undefined;
   const media = validateMediaDiagnostic(value.media);
   const trackIds = validateTrackIds(value.trackIds);
@@ -1142,7 +1108,6 @@ function sanitizeDiagnostic(value: unknown): PlayerRendererSafeDiagnostic | unde
     timestampMs: isFiniteNonNegativeNumber(value.timestampMs) ? value.timestampMs : undefined,
   };
 }
-
 function sanitizeCounts(value: UnknownRecord): Readonly<Record<string, number>> | undefined {
   const counts: Record<string, number> = {};
   for (const [key, count] of Object.entries(value)) {
@@ -1152,12 +1117,10 @@ function sanitizeCounts(value: UnknownRecord): Readonly<Record<string, number>> 
   }
   return Object.keys(counts).length === 0 ? undefined : counts;
 }
-
 function validateTrackIds(value: unknown): readonly PlayerTrackId[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
   }
-
   const ids: PlayerTrackId[] = [];
   for (const item of value) {
     if (!isNonEmptyString(item)) {
@@ -1167,14 +1130,12 @@ function validateTrackIds(value: unknown): readonly PlayerTrackId[] | undefined 
   }
   return ids;
 }
-
 function validateMediaDiagnostic(value: unknown): PlayerRendererSafeDiagnostic['media'] | undefined {
   if (!isRecord(value) || !isNonEmptyString(value.id) || !isNonEmptyString(value.title)) {
     return undefined;
   }
   return { id: value.id, title: value.title };
 }
-
 function createInitialSnapshot(): PlayerSnapshot {
   return {
     requestId: null,
@@ -1195,7 +1156,6 @@ function createInitialSnapshot(): PlayerSnapshot {
     lastError: null,
   };
 }
-
 function cloneSnapshot(snapshot: PlayerSnapshot): PlayerSnapshot {
   return {
     ...snapshot,
@@ -1205,54 +1165,42 @@ function cloneSnapshot(snapshot: PlayerSnapshot): PlayerSnapshot {
     lastError: snapshot.lastError === null ? null : sanitizePlayerError(snapshot.lastError, 'PLAYER_ERROR'),
   };
 }
-
 function isRecord(value: unknown): value is UnknownRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
-
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
-
 function isNullableNonEmptyString(value: unknown): value is string | null {
   return value === null || isNonEmptyString(value);
 }
-
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
-
 function isFiniteNonNegativeNumber(value: unknown): value is number {
   return isFiniteNumber(value) && value >= 0;
 }
-
 function isFiniteRangeNumber(value: unknown, min: number, max: number): value is number {
   return isFiniteNumber(value) && value >= min && value <= max;
 }
-
 function isNullableFiniteNonNegativeNumber(value: unknown): value is number | null {
   return value === null || isFiniteNonNegativeNumber(value);
 }
-
 function isStringInSet<TValue extends string>(
   value: unknown,
   allowed: readonly TValue[],
 ): value is TValue {
   return typeof value === 'string' && allowed.includes(value as TValue);
 }
-
 function isPlayerErrorCategory(value: unknown): value is PlayerErrorCategory {
   return isStringInSet(value, PLAYER_ERROR_CATEGORIES);
 }
-
 function isPlayerRendererIntent(value: unknown): value is PlayerRendererIntent {
   return typeof value === 'string' && Object.hasOwn(PLAYER_INTENT_TO_COMMAND, value);
 }
-
 function assertNever(value: never): never {
   throw new Error(`Unhandled player error category: ${String(value)}`);
 }
-
 function hasForbiddenPrivilegedField(value: unknown): boolean {
   if (Array.isArray(value)) {
     return value.some((item) => hasForbiddenPrivilegedField(item));
@@ -1260,7 +1208,6 @@ function hasForbiddenPrivilegedField(value: unknown): boolean {
   if (!isRecord(value)) {
     return false;
   }
-
   for (const [key, child] of Object.entries(value)) {
     if (
       PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS.includes(
@@ -1273,7 +1220,6 @@ function hasForbiddenPrivilegedField(value: unknown): boolean {
   }
   return false;
 }
-
 function readRequestId(value: UnknownRecord): PlayerRequestId | undefined {
   return isNonEmptyString(value.requestId) ? value.requestId : undefined;
 }

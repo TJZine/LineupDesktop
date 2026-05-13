@@ -9,6 +9,9 @@ import {
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
+  LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
+  LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL,
+  LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL,
   PLAYER_RENDERER_INTENTS,
   RENDERER_FORBIDDEN_PAYLOAD_KEYS,
   type PlayerRendererIntent,
@@ -38,6 +41,36 @@ import {
   type LineupDesktopPreloadApi,
   type ShellCapabilities,
 } from '../../contracts/shell.js';
+import {
+  DIAGNOSTIC_CATEGORIES,
+  DIAGNOSTIC_REDACTION_VERSION,
+  DIAGNOSTIC_RESULT_VALUES,
+  DIAGNOSTIC_SCHEMA_VERSION,
+  DIAGNOSTIC_SEVERITIES,
+  DIAGNOSTIC_STATUSES,
+  DIAGNOSTIC_SURFACES,
+  DIAGNOSTIC_TRUNCATION_LIMITS,
+  DIAGNOSTICS_REQUEST_ID_PATTERN,
+  DIAGNOSTICS_REQUEST_ID_PATTERN_SOURCE,
+  DIAGNOSTICS_RENDERER_EVENT_CATEGORIES,
+  DIAGNOSTICS_RENDERER_EVENT_SEVERITIES,
+  DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN_SOURCE,
+  DIAGNOSTICS_ERROR_CODES,
+  REDACTION_SCAN_FINDING_LABELS,
+  SUPPORT_BUNDLE_SCHEMA_VERSION,
+  isSafeRendererDiagnosticContextValue,
+  type DiagnosticsRendererEventEnvelope,
+  type DiagnosticRecord,
+  type DiagnosticsError,
+  type DiagnosticsResult,
+  type RedactionScanReport,
+  type SupportBundleExportFailure,
+  type SupportBundleExportResult,
+} from '../../contracts/diagnostics.js';
+import {
+  DIAGNOSTIC_FORBIDDEN_FIELD_KEYS,
+  RD17_DIAGNOSTIC_FORBIDDEN_FIELD_KEYS,
+} from '../../contracts/redaction.js';
 
 function assertNoForbiddenKeys(value: unknown): void {
   if (Array.isArray(value)) {
@@ -105,6 +138,228 @@ test('redaction boundary keeps renderer unprivileged', () => {
   assert.equal(REDACTION_BOUNDARY.rendererMayReceiveRawAuthHeaders, false);
   assert.equal(REDACTION_BOUNDARY.rendererMayReceiveNativeHandles, false);
   assert.equal(REDACTION_BOUNDARY.diagnosticsMustBeRedacted, true);
+});
+
+test('diagnostics contract freezes RD-17 schema versions and vocabulary', () => {
+  assert.equal(DIAGNOSTIC_SCHEMA_VERSION, 1);
+  assert.equal(DIAGNOSTIC_REDACTION_VERSION, 'rd17-redaction-v1');
+  assert.equal(SUPPORT_BUNDLE_SCHEMA_VERSION, 1);
+  assert.deepEqual([...DIAGNOSTIC_SURFACES], [
+    'renderer',
+    'preload',
+    'main',
+    'player-ipc',
+    'desktop-player-adapter',
+    'native-host-process',
+    'plex-playback-runtime',
+    'support-bundle',
+    'redaction',
+  ]);
+  assert.deepEqual([...DIAGNOSTIC_CATEGORIES], [
+    'lifecycle',
+    'ipc',
+    'validation',
+    'playback',
+    'helper-crash',
+    'helper-restart',
+    'cleanup',
+    'support-bundle-export',
+    'redaction-scan',
+    'security-boundary',
+    'unknown',
+  ]);
+  assert.deepEqual([...DIAGNOSTIC_SEVERITIES], ['debug', 'info', 'warning', 'error']);
+  assert.deepEqual([...DIAGNOSTIC_STATUSES], [
+    'observed',
+    'started',
+    'succeeded',
+    'failed',
+    'rejected',
+    'ignored',
+    'redacted',
+    'truncated',
+    'cancelled',
+  ]);
+  assert.deepEqual([...DIAGNOSTIC_RESULT_VALUES], ['success', 'failure', 'cancelled', 'ignored']);
+  assert.deepEqual([...DIAGNOSTICS_RENDERER_EVENT_CATEGORIES], [
+    'lifecycle',
+    'validation',
+    'ipc',
+    'support-bundle-export',
+  ]);
+  assert.deepEqual([...DIAGNOSTICS_RENDERER_EVENT_SEVERITIES], ['info', 'warning', 'error']);
+  assert.deepEqual([...DIAGNOSTICS_ERROR_CODES], [
+    'DIAGNOSTICS_UNAUTHORIZED',
+    'DIAGNOSTICS_VALIDATION_FAILED',
+    'DIAGNOSTICS_EXPORT_CANCELLED',
+    'DIAGNOSTICS_EXPORT_FAILED',
+    'DIAGNOSTICS_REDACTION_FAILED',
+    'DIAGNOSTICS_UNAVAILABLE',
+    'DIAGNOSTICS_UNKNOWN',
+  ]);
+});
+
+test('diagnostics renderer event envelope is narrow and renderer-originated', () => {
+  const envelope: DiagnosticsRendererEventEnvelope = {
+    requestId: 'diagnostics-request-1',
+    event: {
+      surface: 'renderer',
+      category: 'support-bundle-export',
+      severity: 'info',
+      operation: 'support-bundle.export.click',
+      message: 'Support bundle export requested from settings.',
+      context: { route: 'settings', focused: true },
+    },
+  };
+
+  assert.equal(envelope.event.surface, 'renderer');
+  assert.equal(Object.hasOwn(envelope.event, 'status'), false);
+  assert.equal(Object.hasOwn(envelope.event, 'timestampMs'), false);
+  assert.equal(Object.hasOwn(envelope.event, 'path'), false);
+  assertNoForbiddenKeys(envelope);
+});
+
+test('diagnostics result and support bundle contracts remain renderer-safe', () => {
+  const record: DiagnosticRecord = {
+    schemaVersion: DIAGNOSTIC_SCHEMA_VERSION,
+    id: 'diagnostic-1',
+    timestampMs: 1,
+    surface: 'main',
+    category: 'redaction-scan',
+    severity: 'info',
+    status: 'succeeded',
+    operation: 'support-bundle.scan',
+    message: 'Support bundle scan passed.',
+    requestId: 'diagnostic-request-1',
+    result: 'success',
+    context: { fileCount: 3, retryable: false, status: 'passed', value: null },
+  };
+  const error: DiagnosticsError = {
+    code: 'DIAGNOSTICS_REDACTION_FAILED',
+    message: 'Support bundle scan failed.',
+    recoverable: true,
+    retryable: false,
+    diagnostic: record,
+  };
+  const success: DiagnosticsResult<DiagnosticRecord> = {
+    ok: true,
+    requestId: 'diagnostic-request-1',
+    value: record,
+  };
+  const failure: DiagnosticsResult<DiagnosticRecord> = {
+    ok: false,
+    requestId: 'diagnostic-request-2',
+    error,
+  };
+  const cancellation: DiagnosticsResult<DiagnosticRecord> = {
+    ok: false,
+    requestId: 'diagnostic-request-3',
+    cancelled: true,
+    error: { ...error, code: 'DIAGNOSTICS_EXPORT_CANCELLED' },
+  };
+  const report: RedactionScanReport = {
+    redactionVersion: DIAGNOSTIC_REDACTION_VERSION,
+    scannedFileCount: 4,
+    scannedByteCount: 512,
+    findingCount: 0,
+    findingsByLabel: {},
+    truncatedRecordCount: 0,
+    omittedFileCount: 0,
+    status: 'passed',
+    timestampMs: 1,
+  };
+  const exportResult: SupportBundleExportResult = {
+    status: 'succeeded',
+    bundleId: 'bundle-1',
+    bundleDirectoryName: 'lineup-desktop-support-bundle-1',
+    createdAtMs: 1,
+    fileCount: 4,
+    byteCount: 512,
+    includedFiles: ['manifest.json', 'diagnostics.ndjson'],
+    redactionReport: report,
+  };
+  const exportFailure: SupportBundleExportFailure = {
+    status: 'failed',
+    error,
+    redactionReport: { ...report, status: 'failed', findingCount: 1 },
+  };
+
+  assert.deepEqual(Object.keys(success).sort(), ['ok', 'requestId', 'value']);
+  assert.deepEqual(Object.keys(failure).sort(), ['error', 'ok', 'requestId']);
+  assert.deepEqual(Object.keys(cancellation).sort(), ['cancelled', 'error', 'ok', 'requestId']);
+  assert.equal(Object.hasOwn(exportResult, 'path'), false);
+  assert.equal(Object.hasOwn(exportResult, 'filePath'), false);
+  assert.equal(Object.hasOwn(exportFailure, 'path'), false);
+  assertNoForbiddenKeys(success);
+  assertNoForbiddenKeys(failure);
+  assertNoForbiddenKeys(cancellation);
+  assertNoForbiddenKeys(exportResult);
+  assertNoForbiddenKeys(exportFailure);
+});
+
+test('diagnostics redaction policy unions prior forbidden fields with RD-17 fields', () => {
+  for (const key of [
+    ...PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
+    ...RENDERER_FORBIDDEN_PAYLOAD_KEYS,
+    ...RD17_DIAGNOSTIC_FORBIDDEN_FIELD_KEYS,
+  ]) {
+    assert.equal(
+      DIAGNOSTIC_FORBIDDEN_FIELD_KEYS.includes(key),
+      true,
+      `diagnostic forbidden keys include ${key}`,
+    );
+  }
+  assert.equal(DIAGNOSTIC_FORBIDDEN_FIELD_KEYS.includes('privatePlaybackDescriptor'), true);
+  assert.equal(DIAGNOSTIC_FORBIDDEN_FIELD_KEYS.includes('rawIpc'), true);
+});
+
+test('diagnostics truncation and scanner report vocabulary match RD-17 Unit 1', () => {
+  assert.deepEqual(DIAGNOSTIC_TRUNCATION_LIMITS, {
+    rawInputBytes: 65_536,
+    messageCharacters: 512,
+    operationCharacters: 80,
+    requestIdCharacters: 120,
+    contextKeyCharacters: 64,
+    contextStringCharacters: 256,
+    contextEntries: 16,
+    nativeOutputSampleCharacters: 1024,
+    storeRecords: 500,
+    exportRecords: 500,
+    diagnosticsNdjsonBytes: 1_048_576,
+  });
+  assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN_SOURCE, '^[A-Za-z0-9._-]{1,120}$');
+  assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN.test('diagnostic-request_1.2'), true);
+  assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN.test('/Users/example/request'), false);
+  assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN.test('C:\\Users\\example\\request'), false);
+  assert.equal(
+    DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN_SOURCE.includes('rawIpc'),
+    true,
+  );
+  assert.equal(isSafeRendererDiagnosticContextValue('settings'), true);
+  assert.equal(isSafeRendererDiagnosticContextValue('/Users/example/private.mov'), false);
+  assert.equal(isSafeRendererDiagnosticContextValue('C:\\Users\\example\\private.mov'), false);
+  assert.equal(isSafeRendererDiagnosticContextValue('\\\\server\\share\\private.mov'), false);
+  assert.equal(isSafeRendererDiagnosticContextValue('/Library/Application Support/private.mov'), false);
+  assert.equal(isSafeRendererDiagnosticContextValue(['access_', 'token=abc123'].join('')), false);
+  assert.equal(isSafeRendererDiagnosticContextValue(['oauth', 'Token=abc123'].join('')), false);
+  assert.equal(isSafeRendererDiagnosticContextValue(['raw', 'IpcFrame:channel'].join('')), false);
+  assert.equal(isSafeRendererDiagnosticContextValue(['process', 'Id=12345'].join('')), false);
+  assert.equal(isSafeRendererDiagnosticContextValue(['native_', 'handle=0xabc'].join('')), false);
+  assert.equal(isSafeRendererDiagnosticContextValue(['Bear', 'er abcdefgh1234'].join('')), false);
+  assert.equal(isSafeRendererDiagnosticContextValue(['p', 'id 12345'].join('')), false);
+  assert.deepEqual([...REDACTION_SCAN_FINDING_LABELS], [
+    'token-query-parameter',
+    'raw-auth-header',
+    'credential-scheme',
+    'header-map-credential',
+    'secret-field-value',
+    'privileged-diagnostic-field-value',
+    'oauth-token-path-segment',
+    'raw-filesystem-path',
+    'raw-process-data',
+    'native-handle',
+    'raw-ipc-frame',
+  ]);
 });
 
 test('player command, event, and snapshot contracts carry request ids', () => {
@@ -324,11 +579,20 @@ test('shell IPC channel vocabulary uses the approved literals', () => {
   assert.equal(LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL, 'lineup:player:getSnapshot');
   assert.equal(LINEUP_PLAYER_CLEANUP_CHANNEL, 'lineup:player:cleanup');
   assert.equal(LINEUP_PLAYER_EVENT_CHANNEL, 'lineup:player:event');
+  assert.equal(
+    LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL,
+    'lineup:diagnostics:recordRendererEvent',
+  );
+  assert.equal(LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL, 'lineup:diagnostics:getSummary');
+  assert.equal(
+    LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
+    'lineup:diagnostics:exportSupportBundle',
+  );
 });
 
-test('preload API contract exposes shell, window, and player methods only', () => {
+test('preload API contract exposes shell, window, player, and diagnostics methods only', () => {
   type ApiKeys = keyof LineupDesktopPreloadApi;
-  const apiKeys: ApiKeys[] = ['shell', 'window', 'player'];
+  const apiKeys: ApiKeys[] = ['shell', 'window', 'player', 'diagnostics'];
   const shellKeys: Array<keyof LineupDesktopPreloadApi['shell']> = [
     'getCapabilities',
     'onStatusChanged',
@@ -340,11 +604,21 @@ test('preload API contract exposes shell, window, and player methods only', () =
     'cleanup',
     'onEvent',
   ];
+  const diagnosticsKeys: Array<keyof LineupDesktopPreloadApi['diagnostics']> = [
+    'recordRendererEvent',
+    'getSummary',
+    'exportSupportBundle',
+  ];
 
-  assert.deepEqual(apiKeys, ['shell', 'window', 'player']);
+  assert.deepEqual(apiKeys, ['shell', 'window', 'player', 'diagnostics']);
   assert.deepEqual(shellKeys, ['getCapabilities', 'onStatusChanged']);
   assert.deepEqual(windowKeys, ['setFullscreen']);
   assert.deepEqual(playerKeys, ['dispatch', 'getSnapshot', 'cleanup', 'onEvent']);
+  assert.deepEqual(diagnosticsKeys, [
+    'recordRendererEvent',
+    'getSummary',
+    'exportSupportBundle',
+  ]);
 });
 
 test('player IPC result and dispatch contracts stay renderer-safe', () => {

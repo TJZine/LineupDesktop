@@ -8,6 +8,7 @@ import {
   applyWorkflowEpgAction,
   applyWorkflowAction,
   applyWorkflowSettingsAction,
+  applyWorkflowSupportBundleExportStatus,
   createWorkflowState,
   findRouteAction,
   getRouteWorkflowView,
@@ -96,6 +97,27 @@ test('settings actions update only renderer-local settings draft state', () => {
   assert.equal(hiddenBadges.settingsDraft.previewBadgesEnabled, false);
   assert.equal(view.settings.playbackMode, 'Fullscreen desktop preview');
   assert.equal(view.settings.sections.length, 3);
+});
+
+test('support bundle settings action is user-gesture state and renders safe export status only', () => {
+  const initial = createWorkflowState('settings');
+  const exporting = applyWorkflowSettingsAction(initial, 'exportSupportBundle');
+  const succeeded = applyWorkflowSupportBundleExportStatus(exporting, {
+    status: 'succeeded',
+    bundleDirectoryName: 'lineup-desktop-support-bundle-1',
+    fileCount: 6,
+    redactionStatus: 'passed',
+  });
+  const view = getRouteWorkflowView(succeeded);
+  const supportBundle = view.settings.sections
+    .flatMap((section) => section.items)
+    .find((item) => item.id === 'support-bundle-export');
+
+  assert.equal(exporting.settingsDraft.supportBundleExport.status, 'exporting');
+  assert.equal(supportBundle?.valueLabel, 'lineup-desktop-support-bundle-1 - 6 files');
+  assert.equal(JSON.stringify(view).includes('/Users/'), false);
+  assert.equal(JSON.stringify(view).includes('C:\\'), false);
+  assert.equal(JSON.stringify(view).includes('path'), false);
 });
 
 test('settings copy describes Desktop-local capabilities and avoids legacy platform truth', () => {

@@ -71,6 +71,15 @@ export const LINEUP_PLAYER_CLEANUP_CHANNEL = 'lineup:player:cleanup' as const;
 
 export const LINEUP_PLAYER_EVENT_CHANNEL = 'lineup:player:event' as const;
 
+export const LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL =
+  'lineup:diagnostics:recordRendererEvent' as const;
+
+export const LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL =
+  'lineup:diagnostics:getSummary' as const;
+
+export const LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL =
+  'lineup:diagnostics:exportSupportBundle' as const;
+
 /**
  * Known privileged renderer payload field names are denied at contract seams.
  * Review additions/removals with secret-flow and native-handle exposure impact.

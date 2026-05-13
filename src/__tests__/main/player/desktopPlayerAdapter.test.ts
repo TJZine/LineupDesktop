@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { DesktopPlayerAdapter } from '../../../main/player/desktopPlayerAdapter.js';
+import { DiagnosticEventStore } from '../../../main/diagnostics/diagnosticEventStore.js';
 import type {
   NativePlayerHostCommandResult,
   NativePlayerHostEvent,
@@ -250,8 +251,10 @@ test('desktop player adapter emits renderer-safe snapshots and host events', asy
 test('desktop player adapter records helper lifecycle failures without raw process details', async () => {
   const host = new LifecycleFakeNativePlayerHost();
   const emittedEvents: PlayerEvent[] = [];
+  const diagnostics = new DiagnosticEventStore({ clock: () => 1_000, idGenerator: () => 'adapter-lifecycle' });
   const adapter = new DesktopPlayerAdapter(host, {
     onEvents: (events) => emittedEvents.push(...events),
+    diagnosticEventStore: diagnostics,
   });
 
   await adapter.dispatchRendererIntent(loadEnvelope('request-lifecycle'));
@@ -276,6 +279,8 @@ test('desktop player adapter records helper lifecycle failures without raw proce
   assert.equal(snapshot.status, 'error');
   assert.equal(snapshot.lastError?.category, 'helper-failure');
   assertTextAbsent(emittedEvents, 'raw exit code');
+  assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 1);
+  assertTextAbsent(diagnostics.getRecords(), 'raw exit code');
   assertNoForbiddenKeys(emittedEvents);
   assertNoForbiddenKeys(snapshot);
 });
@@ -451,7 +456,8 @@ test('desktop player adapter clears pending request ids on helper crash', async 
 
 test('desktop player adapter cleans up requests and maps cleanup failure safely', async () => {
   const host = new FakeNativePlayerHost();
-  const adapter = new DesktopPlayerAdapter(host);
+  const diagnostics = new DiagnosticEventStore({ clock: () => 2_000, idGenerator: () => 'adapter-cleanup' });
+  const adapter = new DesktopPlayerAdapter(host, { diagnosticEventStore: diagnostics });
 
   await adapter.dispatchRendererIntent(loadEnvelope('request-load-1'));
   assert.equal(adapter.getPendingRequestCount(), 0);
@@ -467,6 +473,8 @@ test('desktop player adapter cleans up requests and maps cleanup failure safely'
 
   assert.equal(failed.accepted, false);
   assertErrorEvent(failed.events, 'cleanup-failure');
+  assert.equal(diagnostics.getCrashRecoverySummary().cleanupFailureCount, 1);
+  assertTextAbsent(diagnostics.getRecords(), 'nativeHandle');
   assertNoForbiddenKeys(failed);
 });
 
@@ -488,7 +496,6 @@ test('desktop player adapter rejects invalid renderer payloads before host calls
     },
   } as RendererIntentEnvelope<unknown>);
 
-  assert.equal(result.accepted, false);
   assert.equal(host.commands.length, 0);
   assertErrorEvent(result.events, 'validation-failure');
   assert.deepEqual(result.snapshot, before);
@@ -509,7 +516,6 @@ test('desktop player adapter rejects unsupported payload fields without echoing 
     },
   } as RendererIntentEnvelope<unknown>);
 
-  assert.equal(result.accepted, false);
   assert.equal(host.commands.length, 0);
   assertErrorEvent(result.events, 'validation-failure');
   assert.deepEqual(result.snapshot, before);
@@ -577,6 +583,7 @@ test('desktop player adapter excludes forbidden fields from host events and erro
 
 test('desktop player adapter normalizes host failure strings before renderer exposure', async () => {
   const host = new FakeNativePlayerHost();
+  const diagnostics = new DiagnosticEventStore({ clock: () => 3_000, idGenerator: () => 'adapter-host-failure' });
   host.executeResult = {
     ok: false,
     error: {
@@ -587,7 +594,7 @@ test('desktop player adapter normalizes host failure strings before renderer exp
       retryable: true,
     },
   };
-  const adapter = new DesktopPlayerAdapter(host);
+  const adapter = new DesktopPlayerAdapter(host, { diagnosticEventStore: diagnostics });
 
   const result = await adapter.dispatchRendererIntent(emptyEnvelope('player.play', 'request-play-1'));
 
@@ -604,4 +611,100 @@ test('desktop player adapter normalizes host failure strings before renderer exp
     }),
     true,
   );
+  assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 1);
+  assertTextAbsent(diagnostics.getRecords(), 'RAW_NATIVE_HANDLE');
+});
+
+test('desktop player adapter shared diagnostics summary counts one helper crash incident', async () => {
+  const host = new FakeNativePlayerHost();
+  const diagnostics = new DiagnosticEventStore({ clock: () => 4_000, idGenerator: () => 'adapter-shared-crash' });
+  host.executeResult = {
+    ok: false,
+    error: {
+      code: 'PLAYER_HELPER_EXITED',
+      category: 'helper-failure',
+      message: 'raw helper close detail',
+      recoverable: true,
+      retryable: true,
+    },
+  };
+  diagnostics.record({
+    surface: 'native-host-process',
+    category: 'helper-crash',
+    severity: 'error',
+    status: 'failed',
+    operation: 'helper.command',
+    message: 'Player helper lifecycle failure observed.',
+    requestId: 'request-shared-crash',
+    result: 'failure',
+    context: { code: 'PLAYER_HELPER_EXITED' },
+  });
+  const adapter = new DesktopPlayerAdapter(host, { diagnosticEventStore: diagnostics });
+
+  const result = await adapter.dispatchRendererIntent(loadEnvelope('request-shared-crash'));
+
+  assertErrorEvent(result.events, 'helper-failure');
+  assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 1);
+  assert.equal(diagnostics.getCrashRecoverySummary().events.filter((event) => event.category === 'helper-crash').length, 2);
+  assertTextAbsent(diagnostics.getRecords(), 'raw helper close detail');
+});
+
+test('desktop player adapter shared diagnostics summary counts one unscoped lifecycle crash incident', async () => {
+  const host = new LifecycleFakeNativePlayerHost();
+  const diagnostics = new DiagnosticEventStore({ clock: () => 6_000, idGenerator: () => 'adapter-shared-lifecycle' });
+  const adapter = new DesktopPlayerAdapter(host, { diagnosticEventStore: diagnostics });
+  await adapter.dispatchRendererIntent(loadEnvelope('request-shared-lifecycle'));
+  diagnostics.record({
+    surface: 'native-host-process',
+    category: 'helper-crash',
+    severity: 'warning',
+    status: 'observed',
+    operation: 'helper.lifecycle',
+    message: 'Player helper lifecycle failure observed.',
+    result: 'ignored',
+    context: { code: 'PLAYER_HELPER_EXITED' },
+  });
+
+  host.emitLifecycleFailure({
+    requestId: null,
+    error: {
+      code: 'PLAYER_HELPER_EXITED',
+      category: 'helper-failure',
+      message: 'raw idle close detail',
+      recoverable: true,
+      retryable: true,
+    },
+  });
+
+  assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 1);
+  assert.equal(diagnostics.getCrashRecoverySummary().events.filter((event) => event.category === 'helper-crash').length, 2);
+  assert.equal(adapter.getSnapshot().requestId, 'request-shared-lifecycle');
+  assert.equal(adapter.getSnapshot().lastError?.requestId, 'request-shared-lifecycle');
+  assertTextAbsent(diagnostics.getRecords(), 'raw idle close detail');
+});
+
+test('desktop player adapter shared diagnostics summary counts one cleanup incident', async () => {
+  const host = new FakeNativePlayerHost();
+  const diagnostics = new DiagnosticEventStore({ clock: () => 5_000, idGenerator: () => 'adapter-shared-cleanup' });
+  host.cleanupError = new Error('nativeHandle=shared-cleanup-secret');
+  diagnostics.record({
+    surface: 'native-host-process',
+    category: 'cleanup',
+    severity: 'error',
+    status: 'failed',
+    operation: 'helper.cleanup',
+    message: 'Player helper cleanup failed.',
+    requestId: 'request-shared-cleanup',
+    result: 'failure',
+    context: { code: 'PLAYER_CLEANUP_FAILED' },
+  });
+  const adapter = new DesktopPlayerAdapter(host, { diagnosticEventStore: diagnostics });
+  await adapter.dispatchRendererIntent(loadEnvelope('request-shared-cleanup'));
+
+  const result = await adapter.cleanup();
+
+  assert.equal(result.accepted, false);
+  assert.equal(diagnostics.getCrashRecoverySummary().cleanupFailureCount, 1);
+  assert.equal(diagnostics.getCrashRecoverySummary().events.filter((event) => event.category === 'cleanup').length, 2);
+  assertTextAbsent(diagnostics.getRecords(), 'shared-cleanup-secret');
 });

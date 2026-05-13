@@ -36,6 +36,8 @@ import {
   type ShellIpcAuthorizationDetails,
 } from './shellSecurity.js';
 import { registerPlayerIpcHandlers, type PlayerIpcTeardown } from './player/playerIpc.js';
+import { DiagnosticEventStore } from './diagnostics/diagnosticEventStore.js';
+import { registerDiagnosticsIpcHandlers, type DiagnosticsIpcTeardown } from './diagnostics/supportBundleIpc.js';
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
 import { registerShellAppCommandController } from './window/shellAppCommandController.js';
 import { createShellWindowController } from './window/shellWindowController.js';
@@ -48,6 +50,7 @@ const rendererRoot = path.join(appRoot, 'renderer');
 const preloadPath = path.join(appRoot, 'preload', 'index.cjs');
 const shellMode = getShellMode();
 const smokeMode = shellMode === 'smoke';
+const diagnosticEventStore = new DiagnosticEventStore();
 
 const shellWindowController = createShellWindowController({
   createBrowserWindow: (options) => new BrowserWindow(options),
@@ -57,6 +60,7 @@ const shellWindowController = createShellWindowController({
   publishShellStatus,
 });
 let teardownPlayerIpc: PlayerIpcTeardown | null = null;
+let teardownDiagnosticsIpc: DiagnosticsIpcTeardown | null = null;
 let playerIpcQuitTeardownInProgress = false;
 let playerIpcQuitTeardownComplete = false;
 let containmentCounters: ShellContainmentCounters = {
@@ -73,12 +77,21 @@ app.whenReady()
     registerLineupProtocolHandler(rendererRoot);
     configurePermissionContainment();
     registerShellIpcHandlers();
+    teardownDiagnosticsIpc = registerDiagnosticsIpcHandlers({
+      eventStore: diagnosticEventStore,
+      shellMode,
+      isAuthorizedEvent,
+      createRequestId,
+      getShellWindow: () => shellWindowController.getWindow(),
+      appVersion: app.getVersion(),
+    });
     teardownPlayerIpc = registerPlayerIpcHandlers({
       shellMode,
       isAuthorizedEvent,
       sendPlayerEvent,
       createRequestId,
       reportDiagnostic: reportMainProcessDiagnostic,
+      diagnosticEventStore,
     });
     const shellWindow = shellWindowController.createWindow();
     registerShellAppCommandController(shellWindow, {
@@ -117,6 +130,8 @@ app.on('before-quit', (event) => {
 
   event.preventDefault();
   teardownPlayerIpc = null;
+  teardownDiagnosticsIpc?.();
+  teardownDiagnosticsIpc = null;
   playerIpcQuitTeardownInProgress = true;
   teardown()
     .catch((error: unknown) => {

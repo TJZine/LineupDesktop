@@ -2,7 +2,8 @@ export type SettingsActionId =
   | 'cycleLaunchMode'
   | 'cycleGuideDensity'
   | 'togglePreviewBadges'
-  | 'toggleSetupReminder';
+  | 'toggleSetupReminder'
+  | 'exportSupportBundle';
 
 export type ChannelSetupActionId =
   | 'advanceSetupStep'
@@ -17,6 +18,14 @@ export interface SettingsDraftState {
   guideDensity: 'comfortable' | 'compact';
   previewBadgesEnabled: boolean;
   setupReminderEnabled: boolean;
+  supportBundleExport: SupportBundleExportStatusViewModel;
+}
+
+export interface SupportBundleExportStatusViewModel {
+  status: 'ready' | 'exporting' | 'succeeded' | 'failed' | 'cancelled';
+  bundleDirectoryName: string | null;
+  fileCount: number | null;
+  redactionStatus: 'passed' | 'failed' | null;
 }
 
 export interface SettingsItemViewModel {
@@ -96,6 +105,12 @@ export function createSettingsDraftState(): SettingsDraftState {
     guideDensity: 'comfortable',
     previewBadgesEnabled: true,
     setupReminderEnabled: true,
+    supportBundleExport: {
+      status: 'ready',
+      bundleDirectoryName: null,
+      fileCount: null,
+      redactionStatus: null,
+    },
   };
 }
 
@@ -126,7 +141,27 @@ export function applySettingsAction(
       return { ...state, previewBadgesEnabled: !state.previewBadgesEnabled };
     case 'toggleSetupReminder':
       return { ...state, setupReminderEnabled: !state.setupReminderEnabled };
+    case 'exportSupportBundle':
+      return {
+        ...state,
+        supportBundleExport: {
+          status: 'exporting',
+          bundleDirectoryName: null,
+          fileCount: null,
+          redactionStatus: null,
+        },
+      };
   }
+}
+
+export function applySupportBundleExportStatus(
+  state: SettingsDraftState,
+  status: SupportBundleExportStatusViewModel,
+): SettingsDraftState {
+  return {
+    ...state,
+    supportBundleExport: status,
+  };
 }
 
 export function applyChannelSetupAction(
@@ -212,9 +247,30 @@ export function createSettingsSections(
           valueLabel: state.setupReminderEnabled ? 'On' : 'Off',
           description: 'Keeps the local channel setup route visible without writing preferences.',
         },
+        {
+          id: 'support-bundle-export',
+          label: 'Support bundle',
+          valueLabel: formatSupportBundleStatus(state.supportBundleExport),
+          description: 'Main-owned diagnostics export with redaction scan status.',
+        },
       ],
     },
   ];
+}
+
+function formatSupportBundleStatus(status: SupportBundleExportStatusViewModel): string {
+  switch (status.status) {
+    case 'ready':
+      return 'Ready';
+    case 'exporting':
+      return 'Exporting';
+    case 'succeeded':
+      return `${status.bundleDirectoryName ?? 'Bundle'} - ${String(status.fileCount ?? 0)} files`;
+    case 'failed':
+      return 'Failed';
+    case 'cancelled':
+      return 'Cancelled';
+  }
 }
 
 export function createChannelSetupSteps(

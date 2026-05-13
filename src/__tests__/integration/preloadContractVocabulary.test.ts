@@ -11,8 +11,22 @@ import {
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
+  LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
+  LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL,
+  LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL,
   PLAYER_RENDERER_INTENTS,
 } from '../../contracts/ipc.js';
+import {
+  DIAGNOSTIC_CATEGORIES,
+  DIAGNOSTIC_SEVERITIES,
+  DIAGNOSTIC_STATUSES,
+  DIAGNOSTICS_ERROR_CODES,
+  DIAGNOSTICS_REQUEST_ID_PATTERN_SOURCE,
+  DIAGNOSTICS_RENDERER_EVENT_CATEGORIES,
+  DIAGNOSTICS_RENDERER_EVENT_SEVERITIES,
+  DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN_SOURCE,
+  REDACTION_SCAN_FINDING_LABELS,
+} from '../../contracts/diagnostics.js';
 import {
   PLAYER_COMMAND_VALUES,
   PLAYER_ERROR_CATEGORIES,
@@ -41,6 +55,9 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
   LINEUP_PLAYER_CLEANUP_CHANNEL,
   LINEUP_PLAYER_EVENT_CHANNEL,
+  LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL,
+  LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL,
+  LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
 } as const;
 
 const APPROVED_IPC_CHANNELS_BY_METHOD = {
@@ -50,6 +67,9 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_PLAYER_COMMAND_CHANNEL',
     'LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL',
     'LINEUP_PLAYER_CLEANUP_CHANNEL',
+    'LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL',
+    'LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL',
+    'LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL',
   ]),
   on: new Set(['LINEUP_SHELL_STATUS_CHANGED_CHANNEL', 'LINEUP_PLAYER_EVENT_CHANNEL']),
   removeListener: new Set([
@@ -378,6 +398,18 @@ function assertNoForbiddenElectronAccess(node: ts.Node): void {
 
 test('preload guard vocabulary matches contract vocabulary', () => {
   assert.doesNotMatch(preloadSourceText, /\.\/vocabulary\.cjs/u);
+  assert.equal(
+    preloadSourceText.includes(
+      `const DIAGNOSTICS_REQUEST_ID_PATTERN = /${DIAGNOSTICS_REQUEST_ID_PATTERN_SOURCE}/u;`,
+    ),
+    true,
+  );
+  assert.equal(
+    preloadSourceText.includes(
+      `/${DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN_SOURCE}/iu`,
+    ),
+    true,
+  );
   assert.deepEqual(readPreloadStringArrayConst('SHELL_STATUS_VALUES'), [...SHELL_STATUS_VALUES]);
   assert.deepEqual(readPreloadStringArrayConst('PLAYER_ERROR_CATEGORIES'), [...PLAYER_ERROR_CATEGORIES]);
   assert.deepEqual(
@@ -396,6 +428,27 @@ test('preload guard vocabulary matches contract vocabulary', () => {
     readPreloadStringArrayConst('PLAYER_TRACK_DELIVERY_TYPE_VALUES'),
     [...PLAYER_TRACK_DELIVERY_TYPE_VALUES],
   );
+  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTIC_CATEGORIES'), [
+    ...DIAGNOSTIC_CATEGORIES,
+  ]);
+  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTIC_SEVERITIES'), [
+    ...DIAGNOSTIC_SEVERITIES,
+  ]);
+  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTIC_STATUSES'), [
+    ...DIAGNOSTIC_STATUSES,
+  ]);
+  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTICS_RENDERER_EVENT_CATEGORIES'), [
+    ...DIAGNOSTICS_RENDERER_EVENT_CATEGORIES,
+  ]);
+  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTICS_RENDERER_EVENT_SEVERITIES'), [
+    ...DIAGNOSTICS_RENDERER_EVENT_SEVERITIES,
+  ]);
+  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTICS_ERROR_CODES'), [
+    ...DIAGNOSTICS_ERROR_CODES,
+  ]);
+  assert.deepEqual(readPreloadStringArrayConst('REDACTION_SCAN_FINDING_LABELS'), [
+    ...REDACTION_SCAN_FINDING_LABELS,
+  ]);
 });
 
 test('preload channel constants match approved IPC contract exports', () => {
@@ -511,6 +564,9 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
   visit(preloadSourceFile);
 
   assert.deepEqual(observedCalls.sort(), [
+    'invoke:LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL',
+    'invoke:LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL',
+    'invoke:LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL',
     'invoke:LINEUP_PLAYER_CLEANUP_CHANNEL',
     'invoke:LINEUP_PLAYER_COMMAND_CHANNEL',
     'invoke:LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL',

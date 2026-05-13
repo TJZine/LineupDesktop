@@ -1,6 +1,7 @@
 import type { PlayerCommand, PlayerEvent, PlayerRequestId } from '../../contracts/player.js';
 import type { PlayerRendererIntentEnvelope } from '../../contracts/ipc.js';
 import type { IChannelScheduler } from '../../domain/scheduler/index.js';
+import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.js';
 import type { PlexStreamResolverInput, PlexStreamResolverResult } from '../plex/streamResolver.js';
 import { PlexPlaybackBridge } from './plexPlaybackBridge.js';
 import { PlexPlaybackRuntime, type PlexPlaybackRuntimeClockPort, type PlexPlaybackRuntimePlayerPort, type PlexPlaybackRuntimePmsPort } from './plexPlaybackRuntime.js';
@@ -33,6 +34,7 @@ export interface CreatePlexPlaybackRuntimeCompositionOptions {
   clock?: PlexPlaybackRuntimeClockPort;
   autoplay?: boolean;
   onEvents?: (events: readonly PlayerEvent[]) => void;
+  diagnosticEventStore?: DiagnosticEventStore;
 }
 
 export interface PlexPlaybackRuntimeComposition {
@@ -61,6 +63,7 @@ export function createPlexPlaybackRuntimeComposition(
       createRequestId: options.createRequestId,
       clock: options.clock,
       onEvents: options.onEvents,
+      diagnosticEventStore: options.diagnosticEventStore,
     }),
   };
 }

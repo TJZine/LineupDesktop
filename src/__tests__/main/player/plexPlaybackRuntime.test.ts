@@ -12,6 +12,7 @@ import {
   type PlexPlaybackRuntimeSchedulerPort,
   type PlexPlaybackScheduleSelection,
 } from '../../../main/player/plexPlaybackRuntime.js';
+import { DiagnosticEventStore } from '../../../main/diagnostics/diagnosticEventStore.js';
 import {
   isRendererSafePlayerEvent,
   PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
@@ -125,12 +126,17 @@ function createRuntime(): {
   player: FakePlayerPort;
   pms: FakePmsPort;
   emitted: PlayerEvent[];
+  diagnostics: DiagnosticEventStore;
 } {
   const scheduler = new FakeSchedulerPort();
   const channel = new FakeChannelPort();
   const player = new FakePlayerPort();
   const pms = new FakePmsPort();
   const emitted: PlayerEvent[] = [];
+  const diagnostics = new DiagnosticEventStore({
+    clock: () => 1_000,
+    idGenerator: () => 'runtime-diagnostic',
+  });
   const runtime = new PlexPlaybackRuntime({
     scheduler,
     channel,
@@ -139,8 +145,9 @@ function createRuntime(): {
     clock: { now: () => 42_000 },
     createRequestId: (prefix) => `${prefix}-generated`,
     onEvents: (events) => emitted.push(...events),
+    diagnosticEventStore: diagnostics,
   });
-  return { runtime, scheduler, channel, player, pms, emitted };
+  return { runtime, scheduler, channel, player, pms, emitted, diagnostics };
 }
 
 function assertNoForbiddenKeys(value: unknown): void {
@@ -313,9 +320,10 @@ test('RD-12 plex playback runtime quarantines stale player events by epoch', asy
 });
 
 test('RD-12 plex playback runtime reports cleanup failures without privileged detail', async () => {
-  const { runtime, pms, player } = createRuntime();
+  const { runtime, pms, player, diagnostics } = createRuntime();
   await runtime.startCurrentPlayback();
-  pms.failure = new Error('native-handle-detail');
+  const nativeDetail = ['native', 'handle', 'detail'].join('-');
+  pms.failure = new Error(nativeDetail);
   player.cleanupFailure = new Error('player-private-detail');
 
   const events = await runtime.cleanup({ reason: 'server-change' });
@@ -328,9 +336,32 @@ test('RD-12 plex playback runtime reports cleanup failures without privileged de
       assert.equal(event.error.message, 'Playback cleanup did not complete safely.');
     }
   }
-  assertTextAbsent(events, 'native-handle-detail');
+  assertTextAbsent(events, nativeDetail);
   assertTextAbsent(events, 'player-private-detail');
+  assert.equal(diagnostics.getCrashRecoverySummary().cleanupFailureCount, 1);
+  assert.equal(diagnostics.getCrashRecoverySummary().events.filter((event) => event.category === 'cleanup').length, 2);
+  assertTextAbsent(diagnostics.getRecords(), nativeDetail);
+  assertTextAbsent(diagnostics.getRecords(), 'player-private-detail');
   assertNoForbiddenKeys(events);
+  assertRendererSafePlayerEvents(events);
+});
+
+test('RD-17 plex playback runtime helper-crash cleanup records safe diagnostics and releases resources', async () => {
+  const { runtime, pms, player, diagnostics, emitted } = createRuntime();
+  await runtime.startCurrentPlayback();
+  const forbiddenUrl = ['https://', 'secret', '.example'].join('');
+  pms.failure = new Error(`tokenizedUrl=${forbiddenUrl}`);
+
+  const events = await runtime.handleHelperCrash();
+
+  assert.equal(runtime.getActiveRequestId(), null);
+  assert.equal(pms.releases[0]?.reason, 'helper-crash');
+  assert.deepEqual(player.cleanupRequestIds, ['request-1']);
+  assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 1);
+  assert.equal(diagnostics.getCrashRecoverySummary().cleanupFailureCount, 1);
+  assertTextAbsent(diagnostics.getRecords(), forbiddenUrl);
+  assertNoForbiddenKeys(events);
+  assertNoForbiddenKeys(emitted);
   assertRendererSafePlayerEvents(events);
 });
 
