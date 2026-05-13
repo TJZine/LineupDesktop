@@ -31,7 +31,20 @@ const PUBLIC_FORBIDDEN_KEYS = [
   'size',
 ] as const;
 
-const RAW_PLEX_STREAM_IDS = ['video-main-h264', 'audio-main-aac', 'subtitle-main-embedded'] as const;
+const RAW_PLEX_PRIVATE_VALUES = [
+  'variant-main',
+  'part-main',
+  'video-main-h264',
+  'audio-main-aac',
+  'subtitle-main-embedded',
+  'variant-rich',
+  'part-rich',
+  'video-rich-dovi',
+  'audio-rich-truehd',
+  'audio-rich-opus',
+  'subtitle-rich-forced-pgs',
+  'subtitle-rich-default-srt',
+] as const;
 const SECRET_SHAPED_THROWN_TEXT = 'sk_live_like_1234567890abcdef';
 
 function assertPublicSafe(value: unknown, path = 'value'): void {
@@ -86,8 +99,11 @@ function assertFailureSafe(result: Extract<PlexStreamResolverResult, { ok: false
   assertPublicSafe(result.diagnostics, 'diagnostics');
   assertPublicOutputDoesNotContain(result.error, [SECRET_SHAPED_THROWN_TEXT], 'error');
   assertPublicOutputDoesNotContain(result.diagnostics, [SECRET_SHAPED_THROWN_TEXT], 'diagnostics');
+  assertPublicOutputDoesNotContain(result.error, RAW_PLEX_PRIVATE_VALUES, 'error');
+  assertPublicOutputDoesNotContain(result.diagnostics, RAW_PLEX_PRIVATE_VALUES, 'diagnostics');
   if (result.decision !== undefined) {
     assertPublicSafe(result.decision, 'decision');
+    assertPublicOutputDoesNotContain(result.decision, RAW_PLEX_PRIVATE_VALUES, 'decision');
   }
 }
 
@@ -186,6 +202,35 @@ test('plex stream resolver normalizes unsupported policy without private playbac
   assert.equal(result.decision?.kind, 'unsupported');
   assertFailureSafe(result);
   assert.equal(Object.hasOwn(result, 'privatePlayback'), false);
+});
+
+test('plex stream resolver preserves language delivery default forced and HDR facts through safe decisions', async () => {
+  const result = await createResolver({
+    mediaDetail: createRichMediaDetail(),
+  }).resolve({
+    requestId: 'request-rich-facts',
+    mediaId: 'media-input-rich-facts',
+    capabilityProfile: {
+      ...directPlayProfile,
+      id: 'resolver-rich-facts-profile',
+      directPlayVideoCodecs: ['hevc'],
+      directPlayAudioCodecs: ['truehd', 'opus'],
+      dolbyVision: 'supported',
+    },
+  });
+
+  assertResolved(result, 'direct-play');
+  assert.equal(result.load.policy.preferredAudioTrackId, 'plex-track-audio-1-1-2');
+  assert.equal(result.load.policy.preferredSubtitleTrackId, 'plex-track-subtitle-1-1-1');
+  assert.equal(result.decision.summary.audioCodec, 'opus');
+  assert.equal(result.decision.summary.audioLanguage, 'en');
+  assert.equal(result.decision.summary.subtitleDelivery, 'embedded');
+  assert.equal(result.decision.summary.subtitleLanguage, 'es');
+  assert.equal(result.decision.summary.dynamicRange, 'dolby-vision');
+  assert.equal(result.decision.reasonCodes.includes('forced-subtitle-selected'), true);
+  assert.equal(result.privatePlayback.setup.selectedPrivateTrackIds.audio, 'audio-rich-opus');
+  assert.equal(result.privatePlayback.setup.selectedPrivateTrackIds.subtitle, 'subtitle-rich-forced-pgs');
+  assertPublicProjectionSafe(result);
 });
 
 test('plex stream resolver normalizes missing selected connection safely', async () => {
@@ -299,10 +344,44 @@ test('plex media detail candidate mapping remains public-policy safe', () => {
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0]?.video.codec, 'h264');
   assert.equal(candidates[0]?.video.id, 'plex-track-video-1-1-1');
+  assert.equal(candidates[0]?.candidateId, 'plex-candidate-1-1');
+  assert.equal(candidates[0]?.variant.id, 'plex-variant-1');
+  assert.equal(candidates[0]?.part.id, 'plex-part-1');
   assert.equal(candidates[0]?.audioTracks[0]?.id, 'plex-track-audio-1-1-1');
+  assert.equal(candidates[0]?.audioTracks[0]?.language, 'en');
   assert.equal(candidates[0]?.subtitleTracks[0]?.delivery, 'embedded');
+  assert.equal(candidates[0]?.subtitleTracks[0]?.language, 'en');
   assertPublicSafe(candidates, 'candidates');
-  assertPublicOutputDoesNotContain(candidates, RAW_PLEX_STREAM_IDS, 'candidates');
+  assertPublicOutputDoesNotContain(candidates, RAW_PLEX_PRIVATE_VALUES, 'candidates');
+});
+
+test('plex media detail candidate mapping projects rich track facts without private ids', () => {
+  const [candidate] = mapPlexMediaDetailsToDesktopStreamCandidates(createRichMediaDetail());
+
+  assert.ok(candidate);
+  assert.equal(candidate.video.codec, 'hevc');
+  assert.equal(candidate.video.dynamicRange, 'dolby-vision');
+  assert.equal(candidate.audioTracks[0]?.id, 'plex-track-audio-1-1-1');
+  assert.equal(candidate.audioTracks[0]?.language, 'es');
+  assert.equal(candidate.audioTracks[0]?.codec, 'truehd');
+  assert.equal(candidate.audioTracks[0]?.channelCount, 8);
+  assert.equal(candidate.audioTracks[0]?.default, false);
+  assert.equal(candidate.audioTracks[1]?.id, 'plex-track-audio-1-1-2');
+  assert.equal(candidate.audioTracks[1]?.language, 'en');
+  assert.equal(candidate.audioTracks[1]?.codec, 'opus');
+  assert.equal(candidate.audioTracks[1]?.default, true);
+  assert.equal(candidate.subtitleTracks[0]?.id, 'plex-track-subtitle-1-1-1');
+  assert.equal(candidate.subtitleTracks[0]?.language, 'es');
+  assert.equal(candidate.subtitleTracks[0]?.delivery, 'embedded');
+  assert.equal(candidate.subtitleTracks[0]?.format, 'pgs');
+  assert.equal(candidate.subtitleTracks[0]?.forced, true);
+  assert.equal(candidate.subtitleTracks[1]?.id, 'plex-track-subtitle-1-1-2');
+  assert.equal(candidate.subtitleTracks[1]?.language, 'en');
+  assert.equal(candidate.subtitleTracks[1]?.delivery, 'sidecar');
+  assert.equal(candidate.subtitleTracks[1]?.format, 'srt');
+  assert.equal(candidate.subtitleTracks[1]?.default, true);
+  assertPublicSafe(candidate, 'candidate');
+  assertPublicOutputDoesNotContain(candidate, RAW_PLEX_PRIVATE_VALUES, 'candidate');
 });
 
 function createResolver(options: {
@@ -362,9 +441,9 @@ function assertPublicProjectionSafe(result: Extract<PlexStreamResolverResult, { 
   assertPublicSafe(result.decision, 'decision');
   assertPublicSafe(result.diagnostics, 'diagnostics');
   assertPublicSafe(result.pmsSession, 'pmsSession');
-  assertPublicOutputDoesNotContain(result.load, RAW_PLEX_STREAM_IDS, 'load');
-  assertPublicOutputDoesNotContain(result.decision, RAW_PLEX_STREAM_IDS, 'decision');
-  assertPublicOutputDoesNotContain(result.diagnostics, RAW_PLEX_STREAM_IDS, 'diagnostics');
+  assertPublicOutputDoesNotContain(result.load, RAW_PLEX_PRIVATE_VALUES, 'load');
+  assertPublicOutputDoesNotContain(result.decision, RAW_PLEX_PRIVATE_VALUES, 'decision');
+  assertPublicOutputDoesNotContain(result.diagnostics, RAW_PLEX_PRIVATE_VALUES, 'diagnostics');
 }
 
 function assertSafeLoadPayload(load: PlayerLoadCommandPayload): void {
@@ -466,6 +545,90 @@ function createMediaDetail(options: {
               },
             ]
           : [],
+      },
+    ],
+  };
+}
+
+function createRichMediaDetail(): PlexMediaItem {
+  return {
+    ...createMediaDetail(),
+    ratingKey: 'media-rich-main',
+    media: [
+      {
+        id: 'variant-rich',
+        duration: 1_800_000,
+        bitrate: 9_000,
+        width: 3840,
+        height: 2160,
+        aspectRatio: 1.78,
+        videoCodec: 'hevc',
+        audioCodec: 'opus',
+        audioChannels: 6,
+        container: 'mkv',
+        videoResolution: '4k',
+        parts: [
+          {
+            id: 'part-rich',
+            key: '/library/parts/rich-main',
+            duration: 1_800_000,
+            file: 'rich-main.mkv',
+            size: 654_321,
+            container: 'mkv',
+            streams: [
+              {
+                id: 'video-rich-dovi',
+                streamType: 1,
+                codec: 'hevc',
+                width: 3840,
+                height: 2160,
+                doviProfile: '8',
+                dynamicRange: 'Dolby Vision',
+              },
+              {
+                id: 'audio-rich-truehd',
+                streamType: 2,
+                codec: 'truehd',
+                language: 'Spanish',
+                languageCode: 'es',
+                displayTitle: 'Spanish TrueHD',
+                channels: 8,
+                default: true,
+              },
+              {
+                id: 'audio-rich-opus',
+                streamType: 2,
+                codec: 'opus',
+                language: 'English',
+                languageCode: 'en',
+                displayTitle: 'English Opus',
+                channels: 6,
+                selected: true,
+              },
+              {
+                id: 'subtitle-rich-forced-pgs',
+                streamType: 3,
+                codec: 'pgs',
+                format: 'pgs',
+                language: 'Spanish',
+                languageCode: 'es',
+                displayTitle: 'Spanish Forced PGS',
+                forced: true,
+              },
+              {
+                id: 'subtitle-rich-default-srt',
+                streamType: 3,
+                codec: 'srt',
+                format: 'srt',
+                key: '/library/streams/rich-default-srt',
+                language: 'English',
+                languageCode: 'en',
+                displayTitle: 'English Sidecar SRT',
+                default: true,
+              },
+            ],
+          },
+        ],
       },
     ],
   };
