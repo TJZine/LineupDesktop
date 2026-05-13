@@ -66,7 +66,7 @@ export function renderWorkflowDom(
 
   renderChannelList(view, dom);
   renderEpgGuideDom(view, dom);
-  renderPlayerOverlaysDom(overlayState, playerSnapshot, dom);
+  renderPlayerOverlaysDom(overlayState, playerSnapshot, dom, view.route);
   renderSettingsDom(view, dom);
   renderChannelSetupDom(view, dom);
   renderRouteActionButtons(view, dom);
@@ -276,27 +276,38 @@ function renderPlayerOverlaysDom(
   overlayState: PlayerOverlayState,
   playerSnapshot: PlayerSnapshot,
   dom: RendererDomBindings,
+  activeRoute: RouteWorkflowViewModel['route'],
 ): void {
   const view = createPlayerOverlayView(overlayState, playerSnapshot);
-  document.documentElement.dataset.activeOverlay = view.activeOverlayId ?? '';
+  const isPlayerRoute = activeRoute === 'player';
+  document.documentElement.dataset.activeOverlay = isPlayerRoute ? (view.activeOverlayId ?? '') : '';
 
   for (const element of dom.overlayElements) {
     const overlayId = element.dataset.overlay;
     const isVisible =
-      overlayId === 'playerOsd' ||
-      overlayId === 'nowPlaying' ||
-      overlayId === 'miniGuide' ||
-      overlayId === 'channelNumber' ||
-      overlayId === 'channelBadge' ||
-      overlayId === 'playbackOptions'
+      isPlayerRoute &&
+      (overlayId === 'playerOsd' ||
+        overlayId === 'nowPlaying' ||
+        overlayId === 'miniGuide' ||
+        overlayId === 'channelNumber' ||
+        overlayId === 'channelBadge' ||
+        overlayId === 'playbackOptions')
         ? view.visibleOverlays[overlayId]
         : false;
     element.hidden = !isVisible;
-    element.dataset.overlayActive = String(overlayId === view.activeOverlayId);
+    element.setAttribute('aria-hidden', String(!isVisible));
+    element.dataset.overlayActive = String(isPlayerRoute && overlayId === view.activeOverlayId);
+  }
+
+  for (const button of dom.overlayActionButtons) {
+    button.disabled = !isPlayerRoute;
   }
 
   if (dom.overlayStackElement) {
-    dom.overlayStackElement.dataset.overlayStack = view.stack.join(',');
+    dom.overlayStackElement.hidden = !isPlayerRoute;
+    dom.overlayStackElement.setAttribute('aria-hidden', String(!isPlayerRoute));
+    dom.overlayStackElement.dataset.overlayRouteActive = String(isPlayerRoute);
+    dom.overlayStackElement.dataset.overlayStack = isPlayerRoute ? view.stack.join(',') : '';
   }
   if (dom.overlayNowPlayingTitleElement) {
     dom.overlayNowPlayingTitleElement.textContent = view.nowPlaying.title;

@@ -105,9 +105,10 @@ export function renderRendererFocus(focusState: FocusState, dom: RendererDomBind
   for (const element of dom.focusableElements) {
     const isActive = element.dataset.focusId === focusState.activeId;
     const isPrimaryRouteButton = readRouteId(element.dataset.routeButton) !== null;
+    const isHiddenFromRoute = element.closest('[hidden], [aria-hidden="true"]') !== null;
     element.classList.toggle('is-focused', isActive);
-    element.tabIndex = isActive || isPrimaryRouteButton ? 0 : -1;
-    if (isActive && document.activeElement !== element) {
+    element.tabIndex = !isHiddenFromRoute && (isActive || isPrimaryRouteButton) ? 0 : -1;
+    if (isActive && !isHiddenFromRoute && document.activeElement !== element) {
       element.focus({ preventScroll: true });
     }
   }

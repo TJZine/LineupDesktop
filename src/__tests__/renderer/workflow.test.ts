@@ -98,6 +98,25 @@ test('settings actions update only renderer-local settings draft state', () => {
   assert.equal(view.settings.sections.length, 3);
 });
 
+test('settings copy describes Desktop-local capabilities and avoids legacy platform truth', () => {
+  const view = getRouteWorkflowView(createWorkflowState('settings'));
+  const settingsCopy = [
+    view.primaryText,
+    view.secondaryText,
+    view.statusText,
+    ...view.settings.sections.flatMap((section) => [
+      section.title,
+      section.detail,
+      ...section.items.flatMap((item) => [item.label, item.valueLabel, item.description]),
+    ]),
+  ].join(' ');
+
+  assert.match(settingsCopy, /Desktop|desktop/);
+  assert.match(settingsCopy, /renderer|local|session/);
+  assert.match(settingsCopy, /no desktop preference is saved|without writing preferences/);
+  assert.doesNotMatch(settingsCopy, /webOS|Luna|Palm|TV service/i);
+});
+
 test('channel setup actions update fake draft summary and validation state', () => {
   const initial = createWorkflowState('channelSetup');
   const pausedFeatured = applyWorkflowChannelSetupAction(initial, 'toggleFeaturedChannel');

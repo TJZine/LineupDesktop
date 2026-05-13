@@ -1,6 +1,7 @@
 .player-surface {
   position: absolute;
   inset: 0;
+  z-index: 0;
   background:
     linear-gradient(90deg, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.2)),
     repeating-linear-gradient(
@@ -16,12 +17,12 @@
 .overlay-stack {
   position: absolute;
   inset: 0;
+  z-index: 30;
   pointer-events: none;
 }
 
 .player-overlay {
   position: absolute;
-  z-index: 2;
   pointer-events: auto;
 }
 
