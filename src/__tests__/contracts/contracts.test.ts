@@ -92,6 +92,13 @@ function assertNoForbiddenKeys(value: unknown): void {
       false,
       `renderer-facing player contract contains forbidden key ${key}`,
     );
+    assert.equal(
+      DIAGNOSTIC_FORBIDDEN_FIELD_KEYS.includes(
+        key as (typeof DIAGNOSTIC_FORBIDDEN_FIELD_KEYS)[number],
+      ),
+      false,
+      `renderer-facing diagnostics contract contains forbidden key ${key}`,
+    );
     assertNoForbiddenKeys(child);
   }
 }

@@ -160,7 +160,7 @@ export function applySupportBundleExportStatus(
 ): SettingsDraftState {
   return {
     ...state,
-    supportBundleExport: status,
+    supportBundleExport: sanitizeSupportBundleExportStatus(status),
   };
 }
 
@@ -264,13 +264,58 @@ function formatSupportBundleStatus(status: SupportBundleExportStatusViewModel): 
       return 'Ready';
     case 'exporting':
       return 'Exporting';
-    case 'succeeded':
-      return `${status.bundleDirectoryName ?? 'Bundle'} - ${String(status.fileCount ?? 0)} files`;
+    case 'succeeded': {
+      const redactionLabel = status.redactionStatus === 'failed'
+        ? ' (redaction failed)'
+        : status.redactionStatus === null ? ' (redaction pending)' : '';
+      return `${status.bundleDirectoryName ?? 'Bundle'} - ${String(status.fileCount ?? 0)} files${redactionLabel}`;
+    }
     case 'failed':
       return 'Failed';
     case 'cancelled':
       return 'Cancelled';
   }
+}
+
+function sanitizeSupportBundleExportStatus(
+  status: SupportBundleExportStatusViewModel,
+): SupportBundleExportStatusViewModel {
+  return {
+    status: status.status,
+    bundleDirectoryName: status.status === 'succeeded'
+      ? sanitizeSupportBundleDirectoryName(status.bundleDirectoryName)
+      : null,
+    fileCount: status.status === 'succeeded' && isFiniteNonNegativeNumber(status.fileCount)
+      ? Math.floor(status.fileCount)
+      : null,
+    redactionStatus: status.redactionStatus === 'passed' || status.redactionStatus === 'failed'
+      ? status.redactionStatus
+      : null,
+  };
+}
+
+function sanitizeSupportBundleDirectoryName(value: string | null): string | null {
+  if (value === null) {
+    return null;
+  }
+  const parts = value.split(/[\\/]/u);
+  const baseName = parts[parts.length - 1] ?? '';
+  const safeName = baseName
+    .split('')
+    .filter(isPrintableAscii)
+    .join('')
+    .replace(/[^A-Za-z0-9.-]/gu, '-')
+    .slice(0, 120);
+  return /^lineup-desktop-support-[A-Za-z0-9-]{1,80}$/u.test(safeName) ? safeName : null;
+}
+
+function isFiniteNonNegativeNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function isPrintableAscii(value: string): boolean {
+  const codePoint = value.charCodeAt(0);
+  return codePoint >= 0x20 && codePoint < 0x7f;
 }
 
 export function createChannelSetupSteps(

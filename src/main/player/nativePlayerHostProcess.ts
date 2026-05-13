@@ -268,9 +268,10 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
   #rejectAllPending(error: NativePlayerHostFailure): void {
     for (const [requestId, pending] of [...this.#pending]) {
       clearTimeout(pending.timeout);
+      const cleanupAborted = error.category === 'aborted';
       this.#recordFailure(requestId, error, {
-        operation: error.category === 'timeout' ? 'helper.timeout' : 'helper.command',
-        status: error.code === 'PLAYER_HELPER_MALFORMED_OUTPUT' ? 'redacted' : 'failed',
+        operation: cleanupAborted ? 'helper.cleanup' : error.category === 'timeout' ? 'helper.timeout' : 'helper.command',
+        status: cleanupAborted ? 'cancelled' : error.code === 'PLAYER_HELPER_MALFORMED_OUTPUT' ? 'redacted' : 'failed',
       });
       pending.resolve({ ok: false, error });
       this.#pending.delete(requestId);
@@ -319,13 +320,13 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     },
   ): void {
     this.#recordDiagnostic({
-      category: error.category === 'timeout' ? 'helper-crash' : 'helper-crash',
-      severity: input.status === 'observed' ? 'warning' : 'error',
+      category: diagnosticCategoryForFailure(error),
+      severity: input.status === 'observed' || input.status === 'cancelled' ? 'warning' : 'error',
       status: input.status,
       operation: input.operation,
       message: 'Player helper lifecycle failure observed.',
       requestId: requestId ?? undefined,
-      result: input.status === 'observed' ? 'ignored' : 'failure',
+      result: input.status === 'observed' ? 'ignored' : input.status === 'cancelled' ? 'cancelled' : 'failure',
       context: {
         code: error.code,
         category: error.category,
@@ -450,6 +451,9 @@ function safeFailure(
     recoverable,
     retryable,
   };
+}
+function diagnosticCategoryForFailure(error: NativePlayerHostFailure): DiagnosticEventInput['category'] {
+  return error.category === 'aborted' ? 'cleanup' : 'helper-crash';
 }
 function safeFailureMessage(category: NativePlayerHostFailure['category']): string {
   switch (category) {

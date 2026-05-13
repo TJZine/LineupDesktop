@@ -330,6 +330,73 @@ test('diagnostic ndjson serialization reports records omitted by byte limit', ()
   assert.equal(serialized.truncatedRecordCount, 8);
 });
 
+test('support bundle exporter writes the final redaction report and byte count', async () => {
+  const parentDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-support-bundle-final-'));
+  const preliminaryReport = createScanReport('passed', { scannedByteCount: 111, timestampMs: 1 });
+  const finalReport = createScanReport('passed', { scannedByteCount: 222, timestampMs: 2 });
+  const reports = [preliminaryReport, finalReport];
+  const store = new DiagnosticEventStore({ clock: () => 1, idGenerator: () => 'diagnostic-1' });
+  const exporter = new SupportBundleExporter({
+    eventStore: store,
+    parentDirectoryProvider: () => parentDirectory,
+    redactionScanner: () => {
+      const report = reports.shift();
+      assert.ok(report, 'expected preliminary and final redaction scans');
+      return report;
+    },
+    clock: () => 1,
+    bundleIdGenerator: () => 'bundle-final-report',
+  });
+
+  const result = await exporter.exportSupportBundle();
+
+  assert.equal(result.status, 'succeeded');
+  assert.deepEqual(result.redactionReport, finalReport);
+  const bundleDirectory = path.join(parentDirectory, `${SUPPORT_BUNDLE_DIRECTORY_PREFIX}bundle-final-report`);
+  const redactionReport = JSON.parse(
+    await fs.readFile(path.join(bundleDirectory, 'redaction-report.json'), 'utf8'),
+  ) as RedactionScanReport;
+  const fileNames = await fs.readdir(bundleDirectory);
+  const byteCount = await fileNames.reduce(async (totalPromise, fileName) => {
+    const total = await totalPromise;
+    const content = await fs.readFile(path.join(bundleDirectory, fileName), 'utf8');
+    return total + new TextEncoder().encode(content).byteLength;
+  }, Promise.resolve(0));
+
+  assert.deepEqual(redactionReport, finalReport);
+  assert.equal(result.byteCount, byteCount);
+  assert.equal(store.getSummary().lastExportStatus, 'succeeded');
+});
+
+test('support bundle exporter redacts keys that become redaction sentinels', async () => {
+  const parentDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-support-bundle-key-'));
+  const store = new DiagnosticEventStore({ clock: () => 1, idGenerator: () => 'diagnostic-1' });
+  const exporter = new SupportBundleExporter({
+    eventStore: store,
+    parentDirectoryProvider: () => parentDirectory,
+    redactionScanner: () => createScanReport('passed'),
+    clock: () => 1,
+    bundleIdGenerator: () => 'bundle-redacted-key',
+    environmentProvider: () => ({
+      'token=secret1234': 'must-not-survive-under-redacted-key',
+      safeKey: 'safe-value',
+    }),
+  });
+
+  const result = await exporter.exportSupportBundle();
+
+  assert.equal(result.status, 'succeeded');
+  const environment = JSON.parse(
+    await fs.readFile(
+      path.join(parentDirectory, `${SUPPORT_BUNDLE_DIRECTORY_PREFIX}bundle-redacted-key`, 'environment.json'),
+      'utf8',
+    ),
+  ) as Record<string, unknown>;
+  assert.equal(environment['redacted-field'], '[redacted]');
+  assert.equal(Object.hasOwn(environment, '-redacted-'), false);
+  assert.equal(environment.safeKey, 'safe-value');
+});
+
 function createIdGenerator(prefix: string): () => string {
   let counter = 0;
   return () => {
@@ -399,7 +466,10 @@ async function scanDirectoryForTest(
   };
 }
 
-function createScanReport(status: RedactionScanReport['status']): RedactionScanReport {
+function createScanReport(
+  status: RedactionScanReport['status'],
+  overrides: Partial<RedactionScanReport> = {},
+): RedactionScanReport {
   return {
     redactionVersion: 'rd17-redaction-v1',
     scannedFileCount: 6,
@@ -410,5 +480,6 @@ function createScanReport(status: RedactionScanReport['status']): RedactionScanR
     omittedFileCount: 0,
     status,
     timestampMs: 1000,
+    ...overrides,
   };
 }

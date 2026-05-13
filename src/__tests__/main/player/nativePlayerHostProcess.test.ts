@@ -503,6 +503,7 @@ test('native host process cleanup reaps child and ignores late output', async ()
   const firstChild = new FakeHostChildProcess();
   const secondChild = new FakeHostChildProcess();
   const children = [firstChild, secondChild];
+  const diagnostics = new DiagnosticEventStore({ clock: () => 5_500, idGenerator: () => 'cleanup-aborted' });
   const host = new NativePlayerHostProcess({
     spawnHostProcess: () => {
       const child = children.shift();
@@ -511,6 +512,7 @@ test('native host process cleanup reaps child and ignores late output', async ()
     },
     requestTimeoutMs: 100,
     cleanupGraceMs: 10,
+    diagnosticEventStore: diagnostics,
   });
 
   const pending = host.execute(loadCommand);
@@ -535,6 +537,24 @@ test('native host process cleanup reaps child and ignores late output', async ()
 
   assert.equal(result.ok, false);
   assert.equal(result.ok ? null : result.error.category, 'aborted');
+  assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 0);
+  assert.equal(diagnostics.getCrashRecoverySummary().cleanupFailureCount, 0);
+  assert.deepEqual(
+    diagnostics.getCrashRecoverySummary().events.map((event) => ({
+      category: event.category,
+      status: event.status,
+      operation: event.operation,
+      code: event.code,
+    })),
+    [
+      {
+        category: 'cleanup',
+        status: 'cancelled',
+        operation: 'helper.cleanup',
+        code: 'PLAYER_HELPER_CLEANED_UP',
+      },
+    ],
+  );
   assert.equal(firstChild.killSignals.includes('SIGTERM'), true);
   assert.deepEqual(firstChild.writes[1], { type: 'cleanup', requestId: 'native-load-1' });
   assertNoForbiddenKeys(result);

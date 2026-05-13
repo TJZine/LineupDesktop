@@ -47,6 +47,17 @@ const DIAGNOSTICS_REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,120}$/u;
 const DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN =
   /(?:[?&][^\s=]*(?:token|auth|secret|credential|password)[^\s=]*=|\b[\w-]*(?:token|auth|secret|credential|password)[\w-]*\s*[:=]|\b(?:authorization|x-plex-token|authHeaders|rawAuthHeaders|bearer|basic|token)\b\s*\S*|(?:[A-Za-z]:\\|\\\\[^\\\s]+\\[^\\\s]+|\/(?:Users|home|var|tmp|private|Volumes|Library)(?:\/|\s+Application\s+Support(?:\/|\b)))|\b(?:pid|processId|process|argv|env|stderr|stdout|crashDump|minidump|rawLog|rawIpc(?:Frame)?|nativeHandle|native_handle|libmpvObject|engineId)[\w-]*\s*[:=]?)/iu;
 const SHELL_STATUS_VALUES = ['booting', 'ready', 'closing'] as const;
+const DIAGNOSTIC_SURFACES = [
+  'renderer',
+  'preload',
+  'main',
+  'player-ipc',
+  'desktop-player-adapter',
+  'native-host-process',
+  'plex-playback-runtime',
+  'support-bundle',
+  'redaction',
+] as const;
 const DIAGNOSTIC_CATEGORIES = [
   'lifecycle',
   'ipc',
@@ -640,6 +651,14 @@ function hasOnlyKeys(
   return requiredKeys.every((key) => Object.hasOwn(value, key));
 }
 
+function isFiniteNonNegativeNumberMap(value: unknown, allowedKeys: readonly string[]): boolean {
+  return (
+    isPlainRecord(value) &&
+    hasOnlyKeys(value, [], allowedKeys) &&
+    Object.values(value).every(isFiniteNonNegativeNumber)
+  );
+}
+
 function hasForbiddenPrivilegedField(value: unknown): boolean {
   if (Array.isArray(value)) {
     return value.some((item) => hasForbiddenPrivilegedField(item));
@@ -778,8 +797,8 @@ function isDiagnosticsSummary(value: unknown): value is DiagnosticsGetSummaryRes
     value.redactionVersion === 'rd17-redaction-v1' &&
     isFiniteNonNegativeNumber(value.recordCount) &&
     (value.lastEventTimestampMs === null || isFiniteNonNegativeNumber(value.lastEventTimestampMs)) &&
-    isPlainRecord(value.surfaceCounts) &&
-    isPlainRecord(value.severityCounts) &&
+    isFiniteNonNegativeNumberMap(value.surfaceCounts, DIAGNOSTIC_SURFACES) &&
+    isFiniteNonNegativeNumberMap(value.severityCounts, DIAGNOSTIC_SEVERITIES) &&
     (
       value.lastExportStatus === null ||
       value.lastExportStatus === 'succeeded' ||
@@ -864,10 +883,7 @@ function isRedactionScanReport(value: unknown): boolean {
     isFiniteNonNegativeNumber(value.scannedFileCount) &&
     isFiniteNonNegativeNumber(value.scannedByteCount) &&
     isFiniteNonNegativeNumber(value.findingCount) &&
-    isPlainRecord(value.findingsByLabel) &&
-    Object.keys(value.findingsByLabel).every((key) =>
-      (REDACTION_SCAN_FINDING_LABELS as readonly string[]).includes(key),
-    ) &&
+    isFiniteNonNegativeNumberMap(value.findingsByLabel, REDACTION_SCAN_FINDING_LABELS) &&
     isFiniteNonNegativeNumber(value.truncatedRecordCount) &&
     isFiniteNonNegativeNumber(value.omittedFileCount) &&
     (value.status === 'passed' || value.status === 'failed') &&

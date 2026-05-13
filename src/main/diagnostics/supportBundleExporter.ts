@@ -110,7 +110,7 @@ export class SupportBundleExporter {
         );
       }
 
-      const redactionReportContent = `${JSON.stringify(preliminaryReport, null, 2)}\n`;
+      const redactionReportContent = stringifyBundleJson(preliminaryReport);
       await this.#fileSystem.writeFile(
         path.join(target.bundleDirectoryPath, 'redaction-report.json'),
         redactionReportContent,
@@ -129,6 +129,14 @@ export class SupportBundleExporter {
           finalReport,
         );
       }
+
+      const finalReportContent = stringifyBundleJson(finalReport);
+      await this.#fileSystem.writeFile(
+        path.join(target.bundleDirectoryPath, 'redaction-report.json'),
+        finalReportContent,
+        { encoding: 'utf8', mode: 0o600 },
+      );
+      files.set('redaction-report.json', finalReportContent);
 
       this.#options.eventStore.recordExportStatus('succeeded', finalReport);
       return {
@@ -390,8 +398,9 @@ function sanitizeBundleValue(value: unknown, depth = 0): unknown {
 
   const sanitized: Record<string, unknown> = {};
   for (const [rawKey, rawValue] of Object.entries(value)) {
-    const safeKey = redactDiagnosticText(rawKey).trim().replace(/[^A-Za-z0-9._-]/gu, '-');
-    const keyWasRedacted = safeKey.includes('[redacted]');
+    const redactedKey = redactDiagnosticText(rawKey);
+    const keyWasRedacted = redactedKey.includes('[redacted]');
+    const safeKey = redactedKey.trim().replace(/[^A-Za-z0-9._-]/gu, '-');
     const key = safeKey.length > 0 && !keyWasRedacted ? safeKey : 'redacted-field';
     sanitized[dedupeKey(key, sanitized)] = isDiagnosticForbiddenFieldKey(rawKey) || keyWasRedacted
       ? '[redacted]'

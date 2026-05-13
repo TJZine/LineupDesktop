@@ -120,6 +120,34 @@ test('support bundle settings action is user-gesture state and renders safe expo
   assert.equal(JSON.stringify(view).includes('path'), false);
 });
 
+test('support bundle status sanitizes display names and shows redaction outcomes', () => {
+  const initial = createWorkflowState('settings');
+  const unsafe = applyWorkflowSupportBundleExportStatus(initial, {
+    status: 'succeeded',
+    bundleDirectoryName: 'C:\\Users\\private\\tokenizedUrl-secret',
+    fileCount: 6.9,
+    redactionStatus: 'failed',
+  });
+  const pending = applyWorkflowSupportBundleExportStatus(initial, {
+    status: 'succeeded',
+    bundleDirectoryName: 'lineup-desktop-support-bundle-3',
+    fileCount: 6,
+    redactionStatus: null,
+  });
+  const unsafeBundle = getRouteWorkflowView(unsafe).settings.sections
+    .flatMap((section) => section.items)
+    .find((item) => item.id === 'support-bundle-export');
+  const pendingBundle = getRouteWorkflowView(pending).settings.sections
+    .flatMap((section) => section.items)
+    .find((item) => item.id === 'support-bundle-export');
+
+  assert.equal(unsafe.settingsDraft.supportBundleExport.bundleDirectoryName, null);
+  assert.equal(unsafe.settingsDraft.supportBundleExport.fileCount, 6);
+  assert.equal(unsafeBundle?.valueLabel, 'Bundle - 6 files (redaction failed)');
+  assert.equal(pendingBundle?.valueLabel, 'lineup-desktop-support-bundle-3 - 6 files (redaction pending)');
+  assert.equal(JSON.stringify(unsafe).includes('C:\\Users'), false);
+});
+
 test('settings copy describes Desktop-local capabilities and avoids legacy platform truth', () => {
   const view = getRouteWorkflowView(createWorkflowState('settings'));
   const settingsCopy = [

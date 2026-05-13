@@ -20,6 +20,7 @@ import {
   DIAGNOSTIC_CATEGORIES,
   DIAGNOSTIC_SEVERITIES,
   DIAGNOSTIC_STATUSES,
+  DIAGNOSTIC_SURFACES,
   DIAGNOSTICS_ERROR_CODES,
   DIAGNOSTICS_REQUEST_ID_PATTERN_SOURCE,
   DIAGNOSTICS_RENDERER_EVENT_CATEGORIES,
@@ -428,6 +429,9 @@ test('preload guard vocabulary matches contract vocabulary', () => {
     readPreloadStringArrayConst('PLAYER_TRACK_DELIVERY_TYPE_VALUES'),
     [...PLAYER_TRACK_DELIVERY_TYPE_VALUES],
   );
+  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTIC_SURFACES'), [
+    ...DIAGNOSTIC_SURFACES,
+  ]);
   assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTIC_CATEGORIES'), [
     ...DIAGNOSTIC_CATEGORIES,
   ]);
@@ -449,6 +453,31 @@ test('preload guard vocabulary matches contract vocabulary', () => {
   assert.deepEqual(readPreloadStringArrayConst('REDACTION_SCAN_FINDING_LABELS'), [
     ...REDACTION_SCAN_FINDING_LABELS,
   ]);
+});
+
+test('preload diagnostics guards validate count map keys and values', () => {
+  assert.equal(
+    preloadSourceText.includes(
+      'function isFiniteNonNegativeNumberMap(value: unknown, allowedKeys: readonly string[]): boolean {',
+    ),
+    true,
+  );
+  assert.match(
+    preloadSourceText,
+    /hasOnlyKeys\(value, \[\], allowedKeys\) &&\s*Object\.values\(value\)\.every\(isFiniteNonNegativeNumber\)/u,
+  );
+  assert.equal(
+    preloadSourceText.includes('isFiniteNonNegativeNumberMap(value.surfaceCounts, DIAGNOSTIC_SURFACES)'),
+    true,
+  );
+  assert.equal(
+    preloadSourceText.includes('isFiniteNonNegativeNumberMap(value.severityCounts, DIAGNOSTIC_SEVERITIES)'),
+    true,
+  );
+  assert.equal(
+    preloadSourceText.includes('isFiniteNonNegativeNumberMap(value.findingsByLabel, REDACTION_SCAN_FINDING_LABELS)'),
+    true,
+  );
 });
 
 test('preload channel constants match approved IPC contract exports', () => {

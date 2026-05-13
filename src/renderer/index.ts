@@ -36,13 +36,13 @@ import {
 } from './overlays.js';
 import { renderRouteDom, renderWorkflowDom } from './routeDom.js';
 import { mountStaticRendererDom } from './staticDom.js';
+import { applySupportBundleExportResult } from './supportBundleExport.js';
 import {
   activateWorkflowRoute,
   applyWorkflowAction,
   applyWorkflowChannelSetupAction,
   applyWorkflowEpgAction,
   applyWorkflowSettingsAction,
-  applyWorkflowSupportBundleExportStatus,
   createWorkflowState,
   type ChannelSetupActionId,
   type EpgActionId,
@@ -260,13 +260,10 @@ async function exportSupportBundle(): Promise<void> {
     },
   });
 
-  const result = await window.lineupDesktop.diagnostics.exportSupportBundle();
-  workflowState = applyWorkflowSupportBundleExportStatus(workflowState, {
-    status: result.status,
-    bundleDirectoryName: result.status === 'succeeded' ? result.bundleDirectoryName : null,
-    fileCount: result.status === 'succeeded' ? result.fileCount : null,
-    redactionStatus: result.redactionReport?.status ?? null,
-  });
+  workflowState = await applySupportBundleExportResult(
+    workflowState,
+    () => window.lineupDesktop.diagnostics.exportSupportBundle(),
+  );
   renderApp();
 }
 
