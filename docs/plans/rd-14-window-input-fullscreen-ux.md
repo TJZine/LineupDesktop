@@ -6,8 +6,9 @@ unit selection, implementation orchestration, implementation review,
 verification, platform proof, and closeout for RD-14 Window, Input, And
 Fullscreen UX.
 
-No next-session handoff block is included in this parent plan because the
-controller will route the plan directly into plan review.
+The next session should resume at Unit 5 platform proof. The parent plan review
+is complete; do not route back to plan review unless Windows proof contradicts
+the planned behavior or a replan trigger fires.
 
 Execution state as of 2026-05-13:
 
@@ -371,6 +372,11 @@ Observed local proof:
 
 Required proof still missing:
 
+- Windows native-presentation prerequisites must be available before the RD-06
+  harness can pass. By default the harness resolves mpv/libmpv from
+  `C:\Software\LineupDesktop-prereqs\...`; override those paths with
+  `RD06_MPV_ROOT`, `RD06_MPV_EXE`, or `RD06_LIBMPV_DLL` when the Windows
+  machine stores prerequisites elsewhere.
 - Run the RD-06 native-presentation preflight command on Windows:
   `node tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs --mode native-presentation-preflight --out docs/runs/rd-14-window-input-fullscreen-ux/native-presentation-preflight`
 - Run the RD-06 native-presentation smoke command on Windows:
@@ -931,7 +937,9 @@ Manual and platform proof:
     overlays; native video surface windowed/fullscreen; cursor hide/show over
     video and controls; media-key observed/unavailable/claimed-key behavior;
     gamepad connect/disconnect/repeat/debounce; text input in
-    settings/channel setup; and app quit/back from all primary routes.
+    settings/channel setup when a text-entry control exists, otherwise record
+    the row as unavailable/blocked and cite the automated text-input bypass
+    proof from Unit 1; and app quit/back from all primary routes.
 - Mac/local proof may close only reviewed pure units that are fake-backed and
   independent of OS-specific behavior. It cannot close the RD-14 parent item.
 
