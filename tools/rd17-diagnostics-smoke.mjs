@@ -245,12 +245,14 @@ function runBuild() {
   }
 }
 
-export function resolveEvidenceDirectory(outDirectory) {
+export function resolveEvidenceDirectory(outDirectory, options = {}) {
   if (typeof outDirectory !== 'string' || outDirectory.trim().length === 0) {
     throw new Error('RD-17 smoke output must be under the RD-17 evidence root.');
   }
-  const resolved = path.resolve(REPO_ROOT, outDirectory);
-  const relative = path.relative(RD17_SMOKE_EVIDENCE_ROOT_ABSOLUTE, resolved);
+  const repoRoot = options.repoRoot === undefined ? REPO_ROOT : path.resolve(options.repoRoot);
+  const evidenceRootAbsolute = path.resolve(repoRoot, RD17_SMOKE_EVIDENCE_ROOT);
+  const resolved = path.resolve(repoRoot, outDirectory);
+  const relative = path.relative(evidenceRootAbsolute, resolved);
   if (
     relative.length === 0 ||
     relative.startsWith('..') ||
@@ -258,15 +260,15 @@ export function resolveEvidenceDirectory(outDirectory) {
   ) {
     throw new Error('RD-17 smoke output must be under the RD-17 evidence root.');
   }
-  if (containsSymlinkComponent(resolved)) {
+  if (containsSymlinkComponent(resolved, repoRoot)) {
     throw new Error('RD-17 smoke output must be under the RD-17 evidence root.');
   }
   return resolved;
 }
 
-function containsSymlinkComponent(targetPath) {
-  let current = REPO_ROOT;
-  const relative = path.relative(REPO_ROOT, targetPath);
+function containsSymlinkComponent(targetPath, repoRoot) {
+  let current = repoRoot;
+  const relative = path.relative(repoRoot, targetPath);
   for (const segment of relative.split(path.sep)) {
     if (segment.length === 0) {
       continue;
