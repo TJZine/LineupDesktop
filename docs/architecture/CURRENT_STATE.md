@@ -215,6 +215,19 @@ renderer-visible output limited to bundle identity, completed-bundle scan status
 production native-helper playback, live Plex transport, packaging/signing or
 release behavior, dependency or lockfile change, persisted credential/settings
 schema change, or upstream source import.
+RD-18 Unit 1 is complete for internal Windows x64 package tooling and proof.
+The packaging/provenance owner is `tools/package-windows-internal.mjs`,
+validated by `tools/verify-windows-internal-package.mjs` and
+`tools/__tests__/package-windows-internal.test.mjs`. Windows closeout observed
+`win32 x64`, `npm run build:electron`, internal package generation under
+`out/rd-18-windows-internal/lineup-desktop-0.0.0-win32-x64/`, and package
+verification passing with a clean tracked worktree. The generated artifact
+contains `LineupDesktop.exe`, unpacked `resources/app` with main/preload/renderer
+dist payload, provenance, deterministic checksums, internal notices, and blocked
+native-helper/media-binary markers. RD-18 Unit 1 adds no package script,
+dependency, lockfile, signing config, update metadata, native media
+redistribution, Plex behavior, renderer/preload/IPC contract, runtime behavior,
+or public release artifact.
 
 ## Product Invariants
 
@@ -263,6 +276,7 @@ schema change, or upstream source import.
 | Redaction contract vocabulary | `src/contracts/redaction.ts` | RD-17 redaction boundary and forbidden diagnostic field vocabulary shared by diagnostics contracts, scanner, and tests |
 | External `mpv` POC tool | `tools/mpv-poc/rd-05-external-mpv-poc.mjs` | Dev-only disposable RD-05 evidence harness |
 | Native libmpv spike tool | `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` | Dev-only disposable RD-06 Windows WID/render API evidence harness |
+| Internal Windows package tooling | `tools/package-windows-internal.mjs`, `tools/verify-windows-internal-package.mjs`, and `tools/__tests__/package-windows-internal.test.mjs` | RD-18 Unit 1 owner for internal Windows x64 unpacked package staging, provenance, checksums, internal notices, blocked native-helper/media-binary markers, and verifier coverage; generated artifacts stay ignored under `out/rd-18-windows-internal/**`, and public signing/update/native media redistribution remain blocked |
 | Docs verifier | `tools/verify-docs.mjs` | Active |
 | Redaction verifier | `tools/verify-redaction.mjs` | Active RD-17-aware scanner for secret-shaped values, raw auth/header material, privileged diagnostic fields, raw filesystem paths, process data, native handles, and raw IPC frames |
 | RD-17 diagnostics smoke | `tools/rd17-diagnostics-smoke.mjs` | Windows-only ignored-evidence proof for diagnostics crash recovery and support-bundle redaction closeout |
@@ -279,7 +293,8 @@ schema change, or upstream source import.
   beyond the RD-17 local diagnostics surface
 - preload/renderer persistence IPC wiring
 - encrypted credential backup/restore implementation
-- packaging/signing/update pipeline
+- public signing/update pipeline
+- production native-helper and media-binary redistribution inside packages
 
 ## Electron Shell Frame
 

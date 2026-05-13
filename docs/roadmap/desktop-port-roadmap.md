@@ -156,6 +156,31 @@ durable completion summary.
   production native-helper playback, live Plex transport, preload/contracts,
   product IPC, packaging behavior, dependency or lockfile change, live renderer
   Plex API, preferred-language selection, or upstream source import.
+- [x] RD-17 Diagnostics, Crash Recovery, And Support Bundle completed on
+  2026-05-13 with Windows proof under ignored local evidence at
+  `docs/runs/rd-17-diagnostics-crash-recovery-support-bundle/windows-smoke`;
+  `npm run test:harness-docs`, `npm run typecheck`, `npm run
+  verify:redaction`, `npm run verify:architecture`, `npm run verify:docs`,
+  `npm run smoke:electron`, the RD-17 diagnostics smoke command, and `npm run
+  verify` passed on Windows. RD-17 added local diagnostics, support-bundle
+  export, and helper crash-recovery reporting without telemetry/cloud upload,
+  production native-helper playback, live Plex transport, packaging/signing or
+  release behavior, dependency or lockfile change, persisted credential/settings
+  schema change, or upstream source import.
+- [x] RD-18 Windows Packaging And Release Pipeline Unit 1 completed on
+  2026-05-13 after clean plan review, implementation review, local automated
+  verification, and Windows x64 artifact proof. The internal package tooling
+  stages
+  `out/rd-18-windows-internal/lineup-desktop-0.0.0-win32-x64/` with
+  `LineupDesktop.exe`, unpacked `resources/app`, provenance,
+  `checksums.sha256`, internal third-party notices, and blocked
+  native-helper/media-binary markers. Windows closeout observed `win32 x64`,
+  `npm run build:electron`, package generation, and package verification
+  passing with a clean tracked worktree; generated output remains ignored under
+  `out/rd-18-windows-internal/**`. RD-18 adds no package script, dependency,
+  lockfile, signing config, update metadata, native media redistribution, Plex
+  behavior, renderer/preload/IPC contract, runtime behavior, or public release
+  artifact.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -225,11 +250,11 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-16 are complete enough to route the next Tier 3 session to
-RD-17 Diagnostics, Crash Recovery, And Support Bundle through the quality loop.
-Do not import
-additional original Lineup product code until a reviewed product slice plan
-explicitly authorizes a bounded import.
+RD-01 through RD-18 are complete enough to route the next Tier 3 session to
+RD-19 Internal Alpha/Beta Validation through the quality loop. Do not import
+additional original Lineup product code or broaden live Plex/native playback
+runtime behavior until a reviewed product slice plan explicitly authorizes a
+bounded change.
 
 ## Roadmap Checklist
 
@@ -1130,7 +1155,8 @@ Exit gates:
 
 ### RD-18 Windows Packaging And Release Pipeline
 
-Status: not started.
+Status: complete for internal Windows x64 Unit 1; public signed release,
+native media redistribution, and auto-update remain blocked future work.
 
 Depends on:
 
@@ -1145,13 +1171,21 @@ Objective:
 
 Exit gates:
 
-- Artifact layout includes Electron, renderer, native helper, and media
-  binaries.
-- Checksums and third-party notices are generated.
-- Signing plan is documented before public release.
-- Auto-update remains disabled until signing, release channels, rollback, and
-  native binary layout are stable.
-- Public release is blocked until licensing/provenance is settled.
+- Internal Windows x64 artifact layout includes Electron runtime,
+  `LineupDesktop.exe`, unpacked `resources/app` renderer/main/preload payload,
+  provenance, checksums, internal notices, and explicit blocked marker files for
+  production native helper and media binaries.
+- `node tools/package-windows-internal.mjs --out out/rd-18-windows-internal`
+  and `node tools/verify-windows-internal-package.mjs --package
+  out/rd-18-windows-internal/lineup-desktop-0.0.0-win32-x64 --manifest
+  out/rd-18-windows-internal/lineup-desktop-0.0.0-win32-x64/resources/lineup-desktop-provenance.json`
+  passed on Windows x64 after `npm run build:electron`.
+- Generated package output remains ignored and untracked; final tracked
+  worktree status was clean.
+- Signing plan, public NSIS installer, native media redistribution, and
+  auto-update remain blocked until later reviewed units settle licensing,
+  provenance, signing, update-channel, rollback, native binary layout, and
+  installer proof.
 
 ### RD-19 Internal Alpha/Beta Validation
 
