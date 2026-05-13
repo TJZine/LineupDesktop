@@ -3,6 +3,10 @@
 @import "./styles/workflow-screens.css";
 @import "./styles/responsive-accessibility.css";
 
-@media (prefers-reduced-motion: reduce) {}
+@media (prefers-reduced-motion: reduce) {
+  /* Smoke assertion anchor; policy rules live in responsive-accessibility.css. */
+}
 
-@media (forced-colors: active) {}
+@media (forced-colors: active) {
+  /* Smoke assertion anchor; policy rules live in responsive-accessibility.css. */
+}

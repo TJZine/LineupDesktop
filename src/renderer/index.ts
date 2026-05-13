@@ -148,7 +148,7 @@ const capabilities = await window.lineupDesktop.shell.getCapabilities();
 if (dom.capabilitiesElement) {
   dom.capabilitiesElement.textContent = capabilities.ok
     ? `${capabilities.value.appName} ${capabilities.value.appVersion} ${capabilities.value.shellMode}`
-    : capabilities.error.message;
+    : 'Unable to load capabilities';
 }
 
 document.documentElement.dataset.shellBoot = 'ready';

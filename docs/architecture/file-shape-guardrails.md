@@ -35,6 +35,13 @@ and CSS makes later feature work harder to review and easier to couple.
 | src/contracts/player.ts | 695 | RD-07/RD-12 player contract vocabulary is intentionally centralized to keep renderer-safe command, event, snapshot, error, and guard vocabulary aligned. | Split stable sub-vocabularies only when a new public player contract family is added and parity tests can protect each module. |
 | src/main/plex/streamResolver.ts | 662 | RD-12 stream resolver maps injected Plex media details into private playback descriptors and renderer-safe load payloads while keeping privileged setup private. | Split candidate mapping from descriptor projection before live Plex transport or additional stream modes are introduced. |
 | src/main/player/streamPolicy/desktopStreamPolicy.ts | 625 | RD-08 stream policy keeps capability-driven direct play, direct stream, transcode, fallback, and unsupported decision logic together for deterministic fixture proof. | Split decision phases before adding new codec families, platform capability matrices, or subtitle/audio policy branches. |
-| src/preload/index.cts | 575 | Sandboxed preload remains single-file-compatible today, so guard vocabulary and bridge exposure live together without a bundler; ARCH-01 preparation hardens the source-shape harness so channel constants, the single `lineupDesktop` exposure, and approved `ipcRenderer` method/channel pairs stay aligned with renderer-safe IPC contracts. | Replan before adding new bridge methods, new channels, arbitrary RPC, extra contextBridge exposure, preload bundling, or any bridge vocabulary growth not covered by the parity/shape harness. |
+| src/preload/index.cts | 575 | Sandboxed preload remains single-file-compatible and exposes only the single `lineupDesktop` bridge with approved `ipcRenderer` method/channel pairs. | Replan before adding new bridge methods, new channels, arbitrary RPC, extra contextBridge exposure, preload bundling, or any bridge vocabulary growth not covered by the parity/shape harness. |
 | src/domain/channel/channelAuthoringService.ts | 521 | Channel authoring keeps validation, draft normalization, and safe update shaping together while channel workflows remain pure and runtime-free. | Extract validation helpers before adding richer channel setup persistence or live library-driven authoring. |
 | src/main/player/nativePlayerHostProcess.ts | 501 | RD-07 native host process owns child lifecycle, command framing, failure normalization, and cleanup/reap behavior in the main/player boundary. | Split framing or cleanup helpers before production native-helper protocol expands. |
+
+### Preload Bridge Allowlist Note
+
+ARCH-01 keeps guard vocabulary in the sandbox-compatible preload entrypoint while
+the parity/shape harness checks channel constants, the single `lineupDesktop`
+exposure, and approved `ipcRenderer` method/channel pairs against renderer-safe
+IPC contracts without importing or executing preload.
