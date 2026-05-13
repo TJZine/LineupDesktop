@@ -47,6 +47,10 @@ export interface DesktopPlexServerDiscoveryOptions {
   nowMs?: () => number;
 }
 
+/**
+ * Discovery owns main-memory connection custody, invalidates stale async
+ * results with a context version, and persists only selected-server summaries.
+ */
 export class DesktopPlexServerDiscovery {
   private readonly transport: DesktopPlexDiscoveryTransport;
   private readonly selectedServerStore?: DesktopPlexServerDiscoveryOptions['selectedServerStore'];

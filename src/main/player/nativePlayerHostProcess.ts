@@ -63,7 +63,7 @@ const SAFE_FAILURE_CATEGORIES = PLAYER_ERROR_CATEGORIES.filter(
   (category) => category !== 'stale-request' && category !== 'validation-failure',
 ) as readonly NativePlayerHostFailure['category'][];
 
-export class NativePlayerHostProcess implements NativePlayerHostPort {
+/** Owns JSON-line framing, timeout, malformed output quarantine, cleanup/reap, and forbidden field-name checks; adapter validates event semantics. */ export class NativePlayerHostProcess implements NativePlayerHostPort {
   readonly #spawnHostProcess: () => NativePlayerHostChildProcess;
   readonly #requestTimeoutMs: number;
   readonly #cleanupGraceMs: number;

@@ -45,6 +45,11 @@ const PLAYER_IPC_CHANNELS = [
   LINEUP_PLAYER_CLEANUP_CHANNEL,
 ] as const;
 
+/**
+ * Player IPC checks renderer authorization before adapter access. Development
+ * and smoke shells use the fakeable host path; production remains an explicit
+ * unsupported result until a native host is registered.
+ */
 export function registerPlayerIpcHandlers(
   options: RegisterPlayerIpcHandlersOptions,
 ): PlayerIpcTeardown {

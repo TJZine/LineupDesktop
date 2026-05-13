@@ -28,6 +28,11 @@ export interface PlexPaginationWindow {
   limit: number;
 }
 
+/**
+ * Library domain helpers project parser-owned Plex data into renderer-safe
+ * summaries and bound pagination without carrying raw payloads or connection
+ * details into renderer-facing contracts.
+ */
 export function getPlexRequestIntentForChannelSetup(
   useCase: ChannelSetupPlexRequestUseCase,
 ): PlexLibraryRequestIntent {
