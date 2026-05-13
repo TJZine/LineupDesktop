@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,6 +13,7 @@ import {
   isWindowsProofPlatform,
   parseSmokeArgs,
   resolveEvidenceDirectory,
+  waitForChildClose,
 } from '../rd17-diagnostics-smoke.mjs';
 
 test('rd17 diagnostics smoke exposes the required evidence file manifest', () => {
@@ -120,6 +122,37 @@ test('rd17 diagnostics smoke failure output stays path-free', () => {
     'RD-17 smoke output must be under the RD-17 evidence root.',
   );
 });
+
+test('rd17 diagnostics smoke child close wait resolves when exit is already observed', async () => {
+  const child = new FakeChild();
+  child.exitCode = 0;
+
+  await waitForChildClose(child, 1);
+
+  assert.deepEqual(child.killSignals, []);
+});
+
+test('rd17 diagnostics smoke child close wait times out and kills child', async () => {
+  const child = new FakeChild();
+
+  await assert.rejects(
+    () => waitForChildClose(child, 1),
+    /Timed out waiting 1ms for helper child close/u,
+  );
+
+  assert.deepEqual(child.killSignals, ['SIGKILL']);
+});
+
+class FakeChild extends EventEmitter {
+  exitCode = null;
+  signalCode = null;
+  killSignals = [];
+
+  kill(signal) {
+    this.killSignals.push(signal);
+    return true;
+  }
+}
 
 function makeTempRepo(t) {
   const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd17-smoke-'));

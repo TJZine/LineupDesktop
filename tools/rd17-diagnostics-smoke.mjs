@@ -3,6 +3,7 @@ import fsSync from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
+import { clearTimeout, setTimeout } from 'node:timers';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { scanFileContent, scanSupportBundleDirectory } from './verify-redaction.mjs';
@@ -27,6 +28,7 @@ export const RD17_SMOKE_EVIDENCE_ROOT_ABSOLUTE = path.resolve(REPO_ROOT, RD17_SM
 const SUPPORT_BUNDLE_PARENT_NAME = 'support-bundle-parent';
 const SUPPORT_BUNDLE_ID = 'windows-smoke';
 const CREATED_AT_MS = 1_801_000_000_000;
+const CHILD_CLOSE_TIMEOUT_MS = 30_000;
 
 const LOAD_COMMAND = {
   command: 'load',
@@ -442,12 +444,25 @@ function createIdGenerator(prefix) {
   };
 }
 
-async function waitForChildClose(child) {
+export async function waitForChildClose(child, timeoutMs = CHILD_CLOSE_TIMEOUT_MS) {
   if (hasObservedChildExit(child)) {
     return;
   }
-  await new Promise((resolve) => {
-    child.once('close', resolve);
+  await new Promise((resolve, reject) => {
+    const handleClose = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = setTimeout(() => {
+      child.removeListener('close', handleClose);
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // Smoke harness cleanup is best effort after timeout.
+      }
+      reject(new Error(`Timed out waiting ${String(timeoutMs)}ms for helper child close.`));
+    }, timeoutMs);
+    child.once('close', handleClose);
   });
 }
 
