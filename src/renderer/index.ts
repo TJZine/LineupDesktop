@@ -258,7 +258,7 @@ async function exportSupportBundle(): Promise<void> {
       message: 'Support bundle export requested from settings.',
       context: { route: workflowState.routeState.activeRoute },
     },
-  });
+  }).catch(() => undefined);
 
   workflowState = await applySupportBundleExportResult(
     () => workflowState,

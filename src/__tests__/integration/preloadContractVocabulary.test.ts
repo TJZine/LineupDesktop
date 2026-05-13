@@ -105,6 +105,24 @@ function findPreloadVariableDeclaration(name: string): ts.VariableDeclaration | 
   return result;
 }
 
+function findPreloadFunctionDeclaration(name: string): ts.FunctionDeclaration | null {
+  let result: ts.FunctionDeclaration | null = null;
+
+  function visit(node: ts.Node): void {
+    if (result !== null) {
+      return;
+    }
+    if (ts.isFunctionDeclaration(node) && node.name?.text === name) {
+      result = node;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(preloadSourceFile);
+  return result;
+}
+
 function readStringArrayInitializer(name: string, initializer: ts.Expression): string[] {
   const expression = unwrapExpression(initializer);
   assert.ok(ts.isArrayLiteralExpression(expression), `expected ${name} to be an array literal`);
@@ -511,6 +529,22 @@ test('preload diagnostics guards validate count map keys and values', () => {
     preloadSourceText.includes('isFiniteNonNegativeNumberMap(value.findingsByLabel, REDACTION_SCAN_FINDING_LABELS)'),
     true,
   );
+});
+
+test('preload diagnostics result guard validates cancellation discriminator exactly', () => {
+  const declaration = findPreloadFunctionDeclaration('isDiagnosticsResult');
+  assert.ok(declaration, 'expected preload diagnostics result guard to be declared');
+
+  const source = declaration.getText(preloadSourceFile);
+  assert.match(
+    source,
+    /const hasValidCancellationFlag = value\.cancelled === undefined \|\| value\.cancelled === true;/u,
+  );
+  assert.match(
+    source,
+    /hasOnlyKeys\(value, \['ok', 'requestId', 'error'\], \['cancelled'\]\) &&\s*hasValidCancellationFlag && isDiagnosticsError\(value\.error\)/u,
+  );
+  assert.doesNotMatch(source, /typeof value\.cancelled === 'boolean'/u);
 });
 
 test('preload channel constants match approved IPC contract exports', () => {
