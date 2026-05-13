@@ -457,6 +457,8 @@ test('RD-16 media matrix rejects raw paths, URLs, native handles, and secret-sha
 test('native presentation evidence records RD-16 matrix without replacing dummy media proof', () => {
   assert.match(harnessSource, /--rd16-media-matrix/u);
   assert.match(harnessSource, /rd16MediaMatrix: nativePresentation \? rd16MediaMatrix \?\? buildMissingRd16MediaMatrix\(\) : 'not-requested'/u);
+  assert.match(harnessSource, /const rd16MediaMatrixObserved = !nativePresentation \|\| rd16MediaMatrix\?\.status === 'observed'/u);
+  assert.match(harnessSource, /rd15UiProofsObserved &&\s*rd16MediaMatrixObserved &&\s*helperCleanupObserved/u);
   assert.match(harnessSource, /tracks: 'not-proven-by-dummy-visual-media'/u);
   assert.match(harnessSource, /RD-16 media matrix:/u);
   assert.match(harnessSource, /buildMissingRd16MediaMatrix\('native-presentation-smoke-descriptor-required'\)/u);

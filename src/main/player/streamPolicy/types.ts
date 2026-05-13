@@ -133,6 +133,7 @@ export interface DesktopStreamSubtitleCandidate {
   format?: string;
   forced?: boolean;
   default?: boolean;
+  selected?: boolean;
 }
 
 export interface DesktopStreamPolicyInput {

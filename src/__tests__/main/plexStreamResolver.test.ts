@@ -233,6 +233,36 @@ test('plex stream resolver preserves language delivery default forced and HDR fa
   assertPublicProjectionSafe(result);
 });
 
+test('plex stream resolver preserves Plex-selected subtitle before auto forced fallback', async () => {
+  const mediaDetail = createRichMediaDetail();
+  const selectedSubtitle = mediaDetail.media[0]?.parts[0]?.streams.find(
+    (stream) => stream.id === 'subtitle-rich-default-srt',
+  );
+  assert.ok(selectedSubtitle);
+  selectedSubtitle.selected = true;
+
+  const result = await createResolver({
+    mediaDetail,
+  }).resolve({
+    requestId: 'request-selected-subtitle',
+    mediaId: 'media-input-selected-subtitle',
+    capabilityProfile: {
+      ...directPlayProfile,
+      id: 'resolver-selected-subtitle-profile',
+      directPlayVideoCodecs: ['hevc'],
+      directPlayAudioCodecs: ['truehd', 'opus'],
+      dolbyVision: 'supported',
+    },
+  });
+
+  assertResolved(result, 'direct-play');
+  assert.equal(result.load.policy.preferredSubtitleTrackId, 'plex-track-subtitle-1-1-2');
+  assert.equal(result.decision.summary.subtitleDelivery, 'sidecar');
+  assert.equal(result.decision.summary.subtitleLanguage, 'en');
+  assert.equal(result.privatePlayback.setup.selectedPrivateTrackIds.subtitle, 'subtitle-rich-default-srt');
+  assertPublicProjectionSafe(result);
+});
+
 test('plex stream resolver normalizes missing selected connection safely', async () => {
   const result = await createResolver({
     selectedConnection: null,

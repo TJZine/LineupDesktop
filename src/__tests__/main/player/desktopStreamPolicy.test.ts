@@ -13,6 +13,7 @@ import {
   audioFallbackCandidate,
   allDesktopStreamPolicyFixtureValues,
   desktopStreamPolicyInputs,
+  forcedSubtitleCandidate,
   windowsRd07CapabilityFacts,
   windowsStreamPolicyMatrixInputs,
 } from './fixtures/desktopStreamPolicyFixtures.js';
@@ -222,6 +223,29 @@ test('desktop stream policy prefers forced subtitles over default subtitles with
     'direct-play-supported',
     'forced-subtitle-selected',
   ]);
+});
+
+test('desktop stream policy preserves selected subtitles before forced fallback', () => {
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.forcedSubtitle,
+    candidates: [
+      {
+        ...forcedSubtitleCandidate,
+        subtitleTracks: [
+          {
+            ...forcedSubtitleCandidate.subtitleTracks[0]!,
+            selected: true,
+          },
+          forcedSubtitleCandidate.subtitleTracks[1]!,
+        ],
+      },
+    ],
+  });
+
+  assert.equal(decision.kind, 'direct-play');
+  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-en-default');
+  assert.equal(decision.summary.subtitleLanguage, 'en');
+  assert.deepEqual(decision.reasonCodes, ['direct-play-supported']);
 });
 
 test('desktop stream policy selects default subtitles and preserves selected languages', () => {

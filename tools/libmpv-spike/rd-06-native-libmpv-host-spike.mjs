@@ -730,6 +730,7 @@ async function runSmokeHarness({
         hasRd15NativePresentationProof(rd15UiProofs, proof, presentationMode)
       ))
     ));
+    const rd16MediaMatrixObserved = !nativePresentation || rd16MediaMatrix?.status === 'observed';
 
     status = harnessResult.exitCode === 0 &&
       requestFacts.count > 0 &&
@@ -746,6 +747,7 @@ async function runSmokeHarness({
       fullscreenCompositionObserved &&
       nativePresentationProofObserved &&
       rd15UiProofsObserved &&
+      rd16MediaMatrixObserved &&
       helperCleanupObserved &&
       !helperCleanupFailed &&
       (!renderApi || (

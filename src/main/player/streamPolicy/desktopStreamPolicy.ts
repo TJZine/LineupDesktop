@@ -30,10 +30,7 @@ const DECISION_RANK: Record<DesktopStreamPolicyDecision['kind'], number> = {
   unsupported: 3,
 };
 
-/**
- * Fixture stream policy ranks deterministic decisions with explicit
- * reasons/unknowns instead of treating candidate or profile unknowns as support.
- */
+/** Fixture stream policy ranks deterministic decisions with explicit reasons/unknowns instead of treating unknowns as support. */
 export function decideDesktopStreamPolicy(
   input: DesktopStreamPolicyInput,
 ): DesktopStreamPolicyDecision {
@@ -265,6 +262,19 @@ function selectSubtitle(
     reasons.push('requested-subtitle-unavailable');
   }
 
+  const selectedCompatible = candidate.subtitleTracks.find(
+    (track) => track.selected === true && isSubtitleSupported(input.capabilityProfile, track),
+  );
+  if (selectedCompatible) {
+    if (!hasPreferredSubtitleTrack) {
+      return { track: selectedCompatible, fallback: false };
+    }
+    if (input.capabilityProfile.subtitleTrackSwitching === 'supported') {
+      reasons.push('subtitle-fallback-selected');
+      return { track: selectedCompatible, fallback: true };
+    }
+  }
+
   const forcedCompatible = candidate.subtitleTracks.find(
     (track) => track.forced === true && isSubtitleSupported(input.capabilityProfile, track),
   );
@@ -327,10 +337,7 @@ function buildDirectStreamReasons(options: {
   if (!options.audioSupported && options.profile.directStream.audioTranscode === 'supported') {
     reasons.push('direct-stream-audio-transcode');
   }
-  if (
-    !options.subtitleSupported &&
-    options.profile.directStream.subtitleConversion === 'supported'
-  ) {
+  if (!options.subtitleSupported && options.profile.directStream.subtitleConversion === 'supported') {
     reasons.push('direct-stream-subtitle-conversion');
   }
   if (options.selection.audioFallback && options.profile.audioTrackSwitching === 'supported') {
@@ -385,11 +392,7 @@ function buildTranscodeReasons(options: {
   if (!options.subtitleSupported && options.profile.transcode.subtitles === 'supported') {
     reasons.push('transcode-subtitle');
   }
-  if (
-    !options.hdrSupported &&
-    options.dynamicRange === 'dolby-vision' &&
-    options.profile.transcode.hdr === 'supported'
-  ) {
+  if (!options.hdrSupported && options.dynamicRange === 'dolby-vision' && options.profile.transcode.hdr === 'supported') {
     reasons.push('transcode-dolby-vision');
   } else if (!options.hdrSupported && options.profile.transcode.hdr === 'supported') {
     reasons.push('transcode-hdr');
@@ -486,16 +489,10 @@ function collectUnknowns(
   if (profile.headerAuthSetup === 'unknown' || profile.headerAuthSetup === 'unproven') {
     unknowns.push('profile-header-auth-support-unknown');
   }
-  if (
-    profile.audioTrackSwitching === 'unknown' ||
-    profile.audioTrackSwitching === 'unproven'
-  ) {
+  if (profile.audioTrackSwitching === 'unknown' || profile.audioTrackSwitching === 'unproven') {
     unknowns.push('profile-audio-switching-support-unknown');
   }
-  if (
-    profile.subtitleTrackSwitching === 'unknown' ||
-    profile.subtitleTrackSwitching === 'unproven'
-  ) {
+  if (profile.subtitleTrackSwitching === 'unknown' || profile.subtitleTrackSwitching === 'unproven') {
     unknowns.push('profile-subtitle-switching-support-unknown');
   }
   if (
