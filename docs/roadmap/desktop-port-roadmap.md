@@ -100,6 +100,18 @@ durable completion summary.
   resolver/runtime playback URL setup, scheduler/channel persistence, or
   backup/restore implementation landed. Platform proof remained Mac/local
   automated only, and no Windows gate was triggered.
+- [x] RD-15 UI Over Native Video Integration completed on 2026-05-13 after
+  Units 1 through 3 and clean implementation review. Windows preflight passed;
+  Windows native-presentation smoke passed under
+  `docs/runs/rd-15-ui-over-native-video-integration/` with manifest status
+  `passed` and `RD-15 native presentation UI: 16/16 observed`; `npm run
+  test:harness-docs`, `npm run verify:redaction`, and `npm run verify` passed
+  after the Unit 3 harness revision. RD-15 closed the fake-backed renderer
+  UI-over-native-presentation proof for EPG, OSD, mini guide, channel badge,
+  settings, channel setup, overlays, windowed/fullscreen z-order, and renderer
+  focus, while leaving production native-helper playback, live Plex transport,
+  preload/contracts, product IPC, packaging, and live renderer Plex APIs
+  unimplemented.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -169,8 +181,8 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-14 are complete enough to route the next Tier 3 session to
-RD-15 UI Over Native Video Integration through the quality loop. Do not import
+RD-01 through RD-15 are complete enough to route the next Tier 3 session to
+RD-16 Subtitle, Audio, And HDR Hardening through the quality loop. Do not import
 additional original Lineup product code until a reviewed product slice plan
 explicitly authorizes a bounded import.
 
@@ -942,7 +954,22 @@ Exit gates:
 
 ### RD-15 UI Over Native Video Integration
 
-Status: not started.
+Status: complete. RD-15 completed through the feature-quality loop on
+2026-05-13. Units 1 and 2 hardened the renderer-owned fake-backed UI surfaces
+so EPG, OSD, mini guide, channel badge, settings, channel setup, overlays,
+fullscreen bridge continuity, z-order, and focus behave over the player
+presentation surface. Unit 3 extended and ran the dev-only native-presentation
+proof: Windows preflight passed, Windows native-presentation smoke passed under
+`docs/runs/rd-15-ui-over-native-video-integration/`, the manifest status is
+`passed`, and the summary records `RD-15 native presentation UI: 16/16
+observed`. `npm run test:harness-docs`, `npm run verify:redaction`, and `npm
+run verify` passed after the Unit 3 harness revision, and implementation review
+found no blockers. The completed full plan body was archived locally under
+`docs/runs/archive/plans/` and removed from tracked active plans.
+
+No production native-helper playback, live Plex transport, preload method,
+contract expansion, product IPC, package/dependency/lockfile change, packaging
+behavior, live renderer Plex API, or upstream source import landed in RD-15.
 
 Depends on:
 

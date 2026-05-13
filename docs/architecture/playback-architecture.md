@@ -9,7 +9,10 @@ app-owned native-presentation smoke as RD-07's native surface proof. Production
 player commands currently return renderer-safe unsupported failures. RD-12 adds
 an injected main-owned Plex stream resolver and playback runtime, but production
 native-helper playback, live Plex transport composition, renderer UI
-integration, and product helper wiring remain unimplemented.
+integration with live Plex/player APIs, and product helper wiring remain
+unimplemented. RD-15 proves fake-backed renderer UI composition over the
+reviewed dev-only native-presentation boundary; it does not change production
+playback wiring.
 
 ## Current Hypothesis
 
@@ -123,6 +126,21 @@ Before production playback design hardens, a Windows spike must prove:
 - helper crash detection without corrupting current player state
 - redacted logs and diagnostics
 - acceptable DPI and multi-monitor behavior for MVP
+
+## RD-15 Native Presentation UI Proof
+
+RD-15 reuses the reviewed app-owned native-presentation direction as a
+dev-only proof boundary. Windows preflight and native-presentation smoke passed
+under `docs/runs/rd-15-ui-over-native-video-integration/`, the manifest status
+is `passed`, and the summary records `RD-15 native presentation UI: 16/16
+observed`.
+
+That proof covers active native video with RD-15 EPG, OSD, mini guide, channel
+badge, settings, channel setup, overlays, windowed composition, fullscreen
+composition, renderer focus, helper cleanup, and redaction gates. It remains
+evidence for renderer/native presentation composition only. Production
+native-helper playback, live Plex transport, preload/contracts, product IPC,
+packaging, and live renderer Plex APIs are still future roadmap work.
 
 ## Contract First
 

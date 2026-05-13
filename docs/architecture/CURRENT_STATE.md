@@ -164,6 +164,24 @@ setup UI while preserving Unit 1 automated text-input bypass proof. RD-14 added
 no preload method, IPC channel, contract event, renderer-facing OS command
 payload, main/native cursor control, production native-helper playback, Plex
 runtime behavior, dependency, package, lockfile, or upstream source import.
+RD-15 is complete. Units 1 and 2 hardened the renderer-owned fake-backed UI so
+player overlays, OSD, mini guide, channel badge, guide/EPG, settings, and
+channel setup compose predictably over the player presentation surface with
+stable route reachability, z-order, fullscreen bridge continuity, deterministic
+focus fallback, and Desktop-accurate local settings copy. Unit 3 extended and
+ran the dev-only RD-06 native-presentation harness for RD-15 proof: Windows
+preflight passed, Windows native-presentation smoke passed under
+`docs/runs/rd-15-ui-over-native-video-integration/`, the manifest status is
+`passed`, and the summary records `RD-15 native presentation UI: 16/16
+observed` across windowed and fullscreen native-video composition, EPG, OSD,
+mini guide, channel badge, settings, channel setup, overlays, renderer focus,
+helper cleanup, and redaction gates. `npm run test:harness-docs`, `npm run
+verify:redaction`, and `npm run verify` passed after the Unit 3 harness
+revision, and implementation review found no blockers. RD-15 remains a
+renderer/dev-harness integration closeout only: it adds no production
+native-helper playback, live Plex transport, preload or contract expansion,
+product IPC, packaging behavior, dependency or lockfile change, live renderer
+Plex API, or upstream source import.
 
 ## Product Invariants
 
@@ -189,7 +207,7 @@ runtime behavior, dependency, package, lockfile, or upstream source import.
 | File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size guardrails, temporary oversized-file allowlist rationale, decomposition/revisit triggers, and Tier 3 file-shape verification |
 | Electron main shell | `src/main/index.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with smoke-only assertion ownership split out of the startup/composition entrypoint, plus RD-14 Unit 2 main-owned BrowserWindow/fullscreen/display/restore controller and Unit 3 foreground app-command controller while `src/main/index.ts` remains composition and IPC wiring |
 | Preload bridge | `src/preload/index.cts` | Narrow shell/window/player bridge with runtime payload guards; guard vocabulary is kept in the sandbox-compatible preload entrypoint, and the integration seam reads preload source text plus renderer-safe contracts to parity-test guard vocabulary, channel constants, the single `lineupDesktop` exposure, and approved `ipcRenderer` method/channel pairs without importing or executing preload |
-| Renderer shell | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md) | RD-13/ARCH-01 unprivileged app shell with route, workflow, EPG, overlay, focus, and style surfaces plus RD-14 Unit 1 focused desktop input owner for keyboard, text-entry bypass, browser-safe gamepad policy, fullscreen dispatch, runtime input cleanup, and Unit 4 renderer-owned DOM cursor presentation |
+| Renderer shell | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md) | RD-13/ARCH-01 unprivileged app shell with route, workflow, EPG, overlay, focus, and style surfaces; RD-14 focused desktop input and DOM cursor owners; and RD-15 fake-backed UI-over-player-surface composition for overlays, guide/EPG, settings, channel setup, z-order, fullscreen bridge continuity, and deterministic renderer focus |
 | Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window/player bridge contract |
 | Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, diagnostic, IPC result, and runtime event-guard contract |
 | IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window/player IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
@@ -220,7 +238,8 @@ runtime behavior, dependency, package, lockfile, or upstream source import.
 - Windows-proven production playback host
 - Production Plex-to-native-helper playback setup using the private RD-12
   playback descriptor
-- production renderer player UI wiring
+- live renderer Plex APIs and production renderer-to-Plex/player API wiring
+- preload, contract, and product IPC expansion for live Plex/player runtime
 - preload/renderer persistence IPC wiring
 - encrypted credential backup/restore implementation
 - packaging/signing/update pipeline
