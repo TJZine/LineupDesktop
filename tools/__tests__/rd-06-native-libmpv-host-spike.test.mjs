@@ -12,6 +12,7 @@ import {
   buildDummyHeaderField,
   buildHelperInitPayload,
   buildHelperSpawn,
+  createSanitizedEventCollector,
   buildNativePrerequisiteEvidence,
   createDummyVisualMediaBuffer,
   loadRd16MediaMatrixDescriptor,
@@ -574,12 +575,22 @@ test('timeout cleanup reports success only after child exit is observed', () => 
     'function beginTimeoutCleanup()',
     'timeoutCleanupStarted = true;',
     'child.kill();',
-    "finishHelper('timeout-cleanup-not-observed', 1, 'timeout', false);",
+    "finishHelperAfterStdout('timeout-cleanup-not-observed', 1, 'timeout', false);",
     "child.once('exit', (code, signal) => {",
     "const category = timeoutCleanupStarted ? 'timeout-reaped'",
-    'finishHelper(category, code, signal, true);',
+    'finishHelperAfterStdout(category, code, signal, true);',
   ]);
   assert.doesNotMatch(harnessSource, /finishHelper\('timeout-reaped', null, 'timeout', true\)/u);
+});
+
+test('native presentation harness buffers helper NDJSON before proof reactions', () => {
+  assert.match(harnessSource, /let helperStdoutBuffer = ''/u);
+  assert.match(harnessSource, /let stdoutEventChain = Promise\.resolve\(\)/u);
+  assert.match(harnessSource, /helperStdoutBuffer \+= chunk/u);
+  assert.match(harnessSource, /const lines = helperStdoutBuffer\.split\(\/\\r\?\\n\/u\)/u);
+  assert.match(harnessSource, /helperStdoutBuffer = lines\.pop\(\) \?\? ''/u);
+  assert.match(harnessSource, /child\.stdout\.on\('end', \(\) => \{/u);
+  assert.match(harnessSource, /function finishHelperAfterStdout/u);
 });
 
 test('electron harness does not hang forever on ready-to-show ordering', () => {
@@ -599,7 +610,7 @@ test('failed timeout cleanup prevents native presentation smoke from passing', (
   assert.match(harnessSource, /event\.proof === 'helper-cleanup'/u);
   assert.match(harnessSource, /event\.cleanupObserved !== true \|\| event\.kind !== 'observed'/u);
   assert.match(harnessSource, /!helperCleanupFailed/u);
-  assert.match(harnessSource, /finishHelper\('timeout-cleanup-not-observed', 1, 'timeout', false\)/u);
+  assert.match(harnessSource, /finishHelperAfterStdout\('timeout-cleanup-not-observed', 1, 'timeout', false\)/u);
 });
 
 test('helper source defines minimal render API interop without vendored headers', () => {
@@ -739,6 +750,39 @@ test('sanitizeHelperEvent keeps RD-15 proof booleans while dropping raw fields',
     rendererPixelsObserved: true,
     desktopPixelsObserved: true,
   });
+});
+
+test('sanitized event collector preserves NDJSON proof events split across stdout chunks', () => {
+  const collector = createSanitizedEventCollector({ malformedKind: 'helper-event' });
+
+  collector.consume('{"kind":"observed","proof":"rd15-ui-focus","focused":tr');
+  collector.consume('ue,"markerPixelsObserved":true,"rendererPixelsObserved":true}\n{"kind":');
+  collector.consume('"observed","proof":"helper-cleanup","cleanupObserved":true}');
+  collector.flush();
+
+  assert.deepEqual(collector.events, [
+    {
+      kind: 'observed',
+      proof: 'rd15-ui-focus',
+      focused: true,
+      markerPixelsObserved: true,
+      rendererPixelsObserved: true,
+    },
+    {
+      kind: 'observed',
+      proof: 'helper-cleanup',
+      cleanupObserved: true,
+    },
+  ]);
+});
+
+test('sanitized event collector records malformed final stdout lines after flush', () => {
+  const collector = createSanitizedEventCollector({ malformedKind: 'harness-event' });
+
+  collector.consume('{"kind":"observed"');
+  collector.flush();
+
+  assert.deepEqual(collector.events, [{ kind: 'harness-event', category: 'unparseable' }]);
 });
 
 test('RD-15 native presentation proof stays dev-only without product IPC or production helper behavior', () => {
