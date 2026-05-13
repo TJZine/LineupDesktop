@@ -329,16 +329,10 @@ function buildDirectStreamReasons(options: {
   ) {
     reasons.push('direct-stream-subtitle-conversion');
   }
-  if (
-    options.selection.audioFallback &&
-    options.profile.audioTrackSwitching === 'supported'
-  ) {
+  if (options.selection.audioFallback && options.profile.audioTrackSwitching === 'supported') {
     reasons.push('direct-stream-audio-fallback');
   }
-  if (
-    options.selection.subtitleFallback &&
-    options.profile.subtitleTrackSwitching === 'supported'
-  ) {
+  if (options.selection.subtitleFallback && options.profile.subtitleTrackSwitching === 'supported') {
     reasons.push('direct-stream-subtitle-fallback');
   }
   if (!options.videoSupported || !options.hdrSupported) {
@@ -555,7 +549,9 @@ function buildDecision(
       container: candidate.variant.container ?? null,
       videoCodec: candidate.video.codec ?? null,
       audioCodec: selection.audio?.codec ?? null,
+      audioLanguage: selection.audio?.language ?? null,
       subtitleDelivery: selection.subtitle?.delivery ?? null,
+      subtitleLanguage: selection.subtitle?.language ?? null,
       dynamicRange: candidate.video.dynamicRange ?? null,
       action: kind,
     },
@@ -581,7 +577,9 @@ function unsupportedDecision(
       container: null,
       videoCodec: null,
       audioCodec: null,
+      audioLanguage: null,
       subtitleDelivery: null,
+      subtitleLanguage: null,
       dynamicRange: null,
       action: 'unsupported',
     },

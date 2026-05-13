@@ -189,6 +189,95 @@ export const subtitleFallbackCandidate: DesktopStreamMediaCandidate = {
   ],
 };
 
+export const forcedSubtitleCandidate: DesktopStreamMediaCandidate = {
+  ...directPlayCandidate,
+  candidateId: 'candidate-forced-subtitle',
+  media: {
+    ...directPlayCandidate.media,
+    id: 'media-safe-forced-subtitle',
+  },
+  subtitleTracks: [
+    {
+      id: 'subtitle-track-en-default',
+      label: 'English Default',
+      language: 'en',
+      delivery: 'embedded',
+      format: 'srt',
+      default: true,
+    },
+    {
+      id: 'subtitle-track-es-forced',
+      label: 'Spanish Forced',
+      language: 'es',
+      delivery: 'embedded',
+      format: 'srt',
+      forced: true,
+    },
+  ],
+};
+
+export const languageMismatchCandidate: DesktopStreamMediaCandidate = {
+  ...directPlayCandidate,
+  candidateId: 'candidate-language-mismatch',
+  media: {
+    ...directPlayCandidate.media,
+    id: 'media-safe-language-mismatch',
+  },
+  audioTracks: [
+    {
+      id: 'audio-track-fr-aac-default',
+      label: 'French AAC Default',
+      language: 'fr',
+      codec: 'aac',
+      channelCount: 2,
+      default: true,
+    },
+    {
+      id: 'audio-track-ja-opus',
+      label: 'Japanese Opus',
+      language: 'ja',
+      codec: 'opus',
+      channelCount: 6,
+    },
+  ],
+  subtitleTracks: [
+    {
+      id: 'subtitle-track-de-default',
+      label: 'German Default',
+      language: 'de',
+      delivery: 'embedded',
+      format: 'srt',
+      default: true,
+    },
+    {
+      id: 'subtitle-track-it-sidecar',
+      label: 'Italian Sidecar',
+      language: 'it',
+      delivery: 'sidecar',
+      format: 'srt',
+    },
+  ],
+};
+
+export const subtitleConversionCandidate: DesktopStreamMediaCandidate = {
+  ...directPlayCandidate,
+  candidateId: 'candidate-subtitle-conversion',
+  media: {
+    ...directPlayCandidate.media,
+    id: 'media-safe-subtitle-conversion',
+  },
+  subtitleTracks: [
+    {
+      id: 'subtitle-track-image-burn',
+      label: 'Image Burn In',
+      language: 'en',
+      delivery: 'burn-in',
+      format: 'image',
+      default: true,
+    },
+  ],
+};
+
 export const transcodeCandidate: DesktopStreamMediaCandidate = {
   ...directPlayCandidate,
   candidateId: 'candidate-transcode',
@@ -315,6 +404,19 @@ export const unknownFactsCandidate: DesktopStreamMediaCandidate = {
   ],
 };
 
+export const unknownDynamicRangeCandidate: DesktopStreamMediaCandidate = {
+  ...directPlayCandidate,
+  candidateId: 'candidate-unknown-dynamic-range',
+  media: {
+    ...directPlayCandidate.media,
+    id: 'media-safe-unknown-dynamic-range',
+  },
+  video: {
+    ...directPlayCandidate.video,
+    dynamicRange: 'unknown',
+  },
+};
+
 export const desktopStreamPolicyInputs: Record<string, DesktopStreamPolicyInput> = {
   directPlay: {
     capabilityProfile: desktopPolicyProfile,
@@ -339,6 +441,28 @@ export const desktopStreamPolicyInputs: Record<string, DesktopStreamPolicyInput>
     candidates: [subtitleFallbackCandidate],
     preferredAudioTrackId: 'audio-track-en-aac',
     preferredSubtitleTrackId: 'subtitle-track-missing',
+  },
+  forcedSubtitle: {
+    capabilityProfile: desktopPolicyProfile,
+    candidates: [forcedSubtitleCandidate],
+    preferredAudioTrackId: 'audio-track-en-aac',
+  },
+  defaultSubtitle: {
+    capabilityProfile: desktopPolicyProfile,
+    candidates: [languageMismatchCandidate],
+    preferredAudioTrackId: 'audio-track-fr-aac-default',
+  },
+  languageMismatch: {
+    capabilityProfile: desktopPolicyProfile,
+    candidates: [languageMismatchCandidate],
+    preferredAudioTrackId: 'audio-track-ja-opus',
+    preferredSubtitleTrackId: 'subtitle-track-it-sidecar',
+  },
+  subtitleConversion: {
+    capabilityProfile: desktopPolicyProfile,
+    candidates: [subtitleConversionCandidate],
+    preferredAudioTrackId: 'audio-track-en-aac',
+    preferredSubtitleTrackId: 'subtitle-track-image-burn',
   },
   transcode: {
     capabilityProfile: desktopPolicyProfile,
@@ -404,6 +528,12 @@ export const desktopStreamPolicyInputs: Record<string, DesktopStreamPolicyInput>
     preferredAudioTrackId: 'audio-track-unknown',
     preferredSubtitleTrackId: 'subtitle-track-unknown',
   },
+  unknownDynamicRange: {
+    capabilityProfile: desktopPolicyProfile,
+    candidates: [unknownDynamicRangeCandidate],
+    preferredAudioTrackId: 'audio-track-en-aac',
+    preferredSubtitleTrackId: 'subtitle-track-en-embedded',
+  },
 };
 
 export const windowsStreamPolicyMatrixInputs: Record<string, DesktopStreamPolicyInput> = {
@@ -459,11 +589,15 @@ export const allDesktopStreamPolicyFixtureValues = [
   remuxCandidate,
   audioFallbackCandidate,
   subtitleFallbackCandidate,
+  forcedSubtitleCandidate,
+  languageMismatchCandidate,
+  subtitleConversionCandidate,
   transcodeCandidate,
   unsupportedCandidate,
   hdrCandidate,
   dolbyVisionCandidate,
   unknownFactsCandidate,
+  unknownDynamicRangeCandidate,
   desktopStreamPolicyInputs,
   windowsStreamPolicyMatrixInputs,
 ] as const;
