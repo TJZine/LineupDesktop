@@ -5,6 +5,7 @@ import {
   app,
   BrowserWindow,
   ipcMain,
+  screen,
   type IpcMainInvokeEvent,
   session,
 } from 'electron';
@@ -36,6 +37,8 @@ import {
 } from './shellSecurity.js';
 import { registerPlayerIpcHandlers, type PlayerIpcTeardown } from './player/playerIpc.js';
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
+import { registerShellAppCommandController } from './window/shellAppCommandController.js';
+import { createShellWindowController } from './window/shellWindowController.js';
 
 registerLineupProtocolScheme();
 
@@ -46,7 +49,13 @@ const preloadPath = path.join(appRoot, 'preload', 'index.cjs');
 const shellMode = getShellMode();
 const smokeMode = shellMode === 'smoke';
 
-let shellWindow: BrowserWindow | null = null;
+const shellWindowController = createShellWindowController({
+  createBrowserWindow: (options) => new BrowserWindow(options),
+  screen,
+  preloadPath,
+  smokeMode,
+  publishShellStatus,
+});
 let teardownPlayerIpc: PlayerIpcTeardown | null = null;
 let playerIpcQuitTeardownInProgress = false;
 let playerIpcQuitTeardownComplete = false;
@@ -71,7 +80,10 @@ app.whenReady()
       createRequestId,
       reportDiagnostic: reportMainProcessDiagnostic,
     });
-    shellWindow = createShellWindow();
+    const shellWindow = shellWindowController.createWindow();
+    registerShellAppCommandController(shellWindow, {
+      reportDiagnostic: reportMainProcessDiagnostic,
+    });
     attachContainmentHandlers(shellWindow);
     await shellWindow.loadURL(LINEUP_SHELL_URL);
     if (!isAllowedShellUrl(shellWindow.webContents.getURL())) {
@@ -116,26 +128,6 @@ app.on('before-quit', (event) => {
       app.quit();
     });
 });
-
-function createShellWindow(): BrowserWindow {
-  publishShellStatus('booting');
-  return new BrowserWindow({
-    width: 1280,
-    height: 720,
-    show: !smokeMode,
-    backgroundColor: '#111318',
-    webPreferences: {
-      preload: preloadPath,
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      webSecurity: true,
-      allowRunningInsecureContent: false,
-      experimentalFeatures: false,
-      webviewTag: false,
-    },
-  });
-}
 
 function attachContainmentHandlers(window: BrowserWindow): void {
   window.webContents.setWindowOpenHandler(() => {
@@ -200,12 +192,12 @@ function registerShellIpcHandlers(): void {
     }
 
     const enabled = payload.intent === 'window.enterFullscreen';
-    shellWindow?.setFullScreen(enabled);
-    return shellSuccess(payload.requestId, { enabled });
+    return shellSuccess(payload.requestId, shellWindowController.setFullscreen(enabled));
   });
 }
 
 function isAuthorizedEvent(event: IpcMainInvokeEvent): boolean {
+  const shellWindow = shellWindowController.getWindow();
   if (shellWindow === null) {
     return false;
   }
@@ -248,7 +240,7 @@ function sendPlayerEvent(event: PlayerEvent): void {
 }
 
 function sendToShellWindow(channel: string, payload: unknown): void {
-  const window = shellWindow;
+  const window = shellWindowController.getWindow();
   if (window === null || window.isDestroyed()) {
     return;
   }

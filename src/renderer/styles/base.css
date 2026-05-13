@@ -60,6 +60,11 @@ body {
     var(--color-app-bg);
 }
 
+html[data-desktop-cursor="hidden"],
+html[data-desktop-cursor="hidden"] * {
+  cursor: none !important;
+}
+
 button {
   border: 0;
   border-radius: var(--radius-control);

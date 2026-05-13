@@ -16,8 +16,12 @@ import {
   renderRendererFocus,
 } from './focusDom.js';
 import {
+  createDesktopKeyboardInputListener,
+  startDesktopGamepadRuntime,
+} from './desktopInput.js';
+import { createDesktopCursorRuntime } from './desktopCursor.js';
+import {
   FocusRegistry,
-  mapDesktopKeyEvent,
   type AppRouteId,
   type DesktopInputButton,
   type FocusState,
@@ -61,19 +65,23 @@ focusState = focusRegistry.createInitialState(workflowState.routeState.activeRou
 renderApp();
 
 const unsubscribeShellStatus = window.lineupDesktop.shell.onStatusChanged(renderStatus);
+const cursorRuntime = createDesktopCursorRuntime({
+  host: window,
+  root: document.documentElement,
+});
 
-const keydownListener = (event: KeyboardEvent): void => {
-  const input = mapDesktopKeyEvent(event);
-  if (input === null) {
-    return;
-  }
-  event.preventDefault();
-  void handleDesktopInput(input);
-};
+const keydownListener = createDesktopKeyboardInputListener(handleDesktopInput);
+const gamepadRuntime = startDesktopGamepadRuntime({
+  host: window,
+  getGamepads: () => window.navigator.getGamepads(),
+  dispatch: handleDesktopInput,
+});
 
 window.addEventListener('keydown', keydownListener);
 window.addEventListener('beforeunload', () => {
   window.removeEventListener('keydown', keydownListener);
+  cursorRuntime.cleanup();
+  gamepadRuntime.cleanup();
   unsubscribeShellStatus();
 });
 
@@ -161,6 +169,8 @@ function renderStatus(event: ShellStatusEvent): void {
 }
 
 async function handleDesktopInput(input: DesktopInputButton): Promise<void> {
+  cursorRuntime.hideForDesktopInput();
+
   switch (input) {
     case 'up':
     case 'down':
