@@ -169,8 +169,8 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through ARCH-01 are complete enough to route the next Tier 3 session to
-RD-14 Window, Input, And Fullscreen UX through the quality loop. Do not import
+RD-01 through RD-14 are complete enough to route the next Tier 3 session to
+RD-15 UI Over Native Video Integration through the quality loop. Do not import
 additional original Lineup product code until a reviewed product slice plan
 explicitly authorizes a bounded import.
 
