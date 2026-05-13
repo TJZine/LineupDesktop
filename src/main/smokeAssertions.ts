@@ -33,7 +33,10 @@ export async function runSmokeAssertions(
       const rootStyle = getComputedStyle(document.documentElement);
       const appShell = document.querySelector('[data-style-surface="app-shell"]');
       const routeRail = document.querySelector('[data-style-surface="route-rail"]');
+      const screenRoot = document.querySelector('[data-static-screen-root]');
+      const screenStack = document.querySelector('[data-static-screens-mounted]');
       const styledPlayerScreen = document.querySelector('[data-screen="player"]');
+      const playerSurface = document.querySelector('.player-surface');
       const playerRouteButton = document.querySelector('[data-route-button="player"]');
       const stylesheetTexts = [];
       for (const sheet of Array.from(document.styleSheets)) {
@@ -61,6 +64,30 @@ export async function runSmokeAssertions(
         getComputedStyle(styledPlayerScreen).borderRadius !== '8px'
       ) {
         failures.push('screen style loaded');
+      }
+      if (
+        !(screenRoot instanceof HTMLElement) ||
+        !(screenStack instanceof HTMLElement) ||
+        !(styledPlayerScreen instanceof HTMLElement) ||
+        !(playerSurface instanceof HTMLElement)
+      ) {
+        failures.push('screen height style target');
+      } else {
+        const rootHeight = screenRoot.getBoundingClientRect().height;
+        const stackHeight = screenStack.getBoundingClientRect().height;
+        const screenHeight = styledPlayerScreen.getBoundingClientRect().height;
+        const surfaceHeight = playerSurface.getBoundingClientRect().height;
+        if (
+          rootHeight < window.innerHeight * 0.6 ||
+          Math.abs(stackHeight - rootHeight) > 1 ||
+          Math.abs(screenHeight - rootHeight) > 1 ||
+          Math.abs(surfaceHeight - screenHeight) > 2.5
+        ) {
+          failures.push(
+            'screen fills grid height ' +
+              JSON.stringify({ rootHeight, stackHeight, screenHeight, surfaceHeight }),
+          );
+        }
       }
       if (!(playerRouteButton instanceof HTMLButtonElement)) {
         failures.push('focus style target');
