@@ -111,7 +111,7 @@ read-only review before implementation.
 - `persistence-boundaries`: applies to credential availability, backup/restore
   blockers, app data, diagnostics paths, and uninstall cleanup.
 - `plex-integration-boundaries`: applies to auth, server selection, library,
-  channel creation from Plex media, stream setup, and token custody.
+  channel creation from Plex media, stream setup, and Plex credential ownership.
 - `ui-composition-patterns`: applies to fake-backed renderer validation,
   fullscreen, multi-monitor, focus, EPG, settings, overlays, and long playback
   presentation observations.
