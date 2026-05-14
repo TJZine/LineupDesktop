@@ -292,6 +292,39 @@ test('verifyDocs rejects missing production engineering guardrails', () => {
   assert(errors.some((error) => error.includes('missing production engineering guardrails structure')));
 });
 
+test('verifyDocs rejects missing MVP fake-surface retirement policy', () => {
+  const root = makeFixture({ complete: true });
+
+  let workflow = fs.readFileSync(path.join(root, 'docs/AGENTIC_DEV_WORKFLOW.md'), 'utf8');
+  workflow = workflow.replace(
+    'Fake scaffold product UI in reachable app routes moves to tests, smoke harnesses, or dev-only fixtures.',
+    'Scaffold policy omitted.',
+  );
+  fs.writeFileSync(path.join(root, 'docs/AGENTIC_DEV_WORKFLOW.md'), workflow);
+  let errors = verifyDocs(root);
+  assert(errors.some((error) => error.includes('scaffold product-route retirement')));
+
+  fs.writeFileSync(path.join(root, 'docs/AGENTIC_DEV_WORKFLOW.md'), fixtureContent('docs/AGENTIC_DEV_WORKFLOW.md'));
+  let featureQualityLoop = fs.readFileSync(path.join(root, 'docs/agentic/session-prompts/feature-quality-loop.md'), 'utf8');
+  featureQualityLoop = featureQualityLoop.replace(
+    'fake app routes fake/scaffold UI in a reachable product route active product routes for the roadmap item no longer depend on fake controls',
+    'fake route policy omitted',
+  );
+  fs.writeFileSync(path.join(root, 'docs/agentic/session-prompts/feature-quality-loop.md'), featureQualityLoop);
+  errors = verifyDocs(root);
+  assert(errors.some((error) => error.includes('missing MVP fake-surface retirement marker')));
+
+  fs.writeFileSync(
+    path.join(root, 'docs/agentic/session-prompts/feature-quality-loop.md'),
+    fixtureContent('docs/agentic/session-prompts/feature-quality-loop.md'),
+  );
+  let roadmap = fs.readFileSync(path.join(root, 'docs/roadmap/desktop-port-roadmap.md'), 'utf8');
+  roadmap = roadmap.replace('## MVP Build Posture', '## Fixture Posture');
+  fs.writeFileSync(path.join(root, 'docs/roadmap/desktop-port-roadmap.md'), roadmap);
+  errors = verifyDocs(root);
+  assert(errors.some((error) => error.includes('missing MVP build posture marker')));
+});
+
 test('verifyDocs requires upstream behavior guardrail document and slice coverage', () => {
   const root = makeFixture({ complete: true });
   fs.rmSync(path.join(root, 'docs/architecture/upstream-behavior-guardrails.md'));
@@ -519,6 +552,7 @@ test('verifyDocs accepts reworded production-engineering structures', () => {
     'Configuration, credentials, app paths, diagnostics, and logs are architecture surfaces.',
     'Architecture Health records file-shape evidence, owner hotspots, and the decomposition, avoidance, or allowlist decision.',
     'Each committed checkpoint must remain buildable and reversible.',
+    'Fake scaffold product UI in reachable app routes moves to tests, smoke harnesses, or dev-only fixtures.',
     '## Multi-Agent Usage',
     'Keep read-only roles read-only',
     'Do not let a worker invent architecture seams',
@@ -924,6 +958,7 @@ function fixtureContent(relativePath) {
       'Configuration, credentials, app paths, diagnostics, logs',
       'Architecture Health file-shape owner hotspots decomposition avoidance allowlist',
       'Keep every committed checkpoint buildable and reversible',
+      'Fake scaffold product UI in reachable app routes moves to tests, smoke harnesses, or dev-only fixtures.',
       '## Multi-Agent Usage',
       'Keep read-only roles read-only',
       'Do not let a worker invent architecture seams',
@@ -1023,6 +1058,18 @@ function fixtureContent(relativePath) {
       '## Phase Rules',
       '## Completion Gate',
       '## Architecture Health',
+      'fake app routes fake/scaffold UI in a reachable product route active product routes for the roadmap item no longer depend on fake controls',
+    ].join('\n');
+  }
+
+  if (relativePath === 'docs/roadmap/desktop-port-roadmap.md') {
+    return [
+      '# Desktop Port Roadmap',
+      '## MVP Build Posture',
+      'fake UI in a reachable app route',
+      'real webOS-informed product journey',
+      'Replace or isolate the RD-13 fake channel-setup surface',
+      'channel setup route no longer exposes fake setup summary',
     ].join('\n');
   }
 

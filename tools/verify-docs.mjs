@@ -229,6 +229,14 @@ const workflowAnchorMarkers = [
           /\breversible\b/iu,
         ]),
       },
+      {
+        label: 'scaffold product-route retirement',
+        test: (content) => sectionHasConcepts(content, '## Production Engineering Guardrails', [
+          /\b(?:scaffold|fake)\b/iu,
+          /\b(?:product UI|product route|app route|reachable app routes?)\b/iu,
+          /\b(?:tests?|smoke harness|dev-only fixtures?)\b/iu,
+        ]),
+      },
     ],
   },
   {
@@ -370,6 +378,14 @@ const rd19ValidationMatrixAreas = [
   'Diagnostics export',
   'Install/delete of unpacked package',
   'Long playback',
+];
+
+const roadmapMvpBuildPostureMarkers = [
+  '## MVP Build Posture',
+  'fake UI in a reachable app route',
+  'real webOS-informed product journey',
+  'Replace or isolate the RD-13 fake channel-setup surface',
+  'channel setup route no longer exposes fake setup summary',
 ];
 
 const rd19WindowsProofRequirements = [
@@ -756,6 +772,7 @@ function checkWorkflowAnchors(root, errors) {
   const featureQualityLoopPath = path.join(root, 'docs/agentic/session-prompts/feature-quality-loop.md');
   if (fs.existsSync(featureQualityLoopPath)) {
     const featureQualityLoop = fs.readFileSync(featureQualityLoopPath, 'utf8');
+    const normalizedFeatureQualityLoop = featureQualityLoop.replace(/\s+/gu, ' ');
     for (const heading of featureQualityLoopHeadings) {
       if (!featureQualityLoop.includes(heading)) {
         errors.push(`docs/agentic/session-prompts/feature-quality-loop.md: missing Tier 3 launcher heading ${heading}`);
@@ -763,6 +780,25 @@ function checkWorkflowAnchors(root, errors) {
     }
     if (!featureQualityLoop.includes('## Architecture Health')) {
       errors.push('docs/agentic/session-prompts/feature-quality-loop.md: missing Tier 3 Architecture Health plan section marker');
+    }
+    for (const phrase of [
+      'fake app routes',
+      'fake/scaffold UI in a reachable product route',
+      'active product routes for the roadmap item no longer depend on fake controls',
+    ]) {
+      if (!normalizedFeatureQualityLoop.includes(phrase)) {
+        errors.push(`docs/agentic/session-prompts/feature-quality-loop.md: missing MVP fake-surface retirement marker: ${phrase}`);
+      }
+    }
+  }
+
+  const roadmapPath = path.join(root, 'docs/roadmap/desktop-port-roadmap.md');
+  if (fs.existsSync(roadmapPath)) {
+    const roadmap = fs.readFileSync(roadmapPath, 'utf8').replace(/\s+/gu, ' ');
+    for (const marker of roadmapMvpBuildPostureMarkers) {
+      if (!roadmap.includes(marker)) {
+        errors.push(`docs/roadmap/desktop-port-roadmap.md: missing MVP build posture marker: ${marker}`);
+      }
     }
   }
 }
