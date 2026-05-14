@@ -88,8 +88,9 @@ durable completion summary.
 - [x] RD-10 Plex Auth, Discovery, And Library Import implemented through
   `src/contracts/plex.ts`, `src/main/plex/library/*`,
   `src/main/plex/auth/*`, `src/main/plex/discovery/*`,
-  `src/__tests__/plexLibrary.test.ts`, `src/__tests__/plexAuth.test.ts`, and
-  `src/__tests__/plexDiscovery.test.ts`; `npm run verify` passed on
+  `src/__tests__/main/plexLibrary.test.ts`,
+  `src/__tests__/main/plexAuth.test.ts`, and
+  `src/__tests__/main/plexDiscovery.test.ts`; `npm run verify` passed on
   2026-05-10 with 113 contract tests and 69 harness-doc tests. The unit adds
   imported/adapted main-owned Plex library parsers/domain helpers, auth
   parsers/service/storage seam, discovery/selected-server domain, recursive
@@ -156,6 +157,42 @@ durable completion summary.
   production native-helper playback, live Plex transport, preload/contracts,
   product IPC, packaging behavior, dependency or lockfile change, live renderer
   Plex API, preferred-language selection, or upstream source import.
+- [x] RD-17 Diagnostics, Crash Recovery, And Support Bundle completed on
+  2026-05-13 with Windows proof under ignored local evidence at
+  `docs/runs/rd-17-diagnostics-crash-recovery-support-bundle/windows-smoke`;
+  `npm run test:harness-docs`, `npm run typecheck`, `npm run
+  verify:redaction`, `npm run verify:architecture`, `npm run verify:docs`,
+  `npm run smoke:electron`, the RD-17 diagnostics smoke command, and `npm run
+  verify` passed on Windows. RD-17 added local diagnostics, support-bundle
+  export, and helper crash-recovery reporting without telemetry/cloud upload,
+  production native-helper playback, live Plex transport, packaging/signing or
+  release behavior, dependency or lockfile change, persisted credential/settings
+  schema change, or upstream source import.
+- [x] RD-18 Windows Packaging And Release Pipeline Unit 1 completed on
+  2026-05-13 after clean plan review, implementation review, local automated
+  verification, and Windows x64 artifact proof. The internal package tooling
+  stages
+  `out/rd-18-windows-internal/lineup-desktop-0.0.0-win32-x64/` with
+  `LineupDesktop.exe`, unpacked `resources/app`, provenance,
+  `checksums.sha256`, internal third-party notices, and blocked
+  native-helper/media-binary markers. Windows closeout observed `win32 x64`,
+  `npm run build:electron`, package generation, and package verification
+  passing with a clean tracked worktree; generated output remains ignored under
+  `out/rd-18-windows-internal/**`. RD-18 adds no package script, dependency,
+  lockfile, signing config, update metadata, native media redistribution, Plex
+  behavior, renderer/preload/IPC contract, runtime behavior, or public release
+  artifact.
+- [x] RD-19 Internal Alpha/Beta Validation completed on 2026-05-14 after Units
+  A through D, clean read-only reviews, Windows x64 package proof, and full
+  validation-matrix execution against current fake-backed, injected, package,
+  diagnostics, and dev-only harness proof surfaces.
+- [x] RD-20 Original Lineup Reference Compatibility Pass completed as
+  docs/source-audit/provenance work only. The tracked artifacts are
+  `docs/architecture/original-lineup-reference-compatibility-matrix.md` and
+  `docs/architecture/original-lineup-divergence-register.md`; copied/adapted
+  M01-M07/D01-D07 import and ledger coverage reviewed clean,
+  reference-only/proof-context M08-M11/D08-D11 reviewed clean, and import
+  ledger coverage is current after retained-test path corrections only.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -225,11 +262,11 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-16 are complete enough to route the next Tier 3 session to
-RD-17 Diagnostics, Crash Recovery, And Support Bundle through the quality loop.
-Do not import
-additional original Lineup product code until a reviewed product slice plan
-explicitly authorizes a bounded import.
+RD-01 through RD-20 are complete enough to route the next Tier 3 session to
+RD-21 Future Platform Review through the quality loop. Do not import
+additional original Lineup product code or broaden live Plex/native playback
+runtime behavior until a reviewed product slice plan explicitly authorizes a
+bounded change.
 
 ## Roadmap Checklist
 
@@ -1130,7 +1167,8 @@ Exit gates:
 
 ### RD-18 Windows Packaging And Release Pipeline
 
-Status: not started.
+Status: complete for internal Windows x64 Unit 1; public signed release,
+native media redistribution, and auto-update remain blocked future work.
 
 Depends on:
 
@@ -1145,17 +1183,32 @@ Objective:
 
 Exit gates:
 
-- Artifact layout includes Electron, renderer, native helper, and media
-  binaries.
-- Checksums and third-party notices are generated.
-- Signing plan is documented before public release.
-- Auto-update remains disabled until signing, release channels, rollback, and
-  native binary layout are stable.
-- Public release is blocked until licensing/provenance is settled.
+- Internal Windows x64 artifact layout includes Electron runtime,
+  `LineupDesktop.exe`, unpacked `resources/app` renderer/main/preload payload,
+  provenance, checksums, internal notices, and explicit blocked marker files for
+  production native helper and media binaries.
+- `node tools/package-windows-internal.mjs --out out/rd-18-windows-internal`
+  and `node tools/verify-windows-internal-package.mjs --package
+  out/rd-18-windows-internal/lineup-desktop-0.0.0-win32-x64 --manifest
+  out/rd-18-windows-internal/lineup-desktop-0.0.0-win32-x64/resources/lineup-desktop-provenance.json`
+  passed on Windows x64 after `npm run build:electron`.
+- Generated package output remains ignored and untracked; final tracked
+  worktree status was clean.
+- Signing plan, public NSIS installer, native media redistribution, and
+  auto-update remain blocked until later reviewed units settle licensing,
+  provenance, signing, update-channel, rollback, native binary layout, and
+  installer proof.
 
 ### RD-19 Internal Alpha/Beta Validation
 
-Status: not started.
+Status: complete. RD-19 Units A, B, C, and D are implemented, verified, and
+read-only reviews reported no material findings. The tracked validation
+artifact is `docs/development/rd-19-internal-validation-checklist.md`. Unit D
+executed the full RD-19 matrix on Windows x64 using current fake-backed,
+injected, package, diagnostics, and dev-only harness proof surfaces. Sleep/wake
+and real long playback remain blocked and classified; no live Plex, production
+native playback, signing/update, installer, public release, source, tool,
+package-script, dependency, or lockfile behavior was added or claimed.
 
 Depends on:
 
@@ -1168,16 +1221,25 @@ Objective:
 
 Exit gates:
 
-- Full verification passes.
+- Full verification passes. RD-19 closeout observed `npm run verify` passing on
+  2026-05-14 after the redacted validation checklist, blocker log, roadmap, and
+  current-state updates.
 - Manual smoke matrix covers auth, server selection, channel creation, playback,
   switching, subtitles/audio, EPG, settings, sleep/wake, fullscreen,
   multi-monitor, crash recovery, diagnostics export, install/uninstall, and long
-  playback.
+  playback. RD-19 Unit D records each area as passed or blocked in the
+  validation checklist without raw evidence.
 - Known issues are classified as release blocker, beta blocker, or deferred.
 
 ### RD-20 Original Lineup Reference Compatibility Pass
 
-Status: triggered review slice; not started.
+Status: complete as docs/source-audit/provenance work only. RD-20 Units 1
+through 4 created and completed the compatibility matrix, divergence register,
+copied/adapted import and ledger coverage audit, reference-only/proof-context
+audit, and durable closeout docs. Plan review, Unit 1 implementation review,
+Unit 2 implementation review, Unit 3 implementation review, and final
+implementation review are clean. The completed full plan body was archived
+locally under `docs/runs/archive/plans/` and removed from tracked active plans.
 
 Depends on:
 
@@ -1194,11 +1256,21 @@ Objective:
 Exit gates:
 
 - Import ledger entries are current for every copied/adapted upstream slice.
-- Preserved behavior has Desktop tests, fixtures, or source-audit evidence.
-- Intentional divergences are documented in the roadmap, active plan, import
-  ledger, or architecture docs.
-- If a session also changes the original Lineup repo, that repo's own required
-  verification is run there and recorded separately.
+  RD-20 found only retained-test path corrections were needed.
+- The compatibility matrix records preserved behavior proof for M01-M07
+  copied/adapted rows and M08-M11 reference-only/proof-context rows.
+- Intentional divergences are documented in
+  `docs/architecture/original-lineup-divergence-register.md`.
+- No new copied/adapted upstream source, production source, tests, verifiers,
+  live Plex transport, production native playback, renderer Plex APIs,
+  persistence IPC, package/dependency/lockfile/signing/update/native-media, or
+  public-release behavior landed.
+- Platform proof is `Mac/local automated proof sufficient` because RD-20
+  remained docs/source-audit/provenance-only.
+- `npm run verify:docs`, `npm run verify:redaction`, and `git diff --check`
+  pass after closeout.
+- Final read-only implementation review is clean, and the completed full plan
+  body is archived locally under `docs/runs/archive/plans/`.
 
 ### RD-21 Future Platform Review
 
@@ -1207,6 +1279,7 @@ Status: not started.
 Depends on:
 
 - Windows MVP stabilized through RD-19.
+- RD-20 Original Lineup Reference Compatibility Pass complete and reviewed.
 
 Objective:
 

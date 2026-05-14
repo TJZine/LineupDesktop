@@ -726,9 +726,7 @@ function isDiagnosticContext(value: unknown): boolean {
   ));
 }
 
-function isDiagnosticsRecordRendererEventResult(
-  value: unknown,
-): value is DiagnosticsRecordRendererEventResult {
+function isDiagnosticsRecordRendererEventResult(value: unknown): value is DiagnosticsRecordRendererEventResult {
   return isDiagnosticsResult(value, isDiagnosticRecord);
 }
 
@@ -751,7 +749,9 @@ function isDiagnosticsResult<T>(
   if (value.ok) {
     return hasOnlyKeys(value, ['ok', 'requestId', 'value']) && isValue(value.value);
   }
-  return hasOnlyKeys(value, ['ok', 'requestId', 'error'], ['cancelled']) && isDiagnosticsError(value.error);
+  const hasValidCancellationFlag = value.cancelled === undefined || value.cancelled === true;
+  return hasOnlyKeys(value, ['ok', 'requestId', 'error'], ['cancelled']) &&
+    hasValidCancellationFlag && isDiagnosticsError(value.error);
 }
 
 function isDiagnosticRecord(value: unknown): value is DiagnosticRecord {

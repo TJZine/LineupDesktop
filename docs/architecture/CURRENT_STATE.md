@@ -215,6 +215,47 @@ renderer-visible output limited to bundle identity, completed-bundle scan status
 production native-helper playback, live Plex transport, packaging/signing or
 release behavior, dependency or lockfile change, persisted credential/settings
 schema change, or upstream source import.
+RD-18 Unit 1 is complete for internal Windows x64 package tooling and proof.
+The packaging/provenance owner is `tools/package-windows-internal.mjs`,
+validated by `tools/verify-windows-internal-package.mjs` and
+`tools/__tests__/package-windows-internal.test.mjs`. Windows closeout observed
+`win32 x64`, `npm run build:electron`, internal package generation under
+`out/rd-18-windows-internal/lineup-desktop-0.0.0-win32-x64/`, and package
+verification passing with a clean tracked worktree. The generated artifact
+contains `LineupDesktop.exe`, unpacked `resources/app` with main/preload/renderer
+dist payload, provenance, deterministic checksums, internal notices, and blocked
+native-helper/media-binary markers. RD-18 Unit 1 adds no package script,
+dependency, lockfile, signing config, update metadata, native media
+redistribution, Plex behavior, renderer/preload/IPC contract, runtime behavior,
+or public release artifact.
+RD-19 is complete for internal alpha/beta validation. The validation artifact is
+`docs/development/rd-19-internal-validation-checklist.md`. Units A and B added
+the redacted checklist and checklist-shape verifier, Unit C reran Windows x64
+internal package proof, and Unit D executed the full RD-19 validation matrix on
+Windows x64 using current fake-backed UI, injected/domain, package,
+diagnostics, Electron smoke, and dev-only harness proof surfaces. Unit D
+recorded only redacted summaries and blocker rows: auth, server selection,
+channel creation, playback, switching, subtitles/audio, EPG, settings,
+fullscreen, multi-monitor, crash recovery, diagnostics export, and
+install/delete of the unpacked package have current passed proof for their
+limited fake/injected/package/diagnostics surfaces; sleep/wake and real long
+playback remain blocked and classified. RD-19 does not add live Plex transport,
+renderer Plex APIs, production native playback, persistence IPC, signing/update
+behavior, installer behavior, public release readiness, source/tool/package
+script/dependency/lockfile changes, or tracked generated artifacts.
+RD-20 is complete as docs/source-audit/provenance work only. The tracked
+artifacts are
+`docs/architecture/original-lineup-reference-compatibility-matrix.md` and
+`docs/architecture/original-lineup-divergence-register.md`. The copied/adapted
+M01-M07/D01-D07 import and ledger coverage audit reviewed clean, the
+M08-M11/D08-D11 reference-only/proof-context audit reviewed clean, and import
+ledger coverage is current after retained-test path corrections only. RD-20
+adds no new copied/adapted upstream source, production source, tests,
+verifiers, live Plex transport, renderer Plex APIs, persistence IPC, production
+native playback, package/dependency/lockfile/signing/update/native-media, or
+public-release behavior. Platform proof remains `Mac/local automated proof
+sufficient` because the completed scope stayed docs/source-audit/provenance
+only.
 
 ## Product Invariants
 
@@ -236,7 +277,8 @@ schema change, or upstream source import.
 | Port roadmap | `docs/roadmap/desktop-port-roadmap.md` | Scaffolded |
 | Upstream behavior guardrails | `docs/architecture/upstream-behavior-guardrails.md` | RD-04 docs/harness owner |
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
-| Import provenance | `docs/architecture/import-ledger.md` | Scaffolded |
+| Import provenance | `docs/architecture/import-ledger.md` | Current copied/adapted upstream source ledger; RD-20 retained-test path corrections reviewed current |
+| Original Lineup compatibility | `docs/architecture/original-lineup-reference-compatibility-matrix.md` and `docs/architecture/original-lineup-divergence-register.md` | RD-20 tracked source-audit/provenance artifacts for copied/adapted coverage, reference-only behavior, proof context, and accepted Desktop divergences |
 | File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size guardrails, temporary oversized-file allowlist rationale, decomposition/revisit triggers, and Tier 3 file-shape verification |
 | Electron main shell | `src/main/index.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with smoke-only assertion ownership split out of the startup/composition entrypoint, plus RD-14 Unit 2 main-owned BrowserWindow/fullscreen/display/restore controller and Unit 3 foreground app-command controller while `src/main/index.ts` remains composition and IPC wiring |
 | Preload bridge | `src/preload/index.cts` | Narrow shell/window/player/diagnostics bridge with runtime payload guards; guard vocabulary is kept in the sandbox-compatible preload entrypoint, and the integration seam reads preload source text plus renderer-safe contracts to parity-test guard vocabulary, channel constants, the single `lineupDesktop` exposure, and approved `ipcRenderer` method/channel pairs without importing or executing preload |
@@ -263,6 +305,7 @@ schema change, or upstream source import.
 | Redaction contract vocabulary | `src/contracts/redaction.ts` | RD-17 redaction boundary and forbidden diagnostic field vocabulary shared by diagnostics contracts, scanner, and tests |
 | External `mpv` POC tool | `tools/mpv-poc/rd-05-external-mpv-poc.mjs` | Dev-only disposable RD-05 evidence harness |
 | Native libmpv spike tool | `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` | Dev-only disposable RD-06 Windows WID/render API evidence harness |
+| Internal Windows package tooling | `tools/package-windows-internal.mjs`, `tools/verify-windows-internal-package.mjs`, and `tools/__tests__/package-windows-internal.test.mjs` | RD-18 Unit 1 owner for internal Windows x64 unpacked package staging, provenance, checksums, internal notices, blocked native-helper/media-binary markers, and verifier coverage; generated artifacts stay ignored under `out/rd-18-windows-internal/**`, and public signing/update/native media redistribution remain blocked |
 | Docs verifier | `tools/verify-docs.mjs` | Active |
 | Redaction verifier | `tools/verify-redaction.mjs` | Active RD-17-aware scanner for secret-shaped values, raw auth/header material, privileged diagnostic fields, raw filesystem paths, process data, native handles, and raw IPC frames |
 | RD-17 diagnostics smoke | `tools/rd17-diagnostics-smoke.mjs` | Windows-only ignored-evidence proof for diagnostics crash recovery and support-bundle redaction closeout |
@@ -279,7 +322,8 @@ schema change, or upstream source import.
   beyond the RD-17 local diagnostics surface
 - preload/renderer persistence IPC wiring
 - encrypted credential backup/restore implementation
-- packaging/signing/update pipeline
+- public signing/update pipeline
+- production native-helper and media-binary redistribution inside packages
 
 ## Electron Shell Frame
 
