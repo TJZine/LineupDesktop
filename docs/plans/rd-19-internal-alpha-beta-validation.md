@@ -181,6 +181,15 @@ single-owner where possible:
 - Unit C, if approved and only on Windows x64: bounded private package proof
   rerun using RD-18 commands and ignored output.
 
+Current execution state:
+
+- Unit A is implemented and read-only implementation review reported no
+  material findings. Its tracked artifact is
+  `docs/development/rd-19-internal-validation-checklist.md`.
+- Unit B remains pending and unselected.
+- Unit C remains pending and unselected; Windows x64 package proof has not been
+  rerun in RD-19.
+
 No unit may enable live Plex or production native playback by validation
 shortcut. If validation needs behavior that does not exist, the result is a
 blocker classification and a stop/replan for the smallest reviewed enabling
@@ -271,6 +280,7 @@ RD-19 is Windows-first. Platform proof requirements are:
 ## Files In Scope
 
 - `docs/plans/rd-19-internal-alpha-beta-validation.md`
+- `docs/development/rd-19-internal-validation-checklist.md` for Unit A only
 
 Future implementation units may only add files after reviewed plan approval.
 Likely reviewed targets, if needed, are a redacted validation checklist under
@@ -503,14 +513,15 @@ playback, Plex, and platform-proof boundaries while preserving missing-runtime
 constraints.
 
 NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
-TASK: Review RD-19 Internal Alpha/Beta Validation Plan
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
+TASK: Continue RD-19 Internal Alpha/Beta Validation Through Quality Loop
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/rd-19-internal-alpha-beta-validation.md
-ARTIFACT: docs/plans/rd-19-internal-alpha-beta-validation.md
+ARTIFACT: docs/development/rd-19-internal-validation-checklist.md
 FILES:
 - docs/plans/rd-19-internal-alpha-beta-validation.md
-BLOCKERS: none known before read-only plan review
+- docs/development/rd-19-internal-validation-checklist.md
+BLOCKERS: RD-19 validation blockers and missing runtime surfaces remain classified by the active plan; no workflow blocker is known
 MESSAGE:
-Perform a read-only adversarial review of the active RD-19 plan. Verify that it satisfies `docs/agentic/plan-authoring-standard.md`, preserves current-state constraints, does not invent live Plex or production native playback behavior, covers the required private validation and blocker matrices, includes release-blocker taxonomy, evidence redaction policy, platform proof requirements, Architecture Health, stop/replan triggers, exact verification commands with expected outcomes, and correctly routes the next gate after review.
+Continue RD-19 through `lineup-desktop-feature-quality-loop` at phase `execution-unit-select`. Unit A docs-only validation checklist/blocker-log template is implemented, verified with `npm run verify:docs` and `npm run verify:redaction`, and read-only implementation review reported no material findings. No execution unit is currently selected. Select one remaining bounded approved unit from the active plan: Unit B optional narrow verifier or harness documentation for validation summaries, or Unit C Windows x64 private package proof rerun. Preserve the plan's no-runtime-change constraints and do not call RD-19 done until the validation matrix is executed, redacted, classified, reviewed, and required Windows/platform proof and verification outcomes are recorded.
