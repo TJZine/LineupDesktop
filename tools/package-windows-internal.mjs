@@ -183,8 +183,11 @@ export function resolveElectronRuntimeDir(root = repoRoot) {
 }
 
 export function collectRuntimeVersions(root = repoRoot) {
-  const electronDist = resolveElectronRuntimeDir(root);
-  const electronExecutable = path.join(electronDist, 'electron.exe');
+  return collectRuntimeVersionsFromDir(resolveElectronRuntimeDir(root));
+}
+
+export function collectRuntimeVersionsFromDir(runtimeDir) {
+  const electronExecutable = path.join(runtimeDir, 'electron.exe');
   const expression = [
     'JSON.stringify({',
     'electron:process.versions.electron,',
@@ -204,15 +207,25 @@ export function collectRuntimeVersions(root = repoRoot) {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  if (result.status !== 0) {
-    throw new Error('Unable to collect bundled Electron runtime versions for RD-18 provenance.');
+  if (result.error || result.status !== 0) {
+    throw new Error(
+      [
+        'Unable to collect bundled Electron runtime versions for RD-18 provenance.',
+        formatRuntimeProbeDiagnostics(result),
+      ].filter(Boolean).join(' '),
+    );
   }
 
   let versions;
   try {
-    versions = JSON.parse(result.stdout.trim().split(/\r?\n/u).at(-1) ?? '');
+    versions = JSON.parse(lastNonEmptyLine(result.stdout) ?? '');
   } catch {
-    throw new Error('Bundled Electron runtime version output was not valid JSON.');
+    throw new Error(
+      [
+        'Bundled Electron runtime version output was not valid JSON.',
+        formatRuntimeProbeDiagnostics(result),
+      ].filter(Boolean).join(' '),
+    );
   }
 
   return {
@@ -232,11 +245,11 @@ export async function packageWindowsInternal(options = {}) {
 
   const root = options.root ?? repoRoot;
   const metadata = loadPackageMetadata(root);
-  const runtimeVersions = options.runtimeVersions ?? collectRuntimeVersions(root);
+  const runtimeDir = options.runtimeDir ?? resolveElectronRuntimeDir(root);
+  const runtimeVersions = options.runtimeVersions ?? collectRuntimeVersionsFromDir(runtimeDir);
   if (runtimeVersions.electron !== undefined && runtimeVersions.electron !== metadata.electronVersion) {
     throw new Error('Bundled Electron runtime version does not match package-lock electron version.');
   }
-  const runtimeDir = options.runtimeDir ?? resolveElectronRuntimeDir(root);
   const { packageRoot } = buildInternalPackagePaths({ root, outRoot: options.outRoot });
 
   await stagePackage({
@@ -310,6 +323,7 @@ export function buildInputChecksumManifest(root = repoRoot) {
     'package.json',
     'package-lock.json',
     'tsconfig.electron.json',
+    'tools/package-windows-internal.mjs',
     'tools/clean-electron-build.mjs',
     'tools/copy-renderer-assets.mjs',
     'tools/smoke-electron.mjs',
@@ -345,11 +359,7 @@ export function parseChecksumRows(content) {
     if (!match?.groups) {
       throw new Error(`Invalid checksum row: ${line}`);
     }
-    if (
-      path.isAbsolute(match.groups.path) ||
-      match.groups.path.includes('\\') ||
-      match.groups.path.includes('..')
-    ) {
+    if (!isNormalizedRelativePackagePath(match.groups.path)) {
       throw new Error(`Invalid checksum row: ${line}`);
     }
     rows.push({
@@ -358,6 +368,26 @@ export function parseChecksumRows(content) {
     });
   }
   return rows;
+}
+
+export function isNormalizedRelativePackagePath(value) {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    path.posix.isAbsolute(value) ||
+    path.win32.isAbsolute(value) ||
+    value.includes(':') ||
+    value.includes('\\')
+  ) {
+    return false;
+  }
+
+  const segments = value.split('/');
+  if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
+    return false;
+  }
+
+  return path.posix.normalize(value) === value;
 }
 
 export function listFiles(root) {
@@ -443,6 +473,32 @@ function assertRuntimeVersion(value, label) {
     throw new Error(`Bundled Electron runtime version is missing: ${label}`);
   }
   return value;
+}
+
+function formatRuntimeProbeDiagnostics(result) {
+  const stderrLastLine = lastNonEmptyLine(result.stderr);
+  const parts = [
+    `status=${result.status ?? 'unknown'}`,
+    result.signal ? `signal=${result.signal}` : undefined,
+    result.error ? `error=${result.error.message}` : undefined,
+    stderrLastLine ? `stderrLastLine=${stderrLastLine}` : undefined,
+    formatDiagnosticExcerpt('stdout', result.stdout),
+    formatDiagnosticExcerpt('stderr', result.stderr),
+  ];
+
+  return parts.filter(Boolean).join('; ');
+}
+
+function formatDiagnosticExcerpt(label, value) {
+  const excerpt = String(value ?? '').trim();
+  if (excerpt.length === 0) {
+    return undefined;
+  }
+  return `${label}=${excerpt.slice(-500).replace(/\s+/gu, ' ')}`;
+}
+
+function lastNonEmptyLine(value) {
+  return String(value ?? '').split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).at(-1);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

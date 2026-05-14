@@ -13,8 +13,10 @@ import {
   PACKAGE_DIRECTORY_NAME,
   PROVENANCE_RELATIVE_PATH,
   assertWindowsX64Runtime,
+  buildInputChecksumManifest,
   buildInternalPackagePaths,
   collectRuntimeVersions,
+  collectRuntimeVersionsFromDir,
   computeArtifactChecksums,
   createStagedAppPackage,
   formatChecksumRows,
@@ -85,24 +87,62 @@ test('collectRuntimeVersions reads bundled Electron process versions', (t) => {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
 
   const electronDist = path.join(root, 'node_modules/electron/dist');
-  fs.mkdirSync(electronDist, { recursive: true });
-  fs.writeFileSync(
-    path.join(electronDist, 'electron.exe'),
-    [
-      '#!/bin/sh',
-      'printf \'%s\\n\' \'{"electron":"42.0.0","node":"24.15.0","chrome":"148.0.7778.96","v8":"14.8.178.14-electron.0","modules":"146","napi":"10"}\'',
-      '',
-    ].join('\n'),
-    { mode: 0o755 },
-  );
-
-  assert.deepEqual(collectRuntimeVersions(root), {
+  const expectedVersions = {
     electron: '42.0.0',
     node: '24.15.0',
     chrome: '148.0.7778.96',
     v8: '14.8.178.14-electron.0',
     modules: '146',
     napi: '10',
+  };
+  const preloadPath = createNodeBackedElectronRuntime(electronDist, expectedVersions);
+
+  withTemporaryNodeOptions(preloadPath, () => {
+    assert.deepEqual(collectRuntimeVersions(root), expectedVersions);
+    assert.deepEqual(collectRuntimeVersionsFromDir(electronDist), expectedVersions);
+  });
+});
+
+test('collectRuntimeVersions includes child-process diagnostics on probe failures', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-failure-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const runtimeDir = path.join(root, 'runtime');
+  const preloadPath = createNodeBackedElectronRuntime(runtimeDir, undefined, [
+    'console.error("runtime probe exploded");',
+    'process.exit(7);',
+  ]);
+
+  withTemporaryNodeOptions(preloadPath, () => {
+    assert.throws(
+      () => collectRuntimeVersionsFromDir(runtimeDir),
+      /Unable to collect bundled Electron runtime versions.*status=7.*stderrLastLine=runtime probe exploded/u,
+    );
+  });
+});
+
+test('collectRuntimeVersions includes stdout and stderr diagnostics on invalid JSON', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-json-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const runtimeDir = path.join(root, 'runtime');
+  const preloadPath = createNodeBackedElectronRuntime(runtimeDir, {
+    electron: '42.0.0',
+    node: '24.15.0',
+    chrome: '148.0.7778.96',
+    v8: '14.8.178.14-electron.0',
+    modules: '146',
+    napi: '10',
+  }, [
+    'console.error("json probe stderr context");',
+    'JSON.stringify = () => "not-json";',
+  ]);
+
+  withTemporaryNodeOptions(preloadPath, () => {
+    assert.throws(
+      () => collectRuntimeVersionsFromDir(runtimeDir),
+      /Bundled Electron runtime version output was not valid JSON.*stdout=.*not-json.*stderr=.*json probe stderr context/u,
+    );
   });
 });
 
@@ -123,6 +163,11 @@ test('packageWindowsInternal rejects Electron runtime version drift', async (t) 
   }), /does not match package-lock/u);
 });
 
+test('build input checksums include the packaging tool that defines provenance', () => {
+  const manifest = buildInputChecksumManifest();
+  assert(manifest.some((row) => row.path === 'tools/package-windows-internal.mjs'));
+});
+
 test('checksum parser and formatter keep deterministic normalized paths', () => {
   const rows = [
     { path: 'LineupDesktop.exe', sha256: 'a'.repeat(64) },
@@ -132,6 +177,14 @@ test('checksum parser and formatter keep deterministic normalized paths', () => 
   assert.deepEqual(parseChecksumRows(formatChecksumRows(rows)), rows);
   assert.throws(
     () => parseChecksumRows(String.raw`${'a'.repeat(64)}  resources\app\package.json`),
+    /Invalid checksum row/u,
+  );
+  assert.throws(
+    () => parseChecksumRows(`${'a'.repeat(64)}  resources/../package.json`),
+    /Invalid checksum row/u,
+  );
+  assert.throws(
+    () => parseChecksumRows(`${'a'.repeat(64)}  C:/package.json`),
     /Invalid checksum row/u,
   );
 });
@@ -197,6 +250,7 @@ test('packageWindowsInternal stages the reviewed layout with a fake Windows runt
   assert.equal(provenance.lockfile.packageCount, 2);
   assert.equal(provenance.packageLayout.asar, false);
   assert.equal(provenance.mediaBinariesStatus.rd06LocalPrerequisitesCopied, false);
+  assert(provenance.buildInputChecksums.some((row) => row.path === 'tools/package-windows-internal.mjs'));
 
   assert.deepEqual(verifyWindowsInternalPackage({
     root,
@@ -300,6 +354,61 @@ test('verifier validates provenance artifact checksums against staged files', as
   assert.equal(errors.some((error) => error.includes('checksums.sha256 must match')), false);
 });
 
+test('packageWindowsInternal records runtime versions from the staged runtime directory', async (t) => {
+  const root = makeFixtureRepo(t);
+  const defaultRuntimeDir = path.join(root, 'node_modules/electron/dist');
+  const stagedRuntimeDir = path.join(root, 'staged-electron-runtime');
+  createNodeBackedElectronRuntime(defaultRuntimeDir);
+  createNodeBackedElectronRuntime(stagedRuntimeDir);
+  const preloadPath = path.join(root, 'runtime-version-router.cjs');
+  fs.writeFileSync(preloadPath, [
+    'const defaultVersions = {',
+    '  electron: "41.0.0",',
+    '  node: "23.0.0",',
+    '  chrome: "147.0.0.0",',
+    '  v8: "13.0.0",',
+    '  modules: "145",',
+    '  napi: "9",',
+    '};',
+    'const stagedVersions = {',
+    '  electron: "42.0.0",',
+    '  node: "24.15.0",',
+    '  chrome: "148.0.7778.96",',
+    '  v8: "14.8.178.14-electron.0",',
+    '  modules: "146",',
+    '  napi: "10",',
+    '};',
+    'const versions = process.execPath.includes("staged-electron-runtime") ? stagedVersions : defaultVersions;',
+    'for (const [key, value] of Object.entries(versions)) {',
+    '  Object.defineProperty(process.versions, key, {',
+    '    value,',
+    '    enumerable: true,',
+    '    configurable: true,',
+    '  });',
+    '}',
+    '',
+  ].join('\n'));
+  const stagedVersions = {
+    electron: '42.0.0',
+    node: '24.15.0',
+    chrome: '148.0.7778.96',
+    v8: '14.8.178.14-electron.0',
+    modules: '146',
+    napi: '10',
+  };
+
+  await withTemporaryNodeOptions(preloadPath, async () => {
+    const result = await packageWindowsInternal({
+      root,
+      allowNonWindowsForTest: true,
+      runtimeDir: stagedRuntimeDir,
+    });
+
+    const provenance = readJson(result.manifestPath);
+    assert.deepEqual(provenance.runtime, stagedVersions);
+  });
+});
+
 test('verifier rejects staged app package metadata drift after generated manifests are refreshed', async (t) => {
   const { root, packageRoot } = await makeVerifiedPackage(t);
   const appPackagePath = path.join(packageRoot, APP_PACKAGE_RELATIVE_PATH);
@@ -317,6 +426,47 @@ test('verifier rejects staged app package metadata drift after generated manifes
   assert(errors.some((error) => error.includes('resources/app/package.json version must match root package.json')));
   assert.equal(errors.some((error) => error.includes('checksums.sha256 must match')), false);
   assert.equal(errors.some((error) => error.includes('Provenance artifactFileChecksums must match')), false);
+});
+
+test('verifier rejects traversal paths in provenance checksum arrays', async (t) => {
+  const { root, packageRoot } = await makeVerifiedPackage(t);
+  const provenancePath = path.join(packageRoot, PROVENANCE_RELATIVE_PATH);
+  const provenance = readJson(provenancePath);
+  provenance.buildInputChecksums = [
+    { path: 'tools/../package-windows-internal.mjs', sha256: 'a'.repeat(64) },
+  ];
+  provenance.artifactFileChecksums = [
+    { path: 'resources/../LineupDesktop.exe', sha256: 'b'.repeat(64) },
+  ];
+  fs.writeFileSync(provenancePath, `${JSON.stringify(provenance, null, 2)}\n`);
+  rewriteChecksumManifest(packageRoot);
+
+  const errors = verifyWindowsInternalPackage({
+    root,
+    packageRoot,
+    manifestPath: path.join(packageRoot, PROVENANCE_RELATIVE_PATH),
+  });
+
+  assert(errors.some((error) => (
+    error.includes('Provenance buildInputChecksums paths must be normalized and relative.')
+  )));
+  assert(errors.some((error) => (
+    error.includes('Provenance artifactFileChecksums paths must be normalized and relative.')
+  )));
+  assert.equal(errors.some((error) => error.includes('Unable to read provenance manifest.')), false);
+});
+
+test('verifier reports malformed provenance JSON once', async (t) => {
+  const { root, packageRoot } = await makeVerifiedPackage(t);
+  fs.writeFileSync(path.join(packageRoot, PROVENANCE_RELATIVE_PATH), '{not-json\n');
+
+  const errors = verifyWindowsInternalPackage({
+    root,
+    packageRoot,
+    manifestPath: path.join(packageRoot, PROVENANCE_RELATIVE_PATH),
+  });
+
+  assert.equal(errors.filter((error) => error === 'Unable to read provenance manifest.').length, 1);
 });
 
 test('verifier rejects signing certificate and private key material in generated evidence', async (t) => {
@@ -473,7 +623,12 @@ function makeFixtureRepo(t) {
   }));
   fs.writeFileSync(path.join(root, 'tsconfig.electron.json'), '{}');
   fs.mkdirSync(path.join(root, 'tools'), { recursive: true });
-  for (const tool of ['clean-electron-build.mjs', 'copy-renderer-assets.mjs', 'smoke-electron.mjs']) {
+  for (const tool of [
+    'package-windows-internal.mjs',
+    'clean-electron-build.mjs',
+    'copy-renderer-assets.mjs',
+    'smoke-electron.mjs',
+  ]) {
     fs.writeFileSync(path.join(root, 'tools', tool), `// ${tool}\n`);
   }
   fs.mkdirSync(path.join(root, 'dist/main'), { recursive: true });
@@ -488,4 +643,59 @@ function makeFixtureRepo(t) {
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function createNodeBackedElectronRuntime(runtimeDir, versions, extraPreloadLines = []) {
+  fs.mkdirSync(runtimeDir, { recursive: true });
+  const executablePath = path.join(runtimeDir, 'electron.exe');
+  fs.copyFileSync(process.execPath, executablePath);
+  fs.chmodSync(executablePath, 0o755);
+
+  const preloadPath = path.join(runtimeDir, 'electron-runtime-preload.cjs');
+  const versionLines = versions
+    ? [
+        `const versions = ${JSON.stringify(versions)};`,
+        'for (const [key, value] of Object.entries(versions)) {',
+        '  Object.defineProperty(process.versions, key, {',
+        '    value,',
+        '    enumerable: true,',
+        '    configurable: true,',
+        '  });',
+        '}',
+      ]
+    : [];
+  fs.writeFileSync(preloadPath, [
+    ...versionLines,
+    ...extraPreloadLines,
+    '',
+  ].join('\n'));
+
+  return preloadPath;
+}
+
+function withTemporaryNodeOptions(preloadPaths, callback) {
+  const previous = process.env.NODE_OPTIONS;
+  const paths = Array.isArray(preloadPaths) ? preloadPaths : [preloadPaths];
+  const preloadOptions = paths.map((preloadPath) => `--require ${JSON.stringify(preloadPath)}`).join(' ');
+  process.env.NODE_OPTIONS = previous ? `${previous} ${preloadOptions}` : preloadOptions;
+
+  const restore = () => {
+    if (previous === undefined) {
+      delete process.env.NODE_OPTIONS;
+    } else {
+      process.env.NODE_OPTIONS = previous;
+    }
+  };
+
+  try {
+    const result = callback();
+    if (result && typeof result.then === 'function') {
+      return result.finally(restore);
+    }
+    restore();
+    return result;
+  } catch (error) {
+    restore();
+    throw error;
+  }
 }

@@ -13,6 +13,7 @@ import {
   computeArtifactChecksums,
   createStagedAppPackage,
   formatChecksumRows,
+  isNormalizedRelativePackagePath,
   parseChecksumRows,
 } from './package-windows-internal.mjs';
 import { scanFileContent } from './verify-redaction.mjs';
@@ -136,9 +137,9 @@ export function verifyWindowsInternalPackage(options) {
 
   verifyStagedAppPackage(root, packageRoot, errors);
   verifyBlockedDirectories(files, errors);
-  verifyJsonEvidence(packageRoot, errors);
+  const provenance = verifyJsonEvidence(packageRoot, errors);
   verifyChecksumManifest(packageRoot, errors);
-  verifyProvenanceArtifactChecksums(packageRoot, errors);
+  verifyProvenanceArtifactChecksums(packageRoot, provenance, errors);
   verifyRedactionSafeEvidence(packageRoot, errors);
   verifyNoSigningMaterialEvidence(packageRoot, errors);
 
@@ -255,6 +256,8 @@ export function verifyJsonEvidence(packageRoot, errors) {
       errors.push('Internal notices must record blocked native helper and media binaries.');
     }
   }
+
+  return provenance;
 }
 
 export function verifyChecksumManifest(packageRoot, errors) {
@@ -274,14 +277,13 @@ export function verifyChecksumManifest(packageRoot, errors) {
     errors.push('checksums.sha256 must match staged package files in deterministic path order.');
   }
   for (const row of actualRows) {
-    if (path.isAbsolute(row.path) || row.path.includes('\\') || row.path.includes('..')) {
+    if (!isNormalizedRelativePackagePath(row.path)) {
       errors.push(`Checksum path must be normalized and relative: ${row.path}`);
     }
   }
 }
 
-export function verifyProvenanceArtifactChecksums(packageRoot, errors) {
-  const provenance = readJson(path.join(packageRoot, PROVENANCE_RELATIVE_PATH), errors, 'provenance manifest');
+export function verifyProvenanceArtifactChecksums(packageRoot, provenance, errors) {
   if (!provenance) {
     return;
   }
@@ -372,7 +374,7 @@ function assertChecksumArray(value, label, errors) {
     return;
   }
   for (const row of value) {
-    if (typeof row?.path !== 'string' || path.isAbsolute(row.path) || row.path.includes('\\')) {
+    if (!isNormalizedRelativePackagePath(row?.path)) {
       errors.push(`Provenance ${label} paths must be normalized and relative.`);
     }
     if (typeof row?.sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(row.sha256)) {
