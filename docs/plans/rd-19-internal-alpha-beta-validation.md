@@ -186,7 +186,14 @@ Current execution state:
 - Unit A is implemented and read-only implementation review reported no
   material findings. Its tracked artifact is
   `docs/development/rd-19-internal-validation-checklist.md`.
-- Unit B remains pending and unselected.
+- Unit B is implemented and read-only implementation review reported no
+  material findings after one accepted path-brittleness fix. It adds a narrow
+  RD-19 checklist-shape verifier in `tools/verify-docs.mjs`, with focused
+  fixture coverage in
+  `tools/__tests__/verify-docs.test.mjs`. It requires the Unit A checklist file,
+  safety sections, Windows x64 proof commands, validation matrix coverage,
+  scenario summary template, and blocker log template without changing runtime
+  behavior, package scripts, dependencies, or generated artifacts.
 - Unit C is implemented and read-only implementation review reported no
   material findings. On Windows x64,
   `npm run build:electron`, `node tools/package-windows-internal.mjs --out
@@ -531,6 +538,8 @@ ARTIFACT: docs/development/rd-19-internal-validation-checklist.md
 FILES:
 - docs/plans/rd-19-internal-alpha-beta-validation.md
 - docs/development/rd-19-internal-validation-checklist.md
-BLOCKERS: RD-19 validation blockers and missing runtime surfaces remain classified by the active plan; no workflow blocker is known
+- tools/verify-docs.mjs
+- tools/__tests__/verify-docs.test.mjs
+BLOCKERS: all approved execution units are complete; full RD-19 validation matrix execution and remaining Windows/platform proof still require a reviewed validation execution scope
 MESSAGE:
-Continue RD-19 through `lineup-desktop-feature-quality-loop` at phase `execution-unit-select`. Unit A docs-only validation checklist/blocker-log template is implemented, verified, and read-only implementation review reported no material findings. Unit C Windows x64 private package proof rerun is implemented, verified, and read-only implementation review reported no material findings; generated `dist/**` and `out/**` output remains ignored/local. Unit B remains pending and unselected. No execution unit is currently selected. Select Unit B optional narrow verifier or harness documentation for validation summaries, or use a reviewed replan if Unit B should be removed/deferred before moving into broader private validation execution. Preserve the plan's no-runtime-change constraints and do not call RD-19 done until the validation matrix is executed, redacted, classified, reviewed, and required Windows/platform proof and verification outcomes are recorded.
+Continue RD-19 through `lineup-desktop-feature-quality-loop` at phase `plan-revise` or `execution-unit-select` only after a reviewed validation execution scope exists. Units A, B, and C are implemented, verified, and read-only implementation reviews reported no material findings. Unit B resolved one accepted review finding by checking semantic proof-tool requirements instead of exact generated output paths. Generated `dist/**` and `out/**` output remains ignored/local. No approved execution unit is currently left to select. Define and review the next bounded validation execution scope for the full RD-19 matrix, diagnostics smoke, install/delete handling, fullscreen/display placement, sleep/wake, helper crash recovery, native-presentation, long-playback observations, redacted summaries, and blocker classification before claiming RD-19 validation progress. Preserve the plan's no-runtime-change constraints and do not call RD-19 done until the validation matrix is executed, redacted, classified, reviewed, and required Windows/platform proof and verification outcomes are recorded.

@@ -324,6 +324,7 @@ const planStandardStructures = [
 ];
 
 const upstreamBehaviorGuardrailPath = 'docs/architecture/upstream-behavior-guardrails.md';
+const rd19ValidationChecklistPath = 'docs/development/rd-19-internal-validation-checklist.md';
 
 const upstreamBehaviorGuardrailMarkers = [
   'Original Lineup behavior is reference evidence',
@@ -340,6 +341,70 @@ const upstreamBehaviorGuardrailMarkers = [
   'RD-20 reference compatibility',
   'Source audits are temporary proof only until a Desktop owner exists',
   'convert source audits into Desktop tests or fixtures',
+];
+
+const rd19ValidationChecklistHeadings = [
+  '## Evidence Rules',
+  '## Redaction Gate',
+  '## Blocker Classifications',
+  '## Stop Conditions',
+  '## Required Windows x64 Proof Commands',
+  '## Validation Matrix',
+  '## Scenario Summary Template',
+  '## Blocker Log Template',
+];
+
+const rd19ValidationMatrixAreas = [
+  'Auth',
+  'Server selection',
+  'Channel creation',
+  'Playback',
+  'Switching',
+  'Subtitles/audio',
+  'EPG',
+  'Settings',
+  'Sleep/wake',
+  'Fullscreen',
+  'Multi-monitor',
+  'Crash recovery',
+  'Diagnostics export',
+  'Install/delete of unpacked package',
+  'Long playback',
+];
+
+const rd19WindowsProofRequirements = [
+  {
+    label: 'git status',
+    patterns: [/\bgit status --short --branch\b/iu],
+  },
+  {
+    label: 'docs verifier',
+    patterns: [/\bnpm run verify:docs\b/iu],
+  },
+  {
+    label: 'redaction verifier',
+    patterns: [/\bnpm run verify:redaction\b/iu],
+  },
+  {
+    label: 'Electron build',
+    patterns: [/\bnpm run build:electron\b/iu],
+  },
+  {
+    label: 'internal Windows package staging',
+    patterns: [/\btools[\\/]package-windows-internal\.mjs\b/iu, /--out\b/iu],
+  },
+  {
+    label: 'internal Windows package verifier',
+    patterns: [
+      /\btools[\\/]verify-windows-internal-package\.mjs\b/iu,
+      /--package\b/iu,
+      /--manifest\b/iu,
+    ],
+  },
+  {
+    label: 'RD-17 diagnostics smoke',
+    patterns: [/\btools[\\/]rd17-diagnostics-smoke\.mjs\b/iu, /--out\b/iu],
+  },
 ];
 
 const requiredSkillTargets = {
@@ -385,6 +450,7 @@ export function verifyDocs(root = repoRoot) {
   checkActivePlanShape(root, errors);
   checkWorkflowAnchors(root, errors);
   checkUpstreamBehaviorGuardrails(root, errors);
+  checkRd19ValidationChecklist(root, errors);
   checkProjectSkills(root, errors);
   checkTransferredSkills(root, errors);
   checkForbiddenBaggage(root, errors);
@@ -711,6 +777,105 @@ function checkUpstreamBehaviorGuardrails(root, errors) {
   for (const marker of upstreamBehaviorGuardrailMarkers) {
     if (!normalizedContent.includes(marker)) {
       errors.push(`${upstreamBehaviorGuardrailPath}: missing upstream behavior guardrail marker: ${marker}`);
+    }
+  }
+}
+
+function checkRd19ValidationChecklist(root, errors) {
+  const absolutePath = path.join(root, rd19ValidationChecklistPath);
+  if (!fs.existsSync(absolutePath)) {
+    errors.push(`Missing RD-19 validation checklist: ${rd19ValidationChecklistPath}`);
+    return;
+  }
+
+  const content = fs.readFileSync(absolutePath, 'utf8');
+  const normalizedContent = content.replace(/\s+/gu, ' ');
+  for (const heading of rd19ValidationChecklistHeadings) {
+    if (markdownHeadingIndex(content, heading) === -1) {
+      errors.push(`${rd19ValidationChecklistPath}: missing RD-19 checklist heading ${heading}`);
+    }
+  }
+
+  const structures = [
+    {
+      label: 'evidence rules',
+      heading: '## Evidence Rules',
+      patterns: [
+        /\bredacted summaries\b/iu,
+        /\bRaw evidence must never be tracked\b/iu,
+        /\bdocs\/runs\/\*\*|\bout\/\*\*/iu,
+      ],
+    },
+    {
+      label: 'redaction gate',
+      heading: '## Redaction Gate',
+      patterns: [
+        /\btools\/verify-redaction\.mjs\b/iu,
+        /\bforbidden material\b/iu,
+        /\brelease blocker\b/iu,
+      ],
+    },
+    {
+      label: 'blocker classifications',
+      heading: '## Blocker Classifications',
+      patterns: [
+        /\brelease blocker\b/iu,
+        /\bbeta blocker\b/iu,
+        /\bdeferred\b/iu,
+      ],
+    },
+    {
+      label: 'stop conditions',
+      heading: '## Stop Conditions',
+      patterns: [
+        /\blive Plex auth\b|\breal Plex credentials\b/iu,
+        /\bproduction native helper playback\b|\bnew preload APIs\b/iu,
+        /\bfails redaction scanning\b|\bforbidden material\b/iu,
+      ],
+    },
+    {
+      label: 'scenario summary template',
+      heading: '## Scenario Summary Template',
+      patterns: [
+        /Scenario RD19-<area>-<nn>/iu,
+        /\bBlocker classification\b/iu,
+        /\bRedaction gate status\b/iu,
+      ],
+    },
+    {
+      label: 'blocker log template',
+      heading: '## Blocker Log Template',
+      patterns: [
+        /\bRD19-BLOCK-001\b/iu,
+        /\bStop condition hit\b/iu,
+        /\bOwner for next enabling plan\b/iu,
+      ],
+    },
+  ];
+
+  for (const { label, heading, patterns } of structures) {
+    if (!sectionHasConcepts(content, heading, patterns)) {
+      errors.push(`${rd19ValidationChecklistPath}: missing RD-19 ${label} required safety content`);
+    }
+  }
+
+  const windowsProofSection = markdownSection(content, '## Required Windows x64 Proof Commands') ?? '';
+  for (const { label, patterns } of rd19WindowsProofRequirements) {
+    if (!patterns.every((pattern) => pattern.test(windowsProofSection))) {
+      errors.push(`${rd19ValidationChecklistPath}: missing RD-19 Windows x64 proof requirement: ${label}`);
+    }
+  }
+
+  const matrixSection = markdownSection(content, '## Validation Matrix') ?? '';
+  for (const area of rd19ValidationMatrixAreas) {
+    const areaPattern = new RegExp(`\\|\\s*${escapeRegExp(area)}\\s*\\|`, 'iu');
+    if (!areaPattern.test(matrixSection)) {
+      errors.push(`${rd19ValidationChecklistPath}: missing RD-19 validation matrix area: ${area}`);
+    }
+  }
+  for (const status of ['passed', 'failed', 'blocked', 'not run']) {
+    if (!normalizedContent.includes(status)) {
+      errors.push(`${rd19ValidationChecklistPath}: missing RD-19 scenario status marker: ${status}`);
     }
   }
 }

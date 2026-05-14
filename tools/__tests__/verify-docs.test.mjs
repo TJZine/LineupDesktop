@@ -320,6 +320,50 @@ test('verifyDocs requires upstream behavior guardrail document and slice coverag
   assert(coverageErrors.some((error) => error.includes('RD-20 reference compatibility')));
 });
 
+test('verifyDocs requires RD-19 validation checklist safety sections', () => {
+  const root = makeFixture({ complete: true });
+  fs.rmSync(path.join(root, 'docs/development/rd-19-internal-validation-checklist.md'));
+
+  const missingErrors = verifyDocs(root);
+
+  assert(missingErrors.some((error) => error.includes('Missing RD-19 validation checklist')));
+
+  fs.writeFileSync(path.join(root, 'docs/development/rd-19-internal-validation-checklist.md'), [
+    '# RD-19 Internal Validation Checklist',
+    '## Evidence Rules',
+    'redacted summaries only',
+    '## Redaction Gate',
+    'tools/verify-redaction.mjs',
+    '## Blocker Classifications',
+    'release blocker beta blocker deferred',
+  ].join('\n'));
+
+  const driftErrors = verifyDocs(root);
+
+  assert(driftErrors.some((error) => error.includes('missing RD-19 checklist heading ## Stop Conditions')));
+  assert(driftErrors.some((error) => error.includes('missing RD-19 evidence rules required safety content')));
+  assert(driftErrors.some((error) => error.includes('missing RD-19 redaction gate required safety content')));
+  assert(driftErrors.some((error) => error.includes('missing RD-19 Windows x64 proof requirement')));
+  assert(driftErrors.some((error) => error.includes('missing RD-19 validation matrix area: Auth')));
+});
+
+test('verifyDocs rejects RD-19 checklist matrix and template drift', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, 'docs/development/rd-19-internal-validation-checklist.md'), rd19ValidationChecklistFixture({
+    omitLines: [
+      '| Crash recovery | Redacted summary only. | not run | release blocker |',
+      '- Redaction gate status:',
+      '| RD19-BLOCK-001 | YYYY-MM-DD | <area> | <redacted summary only> | release blocker/beta blocker/deferred | <stop condition or none> | <command/status/counts only> | <owner or plan needed> | <specific trigger> | open |',
+    ],
+  }));
+
+  const errors = verifyDocs(root);
+
+  assert(errors.some((error) => error.includes('missing RD-19 validation matrix area: Crash recovery')));
+  assert(errors.some((error) => error.includes('missing RD-19 scenario summary template required safety content')));
+  assert(errors.some((error) => error.includes('missing RD-19 blocker log template required safety content')));
+});
+
 test('verifyDocs rejects plan standard missing dependency governance', () => {
   const root = makeFixture({ complete: true });
   fs.writeFileSync(path.join(root, 'docs/agentic/plan-authoring-standard.md'), [
@@ -771,6 +815,7 @@ function makeFixture(options = {}) {
       'docs/plans/README.md',
       'docs/runs/README.md',
       'docs/development/testing.md',
+      'docs/development/rd-19-internal-validation-checklist.md',
       'tools/architecture-rules/buildEslintArchitectureRules.mjs',
       'tools/architecture-rules/desktopArchitectureRules.mjs',
       'tools/verify-docs.mjs',
@@ -978,6 +1023,10 @@ function fixtureContent(relativePath) {
     ].join('\n');
   }
 
+  if (relativePath === 'docs/development/rd-19-internal-validation-checklist.md') {
+    return rd19ValidationChecklistFixture();
+  }
+
   const skillTargets = {
     '.agents/skills/lineup-desktop-feature-plan/SKILL.md': 'docs/agentic/session-prompts/feature-plan.md',
     '.agents/skills/lineup-desktop-feature-implement/SKILL.md': 'docs/agentic/session-prompts/feature-implement.md',
@@ -1019,4 +1068,66 @@ function fixtureContent(relativePath) {
   }
 
   return '# Fixture\n';
+}
+
+function rd19ValidationChecklistFixture(options = {}) {
+  const omitLines = new Set(options.omitLines ?? []);
+  const lines = [
+    '# RD-19 Internal Validation Checklist',
+    'Tracked material uses redacted summaries only. Status may be `passed`, `failed`, `blocked`, or `not run`.',
+    '## Evidence Rules',
+    'Tracked material is limited to redacted summaries.',
+    'Raw evidence must never be tracked in this file or any tracked doc.',
+    'Raw local evidence must stay ignored under `docs/runs/**` or `out/**`.',
+    '## Redaction Gate',
+    'Confirm every diagnostics result passed `tools/verify-redaction.mjs` before readiness evidence is used.',
+    'If forbidden material appears, stop and classify it as a release blocker.',
+    '## Blocker Classifications',
+    '`release blocker`, `beta blocker`, and `deferred` are the only classifications.',
+    '## Stop Conditions',
+    'Stop if validation requires live Plex auth or real Plex credentials.',
+    'Stop if validation requires production native helper playback or new preload APIs.',
+    'Stop if any summary contains forbidden material or fails redaction scanning.',
+    '## Required Windows x64 Proof Commands',
+    '```sh',
+    'git status --short --branch',
+    'npm run verify:docs',
+    'npm run verify:redaction',
+    'npm run build:electron',
+    'node tools/package-windows-internal.mjs --out <ignored-package-output>',
+    'node tools/verify-windows-internal-package.mjs --package <ignored-package-root> --manifest <ignored-provenance-manifest>',
+    'node tools/rd17-diagnostics-smoke.mjs --out <ignored-evidence-root>',
+    '```',
+    '## Validation Matrix',
+    '| Area | Checklist | Status | Classification rule |',
+    '| --- | --- | --- | --- |',
+    '| Auth | Redacted summary only. | not run | beta blocker |',
+    '| Server selection | Redacted summary only. | not run | beta blocker |',
+    '| Channel creation | Redacted summary only. | not run | beta blocker |',
+    '| Playback | Redacted summary only. | not run | release blocker |',
+    '| Switching | Redacted summary only. | not run | beta blocker |',
+    '| Subtitles/audio | Redacted summary only. | not run | release blocker |',
+    '| EPG | Redacted summary only. | not run | beta blocker |',
+    '| Settings | Redacted summary only. | not run | deferred |',
+    '| Sleep/wake | Redacted summary only. | not run | beta blocker |',
+    '| Fullscreen | Redacted summary only. | not run | beta blocker |',
+    '| Multi-monitor | Redacted summary only. | not run | deferred |',
+    '| Crash recovery | Redacted summary only. | not run | release blocker |',
+    '| Diagnostics export | Redacted summary only. | not run | release blocker |',
+    '| Install/delete of unpacked package | Redacted summary only. | not run | deferred |',
+    '| Long playback | Redacted summary only. | not run | beta blocker |',
+    '## Scenario Summary Template',
+    '### Scenario RD19-<area>-<nn>',
+    '- Area:',
+    '- Status:',
+    '- Blocker classification:',
+    '- Redaction gate status:',
+    '## Blocker Log Template',
+    '| ID | Date | Area | Summary | Classification | Stop condition hit | Safe evidence | Owner for next enabling plan | Revisit trigger | Status |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| RD19-BLOCK-001 | YYYY-MM-DD | <area> | <redacted summary only> | release blocker/beta blocker/deferred | <stop condition or none> | <command/status/counts only> | <owner or plan needed> | <specific trigger> | open |',
+  ];
+  return lines
+    .filter((line) => !omitLines.has(line))
+    .join('\n');
 }
