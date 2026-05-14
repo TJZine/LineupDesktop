@@ -140,6 +140,46 @@ const STATIC_SCREEN_MARKUP = `
       <ol class="setup-steps" data-setup-steps></ol>
       <div class="channel-draft-list" data-channel-draft-list></div>
       <p class="setup-validation" data-setup-validation></p>
+      <section class="plex-runtime" data-plex-runtime-panel aria-label="Plex setup">
+        <header class="plex-runtime__header">
+          <div>
+            <h3>Plex</h3>
+            <p data-plex-status>Not loaded</p>
+          </div>
+          <p data-plex-error></p>
+        </header>
+        <dl class="plex-runtime__summary">
+          <div><dt>Account</dt><dd data-plex-account-state></dd></div>
+          <div><dt>Server</dt><dd data-plex-server-state></dd></div>
+          <div><dt>Library</dt><dd data-plex-library-state></dd></div>
+        </dl>
+        <div class="plex-runtime__controls" aria-label="Plex sign-in controls">
+          <button type="button" data-plex-action="loadSnapshot" data-focus-id="plex-load">Load</button>
+          <button type="button" data-plex-action="requestPin" data-focus-id="plex-request-pin">Sign in</button>
+          <button type="button" data-plex-action="pollPin" data-focus-id="plex-poll-pin">Check PIN</button>
+          <button type="button" data-plex-action="cancelPin" data-focus-id="plex-cancel-pin">Cancel PIN</button>
+        </div>
+        <div class="plex-runtime__pin" data-plex-pin></div>
+        <div class="plex-runtime__controls" aria-label="Plex profile controls">
+          <input data-plex-home-user-pin data-focus-id="plex-home-pin" inputmode="numeric" autocomplete="off" maxlength="12" aria-label="Plex Home PIN" />
+          <button type="button" data-plex-action="getHomeUsers" data-focus-id="plex-home-users">Profiles</button>
+        </div>
+        <div class="plex-runtime__list" data-plex-home-users></div>
+        <div class="plex-runtime__controls" aria-label="Plex server controls">
+          <button type="button" data-plex-action="restoreSelectedServer" data-focus-id="plex-restore-server">Restore server</button>
+          <button type="button" data-plex-action="refreshServers" data-focus-id="plex-refresh-servers">Refresh servers</button>
+        </div>
+        <div class="plex-runtime__list" data-plex-servers></div>
+        <div class="plex-runtime__controls" aria-label="Plex library controls">
+          <button type="button" data-plex-action="listLibrarySections" data-focus-id="plex-list-sections">Libraries</button>
+          <button type="button" data-plex-action="listLibraryItems" data-focus-id="plex-list-items">Browse</button>
+          <input data-plex-search-query data-focus-id="plex-search-query" maxlength="120" aria-label="Library search" />
+          <button type="button" data-plex-action="searchLibrary" data-focus-id="plex-search">Search</button>
+        </div>
+        <div class="plex-runtime__list" data-plex-sections></div>
+        <div class="plex-runtime__list" data-plex-items></div>
+        <div class="plex-runtime__metadata" data-plex-metadata></div>
+      </section>
       <div class="settings-controls" aria-label="Fake channel setup controls">
         <button type="button" data-setup-action="advanceSetupStep" data-focus-id="setup-advance">Advance step</button>
         <button type="button" data-setup-action="toggleFeaturedChannel" data-focus-id="setup-toggle-featured">Toggle featured channel</button>

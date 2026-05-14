@@ -6,10 +6,34 @@ import type {
   FocusState,
 } from './navigation.js';
 
+const dynamicPlexFocusIdsByRegistry = new WeakMap<FocusRegistry, Set<string>>();
+
+export function syncRendererFocusTargets(
+  focusRegistry: FocusRegistry,
+  dom: RendererDomBindings,
+): void {
+  const focusableElements = readCurrentFocusableElements(dom);
+  const currentDynamicPlexIds = new Set(
+    focusableElements
+      .map((element) => element.dataset.focusId)
+      .filter((focusId): focusId is string => isDynamicPlexFocusId(focusId)),
+  );
+  const previousDynamicPlexIds = dynamicPlexFocusIdsByRegistry.get(focusRegistry) ?? new Set();
+  for (const focusId of previousDynamicPlexIds) {
+    if (!currentDynamicPlexIds.has(focusId)) {
+      focusRegistry.unregister(focusId);
+    }
+  }
+  dynamicPlexFocusIdsByRegistry.set(focusRegistry, currentDynamicPlexIds);
+  dom.focusableElements.splice(0, dom.focusableElements.length, ...focusableElements);
+  registerRendererFocusTargets(focusRegistry, dom);
+}
+
 export function registerRendererFocusTargets(
   focusRegistry: FocusRegistry,
   dom: RendererDomBindings,
 ): void {
+  const registered = new Set<string>();
   dom.routeButtons.forEach((button, index) => {
     const route = readRouteId(button.dataset.routeButton);
     const focusId = button.dataset.focusId;
@@ -23,6 +47,7 @@ export function registerRendererFocusTargets(
       scope: 'global',
       neighbors: { right: focusId === 'nav-player' ? 'player-fullscreen' : undefined },
     });
+    registered.add(focusId);
   });
 
   if (dom.fullscreenButton) {
@@ -32,6 +57,7 @@ export function registerRendererFocusTargets(
       order: 120,
       neighbors: { up: 'nav-player', left: 'nav-player' },
     });
+    registered.add('player-fullscreen');
   }
 
   dom.routeActionButtons.forEach((button, index) => {
@@ -45,9 +71,15 @@ export function registerRendererFocusTargets(
       route,
       order: 100 + index,
     });
+    registered.add(focusId);
   });
 
-  [...dom.epgActionButtons, ...dom.settingsActionButtons, ...dom.setupActionButtons].forEach(
+  [
+    ...dom.epgActionButtons,
+    ...dom.settingsActionButtons,
+    ...dom.setupActionButtons,
+    ...dom.plexActionButtons,
+  ].forEach(
     (button, index) => {
       const route = readClosestRouteId(button);
       const focusId = button.dataset.focusId;
@@ -59,8 +91,23 @@ export function registerRendererFocusTargets(
         route,
         order: 80 + index,
       });
+      registered.add(focusId);
     },
   );
+
+  dom.focusableElements.forEach((element, index) => {
+    const focusId = element.dataset.focusId;
+    const route = readClosestRouteId(element);
+    if (focusId === undefined || registered.has(focusId) || route === null) {
+      return;
+    }
+    focusRegistry.register({
+      id: focusId,
+      route,
+      order: 220 + index,
+    });
+    registered.add(focusId);
+  });
 
   dom.overlayActionButtons.forEach((button, index) => {
     const focusId = button.dataset.focusId;
@@ -72,6 +119,7 @@ export function registerRendererFocusTargets(
       route: 'player',
       order: 150 + index,
     });
+    registered.add(focusId);
   });
 }
 
@@ -124,4 +172,41 @@ export function clickFocusedRendererElement(
   if (activeElement instanceof HTMLButtonElement) {
     activeElement.click();
   }
+}
+
+function readCurrentFocusableElements(dom: RendererDomBindings): HTMLElement[] {
+  if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
+    return Array.from(document.querySelectorAll<HTMLElement>('[data-focus-id]'));
+  }
+
+  const dynamicPlexElements =
+    [
+      dom.plexPanelElement,
+      dom.plexHomeUsersElement,
+      dom.plexServersElement,
+      dom.plexSectionsElement,
+      dom.plexItemsElement,
+    ].flatMap((element) => (
+      element === null || typeof element.querySelectorAll !== 'function'
+        ? []
+        : Array.from(element.querySelectorAll<HTMLElement>('[data-focus-id]'))
+    ));
+  return [
+    ...new Set([
+      ...dom.focusableElements.filter((element) => !isDynamicPlexFocusId(element.dataset.focusId)),
+      ...dynamicPlexElements,
+    ]),
+  ];
+}
+
+function isDynamicPlexFocusId(focusId: string | undefined): focusId is string {
+  return (
+    focusId !== undefined
+    && (
+      focusId.startsWith('plex-dyn-home-')
+      || focusId.startsWith('plex-dyn-server-')
+      || focusId.startsWith('plex-dyn-section-')
+      || focusId.startsWith('plex-dyn-item-')
+    )
+  );
 }

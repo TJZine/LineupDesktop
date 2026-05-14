@@ -37,7 +37,8 @@
 .channel-list__item,
 .channel-draft-list__item,
 .settings-section,
-.setup-steps li {
+.setup-steps li,
+.plex-runtime {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
   background: var(--color-surface-raised);
@@ -186,15 +187,119 @@ dd {
 
 .workflow-actions,
 .settings-controls,
-.guide-controls {
+.guide-controls,
+.plex-runtime__controls,
+.plex-runtime__list {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4);
 }
 
 .settings-controls,
-.guide-controls {
+.guide-controls,
+.plex-runtime__controls {
   margin-top: var(--space-1);
+}
+
+.plex-runtime {
+  display: grid;
+  gap: var(--space-4);
+  max-height: min(46vh, 520px);
+  min-width: 0;
+  margin-top: var(--space-3);
+  padding: var(--space-5);
+  overflow: auto;
+}
+
+.plex-runtime__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.plex-runtime__header h3 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.plex-runtime__header p,
+.plex-runtime__pin span,
+.plex-runtime__metadata p {
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.plex-runtime__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.plex-runtime__summary div {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+
+.plex-runtime input {
+  min-width: 120px;
+  min-height: var(--button-min-height);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text);
+  font: inherit;
+  letter-spacing: 0;
+  padding: 0 var(--space-5);
+}
+
+.plex-runtime input:focus {
+  outline: var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.plex-runtime button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.plex-runtime__pin,
+.plex-runtime__metadata {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.plex-runtime__pin strong {
+  width: max-content;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--color-inverse-bg);
+  color: var(--color-inverse-text);
+  letter-spacing: 0;
+}
+
+.plex-runtime__list button {
+  max-width: 100%;
+  min-height: 36px;
+  margin-top: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plex-runtime__list button[data-selected="true"] {
+  border-color: var(--color-focus-border-strong);
+  background: var(--color-focus-surface);
 }
 
 .guide-detail {
