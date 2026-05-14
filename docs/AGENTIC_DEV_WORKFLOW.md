@@ -331,6 +331,11 @@ throughput. Do not replace the default workflow with always-on delegation.
   verification depth.
 - Once a delegated planner is active, do not draft a competing local plan unless
   the planner blocks, fails, or is explicitly abandoned.
+- Treat a wait timeout from a planner, worker, reviewer, or monitor as
+  "still running," not as failure or abandonment. Do not close, replace, or
+  supersede that role without explicit user approval unless the role reports a
+  blocker/final failure or a newer user instruction makes the delegated task
+  obsolete.
 - Keep delegation shallow; do not spawn nested worker trees.
 - Wait on a sidecar only when the next critical-path decision depends on its
   result.

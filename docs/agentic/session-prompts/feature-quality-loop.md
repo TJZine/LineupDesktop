@@ -48,6 +48,11 @@ are complete or explicitly blocked.
 
 ## Phase Rules
 
+- Role lifecycle: a `wait_agent` timeout means the delegated planner, worker,
+  reviewer, or monitor has not returned yet. The controller must not close,
+  replace, or supersede a still-running tracked role without explicit user
+  approval unless the role reports a blocker/final failure or a newer user
+  instruction makes that delegated task obsolete.
 - `scope-load`: confirm Tier 3 routing, load authority docs, identify the exact
   target, initialize `update_plan`, and create or refresh a gitignored local run
   bundle when repeated handoff context is likely. Start the Architecture Health
