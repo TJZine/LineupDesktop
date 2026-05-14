@@ -27,7 +27,11 @@ export function renderPlexRuntimeDom(
   );
   setText(
     dom.plexServerStateElement,
-    snapshot?.servers.selected?.name ?? formatStatus(snapshot?.servers.status ?? 'idle'),
+    formatSelectedServerState(
+      snapshot?.servers.items ?? [],
+      state.selectedServerId,
+      snapshot?.servers.status ?? 'idle',
+    ),
   );
   setText(
     dom.plexLibraryStateElement,
@@ -38,9 +42,13 @@ export function renderPlexRuntimeDom(
 
   renderPin(snapshot?.auth.pin ?? null, dom);
   renderHomeUsers(snapshot?.auth.homeUsers ?? [], dom);
-  renderServers(snapshot?.servers.items ?? [], dom);
+  renderServers(snapshot?.servers.items ?? [], state.selectedServerId, dom);
   renderSections(snapshot?.library.sections ?? [], state.selectedSectionId, dom);
-  renderItems(snapshot?.library.search?.items ?? snapshot?.library.items ?? [], dom);
+  renderItems(
+    snapshot?.library.search?.items ?? snapshot?.library.items ?? [],
+    state.selectedItemRatingKey,
+    dom,
+  );
   renderMetadata(state.lastMetadata ?? snapshot?.library.metadata ?? null, dom);
 
   if (dom.plexHomeUserPinInput && dom.plexHomeUserPinInput.value !== state.homeUserPin) {
@@ -81,33 +89,42 @@ function renderPin(
   }
   dom.plexPinElement.replaceChildren();
   if (pin === null) {
+    const idle = document.createElement('p');
+    idle.textContent = 'Start Plex sign-in to request a link code.';
+    dom.plexPinElement.append(idle);
     return;
   }
   const code = document.createElement('strong');
   code.textContent = pin.code;
   const detail = document.createElement('span');
-  detail.textContent = `${pin.claimed ? 'Claimed' : 'Pending'} / ${formatTime(pin.expiresAtMs)}`;
+  detail.textContent = pin.claimed
+    ? 'Code claimed. Checking account status.'
+    : `Use Plex sign-in or the Plex Auth App link flow and enter this code. Expires ${formatTime(pin.expiresAtMs)}.`;
   dom.plexPinElement.append(code, detail);
 }
 
 function renderHomeUsers(users: readonly PlexHomeUserSummary[], dom: RendererDomBindings): void {
-  renderButtonList(dom.plexHomeUsersElement, users, (user) => {
+  renderButtonList(dom.plexHomeUsersElement, users, 'No Plex Home profiles loaded.', (user) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.plexHomeUserId = user.id;
     button.dataset.focusId = createPlexFocusId('plex-dyn-home', user.id);
-    button.textContent = `${user.title}${user.protected ? ' / PIN' : ''}`;
+    button.textContent = `${user.title}${user.protected ? ' / PIN required' : ''}`;
     return button;
   });
 }
 
-function renderServers(servers: readonly PlexServerSummary[], dom: RendererDomBindings): void {
-  renderButtonList(dom.plexServersElement, servers, (server) => {
+function renderServers(
+  servers: readonly PlexServerSummary[],
+  selectedServerId: string | null,
+  dom: RendererDomBindings,
+): void {
+  renderButtonList(dom.plexServersElement, servers, 'No servers loaded.', (server) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.plexServerId = server.serverId;
     button.dataset.focusId = createPlexFocusId('plex-dyn-server', server.serverId);
-    button.dataset.selected = String(server.selected);
+    button.dataset.selected = String(server.serverId === selectedServerId);
     button.textContent = `${server.name} / ${formatServerHealth(server)}`;
     return button;
   });
@@ -118,7 +135,7 @@ function renderSections(
   selectedSectionId: string | null,
   dom: RendererDomBindings,
 ): void {
-  renderButtonList(dom.plexSectionsElement, sections, (section) => {
+  renderButtonList(dom.plexSectionsElement, sections, 'No libraries loaded.', (section) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.plexSectionId = section.id;
@@ -130,12 +147,17 @@ function renderSections(
   });
 }
 
-function renderItems(items: readonly PlexMediaItemSummary[], dom: RendererDomBindings): void {
-  renderButtonList(dom.plexItemsElement, items, (item) => {
+function renderItems(
+  items: readonly PlexMediaItemSummary[],
+  selectedItemRatingKey: string | null,
+  dom: RendererDomBindings,
+): void {
+  renderButtonList(dom.plexItemsElement, items, 'No library items loaded.', (item) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.plexRatingKey = item.ratingKey;
     button.dataset.focusId = createPlexFocusId('plex-dyn-item', item.ratingKey);
+    button.dataset.selected = String(item.ratingKey === selectedItemRatingKey);
     button.textContent = `${item.title} / ${formatMediaType(item.type)} / ${formatYear(item.year)}`;
     return button;
   });
@@ -147,6 +169,9 @@ function renderMetadata(item: PlexMediaItemSummary | null, dom: RendererDomBindi
   }
   dom.plexMetadataElement.replaceChildren();
   if (item === null) {
+    const idle = document.createElement('p');
+    idle.textContent = 'Choose an item to preview metadata.';
+    dom.plexMetadataElement.append(idle);
     return;
   }
   const title = document.createElement('strong');
@@ -166,9 +191,16 @@ function renderMetadata(item: PlexMediaItemSummary | null, dom: RendererDomBindi
 function renderButtonList<TValue>(
   host: HTMLElement | null,
   values: readonly TValue[],
+  emptyText: string,
   createButton: (value: TValue) => HTMLButtonElement,
 ): void {
   if (!host) {
+    return;
+  }
+  if (values.length === 0) {
+    const empty = document.createElement('p');
+    empty.textContent = emptyText;
+    host.replaceChildren(empty);
     return;
   }
   host.replaceChildren(...values.map(createButton));
@@ -184,12 +216,39 @@ function shouldDisableAction(
     case 'cancelPin':
       return anyPending || state.snapshot?.auth.pin === null || state.snapshot?.auth.pin === undefined;
     case 'listLibraryItems':
-      return anyPending || state.selectedSectionId === null;
+      return anyPending || state.selectedServerId === null || state.selectedSectionId === null;
     case 'searchLibrary':
-      return anyPending || state.searchQuery.trim().length === 0;
+      return anyPending || state.selectedServerId === null || state.searchQuery.trim().length === 0;
+    case 'clearMetadata':
+      return anyPending || (state.lastMetadata === null && (state.snapshot?.library.metadata ?? null) === null);
+    case 'clearSearch':
+      return anyPending || (state.searchQuery.trim().length === 0 && (state.snapshot?.library.search ?? null) === null);
+    case 'clearItems':
+      return anyPending || (state.snapshot?.library.items.length ?? 0) === 0;
+    case 'clearSelectedSection':
+      return anyPending || state.selectedSectionId === null;
+    case 'clearSelectedServer':
+      return anyPending || state.selectedServerId === null;
+    case 'clearPinSubflow':
+      return anyPending || (
+        state.homeUserPin.length === 0
+        && (state.snapshot?.auth.pin ?? null) === null
+        && (state.snapshot?.auth.homeUsers.length ?? 0) === 0
+      );
     default:
       return anyPending;
   }
+}
+
+function formatSelectedServerState(
+  servers: readonly PlexServerSummary[],
+  selectedServerId: string | null,
+  fallbackStatus: string,
+): string {
+  if (selectedServerId === null) {
+    return formatStatus(fallbackStatus);
+  }
+  return servers.find((server) => server.serverId === selectedServerId)?.name ?? 'Selected server';
 }
 
 function formatAuthState(value: string): string {

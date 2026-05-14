@@ -6,9 +6,17 @@ import type {
 import {
   applyPlexIpcFailure,
   applyPlexSnapshot,
+  clearPlexRendererItems,
+  clearPlexRendererMetadata,
   clearPlexRendererForCleanup,
+  clearPlexRendererPinSubflow,
+  clearPlexRendererPending,
+  clearPlexRendererSearch,
+  clearPlexRendererSection,
+  clearPlexRendererServer,
   createPlexRuntimeRendererState,
   markPlexRendererOperationPending,
+  selectPlexRendererItem,
   updatePlexRendererInputs,
   type PlexRendererOperation,
   type PlexRuntimeRendererState,
@@ -24,6 +32,13 @@ export interface PlexRuntimeController {
   setSearchQuery: (query: string) => void;
   setHomeUserPin: (pin: string) => void;
   setSelectedSection: (sectionId: string) => void;
+  clearMetadata: () => void;
+  clearSearch: () => void;
+  clearItems: () => void;
+  clearSelectedSection: () => void;
+  clearSelectedServer: () => void;
+  clearPinSubflow: () => Promise<void>;
+  handleBack: () => Promise<boolean>;
   loadSnapshot: () => Promise<void>;
   requestPin: () => Promise<void>;
   pollPin: () => Promise<void>;
@@ -123,6 +138,19 @@ export function createPlexRuntimeController({
     }, pollIntervalMs);
   };
 
+  const commitLocalClear = (nextState: PlexRuntimeRendererState): void => {
+    ++operationEpoch;
+    commit(clearPlexRendererPending(nextState));
+  };
+
+  const hasPendingPinSubflow = (): boolean => (
+    state.pending.requestPin
+    || state.pending.pollPin
+    || state.pending.cancelPin
+    || state.pending.getHomeUsers
+    || state.pending.switchHomeUser
+  );
+
   const controller: PlexRuntimeController = {
     getState: () => state,
     setSearchQuery(query: string): void {
@@ -133,6 +161,63 @@ export function createPlexRuntimeController({
     },
     setSelectedSection(sectionId: string): void {
       commit(updatePlexRendererInputs(state, { selectedSectionId: sanitizeInput(sectionId, 120) }));
+    },
+    clearMetadata(): void {
+      commitLocalClear(clearPlexRendererMetadata(state));
+    },
+    clearSearch(): void {
+      commitLocalClear(clearPlexRendererSearch(state));
+    },
+    clearItems(): void {
+      commitLocalClear(clearPlexRendererItems(state));
+    },
+    clearSelectedSection(): void {
+      commitLocalClear(clearPlexRendererSection(state));
+    },
+    clearSelectedServer(): void {
+      commitLocalClear(clearPlexRendererServer(state));
+    },
+    async clearPinSubflow(): Promise<void> {
+      const pinId = activePinId ?? state.snapshot?.auth.pin?.id ?? null;
+      ++operationEpoch;
+      clearPollTimer();
+      activePinId = null;
+      commit(clearPlexRendererPending(clearPlexRendererPinSubflow(state)));
+      if (pinId !== null && Number.isFinite(pinId) && pinId > 0) {
+        await bridge.cancelPin({ pinId }).catch(() => null);
+      }
+    },
+    async handleBack(): Promise<boolean> {
+      if (state.lastMetadata !== null || (state.snapshot?.library.metadata ?? null) !== null || state.selectedItemRatingKey !== null) {
+        controller.clearMetadata();
+        return true;
+      }
+      if (state.searchQuery.trim().length > 0 || (state.snapshot?.library.search ?? null) !== null) {
+        controller.clearSearch();
+        return true;
+      }
+      if ((state.snapshot?.library.items.length ?? 0) > 0) {
+        controller.clearItems();
+        return true;
+      }
+      if (state.selectedSectionId !== null) {
+        controller.clearSelectedSection();
+        return true;
+      }
+      if (state.selectedServerId !== null) {
+        controller.clearSelectedServer();
+        return true;
+      }
+      if (
+        activePinId !== null
+        || state.snapshot?.auth.pin !== null
+        || state.homeUserPin.length > 0
+        || hasPendingPinSubflow()
+      ) {
+        await controller.clearPinSubflow();
+        return true;
+      }
+      return false;
     },
     async loadSnapshot(): Promise<void> {
       await run('getSnapshot', bridge.getSnapshot, (value) => value, 'Snapshot loaded');
@@ -263,6 +348,7 @@ export function createPlexRuntimeController({
       if (safeRatingKey.length === 0) {
         return;
       }
+      commit(selectPlexRendererItem(state, safeRatingKey));
       await run(
         'getMetadata',
         () => bridge.getMetadata({ ratingKey: safeRatingKey }),

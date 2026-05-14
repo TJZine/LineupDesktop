@@ -220,11 +220,11 @@ const ROUTE_COPY = {
   },
   channelSetup: {
     title: 'Channel setup',
-    kicker: 'Lineup draft',
+    kicker: 'Plex setup',
     tone: 'attention',
-    primaryText: 'Arrange the draft lineup before guide and player previews.',
-    secondaryText: 'Setup steps are renderer-local placeholders with no persistence owner yet.',
-    defaultStatus: 'Channel setup draft is ready for review.',
+    primaryText: 'Connect Plex and inspect library content before lineup authoring is enabled.',
+    secondaryText: 'Server, library, search, and metadata selections are renderer-local in this step.',
+    defaultStatus: 'Plex setup is ready for sign-in or server discovery.',
   },
 } as const satisfies Record<
   AppRouteId,

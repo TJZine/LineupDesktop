@@ -28,8 +28,12 @@ test('static channel setup markup hosts reachable Plex setup controls', () => {
 
   assert.match(root.innerHTML, /data-plex-runtime-panel/u);
   assert.match(root.innerHTML, /data-plex-action="requestPin"/u);
+  assert.match(root.innerHTML, /data-plex-action="clearSelectedServer"/u);
+  assert.match(root.innerHTML, /data-plex-action="clearMetadata"/u);
   assert.match(root.innerHTML, /data-plex-search-query/u);
   assert.match(root.innerHTML, /data-screen="channelSetup"/u);
+  assert.doesNotMatch(root.innerHTML, /Fake channel setup controls|data-setup-action|data-setup-steps|data-channel-draft-list/u);
+  assert.doesNotMatch(root.innerHTML, /https?:|token|serverUri/u);
 });
 
 test('Plex runtime controller applies async setup, server, library, search, and metadata transitions', async () => {
@@ -181,6 +185,119 @@ test('Plex runtime controller treats cleared library snapshots as authoritative'
   assert.deepEqual(calls, ['searchLibrary:pilot:']);
 });
 
+test('Plex runtime controller clears nested setup state before route back', async () => {
+  const calls: string[] = [];
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      getSnapshot: async () => success(snapshotWithMetadataAndSearch()),
+      requestPin: async () => success({ pin: pinSummary(), snapshot: snapshotPinPending() }),
+      cancelPin: async ({ pinId }) => {
+        calls.push(`cancelPin:${pinId}`);
+        return success({ pinId, snapshot: snapshotSignedOut() });
+      },
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  await controller.loadSnapshot();
+  controller.setSearchQuery('pilot');
+
+  assert.equal(await controller.handleBack(), true);
+  assert.equal(controller.getState().lastMetadata, null);
+  assert.equal(controller.getState().selectedItemRatingKey, null);
+
+  assert.equal(await controller.handleBack(), true);
+  assert.equal(controller.getState().searchQuery, '');
+  assert.equal(controller.getState().snapshot?.library.search, null);
+
+  assert.equal(await controller.handleBack(), true);
+  assert.equal(controller.getState().snapshot?.library.items.length, 0);
+
+  assert.equal(await controller.handleBack(), true);
+  assert.equal(controller.getState().selectedSectionId, null);
+
+  assert.equal(await controller.handleBack(), true);
+  assert.equal(controller.getState().selectedServerId, null);
+
+  await controller.requestPin();
+  controller.setHomeUserPin('1234');
+  assert.equal(await controller.handleBack(), true);
+  assert.deepEqual(calls, ['cancelPin:42']);
+  assert.equal(controller.getState().snapshot?.auth.pin, null);
+  assert.equal(controller.getState().homeUserPin, '');
+
+  assert.equal(await controller.handleBack(), false);
+});
+
+test('Plex cleanup clears loaded profile and library snapshot state', async () => {
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      getSnapshot: async () => success(snapshotWithMetadataAndSearch()),
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  await controller.loadSnapshot();
+  assert.equal(controller.getState().snapshot?.auth.homeUsers.length, 1);
+  assert.equal(controller.getState().snapshot?.library.items.length, 1);
+  assert.equal(controller.getState().snapshot?.library.search?.query, 'pilot');
+  assert.equal(controller.getState().snapshot?.library.metadata?.ratingKey, 'rating-1');
+
+  await controller.cleanup();
+
+  assert.equal(controller.getState().snapshot?.auth.homeUsers.length, 0);
+  assert.equal(controller.getState().snapshot?.library.sections.length, 0);
+  assert.equal(controller.getState().snapshot?.library.items.length, 0);
+  assert.equal(controller.getState().snapshot?.library.search, null);
+  assert.equal(controller.getState().snapshot?.library.metadata, null);
+  assert.equal(controller.getState().selectedSectionId, null);
+  assert.equal(controller.getState().selectedServerId, null);
+  assert.equal(controller.getState().selectedItemRatingKey, null);
+  assert.equal(controller.getState().searchQuery, '');
+});
+
+test('Plex clear and back ignore pending setup operation results', async () => {
+  const pendingMetadata = deferred<PlexIpcResult<{
+    item: ReturnType<typeof mediaItems>[number];
+    snapshot: PlexRuntimeSnapshot;
+  }>>();
+  const pendingPin = deferred<PlexIpcResult<{
+    pin: ReturnType<typeof pinSummary>;
+    snapshot: PlexRuntimeSnapshot;
+  }>>();
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      getSnapshot: async () => success(snapshotWithItems()),
+      getMetadata: () => pendingMetadata.promise,
+      requestPin: () => pendingPin.promise,
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  await controller.loadSnapshot();
+  const metadataLoad = controller.getMetadata('rating-1');
+  assert.equal(controller.getState().pending.getMetadata, true);
+  assert.equal(await controller.handleBack(), true);
+  assert.equal(controller.getState().selectedItemRatingKey, null);
+  assert.equal(controller.getState().pending.getMetadata, false);
+  pendingMetadata.resolve(success({ item: mediaItems()[0], snapshot: snapshotWithMetadata() }));
+  await metadataLoad;
+  assert.equal(controller.getState().lastMetadata, null);
+  assert.equal(controller.getState().snapshot?.library.metadata, null);
+
+  const pinRequest = controller.requestPin();
+  assert.equal(controller.getState().pending.requestPin, true);
+  assert.equal(await controller.handleBack(), true);
+  assert.equal(controller.getState().pending.requestPin, false);
+  pendingPin.resolve(success({ pin: pinSummary(), snapshot: snapshotPinPending() }));
+  await pinRequest;
+  assert.equal(controller.getState().snapshot?.auth.pin, null);
+  assert.equal(controller.getState().homeUserPin, '');
+});
+
 test('Plex runtime DOM renders safe summaries and disables invalid actions', () => {
   const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   const documentDouble = { createElement: () => new ElementDouble() };
@@ -192,6 +309,7 @@ test('Plex runtime DOM renders safe summaries and disables invalid actions', () 
       snapshot: snapshotWithMetadata(),
       selectedSectionId: 'section-1',
       selectedServerId: 'server-1',
+      selectedItemRatingKey: 'rating-1',
       searchQuery: '',
       homeUserPin: '',
       statusText: 'Ready',
@@ -203,10 +321,13 @@ test('Plex runtime DOM renders safe summaries and disables invalid actions', () 
     assert.match((dom.plexStatusElement as unknown as ElementDouble).textContent, /Ready/u);
     assert.match(collectText(dom.plexItemsElement as unknown as ElementDouble), /Pilot/u);
     assert.match(collectText(dom.plexMetadataElement as unknown as ElementDouble), /45 min/u);
+    assert.match(collectText(dom.plexPinElement as unknown as ElementDouble), /Plex sign-in/u);
     assert.equal(dom.plexActionButtons.find((button) => button.dataset.plexAction === 'searchLibrary')?.disabled, true);
+    assert.equal(dom.plexActionButtons.find((button) => button.dataset.plexAction === 'clearMetadata')?.disabled, false);
     const renderedText = [
       (dom.plexStatusElement as unknown as ElementDouble).textContent,
       (dom.plexErrorElement as unknown as ElementDouble).textContent,
+      collectText(dom.plexPinElement as unknown as ElementDouble),
       collectText(dom.plexItemsElement as unknown as ElementDouble),
       collectText(dom.plexMetadataElement as unknown as ElementDouble),
     ].join(' ');
@@ -285,7 +406,10 @@ test('Plex cleanup clears stale PIN UI when bridge cancellation is unavailable',
 
       assert.equal(controller.getState().snapshot?.auth.pin, null);
       assert.equal(controller.getState().homeUserPin, '');
-      assert.equal(collectText(dom.plexPinElement as unknown as ElementDouble), '');
+      assert.match(
+        collectText(dom.plexPinElement as unknown as ElementDouble),
+        /Start Plex sign-in/u,
+      );
       assert.equal(dom.plexActionButtons.find((button) => button.dataset.plexAction === 'pollPin')?.disabled, true);
       assert.equal(dom.plexActionButtons.find((button) => button.dataset.plexAction === 'cancelPin')?.disabled, true);
     }
@@ -344,6 +468,7 @@ test('dynamic Plex buttons receive stable focus ids and are reachable by OK focu
       },
       selectedSectionId: 'section/one',
       selectedServerId: 'server/one',
+      selectedItemRatingKey: 'rating/key 1',
       searchQuery: '',
       homeUserPin: '',
       statusText: 'Ready',
@@ -373,6 +498,7 @@ test('dynamic Plex buttons receive stable focus ids and are reachable by OK focu
       snapshot: snapshotSignedOut(),
       selectedSectionId: null,
       selectedServerId: null,
+      selectedItemRatingKey: null,
       searchQuery: '',
       homeUserPin: '',
       statusText: 'Ready',
@@ -425,6 +551,7 @@ test('dynamic Plex Home focus ids do not collide with static home controls', () 
       },
       selectedSectionId: null,
       selectedServerId: null,
+      selectedItemRatingKey: null,
       searchQuery: '',
       homeUserPin: '',
       statusText: 'Ready',
@@ -522,7 +649,18 @@ class FocusElementDouble extends ElementDouble {
 }
 
 function createPlexDomBindings(overrides: Partial<RendererDomBindings> = {}): RendererDomBindings {
-  const actions = ['searchLibrary', 'pollPin', 'cancelPin', 'listLibraryItems'].map((action) => {
+  const actions = [
+    'searchLibrary',
+    'pollPin',
+    'cancelPin',
+    'listLibraryItems',
+    'clearMetadata',
+    'clearSearch',
+    'clearItems',
+    'clearSelectedSection',
+    'clearSelectedServer',
+    'clearPinSubflow',
+  ].map((action) => {
     const button = new ElementDouble();
     button.dataset.plexAction = action;
     return button as unknown as HTMLButtonElement;
@@ -778,6 +916,16 @@ function snapshotWithMetadata(): PlexRuntimeSnapshot {
     library: {
       ...snapshotWithItems().library,
       metadata: mediaItems()[0],
+    },
+  };
+}
+
+function snapshotWithMetadataAndSearch(): PlexRuntimeSnapshot {
+  return {
+    ...snapshotWithMetadata(),
+    library: {
+      ...snapshotWithMetadata().library,
+      search: { query: 'pilot', items: mediaItems() },
     },
   };
 }

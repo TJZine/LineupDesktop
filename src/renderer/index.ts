@@ -236,11 +236,17 @@ async function handleDesktopInput(input: DesktopInputButton): Promise<void> {
     case 'left':
     case 'right':
       focusState = moveRendererFocus(focusRegistry, focusState, input, dom);
+      scrollFocusedSetupControlIntoView();
       return;
     case 'ok':
       clickFocusedRendererElement(focusState, dom);
       return;
     case 'back':
+      if (workflowState.routeState.activeRoute === 'channelSetup' && await plexController.handleBack()) {
+        renderApp();
+        scrollFocusedSetupControlIntoView();
+        return;
+      }
       activateRoute(workflowState.routeState.previousRoute ?? 'player');
       return;
     case 'guide':
@@ -360,6 +366,24 @@ async function applyPlexRuntimeAction(action: ReturnType<typeof readPlexRuntimeA
     case 'searchLibrary':
       await plexController.searchLibrary();
       return;
+    case 'clearMetadata':
+      plexController.clearMetadata();
+      return;
+    case 'clearSearch':
+      plexController.clearSearch();
+      return;
+    case 'clearItems':
+      plexController.clearItems();
+      return;
+    case 'clearSelectedSection':
+      plexController.clearSelectedSection();
+      return;
+    case 'clearSelectedServer':
+      plexController.clearSelectedServer();
+      return;
+    case 'clearPinSubflow':
+      await plexController.clearPinSubflow();
+      return;
     case null:
       return;
   }
@@ -380,11 +404,23 @@ function renderApp(): void {
     focusState = focusRegistry.focusTarget(focusState, focusState.activeId).state;
   }
   renderRendererFocus(focusState, dom);
+  scrollFocusedSetupControlIntoView();
 }
 
 function focusRendererElement(element: HTMLElement): void {
   const focusId = element.dataset.focusId;
   if (focusId !== undefined) {
     focusState = focusRendererTarget(focusRegistry, focusState, focusId, dom);
+    scrollFocusedSetupControlIntoView();
   }
+}
+
+function scrollFocusedSetupControlIntoView(): void {
+  if (workflowState.routeState.activeRoute !== 'channelSetup' || focusState.activeId === null) {
+    return;
+  }
+  const activeElement = document.querySelector<HTMLElement>(
+    `[data-focus-id="${CSS.escape(focusState.activeId)}"]`,
+  );
+  activeElement?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }

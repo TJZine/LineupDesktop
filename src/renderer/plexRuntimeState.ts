@@ -15,6 +15,7 @@ export interface PlexRuntimeRendererState {
   snapshot: PlexRuntimeSnapshot | null;
   selectedSectionId: string | null;
   selectedServerId: string | null;
+  selectedItemRatingKey: string | null;
   searchQuery: string;
   homeUserPin: string;
   statusText: string;
@@ -46,6 +47,7 @@ export function createPlexRuntimeRendererState(): PlexRuntimeRendererState {
     snapshot: null,
     selectedSectionId: null,
     selectedServerId: null,
+    selectedItemRatingKey: null,
     searchQuery: '',
     homeUserPin: '',
     statusText: 'Not loaded',
@@ -93,12 +95,26 @@ export function clearPlexRendererForCleanup(
         ...state.snapshot.auth,
         state: state.snapshot.auth.state === 'pin-pending' ? 'signed-out' : state.snapshot.auth.state,
         pin: null,
+        homeUsers: [],
+      },
+      library: {
+        ...state.snapshot.library,
+        sections: [],
+        selectedSectionId: null,
+        items: [],
+        search: null,
+        metadata: null,
       },
     } satisfies PlexRuntimeSnapshot;
   return {
     ...clearPlexRendererPending(state, statusText),
     snapshot,
     homeUserPin: '',
+    selectedSectionId: null,
+    selectedServerId: null,
+    selectedItemRatingKey: null,
+    searchQuery: '',
+    lastMetadata: null,
   };
 }
 
@@ -112,6 +128,7 @@ export function applyPlexSnapshot(
     snapshot,
     selectedSectionId: snapshot.library.selectedSectionId,
     selectedServerId: snapshot.servers.selected?.serverId ?? null,
+    selectedItemRatingKey: snapshot.library.metadata?.ratingKey ?? null,
     errorText: snapshot.lastError === null ? null : sanitizePlexRuntimeError(snapshot.lastError),
     statusText,
     lastMetadata: snapshot.library.metadata,
@@ -141,6 +158,132 @@ export function updatePlexRendererInputs(
     searchQuery: input.searchQuery ?? state.searchQuery,
     homeUserPin: input.homeUserPin ?? state.homeUserPin,
     selectedSectionId: input.selectedSectionId ?? state.selectedSectionId,
+  };
+}
+
+export function selectPlexRendererItem(
+  state: PlexRuntimeRendererState,
+  ratingKey: string,
+): PlexRuntimeRendererState {
+  return {
+    ...state,
+    selectedItemRatingKey: ratingKey,
+  };
+}
+
+export function clearPlexRendererMetadata(
+  state: PlexRuntimeRendererState,
+  statusText = 'Metadata closed',
+): PlexRuntimeRendererState {
+  return {
+    ...state,
+    selectedItemRatingKey: null,
+    lastMetadata: null,
+    statusText,
+    snapshot: state.snapshot === null
+      ? null
+      : {
+        ...state.snapshot,
+        library: {
+          ...state.snapshot.library,
+          metadata: null,
+        },
+      },
+  };
+}
+
+export function clearPlexRendererSearch(
+  state: PlexRuntimeRendererState,
+  statusText = 'Search cleared',
+): PlexRuntimeRendererState {
+  return {
+    ...clearPlexRendererMetadata(state, statusText),
+    searchQuery: '',
+    snapshot: state.snapshot === null
+      ? null
+      : {
+        ...state.snapshot,
+        library: {
+          ...state.snapshot.library,
+          search: null,
+          metadata: null,
+        },
+      },
+  };
+}
+
+export function clearPlexRendererItems(
+  state: PlexRuntimeRendererState,
+  statusText = 'Items cleared',
+): PlexRuntimeRendererState {
+  return {
+    ...clearPlexRendererSearch(state, statusText),
+    snapshot: state.snapshot === null
+      ? null
+      : {
+        ...state.snapshot,
+        library: {
+          ...state.snapshot.library,
+          items: [],
+          search: null,
+          metadata: null,
+        },
+      },
+  };
+}
+
+export function clearPlexRendererSection(
+  state: PlexRuntimeRendererState,
+  statusText = 'Library selection cleared',
+): PlexRuntimeRendererState {
+  return {
+    ...clearPlexRendererItems(state, statusText),
+    selectedSectionId: null,
+    snapshot: state.snapshot === null
+      ? null
+      : {
+        ...state.snapshot,
+        library: {
+          ...state.snapshot.library,
+          selectedSectionId: null,
+          items: [],
+          search: null,
+          metadata: null,
+        },
+      },
+  };
+}
+
+export function clearPlexRendererServer(
+  state: PlexRuntimeRendererState,
+  statusText = 'Server selection cleared for this setup view',
+): PlexRuntimeRendererState {
+  return {
+    ...clearPlexRendererSection(state, statusText),
+    selectedServerId: null,
+  };
+}
+
+export function clearPlexRendererPinSubflow(
+  state: PlexRuntimeRendererState,
+  statusText = 'Sign-in flow cleared',
+): PlexRuntimeRendererState {
+  const snapshot = state.snapshot === null
+    ? null
+    : {
+      ...state.snapshot,
+      auth: {
+        ...state.snapshot.auth,
+        pin: null,
+        homeUsers: [],
+        state: state.snapshot.auth.state === 'pin-pending' ? 'signed-out' : state.snapshot.auth.state,
+      },
+    } satisfies PlexRuntimeSnapshot;
+  return {
+    ...state,
+    snapshot,
+    homeUserPin: '',
+    statusText,
   };
 }
 

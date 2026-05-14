@@ -185,7 +185,13 @@ export type PlexRuntimeActionId =
   | 'refreshServers'
   | 'listLibrarySections'
   | 'listLibraryItems'
-  | 'searchLibrary';
+  | 'searchLibrary'
+  | 'clearPinSubflow'
+  | 'clearSelectedServer'
+  | 'clearSelectedSection'
+  | 'clearItems'
+  | 'clearSearch'
+  | 'clearMetadata';
 
 export function readPlexRuntimeActionId(value: string | undefined): PlexRuntimeActionId | null {
   switch (value) {
@@ -199,6 +205,12 @@ export function readPlexRuntimeActionId(value: string | undefined): PlexRuntimeA
     case 'listLibrarySections':
     case 'listLibraryItems':
     case 'searchLibrary':
+    case 'clearPinSubflow':
+    case 'clearSelectedServer':
+    case 'clearSelectedSection':
+    case 'clearItems':
+    case 'clearSearch':
+    case 'clearMetadata':
       return value;
     default:
       return null;

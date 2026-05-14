@@ -7,6 +7,18 @@
   padding: var(--space-12);
 }
 
+.screen[data-screen="channelSetup"] {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding: var(--space-12);
+}
+
+.screen[data-screen="channelSetup"] .screen__content {
+  align-content: start;
+  width: min(1120px, 100%);
+  min-height: min-content;
+}
+
 .screen__content p:last-child {
   color: var(--color-text-muted);
   font-size: 16px;
@@ -204,11 +216,10 @@ dd {
 .plex-runtime {
   display: grid;
   gap: var(--space-4);
-  max-height: min(46vh, 520px);
+  max-height: none;
   min-width: 0;
   margin-top: var(--space-3);
   padding: var(--space-5);
-  overflow: auto;
 }
 
 .plex-runtime__header {
@@ -232,6 +243,26 @@ dd {
   font-size: 14px;
 }
 
+.plex-runtime__error {
+  max-width: min(360px, 100%);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.plex-runtime__stage {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding-block: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.plex-runtime__stage h4 {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
 .plex-runtime__summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -247,6 +278,7 @@ dd {
 }
 
 .plex-runtime input {
+  width: min(260px, 100%);
   min-width: 120px;
   min-height: var(--button-min-height);
   border: 1px solid var(--color-border);
@@ -295,6 +327,17 @@ dd {
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.plex-runtime__controls button,
+.plex-runtime__list button {
+  overflow-wrap: anywhere;
+}
+
+.plex-runtime__list p,
+.plex-runtime__pin p {
+  color: var(--color-text-muted);
+  font-size: 14px;
 }
 
 .plex-runtime__list button[data-selected="true"] {
