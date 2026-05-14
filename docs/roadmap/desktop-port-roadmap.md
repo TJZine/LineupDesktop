@@ -214,6 +214,8 @@ after that shell proves the main/preload/renderer boundary.
    `docs/plans/`. The plan should cover the whole item and split implementation
    into bounded execution units only when that improves reviewability.
 6. Keep implementation limited to the plan's current approved execution unit.
+   Within that boundary, prefer a vertical product flow that can be manually
+   proven over preserving fake route scaffolds for incremental test convenience.
 7. On closeout, update this roadmap only for observed status changes. Archive
    completed full plan bodies locally after durable conclusions are reflected in
    tracked docs.
@@ -223,6 +225,20 @@ after that shell proves the main/preload/renderer boundary.
 
 Do not use this roadmap to batch multiple product slices into one broad
 implementation. Its purpose is sequencing and dependency clarity.
+
+## MVP Build Posture
+
+The fake-backed renderer shell and smoke fixtures were valuable for RD-13
+through RD-19 Electron, overlay, packaging, and diagnostics proof. They are not
+the product target. From RD-22 onward, fake UI in a reachable app route is
+technical debt unless it is explicitly part of a reviewed dev-only harness.
+
+When a roadmap slice owns a user workflow, its plan should replace the visible
+fake path with the intended Lineup Desktop flow inside the approved security and
+process boundaries. Tests may keep fake data, injected transports, and smoke
+fixtures, but the app route should move toward the real webOS-informed product
+journey: account setup, server/library selection, channel creation, guide
+runtime, and playback.
 
 ## Platform Proof Convention
 
@@ -1340,6 +1356,9 @@ Objective:
 - Wire the smallest real Plex runtime needed to make Desktop usable for account
   setup and library selection: live PIN/profile/Plex Home sign-in, server
   discovery/restore, and renderer-safe library browse/search/metadata UI.
+- Replace or isolate the RD-13 fake channel-setup surface so the reachable
+  setup route proves the real Plex setup journey rather than a placeholder panel
+  embedded below draft controls.
 - Keep transport, tokens, selected connection details, app paths, and
   diagnostics in main-owned custody. Renderer receives only reviewed safe
   summaries through a narrow planned bridge/API.
@@ -1359,6 +1378,9 @@ Exit gates:
   contract and transport boundaries.
 - Live Plex auth/profile, discovery/restore, and library browse/search are
   observed through redaction-safe Windows proof.
+- The channel setup route no longer exposes fake setup summary, draft controls,
+  placeholder setup steps, or smoke-only Plex debug controls in the live product
+  path.
 - Renderer-facing payloads and diagnostics exclude credentials, auth headers,
   tokenized URLs, raw Plex payloads, connection details, local paths, and
   private account/server/media names.
@@ -1392,6 +1414,8 @@ Objective:
   channel-authoring and main-owned persistence owners.
 - Add the minimum renderer-safe channel setup, settings recovery, and restart
   validation needed for a usable MVP.
+- Continue the same real setup journey from RD-22 instead of reintroducing fake
+  draft channels or compatibility scaffolds into the reachable route.
 - Do not broaden live Plex browsing beyond the RD-22 contract, start production
   playback, or add package/release behavior.
 
@@ -1707,6 +1731,8 @@ Fix immediately when discovered in touched scope:
 - Storage corruption.
 - Deterministic scheduler regression.
 - Plex auth, profile, server, library, or stream blocker.
+- Fake/scaffold UI still reachable in a route owned by the current real product
+  slice.
 - PMS transcode cleanup failure.
 - Native helper crash that takes down the Electron UI.
 - Architecture boundary violation.
