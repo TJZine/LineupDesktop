@@ -228,6 +228,21 @@ native-helper/media-binary markers. RD-18 Unit 1 adds no package script,
 dependency, lockfile, signing config, update metadata, native media
 redistribution, Plex behavior, renderer/preload/IPC contract, runtime behavior,
 or public release artifact.
+RD-19 is complete for internal alpha/beta validation. The validation artifact is
+`docs/development/rd-19-internal-validation-checklist.md`. Units A and B added
+the redacted checklist and checklist-shape verifier, Unit C reran Windows x64
+internal package proof, and Unit D executed the full RD-19 validation matrix on
+Windows x64 using current fake-backed UI, injected/domain, package,
+diagnostics, Electron smoke, and dev-only harness proof surfaces. Unit D
+recorded only redacted summaries and blocker rows: auth, server selection,
+channel creation, playback, switching, subtitles/audio, EPG, settings,
+fullscreen, multi-monitor, crash recovery, diagnostics export, and
+install/delete of the unpacked package have current passed proof for their
+limited fake/injected/package/diagnostics surfaces; sleep/wake and real long
+playback remain blocked and classified. RD-19 does not add live Plex transport,
+renderer Plex APIs, production native playback, persistence IPC, signing/update
+behavior, installer behavior, public release readiness, source/tool/package
+script/dependency/lockfile changes, or tracked generated artifacts.
 
 ## Product Invariants
 

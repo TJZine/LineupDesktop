@@ -1189,7 +1189,14 @@ Exit gates:
 
 ### RD-19 Internal Alpha/Beta Validation
 
-Status: not started.
+Status: complete. RD-19 Units A, B, C, and D are implemented, verified, and
+read-only reviews reported no material findings. The tracked validation
+artifact is `docs/development/rd-19-internal-validation-checklist.md`. Unit D
+executed the full RD-19 matrix on Windows x64 using current fake-backed,
+injected, package, diagnostics, and dev-only harness proof surfaces. Sleep/wake
+and real long playback remain blocked and classified; no live Plex, production
+native playback, signing/update, installer, public release, source, tool,
+package-script, dependency, or lockfile behavior was added or claimed.
 
 Depends on:
 
@@ -1202,11 +1209,14 @@ Objective:
 
 Exit gates:
 
-- Full verification passes.
+- Full verification passes. RD-19 closeout observed `npm run verify` passing on
+  2026-05-14 after the redacted validation checklist, blocker log, roadmap, and
+  current-state updates.
 - Manual smoke matrix covers auth, server selection, channel creation, playback,
   switching, subtitles/audio, EPG, settings, sleep/wake, fullscreen,
   multi-monitor, crash recovery, diagnostics export, install/uninstall, and long
-  playback.
+  playback. RD-19 Unit D records each area as passed or blocked in the
+  validation checklist without raw evidence.
 - Known issues are classified as release blocker, beta blocker, or deferred.
 
 ### RD-20 Original Lineup Reference Compatibility Pass
