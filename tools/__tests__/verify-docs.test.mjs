@@ -364,6 +364,28 @@ test('verifyDocs rejects RD-19 checklist matrix and template drift', () => {
   assert(errors.some((error) => error.includes('missing RD-19 blocker log template required safety content')));
 });
 
+test('verifyDocs requires multi-token RD-19 Windows proof commands on one line', () => {
+  const root = makeFixture({ complete: true });
+  const checklistPath = path.join(root, 'docs/development/rd-19-internal-validation-checklist.md');
+  const content = fs.readFileSync(checklistPath, 'utf8');
+  fs.writeFileSync(
+    checklistPath,
+    content.replace(
+      'node tools/verify-windows-internal-package.mjs --package <ignored-package-root> --manifest <ignored-provenance-manifest>',
+      [
+        'node tools/verify-windows-internal-package.mjs --package <ignored-package-root>',
+        '--manifest <ignored-provenance-manifest>',
+      ].join('\n'),
+    ),
+  );
+
+  const errors = verifyDocs(root);
+
+  assert(errors.some((error) => (
+    error.includes('missing RD-19 Windows x64 proof requirement: internal Windows package verifier')
+  )));
+});
+
 test('verifyDocs rejects plan standard missing dependency governance', () => {
   const root = makeFixture({ complete: true });
   fs.writeFileSync(path.join(root, 'docs/agentic/plan-authoring-standard.md'), [

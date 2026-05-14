@@ -14,6 +14,7 @@ import {
   createStagedAppPackage,
   formatChecksumRows,
   isNormalizedRelativePackagePath,
+  listFiles,
   parseChecksumRows,
 } from './package-windows-internal.mjs';
 import { scanFileContent } from './verify-redaction.mjs';
@@ -116,7 +117,11 @@ export function verifyWindowsInternalPackage(options) {
     errors.push(`Manifest path must be ${PROVENANCE_RELATIVE_PATH} inside the package root.`);
   }
 
+  const fileListErrorCount = errors.length;
   const files = safeListFiles(packageRoot, errors);
+  if (errors.length > fileListErrorCount) {
+    return errors;
+  }
   const fileSet = new Set(files);
   for (const requiredFile of expectedTopLevelFiles) {
     if (!fileSet.has(requiredFile)) {
@@ -138,8 +143,23 @@ export function verifyWindowsInternalPackage(options) {
   verifyStagedAppPackage(root, packageRoot, errors);
   verifyBlockedDirectories(files, errors);
   const provenance = verifyJsonEvidence(packageRoot, errors);
-  verifyChecksumManifest(packageRoot, errors);
-  verifyProvenanceArtifactChecksums(packageRoot, provenance, errors);
+  const artifactChecksumRows = safeComputeArtifactChecksums(packageRoot, errors, { exclude: new Set() });
+  if (!artifactChecksumRows) {
+    return errors;
+  }
+  verifyChecksumManifest(
+    packageRoot,
+    errors,
+    artifactChecksumRows.filter((row) => row.path !== CHECKSUMS_RELATIVE_PATH),
+  );
+  verifyProvenanceArtifactChecksums(
+    packageRoot,
+    provenance,
+    errors,
+    artifactChecksumRows.filter((row) => (
+      row.path !== PROVENANCE_RELATIVE_PATH && row.path !== CHECKSUMS_RELATIVE_PATH
+    )),
+  );
   verifyRedactionSafeEvidence(packageRoot, errors);
   verifyNoSigningMaterialEvidence(packageRoot, errors);
 
@@ -260,7 +280,7 @@ export function verifyJsonEvidence(packageRoot, errors) {
   return provenance;
 }
 
-export function verifyChecksumManifest(packageRoot, errors) {
+export function verifyChecksumManifest(packageRoot, errors, expectedRows = undefined) {
   const checksumPath = path.join(packageRoot, CHECKSUMS_RELATIVE_PATH);
   let actualRows;
   try {
@@ -270,10 +290,13 @@ export function verifyChecksumManifest(packageRoot, errors) {
     return;
   }
 
-  const expectedRows = computeArtifactChecksums(packageRoot, {
+  const expectedChecksumRows = expectedRows ?? safeComputeArtifactChecksums(packageRoot, errors, {
     exclude: new Set([CHECKSUMS_RELATIVE_PATH]),
   });
-  if (formatChecksumRows(actualRows) !== formatChecksumRows(expectedRows)) {
+  if (!expectedChecksumRows) {
+    return;
+  }
+  if (formatChecksumRows(actualRows) !== formatChecksumRows(expectedChecksumRows)) {
     errors.push('checksums.sha256 must match staged package files in deterministic path order.');
   }
   for (const row of actualRows) {
@@ -283,17 +306,20 @@ export function verifyChecksumManifest(packageRoot, errors) {
   }
 }
 
-export function verifyProvenanceArtifactChecksums(packageRoot, provenance, errors) {
+export function verifyProvenanceArtifactChecksums(packageRoot, provenance, errors, expectedRows = undefined) {
   if (!provenance) {
     return;
   }
 
-  const expectedRows = computeArtifactChecksums(packageRoot, {
+  const expectedProvenanceRows = expectedRows ?? safeComputeArtifactChecksums(packageRoot, errors, {
     exclude: new Set([PROVENANCE_RELATIVE_PATH, CHECKSUMS_RELATIVE_PATH]),
   });
+  if (!expectedProvenanceRows) {
+    return;
+  }
   if (
     Array.isArray(provenance.artifactFileChecksums) &&
-    formatChecksumRows(provenance.artifactFileChecksums) !== formatChecksumRows(expectedRows)
+    formatChecksumRows(provenance.artifactFileChecksums) !== formatChecksumRows(expectedProvenanceRows)
   ) {
     errors.push(
       'Provenance artifactFileChecksums must match staged package files before provenance and checksums are written.',
@@ -354,10 +380,19 @@ export function verifyNoSigningMaterialEvidence(packageRoot, errors) {
 
 function safeListFiles(packageRoot, errors) {
   try {
-    return computeArtifactChecksums(packageRoot, { exclude: new Set() }).map((row) => row.path);
+    return listFiles(packageRoot);
   } catch (error) {
     errors.push(error instanceof Error ? error.message : 'Unable to inspect package files.');
     return [];
+  }
+}
+
+function safeComputeArtifactChecksums(packageRoot, errors, options) {
+  try {
+    return computeArtifactChecksums(packageRoot, options);
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : 'Unable to inspect package files.');
+    return undefined;
   }
 }
 

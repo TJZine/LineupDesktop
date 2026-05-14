@@ -860,8 +860,12 @@ function checkRd19ValidationChecklist(root, errors) {
   }
 
   const windowsProofSection = markdownSection(content, '## Required Windows x64 Proof Commands') ?? '';
+  const windowsProofLines = windowsProofSection.split(/\r?\n/u);
   for (const { label, patterns } of rd19WindowsProofRequirements) {
-    if (!patterns.every((pattern) => pattern.test(windowsProofSection))) {
+    const hasMatchingCommand = windowsProofLines.some((line) => (
+      patterns.every((pattern) => pattern.test(line))
+    ));
+    if (!hasMatchingCommand) {
       errors.push(`${rd19ValidationChecklistPath}: missing RD-19 Windows x64 proof requirement: ${label}`);
     }
   }

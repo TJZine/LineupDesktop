@@ -354,6 +354,25 @@ test('verifier validates provenance artifact checksums against staged files', as
   assert.equal(errors.some((error) => error.includes('checksums.sha256 must match')), false);
 });
 
+test('verifier reports package output symlinks without continuing checksum traversal', async (t) => {
+  const { root, packageRoot } = await makeVerifiedPackage(t);
+  const linkPath = path.join(packageRoot, 'linked-exe');
+  try {
+    fs.symlinkSync(path.join(packageRoot, 'LineupDesktop.exe'), linkPath, 'file');
+  } catch (error) {
+    t.skip(`symlink creation unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+
+  const errors = verifyWindowsInternalPackage({
+    root,
+    packageRoot,
+    manifestPath: path.join(packageRoot, PROVENANCE_RELATIVE_PATH),
+  });
+
+  assert.deepEqual(errors, ['Refusing to inspect symlink in package output: linked-exe']);
+});
+
 test('packageWindowsInternal records runtime versions from the staged runtime directory', async (t) => {
   const root = makeFixtureRepo(t);
   const defaultRuntimeDir = path.join(root, 'node_modules/electron/dist');
