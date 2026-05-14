@@ -262,11 +262,13 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-20 are complete enough to route the next Tier 3 session to
-RD-21 Future Platform Review through the quality loop. Do not import
-additional original Lineup product code or broaden live Plex/native playback
-runtime behavior until a reviewed product slice plan explicitly authorizes a
-bounded change.
+RD-01 through RD-21 are complete enough to route the next Tier 3 session to
+RD-22 Live Plex Auth, Discovery, And Library Runtime UI through the quality
+loop. RD-21 superseded the former RD-21 Future Platform Review route and
+deferred platform expansion until after product-parity/MVP completion. Do not
+import additional original Lineup product code or broaden live Plex/native
+playback runtime behavior until a reviewed product slice plan explicitly
+authorizes a bounded change.
 
 ## Roadmap Checklist
 
@@ -1272,14 +1274,358 @@ Exit gates:
 - Final read-only implementation review is clean, and the completed full plan
   body is archived locally under `docs/runs/archive/plans/`.
 
-### RD-21 Future Platform Review
+### RD-21 Original Lineup Product Parity Review And MVP Completion Roadmap
+
+Status: complete. Plan review and Unit 1 through Unit 4 implementation reviews
+are clean; final closeout verification and review closed RD-21 as
+docs/product-roadmap work only. RD-21 produced the product parity matrix,
+Windows UI proof plan, and revised MVP completion roadmap without implementing
+runtime behavior. The completed plan body is archived locally under
+`docs/runs/archive/plans/` and removed from tracked active plans.
+
+Depends on:
+
+- RD-19 Internal Alpha/Beta Validation complete.
+- RD-20 Original Lineup Reference Compatibility Pass complete and reviewed.
+
+Objective:
+
+- Replace the previous Future Platform Review route with a conservative
+  product-parity and MVP completion correction.
+- Classify original Lineup workflows against current Desktop proof in
+  `docs/product/lineup-product-parity-matrix.md`.
+- Define redaction-safe Windows UI/package/fullscreen/native-playback proof
+  expectations in `docs/development/windows-ui-proof-plan.md`.
+- Sequence missing and blocked parity areas into reviewed MVP implementation
+  slices before polish, public release, or platform expansion.
+
+Exit gates:
+
+- Product parity rows identify evidence, owner, blocker type, platform proof
+  label, required next roadmap slice, freshness, and replan trigger.
+- Future Platform Review is deferred behind product-parity and MVP completion.
+- No fake-backed UI, domain-only proof, injected transport tests,
+  harness/dev-only proof, docs/provenance proof, or missing Windows UI evidence
+  is promoted to `complete`.
+- `npm run verify:docs`, `npm run verify:redaction`, and `git diff --check`
+  pass after tracked RD-21 edits.
+- Next handoff routes to RD-22 Live Plex Auth, Discovery, And Library Runtime
+  UI through the Tier 3 feature-quality loop.
+
+Stop and replan if:
+
+- Roadmap ordering requires source/runtime implementation during RD-21.
+- A row or slice cannot name an owner, dependency, platform proof label, exit
+  gate, and stop/replan trigger.
+- A proposed route broadens live Plex, native playback, persistence IPC,
+  package/release, signing/update, renderer privilege, or public release scope
+  without a reviewed quality-loop plan.
+
+### RD-22 Live Plex Auth, Discovery, And Library Runtime UI
+
+Status: not started. This is the first next implementation slice after RD-21
+closeout.
+
+Depends on:
+
+- RD-21 complete with clean review and verified roadmap/parity artifacts.
+- RD-09 secure storage and selected-server custody complete.
+- RD-10 Plex auth, discovery, and library domain seams complete.
+- RD-13 renderer app shell and settings/channel-setup surfaces complete.
+- RD-17 diagnostics/redaction surfaces complete enough to report sanitized
+  live-runtime failures.
+
+Objective:
+
+- Wire the smallest real Plex runtime needed to make Desktop usable for account
+  setup and library selection: live PIN/profile/Plex Home sign-in, server
+  discovery/restore, and renderer-safe library browse/search/metadata UI.
+- Keep transport, tokens, selected connection details, app paths, and
+  diagnostics in main-owned custody. Renderer receives only reviewed safe
+  summaries through a narrow planned bridge/API.
+- Do not create channels, persist channel settings, start playback, add
+  production native helper behavior, or change package/release behavior in this
+  slice.
+
+Platform proof label:
+
+- `Windows proof required before closeout` for live sign-in, profile/server
+  picker, selected-server restore, library browse/search, sanitized failure
+  reporting, and credential availability.
+
+Exit gates:
+
+- Reviewed quality-loop plan authorizes the exact main/preload/renderer
+  contract and transport boundaries.
+- Live Plex auth/profile, discovery/restore, and library browse/search are
+  observed through redaction-safe Windows proof.
+- Renderer-facing payloads and diagnostics exclude credentials, auth headers,
+  tokenized URLs, raw Plex payloads, connection details, local paths, and
+  private account/server/media names.
+- `npm run verify` passes unless the reviewed plan names a narrower verified
+  surface with justification.
+- Implementation review is clean.
+
+Stop and replan if:
+
+- Live transport needs renderer custody of secrets, broad RPC, raw channel
+  strings, tokenized URLs, raw Plex payloads, or privileged Electron/Node access.
+- Real Plex behavior requires channel persistence, production playback, package
+  changes, or public-release claims to prove this slice.
+- Windows proof would require storing raw/private evidence in tracked docs.
+
+### RD-23 Live Channel Setup And Runtime Persistence
 
 Status: not started.
 
 Depends on:
 
-- Windows MVP stabilized through RD-19.
-- RD-20 Original Lineup Reference Compatibility Pass complete and reviewed.
+- RD-22 complete and reviewed.
+- RD-09 persistence boundary complete.
+- RD-11 scheduler/channel/content domains and channel persistence seams
+  complete.
+- RD-13 channel setup and settings UI surfaces complete.
+
+Objective:
+
+- Turn live library data into persisted Desktop channels through the reviewed
+  channel-authoring and main-owned persistence owners.
+- Add the minimum renderer-safe channel setup, settings recovery, and restart
+  validation needed for a usable MVP.
+- Do not broaden live Plex browsing beyond the RD-22 contract, start production
+  playback, or add package/release behavior.
+
+Platform proof label:
+
+- `Windows proof required before closeout` for live library-backed channel
+  creation, persisted settings/channel recovery, restart behavior, and
+  redaction-safe failure states.
+
+Exit gates:
+
+- Channel setup commits real library-backed channels through reviewed owners.
+- Restart/recovery proves persisted channels and settings without exposing
+  private Plex, path, or credential details to renderer or tracked docs.
+- `npm run verify` passes unless the reviewed plan names a narrower verified
+  surface with justification.
+- Implementation review is clean.
+
+Stop and replan if:
+
+- The slice needs broad persistence IPC, renderer-owned storage, raw Plex
+  payloads, backup/restore, production playback, or package changes.
+- Channel-authoring or repository hotspots must grow beyond reviewed
+  file-shape guardrails.
+
+### RD-24 Scheduler-Backed Guide And MVP Channel Runtime
+
+Status: not started.
+
+Depends on:
+
+- RD-23 complete and reviewed.
+- RD-11 scheduler/channel/content domains complete.
+- RD-12 Plex-to-player runtime composition seams complete.
+- RD-13 guide, route, mini-guide, and overlay surfaces complete.
+
+Objective:
+
+- Replace fake guide/EPG data with persisted-channel schedule composition and
+  renderer-safe now-playing, mini-guide, channel badge, route, and channel
+  switch state.
+- Prove current-channel and schedule transitions without claiming production
+  native playback readiness.
+
+Platform proof label:
+
+- `Windows proof required before closeout` for guide navigation, schedule
+  refresh, channel switching UI state, focus recovery, and overlay data backed
+  by persisted channels.
+
+Exit gates:
+
+- Guide/EPG, now-playing, mini-guide, and channel badge reflect persisted
+  channels rather than fake data.
+- Channel switch requests resolve to reviewed runtime state and remain
+  renderer-safe.
+- `npm run verify` passes unless the reviewed plan names a narrower verified
+  surface with justification.
+- Implementation review is clean.
+
+Stop and replan if:
+
+- The slice must solve production native playback, real media loading,
+  subtitle/audio/HDR runtime behavior, or broad renderer Plex API changes.
+- Persisted-channel or runtime composition behavior cannot be proven without
+  exposing private media/server details.
+
+### RD-25 Production Native Playback MVP
+
+Status: not started.
+
+Depends on:
+
+- RD-24 complete and reviewed.
+- RD-07 player adapter/process seam complete.
+- RD-08 stream policy complete.
+- RD-12 Plex-to-player runtime composition seams complete.
+- RD-14 through RD-16 native-presentation and media-policy harness proof
+  complete as dev-only prerequisites.
+
+Objective:
+
+- Implement the first production native-helper playback path for live
+  Plex-backed scheduled media: direct play/direct stream/transcode decision
+  handoff, load, stop, switch, fullscreen, helper crash recovery, and PMS
+  cleanup.
+- Keep native handles, raw URLs, headers, playback descriptors, helper internals,
+  and native logs out of renderer-facing contracts and tracked docs.
+
+Platform proof label:
+
+- `Windows proof required before closeout` for production native playback,
+  switching, stop, fullscreen, crash recovery, cleanup, and redaction.
+
+Exit gates:
+
+- Reviewed plan authorizes the native-helper boundary, packaging expectations
+  for local proof, and exact playback verification surface.
+- Live Plex-backed playback works for the MVP modes named by the plan and
+  unsupported modes fail safely.
+- Redacted Windows proof covers playback lifecycle, fullscreen, crash recovery,
+  cleanup, and no forbidden evidence.
+- `npm run verify` passes unless the reviewed plan names a narrower verified
+  surface with justification.
+- Implementation review is clean.
+
+Stop and replan if:
+
+- The implementation needs dependency, native/media binary redistribution,
+  signing/update, installer, public release, or broad package-policy changes.
+- Playback proof would require exposing tokenized URLs, headers, native handles,
+  raw helper logs, raw Plex payloads, or private media details.
+- Player/runtime hotspots must grow beyond reviewed file-shape guardrails.
+
+### RD-26 Runtime Media Options And Playback Quality
+
+Status: not started.
+
+Depends on:
+
+- RD-25 complete and reviewed.
+- RD-16 subtitle, audio, and HDR policy/resolver hardening complete.
+
+Objective:
+
+- Prove runtime subtitle selection, subtitle off/default/forced handling, audio
+  fallback/selection, HDR behavior, and renderer-safe media option UI over the
+  production playback path.
+
+Platform proof label:
+
+- `Windows proof required before closeout` for runtime media option selection,
+  fallback behavior, and video/UI composition.
+
+Exit gates:
+
+- Runtime subtitle/audio/HDR behavior is proven beyond fixtures and policy
+  tests for the MVP sample matrix named by the reviewed plan.
+- Unsupported or unknown media capabilities remain explicit and renderer-safe.
+- `npm run verify` passes unless the reviewed plan names a narrower verified
+  surface with justification.
+- Implementation review is clean.
+
+Stop and replan if:
+
+- Proof requires expanding native/media redistribution, codec claims,
+  dependency surface, or public release posture.
+- Track ids, media metadata, or diagnostics would expose private Plex/native
+  data.
+
+### RD-27 Windows MVP UI Proof And Operational Soak
+
+Status: not started.
+
+Depends on:
+
+- RD-22 through RD-26 complete and reviewed.
+- `docs/development/windows-ui-proof-plan.md` current.
+
+Objective:
+
+- Run the redaction-safe Windows proof matrix for the real MVP: navigation,
+  focus, keyboard/remote-like input, player overlays, fullscreen, multi-monitor,
+  UI over video, sleep/wake, long playback, diagnostics export, and recovery.
+
+Platform proof label:
+
+- `Windows proof required before closeout`.
+
+Exit gates:
+
+- The Windows proof matrix records pass/fail/blocked summaries without raw
+  screenshots, logs, paths, account/server/media names, tokens, native handles,
+  package trees, or private local details.
+- Blockers are classified against the parity matrix taxonomy and routed to the
+  smallest follow-up slice.
+- `npm run verify:docs`, `npm run verify:redaction`, `git diff --check`, and
+  any reviewed runtime verifier commands pass.
+- Implementation/proof review is clean.
+
+Stop and replan if:
+
+- Proof failures require new runtime behavior, IPC/preload expansion,
+  native-helper changes, package behavior, or evidence-handling policy changes.
+- Any raw/private evidence would need to be stored in tracked docs.
+
+### RD-28 Internal Package Install/Delete MVP Proof
+
+Status: not started.
+
+Depends on:
+
+- RD-27 complete and reviewed.
+- RD-18 internal Windows x64 package tooling complete.
+- RD-25 production native playback MVP complete if the package claim includes
+  playback-capable binaries or helper launch behavior.
+
+Objective:
+
+- Prove internal Windows package launch, install/delete or equivalent internal
+  lifecycle scope, app-data behavior, diagnostics safety, and rollback notes for
+  the private MVP.
+- Keep public signing, updater, public installer, and native/media
+  redistribution claims blocked unless a later reviewed release plan owns them.
+
+Platform proof label:
+
+- `Windows proof required before closeout`.
+
+Exit gates:
+
+- Internal package lifecycle proof is redaction-safe and aligned with
+  `docs/architecture/packaging-release-gates.md`.
+- Public release, signing, updater, installer distribution, and native/media
+  redistribution remain explicitly blocked or have their own reviewed plan.
+- `npm run verify:docs`, `npm run verify:redaction`, `git diff --check`, and
+  any reviewed package verifier commands pass.
+- Implementation/proof review is clean.
+
+Stop and replan if:
+
+- The slice needs signing credentials, updater channels, public distribution,
+  new package dependencies, native/media redistribution, or raw package output
+  in tracked docs.
+
+### RD-29 Future Platform Review
+
+Status: deferred behind RD-22 through RD-28 product-parity/MVP completion.
+
+Depends on:
+
+- RD-21 complete and reviewed.
+- RD-22 through RD-28 complete, reviewed, and classified as either passed or
+  intentionally deferred with MVP acceptance rationale.
 
 Objective:
 
@@ -1288,9 +1634,16 @@ Objective:
 
 Exit gates:
 
-- Windows-specific assumptions are documented.
-- Shared contracts remain cross-platform where that does not add v1 complexity.
-- No macOS/Linux release promise is made without a separate plan.
+- Windows-specific assumptions are documented from real MVP evidence.
+- Shared contracts remain cross-platform where that does not add v1
+  complexity.
+- No macOS/Linux release promise is made without a separate reviewed plan.
+
+Stop and replan if:
+
+- Platform expansion would require public release, signing/update,
+  native/media redistribution, live Plex/runtime broadening, or playback
+  behavior not already proven by the MVP sequence.
 
 ## Reuse Map
 
