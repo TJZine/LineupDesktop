@@ -243,6 +243,19 @@ playback remain blocked and classified. RD-19 does not add live Plex transport,
 renderer Plex APIs, production native playback, persistence IPC, signing/update
 behavior, installer behavior, public release readiness, source/tool/package
 script/dependency/lockfile changes, or tracked generated artifacts.
+RD-20 is complete as docs/source-audit/provenance work only. The tracked
+artifacts are
+`docs/architecture/original-lineup-reference-compatibility-matrix.md` and
+`docs/architecture/original-lineup-divergence-register.md`. The copied/adapted
+M01-M07/D01-D07 import and ledger coverage audit reviewed clean, the
+M08-M11/D08-D11 reference-only/proof-context audit reviewed clean, and import
+ledger coverage is current after retained-test path corrections only. RD-20
+adds no new copied/adapted upstream source, production source, tests,
+verifiers, live Plex transport, renderer Plex APIs, persistence IPC, production
+native playback, package/dependency/lockfile/signing/update/native-media, or
+public-release behavior. Platform proof remains `Mac/local automated proof
+sufficient` because the completed scope stayed docs/source-audit/provenance
+only.
 
 ## Product Invariants
 
@@ -264,7 +277,8 @@ script/dependency/lockfile changes, or tracked generated artifacts.
 | Port roadmap | `docs/roadmap/desktop-port-roadmap.md` | Scaffolded |
 | Upstream behavior guardrails | `docs/architecture/upstream-behavior-guardrails.md` | RD-04 docs/harness owner |
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
-| Import provenance | `docs/architecture/import-ledger.md` | Scaffolded |
+| Import provenance | `docs/architecture/import-ledger.md` | Current copied/adapted upstream source ledger; RD-20 retained-test path corrections reviewed current |
+| Original Lineup compatibility | `docs/architecture/original-lineup-reference-compatibility-matrix.md` and `docs/architecture/original-lineup-divergence-register.md` | RD-20 tracked source-audit/provenance artifacts for copied/adapted coverage, reference-only behavior, proof context, and accepted Desktop divergences |
 | File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size guardrails, temporary oversized-file allowlist rationale, decomposition/revisit triggers, and Tier 3 file-shape verification |
 | Electron main shell | `src/main/index.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with smoke-only assertion ownership split out of the startup/composition entrypoint, plus RD-14 Unit 2 main-owned BrowserWindow/fullscreen/display/restore controller and Unit 3 foreground app-command controller while `src/main/index.ts` remains composition and IPC wiring |
 | Preload bridge | `src/preload/index.cts` | Narrow shell/window/player/diagnostics bridge with runtime payload guards; guard vocabulary is kept in the sandbox-compatible preload entrypoint, and the integration seam reads preload source text plus renderer-safe contracts to parity-test guard vocabulary, channel constants, the single `lineupDesktop` exposure, and approved `ipcRenderer` method/channel pairs without importing or executing preload |

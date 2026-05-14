@@ -88,8 +88,9 @@ durable completion summary.
 - [x] RD-10 Plex Auth, Discovery, And Library Import implemented through
   `src/contracts/plex.ts`, `src/main/plex/library/*`,
   `src/main/plex/auth/*`, `src/main/plex/discovery/*`,
-  `src/__tests__/plexLibrary.test.ts`, `src/__tests__/plexAuth.test.ts`, and
-  `src/__tests__/plexDiscovery.test.ts`; `npm run verify` passed on
+  `src/__tests__/main/plexLibrary.test.ts`,
+  `src/__tests__/main/plexAuth.test.ts`, and
+  `src/__tests__/main/plexDiscovery.test.ts`; `npm run verify` passed on
   2026-05-10 with 113 contract tests and 69 harness-doc tests. The unit adds
   imported/adapted main-owned Plex library parsers/domain helpers, auth
   parsers/service/storage seam, discovery/selected-server domain, recursive
@@ -181,6 +182,17 @@ durable completion summary.
   lockfile, signing config, update metadata, native media redistribution, Plex
   behavior, renderer/preload/IPC contract, runtime behavior, or public release
   artifact.
+- [x] RD-19 Internal Alpha/Beta Validation completed on 2026-05-14 after Units
+  A through D, clean read-only reviews, Windows x64 package proof, and full
+  validation-matrix execution against current fake-backed, injected, package,
+  diagnostics, and dev-only harness proof surfaces.
+- [x] RD-20 Original Lineup Reference Compatibility Pass completed as
+  docs/source-audit/provenance work only. The tracked artifacts are
+  `docs/architecture/original-lineup-reference-compatibility-matrix.md` and
+  `docs/architecture/original-lineup-divergence-register.md`; copied/adapted
+  M01-M07/D01-D07 import and ledger coverage reviewed clean,
+  reference-only/proof-context M08-M11/D08-D11 reviewed clean, and import
+  ledger coverage is current after retained-test path corrections only.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -250,8 +262,8 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-18 are complete enough to route the next Tier 3 session to
-RD-19 Internal Alpha/Beta Validation through the quality loop. Do not import
+RD-01 through RD-20 are complete enough to route the next Tier 3 session to
+RD-21 Future Platform Review through the quality loop. Do not import
 additional original Lineup product code or broaden live Plex/native playback
 runtime behavior until a reviewed product slice plan explicitly authorizes a
 bounded change.
@@ -1221,7 +1233,13 @@ Exit gates:
 
 ### RD-20 Original Lineup Reference Compatibility Pass
 
-Status: triggered review slice; not started.
+Status: complete as docs/source-audit/provenance work only. RD-20 Units 1
+through 4 created and completed the compatibility matrix, divergence register,
+copied/adapted import and ledger coverage audit, reference-only/proof-context
+audit, and durable closeout docs. Plan review, Unit 1 implementation review,
+Unit 2 implementation review, Unit 3 implementation review, and final
+implementation review are clean. The completed full plan body was archived
+locally under `docs/runs/archive/plans/` and removed from tracked active plans.
 
 Depends on:
 
@@ -1238,11 +1256,21 @@ Objective:
 Exit gates:
 
 - Import ledger entries are current for every copied/adapted upstream slice.
-- Preserved behavior has Desktop tests, fixtures, or source-audit evidence.
-- Intentional divergences are documented in the roadmap, active plan, import
-  ledger, or architecture docs.
-- If a session also changes the original Lineup repo, that repo's own required
-  verification is run there and recorded separately.
+  RD-20 found only retained-test path corrections were needed.
+- The compatibility matrix records preserved behavior proof for M01-M07
+  copied/adapted rows and M08-M11 reference-only/proof-context rows.
+- Intentional divergences are documented in
+  `docs/architecture/original-lineup-divergence-register.md`.
+- No new copied/adapted upstream source, production source, tests, verifiers,
+  live Plex transport, production native playback, renderer Plex APIs,
+  persistence IPC, package/dependency/lockfile/signing/update/native-media, or
+  public-release behavior landed.
+- Platform proof is `Mac/local automated proof sufficient` because RD-20
+  remained docs/source-audit/provenance-only.
+- `npm run verify:docs`, `npm run verify:redaction`, and `git diff --check`
+  pass after closeout.
+- Final read-only implementation review is clean, and the completed full plan
+  body is archived locally under `docs/runs/archive/plans/`.
 
 ### RD-21 Future Platform Review
 
@@ -1251,6 +1279,7 @@ Status: not started.
 Depends on:
 
 - Windows MVP stabilized through RD-19.
+- RD-20 Original Lineup Reference Compatibility Pass complete and reviewed.
 
 Objective:
 
