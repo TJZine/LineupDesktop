@@ -24,7 +24,7 @@ import type {
 } from './types.js';
 
 export interface DesktopPlexDiscoveryTransport {
-  discoverResources(input: { signal?: AbortSignal | null }): Promise<unknown>;
+  discoverResources(input: { token?: string; signal?: AbortSignal | null }): Promise<unknown>;
   probeConnection(input: {
     server: PlexServer;
     connection: PlexConnection;
@@ -69,10 +69,11 @@ export class DesktopPlexServerDiscovery {
     this.nowMs = options.nowMs ?? Date.now;
   }
 
-  async refreshServers(options: { signal?: AbortSignal | null } = {}): Promise<PlexServerSummary[]> {
+  async refreshServers(options: { token?: string; signal?: AbortSignal | null } = {}): Promise<PlexServerSummary[]> {
     throwIfAborted(options.signal);
     const contextVersion = this.discoveryContextVersion;
-    const resources = await this.discoverResources(options.signal ?? null);
+    const resources = await this.discoverResources(options.signal ?? null, options.token);
+    throwIfAborted(options.signal);
     const servers = parsePlexResources(resources);
 
     if (contextVersion !== this.discoveryContextVersion) {
@@ -129,6 +130,7 @@ export class DesktopPlexServerDiscovery {
     }
 
     const probeSummary = await this.findFastestConnection(server, options.signal ?? null);
+    throwIfAborted(options.signal);
     if (contextVersion !== this.discoveryContextVersion) {
       return { kind: 'selection-failed', reason: 'server-not-found', persisted: false };
     }
@@ -166,10 +168,13 @@ export class DesktopPlexServerDiscovery {
     if (!this.selectedServerStore) {
       throw new PlexDiscoveryError('server-error', 'Plex selected-server store is not available');
     }
+    throwIfAborted(options.signal);
     await this.selectedServerStore.saveSelectedServerSummary(
       selectedServer,
       options.source ?? 'discovery',
+      { signal: options.signal ?? null },
     );
+    throwIfAborted(options.signal);
     if (contextVersion !== this.discoveryContextVersion) {
       return { kind: 'selection-failed', reason: 'server-not-found', persisted: false };
     }
@@ -198,6 +203,7 @@ export class DesktopPlexServerDiscovery {
   }
 
   async restoreSelectedServer(options: {
+    token?: string;
     signal?: AbortSignal | null;
   } = {}): Promise<PlexServerSelectionSummary> {
     if (!this.selectedServerStore) {
@@ -205,6 +211,7 @@ export class DesktopPlexServerDiscovery {
     }
 
     const persisted = await this.selectedServerStore.readSelectedServerSummary();
+    throwIfAborted(options.signal);
     if (!persisted) {
       return { kind: 'selection-failed', reason: 'no-persisted-server', persisted: false };
     }
@@ -213,12 +220,20 @@ export class DesktopPlexServerDiscovery {
     return this.selectServer(persisted.serverId, { source: 'restored', signal: options.signal ?? null });
   }
 
-  private async discoverResources(signal: AbortSignal | null): Promise<unknown> {
+  private async discoverResources(signal: AbortSignal | null, token?: string): Promise<unknown> {
     try {
-      return await this.transport.discoverResources({ signal });
+      return await this.transport.discoverResources({
+        ...(token !== undefined ? { token } : {}),
+        signal,
+      });
     } catch (error) {
       if (error instanceof PlexDiscoveryError) {
         throw error;
+      }
+      if (signal?.aborted || isTransportAbortError(error)) {
+        throw new PlexDiscoveryError('aborted', 'Plex discovery request was aborted', undefined, {
+          cause: error,
+        });
       }
       throw new PlexDiscoveryError('server-unreachable', 'Plex discovery transport failed', undefined, {
         cause: error,
@@ -246,6 +261,7 @@ export class DesktopPlexServerDiscovery {
     throwIfAborted(signal);
     try {
       const result = await this.transport.probeConnection({ server, connection, signal });
+      throwIfAborted(signal);
       return {
         connection: {
           ...connection,
@@ -256,6 +272,7 @@ export class DesktopPlexServerDiscovery {
         outcome: result.outcome,
       };
     } catch {
+      throwIfAborted(signal);
       return { connection, outcome: 'unreachable' };
     }
   }
@@ -289,5 +306,14 @@ function throwIfAborted(signal?: AbortSignal | null): void {
   throwIfPlexRequestAborted(
     signal,
     () => new PlexDiscoveryError('aborted', 'Plex discovery request was aborted'),
+  );
+}
+
+function isTransportAbortError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.name === 'LivePlexTransportError' &&
+    'code' in error &&
+    error.code === 'aborted'
   );
 }

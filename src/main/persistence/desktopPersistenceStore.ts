@@ -3,42 +3,19 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
-import type {
-  PersistenceRecordStatus,
-  PersistenceRendererSafeDiagnostic,
-  PersistenceRendererSafeSnapshot,
-  PlexAccountProfileSummary,
-  PlexCredentialHandle,
-  PlexSelectedServerSummary,
-} from '../../contracts/persistence.js';
+import type { PersistenceRecordStatus, PersistenceRendererSafeDiagnostic, PersistenceRendererSafeSnapshot, PlexAccountProfileSummary, PlexCredentialHandle, PlexSelectedServerSummary } from '../../contracts/persistence.js';
 import type { SecureStringCodec } from './secureStorageCodec.js';
 import { SecureStorageUnavailableError } from './secureStorageCodec.js';
 
 const PERSISTENCE_SCHEMA_VERSION = 1;
 
-export interface DesktopPersistenceStoreOptions {
-  persistenceFilePath: string;
-  secureStringCodec: SecureStringCodec;
-  nowMs?: () => number;
-}
-
-export interface SavePlexCredentialInput {
-  accountId: string;
-  secretValue: string;
-  profile?: PlexAccountProfileSummary;
-}
+export interface DesktopPersistenceStoreOptions { persistenceFilePath: string; secureStringCodec: SecureStringCodec; nowMs?: () => number; }
+export interface SavePlexCredentialInput { accountId: string; secretValue: string; profile?: PlexAccountProfileSummary; }
+export interface DesktopPersistenceMutationOptions { signal?: AbortSignal | null; }
 
 export type SavePlexCredentialResult =
-  | {
-      ok: true;
-      handle: PlexCredentialHandle;
-      diagnostics: readonly PersistenceRendererSafeDiagnostic[];
-    }
-  | {
-      ok: false;
-      status: Exclude<PersistenceRecordStatus, 'present' | 'missing'>;
-      diagnostics: readonly PersistenceRendererSafeDiagnostic[];
-    };
+  | { ok: true; handle: PlexCredentialHandle; diagnostics: readonly PersistenceRendererSafeDiagnostic[] }
+  | { ok: false; status: Exclude<PersistenceRecordStatus, 'present' | 'missing'>; diagnostics: readonly PersistenceRendererSafeDiagnostic[] };
 
 export type ReadPlexCredentialSecretResult =
   | {
@@ -73,15 +50,8 @@ interface PersistenceFile {
 }
 
 type PersistenceFileReadResult =
-  | {
-      status: 'present' | 'missing';
-      value: PersistenceFile;
-      diagnostics: readonly PersistenceRendererSafeDiagnostic[];
-    }
-  | {
-      status: 'corrupt';
-      diagnostics: readonly PersistenceRendererSafeDiagnostic[];
-    };
+  | { status: 'present' | 'missing'; value: PersistenceFile; diagnostics: readonly PersistenceRendererSafeDiagnostic[] }
+  | { status: 'corrupt'; diagnostics: readonly PersistenceRendererSafeDiagnostic[] };
 
 /** Main-owned credential persistence serializes mutations, schema-checks loads, writes by temp-file rename, and keeps plaintext secrets on main-owned read paths. */
 export class DesktopPersistenceStore {
@@ -99,15 +69,17 @@ export class DesktopPersistenceStore {
 
   async savePlexCredential(
     input: SavePlexCredentialInput,
+    options: DesktopPersistenceMutationOptions = {},
   ): Promise<SavePlexCredentialResult> {
     return this.enqueueMutation(async () => {
+      throwIfAborted(options.signal);
       const readResult = await this.readPersistenceFile();
-      if (readResult.status === 'corrupt') {
-        return { ok: false, status: 'corrupt', diagnostics: readResult.diagnostics };
-      }
+      if (readResult.status === 'corrupt') return { ok: false, status: 'corrupt', diagnostics: readResult.diagnostics };
 
       try {
+        throwIfAborted(options.signal);
         const encrypted = await this.secureStringCodec.encryptString(input.secretValue);
+        throwIfAborted(options.signal);
         const nowMs = this.nowMs();
         const credentialId = createPlexCredentialId(input.accountId);
         const existing = readResult.value.credentials.find(
@@ -130,7 +102,7 @@ export class DesktopPersistenceStore {
           record,
         ].sort((left, right) => left.credentialId.localeCompare(right.credentialId));
 
-        await this.writePersistenceFile({ ...readResult.value, credentials });
+        await this.writePersistenceFile({ ...readResult.value, credentials }, options);
 
         return {
           ok: true,
@@ -147,6 +119,9 @@ export class DesktopPersistenceStore {
           ],
         };
       } catch (error) {
+        if (isAbortError(error)) {
+          throw error;
+        }
         const unavailable = error instanceof SecureStorageUnavailableError;
         return {
           ok: false,
@@ -238,14 +213,14 @@ export class DesktopPersistenceStore {
 
   async setSelectedPlexServer(
     selectedServer: PlexSelectedServerSummary | null,
+    options: DesktopPersistenceMutationOptions = {},
   ): Promise<PersistenceRendererSafeSnapshot> {
     return this.enqueueMutation(async () => {
+      throwIfAborted(options.signal);
       const readResult = await this.readPersistenceFile();
-      if (readResult.status === 'corrupt') {
-        return createCorruptSnapshot(readResult.diagnostics);
-      }
+      if (readResult.status === 'corrupt') return createCorruptSnapshot(readResult.diagnostics);
       const value = { ...readResult.value, selectedServer };
-      await this.writePersistenceFile(value);
+      await this.writePersistenceFile(value, options);
       return this.getRendererSafeSnapshot();
     });
   }
@@ -294,18 +269,12 @@ export class DesktopPersistenceStore {
   ): Promise<void> {
     await this.enqueueMutation(async () => {
       const readResult = await this.readPersistenceFile();
-      if (readResult.status === 'corrupt') {
-        return;
-      }
+      if (readResult.status === 'corrupt') return;
       const record = readResult.value.credentials.find(
         (credential) => credential.credentialId === credentialId,
       );
-      if (record === undefined) {
-        return;
-      }
-      if (record.encryptedSecretBase64 !== expectedEncryptedSecretBase64) {
-        return;
-      }
+      if (record === undefined) return;
+      if (record.encryptedSecretBase64 !== expectedEncryptedSecretBase64) return;
       const encrypted = await this.secureStringCodec.encryptString(secretValue);
       const updatedRecord: StoredPlexCredential = {
         ...record,
@@ -367,15 +336,26 @@ export class DesktopPersistenceStore {
     }
   }
 
-  private async writePersistenceFile(value: PersistenceFile): Promise<void> {
+  private async writePersistenceFile(
+    value: PersistenceFile,
+    options: DesktopPersistenceMutationOptions = {},
+  ): Promise<void> {
+    throwIfAborted(options.signal);
     await fs.mkdir(path.dirname(this.persistenceFilePath), { recursive: true });
     this.temporaryWriteCounter += 1;
     const temporaryPath = `${this.persistenceFilePath}.${String(process.pid)}.${String(this.temporaryWriteCounter)}.tmp`;
-    await fs.writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
-    await fs.rename(temporaryPath, this.persistenceFilePath);
+    try {
+      throwIfAborted(options.signal);
+      await fs.writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
+        encoding: 'utf8',
+        mode: 0o600,
+      });
+      throwIfAborted(options.signal);
+      await fs.rename(temporaryPath, this.persistenceFilePath);
+    } catch (error) {
+      await fs.rm(temporaryPath, { force: true }).catch(() => undefined);
+      throw error;
+    }
     await fs.chmod(this.persistenceFilePath, 0o600);
   }
 
@@ -384,6 +364,22 @@ export class DesktopPersistenceStore {
     this.mutationChain = run.then(() => undefined, () => undefined);
     return run;
   }
+}
+
+function throwIfAborted(signal?: AbortSignal | null): void {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+}
+
+function createAbortError(): Error {
+  const error = new Error('Persistence mutation was aborted.');
+  error.name = 'AbortError';
+  return error;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
 }
 
 function createEmptyPersistenceFile(): PersistenceFile {

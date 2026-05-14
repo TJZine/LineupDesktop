@@ -83,6 +83,22 @@ export type DesktopPlexCredentialReadResult =
       diagnostics: readonly PersistenceRendererSafeDiagnostic[];
     };
 
+export type DesktopPlexCredentialSecretReadResult =
+  | {
+      status: 'present';
+      accountId: string;
+      credentialId: string;
+      secretValue: string;
+      profile: PlexAuthProfileSummary;
+      shouldReencrypt: boolean;
+      diagnostics: readonly PersistenceRendererSafeDiagnostic[];
+    }
+  | {
+      status: Exclude<PersistenceRecordStatus, 'present'>;
+      accountId: string | null;
+      diagnostics: readonly PersistenceRendererSafeDiagnostic[];
+    };
+
 export function toPersistenceProfileSummary(
   profile: PlexAuthProfileSummary,
 ): PlexAccountProfileSummary {

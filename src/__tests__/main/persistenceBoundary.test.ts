@@ -269,6 +269,73 @@ test('desktop persistence store serializes concurrent credential and selected-se
   assert.deepEqual(temporaryFiles, []);
 });
 
+test('desktop persistence store aborts in-flight credential save before replacing persisted credential', async () => {
+  const temporaryDirectory = await createTemporaryDirectory();
+  const codec = new DeferredFirstEncryptCodec([2]);
+  const persistenceFilePath = path.join(temporaryDirectory, 'persistence.json');
+  const store = new DesktopPersistenceStore({
+    persistenceFilePath,
+    secureStringCodec: codec,
+    nowMs: () => 3_500,
+  });
+  await store.savePlexCredential({
+    accountId: 'account-1',
+    secretValue: 'rd09-old-secret',
+  });
+
+  const abortController = new AbortController();
+  const replacement = store.savePlexCredential(
+    {
+      accountId: 'account-1',
+      secretValue: 'rd09-new-secret',
+    },
+    { signal: abortController.signal },
+  );
+  await codec.waitForEncrypt(2);
+  abortController.abort();
+  codec.releaseEncrypt(2);
+
+  await assert.rejects(() => replacement, { name: 'AbortError' });
+  const currentRead = await store.readPlexCredentialSecret('account-1');
+  assert.equal(currentRead.status, 'present');
+  if (currentRead.status === 'present') {
+    assert.equal(currentRead.secretValue, 'rd09-old-secret');
+  }
+  const temporaryFiles = (await fs.readdir(temporaryDirectory)).filter((file) => file.endsWith('.tmp'));
+  assert.deepEqual(temporaryFiles, []);
+});
+
+test('desktop persistence store aborts selected-server mutation before replacing persisted selection', async () => {
+  const temporaryDirectory = await createTemporaryDirectory();
+  const store = new DesktopPersistenceStore({
+    persistenceFilePath: path.join(temporaryDirectory, 'persistence.json'),
+    secureStringCodec: new FakeSecureStringCodec(),
+  });
+  const oldSelectedServer: PlexSelectedServerSummary = {
+    serverId: 'server-old',
+    name: 'Old Server',
+    source: 'manual',
+    lastSelectedAtMs: 3_000,
+  };
+  const newSelectedServer: PlexSelectedServerSummary = {
+    serverId: 'server-new',
+    name: 'New Server',
+    source: 'manual',
+    lastSelectedAtMs: 4_000,
+  };
+  await store.setSelectedPlexServer(oldSelectedServer);
+
+  const abortController = new AbortController();
+  abortController.abort();
+  await assert.rejects(
+    () => store.setSelectedPlexServer(newSelectedServer, { signal: abortController.signal }),
+    { name: 'AbortError' },
+  );
+
+  const snapshot = await store.getRendererSafeSnapshot();
+  assert.deepEqual(snapshot.selectedServer, oldSelectedServer);
+});
+
 test('desktop persistence store fails closed when secure storage is unavailable', async () => {
   const temporaryDirectory = await createTemporaryDirectory();
   const codec = new FakeSecureStringCodec();

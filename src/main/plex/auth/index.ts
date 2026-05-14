@@ -39,6 +39,7 @@ export {
 } from './desktopPlexAuthService.js';
 export type {
   DesktopPlexCredentialReadResult,
+  DesktopPlexCredentialSecretReadResult,
   DesktopPlexCredentialSaveResult,
   PlexAuthConfig,
   PlexAuthProfileSummary,

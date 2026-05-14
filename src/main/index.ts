@@ -38,6 +38,7 @@ import {
 import { registerPlayerIpcHandlers, type PlayerIpcTeardown } from './player/playerIpc.js';
 import { DiagnosticEventStore } from './diagnostics/diagnosticEventStore.js';
 import { registerDiagnosticsIpcHandlers, type DiagnosticsIpcTeardown } from './diagnostics/supportBundleIpc.js';
+import { registerPlexComposition, type PlexCompositionTeardown } from './plex/plexComposition.js';
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
 import { registerShellAppCommandController } from './window/shellAppCommandController.js';
 import { createShellWindowController } from './window/shellWindowController.js';
@@ -61,6 +62,7 @@ const shellWindowController = createShellWindowController({
 });
 let teardownPlayerIpc: PlayerIpcTeardown | null = null;
 let teardownDiagnosticsIpc: DiagnosticsIpcTeardown | null = null;
+let teardownPlexComposition: PlexCompositionTeardown | null = null;
 let playerIpcQuitTeardownInProgress = false;
 let playerIpcQuitTeardownComplete = false;
 let containmentCounters: ShellContainmentCounters = {
@@ -93,6 +95,13 @@ app.whenReady()
       reportDiagnostic: reportMainProcessDiagnostic,
       diagnosticEventStore,
     });
+    teardownPlexComposition = registerPlexComposition({
+      app,
+      shellMode,
+      isAuthorizedEvent,
+      createRequestId,
+      diagnosticEventStore,
+    });
     const shellWindow = shellWindowController.createWindow();
     registerShellAppCommandController(shellWindow, {
       reportDiagnostic: reportMainProcessDiagnostic,
@@ -121,6 +130,8 @@ app.on('before-quit', (event) => {
   publishShellStatus('closing');
   const teardown = teardownPlayerIpc;
   if (playerIpcQuitTeardownComplete || teardown === null) {
+    void teardownPlexComposition?.();
+    teardownPlexComposition = null;
     return;
   }
   if (playerIpcQuitTeardownInProgress) {
@@ -132,8 +143,10 @@ app.on('before-quit', (event) => {
   teardownPlayerIpc = null;
   teardownDiagnosticsIpc?.();
   teardownDiagnosticsIpc = null;
+  const teardownPlex = teardownPlexComposition;
+  teardownPlexComposition = null;
   playerIpcQuitTeardownInProgress = true;
-  teardown()
+  Promise.all([teardown(), teardownPlex?.() ?? Promise.resolve()])
     .catch((error: unknown) => {
       reportMainProcessDiagnostic('Player IPC cleanup failed during quit', error);
     })

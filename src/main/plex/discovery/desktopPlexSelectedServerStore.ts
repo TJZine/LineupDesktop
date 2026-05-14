@@ -8,6 +8,10 @@ export interface DesktopPlexSelectedServerStoreOptions {
   nowMs?: () => number;
 }
 
+export interface DesktopPlexSelectedServerSaveOptions {
+  signal?: AbortSignal | null;
+}
+
 export class DesktopPlexSelectedServerStore {
   private readonly persistenceStore: DesktopPlexSelectedServerStoreOptions['persistenceStore'];
   private readonly nowMs: () => number;
@@ -25,14 +29,24 @@ export class DesktopPlexSelectedServerStore {
   async saveSelectedServerSummary(
     server: PlexServer,
     source: PlexServerSelectionSource,
+    options: DesktopPlexSelectedServerSaveOptions = {},
   ): Promise<PlexSelectedServerSummary> {
+    throwIfAborted(options.signal);
     const summary: PlexSelectedServerSummary = {
       serverId: server.id,
       name: server.name,
       source,
       lastSelectedAtMs: this.nowMs(),
     };
-    const snapshot = await this.persistenceStore.setSelectedPlexServer(summary);
+    let snapshot: Awaited<ReturnType<DesktopPlexSelectedServerStoreOptions['persistenceStore']['setSelectedPlexServer']>>;
+    try {
+      snapshot = await this.persistenceStore.setSelectedPlexServer(summary, {
+        signal: options.signal ?? null,
+      });
+    } catch (error) {
+      throwIfAborted(options.signal);
+      throw error;
+    }
     if (
       snapshot.selectedServer?.serverId !== summary.serverId ||
       snapshot.selectedServer.name !== summary.name ||
@@ -46,5 +60,11 @@ export class DesktopPlexSelectedServerStore {
 
   async clearSelectedServerSummary(): Promise<void> {
     await this.persistenceStore.setSelectedPlexServer(null);
+  }
+}
+
+function throwIfAborted(signal?: AbortSignal | null): void {
+  if (signal?.aborted) {
+    throw new PlexDiscoveryError('aborted', 'Plex selected-server save was aborted');
   }
 }

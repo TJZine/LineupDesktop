@@ -6,6 +6,19 @@ import {
   LINEUP_PLAYER_COMMAND_CHANNEL,
   LINEUP_PLAYER_EVENT_CHANNEL,
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
+  LINEUP_PLEX_CANCEL_PIN_CHANNEL,
+  LINEUP_PLEX_GET_HOME_USERS_CHANNEL,
+  LINEUP_PLEX_GET_METADATA_CHANNEL,
+  LINEUP_PLEX_GET_SNAPSHOT_CHANNEL,
+  LINEUP_PLEX_LIST_LIBRARY_ITEMS_CHANNEL,
+  LINEUP_PLEX_LIST_LIBRARY_SECTIONS_CHANNEL,
+  LINEUP_PLEX_POLL_PIN_CHANNEL,
+  LINEUP_PLEX_REFRESH_SERVERS_CHANNEL,
+  LINEUP_PLEX_REQUEST_PIN_CHANNEL,
+  LINEUP_PLEX_RESTORE_SELECTED_SERVER_CHANNEL,
+  LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL,
+  LINEUP_PLEX_SELECT_SERVER_CHANNEL,
+  LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL,
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
@@ -32,6 +45,19 @@ import {
   type PlayerSnapshot,
   type PlayerTrackSummary,
 } from '../../contracts/player.js';
+import {
+  PLEX_FORBIDDEN_RENDERER_FIELD_KEYS,
+  PLEX_RUNTIME_ERROR_CODES,
+  PLEX_RUNTIME_OPERATIONS,
+  containsPlexForbiddenRendererField,
+  type PlexCancelPinValue,
+  type PlexEmptyRequest,
+  type PlexIpcResult,
+  type PlexListLibraryItemsRequest,
+  type PlexListLibraryItemsValue,
+  type PlexRuntimeSnapshot,
+  type PlexSearchLibraryRequest,
+} from '../../contracts/plex.js';
 import {
   LINEUP_PROTOCOL_ORIGIN,
   shellFailure,
@@ -98,6 +124,13 @@ function assertNoForbiddenKeys(value: unknown): void {
       ),
       false,
       `renderer-facing diagnostics contract contains forbidden key ${key}`,
+    );
+    assert.equal(
+      PLEX_FORBIDDEN_RENDERER_FIELD_KEYS.includes(
+        key as (typeof PLEX_FORBIDDEN_RENDERER_FIELD_KEYS)[number],
+      ),
+      false,
+      `renderer-facing Plex contract contains forbidden key ${key}`,
     );
     assertNoForbiddenKeys(child);
   }
@@ -595,11 +628,171 @@ test('shell IPC channel vocabulary uses the approved literals', () => {
     LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
     'lineup:diagnostics:exportSupportBundle',
   );
+  assert.equal(LINEUP_PLEX_GET_SNAPSHOT_CHANNEL, 'lineup:plex:getSnapshot');
+  assert.equal(LINEUP_PLEX_REQUEST_PIN_CHANNEL, 'lineup:plex:requestPin');
+  assert.equal(LINEUP_PLEX_POLL_PIN_CHANNEL, 'lineup:plex:pollPin');
+  assert.equal(LINEUP_PLEX_CANCEL_PIN_CHANNEL, 'lineup:plex:cancelPin');
+  assert.equal(LINEUP_PLEX_GET_HOME_USERS_CHANNEL, 'lineup:plex:getHomeUsers');
+  assert.equal(LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL, 'lineup:plex:switchHomeUser');
+  assert.equal(
+    LINEUP_PLEX_RESTORE_SELECTED_SERVER_CHANNEL,
+    'lineup:plex:restoreSelectedServer',
+  );
+  assert.equal(LINEUP_PLEX_REFRESH_SERVERS_CHANNEL, 'lineup:plex:refreshServers');
+  assert.equal(LINEUP_PLEX_SELECT_SERVER_CHANNEL, 'lineup:plex:selectServer');
+  assert.equal(
+    LINEUP_PLEX_LIST_LIBRARY_SECTIONS_CHANNEL,
+    'lineup:plex:listLibrarySections',
+  );
+  assert.equal(LINEUP_PLEX_LIST_LIBRARY_ITEMS_CHANNEL, 'lineup:plex:listLibraryItems');
+  assert.equal(LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL, 'lineup:plex:searchLibrary');
+  assert.equal(LINEUP_PLEX_GET_METADATA_CHANNEL, 'lineup:plex:getMetadata');
 });
 
-test('preload API contract exposes shell, window, player, and diagnostics methods only', () => {
+test('plex runtime IPC contract freezes RD-22 Unit 1 safe vocabulary', () => {
+  for (const field of ['accessToken', 'access_token', 'address', 'port']) {
+    assert.equal(
+      PLEX_FORBIDDEN_RENDERER_FIELD_KEYS.includes(
+        field as (typeof PLEX_FORBIDDEN_RENDERER_FIELD_KEYS)[number],
+      ),
+      true,
+      `Plex forbidden fields include ${field}`,
+    );
+    assert.equal(
+      containsPlexForbiddenRendererField({ nested: { [field]: 'private' } }),
+      true,
+      `Plex forbidden-field guard rejects ${field}`,
+    );
+  }
+
+  assert.deepEqual([...PLEX_RUNTIME_OPERATIONS], [
+    'getSnapshot',
+    'requestPin',
+    'pollPin',
+    'cancelPin',
+    'getHomeUsers',
+    'switchHomeUser',
+    'restoreSelectedServer',
+    'refreshServers',
+    'selectServer',
+    'listLibrarySections',
+    'listLibraryItems',
+    'searchLibrary',
+    'getMetadata',
+  ]);
+  assert.deepEqual([...PLEX_RUNTIME_ERROR_CODES], [
+    'PLEX_UNAUTHORIZED',
+    'PLEX_VALIDATION_FAILED',
+    'PLEX_CANCELLED',
+    'PLEX_STALE_RESULT',
+    'PLEX_AUTH_REQUIRED',
+    'PLEX_AUTH_INVALID',
+    'PLEX_PIN_EXPIRED',
+    'PLEX_PIN_TIMEOUT',
+    'PLEX_RATE_LIMITED',
+    'PLEX_SERVER_UNREACHABLE',
+    'PLEX_ACCESS_DENIED',
+    'PLEX_RESOURCE_NOT_FOUND',
+    'PLEX_STORAGE_UNAVAILABLE',
+    'PLEX_STORAGE_CORRUPT',
+    'PLEX_PARSE_FAILED',
+    'PLEX_LIBRARY_FAILED',
+    'PLEX_UNKNOWN',
+  ]);
+
+  const snapshot: PlexRuntimeSnapshot = {
+    auth: {
+      state: 'signed-in',
+      pin: { id: 42, code: 'ABCD', expiresAtMs: 2, claimed: false },
+      profile: {
+        accountId: 'account-1',
+        displayName: 'Profile',
+        activeProfileId: 'home-1',
+      },
+      homeUsers: [{ id: 'home-1', title: 'Profile', admin: false, protected: true }],
+      credentialStatus: 'present',
+    },
+    servers: {
+      status: 'ready',
+      selected: {
+        serverId: 'server-1',
+        name: 'Server',
+        owned: true,
+        connectionCount: 2,
+        hasLocalConnection: true,
+        hasRemoteConnection: true,
+        hasRelayConnection: false,
+        selected: true,
+        health: {
+          status: 'ok',
+          connectionKind: 'local',
+          latencyMs: 12,
+          testedAtMs: 1,
+        },
+      },
+      items: [],
+      lastSelection: null,
+    },
+    library: {
+      status: 'ready',
+      sections: [{ id: '1', title: 'Movies', type: 'movie', contentCount: 10, lastScannedAtMs: 1 }],
+      selectedSectionId: '1',
+      items: [],
+      search: { query: 'episode', items: [] },
+      metadata: null,
+    },
+    lastError: null,
+    updatedAtMs: 3,
+  };
+  const emptyRequest: PlexEmptyRequest = { requestId: 'plex-getSnapshot-1', payload: {} };
+  const listRequest: PlexListLibraryItemsRequest = {
+    requestId: 'plex-listLibraryItems-1',
+    payload: { sectionId: '1', offset: 0, limit: 100, sort: 'titleSort:asc' },
+  };
+  const searchRequest: PlexSearchLibraryRequest = {
+    requestId: 'plex-searchLibrary-1',
+    payload: { query: 'episode', sectionId: '1', limit: 25 },
+  };
+  const cancelValue: PlexCancelPinValue = { pinId: 42, snapshot };
+  const listValue: PlexListLibraryItemsValue = {
+    sectionId: '1',
+    offset: 0,
+    limit: 100,
+    items: [],
+    snapshot,
+  };
+  const success: PlexIpcResult<PlexListLibraryItemsValue> = {
+    ok: true,
+    value: listValue,
+    requestId: listRequest.requestId,
+  };
+  const staleFailure: PlexIpcResult<PlexListLibraryItemsValue> = {
+    ok: false,
+    requestId: 'plex-listLibraryItems-stale',
+    stale: true,
+    error: {
+      code: 'PLEX_STALE_RESULT',
+      message: 'The Plex request result is no longer current.',
+      retryable: false,
+      recoverable: true,
+      operation: 'listLibraryItems',
+    },
+  };
+
+  assert.deepEqual(Object.keys(emptyRequest).sort(), ['payload', 'requestId']);
+  assert.deepEqual(Object.keys(success).sort(), ['ok', 'requestId', 'value']);
+  assert.deepEqual(Object.keys(staleFailure).sort(), ['error', 'ok', 'requestId', 'stale']);
+  assert.equal(cancelValue.pinId, 42);
+  assert.equal(searchRequest.payload.query, 'episode');
+  assert.equal(containsPlexForbiddenRendererField(snapshot), false);
+  assertNoForbiddenKeys(emptyRequest);
+  assertNoForbiddenKeys(success);
+  assertNoForbiddenKeys(staleFailure);
+});
+
+test('preload API contract exposes shell, window, player, diagnostics, and plex methods only', () => {
   type ApiKeys = keyof LineupDesktopPreloadApi;
-  const apiKeys: ApiKeys[] = ['shell', 'window', 'player', 'diagnostics'];
+  const apiKeys: ApiKeys[] = ['shell', 'window', 'player', 'diagnostics', 'plex'];
   const shellKeys: Array<keyof LineupDesktopPreloadApi['shell']> = [
     'getCapabilities',
     'onStatusChanged',
@@ -616,8 +809,23 @@ test('preload API contract exposes shell, window, player, and diagnostics method
     'getSummary',
     'exportSupportBundle',
   ];
+  const plexKeys: Array<keyof LineupDesktopPreloadApi['plex']> = [
+    'getSnapshot',
+    'requestPin',
+    'pollPin',
+    'cancelPin',
+    'getHomeUsers',
+    'switchHomeUser',
+    'restoreSelectedServer',
+    'refreshServers',
+    'selectServer',
+    'listLibrarySections',
+    'listLibraryItems',
+    'searchLibrary',
+    'getMetadata',
+  ];
 
-  assert.deepEqual(apiKeys, ['shell', 'window', 'player', 'diagnostics']);
+  assert.deepEqual(apiKeys, ['shell', 'window', 'player', 'diagnostics', 'plex']);
   assert.deepEqual(shellKeys, ['getCapabilities', 'onStatusChanged']);
   assert.deepEqual(windowKeys, ['setFullscreen']);
   assert.deepEqual(playerKeys, ['dispatch', 'getSnapshot', 'cleanup', 'onEvent']);
@@ -625,6 +833,21 @@ test('preload API contract exposes shell, window, player, and diagnostics method
     'recordRendererEvent',
     'getSummary',
     'exportSupportBundle',
+  ]);
+  assert.deepEqual(plexKeys, [
+    'getSnapshot',
+    'requestPin',
+    'pollPin',
+    'cancelPin',
+    'getHomeUsers',
+    'switchHomeUser',
+    'restoreSelectedServer',
+    'refreshServers',
+    'selectServer',
+    'listLibrarySections',
+    'listLibraryItems',
+    'searchLibrary',
+    'getMetadata',
   ]);
 });
 
