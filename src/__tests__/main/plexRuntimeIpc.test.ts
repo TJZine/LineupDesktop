@@ -7,7 +7,10 @@ import {
   LINEUP_PLEX_POLL_PIN_CHANNEL,
   LINEUP_PLEX_REQUEST_PIN_CHANNEL,
 } from '../../contracts/ipc.js';
-import { containsPlexForbiddenRendererField } from '../../contracts/plex.js';
+import {
+  containsPlexForbiddenRendererField,
+  type PlexRuntimeSnapshot,
+} from '../../contracts/plex.js';
 import { DiagnosticEventStore } from '../../main/diagnostics/diagnosticEventStore.js';
 import {
   DesktopPlexAuthService,
@@ -33,7 +36,10 @@ import {
   LivePlexTransport,
   type LivePlexLibraryTransport,
 } from '../../main/plex/livePlexTransport.js';
-import { mapRuntimeError } from '../../main/plex/desktopPlexRuntimeSupport.js';
+import {
+  cloneRuntimeSnapshot,
+  mapRuntimeError,
+} from '../../main/plex/desktopPlexRuntimeSupport.js';
 import { registerPlexIpcHandlers } from '../../main/plex/plexIpc.js';
 
 const placeholderAccountToken = ['placeholder', 'account', 'value'].join('-');
@@ -438,6 +444,143 @@ test('desktop plex runtime maps auth and discovery server errors without leaking
   assert.equal(discoveryError.httpStatus, 503);
   assert.equal(discoveryError.retryable, true);
   assert.equal(JSON.stringify([authError, discoveryError]).includes(placeholderAccountToken), false);
+});
+
+test('desktop plex runtime maps live transport server errors by operation owner', () => {
+  const refreshError = mapRuntimeError(
+    new LivePlexTransportError('server-error', `failed ${placeholderAccountToken}`, 503, {
+      retryable: true,
+    }),
+    'refreshServers',
+  );
+  const libraryError = mapRuntimeError(
+    new LivePlexTransportError('server-error', `failed ${placeholderAccountToken}`, 500, {
+      retryable: true,
+    }),
+    'listLibrarySections',
+  );
+
+  assert.equal(refreshError.code, 'PLEX_UNKNOWN');
+  assert.equal(refreshError.message, 'Plex operation failed.');
+  assert.equal(refreshError.httpStatus, 503);
+  assert.equal(refreshError.retryable, true);
+  assert.equal(libraryError.code, 'PLEX_LIBRARY_FAILED');
+  assert.equal(libraryError.message, 'Plex library request failed.');
+  assert.equal(libraryError.httpStatus, 500);
+  assert.equal(libraryError.retryable, true);
+  assert.equal(JSON.stringify([refreshError, libraryError]).includes(placeholderAccountToken), false);
+});
+
+test('desktop plex runtime snapshot clone isolates nested renderer-safe state', () => {
+  const server = {
+    serverId: 'server-1',
+    name: 'Server',
+    owned: true,
+    connectionCount: 1,
+    hasLocalConnection: true,
+    hasRemoteConnection: false,
+    hasRelayConnection: false,
+    selected: true,
+    health: {
+      status: 'ok' as const,
+      connectionKind: 'local' as const,
+      latencyMs: 12,
+      testedAtMs: 1,
+    },
+  };
+  const item = {
+    ratingKey: 'rating-1',
+    type: 'movie' as const,
+    title: 'Movie',
+    sortTitle: 'Movie',
+    summary: 'Summary',
+    year: 2026,
+    durationMs: 1_000,
+    addedAtMs: 1,
+    updatedAtMs: 2,
+    genres: ['Drama'],
+    directors: ['Director'],
+    actors: ['Actor'],
+    studios: ['Studio'],
+  };
+  const snapshot: PlexRuntimeSnapshot = {
+    auth: {
+      state: 'signed-in',
+      pin: { id: 7, code: 'ABCD', expiresAtMs: 1, claimed: false },
+      profile: {
+        accountId: 'account-1',
+        username: 'viewer',
+        displayName: 'Viewer',
+        activeProfileId: 'home-1',
+        preferredSubtitleLanguage: 'en',
+      },
+      homeUsers: [{ id: 'home-1', title: 'Home User', admin: false, protected: true }],
+      credentialStatus: 'present',
+    },
+    servers: {
+      status: 'ready',
+      selected: server,
+      items: [server],
+      lastSelection: { kind: 'selected', server, persisted: true },
+    },
+    library: {
+      status: 'ready',
+      sections: [{
+        id: 'section-1',
+        title: 'Movies',
+        type: 'movie',
+        contentCount: 1,
+        episodeCount: 0,
+        lastScannedAtMs: 1,
+      }],
+      selectedSectionId: 'section-1',
+      items: [item],
+      search: { query: 'movie', items: [item] },
+      metadata: item,
+    },
+    lastError: {
+      code: 'PLEX_LIBRARY_FAILED',
+      message: 'Plex library request failed.',
+      retryable: true,
+      recoverable: true,
+      operation: 'listLibraryItems',
+      httpStatus: 500,
+    },
+    updatedAtMs: 10,
+  };
+
+  const cloned = cloneRuntimeSnapshot(snapshot);
+
+  assert.deepEqual(cloned, snapshot);
+  assert.notEqual(cloned.auth.pin, snapshot.auth.pin);
+  assert.notEqual(cloned.auth.profile, snapshot.auth.profile);
+  assert.notEqual(cloned.auth.homeUsers, snapshot.auth.homeUsers);
+  assert.notEqual(cloned.auth.homeUsers[0], snapshot.auth.homeUsers[0]);
+  assert.notEqual(cloned.servers.selected, snapshot.servers.selected);
+  assert.notEqual(cloned.servers.selected?.health, snapshot.servers.selected?.health);
+  assert.notEqual(cloned.servers.items, snapshot.servers.items);
+  assert.notEqual(cloned.servers.items[0], snapshot.servers.items[0]);
+  assert.notEqual(cloned.servers.items[0]?.health, snapshot.servers.items[0]?.health);
+  assert.notEqual(cloned.servers.lastSelection, snapshot.servers.lastSelection);
+  assert.equal(cloned.servers.lastSelection?.kind, 'selected');
+  if (cloned.servers.lastSelection?.kind === 'selected' && snapshot.servers.lastSelection?.kind === 'selected') {
+    assert.notEqual(cloned.servers.lastSelection.server, snapshot.servers.lastSelection.server);
+    assert.notEqual(cloned.servers.lastSelection.server.health, snapshot.servers.lastSelection.server.health);
+  }
+  assert.notEqual(cloned.library.sections, snapshot.library.sections);
+  assert.notEqual(cloned.library.sections[0], snapshot.library.sections[0]);
+  assert.notEqual(cloned.library.items, snapshot.library.items);
+  assert.notEqual(cloned.library.items[0], snapshot.library.items[0]);
+  assert.notEqual(cloned.library.items[0]?.genres, snapshot.library.items[0]?.genres);
+  assert.notEqual(cloned.library.items[0]?.directors, snapshot.library.items[0]?.directors);
+  assert.notEqual(cloned.library.items[0]?.actors, snapshot.library.items[0]?.actors);
+  assert.notEqual(cloned.library.items[0]?.studios, snapshot.library.items[0]?.studios);
+  assert.notEqual(cloned.library.search, snapshot.library.search);
+  assert.notEqual(cloned.library.search?.items, snapshot.library.search?.items);
+  assert.notEqual(cloned.library.search?.items[0], snapshot.library.search?.items[0]);
+  assert.notEqual(cloned.library.metadata, snapshot.library.metadata);
+  assert.notEqual(cloned.library.metadata?.genres, snapshot.library.metadata?.genres);
+  assert.notEqual(cloned.lastError, snapshot.lastError);
 });
 
 test('desktop plex runtime projects library sections, items, search, metadata, diagnostics, and sanitized errors', async () => {

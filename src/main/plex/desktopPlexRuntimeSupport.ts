@@ -1,5 +1,6 @@
 import type {
   PlexIpcResult,
+  PlexMediaItemSummary,
   PlexRuntimeError,
   PlexRuntimeErrorCode,
   PlexRuntimeOperation,
@@ -13,6 +14,13 @@ import { PlexDiscoveryError } from './discovery/index.js';
 import { PlexLibraryError } from './library/plexLibraryError.js';
 import type { PlexMediaContainer } from './library/types.js';
 import { LivePlexTransportError } from './livePlexTransport.js';
+
+const PLEX_LIBRARY_OPERATIONS = new Set<PlexRuntimeOperation>([
+  'listLibrarySections',
+  'listLibraryItems',
+  'searchLibrary',
+  'getMetadata',
+]);
 
 export function createInitialSnapshot(nowMs: number): PlexRuntimeSnapshot {
   return {
@@ -65,24 +73,65 @@ export function cloneRuntimeSnapshot(snapshot: PlexRuntimeSnapshot): PlexRuntime
     ...snapshot,
     auth: {
       ...snapshot.auth,
-      homeUsers: [...snapshot.auth.homeUsers],
+      pin: snapshot.auth.pin === null ? null : { ...snapshot.auth.pin },
+      profile: snapshot.auth.profile === null ? null : { ...snapshot.auth.profile },
+      homeUsers: snapshot.auth.homeUsers.map((user) => ({ ...user })),
     },
     servers: {
       ...snapshot.servers,
-      items: [...snapshot.servers.items],
+      selected: snapshot.servers.selected === null ? null : cloneServerSummary(snapshot.servers.selected),
+      items: snapshot.servers.items.map((server) => cloneServerSummary(server)),
+      lastSelection: cloneServerSelection(snapshot.servers.lastSelection),
     },
     library: {
       ...snapshot.library,
-      sections: [...snapshot.library.sections],
-      items: [...snapshot.library.items],
+      sections: snapshot.library.sections.map((section) => ({ ...section })),
+      items: snapshot.library.items.map((item) => cloneMediaItemSummary(item)),
+      metadata: snapshot.library.metadata === null ? null : cloneMediaItemSummary(snapshot.library.metadata),
       search:
         snapshot.library.search === null
           ? null
           : {
               query: snapshot.library.search.query,
-              items: [...snapshot.library.search.items],
+              items: snapshot.library.search.items.map((item) => cloneMediaItemSummary(item)),
             },
     },
+    lastError: snapshot.lastError === null ? null : { ...snapshot.lastError },
+  };
+}
+
+function cloneServerSummary(server: PlexServerSummary): PlexServerSummary {
+  return {
+    ...server,
+    ...(server.health !== undefined ? { health: { ...server.health } } : {}),
+  };
+}
+
+function cloneServerSelection(
+  selection: PlexServerSelectionSummary | null,
+): PlexServerSelectionSummary | null {
+  if (selection === null) {
+    return null;
+  }
+  if (selection.kind === 'selected') {
+    return {
+      ...selection,
+      server: cloneServerSummary(selection.server),
+    };
+  }
+  return {
+    ...selection,
+    ...(selection.server !== undefined ? { server: cloneServerSummary(selection.server) } : {}),
+  };
+}
+
+function cloneMediaItemSummary(item: PlexMediaItemSummary): PlexMediaItemSummary {
+  return {
+    ...item,
+    ...(item.genres !== undefined ? { genres: [...item.genres] } : {}),
+    ...(item.directors !== undefined ? { directors: [...item.directors] } : {}),
+    ...(item.actors !== undefined ? { actors: [...item.actors] } : {}),
+    ...(item.studios !== undefined ? { studios: [...item.studios] } : {}),
   };
 }
 
@@ -373,10 +422,11 @@ function mapTransportError(error: LivePlexTransportError, operation: PlexRuntime
     'parse-error': 'PLEX_PARSE_FAILED',
     aborted: 'PLEX_CANCELLED',
     timeout: 'PLEX_SERVER_UNREACHABLE',
-    'server-error': 'PLEX_LIBRARY_FAILED',
+    'server-error': PLEX_LIBRARY_OPERATIONS.has(operation) ? 'PLEX_LIBRARY_FAILED' : 'PLEX_UNKNOWN',
   };
-  return runtimeError(codeMap[error.code], operation, {
-    message: messageForCode(codeMap[error.code]),
+  const code = codeMap[error.code];
+  return runtimeError(code, operation, {
+    message: messageForCode(code),
     httpStatus: error.httpStatus,
     retryable: error.retryable,
     recoverable: true,

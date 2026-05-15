@@ -95,6 +95,7 @@ export function createPlexRuntimeController({
     statusText: string,
   ): Promise<PlexIpcResult<TValue> | null> => {
     const epoch = ++operationEpoch;
+    const previousStatusText = state.statusText;
     pendingOperationEpochs.set(operation, epoch);
     commit(markPlexRendererOperationPending(state, operation, true));
     const result = await invoke().catch((error: unknown) => {
@@ -118,6 +119,8 @@ export function createPlexRuntimeController({
       const snapshot = applySuccess(result.value);
       if (snapshot !== null) {
         commitSnapshot(snapshot, statusText);
+      } else {
+        commit({ ...state, statusText: previousStatusText });
       }
     } else {
       commit(applyPlexIpcFailure(state, result));
@@ -351,7 +354,7 @@ export function createPlexRuntimeController({
       await run(
         'listLibraryItems',
         () => bridge.listLibraryItems({ sectionId: safeSectionId, offset: 0, limit: 24 }),
-        (value) => value.snapshot,
+        (value) => (state.selectedSectionId === safeSectionId ? value.snapshot : null),
         'Items loaded',
       );
     },
@@ -360,14 +363,19 @@ export function createPlexRuntimeController({
       if (query.length === 0) {
         return;
       }
+      const selectedSectionId = state.selectedSectionId;
       await run(
         'searchLibrary',
         () => bridge.searchLibrary({
           query,
-          sectionId: state.selectedSectionId ?? undefined,
+          sectionId: selectedSectionId ?? undefined,
           limit: 24,
         }),
-        (value) => value.snapshot,
+        (value) => (
+          state.searchQuery.trim() === query && state.selectedSectionId === selectedSectionId
+            ? value.snapshot
+            : null
+        ),
         'Search complete',
       );
     },

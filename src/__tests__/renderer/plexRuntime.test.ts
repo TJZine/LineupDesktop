@@ -429,6 +429,87 @@ test('Plex runtime controller keeps newer matching operations pending after stal
   assert.equal(controller.getState().lastMetadata?.title, 'Second Pilot');
 });
 
+test('Plex runtime controller ignores library item results after section input changes', async () => {
+  const pendingItems = deferred<PlexIpcResult<{
+    sectionId: string;
+    offset: number;
+    limit: number;
+    items: ReturnType<typeof mediaItems>;
+    snapshot: PlexRuntimeSnapshot;
+  }>>();
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      getSnapshot: async () => success(snapshotWithSections()),
+      listLibraryItems: () => pendingItems.promise,
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  await controller.loadSnapshot();
+  assert.equal(controller.getState().statusText, 'Snapshot loaded');
+  const loading = controller.listLibraryItems('section-1');
+  assert.equal(controller.getState().pending.listLibraryItems, true);
+
+  controller.setSelectedSection('section-2');
+  pendingItems.resolve(success({
+    sectionId: 'section-1',
+    offset: 0,
+    limit: 24,
+    items: mediaItems(),
+    snapshot: snapshotWithItems(),
+  }));
+  await loading;
+
+  assert.equal(controller.getState().pending.listLibraryItems, false);
+  assert.equal(controller.getState().selectedSectionId, 'section-2');
+  assert.equal(controller.getState().snapshot?.library.items.length, 0);
+  assert.equal(controller.getState().statusText, 'Snapshot loaded');
+});
+
+test('Plex runtime controller ignores search results after query or section inputs change', async () => {
+  const pendingSearch = deferred<PlexIpcResult<{
+    query: string;
+    sectionId: string | null;
+    items: ReturnType<typeof mediaItems>;
+    snapshot: PlexRuntimeSnapshot;
+  }>>();
+  const capturedRequests: Array<{ query: string; sectionId?: string; limit?: number }> = [];
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      getSnapshot: async () => success(snapshotWithSections()),
+      searchLibrary: (input) => {
+        capturedRequests.push(input);
+        return pendingSearch.promise;
+      },
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  await controller.loadSnapshot();
+  controller.setSearchQuery(' pilot ');
+  const searching = controller.searchLibrary();
+  assert.equal(controller.getState().pending.searchLibrary, true);
+
+  controller.setSearchQuery('new pilot');
+  controller.setSelectedSection('section-2');
+  pendingSearch.resolve(success({
+    query: 'pilot',
+    sectionId: 'section-1',
+    items: mediaItems(),
+    snapshot: snapshotWithSearch('pilot'),
+  }));
+  await searching;
+
+  assert.deepEqual(capturedRequests, [{ query: 'pilot', sectionId: 'section-1', limit: 24 }]);
+  assert.equal(controller.getState().pending.searchLibrary, false);
+  assert.equal(controller.getState().searchQuery, 'new pilot');
+  assert.equal(controller.getState().selectedSectionId, 'section-2');
+  assert.equal(controller.getState().snapshot?.library.search, null);
+  assert.equal(controller.getState().statusText, 'Snapshot loaded');
+});
+
 test('Plex runtime controller does not clear newer home user PIN after pending switch completes', async () => {
   const pendingSwitch = deferred<PlexIpcResult<{
     profile: ReturnType<typeof profile>;
