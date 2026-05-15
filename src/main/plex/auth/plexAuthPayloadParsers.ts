@@ -60,10 +60,15 @@ export function parsePinResponse(data: unknown, fallbackClientId: string): PlexP
 }
 
 export function parseUserResponse(data: unknown, token: string): PlexAuthToken {
-  const payload = requireRecord(data, 'User response');
-  const userId = requireUserId(payload.id, 'Plex user id');
-  const username = requireNonEmptyString(payload.username, 'Plex username');
-  const email = requireNonEmptyString(payload.email, 'Plex user email');
+  const payload = unwrapUserResponseRecord(requireRecord(data, 'User response'));
+  const userId = requireUserId(readFirstValue(payload, ['id', 'uuid']), 'Plex user id');
+  const username = readFirstNonEmptyString(payload, [
+    'username',
+    'title',
+    'friendlyName',
+    'name',
+  ]) ?? 'Plex account';
+  const email = readOptionalString(payload.email) ?? '';
   const thumb = typeof payload.thumb === 'string' ? payload.thumb : '';
   const preferredSubtitleLanguage = extractPreferredSubtitleLanguage(payload);
 
@@ -77,6 +82,23 @@ export function parseUserResponse(data: unknown, token: string): PlexAuthToken {
     issuedAt: new Date(),
     preferredSubtitleLanguage,
   };
+}
+
+function unwrapUserResponseRecord(payload: Record<string, unknown>): Record<string, unknown> {
+  const candidates = [
+    payload.user,
+    payload.User,
+    isRecord(payload.MediaContainer) ? payload.MediaContainer.user : undefined,
+    isRecord(payload.MediaContainer) ? payload.MediaContainer.User : undefined,
+  ];
+
+  for (const candidate of candidates) {
+    if (isRecord(candidate)) {
+      return candidate;
+    }
+  }
+
+  return payload;
 }
 
 export function parseHomeUsersPayload(payload: PlexResponsePayload): PlexHomeUser[] {
@@ -129,11 +151,37 @@ function extractPreferredSubtitleLanguageFromSettings(settings: unknown): string
 }
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
+  if (isRecord(value)) {
     return value as Record<string, unknown>;
   }
 
   throw new PlexAuthError('parse-error', `${label} was not an object`);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readFirstValue(record: Record<string, unknown>, keys: readonly string[]): unknown {
+  for (const key of keys) {
+    if (record[key] !== undefined && record[key] !== null) {
+      return record[key];
+    }
+  }
+  return undefined;
+}
+
+function readFirstNonEmptyString(
+  record: Record<string, unknown>,
+  keys: readonly string[],
+): string | null {
+  for (const key of keys) {
+    const value = readOptionalString(record[key]);
+    if (value !== null) {
+      return value;
+    }
+  }
+  return null;
 }
 
 function requireFiniteNumber(value: unknown, label: string): number {
