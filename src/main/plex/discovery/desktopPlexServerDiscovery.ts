@@ -22,6 +22,7 @@ import type {
   PlexServerHealthRecord,
   PlexServerSelectionSource,
 } from './types.js';
+import { LivePlexTransportError } from '../livePlexTransport.js';
 
 export interface DesktopPlexDiscoveryTransport {
   discoverResources(input: { token?: string; signal?: AbortSignal | null }): Promise<unknown>;
@@ -310,10 +311,5 @@ function throwIfAborted(signal?: AbortSignal | null): void {
 }
 
 function isTransportAbortError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    error.name === 'LivePlexTransportError' &&
-    'code' in error &&
-    error.code === 'aborted'
-  );
+  return error instanceof LivePlexTransportError && error.code === 'aborted';
 }

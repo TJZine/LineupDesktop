@@ -95,7 +95,7 @@ app.whenReady()
       reportDiagnostic: reportMainProcessDiagnostic,
       diagnosticEventStore,
     });
-    teardownPlexComposition = registerPlexComposition({
+    teardownPlexComposition = await registerPlexComposition({
       app,
       shellMode,
       isAuthorizedEvent,
@@ -130,8 +130,11 @@ app.on('before-quit', (event) => {
   publishShellStatus('closing');
   const teardown = teardownPlayerIpc;
   if (playerIpcQuitTeardownComplete || teardown === null) {
-    void teardownPlexComposition?.();
+    const teardownPlex = teardownPlexComposition;
     teardownPlexComposition = null;
+    void teardownPlex?.().catch((error: unknown) => {
+      reportMainProcessDiagnostic('Plex composition cleanup failed during quit', error);
+    });
     return;
   }
   if (playerIpcQuitTeardownInProgress) {

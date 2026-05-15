@@ -272,7 +272,11 @@ export class LivePlexTransport
       timeoutController.abort();
     }, this.timeoutMs);
     const onAbort = () => timeoutController.abort();
-    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) {
+      timeoutController.abort();
+    } else {
+      signal?.addEventListener('abort', onAbort, { once: true });
+    }
 
     try {
       const response = await this.fetchImpl(url, {

@@ -1,5 +1,4 @@
 import os from 'node:os';
-import { randomUUID } from 'node:crypto';
 
 import type { App, IpcMainInvokeEvent } from 'electron';
 import { safeStorage } from 'electron';
@@ -16,6 +15,7 @@ import {
 import { DesktopPlexCredentialStore } from './auth/desktopPlexCredentialStore.js';
 import { DesktopPlexSelectedServerStore } from './discovery/desktopPlexSelectedServerStore.js';
 import { DesktopPlexServerDiscovery } from './discovery/desktopPlexServerDiscovery.js';
+import { readOrCreateDesktopPlexClientIdentifier } from './desktopPlexClientIdentity.js';
 import { DesktopPlexRuntime } from './desktopPlexRuntime.js';
 import { LivePlexTransport } from './livePlexTransport.js';
 import { registerPlexIpcHandlers, type PlexIpcTeardown } from './plexIpc.js';
@@ -30,8 +30,9 @@ export interface RegisterPlexCompositionOptions {
 
 export type PlexCompositionTeardown = () => Promise<void>;
 
-export function registerPlexComposition(options: RegisterPlexCompositionOptions): PlexCompositionTeardown {
+export async function registerPlexComposition(options: RegisterPlexCompositionOptions): Promise<PlexCompositionTeardown> {
   const paths = resolveDesktopAppDataPaths(options.app);
+  const clientIdentifier = await readOrCreateDesktopPlexClientIdentifier(paths);
   const persistenceStore = new DesktopPersistenceStore({
     persistenceFilePath: paths.persistenceFilePath,
     secureStringCodec: createElectronSafeStorageCodec(safeStorage),
@@ -41,7 +42,7 @@ export function registerPlexComposition(options: RegisterPlexCompositionOptions)
   const liveTransport = new LivePlexTransport();
   const authService = new DesktopPlexAuthService({
     config: createDesktopPlexAuthConfig({
-      clientIdentifier: createDesktopClientIdentifier(),
+      clientIdentifier,
       platformVersion: os.release(),
       deviceName: 'Lineup Desktop',
     }),
@@ -79,10 +80,7 @@ export function registerPlexComposition(options: RegisterPlexCompositionOptions)
   });
 
   return async () => {
+    // `registerPlexIpcHandlers` owns runtime shutdown before handler removal.
     await teardownIpc();
   };
-}
-
-function createDesktopClientIdentifier(): string {
-  return `lineup-desktop-${process.platform}-${randomUUID()}`;
 }

@@ -380,6 +380,10 @@ function messageForCode(code: PlexRuntimeErrorCode): string {
       return 'Plex authentication is required.';
     case 'PLEX_AUTH_INVALID':
       return 'Plex authentication was rejected.';
+    case 'PLEX_PIN_EXPIRED':
+      return 'Plex link code expired. Request a new code and try again.';
+    case 'PLEX_PIN_TIMEOUT':
+      return 'Plex link code timed out. Request a new code and try again.';
     case 'PLEX_RATE_LIMITED':
       return 'Plex request was rate limited.';
     case 'PLEX_RESOURCE_NOT_FOUND':

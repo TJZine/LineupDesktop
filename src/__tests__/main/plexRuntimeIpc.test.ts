@@ -541,6 +541,26 @@ test('desktop plex auth ignores aborted profile commits and preserves live abort
   assert.equal(timedOut.ok, false);
   assert.equal(timedOut.ok ? '' : timedOut.error.code, 'PLEX_SERVER_UNREACHABLE');
   assert.equal(timedOut.ok ? false : timedOut.error.retryable, true);
+
+  const pinExpiredFixture = createRuntimeFixture();
+  pinExpiredFixture.authTransport.enqueueError(
+    'request-pin',
+    new PlexAuthError('pin-expired', 'Plex PIN expired'),
+  );
+  const pinExpired = await pinExpiredFixture.runtime.requestPin('pin-expired');
+  assert.equal(pinExpired.ok, false);
+  assert.equal(pinExpired.ok ? '' : pinExpired.error.code, 'PLEX_PIN_EXPIRED');
+  assert.equal(pinExpired.ok ? '' : pinExpired.error.message, 'Plex link code expired. Request a new code and try again.');
+
+  const pinTimeoutFixture = createRuntimeFixture();
+  pinTimeoutFixture.authTransport.enqueueError(
+    'request-pin',
+    new PlexAuthError('pin-timeout', 'Plex PIN timed out'),
+  );
+  const pinTimeout = await pinTimeoutFixture.runtime.requestPin('pin-timeout');
+  assert.equal(pinTimeout.ok, false);
+  assert.equal(pinTimeout.ok ? '' : pinTimeout.error.code, 'PLEX_PIN_TIMEOUT');
+  assert.equal(pinTimeout.ok ? '' : pinTimeout.error.message, 'Plex link code timed out. Request a new code and try again.');
 });
 
 test('desktop plex auth aborts in-flight credential persistence before saving account credential', async () => {
@@ -782,6 +802,23 @@ test('live plex transport sends account token for plex.tv discovery and separate
   abortController.abort();
   await assert.rejects(
     () => aborted,
+    (error) => error instanceof LivePlexTransportError && error.code === 'aborted',
+  );
+
+  const alreadyAbortedController = new AbortController();
+  alreadyAbortedController.abort();
+  const preAbortedTransport = new LivePlexTransport({
+    fetch: (_url, init) => {
+      assert.equal((init?.signal as AbortSignal | undefined)?.aborted, true);
+      return Promise.reject(new DOMException('aborted', 'AbortError'));
+    },
+    timeoutMs: 100,
+  });
+  await assert.rejects(
+    () => preAbortedTransport.discoverResources({
+      token: placeholderAccountToken,
+      signal: alreadyAbortedController.signal,
+    }),
     (error) => error instanceof LivePlexTransportError && error.code === 'aborted',
   );
 });
