@@ -33,6 +33,7 @@ import {
   LivePlexTransport,
   type LivePlexLibraryTransport,
 } from '../../main/plex/livePlexTransport.js';
+import { mapRuntimeError } from '../../main/plex/desktopPlexRuntimeSupport.js';
 import { registerPlexIpcHandlers } from '../../main/plex/plexIpc.js';
 
 const placeholderAccountToken = ['placeholder', 'account', 'value'].join('-');
@@ -414,6 +415,29 @@ test('desktop plex runtime preserves discovery timeout as retryable server unrea
   assert.equal(refreshed.ok ? '' : refreshed.error.code, 'PLEX_SERVER_UNREACHABLE');
   assert.equal(refreshed.ok ? false : refreshed.error.retryable, true);
   assert.equal(refreshed.ok ? true : refreshed.cancelled, undefined);
+});
+
+test('desktop plex runtime maps auth and discovery server errors without leaking privileged context', () => {
+  const authError = mapRuntimeError(
+    new PlexAuthError('server-error', `failed ${placeholderAccountToken}`, 500, {
+      retryable: true,
+    }),
+    'requestPin',
+  );
+  const discoveryError = mapRuntimeError(
+    new PlexDiscoveryError('server-error', `failed ${placeholderAccountToken}`, 503, {
+      retryable: true,
+    }),
+    'refreshServers',
+  );
+
+  assert.equal(authError.code, 'PLEX_UNKNOWN');
+  assert.equal(authError.httpStatus, 500);
+  assert.equal(authError.retryable, true);
+  assert.equal(discoveryError.code, 'PLEX_UNKNOWN');
+  assert.equal(discoveryError.httpStatus, 503);
+  assert.equal(discoveryError.retryable, true);
+  assert.equal(JSON.stringify([authError, discoveryError]).includes(placeholderAccountToken), false);
 });
 
 test('desktop plex runtime projects library sections, items, search, metadata, diagnostics, and sanitized errors', async () => {
@@ -824,17 +848,19 @@ test('live plex transport normalizes JSON/text responses, auth headers, status, 
 
   assert.equal(auth.status, 200);
   assert.equal(probe.outcome, 'auth-required');
-  assert.equal(JSON.stringify(seen[0]?.headers).includes(placeholderAccountToken), true);
+  assert.equal(new Headers(seen[0]?.headers).get('X-Plex-Token'), placeholderAccountToken);
   assert.equal(JSON.stringify(auth).includes(placeholderAccountToken), false);
 });
 
 test('live plex transport sends account token for plex.tv discovery and separates timeout from caller abort', async () => {
   const discoveryTransport = new LivePlexTransport({
-    fetch: async (_url, init) =>
-      new Response(JSON.stringify([{ clientIdentifier: 'server-1' }]), {
-        status: JSON.stringify(init?.headers).includes(placeholderAccountToken) ? 200 : 401,
+    fetch: async (_url, init) => {
+      const headers = new Headers(init?.headers);
+      return new Response(JSON.stringify([{ clientIdentifier: 'server-1' }]), {
+        status: headers.get('X-Plex-Token') === placeholderAccountToken ? 200 : 401,
         headers: { 'Content-Type': 'application/json' },
-      }),
+      });
+    },
     timeoutMs: 5,
   });
   const resources = await discoveryTransport.discoverResources({ token: placeholderAccountToken });

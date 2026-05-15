@@ -301,7 +301,7 @@ export class StaleRuntimeMutationError extends Error {
 }
 
 function mapAuthError(error: PlexAuthError, operation: PlexRuntimeOperation): PlexRuntimeError {
-  const codeMap: Record<string, PlexRuntimeErrorCode> = {
+  const codeMap: Record<PlexAuthError['code'], PlexRuntimeErrorCode> = {
     'auth-required': 'PLEX_AUTH_REQUIRED',
     'auth-invalid': 'PLEX_AUTH_INVALID',
     'auth-failed': 'PLEX_AUTH_INVALID',
@@ -310,11 +310,13 @@ function mapAuthError(error: PlexAuthError, operation: PlexRuntimeOperation): Pl
     'rate-limited': 'PLEX_RATE_LIMITED',
     'resource-not-found': 'PLEX_RESOURCE_NOT_FOUND',
     'server-unreachable': 'PLEX_SERVER_UNREACHABLE',
+    'server-error': 'PLEX_UNKNOWN',
     aborted: 'PLEX_CANCELLED',
     'parse-error': 'PLEX_PARSE_FAILED',
   };
-  return runtimeError(codeMap[error.code] ?? 'PLEX_UNKNOWN', operation, {
-    message: messageForCode(codeMap[error.code] ?? 'PLEX_UNKNOWN'),
+  const code = codeMap[error.code];
+  return runtimeError(code, operation, {
+    message: messageForCode(code),
     httpStatus: error.httpStatus,
     retryable: error.retryable,
     recoverable: true,
@@ -322,15 +324,17 @@ function mapAuthError(error: PlexAuthError, operation: PlexRuntimeOperation): Pl
 }
 
 function mapDiscoveryError(error: PlexDiscoveryError, operation: PlexRuntimeOperation): PlexRuntimeError {
-  const codeMap: Record<string, PlexRuntimeErrorCode> = {
+  const codeMap: Record<PlexDiscoveryError['code'], PlexRuntimeErrorCode> = {
     'auth-required': 'PLEX_AUTH_REQUIRED',
     'auth-invalid': 'PLEX_AUTH_INVALID',
     'server-unreachable': 'PLEX_SERVER_UNREACHABLE',
+    'server-error': 'PLEX_UNKNOWN',
     aborted: 'PLEX_CANCELLED',
     'parse-error': 'PLEX_PARSE_FAILED',
   };
-  return runtimeError(codeMap[error.code] ?? 'PLEX_UNKNOWN', operation, {
-    message: messageForCode(codeMap[error.code] ?? 'PLEX_UNKNOWN'),
+  const code = codeMap[error.code];
+  return runtimeError(code, operation, {
+    message: messageForCode(code),
     httpStatus: error.httpStatus,
     retryable: error.retryable,
     recoverable: true,

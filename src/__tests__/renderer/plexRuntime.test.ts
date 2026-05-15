@@ -417,6 +417,31 @@ test('Plex runtime controller keeps newer matching operations pending after stal
   assert.equal(controller.getState().lastMetadata?.title, 'Second Pilot');
 });
 
+test('Plex runtime controller does not clear newer home user PIN after pending switch completes', async () => {
+  const pendingSwitch = deferred<PlexIpcResult<{
+    profile: ReturnType<typeof profile>;
+    snapshot: PlexRuntimeSnapshot;
+  }>>();
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      switchHomeUser: () => pendingSwitch.promise,
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  controller.setHomeUserPin('1111');
+  const switching = controller.switchHomeUser('home-1');
+  assert.equal(controller.getState().pending.switchHomeUser, true);
+
+  controller.setHomeUserPin('2222');
+  pendingSwitch.resolve(success({ profile: profile(), snapshot: snapshotSignedIn() }));
+  await switching;
+
+  assert.equal(controller.getState().pending.switchHomeUser, false);
+  assert.equal(controller.getState().homeUserPin, '2222');
+});
+
 test('Plex runtime controller preserves Unicode input while removing controls', async () => {
   const capturedMetadataKeys: string[] = [];
   const controller = createPlexRuntimeController({
@@ -761,17 +786,22 @@ test('dynamic Plex Home focus ids do not collide with static home controls', () 
 
     const pinUserButton = childAt(dom.plexHomeUsersElement, 0);
     const usersUserButton = childAt(dom.plexHomeUsersElement, 1);
-    assert.equal(pinUserButton.dataset.focusId, 'plex-dyn-home-pin');
-    assert.equal(usersUserButton.dataset.focusId, 'plex-dyn-home-users');
+    const pinUserFocusId = pinUserButton.dataset.focusId;
+    const usersUserFocusId = usersUserButton.dataset.focusId;
+    assert.ok(pinUserFocusId?.startsWith('plex-dyn-home-'));
+    assert.ok(usersUserFocusId?.startsWith('plex-dyn-home-'));
+    assert.notEqual(pinUserFocusId, 'plex-home-pin');
+    assert.notEqual(usersUserFocusId, 'plex-home-users');
+    assert.notEqual(pinUserFocusId, usersUserFocusId);
 
     const initial = registry.createInitialState('channelSetup');
-    const focusedPinUser = registry.focusTarget(initial, 'plex-dyn-home-pin');
+    const focusedPinUser = registry.focusTarget(initial, pinUserFocusId);
     assert.equal(focusedPinUser.changed, true);
     clickFocusedRendererElement(focusedPinUser.state, dom);
     assert.equal(pinUserButton.clickCount, 1);
     assert.equal(staticPinInput.clickCount, 0);
 
-    const focusedUsersUser = registry.focusTarget(focusedPinUser.state, 'plex-dyn-home-users');
+    const focusedUsersUser = registry.focusTarget(focusedPinUser.state, usersUserFocusId);
     assert.equal(focusedUsersUser.changed, true);
     clickFocusedRendererElement(focusedUsersUser.state, dom);
     assert.equal(usersUserButton.clickCount, 1);

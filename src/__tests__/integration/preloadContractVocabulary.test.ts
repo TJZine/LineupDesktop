@@ -300,6 +300,16 @@ function readStringConstInitializer(name: string, initializer: ts.Expression): s
   return expression.text;
 }
 
+function readRegExpConstInitializer(name: string): { pattern: string; flags: string } {
+  const declaration = findPreloadVariableDeclaration(name);
+  assert.ok(declaration?.initializer, `expected ${name} in preload entrypoint`);
+  const expression = unwrapExpression(declaration.initializer);
+  assert.ok(ts.isRegularExpressionLiteral(expression), `expected ${name} to be a RegExp literal`);
+  const match = /^\/(.*)\/([a-z]*)$/su.exec(expression.text);
+  assert.ok(match, `expected ${name} to have a parseable RegExp literal`);
+  return { pattern: match[1], flags: match[2] };
+}
+
 function unwrapExpression(expression: ts.Expression): ts.Expression {
   let current = expression;
   while (
@@ -652,24 +662,18 @@ function assertNoForbiddenElectronAccess(node: ts.Node): void {
 
 test('preload guard vocabulary matches contract vocabulary', () => {
   assert.doesNotMatch(preloadSourceText, /\.\/vocabulary\.cjs/u);
-  assert.equal(
-    preloadSourceText.includes(
-      `const DIAGNOSTICS_REQUEST_ID_PATTERN = /${DIAGNOSTICS_REQUEST_ID_PATTERN_SOURCE}/u;`,
-    ),
-    true,
-  );
-  assert.equal(
-    preloadSourceText.includes(
-      'const PLEX_REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,120}$/u;',
-    ),
-    true,
-  );
-  assert.equal(
-    preloadSourceText.includes(
-      `/${DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN_SOURCE}/iu`,
-    ),
-    true,
-  );
+  assert.deepEqual(readRegExpConstInitializer('DIAGNOSTICS_REQUEST_ID_PATTERN'), {
+    pattern: DIAGNOSTICS_REQUEST_ID_PATTERN_SOURCE,
+    flags: 'u',
+  });
+  assert.deepEqual(readRegExpConstInitializer('PLEX_REQUEST_ID_PATTERN'), {
+    pattern: '^[A-Za-z0-9._-]{1,120}$',
+    flags: 'u',
+  });
+  assert.deepEqual(readRegExpConstInitializer('DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN'), {
+    pattern: DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN_SOURCE,
+    flags: 'iu',
+  });
   assert.deepEqual(readPreloadStringArrayConst('SHELL_STATUS_VALUES'), [...SHELL_STATUS_VALUES]);
   assert.deepEqual(readPreloadStringArrayConst('PLAYER_ERROR_CATEGORIES'), [...PLAYER_ERROR_CATEGORIES]);
   assert.deepEqual(

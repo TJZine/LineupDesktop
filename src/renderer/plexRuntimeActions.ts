@@ -137,6 +137,8 @@ export function createPlexRuntimeController({
     }
   };
 
+  const isOperationEpochCurrent = (epoch: number): boolean => epoch === operationEpoch;
+
   const clearPollTimer = (): void => {
     if (pollTimer !== null) {
       scheduler.clearTimeout(pollTimer);
@@ -297,13 +299,16 @@ export function createPlexRuntimeController({
         return;
       }
       const pin = state.homeUserPin.trim();
+      const epoch = operationEpoch + 1;
       await run(
         'switchHomeUser',
         () => bridge.switchHomeUser({ userId: safeUserId, pin: pin.length === 0 ? null : pin }),
         (value) => value.snapshot,
         'Profile switched',
       );
-      commit(updatePlexRendererInputs(state, { homeUserPin: '' }));
+      if (isOperationEpochCurrent(epoch) && state.homeUserPin.trim() === pin) {
+        commit(updatePlexRendererInputs(state, { homeUserPin: '' }));
+      }
     },
     async restoreSelectedServer(): Promise<void> {
       await run(
