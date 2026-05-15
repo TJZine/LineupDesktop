@@ -209,20 +209,25 @@ export function isOptionalShortString(value: string | null | undefined): boolean
 }
 
 export function payloadAsContainer<T>(payload: unknown): PlexMediaContainer<T> {
-  if (
-    typeof payload === 'object' &&
-    payload !== null &&
-    'kind' in payload &&
-    (payload as { kind?: unknown }).kind === 'json'
-  ) {
-    return (payload as unknown as { data: unknown }).data as PlexMediaContainer<T>;
+  if (!isPlainObject(payload) || payload.kind !== 'json') {
+    throw new PlexLibraryError('parse-error', 'Plex library response was not JSON');
   }
-  throw new PlexLibraryError('parse-error', 'Plex library response was not JSON');
+  if (!isPlainObject(payload.data) || !isPlainObject(payload.data.MediaContainer)) {
+    throw new PlexLibraryError(
+      'parse-error',
+      'Plex library JSON response did not include a MediaContainer object',
+    );
+  }
+  return payload.data as unknown as PlexMediaContainer<T>;
 }
 
 export function normalizeOperationKey(operationKey: string): PlexRuntimeOperation {
   const [operation] = operationKey.split(':');
   return operation as PlexRuntimeOperation;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function mapCredentialStatus(status: string): PlexRuntimeSnapshot['auth']['credentialStatus'] {

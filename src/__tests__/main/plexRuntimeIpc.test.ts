@@ -469,6 +469,27 @@ test('desktop plex runtime projects library sections, items, search, metadata, d
   assert.equal(JSON.stringify(records).includes(placeholderAccountToken), false);
 });
 
+test('desktop plex runtime rejects malformed JSON library payload envelopes safely', async () => {
+  const invalidPayloads = [
+    { kind: 'json' },
+    { kind: 'json', data: null },
+    { kind: 'json', data: {} },
+  ];
+
+  for (const invalidPayload of invalidPayloads) {
+    const fixture = createRuntimeFixture();
+    await signInAndSelectServer(fixture);
+    fixture.libraryTransport.listItemsResponse = invalidPayload;
+
+    const failed = await fixture.runtime.listLibraryItems('items-invalid-payload', { sectionId: '1' });
+
+    assert.equal(failed.ok, false);
+    assert.equal(failed.ok ? '' : failed.error.code, 'PLEX_PARSE_FAILED');
+    assert.equal(containsPlexForbiddenRendererField(failed), false);
+    assert.equal(JSON.stringify(failed).includes(placeholderAccountToken), false);
+  }
+});
+
 test('desktop plex runtime returns cancelled and stale envelopes without committing stale results', async () => {
   const fixture = createRuntimeFixture();
   await signInAndSelectServer(fixture);

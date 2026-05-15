@@ -232,9 +232,10 @@ export function createPlexRuntimeController({
         controller.clearSelectedServer();
         return true;
       }
+      const hasSnapshotPin = state.snapshot !== null && state.snapshot.auth.pin !== null;
       if (
         activePinId !== null
-        || state.snapshot?.auth.pin !== null
+        || hasSnapshotPin
         || state.homeUserPin.length > 0
         || hasPendingPinSubflow()
       ) {

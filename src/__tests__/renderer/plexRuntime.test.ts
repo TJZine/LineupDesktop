@@ -230,6 +230,18 @@ test('Plex runtime controller clears nested setup state before route back', asyn
   assert.equal(await controller.handleBack(), false);
 });
 
+test('Plex runtime controller does not treat a missing snapshot as a PIN subflow', async () => {
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({}),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  assert.equal(await controller.handleBack(), false);
+  assert.equal(controller.getState().snapshot, null);
+  assert.equal(controller.getState().homeUserPin, '');
+});
+
 test('Plex cleanup clears loaded profile and library snapshot state', async () => {
   const controller = createPlexRuntimeController({
     bridge: createBridge({

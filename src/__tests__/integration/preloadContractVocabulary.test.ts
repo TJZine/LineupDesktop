@@ -875,6 +875,10 @@ test('preload Plex bridge rejects invalid pin ids and limits without IPC', async
     { sectionId: '1', limit: 1.5 },
     { sectionId: '1', limit: 0 },
     { sectionId: '1', limit: 5001 },
+    { sectionId: '', limit: 25 },
+    { sectionId: 42, limit: 25 },
+    { sectionId: null, limit: 25 },
+    { sectionId: 'x'.repeat(257), limit: 25 },
   ]) {
     const result = await harness.api.plex.listLibraryItems(harness.input(input));
     assert.equal((result as { ok: boolean }).ok, false);
