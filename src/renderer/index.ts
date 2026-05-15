@@ -72,6 +72,7 @@ let focusState: FocusState;
 const plexController = createPlexRuntimeController({
   bridge: window.lineupDesktop.plex,
   onStateChanged: () => renderApp(),
+  recordRendererEvent: window.lineupDesktop.diagnostics.recordRendererEvent,
 });
 
 syncRendererFocusTargets(focusRegistry, dom);

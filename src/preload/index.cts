@@ -276,22 +276,7 @@ const PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS = [
   'partKey',
   'secretDiagnostics',
 ] as const;
-const PLEX_FORBIDDEN_RENDERER_FIELD_KEYS = [
-  'rawMediaUrl',
-  'tokenizedUrl',
-  'authHeaders',
-  'rawAuthHeaders',
-  'persistentToken',
-  'credentialMaterial',
-  'nativeHandle',
-  'libmpvObject',
-  'engineId',
-  'electronApi',
-  'nodeApi',
-  'rawPlexPayload',
-  'streamKey',
-  'partKey',
-  'secretDiagnostics',
+const PLEX_FORBIDDEN_STORAGE_FIELD_KEYS = [
   'appPath',
   'userDataPath',
   'filesystemPath',
@@ -299,23 +284,8 @@ const PLEX_FORBIDDEN_RENDERER_FIELD_KEYS = [
   'encryptedSecretBase64',
   'secretValue',
   'secretPlaintext',
-  'connectionUri',
-  'rawConnectionUri',
-  'rawMediaUrl',
-  'tokenizedUrl',
-  'authHeaders',
-  'rawAuthHeaders',
-  'persistentToken',
-  'credentialMaterial',
-  'nativeHandle',
-  'libmpvObject',
-  'engineId',
-  'electronApi',
-  'nodeApi',
-  'rawPlexPayload',
-  'streamKey',
-  'partKey',
-  'secretDiagnostics',
+] as const;
+const PLEX_FORBIDDEN_CONNECTION_FIELD_KEYS = [
   'serverUri',
   'rawServerUri',
   'connectionUri',
@@ -324,8 +294,15 @@ const PLEX_FORBIDDEN_RENDERER_FIELD_KEYS = [
   'port',
   'uri',
   'url',
+] as const;
+const PLEX_FORBIDDEN_HEADER_FIELD_KEYS = [
   'headers',
   'rawHeaders',
+  'authorization',
+  'X-Plex-Token',
+  'header',
+] as const;
+const PLEX_FORBIDDEN_TOKEN_FIELD_KEYS = [
   'authToken',
   'accessToken',
   'access_token',
@@ -335,14 +312,12 @@ const PLEX_FORBIDDEN_RENDERER_FIELD_KEYS = [
   'activeToken',
   'plexToken',
   'clientSecret',
-  'authorization',
-  'X-Plex-Token',
-  'header',
   'secret',
   'credential',
   'password',
+] as const;
+const PLEX_FORBIDDEN_PAYLOAD_FIELD_KEYS = [
   'rawPayload',
-  'rawPlexPayload',
   'mediaFile',
   'mediaPart',
   'file',
@@ -352,6 +327,17 @@ const PLEX_FORBIDDEN_RENDERER_FIELD_KEYS = [
   'banner',
   'clearLogo',
 ] as const;
+const PLEX_FORBIDDEN_RENDERER_FIELD_KEYS = [
+  ...PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
+  ...PLEX_FORBIDDEN_STORAGE_FIELD_KEYS,
+  ...PLEX_FORBIDDEN_CONNECTION_FIELD_KEYS,
+  ...PLEX_FORBIDDEN_HEADER_FIELD_KEYS,
+  ...PLEX_FORBIDDEN_TOKEN_FIELD_KEYS,
+  ...PLEX_FORBIDDEN_PAYLOAD_FIELD_KEYS,
+] as const;
+const PLEX_FORBIDDEN_RENDERER_FIELD_KEYS_LOWER = new Set(
+  PLEX_FORBIDDEN_RENDERER_FIELD_KEYS.map((field) => field.toLowerCase()),
+);
 const PLAYER_STATUS_VALUES = [
   'idle',
   'loading',
@@ -995,9 +981,7 @@ function hasForbiddenPlexRendererField(value: unknown): boolean {
   }
   return Object.entries(value).some(([key, child]) => {
     return (
-      (PLEX_FORBIDDEN_RENDERER_FIELD_KEYS as readonly string[])
-        .map((field) => field.toLowerCase())
-        .includes(key.toLowerCase()) ||
+      PLEX_FORBIDDEN_RENDERER_FIELD_KEYS_LOWER.has(key.toLowerCase()) ||
       hasForbiddenPlexRendererField(child)
     );
   });

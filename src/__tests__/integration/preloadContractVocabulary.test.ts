@@ -283,9 +283,14 @@ function findPreloadFunctionDeclaration(name: string): ts.FunctionDeclaration | 
 function readStringArrayInitializer(name: string, initializer: ts.Expression): string[] {
   const expression = unwrapExpression(initializer);
   assert.ok(ts.isArrayLiteralExpression(expression), `expected ${name} to be an array literal`);
-  return expression.elements.map((element) => {
-    assert.ok(ts.isStringLiteral(element), `expected ${name} to contain only string literals`);
-    return element.text;
+  return expression.elements.flatMap((element) => {
+    if (ts.isSpreadElement(element) && ts.isIdentifier(element.expression)) {
+      const declaration = findPreloadVariableDeclaration(element.expression.text);
+      assert.ok(declaration?.initializer, `expected ${name} spread ${element.expression.text} in preload entrypoint`);
+      return readStringArrayInitializer(element.expression.text, declaration.initializer);
+    }
+    assert.ok(ts.isStringLiteral(element), `expected ${name} to contain only string literals or const spreads`);
+    return [element.text];
   });
 }
 
@@ -713,9 +718,12 @@ test('preload guard vocabulary matches contract vocabulary', () => {
   assert.deepEqual(readPreloadStringArrayConst('PLEX_RUNTIME_ERROR_CODES'), [
     ...PLEX_RUNTIME_ERROR_CODES,
   ]);
-  assert.deepEqual(readPreloadStringArrayConst('PLEX_FORBIDDEN_RENDERER_FIELD_KEYS'), [
-    ...PLEX_FORBIDDEN_RENDERER_FIELD_KEYS,
-  ]);
+  const preloadPlexForbiddenKeys = readPreloadStringArrayConst('PLEX_FORBIDDEN_RENDERER_FIELD_KEYS');
+  assert.deepEqual(
+    [...new Set(preloadPlexForbiddenKeys)].sort(),
+    [...new Set(PLEX_FORBIDDEN_RENDERER_FIELD_KEYS)].sort(),
+  );
+  assert.equal(preloadPlexForbiddenKeys.length, new Set(preloadPlexForbiddenKeys).size);
 });
 
 test('preload Plex bridge validates invoke results before returning them', async () => {

@@ -63,15 +63,17 @@ export function createPlexRuntimeController({
     clearTimeout: (handle) => window.clearTimeout(handle),
   },
   pollIntervalMs = 2500,
+  recordRendererEvent = getRendererDiagnosticRecorder(),
 }: {
   bridge: LineupDesktopPreloadApi['plex'];
   onStateChanged: (state: PlexRuntimeRendererState) => void;
   scheduler?: PlexRuntimeActionScheduler;
   pollIntervalMs?: number;
+  recordRendererEvent?: LineupDesktopPreloadApi['diagnostics']['recordRendererEvent'];
 }): PlexRuntimeController {
   let state = createPlexRuntimeRendererState();
   let operationEpoch = 0;
-  let disposed = false;
+  const pendingOperationEpochs = new Map<PlexRendererOperation, number>();
   let pollTimer: number | null = null;
   let activePinId: number | null = null;
 
@@ -91,16 +93,19 @@ export function createPlexRuntimeController({
     applySuccess: (value: TValue) => PlexRuntimeSnapshot | null,
     statusText: string,
   ): Promise<PlexIpcResult<TValue> | null> => {
-    if (disposed) {
-      return null;
-    }
     const epoch = ++operationEpoch;
+    pendingOperationEpochs.set(operation, epoch);
     commit(markPlexRendererOperationPending(state, operation, true));
-    const result = await invoke().catch(() => null);
-    if (disposed || epoch !== operationEpoch) {
+    const result = await invoke().catch((error: unknown) => {
+      recordPlexRendererIpcRejection(recordRendererEvent, operation, error);
+      return null;
+    });
+    if (epoch !== operationEpoch) {
+      clearPendingOperationIfCurrent(operation, epoch);
       return result;
     }
     if (result === null) {
+      pendingOperationEpochs.delete(operation);
       commit({
         ...markPlexRendererOperationPending(state, operation, false),
         statusText: 'Failed',
@@ -116,8 +121,19 @@ export function createPlexRuntimeController({
     } else {
       commit(applyPlexIpcFailure(state, result));
     }
+    pendingOperationEpochs.delete(operation);
     commit(markPlexRendererOperationPending(state, operation, false));
     return result;
+  };
+
+  const clearPendingOperationIfCurrent = (operation: PlexRendererOperation, epoch: number): void => {
+    if (pendingOperationEpochs.get(operation) !== epoch) {
+      return;
+    }
+    pendingOperationEpochs.delete(operation);
+    if (state.pending[operation]) {
+      commit(markPlexRendererOperationPending(state, operation, false));
+    }
   };
 
   const clearPollTimer = (): void => {
@@ -129,7 +145,7 @@ export function createPlexRuntimeController({
 
   const schedulePoll = (): void => {
     clearPollTimer();
-    if (disposed || activePinId === null) {
+    if (activePinId === null) {
       return;
     }
     pollTimer = scheduler.setTimeout(() => {
@@ -140,6 +156,7 @@ export function createPlexRuntimeController({
 
   const commitLocalClear = (nextState: PlexRuntimeRendererState): void => {
     ++operationEpoch;
+    pendingOperationEpochs.clear();
     commit(clearPlexRendererPending(nextState));
   };
 
@@ -180,11 +197,15 @@ export function createPlexRuntimeController({
     async clearPinSubflow(): Promise<void> {
       const pinId = activePinId ?? state.snapshot?.auth.pin?.id ?? null;
       ++operationEpoch;
+      pendingOperationEpochs.clear();
       clearPollTimer();
       activePinId = null;
       commit(clearPlexRendererPending(clearPlexRendererPinSubflow(state)));
       if (pinId !== null && Number.isFinite(pinId) && pinId > 0) {
-        await bridge.cancelPin({ pinId }).catch(() => null);
+        await bridge.cancelPin({ pinId }).catch((error: unknown) => {
+          recordPlexRendererIpcRejection(recordRendererEvent, 'cancelPin', error);
+          return null;
+        });
       }
     },
     async handleBack(): Promise<boolean> {
@@ -357,10 +378,8 @@ export function createPlexRuntimeController({
       );
     },
     async cleanup(): Promise<void> {
-      if (disposed) {
-        return;
-      }
       ++operationEpoch;
+      pendingOperationEpochs.clear();
       clearPollTimer();
       const pinId = activePinId ?? state.snapshot?.auth.pin?.id ?? null;
       activePinId = null;
@@ -368,8 +387,11 @@ export function createPlexRuntimeController({
       commit(clearPlexRendererForCleanup(state));
       if (pinId !== null && Number.isFinite(pinId) && pinId > 0) {
         commit(markPlexRendererOperationPending(state, 'cleanup', true));
-        const result = await bridge.cancelPin({ pinId }).catch(() => null);
-        if (disposed || cleanupEpoch !== operationEpoch) {
+        const result = await bridge.cancelPin({ pinId }).catch((error: unknown) => {
+          recordPlexRendererIpcRejection(recordRendererEvent, 'cleanup', error);
+          return null;
+        });
+        if (cleanupEpoch !== operationEpoch) {
           return;
         }
         if (result?.ok) {
@@ -385,6 +407,34 @@ export function createPlexRuntimeController({
   };
 
   return controller;
+}
+
+function recordPlexRendererIpcRejection(
+  recordRendererEvent: LineupDesktopPreloadApi['diagnostics']['recordRendererEvent'] | undefined,
+  operation: PlexRendererOperation,
+  error: unknown,
+): void {
+  const errorName = error instanceof Error ? error.name : typeof error;
+  if (recordRendererEvent === undefined) {
+    return;
+  }
+  void recordRendererEvent({
+    requestId: `plex-renderer-${Date.now()}`,
+    event: {
+      surface: 'renderer',
+      category: 'ipc',
+      severity: 'warning',
+      operation: `plex.${operation}`,
+      message: 'Plex renderer IPC invocation rejected.',
+      context: { operation, errorName },
+    },
+  }).catch(() => undefined);
+}
+
+function getRendererDiagnosticRecorder():
+  | LineupDesktopPreloadApi['diagnostics']['recordRendererEvent']
+  | undefined {
+  return typeof window === 'undefined' ? undefined : window.lineupDesktop?.diagnostics.recordRendererEvent;
 }
 
 function sanitizeInput(value: string, maxLength: number): string {

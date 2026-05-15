@@ -307,6 +307,8 @@ function formatServerHealth(server: PlexServerSummary): string {
       return 'Sign-in required';
     case 'access-denied':
       return 'Access denied';
+    default:
+      return assertUnreachable(server.health.status);
   }
 }
 
@@ -322,7 +324,13 @@ function formatMediaType(value: PlexMediaItemSummary['type']): string {
       return 'Track';
     case 'clip':
       return 'Clip';
+    default:
+      return assertUnreachable(value);
   }
+}
+
+function assertUnreachable(_value: never): string {
+  return 'Unknown';
 }
 
 function formatYear(value: number): string {

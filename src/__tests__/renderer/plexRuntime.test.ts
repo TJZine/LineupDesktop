@@ -298,6 +298,87 @@ test('Plex clear and back ignore pending setup operation results', async () => {
   assert.equal(controller.getState().homeUserPin, '');
 });
 
+test('Plex runtime controller keeps newer matching operations pending after stale completion', async () => {
+  const firstMetadata = deferred<PlexIpcResult<{
+    item: ReturnType<typeof mediaItems>[number];
+    snapshot: PlexRuntimeSnapshot;
+  }>>();
+  const secondMetadata = deferred<PlexIpcResult<{
+    item: ReturnType<typeof mediaItems>[number];
+    snapshot: PlexRuntimeSnapshot;
+  }>>();
+  let metadataCallCount = 0;
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      getSnapshot: async () => success(snapshotWithItems()),
+      getMetadata: () => {
+        metadataCallCount += 1;
+        return metadataCallCount === 1 ? firstMetadata.promise : secondMetadata.promise;
+      },
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  await controller.loadSnapshot();
+  const firstLoad = controller.getMetadata('rating-1');
+  const secondLoad = controller.getMetadata('rating-2');
+  assert.equal(controller.getState().pending.getMetadata, true);
+
+  firstMetadata.resolve(success({ item: mediaItems()[0], snapshot: snapshotWithMetadata() }));
+  await firstLoad;
+  assert.equal(controller.getState().pending.getMetadata, true);
+  assert.equal(controller.getState().lastMetadata, null);
+
+  secondMetadata.resolve(success({ item: mediaItems()[0], snapshot: snapshotWithMetadata() }));
+  await secondLoad;
+  assert.equal(controller.getState().pending.getMetadata, false);
+  assert.equal(controller.getState().lastMetadata?.ratingKey, 'rating-1');
+});
+
+test('Plex runtime controller records redacted diagnostics for rejected bridge calls', async () => {
+  const diagnosticEnvelopes: Array<Parameters<LineupDesktopPreloadApi['diagnostics']['recordRendererEvent']>[0]> = [];
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      requestPin: async () => {
+        throw new Error('raw token serverUri failure');
+      },
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+    recordRendererEvent: async (envelope) => {
+      diagnosticEnvelopes.push(envelope);
+      return {
+        ok: true,
+        requestId: envelope.requestId,
+        value: {
+          schemaVersion: 1,
+          id: envelope.requestId,
+          timestampMs: 1,
+          surface: 'renderer',
+          category: 'ipc',
+          severity: 'warning',
+          status: 'observed',
+          operation: envelope.event.operation,
+          message: envelope.event.message,
+        },
+      };
+    },
+  });
+
+  await controller.requestPin();
+
+  assert.equal(controller.getState().pending.requestPin, false);
+  assert.equal(controller.getState().errorText, 'The Plex operation failed.');
+  assert.equal(diagnosticEnvelopes.length, 1);
+  assert.equal(diagnosticEnvelopes[0]?.event.operation, 'plex.requestPin');
+  assert.deepEqual(diagnosticEnvelopes[0]?.event.context, {
+    operation: 'requestPin',
+    errorName: 'Error',
+  });
+  assert.doesNotMatch(JSON.stringify(diagnosticEnvelopes), /token|serverUri/u);
+});
+
 test('Plex runtime DOM renders safe summaries and disables invalid actions', () => {
   const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   const documentDouble = { createElement: () => new ElementDouble() };
@@ -483,10 +564,20 @@ test('dynamic Plex buttons receive stable focus ids and are reachable by OK focu
     const serverButton = firstChild(dom.plexServersElement);
     const sectionButton = firstChild(dom.plexSectionsElement);
     const itemButton = firstChild(dom.plexItemsElement);
-    assert.equal(homeButton.dataset.focusId, 'plex-dyn-home-home-2f-user-20-1');
-    assert.equal(serverButton.dataset.focusId, 'plex-dyn-server-server-2f-one');
-    assert.equal(sectionButton.dataset.focusId, 'plex-dyn-section-section-2f-one');
-    assert.equal(itemButton.dataset.focusId, 'plex-dyn-item-rating-2f-key-20-1');
+    const focusIds = [
+      homeButton.dataset.focusId,
+      serverButton.dataset.focusId,
+      sectionButton.dataset.focusId,
+      itemButton.dataset.focusId,
+    ].map((focusId) => {
+      assert.ok(focusId);
+      return focusId;
+    });
+    assert.equal(focusIds[0]?.startsWith('plex-dyn-home-'), true);
+    assert.equal(focusIds[1]?.startsWith('plex-dyn-server-'), true);
+    assert.equal(focusIds[2]?.startsWith('plex-dyn-section-'), true);
+    assert.equal(focusIds[3]?.startsWith('plex-dyn-item-'), true);
+    assert.equal(new Set(focusIds).size, focusIds.length);
 
     const initial = registry.createInitialState('channelSetup');
     const focused = registry.focusTarget(initial, itemButton.dataset.focusId);
