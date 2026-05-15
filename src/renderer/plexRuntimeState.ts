@@ -288,6 +288,10 @@ export function clearPlexRendererPinSubflow(
 }
 
 export function sanitizePlexRuntimeError(error: PlexRuntimeError): string {
+  if (error.code === 'PLEX_PARSE_FAILED') {
+    return parseFailureText(error.operation);
+  }
+
   switch (error.code) {
     case 'PLEX_VALIDATION_FAILED':
       return 'Check the selected value and try again.';
@@ -313,11 +317,32 @@ export function sanitizePlexRuntimeError(error: PlexRuntimeError): string {
     case 'PLEX_STORAGE_UNAVAILABLE':
     case 'PLEX_STORAGE_CORRUPT':
       return 'Plex credential storage is unavailable.';
-    case 'PLEX_PARSE_FAILED':
     case 'PLEX_LIBRARY_FAILED':
       return 'Plex library data could not be loaded.';
     case 'PLEX_UNKNOWN':
       return 'The Plex operation failed.';
+  }
+}
+
+function parseFailureText(operation: PlexRuntimeOperation): string {
+  switch (operation) {
+    case 'requestPin':
+    case 'pollPin':
+    case 'getHomeUsers':
+    case 'switchHomeUser':
+      return 'Plex sign-in response could not be loaded.';
+    case 'restoreSelectedServer':
+    case 'refreshServers':
+    case 'selectServer':
+      return 'Plex server data could not be loaded.';
+    case 'listLibrarySections':
+    case 'listLibraryItems':
+    case 'searchLibrary':
+    case 'getMetadata':
+      return 'Plex library data could not be loaded.';
+    case 'getSnapshot':
+    case 'cancelPin':
+      return 'Plex response could not be loaded.';
   }
 }
 
