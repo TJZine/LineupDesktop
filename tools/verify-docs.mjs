@@ -384,7 +384,7 @@ const roadmapMvpBuildPostureConcepts = [
   /fake\s+UI[\s\S]*reachable\s+app\s+route/iu,
   /product\s+journey/iu,
   /server\/library\s+selection/iu,
-  /channel\s+(?:setup|creation)/iu,
+  /channel\s+setup[\s\S]{0,160}(?:route|surface)[\s\S]{0,160}(?:fake|replace|isolate|retire)|(?:fake|replace|isolate|retire)[\s\S]{0,160}channel\s+setup[\s\S]{0,160}(?:route|surface)/iu,
 ];
 
 const rd19WindowsProofRequirements = [

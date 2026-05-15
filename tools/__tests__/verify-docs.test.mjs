@@ -342,6 +342,22 @@ test('verifyDocs allows MVP build posture prose changes when scoped concepts rem
   assert(!errors.some((error) => error.includes('MVP Build Posture')));
 });
 
+test('verifyDocs rejects MVP posture prose that mentions channel creation without setup surface retirement', () => {
+  const root = makeFixture({ complete: true });
+  fs.writeFileSync(path.join(root, 'docs/roadmap/desktop-port-roadmap.md'), [
+    '# Desktop Port Roadmap',
+    '## MVP Build Posture',
+    'A fake UI in a reachable app route is temporary proof only.',
+    'The real product journey should drive each owned slice.',
+    'Server/library selection should be part of that journey.',
+    'Channel creation remains part of the MVP product journey.',
+  ].join('\n'));
+
+  const errors = verifyDocs(root);
+
+  assert(errors.some((error) => error.includes('MVP Build Posture missing required fake-surface retirement concepts')));
+});
+
 test('verifyDocs requires upstream behavior guardrail document and slice coverage', () => {
   const root = makeFixture({ complete: true });
   fs.rmSync(path.join(root, 'docs/architecture/upstream-behavior-guardrails.md'));
@@ -1085,6 +1101,7 @@ function fixtureContent(relativePath) {
       '## MVP Build Posture',
       'fake UI in a reachable app route',
       'real webOS-informed product journey with server/library selection and channel setup',
+      'channel setup route or surface must replace or isolate fake setup controls',
     ].join('\n');
   }
 

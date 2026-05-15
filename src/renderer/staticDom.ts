@@ -131,7 +131,7 @@ const STATIC_SCREEN_MARKUP = `
       <p class="screen__kicker" data-workflow-kicker="channelSetup">Channel setup</p>
       <h2 id="screen-channel-setup-title">Channel setup</h2>
       <p data-workflow-primary="channelSetup">Connect Plex, choose a server, and inspect library content.</p>
-      <p data-workflow-secondary="channelSetup">Server, library, search, and metadata selections can be restored from saved state or adjusted here.</p>
+      <p data-workflow-secondary="channelSetup">Saved server selection can be restored here; library, search, and metadata choices can be adjusted during setup.</p>
       <section class="plex-runtime" data-plex-runtime-panel aria-label="Plex setup">
         <header class="plex-runtime__header">
           <div>

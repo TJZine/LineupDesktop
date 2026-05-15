@@ -316,6 +316,21 @@ test('desktop plex runtime maps aborted discovery refresh and restore to cancell
   assert.equal(refreshed.ok ? false : refreshed.cancelled, true);
   assert.equal(refreshSnapshot.ok ? refreshSnapshot.value.lastError : 'not-null', null);
 
+  const structuralRefreshFixture = createRuntimeFixture();
+  await signIn(structuralRefreshFixture);
+  structuralRefreshFixture.discoveryTransport.discoverError = Object.assign(
+    new Error('Plex request was aborted'),
+    { code: 'aborted' },
+  );
+
+  const structurallyRefreshed = await structuralRefreshFixture.runtime.refreshServers('refresh-structural-aborted');
+  const structuralRefreshSnapshot = structuralRefreshFixture.runtime.getSnapshot('snapshot-refresh-structural-aborted');
+
+  assert.equal(structurallyRefreshed.ok, false);
+  assert.equal(structurallyRefreshed.ok ? '' : structurallyRefreshed.error.code, 'PLEX_CANCELLED');
+  assert.equal(structurallyRefreshed.ok ? false : structurallyRefreshed.cancelled, true);
+  assert.equal(structuralRefreshSnapshot.ok ? structuralRefreshSnapshot.value.lastError : 'not-null', null);
+
   const restoreFixture = createRuntimeFixture();
   await signIn(restoreFixture);
   restoreFixture.selectedServerStore.persisted = {

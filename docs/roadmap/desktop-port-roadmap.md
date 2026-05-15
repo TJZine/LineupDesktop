@@ -240,6 +240,10 @@ fixtures, but the app route should move toward the real webOS-informed product
 journey: account setup, server/library selection, channel creation, guide
 runtime, and playback.
 
+When a slice owns channel setup, the reachable channel setup route or surface
+must replace or isolate fake setup summaries and controls in the product path
+before closeout.
+
 ## Platform Proof Convention
 
 Each roadmap item should make platform proof explicit in its tracked plan and,
