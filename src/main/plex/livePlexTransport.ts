@@ -128,12 +128,19 @@ export class LivePlexTransport
   async probeConnection(input: {
     server: PlexServer;
     connection: PlexConnection;
+    token?: string;
     signal?: AbortSignal | null;
   }): Promise<DesktopPlexConnectionProbeTransportResult> {
     const startedAtMs = this.nowMs();
     const response = await this.fetchNormalized(
       new URL('/identity', normalizeBaseUri(input.connection.uri)),
-      { method: 'GET', headers: { Accept: 'application/json' } },
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          ...(input.token !== undefined ? { [PLEX_TOKEN_HEADER_NAME]: input.token } : {}),
+        },
+      },
       input.signal ?? null,
     );
     if (response.status === 401) {
@@ -194,7 +201,6 @@ export class LivePlexTransport
     switch (input.action) {
       case 'request-pin': {
         const url = new URL('/api/v2/pins', PLEX_TV_ORIGIN);
-        url.searchParams.set('strong', 'true');
         return { url, init: { method: 'POST', headers } };
       }
       case 'check-pin-status':
