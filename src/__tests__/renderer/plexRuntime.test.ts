@@ -286,6 +286,47 @@ test('Plex cleanup clears its pending flag when cancellation becomes stale', asy
   assert.equal(controller.getState().pending.cleanup, false);
 });
 
+test('Plex cleanup keeps newer cleanup pending after older stale cancellation resolves', async () => {
+  const firstCancel = deferred<PlexIpcResult<{
+    pinId: number;
+    snapshot: PlexRuntimeSnapshot;
+  }>>();
+  const secondCancel = deferred<PlexIpcResult<{
+    pinId: number;
+    snapshot: PlexRuntimeSnapshot;
+  }>>();
+  let cancelCount = 0;
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      requestPin: async () => success({ pin: pinSummary(), snapshot: snapshotPinPending() }),
+      getSnapshot: async () => success(snapshotPinPending()),
+      cancelPin: () => {
+        cancelCount += 1;
+        return cancelCount === 1 ? firstCancel.promise : secondCancel.promise;
+      },
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  await controller.requestPin();
+  const firstCleanup = controller.cleanup();
+  assert.equal(controller.getState().pending.cleanup, true);
+
+  await controller.loadSnapshot();
+  const secondCleanup = controller.cleanup();
+  assert.equal(controller.getState().pending.cleanup, true);
+  assert.equal(cancelCount, 2);
+
+  firstCancel.resolve(success({ pinId: 42, snapshot: snapshotSignedOut() }));
+  await firstCleanup;
+  assert.equal(controller.getState().pending.cleanup, true);
+
+  secondCancel.resolve(success({ pinId: 42, snapshot: snapshotSignedOut() }));
+  await secondCleanup;
+  assert.equal(controller.getState().pending.cleanup, false);
+});
+
 test('Plex clear and back ignore pending setup operation results', async () => {
   const pendingMetadata = deferred<PlexIpcResult<{
     item: ReturnType<typeof mediaItems>[number];

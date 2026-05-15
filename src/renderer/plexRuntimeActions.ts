@@ -76,6 +76,7 @@ export function createPlexRuntimeController({
   const pendingOperationEpochs = new Map<PlexRendererOperation, number>();
   let pollTimer: number | null = null;
   let activePinId: number | null = null;
+  let pendingCleanupEpoch: number | null = null;
 
   const commit = (nextState: PlexRuntimeRendererState): void => {
     state = nextState;
@@ -386,13 +387,15 @@ export function createPlexRuntimeController({
       const cleanupEpoch = operationEpoch;
       commit(clearPlexRendererForCleanup(state));
       if (pinId !== null && Number.isFinite(pinId) && pinId > 0) {
+        pendingCleanupEpoch = cleanupEpoch;
         commit(markPlexRendererOperationPending(state, 'cleanup', true));
         const result = await bridge.cancelPin({ pinId }).catch((error: unknown) => {
           recordPlexRendererIpcRejection(recordRendererEvent, 'cleanup', error);
           return null;
         });
         if (cleanupEpoch !== operationEpoch) {
-          if (state.pending.cleanup) {
+          if (pendingCleanupEpoch === cleanupEpoch && state.pending.cleanup) {
+            pendingCleanupEpoch = null;
             commit(markPlexRendererOperationPending(state, 'cleanup', false));
           }
           return;
@@ -404,6 +407,7 @@ export function createPlexRuntimeController({
           commit(applyPlexIpcFailure(state, result));
           commit(clearPlexRendererForCleanup(state));
         }
+        pendingCleanupEpoch = null;
         commit(markPlexRendererOperationPending(state, 'cleanup', false));
       }
     },
