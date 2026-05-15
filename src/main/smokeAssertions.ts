@@ -284,7 +284,9 @@ export async function runSmokeAssertions(
       const plexRuntimePanel = document.querySelector('[data-plex-runtime-panel]');
       const setupText = setupScreen instanceof HTMLElement ? setupScreen.textContent ?? '' : '';
       const setupOverflow = setupScreen instanceof HTMLElement ? getComputedStyle(setupScreen).overflowY : '';
-      const oldSetupControls = document.querySelector('[data-setup-action], [data-setup-steps], [data-channel-draft-list]');
+      const oldSetupControls = document.querySelector(
+        '[data-setup-action], [data-setup-steps], [data-channel-draft-list], [data-setup-validation]',
+      );
       if (
         !(plexRuntimePanel instanceof HTMLElement) ||
         !setupText.includes('Plex source setup') ||
@@ -302,6 +304,7 @@ export async function runSmokeAssertions(
               hasLibraries: setupText.includes('Load libraries'),
               setupOverflow,
               hasOldSetupControls: oldSetupControls !== null,
+              hasSetupValidation: document.querySelector('[data-setup-validation]') !== null,
             }),
         );
       }

@@ -223,7 +223,7 @@ const ROUTE_COPY = {
     kicker: 'Plex setup',
     tone: 'attention',
     primaryText: 'Connect Plex and inspect library content before lineup authoring is enabled.',
-    secondaryText: 'Server, library, search, and metadata selections are renderer-local in this step.',
+    secondaryText: 'Server, library, search, and metadata selections can be restored from saved state or adjusted here.',
     defaultStatus: 'Plex setup is ready for sign-in or server discovery.',
   },
 } as const satisfies Record<

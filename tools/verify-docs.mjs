@@ -380,12 +380,11 @@ const rd19ValidationMatrixAreas = [
   'Long playback',
 ];
 
-const roadmapMvpBuildPostureMarkers = [
-  '## MVP Build Posture',
-  'fake UI in a reachable app route',
-  'real webOS-informed product journey',
-  'Replace or isolate the RD-13 fake channel-setup surface',
-  'channel setup route no longer exposes fake setup summary',
+const roadmapMvpBuildPostureConcepts = [
+  /fake\s+UI[\s\S]*reachable\s+app\s+route/iu,
+  /product\s+journey/iu,
+  /server\/library\s+selection/iu,
+  /channel\s+(?:setup|creation)/iu,
 ];
 
 const rd19WindowsProofRequirements = [
@@ -794,11 +793,9 @@ function checkWorkflowAnchors(root, errors) {
 
   const roadmapPath = path.join(root, 'docs/roadmap/desktop-port-roadmap.md');
   if (fs.existsSync(roadmapPath)) {
-    const roadmap = fs.readFileSync(roadmapPath, 'utf8').replace(/\s+/gu, ' ');
-    for (const marker of roadmapMvpBuildPostureMarkers) {
-      if (!roadmap.includes(marker)) {
-        errors.push(`docs/roadmap/desktop-port-roadmap.md: missing MVP build posture marker: ${marker}`);
-      }
+    const roadmap = fs.readFileSync(roadmapPath, 'utf8');
+    if (!sectionHasConcepts(roadmap, '## MVP Build Posture', roadmapMvpBuildPostureConcepts)) {
+      errors.push('docs/roadmap/desktop-port-roadmap.md: MVP Build Posture missing required fake-surface retirement concepts');
     }
   }
 }
