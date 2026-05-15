@@ -182,10 +182,11 @@ export class DesktopPlexRuntime {
       return this.fail(requestId, validationError('selectServer'));
     }
     return this.runOperation(requestId, 'selectServer', async ({ signal, commit }) => {
-      await this.ensureAccountToken(signal, commit);
+      const token = await this.ensureAccountToken(signal, commit);
       this.setServerStatus('loading', commit);
       const selection = await this.serverDiscovery.selectServer(normalizedServerId, {
         source: 'manual',
+        token,
         signal,
       });
       this.applyServerSelection(selection, commit);

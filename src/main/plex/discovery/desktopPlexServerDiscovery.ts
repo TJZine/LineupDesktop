@@ -28,6 +28,7 @@ export interface DesktopPlexDiscoveryTransport {
   probeConnection(input: {
     server: PlexServer;
     connection: PlexConnection;
+    token?: string;
     signal?: AbortSignal | null;
   }): Promise<DesktopPlexConnectionProbeTransportResult>;
 }
@@ -121,7 +122,7 @@ export class DesktopPlexServerDiscovery {
 
   async selectServer(
     serverId: string,
-    options: { source?: PlexServerSelectionSource; signal?: AbortSignal | null } = {},
+    options: { source?: PlexServerSelectionSource; token?: string; signal?: AbortSignal | null } = {},
   ): Promise<PlexServerSelectionSummary> {
     const contextVersion = this.discoveryContextVersion;
     const server = this.servers.find((candidate) => candidate.id === serverId);
@@ -129,7 +130,7 @@ export class DesktopPlexServerDiscovery {
       return { kind: 'selection-failed', reason: 'server-not-found', persisted: false };
     }
 
-    const probeSummary = await this.findFastestConnection(server, options.signal ?? null);
+    const probeSummary = await this.findFastestConnection(server, options.signal ?? null, options.token);
     throwIfAborted(options.signal);
     if (contextVersion !== this.discoveryContextVersion) {
       return { kind: 'selection-failed', reason: 'server-not-found', persisted: false };
@@ -218,7 +219,11 @@ export class DesktopPlexServerDiscovery {
     }
 
     await this.refreshServers(options);
-    return this.selectServer(persisted.serverId, { source: 'restored', signal: options.signal ?? null });
+    return this.selectServer(persisted.serverId, {
+      source: 'restored',
+      token: options.token,
+      signal: options.signal ?? null,
+    });
   }
 
   private async discoverResources(signal: AbortSignal | null, token?: string): Promise<unknown> {
@@ -246,11 +251,12 @@ export class DesktopPlexServerDiscovery {
   private async findFastestConnection(
     server: PlexServer,
     signal: AbortSignal | null,
+    token?: string,
   ): Promise<PlexFastestConnectionProbeResult> {
     return findFastestConnectionProbe({
       server,
       mixedContentConfig: this.mixedContentConfig,
-      probeConnection: (connection) => this.probeConnection(server, connection, signal),
+      probeConnection: (connection) => this.probeConnection(server, connection, signal, token),
     });
   }
 
@@ -258,10 +264,16 @@ export class DesktopPlexServerDiscovery {
     server: PlexServer,
     connection: PlexConnection,
     signal: AbortSignal | null,
+    token?: string,
   ): Promise<PlexConnectionProbeResult> {
     throwIfAborted(signal);
     try {
-      const result = await this.transport.probeConnection({ server, connection, signal });
+      const result = await this.transport.probeConnection({
+        server,
+        connection,
+        ...(token !== undefined ? { token } : {}),
+        signal,
+      });
       throwIfAborted(signal);
       return {
         connection: {
