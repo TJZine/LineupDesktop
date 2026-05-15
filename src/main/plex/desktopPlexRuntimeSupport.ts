@@ -118,6 +118,15 @@ export function applyServerSelectionSnapshot(input: {
   items: readonly PlexServerSummary[];
   nowMs: number;
 }): PlexRuntimeSnapshot {
+  const previousServerId = input.snapshot.servers.selected?.serverId ?? null;
+  const nextServerId = input.selection.kind === 'selected'
+    ? input.selection.server.serverId
+    : null;
+  const preserveLibrary =
+    input.selection.kind === 'selected' &&
+    previousServerId !== null &&
+    previousServerId === nextServerId;
+
   return {
     ...input.snapshot,
     servers: {
@@ -127,11 +136,22 @@ export function applyServerSelectionSnapshot(input: {
       lastSelection: input.selection,
     },
     library:
-      input.selection.kind === 'selected'
+      preserveLibrary
         ? input.snapshot.library
-        : { ...input.snapshot.library, status: 'idle' },
+        : createIdleLibrarySnapshot(),
     lastError: null,
     updatedAtMs: input.nowMs,
+  };
+}
+
+function createIdleLibrarySnapshot(): PlexRuntimeSnapshot['library'] {
+  return {
+    status: 'idle',
+    sections: [],
+    selectedSectionId: null,
+    items: [],
+    search: null,
+    metadata: null,
   };
 }
 

@@ -258,6 +258,34 @@ test('Plex cleanup clears loaded profile and library snapshot state', async () =
   assert.equal(controller.getState().searchQuery, '');
 });
 
+test('Plex cleanup clears its pending flag when cancellation becomes stale', async () => {
+  const pendingCancel = deferred<PlexIpcResult<{
+    pinId: number;
+    snapshot: PlexRuntimeSnapshot;
+  }>>();
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      requestPin: async () => success({ pin: pinSummary(), snapshot: snapshotPinPending() }),
+      cancelPin: () => pendingCancel.promise,
+      getSnapshot: async () => success(snapshotSignedIn()),
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  await controller.requestPin();
+  const cleanup = controller.cleanup();
+  assert.equal(controller.getState().pending.cleanup, true);
+
+  await controller.loadSnapshot();
+  assert.equal(controller.getState().pending.cleanup, true);
+
+  pendingCancel.resolve(success({ pinId: 42, snapshot: snapshotSignedOut() }));
+  await cleanup;
+
+  assert.equal(controller.getState().pending.cleanup, false);
+});
+
 test('Plex clear and back ignore pending setup operation results', async () => {
   const pendingMetadata = deferred<PlexIpcResult<{
     item: ReturnType<typeof mediaItems>[number];
@@ -330,10 +358,47 @@ test('Plex runtime controller keeps newer matching operations pending after stal
   assert.equal(controller.getState().pending.getMetadata, true);
   assert.equal(controller.getState().lastMetadata, null);
 
-  secondMetadata.resolve(success({ item: mediaItems()[0], snapshot: snapshotWithMetadata() }));
+  const secondItem = { ...mediaItems()[0], ratingKey: 'rating-2', title: 'Second Pilot' };
+  const secondSnapshotWithItems = snapshotWithItems();
+  const secondSnapshot: PlexRuntimeSnapshot = {
+    ...secondSnapshotWithItems,
+    library: {
+      ...secondSnapshotWithItems.library,
+      items: [...secondSnapshotWithItems.library.items, secondItem],
+      metadata: secondItem,
+    },
+  };
+
+  secondMetadata.resolve(success({ item: secondItem, snapshot: secondSnapshot }));
   await secondLoad;
   assert.equal(controller.getState().pending.getMetadata, false);
-  assert.equal(controller.getState().lastMetadata?.ratingKey, 'rating-1');
+  assert.equal(controller.getState().lastMetadata?.ratingKey, 'rating-2');
+  assert.equal(controller.getState().lastMetadata?.title, 'Second Pilot');
+});
+
+test('Plex runtime controller preserves Unicode input while removing controls', async () => {
+  const capturedMetadataKeys: string[] = [];
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      getMetadata: async ({ ratingKey }) => {
+        capturedMetadataKeys.push(ratingKey);
+        return success({ item: mediaItems()[0], snapshot: snapshotWithMetadata() });
+      },
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  controller.setSearchQuery(` \u0000Cafe\u0301 東京 🎬\u0085\n `);
+  assert.equal(controller.getState().searchQuery, 'Café 東京 🎬');
+
+  controller.setSearchQuery(`${'界'.repeat(119)}🎬tail`);
+  assert.equal(Array.from(controller.getState().searchQuery).length, 120);
+  assert.equal(controller.getState().searchQuery.endsWith('🎬'), true);
+
+  await controller.getMetadata(` película-🎬-\u0007rating `);
+
+  assert.deepEqual(capturedMetadataKeys, ['película-🎬-rating']);
 });
 
 test('Plex runtime controller records redacted diagnostics for rejected bridge calls', async () => {

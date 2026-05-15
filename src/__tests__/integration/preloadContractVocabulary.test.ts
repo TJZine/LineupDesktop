@@ -793,6 +793,30 @@ test('preload Plex bridge converts malformed or privileged invoke results to loc
   );
 });
 
+test('preload Plex bridge converts invoke rejections to local validation failures', async () => {
+  const harness = createPreloadHarness(() => {
+    throw new Error('raw token serverUri failure');
+  });
+
+  const result = await harness.api.plex.getSnapshot();
+
+  assert.equal((result as { ok: boolean }).ok, false);
+  assert.equal((result as { requestId: string }).requestId, harness.calls[0]?.request.requestId);
+  assert.equal(
+    (result as { error: { code: string } }).error.code,
+    'PLEX_VALIDATION_FAILED',
+  );
+  assert.equal(
+    (result as { error: { message: string; operation: string } }).error.message,
+    'Plex invoke failed (Error).',
+  );
+  assert.equal(
+    (result as { error: { message: string; operation: string } }).error.operation,
+    'getSnapshot',
+  );
+  assert.doesNotMatch(JSON.stringify(result), /raw token|serverUri/u);
+});
+
 test('preload Plex bridge rejects mismatched success request ids locally', async () => {
   const harness = createPreloadHarness((_channel, request, input) => {
     assert.ok(isPlexInvokeRequest(request));
@@ -810,7 +834,7 @@ test('preload Plex bridge rejects mismatched success request ids locally', async
     (result as { error: { code: string } }).error.code,
     'PLEX_VALIDATION_FAILED',
   );
-  assert.notEqual((result as { requestId: string }).requestId, harness.calls[0]?.request.requestId);
+  assert.equal((result as { requestId: string }).requestId, harness.calls[0]?.request.requestId);
 });
 
 test('preload Plex bridge rejects mismatched failure request ids locally', async () => {
@@ -826,7 +850,7 @@ test('preload Plex bridge rejects mismatched failure request ids locally', async
     (result as { error: { code: string } }).error.code,
     'PLEX_VALIDATION_FAILED',
   );
-  assert.notEqual((result as { requestId: string }).requestId, harness.calls[0]?.request.requestId);
+  assert.equal((result as { requestId: string }).requestId, harness.calls[0]?.request.requestId);
 });
 
 test('preload Plex bridge rejects invalid pin ids and limits without IPC', async () => {

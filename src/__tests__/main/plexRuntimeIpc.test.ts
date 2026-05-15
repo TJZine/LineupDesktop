@@ -300,6 +300,51 @@ test('desktop plex runtime refreshes, restores, and selects servers while keepin
   assertRendererSafe(selected);
 });
 
+test('desktop plex runtime clears library data when selected server changes', async () => {
+  const fixture = createRuntimeFixture();
+  await signIn(fixture);
+  fixture.discoveryTransport.resources = [
+    createPlexApiResource({
+      clientIdentifier: 'server-1',
+      name: 'Living Room',
+      connections: [connection({ address: 'local', uri: 'https://local.example:32400' })],
+    }),
+    createPlexApiResource({
+      clientIdentifier: 'server-2',
+      name: 'Bedroom',
+      connections: [connection({ address: 'remote', uri: 'https://remote.example:32400' })],
+    }),
+  ];
+  fixture.discoveryTransport.enqueueProbe('local', { outcome: 'reachable', latencyMs: 12 });
+  fixture.discoveryTransport.enqueueProbe('remote', { outcome: 'reachable', latencyMs: 10 });
+
+  assert.equal((await fixture.runtime.refreshServers('refresh')).ok, true);
+  assert.equal((await fixture.runtime.selectServer('select-local', 'server-1')).ok, true);
+  assert.equal((await fixture.runtime.listLibrarySections('sections')).ok, true);
+  assert.equal((await fixture.runtime.listLibraryItems('items', { sectionId: '1' })).ok, true);
+  assert.equal((await fixture.runtime.searchLibrary('search', { query: 'movie' })).ok, true);
+  assert.equal((await fixture.runtime.getMetadata('metadata', 'meta-1')).ok, true);
+
+  const populatedSnapshot = fixture.runtime.getSnapshot('snapshot-populated');
+  assert.equal(populatedSnapshot.ok ? populatedSnapshot.value.library.sections.length : 0, 1);
+  assert.equal(populatedSnapshot.ok ? populatedSnapshot.value.library.items.length : 0, 1);
+  assert.equal(populatedSnapshot.ok ? populatedSnapshot.value.library.search?.items.length : 0, 1);
+  assert.equal(populatedSnapshot.ok ? populatedSnapshot.value.library.metadata?.ratingKey : '', 'meta-1');
+
+  const switched = await fixture.runtime.selectServer('select-remote', 'server-2');
+  const switchedSnapshot = fixture.runtime.getSnapshot('snapshot-switched');
+
+  assert.equal(switched.ok, true);
+  assert.equal(switchedSnapshot.ok ? switchedSnapshot.value.servers.selected?.serverId : '', 'server-2');
+  assert.equal(switchedSnapshot.ok ? switchedSnapshot.value.library.status : '', 'idle');
+  assert.equal(switchedSnapshot.ok ? switchedSnapshot.value.library.sections.length : -1, 0);
+  assert.equal(switchedSnapshot.ok ? switchedSnapshot.value.library.selectedSectionId : 'not-null', null);
+  assert.equal(switchedSnapshot.ok ? switchedSnapshot.value.library.items.length : -1, 0);
+  assert.equal(switchedSnapshot.ok ? switchedSnapshot.value.library.search : 'not-null', null);
+  assert.equal(switchedSnapshot.ok ? switchedSnapshot.value.library.metadata : 'not-null', null);
+  assertRendererSafe(switchedSnapshot);
+});
+
 test('desktop plex runtime maps aborted discovery refresh and restore to cancellation', async () => {
   const refreshFixture = createRuntimeFixture();
   await signIn(refreshFixture);

@@ -210,6 +210,7 @@ export class DesktopPlexServerDiscovery {
       throw new PlexDiscoveryError('server-error', 'Plex selected-server store is not available');
     }
 
+    throwIfAborted(options.signal);
     const persisted = await this.selectedServerStore.readSelectedServerSummary();
     throwIfAborted(options.signal);
     if (!persisted) {

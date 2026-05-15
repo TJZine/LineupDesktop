@@ -341,6 +341,39 @@ test('desktop plex discovery keeps stale persisted server id on restore miss or 
   assertRendererSafe(authRequired);
 });
 
+test('desktop plex discovery skips persisted selected-server reads when restore is already aborted', async () => {
+  let readCount = 0;
+  const selectedServerStore = {
+    async readSelectedServerSummary(): Promise<PlexSelectedServerSummary | null> {
+      readCount += 1;
+      return null;
+    },
+    async saveSelectedServerSummary(
+      server: PlexServer,
+      source: PlexServerSelectionSource,
+    ): Promise<PlexSelectedServerSummary> {
+      return {
+        serverId: server.id,
+        name: server.name,
+        source,
+        lastSelectedAtMs: 1,
+      };
+    },
+  };
+  const discovery = new DesktopPlexServerDiscovery({
+    transport: new FakeDiscoveryTransport(),
+    selectedServerStore,
+  });
+  const abortController = new AbortController();
+  abortController.abort();
+
+  await assert.rejects(
+    () => discovery.restoreSelectedServer({ signal: abortController.signal }),
+    (error) => error instanceof PlexDiscoveryError && error.code === 'aborted',
+  );
+  assert.equal(readCount, 0);
+});
+
 test('desktop plex discovery clears selected connection when a fresh same-server restore probe fails', async () => {
   const temporaryDirectory = await createTemporaryDirectory();
   const persistenceStore = new DesktopPersistenceStore({

@@ -392,6 +392,9 @@ export function createPlexRuntimeController({
           return null;
         });
         if (cleanupEpoch !== operationEpoch) {
+          if (state.pending.cleanup) {
+            commit(markPlexRendererOperationPending(state, 'cleanup', false));
+          }
           return;
         }
         if (result?.ok) {
@@ -438,13 +441,14 @@ function getRendererDiagnosticRecorder():
 }
 
 function sanitizeInput(value: string, maxLength: number): string {
-  return value
-    .split('')
+  const sanitized = Array.from(value)
     .filter((char) => {
-      const code = char.charCodeAt(0);
-      return code >= 0x20 && code < 0x7f;
+      const codePoint = char.codePointAt(0);
+      return codePoint !== undefined && codePoint >= 0x20 && (codePoint < 0x7f || codePoint > 0x9f);
     })
     .join('')
+    .normalize('NFC')
     .trim()
-    .slice(0, maxLength);
+
+  return Array.from(sanitized).slice(0, maxLength).join('');
 }

@@ -747,8 +747,8 @@ function isPreloadPlexRuntimeOperation(
 function plexValidationFailure<TValue>(
   operation: PreloadPlexRuntimeOperation,
   message: string,
+  requestId = createRequestId('plex-validation'),
 ): PlexIpcResult<TValue> {
-  const requestId = createRequestId('plex-validation');
   const error: PlexRuntimeError = {
     code: PLEX_RUNTIME_ERROR_CODES[1],
     message,
@@ -1058,10 +1058,20 @@ async function invokePlex<TValue>(
   request: { requestId: string; payload: unknown },
   isValue: (value: unknown) => value is TValue,
 ): Promise<PlexIpcResult<TValue>> {
-  const result = await ipcRenderer.invoke(channel, request);
+  let result: unknown;
+  try {
+    result = await ipcRenderer.invoke(channel, request);
+  } catch (error: unknown) {
+    const errorName = error instanceof Error ? error.name : typeof error;
+    return plexValidationFailure<TValue>(
+      operation,
+      `Plex invoke failed (${errorName}).`,
+      request.requestId,
+    );
+  }
   return isPlexIpcResult(result, operation, request.requestId, isValue)
     ? result
-    : plexValidationFailure<TValue>(operation, 'Plex result is invalid.');
+    : plexValidationFailure<TValue>(operation, 'Plex result is invalid.', request.requestId);
 }
 
 function isPlexPinSummary(value: unknown): boolean {

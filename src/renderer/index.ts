@@ -98,7 +98,7 @@ window.addEventListener('beforeunload', () => {
   cursorRuntime.cleanup();
   gamepadRuntime.cleanup();
   unsubscribeShellStatus();
-  void plexController.cleanup();
+  cleanupPlexRuntime('beforeunload');
 });
 
 for (const button of dom.routeButtons) {
@@ -392,8 +392,25 @@ async function applyPlexRuntimeAction(action: ReturnType<typeof readPlexRuntimeA
 
 function cleanupPlexRuntimeForRouteChange(previousRoute: AppRouteId, nextRoute: AppRouteId): void {
   if (previousRoute === 'channelSetup' && nextRoute !== 'channelSetup') {
-    void plexController.cleanup();
+    cleanupPlexRuntime('route-change');
   }
+}
+
+function cleanupPlexRuntime(reason: 'beforeunload' | 'route-change'): void {
+  void plexController.cleanup().catch((error: unknown) => {
+    const errorName = error instanceof Error ? error.name : typeof error;
+    void window.lineupDesktop.diagnostics.recordRendererEvent({
+      requestId: `plex-cleanup-${Date.now()}`,
+      event: {
+        surface: 'renderer',
+        category: 'ipc',
+        severity: 'warning',
+        operation: 'plex.cleanup',
+        message: 'Plex cleanup failed.',
+        context: { reason, errorName },
+      },
+    }).catch(() => undefined);
+  });
 }
 
 function renderApp(): void {
