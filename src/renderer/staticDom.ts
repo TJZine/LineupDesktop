@@ -129,7 +129,7 @@ const STATIC_SCREEN_MARKUP = `
   <section id="screen-channel-setup" class="screen" data-screen="channelSetup" data-style-surface="screen" aria-labelledby="screen-channel-setup-title" hidden>
     <div class="screen__content">
       <p class="screen__kicker" data-workflow-kicker="channelSetup">Channel setup</p>
-      <h2 id="screen-channel-setup-title">Channel setup</h2>
+      <h2 id="screen-channel-setup-title">Plex setup</h2>
       <p data-workflow-primary="channelSetup">Connect Plex, choose a server, and inspect library content.</p>
       <p data-workflow-secondary="channelSetup">Saved server selection can be restored here; library, search, and metadata choices can be adjusted during setup.</p>
       <section class="plex-runtime" data-plex-runtime-panel aria-label="Plex setup">
@@ -190,10 +190,6 @@ const STATIC_SCREEN_MARKUP = `
           <div class="plex-runtime__metadata" data-plex-metadata></div>
         </section>
       </section>
-      <div class="workflow-actions" data-workflow-actions="channelSetup">
-        <button type="button" data-route-action="reviewLineup" data-focus-id="setup-guide">Review guide</button>
-        <button type="button" data-route-action="confirmSetup" data-focus-id="setup-player">Preview player</button>
-      </div>
     </div>
   </section>
 </section>`;

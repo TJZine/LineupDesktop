@@ -51,8 +51,8 @@
 }
 
 body {
+  height: 100vh;
   min-width: 320px;
-  min-height: 100vh;
   margin: 0;
   overflow: hidden;
   background:
@@ -94,9 +94,18 @@ button:focus-visible,
   grid-template:
     "topbar topbar" auto
     "rail screens" minmax(0, 1fr) / var(--route-rail-width) minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
   gap: var(--space-9);
   padding: var(--space-10);
+}
+
+@supports (height: 100dvh) {
+  body,
+  .app-shell {
+    height: 100dvh;
+  }
 }
 
 .app-shell__topbar {

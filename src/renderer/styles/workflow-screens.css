@@ -1,7 +1,7 @@
 .screen__content {
   position: relative;
   display: grid;
-  align-content: end;
+  align-content: start;
   width: min(680px, 100%);
   gap: var(--space-4);
   padding: var(--space-12);
@@ -17,6 +17,7 @@
   align-content: start;
   width: min(1120px, 100%);
   min-height: min-content;
+  padding-bottom: calc(var(--space-12) * 2);
 }
 
 .screen__content p:last-child {
@@ -219,7 +220,9 @@ dd {
   max-height: none;
   min-width: 0;
   margin-top: var(--space-3);
-  padding: var(--space-5);
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .plex-runtime__header {
