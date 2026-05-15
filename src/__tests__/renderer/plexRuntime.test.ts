@@ -16,6 +16,7 @@ import {
 import { FocusRegistry } from '../../renderer/navigation.js';
 import { createPlexRuntimeController } from '../../renderer/plexRuntimeActions.js';
 import { renderPlexRuntimeDom } from '../../renderer/plexRuntimeDom.js';
+import { sanitizePlexRuntimeError } from '../../renderer/plexRuntimeState.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
 
 test('static channel setup markup hosts reachable Plex setup controls', () => {
@@ -644,6 +645,30 @@ test('Plex runtime DOM renders safe summaries and disables invalid actions', () 
       Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
     }
   }
+});
+
+test('Plex runtime error text describes auth parse failures as sign-in failures', () => {
+  assert.equal(
+    sanitizePlexRuntimeError({
+      code: 'PLEX_PARSE_FAILED',
+      operation: 'pollPin',
+      message: 'Plex response could not be parsed.',
+      retryable: false,
+      recoverable: true,
+    }),
+    'Plex sign-in response could not be loaded.',
+  );
+
+  assert.equal(
+    sanitizePlexRuntimeError({
+      code: 'PLEX_PARSE_FAILED',
+      operation: 'listLibraryItems',
+      message: 'Plex response could not be parsed.',
+      retryable: false,
+      recoverable: true,
+    }),
+    'Plex library data could not be loaded.',
+  );
 });
 
 test('Plex cleanup clears protected-home PIN input on next render', async () => {

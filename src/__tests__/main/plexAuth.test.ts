@@ -160,6 +160,22 @@ test('plex auth parsers normalize PIN and user profile responses', () => {
   assert.equal(user.username, 'viewer');
   assert.equal(user.email, 'viewer@example.invalid');
   assert.equal(user.preferredSubtitleLanguage, 'es');
+
+  const nestedUser = parseUserResponse(
+    {
+      MediaContainer: {
+        user: {
+          uuid: 'managed-profile-1',
+          title: 'Managed profile',
+        },
+      },
+    },
+    'placeholder-auth-value',
+  );
+
+  assert.equal(nestedUser.userId, 'managed-profile-1');
+  assert.equal(nestedUser.username, 'Managed profile');
+  assert.equal(nestedUser.email, '');
 });
 
 test('plex auth response reader parses JSON once and reports sanitized parse errors', async () => {

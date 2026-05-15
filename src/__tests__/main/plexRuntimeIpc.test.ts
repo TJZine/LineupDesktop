@@ -135,6 +135,11 @@ class FakeDiscoveryTransport implements DesktopPlexDiscoveryTransport {
   public resources: unknown = [];
   public discoverError: unknown = null;
   public readonly discoverInputs: Array<{ token?: string; signal?: AbortSignal | null }> = [];
+  public readonly probeInputs: Array<{
+    server: PlexServer;
+    connection: PlexConnection;
+    token?: string;
+  }> = [];
   private readonly probeResponses = new Map<
     string,
     DesktopPlexConnectionProbeTransportResult | Promise<DesktopPlexConnectionProbeTransportResult>
@@ -158,7 +163,9 @@ class FakeDiscoveryTransport implements DesktopPlexDiscoveryTransport {
   async probeConnection(input: {
     server: PlexServer;
     connection: PlexConnection;
+    token?: string;
   }): Promise<DesktopPlexConnectionProbeTransportResult> {
+    this.probeInputs.push(input);
     return this.probeResponses.get(input.connection.address) ?? { outcome: 'unreachable' };
   }
 }
@@ -301,6 +308,10 @@ test('desktop plex runtime refreshes, restores, and selects servers while keepin
   assert.deepEqual(
     fixture.discoveryTransport.discoverInputs.map((input) => input.token),
     [placeholderAccountToken, placeholderAccountToken],
+  );
+  assert.equal(
+    fixture.discoveryTransport.probeInputs.every((input) => input.token === placeholderAccountToken),
+    true,
   );
   assert.equal(fixture.discovery.getSelectedConnectionForMain()?.uri, 'https://local.example:32400');
   assert.equal(JSON.stringify(selected).includes('local.example'), false);
@@ -1008,11 +1019,13 @@ test('live plex transport normalizes JSON/text responses, auth headers, status, 
   const probe = await transport.probeConnection({
     server: {} as PlexServer,
     connection: connection({ uri: 'https://server.example:32400' }),
+    token: placeholderAccountToken,
   });
 
   assert.equal(auth.status, 200);
   assert.equal(probe.outcome, 'auth-required');
   assert.equal(new Headers(seen[0]?.headers).get('X-Plex-Token'), placeholderAccountToken);
+  assert.equal(new Headers(seen[1]?.headers).get('X-Plex-Token'), placeholderAccountToken);
   assert.equal(JSON.stringify(auth).includes(placeholderAccountToken), false);
 });
 
@@ -1071,6 +1084,33 @@ test('live plex transport sends account token for plex.tv discovery and separate
     }),
     (error) => error instanceof LivePlexTransportError && error.code === 'aborted',
   );
+});
+
+test('live plex transport requests the short Plex link PIN code form', async () => {
+  const seen: URL[] = [];
+  const transport = new LivePlexTransport({
+    fetch: async (url) => {
+      seen.push(url instanceof URL ? url : new URL(String(url)));
+      return new Response(JSON.stringify({
+        id: 7,
+        code: 'ABCD',
+        expiresAt: '2026-05-14T12:00:00.000Z',
+        authToken: null,
+      }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  });
+
+  const result = await transport.request({
+    action: 'request-pin',
+    config: authConfig(),
+  });
+
+  assert.equal(result.status, 201);
+  assert.equal(seen[0]?.pathname, '/api/v2/pins');
+  assert.equal(seen[0]?.searchParams.has('strong'), false);
 });
 
 test('plex IPC authorizes exact channels and returns validation/result envelopes', async () => {

@@ -27,6 +27,8 @@ import {
   type PlexServer,
 } from '../../main/plex/discovery/index.js';
 
+const placeholderAuthValue = 'placeholder-auth-value';
+
 class FakeSecureStringCodec implements SecureStringCodec {
   public availability: SecureStorageAvailability = {
     available: true,
@@ -57,7 +59,11 @@ class FakeSecureStringCodec implements SecureStringCodec {
 
 class FakeDiscoveryTransport implements DesktopPlexDiscoveryTransport {
   public resources: unknown = [];
-  public readonly probeRequests: Array<{ server: PlexServer; connection: PlexConnection }> = [];
+  public readonly probeRequests: Array<{
+    server: PlexServer;
+    connection: PlexConnection;
+    token?: string;
+  }> = [];
   private readonly probeResponses = new Map<string, DesktopPlexConnectionProbeTransportResult>();
   private deferredResources:
     | {
@@ -94,6 +100,7 @@ class FakeDiscoveryTransport implements DesktopPlexDiscoveryTransport {
   async probeConnection(input: {
     server: PlexServer;
     connection: PlexConnection;
+    token?: string;
   }): Promise<DesktopPlexConnectionProbeTransportResult> {
     this.probeRequests.push(input);
     return this.probeResponses.get(input.connection.address) ?? { outcome: 'unreachable' };
@@ -235,7 +242,10 @@ test('desktop plex discovery selects a server and persists only RD-09 summary st
   });
 
   await discovery.refreshServers();
-  const selected = await discovery.selectServer('server-1', { source: 'manual' });
+  const selected = await discovery.selectServer('server-1', {
+    source: 'manual',
+    token: placeholderAuthValue,
+  });
   const persisted = await persistenceStore.getRendererSafeSnapshot();
   const persistedFile = await fs.readFile(path.join(temporaryDirectory, 'persistence.json'), 'utf8');
 
@@ -250,6 +260,7 @@ test('desktop plex discovery selects a server and persists only RD-09 summary st
   assert.equal(persistedFile.includes('://'), false);
   assert.equal(persistedFile.includes('connection'), false);
   assert.equal(discovery.getSelectedConnectionForMain()?.address, 'local');
+  assert.equal(transport.probeRequests.every((request) => request.token === placeholderAuthValue), true);
 });
 
 test('desktop plex discovery restores by persisted server id with fresh probing', async () => {
