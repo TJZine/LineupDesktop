@@ -3,7 +3,7 @@ import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.j
 import type { DesktopPlexAuthService } from './auth/index.js';
 import type { DesktopPlexCredentialStore } from './auth/desktopPlexCredentialStore.js';
 import type { DesktopPlexServerDiscovery } from './discovery/index.js';
-import { extractLibrarySectionDirectories, extractMetadataArray, extractSearchHubMetadata, extractSearchHubs, normalizeLibraryPagination, parseLibrarySections, parseMediaItems, toRendererSafeLibrarySectionSummary, toRendererSafeMediaItemSummary, type RawLibrarySection, type RawMediaItem } from './library/index.js';
+import { extractLibrarySectionDirectories, extractMetadataArray, extractSearchHubMetadata, extractSearchHubs, normalizeLibraryPagination, parseLibrarySections, parseMediaItems, PLEX_LIBRARY_CONSTANTS, toRendererSafeLibrarySectionSummary, toRendererSafeMediaItemSummary, type PlexMediaType, type RawLibrarySection, type RawMediaItem } from './library/index.js';
 import { PlexLibraryError } from './library/plexLibraryError.js';
 import { applyFailureSnapshot, applyServerSelectionSnapshot, authRequiredError, cloneRuntimeSnapshot, createInitialSnapshot, failureResult, isOptionalShortString, mapCredentialStatus, mapRuntimeError, normalizeOperationKey, payloadAsContainer, recordRuntimeDiagnostic, staleError, StaleRuntimeMutationError, storageError, stripPinSecretFields, success, validatePositiveInteger, validationError } from './desktopPlexRuntimeSupport.js';
 import { LivePlexTransportError, type LivePlexLibraryTransport } from './livePlexTransport.js';
@@ -129,12 +129,28 @@ export class DesktopPlexRuntime {
         pin: input.pin ?? null,
         signal,
       });
+      this.abortActiveOperationsExcept('switchHomeUser');
+      this.serverDiscovery.resetDiscoveryContext();
       commit((snapshot) => ({
         ...snapshot,
         auth: {
           ...snapshot.auth,
           state: 'signed-in',
           profile: result.activeProfile,
+        },
+        servers: {
+          status: 'idle',
+          selected: null,
+          items: [],
+          lastSelection: null,
+        },
+        library: {
+          status: 'idle',
+          sections: [],
+          selectedSectionId: null,
+          items: [],
+          search: null,
+          metadata: null,
         },
         lastError: null,
         updatedAtMs: this.nowMs(),
@@ -146,8 +162,12 @@ export class DesktopPlexRuntime {
   async restoreSelectedServer(requestId: string): Promise<PlexIpcResult<PlexRestoreSelectedServerValue>> {
     return this.runOperation(requestId, 'restoreSelectedServer', async ({ signal, commit }) => {
       const token = await this.ensureAccountToken(signal, commit);
+      const profileId = this.requireActiveProfileId('restoreSelectedServer');
       this.setServerStatus('loading', commit);
-      const selection = await this.serverDiscovery.restoreSelectedServer({ token, signal });
+      const selection = await this.serverDiscovery.restoreSelectedServer({ token, profileId, signal });
+      if (selection.kind === 'selected') {
+        this.abortActiveOperationsExcept('restoreSelectedServer');
+      }
       this.applyServerSelection(selection, commit);
       return { selection, snapshot: this.cloneSnapshot() };
     });
@@ -183,12 +203,17 @@ export class DesktopPlexRuntime {
     }
     return this.runOperation(requestId, 'selectServer', async ({ signal, commit }) => {
       const token = await this.ensureAccountToken(signal, commit);
+      const profileId = this.requireActiveProfileId('selectServer');
       this.setServerStatus('loading', commit);
       const selection = await this.serverDiscovery.selectServer(normalizedServerId, {
         source: 'manual',
         token,
+        profileId,
         signal,
       });
+      if (selection.kind === 'selected') {
+        this.abortActiveOperationsExcept('selectServer');
+      }
       this.applyServerSelection(selection, commit);
       return { selection, snapshot: this.cloneSnapshot() };
     });
@@ -215,51 +240,106 @@ export class DesktopPlexRuntime {
 
   async listLibraryItems(
     requestId: string,
-    input: { sectionId: string; offset?: number; limit?: number; sort?: string },
+    input: {
+      sectionId: string;
+      offset?: number;
+      limit?: number;
+      sort?: string;
+      filter?: Readonly<Record<string, string | number>>;
+      includeCollections?: boolean;
+    },
   ): Promise<PlexIpcResult<PlexListLibraryItemsValue>> {
     const sectionId = input.sectionId.trim();
-    if (sectionId.length === 0 || !isOptionalShortString(input.sort)) {
+    if (
+      sectionId.length === 0 ||
+      !isOptionalShortString(input.sort) ||
+      !isSafeLibraryFilter(input.filter) ||
+      (input.includeCollections !== undefined && typeof input.includeCollections !== 'boolean')
+    ) {
       return this.fail(requestId, validationError('listLibraryItems'));
     }
+    if (typeof input.limit === 'number' && Number.isFinite(input.limit) && input.limit <= 0) {
+      return this.runOperation(requestId, 'listLibraryItems', async ({ commit }) => {
+        commit((snapshot) => ({
+          ...snapshot,
+          library: {
+            ...snapshot.library,
+            status: 'ready',
+            selectedSectionId: sectionId,
+            items: [],
+          },
+          lastError: null,
+          updatedAtMs: this.nowMs(),
+        }));
+        return { sectionId, offset: normalizeLibraryPagination(input).offset, limit: 0, items: [], snapshot: this.cloneSnapshot() };
+      });
+    }
     const { offset, limit } = normalizeLibraryPagination(input);
+    const hasRequestedLimit = typeof input.limit === 'number' && Number.isFinite(input.limit);
     return this.runOperation(requestId, 'listLibraryItems', async ({ signal, commit }) => {
       const token = await this.requireActiveToken(signal, commit, 'listLibraryItems');
       const connection = this.requireSelectedConnection('listLibraryItems');
       this.setLibraryStatus('loading', commit);
-      const payload = await this.libraryTransport.listLibraryItems({
-        connection,
-        token,
-        sectionId,
-        offset,
-        limit,
-        ...(input.sort !== undefined ? { sort: input.sort } : {}),
-        signal,
-      });
-      const items = parseMediaItems(
-        extractMetadataArray<RawMediaItem>(payloadAsContainer<RawMediaItem>(payload), 'library items'),
-      ).map(toRendererSafeMediaItemSummary);
+      const items: RawMediaItem[] = [];
+      let nextOffset = offset;
+      let iterations = 0;
+      while (true) {
+        if (++iterations > PLEX_LIBRARY_CONSTANTS.MAX_PAGINATION_ITERATIONS) {
+          throw new PlexLibraryError(
+            'pagination-limit-exceeded',
+            'Plex library pagination limit was exceeded',
+          );
+        }
+        const payload = await this.libraryTransport.listLibraryItems({
+          connection,
+          token,
+          sectionId,
+          offset: nextOffset,
+          limit,
+          ...(input.sort !== undefined ? { sort: input.sort } : {}),
+          ...(input.filter !== undefined ? { filter: input.filter } : {}),
+          ...(input.includeCollections !== undefined ? { includeCollections: input.includeCollections } : {}),
+          signal,
+        });
+        const pageItems = extractMetadataArray<RawMediaItem>(
+          payloadAsContainer<RawMediaItem>(payload),
+          'library items',
+        );
+        items.push(...pageItems);
+        if (pageItems.length < limit || (hasRequestedLimit && items.length >= limit)) {
+          break;
+        }
+        nextOffset += pageItems.length;
+      }
+      const summaries = parseMediaItems(hasRequestedLimit ? items.slice(0, limit) : items)
+        .map(toRendererSafeMediaItemSummary);
       commit((snapshot) => ({
         ...snapshot,
         library: {
           ...snapshot.library,
           status: 'ready',
           selectedSectionId: sectionId,
-          items,
+          items: summaries,
         },
         lastError: null,
         updatedAtMs: this.nowMs(),
       }));
-      return { sectionId, offset, limit, items, snapshot: this.cloneSnapshot() };
+      return { sectionId, offset, limit, items: summaries, snapshot: this.cloneSnapshot() };
     });
   }
 
   async searchLibrary(
     requestId: string,
-    input: { query: string; sectionId?: string; limit?: number },
+    input: { query: string; sectionId?: string; limit?: number; types?: readonly PlexMediaType[] },
   ): Promise<PlexIpcResult<PlexSearchLibraryValue>> {
     const query = input.query.trim();
     const sectionId = input.sectionId?.trim() ?? null;
-    if (query.length === 0 || sectionId === '') {
+    if (
+      query.length === 0 ||
+      sectionId === '' ||
+      !isSafeSearchTypes(input.types) ||
+      !isSafeSearchLimit(input.limit)
+    ) {
       return this.fail(requestId, validationError('searchLibrary'));
     }
     const limit = normalizeLibraryPagination({ limit: input.limit }).limit;
@@ -273,10 +353,19 @@ export class DesktopPlexRuntime {
         query,
         sectionId,
         limit,
+        ...(input.types !== undefined ? { types: input.types } : {}),
         signal,
       });
       const items = extractSearchHubs(payloadAsContainer<RawMediaItem>(payload), 'search')
-        .flatMap((hub) => extractSearchHubMetadata(hub, 'search hub'))
+        .flatMap((hub) => {
+          if (input.types !== undefined && input.types.length > 0) {
+            const hubType = mapSearchHubTypeToMediaType(hub.type);
+            if (hubType === null || !input.types.includes(hubType)) {
+              return [];
+            }
+          }
+          return extractSearchHubMetadata(hub, `search hub "${hub.type}"`);
+        })
         .slice(0, limit);
       const summaries = parseMediaItems(items).map(toRendererSafeMediaItemSummary);
       commit((snapshot) => ({
@@ -310,20 +399,31 @@ export class DesktopPlexRuntime {
         token,
         ratingKey: normalizedRatingKey,
         signal,
+      }).catch((error: unknown) => {
+        if (error instanceof LivePlexTransportError && error.code === 'resource-not-found') {
+          return null;
+        }
+        throw error;
       });
+      if (payload === null) {
+        commit((snapshot) => ({
+          ...snapshot,
+          library: { ...snapshot.library, status: 'ready', metadata: null },
+          lastError: null,
+          updatedAtMs: this.nowMs(),
+        }));
+        return { item: null, snapshot: this.cloneSnapshot() };
+      }
       const item = parseMediaItems(
         extractMetadataArray<RawMediaItem>(payloadAsContainer<RawMediaItem>(payload), 'metadata'),
       ).map(toRendererSafeMediaItemSummary)[0];
-      if (item === undefined) {
-        throw new PlexLibraryError('parse-error', 'Metadata payload did not include an item');
-      }
       commit((snapshot) => ({
         ...snapshot,
-        library: { ...snapshot.library, status: 'ready', metadata: item },
+        library: { ...snapshot.library, status: 'ready', metadata: item ?? null },
         lastError: null,
         updatedAtMs: this.nowMs(),
       }));
-      return { item, snapshot: this.cloneSnapshot() };
+      return { item: item ?? null, snapshot: this.cloneSnapshot() };
     });
   }
 
@@ -380,6 +480,16 @@ export class DesktopPlexRuntime {
     }
   }
 
+  private abortActiveOperationsExcept(operationKey: string): void {
+    for (const [activeOperationKey, controller] of this.activeOperations.entries()) {
+      if (activeOperationKey === operationKey) {
+        continue;
+      }
+      controller.abort();
+      this.activeOperations.delete(activeOperationKey);
+    }
+  }
+
   private async ensureAccountToken(
     signal: AbortSignal,
     commit: SnapshotCommit,
@@ -433,6 +543,14 @@ export class DesktopPlexRuntime {
       );
     }
     return connection;
+  }
+
+  private requireActiveProfileId(operation: PlexRuntimeOperation): string {
+    const profileId = this.authService.getActiveUserId()?.trim() ?? '';
+    if (profileId.length === 0) {
+      throw authRequiredError(operation);
+    }
+    return profileId;
   }
 
   private setServerStatus(
@@ -497,4 +615,50 @@ export class DesktopPlexRuntime {
   private cloneSnapshot(): PlexRuntimeSnapshot {
     return cloneRuntimeSnapshot(this.snapshot);
   }
+}
+
+const SEARCH_HUB_MEDIA_TYPES: Readonly<Record<string, PlexMediaType>> = { movie: 'movie', movies: 'movie', show: 'show', shows: 'show', episode: 'episode', episodes: 'episode', track: 'track', tracks: 'track', clip: 'clip', clips: 'clip' };
+
+const SAFE_FILTER_KEY_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/u;
+const SAFE_LIBRARY_FILTER_KEYS = new Set(['actor', 'audienceRating', 'collection', 'contentRating', 'country', 'decade', 'director', 'episode.unwatched', 'genre', 'hdr', 'producer', 'rating', 'resolution', 'studio', 'subtitleLanguage', 'type', 'unwatched', 'watched', 'writer', 'year']);
+const SAFE_SEARCH_TYPES = new Set<PlexMediaType>(['movie', 'show', 'episode', 'track', 'clip']);
+
+function isSafeLibraryFilter(value: unknown): value is Readonly<Record<string, string | number>> | undefined {
+  if (value === undefined) {
+    return true;
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (!SAFE_FILTER_KEY_PATTERN.test(key) || !SAFE_LIBRARY_FILTER_KEYS.has(key)) {
+      return false;
+    }
+    if (typeof child === 'number' && Number.isFinite(child)) {
+      continue;
+    }
+    if (typeof child === 'string' && child.length > 0 && child.length <= 256) {
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+function isSafeSearchTypes(value: unknown): value is readonly PlexMediaType[] | undefined {
+  return (
+    value === undefined ||
+    (Array.isArray(value) &&
+      value.length <= SAFE_SEARCH_TYPES.size &&
+      value.every((type) => SAFE_SEARCH_TYPES.has(type)))
+  );
+}
+
+function isSafeSearchLimit(value: unknown): value is number | undefined {
+  return value === undefined ||
+    (typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value > 0);
+}
+
+function mapSearchHubTypeToMediaType(type: string): PlexMediaType | null {
+  return SEARCH_HUB_MEDIA_TYPES[type.trim().toLowerCase()] ?? null;
 }

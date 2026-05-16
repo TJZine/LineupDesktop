@@ -747,11 +747,18 @@ test('plex runtime IPC contract freezes RD-22 Unit 1 safe vocabulary', () => {
   const emptyRequest: PlexEmptyRequest = { requestId: 'plex-getSnapshot-1', payload: {} };
   const listRequest: PlexListLibraryItemsRequest = {
     requestId: 'plex-listLibraryItems-1',
-    payload: { sectionId: '1', offset: 0, limit: 100, sort: 'titleSort:asc' },
+    payload: {
+      sectionId: '1',
+      offset: 0,
+      limit: 100,
+      sort: 'titleSort:asc',
+      filter: { type: 1 },
+      includeCollections: true,
+    },
   };
   const searchRequest: PlexSearchLibraryRequest = {
     requestId: 'plex-searchLibrary-1',
-    payload: { query: 'episode', sectionId: '1', limit: 25 },
+    payload: { query: 'episode', sectionId: '1', limit: 25, types: ['episode'] },
   };
   const cancelValue: PlexCancelPinValue = { pinId: 42, snapshot };
   const listValue: PlexListLibraryItemsValue = {

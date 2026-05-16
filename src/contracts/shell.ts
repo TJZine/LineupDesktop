@@ -22,6 +22,7 @@ import type {
   PlexRefreshServersValue,
   PlexRequestPinValue,
   PlexRestoreSelectedServerValue,
+  PlexRendererMediaType,
   PlexRuntimeSnapshot,
   PlexSearchLibraryValue,
   PlexSelectServerValue,
@@ -126,11 +127,14 @@ export interface LineupDesktopPreloadApi {
       offset?: number;
       limit?: number;
       sort?: string;
+      filter?: Readonly<Record<string, string | number>>;
+      includeCollections?: boolean;
     }) => Promise<PlexIpcResult<PlexListLibraryItemsValue>>;
     searchLibrary: (input: {
       query: string;
       sectionId?: string;
       limit?: number;
+      types?: readonly PlexRendererMediaType[];
     }) => Promise<PlexIpcResult<PlexSearchLibraryValue>>;
     getMetadata: (input: {
       ratingKey: string;

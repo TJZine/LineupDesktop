@@ -60,9 +60,11 @@ export interface PlexLibrarySectionSummary {
   lastScannedAtMs: number;
 }
 
+export type PlexRendererMediaType = 'movie' | 'show' | 'episode' | 'track' | 'clip';
+
 export interface PlexMediaItemSummary {
   ratingKey: string;
-  type: 'movie' | 'show' | 'episode' | 'track' | 'clip';
+  type: PlexRendererMediaType;
   title: string;
   sortTitle: string;
   summary: string;
@@ -242,11 +244,14 @@ export type PlexListLibraryItemsRequest = PlexIpcRequest<{
   offset?: number;
   limit?: number;
   sort?: string;
+  filter?: Readonly<Record<string, string | number>>;
+  includeCollections?: boolean;
 }>;
 export type PlexSearchLibraryRequest = PlexIpcRequest<{
   query: string;
   sectionId?: string;
   limit?: number;
+  types?: readonly PlexRendererMediaType[];
 }>;
 export type PlexGetMetadataRequest = PlexIpcRequest<{ ratingKey: string }>;
 
@@ -345,7 +350,7 @@ export interface PlexSearchLibraryValue {
 }
 
 export interface PlexGetMetadataValue {
-  item: PlexMediaItemSummary;
+  item: PlexMediaItemSummary | null;
   snapshot: PlexRuntimeSnapshot;
 }
 

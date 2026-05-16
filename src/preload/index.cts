@@ -36,6 +36,7 @@ import type {
   PlexRefreshServersValue,
   PlexRequestPinValue,
   PlexRestoreSelectedServerValue,
+  PlexRendererMediaType,
   PlexRuntimeError,
   PlexRuntimeSnapshot,
   PlexSearchLibraryRequest,
@@ -841,12 +842,72 @@ function validatePlexLimit(value: unknown): PlexValidationResult<number | undefi
     typeof value !== 'number' ||
     !Number.isFinite(value) ||
     !Number.isInteger(value) ||
-    value <= 0 ||
     value > PLEX_MAX_PAGE_SIZE
   ) {
     return { ok: false, message: 'Plex library limit is invalid.' };
   }
   return { ok: true, payload: value };
+}
+
+function validatePlexPositiveLimit(value: unknown): PlexValidationResult<number | undefined> {
+  const limit = validatePlexLimit(value);
+  if (!limit.ok) {
+    return limit;
+  }
+  if (limit.payload !== undefined && limit.payload <= 0) {
+    return { ok: false, message: 'Plex library limit is invalid.' };
+  }
+  return limit;
+}
+
+const PLEX_SAFE_FILTER_KEY_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/u;
+const PLEX_SAFE_LIBRARY_FILTER_KEYS = new Set(['actor', 'audienceRating', 'collection', 'contentRating', 'country', 'decade', 'director', 'episode.unwatched', 'genre', 'hdr', 'producer', 'rating', 'resolution', 'studio', 'subtitleLanguage', 'type', 'unwatched', 'watched', 'writer', 'year']);
+const PLEX_SAFE_MEDIA_TYPES = new Set<PlexRendererMediaType>(['movie', 'show', 'episode', 'track', 'clip']);
+
+function validatePlexLibraryFilter(
+  value: unknown,
+): PlexValidationResult<Readonly<Record<string, string | number>> | undefined> {
+  if (value === undefined) {
+    return { ok: true, payload: undefined };
+  }
+  if (!isPlainRecord(value)) {
+    return { ok: false, message: 'Plex library filter is invalid.' };
+  }
+  const filter: Record<string, string | number> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (!PLEX_SAFE_FILTER_KEY_PATTERN.test(key) || !PLEX_SAFE_LIBRARY_FILTER_KEYS.has(key)) {
+      return { ok: false, message: 'Plex library filter is invalid.' };
+    }
+    if (typeof child === 'number' && Number.isFinite(child)) {
+      filter[key] = child;
+      continue;
+    }
+    if (typeof child === 'string' && child.length > 0 && child.length <= 256) {
+      filter[key] = child;
+      continue;
+    }
+    return { ok: false, message: 'Plex library filter is invalid.' };
+  }
+  return { ok: true, payload: filter };
+}
+
+function validatePlexSearchTypes(
+  value: unknown,
+): PlexValidationResult<readonly PlexRendererMediaType[] | undefined> {
+  if (value === undefined) {
+    return { ok: true, payload: undefined };
+  }
+  if (!Array.isArray(value) || value.length > PLEX_SAFE_MEDIA_TYPES.size) {
+    return { ok: false, message: 'Plex search types are invalid.' };
+  }
+  const types: PlexRendererMediaType[] = [];
+  for (const type of value) {
+    if (!PLEX_SAFE_MEDIA_TYPES.has(type)) {
+      return { ok: false, message: 'Plex search types are invalid.' };
+    }
+    types.push(type);
+  }
+  return { ok: true, payload: types };
 }
 
 function validatePlexPinRequest(
@@ -920,13 +981,24 @@ function validatePlexListLibraryItemsRequest(
   if (!sort.ok) {
     return sort;
   }
+  const filter = validatePlexLibraryFilter(input.filter);
+  if (!filter.ok) {
+    return filter;
+  }
+  if (input.includeCollections !== undefined && typeof input.includeCollections !== 'boolean') {
+    return { ok: false, message: 'Plex library includeCollections flag is invalid.' };
+  }
   return {
     ok: true,
     payload: {
       sectionId: sectionId.payload,
       offset: offset.payload ?? 0,
-      limit: limit.payload ?? PLEX_DEFAULT_PAGE_SIZE,
+      ...(limit.payload !== undefined ? { limit: limit.payload } : {}),
       ...(sort.payload !== undefined ? { sort: sort.payload } : {}),
+      ...(filter.payload !== undefined ? { filter: filter.payload } : {}),
+      ...(input.includeCollections !== undefined
+        ? { includeCollections: input.includeCollections }
+        : {}),
     },
   };
 }
@@ -945,9 +1017,13 @@ function validatePlexSearchLibraryRequest(
   if (!sectionId.ok) {
     return sectionId;
   }
-  const limit = validatePlexLimit(input.limit);
+  const limit = validatePlexPositiveLimit(input.limit);
   if (!limit.ok) {
     return limit;
+  }
+  const types = validatePlexSearchTypes(input.types);
+  if (!types.ok) {
+    return types;
   }
   return {
     ok: true,
@@ -955,6 +1031,7 @@ function validatePlexSearchLibraryRequest(
       query: query.payload,
       ...(sectionId.payload !== undefined ? { sectionId: sectionId.payload } : {}),
       limit: limit.payload ?? PLEX_DEFAULT_PAGE_SIZE,
+      ...(types.payload !== undefined ? { types: types.payload } : {}),
     },
   };
 }
@@ -1399,7 +1476,7 @@ function isPlexListLibraryItemsValue(value: unknown): value is PlexListLibraryIt
     hasOnlyKeys(value, ['sectionId', 'offset', 'limit', 'items', 'snapshot']) &&
     isNonEmptyString(value.sectionId) &&
     isPlexInteger(value.offset) &&
-    isPlexInteger(value.limit, 1) &&
+    isPlexInteger(value.limit) &&
     value.limit <= PLEX_MAX_PAGE_SIZE &&
     Array.isArray(value.items) &&
     value.items.every(isPlexMediaItemSummary) &&
@@ -1423,7 +1500,7 @@ function isPlexGetMetadataValue(value: unknown): value is PlexGetMetadataValue {
   return (
     isPlainRecord(value) &&
     hasOnlyKeys(value, ['item', 'snapshot']) &&
-    isPlexMediaItemSummary(value.item) &&
+    (value.item === null || isPlexMediaItemSummary(value.item)) &&
     isPlexRuntimeSnapshot(value.snapshot)
   );
 }

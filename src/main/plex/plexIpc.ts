@@ -208,11 +208,13 @@ export function registerPlexIpcHandlers(options: RegisterPlexIpcHandlersOptions)
     }
     if (
       !request.ok ||
-      !hasOnlyKeys(request.payload, ['sectionId'], ['offset', 'limit', 'sort']) ||
+      !hasOnlyKeys(request.payload, ['sectionId'], ['offset', 'limit', 'sort', 'filter', 'includeCollections']) ||
       !isNonEmptyString(request.payload.sectionId) ||
       !isOptionalFiniteNumber(request.payload.offset) ||
       !isOptionalFiniteNumber(request.payload.limit) ||
-      !isOptionalShortString(request.payload.sort)
+      !isOptionalShortString(request.payload.sort) ||
+      !isOptionalStringNumberRecord(request.payload.filter) ||
+      !isOptionalBoolean(request.payload.includeCollections)
     ) {
       return validationResult(request.requestId, 'listLibraryItems');
     }
@@ -226,10 +228,11 @@ export function registerPlexIpcHandlers(options: RegisterPlexIpcHandlersOptions)
     }
     if (
       !request.ok ||
-      !hasOnlyKeys(request.payload, ['query'], ['sectionId', 'limit']) ||
+      !hasOnlyKeys(request.payload, ['query'], ['sectionId', 'limit', 'types']) ||
       !isNonEmptyString(request.payload.query) ||
       !isOptionalShortString(request.payload.sectionId) ||
-      !isOptionalFiniteNumber(request.payload.limit)
+      !isOptionalPositiveInteger(request.payload.limit) ||
+      !isOptionalShortStringArray(request.payload.types)
     ) {
       return validationResult(request.requestId, 'searchLibrary');
     }
@@ -361,6 +364,30 @@ function isOptionalShortString(value: unknown): value is string | null | undefin
 
 function isOptionalFiniteNumber(value: unknown): value is number | undefined {
   return value === undefined || (typeof value === 'number' && Number.isFinite(value));
+}
+
+function isOptionalPositiveInteger(value: unknown): value is number | undefined {
+  return value === undefined ||
+    (typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value > 0);
+}
+
+function isOptionalBoolean(value: unknown): value is boolean | undefined {
+  return value === undefined || typeof value === 'boolean';
+}
+
+function isOptionalStringNumberRecord(value: unknown): value is Readonly<Record<string, string | number>> | undefined {
+  if (value === undefined) {
+    return true;
+  }
+  return isPlainRecord(value) &&
+    Object.values(value).every((entry) => typeof entry === 'string' || typeof entry === 'number');
+}
+
+function isOptionalShortStringArray(value: unknown): value is readonly string[] | undefined {
+  if (value === undefined) {
+    return true;
+  }
+  return Array.isArray(value) && value.every((entry) => isNonEmptyString(entry));
 }
 
 function getElectronIpcMain(): PlexIpcMain {

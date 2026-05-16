@@ -8,6 +8,12 @@ import {
   parseUserResponse,
   type PlexResponsePayload,
 } from './plexAuthPayloadParsers.js';
+import {
+  HOME_ENDPOINT_VERSIONS,
+  hasProvidedPlexHomePin,
+  requestFirstSupportedPlexHomeEndpoint,
+  type DesktopPlexHomeEndpointVersion,
+} from './plexHomeEndpointPolicy.js';
 import type { DesktopPlexCredentialStore } from './desktopPlexCredentialStore.js';
 import type { PlexAuthConfig, PlexAuthToken, PlexPinRequest } from './types.js';
 import { toPlexAuthProfileSummary } from './types.js';
@@ -27,6 +33,7 @@ export interface DesktopPlexAuthTransportRequest {
   token?: string;
   userId?: string;
   pin?: string | null;
+  homeEndpointVersion?: DesktopPlexHomeEndpointVersion;
   signal?: AbortSignal | null;
 }
 
@@ -230,21 +237,42 @@ export class DesktopPlexAuthService {
     }
     throwIfAborted(options.signal);
 
-    const response = await this.requestTransport({
+    const response = await this.requestFirstSupportedHomeEndpoint({
       action: 'get-home-users',
-      config: this.config,
       token: this.accountToken.token,
       signal: options.signal ?? null,
     });
+    if (!response) {
+      return [];
+    }
     throwIfAborted(options.signal);
     assertOkResponse(response);
-    return parseHomeUsersPayload(toPlexResponsePayload(response.payload)).map((user) => ({
-      id: user.id,
-      title: user.title,
-      admin: user.admin,
-      protected: user.protected,
-      ...(user.restricted === undefined ? {} : { restricted: user.restricted }),
-    }));
+    const users = parseHomeUsersPayload(toPlexResponsePayload(response.payload));
+    if (users.length > 0) {
+      return users.map(toHomeUserSummary);
+    }
+
+    for (const endpointVersion of HOME_ENDPOINT_VERSIONS.slice(
+      HOME_ENDPOINT_VERSIONS.indexOf(response.homeEndpointVersion) + 1,
+    )) {
+      const fallbackResponse = await this.requestFirstSupportedHomeEndpoint({
+        action: 'get-home-users',
+        token: this.accountToken.token,
+        signal: options.signal ?? null,
+        startAtEndpointVersion: endpointVersion,
+      });
+      if (!fallbackResponse) {
+        return [];
+      }
+      throwIfAborted(options.signal);
+      assertOkResponse(fallbackResponse);
+      const fallbackUsers = parseHomeUsersPayload(toPlexResponsePayload(fallbackResponse.payload));
+      if (fallbackUsers.length > 0) {
+        return fallbackUsers.map(toHomeUserSummary);
+      }
+    }
+
+    return [];
   }
 
   async switchHomeUser(
@@ -256,15 +284,24 @@ export class DesktopPlexAuthService {
     }
     throwIfAborted(options.signal);
 
-    const response = await this.requestTransport({
+    const response = await this.requestFirstSupportedHomeEndpoint({
       action: 'switch-home-user',
-      config: this.config,
       token: this.accountToken.token,
       userId,
       pin: options.pin ?? null,
       signal: options.signal ?? null,
     });
+    if (!response) {
+      throw new PlexAuthError('resource-not-found', 'Plex Home switching is not supported');
+    }
     throwIfAborted(options.signal);
+    if ((response.status === 401 || response.status === 403) && hasProvidedPlexHomePin(options.pin)) {
+      const validation = await this.validateToken(this.accountToken.token, { signal: options.signal ?? null });
+      throwIfAborted(options.signal);
+      if (validation.valid) {
+        throw new PlexAuthError('auth-failed', 'Incorrect Plex Home PIN', response.status);
+      }
+    }
     assertOkResponse(response);
     const { authToken } = parseSwitchResponsePayload(toPlexResponsePayload(response.payload));
     const activeToken = await this.fetchUserProfile(authToken, options.signal ?? null);
@@ -342,12 +379,45 @@ export class DesktopPlexAuthService {
       throw sanitizeAuthSeamError(error, 'server-unreachable', 'Plex auth transport failed', true);
     }
   }
+
+  private async requestFirstSupportedHomeEndpoint(input: {
+    action: 'get-home-users' | 'switch-home-user';
+    token: string;
+    userId?: string;
+    pin?: string | null;
+    signal: AbortSignal | null;
+    startAtEndpointVersion?: DesktopPlexHomeEndpointVersion;
+  }): Promise<(DesktopPlexAuthTransportResponse & { homeEndpointVersion: DesktopPlexHomeEndpointVersion }) | null> {
+    return requestFirstSupportedPlexHomeEndpoint({
+      ...input,
+      request: (request) =>
+        this.requestTransport({
+          action: input.action,
+          config: this.config,
+          token: request.token,
+          userId: request.userId,
+          pin: request.pin ?? null,
+          homeEndpointVersion: request.homeEndpointVersion,
+          signal: request.signal,
+        }),
+    });
+  }
 }
 
 function assertOkResponse(response: DesktopPlexAuthTransportResponse): void {
   if (response.status < 200 || response.status >= 300) {
     throw createPlexAuthHttpError(response.status);
   }
+}
+
+function toHomeUserSummary(user: ReturnType<typeof parseHomeUsersPayload>[number]): PlexHomeUserSummary {
+  return {
+    id: user.id,
+    title: user.title,
+    admin: user.admin,
+    protected: user.protected,
+    ...(user.restricted === undefined ? {} : { restricted: user.restricted }),
+  };
 }
 
 function sanitizeAuthSeamError(

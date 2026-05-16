@@ -6,6 +6,7 @@ import {
   LINEUP_PLEX_LIST_LIBRARY_ITEMS_CHANNEL,
   LINEUP_PLEX_POLL_PIN_CHANNEL,
   LINEUP_PLEX_REQUEST_PIN_CHANNEL,
+  LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL,
 } from '../../contracts/ipc.js';
 import {
   containsPlexForbiddenRendererField,
@@ -172,13 +173,21 @@ class FakeDiscoveryTransport implements DesktopPlexDiscoveryTransport {
 
 class FakeSelectedServerStore {
   public persisted: { serverId: string; name: string; source: PlexServerSelectionSource; lastSelectedAtMs: number } | null = null;
+  public readonly persistedByProfileId = new Map<
+    string,
+    { serverId: string; name: string; source: PlexServerSelectionSource; lastSelectedAtMs: number }
+  >();
   public saveCount = 0;
 
-  async readSelectedServerSummary() {
-    return this.persisted;
+  async readSelectedServerSummary(profileId?: string) {
+    return profileId === undefined ? this.persisted : this.persistedByProfileId.get(profileId) ?? null;
   }
 
-  async saveSelectedServerSummary(server: PlexServer, source: PlexServerSelectionSource) {
+  async saveSelectedServerSummary(
+    server: PlexServer,
+    source: PlexServerSelectionSource,
+    options: { profileId?: string } = {},
+  ) {
     this.saveCount += 1;
     this.persisted = {
       serverId: server.id,
@@ -186,6 +195,9 @@ class FakeSelectedServerStore {
       source,
       lastSelectedAtMs: 50_000,
     };
+    if (options.profileId !== undefined) {
+      this.persistedByProfileId.set(options.profileId, this.persisted);
+    }
     return this.persisted;
   }
 }
@@ -193,12 +205,15 @@ class FakeSelectedServerStore {
 class FakeLibraryTransport implements LivePlexLibraryTransport {
   public listSectionsResponse: unknown = { kind: 'json', data: { MediaContainer: { Directory: [rawSection()] } } };
   public listItemsResponse: unknown = { kind: 'json', data: { MediaContainer: { Metadata: [rawItem()] } } };
+  public listItemsResponses: unknown[] = [];
   public searchResponse: unknown = {
     kind: 'json',
     data: { MediaContainer: { Hub: [{ type: 'movie', Metadata: [rawItem({ ratingKey: 'search-1', title: 'Search' })] }] } },
   };
   public metadataResponse: unknown = { kind: 'json', data: { MediaContainer: { Metadata: [rawItem({ ratingKey: 'meta-1', title: 'Metadata' })] } } };
   public sectionsError: unknown = null;
+  public readonly listItemsRequests: Parameters<LivePlexLibraryTransport['listLibraryItems']>[0][] = [];
+  public readonly searchRequests: Parameters<LivePlexLibraryTransport['searchLibrary']>[0][] = [];
 
   async listLibrarySections() {
     if (this.sectionsError !== null) {
@@ -207,11 +222,13 @@ class FakeLibraryTransport implements LivePlexLibraryTransport {
     return this.listSectionsResponse as never;
   }
 
-  async listLibraryItems() {
-    return this.listItemsResponse as never;
+  async listLibraryItems(input: Parameters<LivePlexLibraryTransport['listLibraryItems']>[0]) {
+    this.listItemsRequests.push(input);
+    return (this.listItemsResponses.shift() ?? this.listItemsResponse) as never;
   }
 
-  async searchLibrary() {
+  async searchLibrary(input: Parameters<LivePlexLibraryTransport['searchLibrary']>[0]) {
+    this.searchRequests.push(input);
     return this.searchResponse as never;
   }
 
@@ -284,6 +301,94 @@ test('desktop plex runtime switches Plex Home users with active-profile token in
   assert.equal(fixture.credentialStore.secretValue, placeholderAccountToken);
   assert.equal(JSON.stringify(switched).includes(placeholderManagedToken), false);
   assertRendererSafe(switched);
+});
+
+test('desktop plex runtime does not reuse selected server across Plex Home profile switch', async () => {
+  const fixture = createRuntimeFixture();
+  await signIn(fixture);
+  fixture.discoveryTransport.resources = [
+    createPlexApiResource({
+      clientIdentifier: 'server-1',
+      name: 'Living Room',
+      connections: [connection({ address: 'local', uri: 'https://local.example:32400' })],
+    }),
+  ];
+  fixture.discoveryTransport.enqueueProbe('local', { outcome: 'reachable', latencyMs: 12 });
+
+  assert.equal((await fixture.runtime.refreshServers('refresh')).ok, true);
+  assert.equal((await fixture.runtime.selectServer('select-account', 'server-1')).ok, true);
+  assert.equal(fixture.selectedServerStore.persistedByProfileId.get('account-1')?.serverId, 'server-1');
+
+  fixture.authTransport.enqueue('switch-home-user', {
+    status: 200,
+    payload: { kind: 'json', data: { authToken: placeholderManagedToken } },
+  });
+  fixture.authTransport.enqueue('validate-token', {
+    status: 200,
+    payload: { kind: 'json', data: accountPayload({ id: 'managed', username: 'managed' }) },
+  });
+
+  const switched = await fixture.runtime.switchHomeUser('switch-managed', { userId: 'managed', pin: '1234' });
+  const restored = await fixture.runtime.restoreSelectedServer('restore-managed');
+
+  assert.equal(switched.ok, true);
+  assert.equal(restored.ok, true);
+  assert.deepEqual(restored.ok ? restored.value.selection : null, {
+    kind: 'selection-failed',
+    reason: 'no-persisted-server',
+    persisted: false,
+  });
+  assert.equal(restored.ok ? restored.value.snapshot.servers.selected : 'not-null', null);
+  assert.equal(fixture.discovery.getSelectedConnectionForMain(), null);
+  assert.equal(fixture.selectedServerStore.persistedByProfileId.get('account-1')?.serverId, 'server-1');
+  assert.equal(fixture.selectedServerStore.persistedByProfileId.get('managed'), undefined);
+  assertRendererSafe(restored);
+});
+
+test('desktop plex runtime rejects stale library commits after Plex Home profile switch', async () => {
+  const fixture = createRuntimeFixture();
+  await signInAndSelectServer(fixture);
+  const libraryStarted = createDeferred<void>();
+  const staleSections = createDeferred<unknown>();
+  fixture.libraryTransport.listLibrarySections = async () => {
+    libraryStarted.resolve();
+    return staleSections.promise as never;
+  };
+
+  const staleSectionsResult = fixture.runtime.listLibrarySections('sections-old-profile');
+  await libraryStarted.promise;
+  fixture.authTransport.enqueue('switch-home-user', {
+    status: 200,
+    payload: { kind: 'json', data: { authToken: placeholderManagedToken } },
+  });
+  fixture.authTransport.enqueue('validate-token', {
+    status: 200,
+    payload: { kind: 'json', data: accountPayload({ id: 'managed', username: 'managed' }) },
+  });
+
+  const switched = await fixture.runtime.switchHomeUser('switch-managed-race', {
+    userId: 'managed',
+    pin: '1234',
+  });
+  staleSections.resolve({
+    kind: 'json',
+    data: { MediaContainer: { Directory: [rawSection({ title: 'Old Profile' })] } },
+  });
+  const stale = await staleSectionsResult;
+  const snapshot = fixture.runtime.getSnapshot('snapshot-after-profile-switch-race');
+
+  assert.equal(switched.ok, true);
+  assert.equal(stale.ok, false);
+  assert.equal(stale.ok ? '' : stale.error.code, 'PLEX_STALE_RESULT');
+  assert.equal(stale.ok ? false : stale.stale, true);
+  assert.equal(snapshot.ok ? snapshot.value.auth.profile?.accountId : '', 'managed');
+  assert.equal(snapshot.ok ? snapshot.value.servers.selected : 'not-null', null);
+  assert.equal(snapshot.ok ? snapshot.value.library.status : '', 'idle');
+  assert.equal(snapshot.ok ? snapshot.value.library.sections.length : -1, 0);
+  assert.equal(snapshot.ok ? snapshot.value.library.items.length : -1, 0);
+  assert.equal(snapshot.ok ? snapshot.value.library.search : 'not-null', null);
+  assert.equal(snapshot.ok ? snapshot.value.library.metadata : 'not-null', null);
+  assertRendererSafe([stale, snapshot]);
 });
 
 test('desktop plex runtime refreshes, restores, and selects servers while keeping connection details in main custody', async () => {
@@ -402,6 +507,10 @@ test('desktop plex runtime maps aborted discovery refresh and restore to cancell
     source: 'manual',
     lastSelectedAtMs: 50_000,
   };
+  restoreFixture.selectedServerStore.persistedByProfileId.set(
+    'account-1',
+    restoreFixture.selectedServerStore.persisted,
+  );
   restoreFixture.discoveryTransport.discoverError = new LivePlexTransportError(
     'aborted',
     'Plex request was aborted',
@@ -609,18 +718,232 @@ test('desktop plex runtime projects library sections, items, search, metadata, d
   assert.equal(metadata.ok, true);
   assert.equal(items.ok ? items.value.items[0]?.title : '', 'Movie');
   assert.equal(search.ok ? search.value.items[0]?.ratingKey : '', 'search-1');
-  assert.equal(metadata.ok ? metadata.value.item.title : '', 'Metadata');
+  assert.equal(metadata.ok ? metadata.value.item?.title : '', 'Metadata');
   assertRendererSafe([sections, items, search, metadata]);
 
   fixture.libraryTransport.metadataResponse = { kind: 'json', data: { MediaContainer: { Metadata: [] } } };
-  const failed = await fixture.runtime.getMetadata('metadata-fail', 'missing');
-  assert.equal(failed.ok, false);
-  assert.equal(failed.ok ? '' : failed.error.code, 'PLEX_PARSE_FAILED');
-  assert.equal(containsPlexForbiddenRendererField(failed), false);
+  const missing = await fixture.runtime.getMetadata('metadata-missing', 'missing');
+  assert.equal(missing.ok, true);
+  assert.equal(missing.ok ? missing.value.item : 'not-null', null);
+  assert.equal(missing.ok ? missing.value.snapshot.library.metadata : 'not-null', null);
+  assert.equal(containsPlexForbiddenRendererField(missing), false);
 
   const records = fixture.diagnostics.getRecords();
   assert.equal(JSON.stringify(records).includes('local.example'), false);
   assert.equal(JSON.stringify(records).includes(placeholderAccountToken), false);
+});
+
+test('desktop plex runtime paginates library browse and forwards safe filters', async () => {
+  const fixture = createRuntimeFixture();
+  await signInAndSelectServer(fixture);
+  fixture.libraryTransport.listItemsResponses = [
+    {
+      kind: 'json',
+      data: {
+        MediaContainer: {
+          Metadata: Array.from({ length: 100 }, (_, index) =>
+            rawItem({ ratingKey: `item-${index + 1}`, title: `Item ${index + 1}` }),
+          ),
+        },
+      },
+    },
+    {
+      kind: 'json',
+      data: {
+        MediaContainer: {
+          Metadata: [
+            rawItem({ ratingKey: 'item-3', title: 'Item 3' }),
+            rawItem({ ratingKey: 'item-4', title: 'Item 4' }),
+          ],
+        },
+      },
+    },
+  ];
+
+  const result = await fixture.runtime.listLibraryItems('items-paged', {
+    sectionId: '1',
+    offset: 5,
+    sort: 'titleSort:asc',
+    filter: { type: 1, year: 2020 },
+    includeCollections: true,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.ok ? result.value.items.length : 0, 102);
+  assert.deepEqual(
+    fixture.libraryTransport.listItemsRequests.map((request) => ({
+      offset: request.offset,
+      limit: request.limit,
+      sort: request.sort,
+      filter: request.filter,
+      includeCollections: request.includeCollections,
+    })),
+    [
+      {
+        offset: 5,
+        limit: 100,
+        sort: 'titleSort:asc',
+        filter: { type: 1, year: 2020 },
+        includeCollections: true,
+      },
+      {
+        offset: 105,
+        limit: 100,
+        sort: 'titleSort:asc',
+        filter: { type: 1, year: 2020 },
+        includeCollections: true,
+      },
+    ],
+  );
+  assertRendererSafe([result]);
+});
+
+test('desktop plex runtime trims library browse results to requested limit', async () => {
+  const fixture = createRuntimeFixture();
+  await signInAndSelectServer(fixture);
+  fixture.libraryTransport.listItemsResponse = {
+    kind: 'json',
+    data: {
+      MediaContainer: {
+        Metadata: [
+          rawItem({ ratingKey: 'item-1', title: 'Item 1' }),
+          rawItem({ ratingKey: 'item-2', title: 'Item 2' }),
+          rawItem({ ratingKey: 'item-3', title: 'Item 3' }),
+          rawItem({ ratingKey: 'item-4', title: 'Item 4' }),
+        ],
+      },
+    },
+  };
+
+  const result = await fixture.runtime.listLibraryItems('items-trim', { sectionId: '1', limit: 3 });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    result.ok ? result.value.items.map((item) => item.ratingKey) : [],
+    ['item-1', 'item-2', 'item-3'],
+  );
+  assert.deepEqual(
+    fixture.libraryTransport.listItemsRequests.map((request) => ({ offset: request.offset, limit: request.limit })),
+    [{ offset: 0, limit: 3 }],
+  );
+});
+
+test('desktop plex runtime returns empty browse results without transport for non-positive limits', async () => {
+  const fixture = createRuntimeFixture();
+
+  const result = await fixture.runtime.listLibraryItems('items-empty', { sectionId: '1', limit: 0 });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.ok ? result.value.items : ['unexpected'], []);
+  assert.equal(fixture.libraryTransport.listItemsRequests.length, 0);
+  assert.equal(result.ok ? result.value.snapshot.library.selectedSectionId : null, '1');
+  assertRendererSafe([result]);
+});
+
+test('desktop plex runtime rejects unsafe library browse filter and include flags', async () => {
+  const fixture = createRuntimeFixture();
+
+  const tokenFilter = await fixture.runtime.listLibraryItems('items-token-filter', {
+    sectionId: '1',
+    filter: { token: 'unsafe' },
+  });
+  const badIncludeCollections = await fixture.runtime.listLibraryItems(
+    'items-bad-include-collections',
+    { sectionId: '1', includeCollections: 'yes' as never },
+  );
+
+  assert.equal(tokenFilter.ok, false);
+  assert.equal(tokenFilter.ok ? '' : tokenFilter.error.code, 'PLEX_VALIDATION_FAILED');
+  assert.equal(badIncludeCollections.ok, false);
+  assert.equal(badIncludeCollections.ok ? '' : badIncludeCollections.error.code, 'PLEX_VALIDATION_FAILED');
+  assert.equal(fixture.libraryTransport.listItemsRequests.length, 0);
+  assertRendererSafe([tokenFilter, badIncludeCollections]);
+});
+
+test('desktop plex runtime rejects explicit non-positive search limits', async () => {
+  const fixture = createRuntimeFixture();
+
+  const zero = await fixture.runtime.searchLibrary('search-zero-limit', { query: 'movie', limit: 0 });
+  const negative = await fixture.runtime.searchLibrary('search-negative-limit', { query: 'movie', limit: -1 });
+
+  assert.equal(zero.ok, false);
+  assert.equal(zero.ok ? '' : zero.error.code, 'PLEX_VALIDATION_FAILED');
+  assert.equal(negative.ok, false);
+  assert.equal(negative.ok ? '' : negative.error.code, 'PLEX_VALIDATION_FAILED');
+  assert.equal(fixture.libraryTransport.searchRequests.length, 0);
+  assertRendererSafe([zero, negative]);
+});
+
+test('desktop plex runtime guards infinite library browse pagination safely', async () => {
+  const fixture = createRuntimeFixture();
+  await signInAndSelectServer(fixture);
+  fixture.libraryTransport.listItemsResponse = {
+    kind: 'json',
+    data: {
+      MediaContainer: {
+        Metadata: Array.from({ length: 100 }, (_, index) =>
+          rawItem({ ratingKey: `loop-${index}`, title: 'Loop' }),
+        ),
+      },
+    },
+  };
+
+  const failed = await fixture.runtime.listLibraryItems('items-loop', { sectionId: '1' });
+
+  assert.equal(failed.ok, false);
+  assert.equal(failed.ok ? '' : failed.error.code, 'PLEX_LIBRARY_FAILED');
+  assert.equal(fixture.libraryTransport.listItemsRequests.length, 1_000);
+  assert.equal(containsPlexForbiddenRendererField(failed), false);
+  assert.equal(JSON.stringify(failed).includes(placeholderAccountToken), false);
+});
+
+test('desktop plex runtime forwards search types and skips non-requested hubs', async () => {
+  const fixture = createRuntimeFixture();
+  await signInAndSelectServer(fixture);
+  fixture.libraryTransport.searchResponse = {
+    kind: 'json',
+    data: {
+      MediaContainer: {
+        Hub: [
+          { type: 'movie', Metadata: [rawItem({ ratingKey: 'movie-1', title: 'Movie' })] },
+          { type: 'show', Metadata: [rawItem({ ratingKey: 'show-1', type: 'show', title: 'Show' })] },
+          { type: 'unknown', Metadata: [rawItem({ ratingKey: 'unknown-1', title: 'Unknown' })] },
+        ],
+      },
+    },
+  };
+
+  const result = await fixture.runtime.searchLibrary('search-types', {
+    query: 'library',
+    sectionId: '1',
+    limit: 10,
+    types: ['movie'],
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.ok ? result.value.items.map((item) => item.ratingKey) : [], ['movie-1']);
+  assert.deepEqual(fixture.libraryTransport.searchRequests.map((request) => request.types), [['movie']]);
+  assertRendererSafe([result]);
+});
+
+test('desktop plex runtime maps not-found metadata to semantic null and preserves malformed payload failures', async () => {
+  const fixture = createRuntimeFixture();
+  await signInAndSelectServer(fixture);
+  fixture.libraryTransport.getMetadata = async () => {
+    throw new LivePlexTransportError('resource-not-found', 'Plex resource was not found', 404);
+  };
+
+  const missing = await fixture.runtime.getMetadata('metadata-404', 'missing');
+  assert.equal(missing.ok, true);
+  assert.equal(missing.ok ? missing.value.item : 'not-null', null);
+  assert.equal(missing.ok ? missing.value.snapshot.library.metadata : 'not-null', null);
+
+  fixture.libraryTransport.getMetadata = async () =>
+    ({ kind: 'json', data: { MediaContainer: { Metadata: {} } } }) as never;
+  const malformed = await fixture.runtime.getMetadata('metadata-malformed', 'broken');
+  assert.equal(malformed.ok, false);
+  assert.equal(malformed.ok ? '' : malformed.error.code, 'PLEX_PARSE_FAILED');
+  assert.equal(containsPlexForbiddenRendererField(malformed), false);
 });
 
 test('desktop plex runtime rejects malformed JSON library payload envelopes safely', async () => {
@@ -911,7 +1234,7 @@ test('desktop plex discovery ignores aborted selection commits and selected-serv
   ];
   transport.enqueueProbe('old', { outcome: 'reachable', latencyMs: 10 });
   await discovery.refreshServers();
-  const selectedOld = await discovery.selectServer('server-old');
+  const selectedOld = await discovery.selectServer('server-old', { profileId: 'profile-a' });
   assert.equal(selectedOld.kind, 'selected');
   assert.equal(selectedServerStore.persisted?.serverId, 'server-old');
   assert.equal(discovery.getSelectedServerSummary()?.serverId, 'server-old');
@@ -920,7 +1243,10 @@ test('desktop plex discovery ignores aborted selection commits and selected-serv
   const newProbe = createDeferred<DesktopPlexConnectionProbeTransportResult>();
   const abortController = new AbortController();
   transport.enqueueProbe('new', newProbe.promise);
-  const staleSelection = discovery.selectServer('server-new', { signal: abortController.signal });
+  const staleSelection = discovery.selectServer('server-new', {
+    profileId: 'profile-a',
+    signal: abortController.signal,
+  });
   abortController.abort();
   newProbe.resolve({ outcome: 'reachable', latencyMs: 5 });
 
@@ -984,7 +1310,10 @@ test('desktop plex discovery aborts in-flight selected-server persistence before
   await discovery.refreshServers();
 
   const abortController = new AbortController();
-  const selection = discovery.selectServer('server-new', { signal: abortController.signal });
+  const selection = discovery.selectServer('server-new', {
+    profileId: 'profile-a',
+    signal: abortController.signal,
+  });
   await saveStarted.promise;
   abortController.abort();
   releaseSave.resolve();
@@ -1027,6 +1356,55 @@ test('live plex transport normalizes JSON/text responses, auth headers, status, 
   assert.equal(new Headers(seen[0]?.headers).get('X-Plex-Token'), placeholderAccountToken);
   assert.equal(new Headers(seen[1]?.headers).get('X-Plex-Token'), placeholderAccountToken);
   assert.equal(JSON.stringify(auth).includes(placeholderAccountToken), false);
+});
+
+test('live plex transport encodes library browse filters and search types safely', async () => {
+  const seen: string[] = [];
+  const transport = new LivePlexTransport({
+    fetch: async (url) => {
+      seen.push(String(url));
+      return new Response(JSON.stringify({ MediaContainer: { Metadata: [] } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  });
+
+  await transport.listLibraryItems({
+    connection: connection({ uri: 'https://server.example:32400' }),
+    token: placeholderAccountToken,
+    sectionId: '1',
+    offset: 10,
+    limit: 25,
+    sort: 'titleSort:asc',
+    filter: { type: 1, year: 2020 },
+    includeCollections: true,
+  });
+  await transport.searchLibrary({
+    connection: connection({ uri: 'https://server.example:32400' }),
+    token: placeholderAccountToken,
+    query: 'movie',
+    sectionId: '1',
+    limit: 5,
+    types: ['movie', 'episode'],
+  });
+
+  const browse = new URL(seen[0] ?? '');
+  assert.equal(browse.pathname, '/library/sections/1/all');
+  assert.equal(browse.searchParams.get('X-Plex-Container-Start'), '10');
+  assert.equal(browse.searchParams.get('X-Plex-Container-Size'), '25');
+  assert.equal(browse.searchParams.get('sort'), 'titleSort:asc');
+  assert.equal(browse.searchParams.get('type'), '1');
+  assert.equal(browse.searchParams.get('year'), '2020');
+  assert.equal(browse.searchParams.get('includeCollections'), '1');
+
+  const search = new URL(seen[1] ?? '');
+  assert.equal(search.pathname, '/hubs/search');
+  assert.equal(search.searchParams.get('query'), 'movie');
+  assert.equal(search.searchParams.get('sectionId'), '1');
+  assert.equal(search.searchParams.get('limit'), '5');
+  assert.equal(search.searchParams.get('types'), 'movie,episode');
+  assert.equal(JSON.stringify(seen).includes(placeholderAccountToken), false);
 });
 
 test('live plex transport sends account token for plex.tv discovery and separates timeout from caller abort', async () => {
@@ -1113,12 +1491,108 @@ test('live plex transport requests the short Plex link PIN code form', async () 
   assert.equal(seen[0]?.searchParams.has('strong'), false);
 });
 
+test('live plex transport uses versioned Plex Home endpoints and sends switch PIN as query', async () => {
+  const seen: Array<{ url: URL; init: RequestInit | undefined }> = [];
+  const transport = new LivePlexTransport({
+    fetch: async (url, init) => {
+      seen.push({ url: url instanceof URL ? url : new URL(String(url)), init });
+      return new Response(JSON.stringify({ MediaContainer: { User: [] } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  });
+
+  await transport.request({
+    action: 'get-home-users',
+    config: authConfig(),
+    token: placeholderAccountToken,
+    homeEndpointVersion: 'v2',
+  });
+  await transport.request({
+    action: 'get-home-users',
+    config: authConfig(),
+    token: placeholderAccountToken,
+    homeEndpointVersion: 'v1',
+  });
+  await transport.request({
+    action: 'switch-home-user',
+    config: authConfig(),
+    token: placeholderAccountToken,
+    userId: 'kid',
+    pin: ' 1234 ',
+    homeEndpointVersion: 'v2',
+  });
+
+  assert.equal(seen[0]?.url.pathname, '/api/v2/home/users');
+  assert.equal(seen[1]?.url.pathname, '/api/home/users');
+  assert.equal(seen[2]?.url.pathname, '/api/v2/home/users/kid/switch');
+  assert.equal(seen[2]?.url.searchParams.get('pin'), '1234');
+  assert.equal(seen[2]?.init?.body, undefined);
+  assert.equal(new Headers(seen[2]?.init?.headers).get('X-Plex-Token'), placeholderAccountToken);
+});
+
+test('live plex transport redacts switch PINs from request failure causes', async () => {
+  const transport = new LivePlexTransport({
+    fetch: async (url, init) => {
+      const headers = new Headers(init?.headers);
+      throw new Error(
+        [
+          `failed ${String(url)}`,
+          `X-Plex-Token=${headers.get('X-Plex-Token') ?? ''}`,
+          'pin=1234',
+        ].join(' '),
+      );
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      transport.request({
+        action: 'switch-home-user',
+        config: authConfig(),
+        token: placeholderAccountToken,
+        userId: 'kid',
+        pin: ' 1234 ',
+        homeEndpointVersion: 'v2',
+      }),
+    (error) => {
+      const serialized = JSON.stringify(error);
+      return (
+        error instanceof LivePlexTransportError &&
+        error.code === 'server-unreachable' &&
+        !serialized.includes('1234') &&
+        !serialized.includes(placeholderAccountToken) &&
+        serialized.includes('pin=[REDACTED]')
+      );
+    },
+  );
+});
+
 test('plex IPC authorizes exact channels and returns validation/result envelopes', async () => {
   const ipcMain = new FakeIpcMain();
+  const seenListItems: unknown[] = [];
+  const seenSearches: unknown[] = [];
   const runtime = {
     getSnapshot: (requestId: string) => ({ ok: true, requestId, value: { updatedAtMs: 1 } }),
     requestPin: (requestId: string) => ({ ok: true, requestId, value: { pin: { id: 1 } } }),
     pollPin: (requestId: string, pinId: number) => ({ ok: true, requestId, value: { pinId } }),
+    listLibraryItems: (requestId: string, payload: unknown) => {
+      seenListItems.push(payload);
+      return {
+        ok: true,
+        requestId,
+        value: { sectionId: '1', offset: 0, limit: 100, items: [], snapshot: { updatedAtMs: 1 } },
+      };
+    },
+    searchLibrary: (requestId: string, payload: unknown) => {
+      seenSearches.push(payload);
+      return {
+        ok: true,
+        requestId,
+        value: { query: 'movie', sectionId: null, items: [], snapshot: { updatedAtMs: 1 } },
+      };
+    },
     shutdown: async () => undefined,
   };
   registerPlexIpcHandlers({
@@ -1144,6 +1618,23 @@ test('plex IPC authorizes exact channels and returns validation/result envelopes
     requestId: 'items-extra-key',
     payload: { sectionId: '1', limit: 10, unexpected: true },
   }) as { ok: false; error: { code: string }; requestId: string };
+  const itemsWithFilters = await ipcMain.invoke(LINEUP_PLEX_LIST_LIBRARY_ITEMS_CHANNEL, AUTHORIZED_EVENT, {
+    requestId: 'items-filters',
+    payload: {
+      sectionId: '1',
+      offset: 0,
+      filter: { type: 1, year: 2020 },
+      includeCollections: true,
+    },
+  }) as { ok: boolean };
+  const searchWithTypes = await ipcMain.invoke(LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL, AUTHORIZED_EVENT, {
+    requestId: 'search-types',
+    payload: { query: 'movie', types: ['movie', 'episode'] },
+  }) as { ok: boolean };
+  const searchZeroLimit = await ipcMain.invoke(LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL, AUTHORIZED_EVENT, {
+    requestId: 'search-zero-limit',
+    payload: { query: 'movie', limit: 0 },
+  }) as { ok: false; error: { code: string }; requestId: string };
 
   assert.equal(unauthorized.ok, false);
   assert.equal(unauthorized.error.code, 'PLEX_UNAUTHORIZED');
@@ -1153,6 +1644,20 @@ test('plex IPC authorizes exact channels and returns validation/result envelopes
   assert.equal(extraPayloadKey.ok, false);
   assert.equal(extraPayloadKey.requestId, 'items-extra-key');
   assert.equal(extraPayloadKey.error.code, 'PLEX_VALIDATION_FAILED');
+  assert.equal(itemsWithFilters.ok, true);
+  assert.equal(searchWithTypes.ok, true);
+  assert.equal(searchZeroLimit.ok, false);
+  assert.equal(searchZeroLimit.requestId, 'search-zero-limit');
+  assert.equal(searchZeroLimit.error.code, 'PLEX_VALIDATION_FAILED');
+  assert.deepEqual(seenListItems, [
+    {
+      sectionId: '1',
+      offset: 0,
+      filter: { type: 1, year: 2020 },
+      includeCollections: true,
+    },
+  ]);
+  assert.deepEqual(seenSearches, [{ query: 'movie', types: ['movie', 'episode'] }]);
   assert.deepEqual(ipcMain.channels.sort(), [
     'lineup:plex:cancelPin',
     'lineup:plex:getHomeUsers',

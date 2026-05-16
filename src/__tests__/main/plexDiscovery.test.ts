@@ -26,6 +26,7 @@ import {
   type PlexServerSelectionSource,
   type PlexServer,
 } from '../../main/plex/discovery/index.js';
+import { LivePlexTransport, LivePlexTransportError } from '../../main/plex/livePlexTransport.js';
 
 const placeholderAuthValue = 'placeholder-auth-value';
 
@@ -108,7 +109,7 @@ class FakeDiscoveryTransport implements DesktopPlexDiscoveryTransport {
 }
 
 class DeferredSelectedServerStore {
-  public saved: Array<{ serverId: string; source: PlexServerSelectionSource }> = [];
+  public saved: Array<{ serverId: string; source: PlexServerSelectionSource; profileId?: string }> = [];
   private resolveSave: (() => void) | null = null;
 
   async readSelectedServerSummary() {
@@ -118,8 +119,9 @@ class DeferredSelectedServerStore {
   async saveSelectedServerSummary(
     server: PlexServer,
     source: PlexServerSelectionSource,
+    options?: { profileId?: string },
   ): Promise<PlexSelectedServerSummary> {
-    this.saved.push({ serverId: server.id, source });
+    this.saved.push({ serverId: server.id, source, profileId: options?.profileId });
     await new Promise<void>((resolve) => {
       this.resolveSave = resolve;
     });
@@ -134,6 +136,68 @@ class DeferredSelectedServerStore {
   resolve(): void {
     this.resolveSave?.();
   }
+}
+
+type FakeFetchResponse = {
+  status: number;
+  body: string;
+  headers?: Record<string, string>;
+};
+
+function createDiscoveryFetch(responses: FakeFetchResponse[]): {
+  fetch: typeof globalThis.fetch;
+  calls: Array<{ url: string; headers: Record<string, string> }>;
+} {
+  const calls: Array<{ url: string; headers: Record<string, string> }> = [];
+  const fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({
+      url: String(url),
+      headers: normalizeRequestHeaders(init?.headers),
+    });
+    const next = responses.shift();
+    if (!next) {
+      throw new Error('unexpected discovery fetch');
+    }
+    return {
+      status: next.status,
+      headers: {
+        get(name: string): string | null {
+          const lowerName = name.toLowerCase();
+          const entry = Object.entries(next.headers ?? {}).find(([key]) => key.toLowerCase() === lowerName);
+          return entry?.[1] ?? null;
+        },
+      },
+      async text(): Promise<string> {
+        return next.body;
+      },
+    } as Response;
+  }) as typeof globalThis.fetch;
+  return { fetch, calls };
+}
+
+function normalizeRequestHeaders(headers: HeadersInit | undefined): Record<string, string> {
+  if (!headers) {
+    return {};
+  }
+  if (headers instanceof Headers) {
+    const normalized: Record<string, string> = {};
+    headers.forEach((value, key) => {
+      normalized[key] = value;
+    });
+    return normalized;
+  }
+  if (Array.isArray(headers)) {
+    return Object.fromEntries(headers);
+  }
+  return { ...headers };
+}
+
+function jsonDiscoveryResponse(resources: unknown[]): FakeFetchResponse {
+  return {
+    status: 200,
+    body: JSON.stringify(resources),
+    headers: { 'Content-Type': 'application/json' },
+  };
 }
 
 test('plex discovery errors summarize unserializable context without stack leakage', () => {
@@ -157,6 +221,277 @@ test('plex discovery errors summarize unserializable context without stack leaka
   assert.equal(serialized.includes('/Users/example'), false);
   assert.equal(serialized.includes('"stack"'), false);
   assert.equal(serialized.includes('unserializable object'), true);
+});
+
+test('live plex discovery falls back through trusted token-query variants', async () => {
+  const { fetch, calls } = createDiscoveryFetch([
+    { status: 500, body: 'temporary failure', headers: { 'Content-Type': 'text/plain' } },
+    jsonDiscoveryResponse([
+      {
+        clientIdentifier: 'server-variant',
+        name: 'Variant Server',
+        sourceTitle: 'Variant Server',
+        ownerId: 'owner',
+        owned: true,
+        provides: 'server',
+        connections: [],
+      },
+    ]),
+  ]);
+  const transport = new LivePlexTransport({
+    fetch,
+    discoveryWaitMs: async () => {},
+  });
+
+  const resources = await transport.discoverResources({ token: placeholderAuthValue });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0]?.url.includes('X-Plex-Token'), false);
+  assert.equal(calls[0]?.url.includes('includeIPv6'), false);
+  assert.equal(calls[0]?.headers['X-Plex-Token'], placeholderAuthValue);
+  assert.equal(calls[1]?.url.startsWith('https://plex.tv/api/v2/resources'), true);
+  assert.equal(calls[1]?.url.includes('X-Plex-Token=placeholder-auth-value'), true);
+  assert.equal(calls[1]?.url.includes('includeIPv6'), false);
+  assert.deepEqual(resources, [
+    {
+      clientIdentifier: 'server-variant',
+      name: 'Variant Server',
+      sourceTitle: 'Variant Server',
+      ownerId: 'owner',
+      owned: true,
+      provides: 'server',
+      connections: [],
+    },
+  ]);
+});
+
+test('live plex discovery parses XML resources before desktop discovery projection', async () => {
+  const { fetch } = createDiscoveryFetch([
+    {
+      status: 200,
+      headers: { 'Content-Type': 'application/xml' },
+      body: `
+        <MediaContainer>
+          <Device
+            clientIdentifier="server-xml"
+            name='XML Server &#65;'
+            sourceTitle='XML &amp; Source'
+            ownerId="owner-xml"
+            owned="1"
+            provides="server">
+            <Connection
+              uri='https://xml.example:32400/library'
+              protocol='https'
+              address='xml'
+              port='32400'
+              local='1'
+              relay='0' />
+          </Device>
+        </MediaContainer>
+      `,
+    },
+  ]);
+  const liveTransport = new LivePlexTransport({ fetch });
+  const discovery = new DesktopPlexServerDiscovery({ transport: liveTransport });
+
+  const summaries = await discovery.refreshServers({ token: placeholderAuthValue });
+
+  assert.deepEqual(summaries, [
+    {
+      serverId: 'server-xml',
+      name: 'XML Server A',
+      owned: true,
+      sourceTitle: 'XML & Source',
+      connectionCount: 1,
+      hasLocalConnection: true,
+      hasRemoteConnection: false,
+      hasRelayConnection: false,
+      selected: false,
+    },
+  ]);
+  assertRendererSafe(summaries);
+});
+
+test('live plex discovery classifies malformed non-XML responses as parse errors', async () => {
+  const { fetch } = createDiscoveryFetch([
+    {
+      status: 200,
+      body: 'not-a-json-or-xml-payload',
+      headers: { 'Content-Type': 'text/plain' },
+    },
+  ]);
+  const transport = new LivePlexTransport({ fetch });
+
+  await assert.rejects(
+    () => transport.discoverResources({ token: placeholderAuthValue }),
+    (error) =>
+      error instanceof LivePlexTransportError &&
+      error.code === 'parse-error' &&
+      error.httpStatus === 200,
+  );
+});
+
+test('live plex discovery classifies malformed XML responses as parse errors', async () => {
+  const { fetch } = createDiscoveryFetch([
+    {
+      status: 200,
+      body: '<MediaContainer><Device name="broken"></MediaContainer>',
+      headers: { 'Content-Type': 'application/xml' },
+    },
+  ]);
+  const transport = new LivePlexTransport({ fetch });
+
+  await assert.rejects(
+    () => transport.discoverResources({ token: placeholderAuthValue }),
+    (error) =>
+      error instanceof LivePlexTransportError &&
+      error.code === 'parse-error' &&
+      error.httpStatus === 200,
+  );
+});
+
+test('live plex discovery rejects malformed XML connection nesting', async () => {
+  const { fetch } = createDiscoveryFetch([
+    {
+      status: 200,
+      body: '<MediaContainer><Device name="broken"><Connection uri="https://broken.example"></Device></MediaContainer>',
+      headers: { 'Content-Type': 'application/xml' },
+    },
+  ]);
+  const transport = new LivePlexTransport({ fetch });
+
+  await assert.rejects(
+    () => transport.discoverResources({ token: placeholderAuthValue }),
+    (error) =>
+      error instanceof LivePlexTransportError &&
+      error.code === 'parse-error' &&
+      error.httpStatus === 200,
+  );
+});
+
+test('live plex discovery rejects malformed XML entities', async () => {
+  for (const nameAttribute of [
+    'A & B',
+    'A &bogus; B',
+    'bad &#x110000; codepoint',
+    'bad &#0; codepoint',
+    'bad &#1; codepoint',
+    'bad &#8; codepoint',
+    'bad &#31; codepoint',
+    'bad &#xFFFE; codepoint',
+    'bad &#xFFFF; codepoint',
+  ]) {
+    const { fetch } = createDiscoveryFetch([
+      {
+        status: 200,
+        body: `<MediaContainer><Device clientIdentifier="bad-entity" name="${nameAttribute}" /></MediaContainer>`,
+        headers: { 'Content-Type': 'application/xml' },
+      },
+    ]);
+    const transport = new LivePlexTransport({ fetch });
+
+    await assert.rejects(
+      () => transport.discoverResources({ token: placeholderAuthValue }),
+      (error) =>
+        error instanceof LivePlexTransportError &&
+        error.code === 'parse-error' &&
+        error.httpStatus === 200,
+    );
+  }
+});
+
+test('live plex discovery classifies unreadable response bodies as parse errors', async () => {
+  const fetch = (async () =>
+    ({
+      status: 200,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      async text(): Promise<string> {
+        throw new Error('body stream unavailable token=placeholder-auth-value');
+      },
+    }) as Response) as typeof globalThis.fetch;
+  const transport = new LivePlexTransport({ fetch });
+
+  await assert.rejects(
+    () => transport.discoverResources({ token: placeholderAuthValue }),
+    (error) =>
+      error instanceof LivePlexTransportError &&
+      error.code === 'parse-error' &&
+      error.httpStatus === 200 &&
+      !JSON.stringify(error).includes(placeholderAuthValue) &&
+      !JSON.stringify(error.cause).includes(placeholderAuthValue),
+  );
+});
+
+test('desktop plex discovery preserves live transport parse failures', async () => {
+  const fetch = (async () =>
+    ({
+      status: 200,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      async text(): Promise<string> {
+        throw new Error('body stream unavailable token=placeholder-auth-value');
+      },
+    }) as Response) as typeof globalThis.fetch;
+  const liveTransport = new LivePlexTransport({ fetch });
+  const discovery = new DesktopPlexServerDiscovery({ transport: liveTransport });
+
+  await assert.rejects(
+    () => discovery.refreshServers({ token: placeholderAuthValue }),
+    (error) =>
+      error instanceof PlexDiscoveryError &&
+      error.code === 'parse-error' &&
+      error.retryable === false &&
+      error.httpStatus === 200 &&
+      !JSON.stringify(error).includes(placeholderAuthValue) &&
+      !JSON.stringify(error.cause).includes(placeholderAuthValue),
+  );
+});
+
+test('live plex discovery honors bounded 429 retry-after retry path', async () => {
+  const { fetch, calls } = createDiscoveryFetch([
+    {
+      status: 429,
+      body: 'rate limited',
+      headers: { 'Retry-After': '0.25', 'Content-Type': 'text/plain' },
+    },
+    jsonDiscoveryResponse([]),
+  ]);
+  const waits: number[] = [];
+  const transport = new LivePlexTransport({
+    fetch,
+    discoveryWaitMs: async (delayMs) => {
+      waits.push(delayMs);
+    },
+  });
+
+  const resources = await transport.discoverResources({ token: placeholderAuthValue });
+
+  assert.deepEqual(resources, []);
+  assert.deepEqual(waits, [250]);
+  assert.equal(calls.length, 2);
+});
+
+test('live plex discovery keeps tokenized request failures out of error output', async () => {
+  const calls: string[] = [];
+  const fetch = (async (url: string | URL | Request) => {
+    calls.push(String(url));
+    throw new Error(`failed ${String(url)} token=${placeholderAuthValue}`);
+  }) as typeof globalThis.fetch;
+  const transport = new LivePlexTransport({
+    fetch,
+    discoveryWaitMs: async () => {},
+  });
+
+  await assert.rejects(
+    () => transport.discoverResources({ token: placeholderAuthValue }),
+    (error) => {
+      assert.equal(error instanceof LivePlexTransportError, true);
+      const serialized = JSON.stringify(error);
+      assert.equal(serialized.includes(placeholderAuthValue), false);
+      assert.equal(serialized.includes('X-Plex-Token=placeholder-auth-value'), false);
+      return true;
+    },
+  );
+  assert.equal(calls.some((url) => url.startsWith('https://clients.plex.tv/api/v2/resources')), true);
 });
 
 test('plex discovery parser normalizes resources and renderer-safe summaries', async () => {
@@ -245,18 +580,21 @@ test('desktop plex discovery selects a server and persists only RD-09 summary st
   const selected = await discovery.selectServer('server-1', {
     source: 'manual',
     token: placeholderAuthValue,
+    profileId: 'profile-a',
   });
   const persisted = await persistenceStore.getRendererSafeSnapshot();
+  const scopedPersisted = await persistenceStore.getSelectedPlexServer('profile-a');
   const persistedFile = await fs.readFile(path.join(temporaryDirectory, 'persistence.json'), 'utf8');
 
   assert.equal(selected.kind, 'selected');
   assertRendererSafe(selected);
-  assert.deepEqual(persisted.selectedServer, {
+  assert.deepEqual(scopedPersisted, {
     serverId: 'server-1',
     name: 'Living Room',
     source: 'manual',
     lastSelectedAtMs: 50_000,
   });
+  assert.equal(persisted.selectedServer, null);
   assert.equal(persistedFile.includes('://'), false);
   assert.equal(persistedFile.includes('connection'), false);
   assert.equal(discovery.getSelectedConnectionForMain()?.address, 'local');
@@ -270,7 +608,7 @@ test('desktop plex discovery restores by persisted server id with fresh probing'
     secureStringCodec: new FakeSecureStringCodec(),
     nowMs: () => 10_000,
   });
-  await persistenceStore.setSelectedPlexServer({
+  await persistenceStore.setSelectedPlexServer('profile-a', {
     serverId: 'server-1',
     name: 'Stale Name',
     source: 'manual',
@@ -291,12 +629,12 @@ test('desktop plex discovery restores by persisted server id with fresh probing'
     nowMs: () => 30_000,
   });
 
-  const restored = await discovery.restoreSelectedServer();
-  const persisted = await persistenceStore.getRendererSafeSnapshot();
+  const restored = await discovery.restoreSelectedServer({ profileId: 'profile-a' });
+  const persisted = await persistenceStore.getSelectedPlexServer('profile-a');
 
   assert.equal(restored.kind, 'selected');
   assert.equal(restored.kind === 'selected' ? restored.server.name : '', 'Fresh Name');
-  assert.deepEqual(persisted.selectedServer, {
+  assert.deepEqual(persisted, {
     serverId: 'server-1',
     name: 'Fresh Name',
     source: 'restored',
@@ -305,13 +643,97 @@ test('desktop plex discovery restores by persisted server id with fresh probing'
   assertRendererSafe(restored);
 });
 
+test('desktop plex discovery scopes selected-server save and restore by active profile id', async () => {
+  const temporaryDirectory = await createTemporaryDirectory();
+  const persistenceStore = new DesktopPersistenceStore({
+    persistenceFilePath: path.join(temporaryDirectory, 'persistence.json'),
+    secureStringCodec: new FakeSecureStringCodec(),
+  });
+  const transport = new FakeDiscoveryTransport();
+  transport.resources = [
+    createPlexApiResource({
+      clientIdentifier: 'server-a',
+      name: 'Profile A Server',
+      connections: [createConnection({ address: 'a', uri: `${'https'}://a.example:32400` })],
+    }),
+    createPlexApiResource({
+      clientIdentifier: 'server-b',
+      name: 'Profile B Server',
+      connections: [createConnection({ address: 'b', uri: `${'https'}://b.example:32400` })],
+    }),
+  ];
+  transport.enqueueProbe('a', { outcome: 'reachable', latencyMs: 30 });
+  transport.enqueueProbe('b', { outcome: 'reachable', latencyMs: 20 });
+  const discovery = new DesktopPlexServerDiscovery({
+    transport,
+    selectedServerStore: new DesktopPlexSelectedServerStore({ persistenceStore, nowMs: () => 70_000 }),
+  });
+
+  await discovery.refreshServers();
+  const selectedA = await discovery.selectServer('server-a', { profileId: 'profile-a' });
+  const selectedB = await discovery.selectServer('server-b', { profileId: 'profile-b' });
+  const persistedFile = await fs.readFile(path.join(temporaryDirectory, 'persistence.json'), 'utf8');
+
+  assert.equal(selectedA.kind, 'selected');
+  assert.equal(selectedB.kind, 'selected');
+  assert.equal((await persistenceStore.getSelectedPlexServer('profile-a'))?.serverId, 'server-a');
+  assert.equal((await persistenceStore.getSelectedPlexServer('profile-b'))?.serverId, 'server-b');
+  assert.equal(persistedFile.includes('://'), false);
+  assert.equal(persistedFile.includes('connection'), false);
+
+  const restoreTransport = new FakeDiscoveryTransport();
+  restoreTransport.resources = transport.resources;
+  restoreTransport.enqueueProbe('b', { outcome: 'reachable', latencyMs: 10 });
+  const restoreDiscovery = new DesktopPlexServerDiscovery({
+    transport: restoreTransport,
+    selectedServerStore: new DesktopPlexSelectedServerStore({ persistenceStore, nowMs: () => 80_000 }),
+  });
+
+  const restoredB = await restoreDiscovery.restoreSelectedServer({ profileId: 'profile-b' });
+
+  assert.equal(restoredB.kind, 'selected');
+  assert.equal(restoredB.kind === 'selected' ? restoredB.server.serverId : '', 'server-b');
+  assert.equal((await persistenceStore.getSelectedPlexServer('profile-a'))?.serverId, 'server-a');
+  assert.equal((await persistenceStore.getSelectedPlexServer('profile-b'))?.source, 'restored');
+  assertRendererSafe(restoredB);
+});
+
+test('desktop plex discovery returns no persisted server for a profile without scoped selection', async () => {
+  const temporaryDirectory = await createTemporaryDirectory();
+  const persistenceStore = new DesktopPersistenceStore({
+    persistenceFilePath: path.join(temporaryDirectory, 'persistence.json'),
+    secureStringCodec: new FakeSecureStringCodec(),
+  });
+  await persistenceStore.setSelectedPlexServer('profile-a', {
+    serverId: 'server-a',
+    name: 'Profile A Server',
+    source: 'manual',
+    lastSelectedAtMs: 1,
+  });
+  const discovery = new DesktopPlexServerDiscovery({
+    transport: new FakeDiscoveryTransport(),
+    selectedServerStore: new DesktopPlexSelectedServerStore({ persistenceStore }),
+  });
+
+  const restored = await discovery.restoreSelectedServer({ profileId: 'profile-b' });
+
+  assert.deepEqual(restored, {
+    kind: 'selection-failed',
+    reason: 'no-persisted-server',
+    persisted: false,
+  });
+  assert.equal(discovery.getSelectedConnectionForMain(), null);
+  assert.equal((await persistenceStore.getSelectedPlexServer('profile-a'))?.serverId, 'server-a');
+  assert.equal(await persistenceStore.getSelectedPlexServer('profile-b'), null);
+});
+
 test('desktop plex discovery keeps stale persisted server id on restore miss or auth failure', async () => {
   const temporaryDirectory = await createTemporaryDirectory();
   const persistenceStore = new DesktopPersistenceStore({
     persistenceFilePath: path.join(temporaryDirectory, 'persistence.json'),
     secureStringCodec: new FakeSecureStringCodec(),
   });
-  await persistenceStore.setSelectedPlexServer({
+  await persistenceStore.setSelectedPlexServer('profile-a', {
     serverId: 'missing-server',
     name: 'Missing',
     source: 'manual',
@@ -331,25 +753,67 @@ test('desktop plex discovery keeps stale persisted server id on restore miss or 
     selectedServerStore: new DesktopPlexSelectedServerStore({ persistenceStore }),
   });
 
-  const missing = await discovery.restoreSelectedServer();
+  const missing = await discovery.restoreSelectedServer({ profileId: 'profile-a' });
   assert.deepEqual(missing, {
     kind: 'selection-failed',
     reason: 'server-not-found',
     persisted: false,
   });
-  assert.equal((await persistenceStore.getRendererSafeSnapshot()).selectedServer?.serverId, 'missing-server');
+  assert.equal((await persistenceStore.getSelectedPlexServer('profile-a'))?.serverId, 'missing-server');
 
-  await persistenceStore.setSelectedPlexServer({
+  await persistenceStore.setSelectedPlexServer('profile-a', {
     serverId: 'server-1',
     name: 'Present',
     source: 'manual',
     lastSelectedAtMs: 2,
   });
-  const authRequired = await discovery.restoreSelectedServer();
+  const authRequired = await discovery.restoreSelectedServer({ profileId: 'profile-a' });
   assert.equal(authRequired.kind, 'selection-failed');
   assert.equal(authRequired.kind === 'selection-failed' ? authRequired.reason : '', 'auth-required');
-  assert.equal((await persistenceStore.getRendererSafeSnapshot()).selectedServer?.serverId, 'server-1');
+  assert.equal((await persistenceStore.getSelectedPlexServer('profile-a'))?.serverId, 'server-1');
   assertRendererSafe(authRequired);
+});
+
+test('desktop plex discovery does not overwrite another profile when scoped restore misses', async () => {
+  const temporaryDirectory = await createTemporaryDirectory();
+  const persistenceStore = new DesktopPersistenceStore({
+    persistenceFilePath: path.join(temporaryDirectory, 'persistence.json'),
+    secureStringCodec: new FakeSecureStringCodec(),
+  });
+  await persistenceStore.setSelectedPlexServer('profile-a', {
+    serverId: 'server-a',
+    name: 'Profile A Server',
+    source: 'manual',
+    lastSelectedAtMs: 1,
+  });
+  await persistenceStore.setSelectedPlexServer('profile-b', {
+    serverId: 'missing-server',
+    name: 'Missing',
+    source: 'manual',
+    lastSelectedAtMs: 2,
+  });
+  const transport = new FakeDiscoveryTransport();
+  transport.resources = [
+    createPlexApiResource({
+      clientIdentifier: 'server-a',
+      name: 'Profile A Server',
+      connections: [createConnection({ address: 'a' })],
+    }),
+  ];
+  const discovery = new DesktopPlexServerDiscovery({
+    transport,
+    selectedServerStore: new DesktopPlexSelectedServerStore({ persistenceStore }),
+  });
+
+  const restored = await discovery.restoreSelectedServer({ profileId: 'profile-b' });
+
+  assert.deepEqual(restored, {
+    kind: 'selection-failed',
+    reason: 'server-not-found',
+    persisted: false,
+  });
+  assert.equal((await persistenceStore.getSelectedPlexServer('profile-a'))?.serverId, 'server-a');
+  assert.equal((await persistenceStore.getSelectedPlexServer('profile-b'))?.serverId, 'missing-server');
 });
 
 test('desktop plex discovery skips persisted selected-server reads when restore is already aborted', async () => {
@@ -406,10 +870,10 @@ test('desktop plex discovery clears selected connection when a fresh same-server
 
   transport.enqueueProbe('server', { outcome: 'reachable', latencyMs: 10 });
   await discovery.refreshServers();
-  await discovery.selectServer('server-1');
+  await discovery.selectServer('server-1', { profileId: 'profile-a' });
   assert.equal(discovery.getSelectedConnectionForMain()?.address, 'server');
 
-  await persistenceStore.setSelectedPlexServer({
+  await persistenceStore.setSelectedPlexServer('profile-a', {
     serverId: 'server-1',
     name: 'Present',
     source: 'manual',
@@ -417,12 +881,12 @@ test('desktop plex discovery clears selected connection when a fresh same-server
   });
   transport.enqueueProbe('server', { outcome: 'unreachable' });
 
-  const restored = await discovery.restoreSelectedServer();
+  const restored = await discovery.restoreSelectedServer({ profileId: 'profile-a' });
 
   assert.equal(restored.kind, 'selection-failed');
   assert.equal(discovery.getSelectedConnectionForMain(), null);
   assert.equal(discovery.getSelectedServerSummary(), null);
-  assert.equal((await persistenceStore.getRendererSafeSnapshot()).selectedServer?.serverId, 'server-1');
+  assert.equal((await persistenceStore.getSelectedPlexServer('profile-a'))?.serverId, 'server-1');
 });
 
 test('desktop plex discovery does not commit runtime state when RD-09 selected-server save fails', async () => {
@@ -448,7 +912,7 @@ test('desktop plex discovery does not commit runtime state when RD-09 selected-s
   });
 
   await discovery.refreshServers();
-  await assert.rejects(() => discovery.selectServer('server-1'), {
+  await assert.rejects(() => discovery.selectServer('server-1', { profileId: 'profile-a' }), {
     name: 'PlexDiscoveryError',
     code: 'server-error',
   });
@@ -506,7 +970,7 @@ test('desktop plex discovery ignores stale in-flight selection after context res
   });
   await discovery.refreshServers();
 
-  const selection = discovery.selectServer('server-1');
+  const selection = discovery.selectServer('server-1', { profileId: 'profile-a' });
   discovery.resetDiscoveryContext();
   resolveProbe({ outcome: 'reachable', latencyMs: 10 });
 
@@ -536,7 +1000,7 @@ test('desktop plex discovery does not report success or commit memory when conte
   });
   await discovery.refreshServers();
 
-  const selection = discovery.selectServer('server-1');
+  const selection = discovery.selectServer('server-1', { profileId: 'profile-a' });
   await waitFor(() => selectedServerStore.saved.length === 1);
   discovery.resetDiscoveryContext();
   selectedServerStore.resolve();
@@ -548,7 +1012,7 @@ test('desktop plex discovery does not report success or commit memory when conte
   });
   assert.equal(discovery.getSelectedConnectionForMain(), null);
   assert.equal(discovery.getSelectedServerSummary(), null);
-  assert.deepEqual(selectedServerStore.saved, [{ serverId: 'server-1', source: 'discovery' }]);
+  assert.deepEqual(selectedServerStore.saved, [{ serverId: 'server-1', source: 'discovery', profileId: 'profile-a' }]);
 });
 
 function createConnection(input: {

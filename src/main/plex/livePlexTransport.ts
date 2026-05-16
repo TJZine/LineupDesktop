@@ -2,22 +2,31 @@ import { clearTimeout, setTimeout } from 'node:timers';
 
 import {
   buildPlexAuthRequestHeaders,
-  readPlexResponse,
   type DesktopPlexAuthTransport,
   type DesktopPlexAuthTransportRequest,
   type DesktopPlexAuthTransportResponse,
   type PlexResponsePayload,
+  readPlexResponse,
 } from './auth/index.js';
 import type {
   DesktopPlexConnectionProbeTransportResult,
   DesktopPlexDiscoveryTransport,
 } from './discovery/index.js';
+import {
+  discoverPlexResourcesWithRequestPolicy,
+  type DiscoveryTextResponse,
+} from './discovery/livePlexDiscoveryRequestPolicy.js';
 import type { PlexConnection, PlexServer } from './discovery/types.js';
+import { LivePlexTransportError } from './livePlexTransportError.js';
+
+export { LivePlexTransportError } from './livePlexTransportError.js';
+export type { LivePlexTransportErrorCode } from './livePlexTransportError.js';
 
 export interface LivePlexTransportOptions {
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
   nowMs?: () => number;
+  discoveryWaitMs?: (delayMs: number) => Promise<void>;
 }
 
 export interface LivePlexLibraryRequest {
@@ -31,12 +40,15 @@ export interface LivePlexListLibraryItemsRequest extends LivePlexLibraryRequest 
   offset: number;
   limit: number;
   sort?: string;
+  filter?: Readonly<Record<string, string | number>>;
+  includeCollections?: boolean;
 }
 
 export interface LivePlexSearchLibraryRequest extends LivePlexLibraryRequest {
   query: string;
   sectionId?: string | null;
   limit: number;
+  types?: readonly string[];
 }
 
 export interface LivePlexGetMetadataRequest extends LivePlexLibraryRequest {
@@ -50,35 +62,6 @@ export interface LivePlexLibraryTransport {
   getMetadata(input: LivePlexGetMetadataRequest): Promise<PlexResponsePayload>;
 }
 
-export type LivePlexTransportErrorCode =
-  | 'auth-required'
-  | 'auth-invalid'
-  | 'resource-not-found'
-  | 'rate-limited'
-  | 'server-unreachable'
-  | 'parse-error'
-  | 'aborted'
-  | 'timeout'
-  | 'server-error';
-
-export class LivePlexTransportError extends Error {
-  public readonly retryable: boolean;
-
-  constructor(
-    public readonly code: LivePlexTransportErrorCode,
-    message: string,
-    public readonly httpStatus?: number,
-    options: { retryable?: boolean; cause?: unknown } = {},
-  ) {
-    super(message);
-    this.name = 'LivePlexTransportError';
-    this.retryable = options.retryable ?? false;
-    if (options.cause !== undefined) {
-      this.cause = sanitizeTransportCause(options.cause);
-    }
-  }
-}
-
 const DEFAULT_TIMEOUT_MS = 20_000;
 const PLEX_TV_ORIGIN = 'https://plex.tv';
 const PLEX_TOKEN_HEADER_NAME = ['X-Plex', 'Token'].join('-');
@@ -89,11 +72,13 @@ export class LivePlexTransport
   private readonly fetchImpl: typeof globalThis.fetch;
   private readonly timeoutMs: number;
   private readonly nowMs: () => number;
+  private readonly discoveryWaitMs: (delayMs: number) => Promise<void>;
 
   constructor(options: LivePlexTransportOptions = {}) {
     this.fetchImpl = options.fetch ?? globalThis.fetch;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.nowMs = options.nowMs ?? Date.now;
+    this.discoveryWaitMs = options.discoveryWaitMs ?? defaultWaitMs;
   }
 
   async request(input: DesktopPlexAuthTransportRequest): Promise<DesktopPlexAuthTransportResponse> {
@@ -106,23 +91,12 @@ export class LivePlexTransport
   }
 
   async discoverResources(input: { token?: string; signal?: AbortSignal | null }): Promise<unknown> {
-    const url = new URL('/api/v2/resources', PLEX_TV_ORIGIN);
-    url.searchParams.set('includeHttps', '1');
-    url.searchParams.set('includeRelay', '1');
-    url.searchParams.set('includeIPv6', '0');
-    const response = await this.fetchNormalized(
-      url,
-      {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          ...(input.token !== undefined ? { [PLEX_TOKEN_HEADER_NAME]: input.token } : {}),
-        },
-      },
-      input.signal ?? null,
-    );
-    throwForHttpStatus(response.status);
-    return unwrapPayload(response.payload);
+    return discoverPlexResourcesWithRequestPolicy({
+      ...(input.token !== undefined ? { token: input.token } : {}),
+      signal: input.signal ?? null,
+      fetchText: ({ url, init, signal }) => this.fetchTextNormalized(url, init, signal),
+      waitMs: this.discoveryWaitMs,
+    });
   }
 
   async probeConnection(input: {
@@ -169,6 +143,14 @@ export class LivePlexTransport
     if (input.sort !== undefined) {
       url.searchParams.set('sort', input.sort);
     }
+    if (input.filter !== undefined) {
+      for (const [key, value] of Object.entries(input.filter)) {
+        url.searchParams.set(key, String(value));
+      }
+    }
+    if (input.includeCollections === true) {
+      url.searchParams.set('includeCollections', '1');
+    }
     return this.fetchPmsUrlPayload(url, input.token, input.signal ?? null);
   }
 
@@ -178,6 +160,9 @@ export class LivePlexTransport
     url.searchParams.set('limit', String(input.limit));
     if (input.sectionId !== undefined && input.sectionId !== null) {
       url.searchParams.set('sectionId', input.sectionId);
+    }
+    if (input.types !== undefined && input.types.length > 0) {
+      url.searchParams.set('types', input.types.join(','));
     }
     return this.fetchPmsUrlPayload(url, input.token, input.signal ?? null);
   }
@@ -220,19 +205,19 @@ export class LivePlexTransport
         };
       case 'get-home-users':
         return {
-          url: new URL('/api/home/users', PLEX_TV_ORIGIN),
+          url: new URL(homeUsersPath(input.homeEndpointVersion), PLEX_TV_ORIGIN),
           init: { method: 'GET', headers },
         };
       case 'switch-home-user': {
         const url = new URL(
-          `/api/home/users/${encodeURIComponent(input.userId ?? '')}/switch`,
+          `${homeUsersPath(input.homeEndpointVersion)}/${encodeURIComponent(input.userId ?? '')}/switch`,
           PLEX_TV_ORIGIN,
         );
-        const body =
-          input.pin === undefined || input.pin === null
-            ? undefined
-            : JSON.stringify({ pin: input.pin });
-        return { url, init: { method: 'POST', headers, body } };
+        const pin = input.pin?.trim();
+        if (pin) {
+          url.searchParams.set('pin', pin);
+        }
+        return { url, init: { method: 'POST', headers } };
       }
     }
   }
@@ -320,6 +305,74 @@ export class LivePlexTransport
       signal?.removeEventListener('abort', onAbort);
     }
   }
+
+  private async fetchTextNormalized(
+    url: URL,
+    init: RequestInit,
+    signal: AbortSignal | null,
+  ): Promise<DiscoveryTextResponse> {
+    const timeoutController = new AbortController();
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      timeoutController.abort();
+    }, this.timeoutMs);
+    const onAbort = () => timeoutController.abort();
+    if (signal?.aborted) {
+      timeoutController.abort();
+    } else {
+      signal?.addEventListener('abort', onAbort, { once: true });
+    }
+
+    try {
+      const response = await this.fetchImpl(url, {
+        ...init,
+        signal: timeoutController.signal,
+      });
+      let text: string;
+      try {
+        text = await response.text();
+      } catch (error) {
+        if (signal?.aborted) {
+          throw new LivePlexTransportError('aborted', 'Plex request was aborted', undefined, {
+            cause: error,
+          });
+        }
+        if (timedOut) {
+          throw new LivePlexTransportError('timeout', 'Plex request timed out', undefined, {
+            retryable: true,
+            cause: error,
+          });
+        }
+        throw new LivePlexTransportError('parse-error', 'Plex response could not be parsed', response.status, {
+          cause: error,
+        });
+      }
+      return { status: response.status, headers: response.headers, text };
+    } catch (error) {
+      if (signal?.aborted) {
+        throw new LivePlexTransportError('aborted', 'Plex request was aborted', undefined, {
+          cause: error,
+        });
+      }
+      if (timedOut) {
+        throw new LivePlexTransportError('timeout', 'Plex request timed out', undefined, {
+          retryable: true,
+          cause: error,
+        });
+      }
+      if (error instanceof LivePlexTransportError) {
+        throw error;
+      }
+      throw new LivePlexTransportError('server-unreachable', 'Plex service is unreachable', undefined, {
+        retryable: true,
+        cause: error,
+      });
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', onAbort);
+    }
+  }
 }
 
 function throwForHttpStatus(status: number): void {
@@ -348,18 +401,16 @@ function throwForHttpStatus(status: number): void {
   throw new LivePlexTransportError('server-error', 'Plex service request failed', status);
 }
 
-function unwrapPayload(payload: PlexResponsePayload): unknown {
-  if (payload.kind === 'json') {
-    return payload.data;
-  }
-  if (payload.kind === 'text') {
-    return payload.data;
-  }
-  return [];
+async function defaultWaitMs(delayMs: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 function normalizeBaseUri(uri: string): string {
   return uri.endsWith('/') ? uri : `${uri}/`;
+}
+
+function homeUsersPath(endpointVersion: 'v2' | 'v1' | undefined): string {
+  return endpointVersion === 'v1' ? '/api/home/users' : '/api/v2/home/users';
 }
 
 function isPlexParseError(error: unknown): boolean {
@@ -369,14 +420,4 @@ function isPlexParseError(error: unknown): boolean {
     typeof error.code === 'string' &&
     error.code === 'parse-error'
   );
-}
-
-function sanitizeTransportCause(cause: unknown): unknown {
-  if (cause instanceof Error) {
-    return { name: cause.name, message: cause.message };
-  }
-  if (typeof cause === 'string') {
-    return cause.slice(0, 256);
-  }
-  return undefined;
 }

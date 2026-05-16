@@ -381,6 +381,8 @@ function mapDiscoveryError(error: PlexDiscoveryError, operation: PlexRuntimeOper
   const codeMap: Record<PlexDiscoveryError['code'], PlexRuntimeErrorCode> = {
     'auth-required': 'PLEX_AUTH_REQUIRED',
     'auth-invalid': 'PLEX_AUTH_INVALID',
+    'resource-not-found': 'PLEX_RESOURCE_NOT_FOUND',
+    'rate-limited': 'PLEX_RATE_LIMITED',
     'server-unreachable': 'PLEX_SERVER_UNREACHABLE',
     'server-error': 'PLEX_UNKNOWN',
     aborted: 'PLEX_CANCELLED',
@@ -402,6 +404,7 @@ function mapLibraryError(error: PlexLibraryError, operation: PlexRuntimeOperatio
     'authentication-expired': 'PLEX_AUTH_INVALID',
     'server-error': 'PLEX_LIBRARY_FAILED',
     'rate-limited': 'PLEX_RATE_LIMITED',
+    'pagination-limit-exceeded': 'PLEX_LIBRARY_FAILED',
     aborted: 'PLEX_CANCELLED',
   };
   return runtimeError(codeMap[error.code] ?? 'PLEX_LIBRARY_FAILED', operation, {

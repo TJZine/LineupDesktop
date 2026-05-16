@@ -4,6 +4,8 @@ export type PlexDiscoveryErrorCode =
   | 'parse-error'
   | 'auth-required'
   | 'auth-invalid'
+  | 'resource-not-found'
+  | 'rate-limited'
   | 'server-unreachable'
   | 'server-error'
   | 'aborted';

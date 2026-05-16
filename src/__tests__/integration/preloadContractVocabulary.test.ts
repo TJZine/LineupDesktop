@@ -750,16 +750,61 @@ test('preload Plex bridge validates invoke results before returning them', async
   const result = await harness.api.plex.listLibraryItems(harness.input({
     sectionId: '1',
     offset: 0.9,
-    limit: 25,
+    filter: { type: 1, year: 2020 },
+    includeCollections: true,
   }));
 
   assert.equal(harness.calls.length, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(harness.calls[0]?.request.payload)), {
     sectionId: '1',
     offset: 0,
-    limit: 25,
+    filter: { type: 1, year: 2020 },
+    includeCollections: true,
   });
   assert.equal((result as { ok: boolean }).ok, true);
+});
+
+test('preload Plex bridge accepts nullable metadata and search types', async () => {
+  const snapshot = createSafePlexSnapshot();
+  const harness = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPlexInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        item: null,
+        snapshot,
+      },
+    });
+  });
+
+  const metadata = await harness.api.plex.getMetadata(harness.input({ ratingKey: 'missing' }));
+
+  assert.equal((metadata as { ok: boolean }).ok, true);
+
+  const searchHarness = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPlexInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        query: 'movie',
+        sectionId: null,
+        items: [],
+        snapshot,
+      },
+    });
+  });
+  const search = await searchHarness.api.plex.searchLibrary(
+    searchHarness.input({ query: 'movie', limit: 10, types: ['movie', 'episode'] }),
+  );
+
+  assert.equal((search as { ok: boolean }).ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(searchHarness.calls[0]?.request.payload)), {
+    query: 'movie',
+    limit: 10,
+    types: ['movie', 'episode'],
+  });
 });
 
 test('preload Plex bridge converts malformed or privileged invoke results to local validation failures', async () => {
@@ -873,14 +918,32 @@ test('preload Plex bridge rejects invalid pin ids and limits without IPC', async
 
   for (const input of [
     { sectionId: '1', limit: 1.5 },
-    { sectionId: '1', limit: 0 },
     { sectionId: '1', limit: 5001 },
     { sectionId: '', limit: 25 },
     { sectionId: 42, limit: 25 },
     { sectionId: null, limit: 25 },
     { sectionId: 'x'.repeat(257), limit: 25 },
+    { sectionId: '1', filter: { 'bad key': 1 } },
+    { sectionId: '1', filter: { token: 'unsafe' } },
+    { sectionId: '1', filter: { serverUri: 'unsafe' } },
+    { sectionId: '1', filter: { year: { raw: 2020 } } },
+    { sectionId: '1', includeCollections: 'yes' },
   ]) {
     const result = await harness.api.plex.listLibraryItems(harness.input(input));
+    assert.equal((result as { ok: boolean }).ok, false);
+    assert.equal(
+      (result as { error: { code: string } }).error.code,
+      'PLEX_VALIDATION_FAILED',
+    );
+  }
+
+  for (const input of [
+    { query: 'movie', types: ['server'] },
+    { query: 'movie', types: ['movie', 42] },
+    { query: 'movie', limit: 0 },
+    { query: 'movie', limit: -1 },
+  ]) {
+    const result = await harness.api.plex.searchLibrary(harness.input(input));
     assert.equal((result as { ok: boolean }).ok, false);
     assert.equal(
       (result as { error: { code: string } }).error.code,

@@ -764,6 +764,210 @@ test('desktop plex auth service validates tokens, home users, switches profiles,
   assert.equal(transport.requests.at(-1)?.action, 'cancel-pin');
 });
 
+test('desktop plex auth service probes v2 then v1 home users when v2 is empty', async () => {
+  const transport = new FakePlexAuthTransport();
+  const service = new DesktopPlexAuthService({
+    config: createDesktopPlexAuthConfig({ clientIdentifier: 'desktop-client' }),
+    transport,
+    credentialStore: createSuccessfulCredentialStore(),
+  });
+
+  transport.enqueue('check-pin-status', {
+    status: 200,
+    payload: {
+      id: 8,
+      code: 'ZZZZ',
+      expiresAt: '2026-05-10T12:05:00.000Z',
+      authToken: placeholderAuthValue,
+      clientIdentifier: 'desktop-client',
+    },
+  });
+  transport.enqueue('validate-token', {
+    status: 200,
+    payload: {
+      id: 'account-1',
+      username: 'viewer',
+      email: 'viewer@example.invalid',
+    },
+  });
+  await service.checkPinStatus(8);
+
+  transport.enqueue('get-home-users', {
+    status: 200,
+    payload: { MediaContainer: {} },
+  });
+  transport.enqueue('get-home-users', {
+    status: 200,
+    payload: {
+      MediaContainer: {
+        User: [{ id: 'kid', title: 'Kid', admin: false, protected: true }],
+      },
+    },
+  });
+
+  assert.deepEqual(await service.getHomeUsers(), [
+    { id: 'kid', title: 'Kid', admin: false, protected: true },
+  ]);
+
+  const homeRequests = transport.requests.filter((request) => request.action === 'get-home-users');
+  assert.deepEqual(
+    homeRequests.map((request) => request.homeEndpointVersion),
+    ['v2', 'v1'],
+  );
+});
+
+test('desktop plex auth service preserves home user fallback failures after empty v2', async () => {
+  const transport = new FakePlexAuthTransport();
+  const service = new DesktopPlexAuthService({
+    config: createDesktopPlexAuthConfig({ clientIdentifier: 'desktop-client' }),
+    transport,
+    credentialStore: createSuccessfulCredentialStore(),
+  });
+
+  transport.enqueue('check-pin-status', {
+    status: 200,
+    payload: {
+      id: 8,
+      code: 'ZZZZ',
+      expiresAt: '2026-05-10T12:05:00.000Z',
+      authToken: placeholderAuthValue,
+      clientIdentifier: 'desktop-client',
+    },
+  });
+  transport.enqueue('validate-token', {
+    status: 200,
+    payload: {
+      id: 'account-1',
+      username: 'viewer',
+      email: 'viewer@example.invalid',
+    },
+  });
+  await service.checkPinStatus(8);
+
+  transport.enqueue('get-home-users', {
+    status: 200,
+    payload: { MediaContainer: { User: [] } },
+  });
+  transport.enqueue('get-home-users', {
+    status: 500,
+    payload: { error: 'server error' },
+  });
+
+  await assert.rejects(() => service.getHomeUsers(), {
+    name: 'PlexAuthError',
+    code: 'server-error',
+    httpStatus: 500,
+  });
+});
+
+test('desktop plex auth service switches home users through v2 then v1 fallback', async () => {
+  const transport = new FakePlexAuthTransport();
+  const service = new DesktopPlexAuthService({
+    config: createDesktopPlexAuthConfig({ clientIdentifier: 'desktop-client' }),
+    transport,
+    credentialStore: createSuccessfulCredentialStore(),
+  });
+
+  transport.enqueue('check-pin-status', {
+    status: 200,
+    payload: {
+      id: 8,
+      code: 'ZZZZ',
+      expiresAt: '2026-05-10T12:05:00.000Z',
+      authToken: placeholderAuthValue,
+      clientIdentifier: 'desktop-client',
+    },
+  });
+  transport.enqueue('validate-token', {
+    status: 200,
+    payload: {
+      id: 'account-1',
+      username: 'viewer',
+      email: 'viewer@example.invalid',
+    },
+  });
+  await service.checkPinStatus(8);
+
+  transport.enqueue('switch-home-user', {
+    status: 404,
+    payload: { error: 'not found' },
+  });
+  transport.enqueue('switch-home-user', {
+    status: 200,
+    payload: { kind: 'json', data: { authToken: placeholderAuthValue } },
+  });
+  transport.enqueue('validate-token', {
+    status: 200,
+    payload: {
+      id: 'kid',
+      username: 'kid',
+      email: 'kid@example.invalid',
+    },
+  });
+
+  await service.switchHomeUser('kid', { pin: ' 1234 ' });
+
+  const switchRequests = transport.requests.filter((request) => request.action === 'switch-home-user');
+  assert.deepEqual(
+    switchRequests.map((request) => request.homeEndpointVersion),
+    ['v2', 'v1'],
+  );
+  assert.deepEqual(
+    switchRequests.map((request) => request.pin),
+    [' 1234 ', ' 1234 '],
+  );
+  assert.equal(service.getActiveUserId(), 'kid');
+});
+
+test('desktop plex auth service reports protected switch PIN failure when account token remains valid', async () => {
+  const transport = new FakePlexAuthTransport();
+  const service = new DesktopPlexAuthService({
+    config: createDesktopPlexAuthConfig({ clientIdentifier: 'desktop-client' }),
+    transport,
+    credentialStore: createSuccessfulCredentialStore(),
+  });
+
+  transport.enqueue('check-pin-status', {
+    status: 200,
+    payload: {
+      id: 8,
+      code: 'ZZZZ',
+      expiresAt: '2026-05-10T12:05:00.000Z',
+      authToken: placeholderAuthValue,
+      clientIdentifier: 'desktop-client',
+    },
+  });
+  transport.enqueue('validate-token', {
+    status: 200,
+    payload: {
+      id: 'account-1',
+      username: 'viewer',
+      email: 'viewer@example.invalid',
+    },
+  });
+  await service.checkPinStatus(8);
+
+  transport.enqueue('switch-home-user', {
+    status: 401,
+    payload: { error: 'unauthorized' },
+  });
+  transport.enqueue('validate-token', {
+    status: 200,
+    payload: {
+      id: 'account-1',
+      username: 'viewer',
+      email: 'viewer@example.invalid',
+    },
+  });
+
+  await assert.rejects(() => service.switchHomeUser('kid', { pin: '1234' }), {
+    name: 'PlexAuthError',
+    code: 'auth-failed',
+    httpStatus: 401,
+  });
+  assert.equal(service.getActiveUserId(), 'account-1');
+});
+
 test('desktop plex auth service rejects already-aborted home and switch calls before transport', async () => {
   const transport = new FakePlexAuthTransport();
   const service = new DesktopPlexAuthService({

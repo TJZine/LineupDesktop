@@ -47,6 +47,7 @@ interface PersistenceFile {
   schemaVersion: typeof PERSISTENCE_SCHEMA_VERSION;
   credentials: StoredPlexCredential[];
   selectedServer: PlexSelectedServerSummary | null;
+  selectedServersByProfileId?: Record<string, PlexSelectedServerSummary>;
 }
 
 type PersistenceFileReadResult =
@@ -211,15 +212,75 @@ export class DesktopPersistenceStore {
     }
   }
 
+  async getSelectedPlexServer(profileId?: string | null): Promise<PlexSelectedServerSummary | null> {
+    const readResult = await this.readPersistenceFile();
+    if (readResult.status === 'corrupt') {
+      return null;
+    }
+    if (profileId === undefined || profileId === null) {
+      return readResult.value.selectedServer;
+    }
+    const normalizedProfileId = normalizeSelectedServerProfileId(profileId);
+    if (normalizedProfileId === null) {
+      return null;
+    }
+    return readResult.value.selectedServersByProfileId?.[normalizedProfileId] ?? null;
+  }
+
+  async setSelectedPlexServer(
+    profileId: string,
+    selectedServer: PlexSelectedServerSummary | null,
+    options?: DesktopPersistenceMutationOptions,
+  ): Promise<PersistenceRendererSafeSnapshot>;
   async setSelectedPlexServer(
     selectedServer: PlexSelectedServerSummary | null,
-    options: DesktopPersistenceMutationOptions = {},
+    options?: DesktopPersistenceMutationOptions,
+  ): Promise<PersistenceRendererSafeSnapshot>;
+  async setSelectedPlexServer(
+    profileIdOrSelectedServer: string | PlexSelectedServerSummary | null,
+    selectedServerOrOptions: PlexSelectedServerSummary | null | DesktopPersistenceMutationOptions = {},
+    maybeOptions: DesktopPersistenceMutationOptions = {},
   ): Promise<PersistenceRendererSafeSnapshot> {
+    const scoped = typeof profileIdOrSelectedServer === 'string';
+    const profileId = scoped ? profileIdOrSelectedServer : null;
+    const selectedServer = scoped
+      ? selectedServerOrOptions as PlexSelectedServerSummary | null
+      : profileIdOrSelectedServer;
+    const options = scoped
+      ? maybeOptions
+      : selectedServerOrOptions as DesktopPersistenceMutationOptions;
     return this.enqueueMutation(async () => {
       throwIfAborted(options.signal);
       const readResult = await this.readPersistenceFile();
       if (readResult.status === 'corrupt') return createCorruptSnapshot(readResult.diagnostics);
-      const value = { ...readResult.value, selectedServer };
+      if (!scoped) {
+        const value = {
+          ...readResult.value,
+          selectedServer: sanitizeSelectedServerSummary(selectedServer),
+        };
+        await this.writePersistenceFile(value, options);
+        return this.getRendererSafeSnapshot();
+      }
+      const normalizedProfileId = normalizeSelectedServerProfileId(profileId ?? '');
+      if (normalizedProfileId === null) {
+        throw createInvalidSelectedServerProfileError();
+      }
+      const selectedServersByProfileId = {
+        ...(readResult.value.selectedServersByProfileId ?? {}),
+      };
+      if (selectedServer === null) {
+        delete selectedServersByProfileId[normalizedProfileId];
+      } else {
+        const sanitizedSelectedServer = sanitizeSelectedServerSummary(selectedServer);
+        if (sanitizedSelectedServer === null) {
+          throw new Error('Selected-server summary is invalid.');
+        }
+        selectedServersByProfileId[normalizedProfileId] = sanitizedSelectedServer;
+      }
+      const value = {
+        ...readResult.value,
+        selectedServersByProfileId,
+      };
       await this.writePersistenceFile(value, options);
       return this.getRendererSafeSnapshot();
     });
@@ -387,6 +448,7 @@ function createEmptyPersistenceFile(): PersistenceFile {
     schemaVersion: PERSISTENCE_SCHEMA_VERSION,
     credentials: [],
     selectedServer: null,
+    selectedServersByProfileId: {},
   };
 }
 
@@ -410,6 +472,25 @@ function createPlexCredentialId(accountId: string): string {
   return `plex-account:${encodeURIComponent(accountId)}`;
 }
 
+function createInvalidSelectedServerProfileError(): Error {
+  const error = new Error('Selected-server profile id is required.');
+  error.name = 'InvalidSelectedServerProfileError';
+  return error;
+}
+
+function normalizeSelectedServerProfileId(profileId: string): string | null {
+  const normalized = profileId.trim();
+  if (
+    normalized.length === 0 ||
+    normalized === '__proto__' ||
+    normalized === 'prototype' ||
+    normalized === 'constructor'
+  ) {
+    return null;
+  }
+  return normalized;
+}
+
 function toCredentialHandle(record: StoredPlexCredential): PlexCredentialHandle {
   return {
     credentialId: record.credentialId,
@@ -425,7 +506,15 @@ function parsePersistenceFile(content: string): PersistenceFile {
   if (!isPersistenceFile(parsed)) {
     throw new Error('Persistence file schema is invalid.');
   }
-  return parsed;
+  const value = parsed as PersistenceFile;
+  return {
+    schemaVersion: value.schemaVersion,
+    credentials: value.credentials,
+    selectedServer: sanitizeSelectedServerSummary(value.selectedServer),
+    selectedServersByProfileId: sanitizeSelectedServersByProfileId(
+      value.selectedServersByProfileId ?? {},
+    ),
+  };
 }
 
 function isPersistenceFile(value: unknown): value is PersistenceFile {
@@ -437,7 +526,9 @@ function isPersistenceFile(value: unknown): value is PersistenceFile {
     candidate.schemaVersion === PERSISTENCE_SCHEMA_VERSION &&
     Array.isArray(candidate.credentials) &&
     candidate.credentials.every(isStoredPlexCredential) &&
-    (candidate.selectedServer === null || isSelectedServerSummary(candidate.selectedServer))
+    (candidate.selectedServer === null || isSelectedServerSummary(candidate.selectedServer)) &&
+    (candidate.selectedServersByProfileId === undefined ||
+      isSelectedServersByProfileId(candidate.selectedServersByProfileId))
   );
 }
 
@@ -483,6 +574,45 @@ function isSelectedServerSummary(value: unknown): value is PlexSelectedServerSum
       candidate.source === 'restored') &&
     typeof candidate.lastSelectedAtMs === 'number'
   );
+}
+
+function sanitizeSelectedServerSummary(value: unknown): PlexSelectedServerSummary | null {
+  if (!isSelectedServerSummary(value)) {
+    return null;
+  }
+  return {
+    serverId: value.serverId,
+    name: value.name,
+    source: value.source,
+    lastSelectedAtMs: value.lastSelectedAtMs,
+  };
+}
+
+function isSelectedServersByProfileId(
+  value: unknown,
+): value is Record<string, PlexSelectedServerSummary> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  return Object.entries(value).every(
+    ([profileId, selectedServer]) =>
+      normalizeSelectedServerProfileId(profileId) !== null &&
+      isSelectedServerSummary(selectedServer),
+  );
+}
+
+function sanitizeSelectedServersByProfileId(
+  value: Record<string, PlexSelectedServerSummary>,
+): Record<string, PlexSelectedServerSummary> {
+  const selectedServersByProfileId: Record<string, PlexSelectedServerSummary> = {};
+  for (const [profileId, selectedServer] of Object.entries(value)) {
+    const normalizedProfileId = normalizeSelectedServerProfileId(profileId);
+    const sanitizedSelectedServer = sanitizeSelectedServerSummary(selectedServer);
+    if (normalizedProfileId !== null && sanitizedSelectedServer !== null) {
+      selectedServersByProfileId[normalizedProfileId] = sanitizedSelectedServer;
+    }
+  }
+  return selectedServersByProfileId;
 }
 
 function isNodeFileError(error: unknown, code: string): boolean {
