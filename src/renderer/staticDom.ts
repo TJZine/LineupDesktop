@@ -129,27 +129,71 @@ const STATIC_SCREEN_MARKUP = `
   <section id="screen-channel-setup" class="screen" data-screen="channelSetup" data-style-surface="screen" aria-labelledby="screen-channel-setup-title" hidden>
     <div class="screen__content">
       <p class="screen__kicker" data-workflow-kicker="channelSetup">Channel setup</p>
-      <h2 id="screen-channel-setup-title">Channel setup</h2>
-      <p data-workflow-primary="channelSetup">Lineup controls.</p>
-      <p data-workflow-secondary="channelSetup">Draft setup with no persistence.</p>
-      <dl class="setup-summary">
-        <div><dt>Source</dt><dd data-channel-setup-source></dd></div>
-        <div><dt>Enabled</dt><dd data-channel-setup-enabled></dd></div>
-        <div><dt>Blocks</dt><dd data-channel-setup-blocks></dd></div>
-      </dl>
-      <ol class="setup-steps" data-setup-steps></ol>
-      <div class="channel-draft-list" data-channel-draft-list></div>
-      <p class="setup-validation" data-setup-validation></p>
-      <div class="settings-controls" aria-label="Fake channel setup controls">
-        <button type="button" data-setup-action="advanceSetupStep" data-focus-id="setup-advance">Advance step</button>
-        <button type="button" data-setup-action="toggleFeaturedChannel" data-focus-id="setup-toggle-featured">Toggle featured channel</button>
-        <button type="button" data-setup-action="addDraftChannel" data-focus-id="setup-add-channel">Add draft channel</button>
-        <button type="button" data-setup-action="resetDraftLineup" data-focus-id="setup-reset">Reset draft</button>
-      </div>
-      <div class="workflow-actions" data-workflow-actions="channelSetup">
-        <button type="button" data-route-action="reviewLineup" data-focus-id="setup-guide">Review guide</button>
-        <button type="button" data-route-action="confirmSetup" data-focus-id="setup-player">Preview player</button>
-      </div>
+      <h2 id="screen-channel-setup-title">Plex setup</h2>
+      <p data-workflow-primary="channelSetup">Connect Plex, choose a profile and server, then browse your library.</p>
+      <p data-workflow-secondary="channelSetup">Only renderer-safe account, server, library, and media summaries are shown here.</p>
+      <section class="plex-runtime plex-onboarding" data-plex-runtime-panel aria-label="Plex onboarding">
+        <header class="plex-runtime__header">
+          <div>
+            <h3>Plex onboarding</h3>
+            <p data-plex-status>Not loaded</p>
+          </div>
+          <p class="plex-runtime__error" data-plex-error hidden></p>
+        </header>
+        <dl class="plex-runtime__summary">
+          <div><dt>Account</dt><dd data-plex-account-state></dd></div>
+          <div><dt>Server</dt><dd data-plex-server-state></dd></div>
+          <div><dt>Library</dt><dd data-plex-library-state></dd></div>
+        </dl>
+        <section class="plex-runtime__stage" aria-labelledby="plex-stage-account">
+          <h4 id="plex-stage-account">1. Sign in</h4>
+          <p class="plex-runtime__stage-copy">Link a Plex account and select the profile Lineup Desktop should use.</p>
+          <div class="plex-runtime__controls" aria-label="Plex sign-in controls">
+            <button type="button" data-plex-action="loadSnapshot" data-focus-id="plex-load">Resume setup</button>
+            <button type="button" data-plex-action="requestPin" data-focus-id="plex-request-pin">Get link code</button>
+            <button type="button" data-plex-action="pollPin" data-focus-id="plex-poll-pin">I signed in</button>
+            <button type="button" data-plex-action="cancelPin" data-focus-id="plex-cancel-pin">Cancel</button>
+            <button type="button" data-plex-action="clearPinSubflow" data-focus-id="plex-clear-pin">Start over</button>
+          </div>
+          <div class="plex-runtime__pin" data-plex-pin></div>
+          <div class="plex-runtime__controls" aria-label="Plex profile controls">
+            <input data-plex-home-user-pin data-focus-id="plex-home-pin" inputmode="numeric" autocomplete="off" maxlength="12" aria-label="Plex Home PIN" />
+            <button type="button" data-plex-action="getHomeUsers" data-focus-id="plex-home-users">Choose profile</button>
+          </div>
+          <div class="plex-runtime__list" data-plex-home-users></div>
+        </section>
+        <section class="plex-runtime__stage" aria-labelledby="plex-stage-server">
+          <h4 id="plex-stage-server">2. Choose server</h4>
+          <p class="plex-runtime__stage-copy">Pick a reachable Plex server from the safe server summaries returned by the desktop runtime.</p>
+          <div class="plex-runtime__controls" aria-label="Plex server controls">
+            <button type="button" data-plex-action="restoreSelectedServer" data-focus-id="plex-restore-server">Use saved server</button>
+            <button type="button" data-plex-action="refreshServers" data-focus-id="plex-refresh-servers">Find servers</button>
+            <button type="button" data-plex-action="clearSelectedServer" data-focus-id="plex-clear-server">Change server</button>
+          </div>
+          <div class="plex-runtime__list" data-plex-servers></div>
+        </section>
+        <section class="plex-runtime__stage" aria-labelledby="plex-stage-library">
+          <h4 id="plex-stage-library">3. Browse library</h4>
+          <p class="plex-runtime__stage-copy">Choose a library, browse items, or search before previewing metadata.</p>
+          <div class="plex-runtime__controls" aria-label="Plex library controls">
+            <button type="button" data-plex-action="listLibrarySections" data-focus-id="plex-list-sections">Open libraries</button>
+            <button type="button" data-plex-action="clearSelectedSection" data-focus-id="plex-clear-section">Change library</button>
+            <button type="button" data-plex-action="listLibraryItems" data-focus-id="plex-list-items">Browse library</button>
+            <button type="button" data-plex-action="clearItems" data-focus-id="plex-clear-items">Clear results</button>
+            <input data-plex-search-query data-focus-id="plex-search-query" maxlength="120" aria-label="Library search" />
+            <button type="button" data-plex-action="searchLibrary" data-focus-id="plex-search">Search</button>
+            <button type="button" data-plex-action="clearSearch" data-focus-id="plex-clear-search">Clear search</button>
+          </div>
+          <div class="plex-runtime__list" data-plex-sections></div>
+          <div class="plex-runtime__list" data-plex-items></div>
+        </section>
+        <section class="plex-runtime__stage" aria-labelledby="plex-stage-metadata">
+          <h4 id="plex-stage-metadata">4. Preview item</h4>
+          <p class="plex-runtime__stage-copy">Review the selected media summary before continuing setup later.</p>
+          <button type="button" data-plex-action="clearMetadata" data-focus-id="plex-clear-metadata">Close preview</button>
+          <div class="plex-runtime__metadata" data-plex-metadata></div>
+        </section>
+      </section>
     </div>
   </section>
 </section>`;

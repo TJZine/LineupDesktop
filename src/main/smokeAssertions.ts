@@ -277,14 +277,36 @@ export async function runSmokeAssertions(
         setupButton.click();
       }
       const setupScreen = document.querySelector('[data-screen="channelSetup"]');
-      const setupSteps = document.querySelector('[data-setup-steps]')?.textContent ?? '';
-      const setupValidation = document.querySelector('[data-setup-validation]')?.textContent ?? '';
       if (document.documentElement.dataset.activeRoute !== 'channelSetup') {
         failures.push('channel setup route activation');
       }
       if (!(setupScreen instanceof HTMLElement) || setupScreen.hidden) failures.push('channel setup screen visible');
-      if (!setupSteps.includes('Arrange channels') || !setupValidation.includes('Draft setup')) {
-        failures.push('channel setup workflow content');
+      const plexRuntimePanel = document.querySelector('[data-plex-runtime-panel]');
+      const setupText = setupScreen instanceof HTMLElement ? setupScreen.textContent ?? '' : '';
+      const setupOverflow = setupScreen instanceof HTMLElement ? getComputedStyle(setupScreen).overflowY : '';
+      const oldSetupControls = document.querySelector(
+        '[data-setup-action], [data-setup-steps], [data-channel-draft-list], [data-setup-validation]',
+      );
+      if (
+        !(plexRuntimePanel instanceof HTMLElement) ||
+        !setupText.includes('Plex source setup') ||
+        !setupText.includes('Get link code') ||
+        !setupText.includes('Load libraries') ||
+        setupOverflow !== 'auto' ||
+        oldSetupControls !== null
+      ) {
+        failures.push(
+          'channel setup plex flow content ' +
+            JSON.stringify({
+              hasPlexRuntimePanel: plexRuntimePanel instanceof HTMLElement,
+              hasPlexCopy: setupText.includes('Plex source setup'),
+              hasLinkCode: setupText.includes('Get link code'),
+              hasLibraries: setupText.includes('Load libraries'),
+              setupOverflow,
+              hasOldSetupControls: oldSetupControls !== null,
+              hasSetupValidation: document.querySelector('[data-setup-validation]') !== null,
+            }),
+        );
       }
 
       const playerButton = document.querySelector('[data-route-button="player"]');

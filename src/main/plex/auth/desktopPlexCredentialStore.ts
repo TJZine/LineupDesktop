@@ -5,6 +5,7 @@ import type {
 } from '../../../contracts/persistence.js';
 import type {
   DesktopPlexCredentialReadResult,
+  DesktopPlexCredentialSecretReadResult,
   DesktopPlexCredentialSaveResult,
   PlexAuthProfileSummary,
 } from './types.js';
@@ -23,6 +24,10 @@ export interface SaveDesktopPlexAccountCredentialInput {
   profile?: PlexAuthProfileSummary;
 }
 
+export interface DesktopPlexCredentialSaveOptions {
+  signal?: AbortSignal | null;
+}
+
 export class DesktopPlexCredentialStore {
   private readonly persistenceStore: DesktopPlexCredentialStoreOptions['persistenceStore'];
 
@@ -32,12 +37,16 @@ export class DesktopPlexCredentialStore {
 
   async saveAccountCredential(
     input: SaveDesktopPlexAccountCredentialInput,
+    options: DesktopPlexCredentialSaveOptions = {},
   ): Promise<DesktopPlexCredentialSaveResult> {
+    throwIfAborted(options.signal);
     const profile = normalizeProfileAccountId(input.accountId, input.profile);
     const saveResult = await this.persistenceStore.savePlexCredential({
       accountId: input.accountId,
       secretValue: input.secretValue,
       profile: toPersistenceProfileSummary(profile),
+    }, {
+      signal: options.signal ?? null,
     });
 
     if (!saveResult.ok) {
@@ -104,6 +113,49 @@ export class DesktopPlexCredentialStore {
       shouldReencrypt: readResult.shouldReencrypt,
       diagnostics: [...readResult.diagnostics, ...snapshot.diagnostics, ...handleDiagnostics],
     };
+  }
+
+  async readDefaultAccountCredentialSecret(): Promise<DesktopPlexCredentialSecretReadResult> {
+    const snapshot = await this.persistenceStore.getRendererSafeSnapshot();
+    const account = snapshot.accounts[0];
+    if (account === undefined) {
+      return {
+        status: snapshot.storage.credentials === 'unavailable'
+          ? 'unavailable'
+          : snapshot.storage.credentials === 'corrupt'
+            ? 'corrupt'
+            : 'missing',
+        accountId: null,
+        diagnostics: snapshot.diagnostics,
+      };
+    }
+
+    const readResult = await this.persistenceStore.readPlexCredentialSecret(account.accountId);
+    if (readResult.status !== 'present') {
+      return {
+        status: readResult.status,
+        accountId: account.accountId,
+        diagnostics: [...snapshot.diagnostics, ...readResult.diagnostics],
+      };
+    }
+
+    return {
+      status: 'present',
+      accountId: readResult.accountId,
+      credentialId: readResult.credentialId,
+      secretValue: readResult.secretValue,
+      shouldReencrypt: readResult.shouldReencrypt,
+      profile: toAuthProfileSummary(readResult.accountId, readResult.profile),
+      diagnostics: [...snapshot.diagnostics, ...readResult.diagnostics],
+    };
+  }
+}
+
+function throwIfAborted(signal?: AbortSignal | null): void {
+  if (signal?.aborted) {
+    const error = new Error('Plex credential save was aborted.');
+    error.name = 'AbortError';
+    throw error;
   }
 }
 

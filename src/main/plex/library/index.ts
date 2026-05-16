@@ -7,6 +7,7 @@ export type {
   PlexLibrarySection,
   PlexLibrarySectionType,
   PlexMediaFile,
+  PlexMediaContainer,
   PlexMediaItem,
   PlexMediaPart,
   PlexMediaType,

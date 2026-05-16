@@ -220,6 +220,128 @@ test('desktop persistence store records selected server state without secure sto
   assert.equal(containsPersistenceForbiddenRendererField(snapshot), false);
 });
 
+test('desktop persistence store records selected server state by profile scope without raw connection fields', async () => {
+  const temporaryDirectory = await createTemporaryDirectory();
+  const persistenceFilePath = path.join(temporaryDirectory, 'persistence.json');
+  const store = new DesktopPersistenceStore({
+    persistenceFilePath,
+    secureStringCodec: new FakeSecureStringCodec(),
+  });
+  const profileASelectedServer: PlexSelectedServerSummary = {
+    serverId: 'server-a',
+    name: 'Profile A Server',
+    source: 'manual',
+    lastSelectedAtMs: 2_000,
+  };
+  const profileBSelectedServer: PlexSelectedServerSummary = {
+    serverId: 'server-b',
+    name: 'Profile B Server',
+    source: 'restored',
+    lastSelectedAtMs: 3_000,
+  };
+
+  await store.setSelectedPlexServer('profile-a', profileASelectedServer);
+  await store.setSelectedPlexServer('profile-b', profileBSelectedServer);
+
+  assert.deepEqual(await store.getSelectedPlexServer('profile-a'), profileASelectedServer);
+  assert.deepEqual(await store.getSelectedPlexServer('profile-b'), profileBSelectedServer);
+  assert.equal(await store.getSelectedPlexServer('profile-c'), null);
+  const persisted = await fs.readFile(persistenceFilePath, 'utf8');
+  assert.equal(persisted.includes('://'), false);
+  assert.equal(persisted.includes('connectionUri'), false);
+  assert.equal(persisted.includes('serverUri'), false);
+  assert.equal(containsPersistenceForbiddenRendererField(JSON.parse(persisted)), false);
+});
+
+test('desktop persistence store sanitizes hostile persisted selected-server extras', async () => {
+  const temporaryDirectory = await createTemporaryDirectory();
+  const persistenceFilePath = path.join(temporaryDirectory, 'persistence.json');
+  await fs.writeFile(
+    persistenceFilePath,
+    `${JSON.stringify({
+      schemaVersion: 1,
+      credentials: [],
+      selectedServer: {
+        serverId: 'legacy-server',
+        name: 'Legacy Server',
+        source: 'restored',
+        lastSelectedAtMs: 1_000,
+        serverUri: 'legacy-uri-value',
+        token: 'legacy-secret-shaped-value',
+        headers: { unsafeHeader: 'legacy-secret-shaped-value' },
+        selectedConnection: { uri: 'legacy-uri-value' },
+      },
+      selectedServersByProfileId: {
+        'profile-a': {
+          serverId: 'scoped-server',
+          name: 'Scoped Server',
+          source: 'manual',
+          lastSelectedAtMs: 2_000,
+          uri: 'scoped-uri-value',
+          rawConnectionUri: 'scoped-raw-connection-uri-value',
+          headers: { unsafeHeader: 'scoped-secret-shaped-value' },
+          selectedConnection: { uri: 'scoped-uri-value' },
+        },
+      },
+    }, null, 2)}\n`,
+  );
+  const store = new DesktopPersistenceStore({
+    persistenceFilePath,
+    secureStringCodec: new FakeSecureStringCodec(),
+  });
+
+  const legacySelectedServer = {
+    serverId: 'legacy-server',
+    name: 'Legacy Server',
+    source: 'restored',
+    lastSelectedAtMs: 1_000,
+  };
+  const scopedSelectedServer = {
+    serverId: 'scoped-server',
+    name: 'Scoped Server',
+    source: 'manual',
+    lastSelectedAtMs: 2_000,
+  };
+
+  assert.deepEqual(await store.getSelectedPlexServer(), legacySelectedServer);
+  assert.deepEqual(await store.getSelectedPlexServer('profile-a'), scopedSelectedServer);
+  const snapshot = await store.getRendererSafeSnapshot();
+  assert.deepEqual(snapshot.selectedServer, legacySelectedServer);
+  assert.equal(containsPersistenceForbiddenRendererField(snapshot), false);
+  assert.equal(JSON.stringify(snapshot).includes('legacy-secret-shaped-value'), false);
+
+  await store.setSelectedPlexServer('profile-b', {
+    serverId: 'clean-server',
+    name: 'Clean Server',
+    source: 'discovery',
+    lastSelectedAtMs: 3_000,
+  });
+
+  const persisted = JSON.parse(await fs.readFile(persistenceFilePath, 'utf8')) as {
+    selectedServer?: Record<string, unknown> | null;
+    selectedServersByProfileId?: Record<string, Record<string, unknown>>;
+  };
+  assert.deepEqual(persisted.selectedServer, legacySelectedServer);
+  assert.deepEqual(persisted.selectedServersByProfileId?.['profile-a'], scopedSelectedServer);
+  assert.deepEqual(Object.keys(persisted.selectedServer ?? {}).sort(), [
+    'lastSelectedAtMs',
+    'name',
+    'serverId',
+    'source',
+  ]);
+  assert.deepEqual(Object.keys(persisted.selectedServersByProfileId?.['profile-a'] ?? {}).sort(), [
+    'lastSelectedAtMs',
+    'name',
+    'serverId',
+    'source',
+  ]);
+  assert.equal(containsPersistenceForbiddenRendererField(persisted), false);
+  assert.equal(JSON.stringify(persisted).includes('legacy-secret-shaped-value'), false);
+  assert.equal(JSON.stringify(persisted).includes('scoped-secret-shaped-value'), false);
+  assert.equal(JSON.stringify(persisted).includes('selectedConnection'), false);
+  assert.equal(JSON.stringify(persisted).includes('serverUri'), false);
+});
+
 test('desktop persistence store serializes concurrent credential and selected-server mutations', async () => {
   const temporaryDirectory = await createTemporaryDirectory();
   const codec = new DeferredFirstEncryptCodec([1]);
@@ -267,6 +389,73 @@ test('desktop persistence store serializes concurrent credential and selected-se
   assert.equal(JSON.stringify(persisted).includes('rd09-secret-two'), false);
   const temporaryFiles = (await fs.readdir(temporaryDirectory)).filter((file) => file.endsWith('.tmp'));
   assert.deepEqual(temporaryFiles, []);
+});
+
+test('desktop persistence store aborts in-flight credential save before replacing persisted credential', async () => {
+  const temporaryDirectory = await createTemporaryDirectory();
+  const codec = new DeferredFirstEncryptCodec([2]);
+  const persistenceFilePath = path.join(temporaryDirectory, 'persistence.json');
+  const store = new DesktopPersistenceStore({
+    persistenceFilePath,
+    secureStringCodec: codec,
+    nowMs: () => 3_500,
+  });
+  await store.savePlexCredential({
+    accountId: 'account-1',
+    secretValue: 'rd09-old-secret',
+  });
+
+  const abortController = new AbortController();
+  const replacement = store.savePlexCredential(
+    {
+      accountId: 'account-1',
+      secretValue: 'rd09-new-secret',
+    },
+    { signal: abortController.signal },
+  );
+  await codec.waitForEncrypt(2);
+  abortController.abort();
+  codec.releaseEncrypt(2);
+
+  await assert.rejects(() => replacement, { name: 'AbortError' });
+  const currentRead = await store.readPlexCredentialSecret('account-1');
+  assert.equal(currentRead.status, 'present');
+  if (currentRead.status === 'present') {
+    assert.equal(currentRead.secretValue, 'rd09-old-secret');
+  }
+  const temporaryFiles = (await fs.readdir(temporaryDirectory)).filter((file) => file.endsWith('.tmp'));
+  assert.deepEqual(temporaryFiles, []);
+});
+
+test('desktop persistence store aborts selected-server mutation before replacing persisted selection', async () => {
+  const temporaryDirectory = await createTemporaryDirectory();
+  const store = new DesktopPersistenceStore({
+    persistenceFilePath: path.join(temporaryDirectory, 'persistence.json'),
+    secureStringCodec: new FakeSecureStringCodec(),
+  });
+  const oldSelectedServer: PlexSelectedServerSummary = {
+    serverId: 'server-old',
+    name: 'Old Server',
+    source: 'manual',
+    lastSelectedAtMs: 3_000,
+  };
+  const newSelectedServer: PlexSelectedServerSummary = {
+    serverId: 'server-new',
+    name: 'New Server',
+    source: 'manual',
+    lastSelectedAtMs: 4_000,
+  };
+  await store.setSelectedPlexServer(oldSelectedServer);
+
+  const abortController = new AbortController();
+  abortController.abort();
+  await assert.rejects(
+    () => store.setSelectedPlexServer(newSelectedServer, { signal: abortController.signal }),
+    { name: 'AbortError' },
+  );
+
+  const snapshot = await store.getRendererSafeSnapshot();
+  assert.deepEqual(snapshot.selectedServer, oldSelectedServer);
 });
 
 test('desktop persistence store fails closed when secure storage is unavailable', async () => {

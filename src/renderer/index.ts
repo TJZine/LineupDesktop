@@ -4,6 +4,7 @@ import {
   readChannelSetupActionId,
   readEpgActionId,
   readOverlayActionId,
+  readPlexRuntimeActionId,
   readRouteActionId,
   readRouteId,
   readSettingsActionId,
@@ -12,8 +13,8 @@ import {
   clickFocusedRendererElement,
   focusRendererTarget,
   moveRendererFocus,
-  registerRendererFocusTargets,
   renderRendererFocus,
+  syncRendererFocusTargets,
 } from './focusDom.js';
 import {
   createDesktopKeyboardInputListener,
@@ -37,6 +38,14 @@ import {
 import { renderRouteDom, renderWorkflowDom } from './routeDom.js';
 import { mountStaticRendererDom } from './staticDom.js';
 import { applySupportBundleExportResult } from './supportBundleExport.js';
+import { createPlexRuntimeController } from './plexRuntimeActions.js';
+import {
+  readPlexHomeUserId,
+  readPlexRatingKey,
+  readPlexSectionId,
+  readPlexServerId,
+  renderPlexRuntimeDom,
+} from './plexRuntimeDom.js';
 import {
   activateWorkflowRoute,
   applyWorkflowAction,
@@ -60,8 +69,13 @@ let overlayState = createPlayerOverlayState();
 const playerSnapshot = createFakePlayerSnapshot();
 const focusRegistry = new FocusRegistry();
 let focusState: FocusState;
+const plexController = createPlexRuntimeController({
+  bridge: window.lineupDesktop.plex,
+  onStateChanged: () => renderApp(),
+  recordRendererEvent: window.lineupDesktop.diagnostics.recordRendererEvent,
+});
 
-registerRendererFocusTargets(focusRegistry, dom);
+syncRendererFocusTargets(focusRegistry, dom);
 focusState = focusRegistry.createInitialState(workflowState.routeState.activeRoute);
 renderApp();
 
@@ -84,6 +98,7 @@ window.addEventListener('beforeunload', () => {
   cursorRuntime.cleanup();
   gamepadRuntime.cleanup();
   unsubscribeShellStatus();
+  cleanupPlexRuntime('beforeunload');
 });
 
 for (const button of dom.routeButtons) {
@@ -140,14 +155,57 @@ for (const button of dom.overlayActionButtons) {
   });
 }
 
-for (const element of dom.focusableElements) {
-  element.addEventListener('focus', () => {
-    const focusId = element.dataset.focusId;
-    if (focusId !== undefined) {
-      focusState = focusRendererTarget(focusRegistry, focusState, focusId, dom);
+for (const button of dom.plexActionButtons) {
+  button.addEventListener('click', () => {
+    const action = readPlexRuntimeActionId(button.dataset.plexAction);
+    if (action !== null) {
+      void applyPlexRuntimeAction(action);
     }
   });
 }
+
+dom.plexHomeUserPinInput?.addEventListener('input', () => {
+  plexController.setHomeUserPin(dom.plexHomeUserPinInput?.value ?? '');
+});
+
+dom.plexSearchQueryInput?.addEventListener('input', () => {
+  plexController.setSearchQuery(dom.plexSearchQueryInput?.value ?? '');
+});
+
+dom.plexPanelElement?.addEventListener('click', (event) => {
+  if (!(event.target instanceof HTMLElement)) {
+    return;
+  }
+  const homeUserButton = event.target.closest<HTMLElement>('[data-plex-home-user-id]');
+  const serverButton = event.target.closest<HTMLElement>('[data-plex-server-id]');
+  const sectionButton = event.target.closest<HTMLElement>('[data-plex-section-id]');
+  const itemButton = event.target.closest<HTMLElement>('[data-plex-rating-key]');
+  const homeUserId = homeUserButton === null ? null : readPlexHomeUserId(homeUserButton);
+  const serverId = serverButton === null ? null : readPlexServerId(serverButton);
+  const sectionId = sectionButton === null ? null : readPlexSectionId(sectionButton);
+  const ratingKey = itemButton === null ? null : readPlexRatingKey(itemButton);
+
+  if (homeUserId !== null) {
+    void plexController.switchHomeUser(homeUserId);
+  } else if (serverId !== null) {
+    void plexController.selectServer(serverId);
+  } else if (sectionId !== null) {
+    plexController.setSelectedSection(sectionId);
+    void plexController.listLibraryItems(sectionId);
+  } else if (ratingKey !== null) {
+    void plexController.getMetadata(ratingKey);
+  }
+});
+
+for (const element of dom.focusableElements) {
+  element.addEventListener('focus', () => focusRendererElement(element));
+}
+
+document.addEventListener('focusin', (event) => {
+  if (event.target instanceof HTMLElement) {
+    focusRendererElement(event.target);
+  }
+});
 
 dom.fullscreenButton?.addEventListener('click', () => {
   void toggleFullscreen();
@@ -162,6 +220,7 @@ if (dom.capabilitiesElement) {
 
 document.documentElement.dataset.shellBoot = 'ready';
 document.documentElement.dataset.activeRoute = workflowState.routeState.activeRoute;
+void plexController.loadSnapshot();
 
 function renderStatus(event: ShellStatusEvent): void {
   if (dom.statusElement) {
@@ -178,11 +237,17 @@ async function handleDesktopInput(input: DesktopInputButton): Promise<void> {
     case 'left':
     case 'right':
       focusState = moveRendererFocus(focusRegistry, focusState, input, dom);
+      scrollFocusedSetupControlIntoView();
       return;
     case 'ok':
       clickFocusedRendererElement(focusState, dom);
       return;
     case 'back':
+      if (workflowState.routeState.activeRoute === 'channelSetup' && await plexController.handleBack()) {
+        renderApp();
+        scrollFocusedSetupControlIntoView();
+        return;
+      }
       activateRoute(workflowState.routeState.previousRoute ?? 'player');
       return;
     case 'guide':
@@ -198,7 +263,9 @@ async function handleDesktopInput(input: DesktopInputButton): Promise<void> {
 }
 
 function activateRoute(route: AppRouteId): void {
+  const previousRoute = workflowState.routeState.activeRoute;
   workflowState = activateWorkflowRoute(workflowState, route);
+  cleanupPlexRuntimeForRouteChange(previousRoute, workflowState.routeState.activeRoute);
   focusState = focusRegistry.focusRoute(focusState, route).state;
   renderApp();
 }
@@ -208,6 +275,7 @@ function applyRouteAction(action: RouteWorkflowActionId): void {
   workflowState = applyWorkflowAction(workflowState, action);
   const nextRoute = workflowState.routeState.activeRoute;
   if (previousRoute !== nextRoute) {
+    cleanupPlexRuntimeForRouteChange(previousRoute, nextRoute);
     focusState = focusRegistry.focusRoute(focusState, nextRoute).state;
   }
   renderApp();
@@ -267,8 +335,110 @@ async function exportSupportBundle(): Promise<void> {
   renderApp();
 }
 
+async function applyPlexRuntimeAction(action: ReturnType<typeof readPlexRuntimeActionId>): Promise<void> {
+  switch (action) {
+    case 'loadSnapshot':
+      await plexController.loadSnapshot();
+      return;
+    case 'requestPin':
+      await plexController.requestPin();
+      return;
+    case 'pollPin':
+      await plexController.pollPin();
+      return;
+    case 'cancelPin':
+      await plexController.cancelPin();
+      return;
+    case 'getHomeUsers':
+      await plexController.getHomeUsers();
+      return;
+    case 'restoreSelectedServer':
+      await plexController.restoreSelectedServer();
+      return;
+    case 'refreshServers':
+      await plexController.refreshServers();
+      return;
+    case 'listLibrarySections':
+      await plexController.listLibrarySections();
+      return;
+    case 'listLibraryItems':
+      await plexController.listLibraryItems();
+      return;
+    case 'searchLibrary':
+      await plexController.searchLibrary();
+      return;
+    case 'clearMetadata':
+      plexController.clearMetadata();
+      return;
+    case 'clearSearch':
+      plexController.clearSearch();
+      return;
+    case 'clearItems':
+      plexController.clearItems();
+      return;
+    case 'clearSelectedSection':
+      plexController.clearSelectedSection();
+      return;
+    case 'clearSelectedServer':
+      plexController.clearSelectedServer();
+      return;
+    case 'clearPinSubflow':
+      await plexController.clearPinSubflow();
+      return;
+    case null:
+      return;
+  }
+}
+
+function cleanupPlexRuntimeForRouteChange(previousRoute: AppRouteId, nextRoute: AppRouteId): void {
+  if (previousRoute === 'channelSetup' && nextRoute !== 'channelSetup') {
+    cleanupPlexRuntime('route-change');
+  }
+}
+
+function cleanupPlexRuntime(reason: 'beforeunload' | 'route-change'): void {
+  void plexController.cleanup().catch((error: unknown) => {
+    const errorName = error instanceof Error ? error.name : typeof error;
+    void window.lineupDesktop.diagnostics.recordRendererEvent({
+      requestId: `plex-cleanup-${Date.now()}`,
+      event: {
+        surface: 'renderer',
+        category: 'ipc',
+        severity: 'warning',
+        operation: 'plex.cleanup',
+        message: 'Plex cleanup failed.',
+        context: { reason, errorName },
+      },
+    }).catch(() => undefined);
+  });
+}
+
 function renderApp(): void {
   renderRouteDom(workflowState, dom);
   renderWorkflowDom(workflowState, overlayState, playerSnapshot, dom);
+  renderPlexRuntimeDom(plexController.getState(), dom);
+  syncRendererFocusTargets(focusRegistry, dom);
+  if (focusState.activeId !== null) {
+    focusState = focusRegistry.focusTarget(focusState, focusState.activeId).state;
+  }
   renderRendererFocus(focusState, dom);
+  scrollFocusedSetupControlIntoView();
+}
+
+function focusRendererElement(element: HTMLElement): void {
+  const focusId = element.dataset.focusId;
+  if (focusId !== undefined) {
+    focusState = focusRendererTarget(focusRegistry, focusState, focusId, dom);
+    scrollFocusedSetupControlIntoView();
+  }
+}
+
+function scrollFocusedSetupControlIntoView(): void {
+  if (workflowState.routeState.activeRoute !== 'channelSetup' || focusState.activeId === null) {
+    return;
+  }
+  const activeElement = document.querySelector<HTMLElement>(
+    `[data-focus-id="${CSS.escape(focusState.activeId)}"]`,
+  );
+  activeElement?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }

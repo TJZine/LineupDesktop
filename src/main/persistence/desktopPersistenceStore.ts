@@ -3,42 +3,19 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
-import type {
-  PersistenceRecordStatus,
-  PersistenceRendererSafeDiagnostic,
-  PersistenceRendererSafeSnapshot,
-  PlexAccountProfileSummary,
-  PlexCredentialHandle,
-  PlexSelectedServerSummary,
-} from '../../contracts/persistence.js';
+import type { PersistenceRecordStatus, PersistenceRendererSafeDiagnostic, PersistenceRendererSafeSnapshot, PlexAccountProfileSummary, PlexCredentialHandle, PlexSelectedServerSummary } from '../../contracts/persistence.js';
 import type { SecureStringCodec } from './secureStorageCodec.js';
 import { SecureStorageUnavailableError } from './secureStorageCodec.js';
 
 const PERSISTENCE_SCHEMA_VERSION = 1;
 
-export interface DesktopPersistenceStoreOptions {
-  persistenceFilePath: string;
-  secureStringCodec: SecureStringCodec;
-  nowMs?: () => number;
-}
-
-export interface SavePlexCredentialInput {
-  accountId: string;
-  secretValue: string;
-  profile?: PlexAccountProfileSummary;
-}
+export interface DesktopPersistenceStoreOptions { persistenceFilePath: string; secureStringCodec: SecureStringCodec; nowMs?: () => number; }
+export interface SavePlexCredentialInput { accountId: string; secretValue: string; profile?: PlexAccountProfileSummary; }
+export interface DesktopPersistenceMutationOptions { signal?: AbortSignal | null; }
 
 export type SavePlexCredentialResult =
-  | {
-      ok: true;
-      handle: PlexCredentialHandle;
-      diagnostics: readonly PersistenceRendererSafeDiagnostic[];
-    }
-  | {
-      ok: false;
-      status: Exclude<PersistenceRecordStatus, 'present' | 'missing'>;
-      diagnostics: readonly PersistenceRendererSafeDiagnostic[];
-    };
+  | { ok: true; handle: PlexCredentialHandle; diagnostics: readonly PersistenceRendererSafeDiagnostic[] }
+  | { ok: false; status: Exclude<PersistenceRecordStatus, 'present' | 'missing'>; diagnostics: readonly PersistenceRendererSafeDiagnostic[] };
 
 export type ReadPlexCredentialSecretResult =
   | {
@@ -70,18 +47,12 @@ interface PersistenceFile {
   schemaVersion: typeof PERSISTENCE_SCHEMA_VERSION;
   credentials: StoredPlexCredential[];
   selectedServer: PlexSelectedServerSummary | null;
+  selectedServersByProfileId?: Record<string, PlexSelectedServerSummary>;
 }
 
 type PersistenceFileReadResult =
-  | {
-      status: 'present' | 'missing';
-      value: PersistenceFile;
-      diagnostics: readonly PersistenceRendererSafeDiagnostic[];
-    }
-  | {
-      status: 'corrupt';
-      diagnostics: readonly PersistenceRendererSafeDiagnostic[];
-    };
+  | { status: 'present' | 'missing'; value: PersistenceFile; diagnostics: readonly PersistenceRendererSafeDiagnostic[] }
+  | { status: 'corrupt'; diagnostics: readonly PersistenceRendererSafeDiagnostic[] };
 
 /** Main-owned credential persistence serializes mutations, schema-checks loads, writes by temp-file rename, and keeps plaintext secrets on main-owned read paths. */
 export class DesktopPersistenceStore {
@@ -99,15 +70,17 @@ export class DesktopPersistenceStore {
 
   async savePlexCredential(
     input: SavePlexCredentialInput,
+    options: DesktopPersistenceMutationOptions = {},
   ): Promise<SavePlexCredentialResult> {
     return this.enqueueMutation(async () => {
+      throwIfAborted(options.signal);
       const readResult = await this.readPersistenceFile();
-      if (readResult.status === 'corrupt') {
-        return { ok: false, status: 'corrupt', diagnostics: readResult.diagnostics };
-      }
+      if (readResult.status === 'corrupt') return { ok: false, status: 'corrupt', diagnostics: readResult.diagnostics };
 
       try {
+        throwIfAborted(options.signal);
         const encrypted = await this.secureStringCodec.encryptString(input.secretValue);
+        throwIfAborted(options.signal);
         const nowMs = this.nowMs();
         const credentialId = createPlexCredentialId(input.accountId);
         const existing = readResult.value.credentials.find(
@@ -130,7 +103,7 @@ export class DesktopPersistenceStore {
           record,
         ].sort((left, right) => left.credentialId.localeCompare(right.credentialId));
 
-        await this.writePersistenceFile({ ...readResult.value, credentials });
+        await this.writePersistenceFile({ ...readResult.value, credentials }, options);
 
         return {
           ok: true,
@@ -147,6 +120,9 @@ export class DesktopPersistenceStore {
           ],
         };
       } catch (error) {
+        if (isAbortError(error)) {
+          throw error;
+        }
         const unavailable = error instanceof SecureStorageUnavailableError;
         return {
           ok: false,
@@ -236,16 +212,76 @@ export class DesktopPersistenceStore {
     }
   }
 
+  async getSelectedPlexServer(profileId?: string | null): Promise<PlexSelectedServerSummary | null> {
+    const readResult = await this.readPersistenceFile();
+    if (readResult.status === 'corrupt') {
+      return null;
+    }
+    if (profileId === undefined || profileId === null) {
+      return readResult.value.selectedServer;
+    }
+    const normalizedProfileId = normalizeSelectedServerProfileId(profileId);
+    if (normalizedProfileId === null) {
+      return null;
+    }
+    return readResult.value.selectedServersByProfileId?.[normalizedProfileId] ?? null;
+  }
+
+  async setSelectedPlexServer(
+    profileId: string,
+    selectedServer: PlexSelectedServerSummary | null,
+    options?: DesktopPersistenceMutationOptions,
+  ): Promise<PersistenceRendererSafeSnapshot>;
   async setSelectedPlexServer(
     selectedServer: PlexSelectedServerSummary | null,
+    options?: DesktopPersistenceMutationOptions,
+  ): Promise<PersistenceRendererSafeSnapshot>;
+  async setSelectedPlexServer(
+    profileIdOrSelectedServer: string | PlexSelectedServerSummary | null,
+    selectedServerOrOptions: PlexSelectedServerSummary | null | DesktopPersistenceMutationOptions = {},
+    maybeOptions: DesktopPersistenceMutationOptions = {},
   ): Promise<PersistenceRendererSafeSnapshot> {
+    const scoped = typeof profileIdOrSelectedServer === 'string';
+    const profileId = scoped ? profileIdOrSelectedServer : null;
+    const selectedServer = scoped
+      ? selectedServerOrOptions as PlexSelectedServerSummary | null
+      : profileIdOrSelectedServer;
+    const options = scoped
+      ? maybeOptions
+      : selectedServerOrOptions as DesktopPersistenceMutationOptions;
     return this.enqueueMutation(async () => {
+      throwIfAborted(options.signal);
       const readResult = await this.readPersistenceFile();
-      if (readResult.status === 'corrupt') {
-        return createCorruptSnapshot(readResult.diagnostics);
+      if (readResult.status === 'corrupt') return createCorruptSnapshot(readResult.diagnostics);
+      if (!scoped) {
+        const value = {
+          ...readResult.value,
+          selectedServer: sanitizeSelectedServerSummary(selectedServer),
+        };
+        await this.writePersistenceFile(value, options);
+        return this.getRendererSafeSnapshot();
       }
-      const value = { ...readResult.value, selectedServer };
-      await this.writePersistenceFile(value);
+      const normalizedProfileId = normalizeSelectedServerProfileId(profileId ?? '');
+      if (normalizedProfileId === null) {
+        throw createInvalidSelectedServerProfileError();
+      }
+      const selectedServersByProfileId = {
+        ...(readResult.value.selectedServersByProfileId ?? {}),
+      };
+      if (selectedServer === null) {
+        delete selectedServersByProfileId[normalizedProfileId];
+      } else {
+        const sanitizedSelectedServer = sanitizeSelectedServerSummary(selectedServer);
+        if (sanitizedSelectedServer === null) {
+          throw new Error('Selected-server summary is invalid.');
+        }
+        selectedServersByProfileId[normalizedProfileId] = sanitizedSelectedServer;
+      }
+      const value = {
+        ...readResult.value,
+        selectedServersByProfileId,
+      };
+      await this.writePersistenceFile(value, options);
       return this.getRendererSafeSnapshot();
     });
   }
@@ -294,18 +330,12 @@ export class DesktopPersistenceStore {
   ): Promise<void> {
     await this.enqueueMutation(async () => {
       const readResult = await this.readPersistenceFile();
-      if (readResult.status === 'corrupt') {
-        return;
-      }
+      if (readResult.status === 'corrupt') return;
       const record = readResult.value.credentials.find(
         (credential) => credential.credentialId === credentialId,
       );
-      if (record === undefined) {
-        return;
-      }
-      if (record.encryptedSecretBase64 !== expectedEncryptedSecretBase64) {
-        return;
-      }
+      if (record === undefined) return;
+      if (record.encryptedSecretBase64 !== expectedEncryptedSecretBase64) return;
       const encrypted = await this.secureStringCodec.encryptString(secretValue);
       const updatedRecord: StoredPlexCredential = {
         ...record,
@@ -367,15 +397,26 @@ export class DesktopPersistenceStore {
     }
   }
 
-  private async writePersistenceFile(value: PersistenceFile): Promise<void> {
+  private async writePersistenceFile(
+    value: PersistenceFile,
+    options: DesktopPersistenceMutationOptions = {},
+  ): Promise<void> {
+    throwIfAborted(options.signal);
     await fs.mkdir(path.dirname(this.persistenceFilePath), { recursive: true });
     this.temporaryWriteCounter += 1;
     const temporaryPath = `${this.persistenceFilePath}.${String(process.pid)}.${String(this.temporaryWriteCounter)}.tmp`;
-    await fs.writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
-    await fs.rename(temporaryPath, this.persistenceFilePath);
+    try {
+      throwIfAborted(options.signal);
+      await fs.writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
+        encoding: 'utf8',
+        mode: 0o600,
+      });
+      throwIfAborted(options.signal);
+      await fs.rename(temporaryPath, this.persistenceFilePath);
+    } catch (error) {
+      await fs.rm(temporaryPath, { force: true }).catch(() => undefined);
+      throw error;
+    }
     await fs.chmod(this.persistenceFilePath, 0o600);
   }
 
@@ -386,11 +427,28 @@ export class DesktopPersistenceStore {
   }
 }
 
+function throwIfAborted(signal?: AbortSignal | null): void {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+}
+
+function createAbortError(): Error {
+  const error = new Error('Persistence mutation was aborted.');
+  error.name = 'AbortError';
+  return error;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 function createEmptyPersistenceFile(): PersistenceFile {
   return {
     schemaVersion: PERSISTENCE_SCHEMA_VERSION,
     credentials: [],
     selectedServer: null,
+    selectedServersByProfileId: {},
   };
 }
 
@@ -414,6 +472,25 @@ function createPlexCredentialId(accountId: string): string {
   return `plex-account:${encodeURIComponent(accountId)}`;
 }
 
+function createInvalidSelectedServerProfileError(): Error {
+  const error = new Error('Selected-server profile id is required.');
+  error.name = 'InvalidSelectedServerProfileError';
+  return error;
+}
+
+function normalizeSelectedServerProfileId(profileId: string): string | null {
+  const normalized = profileId.trim();
+  if (
+    normalized.length === 0 ||
+    normalized === '__proto__' ||
+    normalized === 'prototype' ||
+    normalized === 'constructor'
+  ) {
+    return null;
+  }
+  return normalized;
+}
+
 function toCredentialHandle(record: StoredPlexCredential): PlexCredentialHandle {
   return {
     credentialId: record.credentialId,
@@ -429,7 +506,15 @@ function parsePersistenceFile(content: string): PersistenceFile {
   if (!isPersistenceFile(parsed)) {
     throw new Error('Persistence file schema is invalid.');
   }
-  return parsed;
+  const value = parsed as PersistenceFile;
+  return {
+    schemaVersion: value.schemaVersion,
+    credentials: value.credentials,
+    selectedServer: sanitizeSelectedServerSummary(value.selectedServer),
+    selectedServersByProfileId: sanitizeSelectedServersByProfileId(
+      value.selectedServersByProfileId ?? {},
+    ),
+  };
 }
 
 function isPersistenceFile(value: unknown): value is PersistenceFile {
@@ -441,7 +526,9 @@ function isPersistenceFile(value: unknown): value is PersistenceFile {
     candidate.schemaVersion === PERSISTENCE_SCHEMA_VERSION &&
     Array.isArray(candidate.credentials) &&
     candidate.credentials.every(isStoredPlexCredential) &&
-    (candidate.selectedServer === null || isSelectedServerSummary(candidate.selectedServer))
+    (candidate.selectedServer === null || isSelectedServerSummary(candidate.selectedServer)) &&
+    (candidate.selectedServersByProfileId === undefined ||
+      isSelectedServersByProfileId(candidate.selectedServersByProfileId))
   );
 }
 
@@ -487,6 +574,45 @@ function isSelectedServerSummary(value: unknown): value is PlexSelectedServerSum
       candidate.source === 'restored') &&
     typeof candidate.lastSelectedAtMs === 'number'
   );
+}
+
+function sanitizeSelectedServerSummary(value: unknown): PlexSelectedServerSummary | null {
+  if (!isSelectedServerSummary(value)) {
+    return null;
+  }
+  return {
+    serverId: value.serverId,
+    name: value.name,
+    source: value.source,
+    lastSelectedAtMs: value.lastSelectedAtMs,
+  };
+}
+
+function isSelectedServersByProfileId(
+  value: unknown,
+): value is Record<string, PlexSelectedServerSummary> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  return Object.entries(value).every(
+    ([profileId, selectedServer]) =>
+      normalizeSelectedServerProfileId(profileId) !== null &&
+      isSelectedServerSummary(selectedServer),
+  );
+}
+
+function sanitizeSelectedServersByProfileId(
+  value: Record<string, PlexSelectedServerSummary>,
+): Record<string, PlexSelectedServerSummary> {
+  const selectedServersByProfileId: Record<string, PlexSelectedServerSummary> = {};
+  for (const [profileId, selectedServer] of Object.entries(value)) {
+    const normalizedProfileId = normalizeSelectedServerProfileId(profileId);
+    const sanitizedSelectedServer = sanitizeSelectedServerSummary(selectedServer);
+    if (normalizedProfileId !== null && sanitizedSelectedServer !== null) {
+      selectedServersByProfileId[normalizedProfileId] = sanitizedSelectedServer;
+    }
+  }
+  return selectedServersByProfileId;
 }
 
 function isNodeFileError(error: unknown, code: string): boolean {

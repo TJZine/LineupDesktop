@@ -6,6 +6,7 @@ export type PlexLibraryErrorCode =
   | 'authentication-expired'
   | 'server-error'
   | 'rate-limited'
+  | 'pagination-limit-exceeded'
   | 'aborted';
 
 export interface PlexLibraryErrorOptions {

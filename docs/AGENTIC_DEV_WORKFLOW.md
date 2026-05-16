@@ -81,6 +81,8 @@ they need.
   observed verification, and adversarial review
 - keep renderer, preload, main, helper, Plex, storage, UI, and packaging owners
   narrow from the first implementation slice
+- build toward real user journeys once the shell/security proof is complete;
+  fake product surfaces are temporary proof fixtures, not assets to preserve
 - use verifiers and review loops as part of the harness, not as optional
   cleanup after implementation
 - keep code health improving over time by rejecting avoidable complexity,
@@ -139,6 +141,9 @@ not merely make the next check pass.
 - Do not introduce unused public APIs, placeholder abstractions, speculative
   extension points, or framework scaffolding without a near-term caller and a
   verification path.
+- Do not preserve scaffold or fake product UI once a roadmap slice owns the real
+  workflow. Move fake data and fake controls into tests, smoke harnesses, or
+  explicit dev-only fixtures instead of keeping them in reachable app routes.
 - Dependency changes must name the runtime owner, why the package is needed now,
   lockfile impact, licensing/provenance risk, security posture, and verification
   command. Prefer no new dependency when existing platform or repo code is
@@ -239,6 +244,10 @@ implementation would otherwise need to invent ownership or verification policy.
 6. Implement narrowly.
    - Execute one approved unit at a time.
    - Keep implementation inside the approved files, owner, and seam.
+   - Prefer a vertical product path inside that seam over preserving a fake
+     route shell. A bounded unit may cross renderer submodules when the user
+     journey needs sign-in, selection, browse, and clear/back behavior to be
+     testable together.
    - Prefer small durable owners over broad helpers, no-value forwarding,
      compatibility wrappers, or framework setup that cannot be reviewed for
      behavior.
@@ -292,6 +301,9 @@ these regression categories:
 - source signal: avoid generated-looking scaffolding, no-value forwarding,
   broad helper names, stale comments, and unrelated cleanup mixed into a feature
   unit
+- scaffold drag: fake-backed UI, placeholder copy, draft controls, or smoke-only
+  panels must not remain in active product routes after the roadmap slice that
+  replaces that workflow begins
 - release debt: do not weaken licensing, signing, update, diagnostics, or binary
   provenance gates to accelerate a private spike
 
@@ -331,6 +343,11 @@ throughput. Do not replace the default workflow with always-on delegation.
   verification depth.
 - Once a delegated planner is active, do not draft a competing local plan unless
   the planner blocks, fails, or is explicitly abandoned.
+- Treat a wait timeout from a planner, worker, reviewer, or monitor as
+  "still running," not as failure or abandonment. Do not close, replace, or
+  supersede that role without explicit user approval unless the role reports a
+  blocker/final failure or a newer user instruction makes the delegated task
+  obsolete.
 - Keep delegation shallow; do not spawn nested worker trees.
 - Wait on a sidecar only when the next critical-path decision depends on its
   result.
@@ -352,6 +369,9 @@ Use `parallel-sidecars` for optional read-only sidecars and
   or with the import.
 - Do not add compatibility barrels or old-path shims just to mirror upstream
   paths.
+- Treat fake renderer UI and scaffold workflows as disposable after early shell
+  proof. When a real MVP slice starts, replace the reachable fake path with the
+  intended product flow instead of layering the real flow underneath it.
 - Prefer small, verifiable units over broad framework setup that cannot be
   reviewed for behavior.
 

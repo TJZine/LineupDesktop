@@ -40,11 +40,10 @@ test('route actions move between existing route ids and carry status text', () =
 
   const setup = applyWorkflowAction(guide, 'openChannelSetup');
   assert.deepEqual(setup.routeState, { activeRoute: 'channelSetup', previousRoute: 'guide' });
-  assert.equal(getRouteWorkflowView(setup).statusText, 'Channel setup opened for lineup edits.');
+  assert.equal(getRouteWorkflowView(setup).statusText, 'Plex onboarding opened from the guide.');
 
   const player = applyWorkflowAction(setup, 'confirmSetup');
-  assert.deepEqual(player.routeState, { activeRoute: 'player', previousRoute: 'channelSetup' });
-  assert.equal(getRouteWorkflowView(player).statusText, 'Player preview opened with the draft lineup.');
+  assert.equal(player, setup);
 });
 
 test('invalid route action for the active route leaves workflow state unchanged', () => {
@@ -61,7 +60,7 @@ test('settings channel setup action uses settings-specific status text', () => {
   assert.deepEqual(setup.routeState, { activeRoute: 'channelSetup', previousRoute: 'settings' });
   assert.equal(setup.lastActionId, 'openChannelSetup');
   assert.equal(setup.lastActionRoute, 'settings');
-  assert.equal(getRouteWorkflowView(setup).statusText, 'Channel setup opened from settings.');
+  assert.equal(getRouteWorkflowView(setup).statusText, 'Plex onboarding opened from settings.');
 });
 
 test('settings player action uses settings-specific status text', () => {
@@ -167,7 +166,7 @@ test('settings copy describes Desktop-local capabilities and avoids legacy platf
   assert.doesNotMatch(settingsCopy, /webOS|Luna|Palm|TV service/i);
 });
 
-test('channel setup actions update fake draft summary and validation state', () => {
+test('legacy draft setup state stays renderer-local and outside reachable Plex onboarding actions', () => {
   const initial = createWorkflowState('channelSetup');
   const pausedFeatured = applyWorkflowChannelSetupAction(initial, 'toggleFeaturedChannel');
   const withDraft = applyWorkflowChannelSetupAction(pausedFeatured, 'addDraftChannel');
@@ -183,6 +182,7 @@ test('channel setup actions update fake draft summary and validation state', () 
 
   const reset = applyWorkflowChannelSetupAction(review, 'resetDraftLineup');
   assert.equal(getRouteWorkflowView(reset).channelDrafts.length, 3);
+  assert.deepEqual(getRouteWorkflowView(initial).actions, []);
 });
 
 test('EPG actions update only renderer-local guide state', () => {

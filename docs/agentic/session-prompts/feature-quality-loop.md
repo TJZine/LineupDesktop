@@ -48,6 +48,11 @@ are complete or explicitly blocked.
 
 ## Phase Rules
 
+- Role lifecycle: a `wait_agent` timeout means the delegated planner, worker,
+  reviewer, or monitor has not returned yet. The controller must not close,
+  replace, or supersede a still-running tracked role without explicit user
+  approval unless the role reports a blocker/final failure or a newer user
+  instruction makes that delegated task obsolete.
 - `scope-load`: confirm Tier 3 routing, load authority docs, identify the exact
   target, initialize `update_plan`, and create or refresh a gitignored local run
   bundle when repeated handoff context is likely. Start the Architecture Health
@@ -67,10 +72,15 @@ are complete or explicitly blocked.
 - `execution-unit-select`: choose one approved bounded unit from the plan. If
   the plan contains multiple required units, keep the same roadmap item active
   and record which units are complete, current, blocked, or remaining. Parallel
-  units require explicit disjoint owners, files, and verification.
+  units require explicit disjoint owners, files, and verification. For MVP
+  product slices, prefer bounded vertical units that make the intended user
+  journey testable over layer-only units that leave fake app routes in place.
 - `implement`: use a tracked `worker` pass for the approved execution unit. If
   the work is small enough for controller-local editing, downgrade the task out
-  of this Tier 3 loop before editing.
+  of this Tier 3 loop before editing. Do not preserve fake/scaffold UI in a
+  reachable product route once the approved unit owns the real workflow; move
+  remaining fake behavior to tests, smoke fixtures, or explicit dev-only
+  harnesses.
 - `implementation-review`: use a fresh read-only `reviewer` pass against the
   implemented unit, observed verification, and current diff.
 - `implementation-revise`: fix accepted findings inside the approved unit. Route
@@ -93,6 +103,9 @@ The controller may call the task complete only when:
 - every required execution unit for the current roadmap item is complete or a
   reviewed replan has explicitly removed/deferred it
 - required verification commands were observed
+- active product routes for the roadmap item no longer depend on fake controls,
+  placeholder copy, or smoke-only panels unless a reviewed replan records a
+  temporary exception and removal trigger
 - import ledger, architecture docs, plan status, and run-bundle conclusions are
   current where applicable
 - the roadmap item's platform-proof requirement is satisfied, deferred to a

@@ -256,6 +256,21 @@ native playback, package/dependency/lockfile/signing/update/native-media, or
 public-release behavior. Platform proof remains `Mac/local automated proof
 sufficient` because the completed scope stayed docs/source-audit/provenance
 only.
+RD-21 is complete as product-parity and roadmap work only. The tracked
+artifacts are `docs/product/lineup-product-parity-matrix.md`,
+`docs/development/windows-ui-proof-plan.md`, and the revised MVP sequence in
+`docs/roadmap/desktop-port-roadmap.md`. The parity matrix classifies every
+reviewed original Lineup workflow as fake-backed UI only, domain-only,
+harness/dev-only proof, docs/provenance proof, blocked, or intentionally
+divergent; no workflow is marked complete because the current app still lacks
+live Plex runtime UI wiring, runtime channel persistence, scheduler-backed
+guide data from persisted channels, production native playback, runtime media
+options, Windows MVP soak proof, and package lifecycle proof at MVP depth.
+Future Platform Review is deferred behind the RD-22 through RD-28 MVP
+completion sequence. RD-21 adds no product runtime, source, tests, verifiers,
+live Plex transport, renderer Plex APIs, persistence IPC, production native
+playback, package/dependency/lockfile/signing/update/native-media, upstream
+source import, or public-release behavior.
 
 ## Product Invariants
 
@@ -279,6 +294,7 @@ only.
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
 | Import provenance | `docs/architecture/import-ledger.md` | Current copied/adapted upstream source ledger; RD-20 retained-test path corrections reviewed current |
 | Original Lineup compatibility | `docs/architecture/original-lineup-reference-compatibility-matrix.md` and `docs/architecture/original-lineup-divergence-register.md` | RD-20 tracked source-audit/provenance artifacts for copied/adapted coverage, reference-only behavior, proof context, and accepted Desktop divergences |
+| Product parity and MVP roadmap | `docs/product/lineup-product-parity-matrix.md`, `docs/development/windows-ui-proof-plan.md`, and `docs/roadmap/desktop-port-roadmap.md` | RD-21 product-parity artifact, Windows proof rules, and revised MVP completion sequence; Future Platform Review is deferred behind RD-22 through RD-28 |
 | File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size guardrails, temporary oversized-file allowlist rationale, decomposition/revisit triggers, and Tier 3 file-shape verification |
 | Electron main shell | `src/main/index.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with smoke-only assertion ownership split out of the startup/composition entrypoint, plus RD-14 Unit 2 main-owned BrowserWindow/fullscreen/display/restore controller and Unit 3 foreground app-command controller while `src/main/index.ts` remains composition and IPC wiring |
 | Preload bridge | `src/preload/index.cts` | Narrow shell/window/player/diagnostics bridge with runtime payload guards; guard vocabulary is kept in the sandbox-compatible preload entrypoint, and the integration seam reads preload source text plus renderer-safe contracts to parity-test guard vocabulary, channel constants, the single `lineupDesktop` exposure, and approved `ipcRenderer` method/channel pairs without importing or executing preload |
@@ -313,6 +329,8 @@ only.
 ## Not Yet Implemented
 
 - Live Plex auth/discovery/library transport and runtime composition
+- live renderer auth/server/library UI for Plex sign-in, Plex Home profile
+  selection, server discovery/restore, library browsing, search, and metadata
 - Windows-proven production native playback helper
 - Windows-proven production playback host
 - Production Plex-to-native-helper playback setup using the private RD-12

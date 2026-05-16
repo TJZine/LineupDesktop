@@ -8,6 +8,19 @@ import {
   LINEUP_PLAYER_COMMAND_CHANNEL,
   LINEUP_PLAYER_EVENT_CHANNEL,
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
+  LINEUP_PLEX_CANCEL_PIN_CHANNEL,
+  LINEUP_PLEX_GET_HOME_USERS_CHANNEL,
+  LINEUP_PLEX_GET_METADATA_CHANNEL,
+  LINEUP_PLEX_GET_SNAPSHOT_CHANNEL,
+  LINEUP_PLEX_LIST_LIBRARY_ITEMS_CHANNEL,
+  LINEUP_PLEX_LIST_LIBRARY_SECTIONS_CHANNEL,
+  LINEUP_PLEX_POLL_PIN_CHANNEL,
+  LINEUP_PLEX_REFRESH_SERVERS_CHANNEL,
+  LINEUP_PLEX_REQUEST_PIN_CHANNEL,
+  LINEUP_PLEX_RESTORE_SELECTED_SERVER_CHANNEL,
+  LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL,
+  LINEUP_PLEX_SELECT_SERVER_CHANNEL,
+  LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL,
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
@@ -36,6 +49,11 @@ import {
   PLAYER_TRACK_DELIVERY_TYPE_VALUES,
   PLAYER_TRACK_KIND_VALUES,
 } from '../../contracts/player.js';
+import {
+  PLEX_FORBIDDEN_RENDERER_FIELD_KEYS,
+  PLEX_RUNTIME_ERROR_CODES,
+  PLEX_RUNTIME_OPERATIONS,
+} from '../../contracts/plex.js';
 import { SHELL_STATUS_VALUES } from '../../contracts/shell.js';
 
 const preloadSourceUrl = new URL('../../preload/index.cts', import.meta.url);
@@ -48,6 +66,119 @@ const preloadSourceFile = ts.createSourceFile(
   ts.ScriptKind.TS,
 );
 
+type PreloadInvokeCall = {
+  channel: string;
+  request: { requestId: string; payload: unknown };
+};
+
+function createPreloadHarness(
+  invoke: (
+    channel: string,
+    request: unknown,
+    input: (value: unknown) => unknown,
+  ) => unknown | Promise<unknown>,
+): {
+  api: Record<string, { [method: string]: (...args: unknown[]) => Promise<unknown> }>;
+  calls: PreloadInvokeCall[];
+  input: (value: unknown) => unknown;
+} {
+  const calls: PreloadInvokeCall[] = [];
+  let exposedApi: unknown = null;
+  const input = (value: unknown) => JSON.parse(JSON.stringify(value)) as unknown;
+  const compiled = ts.transpileModule(preloadSourceText, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: 'src/preload/index.cts',
+  }).outputText;
+  const requireElectron = (moduleName: string) => {
+    assert.equal(moduleName, 'electron');
+    return {
+      contextBridge: {
+        exposeInMainWorld: (key: string, value: unknown) => {
+          assert.equal(key, 'lineupDesktop');
+          exposedApi = value;
+        },
+      },
+      ipcRenderer: {
+        invoke: async (channel: string, request: unknown) => {
+          assert.ok(isPlexInvokeRequest(request));
+          calls.push({ channel, request });
+          return invoke(channel, request, input);
+        },
+        on: () => undefined,
+        removeListener: () => undefined,
+      },
+    };
+  };
+  const exportsObject = {};
+  const evaluatePreload = new Function('require', 'exports', compiled);
+  evaluatePreload(requireElectron, exportsObject);
+  assert.ok(exposedApi !== null && typeof exposedApi === 'object');
+  return {
+    api: exposedApi as Record<string, { [method: string]: (...args: unknown[]) => Promise<unknown> }>,
+    calls,
+    input,
+  };
+}
+
+function isPlexInvokeRequest(value: unknown): value is { requestId: string; payload: unknown } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'requestId' in value &&
+    typeof value.requestId === 'string' &&
+    'payload' in value
+  );
+}
+
+function createSafePlexSnapshot(): Record<string, unknown> {
+  return {
+    auth: {
+      state: 'signed-in',
+      pin: { id: 42, code: 'ABCD', expiresAtMs: 2, claimed: false },
+      profile: { accountId: 'account-1', displayName: 'Profile' },
+      homeUsers: [{ id: 'home-1', title: 'Profile', admin: false, protected: true }],
+      credentialStatus: 'present',
+    },
+    servers: {
+      status: 'ready',
+      selected: null,
+      items: [],
+      lastSelection: null,
+    },
+    library: {
+      status: 'ready',
+      sections: [],
+      selectedSectionId: null,
+      items: [],
+      search: null,
+      metadata: null,
+    },
+    lastError: null,
+    updatedAtMs: 3,
+  };
+}
+
+function createSafePlexFailure(
+  operation: string,
+  requestId: string,
+  code = 'PLEX_AUTH_REQUIRED',
+): Record<string, unknown> {
+  return {
+    ok: false,
+    requestId,
+    error: {
+      code,
+      message: 'Plex request failed.',
+      retryable: false,
+      recoverable: true,
+      operation,
+    },
+  };
+}
+
 const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
@@ -59,6 +190,19 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL,
   LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL,
   LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
+  LINEUP_PLEX_GET_SNAPSHOT_CHANNEL,
+  LINEUP_PLEX_REQUEST_PIN_CHANNEL,
+  LINEUP_PLEX_POLL_PIN_CHANNEL,
+  LINEUP_PLEX_CANCEL_PIN_CHANNEL,
+  LINEUP_PLEX_GET_HOME_USERS_CHANNEL,
+  LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL,
+  LINEUP_PLEX_RESTORE_SELECTED_SERVER_CHANNEL,
+  LINEUP_PLEX_REFRESH_SERVERS_CHANNEL,
+  LINEUP_PLEX_SELECT_SERVER_CHANNEL,
+  LINEUP_PLEX_LIST_LIBRARY_SECTIONS_CHANNEL,
+  LINEUP_PLEX_LIST_LIBRARY_ITEMS_CHANNEL,
+  LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL,
+  LINEUP_PLEX_GET_METADATA_CHANNEL,
 } as const;
 
 const APPROVED_IPC_CHANNELS_BY_METHOD = {
@@ -71,6 +215,19 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL',
     'LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL',
     'LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL',
+    'LINEUP_PLEX_GET_SNAPSHOT_CHANNEL',
+    'LINEUP_PLEX_REQUEST_PIN_CHANNEL',
+    'LINEUP_PLEX_POLL_PIN_CHANNEL',
+    'LINEUP_PLEX_CANCEL_PIN_CHANNEL',
+    'LINEUP_PLEX_GET_HOME_USERS_CHANNEL',
+    'LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL',
+    'LINEUP_PLEX_RESTORE_SELECTED_SERVER_CHANNEL',
+    'LINEUP_PLEX_REFRESH_SERVERS_CHANNEL',
+    'LINEUP_PLEX_SELECT_SERVER_CHANNEL',
+    'LINEUP_PLEX_LIST_LIBRARY_SECTIONS_CHANNEL',
+    'LINEUP_PLEX_LIST_LIBRARY_ITEMS_CHANNEL',
+    'LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL',
+    'LINEUP_PLEX_GET_METADATA_CHANNEL',
   ]),
   on: new Set(['LINEUP_SHELL_STATUS_CHANGED_CHANNEL', 'LINEUP_PLAYER_EVENT_CHANNEL']),
   removeListener: new Set([
@@ -126,9 +283,14 @@ function findPreloadFunctionDeclaration(name: string): ts.FunctionDeclaration | 
 function readStringArrayInitializer(name: string, initializer: ts.Expression): string[] {
   const expression = unwrapExpression(initializer);
   assert.ok(ts.isArrayLiteralExpression(expression), `expected ${name} to be an array literal`);
-  return expression.elements.map((element) => {
-    assert.ok(ts.isStringLiteral(element), `expected ${name} to contain only string literals`);
-    return element.text;
+  return expression.elements.flatMap((element) => {
+    if (ts.isSpreadElement(element) && ts.isIdentifier(element.expression)) {
+      const declaration = findPreloadVariableDeclaration(element.expression.text);
+      assert.ok(declaration?.initializer, `expected ${name} spread ${element.expression.text} in preload entrypoint`);
+      return readStringArrayInitializer(element.expression.text, declaration.initializer);
+    }
+    assert.ok(ts.isStringLiteral(element), `expected ${name} to contain only string literals or const spreads`);
+    return [element.text];
   });
 }
 
@@ -136,6 +298,16 @@ function readStringConstInitializer(name: string, initializer: ts.Expression): s
   const expression = unwrapExpression(initializer);
   assert.ok(ts.isStringLiteral(expression), `expected ${name} to be a string literal`);
   return expression.text;
+}
+
+function readRegExpConstInitializer(name: string): { pattern: string; flags: string } {
+  const declaration = findPreloadVariableDeclaration(name);
+  assert.ok(declaration?.initializer, `expected ${name} in preload entrypoint`);
+  const expression = unwrapExpression(declaration.initializer);
+  assert.ok(ts.isRegularExpressionLiteral(expression), `expected ${name} to be a RegExp literal`);
+  const match = /^\/(.*)\/([a-z]*)$/su.exec(expression.text);
+  assert.ok(match, `expected ${name} to have a parseable RegExp literal`);
+  return { pattern: match[1], flags: match[2] };
 }
 
 function unwrapExpression(expression: ts.Expression): ts.Expression {
@@ -410,6 +582,24 @@ function assertApprovedChannelIdentifier(name: string): void {
   );
 }
 
+function isInvokePlexChannelParameter(node: ts.Identifier): boolean {
+  if (node.text !== 'channel') {
+    return false;
+  }
+  let current: ts.Node | undefined = node;
+  while (current !== undefined && !ts.isSourceFile(current)) {
+    if (
+      ts.isFunctionDeclaration(current) &&
+      current.name?.text === 'invokePlex' &&
+      current.parameters.some((parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === 'channel')
+    ) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
 function assertApprovedElectronRequireBinding(): void {
   const declarations: ts.VariableDeclaration[] = [];
 
@@ -432,6 +622,28 @@ function assertApprovedElectronRequireBinding(): void {
   );
 }
 
+function collectInvokePlexChannelArguments(): string[] {
+  const channels: string[] = [];
+
+  function visit(node: ts.Node): void {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'invokePlex'
+    ) {
+      const [channelExpression] = node.arguments;
+      assert.ok(channelExpression, 'invokePlex must pass a channel');
+      assert.ok(ts.isIdentifier(channelExpression), 'invokePlex channel must be a constant');
+      assertApprovedChannelIdentifier(channelExpression.text);
+      channels.push(channelExpression.text);
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(preloadSourceFile);
+  return channels;
+}
+
 function assertNoForbiddenElectronAccess(node: ts.Node): void {
   if (ts.isCallExpression(node) && isElectronRequireCall(node)) {
     assert.ok(
@@ -450,18 +662,18 @@ function assertNoForbiddenElectronAccess(node: ts.Node): void {
 
 test('preload guard vocabulary matches contract vocabulary', () => {
   assert.doesNotMatch(preloadSourceText, /\.\/vocabulary\.cjs/u);
-  assert.equal(
-    preloadSourceText.includes(
-      `const DIAGNOSTICS_REQUEST_ID_PATTERN = /${DIAGNOSTICS_REQUEST_ID_PATTERN_SOURCE}/u;`,
-    ),
-    true,
-  );
-  assert.equal(
-    preloadSourceText.includes(
-      `/${DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN_SOURCE}/iu`,
-    ),
-    true,
-  );
+  assert.deepEqual(readRegExpConstInitializer('DIAGNOSTICS_REQUEST_ID_PATTERN'), {
+    pattern: DIAGNOSTICS_REQUEST_ID_PATTERN_SOURCE,
+    flags: 'u',
+  });
+  assert.deepEqual(readRegExpConstInitializer('PLEX_REQUEST_ID_PATTERN'), {
+    pattern: '^[A-Za-z0-9._-]{1,120}$',
+    flags: 'u',
+  });
+  assert.deepEqual(readRegExpConstInitializer('DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN'), {
+    pattern: DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN_SOURCE,
+    flags: 'iu',
+  });
   assert.deepEqual(readPreloadStringArrayConst('SHELL_STATUS_VALUES'), [...SHELL_STATUS_VALUES]);
   assert.deepEqual(readPreloadStringArrayConst('PLAYER_ERROR_CATEGORIES'), [...PLAYER_ERROR_CATEGORIES]);
   assert.deepEqual(
@@ -504,6 +716,242 @@ test('preload guard vocabulary matches contract vocabulary', () => {
   assert.deepEqual(readPreloadStringArrayConst('REDACTION_SCAN_FINDING_LABELS'), [
     ...REDACTION_SCAN_FINDING_LABELS,
   ]);
+  assert.deepEqual(readPreloadStringArrayConst('PLEX_RUNTIME_OPERATIONS'), [
+    ...PLEX_RUNTIME_OPERATIONS,
+  ]);
+  assert.deepEqual(readPreloadStringArrayConst('PLEX_RUNTIME_ERROR_CODES'), [
+    ...PLEX_RUNTIME_ERROR_CODES,
+  ]);
+  const preloadPlexForbiddenKeys = readPreloadStringArrayConst('PLEX_FORBIDDEN_RENDERER_FIELD_KEYS');
+  assert.deepEqual(
+    [...new Set(preloadPlexForbiddenKeys)].sort(),
+    [...new Set(PLEX_FORBIDDEN_RENDERER_FIELD_KEYS)].sort(),
+  );
+  assert.equal(preloadPlexForbiddenKeys.length, new Set(preloadPlexForbiddenKeys).size);
+});
+
+test('preload Plex bridge validates invoke results before returning them', async () => {
+  const snapshot = createSafePlexSnapshot();
+  const harness = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPlexInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        sectionId: '1',
+        offset: 0,
+        limit: 25,
+        items: [],
+        snapshot,
+      },
+    });
+  });
+
+  const result = await harness.api.plex.listLibraryItems(harness.input({
+    sectionId: '1',
+    offset: 0.9,
+    filter: { type: 1, year: 2020 },
+    includeCollections: true,
+  }));
+
+  assert.equal(harness.calls.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(harness.calls[0]?.request.payload)), {
+    sectionId: '1',
+    offset: 0,
+    filter: { type: 1, year: 2020 },
+    includeCollections: true,
+  });
+  assert.equal((result as { ok: boolean }).ok, true);
+});
+
+test('preload Plex bridge accepts nullable metadata and search types', async () => {
+  const snapshot = createSafePlexSnapshot();
+  const harness = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPlexInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        item: null,
+        snapshot,
+      },
+    });
+  });
+
+  const metadata = await harness.api.plex.getMetadata(harness.input({ ratingKey: 'missing' }));
+
+  assert.equal((metadata as { ok: boolean }).ok, true);
+
+  const searchHarness = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPlexInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        query: 'movie',
+        sectionId: null,
+        items: [],
+        snapshot,
+      },
+    });
+  });
+  const search = await searchHarness.api.plex.searchLibrary(
+    searchHarness.input({ query: 'movie', limit: 10, types: ['movie', 'episode'] }),
+  );
+
+  assert.equal((search as { ok: boolean }).ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(searchHarness.calls[0]?.request.payload)), {
+    query: 'movie',
+    limit: 10,
+    types: ['movie', 'episode'],
+  });
+});
+
+test('preload Plex bridge converts malformed or privileged invoke results to local validation failures', async () => {
+  const privileged = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPlexInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: { snapshot: createSafePlexSnapshot(), accessToken: 'private' },
+    });
+  });
+  const privilegedResult = await privileged.api.plex.getSnapshot();
+
+  assert.equal((privilegedResult as { ok: boolean }).ok, false);
+  assert.equal(
+    (privilegedResult as { error: { code: string } }).error.code,
+    'PLEX_VALIDATION_FAILED',
+  );
+
+  const malformedCancelled = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPlexInvokeRequest(request));
+    return input({
+      ...createSafePlexFailure('pollPin', request.requestId, 'PLEX_CANCELLED'),
+      cancelled: false,
+    });
+  });
+  const malformedCancelledResult = await malformedCancelled.api.plex.pollPin(
+    malformedCancelled.input({ pinId: 42 }),
+  );
+
+  assert.equal((malformedCancelledResult as { ok: boolean }).ok, false);
+  assert.equal(
+    (malformedCancelledResult as { error: { code: string } }).error.code,
+    'PLEX_VALIDATION_FAILED',
+  );
+});
+
+test('preload Plex bridge converts invoke rejections to local validation failures', async () => {
+  const harness = createPreloadHarness(() => {
+    throw new Error('raw token serverUri failure');
+  });
+
+  const result = await harness.api.plex.getSnapshot();
+
+  assert.equal((result as { ok: boolean }).ok, false);
+  assert.equal((result as { requestId: string }).requestId, harness.calls[0]?.request.requestId);
+  assert.equal(
+    (result as { error: { code: string } }).error.code,
+    'PLEX_VALIDATION_FAILED',
+  );
+  assert.equal(
+    (result as { error: { message: string; operation: string } }).error.message,
+    'Plex invoke failed (Error).',
+  );
+  assert.equal(
+    (result as { error: { message: string; operation: string } }).error.operation,
+    'getSnapshot',
+  );
+  assert.doesNotMatch(JSON.stringify(result), /raw token|serverUri/u);
+});
+
+test('preload Plex bridge rejects mismatched success request ids locally', async () => {
+  const harness = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPlexInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: `${request.requestId}-mismatch`,
+      value: createSafePlexSnapshot(),
+    });
+  });
+
+  const result = await harness.api.plex.getSnapshot();
+
+  assert.equal((result as { ok: boolean }).ok, false);
+  assert.equal(
+    (result as { error: { code: string } }).error.code,
+    'PLEX_VALIDATION_FAILED',
+  );
+  assert.equal((result as { requestId: string }).requestId, harness.calls[0]?.request.requestId);
+});
+
+test('preload Plex bridge rejects mismatched failure request ids locally', async () => {
+  const harness = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPlexInvokeRequest(request));
+    return input(createSafePlexFailure('pollPin', `${request.requestId}-mismatch`));
+  });
+
+  const result = await harness.api.plex.pollPin(harness.input({ pinId: 42 }));
+
+  assert.equal((result as { ok: boolean }).ok, false);
+  assert.equal(
+    (result as { error: { code: string } }).error.code,
+    'PLEX_VALIDATION_FAILED',
+  );
+  assert.equal((result as { requestId: string }).requestId, harness.calls[0]?.request.requestId);
+});
+
+test('preload Plex bridge rejects invalid pin ids and limits without IPC', async () => {
+  const harness = createPreloadHarness(() => {
+    assert.fail('invalid Plex renderer input must not invoke IPC');
+  });
+
+  for (const input of [{ pinId: 1.5 }, { pinId: Number.NaN }, { pinId: 0 }]) {
+    const result = await harness.api.plex.pollPin(harness.input(input));
+    assert.equal((result as { ok: boolean }).ok, false);
+    assert.equal(
+      (result as { error: { code: string } }).error.code,
+      'PLEX_VALIDATION_FAILED',
+    );
+  }
+
+  for (const input of [
+    { sectionId: '1', limit: 1.5 },
+    { sectionId: '1', limit: 5001 },
+    { sectionId: '', limit: 25 },
+    { sectionId: 42, limit: 25 },
+    { sectionId: null, limit: 25 },
+    { sectionId: 'x'.repeat(257), limit: 25 },
+    { sectionId: '1', filter: { 'bad key': 1 } },
+    { sectionId: '1', filter: { token: 'unsafe' } },
+    { sectionId: '1', filter: { serverUri: 'unsafe' } },
+    { sectionId: '1', filter: { year: { raw: 2020 } } },
+    { sectionId: '1', includeCollections: 'yes' },
+  ]) {
+    const result = await harness.api.plex.listLibraryItems(harness.input(input));
+    assert.equal((result as { ok: boolean }).ok, false);
+    assert.equal(
+      (result as { error: { code: string } }).error.code,
+      'PLEX_VALIDATION_FAILED',
+    );
+  }
+
+  for (const input of [
+    { query: 'movie', types: ['server'] },
+    { query: 'movie', types: ['movie', 42] },
+    { query: 'movie', limit: 0 },
+    { query: 'movie', limit: -1 },
+  ]) {
+    const result = await harness.api.plex.searchLibrary(harness.input(input));
+    assert.equal((result as { ok: boolean }).ok, false);
+    assert.equal(
+      (result as { error: { code: string } }).error.code,
+      'PLEX_VALIDATION_FAILED',
+    );
+  }
+
+  assert.equal(harness.calls.length, 0);
 });
 
 test('preload diagnostics guards validate count map keys and values', () => {
@@ -677,6 +1125,12 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
         )}`,
       );
 
+      if (isInvokePlexChannelParameter(channelExpression)) {
+        observedCalls.push(`${methodName}:invokePlex.channel`);
+        ts.forEachChild(node, visit);
+        return;
+      }
+
       const approvedChannels =
         APPROVED_IPC_CHANNELS_BY_METHOD[
           methodName as keyof typeof APPROVED_IPC_CHANNELS_BY_METHOD
@@ -703,9 +1157,25 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
     'invoke:LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL',
     'invoke:LINEUP_SHELL_GET_CAPABILITIES_CHANNEL',
     'invoke:LINEUP_WINDOW_INTENT_CHANNEL',
+    'invoke:invokePlex.channel',
     'on:LINEUP_PLAYER_EVENT_CHANNEL',
     'on:LINEUP_SHELL_STATUS_CHANGED_CHANNEL',
     'removeListener:LINEUP_PLAYER_EVENT_CHANNEL',
     'removeListener:LINEUP_SHELL_STATUS_CHANGED_CHANNEL',
+  ]);
+  assert.deepEqual(collectInvokePlexChannelArguments().sort(), [
+    'LINEUP_PLEX_CANCEL_PIN_CHANNEL',
+    'LINEUP_PLEX_GET_HOME_USERS_CHANNEL',
+    'LINEUP_PLEX_GET_METADATA_CHANNEL',
+    'LINEUP_PLEX_GET_SNAPSHOT_CHANNEL',
+    'LINEUP_PLEX_LIST_LIBRARY_ITEMS_CHANNEL',
+    'LINEUP_PLEX_LIST_LIBRARY_SECTIONS_CHANNEL',
+    'LINEUP_PLEX_POLL_PIN_CHANNEL',
+    'LINEUP_PLEX_REFRESH_SERVERS_CHANNEL',
+    'LINEUP_PLEX_REQUEST_PIN_CHANNEL',
+    'LINEUP_PLEX_RESTORE_SELECTED_SERVER_CHANNEL',
+    'LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL',
+    'LINEUP_PLEX_SELECT_SERVER_CHANNEL',
+    'LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL',
   ]);
 });

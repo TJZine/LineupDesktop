@@ -11,6 +11,23 @@ import type {
   PlayerIpcResult,
   PlayerSnapshot,
 } from './player.js';
+import type {
+  PlexCancelPinValue,
+  PlexGetHomeUsersValue,
+  PlexGetMetadataValue,
+  PlexIpcResult,
+  PlexListLibraryItemsValue,
+  PlexListLibrarySectionsValue,
+  PlexPollPinValue,
+  PlexRefreshServersValue,
+  PlexRequestPinValue,
+  PlexRestoreSelectedServerValue,
+  PlexRendererMediaType,
+  PlexRuntimeSnapshot,
+  PlexSearchLibraryValue,
+  PlexSelectServerValue,
+  PlexSwitchHomeUserValue,
+} from './plex.js';
 
 export const LINEUP_PROTOCOL_ORIGIN = 'lineup://shell' as const;
 export const LINEUP_SHELL_URL = 'lineup://shell/index.html' as const;
@@ -88,6 +105,40 @@ export interface LineupDesktopPreloadApi {
     ) => Promise<DiagnosticsRecordRendererEventResult>;
     getSummary: () => Promise<DiagnosticsGetSummaryResult>;
     exportSupportBundle: () => Promise<DiagnosticsExportSupportBundleResult>;
+  };
+  plex: {
+    getSnapshot: () => Promise<PlexIpcResult<PlexRuntimeSnapshot>>;
+    requestPin: () => Promise<PlexIpcResult<PlexRequestPinValue>>;
+    pollPin: (input: { pinId: number }) => Promise<PlexIpcResult<PlexPollPinValue>>;
+    cancelPin: (input: { pinId: number }) => Promise<PlexIpcResult<PlexCancelPinValue>>;
+    getHomeUsers: () => Promise<PlexIpcResult<PlexGetHomeUsersValue>>;
+    switchHomeUser: (input: {
+      userId: string;
+      pin?: string | null;
+    }) => Promise<PlexIpcResult<PlexSwitchHomeUserValue>>;
+    restoreSelectedServer: () => Promise<PlexIpcResult<PlexRestoreSelectedServerValue>>;
+    refreshServers: () => Promise<PlexIpcResult<PlexRefreshServersValue>>;
+    selectServer: (input: {
+      serverId: string;
+    }) => Promise<PlexIpcResult<PlexSelectServerValue>>;
+    listLibrarySections: () => Promise<PlexIpcResult<PlexListLibrarySectionsValue>>;
+    listLibraryItems: (input: {
+      sectionId: string;
+      offset?: number;
+      limit?: number;
+      sort?: string;
+      filter?: Readonly<Record<string, string | number>>;
+      includeCollections?: boolean;
+    }) => Promise<PlexIpcResult<PlexListLibraryItemsValue>>;
+    searchLibrary: (input: {
+      query: string;
+      sectionId?: string;
+      limit?: number;
+      types?: readonly PlexRendererMediaType[];
+    }) => Promise<PlexIpcResult<PlexSearchLibraryValue>>;
+    getMetadata: (input: {
+      ratingKey: string;
+    }) => Promise<PlexIpcResult<PlexGetMetadataValue>>;
   };
 }
 

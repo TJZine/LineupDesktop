@@ -80,6 +80,43 @@ export const LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL =
 export const LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL =
   'lineup:diagnostics:exportSupportBundle' as const;
 
+export const LINEUP_PLEX_GET_SNAPSHOT_CHANNEL =
+  'lineup:plex:getSnapshot' as const;
+
+export const LINEUP_PLEX_REQUEST_PIN_CHANNEL =
+  'lineup:plex:requestPin' as const;
+
+export const LINEUP_PLEX_POLL_PIN_CHANNEL = 'lineup:plex:pollPin' as const;
+
+export const LINEUP_PLEX_CANCEL_PIN_CHANNEL = 'lineup:plex:cancelPin' as const;
+
+export const LINEUP_PLEX_GET_HOME_USERS_CHANNEL =
+  'lineup:plex:getHomeUsers' as const;
+
+export const LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL =
+  'lineup:plex:switchHomeUser' as const;
+
+export const LINEUP_PLEX_RESTORE_SELECTED_SERVER_CHANNEL =
+  'lineup:plex:restoreSelectedServer' as const;
+
+export const LINEUP_PLEX_REFRESH_SERVERS_CHANNEL =
+  'lineup:plex:refreshServers' as const;
+
+export const LINEUP_PLEX_SELECT_SERVER_CHANNEL =
+  'lineup:plex:selectServer' as const;
+
+export const LINEUP_PLEX_LIST_LIBRARY_SECTIONS_CHANNEL =
+  'lineup:plex:listLibrarySections' as const;
+
+export const LINEUP_PLEX_LIST_LIBRARY_ITEMS_CHANNEL =
+  'lineup:plex:listLibraryItems' as const;
+
+export const LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL =
+  'lineup:plex:searchLibrary' as const;
+
+export const LINEUP_PLEX_GET_METADATA_CHANNEL =
+  'lineup:plex:getMetadata' as const;
+
 /**
  * Known privileged renderer payload field names are denied at contract seams.
  * Review additions/removals with secret-flow and native-handle exposure impact.

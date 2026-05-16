@@ -68,7 +68,6 @@ export function renderWorkflowDom(
   renderEpgGuideDom(view, dom);
   renderPlayerOverlaysDom(overlayState, playerSnapshot, dom, view.route);
   renderSettingsDom(view, dom);
-  renderChannelSetupDom(view, dom);
   renderRouteActionButtons(view, dom);
 }
 
@@ -128,60 +127,6 @@ function renderSettingsDom(view: RouteWorkflowViewModel, dom: RendererDomBinding
         return article;
       }),
     );
-  }
-}
-
-function renderChannelSetupDom(view: RouteWorkflowViewModel, dom: RendererDomBindings): void {
-  if (dom.setupStepsElement) {
-    dom.setupStepsElement.replaceChildren(
-      ...view.setupSteps.map((step) => {
-        const item = document.createElement('li');
-        item.dataset.stepState = step.state;
-        const copy = document.createElement('div');
-        const label = document.createElement('strong');
-        label.textContent = step.label;
-        const detail = document.createElement('span');
-        detail.textContent = step.detail;
-        copy.append(label, detail);
-        item.append(copy);
-        return item;
-      }),
-    );
-  }
-  if (dom.channelSetupSourceElement) {
-    dom.channelSetupSourceElement.textContent = view.channelSetupSummary.sourceName;
-  }
-  if (dom.channelSetupEnabledElement) {
-    dom.channelSetupEnabledElement.textContent = `${view.channelSetupSummary.enabledChannelCount} of ${view.channelSetupSummary.totalChannelCount}`;
-  }
-  if (dom.channelSetupBlocksElement) {
-    dom.channelSetupBlocksElement.textContent = String(view.channelSetupSummary.totalBlockCount);
-  }
-  if (dom.channelDraftListElement) {
-    dom.channelDraftListElement.replaceChildren(
-      ...view.channelDrafts.map((channel) => {
-        const item = document.createElement('article');
-        item.className = 'channel-draft-list__item';
-        item.dataset.channelEnabled = String(channel.enabled);
-        const number = document.createElement('span');
-        number.className = 'channel-list__number';
-        number.textContent = channel.number;
-        const copy = document.createElement('div');
-        const title = document.createElement('strong');
-        title.textContent = channel.name;
-        const detail = document.createElement('p');
-        detail.textContent = `${channel.enabled ? 'Enabled' : 'Paused'} - ${channel.blockCount} fake blocks`;
-        copy.append(title, detail);
-        item.append(number, copy);
-        return item;
-      }),
-    );
-  }
-  if (dom.setupValidationElement) {
-    dom.setupValidationElement.textContent =
-      view.setupValidationMessages.length === 0
-        ? 'Draft setup is ready for guide and player previews.'
-        : view.setupValidationMessages.join(' ');
   }
 }
 
