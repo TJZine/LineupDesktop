@@ -158,17 +158,17 @@ const ROUTE_ACTIONS = {
     },
     {
       id: 'openChannelSetup',
-      label: 'Edit lineup',
+      label: 'Set up Plex',
       targetRoute: 'channelSetup',
-      statusText: 'Channel setup opened for lineup edits.',
+      statusText: 'Plex onboarding opened from the guide.',
     },
   ],
   settings: [
     {
       id: 'openChannelSetup',
-      label: 'Channel setup',
+      label: 'Plex setup',
       targetRoute: 'channelSetup',
-      statusText: 'Channel setup opened from settings.',
+      statusText: 'Plex onboarding opened from settings.',
     },
     {
       id: 'resumePlayer',
@@ -177,20 +177,7 @@ const ROUTE_ACTIONS = {
       statusText: 'Returned to player preview from settings.',
     },
   ],
-  channelSetup: [
-    {
-      id: 'reviewLineup',
-      label: 'Review guide',
-      targetRoute: 'guide',
-      statusText: 'Guide preview opened for draft channel review.',
-    },
-    {
-      id: 'confirmSetup',
-      label: 'Preview player',
-      targetRoute: 'player',
-      statusText: 'Player preview opened with the draft lineup.',
-    },
-  ],
+  channelSetup: [],
 } as const satisfies Record<AppRouteId, readonly RouteActionViewModel[]>;
 
 const ROUTE_COPY = {
@@ -222,8 +209,8 @@ const ROUTE_COPY = {
     title: 'Channel setup',
     kicker: 'Plex setup',
     tone: 'attention',
-    primaryText: 'Connect Plex and inspect library content before lineup authoring is enabled.',
-    secondaryText: 'Saved server selection can be restored here; library, search, and metadata choices can be adjusted during setup.',
+    primaryText: 'Connect Plex, choose a profile and server, then browse your library.',
+    secondaryText: 'Only renderer-safe account, server, library, and media summaries are shown here.',
     defaultStatus: 'Plex setup is ready for sign-in or server discovery.',
   },
 } as const satisfies Record<

@@ -266,6 +266,13 @@ dd {
   letter-spacing: 0;
 }
 
+.plex-runtime__stage-copy {
+  max-width: 760px;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
 .plex-runtime__summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

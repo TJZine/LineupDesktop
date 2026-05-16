@@ -27,14 +27,22 @@ test('static channel setup markup hosts reachable Plex setup controls', () => {
 
   mountStaticRendererDom(documentDouble as unknown as Document);
 
-  assert.match(root.innerHTML, /data-plex-runtime-panel/u);
-  assert.match(root.innerHTML, /data-plex-action="requestPin"/u);
-  assert.match(root.innerHTML, /data-plex-action="clearSelectedServer"/u);
-  assert.match(root.innerHTML, /data-plex-action="clearMetadata"/u);
-  assert.match(root.innerHTML, /data-plex-search-query/u);
-  assert.match(root.innerHTML, /data-screen="channelSetup"/u);
-  assert.doesNotMatch(root.innerHTML, /Fake channel setup controls|data-setup-action|data-setup-steps|data-channel-draft-list/u);
-  assert.doesNotMatch(root.innerHTML, /https?:|token|serverUri/u);
+  const channelSetupMarkup = readStaticChannelSetupMarkup(root.innerHTML);
+
+  assert.match(channelSetupMarkup, /data-plex-runtime-panel/u);
+  assert.match(channelSetupMarkup, /data-plex-action="requestPin"/u);
+  assert.match(channelSetupMarkup, /data-plex-action="clearSelectedServer"/u);
+  assert.match(channelSetupMarkup, /data-plex-action="clearMetadata"/u);
+  assert.match(channelSetupMarkup, /data-plex-search-query/u);
+  assert.match(channelSetupMarkup, /Plex onboarding/u);
+  assert.match(channelSetupMarkup, /Choose profile/u);
+  assert.match(channelSetupMarkup, /Find servers/u);
+  assert.match(channelSetupMarkup, /Open libraries/u);
+  assert.doesNotMatch(
+    channelSetupMarkup,
+    /Fake channel setup controls|data-setup-action|data-setup-steps|data-channel-draft-list|draft channel|fake blocks|debug|smoke|transport/u,
+  );
+  assert.doesNotMatch(channelSetupMarkup, /https?:|token|serverUri/u);
 });
 
 test('Plex runtime controller applies async setup, server, library, search, and metadata transitions', async () => {
@@ -638,6 +646,101 @@ test('Plex runtime DOM renders safe summaries and disables invalid actions', () 
       collectText(dom.plexMetadataElement as unknown as ElementDouble),
     ].join(' ');
     assert.doesNotMatch(renderedText, /token|serverUri|\/Users\/|https?:/u);
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
+    }
+  }
+});
+
+test('Plex runtime DOM renders onboarding product states for sign-in profile server library search and metadata', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = { createElement: () => new ElementDouble() };
+  Object.defineProperty(globalThis, 'document', { value: documentDouble, configurable: true });
+
+  try {
+    const dom = createPlexDomBindings();
+    renderPlexRuntimeDom({
+      snapshot: snapshotWithMetadataAndSearch(),
+      selectedSectionId: 'section-1',
+      selectedServerId: 'server-1',
+      selectedItemRatingKey: 'rating-1',
+      searchQuery: 'pilot',
+      homeUserPin: '1234',
+      statusText: 'Ready',
+      errorText: null,
+      pending: pendingMap(false),
+      lastMetadata: mediaItems()[0],
+    }, dom);
+
+    const renderedText = [
+      (dom.plexAccountStateElement as unknown as ElementDouble).textContent,
+      (dom.plexServerStateElement as unknown as ElementDouble).textContent,
+      (dom.plexLibraryStateElement as unknown as ElementDouble).textContent,
+      collectText(dom.plexHomeUsersElement as unknown as ElementDouble),
+      collectText(dom.plexServersElement as unknown as ElementDouble),
+      collectText(dom.plexSectionsElement as unknown as ElementDouble),
+      collectText(dom.plexItemsElement as unknown as ElementDouble),
+      collectText(dom.plexMetadataElement as unknown as ElementDouble),
+    ].join(' ');
+
+    assert.match(renderedText, /Signed in/u);
+    assert.match(renderedText, /Profile/u);
+    assert.match(renderedText, /Server/u);
+    assert.match(renderedText, /Movies/u);
+    assert.match(renderedText, /Pilot/u);
+    assert.match(renderedText, /Metadata summary/u);
+    assert.doesNotMatch(renderedText, /token|serverUri|debug|transport|fake blocks/u);
+    assert.equal(dom.plexSearchQueryInput?.value, 'pilot');
+    assert.equal(dom.plexHomeUserPinInput?.value, '1234');
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
+    }
+  }
+});
+
+test('Plex runtime DOM renders loading empty and error onboarding states', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = { createElement: () => new ElementDouble() };
+  Object.defineProperty(globalThis, 'document', { value: documentDouble, configurable: true });
+
+  try {
+    const dom = createPlexDomBindings();
+    renderPlexRuntimeDom({
+      snapshot: {
+        ...snapshotSignedIn(),
+        servers: { status: 'loading', selected: null, items: [], lastSelection: null },
+        library: {
+          status: 'failed',
+          sections: [],
+          selectedSectionId: null,
+          items: [],
+          search: { query: 'missing', items: [] },
+          metadata: null,
+        },
+      },
+      selectedSectionId: null,
+      selectedServerId: null,
+      selectedItemRatingKey: null,
+      searchQuery: 'missing',
+      homeUserPin: '',
+      statusText: 'Loading',
+      errorText: 'Plex library data could not be loaded.',
+      pending: { ...pendingMap(false), refreshServers: true },
+      lastMetadata: null,
+    }, dom);
+
+    assert.match(collectText(dom.plexServersElement as unknown as ElementDouble), /Looking for Plex servers/u);
+    assert.match(collectText(dom.plexSectionsElement as unknown as ElementDouble), /Libraries could not be loaded/u);
+    assert.match(collectText(dom.plexItemsElement as unknown as ElementDouble), /No search results for "missing"/u);
+    assert.match(collectText(dom.plexMetadataElement as unknown as ElementDouble), /Choose a library item/u);
+    assert.match((dom.plexErrorElement as unknown as ElementDouble).textContent, /Plex library data/u);
+    assert.equal(dom.plexActionButtons.find((button) => button.dataset.plexAction === 'searchLibrary')?.disabled, true);
   } finally {
     if (originalDocument === undefined) {
       Reflect.deleteProperty(globalThis, 'document');
@@ -1356,4 +1459,11 @@ function childAt(element: HTMLElement | null, index: number): ElementDouble {
   const child = (element as unknown as ElementDouble).children[index];
   assert.ok(child);
   return child;
+}
+
+function readStaticChannelSetupMarkup(markup: string): string {
+  const start = markup.indexOf('id="screen-channel-setup"');
+  assert.notEqual(start, -1);
+  const end = markup.indexOf('</section>\n</section>`', start);
+  return end === -1 ? markup.slice(start) : markup.slice(start, end);
 }

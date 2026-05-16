@@ -151,6 +151,61 @@ test('route DOM renders support bundle status without filesystem paths', () => {
   }
 });
 
+test('route DOM does not render legacy draft setup surfaces into Plex onboarding', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    createElement: () => new ElementDouble(),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const setupSteps = new ElementDouble();
+    setupSteps.textContent = 'unchanged steps host';
+    const draftList = new ElementDouble();
+    draftList.textContent = 'unchanged draft host';
+    const validation = new ElementDouble();
+    validation.textContent = 'unchanged validation host';
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.setupStepsElement = setupSteps as unknown as HTMLElement;
+    dom.channelDraftListElement = draftList as unknown as HTMLElement;
+    dom.setupValidationElement = validation as unknown as HTMLElement;
+    dom.channelSetupSourceElement = new ElementDouble() as unknown as HTMLElement;
+    dom.channelSetupEnabledElement = new ElementDouble() as unknown as HTMLElement;
+    dom.channelSetupBlocksElement = new ElementDouble() as unknown as HTMLElement;
+
+    renderWorkflowDom(
+      createWorkflowState('channelSetup'),
+      createPlayerOverlayState(),
+      createFakePlayerSnapshot(),
+      dom,
+    );
+
+    assert.equal(setupSteps.textContent, 'unchanged steps host');
+    assert.equal(draftList.textContent, 'unchanged draft host');
+    assert.equal(validation.textContent, 'unchanged validation host');
+    assert.deepEqual(setupSteps.children, []);
+    assert.deepEqual(draftList.children, []);
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+});
+
 function collectText(element: ElementDouble): string {
   return [element.textContent, ...element.children.map(collectText)].join(' ');
 }
