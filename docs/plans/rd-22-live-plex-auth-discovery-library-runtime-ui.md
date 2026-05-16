@@ -22,6 +22,15 @@ gap, decision, owner, files, tests, and import-ledger obligation. Only after
 review of that matrix may implementation units replace the fake/debug setup
 surface and weak desktop-only Plex logic with real Desktop-owned equivalents.
 
+Manual Windows proof on 2026-05-16 also exposed a planning gap: behavior
+parity is not enough if the RD-22-owned UI still reads as the RD-13 scaffold.
+RD-22 must now treat upstream visual/product-flow parity as part of the
+onboarding acceptance contract. The rebuilt setup path must import or adapt the
+upstream auth/profile/server/channel-setup screen structure, visual hierarchy,
+interaction model, and product copy where those fit Desktop boundaries, or
+record an explicit reviewed Desktop divergence with owner, reason, and follow-up
+trigger.
+
 The target product path is a normal app onboarding flow, not proof-of-concept
 UI:
 
@@ -398,7 +407,9 @@ owners:
   credential persistence, selected-server persistence, retry policy, operation
   cancellation, and sanitized diagnostics.
 - Renderer may be rebuilt to match upstream onboarding flow concepts, but it
-  remains display-only and receives only renderer-safe summaries.
+  remains display-only and receives only renderer-safe summaries. Matching
+  upstream flow concepts includes the visual/product shape of the owned
+  onboarding screens, not only the sequence of runtime operations.
 - Renderer runtime UI may display user-facing names and titles carried by
   renderer-safe summaries. Redaction restrictions apply to tracked proof, docs,
   tests, diagnostics, logs, raw support artifacts, and chat, not to normal
@@ -411,6 +422,10 @@ owners:
 - Fake or placeholder surfaces must be deleted from reachable product routes
   once the corresponding real flow is implemented. Tests and smoke harnesses may
   keep fake fixtures when they are explicit, isolated, and not user-reachable.
+- A Desktop-specific visual divergence is allowed only when the plan or review
+  names the owner, why upstream visual behavior does not fit Desktop boundaries,
+  how the product intent is preserved, and which later roadmap item revisits it
+  if needed.
 
 Forbidden shortcuts:
 
@@ -485,6 +500,11 @@ Live Windows proof required after implementation review:
   controls, or standalone transport-operation buttons as the primary UX. Any
   remaining fake player/guide surfaces outside RD-22 are explicitly out of
   scope and must not be used to claim onboarding completion.
+- RD-22-owned onboarding visuals have reviewed upstream parity evidence:
+  auth/link-code screen structure, Plex Home/profile selection, protected PIN
+  handling, server selection, library browse/search/metadata surfaces, visual
+  hierarchy, product copy, loading/empty/error states, focus/back behavior, and
+  any Desktop-specific divergences are documented before live proof closeout.
 - Desktop auth behavior matches upstream semantics where applicable: PIN
   request shape, polling, cancellation, expiration/failure handling, account
   validation, Plex Home profile listing/switching, protected profile PIN, active
@@ -501,7 +521,8 @@ Live Windows proof required after implementation review:
 - Renderer onboarding flow matches upstream product intent while preserving
   Desktop boundaries: sign-in, profile select, server select, library
   browsing/search/metadata, clear/back/cancel behavior, scroll/focus,
-  keyboard/remote interaction, accessibility, and sanitized error states.
+  keyboard/remote interaction, accessibility, sanitized error states, and the
+  visual/product-flow feel of upstream Lineup for the owned onboarding path.
 - Renderer/preload/main boundaries remain intact. Renderer does not receive raw
   tokens, auth headers, endpoint URLs, connection details, raw Plex payloads,
   local paths, native handles, or privileged storage/electron APIs.
@@ -523,6 +544,9 @@ Live Windows proof required after implementation review:
   operation vocabulary.
 - Live server discovery still fails after upstream-equivalent discovery request
   policy and authenticated probing are implemented.
+- User or reviewer visual inspection finds that the RD-22-owned onboarding path
+  still reads as the RD-13 scaffold, generic debug controls, draft channel
+  setup, or a Desktop-only control panel after runtime behavior is wired.
 - A production file crosses 500 lines or an allowlisted hotspot grows without a
   reviewed Architecture Health decision.
 - Redaction verification flags raw proof, token/header/URL/connection leakage,
@@ -631,6 +655,11 @@ Required output:
   policy, server probing, selected-server persistence/restore, library
   sections, browse, search, metadata, renderer onboarding screens, fake-surface
   removal, tests, and proof.
+- Visual parity rows for upstream auth/profile/server/channel-setup screens:
+  screen structure, visual hierarchy, product copy, focus/back/scroll/text input
+  behavior, loading/empty/error states, and any Desktop-specific divergence
+  that would make the app look or feel materially different from upstream
+  Lineup.
 - Each row must include upstream files/tests, Desktop files/tests, behavior
   expectation, current gap, decision (`copy`, `adapt`, `rewrite`, `remove`,
   `keep`), owner, verification, dirty pre-audit patch disposition,
@@ -703,6 +732,12 @@ Likely scope, subject to Unit 1:
 - remove reachable fake/debug setup panel controls
 - implement real onboarding flow screens or sections for sign-in, profile,
   server, library, search, and metadata
+- import or adapt upstream onboarding visual hierarchy, screen composition,
+  product copy, loading/empty/error presentation, and focus/back behavior for
+  the RD-22-owned path
+- remove or isolate surrounding RD-13 scaffold affordances from the onboarding
+  path when they make the owned setup flow read as a scaffold rather than the
+  upstream product journey
 - keyboard/remote focus, scroll, clear/back/cancel, loading/empty/error states
 - tests proving fake-surface retirement and setup flow behavior
 
@@ -710,8 +745,74 @@ Verification:
 
 - focused renderer onboarding tests
 - route/workflow/focus tests
+- upstream visual-parity review packet with sanitized screenshots or
+  count/category-only written notes kept local unless redacted and approved for
+  tracking
 - visual/manual Windows layout proof
 - `npm run verify`
+
+Current execution packet for RD-22 UI parity closeout, added 2026-05-16:
+
+- Treat this as the next RD-22 closeout subitem after the main Plex auth,
+  discovery, selected-server, and library runtime parity fixes. The live proof
+  established PIN claim, credential-present state, profile selection, and
+  protected-profile handling, but it remained blocked at server discovery by a
+  sanitized public rate-limit category. That blocker does not excuse the
+  renderer scaffold gap.
+- Goal: replace the reachable RD-22 setup experience with an upstream Lineup
+  product-feeling onboarding path for sign-in/PIN, profile selection, protected
+  profile PIN handling, server discovery/selection/restore, library sections,
+  browse, search, metadata summary, loading/empty/error states, focus/back,
+  text-entry bypass, and scroll behavior.
+- Non-goals: do not implement RD-23 channel creation, persisted channel
+  settings, scheduler-backed guide runtime, playback, native helper behavior,
+  package/signing/update readiness, installer behavior, or full platform
+  expansion. Do not retire fake player/guide routes except where their
+  surrounding scaffold presentation undermines the RD-22 onboarding path.
+- Upstream source to inspect and adapt: `src/modules/ui/profile-select/**`,
+  `src/modules/ui/server-select/**`, `src/modules/ui/channel-setup/**`, and
+  the upstream tests beside those modules. Reconfirm the upstream checkout
+  branch and HEAD before editing; the most recent local evidence was upstream
+  `C:\Software\Lineup` on branch `code-health` at `c335473c`.
+- Desktop owners likely in scope: `src/renderer/staticDom.ts`,
+  `src/renderer/routeDom.ts`, `src/renderer/workflow.ts`,
+  `src/renderer/plexRuntimeState.ts`, `src/renderer/plexRuntimeActions.ts`,
+  `src/renderer/plexRuntimeDom.ts`, `src/renderer/navigation.ts`,
+  `src/renderer/desktopInput.ts`, `src/renderer/styles.css`,
+  `src/renderer/styles/workflow-screens.css`,
+  `src/renderer/styles/responsive-accessibility.css`, and focused renderer
+  tests under `src/__tests__/renderer/**`.
+- Desktop owners out of scope unless a reviewed replan says otherwise:
+  main-owned Plex auth/discovery/library transports, secure storage, selected
+  server persistence, preload contract shape, production playback/player,
+  channel/scheduler domains, packaging, updater, native helper, and diagnostics
+  export behavior.
+- Architecture seam: renderer owns composition, display state, product copy,
+  focus model, route transitions, and local UI interaction state only. Main
+  remains the only owner of Plex credentials, tokens, raw transport, selected
+  connection details, raw Plex payloads, retry policy, and persistence.
+- Forbidden shortcuts: no raw token/header/URL/path/payload/native-handle data
+  in renderer state, tests, docs, logs, diagnostics, screenshots, or chat; no
+  broad preload RPC; no renderer-side Plex fetch; no compatibility route that
+  keeps the scaffold as the product path; no "visual parity" claim based only
+  on operation order; no unreviewed dependency or asset import.
+- Required tests/proof: port or adapt upstream renderer tests for profile,
+  server, channel-setup, focus, scroll, and back behavior where compatible with
+  Desktop; add Desktop tests proving the reachable RD-22 setup path lacks
+  fake/debug/draft controls; add layout/focus assertions that the onboarding
+  path is primary rather than embedded in the old scaffold; run
+  `npm run verify` and include sanitized Windows visual/manual proof before
+  closeout.
+- Acceptance: a user and reviewer can no longer reasonably describe the
+  RD-22-owned onboarding path as the RD-13 scaffold with real Plex controls
+  dropped into it. Any visible Desktop divergence from upstream is reviewed,
+  documented, and tied to a Desktop process/security/accessibility reason.
+- Stop/replan if upstream UI modules require a dependency, router model,
+  browser storage pattern, or direct DOM lifecycle incompatible with Desktop
+  boundaries; if renderer changes require new preload/main Plex contracts; if
+  the work grows into RD-23 channel creation or RD-24 guide/player behavior; or
+  if sanitized visual proof cannot be produced without exposing private Plex
+  names/media.
 
 ### Unit 5: Live Windows Proof And Closeout Review
 
@@ -789,13 +890,16 @@ Minimum Unit 1 rows:
   commit.
 - Renderer onboarding shape: upstream uses separate auth/profile/server/channel
   screens, while Desktop currently has a left rail and route shell. The plan
-  should copy the product flow and interaction semantics, not necessarily the
-  exact upstream DOM structure.
+  should preserve upstream product feel and visual hierarchy for the owned
+  onboarding path, not merely the operation order. Exact DOM/path sharing is not
+  required, but visible divergence from upstream needs a reviewed Desktop
+  rationale.
 - Fake-surface removal: removing fake setup scaffolding may expose that adjacent
   fake player/guide routes are still placeholders. RD-22 should remove fake
-  garbage from the Plex onboarding path only; broader fake player/guide
-  retirement belongs to later roadmap items unless the user explicitly expands
-  scope.
+  garbage from the Plex onboarding path and must not let the surrounding RD-13
+  scaffold undermine that path's upstream visual parity. Broader fake
+  player/guide retirement belongs to RD-24/RD-27 unless the user explicitly
+  expands RD-22 scope.
 - Live proof vs automated proof: Windows live proof is mandatory but not enough.
   The rebuild must add parity tests so we are not debugging every upstream
   behavior through the real Plex account.
@@ -804,40 +908,33 @@ MODEL_SUGGESTION
 PLANNER: gpt-5 high reasoning
 IMPLEMENTER: gpt-5 high reasoning
 REVIEWER: gpt-5 high reasoning
-WHY: Tier 3 rebuild spans upstream parity, Plex auth/discovery/library, renderer onboarding, persistence boundaries, redaction policy, and live Windows proof.
+WHY: Tier 3 UI parity closeout spans upstream UI adaptation, renderer composition/focus/styles, import provenance, redaction policy, and live Windows visual/proof gates.
 
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
-TASK: Complete RD-22 Upstream-Parity Plex Onboarding And Runtime Rebuild
+TASK: Complete RD-22 UI Parity Closeout Subitem
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md
-ARTIFACT: active plan revised after plan-review blockers; awaiting clean re-review
+ARTIFACT: Unit 4 current execution packet in the active RD-22 plan
 FILES:
 - docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md
+- docs/plans/rd-22-upstream-parity-audit-matrix.md
+- docs/roadmap/desktop-port-roadmap.md
 - docs/architecture/import-ledger.md
-- docs/architecture/security-and-secret-flow.md
-- docs/architecture/file-shape-guardrails.md
-- docs/development/windows-ui-proof-plan.md
-- docs/product/lineup-product-parity-matrix.md
-- src/main/plex/livePlexTransport.ts
-- src/main/plex/desktopPlexRuntime.ts
-- src/main/plex/auth/**
-- src/main/plex/discovery/**
-- src/main/plex/library/**
 - src/renderer/plexRuntimeState.ts
 - src/renderer/plexRuntimeActions.ts
 - src/renderer/plexRuntimeDom.ts
 - src/renderer/staticDom.ts
+- src/renderer/routeDom.ts
+- src/renderer/workflow.ts
+- src/renderer/navigation.ts
+- src/renderer/desktopInput.ts
 - src/renderer/index.ts
 - src/renderer/styles/**
-- <upstream-root>\src\modules\plex\auth/**
-- <upstream-root>\src\modules\plex\discovery/**
-- <upstream-root>\src\modules\plex\library/**
-- <upstream-root>\src\core\server-selection/**
 - <upstream-root>\src\modules\ui\profile-select/**
 - <upstream-root>\src\modules\ui\server-select/**
 - <upstream-root>\src\modules\ui\channel-setup/**
-BLOCKERS: RD-22 live Windows proof is failing at server reachability; do not continue one-off patches or closeout until Unit 1 upstream parity audit and review pass.
+BLOCKERS: RD-22 live Windows proof remains blocked at server discovery by sanitized public rate-limit category; UI parity is also a closeout blocker because the owned onboarding path still reads as scaffold UI.
 MESSAGE:
-Start with plan re-review, then Unit 1 only if review is clean: create the tracked RD-22 upstream parity audit matrix at `docs/plans/rd-22-upstream-parity-audit-matrix.md`, comparing current upstream Lineup Plex auth/profile/discovery/core server-selection/library/onboarding behavior against Desktop source and tests. Resolve the upstream root through the freshness gate (`/Users/tristan/Software/Lineup` on this macOS workspace, `C:\Software\Lineup` on Windows unless a handoff names another checkout) and record its branch/HEAD. Do not implement product changes in Unit 1. When the Desktop checkout is clean, record dirty/pre-audit disposition as `N/A - clean checkout` or `retain committed baseline for audit only`; if dirty RD-22 source/test changes exist, classify each as retain, replace, drop, or rework before any commit. Record gaps, decisions, owners, tests, import-ledger obligations, and points of contention. Run `npm run verify:docs`, `npm run verify:redaction`, and `git diff --check`, then send the matrix for read-only adversarial review. After review findings are resolved, implement reviewed units in order: main Plex runtime parity, optional contract/preload adjustments if needed, renderer onboarding fake-surface replacement, then live Windows proof and closeout review. Keep renderer unprivileged, main-owned secrets/transport/connection custody intact, and tracked evidence redaction-safe.
+Start with the Unit 4 current execution packet in the active RD-22 plan. Reconfirm upstream Lineup branch/HEAD, inspect upstream profile-select, server-select, and channel-setup source/tests/styles, then replace or adapt the reachable Desktop RD-22 onboarding path so it no longer reads as the RD-13 scaffold. Keep renderer unprivileged and main-owned Plex credential/transport/connection custody unchanged. Do not implement RD-23 channel creation, RD-24 guide/player behavior, playback, native helper work, packaging, or platform expansion. Add focused renderer tests for upstream-equivalent profile/server/channel-setup flow, screen-specific focus/back/scroll/text-entry behavior, fake/debug setup control retirement, and route-shell isolation. Add an import-ledger row if upstream UI source, CSS, copy, or tests are copied/adapted. Run `npm run verify`; then run sanitized Windows visual/manual proof for layout/focus/scroll/input/back and retry RD-22 live proof only after the Plex rate-limit window clears. Close RD-22 only after implementation review and redaction-safe proof are clean.
