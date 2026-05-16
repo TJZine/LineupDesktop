@@ -161,7 +161,7 @@ export class DesktopPlexRuntime {
 
   async restoreSelectedServer(requestId: string): Promise<PlexIpcResult<PlexRestoreSelectedServerValue>> {
     return this.runOperation(requestId, 'restoreSelectedServer', async ({ signal, commit }) => {
-      const token = await this.ensureAccountToken(signal, commit);
+      const token = await this.requireActiveToken(signal, commit, 'restoreSelectedServer');
       const profileId = this.requireActiveProfileId('restoreSelectedServer');
       this.setServerStatus('loading', commit);
       const selection = await this.serverDiscovery.restoreSelectedServer({ token, profileId, signal });
@@ -175,7 +175,7 @@ export class DesktopPlexRuntime {
 
   async refreshServers(requestId: string): Promise<PlexIpcResult<PlexRefreshServersValue>> {
     return this.runOperation(requestId, 'refreshServers', async ({ signal, commit }) => {
-      const token = await this.ensureAccountToken(signal, commit);
+      const token = await this.requireActiveToken(signal, commit, 'refreshServers');
       this.setServerStatus('loading', commit);
       const servers = await this.serverDiscovery.refreshServers({ token, signal });
       commit((snapshot) => ({
@@ -202,7 +202,7 @@ export class DesktopPlexRuntime {
       return this.fail(requestId, validationError('selectServer'));
     }
     return this.runOperation(requestId, 'selectServer', async ({ signal, commit }) => {
-      const token = await this.ensureAccountToken(signal, commit);
+      const token = await this.requireActiveToken(signal, commit, 'selectServer');
       const profileId = this.requireActiveProfileId('selectServer');
       this.setServerStatus('loading', commit);
       const selection = await this.serverDiscovery.selectServer(normalizedServerId, {

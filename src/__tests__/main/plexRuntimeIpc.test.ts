@@ -303,6 +303,52 @@ test('desktop plex runtime switches Plex Home users with active-profile token in
   assertRendererSafe(switched);
 });
 
+test('desktop plex runtime uses active profile token for server discovery and probing after Home switch', async () => {
+  const fixture = createRuntimeFixture();
+  await signIn(fixture);
+  fixture.authTransport.enqueue('switch-home-user', {
+    status: 200,
+    payload: { kind: 'json', data: { authToken: placeholderManagedToken } },
+  });
+  fixture.authTransport.enqueue('validate-token', {
+    status: 200,
+    payload: { kind: 'json', data: accountPayload({ id: 'managed', username: 'managed' }) },
+  });
+  const switched = await fixture.runtime.switchHomeUser('switch-managed', {
+    userId: 'managed',
+    pin: '1234',
+  });
+  fixture.discoveryTransport.resources = [
+    createPlexApiResource({
+      clientIdentifier: 'server-1',
+      name: 'Managed Server',
+      connections: [connection({ address: 'managed-local', uri: 'https://managed.example:32400' })],
+    }),
+  ];
+  fixture.discoveryTransport.enqueueProbe('managed-local', { outcome: 'reachable', latencyMs: 12 });
+  fixture.discoveryTransport.enqueueProbe('managed-local', { outcome: 'reachable', latencyMs: 10 });
+
+  const refreshed = await fixture.runtime.refreshServers('refresh-managed');
+  const selected = await fixture.runtime.selectServer('select-managed', 'server-1');
+  const restored = await fixture.runtime.restoreSelectedServer('restore-managed');
+
+  assert.equal(switched.ok, true);
+  assert.equal(refreshed.ok, true);
+  assert.equal(selected.ok, true);
+  assert.equal(restored.ok, true);
+  assert.deepEqual(
+    fixture.discoveryTransport.discoverInputs.map((input) => input.token),
+    [placeholderManagedToken, placeholderManagedToken],
+  );
+  assert.deepEqual(
+    fixture.discoveryTransport.probeInputs.map((input) => input.token),
+    [placeholderManagedToken, placeholderManagedToken],
+  );
+  assert.equal(fixture.selectedServerStore.persistedByProfileId.get('managed')?.serverId, 'server-1');
+  assert.equal(fixture.credentialStore.secretValue, placeholderAccountToken);
+  assertRendererSafe([refreshed, selected, restored]);
+});
+
 test('desktop plex runtime does not reuse selected server across Plex Home profile switch', async () => {
   const fixture = createRuntimeFixture();
   await signIn(fixture);
