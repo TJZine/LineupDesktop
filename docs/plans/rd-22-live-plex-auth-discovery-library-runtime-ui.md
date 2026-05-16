@@ -112,11 +112,16 @@ upstream semantics before live Windows proof is attempted again.
 16. Upstream source and test files listed in `## Files In Scope`
 
 Freshness gate: before editing, run `git status --short --branch`,
-`git diff --stat`, and `git -C C:\Software\Lineup rev-parse HEAD`, then compare
-the current Desktop and upstream file lists against this plan. If upstream paths
-moved, Desktop Plex/runtime files changed materially, the active branch changed,
-the dirty baseline changed, or live proof produced a new sanitized blocker
-category, update and re-review this plan before implementation.
+`git diff --stat`, and resolve the upstream Lineup root for the current
+workspace. Prefer `/Users/tristan/Software/Lineup` on macOS/Linux and
+`C:\Software\Lineup` on Windows; if both exist, use the checkout explicitly
+named by the current handoff. Then run `git -C <upstream-root> status --short
+--branch` and `git -C <upstream-root> rev-parse HEAD`, and compare the current
+Desktop and upstream file lists against this plan. If upstream paths moved,
+Desktop Plex/runtime files changed materially, the active Desktop or upstream
+branch changed, the dirty baseline policy below no longer matches the checkout,
+or live proof produced a new sanitized blocker category, update and re-review
+this plan before implementation.
 
 ## Required Skills
 
@@ -167,18 +172,23 @@ category, update and re-review this plan before implementation.
   `bb3da904aa87be6c6a00c25e6fa340f16f788709`, but live proof now shows the
   adaptation and later live-runtime bridge/UI work diverged from upstream
   behavior in critical areas.
-- upstream audit target: Unit 1 must record the current `C:\Software\Lineup`
-  branch and HEAD at audit start, audit that exact upstream checkout, and note
-  where that behavior differs from the older import-ledger source commit
-  `bb3da904aa87be6c6a00c25e6fa340f16f788709`. Do not hardcode a stale upstream
-  HEAD as the future audit target.
-- dirty Desktop baseline evidence: this plan was written with a dirty worktree
-  containing pre-audit live-debug patches in `src/main/plex/auth/**`,
-  `src/main/plex/discovery/**`, `src/main/plex/livePlexTransport.ts`,
-  `src/main/plex/desktopPlexRuntime.ts`, renderer Plex setup files, CSS, and
-  focused tests. Unit 1 must classify every existing dirty source/test change as
-  `retain`, `replace`, `drop`, or `rework` in the tracked parity matrix before
-  those patches are committed or used as the trusted Desktop baseline.
+- upstream audit target: Unit 1 must record the resolved upstream root, branch,
+  and HEAD at audit start, audit that exact upstream checkout, and note where
+  that behavior differs from the older import-ledger source commit
+  `bb3da904aa87be6c6a00c25e6fa340f16f788709`. The macOS controller observed
+  `/Users/tristan/Software/Lineup` on branch `code-health` at
+  `9a4dfcaa5d12c75ecd416cd6e81f32c21cf13be8`; future sessions must re-check
+  rather than treating this as a fixed target.
+- dirty Desktop baseline evidence: earlier RD-22 live-debug patches were
+  mentioned in handoff notes, but the current Desktop checkout was observed
+  clean on branch `initial-build` with empty `git diff --stat` before this plan
+  revision. Unit 1 still includes a dirty/pre-audit patch disposition column.
+  When the Desktop checkout is clean, record the disposition as `N/A - clean
+  checkout` or `retain committed baseline for audit only` for each row instead
+  of inventing nonexistent dirty patches. If dirty Desktop RD-22 source/test
+  changes are present in a future session, Unit 1 must classify each such change
+  as `retain`, `replace`, `drop`, or `rework` before those patches are committed
+  or used as the trusted Desktop baseline.
 - live Windows evidence from the current session, kept sanitized here:
   account sign-in now reaches credential-present state after local remediation;
   profile/Plex Home selection was observed; server discovery/selection still
@@ -304,21 +314,24 @@ authorized until the parity matrix is reviewed.
 
 ### Upstream Source In Scope
 
-Read-only upstream reference paths:
+Read-only upstream reference paths. The Windows proof target may use
+`C:\Software\Lineup`; this macOS workspace resolves the same upstream reference
+as `/Users/tristan/Software/Lineup`. Use the resolved upstream root from the
+freshness gate and map the paths below under that root.
 
-- `C:\Software\Lineup\src\modules\plex\auth/**`
-- `C:\Software\Lineup\src\modules\plex\discovery/**`
-- `C:\Software\Lineup\src\modules\plex\library/**`
-- `C:\Software\Lineup\src\modules\plex\shared/**`
-- `C:\Software\Lineup\src\core\server-selection/**`
-- `C:\Software\Lineup\src\modules\ui\profile-select/**`
-- `C:\Software\Lineup\src\modules\ui\server-select/**`
-- `C:\Software\Lineup\src\modules\ui\channel-setup/**`
-- `C:\Software\Lineup\src\core\initialization/**`
-- `C:\Software\Lineup\src\core\channel-setup/**`
-- `C:\Software\Lineup\src\App.ts`
-- `C:\Software\Lineup\src\index.ts`
-- `C:\Software\Lineup\src\styles\shell.onboarding.*.css`
+- `<upstream-root>\src\modules\plex\auth/**`
+- `<upstream-root>\src\modules\plex\discovery/**`
+- `<upstream-root>\src\modules\plex\library/**`
+- `<upstream-root>\src\modules\plex\shared/**`
+- `<upstream-root>\src\core\server-selection/**`
+- `<upstream-root>\src\modules\ui\profile-select/**`
+- `<upstream-root>\src\modules\ui\server-select/**`
+- `<upstream-root>\src\modules\ui\channel-setup/**`
+- `<upstream-root>\src\core\initialization/**`
+- `<upstream-root>\src\core\channel-setup/**`
+- `<upstream-root>\src\App.ts`
+- `<upstream-root>\src\index.ts`
+- `<upstream-root>\src\styles\shell.onboarding.*.css`
 
 The upstream repo is a read-only reference for this plan. Do not edit it.
 
@@ -517,8 +530,11 @@ Live Windows proof required after implementation review:
 - The upstream repo cannot be used as a stable reference because required files
   are missing, materially changed, or unreviewed relative to the import-ledger
   source date.
-- Unit 1 cannot classify the existing dirty live-debug patches without either
-  reverting user work or committing unreviewed behavior.
+- Unit 1 cannot classify existing dirty live-debug patches without either
+  reverting user work or committing unreviewed behavior. This trigger applies
+  only when dirty RD-22 source/test changes are actually present; on a clean
+  checkout, the matrix records `N/A - clean checkout` or `retain committed
+  baseline for audit only`.
 - Reviewer finds material plan, boundary, security, parity, fake-surface,
   import-ledger, or verification gaps.
 - User changes the product strategy, for example choosing a full reset over a
@@ -553,8 +569,10 @@ Live Windows proof required after implementation review:
 - Keep plan/audit, runtime, renderer, and proof-summary commits separate when
   practical.
 - Do not stage unrelated local changes.
-- Do not commit the current pre-audit live-debug patches until Unit 1 classifies
-  them in the tracked matrix and review accepts their disposition.
+- Do not commit any dirty pre-audit live-debug patches until Unit 1 classifies
+  them in the tracked matrix and review accepts their disposition. When no dirty
+  patches exist, the Unit 1 disposition column records the clean-checkout
+  baseline instead.
 
 ## Architecture Health
 
@@ -756,9 +774,12 @@ Minimum Unit 1 rows:
   response policy that Desktop's live bridge does not fully carry today. This is
   a likely source of the current server failure and should be audited before any
   further live patches.
-- Dirty baseline: the current worktree contains live-debug patches made before
-  this rebuild plan. The audit must treat them as candidate changes, not trusted
-  baseline behavior, and decide which to retain, replace, drop, or rework.
+- Dirty baseline: the current Desktop worktree was observed clean before this
+  plan revision. Unit 1 must still record a dirty/pre-audit disposition for each
+  row. Use `N/A - clean checkout` or `retain committed baseline for audit only`
+  unless a future freshness check observes dirty RD-22 source/test changes; if
+  dirty changes exist, treat them as candidate changes, not trusted baseline
+  behavior, and decide which to retain, replace, drop, or rework.
 - Runtime privacy: renderer-safe names and titles are allowed in the local app
   UI because users need to select real profiles, servers, libraries, and media.
   The strict redaction ban applies to proof, docs, logs, diagnostics, tests, and
@@ -791,7 +812,7 @@ TASK: Complete RD-22 Upstream-Parity Plex Onboarding And Runtime Rebuild
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md
-ARTIFACT: active plan awaiting or incorporating plan review
+ARTIFACT: active plan revised after plan-review blockers; awaiting clean re-review
 FILES:
 - docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md
 - docs/architecture/import-ledger.md
@@ -810,13 +831,13 @@ FILES:
 - src/renderer/staticDom.ts
 - src/renderer/index.ts
 - src/renderer/styles/**
-- C:\Software\Lineup\src\modules\plex\auth/**
-- C:\Software\Lineup\src\modules\plex\discovery/**
-- C:\Software\Lineup\src\modules\plex\library/**
-- C:\Software\Lineup\src\core\server-selection/**
-- C:\Software\Lineup\src\modules\ui\profile-select/**
-- C:\Software\Lineup\src\modules\ui\server-select/**
-- C:\Software\Lineup\src\modules\ui\channel-setup/**
+- <upstream-root>\src\modules\plex\auth/**
+- <upstream-root>\src\modules\plex\discovery/**
+- <upstream-root>\src\modules\plex\library/**
+- <upstream-root>\src\core\server-selection/**
+- <upstream-root>\src\modules\ui\profile-select/**
+- <upstream-root>\src\modules\ui\server-select/**
+- <upstream-root>\src\modules\ui\channel-setup/**
 BLOCKERS: RD-22 live Windows proof is failing at server reachability; do not continue one-off patches or closeout until Unit 1 upstream parity audit and review pass.
 MESSAGE:
-Start with Unit 1 only: create the tracked RD-22 upstream parity audit matrix at `docs/plans/rd-22-upstream-parity-audit-matrix.md`, comparing current upstream Lineup Plex auth/profile/discovery/core server-selection/library/onboarding behavior against Desktop source and tests. Do not implement product changes in Unit 1. Treat the current dirty RD-22 live-debug patches as untrusted pre-audit candidate changes and classify each as retain, replace, drop, or rework before any commit. Record gaps, decisions, owners, tests, import-ledger obligations, and points of contention. Run `npm run verify:docs`, `npm run verify:redaction`, and `git diff --check`, then send the matrix for read-only adversarial review. After review findings are resolved, implement reviewed units in order: main Plex runtime parity, optional contract/preload adjustments if needed, renderer onboarding fake-surface replacement, then live Windows proof and closeout review. Keep renderer unprivileged, main-owned secrets/transport/connection custody intact, and tracked evidence redaction-safe.
+Start with plan re-review, then Unit 1 only if review is clean: create the tracked RD-22 upstream parity audit matrix at `docs/plans/rd-22-upstream-parity-audit-matrix.md`, comparing current upstream Lineup Plex auth/profile/discovery/core server-selection/library/onboarding behavior against Desktop source and tests. Resolve the upstream root through the freshness gate (`/Users/tristan/Software/Lineup` on this macOS workspace, `C:\Software\Lineup` on Windows unless a handoff names another checkout) and record its branch/HEAD. Do not implement product changes in Unit 1. When the Desktop checkout is clean, record dirty/pre-audit disposition as `N/A - clean checkout` or `retain committed baseline for audit only`; if dirty RD-22 source/test changes exist, classify each as retain, replace, drop, or rework before any commit. Record gaps, decisions, owners, tests, import-ledger obligations, and points of contention. Run `npm run verify:docs`, `npm run verify:redaction`, and `git diff --check`, then send the matrix for read-only adversarial review. After review findings are resolved, implement reviewed units in order: main Plex runtime parity, optional contract/preload adjustments if needed, renderer onboarding fake-surface replacement, then live Windows proof and closeout review. Keep renderer unprivileged, main-owned secrets/transport/connection custody intact, and tracked evidence redaction-safe.
