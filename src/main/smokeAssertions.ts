@@ -289,9 +289,9 @@ export async function runSmokeAssertions(
       );
       if (
         !(plexRuntimePanel instanceof HTMLElement) ||
-        !setupText.includes('Plex source setup') ||
+        !setupText.includes('Plex onboarding') ||
         !setupText.includes('Get link code') ||
-        !setupText.includes('Load libraries') ||
+        !setupText.includes('Open libraries') ||
         setupOverflow !== 'auto' ||
         oldSetupControls !== null
       ) {
@@ -299,9 +299,9 @@ export async function runSmokeAssertions(
           'channel setup plex flow content ' +
             JSON.stringify({
               hasPlexRuntimePanel: plexRuntimePanel instanceof HTMLElement,
-              hasPlexCopy: setupText.includes('Plex source setup'),
+              hasPlexOnboarding: setupText.includes('Plex onboarding'),
               hasLinkCode: setupText.includes('Get link code'),
-              hasLibraries: setupText.includes('Load libraries'),
+              hasOpenLibraries: setupText.includes('Open libraries'),
               setupOverflow,
               hasOldSetupControls: oldSetupControls !== null,
               hasSetupValidation: document.querySelector('[data-setup-validation]') !== null,
