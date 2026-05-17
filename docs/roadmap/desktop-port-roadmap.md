@@ -252,6 +252,27 @@ When a slice owns channel setup, the reachable channel setup route or surface
 must replace or isolate fake setup summaries and controls in the product path
 before closeout.
 
+## Upstream UI Parity Distribution
+
+Feature-complete UI parity is distributed across the MVP slices that own the
+underlying runtime behavior. This keeps the port reviewable without treating
+upstream design parity as optional polish.
+
+| Upstream UI surface | Desktop owner slice | Required parity posture |
+| --- | --- | --- |
+| Auth, PIN, profile/Plex Home, server selection, library browse/search, and metadata summary onboarding | RD-22 | Import or adapt upstream onboarding/profile/server/channel-setup screen structure, hierarchy, copy, focus/back, loading, empty, and error treatment while keeping Plex credentials and transport in main custody. |
+| Channel creation setup, validation, persisted channel recovery, and settings tied to MVP setup | RD-23 | Import or adapt upstream channel-setup and settings visuals for the live authoring path; fake draft setup controls cannot remain in the reachable product route. |
+| Guide/EPG, current-channel state, OSD, now-playing info, mini guide, channel badge, and player/route chrome | RD-24 | Import or adapt upstream guide, overlay, mini-guide, now-playing, channel badge, route/player-chrome, focus, density, virtualization, and empty/error behavior when persisted-channel runtime data replaces fakes. |
+| Production playback controls and playback-state presentation over native video | RD-25 | Preserve the upstream playback interaction feel where it fits Desktop native-helper boundaries; renderer stays free of raw playback descriptors, URLs, headers, and native handles. |
+| Subtitle/audio/HDR option UI and playback-quality controls | RD-26 | Import or adapt upstream media-option presentation and interaction patterns only after runtime media-option behavior is real and renderer-safe. |
+| Full MVP visual, focus, input, overlay, and Windows behavior proof | RD-27 | Run redaction-safe Windows proof across the real upstream-adapted UI surfaces; this is a final integration/proof gate, not a substitute for the earlier imports. |
+
+Each owning slice must record copied or adapted upstream UI source, CSS, copy,
+assets, or tests in the import ledger before or with the import. Exact DOM or
+router sharing is not required when upstream browser/webOS assumptions conflict
+with Desktop boundaries, but visible divergence must have a reviewed Desktop
+security, process, accessibility, or platform rationale.
+
 ## Platform Proof Convention
 
 Each roadmap item should make platform proof explicit in its tracked plan and,
@@ -1351,8 +1372,14 @@ Stop and replan if:
 
 ### RD-22 Live Plex Auth, Discovery, And Library Runtime UI
 
-Status: not started. This is the first next implementation slice after RD-21
-closeout.
+Status: active. The RD-22 Unit 4 onboarding UI parity subitem landed at
+`0c4abc8`: the reachable channel setup route now uses an upstream-adapted Plex
+onboarding surface, isolated route shell, profile/server/library/media rows,
+focus/back/scroll/text-entry coverage, fake setup control retirement, and an
+import-ledger row for adapted upstream profile-select, server-select,
+channel-setup, and onboarding CSS source. RD-22 is not complete: live Windows
+proof remains blocked at server discovery by the sanitized public rate-limit
+category, and final closeout still requires reviewed redaction-safe proof.
 
 Depends on:
 
@@ -1400,6 +1427,10 @@ Exit gates:
   screen structure, hierarchy, copy, focus/back behavior, loading/empty/error
   states, and any Desktop-specific divergences are documented before live
   Windows proof is used for closeout.
+- This slice proves only the Plex onboarding/setup route. It must not be used
+  as a broad UI parity claim for guide/EPG, settings, OSD, now-playing,
+  mini-guide, channel badge, player chrome, playback controls, or media-option
+  UI; those surfaces remain owned by RD-23 through RD-27.
 - Renderer-facing payloads and diagnostics exclude credentials, auth headers,
   tokenized URLs, raw Plex payloads, connection details, local paths, and
   private account/server/media names.
@@ -1436,8 +1467,9 @@ Objective:
 - Continue the same real setup journey from RD-22 instead of reintroducing fake
   draft channels or compatibility scaffolds into the reachable route.
 - Import or adapt upstream channel-setup and settings visuals for the owned
-  live channel-authoring path, including screen hierarchy, controls, validation
-  states, and focus behavior where compatible with Desktop boundaries.
+  live channel-authoring and settings path, including screen hierarchy,
+  controls, validation states, saved-state/recovery presentation, focus/back,
+  and empty/error behavior where compatible with Desktop boundaries.
 - Do not broaden live Plex browsing beyond the RD-22 contract, start production
   playback, or add package/release behavior.
 
@@ -1480,12 +1512,12 @@ Depends on:
 Objective:
 
 - Replace fake guide/EPG data with persisted-channel schedule composition and
-  renderer-safe now-playing, mini-guide, channel badge, route, and channel
-  switch state.
-- Import or adapt upstream guide/EPG, mini-guide, now-playing, channel badge,
-  and route/player-chrome visuals for the owned runtime surfaces, including
-  virtualization, focus, density, hierarchy, and empty/error states where they
-  fit Desktop boundaries.
+  renderer-safe OSD, now-playing, mini-guide, channel badge, route, player
+  chrome, and channel switch state.
+- Import or adapt upstream guide/EPG, OSD, mini-guide, now-playing, channel
+  badge, and route/player-chrome visuals for the owned runtime surfaces,
+  including virtualization, focus, density, hierarchy, transition timing, and
+  empty/error states where they fit Desktop boundaries.
 - Prove current-channel and schedule transitions without claiming production
   native playback readiness.
 
@@ -1497,11 +1529,11 @@ Platform proof label:
 
 Exit gates:
 
-- Guide/EPG, now-playing, mini-guide, and channel badge reflect persisted
-  channels rather than fake data.
-- The guide, mini-guide, now-playing, channel badge, and route/player chrome no
-  longer read as fake preview surfaces and have reviewed upstream visual-parity
-  evidence or explicit reviewed Desktop divergence notes.
+- Guide/EPG, OSD, now-playing, mini-guide, channel badge, and player/route
+  chrome reflect persisted channels rather than fake data.
+- The guide, OSD, mini-guide, now-playing, channel badge, and route/player
+  chrome no longer read as fake preview surfaces and have reviewed upstream
+  visual-parity evidence or explicit reviewed Desktop divergence notes.
 - Channel switch requests resolve to reviewed runtime state and remain
   renderer-safe.
 - `npm run verify` passes unless the reviewed plan names a narrower verified
