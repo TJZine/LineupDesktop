@@ -126,12 +126,14 @@ const STATIC_SCREEN_MARKUP = `
       </div>
     </div>
   </section>
-  <section id="screen-channel-setup" class="screen" data-screen="channelSetup" data-style-surface="screen" aria-labelledby="screen-channel-setup-title" hidden>
-    <div class="screen__content">
-      <p class="screen__kicker" data-workflow-kicker="channelSetup">Channel setup</p>
-      <h2 id="screen-channel-setup-title">Plex setup</h2>
-      <p data-workflow-primary="channelSetup">Connect Plex, choose a profile and server, then browse your library.</p>
-      <p data-workflow-secondary="channelSetup">Only renderer-safe account, server, library, and media summaries are shown here.</p>
+  <section id="screen-channel-setup" class="screen screen--onboarding" data-screen="channelSetup" data-style-surface="screen" aria-labelledby="screen-channel-setup-title" hidden>
+    <div class="screen__content plex-onboarding-shell">
+      <div class="plex-onboarding-hero">
+        <p class="screen__kicker" data-workflow-kicker="channelSetup">Channel setup</p>
+        <h2 id="screen-channel-setup-title">Plex setup</h2>
+        <p data-workflow-primary="channelSetup">Connect Plex, choose a profile and server, then browse your library.</p>
+        <p data-workflow-secondary="channelSetup">Lineup Desktop shows the account, server, library, and media details needed for setup.</p>
+      </div>
       <section class="plex-runtime plex-onboarding" data-plex-runtime-panel aria-label="Plex onboarding">
         <header class="plex-runtime__header">
           <div>
@@ -164,7 +166,7 @@ const STATIC_SCREEN_MARKUP = `
         </section>
         <section class="plex-runtime__stage" aria-labelledby="plex-stage-server">
           <h4 id="plex-stage-server">2. Choose server</h4>
-          <p class="plex-runtime__stage-copy">Pick a reachable Plex server from the safe server summaries returned by the desktop runtime.</p>
+          <p class="plex-runtime__stage-copy">Pick the Plex server Lineup Desktop should use for this profile.</p>
           <div class="plex-runtime__controls" aria-label="Plex server controls">
             <button type="button" data-plex-action="restoreSelectedServer" data-focus-id="plex-restore-server">Use saved server</button>
             <button type="button" data-plex-action="refreshServers" data-focus-id="plex-refresh-servers">Find servers</button>

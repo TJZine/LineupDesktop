@@ -34,6 +34,8 @@ test('static channel setup markup hosts reachable Plex setup controls', () => {
   assert.match(channelSetupMarkup, /data-plex-action="clearSelectedServer"/u);
   assert.match(channelSetupMarkup, /data-plex-action="clearMetadata"/u);
   assert.match(channelSetupMarkup, /data-plex-search-query/u);
+  assert.match(channelSetupMarkup, /screen--onboarding/u);
+  assert.match(channelSetupMarkup, /plex-onboarding-shell/u);
   assert.match(channelSetupMarkup, /Plex onboarding/u);
   assert.match(channelSetupMarkup, /Choose profile/u);
   assert.match(channelSetupMarkup, /Find servers/u);
@@ -916,6 +918,14 @@ test('dynamic Plex buttons receive stable focus ids and are reachable by OK focu
     const serverButton = firstChild(dom.plexServersElement);
     const sectionButton = firstChild(dom.plexSectionsElement);
     const itemButton = firstChild(dom.plexItemsElement);
+    assert.equal(homeButton.className, 'profile-row');
+    assert.match(collectText(homeButton), /Profile\s+PIN/u);
+    assert.equal(serverButton.className, 'server-row active');
+    assert.match(collectText(serverButton), /Server .*Connected/u);
+    assert.equal(sectionButton.className, 'setup-toggle library-toggle selected');
+    assert.match(collectText(sectionButton), /Movies .*Selected/u);
+    assert.equal(itemButton.className, 'setup-toggle media-toggle selected');
+    assert.match(collectText(itemButton), /Pilot .*Previewing/u);
     const focusIds = [
       homeButton.dataset.focusId,
       serverButton.dataset.focusId,
@@ -1044,6 +1054,7 @@ test('dynamic Plex Home focus ids do not collide with static home controls', () 
 class ElementDouble {
   hidden = false;
   disabled = false;
+  className = '';
   textContent = '';
   value = '';
   type = '';

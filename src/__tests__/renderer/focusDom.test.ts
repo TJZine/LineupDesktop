@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
-import { renderRendererFocus } from '../../renderer/focusDom.js';
+import { renderRendererFocus, syncRendererFocusTargets } from '../../renderer/focusDom.js';
+import { FocusRegistry } from '../../renderer/navigation.js';
 
 class FocusElementDouble {
   className = '';
@@ -25,14 +26,21 @@ class FocusElementDouble {
     readonly focusId: string,
     private readonly hiddenFromRoute = false,
     routeButton?: string,
+    plexAction?: string,
   ) {
     this.dataset.focusId = focusId;
     if (routeButton !== undefined) {
       this.dataset.routeButton = routeButton;
     }
+    if (plexAction !== undefined) {
+      this.dataset.plexAction = plexAction;
+    }
   }
 
   closest(selector: string): object | null {
+    if (selector === '[data-screen]') {
+      return { dataset: { screen: this.dataset.routeButton ?? 'channelSetup' } };
+    }
     assert.equal(selector, '[hidden], [aria-hidden="true"]');
     return this.hiddenFromRoute ? {} : null;
   }
@@ -83,6 +91,34 @@ test('renderer focus suppresses browser focus and tab stops inside hidden trees'
       });
     }
   }
+});
+
+test('channel setup initial focus starts on onboarding controls before the route rail', () => {
+  const registry = new FocusRegistry();
+  const navPlayer = new FocusElementDouble('nav-player', false, 'player');
+  const navGuide = new FocusElementDouble('nav-guide', false, 'guide');
+  const navSettings = new FocusElementDouble('nav-settings', false, 'settings');
+  const navSetup = new FocusElementDouble('nav-channel-setup', false, 'channelSetup');
+  const load = new FocusElementDouble('plex-load', false, undefined, 'loadSnapshot');
+  const requestPin = new FocusElementDouble('plex-request-pin', false, undefined, 'requestPin');
+  const dom = createFocusDomBindings([navPlayer, navGuide, navSettings, navSetup, load, requestPin]);
+  dom.routeButtons = [navPlayer, navGuide, navSettings, navSetup] as unknown as HTMLButtonElement[];
+  dom.plexActionButtons = [load, requestPin] as unknown as HTMLButtonElement[];
+
+  syncRendererFocusTargets(registry, dom);
+
+  assert.deepEqual(registry.createInitialState('channelSetup'), {
+    activeRoute: 'channelSetup',
+    activeId: 'plex-load',
+  });
+  assert.deepEqual(registry.move(registry.createInitialState('channelSetup'), 'down').state, {
+    activeRoute: 'channelSetup',
+    activeId: 'plex-request-pin',
+  });
+  assert.deepEqual(registry.focusTarget(registry.createInitialState('channelSetup'), 'nav-guide').state, {
+    activeRoute: 'channelSetup',
+    activeId: 'plex-load',
+  });
 });
 
 function createFocusDomBindings(focusableElements: FocusElementDouble[]): RendererDomBindings {

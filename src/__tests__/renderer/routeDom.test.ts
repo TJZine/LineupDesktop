@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import { createFakePlayerSnapshot, createPlayerOverlayState } from '../../renderer/overlays.js';
-import { renderWorkflowDom } from '../../renderer/routeDom.js';
+import { renderRouteDom, renderWorkflowDom } from '../../renderer/routeDom.js';
 import { createWorkflowState } from '../../renderer/workflow.js';
 
 class ElementDouble {
@@ -15,9 +15,24 @@ class ElementDouble {
   readonly attributes = new Map<string, string>();
   readonly style = { setProperty: () => undefined };
   readonly children: ElementDouble[] = [];
+  readonly classList = {
+    toggle: (name: string, enabled: boolean): void => {
+      const names = new Set(this.className.split(' ').filter(Boolean));
+      if (enabled) {
+        names.add(name);
+      } else {
+        names.delete(name);
+      }
+      this.className = [...names].join(' ');
+    },
+  };
 
   setAttribute(name: string, value: string): void {
     this.attributes.set(name, value);
+  }
+
+  removeAttribute(name: string): void {
+    this.attributes.delete(name);
   }
 
   getAttribute(name: string): string | null {
@@ -93,6 +108,62 @@ test('route DOM workflow rendering hides and disables player overlays away from 
     assert.equal(nowPlayingOverlay.hidden, false);
     assert.equal(overlayAction.disabled, false);
     assert.equal(documentDataset.activeOverlay, 'playerOsd');
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+});
+
+test('route DOM marks channel setup as the isolated onboarding route', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDataset: Record<string, string> = {};
+  const documentDouble = {
+    documentElement: { dataset: documentDataset },
+    querySelector: () => null,
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const playerButton = new ElementDouble();
+    playerButton.dataset.routeButton = 'player';
+    const setupButton = new ElementDouble();
+    setupButton.dataset.routeButton = 'channelSetup';
+    const playerScreen = new ElementDouble();
+    playerScreen.dataset.screen = 'player';
+    const setupScreen = new ElementDouble();
+    setupScreen.dataset.screen = 'channelSetup';
+    const routeTitle = new ElementDouble();
+    const routeStatus = new ElementDouble();
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.routeTitleElement = routeTitle as unknown as HTMLElement;
+    dom.routeStatusElement = routeStatus as unknown as HTMLElement;
+    dom.routeButtons = [playerButton, setupButton] as unknown as HTMLButtonElement[];
+    dom.screens = [playerScreen, setupScreen] as unknown as HTMLElement[];
+
+    renderRouteDom(createWorkflowState('channelSetup'), dom);
+
+    assert.equal(documentDataset.activeRoute, 'channelSetup');
+    assert.equal(routeTitle.textContent, 'Channel setup');
+    assert.match(routeStatus.textContent, /Plex setup/u);
+    assert.equal(playerButton.getAttribute('aria-current'), null);
+    assert.equal(setupButton.getAttribute('aria-current'), 'page');
+    assert.equal(playerScreen.hidden, true);
+    assert.equal(setupScreen.hidden, false);
+    assert.equal(setupScreen.className, 'screen--active');
+    assert.equal(setupScreen.dataset.workflowTone, 'attention');
   } finally {
     if (originalDocument === undefined) {
       Reflect.deleteProperty(globalThis, 'document');

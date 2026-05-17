@@ -45,6 +45,7 @@ export function registerRendererFocusTargets(
       route,
       order: index,
       scope: 'global',
+      hiddenOnRoutes: ['channelSetup'],
       neighbors: { right: focusId === 'nav-player' ? 'player-fullscreen' : undefined },
     });
     registered.add(focusId);
@@ -89,7 +90,7 @@ export function registerRendererFocusTargets(
       focusRegistry.register({
         id: focusId,
         route,
-        order: 80 + index,
+        order: route === 'channelSetup' && button.dataset.plexAction !== undefined ? index : 80 + index,
       });
       registered.add(focusId);
     },
