@@ -273,6 +273,11 @@ router sharing is not required when upstream browser/webOS assumptions conflict
 with Desktop boundaries, but visible divergence must have a reviewed Desktop
 security, process, accessibility, or platform rationale.
 
+RD-27 may verify integration across these surfaces, but it must not backfill
+missing upstream UI import/adaptation that belonged to RD-22 through RD-26.
+Each owning slice must close its own parity gate before the next runtime slice
+treats that surface as complete.
+
 ## Platform Proof Convention
 
 Each roadmap item should make platform proof explicit in its tracked plan and,
@@ -1423,8 +1428,9 @@ Exit gates:
 - The channel setup route no longer exposes fake setup summary, draft controls,
   placeholder setup steps, or smoke-only Plex debug controls in the live product
   path.
-- The RD-22-owned onboarding path has reviewed upstream visual-parity evidence:
-  screen structure, hierarchy, copy, focus/back behavior, loading/empty/error
+- The RD-22-owned onboarding path has reviewed upstream UI parity evidence for
+  PIN sign-in, profile/Plex Home, server selection, library browse/search,
+  metadata summary, setup navigation, focus/back behavior, loading/empty/error
   states, and any Desktop-specific divergences are documented before live
   Windows proof is used for closeout.
 - This slice proves only the Plex onboarding/setup route. It must not be used
@@ -1482,8 +1488,10 @@ Platform proof label:
 Exit gates:
 
 - Channel setup commits real library-backed channels through reviewed owners.
-- Channel setup and settings no longer read as draft/scaffold UI and have
-  reviewed upstream visual-parity evidence or explicit reviewed Desktop
+- Channel setup and Settings recovery surfaces no longer read as
+  draft/scaffold UI and have reviewed upstream parity evidence for setup
+  hierarchy, settings grouping, validation, persisted-channel recovery,
+  destructive/confirmation states, focus/back behavior, and Desktop-specific
   divergence notes.
 - Restart/recovery proves persisted channels and settings without exposing
   private Plex, path, or credential details to renderer or tracked docs.
@@ -1531,9 +1539,11 @@ Exit gates:
 
 - Guide/EPG, OSD, now-playing, mini-guide, channel badge, and player/route
   chrome reflect persisted channels rather than fake data.
-- The guide, OSD, mini-guide, now-playing, channel badge, and route/player
+- Guide/EPG, OSD, now-playing info, mini-guide, channel badge, and route/player
   chrome no longer read as fake preview surfaces and have reviewed upstream
-  visual-parity evidence or explicit reviewed Desktop divergence notes.
+  parity evidence for layout density, time/channel navigation, virtualization,
+  current-program state, focus/back behavior, empty/error states, and any
+  reviewed Desktop divergences.
 - Channel switch requests resolve to reviewed runtime state and remain
   renderer-safe.
 - `npm run verify` passes unless the reviewed plan names a narrower verified
@@ -1580,6 +1590,10 @@ Exit gates:
   for local proof, and exact playback verification surface.
 - Live Plex-backed playback works for the MVP modes named by the plan and
   unsupported modes fail safely.
+- Production playback controls and playback-state presentation over native
+  video preserve the upstream OSD/player-control interaction feel where
+  compatible with Desktop boundaries, with redaction-safe Windows proof in
+  windowed and fullscreen modes.
 - Redacted Windows proof covers playback lifecycle, fullscreen, crash recovery,
   cleanup, and no forbidden evidence.
 - `npm run verify` passes unless the reviewed plan names a narrower verified
@@ -1618,6 +1632,9 @@ Exit gates:
 
 - Runtime subtitle/audio/HDR behavior is proven beyond fixtures and policy
   tests for the MVP sample matrix named by the reviewed plan.
+- Subtitle, audio, and HDR option UI has reviewed upstream parity evidence for
+  menu structure, selected/off/default/forced states, fallback/error states,
+  focus/back behavior, and renderer-safe track identifiers.
 - Unsupported or unknown media capabilities remain explicit and renderer-safe.
 - `npm run verify` passes unless the reviewed plan names a narrower verified
   surface with justification.
@@ -1654,6 +1671,12 @@ Exit gates:
 - The Windows proof matrix records pass/fail/blocked summaries without raw
   screenshots, logs, paths, account/server/media names, tokens, native handles,
   package trees, or private local details.
+- The Windows proof matrix includes one redaction-safe row for each upstream
+  adapted MVP UI surface owned by RD-22 through RD-26: onboarding, channel
+  setup, Settings, Guide/EPG, OSD, now-playing info, mini-guide, player chrome,
+  playback controls, and media options.
+- Any missing upstream parity is routed back to the owning RD slice or a
+  reviewed narrow follow-up, not closed as RD-27 soak work.
 - Blockers are classified against the parity matrix taxonomy and routed to the
   smallest follow-up slice.
 - `npm run verify:docs`, `npm run verify:redaction`, `git diff --check`, and
