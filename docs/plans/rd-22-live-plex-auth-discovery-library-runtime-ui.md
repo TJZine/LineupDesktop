@@ -443,6 +443,7 @@ PLAN: docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md
 ARTIFACT: Unit 2 upstream UI body inventory and parity matrix
 FILES:
 - docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md
+- docs/plans/rd-22a-upstream-ui-body-parity-matrix.md
 - docs/roadmap/desktop-port-roadmap.md
 - docs/architecture/import-ledger.md
 - src/renderer/staticDom.ts
@@ -460,4 +461,4 @@ FILES:
 - <upstream-root>/src/styles/**
 BLOCKERS: RD-22B live Plex proof remains blocked until Plex rate limiting clears; RD-22A must not retry live Plex or change main/preload/runtime owners.
 MESSAGE:
-Start with Unit 2. Reconfirm the upstream Lineup branch and HEAD, inventory the upstream app shell/body surfaces, route structure, onboarding/profile/server setup, channel setup, Settings, Guide/EPG shell, OSD shell, now-playing shell, mini guide shell, channel badge shell, player chrome shell, CSS, copy, assets, and tests. Produce a parity matrix mapping each upstream body surface to Desktop renderer owners, fixture/injected data needs, import-ledger obligations, tests, visual/focus proof, and Desktop divergence reasons. Mark every guide/player surface as RD-22A fixture shell/body work or RD-24 runtime-backed guide/player work so RD-22A cannot over-claim runtime parity. Keep this unit docs/source-audit only; do not edit source, do not make live Plex calls, and do not change main/preload/contracts/runtime/persistence/player/package behavior. Send the matrix to read-only adversarial review before implementation.
+Start with Unit 3. Use the reviewed Unit 2 matrix at `docs/plans/rd-22a-upstream-ui-body-parity-matrix.md` as the implementation packet. Reconfirm the upstream Lineup branch and HEAD before editing. Adapt the upstream-shaped renderer app body for the surfaces in the matrix using fixture/injected renderer-safe data only: app shell/body, route structure, onboarding/profile/server setup shells, channel setup shell, Settings shell, Guide/EPG shell, OSD shell, now-playing shell, mini guide shell, channel badge shell, player chrome shell, CSS/copy/assets, and tests. Keep RD-22A limited to shell/body parity: no live Plex calls, no channel creation, no scheduler runtime, no playback, no media-option runtime, no main/preload/contracts/runtime/persistence/player/package changes, and no runtime-backed guide/player parity claims. Add import-ledger rows before or with any copied/adapted upstream UI source, CSS, copy, assets, or tests. Run the exact renderer test command from the matrix, `npm run verify`, `npm run smoke:electron`, and sanitized visual/focus/manual proof; then send the implementation diff to read-only adversarial review before closeout.
