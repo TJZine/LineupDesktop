@@ -252,17 +252,25 @@ When a slice owns channel setup, the reachable channel setup route or surface
 must replace or isolate fake setup summaries and controls in the product path
 before closeout.
 
+The next product foundation is upstream-shaped app body parity. Live Plex,
+channel creation, scheduler runtime, playback, and media-option behavior should
+wire into that body; they should not keep the renderer stuck as a scaffold while
+each integration is debugged. Fixture-backed or injected renderer-safe data is
+acceptable for a UI-body foundation slice when the slice explicitly forbids live
+network/runtime claims and routes those claims to the owning runtime slices.
+
 ## Upstream UI Parity Distribution
 
-Feature-complete UI parity is distributed across the MVP slices that own the
-underlying runtime behavior. This keeps the port reviewable without treating
-upstream design parity as optional polish.
+Feature-complete UI parity is split into an upstream-shaped app body foundation
+and later runtime wiring slices. This keeps the port reviewable without letting
+live integration blockers delay the complete Desktop skeleton.
 
 | Upstream UI surface | Desktop owner slice | Required parity posture |
 | --- | --- | --- |
-| Auth, PIN, profile/Plex Home, server selection, library browse/search, and metadata summary onboarding | RD-22 | Import or adapt upstream onboarding/profile/server/channel-setup screen structure, hierarchy, copy, focus/back, loading, empty, and error treatment while keeping Plex credentials and transport in main custody. |
+| App shell/body, route structure, onboarding shell, channel setup shell, Settings shell, Guide/EPG shell, OSD shell, now-playing shell, mini guide shell, channel badge shell, player chrome shell, loading/empty/error states, and focus/back behavior | RD-22A | Import or adapt upstream app body structure, hierarchy, copy, CSS, focus/back, scroll, text-entry, and visual state treatment with fixture/injected renderer-safe data only. RD-22A establishes shell/body parity but cannot claim live Plex, channel creation, scheduler, playback, media-option runtime behavior, or runtime-backed guide/player parity. |
+| Auth, PIN, profile/Plex Home, server selection, library browse/search, metadata summary, and selected-server restore wired into the upstream-shaped body | RD-22B | Wire main-owned live Plex onboarding/library runtime into the RD-22A body while keeping Plex credentials, transport, tokens, selected connections, and raw payloads in main custody. |
 | Channel creation setup, validation, persisted channel recovery, and settings tied to MVP setup | RD-23 | Import or adapt upstream channel-setup and settings visuals for the live authoring path; fake draft setup controls cannot remain in the reachable product route. |
-| Guide/EPG, current-channel state, OSD, now-playing info, mini guide, channel badge, and player/route chrome | RD-24 | Import or adapt upstream guide, overlay, mini-guide, now-playing, channel badge, route/player-chrome, focus, density, virtualization, and empty/error behavior when persisted-channel runtime data replaces fakes. |
+| Runtime-backed Guide/EPG, current-channel state, OSD, now-playing info, mini guide, channel badge, and player/route chrome | RD-24 | Wire persisted-channel scheduler/runtime data into the RD-22A guide/player shells and finish any guide/player parity that depends on real schedule state, channel switching, virtualization, current-program state, or runtime error behavior. |
 | Production playback controls and playback-state presentation over native video | RD-25 | Preserve the upstream playback interaction feel where it fits Desktop native-helper boundaries; renderer stays free of raw playback descriptors, URLs, headers, and native handles. |
 | Subtitle/audio/HDR option UI and playback-quality controls | RD-26 | Import or adapt upstream media-option presentation and interaction patterns only after runtime media-option behavior is real and renderer-safe. |
 | Full MVP visual, focus, input, overlay, and Windows behavior proof | RD-27 | Run redaction-safe Windows proof across the real upstream-adapted UI surfaces; this is a final integration/proof gate, not a substitute for the earlier imports. |
@@ -274,7 +282,7 @@ with Desktop boundaries, but visible divergence must have a reviewed Desktop
 security, process, accessibility, or platform rationale.
 
 RD-27 may verify integration across these surfaces, but it must not backfill
-missing upstream UI import/adaptation that belonged to RD-22 through RD-26.
+missing upstream UI import/adaptation that belonged to RD-22A through RD-26.
 Each owning slice must close its own parity gate before the next runtime slice
 treats that surface as complete.
 
@@ -317,10 +325,10 @@ When a roadmap slice reaches its exit gates:
   review is clean
 
 RD-01 through RD-21 are complete enough to route the next Tier 3 session to
-RD-22 Live Plex Auth, Discovery, And Library Runtime UI through the quality
-loop. RD-21 superseded the former RD-21 Future Platform Review route and
-deferred platform expansion until after product-parity/MVP completion. Do not
-import additional original Lineup product code or broaden live Plex/native
+RD-22A Upstream Lineup UI Skeleton And Body Parity Foundation through the
+quality loop. RD-21 superseded the former RD-21 Future Platform Review route
+and deferred platform expansion until after product-parity/MVP completion. Do
+not import additional original Lineup product code or broaden live Plex/native
 playback runtime behavior until a reviewed product slice plan explicitly
 authorizes a bounded change.
 
@@ -1363,8 +1371,8 @@ Exit gates:
   is promoted to `complete`.
 - `npm run verify:docs`, `npm run verify:redaction`, and `git diff --check`
   pass after tracked RD-21 edits.
-- Next handoff routes to RD-22 Live Plex Auth, Discovery, And Library Runtime
-  UI through the Tier 3 feature-quality loop.
+- Next handoff routes to RD-22A Upstream Lineup UI Skeleton And Body Parity
+  Foundation through the Tier 3 feature-quality loop.
 
 Stop and replan if:
 
@@ -1375,68 +1383,109 @@ Stop and replan if:
   package/release, signing/update, renderer privilege, or public release scope
   without a reviewed quality-loop plan.
 
-### RD-22 Live Plex Auth, Discovery, And Library Runtime UI
+### RD-22A Upstream Lineup UI Skeleton And Body Parity Foundation
 
-Status: active. The RD-22 Unit 4 onboarding UI parity subitem landed at
-`0c4abc8`: the reachable channel setup route now uses an upstream-adapted Plex
-onboarding surface, isolated route shell, profile/server/library/media rows,
-focus/back/scroll/text-entry coverage, fake setup control retirement, and an
-import-ledger row for adapted upstream profile-select, server-select,
-channel-setup, and onboarding CSS source. RD-22 is not complete: live Windows
-proof remains blocked at server discovery by the sanitized public rate-limit
-category, and final closeout still requires reviewed redaction-safe proof.
+Status: active. This slice supersedes the prior live-runtime-first closeout
+posture. The RD-22 onboarding work and live Plex fixes remain useful, but the
+next blocking product foundation is the complete upstream-shaped Desktop body:
+app shell, route structure, onboarding shell, channel setup shell, Settings,
+Guide/EPG, OSD, now-playing information, mini guide, channel badge, player
+chrome, visual states, and focus/back behavior. RD-22A uses fixture or injected
+renderer-safe data only where runtime behavior is not ready.
 
 Depends on:
 
-- RD-21 complete with clean review and verified roadmap/parity artifacts.
-- RD-09 secure storage and selected-server custody complete.
-- RD-10 Plex auth, discovery, and library domain seams complete.
-- RD-13 renderer app shell and settings/channel-setup surfaces complete.
-- RD-17 diagnostics/redaction surfaces complete enough to report sanitized
-  live-runtime failures.
+- RD-13 renderer app shell and fake-backed route surfaces complete.
+- RD-14 window/input/fullscreen UX complete.
+- RD-15 UI-over-native-video composition proof complete.
+- RD-20 and RD-21 parity/provenance roadmap artifacts complete and reviewed.
+- Existing RD-22 onboarding UI parity commits retained as baseline input.
 
 Objective:
 
-- Wire the smallest real Plex runtime needed to make Desktop usable for account
-  setup and library selection: live PIN/profile/Plex Home sign-in, server
-  discovery/restore, and renderer-safe library browse/search/metadata UI.
-- Replace or isolate the RD-13 fake channel-setup surface so the reachable
-  setup route proves the real Plex setup journey rather than a placeholder panel
-  embedded below draft controls.
-- Import or adapt the upstream auth/profile/server/channel-setup visual and
-  interaction model for the RD-22-owned onboarding path. Behavior parity alone
-  is not sufficient if the surface still reads as the RD-13 scaffold.
-- Keep transport, tokens, selected connection details, app paths, and
-  diagnostics in main-owned custody. Renderer receives only reviewed safe
-  summaries through a narrow planned bridge/API.
-- Do not create channels, persist channel settings, start playback, add
-  production native helper behavior, or change package/release behavior in this
-  slice.
+- Import or adapt upstream Lineup app body structure, route hierarchy, visual
+  hierarchy, product copy, CSS, loading/empty/error states, focus/back,
+  scroll, and text-entry behavior for the MVP body surfaces.
+- Make the reachable Desktop app feel like a coherent Lineup product skeleton
+  before live runtime integrations are retried.
+- Use fixture or injected renderer-safe data for incomplete runtime surfaces,
+  while keeping fake/debug/draft controls out of product routes.
+- Record copied/adapted upstream UI source, CSS, copy, assets, or tests in the
+  import ledger before or with the import.
+- Do not change main/preload/contracts, live Plex runtime, channel persistence,
+  scheduler runtime, production playback, native helper, packaging, dependency,
+  lockfile, signing, update, installer, or release behavior.
 
 Platform proof label:
 
-- `Windows proof required before closeout` for live sign-in, profile/server
-  picker, selected-server restore, library browse/search, sanitized failure
-  reporting, and credential availability.
+- `Windows proof required before closeout` for layout, focus, keyboard/remote
+  navigation, scroll, text-entry bypass, back behavior, route isolation, and UI
+  over the existing Desktop shell. No live Plex proof is part of RD-22A.
 
 Exit gates:
 
-- Reviewed quality-loop plan authorizes the exact main/preload/renderer
-  contract and transport boundaries.
-- Live Plex auth/profile, discovery/restore, and library browse/search are
-  observed through redaction-safe Windows proof.
-- The channel setup route no longer exposes fake setup summary, draft controls,
-  placeholder setup steps, or smoke-only Plex debug controls in the live product
-  path.
-- The RD-22-owned onboarding path has reviewed upstream UI parity evidence for
-  PIN sign-in, profile/Plex Home, server selection, library browse/search,
-  metadata summary, setup navigation, focus/back behavior, loading/empty/error
-  states, and any Desktop-specific divergences are documented before live
-  Windows proof is used for closeout.
-- This slice proves only the Plex onboarding/setup route. It must not be used
-  as a broad UI parity claim for guide/EPG, settings, OSD, now-playing,
-  mini-guide, channel badge, player chrome, playback controls, or media-option
-  UI; those surfaces remain owned by RD-23 through RD-27.
+- The reachable Desktop app body no longer reads as the RD-13 scaffold.
+- Upstream UI body parity evidence exists for onboarding, channel setup shell,
+  Settings shell, Guide/EPG shell, OSD shell, now-playing shell, mini guide
+  shell, channel badge shell, player chrome shell, visual states, and
+  focus/back behavior.
+- Fixture-backed surfaces remain renderer-safe and cannot be mistaken for live
+  Plex, channel creation, scheduler, playback, media-option runtime proof, or
+  runtime-backed guide/player parity.
+- Fake/debug/smoke/draft controls are removed from or isolated outside product
+  routes where RD-22A owns the visible body.
+- Import-ledger rows cover any copied/adapted upstream UI, CSS, copy, assets,
+  or tests.
+- `npm run verify`, `npm run smoke:electron`, sanitized visual/manual proof,
+  and read-only implementation review pass.
+
+Stop and replan if:
+
+- Upstream body parity requires main/preload/contract/runtime changes, new
+  dependencies, package changes, live network calls, or renderer custody of
+  secrets, tokenized URLs, raw payloads, native handles, Electron APIs, Node
+  APIs, or broad IPC.
+- Renderer hotspots would grow past guardrails without a reviewed
+  decomposition or temporary allowlist decision.
+- Visual proof would require tracked raw screenshots, logs, local paths,
+  private Plex names, media names, URLs, payloads, tokens, or native handles.
+
+### RD-22B Live Plex Onboarding Runtime Wiring Into Parity Body
+
+Status: not started. Live Plex proof remains blocked until Plex rate limiting
+clears. RD-22B starts only after RD-22A is complete and reviewed.
+
+Depends on:
+
+- RD-22A complete and reviewed.
+- RD-09 secure storage and selected-server custody complete.
+- RD-10 Plex auth, discovery, and library domain seams complete.
+- RD-17 diagnostics/redaction surfaces complete enough to report sanitized
+  live-runtime failures.
+- Existing RD-22 live-runtime fixes retained and verified.
+
+Objective:
+
+- Wire main-owned live Plex auth/profile/Plex Home, server discovery/restore,
+  server selection, library sections, browse, search, metadata, sanitized
+  failure states, and relaunch restore into the RD-22A body.
+- Keep transport, tokens, selected connection details, app paths, raw Plex
+  payloads, and diagnostics in main-owned custody.
+- Avoid reshaping the app body except for reviewed data-binding adjustments.
+- Do not create channels, persist channel settings, start playback, add
+  production native helper behavior, or change package/release behavior.
+
+Platform proof label:
+
+- `Windows proof required before closeout` for live sign-in, profile/Plex Home,
+  server discovery/selection/restore, library browse/search, metadata,
+  sanitized failure reporting, credential availability, and relaunch restore.
+
+Exit gates:
+
+- Live Plex auth/profile, discovery/restore, server selection, and library
+  browse/search/metadata are observed through redaction-safe Windows proof.
+- Runtime wiring preserves the RD-22A app body and renderer privilege boundary.
 - Renderer-facing payloads and diagnostics exclude credentials, auth headers,
   tokenized URLs, raw Plex payloads, connection details, local paths, and
   private account/server/media names.
@@ -1458,7 +1507,7 @@ Status: not started.
 
 Depends on:
 
-- RD-22 complete and reviewed.
+- RD-22B complete and reviewed.
 - RD-09 persistence boundary complete.
 - RD-11 scheduler/channel/content domains and channel persistence seams
   complete.
@@ -1470,14 +1519,15 @@ Objective:
   channel-authoring and main-owned persistence owners.
 - Add the minimum renderer-safe channel setup, settings recovery, and restart
   validation needed for a usable MVP.
-- Continue the same real setup journey from RD-22 instead of reintroducing fake
-  draft channels or compatibility scaffolds into the reachable route.
+- Continue the same real setup journey from RD-22A/RD-22B instead of
+  reintroducing fake draft channels or compatibility scaffolds into the
+  reachable route.
 - Import or adapt upstream channel-setup and settings visuals for the owned
   live channel-authoring and settings path, including screen hierarchy,
   controls, validation states, saved-state/recovery presentation, focus/back,
   and empty/error behavior where compatible with Desktop boundaries.
-- Do not broaden live Plex browsing beyond the RD-22 contract, start production
-  playback, or add package/release behavior.
+- Do not broaden live Plex browsing beyond the RD-22B contract, start
+  production playback, or add package/release behavior.
 
 Platform proof label:
 
@@ -1521,11 +1571,11 @@ Objective:
 
 - Replace fake guide/EPG data with persisted-channel schedule composition and
   renderer-safe OSD, now-playing, mini-guide, channel badge, route, player
-  chrome, and channel switch state.
-- Import or adapt upstream guide/EPG, OSD, mini-guide, now-playing, channel
-  badge, and route/player-chrome visuals for the owned runtime surfaces,
-  including virtualization, focus, density, hierarchy, transition timing, and
-  empty/error states where they fit Desktop boundaries.
+  chrome, and channel switch state inside the RD-22A body.
+- Finish runtime-backed upstream guide/EPG, OSD, mini-guide, now-playing,
+  channel badge, and route/player-chrome parity for behavior that depends on
+  persisted schedules, channel switching, virtualization, current-program state,
+  transition timing, and runtime empty/error states.
 - Prove current-channel and schedule transitions without claiming production
   native playback readiness.
 
@@ -1538,12 +1588,13 @@ Platform proof label:
 Exit gates:
 
 - Guide/EPG, OSD, now-playing, mini-guide, channel badge, and player/route
-  chrome reflect persisted channels rather than fake data.
-- Guide/EPG, OSD, now-playing info, mini-guide, channel badge, and route/player
-  chrome no longer read as fake preview surfaces and have reviewed upstream
-  parity evidence for layout density, time/channel navigation, virtualization,
-  current-program state, focus/back behavior, empty/error states, and any
-  reviewed Desktop divergences.
+  chrome reflect persisted channels rather than fake data inside the RD-22A
+  body.
+- Runtime-backed Guide/EPG, OSD, now-playing info, mini-guide, channel badge,
+  and route/player chrome have reviewed upstream parity evidence for layout
+  density, time/channel navigation, virtualization, current-program state,
+  focus/back behavior, empty/error states, and any reviewed Desktop
+  divergences.
 - Channel switch requests resolve to reviewed runtime state and remain
   renderer-safe.
 - `npm run verify` passes unless the reviewed plan names a narrower verified
@@ -1653,7 +1704,7 @@ Status: not started.
 
 Depends on:
 
-- RD-22 through RD-26 complete and reviewed.
+- RD-22A through RD-26 complete and reviewed, including RD-22B live Plex wiring.
 - `docs/development/windows-ui-proof-plan.md` current.
 
 Objective:
@@ -1672,7 +1723,7 @@ Exit gates:
   screenshots, logs, paths, account/server/media names, tokens, native handles,
   package trees, or private local details.
 - The Windows proof matrix includes one redaction-safe row for each upstream
-  adapted MVP UI surface owned by RD-22 through RD-26: onboarding, channel
+  adapted MVP UI surface owned by RD-22A through RD-26: onboarding, channel
   setup, Settings, Guide/EPG, OSD, now-playing info, mini-guide, player chrome,
   playback controls, and media options.
 - Any missing upstream parity is routed back to the owning RD slice or a
@@ -1730,12 +1781,12 @@ Stop and replan if:
 
 ### RD-29 Future Platform Review
 
-Status: deferred behind RD-22 through RD-28 product-parity/MVP completion.
+Status: deferred behind RD-22A through RD-28 product-parity/MVP completion.
 
 Depends on:
 
 - RD-21 complete and reviewed.
-- RD-22 through RD-28 complete, reviewed, and classified as either passed or
+- RD-22A through RD-28 complete, reviewed, and classified as either passed or
   intentionally deferred with MVP acceptance rationale.
 
 Objective:
