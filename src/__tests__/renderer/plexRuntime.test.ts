@@ -774,6 +774,28 @@ test('Plex runtime error text describes auth parse failures as sign-in failures'
     }),
     'Plex library data could not be loaded.',
   );
+
+  assert.equal(
+    sanitizePlexRuntimeError({
+      code: 'PLEX_UNKNOWN',
+      operation: 'refreshServers',
+      message: 'Plex operation failed.',
+      retryable: true,
+      recoverable: true,
+    }),
+    'Plex server discovery failed.',
+  );
+
+  assert.equal(
+    sanitizePlexRuntimeError({
+      code: 'PLEX_UNKNOWN',
+      operation: 'listLibrarySections',
+      message: 'Plex operation failed.',
+      retryable: true,
+      recoverable: true,
+    }),
+    'Plex library request failed.',
+  );
 });
 
 test('Plex cleanup clears protected-home PIN input on next render', async () => {

@@ -19,6 +19,7 @@ export interface DiscoveryFetchVariant {
 
 export interface LivePlexDiscoveryRequestPolicyOptions {
   token?: string;
+  headers?: Record<string, string>;
   signal: AbortSignal | null;
   fetchText(input: {
     url: URL;
@@ -42,7 +43,7 @@ const NUMERIC_RETRY_AFTER_PATTERN = /^[+-]?(?:\d+\.?\d*|\.\d+)$/u;
 export async function discoverPlexResourcesWithRequestPolicy(
   options: LivePlexDiscoveryRequestPolicyOptions,
 ): Promise<PlexApiResource[]> {
-  const variants = buildDiscoveryFetchVariants(options.token);
+  const variants = buildDiscoveryFetchVariants(options.token, options.headers);
   let lastRetryableError: LivePlexTransportError | null = null;
   let lastServerError: LivePlexTransportError | null = null;
 
@@ -108,9 +109,13 @@ export async function discoverPlexResourcesWithRequestPolicy(
   });
 }
 
-function buildDiscoveryFetchVariants(token?: string): DiscoveryFetchVariant[] {
+function buildDiscoveryFetchVariants(
+  token?: string,
+  inputHeaders: Record<string, string> = {},
+): DiscoveryFetchVariant[] {
   const headers = {
     Accept: 'application/json',
+    ...inputHeaders,
     ...(token !== undefined ? { [PLEX_TOKEN_HEADER_NAME]: token } : {}),
   };
   const baseUrl = buildDiscoveryResourcesUrl(PLEX_TV_ORIGIN);

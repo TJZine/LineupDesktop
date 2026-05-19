@@ -1376,6 +1376,7 @@ test('desktop plex discovery aborts in-flight selected-server persistence before
 test('live plex transport normalizes JSON/text responses, auth headers, status, and aborts', async () => {
   const seen: Array<{ url: string; headers: HeadersInit | undefined }> = [];
   const transport = new LivePlexTransport({
+    authConfig: authConfig(),
     fetch: async (url, init) => {
       seen.push({ url: String(url), headers: init?.headers });
       return new Response(JSON.stringify({ ok: true }), {
@@ -1401,6 +1402,8 @@ test('live plex transport normalizes JSON/text responses, auth headers, status, 
   assert.equal(probe.outcome, 'auth-required');
   assert.equal(new Headers(seen[0]?.headers).get('X-Plex-Token'), placeholderAccountToken);
   assert.equal(new Headers(seen[1]?.headers).get('X-Plex-Token'), placeholderAccountToken);
+  assert.equal(new Headers(seen[1]?.headers).get('X-Plex-Client-Identifier'), 'desktop-client');
+  assert.equal(new Headers(seen[1]?.headers).get('X-Plex-Product'), 'Lineup Desktop');
   assert.equal(JSON.stringify(auth).includes(placeholderAccountToken), false);
 });
 
@@ -1454,9 +1457,12 @@ test('live plex transport encodes library browse filters and search types safely
 });
 
 test('live plex transport sends account token for plex.tv discovery and separates timeout from caller abort', async () => {
+  const seenDiscoveryHeaders: Headers[] = [];
   const discoveryTransport = new LivePlexTransport({
+    authConfig: authConfig(),
     fetch: async (_url, init) => {
       const headers = new Headers(init?.headers);
+      seenDiscoveryHeaders.push(headers);
       return new Response(JSON.stringify([{ clientIdentifier: 'server-1' }]), {
         status: headers.get('X-Plex-Token') === placeholderAccountToken ? 200 : 401,
         headers: { 'Content-Type': 'application/json' },
@@ -1466,6 +1472,9 @@ test('live plex transport sends account token for plex.tv discovery and separate
   });
   const resources = await discoveryTransport.discoverResources({ token: placeholderAccountToken });
   assert.equal(Array.isArray(resources), true);
+  assert.equal(seenDiscoveryHeaders[0]?.get('X-Plex-Token'), placeholderAccountToken);
+  assert.equal(seenDiscoveryHeaders[0]?.get('X-Plex-Client-Identifier'), 'desktop-client');
+  assert.equal(seenDiscoveryHeaders[0]?.get('X-Plex-Product'), 'Lineup Desktop');
 
   const timeoutTransport = new LivePlexTransport({
     fetch: (_url, init) =>

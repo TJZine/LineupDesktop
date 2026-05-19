@@ -39,13 +39,14 @@ export async function registerPlexComposition(options: RegisterPlexCompositionOp
   });
   const credentialStore = new DesktopPlexCredentialStore({ persistenceStore });
   const selectedServerStore = new DesktopPlexSelectedServerStore({ persistenceStore });
-  const liveTransport = new LivePlexTransport();
+  const authConfig = createDesktopPlexAuthConfig({
+    clientIdentifier,
+    platformVersion: os.release(),
+    deviceName: 'Lineup Desktop',
+  });
+  const liveTransport = new LivePlexTransport({ authConfig });
   const authService = new DesktopPlexAuthService({
-    config: createDesktopPlexAuthConfig({
-      clientIdentifier,
-      platformVersion: os.release(),
-      deviceName: 'Lineup Desktop',
-    }),
+    config: authConfig,
     transport: liveTransport,
     credentialStore,
   });
