@@ -193,6 +193,23 @@ durable completion summary.
   M01-M07/D01-D07 import and ledger coverage reviewed clean,
   reference-only/proof-context M08-M11/D08-D11 reviewed clean, and import
   ledger coverage is current after retained-test path corrections only.
+- [x] RD-22A Upstream Lineup UI Skeleton And Body Parity Foundation completed
+  and reviewed as fixture/injected renderer-safe body parity for the reachable
+  Desktop app. It established the upstream-shaped onboarding/profile/server,
+  channel setup, Settings, Guide/EPG, overlay/player chrome, now-playing, mini
+  guide, channel badge, route, focus, loading, empty, and error surfaces without
+  live Plex, channel creation, scheduler, playback, media options, package, or
+  release behavior.
+- [x] RD-22B Live Plex Onboarding Runtime Wiring Into Parity Body completed and
+  reviewed on Windows. Focused runtime tests, typecheck, smoke, full verify,
+  docs verify, redaction verify, diff check, clean plan/implementation/proof
+  reviews, adjudicated closeout review, and redaction-safe live proof covered
+  auth/PIN, credential availability and restore, Plex Home/profile selection,
+  protected-user PIN failure handling, server discovery/selection/restore,
+  library sections/browse/search/metadata, failure/empty/loading/stale
+  categories, and clear/back/cancel/text-entry/scroll behavior. No raw private
+  Plex evidence is tracked, and RD-23+
+  channel/scheduler/playback/package scope remains unimplemented.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -252,9 +269,10 @@ When a slice owns channel setup, the reachable channel setup route or surface
 must replace or isolate fake setup summaries and controls in the product path
 before closeout.
 
-The next product foundation is upstream-shaped app body parity. Live Plex,
-channel creation, scheduler runtime, playback, and media-option behavior should
-wire into that body; they should not keep the renderer stuck as a scaffold while
+The upstream-shaped app body parity foundation is complete. RD-22B has now
+wired live Plex onboarding and library behavior into that body. Channel
+creation, scheduler runtime, playback, and media-option behavior should wire
+into the same body; they should not keep the renderer stuck as a scaffold while
 each integration is debugged. Fixture-backed or injected renderer-safe data is
 acceptable for a UI-body foundation slice when the slice explicitly forbids live
 network/runtime claims and routes those claims to the owning runtime slices.
@@ -324,13 +342,13 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-22A are complete enough to route the next Tier 3 session to
-RD-22B Live Plex Onboarding Runtime Wiring Into Parity Body through the quality
-loop. RD-21 superseded the former RD-21 Future Platform Review route and
-deferred platform expansion until after product-parity/MVP completion. Do not
-import additional original Lineup product code or broaden live Plex/native
-playback runtime behavior until a reviewed product slice plan explicitly
-authorizes a bounded change.
+RD-01 through RD-22B are complete enough to route the next Tier 3 session to
+RD-23 Live Channel Setup And Runtime Persistence through the quality loop.
+RD-21 superseded the former RD-21 Future Platform Review route and deferred
+platform expansion until after product-parity/MVP completion. Do not import
+additional original Lineup product code or broaden live Plex/native playback
+runtime behavior until a reviewed product slice plan explicitly authorizes a
+bounded change.
 
 ## Roadmap Checklist
 
@@ -1468,9 +1486,10 @@ Stop and replan if:
 
 ### RD-22B Live Plex Onboarding Runtime Wiring Into Parity Body
 
-Status: next Tier 3 planning target. RD-22B starts after RD-22A completion and
-review. Live proof and implementation remain gated by redaction-safe Plex
-account/server availability and any active Plex rate limiting.
+Status: complete and reviewed. RD-22B closed the live Plex onboarding and
+library runtime wiring slice inside the RD-22A body. The implementation needed
+no additional source patch after the freshness gate because existing runtime
+seams already satisfied the approved plan.
 
 Depends on:
 
@@ -1509,6 +1528,31 @@ Exit gates:
 - `npm run verify` passes unless the reviewed plan names a narrower verified
   surface with justification.
 - Implementation review is clean.
+
+Closeout evidence:
+
+- Plan activation and read-only plan review were clean after `npm run
+  verify:docs`, `npm run verify:redaction`, and targeted `git diff --check`.
+- Unit 2 source freshness found no required code changes. Focused Plex
+  contract/main/preload/renderer tests, targeted renderer tests, `npm run
+  typecheck`, `npm run verify:redaction`, `npm run smoke:electron`, `npm run
+  verify`, and `git diff --check` passed.
+- Redaction-safe Windows live proof used the built Electron app and narrow
+  renderer bridge to observe live PIN auth, encrypted credential present after
+  sign-in, Plex Home/profile data, protected-user PIN failure as a sanitized
+  auth-invalid category, two discovered servers, selected-server relaunch
+  restore, six library sections, browse/search/metadata behavior, empty search,
+  clear/back/cancel/text-entry/scroll behavior, and forbidden visible text
+  checks without tracking raw account, profile, server, library, media,
+  endpoint, token, path, payload, log, screenshot, process, or native-handle
+  evidence.
+- Proof review was clean. It accepted CDP-driven DOM proof for Windows-launched
+  Electron renderer/runtime behavior and confirmed loading/stale behavior is
+  covered by existing automated public-seam tests.
+- RD-22B added no channel creation, channel persistence, scheduler-backed
+  guide/player data, production playback, media-option runtime, package/release
+  behavior, native-helper production behavior, public readiness claim, or new
+  copied/adapted upstream source.
 
 Stop and replan if:
 

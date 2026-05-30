@@ -1,13 +1,15 @@
 # RD-22B Live Plex Onboarding Runtime Wiring Into Parity Body
 
-**Plan Status:** active
+**Plan Status:** complete and reviewed; durable RD-22B closeout is reflected in
+`docs/architecture/CURRENT_STATE.md` and
+`docs/roadmap/desktop-port-roadmap.md`
 **Task family:** feature/design
 **Tier:** Tier 3
 
 Path note: this plan keeps the historical RD-22 filename for handoff
 continuity. RD-22A is complete and reviewed as fixture/injected
-renderer-safe upstream-shaped app body parity. RD-22B is now the active live
-runtime wiring and closeout plan for RD-22.
+renderer-safe upstream-shaped app body parity. RD-22B was the live runtime
+wiring and closeout plan for RD-22 and is now closed.
 
 ## Goal
 
@@ -29,6 +31,36 @@ main-owned Plex runtime and narrow preload bridge for:
 
 Close RD-22 only after implementation, redaction-safe Windows live proof, full
 verification, implementation review, and durable memory updates are complete.
+
+## Closeout Summary
+
+RD-22B closed the live Plex onboarding and library runtime wiring slice without
+needing source changes after the approved freshness gate. Existing
+main/preload/renderer seams already satisfied the plan, and the no-diff
+implementation review was clean.
+
+Observed closeout proof and verification:
+
+- focused Plex contract/main/preload/renderer tests passed
+- targeted renderer Plex runtime/navigation/focus/input tests passed
+- `npm run typecheck` passed
+- `npm run smoke:electron` passed
+- `npm run verify` passed
+- `npm run verify:docs` passed for plan activation and closeout docs
+- `npm run verify:redaction` passed
+- `git diff --check` passed
+- redaction-safe Windows live proof passed for auth/PIN, credential
+  availability and restore, Plex Home/profile selection, protected-user PIN
+  failure handling, server discovery/selection/restore, library sections,
+  browse, search, metadata, failure/empty/loading/stale categories, and
+  clear/back/cancel/text-entry/scroll behavior
+- plan, implementation, and proof reviews were clean; final closeout review
+  findings were adjudicated in this closeout update
+
+No raw account, profile, server, library, media, endpoint, token, path, payload,
+log, screenshot, process, native-handle, or support-bundle evidence is tracked.
+No copied or adapted upstream source landed in RD-22B, so no import-ledger
+update was required.
 
 ## Non-Goals
 
@@ -655,24 +687,22 @@ Stop/replan:
 - Any material review finding remains unresolved, required verification fails,
   Windows proof is blocked, or memory updates would overclaim RD-23+ scope.
 
-## Review Handoff
+## Closeout Handoff
 
 MODEL_SUGGESTION
 PLANNER: gpt-5 high reasoning
 IMPLEMENTER: gpt-5 high reasoning
 REVIEWER: gpt-5 high reasoning
-WHY: RD-22B is Tier 3 live Plex runtime wiring across Electron main, preload, contracts, secure storage, Plex auth/discovery/library, renderer focus/UI binding, Windows live proof, and redaction boundaries.
+WHY: RD-23 is Tier 3 channel setup and persistence work across live Plex library data, channel/domain seams, main-owned persistence, preload/renderer boundaries, UI binding, Windows proof, and redaction boundaries.
 
 NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
-TASK: Review RD-22B Live Plex Onboarding Runtime Wiring Plan
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
+TASK: Plan RD-23 Live Channel Setup And Runtime Persistence
 TASK_FAMILY: feature/design
 TIER: Tier 3
-PLAN: docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md
-ARTIFACT: active RD-22B execution plan
+PLAN: create or update an active tracked RD-23 plan under docs/plans/
+ARTIFACT: RD-22B closed and reviewed; roadmap now routes to RD-23
 FILES:
-- docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md
-- docs/plans/rd-22a-upstream-ui-body-parity-matrix.md
 - docs/architecture/CURRENT_STATE.md
 - docs/architecture/file-shape-guardrails.md
 - docs/architecture/security-and-secret-flow.md
@@ -680,10 +710,13 @@ FILES:
 - docs/roadmap/desktop-port-roadmap.md
 - docs/development/windows-ui-proof-plan.md
 - src/contracts/plex.ts
+- src/contracts/persistence.ts
 - src/preload/index.cts
 - src/main/index.ts
 - src/main/plex/**
 - src/main/persistence/**
+- src/domain/channel/**
+- src/domain/scheduler/**
 - src/renderer/plexRuntime*.ts
 - src/renderer/staticDom.ts
 - src/renderer/domBindings.ts
@@ -692,6 +725,14 @@ FILES:
 - src/renderer/desktopInput.ts
 - src/renderer/index.ts
 - src/__tests__/**
-BLOCKERS: none for read-only plan review. Source implementation is intentionally not started.
+BLOCKERS: none known. RD-23 must still produce and review its own plan before implementation.
 MESSAGE:
-Review the active RD-22B plan for implementation readiness. Prioritize findings about main/preload/renderer ownership, credential/token/connection/raw-payload custody, selected-server restore persistence, protected Plex Home PIN handling, RD-22A body preservation, file-shape guardrails, verification sufficiency, live Windows proof redaction policy, RD-23+ scope leakage, and import-ledger obligations. Stay read-only and lead with blockers or material risks by file/section reference. If clean, state that the plan is implementation-ready and identify any residual proof risk.
+Start the RD-23 quality loop from the current architecture truth and roadmap.
+Plan the live channel setup and runtime persistence slice without reopening
+RD-22B live Plex onboarding/library scope, production playback, scheduler-backed
+guide/player runtime, media options, package/release behavior, native-helper
+production behavior, or public readiness claims. Prioritize main-owned channel
+persistence, renderer-safe channel authoring from live library summaries,
+settings/recovery behavior, redaction-safe Windows proof, import-ledger duties
+for any copied/adapted upstream channel setup UI/code, and clear stop/replan
+triggers before implementation.
