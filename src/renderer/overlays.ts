@@ -234,19 +234,21 @@ function closeTopOverlay(state: PlayerOverlayState): PlayerOverlayState {
 }
 
 function nextAudioTrackId(currentTrackId: string): string {
-  const currentIndex = PLAYBACK_AUDIO_TRACKS.findIndex((track) => track.id === currentTrackId);
+  const availableTracks = PLAYBACK_AUDIO_TRACKS.filter((track) => track.available);
+  const currentIndex = availableTracks.findIndex((track) => track.id === currentTrackId);
   if (currentIndex === -1) {
-    return PLAYBACK_AUDIO_TRACKS[0].id;
+    return availableTracks[0]?.id ?? currentTrackId;
   }
-  return PLAYBACK_AUDIO_TRACKS[(currentIndex + 1) % PLAYBACK_AUDIO_TRACKS.length].id;
+  return availableTracks[(currentIndex + 1) % availableTracks.length]?.id ?? currentTrackId;
 }
 
 function nextSubtitleTrackId(currentTrackId: string | null): string | null {
-  const currentIndex = PLAYBACK_SUBTITLE_TRACKS.findIndex((track) => track.id === currentTrackId);
+  const availableTracks = PLAYBACK_SUBTITLE_TRACKS.filter((track) => track.available);
+  const currentIndex = availableTracks.findIndex((track) => track.id === currentTrackId);
   if (currentIndex === -1) {
-    return PLAYBACK_SUBTITLE_TRACKS[0].id;
+    return availableTracks[0]?.id ?? null;
   }
-  return PLAYBACK_SUBTITLE_TRACKS[(currentIndex + 1) % PLAYBACK_SUBTITLE_TRACKS.length].id;
+  return availableTracks[(currentIndex + 1) % availableTracks.length]?.id ?? null;
 }
 
 function readChannelDigit(actionId: PlayerOverlayDigitActionId): string {

@@ -54,6 +54,8 @@ test('mini guide channel selection updates the selected channel and badge summar
       ['101', false],
       ['204', true],
       ['310', false],
+      ['411', false],
+      ['512', false],
     ],
   );
 
@@ -98,6 +100,9 @@ test('playback options cycle renderer-local track and volume state', () => {
   assert.equal(view.playbackOptions.selectedSubtitleLabel, 'English');
   assert.equal(view.playbackOptions.volumePercent, 82);
   assert.equal(view.playbackOptions.muted, true);
+  assert.equal(view.playbackOptions.audioTracks.some((track) => !track.available), true);
+  assert.equal(view.playbackOptions.subtitleTracks.some((track) => track.meta === 'Burn-in'), true);
+  assert.match(view.playbackOptions.playbackSummary, /Direct Play .*Video Transcode/u);
 });
 
 test('playback options normalize unknown track ids to the first option when cycling', () => {

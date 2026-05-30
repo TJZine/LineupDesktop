@@ -39,6 +39,7 @@ export interface RendererDomBindings {
   setupStepsElement: HTMLElement | null;
   channelDraftListElement: HTMLElement | null;
   setupValidationElement: HTMLElement | null;
+  channelSetupFixtureStatusElement: HTMLElement | null;
   plexPanelElement: HTMLElement | null;
   plexActionButtons: HTMLButtonElement[];
   plexStatusElement: HTMLElement | null;
@@ -70,6 +71,9 @@ export interface RendererDomBindings {
   overlaySubtitleLabelElement: HTMLElement | null;
   overlayVolumeLabelElement: HTMLElement | null;
   overlayRateLabelElement: HTMLElement | null;
+  overlayPlaybackSummaryElement: HTMLElement | null;
+  overlayAudioOptionsElement: HTMLElement | null;
+  overlaySubtitleOptionsElement: HTMLElement | null;
 }
 
 export function queryRendererDom(documentRef: Document = document): RendererDomBindings {
@@ -116,9 +120,12 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     channelSetupBlocksElement: documentRef.querySelector<HTMLElement>(
       '[data-channel-setup-blocks]',
     ),
-    setupStepsElement: documentRef.querySelector<HTMLElement>('[data-setup-steps]'),
-    channelDraftListElement: documentRef.querySelector<HTMLElement>('[data-channel-draft-list]'),
-    setupValidationElement: documentRef.querySelector<HTMLElement>('[data-setup-validation]'),
+    setupStepsElement: documentRef.querySelector<HTMLElement>('[data-channel-review-steps]'),
+    channelDraftListElement: documentRef.querySelector<HTMLElement>('[data-channel-review-list]'),
+    setupValidationElement: documentRef.querySelector<HTMLElement>('[data-channel-review-validation]'),
+    channelSetupFixtureStatusElement: documentRef.querySelector<HTMLElement>(
+      '[data-channel-setup-fixture-status]',
+    ),
     plexPanelElement: documentRef.querySelector<HTMLElement>('[data-plex-runtime-panel]'),
     plexActionButtons: Array.from(
       documentRef.querySelectorAll<HTMLButtonElement>('[data-plex-action]'),
@@ -172,6 +179,15 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
       '[data-overlay-volume-label]',
     ),
     overlayRateLabelElement: documentRef.querySelector<HTMLElement>('[data-overlay-rate-label]'),
+    overlayPlaybackSummaryElement: documentRef.querySelector<HTMLElement>(
+      '[data-overlay-playback-summary]',
+    ),
+    overlayAudioOptionsElement: documentRef.querySelector<HTMLElement>(
+      '[data-overlay-audio-options]',
+    ),
+    overlaySubtitleOptionsElement: documentRef.querySelector<HTMLElement>(
+      '[data-overlay-subtitle-options]',
+    ),
   };
 }
 

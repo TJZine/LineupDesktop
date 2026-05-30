@@ -80,7 +80,7 @@ test('direct route activation clears action status and preserves previous route'
   assert.deepEqual(settings.routeState, { activeRoute: 'settings', previousRoute: 'guide' });
   assert.equal(settings.lastActionId, null);
   assert.equal(settings.lastActionRoute, null);
-  assert.equal(settingsView.statusText, 'Settings preview is local-only and not persisted.');
+  assert.equal(settingsView.statusText, 'Settings shell is local-only and not persisted.');
 });
 
 test('settings actions update only renderer-local settings draft state', () => {

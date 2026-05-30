@@ -33,6 +33,8 @@ export interface PlaybackOptionTrackViewModel {
   label: string;
   selected: boolean;
   available: boolean;
+  meta: string;
+  stateLabel: string;
 }
 
 export interface PlaybackOptionsViewModel {
@@ -43,6 +45,7 @@ export interface PlaybackOptionsViewModel {
   subtitleTracks: readonly PlaybackOptionTrackViewModel[];
   selectedAudioLabel: string;
   selectedSubtitleLabel: string;
+  playbackSummary: string;
 }
 
 export interface PlayerOverlayState {
@@ -98,21 +101,37 @@ export const FAKE_OVERLAY_CHANNELS = [
   {
     id: 'channel-weekend',
     number: '310',
-    name: 'Weekend Queue',
+    name: 'Weekend Queue With A Long Channel Name',
     currentTitle: 'Pilot Block',
     nextTitle: 'Comfort Marathon',
+  },
+  {
+    id: 'channel-docs',
+    number: '411',
+    name: 'Documentary Shelf',
+    currentTitle: 'Field Notes',
+    nextTitle: 'Archive Interview',
+  },
+  {
+    id: 'channel-late',
+    number: '512',
+    name: 'Late Signal',
+    currentTitle: 'HLS Session Sample',
+    nextTitle: 'Subtitle Burn-in Demo',
   },
 ] as const satisfies readonly OverlayChannelViewModel[];
 
 export const PLAYBACK_AUDIO_TRACKS = [
-  { id: 'audio-main', label: 'Main stereo' },
-  { id: 'audio-commentary', label: 'Commentary' },
+  { id: 'audio-main', label: 'Main stereo', meta: 'Direct Play', available: true },
+  { id: 'audio-commentary', label: 'Commentary', meta: 'Audio Transcode', available: true },
+  { id: 'audio-described', label: 'Descriptive audio', meta: 'Unavailable', available: false },
 ] as const;
 
 export const PLAYBACK_SUBTITLE_TRACKS = [
-  { id: null, label: 'Off' },
-  { id: 'subtitle-english', label: 'English' },
-  { id: 'subtitle-sdh', label: 'English SDH' },
+  { id: null, label: 'Off', meta: 'Direct', available: true },
+  { id: 'subtitle-english', label: 'English', meta: 'Extract', available: true },
+  { id: 'subtitle-sdh', label: 'English SDH', meta: 'Burn-in', available: true },
+  { id: 'subtitle-forced-missing', label: 'Forced track', meta: 'Unavailable', available: false },
 ] as const;
 
 export function createPlayerOverlayView(
@@ -248,13 +267,15 @@ function createPlaybackOptionsView(state: PlayerOverlayState): PlaybackOptionsVi
   const audioTracks = PLAYBACK_AUDIO_TRACKS.map((track) => ({
     ...track,
     selected: track.id === state.selectedAudioTrackId,
-    available: true,
+    stateLabel: track.id === state.selectedAudioTrackId ? 'Selected' : track.available ? 'Available' : 'Unavailable',
   }));
   const subtitleTracks = PLAYBACK_SUBTITLE_TRACKS.map((track) => ({
     id: track.id ?? 'subtitles-off',
     label: track.label,
     selected: track.id === state.selectedSubtitleTrackId,
-    available: true,
+    available: track.available,
+    meta: track.meta,
+    stateLabel: track.id === state.selectedSubtitleTrackId ? 'Selected' : track.available ? 'Available' : 'Unavailable',
   }));
   const selectedAudioLabel =
     audioTracks.find((track) => track.selected)?.label ?? PLAYBACK_AUDIO_TRACKS[0].label;
@@ -269,6 +290,7 @@ function createPlaybackOptionsView(state: PlayerOverlayState): PlaybackOptionsVi
     subtitleTracks,
     selectedAudioLabel,
     selectedSubtitleLabel,
+    playbackSummary: 'Playback: Direct Play / Direct Stream / HLS Session / Audio Transcode / Video Transcode',
   };
 }
 

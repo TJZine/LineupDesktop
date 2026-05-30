@@ -86,7 +86,7 @@ const FAKE_EPG_CHANNELS = [
   {
     id: 'channel-weekend',
     number: '310',
-    name: 'Weekend Queue',
+    name: 'Weekend Queue With A Long Channel Name',
     programs: [
       createProgram('weekend-pilot', 'Pilot Block', 'First episodes', 0, 30),
       createProgram('weekend-marathon', 'Comfort Marathon', 'Season stretch', 30, 150),

@@ -40,12 +40,26 @@ const STATIC_SCREEN_MARKUP = `
           </div>
         </section>
         <section class="player-overlay playback-options" data-overlay="playbackOptions" aria-label="Playback options" hidden>
+          <header class="playback-options__header">
+            <p>Playback options</p>
+            <strong data-overlay-playback-summary></strong>
+          </header>
           <dl>
             <div><dt>Audio</dt><dd data-overlay-audio-label></dd></div>
             <div><dt>Subtitles</dt><dd data-overlay-subtitle-label></dd></div>
             <div><dt>Volume</dt><dd data-overlay-volume-label></dd></div>
             <div><dt>Rate</dt><dd data-overlay-rate-label></dd></div>
           </dl>
+          <div class="playback-options__lists">
+            <section>
+              <h4>Audio tracks</h4>
+              <div data-overlay-audio-options></div>
+            </section>
+            <section>
+              <h4>Subtitle tracks</h4>
+              <div data-overlay-subtitle-options></div>
+            </section>
+          </div>
           <div class="playback-options__controls">
             <button type="button" data-overlay-action="cycleAudioTrack" data-focus-id="overlay-audio-cycle">Audio</button>
             <button type="button" data-overlay-action="cycleSubtitleTrack" data-focus-id="overlay-subtitle-cycle">Subtitles</button>
@@ -58,6 +72,10 @@ const STATIC_SCREEN_MARKUP = `
   </div>
   <section id="screen-player" class="screen screen--active" data-screen="player" data-style-surface="screen" aria-labelledby="screen-player-title">
     <div class="screen__content">
+      <div class="screen-shell-state" data-shell-state="active">
+        <span>Player preview</span>
+        <strong data-screen-state-text="player">Player controls are available for the local preview surface.</strong>
+      </div>
       <p class="screen__kicker" data-workflow-kicker="player">Now playing</p>
       <h2 id="screen-player-title">Player</h2>
       <p data-workflow-primary="player">Ready for playback.</p>
@@ -77,11 +95,15 @@ const STATIC_SCREEN_MARKUP = `
   </section>
   <section id="screen-guide" class="screen" data-screen="guide" data-style-surface="screen" aria-labelledby="screen-guide-title" hidden>
     <div class="screen__content">
+      <div class="screen-shell-state" data-shell-state="active">
+        <span>Guide preview</span>
+        <strong data-screen-state-text="guide">Guide rows show the current local lineup preview.</strong>
+      </div>
       <p class="screen__kicker" data-workflow-kicker="guide">Guide</p>
       <h2 id="screen-guide-title">Guide</h2>
       <p data-workflow-primary="guide">Tonight at a glance.</p>
       <p data-workflow-secondary="guide">Lineup preview.</p>
-      <div class="guide-controls" aria-label="Fake guide controls">
+      <div class="guide-controls" aria-label="Guide shell controls">
         <button type="button" data-epg-action="previousWindow" data-focus-id="guide-window-previous">Earlier</button>
         <button type="button" data-epg-action="nextWindow" data-focus-id="guide-window-next">Later</button>
         <button type="button" data-epg-action="previousChannel" data-focus-id="guide-channel-previous">Channel up</button>
@@ -94,6 +116,10 @@ const STATIC_SCREEN_MARKUP = `
         <h3 data-epg-detail-title></h3>
         <p data-epg-detail-time></p>
       </section>
+      <div class="screen-shell-state" data-shell-state="empty">
+        <span>Empty state</span>
+        <strong>No saved channels are loaded for this local setup state.</strong>
+      </div>
       <div class="epg-grid" data-epg-grid aria-label="Guide schedule grid"></div>
       <div class="workflow-actions" data-workflow-actions="guide">
         <button type="button" data-route-action="resumePlayer" data-focus-id="guide-watch">Watch now</button>
@@ -103,6 +129,10 @@ const STATIC_SCREEN_MARKUP = `
   </section>
   <section id="screen-settings" class="screen" data-screen="settings" data-style-surface="screen" aria-labelledby="screen-settings-title" hidden>
     <div class="screen__content">
+      <div class="screen-shell-state" data-shell-state="active">
+        <span>Settings preview</span>
+        <strong data-screen-state-text="settings">Preference changes apply to this local preview session only.</strong>
+      </div>
       <p class="screen__kicker" data-workflow-kicker="settings">Settings</p>
       <h2 id="screen-settings-title">Settings</h2>
       <p data-workflow-primary="settings">Desktop preferences.</p>
@@ -113,7 +143,7 @@ const STATIC_SCREEN_MARKUP = `
         <div><dt>Status</dt><dd data-settings-state></dd></div>
       </dl>
       <div class="settings-sections" data-settings-sections></div>
-      <div class="settings-controls" aria-label="Fake settings controls">
+      <div class="settings-controls" aria-label="Settings shell controls">
         <button type="button" data-settings-action="cycleLaunchMode" data-focus-id="settings-launch-mode">Startup surface</button>
         <button type="button" data-settings-action="cycleGuideDensity" data-focus-id="settings-guide-density">Guide density</button>
         <button type="button" data-settings-action="togglePreviewBadges" data-focus-id="settings-preview-badges">Preview badges</button>
@@ -133,6 +163,10 @@ const STATIC_SCREEN_MARKUP = `
         <h2 id="screen-channel-setup-title">Plex setup</h2>
         <p data-workflow-primary="channelSetup">Connect Plex, choose a profile and server, then browse your library.</p>
         <p data-workflow-secondary="channelSetup">Lineup Desktop shows the account, server, library, and media details needed for setup.</p>
+      </div>
+      <div class="screen-shell-state" data-shell-state="loading">
+        <span>Local setup state</span>
+        <strong data-screen-state-text="channelSetup">Review account, server, library, and lineup setup steps in one place.</strong>
       </div>
       <section class="plex-runtime plex-onboarding" data-plex-runtime-panel aria-label="Plex onboarding">
         <header class="plex-runtime__header">
@@ -195,6 +229,31 @@ const STATIC_SCREEN_MARKUP = `
           <button type="button" data-plex-action="clearMetadata" data-focus-id="plex-clear-metadata">Close preview</button>
           <div class="plex-runtime__metadata" data-plex-metadata></div>
         </section>
+      </section>
+      <section class="channel-setup-fixture" aria-labelledby="channel-setup-fixture-title">
+        <header>
+          <div>
+            <p class="screen__kicker">Channel setup shell</p>
+            <h3 id="channel-setup-fixture-title">Review lineup body</h3>
+          </div>
+          <strong data-channel-setup-fixture-status></strong>
+        </header>
+        <ol class="setup-steps" data-channel-review-steps></ol>
+        <dl class="setup-summary">
+          <div><dt>Source</dt><dd data-channel-setup-source></dd></div>
+          <div><dt>Enabled channels</dt><dd data-channel-setup-enabled></dd></div>
+          <div><dt>Blocks</dt><dd data-channel-setup-blocks></dd></div>
+        </dl>
+        <div class="setup-review">
+          <section>
+            <h4>Compact guide order</h4>
+            <div class="channel-draft-list" data-channel-review-list></div>
+          </section>
+          <section>
+            <h4>Guarded review</h4>
+            <div class="setup-validation" data-channel-review-validation></div>
+          </section>
+        </div>
       </section>
     </div>
   </section>

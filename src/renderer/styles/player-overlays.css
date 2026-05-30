@@ -221,8 +221,30 @@
   bottom: 92px;
   display: grid;
   gap: var(--space-5);
-  width: min(560px, calc(100% - (var(--space-11) * 2)));
+  width: min(680px, calc(100% - (var(--space-11) * 2)));
+  max-height: min(72vh, 620px);
+  overflow: auto;
+  scroll-padding: var(--space-5);
   padding: var(--space-7);
+}
+
+.playback-options__header {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.playback-options__header p {
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.playback-options__header strong {
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .playback-options dl {
@@ -245,4 +267,69 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.playback-options__lists {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.playback-options__lists section {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.playback-options__lists h4 {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.playback-options__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-raised);
+}
+
+.playback-options__row strong,
+.playback-options__row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playback-options__row em {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: var(--color-text-muted);
+  font-style: normal;
+  font-size: 12px;
+}
+
+.playback-options__row[data-selected="true"] {
+  border-color: var(--color-focus);
+  background: var(--color-focus-surface);
+}
+
+.playback-options__row[data-available="false"] {
+  opacity: 0.58;
+}
+
+@media (max-width: 720px) {
+  .playback-options dl,
+  .playback-options__lists {
+    grid-template-columns: 1fr;
+  }
 }

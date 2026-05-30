@@ -324,11 +324,11 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-21 are complete enough to route the next Tier 3 session to
-RD-22A Upstream Lineup UI Skeleton And Body Parity Foundation through the
-quality loop. RD-21 superseded the former RD-21 Future Platform Review route
-and deferred platform expansion until after product-parity/MVP completion. Do
-not import additional original Lineup product code or broaden live Plex/native
+RD-01 through RD-22A are complete enough to route the next Tier 3 session to
+RD-22B Live Plex Onboarding Runtime Wiring Into Parity Body through the quality
+loop. RD-21 superseded the former RD-21 Future Platform Review route and
+deferred platform expansion until after product-parity/MVP completion. Do not
+import additional original Lineup product code or broaden live Plex/native
 playback runtime behavior until a reviewed product slice plan explicitly
 authorizes a bounded change.
 
@@ -1385,9 +1385,8 @@ Stop and replan if:
 
 ### RD-22A Upstream Lineup UI Skeleton And Body Parity Foundation
 
-Status: active. This slice supersedes the prior live-runtime-first closeout
-posture. The RD-22 onboarding work and live Plex fixes remain useful, but the
-next blocking product foundation is the complete upstream-shaped Desktop body:
+Status: complete and reviewed. RD-22A superseded the prior live-runtime-first
+closeout posture and established the complete upstream-shaped Desktop body:
 app shell, route structure, onboarding shell, channel setup shell, Settings,
 Guide/EPG, OSD, now-playing information, mini guide, channel badge, player
 chrome, visual states, and focus/back behavior. RD-22A uses fixture or injected
@@ -1439,6 +1438,23 @@ Exit gates:
 - `npm run verify`, `npm run smoke:electron`, sanitized visual/manual proof,
   and read-only implementation review pass.
 
+Closeout evidence:
+
+- RD-22A Unit 3 implementation and re-review were clean.
+- The controller observed the exact renderer command passing 75/75 tests,
+  `npm run verify` passing, `npm run smoke:electron` passing, and
+  `git diff --check` passing with only CRLF warnings.
+- Sanitized local proof exercised the built renderer through the local safe
+  mock bridge across route switching, overlay/player chrome, guide, Settings,
+  channel setup, and focus targets, with no old setup hooks and no forbidden
+  token, header, path, or raw private text.
+- No screenshots, raw logs, account names, server names, library/media titles,
+  raw paths, endpoint URLs, tokens, headers, payloads, native handles, or other
+  private proof are tracked.
+- RD-22A remains fixture/body parity only and does not prove live Plex, channel
+  creation, scheduler-backed guide/player data, playback, media-option runtime,
+  package/release behavior, or runtime-backed guide/player parity.
+
 Stop and replan if:
 
 - Upstream body parity requires main/preload/contract/runtime changes, new
@@ -1452,8 +1468,9 @@ Stop and replan if:
 
 ### RD-22B Live Plex Onboarding Runtime Wiring Into Parity Body
 
-Status: not started. Live Plex proof remains blocked until Plex rate limiting
-clears. RD-22B starts only after RD-22A is complete and reviewed.
+Status: next Tier 3 planning target. RD-22B starts after RD-22A completion and
+review. Live proof and implementation remain gated by redaction-safe Plex
+account/server availability and any active Plex rate limiting.
 
 Depends on:
 

@@ -40,9 +40,11 @@ test('static channel setup markup hosts reachable Plex setup controls', () => {
   assert.match(channelSetupMarkup, /Choose profile/u);
   assert.match(channelSetupMarkup, /Find servers/u);
   assert.match(channelSetupMarkup, /Open libraries/u);
+  assert.match(channelSetupMarkup, /Channel setup shell/u);
+  assert.match(channelSetupMarkup, /Guarded review/u);
   assert.doesNotMatch(
     channelSetupMarkup,
-    /Fake channel setup controls|data-setup-action|data-setup-steps|data-channel-draft-list|draft channel|fake blocks|debug|smoke|transport/u,
+    /Fake channel setup controls|data-setup-action|data-setup-steps|data-channel-draft-list|data-setup-validation|draft channel|fake blocks|debug|smoke|transport/u,
   );
   assert.doesNotMatch(channelSetupMarkup, /https?:|token|serverUri/u);
 });
@@ -1178,6 +1180,7 @@ function createPlexDomBindings(overrides: Partial<RendererDomBindings> = {}): Re
     setupStepsElement: null,
     channelDraftListElement: null,
     setupValidationElement: null,
+    channelSetupFixtureStatusElement: null,
     plexPanelElement: new ElementDouble() as unknown as HTMLElement,
     plexActionButtons: actions,
     plexStatusElement: new ElementDouble() as unknown as HTMLElement,
@@ -1209,6 +1212,9 @@ function createPlexDomBindings(overrides: Partial<RendererDomBindings> = {}): Re
     overlaySubtitleLabelElement: null,
     overlayVolumeLabelElement: null,
     overlayRateLabelElement: null,
+    overlayPlaybackSummaryElement: null,
+    overlayAudioOptionsElement: null,
+    overlaySubtitleOptionsElement: null,
     ...overrides,
   };
 }

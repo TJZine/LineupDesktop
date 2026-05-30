@@ -8,10 +8,10 @@
 Lineup Desktop is a new Windows-first Electron repository. It currently has a
 secure Electron shell frame, the RD-13 renderer app shell/navigation, workflow,
 settings/channel setup, fake-backed EPG, fake-backed overlay, and CSS/theme
-style surfaces, docs, workflow, contract, harness scaffolding, and main-owned
-Plex auth/discovery/library domain seams. There is no production native playback
-host, copied/adapted upstream TV UI source, installer implementation, live Plex
-transport wiring, or renderer Plex API yet.
+style surfaces, the RD-22A upstream-shaped fixture/injected app body, docs,
+workflow, contract, harness scaffolding, and main-owned Plex auth/discovery/
+library domain seams. There is no production native playback host, installer
+implementation, live Plex transport wiring, or renderer Plex API yet.
 RD-04 adds documentation and harness ownership for upstream behavior guardrails
 only; it does not import product runtime code. RD-05 adds a disposable
 dev-only external `mpv` POC tool and ignored redacted local evidence only; it
@@ -271,6 +271,24 @@ completion sequence. RD-21 adds no product runtime, source, tests, verifiers,
 live Plex transport, renderer Plex APIs, persistence IPC, production native
 playback, package/dependency/lockfile/signing/update/native-media, upstream
 source import, or public-release behavior.
+RD-22A is complete and reviewed as fixture/injected renderer-safe upstream UI
+body parity only. Unit 3 adapted the reachable Desktop renderer body for
+upstream-shaped route switching, onboarding/profile/server setup shells,
+channel setup shell, Settings, Guide/EPG, overlay/player chrome, now-playing,
+mini guide, channel badge/number shell, focus targets, and product route copy
+without live Plex calls, main/preload/contract/runtime/persistence/player/
+package changes, channel creation, scheduler runtime, playback, media-option
+runtime, production native-helper behavior, or package/release behavior.
+Controller-observed closeout evidence included the exact renderer command
+passing 75/75 tests, `npm run verify` passing, `npm run smoke:electron`
+passing, `git diff --check` passing with only CRLF warnings, clean
+implementation re-review, and sanitized local safe mock bridge proof with no
+old setup hooks and no forbidden token, header, path, or raw private text. No
+raw screenshots, logs, account/server/library/media names, paths, endpoints,
+tokens, headers, payloads, native handles, or private proof are tracked. The
+RD-22A Unit 3 import-ledger provenance row records upstream HEAD
+`613b1c516c7c9e37f9c18ea3e92c474013472b11`. RD-22B now owns live Plex
+auth/profile/discovery/library runtime wiring into the RD-22A body.
 
 ## Product Invariants
 
@@ -292,13 +310,13 @@ source import, or public-release behavior.
 | Port roadmap | `docs/roadmap/desktop-port-roadmap.md` | Scaffolded |
 | Upstream behavior guardrails | `docs/architecture/upstream-behavior-guardrails.md` | RD-04 docs/harness owner |
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
-| Import provenance | `docs/architecture/import-ledger.md` | Current copied/adapted upstream source ledger; RD-20 retained-test path corrections reviewed current |
+| Import provenance | `docs/architecture/import-ledger.md` | Current copied/adapted upstream source ledger; RD-20 retained-test path corrections reviewed current; RD-22A Unit 3 upstream UI/CSS/copy/test provenance recorded at upstream HEAD `613b1c516c7c9e37f9c18ea3e92c474013472b11` |
 | Original Lineup compatibility | `docs/architecture/original-lineup-reference-compatibility-matrix.md` and `docs/architecture/original-lineup-divergence-register.md` | RD-20 tracked source-audit/provenance artifacts for copied/adapted coverage, reference-only behavior, proof context, and accepted Desktop divergences |
-| Product parity and MVP roadmap | `docs/product/lineup-product-parity-matrix.md`, `docs/development/windows-ui-proof-plan.md`, and `docs/roadmap/desktop-port-roadmap.md` | RD-21 product-parity artifact, Windows proof rules, and revised MVP completion sequence; Future Platform Review is deferred behind RD-22 through RD-28 |
+| Product parity and MVP roadmap | `docs/product/lineup-product-parity-matrix.md`, `docs/development/windows-ui-proof-plan.md`, and `docs/roadmap/desktop-port-roadmap.md` | RD-21 product-parity artifact, Windows proof rules, revised MVP completion sequence, and RD-22A fixture/body parity closeout; Future Platform Review is deferred behind RD-22 through RD-28 |
 | File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size guardrails, temporary oversized-file allowlist rationale, decomposition/revisit triggers, and Tier 3 file-shape verification |
 | Electron main shell | `src/main/index.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with smoke-only assertion ownership split out of the startup/composition entrypoint, plus RD-14 Unit 2 main-owned BrowserWindow/fullscreen/display/restore controller and Unit 3 foreground app-command controller while `src/main/index.ts` remains composition and IPC wiring |
 | Preload bridge | `src/preload/index.cts` | Narrow shell/window/player/diagnostics bridge with runtime payload guards; guard vocabulary is kept in the sandbox-compatible preload entrypoint, and the integration seam reads preload source text plus renderer-safe contracts to parity-test guard vocabulary, channel constants, the single `lineupDesktop` exposure, and approved `ipcRenderer` method/channel pairs without importing or executing preload |
-| Renderer shell | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md) | RD-13/ARCH-01 unprivileged app shell with route, workflow, EPG, overlay, focus, and style surfaces; RD-14 focused desktop input and DOM cursor owners; and RD-15 fake-backed UI-over-player-surface composition for overlays, guide/EPG, settings, channel setup, z-order, fullscreen bridge continuity, and deterministic renderer focus |
+| Renderer shell | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md) | RD-13/ARCH-01 unprivileged app shell with route, workflow, EPG, overlay, focus, and style surfaces; RD-14 focused desktop input and DOM cursor owners; RD-15 fake-backed UI-over-player-surface composition for overlays, guide/EPG, settings, channel setup, z-order, fullscreen bridge continuity, and deterministic renderer focus; and RD-22A fixture/injected upstream-shaped app body parity for onboarding/profile/server setup shells, channel setup shell, Settings, Guide/EPG, overlay/player chrome, now-playing, mini guide, channel badge/number shell, route switching, and focus targets |
 | Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window/player bridge contract |
 | Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, diagnostic, IPC result, and runtime event-guard contract |
 | IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window/player/diagnostics IPC literals plus renderer-safe player intent and forbidden-field vocabulary |

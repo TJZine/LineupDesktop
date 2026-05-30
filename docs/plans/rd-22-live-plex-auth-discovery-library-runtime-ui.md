@@ -1,12 +1,12 @@
-# RD-22A Upstream Lineup UI Skeleton And Body Parity Foundation
+# RD-22A Upstream Lineup UI Skeleton And Body Parity Foundation Closeout
 
-**Plan Status:** active
+**Plan Status:** RD-22A complete and reviewed; RD-22B handoff active
 **Task family:** feature/design
 **Tier:** Tier 3
 
 Path note: this plan keeps the historical RD-22 filename for handoff continuity.
-The active execution target is now RD-22A. Live Plex runtime closeout moves to
-RD-22B after the upstream-shaped Desktop app body exists.
+RD-22A is complete. Live Plex runtime wiring now moves to RD-22B after the
+upstream-shaped Desktop app body exists.
 
 ## Goal
 
@@ -419,6 +419,24 @@ Verification:
 - `git diff --check`
 - closeout review
 
+Status: complete. RD-22A Unit 3 implementation and re-review are clean. The
+controller observed the exact renderer command passing 75/75 tests, `npm run
+verify` passing, `npm run smoke:electron` passing, and `git diff --check`
+passing with only CRLF warnings. Sanitized local proof exercised the built
+renderer through the local safe mock bridge across route switching,
+overlay/player chrome, guide, Settings, channel setup, and focus targets. The
+proof found no old setup hooks and no forbidden token, header, path, or raw
+private text. No screenshots, raw logs, account names, server names, media
+titles, raw paths, endpoint URLs, tokens, headers, payloads, native handles, or
+other private proof are tracked.
+
+RD-22A completion claim: fixture/injected renderer-safe upstream-shaped app
+body parity only. RD-22A does not prove live Plex auth, Plex Home/profile
+runtime, server discovery/restore, library browse/search/metadata, channel
+creation, scheduler-backed guide/player data, playback, media-option runtime,
+production native-helper behavior, package/release behavior, or runtime-backed
+guide/player parity.
+
 ## RD-22B Deferred Runtime Scope
 
 RD-22B will own live Plex auth/profile/discovery/library wiring into the
@@ -432,33 +450,26 @@ MODEL_SUGGESTION
 PLANNER: gpt-5 high reasoning
 IMPLEMENTER: gpt-5 high reasoning
 REVIEWER: gpt-5 high reasoning
-WHY: Tier 3 UI body parity spans broad upstream UI adaptation, renderer route/focus/CSS ownership, import provenance, visual proof, and future live-runtime handoff boundaries.
+WHY: RD-22B is Tier 3 live Plex runtime wiring across auth, profile, server discovery/restore, library data, persistence custody, renderer binding, Windows proof, and redaction boundaries.
 
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
-TASK: Complete RD-22A Upstream Lineup UI Skeleton And Body Parity Foundation
+TASK: Complete RD-22B Live Plex Onboarding Runtime Wiring Into Parity Body
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md
-ARTIFACT: Unit 2 upstream UI body inventory and parity matrix
+ARTIFACT: RD-22A completed parity body and closeout summary
 FILES:
 - docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md
 - docs/plans/rd-22a-upstream-ui-body-parity-matrix.md
 - docs/roadmap/desktop-port-roadmap.md
 - docs/architecture/import-ledger.md
-- src/renderer/staticDom.ts
-- src/renderer/routeDom.ts
-- src/renderer/workflow.ts
-- src/renderer/navigation.ts
-- src/renderer/desktopInput.ts
-- src/renderer/index.ts
-- src/renderer/plexRuntimeDom.ts
-- src/renderer/plexRuntimeState.ts
-- src/renderer/plexRuntimeActions.ts
-- src/renderer/styles/**
-- src/__tests__/renderer/**
-- <upstream-root>/src/modules/ui/**
-- <upstream-root>/src/styles/**
-BLOCKERS: RD-22B live Plex proof remains blocked until Plex rate limiting clears; RD-22A must not retry live Plex or change main/preload/runtime owners.
+- docs/architecture/CURRENT_STATE.md
+- src/contracts/plex.ts
+- src/main/plex/**
+- src/main/persistence/**
+- src/renderer/**
+- src/__tests__/**
+BLOCKERS: none for RD-22B planning. Live proof and implementation remain gated by redaction-safe Plex account/server availability and any active Plex rate limiting.
 MESSAGE:
-Start with Unit 3. Use the reviewed Unit 2 matrix at `docs/plans/rd-22a-upstream-ui-body-parity-matrix.md` as the implementation packet. Reconfirm the upstream Lineup branch and HEAD before editing. Adapt the upstream-shaped renderer app body for the surfaces in the matrix using fixture/injected renderer-safe data only: app shell/body, route structure, onboarding/profile/server setup shells, channel setup shell, Settings shell, Guide/EPG shell, OSD shell, now-playing shell, mini guide shell, channel badge shell, player chrome shell, CSS/copy/assets, and tests. Keep RD-22A limited to shell/body parity: no live Plex calls, no channel creation, no scheduler runtime, no playback, no media-option runtime, no main/preload/contracts/runtime/persistence/player/package changes, and no runtime-backed guide/player parity claims. Add import-ledger rows before or with any copied/adapted upstream UI source, CSS, copy, assets, or tests. Run the exact renderer test command from the matrix, `npm run verify`, `npm run smoke:electron`, and sanitized visual/focus/manual proof; then send the implementation diff to read-only adversarial review before closeout.
+Start RD-22B planning through the quality loop. RD-22A is complete and reviewed as fixture/injected renderer-safe upstream-shaped body parity only; do not reopen RD-22A unless a reviewer finds a closeout contradiction. Plan live Plex auth/PIN, profile/Plex Home, server discovery/restore, server selection, library sections, browse, search, metadata summaries, sanitized failure states, credential availability, and relaunch restore wired into the RD-22A body. Keep credentials, tokens, selected connections, raw Plex payloads, auth headers, endpoint details, app paths, and diagnostics in main-owned custody. Preserve the RD-22A body except for reviewed data-binding adjustments. Do not implement channel creation, scheduler-backed guide/player runtime, playback, media-option runtime, production native-helper behavior, package/release behavior, or public release claims. The plan must name verification and review gates, including redaction-safe Windows proof for live sign-in, profile/Plex Home, server discovery/selection/restore, library browse/search/metadata, sanitized failures, credential availability, relaunch restore, `npm run verify` unless narrowly replanned, `npm run verify:redaction`, and implementation review.

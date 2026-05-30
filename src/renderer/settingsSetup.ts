@@ -48,6 +48,8 @@ export interface ChannelDraftViewModel {
   name: string;
   enabled: boolean;
   blockCount: number;
+  category: string;
+  reviewStatus: 'active' | 'disabled';
 }
 
 export interface ChannelSetupDraftState {
@@ -82,6 +84,8 @@ const DEFAULT_CHANNELS = [
     name: 'Liminal One',
     enabled: true,
     blockCount: 8,
+    category: 'Movies',
+    reviewStatus: 'active',
   },
   {
     id: 'draft-vault',
@@ -89,6 +93,8 @@ const DEFAULT_CHANNELS = [
     name: 'The Vault',
     enabled: true,
     blockCount: 5,
+    category: 'Archive',
+    reviewStatus: 'active',
   },
   {
     id: 'draft-weekend',
@@ -96,6 +102,8 @@ const DEFAULT_CHANNELS = [
     name: 'Weekend Queue',
     enabled: false,
     blockCount: 3,
+    category: 'Series',
+    reviewStatus: 'disabled',
   },
 ] as const satisfies readonly ChannelDraftViewModel[];
 
@@ -176,7 +184,11 @@ export function applyChannelSetupAction(
         ...state,
         channels: state.channels.map((channel) =>
           channel.id === state.channels[0]?.id
-            ? { ...channel, enabled: !channel.enabled }
+            ? {
+              ...channel,
+              enabled: !channel.enabled,
+              reviewStatus: channel.enabled ? 'disabled' : 'active',
+            }
             : channel,
         ),
       };
@@ -188,9 +200,11 @@ export function applyChannelSetupAction(
           {
             id: `draft-extra-${state.channels.length + 1}`,
             number: String(400 + state.channels.length + 1),
-            name: `Draft Channel ${state.channels.length + 1}`,
+            name: `Fixture Channel ${state.channels.length + 1}`,
             enabled: true,
             blockCount: 1,
+            category: 'Mixed',
+            reviewStatus: 'active',
           },
         ],
       };
@@ -219,27 +233,27 @@ export function createSettingsSections(
           id: 'preview-badges',
           label: 'Preview badges',
           valueLabel: state.previewBadgesEnabled ? 'Shown' : 'Hidden',
-          description: 'Controls local preview markers without changing playback runtime state.',
+          description: 'Controls local preview markers for this session only.',
         },
       ],
     },
     {
       id: 'guide',
       title: 'Guide display',
-      detail: 'Local guide presentation choices that do not contact live Plex or scheduler runtime.',
+      detail: 'Local guide presentation choices that do not contact Plex or save guide data.',
       items: [
         {
           id: 'guide-density',
           label: 'Density',
           valueLabel: state.guideDensity === 'comfortable' ? 'Comfortable' : 'Compact',
-          description: 'Adjusts renderer guide copy for this session only.',
+          description: 'Adjusts renderer guide spacing for this session only; no category color legend is used.',
         },
       ],
     },
     {
       id: 'setup',
       title: 'Setup prompts',
-      detail: 'Draft reminders that do not write preferences.',
+      detail: 'Setup reminders that do not write preferences.',
       items: [
         {
           id: 'setup-reminder',
@@ -348,13 +362,13 @@ export function validateChannelSetupDraft(state: ChannelSetupDraftState): readon
   const failures: string[] = [];
   const summary = summarizeChannelSetupDraft(state);
   if (state.sourceName.trim().length === 0) {
-    failures.push('Choose a fake library source.');
+    failures.push('Choose a library source.');
   }
   if (summary.enabledChannelCount === 0) {
-    failures.push('Enable at least one draft channel.');
+    failures.push('Enable at least one preview channel.');
   }
   if (summary.totalBlockCount === 0) {
-    failures.push('Add at least one draft programming block.');
+    failures.push('Add at least one programming block.');
   }
   return failures;
 }
@@ -383,12 +397,12 @@ function setupStepDetail(
   const summary = summarizeChannelSetupDraft(state);
   switch (stepId) {
     case 'source':
-      return `${summary.sourceName} is the fake source for this setup draft.`;
+      return `${summary.sourceName} is selected for this setup preview.`;
     case 'channels':
-      return `${summary.enabledChannelCount} of ${summary.totalChannelCount} draft channels are enabled.`;
+      return `${summary.enabledChannelCount} of ${summary.totalChannelCount} preview channels are enabled.`;
     case 'review':
       return summary.readyForPreview
-        ? `${summary.totalBlockCount} fake programming blocks are ready for preview.`
-        : 'Enable a draft channel before previewing the lineup.';
+        ? `${summary.totalBlockCount} programming blocks are ready for preview.`
+        : 'Enable a preview channel before previewing the lineup.';
   }
 }

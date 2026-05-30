@@ -22,6 +22,7 @@ test('EPG guide view creates deterministic slots and clipped program spans', () 
   assert.equal(view.slots[0].label, '8:00 PM');
   assert.equal(view.slots[5].label, '10:30 PM');
   assert.equal(view.rows.length, 4);
+  assert.equal(view.rows.some((row) => row.name.includes('Long Channel Name')), true);
 
   const selectedProgram = view.selectedProgram;
   assert.equal(selectedProgram.id, 'liminal-archive');

@@ -154,6 +154,7 @@ function createFocusDomBindings(focusableElements: FocusElementDouble[]): Render
     setupStepsElement: null,
     channelDraftListElement: null,
     setupValidationElement: null,
+    channelSetupFixtureStatusElement: null,
     plexPanelElement: null,
     plexActionButtons: [],
     plexStatusElement: null,
@@ -185,5 +186,8 @@ function createFocusDomBindings(focusableElements: FocusElementDouble[]): Render
     overlaySubtitleLabelElement: null,
     overlayVolumeLabelElement: null,
     overlayRateLabelElement: null,
+    overlayPlaybackSummaryElement: null,
+    overlayAudioOptionsElement: null,
+    overlaySubtitleOptionsElement: null,
   };
 }

@@ -23,30 +23,29 @@ lockfile edits are authorized by Unit 2.
 
 ## Evidence
 
-- Desktop workspace status before matrix authoring:
-  `## initial-build...origin/initial-build [ahead 2]`; no short-status file
-  changes were reported.
+- Desktop workspace status during this freshness refresh:
+  `## initial-build...origin/initial-build`; no short-status file changes were
+  reported. Desktop HEAD was
+  `3eb38d376d0077456ea55b6475f7f0747c376f65`.
 - Codanna: `semantic_search_with_context` was attempted for renderer route/body
   ownership, but semantic search failed because no embeddings were available.
   Direct `rg` and source reads were used as the fallback evidence path.
 - Upstream root: `C:\Software\Lineup` is present.
-- Upstream branch/HEAD/status after final freshness fetch: branch
-  `code-health`, HEAD `e6b94b2b364b4e3421cb0c7c5e7b77f126f71a0e`,
+- Upstream branch/HEAD/status after this freshness refresh: branch
+  `code-health`, HEAD `613b1c516c7c9e37f9c18ea3e92c474013472b11`,
   remote `origin/code-health` at the same commit, short status
   `## code-health...origin/code-health` with no file rows.
-- Final upstream freshness delta from the earlier observed HEAD
-  `a5cedabf218b2fbe7187e187f5fe9e5cb6d0a280` to current HEAD:
-  `ab634d8d feat: redesign channel setup review impact` and
-  `e6b94b2b style: improve channel setup new segment contrast`. The scoped UI
-  onboarding diff changes only channel setup review/runtime presentation files:
-  `src/modules/ui/channel-setup/ChannelSetupSessionRuntime.ts`,
-  `src/modules/ui/channel-setup/ChannelSetupWorkflowPresenter.ts`,
-  `src/modules/ui/channel-setup/steps/BuildReviewStepController.ts`,
-  `src/modules/ui/channel-setup/steps/ChannelSetupBuildStepPresenter.ts`,
-  `src/modules/ui/channel-setup/steps/StrategyStepController.ts`,
-  `src/modules/ui/channel-setup/steps/types.ts`,
-  `src/modules/ui/channel-setup/styles.review-progress.css`, and related
-  channel setup tests.
+- Current upstream freshness delta from the previously reviewed matrix HEAD
+  `e6b94b2b364b4e3421cb0c7c5e7b77f126f71a0e` to current HEAD
+  `613b1c516c7c9e37f9c18ea3e92c474013472b11`: 25 commits were inspected by
+  changed path and scoped hunk reads. RD-22A-relevant UI/body changes are
+  channel setup guide-order compaction and DOM-id handling, guarded review
+  renders, EPG channel-name identity/overflow behavior, removal of guide and
+  mini-guide category color cues, playback options focus/subtitle option
+  policy, settings subtitle-language/HDR copy changes, now-playing playback
+  summary wording, and safer playback diagnostics copy. Non-RD-22A runtime,
+  Plex stream, subtitle fallback, scheduler, and workflow-doc changes do not
+  change the renderer-only Unit 3 scope.
 - Upstream source inspected:
   `src/App.ts`, `src/index.ts`, `src/core/app-shell/**`,
   `src/modules/navigation/**`, `src/modules/ui/common/**`,
@@ -57,7 +56,9 @@ lockfile edits are authorized by Unit 2.
   `src/modules/ui/mini-guide/**`, `src/modules/ui/channel-badge/**`,
   `src/modules/ui/channel-number-overlay/**`,
   `src/modules/ui/playback-options/**`, `src/modules/ui/splash/**`, and
-  `src/styles/**`.
+  `src/styles/**`, plus scoped supporting UI/copy helpers
+  `src/modules/ui/common/channelDisplay.ts`, `src/utils/playbackSummary.ts`,
+  `src/utils/redact.ts`, and `src/shared/subtitle-language.ts`.
 - Upstream tests inventoried:
   `src/core/app-shell/__tests__/**`,
   `src/modules/navigation/__tests__/**`,
@@ -74,6 +75,69 @@ lockfile edits are authorized by Unit 2.
   `src/renderer/plexRuntimeDom.ts`, `src/renderer/plexRuntimeRows.ts`,
   `src/renderer/plexRuntimeState.ts`, `src/renderer/plexRuntimeActions.ts`,
   `src/renderer/styles/**`, and `src/__tests__/renderer/**`.
+
+## Freshness Decision
+
+The Unit 2 matrix remains implementation-ready with this addendum. The upstream
+delta does not invalidate RD-22A renderer-only scope, does not require live Plex
+proof, and does not require Desktop main/preload/contracts/runtime/persistence/
+player/package changes before Unit 3.
+
+Unit 3 must treat upstream `613b1c516c7c9e37f9c18ea3e92c474013472b11` as the
+fresh source baseline. Implementation should update import-ledger provenance to
+that HEAD for any copied/adapted upstream UI, CSS, copy, asset, or test slice.
+The parent RD-22A plan does not need amendment because its existing boundaries,
+verification class, import-ledger obligation, and replan triggers already cover
+the refreshed upstream delta.
+
+## Unit 3 Freshness Addendum By Surface
+
+These notes supersede stale "final freshness" details in the matrix rows below
+without changing the RD-22A ownership boundary.
+
+- App shell/body, route shell, and common shell: no scoped upstream app shell or
+  navigation structural change requires Desktop main/preload or contract work.
+  Playback diagnostics text changed under app-shell runtime diagnostics, but it
+  is source material for safe UI copy only in RD-22A.
+- Onboarding/profile/server: no scoped upstream auth, profile-select, or
+  server-select body changes landed after `e6b94b2b`; existing Unit 2 rows
+  remain current for shell/body implementation.
+- Channel setup: include upstream commits `d5a62c2b`, `a3d462ab`, and
+  `c25ac0f9`. Unit 3 should account for guarded review renders, compact guide
+  order reordering, active-enabled strategy rows only, reset order, pickup/
+  move/place/cancel copy, disabled one-category state, stable DOM-encoded ids,
+  and compact/floating preview treatment. This remains fixture shell work; live
+  channel authoring, review calculation, persistence, and scheduler/channel
+  domain behavior stay RD-23 or later.
+- Settings: include upstream commits `215e9c34`, `7869c9a8`, and `19eaa0fd`.
+  Unit 3 should not carry forward the guide category-colors toggle as a parity
+  requirement. Subtitle language labels/aliases and HDR fallback labels are
+  display/copy references only until RD-23/RD-26 runtime ownership exists.
+- Guide/EPG: include upstream commits `215e9c34` and `f87c1450`. Unit 3 should
+  prefer textual channel identity/provenance over build-strategy color cues,
+  support long channel-name expansion/wrapping, and avoid category-color legend
+  or settings dependencies. Scheduler-backed guide data, virtualization depth,
+  current program state, and persisted channels remain RD-24.
+- OSD/player chrome: no scoped OSD structural delta after `e6b94b2b` changes
+  the RD-22A shell boundary. Player chrome remains fixture host-plane and
+  overlay stack work over the existing Desktop player presentation surface.
+- Now-playing: include upstream commit `b30f0f3a`. Playback summary wording can
+  distinguish Direct Play, Direct Stream, HLS Session, Audio Transcode, and
+  Video Transcode as fixture copy. RD-22A must not claim real PMS playback
+  decision fidelity.
+- Mini guide and channel badge/number: include upstream commit `215e9c34`.
+  Mini guide should not rely on build-strategy color borders as the primary
+  channel category cue. Badge and channel-number shell rows remain current.
+- Playback options: include upstream commits `5f7cc1d3`, `c1da0437`, and
+  `613b1c51`. Unit 3 should model enabled/disabled audio/subtitle rows,
+  direct/extract/burn-in/unavailable labels, empty states, selected focus, and
+  scroll-stable focus behavior as fixture shell states only. Do not import the
+  deleted upstream UI-owned subtitle probe URL policy, and stop if real player
+  track mutation, subtitle probing, Plex URL construction, auth headers, stream
+  descriptors, burn-in runtime, or player contract changes are required.
+- CSS/tokens/copy/tests: include upstream commit `215e9c34`, which removed EPG
+  category-color tokens. Unit 3 must not add category-color tokens/settings as
+  required parity unless a later reviewed runtime plan owns that behavior.
 
 ## Implementation Matrix
 
@@ -101,6 +165,9 @@ Unit 2 docs/source-audit verification from the active plan:
 - `npm run verify:docs` should pass.
 - `npm run verify:redaction` should pass.
 - `git diff --check` should pass.
+- Freshness refresh closeout should also run
+  `git diff --check -- docs/plans/rd-22a-upstream-ui-body-parity-matrix.md`
+  so the modified tracked matrix is included explicitly.
 - Read-only review of this matrix should report no material blockers before
   Unit 3 implementation.
 
@@ -126,6 +193,23 @@ inspect an untracked file. Closeout for Unit 2 must therefore include either a
 direct whitespace check on this file or a staged/cached diff check before
 commit.
 
+Freshness refresh status: read-only review completed and clean. The subsequent
+Unit 3 implementation review found a product-copy blocker in reachable renderer
+routes; this bounded fix removes the visible proof/scaffold terms while
+preserving renderer-safe local setup data internally.
+
+Unit 3 closeout status: complete and reviewed. The controller observed the
+exact renderer command passing 75/75 tests, `npm run verify` passing,
+`npm run smoke:electron` passing, and `git diff --check` passing with only CRLF
+warnings. Sanitized local proof exercised the built renderer through the local
+safe mock bridge across route switching, overlay/player chrome, guide,
+Settings, channel setup, and focus targets. It found no old setup hooks and no
+forbidden token, header, path, or raw private text. No screenshots, raw logs,
+account names, server names, library/media titles, raw paths, endpoint URLs,
+tokens, headers, payloads, native handles, or other private proof are tracked.
+The import ledger already records the RD-22A Unit 3 upstream provenance row at
+upstream HEAD `613b1c516c7c9e37f9c18ea3e92c474013472b11`.
+
 ## Unit 3 Acceptance Gates
 
 - The reachable Desktop body no longer reads as the RD-13 scaffold with isolated
@@ -140,43 +224,36 @@ commit.
 - Fake/debug/smoke/draft controls are removed from or isolated outside product
   routes where RD-22A owns the visible body.
 
-## NEXT_SESSION_HANDOFF
+## Completion Handoff
 
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
-TASK: Implement RD-22A Unit 3 Renderer UI Body Adaptation
+TASK: Complete RD-22B Live Plex Onboarding Runtime Wiring Into Parity Body
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: `docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md`
-ARTIFACT: `docs/plans/rd-22a-upstream-ui-body-parity-matrix.md`
+ARTIFACT: RD-22A completed parity matrix and closeout summary
 FILES:
 - `docs/plans/rd-22a-upstream-ui-body-parity-matrix.md`
 - `docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md`
 - `docs/roadmap/desktop-port-roadmap.md`
 - `docs/architecture/import-ledger.md`
-- `src/renderer/staticDom.ts`
-- `src/renderer/routeDom.ts`
-- `src/renderer/workflow.ts`
-- `src/renderer/navigation.ts`
-- `src/renderer/desktopInput.ts`
-- `src/renderer/index.ts`
-- `src/renderer/plexRuntimeDom.ts`
-- `src/renderer/plexRuntimeState.ts`
-- `src/renderer/plexRuntimeActions.ts`
-- `src/renderer/styles/**`
-- `src/__tests__/renderer/**`
-BLOCKERS: RD-22B live Plex proof remains blocked until Plex rate limiting
-clears; RD-22A must not retry live Plex or change
-main/preload/contracts/runtime/persistence/player/package owners.
+- `docs/architecture/CURRENT_STATE.md`
+- `src/contracts/plex.ts`
+- `src/main/plex/**`
+- `src/main/persistence/**`
+- `src/renderer/**`
+- `src/__tests__/**`
+BLOCKERS: none for RD-22B planning. Live proof and implementation remain gated
+by redaction-safe Plex account/server availability and any active Plex rate
+limiting.
 MESSAGE:
-Start with RD-22A Unit 3. Use this reviewed matrix as the implementation
-packet. Reconfirm upstream `C:\Software\Lineup` branch and HEAD before editing.
-Adapt the upstream-shaped renderer app body for the matrix surfaces using
-fixture/injected renderer-safe data only. Keep RD-22A limited to shell/body
-parity: no live Plex calls, no channel creation, no scheduler runtime, no
-playback, no media-option runtime, no main/preload/contracts/runtime/
-persistence/player/package changes, and no runtime-backed guide/player parity
-claims. Add import-ledger rows before or with any copied/adapted upstream UI
-source, CSS, copy, assets, or tests. Run the exact renderer test command above,
-`npm run verify`, `npm run smoke:electron`, and sanitized visual/focus/manual
-proof; then send the implementation diff to read-only adversarial review before
-closeout.
+Use this matrix as completed RD-22A body-surface context, not as an RD-22B
+implementation packet. Start RD-22B planning through the quality loop for live
+Plex auth/profile/server/library runtime wiring into the RD-22A body. Preserve
+RD-22A body shape except for reviewed data-binding adjustments. Keep Plex
+credentials, tokens, selected connections, raw payloads, auth headers, endpoint
+details, app paths, and diagnostics in main-owned custody. Do not claim channel
+creation, scheduler-backed guide/player runtime, playback, media-option
+runtime, production native-helper behavior, package/release behavior, or public
+release readiness. Require redaction-safe Windows proof and read-only review
+before RD-22B closeout.

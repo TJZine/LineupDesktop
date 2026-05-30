@@ -2,7 +2,11 @@ import type { PlayerSnapshot } from '../contracts/player.js';
 import { formatEpgTimeWindow } from './epg.js';
 import type { RendererDomBindings } from './domBindings.js';
 import { readClosestRouteId, readRouteActionId, readRouteId } from './domBindings.js';
-import { createPlayerOverlayView, type PlayerOverlayState } from './overlays.js';
+import {
+  createPlayerOverlayView,
+  type PlaybackOptionTrackViewModel,
+  type PlayerOverlayState,
+} from './overlays.js';
 import {
   getRouteWorkflowView,
   type RouteWorkflowViewModel,
@@ -68,6 +72,7 @@ export function renderWorkflowDom(
   renderEpgGuideDom(view, dom);
   renderPlayerOverlaysDom(overlayState, playerSnapshot, dom, view.route);
   renderSettingsDom(view, dom);
+  renderChannelSetupDom(view, dom);
   renderRouteActionButtons(view, dom);
 }
 
@@ -125,6 +130,71 @@ function renderSettingsDom(view: RouteWorkflowViewModel, dom: RendererDomBinding
         }
         article.append(title, detail, list);
         return article;
+      }),
+    );
+  }
+}
+
+function renderChannelSetupDom(view: RouteWorkflowViewModel, dom: RendererDomBindings): void {
+  if (dom.channelSetupFixtureStatusElement) {
+    dom.channelSetupFixtureStatusElement.textContent = view.channelSetupSummary.readyForPreview
+      ? 'Guarded review ready'
+      : 'Review disabled until one strategy is active';
+  }
+  if (dom.channelSetupSourceElement) {
+    dom.channelSetupSourceElement.textContent = view.channelSetupSummary.sourceName;
+  }
+  if (dom.channelSetupEnabledElement) {
+    dom.channelSetupEnabledElement.textContent =
+      `${view.channelSetupSummary.enabledChannelCount} of ${view.channelSetupSummary.totalChannelCount}`;
+  }
+  if (dom.channelSetupBlocksElement) {
+    dom.channelSetupBlocksElement.textContent = `${view.channelSetupSummary.totalBlockCount} preview blocks`;
+  }
+  if (dom.setupStepsElement) {
+    dom.setupStepsElement.replaceChildren(
+      ...view.setupSteps.map((step) => {
+        const item = document.createElement('li');
+        item.dataset.stepState = step.state;
+        const label = document.createElement('strong');
+        label.textContent = step.label;
+        const detail = document.createElement('span');
+        detail.textContent = step.detail;
+        item.append(label, detail);
+        return item;
+      }),
+    );
+  }
+  if (dom.channelDraftListElement) {
+    dom.channelDraftListElement.replaceChildren(
+      ...view.channelDrafts.map((channel, index) => {
+        const item = document.createElement('article');
+        item.className = 'channel-draft-list__item';
+        item.dataset.channelEnabled = String(channel.enabled);
+        item.dataset.reviewStatus = channel.reviewStatus;
+        const number = document.createElement('span');
+        number.className = 'channel-list__number';
+        number.textContent = channel.number;
+        const copy = document.createElement('div');
+        const title = document.createElement('strong');
+        title.textContent = channel.name;
+        const detail = document.createElement('p');
+        detail.textContent = `#${index + 1} / ${channel.category} / ${channel.blockCount} blocks / ${channel.enabled ? 'active' : 'disabled'}`;
+        copy.append(title, detail);
+        item.append(number, copy);
+        return item;
+      }),
+    );
+  }
+  if (dom.setupValidationElement) {
+    const messages = view.setupValidationMessages.length === 0
+      ? ['Only active-enabled strategy rows would render in a live review.']
+      : view.setupValidationMessages;
+    dom.setupValidationElement.replaceChildren(
+      ...messages.map((message) => {
+        const item = document.createElement('p');
+        item.textContent = message;
+        return item;
       }),
     );
   }
@@ -318,4 +388,34 @@ function renderPlayerOverlaysDom(
   if (dom.overlayRateLabelElement) {
     dom.overlayRateLabelElement.textContent = view.playbackOptions.playbackRateLabel;
   }
+  if (dom.overlayPlaybackSummaryElement) {
+    dom.overlayPlaybackSummaryElement.textContent = view.playbackOptions.playbackSummary;
+  }
+  renderPlaybackOptionRows(dom.overlayAudioOptionsElement, view.playbackOptions.audioTracks);
+  renderPlaybackOptionRows(dom.overlaySubtitleOptionsElement, view.playbackOptions.subtitleTracks);
+}
+
+function renderPlaybackOptionRows(
+  host: HTMLElement | null,
+  tracks: readonly PlaybackOptionTrackViewModel[],
+): void {
+  if (!host) {
+    return;
+  }
+  host.replaceChildren(
+    ...tracks.map((track) => {
+      const row = document.createElement('div');
+      row.className = 'playback-options__row';
+      row.dataset.selected = String(track.selected);
+      row.dataset.available = String(track.available);
+      const label = document.createElement('strong');
+      label.textContent = track.label;
+      const meta = document.createElement('span');
+      meta.textContent = track.meta;
+      const state = document.createElement('em');
+      state.textContent = track.stateLabel;
+      row.append(label, meta, state);
+      return row;
+    }),
+  );
 }

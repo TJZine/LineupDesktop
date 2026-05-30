@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import { createFakePlayerSnapshot, createPlayerOverlayState } from '../../renderer/overlays.js';
 import { renderRouteDom, renderWorkflowDom } from '../../renderer/routeDom.js';
+import { mountStaticRendererDom } from '../../renderer/staticDom.js';
 import { createWorkflowState } from '../../renderer/workflow.js';
 
 class ElementDouble {
@@ -222,7 +223,58 @@ test('route DOM renders support bundle status without filesystem paths', () => {
   }
 });
 
-test('route DOM does not render legacy draft setup surfaces into Plex onboarding', () => {
+test('route DOM renders playback options enabled and disabled fixture rows', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    createElement: () => new ElementDouble(),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const audioOptions = new ElementDouble();
+    const subtitleOptions = new ElementDouble();
+    const summary = new ElementDouble();
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.overlayAudioOptionsElement = audioOptions as unknown as HTMLElement;
+    dom.overlaySubtitleOptionsElement = subtitleOptions as unknown as HTMLElement;
+    dom.overlayPlaybackSummaryElement = summary as unknown as HTMLElement;
+
+    renderWorkflowDom(
+      createWorkflowState('player'),
+      createPlayerOverlayState(),
+      createFakePlayerSnapshot(),
+      dom,
+    );
+
+    const renderedText = [summary.textContent, collectText(audioOptions), collectText(subtitleOptions)].join(' ');
+    assert.match(renderedText, /Direct Play/u);
+    assert.match(renderedText, /Audio Transcode/u);
+    assert.match(renderedText, /Burn-in/u);
+    assert.match(renderedText, /Unavailable/u);
+    assert.equal(audioOptions.children.some((child) => child.dataset.available === 'false'), true);
+    assert.equal(subtitleOptions.children.some((child) => child.dataset.selected === 'true'), true);
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+});
+
+test('route DOM renders channel setup review fixture without privileged data', () => {
   const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   const documentDouble = {
     documentElement: { dataset: {} },
@@ -260,11 +312,11 @@ test('route DOM does not render legacy draft setup surfaces into Plex onboarding
       dom,
     );
 
-    assert.equal(setupSteps.textContent, 'unchanged steps host');
-    assert.equal(draftList.textContent, 'unchanged draft host');
-    assert.equal(validation.textContent, 'unchanged validation host');
-    assert.deepEqual(setupSteps.children, []);
-    assert.deepEqual(draftList.children, []);
+    const renderedText = [collectText(setupSteps), collectText(draftList), collectText(validation)].join(' ');
+    assert.match(renderedText, /Choose library/u);
+    assert.match(renderedText, /Liminal One/u);
+    assert.match(renderedText, /Only active-enabled strategy rows/u);
+    assert.doesNotMatch(renderedText, /serverUri|token|https?:|raw payload/u);
   } finally {
     if (originalDocument === undefined) {
       Reflect.deleteProperty(globalThis, 'document');
@@ -276,6 +328,132 @@ test('route DOM does not render legacy draft setup surfaces into Plex onboarding
     }
   }
 });
+
+test('reachable product route text avoids internal implementation-status terms', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const selectorTextHosts = new Map<string, ElementDouble>();
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: (selector: string) => selectorTextHosts.get(selector) ?? null,
+    createElement: () => new ElementDouble(),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const renderedRouteText: string[] = [];
+    for (const route of ['player', 'guide', 'settings', 'channelSetup'] as const) {
+      selectorTextHosts.clear();
+      for (const field of ['kicker', 'primary', 'secondary'] as const) {
+        selectorTextHosts.set(`[data-workflow-${field}="${route}"]`, new ElementDouble());
+      }
+
+      const screen = new ElementDouble();
+      screen.dataset.screen = route;
+      const dom = createOverlayDomBindings({
+        overlayStack: new ElementDouble(),
+        overlays: [],
+        overlayActions: [],
+      });
+      dom.routeTitleElement = new ElementDouble() as unknown as HTMLElement;
+      dom.routeStatusElement = new ElementDouble() as unknown as HTMLElement;
+      dom.screens = [screen] as unknown as HTMLElement[];
+      dom.currentChannelElement = new ElementDouble() as unknown as HTMLElement;
+      dom.currentProgramElement = new ElementDouble() as unknown as HTMLElement;
+      dom.currentWindowElement = new ElementDouble() as unknown as HTMLElement;
+      dom.epgGridElement = new ElementDouble() as unknown as HTMLElement;
+      dom.epgDetailChannelElement = new ElementDouble() as unknown as HTMLElement;
+      dom.epgDetailTitleElement = new ElementDouble() as unknown as HTMLElement;
+      dom.epgDetailTimeElement = new ElementDouble() as unknown as HTMLElement;
+      dom.settingsSourceElement = new ElementDouble() as unknown as HTMLElement;
+      dom.settingsChannelsElement = new ElementDouble() as unknown as HTMLElement;
+      dom.settingsStateElement = new ElementDouble() as unknown as HTMLElement;
+      dom.settingsSectionsElement = new ElementDouble() as unknown as HTMLElement;
+      dom.channelSetupSourceElement = new ElementDouble() as unknown as HTMLElement;
+      dom.channelSetupEnabledElement = new ElementDouble() as unknown as HTMLElement;
+      dom.channelSetupBlocksElement = new ElementDouble() as unknown as HTMLElement;
+      dom.setupStepsElement = new ElementDouble() as unknown as HTMLElement;
+      dom.channelDraftListElement = new ElementDouble() as unknown as HTMLElement;
+      dom.setupValidationElement = new ElementDouble() as unknown as HTMLElement;
+      dom.channelSetupFixtureStatusElement = new ElementDouble() as unknown as HTMLElement;
+      dom.overlayPlaybackSummaryElement = new ElementDouble() as unknown as HTMLElement;
+      dom.overlayAudioOptionsElement = new ElementDouble() as unknown as HTMLElement;
+      dom.overlaySubtitleOptionsElement = new ElementDouble() as unknown as HTMLElement;
+
+      const workflowState = createWorkflowState(route);
+      renderRouteDom(workflowState, dom);
+      renderWorkflowDom(
+        workflowState,
+        createPlayerOverlayState(),
+        createFakePlayerSnapshot(),
+        dom,
+      );
+
+      renderedRouteText.push([
+        ...selectorTextHosts.values(),
+        dom.routeTitleElement,
+        dom.routeStatusElement,
+        dom.currentChannelElement,
+        dom.currentProgramElement,
+        dom.currentWindowElement,
+        dom.epgGridElement,
+        dom.epgDetailChannelElement,
+        dom.epgDetailTitleElement,
+        dom.epgDetailTimeElement,
+        dom.settingsSourceElement,
+        dom.settingsChannelsElement,
+        dom.settingsStateElement,
+        dom.settingsSectionsElement,
+        dom.channelSetupSourceElement,
+        dom.channelSetupEnabledElement,
+        dom.channelSetupBlocksElement,
+        dom.setupStepsElement,
+        dom.channelDraftListElement,
+        dom.setupValidationElement,
+        dom.channelSetupFixtureStatusElement,
+        dom.overlayPlaybackSummaryElement,
+        dom.overlayAudioOptionsElement,
+        dom.overlaySubtitleOptionsElement,
+      ].map((element) => collectText(element as ElementDouble)).join(' '));
+    }
+
+    assert.doesNotMatch(renderedRouteText.join(' '), PRODUCT_ROUTE_INTERNAL_COPY_PATTERN);
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+});
+
+test('static product route visible text avoids internal implementation-status terms', () => {
+  const root = { innerHTML: '', querySelector: () => null };
+  const documentDouble = {
+    querySelector: (selector: string) => selector === '[data-static-screen-root]' ? root : null,
+  };
+
+  mountStaticRendererDom(documentDouble as unknown as Document);
+
+  assert.doesNotMatch(readVisibleTextFromMarkup(root.innerHTML), PRODUCT_ROUTE_INTERNAL_COPY_PATTERN);
+});
+
+const PRODUCT_ROUTE_INTERNAL_COPY_PATTERN =
+  /\bRD-\d+[A-Z]?\b|future RD|\bruntime\b|runtime wiring|scheduler wiring|later runtime pass|pending runtime|not implemented|implementation status|roadmap|\bfixture\b|\bfake\b|\bdebug\b|\bsmoke\b|\bproof\b|\bscaffold\b|\bdraft(?:\b|\s+(?:channel|programming|source|controls|setup))|not proven here|live Plex/iu;
+
+function readVisibleTextFromMarkup(markup: string): string {
+  return markup
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/giu, ' ')
+    .replace(/<[^>]+>/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
 
 function collectText(element: ElementDouble): string {
   return [element.textContent, ...element.children.map(collectText)].join(' ');
@@ -322,6 +500,7 @@ function createOverlayDomBindings({
     setupStepsElement: null,
     channelDraftListElement: null,
     setupValidationElement: null,
+    channelSetupFixtureStatusElement: null,
     plexPanelElement: null,
     plexActionButtons: [],
     plexStatusElement: null,
@@ -353,5 +532,8 @@ function createOverlayDomBindings({
     overlaySubtitleLabelElement: null,
     overlayVolumeLabelElement: null,
     overlayRateLabelElement: null,
+    overlayPlaybackSummaryElement: null,
+    overlayAudioOptionsElement: null,
+    overlaySubtitleOptionsElement: null,
   };
 }

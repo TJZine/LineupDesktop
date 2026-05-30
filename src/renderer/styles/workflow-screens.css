@@ -12,6 +12,29 @@
   font-size: 16px;
 }
 
+.screen-shell-state {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.screen-shell-state span {
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.screen-shell-state strong {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
 .screen__content button {
   width: max-content;
   min-height: var(--button-min-height);
@@ -108,6 +131,53 @@ dd {
   display: grid;
   gap: var(--space-3);
   padding: var(--space-5);
+}
+
+.channel-setup-fixture {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+  padding: var(--space-7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-panel);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.channel-setup-fixture > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.channel-setup-fixture h3,
+.channel-setup-fixture h4 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.channel-setup-fixture > header strong {
+  flex: 0 0 auto;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--plex-onboarding-accent-border, var(--color-border));
+  border-radius: 999px;
+  color: var(--plex-onboarding-text-muted, var(--color-text-muted));
+  font-size: 13px;
+}
+
+.setup-review {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.6fr);
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.setup-review section {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
 }
 
 .settings-section h3 {
@@ -277,8 +347,16 @@ dd {
   overflow: hidden;
   color: var(--color-text-muted);
   font-size: 13px;
+}
+
+.epg-grid__program span {
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.epg-grid__channel span {
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .epg-grid__programs {
@@ -310,4 +388,17 @@ dd {
 .epg-grid__row[data-selected-channel="true"] .epg-grid__channel {
   border-color: var(--color-focus-border-strong);
   background: var(--color-focus-surface);
+}
+
+@media (max-width: 880px) {
+  .setup-review,
+  .program-summary,
+  .settings-summary,
+  .setup-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .channel-setup-fixture > header {
+    flex-direction: column;
+  }
 }
