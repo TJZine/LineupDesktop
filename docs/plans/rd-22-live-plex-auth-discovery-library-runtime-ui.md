@@ -1,475 +1,697 @@
-# RD-22A Upstream Lineup UI Skeleton And Body Parity Foundation Closeout
+# RD-22B Live Plex Onboarding Runtime Wiring Into Parity Body
 
-**Plan Status:** RD-22A complete and reviewed; RD-22B handoff active
+**Plan Status:** active
 **Task family:** feature/design
 **Tier:** Tier 3
 
-Path note: this plan keeps the historical RD-22 filename for handoff continuity.
-RD-22A is complete. Live Plex runtime wiring now moves to RD-22B after the
-upstream-shaped Desktop app body exists.
+Path note: this plan keeps the historical RD-22 filename for handoff
+continuity. RD-22A is complete and reviewed as fixture/injected
+renderer-safe upstream-shaped app body parity. RD-22B is now the active live
+runtime wiring and closeout plan for RD-22.
 
 ## Goal
 
-Stop letting live Plex discovery and rate limiting define whether the Desktop
-app can become recognizable. The next blocking product foundation is the
-upstream Lineup app body: route structure, onboarding, channel setup shell,
-Settings, Guide/EPG, OSD, now-playing information, mini guide, channel badge,
-player chrome, focus/back behavior, loading/empty/error states, and visual
-hierarchy.
+Wire live Plex onboarding and library runtime into the committed RD-22A body
+without reshaping that body except for reviewed data-binding adjustments.
 
-RD-22A imports or adapts the upstream Lineup UI skeleton and body into the
-Desktop renderer using fixture or injected renderer-safe data where runtime
-owners are not ready. Live Plex, channel creation, scheduler runtime, and
-playback must later wire into that body instead of forcing the body to be built
-around partial runtime proof.
+RD-22B must make the reachable Desktop setup path operate through the existing
+main-owned Plex runtime and narrow preload bridge for:
 
-The intended result is a Desktop app that looks and navigates like a coherent
-Lineup product skeleton before live integrations are retried. RD-22A is
-fixture-only for incomplete runtime surfaces, but the fixture path must still
-use product-like UI, not RD-13 scaffold panels or smoke/debug controls.
+- live Plex auth and link PIN request, polling, cancellation, and retry
+- credential availability and encrypted credential restore status
+- profile and Plex Home selection, including protected-user PIN handling
+- server discovery, selection, and selected-server restore after relaunch
+- library section loading, browse, search, and metadata summary preview
+- sanitized failure, loading, empty, cancelled, stale, back, clear, and retry
+  states inside the RD-22A body
+- focus, text-entry, scroll/list, and keyboard/remote-like behavior for the
+  live setup path
+
+Close RD-22 only after implementation, redaction-safe Windows live proof, full
+verification, implementation review, and durable memory updates are complete.
 
 ## Non-Goals
 
-- Do not retry live Plex proof, make live Plex calls, or require a Plex account
-  for RD-22A closeout.
-- Do not change main-owned Plex auth, discovery, library, selected-server,
-  credential, transport, retry, or persistence behavior.
-- Do not change preload contracts, IPC vocabulary, persistence schemas, player
-  contracts, native helper behavior, package scripts, dependencies, lockfiles,
-  signing, update, installer, or release behavior.
-- Do not implement RD-22B live Plex runtime wiring, RD-23 channel creation,
-  RD-24 scheduler-backed guide runtime, RD-25 playback, RD-26 media options, or
-  RD-27 soak proof.
-- Do not preserve reachable fake/debug/draft controls in product routes once an
-  upstream-equivalent body surface replaces them.
+- Do not implement RD-23 channel creation, live channel setup commit,
+  channel settings persistence, or persisted channel recovery.
+- Do not implement RD-24 scheduler-backed guide/player runtime, current-channel
+  state, guide schedule refresh, channel switching, or runtime player chrome.
+- Do not implement RD-25 production playback, native-helper behavior, media
+  load, stop/switch playback, or production playback controls.
+- Do not implement RD-26 media-option runtime, subtitle/audio/HDR mutation, or
+  playback-quality controls.
+- Do not change package scripts, dependencies, lockfiles, signing, update,
+  installer, release, public readiness claims, or native/media redistribution.
+- Do not add renderer custody of credentials, tokens, selected connections,
+  raw Plex payloads, auth headers, endpoint details, app paths, diagnostics
+  internals, raw private proof, Node APIs, Electron APIs, native handles, or
+  broad IPC/RPC access.
 - Do not copy raw screenshots, logs, account names, server names, library
-  titles, media titles, raw paths, endpoint URLs, tokens, headers, raw Plex
-  payloads, native handles, process ids, or support bundles into tracked docs,
-  tests, diagnostics, or chat.
+  titles, media titles, local paths, endpoint URLs, tokens, auth headers,
+  payloads, native handles, process ids, support-bundle contents, or private
+  proof into tracked docs, tests, diagnostics, fixtures, or Codex output.
 
 ## Parent Architecture Alignment
 
-The renderer remains unprivileged and owns composition, route display, focus,
-keyboard/remote-like interaction, local view state, CSS, and sanitized product
-copy. Main, preload, persistence, Plex runtime, player runtime, and native
-helper boundaries do not change in RD-22A.
+Chosen route: Tier 3 feature/design through the Desktop feature-quality loop:
+plan, read-only plan review, bounded implementation, verification, read-only
+implementation review, closeout, and RD-22 durable memory update.
 
-RD-22A may add or refactor renderer-owned screens, route shells, components,
-view models, fixture adapters, CSS, focus maps, and renderer tests. It may copy
-or adapt upstream UI source, CSS, copy, assets, and tests only with an
-import-ledger row before or in the same change. Exact upstream DOM sharing is
-not required when upstream browser/webOS assumptions conflict with Desktop
-security, process, accessibility, or platform boundaries.
+Current architecture already has the required process owners:
 
-Fixture-backed UI is allowed only to prove the product body and interaction
-model. It must not introduce renderer custody of credentials, auth headers,
-tokenized URLs, raw Plex payloads, raw media descriptors, native handles,
-filesystem paths, Electron APIs, Node APIs, or broad IPC/RPC escape hatches.
+- Electron main owns app paths, Electron `safeStorage`, encrypted Plex
+  credential records, selected-server persistence, live Plex transport,
+  profile-scoped active tokens, selected connections, raw Plex payloads,
+  sanitized diagnostics, and shutdown cleanup.
+- Preload owns the typed, validated `window.lineupDesktop.plex` bridge only.
+  It must stay a single narrow exposure and must reject malformed or
+  privileged Plex results locally.
+- Renderer owns the RD-22A body, setup composition, safe UI state, focus,
+  keyboard/remote-like input, text-entry, lists, loading/empty/error display,
+  and live setup actions against the preload bridge.
+- Contracts own renderer-safe public shapes only. They may contain profile,
+  home-user, server, library, media, selection, operation, request, and error
+  summaries, but never raw transport or secret material.
+- Persistence remains main-owned. Renderer may show only safe credential
+  availability states such as missing, present, unavailable, or corrupt.
+
+RD-22B may change main/preload/contracts/runtime/persistence/renderer seams
+only where the reviewed implementation unit proves the existing seam is
+insufficient for the live setup path. The default posture is to bind, verify,
+and narrowly fix the existing RD-22 live runtime rather than invent a second
+runtime.
 
 ## Required Reading
+
+Fresh-session implementers and reviewers must read:
 
 1. `AGENTS.md`
 2. `docs/AGENTIC_DEV_WORKFLOW.md`
 3. `docs/agentic/session-prompts/feature-quality-loop.md`
 4. `docs/agentic/session-prompts/feature-plan.md`
-5. `docs/agentic/plan-authoring-standard.md`
-6. `docs/architecture/CURRENT_STATE.md`
-7. `docs/architecture/file-shape-guardrails.md`
-8. `docs/architecture/import-ledger.md`
-9. `docs/roadmap/desktop-port-roadmap.md`
-10. `docs/product/lineup-product-parity-matrix.md`
-11. `docs/development/windows-ui-proof-plan.md`
-12. Upstream Lineup UI source under the resolved upstream root:
-    `src/modules/ui/**`, `src/styles/**`, route/app shell owners, and adjacent
-    tests for onboarding, channel setup, guide, overlays, Settings, and player
-    chrome.
+5. `docs/agentic/session-prompts/feature-review.md`
+6. `docs/agentic/plan-authoring-standard.md`
+7. `docs/architecture/CURRENT_STATE.md`
+8. `docs/architecture/file-shape-guardrails.md`
+9. `docs/architecture/security-and-secret-flow.md`
+10. `docs/architecture/import-ledger.md`
+11. `docs/roadmap/desktop-port-roadmap.md`
+12. `docs/development/windows-ui-proof-plan.md`
+13. `docs/plans/rd-22a-upstream-ui-body-parity-matrix.md`
+14. This plan
+15. Current source in:
+    `src/contracts/plex.ts`, `src/contracts/ipc.ts`, `src/contracts/shell.ts`,
+    `src/preload/index.cts`, `src/main/index.ts`, `src/main/plex/**`,
+    `src/main/persistence/**`, `src/renderer/plexRuntime*.ts`,
+    `src/renderer/staticDom.ts`, route/workflow/navigation/input owners, and
+    `src/__tests__/**`.
 
-Freshness gate: before implementation, run `git status --short --branch`,
-`git diff --stat`, resolve the upstream Lineup checkout, then run
-`git -C <upstream-root> status --short --branch` and
-`git -C <upstream-root> rev-parse HEAD`. If upstream UI paths moved, Desktop
-renderer ownership changed materially, the active branch changed, or this plan
-conflicts with the roadmap, update and re-review the plan before editing source.
+Freshness gate: before source edits, run `git status --short --branch`,
+`git rev-parse HEAD`, `git -C C:\Software\Lineup status --short --branch`,
+and `git -C C:\Software\Lineup rev-parse HEAD`. If Desktop moved from
+`d743fc1d4f42c6f514987216106d8ffdd3f8f343`, upstream moved from
+`613b1c516c7c9e37f9c18ea3e92c474013472b11`, relevant ownership changed, or
+this plan conflicts with the roadmap/current-state docs, update and re-review
+the plan before editing source.
 
 ## Required Skills
 
-- `execution-plan-authoring`: this is a Tier 3 re-slice of the active product
-  plan and must remain decision-complete.
-- `lineup-desktop-feature-quality-loop`: RD-22A requires plan, review,
-  implementation, verification, implementation review, and closeout gates.
-- `lineup-desktop-feature-review`: required for this replan and each
-  implementation unit before closeout.
-- `ui-composition-patterns`: renderer route/body/focus/overlay composition is
-  the central scope.
-- `architecture-boundaries`: required to keep renderer work from changing
-  preload/main/Plex/player ownership.
-- `verification-strategy`: required because RD-22A is fixture-only but still
-  needs visual, focus, smoke, and automated proof.
-- `review-request` and `review-adjudication`: required for adversarial review
-  and finding resolution.
-- `closeout-verification`: required before staging, committing, or calling any
-  RD-22A unit complete.
+- `lineup-desktop-feature-quality-loop`: required because RD-22B crosses
+  main/preload/contracts/persistence/Plex/renderer and needs repeated gates.
+- `execution-plan-authoring`: freezes scope, ownership seams, verification,
+  rollback, and replan triggers for a fresh implementer.
+- `architecture-boundaries`: keeps Electron process ownership, contracts, IPC,
+  preload, and renderer responsibilities narrow.
+- `persistence-boundaries`: applies to credential availability,
+  selected-server persistence, app paths, and encrypted storage status.
+- `plex-integration-boundaries`: applies to auth/PIN, Plex Home,
+  selected-server state, discovery, library, search, metadata, token custody,
+  and transport redaction.
+- `ui-composition-patterns`: applies to binding live state into the RD-22A
+  body, focus, text entry, scroll/list behavior, cancellation, and back/clear
+  behavior.
+- `verification-strategy`: required because automated public-seam tests must
+  be paired with redaction-safe Windows live proof.
+- `review-request`: required for read-only plan and implementation review.
+- `closeout-verification`: required before staging, committing, closing
+  RD-22, or handing off to RD-23.
 
 ## Evidence And Discovery
 
-- `semantic_search_with_context`: not used for this docs-only replan; previous
-  RD-22 attempts found Codanna unavailable or unhelpful for UI parity evidence.
-- `semantic_search_docs` or repo-doc search: not used; the active roadmap,
-  workflow, and plan files were known and read directly.
-- impact analysis: not run for this docs-only replan. Implementation units must
-  derive impact from direct renderer and upstream UI reads before editing.
-- direct reads / `rg`: read the active roadmap, active RD-22 plan, workflow
-  runbook, plan-authoring standard, recent git history, and planner sidecar
-  output recommending an RD-22A/RD-22B split.
-- official docs: not required because this replan does not change Electron,
-  dependency, packaging, signing, API, or external framework behavior.
-- observed project evidence: prior commits adapted the RD-22 onboarding route,
-  but live proof remains blocked by Plex public rate limiting and the broader
-  Desktop app still lacks the complete upstream-shaped body the user expects.
-- superseded artifact: `docs/plans/rd-22-upstream-parity-audit-matrix.md`
-  remains historical RD-22 runtime evidence, but it is not RD-22A authority
-  because it predates the UI-body-first pivot and live-runtime deferral.
+- `semantic_search_with_context`: controller-confirmed Codanna index has
+  `0 symbols`, `0 files`, and `0 embeddings`; semantic discovery is not useful
+  for this plan. Direct `rg` and file reads are the recorded fallback path.
+- `semantic_search_docs` or repo-doc search: same Codanna fallback. Required
+  docs were read directly.
+- impact analysis: not run because Codanna has no indexed graph. Direct source
+  reads and `rg` anchored the current public seams and tests.
+- direct reads / `rg`: read the workflow runbook, feature-plan launcher,
+  plan-authoring standard, current architecture state, file-shape guardrails,
+  roadmap RD-22B/RD-23+ boundaries, import ledger, secret-flow doc,
+  Windows proof plan, active RD-22/RD-22A plan artifacts, `src/contracts/plex.ts`,
+  `src/contracts/ipc.ts`, `src/contracts/shell.ts`, `src/preload/index.cts`,
+  `src/main/index.ts`, `src/main/plex/plexIpc.ts`,
+  `src/main/plex/plexComposition.ts`, `src/main/plex/desktopPlexRuntime.ts`,
+  `src/main/plex/desktopPlexRuntimeSupport.ts`,
+  `src/main/plex/livePlexTransport.ts`,
+  `src/main/persistence/desktopPersistenceStore.ts`,
+  renderer Plex runtime/static/focus/action owners, and relevant contract,
+  main, preload, renderer, persistence, and discovery tests.
+- official docs: not required for this plan because RD-22B does not change
+  Electron, package, dependency, signing, release, or external API policy. If
+  implementation proposes external framework/API behavior changes, stop and
+  add official-doc evidence before review.
+- upstream source: upstream `C:\Software\Lineup` is on
+  `code-health` at `613b1c516c7c9e37f9c18ea3e92c474013472b11`. RD-22A already
+  imported/adapted the UI body at that commit. RD-22B should not copy more
+  upstream UI/source unless a reviewed implementation unit records a new
+  import-ledger row before or with the copy/adaptation.
+- current implementation evidence:
+  `src/contracts/plex.ts` already declares renderer-safe auth/profile/Home
+  user/server/library/search/metadata snapshots, operations, and recursive
+  forbidden-field checks. `src/preload/index.cts` already exposes the Plex
+  bridge with validated request/result guards. `src/main/index.ts` registers
+  Plex composition before shell window creation. `src/main/plex/desktopPlexRuntime.ts`
+  already owns PIN, Home users, selected-server restore/refresh/select, library
+  sections/items/search/metadata, abort/stale handling, and sanitized snapshot
+  commits. `src/renderer/plexRuntimeActions.ts`,
+  `src/renderer/plexRuntimeDom.ts`, and `src/renderer/plexRuntimeRows.ts`
+  already bind safe runtime snapshots into RD-22A onboarding/setup controls.
 
 ## Impact Snapshot
 
-RD-22A implementation may change renderer UI owners and tests:
+Expected blast radius is cross-boundary but bounded to the live Plex setup
+path:
 
-- `src/renderer/staticDom.ts`
-- `src/renderer/routeDom.ts`
-- `src/renderer/workflow.ts`
-- `src/renderer/navigation.ts`
-- `src/renderer/desktopInput.ts`
-- `src/renderer/index.ts`
-- `src/renderer/plexRuntimeDom.ts`
-- `src/renderer/plexRuntimeState.ts`
-- `src/renderer/plexRuntimeActions.ts`
-- `src/renderer/styles/**`
-- `src/__tests__/renderer/**`
-- `docs/architecture/import-ledger.md`
-- upstream UI source/tests/CSS/copy read-only under the resolved upstream root
+- Main Plex/runtime may receive narrow fixes for live auth/PIN, credential
+  availability, profile/Plex Home switching, selected-server restore after
+  relaunch, discovery, library browse/search/metadata, stale/cancel handling,
+  and sanitized diagnostics.
+- Main persistence may receive narrow fixes only for profile-scoped
+  selected-server restore or credential availability if live proof contradicts
+  existing behavior.
+- Contracts/preload may change only if the live path needs a renderer-safe
+  summary or validation correction that cannot be represented by current
+  shapes. No privileged field may cross the seam.
+- Renderer Plex setup owners may receive data-binding, focus, text-entry,
+  scroll/list, clear/back/cancel, loading/empty/error, and redaction-safe copy
+  adjustments inside the RD-22A body.
+- Tests must change wherever a public seam changes or a live-path regression
+  needs stable automated protection.
+- Import ledger must change before or with any additional copied/adapted
+  upstream Plex/UI/CSS/copy/test source.
+- No dependency, build-tool, package, lockfile, packaging, signing, update, CI,
+  native-helper, or release change is expected or approved.
 
-Public contracts, preload, Electron main, persistence, Plex runtime, player
-runtime, native helper, packaging, dependencies, and lockfiles are out of scope.
+The first implementation unit may cross main/preload/renderer only to verify
+and patch the single onboarding journey end to end. That cross-boundary unit is
+allowed because splitting auth/profile/server/library binding into isolated
+source commits would make Windows live proof and RD-22 closure less reliable.
+Each patch inside that unit must still name its owner and stay inside this
+plan's files.
 
-Expected user-visible change: the app should present an upstream-shaped Desktop
-body for onboarding, setup, guide, overlays, settings, and player chrome even
-where data is fixture-backed. Existing fake smoke fixtures may remain in tests
-and dev-only harnesses, but not as the primary product route presentation.
+User-visible behavior that must not regress: the RD-22A body structure,
+product copy posture, route isolation, player/guide/settings shells, fake-free
+reachable setup body, keyboard/remote-like navigation, text-entry bypass, and
+sanitized diagnostics/support behavior.
 
-Local-only visual proof and run notes remain ignored under `docs/runs/**`.
+Local-only artifacts, raw proof notes, screenshots, logs, support bundles, and
+manual evidence stay ignored under `docs/runs/**` or outside tracked docs.
+
+## Architecture Health
+
+Tier 3 file-shape evidence from current direct line counts:
+
+- `src/preload/index.cts`: 2116 lines, allowlisted hard-overage. It may not
+  grow for RD-22B unless a reviewed implementation unit proves a missing
+  Plex bridge guard is required and also records why the existing approved
+  bridge vocabulary cannot represent the live path. Preferred decision:
+  avoid growth.
+- `src/main/plex/desktopPlexRuntime.ts`: 664 lines, allowlisted. It may receive
+  narrow live-path fixes, but selection/profile orchestration must be split
+  before adding another broad runtime behavior family. Preferred decision:
+  avoid or shrink; do not add a new operation family.
+- `src/main/persistence/desktopPersistenceStore.ts`: 625 lines, allowlisted.
+  Only selected-server/profile-scope or credential availability defects are in
+  scope. No new persisted state family is approved. Preferred decision: avoid
+  growth or make a focused same-owner extraction if needed.
+- `src/contracts/plex.ts`: 380 lines, below the production guardrail. Contract
+  additions are allowed only for renderer-safe summaries, not privileged
+  transport fields.
+- `src/main/index.ts`: 319 lines, below the guardrail. It should remain
+  composition wiring only.
+- `src/renderer/staticDom.ts`: 269 lines,
+  `src/renderer/plexRuntimeActions.ts`: 472 lines,
+  `src/renderer/plexRuntimeDom.ts`: 225 lines, and
+  `src/renderer/plexRuntimeRows.ts`: 329 lines. Renderer Plex binding changes
+  should stay in these focused owners unless a new focused renderer owner
+  clearly reduces complexity.
+
+Affected owner hotspots: preload bridge, main Plex runtime, main persistence
+store, and renderer setup binding. RD-22B must not raise file-shape baselines
+to pre-authorize growth. If implementation must grow an allowlisted file above
+its current reviewed baseline, stop for a reviewed decomposition or temporary
+allowlist decision with a removal trigger.
+
+Maintainability route:
+
+- Run `npm run verify:maintainability` directly after any production source
+  shape or file-shape guardrail change.
+- `npm run verify` remains the closeout command for source implementation and
+  should include maintainability unless the reviewed implementation packet
+  names a narrower command for a docs-only checkpoint.
 
 ## Files In Scope
 
-Docs-only replan scope:
+Plan/review/control surfaces:
 
 - `docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md`
-- `docs/roadmap/desktop-port-roadmap.md`
+- `docs/plans/rd-22a-upstream-ui-body-parity-matrix.md` read-only context
+- `docs/architecture/import-ledger.md` only for copied/adapted upstream source
+- `docs/architecture/CURRENT_STATE.md` and
+  `docs/roadmap/desktop-port-roadmap.md` only during RD-22 closeout memory
+  update after observed implementation/proof/review completion
 
-RD-22A implementation scope after review:
+Source implementation scope after read-only plan review:
 
-- `docs/architecture/import-ledger.md`
+- `src/contracts/plex.ts`
+- `src/contracts/ipc.ts` only for approved Plex channel vocabulary correction
+- `src/contracts/shell.ts` only for typed Plex bridge shape correction
+- `src/preload/index.cts`
+- `src/main/index.ts`
+- `src/main/plex/plexComposition.ts`
+- `src/main/plex/plexIpc.ts`
+- `src/main/plex/desktopPlexRuntime.ts`
+- `src/main/plex/desktopPlexRuntimeSupport.ts`
+- `src/main/plex/livePlexTransport.ts`
+- `src/main/plex/auth/**`
+- `src/main/plex/discovery/**`
+- `src/main/plex/library/**`
+- `src/main/persistence/desktopPersistenceStore.ts`
+- `src/main/persistence/appDataPaths.ts`
+- `src/main/persistence/secureStorageCodec.ts`
+- `src/renderer/plexRuntimeActions.ts`
+- `src/renderer/plexRuntimeState.ts`
+- `src/renderer/plexRuntimeDom.ts`
+- `src/renderer/plexRuntimeRows.ts`
 - `src/renderer/staticDom.ts`
-- `src/renderer/routeDom.ts`
-- `src/renderer/workflow.ts`
+- `src/renderer/domBindings.ts`
+- `src/renderer/focusDom.ts`
 - `src/renderer/navigation.ts`
 - `src/renderer/desktopInput.ts`
 - `src/renderer/index.ts`
-- `src/renderer/plexRuntimeDom.ts`
-- `src/renderer/plexRuntimeState.ts`
-- `src/renderer/plexRuntimeActions.ts`
-- `src/renderer/styles/**`
-- `src/__tests__/renderer/**`
-- read-only upstream UI source, CSS, assets, copy, and tests under the resolved
-  upstream Lineup checkout
+- `src/renderer/styles/plex-onboarding.css`
+- `src/renderer/styles/plex-onboarding-cards.css`
+- focused tests in `src/__tests__/contracts/**`,
+  `src/__tests__/integration/preloadContractVocabulary.test.ts`,
+  `src/__tests__/main/plex*.test.ts`,
+  `src/__tests__/main/persistenceBoundary.test.ts`,
+  and `src/__tests__/renderer/plexRuntime.test.ts`
+
+Read-only upstream source may be inspected under `C:\Software\Lineup` for
+behavior parity. Copy/adaptation requires the import-ledger obligation above.
 
 ## Files Out Of Scope
 
-- `src/contracts/**`
-- `src/preload/**`
-- `src/main/**`
 - `src/domain/**`
+- `src/main/player/**` except read-only context
+- `src/main/persistence/desktopChannelPersistenceStore.ts`
 - `src/native/**`
-- `src/main/player/**`
-- package manifests and lockfiles
-- package, signing, update, installer, release, and CI configuration
-- tracked raw proof artifacts, screenshots, logs, support bundles, raw Plex
-  payloads, endpoint URLs, connection details, tokens, headers, account/server
-  names, library/media names, local paths, and native handles
+- production native-helper files or tools
+- scheduler/channel runtime owners
+- package manifests, lockfiles, package tooling, signing/update/installer
+  configuration, release docs, and CI configuration
+- guide/player runtime, media-option runtime, and playback-specific contracts
+- tracked raw proof artifacts, screenshots, logs, support-bundle contents,
+  account/server/library/media names, local paths, endpoint URLs, connection
+  details, auth headers, tokens, raw Plex payloads, process ids, native
+  handles, and private diagnostic output
 
 ## Planner Self-Check
 
-1. No product architecture decision is unresolved for RD-22A: renderer owns the
-   UI body; runtime owners are explicitly out of scope.
-2. The plan does not depend on contract, preload, main, persistence, player, or
-   package changes.
-3. Files out of scope are not hidden wiring for RD-22A; fixture/injected
-   renderer-safe data is allowed until runtime slices wire in.
-4. Evidence path is recorded as direct reads plus planner sidecar output.
-5. Work is assigned to renderer owners and must decompose hotspots rather than
-   inflate existing broad files.
-6. Tier 3 Architecture Health evidence is included below.
+1. No product, ownership, dependency, or verification decision is left
+   unresolved for RD-22B planning. Existing owners are main Plex/persistence,
+   preload bridge, contracts, and renderer setup binding.
+2. The plan includes adjacent contract/preload/main/persistence/renderer files
+   that may need changes; it does not rely on hidden wiring in frozen files.
+3. Files out of scope are not needed to prove RD-22B because channel creation,
+   scheduler guide/player runtime, playback, media options, native helper, and
+   package behavior are later roadmap items.
+4. Evidence path records Codanna fallback plus direct doc/source/test reads.
+5. Work stays with repo-preferred owners and explicitly avoids hotspot growth
+   unless a reviewed decomposition/allowlist decision is made.
+6. Tier 3 Architecture Health evidence and maintainability route are included.
 7. A fresh implementer should not need to invent security, IPC, playback,
    persistence, packaging, import, or verification policy.
-8. Verification commands, expected outcomes, and stop/replan triggers are named.
+8. Exact verification commands, expected outcomes, live proof expectations,
+   stop/replan triggers, rollback notes, commit checkpoints, and review
+   handoff are recorded.
 
 ## Architecture Seam Decision Gate
 
-Chosen seam: renderer-only upstream UI body parity with fixture/injected
-renderer-safe data. Runtime slices wire into this seam later.
+Chosen seam: main-owned live Plex runtime and persistence feed renderer-safe
+snapshots through the narrow preload bridge into the RD-22A renderer body.
+Renderer owns display, focus, and local transient input only.
 
 Forbidden shortcuts:
 
-- no renderer Plex fetches or network transport
-- no renderer storage of credentials, raw server connections, raw media
-  descriptors, native handles, or token-bearing values
-- no broad preload bridge or arbitrary IPC channel strings
-- no dependency or lockfile change
-- no upstream path shim or compatibility barrel
-- no reachable fake/debug/draft controls in product routes after replacement
-- no tracked raw visual proof
+- no renderer Plex fetches, token handling, auth headers, raw endpoint details,
+  selected connections, raw payloads, raw diagnostics, Electron/Node APIs,
+  filesystem paths, app paths, browser storage, native handles, or privileged
+  playback descriptors
+- no broad preload RPC, arbitrary channel strings, second contextBridge world,
+  compatibility barrels, old upstream path shims, or fallback API variants
+- no persistence schema expansion beyond credential/selected-server behavior
+  already owned by RD-09/RD-22 unless a reviewed migration/no-migration note is
+  added before implementation
+- no tracked raw live proof or private Plex/account/server/library/media data
+- no package/dependency/release/native-helper changes
 
-Stop before implementation if the upstream UI body cannot be adapted without
-main/preload/runtime changes, new dependencies, raw private data in renderer, or
-large unreviewable renderer hotspots.
+Storage decision: existing RD-09 main persistence remains the owner. RD-22B may
+use only encrypted credential records and active-profile scoped
+selected-server summaries. No migration is expected. If live proof shows legacy
+singleton selected-server data needs migration into profile-scoped records,
+stop and replan with explicit schema/migration verification.
+
+Redaction decision: renderer-facing state, contracts, diagnostics, tests, docs,
+and proof summaries may contain only safe status, counts, operation names,
+request ids, and generic product copy. Main may hold private material only in
+runtime memory or encrypted storage as already approved.
+
+UI decision: preserve RD-22A body structure. Data-binding adjustments may alter
+button enabled states, list contents, focus registration, scrollable regions,
+input clearing, status/error copy, and empty/loading states. Rebuilding the
+body, reintroducing scaffold/debug controls, or changing later RD-23/RD-24/RD-25
+surfaces is out of scope.
+
+Stop and replan if implementation contradicts any owner seam above.
 
 ## Verification Commands
 
 Verification classification: `broader integration/manual proof required`.
 
-Docs-only replan:
+Plan-only checkpoint:
 
-- `npm run verify:docs` should pass.
-- `npm run verify:redaction` should pass.
-- `git diff --check` should pass.
+- `npm run verify:docs` should pass for this active tracked plan.
+- `git diff --check -- docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md`
+  should pass or report only known pre-existing line-ending warnings that do
+  not affect content.
 
-RD-22A implementation after review:
+Implementation units must run the smallest focused proof first, then close with
+the full source proof:
 
-- `node --import tsx --test src/__tests__/renderer/workflow.test.ts src/__tests__/renderer/routeDom.test.ts src/__tests__/renderer/navigation.test.ts src/__tests__/renderer/focusDom.test.ts src/__tests__/renderer/desktopInput.test.ts src/__tests__/renderer/epg.test.ts src/__tests__/renderer/overlays.test.ts src/__tests__/renderer/plexRuntime.test.ts` should pass.
-- `npm run verify` should pass.
-- `npm run smoke:electron` should pass.
-- Sanitized visual/focus/manual proof should show the fixture-backed,
-  upstream-shaped app body
-  across onboarding, channel setup shell, Settings, Guide/EPG, OSD,
-  now-playing information, mini guide, channel badge, and player chrome without
-  raw/private evidence or any claim of live Plex, channel creation, scheduler,
-  playback, or media-option runtime completion.
-- Read-only implementation review should report no material blockers.
+- `npm run typecheck` should pass after contract, preload, main, or renderer
+  type changes.
+- `npm run test:contracts -- --test-name-pattern "plex runtime|plex auth|plex discovery|plex library|preload Plex|contract|persistence"`
+  should pass when Plex runtime, persistence, contract, or preload behavior is
+  touched.
+- `node --import tsx --test src/__tests__/renderer/plexRuntime.test.ts src/__tests__/renderer/navigation.test.ts src/__tests__/renderer/focusDom.test.ts src/__tests__/renderer/desktopInput.test.ts`
+  should pass when renderer Plex binding, focus, text-entry, or back/clear
+  behavior is touched.
+- `npm run verify:redaction` should pass after any live Plex, diagnostics,
+  contract, test, or proof-surface change.
+- `npm run verify:maintainability` should pass after any production source
+  shape change or file-shape guardrail change.
+- `npm run smoke:electron` should pass before closeout because the live bridge
+  is composed during shell startup.
+- `npm run verify` should pass before source implementation closeout.
+- `git diff --check` should pass before commit, with only explicitly observed
+  and acceptable line-ending warnings if present.
+
+Expected outcomes:
+
+- Contract/preload tests reject forbidden Plex fields, malformed request/result
+  envelopes, mismatched request ids, invalid PINs, invalid limits/filters, and
+  unsafe bridge exposure.
+- Main tests prove token/connection/raw payload custody remains in main,
+  selected-server restore is profile-scoped, protected Home PIN switching is
+  safe, stale/cancelled operations do not commit old state, library
+  browse/search/metadata summaries remain renderer-safe, and sanitized errors
+  omit private material.
+- Renderer tests prove live state binding, loading/empty/error text, protected
+  Home PIN input clearing, search text-entry, scroll/list focus targets,
+  nested back/clear/cancel ordering, stale result ignores, and no forbidden
+  renderer state.
+- Smoke proves the shell starts with the preload/main Plex bridge composed and
+  without weakening sandbox/containment.
+
+Windows live proof is mandatory before RD-22B closeout. Tracked summary may
+include only categories, scenario counts, pass/fail/blocked status, command or
+route names, and sanitized blocker classification. Required categories:
+
+- auth/PIN: request, poll/claim, cancel, retry, expired or failed state if
+  observed
+- credential availability: missing/present/unavailable or corrupt state as
+  safely observable
+- profile/Plex Home: Home user load, protected-user PIN success/failure or
+  blocked-unavailable, profile switch reset behavior
+- server discovery and selection: refresh, select, unavailable/error state,
+  profile-scoped selected-server restore after app relaunch
+- library: sections, browse, search, metadata summary, empty/error state
+- renderer behavior: back, clear, cancel, focus movement, text-entry bypass,
+  scroll/list reachability, route cleanup
+- redaction: no tracked private names, paths, URLs, tokens, headers, payloads,
+  screenshots, logs, native handles, support-bundle contents, or raw proof
+
+Live proof counts should use a shape like:
+`RD-22B live Plex onboarding: <passed>/<total> observed; blocked=<count>`.
+Do not include account, server, library, or media names in the tracked summary.
 
 ## Acceptance Criteria
 
-- The reachable Desktop app body no longer reads as the RD-13 scaffold with
-  isolated real controls dropped into it.
-- Upstream Lineup UI structure, hierarchy, copy, focus/back behavior,
-  loading/empty/error treatment, and screen relationships are imported or
-  adapted for the skeleton/body surfaces named by RD-22A.
-- Fixture-backed surfaces are clearly product-shaped and renderer-safe, and the
-  proof packet explicitly distinguishes fixture/demo state from live Plex,
-  channel creation, scheduler, playback, and media-option runtime completion.
-- Fake/debug/smoke/draft controls are isolated from product routes or removed
-  where RD-22A owns the visible body.
-- Any copied/adapted upstream UI source, CSS, copy, assets, or tests are
-  recorded in `docs/architecture/import-ledger.md`.
-- No live Plex, channel creation, scheduler runtime, playback, native helper,
-  package, dependency, lockfile, or release behavior changes land in RD-22A.
-- Verification and adversarial review pass before closeout.
+- Live Plex sign-in through link PIN works from the RD-22A body, including
+  cancel/retry and sanitized failed/expired/rate-limited states.
+- Credential availability is visible only as safe status and main can restore
+  an encrypted credential without exposing the secret to renderer/preload
+  contracts, docs, tests, diagnostics, or output.
+- Plex Home profiles load through main, protected users accept a PIN through
+  renderer-local transient input, and profile switching clears server/library
+  state without leaking the account token or managed-user token.
+- Server discovery, selection, and selected-server restore after relaunch work
+  for the active profile, while selected connections and endpoint details stay
+  in main memory only.
+- Library sections, browse, search, and metadata summaries populate the RD-22A
+  body with renderer-safe summaries only. No artwork URLs, media files, raw
+  payloads, tokenized URLs, headers, or private endpoint details cross the
+  seam.
+- Sanitized loading, empty, failed, cancelled, stale, auth-required,
+  storage-unavailable/corrupt, server-unreachable, access-denied,
+  rate-limited, and parse/library failure states appear in the setup body
+  without raw private material.
+- Back/clear/cancel behavior unwinds metadata, search, items, selected
+  section, selected server, and PIN/profile subflow before route back, while
+  cancelling active PIN polling and ignoring stale results.
+- Focus, text-entry, dynamic row focus ids, OK activation, scroll/list
+  reachability, and route cleanup stay stable on Windows.
+- RD-22A body parity remains intact except for reviewed live data-binding
+  adjustments. Channel setup shell remains shell-only until RD-23.
+- Any copied/adapted upstream Plex/UI/CSS/copy/test source has an
+  import-ledger row before or in the same change.
+- `npm run verify`, `npm run smoke:electron`, `npm run verify:redaction`,
+  required focused tests, redaction-safe Windows live proof, and read-only
+  implementation review pass before RD-22 closes.
 
 ## Replan Triggers
 
-- Upstream UI parity requires contract, preload, main, persistence, player, or
-  native-helper changes.
-- The renderer would need raw credentials, auth headers, tokenized URLs, raw
-  Plex payloads, raw media descriptors, native handles, Electron APIs, Node
-  APIs, or broad IPC.
-- The work requires a new dependency, package change, lockfile change, or build
-  tool change.
-- Renderer hotspots would grow past file-shape guardrails without a reviewed
-  decomposition or temporary allowlist decision.
-- Visual proof would require tracked raw screenshots, logs, paths, private Plex
-  names, media names, tokens, URLs, payloads, or native handles.
-- Reviewer finds material scope, architecture, verification, import-ledger, or
-  fake-surface gaps.
+- Live behavior requires renderer custody of credentials, tokens, auth
+  headers, selected connections, raw Plex payloads, endpoint details,
+  diagnostics internals, app paths, filesystem paths, Electron/Node APIs,
+  native handles, or privileged playback descriptors.
+- The preload bridge would need broad RPC, arbitrary channel strings, another
+  contextBridge exposure, compatibility shims, or old upstream path mirrors.
+- Credential restore or selected-server restore requires a persistence schema
+  migration, plaintext fallback, browser storage, or renderer-owned storage.
+- Plex proof requires channel creation, persisted channel settings, scheduler
+  guide/player runtime, production playback, media-option runtime,
+  native-helper behavior, package/release changes, or public release claims.
+- Live proof is blocked by missing redaction-safe Plex account/server access or
+  active Plex rate limiting after a quiet retry window. Record blocked status
+  without storing private evidence.
+- Windows proof would require tracked screenshots, raw logs, account/server/
+  library/media names, local paths, endpoint URLs, tokens, auth headers, raw
+  payloads, support bundles, process ids, native handles, or private proof.
+- Any allowlisted production file must grow above its reviewed baseline without
+  an approved decomposition or temporary allowlist update.
+- Required verification fails in a way that invalidates the chosen seam.
+- Read-only plan or implementation review reports a material security,
+  boundary, verification, import-ledger, body-preservation, or scope blocker.
 
 ## Rollback Notes
 
-- The docs-only replan can be reverted by reverting this plan and the roadmap
-  changes.
-- RD-22A implementation should commit in focused units: source inventory/matrix,
-  renderer body adaptation, tests, import ledger, and proof summaries when
-  needed.
-- If RD-22A implementation fails, keep RD-22A active and do not route to RD-22B.
-- Ignored local proof notes under `docs/runs/**` may be deleted without
-  affecting source.
-- Do not roll back unrelated user changes or prior committed runtime fixes
+- Plan-only changes can be reverted by reverting this file.
+- Implementation should use focused commits so rollback can drop a failed live
+  wiring unit without disturbing RD-22A body parity.
+- If a runtime source change fails verification or live proof, revert only that
+  focused change and preserve committed RD-22A body parity.
+- If a profile-scoped selected-server or credential availability fix is wrong,
+  remove the narrow runtime/persistence change and keep encrypted credential
+  storage fail-closed.
+- Ignored local proof under `docs/runs/**` can be deleted without affecting
+  tracked source. Do not commit raw proof.
+- Do not revert unrelated user changes or prior committed RD-22A/runtime fixes
   unless explicitly requested.
+- If RD-22B is blocked by live account/server availability or rate limiting,
+  leave RD-22B active or mark the reviewed handoff blocked; do not close RD-22
+  with fake/injected proof.
 
 ## Commit Checkpoints
 
-- Commit 1: `docs(roadmap): split UI body parity from live Plex wiring` after
-  this replan passes docs verification and read-only review.
-- Later RD-22A implementation commits should stay renderer-focused, for
-  example `feat(renderer): adapt upstream Lineup app body skeleton`.
-- RD-22B live-runtime commits should be separate from RD-22A UI-body commits.
-- Do not stage unrelated changes.
-
-## Architecture Health
-
-RD-22A implementation is expected to touch renderer hotspots near or past the
-maintainability threshold. The preferred direction is decomposition, not growth:
-
-- Keep `src/renderer/index.ts`, `src/renderer/plexRuntimeDom.ts`,
-  `src/renderer/plexRuntimeActions.ts`, and existing broad CSS files from
-  absorbing the whole app body.
-- Add focused renderer UI owners only when they map to real upstream body
-  surfaces, route shells, focus maps, or view models.
-- Avoid increasing `src/preload/index.cts`, main Plex runtime owners, player
-  owners, persistence owners, or package owners because they are out of RD-22A.
-- Run `npm run verify:maintainability` directly or through `npm run verify`
-  after source changes.
-
-Decision: decompose renderer UI body work into focused owners and avoid
-pre-authorizing hotspot growth. No temporary allowlist row is approved by this
-plan.
-
-Do not add a file-shape allowlist row to pre-authorize growth. If a later unit
-cannot avoid crossing a guardrail, replan or record a reviewed temporary
-allowlist decision in the implementation packet.
+- Checkpoint 1: `docs(plan): activate RD-22B live Plex wiring packet` after
+  this plan passes `npm run verify:docs` and read-only plan review.
+- Checkpoint 2: `feat(plex): wire live onboarding into parity body` after the
+  approved implementation unit passes focused tests, `npm run verify`,
+  `npm run smoke:electron`, redaction-safe Windows live proof, and
+  implementation review.
+- Optional checkpoint 3: `docs(roadmap): close RD-22 live Plex onboarding`
+  only after RD-22B source implementation, proof, review, and memory updates
+  are complete. Keep workflow/control-plane docs separate from source when
+  practical.
+- Do not stage unrelated files. Do not combine RD-23/RD-24/RD-25/RD-26 work
+  into RD-22B commits.
 
 ## Execution Units
 
-### Unit 1: Roadmap And Active Plan Pivot
-
-Type: docs/control-plane.
+### Unit 1: Plan Activation And Review
 
 Scope:
 
-- Split RD-22 into RD-22A UI body parity and RD-22B live Plex runtime wiring.
-- Update the active plan and roadmap so the next implementation targets the
-  upstream-shaped Desktop app body.
+- Replace the completed RD-22A active plan body with this RD-22B packet.
+- Do not edit product source.
 
 Verification:
 
-- `npm run verify:docs`
+- `npm run verify:docs` should pass.
+- `git diff --check -- docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md`
+  should pass or report only observed acceptable line-ending warnings.
+- Read-only plan review through `lineup-desktop-feature-review` should report
+  no material blockers before source implementation begins.
+
+### Unit 2: Runtime Seam Freshness And Focused Patch
+
+Scope after clean plan review:
+
+- Reconfirm current live runtime behavior through focused contract/main/
+  preload/renderer tests and source reads.
+- Patch only the smallest defects that prevent live auth/PIN, credential
+  availability, profile/Home switch, protected-user PIN handling, server
+  discovery/selection/restore, library browse/search/metadata, sanitized
+  failures, and RD-22A body binding from working as planned.
+- Preserve the existing operation vocabulary unless a reviewed public-seam
+  correction is unavoidable.
+
+Files in scope: the source/test files listed in `## Files In Scope`.
+
+Files out of scope: all RD-23 through RD-26 owners and all package/native/
+release surfaces listed in `## Files Out Of Scope`.
+
+Verification:
+
+- Focused commands from `## Verification Commands` for touched owners.
 - `npm run verify:redaction`
-- `git diff --check`
-- read-only adversarial review
-
-### Unit 2: Upstream UI Body Inventory And Parity Matrix
-
-Type: source-audit/docs after Unit 1 review.
-
-Scope:
-
-- Reconfirm upstream branch and HEAD.
-- Inventory upstream app shell, route structure, onboarding, profile/server
-  setup, channel setup, Settings, Guide/EPG shell, OSD shell, now-playing
-  shell, mini guide shell, channel badge shell, player chrome shell, CSS, copy,
-  assets, and tests.
-- Map upstream surfaces to Desktop renderer owners, test owners, import-ledger
-  obligations, fixture needs, and Desktop divergence reasons.
-- Mark every guide/player surface as RD-22A fixture shell/body work or RD-24
-  runtime-backed guide/player work so the matrix cannot over-claim future
-  runtime parity.
-
-Verification:
-
-- `npm run verify:docs`
-- `npm run verify:redaction`
-- `git diff --check`
-- read-only review of the matrix before implementation
-
-### Unit 3: Renderer UI Body Adaptation
-
-Type: renderer implementation after Unit 2 review.
-
-Scope:
-
-- Adapt upstream-shaped app body surfaces using renderer-safe fixture/injected
-  data where runtime behavior is not ready.
-- Isolate or remove fake/debug/draft controls from product routes.
-- Add or update renderer tests for structure, focus/back, scroll, text-entry
-  bypass, loading/empty/error states, and route isolation.
-- Update the import ledger for copied/adapted upstream UI/CSS/copy/tests.
-
-Verification:
-
-- focused renderer tests named by the unit
-- `node --import tsx --test src/__tests__/renderer/workflow.test.ts src/__tests__/renderer/routeDom.test.ts src/__tests__/renderer/navigation.test.ts src/__tests__/renderer/focusDom.test.ts src/__tests__/renderer/desktopInput.test.ts src/__tests__/renderer/epg.test.ts src/__tests__/renderer/overlays.test.ts src/__tests__/renderer/plexRuntime.test.ts`
-- `npm run verify`
+- `npm run verify:maintainability` when production source shape changes
 - `npm run smoke:electron`
-- sanitized visual/focus/manual proof that labels fixture/demo state explicitly
-- read-only implementation review
+- `npm run verify`
 
-### Unit 4: RD-22A Closeout And RD-22B Handoff
+Stop/replan:
 
-Type: proof/review/docs.
+- Any architecture seam, persistence schema, preload breadth, raw private data,
+  source import, file-shape, or roadmap-scope trigger above fires.
+
+### Unit 3: Redaction-Safe Windows Live Proof
 
 Scope:
 
-- Confirm fixture-only UI body parity evidence is clean and explicitly labels
-  live Plex, channel creation, scheduler, playback, and media-option runtime as
-  not proven by RD-22A.
-- Do not retry live Plex proof.
-- Produce the next handoff to RD-22B live Plex onboarding runtime wiring into
-  the established UI body.
+- On Windows, run the live setup path through the RD-22A body against an
+  available redaction-safe Plex account/server.
+- Record only local ignored raw notes if needed.
+- Track only sanitized category/count/pass-fail/blocked summary after a
+  redaction scan.
+
+Required proof categories:
+
+- auth/PIN
+- credential availability
+- profile/Plex Home, including protected PIN if available
+- server discovery, selection, and relaunch restore
+- library sections, browse, search, and metadata
+- failure/empty/loading/cancel/stale state
+- back/clear/cancel/focus/text-entry/scroll behavior
+- redaction gate
 
 Verification:
 
-- `npm run verify:docs`
 - `npm run verify:redaction`
 - `git diff --check`
-- closeout review
+- Any exact live-proof command or manual script named by the implementation
+  packet, with observed exit/status and sanitized result counts.
 
-Status: complete. RD-22A Unit 3 implementation and re-review are clean. The
-controller observed the exact renderer command passing 75/75 tests, `npm run
-verify` passing, `npm run smoke:electron` passing, and `git diff --check`
-passing with only CRLF warnings. Sanitized local proof exercised the built
-renderer through the local safe mock bridge across route switching,
-overlay/player chrome, guide, Settings, channel setup, and focus targets. The
-proof found no old setup hooks and no forbidden token, header, path, or raw
-private text. No screenshots, raw logs, account names, server names, media
-titles, raw paths, endpoint URLs, tokens, headers, payloads, native handles, or
-other private proof are tracked.
+Stop/replan:
 
-RD-22A completion claim: fixture/injected renderer-safe upstream-shaped app
-body parity only. RD-22A does not prove live Plex auth, Plex Home/profile
-runtime, server discovery/restore, library browse/search/metadata, channel
-creation, scheduler-backed guide/player data, playback, media-option runtime,
-production native-helper behavior, package/release behavior, or runtime-backed
-guide/player parity.
+- Live proof cannot be completed without raw tracked evidence, private data
+  exposure, package/native/playback/channel work, or public release claims.
 
-## RD-22B Deferred Runtime Scope
+### Unit 4: Implementation Review And RD-22 Closeout
 
-RD-22B will own live Plex auth/profile/discovery/library wiring into the
-RD-22A body after RD-22A closes. RD-22B remains responsible for redaction-safe
-Windows proof of live sign-in, profile/Plex Home, server discovery/restore,
-server selection, library sections, browse, search, metadata, sanitized failure
-states, and relaunch restore. RD-22B must not reshape the app body except for
-small data-binding adjustments reviewed against the RD-22A surfaces.
+Scope:
+
+- Send the implementation diff, observed commands, Windows proof summary, and
+  known risks to read-only implementation review.
+- Adjudicate findings. Rerun required verification after accepted fixes.
+- Update durable memory only after implementation review is clean:
+  `docs/architecture/CURRENT_STATE.md`,
+  `docs/roadmap/desktop-port-roadmap.md`, and import ledger if needed.
+- Archive completed full plan body locally only after durable conclusions are
+  reflected in tracked docs.
+
+Verification:
+
+- `npm run verify:docs` for closeout docs.
+- `npm run verify:redaction`
+- `npm run verify`
+- read-only implementation review clean.
+
+Stop/replan:
+
+- Any material review finding remains unresolved, required verification fails,
+  Windows proof is blocked, or memory updates would overclaim RD-23+ scope.
+
+## Review Handoff
 
 MODEL_SUGGESTION
 PLANNER: gpt-5 high reasoning
 IMPLEMENTER: gpt-5 high reasoning
 REVIEWER: gpt-5 high reasoning
-WHY: RD-22B is Tier 3 live Plex runtime wiring across auth, profile, server discovery/restore, library data, persistence custody, renderer binding, Windows proof, and redaction boundaries.
+WHY: RD-22B is Tier 3 live Plex runtime wiring across Electron main, preload, contracts, secure storage, Plex auth/discovery/library, renderer focus/UI binding, Windows live proof, and redaction boundaries.
 
 NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
-TASK: Complete RD-22B Live Plex Onboarding Runtime Wiring Into Parity Body
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
+TASK: Review RD-22B Live Plex Onboarding Runtime Wiring Plan
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md
-ARTIFACT: RD-22A completed parity body and closeout summary
+ARTIFACT: active RD-22B execution plan
 FILES:
 - docs/plans/rd-22-live-plex-auth-discovery-library-runtime-ui.md
 - docs/plans/rd-22a-upstream-ui-body-parity-matrix.md
-- docs/roadmap/desktop-port-roadmap.md
-- docs/architecture/import-ledger.md
 - docs/architecture/CURRENT_STATE.md
+- docs/architecture/file-shape-guardrails.md
+- docs/architecture/security-and-secret-flow.md
+- docs/architecture/import-ledger.md
+- docs/roadmap/desktop-port-roadmap.md
+- docs/development/windows-ui-proof-plan.md
 - src/contracts/plex.ts
+- src/preload/index.cts
+- src/main/index.ts
 - src/main/plex/**
 - src/main/persistence/**
-- src/renderer/**
+- src/renderer/plexRuntime*.ts
+- src/renderer/staticDom.ts
+- src/renderer/domBindings.ts
+- src/renderer/focusDom.ts
+- src/renderer/navigation.ts
+- src/renderer/desktopInput.ts
+- src/renderer/index.ts
 - src/__tests__/**
-BLOCKERS: none for RD-22B planning. Live proof and implementation remain gated by redaction-safe Plex account/server availability and any active Plex rate limiting.
+BLOCKERS: none for read-only plan review. Source implementation is intentionally not started.
 MESSAGE:
-Start RD-22B planning through the quality loop. RD-22A is complete and reviewed as fixture/injected renderer-safe upstream-shaped body parity only; do not reopen RD-22A unless a reviewer finds a closeout contradiction. Plan live Plex auth/PIN, profile/Plex Home, server discovery/restore, server selection, library sections, browse, search, metadata summaries, sanitized failure states, credential availability, and relaunch restore wired into the RD-22A body. Keep credentials, tokens, selected connections, raw Plex payloads, auth headers, endpoint details, app paths, and diagnostics in main-owned custody. Preserve the RD-22A body except for reviewed data-binding adjustments. Do not implement channel creation, scheduler-backed guide/player runtime, playback, media-option runtime, production native-helper behavior, package/release behavior, or public release claims. The plan must name verification and review gates, including redaction-safe Windows proof for live sign-in, profile/Plex Home, server discovery/selection/restore, library browse/search/metadata, sanitized failures, credential availability, relaunch restore, `npm run verify` unless narrowly replanned, `npm run verify:redaction`, and implementation review.
+Review the active RD-22B plan for implementation readiness. Prioritize findings about main/preload/renderer ownership, credential/token/connection/raw-payload custody, selected-server restore persistence, protected Plex Home PIN handling, RD-22A body preservation, file-shape guardrails, verification sufficiency, live Windows proof redaction policy, RD-23+ scope leakage, and import-ledger obligations. Stay read-only and lead with blockers or material risks by file/section reference. If clean, state that the plan is implementation-ready and identify any residual proof risk.
