@@ -38,6 +38,7 @@ import {
 import { registerPlayerIpcHandlers, type PlayerIpcTeardown } from './player/playerIpc.js';
 import { DiagnosticEventStore } from './diagnostics/diagnosticEventStore.js';
 import { registerDiagnosticsIpcHandlers, type DiagnosticsIpcTeardown } from './diagnostics/supportBundleIpc.js';
+import { registerChannelComposition, type ChannelCompositionTeardown } from './channel/channelComposition.js';
 import { registerPlexComposition, type PlexCompositionTeardown } from './plex/plexComposition.js';
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
 import { registerShellAppCommandController } from './window/shellAppCommandController.js';
@@ -63,6 +64,7 @@ const shellWindowController = createShellWindowController({
 let teardownPlayerIpc: PlayerIpcTeardown | null = null;
 let teardownDiagnosticsIpc: DiagnosticsIpcTeardown | null = null;
 let teardownPlexComposition: PlexCompositionTeardown | null = null;
+let teardownChannelComposition: ChannelCompositionTeardown | null = null;
 let playerIpcQuitTeardownInProgress = false;
 let playerIpcQuitTeardownComplete = false;
 let containmentCounters: ShellContainmentCounters = {
@@ -102,6 +104,13 @@ app.whenReady()
       createRequestId,
       diagnosticEventStore,
     });
+    teardownChannelComposition = registerChannelComposition({
+      app,
+      shellMode,
+      isAuthorizedEvent,
+      createRequestId,
+      diagnosticEventStore,
+    });
     const shellWindow = shellWindowController.createWindow();
     registerShellAppCommandController(shellWindow, {
       reportDiagnostic: reportMainProcessDiagnostic,
@@ -132,8 +141,13 @@ app.on('before-quit', (event) => {
   if (playerIpcQuitTeardownComplete || teardown === null) {
     const teardownPlex = teardownPlexComposition;
     teardownPlexComposition = null;
-    void teardownPlex?.().catch((error: unknown) => {
-      reportMainProcessDiagnostic('Plex composition cleanup failed during quit', error);
+    const teardownChannel = teardownChannelComposition;
+    teardownChannelComposition = null;
+    void Promise.all([
+      teardownPlex?.() ?? Promise.resolve(),
+      teardownChannel?.() ?? Promise.resolve(),
+    ]).catch((error: unknown) => {
+      reportMainProcessDiagnostic('Runtime composition cleanup failed during quit', error);
     });
     return;
   }
@@ -148,8 +162,14 @@ app.on('before-quit', (event) => {
   teardownDiagnosticsIpc = null;
   const teardownPlex = teardownPlexComposition;
   teardownPlexComposition = null;
+  const teardownChannel = teardownChannelComposition;
+  teardownChannelComposition = null;
   playerIpcQuitTeardownInProgress = true;
-  Promise.all([teardown(), teardownPlex?.() ?? Promise.resolve()])
+  Promise.all([
+    teardown(),
+    teardownPlex?.() ?? Promise.resolve(),
+    teardownChannel?.() ?? Promise.resolve(),
+  ])
     .catch((error: unknown) => {
       reportMainProcessDiagnostic('Player IPC cleanup failed during quit', error);
     })

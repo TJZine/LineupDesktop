@@ -1,5 +1,10 @@
 import type { IpcRendererEvent } from 'electron';
 import type * as Electron from 'electron';
+import {
+  channelSetupValidationFailure,
+  createChannelSetupEmptyRequest,
+  isChannelSetupStatusResult,
+} from './channelBridgeGuards.cjs';
 import type {
   DiagnosticsExportSupportBundleResult,
   DiagnosticsGetSummaryResult,
@@ -81,44 +86,13 @@ const LINEUP_PLEX_LIST_LIBRARY_SECTIONS_CHANNEL = 'lineup:plex:listLibrarySectio
 const LINEUP_PLEX_LIST_LIBRARY_ITEMS_CHANNEL = 'lineup:plex:listLibraryItems';
 const LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL = 'lineup:plex:searchLibrary';
 const LINEUP_PLEX_GET_METADATA_CHANNEL = 'lineup:plex:getMetadata';
+const LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL = 'lineup:channelSetup:getStatus';
 const PLEX_REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,120}$/u;
 const PLEX_DEFAULT_PAGE_SIZE = 100;
 const PLEX_MAX_PAGE_SIZE = 5000;
 const PLEX_MAX_SHORT_STRING_LENGTH = 256;
-const PLEX_RUNTIME_OPERATIONS = [
-  'getSnapshot',
-  'requestPin',
-  'pollPin',
-  'cancelPin',
-  'getHomeUsers',
-  'switchHomeUser',
-  'restoreSelectedServer',
-  'refreshServers',
-  'selectServer',
-  'listLibrarySections',
-  'listLibraryItems',
-  'searchLibrary',
-  'getMetadata',
-] as const;
-const PLEX_RUNTIME_ERROR_CODES = [
-  'PLEX_UNAUTHORIZED',
-  'PLEX_VALIDATION_FAILED',
-  'PLEX_CANCELLED',
-  'PLEX_STALE_RESULT',
-  'PLEX_AUTH_REQUIRED',
-  'PLEX_AUTH_INVALID',
-  'PLEX_PIN_EXPIRED',
-  'PLEX_PIN_TIMEOUT',
-  'PLEX_RATE_LIMITED',
-  'PLEX_SERVER_UNREACHABLE',
-  'PLEX_ACCESS_DENIED',
-  'PLEX_RESOURCE_NOT_FOUND',
-  'PLEX_STORAGE_UNAVAILABLE',
-  'PLEX_STORAGE_CORRUPT',
-  'PLEX_PARSE_FAILED',
-  'PLEX_LIBRARY_FAILED',
-  'PLEX_UNKNOWN',
-] as const;
+const PLEX_RUNTIME_OPERATIONS = ['getSnapshot', 'requestPin', 'pollPin', 'cancelPin', 'getHomeUsers', 'switchHomeUser', 'restoreSelectedServer', 'refreshServers', 'selectServer', 'listLibrarySections', 'listLibraryItems', 'searchLibrary', 'getMetadata'] as const;
+const PLEX_RUNTIME_ERROR_CODES = ['PLEX_UNAUTHORIZED', 'PLEX_VALIDATION_FAILED', 'PLEX_CANCELLED', 'PLEX_STALE_RESULT', 'PLEX_AUTH_REQUIRED', 'PLEX_AUTH_INVALID', 'PLEX_PIN_EXPIRED', 'PLEX_PIN_TIMEOUT', 'PLEX_RATE_LIMITED', 'PLEX_SERVER_UNREACHABLE', 'PLEX_ACCESS_DENIED', 'PLEX_RESOURCE_NOT_FOUND', 'PLEX_STORAGE_UNAVAILABLE', 'PLEX_STORAGE_CORRUPT', 'PLEX_PARSE_FAILED', 'PLEX_LIBRARY_FAILED', 'PLEX_UNKNOWN'] as const;
 type PreloadPlexRuntimeOperation = (typeof PLEX_RUNTIME_OPERATIONS)[number];
 const DIAGNOSTICS_REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,120}$/u;
 const DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN =
@@ -2109,6 +2083,19 @@ const lineupDesktop: LineupDesktopPreloadApi = {
         ),
         isPlexGetMetadataValue,
       );
+    },
+  },
+  channelSetup: {
+    getStatus: async () => {
+      const request = createChannelSetupEmptyRequest();
+      try {
+        const result = await ipcRenderer.invoke(LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL, request);
+        return isChannelSetupStatusResult(result, request.requestId)
+          ? result
+          : channelSetupValidationFailure(request.requestId);
+      } catch {
+        return channelSetupValidationFailure(request.requestId);
+      }
     },
   },
 };

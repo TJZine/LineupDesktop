@@ -215,6 +215,7 @@ export function applyChannelSetupAction(
 
 export function createSettingsSections(
   state: SettingsDraftState,
+  persistedStatus?: { channelCount: number; currentChannelName: string | null } | null,
 ): readonly SettingsSectionViewModel[] {
   return [
     {
@@ -252,14 +253,16 @@ export function createSettingsSections(
     },
     {
       id: 'setup',
-      title: 'Setup prompts',
-      detail: 'Setup reminders that do not write preferences.',
+      title: 'Channel setup',
+      detail: 'Main-owned persisted channel recovery status.',
       items: [
         {
           id: 'setup-reminder',
-          label: 'Setup reminder',
-          valueLabel: state.setupReminderEnabled ? 'On' : 'Off',
-          description: 'Keeps the local channel setup route visible without writing preferences.',
+          label: 'Persisted channels',
+          valueLabel: String(persistedStatus?.channelCount ?? 0),
+          description: persistedStatus?.currentChannelName
+            ? `Recovered current channel ${persistedStatus.currentChannelName}.`
+            : 'No persisted current channel is available yet.',
         },
         {
           id: 'support-bundle-export',

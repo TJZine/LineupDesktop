@@ -13,6 +13,7 @@ import {
   findRouteAction,
   getRouteWorkflowView,
 } from '../../renderer/workflow.js';
+import type { ChannelRuntimeRendererState } from '../../renderer/channelRuntimeState.js';
 
 test('workflow state starts on the player route with fake program context', () => {
   const state = createWorkflowState();
@@ -145,6 +146,36 @@ test('support bundle status sanitizes display names and shows redaction outcomes
   assert.equal(unsafeBundle?.valueLabel, 'Bundle - 6 files (redaction failed)');
   assert.equal(pendingBundle?.valueLabel, 'lineup-desktop-support-bundle-3 - 6 files (redaction pending)');
   assert.equal(JSON.stringify(unsafe).includes('C:\\Users'), false);
+});
+
+test('settings surface uses persisted channel setup status when available', () => {
+  const channelRuntime: ChannelRuntimeRendererState = {
+    pending: false,
+    statusText: 'Recovered',
+    errorText: null,
+    summary: {
+      status: 'configured',
+      channelCount: 2,
+      currentChannelId: 'channel-two',
+      currentChannelNumber: 204,
+      currentChannelName: 'Channel Two',
+      channelNumbers: [101, 204],
+      updatedAtMs: 123,
+      recovery: { loaded: true, repaired: false },
+    },
+  };
+
+  const view = getRouteWorkflowView(createWorkflowState('settings'), channelRuntime);
+
+  assert.equal(view.settings.libraryName, 'Channel Two');
+  assert.equal(view.settings.channelCount, 2);
+  assert.equal(view.settings.setupState, 'Recovered');
+  assert.equal(view.settings.recoveryDetail, '2 persisted channels; Current channel 204.');
+  assert.equal(
+    view.settings.sections.find((section) => section.id === 'setup')?.items[0]?.valueLabel,
+    '2',
+  );
+  assert.equal(containsPlexForbiddenRendererField(view.settings), false);
 });
 
 test('settings copy describes Desktop-local capabilities and avoids legacy platform truth', () => {

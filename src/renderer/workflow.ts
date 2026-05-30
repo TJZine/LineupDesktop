@@ -1,5 +1,9 @@
 import { setRoute, type AppRouteId, type RouteState } from './navigation.js';
 import {
+  formatChannelSetupStatus,
+  type ChannelRuntimeRendererState,
+} from './channelRuntimeState.js';
+import {
   applyEpgAction,
   createEpgGuideView,
   createEpgState,
@@ -69,6 +73,7 @@ export interface SettingsSummaryViewModel {
   channelCount: number;
   playbackMode: string;
   setupState: string;
+  recoveryDetail: string;
   sections: readonly SettingsSectionViewModel[];
 }
 
@@ -269,10 +274,15 @@ export function applyWorkflowAction(
   };
 }
 
-export function getRouteWorkflowView(state: WorkflowState): RouteWorkflowViewModel {
+export function getRouteWorkflowView(
+  state: WorkflowState,
+  channelRuntime?: ChannelRuntimeRendererState,
+): RouteWorkflowViewModel {
   const route = state.routeState.activeRoute;
   const copy = ROUTE_COPY[route];
   const setupSummary = summarizeChannelSetupDraft(state.channelSetupDraft);
+  const persistedSummary = channelRuntime?.summary ?? null;
+  const persistedChannelCount = persistedSummary?.channelCount ?? 0;
   const statusText =
     state.lastActionId === null || state.lastActionRoute === null
       ? copy.defaultStatus
@@ -290,21 +300,44 @@ export function getRouteWorkflowView(state: WorkflowState): RouteWorkflowViewMod
     channels: CHANNELS,
     guide: createEpgGuideView(state.epg),
     settings: {
-      libraryName: setupSummary.sourceName,
-      channelCount: setupSummary.enabledChannelCount,
+      libraryName: persistedSummary?.currentChannelName ?? setupSummary.sourceName,
+      channelCount: persistedChannelCount,
       playbackMode:
         state.settingsDraft.launchMode === 'windowed'
           ? 'Windowed desktop preview'
           : 'Fullscreen desktop preview',
-      setupState: setupSummary.readyForPreview ? 'Preview ready' : 'Needs channels',
-      sections: createSettingsSections(state.settingsDraft),
+      setupState: channelRuntime?.pending
+        ? 'Loading persisted status'
+        : channelRuntime?.errorText ?? formatChannelSetupStatus(persistedSummary),
+      recoveryDetail: formatRecoveryDetail(persistedSummary),
+      sections: createSettingsSections(state.settingsDraft, persistedSummary),
     },
     channelDrafts: state.channelSetupDraft.channels,
-    channelSetupSummary: setupSummary,
+    channelSetupSummary: persistedSummary === null
+      ? setupSummary
+      : {
+          sourceName: persistedSummary.currentChannelName ?? 'Persisted channels',
+          enabledChannelCount: persistedSummary.channelCount,
+          totalChannelCount: persistedSummary.channelCount,
+          totalBlockCount: 0,
+          readyForPreview: persistedSummary.channelCount > 0,
+        },
     setupSteps: createChannelSetupSteps(state.channelSetupDraft),
     setupValidationMessages: validateChannelSetupDraft(state.channelSetupDraft),
     actions: ROUTE_ACTIONS[route],
   };
+}
+
+function formatRecoveryDetail(
+  summary: ChannelRuntimeRendererState['summary'],
+): string {
+  if (summary === null || summary.channelCount === 0) {
+    return 'No persisted channels recovered.';
+  }
+  const current = summary.currentChannelNumber === null
+    ? 'No current channel'
+    : `Current channel ${String(summary.currentChannelNumber)}`;
+  return `${String(summary.channelCount)} persisted channels; ${current}.`;
 }
 
 export function applyWorkflowSettingsAction(

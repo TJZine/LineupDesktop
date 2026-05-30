@@ -1,5 +1,9 @@
 import type { PlayerRendererIntentEnvelope, RendererIntentEnvelope } from './ipc.js';
 import type {
+  ChannelSetupIpcResult,
+  ChannelSetupSummary,
+} from './channel.js';
+import type {
   DiagnosticsExportSupportBundleResult,
   DiagnosticsGetSummaryResult,
   DiagnosticsRecordRendererEventResult,
@@ -139,6 +143,9 @@ export interface LineupDesktopPreloadApi {
     getMetadata: (input: {
       ratingKey: string;
     }) => Promise<PlexIpcResult<PlexGetMetadataValue>>;
+  };
+  channelSetup: {
+    getStatus: () => Promise<ChannelSetupIpcResult<ChannelSetupSummary>>;
   };
 }
 

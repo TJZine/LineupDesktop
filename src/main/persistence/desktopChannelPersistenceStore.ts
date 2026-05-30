@@ -20,13 +20,21 @@ interface RawChannelPersistenceFile {
 }
 
 type ChannelPersistenceFileReadResult =
-  | { status: 'present' | 'missing'; value: ChannelPersistenceFile; needsCurrentChannelIdRepair?: boolean }
+  | { status: 'present'; value: ChannelPersistenceFile; needsCurrentChannelIdRepair?: boolean }
+  | { status: 'missing'; value: ChannelPersistenceFile; needsCurrentChannelIdRepair?: boolean }
   | { status: 'corrupt' };
 
 class UnsupportedChannelPersistenceSchemaError extends Error {
   public constructor(schemaVersion: number) {
     super(`Unsupported channel persistence schema version ${String(schemaVersion)}.`);
     this.name = 'UnsupportedChannelPersistenceSchemaError';
+  }
+}
+
+export class CorruptChannelPersistenceFileError extends Error {
+  public constructor() {
+    super('Channel persistence file is corrupt.');
+    this.name = 'CorruptChannelPersistenceFileError';
   }
 }
 
@@ -63,7 +71,7 @@ export class DesktopChannelPersistenceStore implements ChannelPersistenceStorage
       const readResult = await this.readPersistenceFile();
       if (readResult.status === 'corrupt') {
         await this.writePersistenceFile(createEmptyChannelPersistenceFile());
-        return null;
+        throw new CorruptChannelPersistenceFileError();
       }
       if (readResult.value.storedChannelData === null) {
         return null;

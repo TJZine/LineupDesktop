@@ -797,9 +797,9 @@ test('plex runtime IPC contract freezes RD-22 Unit 1 safe vocabulary', () => {
   assertNoForbiddenKeys(staleFailure);
 });
 
-test('preload API contract exposes shell, window, player, diagnostics, and plex methods only', () => {
+test('preload API contract exposes shell, window, player, diagnostics, plex, and channel setup methods only', () => {
   type ApiKeys = keyof LineupDesktopPreloadApi;
-  const apiKeys: ApiKeys[] = ['shell', 'window', 'player', 'diagnostics', 'plex'];
+  const apiKeys: ApiKeys[] = ['shell', 'window', 'player', 'diagnostics', 'plex', 'channelSetup'];
   const shellKeys: Array<keyof LineupDesktopPreloadApi['shell']> = [
     'getCapabilities',
     'onStatusChanged',
@@ -831,8 +831,9 @@ test('preload API contract exposes shell, window, player, diagnostics, and plex 
     'searchLibrary',
     'getMetadata',
   ];
+  const channelSetupKeys: Array<keyof LineupDesktopPreloadApi['channelSetup']> = ['getStatus'];
 
-  assert.deepEqual(apiKeys, ['shell', 'window', 'player', 'diagnostics', 'plex']);
+  assert.deepEqual(apiKeys, ['shell', 'window', 'player', 'diagnostics', 'plex', 'channelSetup']);
   assert.deepEqual(shellKeys, ['getCapabilities', 'onStatusChanged']);
   assert.deepEqual(windowKeys, ['setFullscreen']);
   assert.deepEqual(playerKeys, ['dispatch', 'getSnapshot', 'cleanup', 'onEvent']);
@@ -856,6 +857,7 @@ test('preload API contract exposes shell, window, player, diagnostics, and plex 
     'searchLibrary',
     'getMetadata',
   ]);
+  assert.deepEqual(channelSetupKeys, ['getStatus']);
 });
 
 test('player IPC result and dispatch contracts stay renderer-safe', () => {

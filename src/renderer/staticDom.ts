@@ -165,8 +165,8 @@ const STATIC_SCREEN_MARKUP = `
         <p data-workflow-secondary="channelSetup">Lineup Desktop shows the account, server, library, and media details needed for setup.</p>
       </div>
       <div class="screen-shell-state" data-shell-state="loading">
-        <span>Local setup state</span>
-        <strong data-screen-state-text="channelSetup">Review account, server, library, and lineup setup steps in one place.</strong>
+        <span>Persisted setup status</span>
+        <strong data-screen-state-text="channelSetup">Review account, server, library, and persisted channel recovery in one place.</strong>
       </div>
       <section class="plex-runtime plex-onboarding" data-plex-runtime-panel aria-label="Plex onboarding">
         <header class="plex-runtime__header">

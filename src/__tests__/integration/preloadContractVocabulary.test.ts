@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import ts from 'typescript';
 
 import {
+  LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
   LINEUP_PLAYER_CLEANUP_CHANNEL,
   LINEUP_PLAYER_COMMAND_CHANNEL,
   LINEUP_PLAYER_EVENT_CHANNEL,
@@ -29,6 +30,12 @@ import {
   LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL,
   PLAYER_RENDERER_INTENTS,
 } from '../../contracts/ipc.js';
+import {
+  CHANNEL_SETUP_ERROR_CODES,
+  CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS,
+  CHANNEL_SETUP_OPERATIONS,
+  CHANNEL_SETUP_STATUS_VALUES,
+} from '../../contracts/channel.js';
 import {
   DIAGNOSTIC_CATEGORIES,
   DIAGNOSTIC_SEVERITIES,
@@ -58,9 +65,23 @@ import { SHELL_STATUS_VALUES } from '../../contracts/shell.js';
 
 const preloadSourceUrl = new URL('../../preload/index.cts', import.meta.url);
 const preloadSourceText = readFileSync(preloadSourceUrl, 'utf8');
+const channelGuardSourceUrl = new URL('../../preload/channelBridgeGuards.cts', import.meta.url);
+const channelGuardSourceText = readFileSync(channelGuardSourceUrl, 'utf8');
+const preloadBundleToolSourceText = readFileSync(
+  new URL('../../../tools/bundle-preload.mjs', import.meta.url),
+  'utf8',
+);
+const preloadBundleOutputUrl = new URL('../../../dist/preload/index.cjs', import.meta.url);
 const preloadSourceFile = ts.createSourceFile(
   'src/preload/index.cts',
   preloadSourceText,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+);
+const channelGuardSourceFile = ts.createSourceFile(
+  'src/preload/channelBridgeGuards.cts',
+  channelGuardSourceText,
   ts.ScriptTarget.Latest,
   true,
   ts.ScriptKind.TS,
@@ -70,6 +91,24 @@ type PreloadInvokeCall = {
   channel: string;
   request: { requestId: string; payload: unknown };
 };
+
+function evaluateChannelGuardModule(): Record<string, unknown> {
+  const exportsObject = {};
+  const moduleObject = { exports: exportsObject };
+  const compiled = ts.transpileModule(channelGuardSourceText, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: 'src/preload/channelBridgeGuards.cts',
+  }).outputText;
+  const requireGuard = (moduleName: string) => {
+    assert.fail(`unexpected channel bridge guard require ${moduleName}`);
+  };
+  const evaluateGuards = new Function('require', 'exports', 'module', compiled);
+  evaluateGuards(requireGuard, exportsObject, moduleObject);
+  return moduleObject.exports as Record<string, unknown>;
+}
 
 function createPreloadHarness(
   invoke: (
@@ -85,6 +124,7 @@ function createPreloadHarness(
   const calls: PreloadInvokeCall[] = [];
   let exposedApi: unknown = null;
   const input = (value: unknown) => JSON.parse(JSON.stringify(value)) as unknown;
+  const channelGuardExports = evaluateChannelGuardModule();
   const compiled = ts.transpileModule(preloadSourceText, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -93,6 +133,9 @@ function createPreloadHarness(
     fileName: 'src/preload/index.cts',
   }).outputText;
   const requireElectron = (moduleName: string) => {
+    if (moduleName === './channelBridgeGuards.cjs') {
+      return channelGuardExports;
+    }
     assert.equal(moduleName, 'electron');
     return {
       contextBridge: {
@@ -203,6 +246,7 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_PLEX_LIST_LIBRARY_ITEMS_CHANNEL,
   LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL,
   LINEUP_PLEX_GET_METADATA_CHANNEL,
+  LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
 } as const;
 
 const APPROVED_IPC_CHANNELS_BY_METHOD = {
@@ -228,6 +272,7 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_PLEX_LIST_LIBRARY_ITEMS_CHANNEL',
     'LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL',
     'LINEUP_PLEX_GET_METADATA_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
   ]),
   on: new Set(['LINEUP_SHELL_STATUS_CHANGED_CHANNEL', 'LINEUP_PLAYER_EVENT_CHANNEL']),
   removeListener: new Set([
@@ -244,7 +289,20 @@ function readPreloadStringArrayConst(name: string): string[] {
   return readStringArrayInitializer(name, declaration.initializer);
 }
 
+function readChannelGuardStringArrayConst(name: string): string[] {
+  const declaration = findVariableDeclaration(channelGuardSourceFile, name);
+  assert.ok(declaration?.initializer, `expected ${name} in channel bridge guards`);
+  return readStringArrayInitializer(name, declaration.initializer);
+}
+
 function findPreloadVariableDeclaration(name: string): ts.VariableDeclaration | null {
+  return findVariableDeclaration(preloadSourceFile, name);
+}
+
+function findVariableDeclaration(
+  sourceFile: ts.SourceFile,
+  name: string,
+): ts.VariableDeclaration | null {
   let result: ts.VariableDeclaration | null = null;
 
   function visit(node: ts.Node): void {
@@ -258,7 +316,7 @@ function findPreloadVariableDeclaration(name: string): ts.VariableDeclaration | 
     ts.forEachChild(node, visit);
   }
 
-  visit(preloadSourceFile);
+  visit(sourceFile);
   return result;
 }
 
@@ -722,6 +780,19 @@ test('preload guard vocabulary matches contract vocabulary', () => {
   assert.deepEqual(readPreloadStringArrayConst('PLEX_RUNTIME_ERROR_CODES'), [
     ...PLEX_RUNTIME_ERROR_CODES,
   ]);
+  assert.deepEqual(readChannelGuardStringArrayConst('CHANNEL_SETUP_STATUS_VALUES'), [
+    ...CHANNEL_SETUP_STATUS_VALUES,
+  ]);
+  assert.deepEqual(readChannelGuardStringArrayConst('CHANNEL_SETUP_ERROR_CODES'), [
+    ...CHANNEL_SETUP_ERROR_CODES,
+  ]);
+  assert.deepEqual(readChannelGuardStringArrayConst('CHANNEL_SETUP_OPERATIONS'), [
+    ...CHANNEL_SETUP_OPERATIONS,
+  ]);
+  assert.deepEqual(
+    readChannelGuardStringArrayConst('CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS'),
+    [...CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS],
+  );
   const preloadPlexForbiddenKeys = readPreloadStringArrayConst('PLEX_FORBIDDEN_RENDERER_FIELD_KEYS');
   assert.deepEqual(
     [...new Set(preloadPlexForbiddenKeys)].sort(),
@@ -954,6 +1025,133 @@ test('preload Plex bridge rejects invalid pin ids and limits without IPC', async
   assert.equal(harness.calls.length, 0);
 });
 
+test('preload channel setup bridge validates status results before returning them', async () => {
+  const harness = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPlexInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        status: 'configured',
+        channelCount: 1,
+        currentChannelId: 'channel-one',
+        currentChannelNumber: 101,
+        currentChannelName: 'Channel One',
+        channelNumbers: [101],
+        updatedAtMs: 123,
+        recovery: { loaded: true, repaired: false },
+      },
+    });
+  });
+
+  const result = await harness.api.channelSetup.getStatus();
+
+  assert.equal(harness.calls[0]?.channel, LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL);
+  assert.equal((result as { ok: boolean }).ok, true);
+
+  const privileged = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPlexInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        status: 'configured',
+        channelCount: 1,
+        currentChannelId: 'channel-one',
+        currentChannelNumber: 101,
+        currentChannelName: 'Channel One',
+        channelNumbers: [101],
+        updatedAtMs: 123,
+        recovery: { loaded: true, repaired: false },
+        persistenceFilePath: 'private',
+      },
+    });
+  });
+
+  const privilegedResult = await privileged.api.channelSetup.getStatus();
+  assert.equal((privilegedResult as { ok: boolean }).ok, false);
+  assert.equal(
+    (privilegedResult as { error: { code: string } }).error.code,
+    'CHANNEL_VALIDATION_FAILED',
+  );
+
+  for (const invalidNumber of [0, 501]) {
+    const invalidNumberHarness = createPreloadHarness((_channel, request, input) => {
+      assert.ok(isPlexInvokeRequest(request));
+      return input({
+        ok: true,
+        requestId: request.requestId,
+        value: {
+          status: 'configured',
+          channelCount: 1,
+          currentChannelId: 'channel-one',
+          currentChannelNumber: invalidNumber,
+          currentChannelName: 'Channel One',
+          channelNumbers: [101],
+          updatedAtMs: 123,
+          recovery: { loaded: true, repaired: false },
+        },
+      });
+    });
+
+    const invalidResult = await invalidNumberHarness.api.channelSetup.getStatus();
+    assert.equal((invalidResult as { ok: boolean }).ok, false);
+    assert.equal(
+      (invalidResult as { error: { code: string } }).error.code,
+      'CHANNEL_VALIDATION_FAILED',
+    );
+  }
+
+  for (const invalidNumber of [0, 501]) {
+    const invalidNumbersHarness = createPreloadHarness((_channel, request, input) => {
+      assert.ok(isPlexInvokeRequest(request));
+      return input({
+        ok: true,
+        requestId: request.requestId,
+        value: {
+          status: 'configured',
+          channelCount: 1,
+          currentChannelId: 'channel-one',
+          currentChannelNumber: 101,
+          currentChannelName: 'Channel One',
+          channelNumbers: [invalidNumber],
+          updatedAtMs: 123,
+          recovery: { loaded: true, repaired: false },
+        },
+      });
+    });
+
+    const invalidResult = await invalidNumbersHarness.api.channelSetup.getStatus();
+    assert.equal((invalidResult as { ok: boolean }).ok, false);
+    assert.equal(
+      (invalidResult as { error: { code: string } }).error.code,
+      'CHANNEL_VALIDATION_FAILED',
+    );
+  }
+
+  const unsafeMessage = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPlexInvokeRequest(request));
+    return input({
+      ok: false,
+      requestId: request.requestId,
+      error: {
+        code: 'CHANNEL_STORAGE_UNAVAILABLE',
+        message: 'Failed at C:\\Users\\private\\channels.json with token=private',
+        retryable: true,
+        recoverable: true,
+        operation: 'getStatus',
+      },
+    });
+  });
+
+  const unsafeMessageResult = await unsafeMessage.api.channelSetup.getStatus();
+  assert.equal((unsafeMessageResult as { ok: boolean }).ok, false);
+  assert.equal(
+    (unsafeMessageResult as { error: { code: string } }).error.code,
+    'CHANNEL_VALIDATION_FAILED',
+  );
+});
+
 test('preload diagnostics guards validate count map keys and values', () => {
   assert.equal(
     preloadSourceText.includes(
@@ -1039,6 +1237,25 @@ test('preload bridge guard rejects Electron value imports while allowing type im
     () => assertNoElectronValueImports(valueImportSource),
     /Electron value imports are not allowed in preload/u,
   );
+});
+
+test('preload split keeps Electron values in index and built preload has no local preload requires', () => {
+  assertNoElectronValueImports(channelGuardSourceFile);
+  assert.doesNotMatch(channelGuardSourceText, /require\(['"]electron['"]\)/u);
+  assert.match(preloadSourceText, /from '\.\/channelBridgeGuards\.cjs'/u);
+  assert.match(preloadBundleToolSourceText, /bundle:\s*true/u);
+  assert.match(preloadBundleToolSourceText, /external:\s*\[\s*'electron'\s*\]/u);
+  assert.ok(
+    existsSync(preloadBundleOutputUrl),
+    'expected dist/preload/index.cjs to exist; run npm run build:electron before this test',
+  );
+
+  const preloadBundleOutputText = readFileSync(preloadBundleOutputUrl, 'utf8');
+  assert.match(preloadBundleOutputText, /require\(["']electron["']\)/u);
+  assert.doesNotMatch(preloadBundleOutputText, /channelBridgeGuards\.cjs/u);
+  assert.doesNotMatch(preloadBundleOutputText, /require\(["']\.(?:\/|\\)[^"']+["']\)/u);
+  assert.doesNotMatch(preloadBundleOutputText, /\bfrom\s+["']\.(?:\/|\\)[^"']+["']/u);
+  assert.doesNotMatch(preloadBundleOutputText, /\bimport\(["']\.(?:\/|\\)[^"']+["']\)/u);
 });
 
 test('preload bridge exposes only the typed lineupDesktop world', () => {
@@ -1149,6 +1366,7 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
   visit(preloadSourceFile);
 
   assert.deepEqual(observedCalls.sort(), [
+    'invoke:LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
     'invoke:LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL',
     'invoke:LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL',
     'invoke:LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL',

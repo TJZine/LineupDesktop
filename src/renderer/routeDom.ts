@@ -1,5 +1,6 @@
 import type { PlayerSnapshot } from '../contracts/player.js';
 import { formatEpgTimeWindow } from './epg.js';
+import type { ChannelRuntimeRendererState } from './channelRuntimeState.js';
 import type { RendererDomBindings } from './domBindings.js';
 import { readClosestRouteId, readRouteActionId, readRouteId } from './domBindings.js';
 import {
@@ -13,9 +14,13 @@ import {
   type WorkflowState,
 } from './workflow.js';
 
-export function renderRouteDom(workflowState: WorkflowState, dom: RendererDomBindings): void {
+export function renderRouteDom(
+  workflowState: WorkflowState,
+  dom: RendererDomBindings,
+  channelRuntime?: ChannelRuntimeRendererState,
+): void {
   const activeRoute = workflowState.routeState.activeRoute;
-  const view = getRouteWorkflowView(workflowState);
+  const view = getRouteWorkflowView(workflowState, channelRuntime);
   document.documentElement.dataset.activeRoute = activeRoute;
   if (dom.routeTitleElement) {
     dom.routeTitleElement.textContent = view.title;
@@ -48,8 +53,9 @@ export function renderWorkflowDom(
   overlayState: PlayerOverlayState,
   playerSnapshot: PlayerSnapshot,
   dom: RendererDomBindings,
+  channelRuntime?: ChannelRuntimeRendererState,
 ): void {
-  const view = getRouteWorkflowView(workflowState);
+  const view = getRouteWorkflowView(workflowState, channelRuntime);
 
   setText(`[data-workflow-kicker="${view.route}"]`, view.kicker);
   setText(`[data-workflow-primary="${view.route}"]`, view.primaryText);
@@ -107,7 +113,7 @@ function renderSettingsDom(view: RouteWorkflowViewModel, dom: RendererDomBinding
     dom.settingsChannelsElement.textContent = String(view.settings.channelCount);
   }
   if (dom.settingsStateElement) {
-    dom.settingsStateElement.textContent = view.settings.setupState;
+    dom.settingsStateElement.textContent = `${view.settings.setupState}; ${view.settings.recoveryDetail}`;
   }
   if (dom.settingsSectionsElement) {
     dom.settingsSectionsElement.replaceChildren(
@@ -149,7 +155,10 @@ function renderChannelSetupDom(view: RouteWorkflowViewModel, dom: RendererDomBin
       `${view.channelSetupSummary.enabledChannelCount} of ${view.channelSetupSummary.totalChannelCount}`;
   }
   if (dom.channelSetupBlocksElement) {
-    dom.channelSetupBlocksElement.textContent = `${view.channelSetupSummary.totalBlockCount} preview blocks`;
+    dom.channelSetupBlocksElement.textContent =
+      view.channelSetupSummary.readyForPreview && view.channelSetupSummary.totalBlockCount === 0
+        ? `${view.channelSetupSummary.enabledChannelCount} persisted channels`
+        : `${view.channelSetupSummary.totalBlockCount} preview blocks`;
   }
   if (dom.setupStepsElement) {
     dom.setupStepsElement.replaceChildren(

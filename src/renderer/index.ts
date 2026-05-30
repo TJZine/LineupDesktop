@@ -39,6 +39,7 @@ import { renderRouteDom, renderWorkflowDom } from './routeDom.js';
 import { mountStaticRendererDom } from './staticDom.js';
 import { applySupportBundleExportResult } from './supportBundleExport.js';
 import { createPlexRuntimeController } from './plexRuntimeActions.js';
+import { createChannelRuntimeController } from './channelRuntimeActions.js';
 import {
   readPlexHomeUserId,
   readPlexRatingKey,
@@ -73,6 +74,10 @@ const plexController = createPlexRuntimeController({
   bridge: window.lineupDesktop.plex,
   onStateChanged: () => renderApp(),
   recordRendererEvent: window.lineupDesktop.diagnostics.recordRendererEvent,
+});
+const channelController = createChannelRuntimeController({
+  bridge: window.lineupDesktop.channelSetup,
+  onStateChanged: () => renderApp(),
 });
 
 syncRendererFocusTargets(focusRegistry, dom);
@@ -221,6 +226,7 @@ if (dom.capabilitiesElement) {
 document.documentElement.dataset.shellBoot = 'ready';
 document.documentElement.dataset.activeRoute = workflowState.routeState.activeRoute;
 void plexController.loadSnapshot();
+void channelController.loadStatus();
 
 function renderStatus(event: ShellStatusEvent): void {
   if (dom.statusElement) {
@@ -414,8 +420,8 @@ function cleanupPlexRuntime(reason: 'beforeunload' | 'route-change'): void {
 }
 
 function renderApp(): void {
-  renderRouteDom(workflowState, dom);
-  renderWorkflowDom(workflowState, overlayState, playerSnapshot, dom);
+  renderRouteDom(workflowState, dom, channelController.getState());
+  renderWorkflowDom(workflowState, overlayState, playerSnapshot, dom, channelController.getState());
   renderPlexRuntimeDom(plexController.getState(), dom);
   syncRendererFocusTargets(focusRegistry, dom);
   if (focusState.activeId !== null) {

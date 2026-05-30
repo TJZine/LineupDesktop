@@ -117,6 +117,9 @@ export const LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL =
 export const LINEUP_PLEX_GET_METADATA_CHANNEL =
   'lineup:plex:getMetadata' as const;
 
+export const LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL =
+  'lineup:channelSetup:getStatus' as const;
+
 /**
  * Known privileged renderer payload field names are denied at contract seams.
  * Review additions/removals with secret-flow and native-handle exposure impact.
