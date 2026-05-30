@@ -54,6 +54,7 @@ export function renderWorkflowDom(
   playerSnapshot: PlayerSnapshot,
   dom: RendererDomBindings,
   channelRuntime?: ChannelRuntimeRendererState,
+  hasLiveSelectedPlexSection = false,
 ): void {
   const view = getRouteWorkflowView(workflowState, channelRuntime);
 
@@ -78,7 +79,7 @@ export function renderWorkflowDom(
   renderEpgGuideDom(view, dom);
   renderPlayerOverlaysDom(overlayState, playerSnapshot, dom, view.route);
   renderSettingsDom(view, dom);
-  renderChannelSetupDom(view, dom);
+  renderChannelSetupDom(view, dom, hasLiveSelectedPlexSection);
   renderRouteActionButtons(view, dom);
 }
 
@@ -141,7 +142,11 @@ function renderSettingsDom(view: RouteWorkflowViewModel, dom: RendererDomBinding
   }
 }
 
-function renderChannelSetupDom(view: RouteWorkflowViewModel, dom: RendererDomBindings): void {
+function renderChannelSetupDom(
+  view: RouteWorkflowViewModel,
+  dom: RendererDomBindings,
+  hasLiveSelectedPlexSection: boolean,
+): void {
   if (dom.channelSetupFixtureStatusElement) {
     dom.channelSetupFixtureStatusElement.textContent = view.channelSetupSummary.readyForPreview
       ? 'Guarded review ready'
@@ -156,9 +161,11 @@ function renderChannelSetupDom(view: RouteWorkflowViewModel, dom: RendererDomBin
   }
   if (dom.channelSetupBlocksElement) {
     dom.channelSetupBlocksElement.textContent =
-      view.channelSetupSummary.readyForPreview && view.channelSetupSummary.totalBlockCount === 0
+      view.channelSetupSummary.totalChannelCount === 0
+        ? '0 persisted channels'
+        : view.channelSetupSummary.readyForPreview && view.channelSetupSummary.totalBlockCount === 0
         ? `${view.channelSetupSummary.enabledChannelCount} persisted channels`
-        : `${view.channelSetupSummary.totalBlockCount} preview blocks`;
+        : `${view.channelSetupSummary.totalBlockCount} library items`;
   }
   if (dom.setupStepsElement) {
     dom.setupStepsElement.replaceChildren(
@@ -207,6 +214,25 @@ function renderChannelSetupDom(view: RouteWorkflowViewModel, dom: RendererDomBin
       }),
     );
   }
+  for (const button of dom.channelCommitButtons) {
+    const action = button.dataset.channelCommitAction;
+    button.disabled = channelCommitDisabled(action, view, hasLiveSelectedPlexSection);
+  }
+}
+
+function channelCommitDisabled(
+  action: string | undefined,
+  view: RouteWorkflowViewModel,
+  hasLiveSelectedPlexSection: boolean,
+): boolean {
+  if (action === 'confirmReplace') {
+    return view.settings.setupState === 'Loading persisted status' ||
+      !hasLiveSelectedPlexSection ||
+      !/requires confirmation/iu.test(view.settings.setupState);
+  }
+  return action !== 'append' && action !== 'replace'
+    ? true
+    : view.settings.setupState === 'Loading persisted status' || !hasLiveSelectedPlexSection;
 }
 
 function renderRouteActionButtons(view: RouteWorkflowViewModel, dom: RendererDomBindings): void {

@@ -1,6 +1,7 @@
 import type { ShellStatusEvent } from '../contracts/shell.js';
 import {
   queryRendererDom,
+  readChannelCommitActionId,
   readChannelSetupActionId,
   readEpgActionId,
   readOverlayActionId,
@@ -138,6 +139,15 @@ for (const button of dom.setupActionButtons) {
     const action = readChannelSetupActionId(button.dataset.setupAction);
     if (action !== null) {
       applyChannelSetupAction(action);
+    }
+  });
+}
+
+for (const button of dom.channelCommitButtons) {
+  button.addEventListener('click', () => {
+    const action = readChannelCommitActionId(button.dataset.channelCommitAction);
+    if (action !== null) {
+      void applyChannelCommitAction(action);
     }
   });
 }
@@ -300,6 +310,23 @@ function applyChannelSetupAction(action: ChannelSetupActionId): void {
   renderApp();
 }
 
+async function applyChannelCommitAction(action: ReturnType<typeof readChannelCommitActionId>): Promise<void> {
+  if (action === null) {
+    return;
+  }
+  const plexState = plexController.getState();
+  const sectionId = resolveLiveSelectedPlexSectionId(plexState);
+  if (sectionId === null) {
+    return;
+  }
+  await channelController.commit({
+    mode: action === 'append' ? 'append' : 'replace',
+    sectionIds: [sectionId],
+    confirmReplace: action === 'confirmReplace',
+  });
+  renderApp();
+}
+
 function applyEpgAction(action: EpgActionId): void {
   workflowState = applyWorkflowEpgAction(workflowState, action);
   renderApp();
@@ -420,9 +447,17 @@ function cleanupPlexRuntime(reason: 'beforeunload' | 'route-change'): void {
 }
 
 function renderApp(): void {
+  const plexState = plexController.getState();
   renderRouteDom(workflowState, dom, channelController.getState());
-  renderWorkflowDom(workflowState, overlayState, playerSnapshot, dom, channelController.getState());
-  renderPlexRuntimeDom(plexController.getState(), dom);
+  renderWorkflowDom(
+    workflowState,
+    overlayState,
+    playerSnapshot,
+    dom,
+    channelController.getState(),
+    resolveLiveSelectedPlexSectionId(plexState) !== null,
+  );
+  renderPlexRuntimeDom(plexState, dom);
   syncRendererFocusTargets(focusRegistry, dom);
   if (focusState.activeId !== null) {
     focusState = focusRegistry.focusTarget(focusState, focusState.activeId).state;
@@ -447,4 +482,18 @@ function scrollFocusedSetupControlIntoView(): void {
     `[data-focus-id="${CSS.escape(focusState.activeId)}"]`,
   );
   activeElement?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+function resolveLiveSelectedPlexSectionId(
+  plexState: ReturnType<typeof plexController.getState>,
+): string | null {
+  const sectionId = plexState.selectedSectionId;
+  if (sectionId === null) {
+    return null;
+  }
+  const section = plexState.snapshot?.library.sections.find((candidate) => (
+    candidate.id === sectionId &&
+    (candidate.type === 'movie' || candidate.type === 'show')
+  ));
+  return section === undefined ? null : sectionId;
 }

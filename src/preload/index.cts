@@ -2,8 +2,9 @@ import type { IpcRendererEvent } from 'electron';
 import type * as Electron from 'electron';
 import {
   channelSetupValidationFailure,
+  createChannelSetupCommitRequest,
   createChannelSetupEmptyRequest,
-  isChannelSetupStatusResult,
+  isChannelSetupResult,
 } from './channelBridgeGuards.cjs';
 import type {
   DiagnosticsExportSupportBundleResult,
@@ -87,6 +88,7 @@ const LINEUP_PLEX_LIST_LIBRARY_ITEMS_CHANNEL = 'lineup:plex:listLibraryItems';
 const LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL = 'lineup:plex:searchLibrary';
 const LINEUP_PLEX_GET_METADATA_CHANNEL = 'lineup:plex:getMetadata';
 const LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL = 'lineup:channelSetup:getStatus';
+const LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL = 'lineup:channelSetup:commit';
 const PLEX_REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,120}$/u;
 const PLEX_DEFAULT_PAGE_SIZE = 100;
 const PLEX_MAX_PAGE_SIZE = 5000;
@@ -2090,11 +2092,21 @@ const lineupDesktop: LineupDesktopPreloadApi = {
       const request = createChannelSetupEmptyRequest();
       try {
         const result = await ipcRenderer.invoke(LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL, request);
-        return isChannelSetupStatusResult(result, request.requestId)
+        return isChannelSetupResult(result, request.requestId)
           ? result
-          : channelSetupValidationFailure(request.requestId);
+          : channelSetupValidationFailure(request.requestId, 'getStatus');
+      } catch { return channelSetupValidationFailure(request.requestId, 'getStatus'); }
+    },
+    commit: async (input) => {
+      const request = createChannelSetupCommitRequest(input);
+      if (!request.ok) { return request.result; }
+      try {
+        const result = await ipcRenderer.invoke(LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL, request);
+        return isChannelSetupResult(result, request.requestId)
+          ? result
+          : channelSetupValidationFailure(request.requestId, 'commit');
       } catch {
-        return channelSetupValidationFailure(request.requestId);
+        return channelSetupValidationFailure(request.requestId, 'commit');
       }
     },
   },

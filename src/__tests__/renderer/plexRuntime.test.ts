@@ -40,13 +40,28 @@ test('static channel setup markup hosts reachable Plex setup controls', () => {
   assert.match(channelSetupMarkup, /Choose profile/u);
   assert.match(channelSetupMarkup, /Find servers/u);
   assert.match(channelSetupMarkup, /Open libraries/u);
-  assert.match(channelSetupMarkup, /Channel setup shell/u);
+  assert.match(channelSetupMarkup, /Review and save channels/u);
+  assert.match(channelSetupMarkup, /data-channel-commit-action="append"/u);
+  assert.match(channelSetupMarkup, /data-channel-commit-action="confirmReplace"/u);
   assert.match(channelSetupMarkup, /Guarded review/u);
   assert.doesNotMatch(
     channelSetupMarkup,
     /Fake channel setup controls|data-setup-action|data-setup-steps|data-channel-draft-list|data-setup-validation|draft channel|fake blocks|debug|smoke|transport/u,
   );
   assert.doesNotMatch(channelSetupMarkup, /https?:|token|serverUri/u);
+});
+
+test('static channel setup commit panel exposes the setup frame style hook', () => {
+  const root = { innerHTML: '', querySelector: () => null };
+  const documentDouble = {
+    querySelector: (selector: string) => selector === '[data-static-screen-root]' ? root : null,
+  };
+
+  mountStaticRendererDom(documentDouble as unknown as Document);
+
+  const channelSetupMarkup = readStaticChannelSetupMarkup(root.innerHTML);
+
+  assert.match(channelSetupMarkup, /class="channel-setup-commit"/u);
 });
 
 test('Plex runtime controller applies async setup, server, library, search, and metadata transitions', async () => {
@@ -1158,6 +1173,7 @@ function createPlexDomBindings(overrides: Partial<RendererDomBindings> = {}): Re
     routeActionButtons: [],
     settingsActionButtons: [],
     setupActionButtons: [],
+    channelCommitButtons: [],
     epgActionButtons: [],
     overlayActionButtons: [],
     screens: [],

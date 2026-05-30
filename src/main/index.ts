@@ -39,7 +39,7 @@ import { registerPlayerIpcHandlers, type PlayerIpcTeardown } from './player/play
 import { DiagnosticEventStore } from './diagnostics/diagnosticEventStore.js';
 import { registerDiagnosticsIpcHandlers, type DiagnosticsIpcTeardown } from './diagnostics/supportBundleIpc.js';
 import { registerChannelComposition, type ChannelCompositionTeardown } from './channel/channelComposition.js';
-import { registerPlexComposition, type PlexCompositionTeardown } from './plex/plexComposition.js';
+import { registerPlexComposition, type PlexCompositionRegistration } from './plex/plexComposition.js';
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
 import { registerShellAppCommandController } from './window/shellAppCommandController.js';
 import { createShellWindowController } from './window/shellWindowController.js';
@@ -63,7 +63,7 @@ const shellWindowController = createShellWindowController({
 });
 let teardownPlayerIpc: PlayerIpcTeardown | null = null;
 let teardownDiagnosticsIpc: DiagnosticsIpcTeardown | null = null;
-let teardownPlexComposition: PlexCompositionTeardown | null = null;
+let plexComposition: PlexCompositionRegistration | null = null;
 let teardownChannelComposition: ChannelCompositionTeardown | null = null;
 let playerIpcQuitTeardownInProgress = false;
 let playerIpcQuitTeardownComplete = false;
@@ -97,7 +97,7 @@ app.whenReady()
       reportDiagnostic: reportMainProcessDiagnostic,
       diagnosticEventStore,
     });
-    teardownPlexComposition = await registerPlexComposition({
+    plexComposition = await registerPlexComposition({
       app,
       shellMode,
       isAuthorizedEvent,
@@ -109,6 +109,7 @@ app.whenReady()
       shellMode,
       isAuthorizedEvent,
       createRequestId,
+      plexRuntime: plexComposition.runtime,
       diagnosticEventStore,
     });
     const shellWindow = shellWindowController.createWindow();
@@ -139,8 +140,8 @@ app.on('before-quit', (event) => {
   publishShellStatus('closing');
   const teardown = teardownPlayerIpc;
   if (playerIpcQuitTeardownComplete || teardown === null) {
-    const teardownPlex = teardownPlexComposition;
-    teardownPlexComposition = null;
+    const teardownPlex = plexComposition?.teardown ?? null;
+    plexComposition = null;
     const teardownChannel = teardownChannelComposition;
     teardownChannelComposition = null;
     void Promise.all([
@@ -160,8 +161,8 @@ app.on('before-quit', (event) => {
   teardownPlayerIpc = null;
   teardownDiagnosticsIpc?.();
   teardownDiagnosticsIpc = null;
-  const teardownPlex = teardownPlexComposition;
-  teardownPlexComposition = null;
+    const teardownPlex = plexComposition?.teardown ?? null;
+    plexComposition = null;
   const teardownChannel = teardownChannelComposition;
   teardownChannelComposition = null;
   playerIpcQuitTeardownInProgress = true;

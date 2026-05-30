@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
+import type { ChannelRuntimeRendererState } from '../../renderer/channelRuntimeState.js';
 import { createFakePlayerSnapshot, createPlayerOverlayState } from '../../renderer/overlays.js';
 import { renderRouteDom, renderWorkflowDom } from '../../renderer/routeDom.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
@@ -274,7 +275,7 @@ test('route DOM renders playback options enabled and disabled fixture rows', () 
   }
 });
 
-test('route DOM renders channel setup review fixture without privileged data', () => {
+test('route DOM renders channel setup review without privileged data', () => {
   const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   const documentDouble = {
     documentElement: { dataset: {} },
@@ -289,8 +290,8 @@ test('route DOM renders channel setup review fixture without privileged data', (
   try {
     const setupSteps = new ElementDouble();
     setupSteps.textContent = 'unchanged steps host';
-    const draftList = new ElementDouble();
-    draftList.textContent = 'unchanged draft host';
+    const channelList = new ElementDouble();
+    channelList.textContent = 'unchanged channel host';
     const validation = new ElementDouble();
     validation.textContent = 'unchanged validation host';
     const dom = createOverlayDomBindings({
@@ -299,7 +300,7 @@ test('route DOM renders channel setup review fixture without privileged data', (
       overlayActions: [],
     });
     dom.setupStepsElement = setupSteps as unknown as HTMLElement;
-    dom.channelDraftListElement = draftList as unknown as HTMLElement;
+    dom.channelDraftListElement = channelList as unknown as HTMLElement;
     dom.setupValidationElement = validation as unknown as HTMLElement;
     dom.channelSetupSourceElement = new ElementDouble() as unknown as HTMLElement;
     dom.channelSetupEnabledElement = new ElementDouble() as unknown as HTMLElement;
@@ -312,11 +313,84 @@ test('route DOM renders channel setup review fixture without privileged data', (
       dom,
     );
 
-    const renderedText = [collectText(setupSteps), collectText(draftList), collectText(validation)].join(' ');
+    const renderedText = [collectText(setupSteps), collectText(channelList), collectText(validation)].join(' ');
     assert.match(renderedText, /Choose library/u);
-    assert.match(renderedText, /Liminal One/u);
-    assert.match(renderedText, /Only active-enabled strategy rows/u);
+    assert.match(renderedText, /Persisted channel status is not loaded yet/u);
+    assert.doesNotMatch(renderedText, /Liminal One/u);
+    assert.doesNotMatch(renderedText, /Demo Library|The Vault|Weekend Queue/u);
+    assert.doesNotMatch(renderedText, /2 of 3|6 programming blocks|16 programming blocks/u);
+    assert.match(renderedText, /Choose a Plex library before saving channels/u);
     assert.doesNotMatch(renderedText, /serverUri|token|https?:|raw payload/u);
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+});
+
+test('route DOM keeps channel commit controls disabled until a live Plex section is selected', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const appendButton = new ElementDouble();
+    appendButton.dataset.channelCommitAction = 'append';
+    const replaceButton = new ElementDouble();
+    replaceButton.dataset.channelCommitAction = 'replace';
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.channelCommitButtons = [appendButton, replaceButton] as unknown as HTMLButtonElement[];
+
+    renderWorkflowDom(
+      createWorkflowState('channelSetup'),
+      createPlayerOverlayState(),
+      createFakePlayerSnapshot(),
+      dom,
+      configuredChannelRuntimeState(),
+      false,
+    );
+
+    assert.equal(appendButton.disabled, true);
+    assert.equal(replaceButton.disabled, true);
+
+    renderWorkflowDom(
+      createWorkflowState('channelSetup'),
+      createPlayerOverlayState(),
+      createFakePlayerSnapshot(),
+      dom,
+      configuredChannelRuntimeState(),
+      true,
+    );
+
+    assert.equal(appendButton.disabled, false);
+    assert.equal(replaceButton.disabled, false);
+
+    renderWorkflowDom(
+      createWorkflowState('channelSetup'),
+      createPlayerOverlayState(),
+      createFakePlayerSnapshot(),
+      dom,
+      { ...configuredChannelRuntimeState(), pending: true },
+      true,
+    );
+
+    assert.equal(appendButton.disabled, true);
+    assert.equal(replaceButton.disabled, true);
   } finally {
     if (originalDocument === undefined) {
       Reflect.deleteProperty(globalThis, 'document');
@@ -343,7 +417,7 @@ test('reachable product route text avoids internal implementation-status terms',
   });
 
   try {
-    const renderedRouteText: string[] = [];
+    const renderedRouteText: { route: string; text: string; channelSetupText: string }[] = [];
     for (const route of ['player', 'guide', 'settings', 'channelSetup'] as const) {
       selectorTextHosts.clear();
       for (const field of ['kicker', 'primary', 'secondary'] as const) {
@@ -391,21 +465,7 @@ test('reachable product route text avoids internal implementation-status terms',
         dom,
       );
 
-      renderedRouteText.push([
-        ...selectorTextHosts.values(),
-        dom.routeTitleElement,
-        dom.routeStatusElement,
-        dom.currentChannelElement,
-        dom.currentProgramElement,
-        dom.currentWindowElement,
-        dom.epgGridElement,
-        dom.epgDetailChannelElement,
-        dom.epgDetailTitleElement,
-        dom.epgDetailTimeElement,
-        dom.settingsSourceElement,
-        dom.settingsChannelsElement,
-        dom.settingsStateElement,
-        dom.settingsSectionsElement,
+      const channelSetupText = [
         dom.channelSetupSourceElement,
         dom.channelSetupEnabledElement,
         dom.channelSetupBlocksElement,
@@ -413,13 +473,49 @@ test('reachable product route text avoids internal implementation-status terms',
         dom.channelDraftListElement,
         dom.setupValidationElement,
         dom.channelSetupFixtureStatusElement,
-        dom.overlayPlaybackSummaryElement,
-        dom.overlayAudioOptionsElement,
-        dom.overlaySubtitleOptionsElement,
-      ].map((element) => collectText(element as ElementDouble)).join(' '));
+      ].map((element) => collectText(element as unknown as ElementDouble)).join(' ');
+      renderedRouteText.push({
+        route,
+        channelSetupText,
+        text: [
+          ...selectorTextHosts.values(),
+          dom.routeTitleElement,
+          dom.routeStatusElement,
+          dom.currentChannelElement,
+          dom.currentProgramElement,
+          dom.currentWindowElement,
+          dom.epgGridElement,
+          dom.epgDetailChannelElement,
+          dom.epgDetailTitleElement,
+          dom.epgDetailTimeElement,
+          dom.settingsSourceElement,
+          dom.settingsChannelsElement,
+          dom.settingsStateElement,
+          dom.settingsSectionsElement,
+          dom.channelSetupSourceElement,
+          dom.channelSetupEnabledElement,
+          dom.channelSetupBlocksElement,
+          dom.setupStepsElement,
+          dom.channelDraftListElement,
+          dom.setupValidationElement,
+          dom.channelSetupFixtureStatusElement,
+          dom.overlayPlaybackSummaryElement,
+          dom.overlayAudioOptionsElement,
+          dom.overlaySubtitleOptionsElement,
+        ].map((element) => collectText(element as ElementDouble)).join(' '),
+      });
     }
 
-    assert.doesNotMatch(renderedRouteText.join(' '), PRODUCT_ROUTE_INTERNAL_COPY_PATTERN);
+    assert.doesNotMatch(
+      renderedRouteText.map(({ text }) => text).join(' '),
+      PRODUCT_ROUTE_INTERNAL_COPY_PATTERN,
+    );
+    const channelSetupRouteText =
+      renderedRouteText.find(({ route }) => route === 'channelSetup')?.channelSetupText ?? '';
+    assert.doesNotMatch(
+      channelSetupRouteText,
+      /Demo Library|Liminal One|The Vault|Weekend Queue|2 of 3|6 programming blocks|16 programming blocks/u,
+    );
   } finally {
     if (originalDocument === undefined) {
       Reflect.deleteProperty(globalThis, 'document');
@@ -459,6 +555,36 @@ function collectText(element: ElementDouble): string {
   return [element.textContent, ...element.children.map(collectText)].join(' ');
 }
 
+function configuredChannelRuntimeState(): ChannelRuntimeRendererState {
+  return {
+    pending: false,
+    statusText: 'Recovered',
+    errorText: null,
+    commitMode: 'append',
+    confirmReplace: false,
+    summary: {
+      status: 'configured',
+      channelCount: 1,
+      currentChannelId: 'channel-one',
+      currentChannelNumber: 101,
+      currentChannelName: 'Movies',
+      channelNumbers: [101],
+      channels: [
+        {
+          id: 'channel-one',
+          number: 101,
+          name: 'Movies',
+          sourceLibraryId: 'movies',
+          sourceLibraryName: 'Movies',
+          itemCount: 2,
+        },
+      ],
+      updatedAtMs: 1,
+      recovery: { loaded: true, repaired: false },
+    },
+  };
+}
+
 function createOverlayDomBindings({
   overlayStack,
   overlays,
@@ -478,6 +604,7 @@ function createOverlayDomBindings({
     routeActionButtons: [],
     settingsActionButtons: [],
     setupActionButtons: [],
+    channelCommitButtons: [],
     epgActionButtons: [],
     overlayActionButtons: overlayActions as unknown as HTMLButtonElement[],
     screens: [],

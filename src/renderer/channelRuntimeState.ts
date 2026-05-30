@@ -1,4 +1,5 @@
 import type {
+  ChannelSetupCommitMode,
   ChannelSetupIpcResult,
   ChannelSetupRuntimeError,
   ChannelSetupSummary,
@@ -9,6 +10,8 @@ export interface ChannelRuntimeRendererState {
   statusText: string;
   errorText: string | null;
   pending: boolean;
+  commitMode: ChannelSetupCommitMode;
+  confirmReplace: boolean;
 }
 
 export function createChannelRuntimeRendererState(): ChannelRuntimeRendererState {
@@ -17,6 +20,8 @@ export function createChannelRuntimeRendererState(): ChannelRuntimeRendererState
     statusText: 'Channel setup status not loaded',
     errorText: null,
     pending: false,
+    commitMode: 'append',
+    confirmReplace: false,
   };
 }
 
@@ -31,6 +36,19 @@ export function markChannelRuntimePending(
   };
 }
 
+export function markChannelCommitPending(
+  state: ChannelRuntimeRendererState,
+  mode: ChannelSetupCommitMode,
+): ChannelRuntimeRendererState {
+  return {
+    ...state,
+    pending: true,
+    commitMode: mode,
+    statusText: mode === 'replace' ? 'Replacing channels' : 'Saving channels',
+    errorText: null,
+  };
+}
+
 export function applyChannelStatusResult(
   state: ChannelRuntimeRendererState,
   result: ChannelSetupIpcResult<ChannelSetupSummary>,
@@ -41,6 +59,7 @@ export function applyChannelStatusResult(
       pending: false,
       statusText: 'Channel status unavailable',
       errorText: sanitizeChannelRuntimeError(result.error),
+      confirmReplace: result.error.code === 'CHANNEL_REPLACE_CONFIRMATION_REQUIRED',
     };
   }
   return {
@@ -48,6 +67,8 @@ export function applyChannelStatusResult(
     pending: false,
     statusText: formatChannelSetupStatus(result.value),
     errorText: null,
+    commitMode: state.commitMode,
+    confirmReplace: false,
   };
 }
 
@@ -73,6 +94,10 @@ export function sanitizeChannelRuntimeError(error: ChannelSetupRuntimeError): st
       return 'Channel setup status is not authorized.';
     case 'CHANNEL_VALIDATION_FAILED':
       return 'Channel setup status could not be validated.';
+    case 'CHANNEL_REPLACE_CONFIRMATION_REQUIRED':
+      return 'Replacing saved channels requires confirmation.';
+    case 'CHANNEL_PLEX_REQUIRED':
+      return 'Choose a Plex profile, server, and library first.';
     case 'CHANNEL_STORAGE_CORRUPT':
       return 'Persisted channels could not be recovered.';
     case 'CHANNEL_STORAGE_UNAVAILABLE':

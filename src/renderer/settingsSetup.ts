@@ -337,12 +337,13 @@ function isPrintableAscii(value: string): boolean {
 
 export function createChannelSetupSteps(
   state: ChannelSetupDraftState,
+  persistedStatus?: { channelCount: number } | null,
 ): readonly ChannelSetupStepViewModel[] {
   const activeIndex = SETUP_STEP_ORDER.indexOf(state.activeStepId);
   return SETUP_STEP_ORDER.map((stepId, index) => ({
     id: stepId,
     label: setupStepLabel(stepId),
-    detail: setupStepDetail(stepId, state),
+    detail: setupStepDetail(stepId, state, persistedStatus),
     state: index < activeIndex ? 'complete' : index === activeIndex ? 'current' : 'pending',
   }));
 }
@@ -361,7 +362,15 @@ export function summarizeChannelSetupDraft(
   };
 }
 
-export function validateChannelSetupDraft(state: ChannelSetupDraftState): readonly string[] {
+export function validateChannelSetupDraft(
+  state: ChannelSetupDraftState,
+  persistedStatus?: { channelCount: number } | null,
+): readonly string[] {
+  if (persistedStatus !== undefined && persistedStatus !== null) {
+    return persistedStatus.channelCount > 0
+      ? ['Saved channels are ready for recovery.']
+      : ['Choose a Plex library before saving channels.'];
+  }
   const failures: string[] = [];
   const summary = summarizeChannelSetupDraft(state);
   if (state.sourceName.trim().length === 0) {
@@ -396,7 +405,30 @@ function setupStepLabel(stepId: ChannelSetupStepId): string {
 function setupStepDetail(
   stepId: ChannelSetupStepId,
   state: ChannelSetupDraftState,
+  persistedStatus?: { channelCount: number } | null,
 ): string {
+  if (persistedStatus !== undefined) {
+    if (persistedStatus === null) {
+      switch (stepId) {
+        case 'source':
+          return 'Persisted channel status is not loaded yet.';
+        case 'channels':
+          return 'Saved channel counts are unavailable until recovery status loads.';
+        case 'review':
+          return 'Saved channel review is disabled until persisted status is available.';
+      }
+    }
+    switch (stepId) {
+      case 'source':
+        return 'Use the selected Plex profile, server, and library from this setup screen.';
+      case 'channels':
+        return `${persistedStatus.channelCount} saved channels are available for recovery.`;
+      case 'review':
+        return persistedStatus.channelCount > 0
+          ? 'Saved channels can be replaced or appended from the selected library.'
+          : 'Select a Plex library before saving channels.';
+    }
+  }
   const summary = summarizeChannelSetupDraft(state);
   switch (stepId) {
     case 'source':

@@ -8,12 +8,16 @@ export const CHANNEL_SETUP_STATUS_VALUES = [
 export const CHANNEL_SETUP_ERROR_CODES = [
   'CHANNEL_UNAUTHORIZED',
   'CHANNEL_VALIDATION_FAILED',
+  'CHANNEL_REPLACE_CONFIRMATION_REQUIRED',
+  'CHANNEL_PLEX_REQUIRED',
   'CHANNEL_STORAGE_UNAVAILABLE',
   'CHANNEL_STORAGE_CORRUPT',
   'CHANNEL_UNKNOWN',
 ] as const;
 
-export const CHANNEL_SETUP_OPERATIONS = ['getStatus'] as const;
+export const CHANNEL_SETUP_OPERATIONS = ['getStatus', 'commit'] as const;
+
+export const CHANNEL_SETUP_COMMIT_MODES = ['append', 'replace'] as const;
 
 export const CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS = [
   'rawPayload',
@@ -49,6 +53,16 @@ export const CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS = [
 export type ChannelSetupStatusValue = (typeof CHANNEL_SETUP_STATUS_VALUES)[number];
 export type ChannelSetupErrorCode = (typeof CHANNEL_SETUP_ERROR_CODES)[number];
 export type ChannelSetupOperation = (typeof CHANNEL_SETUP_OPERATIONS)[number];
+export type ChannelSetupCommitMode = (typeof CHANNEL_SETUP_COMMIT_MODES)[number];
+
+export interface ChannelSetupPersistedChannelSummary {
+  id: string;
+  number: number;
+  name: string;
+  sourceLibraryId: string | null;
+  sourceLibraryName: string | null;
+  itemCount: number;
+}
 
 export interface ChannelSetupSummary {
   status: ChannelSetupStatusValue;
@@ -57,6 +71,7 @@ export interface ChannelSetupSummary {
   currentChannelNumber: number | null;
   currentChannelName: string | null;
   channelNumbers: readonly number[];
+  channels: readonly ChannelSetupPersistedChannelSummary[];
   updatedAtMs: number;
   recovery: {
     loaded: boolean;
@@ -79,6 +94,15 @@ export type ChannelSetupIpcResult<TValue> =
 export type ChannelSetupEmptyRequest = {
   requestId: string;
   payload: Record<string, never>;
+};
+
+export type ChannelSetupCommitRequest = {
+  requestId: string;
+  payload: {
+    mode: ChannelSetupCommitMode;
+    sectionIds: readonly string[];
+    confirmReplace?: boolean;
+  };
 };
 
 export function channelSetupSuccess<TValue>(

@@ -132,6 +132,7 @@ function createFocusDomBindings(focusableElements: FocusElementDouble[]): Render
     routeActionButtons: [],
     settingsActionButtons: [],
     setupActionButtons: [],
+    channelCommitButtons: [],
     epgActionButtons: [],
     overlayActionButtons: [],
     screens: [],

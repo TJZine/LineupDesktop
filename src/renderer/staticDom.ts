@@ -230,11 +230,11 @@ const STATIC_SCREEN_MARKUP = `
           <div class="plex-runtime__metadata" data-plex-metadata></div>
         </section>
       </section>
-      <section class="channel-setup-fixture" aria-labelledby="channel-setup-fixture-title">
+      <section class="channel-setup-commit" aria-labelledby="channel-setup-commit-title">
         <header>
           <div>
-            <p class="screen__kicker">Channel setup shell</p>
-            <h3 id="channel-setup-fixture-title">Review lineup body</h3>
+            <p class="screen__kicker">Channel setup</p>
+            <h3 id="channel-setup-commit-title">Review and save channels</h3>
           </div>
           <strong data-channel-setup-fixture-status></strong>
         </header>
@@ -244,6 +244,11 @@ const STATIC_SCREEN_MARKUP = `
           <div><dt>Enabled channels</dt><dd data-channel-setup-enabled></dd></div>
           <div><dt>Blocks</dt><dd data-channel-setup-blocks></dd></div>
         </dl>
+        <div class="plex-runtime__controls" aria-label="Channel setup commit controls">
+          <button type="button" data-channel-commit-action="append" data-focus-id="channel-append">Append selected library</button>
+          <button type="button" data-channel-commit-action="replace" data-focus-id="channel-replace">Replace lineup</button>
+          <button type="button" data-channel-commit-action="confirmReplace" data-focus-id="channel-confirm-replace">Confirm replace</button>
+        </div>
         <div class="setup-review">
           <section>
             <h4>Compact guide order</h4>

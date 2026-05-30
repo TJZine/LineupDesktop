@@ -133,7 +133,8 @@ dd {
   padding: var(--space-5);
 }
 
-.channel-setup-fixture {
+.channel-setup-fixture,
+.channel-setup-commit {
   display: grid;
   gap: var(--space-5);
   min-width: 0;
@@ -143,7 +144,8 @@ dd {
   background: rgba(255, 255, 255, 0.045);
 }
 
-.channel-setup-fixture > header {
+.channel-setup-fixture > header,
+.channel-setup-commit > header {
   display: flex;
   align-items: start;
   justify-content: space-between;
@@ -152,12 +154,15 @@ dd {
 }
 
 .channel-setup-fixture h3,
-.channel-setup-fixture h4 {
+.channel-setup-fixture h4,
+.channel-setup-commit h3,
+.channel-setup-commit h4 {
   margin: 0;
   letter-spacing: 0;
 }
 
-.channel-setup-fixture > header strong {
+.channel-setup-fixture > header strong,
+.channel-setup-commit > header strong {
   flex: 0 0 auto;
   padding: var(--space-2) var(--space-4);
   border: 1px solid var(--plex-onboarding-accent-border, var(--color-border));
@@ -398,7 +403,8 @@ dd {
     grid-template-columns: 1fr;
   }
 
-  .channel-setup-fixture > header {
+  .channel-setup-fixture > header,
+  .channel-setup-commit > header {
     flex-direction: column;
   }
 }

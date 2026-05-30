@@ -19,7 +19,6 @@ import {
   createChannelSetupSteps,
   createSettingsDraftState,
   createSettingsSections,
-  summarizeChannelSetupDraft,
   validateChannelSetupDraft,
   type ChannelDraftViewModel,
   type ChannelSetupActionId,
@@ -206,8 +205,8 @@ const ROUTE_COPY = {
     title: 'Settings',
     kicker: 'Desktop preferences',
     tone: 'draft',
-    primaryText: 'Demo Library is configured for the settings preview.',
-    secondaryText: `${CHANNELS.length} preview channels use desktop player preview; no preferences are saved.`,
+    primaryText: 'Persisted channel recovery status is shown after the app reports it.',
+    secondaryText: 'Local display preferences apply to this renderer session; channel data is not inferred from setup drafts.',
     defaultStatus: 'Settings shell is local-only and not persisted.',
   },
   channelSetup: {
@@ -229,6 +228,14 @@ const ROUTE_COPY = {
     defaultStatus: string;
   }
 >;
+
+const UNAVAILABLE_CHANNEL_SETUP_SUMMARY = {
+  sourceName: 'Persisted channel status unavailable',
+  enabledChannelCount: 0,
+  totalChannelCount: 0,
+  totalBlockCount: 0,
+  readyForPreview: false,
+} as const satisfies ChannelSetupSummaryViewModel;
 
 export function createWorkflowState(initialRoute: AppRouteId = 'player'): WorkflowState {
   return {
@@ -280,9 +287,12 @@ export function getRouteWorkflowView(
 ): RouteWorkflowViewModel {
   const route = state.routeState.activeRoute;
   const copy = ROUTE_COPY[route];
-  const setupSummary = summarizeChannelSetupDraft(state.channelSetupDraft);
   const persistedSummary = channelRuntime?.summary ?? null;
   const persistedChannelCount = persistedSummary?.channelCount ?? 0;
+  const selectedLibraryItemCount = persistedSummary?.channels.reduce(
+    (sum, channel) => sum + channel.itemCount,
+    0,
+  ) ?? 0;
   const statusText =
     state.lastActionId === null || state.lastActionRoute === null
       ? copy.defaultStatus
@@ -300,7 +310,7 @@ export function getRouteWorkflowView(
     channels: CHANNELS,
     guide: createEpgGuideView(state.epg),
     settings: {
-      libraryName: persistedSummary?.currentChannelName ?? setupSummary.sourceName,
+      libraryName: persistedSummary?.currentChannelName ?? 'No persisted channel library',
       channelCount: persistedChannelCount,
       playbackMode:
         state.settingsDraft.launchMode === 'windowed'
@@ -312,18 +322,30 @@ export function getRouteWorkflowView(
       recoveryDetail: formatRecoveryDetail(persistedSummary),
       sections: createSettingsSections(state.settingsDraft, persistedSummary),
     },
-    channelDrafts: state.channelSetupDraft.channels,
+    channelDrafts: persistedSummary === null
+      ? []
+      : persistedSummary.channels.map((channel) => ({
+          id: channel.id,
+          number: String(channel.number),
+          name: channel.name,
+          enabled: true,
+          blockCount: channel.itemCount,
+          category: channel.sourceLibraryName ?? 'Plex library',
+          reviewStatus: 'active',
+        })),
     channelSetupSummary: persistedSummary === null
-      ? setupSummary
+      ? UNAVAILABLE_CHANNEL_SETUP_SUMMARY
       : {
           sourceName: persistedSummary.currentChannelName ?? 'Persisted channels',
           enabledChannelCount: persistedSummary.channelCount,
           totalChannelCount: persistedSummary.channelCount,
-          totalBlockCount: 0,
+          totalBlockCount: selectedLibraryItemCount,
           readyForPreview: persistedSummary.channelCount > 0,
         },
-    setupSteps: createChannelSetupSteps(state.channelSetupDraft),
-    setupValidationMessages: validateChannelSetupDraft(state.channelSetupDraft),
+    setupSteps: createChannelSetupSteps(state.channelSetupDraft, persistedSummary),
+    setupValidationMessages: persistedSummary === null
+      ? ['Choose a Plex library before saving channels.']
+      : validateChannelSetupDraft(state.channelSetupDraft, persistedSummary),
     actions: ROUTE_ACTIONS[route],
   };
 }

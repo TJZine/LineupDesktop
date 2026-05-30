@@ -1,5 +1,6 @@
 import type {
   ChannelSetupIpcResult,
+  ChannelSetupCommitMode,
   ChannelSetupOperation,
   ChannelSetupSummary,
 } from '../contracts/channel.js';
@@ -13,11 +14,14 @@ export const CHANNEL_SETUP_STATUS_VALUES = [
 export const CHANNEL_SETUP_ERROR_CODES = [
   'CHANNEL_UNAUTHORIZED',
   'CHANNEL_VALIDATION_FAILED',
+  'CHANNEL_REPLACE_CONFIRMATION_REQUIRED',
+  'CHANNEL_PLEX_REQUIRED',
   'CHANNEL_STORAGE_UNAVAILABLE',
   'CHANNEL_STORAGE_CORRUPT',
   'CHANNEL_UNKNOWN',
 ] as const;
-export const CHANNEL_SETUP_OPERATIONS = ['getStatus'] as const;
+export const CHANNEL_SETUP_OPERATIONS = ['getStatus', 'commit'] as const;
+export const CHANNEL_SETUP_COMMIT_MODES = ['append', 'replace'] as const;
 export const CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS = [
   'rawPayload',
   'rawPlexPayload',
@@ -74,7 +78,59 @@ export function createChannelSetupEmptyRequest(): {
   };
 }
 
-export function isChannelSetupStatusResult(
+export function createChannelSetupCommitRequest(input: {
+  mode: ChannelSetupCommitMode;
+  sectionIds: readonly string[];
+  confirmReplace?: boolean;
+}): ChannelSetupCommitPreloadRequest {
+  const requestId = `channel-setup-commit-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  if (
+    !isPlainRecord(input) ||
+    !isStringInSet(input.mode, CHANNEL_SETUP_COMMIT_MODES) ||
+    !Array.isArray(input.sectionIds) ||
+    input.sectionIds.length === 0 ||
+    input.sectionIds.length > 24 ||
+    !input.sectionIds.every((sectionId) => typeof sectionId === 'string') ||
+    (
+      input.confirmReplace !== undefined &&
+      typeof input.confirmReplace !== 'boolean'
+    )
+  ) {
+    return {
+      ok: false,
+      result: channelSetupValidationFailure(
+        requestId,
+        'commit',
+        'Channel setup request payload is invalid.',
+      ),
+    };
+  }
+
+  const sectionIds = input.sectionIds
+    .filter(isSafeChannelId);
+  if (sectionIds.length !== input.sectionIds.length) {
+    return {
+      ok: false,
+      result: channelSetupValidationFailure(
+        requestId,
+        'commit',
+        'Channel setup request payload is invalid.',
+      ),
+    };
+  }
+
+  return {
+    ok: true,
+    requestId,
+    payload: {
+      mode: input.mode,
+      sectionIds,
+      ...(input.confirmReplace === undefined ? {} : { confirmReplace: input.confirmReplace }),
+    },
+  };
+}
+
+export function isChannelSetupResult(
   value: unknown,
   requestId: string,
 ): value is ChannelSetupIpcResult<ChannelSetupSummary> {
@@ -98,19 +154,36 @@ export function isChannelSetupStatusResult(
 
 export function channelSetupValidationFailure(
   requestId: string,
+  operation: ChannelSetupOperation = 'getStatus',
+  message = 'Channel setup result is invalid.',
 ): ChannelSetupIpcResult<ChannelSetupSummary> {
   return {
     ok: false,
     requestId,
     error: {
       code: 'CHANNEL_VALIDATION_FAILED',
-      message: 'Channel setup result is invalid.',
+      message,
       retryable: false,
       recoverable: false,
-      operation: 'getStatus',
+      operation,
     },
   };
 }
+
+export type ChannelSetupCommitPreloadRequest =
+  | {
+      ok: true;
+      requestId: string;
+      payload: {
+        mode: ChannelSetupCommitMode;
+        sectionIds: readonly string[];
+        confirmReplace?: boolean;
+      };
+    }
+  | {
+      ok: false;
+      result: ChannelSetupIpcResult<ChannelSetupSummary>;
+    };
 
 function isChannelSetupSummary(value: unknown): value is ChannelSetupSummary {
   return (
@@ -123,6 +196,7 @@ function isChannelSetupSummary(value: unknown): value is ChannelSetupSummary {
       'currentChannelNumber',
       'currentChannelName',
       'channelNumbers',
+      'channels',
       'updatedAtMs',
       'recovery',
     ]) &&
@@ -133,9 +207,33 @@ function isChannelSetupSummary(value: unknown): value is ChannelSetupSummary {
     isNullableSafeDisplayString(value.currentChannelName) &&
     Array.isArray(value.channelNumbers) &&
     value.channelNumbers.every(isChannelNumber) &&
+    Array.isArray(value.channels) &&
+    value.channels.every(isPersistedChannelSummary) &&
     typeof value.updatedAtMs === 'number' &&
     Number.isFinite(value.updatedAtMs) &&
     isRecoverySummary(value.recovery)
+  );
+}
+
+function isPersistedChannelSummary(value: unknown): boolean {
+  return (
+    isPlainRecord(value) &&
+    !hasForbiddenChannelSetupField(value) &&
+    hasOnlyKeys(value, [
+      'id',
+      'number',
+      'name',
+      'sourceLibraryId',
+      'sourceLibraryName',
+      'itemCount',
+    ]) &&
+    isNullableSafeString(value.id) &&
+    value.id !== null &&
+    isChannelNumber(value.number) &&
+    isSafeChannelSetupString(value.name) &&
+    isNullableSafeString(value.sourceLibraryId) &&
+    isNullableSafeDisplayString(value.sourceLibraryName) &&
+    isFiniteNonNegativeInteger(value.itemCount)
   );
 }
 
@@ -211,6 +309,13 @@ function isNullableSafeString(value: unknown): value is string | null {
     (typeof value === 'string' &&
       value.length <= 160 &&
       CHANNEL_SETUP_REQUEST_ID_PATTERN.test(value));
+}
+
+function isSafeChannelId(value: string): boolean {
+  return value.trim() === value &&
+    value.length > 0 &&
+    value.length <= 120 &&
+    CHANNEL_SETUP_REQUEST_ID_PATTERN.test(value);
 }
 
 function isNullableSafeDisplayString(value: unknown): value is string | null {

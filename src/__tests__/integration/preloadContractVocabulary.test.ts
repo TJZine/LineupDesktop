@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import ts from 'typescript';
 
 import {
+  LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
   LINEUP_PLAYER_CLEANUP_CHANNEL,
   LINEUP_PLAYER_COMMAND_CHANNEL,
@@ -32,6 +33,7 @@ import {
 } from '../../contracts/ipc.js';
 import {
   CHANNEL_SETUP_ERROR_CODES,
+  CHANNEL_SETUP_COMMIT_MODES,
   CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS,
   CHANNEL_SETUP_OPERATIONS,
   CHANNEL_SETUP_STATUS_VALUES,
@@ -247,6 +249,7 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL,
   LINEUP_PLEX_GET_METADATA_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
+  LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
 } as const;
 
 const APPROVED_IPC_CHANNELS_BY_METHOD = {
@@ -273,6 +276,7 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL',
     'LINEUP_PLEX_GET_METADATA_CHANNEL',
     'LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL',
   ]),
   on: new Set(['LINEUP_SHELL_STATUS_CHANGED_CHANNEL', 'LINEUP_PLAYER_EVENT_CHANNEL']),
   removeListener: new Set([
@@ -789,6 +793,9 @@ test('preload guard vocabulary matches contract vocabulary', () => {
   assert.deepEqual(readChannelGuardStringArrayConst('CHANNEL_SETUP_OPERATIONS'), [
     ...CHANNEL_SETUP_OPERATIONS,
   ]);
+  assert.deepEqual(readChannelGuardStringArrayConst('CHANNEL_SETUP_COMMIT_MODES'), [
+    ...CHANNEL_SETUP_COMMIT_MODES,
+  ]);
   assert.deepEqual(
     readChannelGuardStringArrayConst('CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS'),
     [...CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS],
@@ -1038,6 +1045,14 @@ test('preload channel setup bridge validates status results before returning the
         currentChannelNumber: 101,
         currentChannelName: 'Channel One',
         channelNumbers: [101],
+        channels: [{
+          id: 'channel-one',
+          number: 101,
+          name: 'Channel One',
+          sourceLibraryId: 'movies',
+          sourceLibraryName: 'Movies',
+          itemCount: 12,
+        }],
         updatedAtMs: 123,
         recovery: { loaded: true, repaired: false },
       },
@@ -1061,6 +1076,7 @@ test('preload channel setup bridge validates status results before returning the
         currentChannelNumber: 101,
         currentChannelName: 'Channel One',
         channelNumbers: [101],
+        channels: [],
         updatedAtMs: 123,
         recovery: { loaded: true, repaired: false },
         persistenceFilePath: 'private',
@@ -1073,6 +1089,10 @@ test('preload channel setup bridge validates status results before returning the
   assert.equal(
     (privilegedResult as { error: { code: string } }).error.code,
     'CHANNEL_VALIDATION_FAILED',
+  );
+  assert.equal(
+    (privilegedResult as { error: { operation: string } }).error.operation,
+    'getStatus',
   );
 
   for (const invalidNumber of [0, 501]) {
@@ -1088,6 +1108,7 @@ test('preload channel setup bridge validates status results before returning the
           currentChannelNumber: invalidNumber,
           currentChannelName: 'Channel One',
           channelNumbers: [101],
+          channels: [],
           updatedAtMs: 123,
           recovery: { loaded: true, repaired: false },
         },
@@ -1115,6 +1136,7 @@ test('preload channel setup bridge validates status results before returning the
           currentChannelNumber: 101,
           currentChannelName: 'Channel One',
           channelNumbers: [invalidNumber],
+          channels: [],
           updatedAtMs: 123,
           recovery: { loaded: true, repaired: false },
         },
@@ -1150,6 +1172,88 @@ test('preload channel setup bridge validates status results before returning the
     (unsafeMessageResult as { error: { code: string } }).error.code,
     'CHANNEL_VALIDATION_FAILED',
   );
+  assert.equal(
+    (unsafeMessageResult as { error: { operation: string } }).error.operation,
+    'getStatus',
+  );
+
+  const rejectedStatus = createPreloadHarness(() => {
+    throw new Error('raw token serverUri failure');
+  });
+
+  const rejectedStatusResult = await rejectedStatus.api.channelSetup.getStatus();
+  assert.equal((rejectedStatusResult as { ok: boolean }).ok, false);
+  assert.equal(
+    (rejectedStatusResult as { error: { code: string } }).error.code,
+    'CHANNEL_VALIDATION_FAILED',
+  );
+  assert.equal(
+    (rejectedStatusResult as { error: { operation: string } }).error.operation,
+    'getStatus',
+  );
+  assert.doesNotMatch(JSON.stringify(rejectedStatusResult), /raw token|serverUri/u);
+
+  const commitHarness = createPreloadHarness((channel, request, input) => {
+    assert.equal(channel, LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL);
+    assert.ok(isPlexInvokeRequest(request));
+    assert.deepEqual(request.payload, { mode: 'append', sectionIds: ['movies'] });
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        status: 'configured',
+        channelCount: 1,
+        currentChannelId: 'channel-one',
+        currentChannelNumber: 1,
+        currentChannelName: 'Movies',
+        channelNumbers: [1],
+        channels: [{
+          id: 'channel-one',
+          number: 1,
+          name: 'Movies',
+          sourceLibraryId: 'movies',
+          sourceLibraryName: 'Movies',
+          itemCount: 2,
+        }],
+        updatedAtMs: 123,
+        recovery: { loaded: true, repaired: false },
+      },
+    });
+  });
+
+  const commitResult = await commitHarness.api.channelSetup.commit({
+    mode: 'append',
+    sectionIds: ['movies'],
+  });
+
+  assert.equal((commitResult as { ok: boolean }).ok, true);
+});
+
+test('preload channel setup bridge rejects malformed commit inputs without IPC', async () => {
+  const harness = createPreloadHarness(() => {
+    assert.fail('invalid channel setup commit input must not invoke IPC');
+  });
+
+  for (const input of [
+    undefined,
+    { mode: 'append', sectionIds: null },
+    { mode: 'append', sectionIds: ['movies', 'bad id!'] },
+  ]) {
+    const result = await harness.api.channelSetup.commit(input);
+    assert.equal((result as { ok: boolean }).ok, false);
+    assert.match((result as { requestId: string }).requestId, /^channel-setup-commit-/u);
+    assert.equal(
+      (result as { error: { code: string } }).error.code,
+      'CHANNEL_VALIDATION_FAILED',
+    );
+    assert.equal(
+      (result as { error: { operation: string } }).error.operation,
+      'commit',
+    );
+    assert.doesNotMatch(JSON.stringify(result), /rawPayload|token|serverUri|https?:/u);
+  }
+
+  assert.equal(harness.calls.length, 0);
 });
 
 test('preload diagnostics guards validate count map keys and values', () => {
@@ -1366,6 +1470,7 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
   visit(preloadSourceFile);
 
   assert.deepEqual(observedCalls.sort(), [
+    'invoke:LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL',
     'invoke:LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
     'invoke:LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL',
     'invoke:LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL',

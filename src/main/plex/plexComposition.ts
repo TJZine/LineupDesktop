@@ -28,9 +28,14 @@ export interface RegisterPlexCompositionOptions {
   diagnosticEventStore?: DiagnosticEventStore;
 }
 
-export type PlexCompositionTeardown = () => Promise<void>;
+export interface PlexCompositionRegistration {
+  runtime: DesktopPlexRuntime;
+  teardown: () => Promise<void>;
+}
 
-export async function registerPlexComposition(options: RegisterPlexCompositionOptions): Promise<PlexCompositionTeardown> {
+export async function registerPlexComposition(
+  options: RegisterPlexCompositionOptions,
+): Promise<PlexCompositionRegistration> {
   const paths = resolveDesktopAppDataPaths(options.app);
   const clientIdentifier = await readOrCreateDesktopPlexClientIdentifier(paths);
   const persistenceStore = new DesktopPersistenceStore({
@@ -80,8 +85,11 @@ export async function registerPlexComposition(options: RegisterPlexCompositionOp
     },
   });
 
-  return async () => {
-    // `registerPlexIpcHandlers` owns runtime shutdown before handler removal.
-    await teardownIpc();
+  return {
+    runtime,
+    teardown: async () => {
+      // `registerPlexIpcHandlers` owns runtime shutdown before handler removal.
+      await teardownIpc();
+    },
   };
 }

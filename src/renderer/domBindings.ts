@@ -17,6 +17,7 @@ export interface RendererDomBindings {
   routeActionButtons: HTMLButtonElement[];
   settingsActionButtons: HTMLButtonElement[];
   setupActionButtons: HTMLButtonElement[];
+  channelCommitButtons: HTMLButtonElement[];
   epgActionButtons: HTMLButtonElement[];
   overlayActionButtons: HTMLButtonElement[];
   screens: HTMLElement[];
@@ -94,6 +95,9 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     ),
     setupActionButtons: Array.from(
       documentRef.querySelectorAll<HTMLButtonElement>('[data-setup-action]'),
+    ),
+    channelCommitButtons: Array.from(
+      documentRef.querySelectorAll<HTMLButtonElement>('[data-channel-commit-action]'),
     ),
     epgActionButtons: Array.from(documentRef.querySelectorAll<HTMLButtonElement>('[data-epg-action]')),
     overlayActionButtons: Array.from(
@@ -278,6 +282,19 @@ export function readChannelSetupActionId(value: string | undefined): ChannelSetu
     case 'toggleFeaturedChannel':
     case 'addDraftChannel':
     case 'resetDraftLineup':
+      return value;
+    default:
+      return null;
+  }
+}
+
+export type ChannelCommitActionId = 'append' | 'replace' | 'confirmReplace';
+
+export function readChannelCommitActionId(value: string | undefined): ChannelCommitActionId | null {
+  switch (value) {
+    case 'append':
+    case 'replace':
+    case 'confirmReplace':
       return value;
     default:
       return null;

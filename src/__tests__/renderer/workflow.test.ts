@@ -153,6 +153,8 @@ test('settings surface uses persisted channel setup status when available', () =
     pending: false,
     statusText: 'Recovered',
     errorText: null,
+    commitMode: 'append',
+    confirmReplace: false,
     summary: {
       status: 'configured',
       channelCount: 2,
@@ -160,17 +162,38 @@ test('settings surface uses persisted channel setup status when available', () =
       currentChannelNumber: 204,
       currentChannelName: 'Channel Two',
       channelNumbers: [101, 204],
+      channels: [
+        {
+          id: 'channel-one',
+          number: 101,
+          name: 'Channel One',
+          sourceLibraryId: 'movies',
+          sourceLibraryName: 'Movies',
+          itemCount: 12,
+        },
+        {
+          id: 'channel-two',
+          number: 204,
+          name: 'Channel Two',
+          sourceLibraryId: 'shows',
+          sourceLibraryName: 'Shows',
+          itemCount: 8,
+        },
+      ],
       updatedAtMs: 123,
       recovery: { loaded: true, repaired: false },
     },
   };
 
   const view = getRouteWorkflowView(createWorkflowState('settings'), channelRuntime);
+  const setupView = getRouteWorkflowView(createWorkflowState('channelSetup'), channelRuntime);
 
   assert.equal(view.settings.libraryName, 'Channel Two');
   assert.equal(view.settings.channelCount, 2);
   assert.equal(view.settings.setupState, 'Recovered');
   assert.equal(view.settings.recoveryDetail, '2 persisted channels; Current channel 204.');
+  assert.equal(setupView.channelSetupSummary.enabledChannelCount, 2);
+  assert.equal(setupView.channelSetupSummary.totalBlockCount, 20);
   assert.equal(
     view.settings.sections.find((section) => section.id === 'setup')?.items[0]?.valueLabel,
     '2',
@@ -197,23 +220,66 @@ test('settings copy describes Desktop-local capabilities and avoids legacy platf
   assert.doesNotMatch(settingsCopy, /webOS|Luna|Palm|TV service/i);
 });
 
-test('legacy draft setup state stays renderer-local and outside reachable Plex onboarding actions', () => {
+test('draft setup state stays isolated until persisted channel status is available', () => {
   const initial = createWorkflowState('channelSetup');
   const pausedFeatured = applyWorkflowChannelSetupAction(initial, 'toggleFeaturedChannel');
   const withDraft = applyWorkflowChannelSetupAction(pausedFeatured, 'addDraftChannel');
   const review = applyWorkflowChannelSetupAction(withDraft, 'advanceSetupStep');
   const view = getRouteWorkflowView(review);
+  const viewText = JSON.stringify({
+    settings: view.settings,
+    channelDrafts: view.channelDrafts,
+    channelSetupSummary: view.channelSetupSummary,
+    setupSteps: view.setupSteps,
+    setupValidationMessages: view.setupValidationMessages,
+  });
 
   assert.deepEqual(review.routeState, initial.routeState);
-  assert.equal(view.channelDrafts.length, 4);
-  assert.equal(view.channelSetupSummary.enabledChannelCount, 2);
-  assert.equal(view.channelSetupSummary.totalBlockCount, 6);
+  assert.equal(view.channelDrafts.length, 0);
+  assert.equal(view.channelSetupSummary.sourceName, 'Persisted channel status unavailable');
+  assert.equal(view.channelSetupSummary.enabledChannelCount, 0);
+  assert.equal(view.channelSetupSummary.totalChannelCount, 0);
+  assert.equal(view.channelSetupSummary.totalBlockCount, 0);
+  assert.equal(view.channelSetupSummary.readyForPreview, false);
   assert.equal(view.setupSteps.find((step) => step.id === 'review')?.state, 'current');
-  assert.deepEqual(view.setupValidationMessages, []);
+  assert.deepEqual(view.setupValidationMessages, ['Choose a Plex library before saving channels.']);
+  assert.doesNotMatch(viewText, /Demo Library|Liminal One|The Vault|Weekend Queue/u);
+  assert.doesNotMatch(viewText, /2 of 3|6 programming blocks|16 programming blocks/u);
 
   const reset = applyWorkflowChannelSetupAction(review, 'resetDraftLineup');
-  assert.equal(getRouteWorkflowView(reset).channelDrafts.length, 3);
+  assert.equal(getRouteWorkflowView(reset).channelDrafts.length, 0);
   assert.deepEqual(getRouteWorkflowView(initial).actions, []);
+});
+
+test('channel setup route does not use draft setup fallback after status failure', () => {
+  const failedRuntime: ChannelRuntimeRendererState = {
+    pending: false,
+    statusText: 'Channel status unavailable',
+    errorText: 'Channel setup status could not be loaded.',
+    commitMode: 'append',
+    confirmReplace: false,
+    summary: null,
+  };
+  const view = getRouteWorkflowView(createWorkflowState('channelSetup'), failedRuntime);
+  const viewText = JSON.stringify({
+    settings: view.settings,
+    channelDrafts: view.channelDrafts,
+    channelSetupSummary: view.channelSetupSummary,
+    setupSteps: view.setupSteps,
+    setupValidationMessages: view.setupValidationMessages,
+  });
+
+  assert.equal(view.settings.setupState, 'Channel setup status could not be loaded.');
+  assert.equal(view.channelDrafts.length, 0);
+  assert.deepEqual(view.channelSetupSummary, {
+    sourceName: 'Persisted channel status unavailable',
+    enabledChannelCount: 0,
+    totalChannelCount: 0,
+    totalBlockCount: 0,
+    readyForPreview: false,
+  });
+  assert.doesNotMatch(viewText, /Demo Library|Liminal One|The Vault|Weekend Queue/u);
+  assert.doesNotMatch(viewText, /2 of 3|6 programming blocks|16 programming blocks/u);
 });
 
 test('EPG actions update only renderer-local guide state', () => {

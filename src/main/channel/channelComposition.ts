@@ -6,12 +6,14 @@ import { resolveDesktopAppDataPaths } from '../persistence/appDataPaths.js';
 import { DesktopChannelPersistenceStore } from '../persistence/desktopChannelPersistenceStore.js';
 import { registerChannelIpcHandlers, type ChannelIpcTeardown } from './channelIpc.js';
 import { ChannelRuntime } from './channelRuntime.js';
+import type { DesktopPlexRuntime } from '../plex/desktopPlexRuntime.js';
 
 export interface RegisterChannelCompositionOptions {
   app: Pick<App, 'getPath'>;
   shellMode: ShellMode;
   isAuthorizedEvent(event: IpcMainInvokeEvent): boolean;
   createRequestId(prefix: string): string;
+  plexRuntime?: Pick<DesktopPlexRuntime, 'getSnapshot' | 'listLibraryItems'>;
   diagnosticEventStore?: DiagnosticEventStore;
 }
 
@@ -29,6 +31,7 @@ export function registerChannelComposition(
     storage: new DesktopChannelPersistenceStore({
       persistenceFilePath: channelPersistenceFilePath,
     }),
+    plexRuntime: options.plexRuntime,
   });
   const teardownIpc: ChannelIpcTeardown = registerChannelIpcHandlers({
     runtime,
