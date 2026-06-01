@@ -747,23 +747,301 @@ Stop/replan:
   would overclaim RD-24/RD-25/RD-26 readiness, or material review findings
   remain.
 
-## Plan Review Handoff
+## Unit 4 Closeout Attempt
+
+2026-05-30 Windows proof status: blocked.
+
+Observed redaction-safe proof:
+
+- `npm run build:electron` passed before proof.
+- A focused Electron/CDP proof command launched the built app on Windows,
+  exercised only renderer-safe `window.lineupDesktop.plex` and
+  `window.lineupDesktop.channelSetup` bridge methods, and printed only
+  category/count/pass-fail facts.
+- Proof summary: `RD-23 channel setup persistence: 2/8 observed; blocked=6`.
+- Passing categories: validation failure state and Settings route recovery
+  surface availability.
+- Sanitized blocker probe: Windows platform and bridge readiness were observed;
+  Plex snapshot and selected-server restore calls returned safely; movie/show
+  library section count was `6`; active profile readiness was `false`;
+  selected server readiness was `false`; persisted channel count was `0`.
+
+Blocked categories:
+
+- live library-backed channel commit
+- destructive replace confirmation through a committed channel set
+- persisted channel recovery after restart
+- setup rerun after existing channels
+- full focus/back/text-entry/list/scroll proof for the committed setup path
+- redaction-safe closeout summary for the complete RD-23 proof package
+
+Conclusion: RD-23 is not ready for closeout review and must not route to RD-24.
+The blocker is missing active live Plex profile/server state for the channel
+commit path in this Windows proof environment. No private account, server,
+library, media, endpoint, token, header, raw payload, local path, process id,
+native handle, screenshot, raw log, support bundle, or raw persistence evidence
+was tracked.
+
+2026-05-30 second Windows proof-remediation attempt: blocked.
+
+Observed redaction-safe proof:
+
+- `npm run build:electron` passed before proof.
+- A focused Electron/CDP proof command launched the built app on Windows and
+  used only renderer-safe `window.lineupDesktop.plex` and
+  `window.lineupDesktop.channelSetup` bridge methods. Output was limited to
+  platform, bridge readiness, operation pass/fail, sanitized error codes,
+  category counts, and booleans.
+- Initial snapshot readiness was `activeProfileReady=false` and
+  `selectedServerReady=false`; `restoreSelectedServer()` returned safely with
+  `selectionKind=selected`, `activeProfileReady=true`, and
+  `selectedServerReady=true`.
+- `listLibrarySections()` returned safely with six movie/show candidate
+  sections. A follow-up sanitized item-page probe returned safely for all six
+  candidates; observed item counts were non-zero for all candidates, and all
+  observed item pages had positive-duration items.
+- `channelSetup.commit({ mode: "append" })` returned
+  `CHANNEL_VALIDATION_FAILED` for all six candidate sections. Persisted channel
+  count remained `0`.
+- Settings/channel setup route availability and text-entry presence were
+  observed. Full focus/back/clear/list/scroll proof remains blocked because the
+  committed setup path does not exist yet.
+
+Proof summary: `RD-23 channel setup persistence: 2/8 observed; blocked=6`.
+
+Passing categories:
+
+- validation failure state
+- Settings/channel setup route recovery surface availability
+
+Sanitized blocker categories:
+
+- live library-backed channel commit: blocked by
+  `CHANNEL_VALIDATION_FAILED` across `6/6` movie/show candidate sections after
+  active profile and selected server restore succeeded
+- destructive replace confirmation through a committed channel set: blocked
+  because persisted channel count remained `0`
+- persisted channel recovery after restart: blocked because no channel commit
+  was persisted
+- setup rerun after existing channels: blocked because no existing channel set
+  was created
+- full focus/back/clear/text-entry/list/scroll proof for the committed setup
+  path: blocked because the committed setup path does not exist yet
+- redaction-safe closeout summary for the complete RD-23 proof package: blocked
+  because RD-23 channel commit and restart recovery did not pass
+
+Conclusion: RD-23 is still not ready for closeout review and must not route to
+RD-24. The original active profile/server readiness blocker was not reproduced
+after invoking the existing RD-22B selected-server restore bridge operation;
+the current sanitized blocker is channel commit validation after live profile,
+server, library-section, and item-page readiness are observed. No private
+account, server, library, media, endpoint, token, header, raw payload, local
+path, process id, native handle, screenshot, raw log, support bundle, or raw
+persistence evidence was tracked.
+
+## Direction Correction: Upstream Setup UI Before Proof
+
+2026-05-31 controller/user direction correction:
+
+- Do not run further Electron app proof, Windows proof, or manual runtime proof
+  for RD-23 channel setup until the reachable setup UI is complete enough to
+  match the upstream Lineup/webOS onboarding and channel-setup journey in the
+  Desktop stack.
+- Local implementation checks such as typecheck, focused unit tests,
+  maintainability, docs verification, and redaction verification remain allowed.
+  They are not a substitute for product proof and must not be described as app
+  proof.
+- The current product route must not be closed with a hybrid of RD-22 Plex
+  browsing, fake/draft channel setup review, and bolted-on append/replace
+  controls. That hybrid caused the observed manual confusion and invalidates
+  further incremental UI proof for this area.
+- Future workers must treat upstream UI parity as the next blocking RD-23 unit:
+  first make the live setup journey coherent and upstream-shaped, then diagnose
+  any remaining `CHANNEL_VALIDATION_FAILED` commit branch, then resume app proof.
+
+Research and review evidence:
+
+- Upstream reference repo is available locally at `C:\Software\Lineup` on commit
+  `613b1c516c7c9e37f9c18ea3e92c474013472b11`.
+- Upstream channel-setup UI source to audit/adapt:
+  `src/modules/ui/channel-setup/**`, including `ChannelSetupScreen.ts`,
+  `ChannelSetupSessionController.ts`, `ChannelSetupWorkflowPresenter.ts`,
+  `ChannelSetupUserCopy.ts`, `steps/LibraryStepController.ts`,
+  `steps/LibraryStepPresenter.ts`, `steps/StrategyStepController.ts`,
+  `steps/BuildReviewStepController.ts`, `steps/BuildProgressStepController.ts`,
+  and `styles*.css`.
+- Upstream channel-setup domain/workflow source to use as behavior evidence:
+  `src/core/channel-setup/**`, especially `ChannelSetupCoordinator.ts`,
+  `ChannelSetupRerunController.ts`, `workflow/**`, `build/**`,
+  `planning/**`, and `shared/formatChannelSetupWarning.ts`.
+- Upstream settings UI source to audit/adapt for recovery/settings parity:
+  `src/modules/ui/settings/**`, especially `SettingsScreen.ts`,
+  `SettingsScreenStateController.ts`, `SettingsStore.ts`, `SettingsToggle.ts`,
+  `SettingsSelect.ts`, and `styles*.css`.
+- The upstream-equivalent user flow is: enter setup, choose/auth Plex runtime,
+  select live library source, configure channel strategy, review build/validation,
+  commit append/replace/confirm, and recover the persisted result through
+  Settings/setup rerun.
+
+Current Desktop divergence to fix before proof:
+
+- `src/renderer/settingsSetup.ts` still owns fake `Demo Library` draft setup
+  state and demo channel rows.
+- `src/renderer/staticDom.ts` mixes RD-22 Plex browse/metadata panels with
+  fake review/status content and commit buttons.
+- `src/renderer/workflow.ts` and `src/renderer/routeDom.ts` can render setup
+  summaries, counts, validation, and button states from draft or stale runtime
+  state instead of one authoritative live setup model.
+- The user can browse a live library and preview metadata, but the visible
+  product path does not clearly become "create channels from this selected
+  library" in the same upstream-shaped setup journey.
+- Replace/confirm behavior and selected-library readiness need to reflect
+  persisted channel status and current live library state; they must not appear
+  as unexplained controls.
+
+Uncommitted worker patch status:
+
+- A 2026-05-31 worker patch is present in the worktree and is not committed.
+  It changed renderer setup copy/state and added
+  `src/renderer/channelSetupLiveSelection.ts` plus focused renderer tests.
+- Read-only review found the patch directionally useful but not clean as a
+  standalone checkpoint. It can show stale selected-library readiness/item
+  counts, exposes replace too early, and lacks coverage for the actual renderer
+  action path.
+- Next session must either fold this patch into the full upstream UI parity
+  unit or replace it cleanly. Do not commit it as an RD-23 fix by itself.
+
+## Required Next Unit: RD-23 Live-Onboarding Setup Parity
+
+Purpose:
+
+- Replace the reachable fake/draft setup review with a single authoritative,
+  upstream-shaped Desktop setup journey backed by live Plex section selection
+  and main-owned persisted channel status.
+- Preserve Desktop boundaries: renderer owns display and interaction state;
+  main owns Plex transport, raw payloads, tokens, selected connections,
+  channel authoring, and persistence.
+
+Files expected in scope:
+
+- `src/renderer/staticDom.ts`
+- `src/renderer/workflow.ts`
+- `src/renderer/routeDom.ts`
+- `src/renderer/settingsSetup.ts`
+- `src/renderer/index.ts`
+- `src/renderer/plexRuntimeActions.ts`
+- `src/renderer/plexRuntimeState.ts`
+- `src/renderer/plexRuntimeDom.ts`
+- `src/renderer/plexRuntimeRows.ts`
+- `src/renderer/channelRuntimeActions.ts`
+- `src/renderer/channelRuntimeState.ts`
+- focused renderer tests under `src/__tests__/renderer/**`
+- `docs/architecture/import-ledger.md` if upstream source/copy/CSS/tests are
+  copied or adapted
+- this plan, if scope or proof rules change
+
+Files out of scope unless a reviewed replan says otherwise:
+
+- RD-24 scheduler-backed guide runtime
+- RD-25 playback/native-helper production behavior
+- RD-26 media options
+- package/release/signing/update behavior
+- backup/restore
+- broad RPC or renderer-owned storage
+- raw Plex payloads, tokenized URLs, credentials, app paths, private proof, or
+  raw persistence inspection
+
+Implementation requirements:
+
+- Remove or fence fake `Demo Library`/draft channel setup as a reachable product
+  path. It may remain only as an explicitly non-product test fixture.
+- Structure the UI as a wizard-like upstream flow rather than a Plex browser
+  with a separate review panel underneath.
+- Make selected library state explicit and current. The setup path must
+  distinguish library-section selection from media-item metadata preview.
+- Represent setup stages with upstream-equivalent semantics: source/library,
+  strategy/channel creation, review/validation, build/commit result, and
+  persisted recovery/rerun.
+- Derive replace/confirm availability from persisted channel status and the
+  explicit confirmation-required result, not from a generic selected-library
+  boolean.
+- Surface sanitized commit failures in the setup result stage, preserving the
+  distinction between invalid library ids and no usable library content.
+- Keep settings recovery tied to `channelSetup.getStatus()` and persisted
+  channel summaries; do not show synthetic setup success.
+- Update focused renderer tests to cover live selection resolution, stale item
+  avoidance, no-library state, first-run create state, existing-channel
+  append/replace/confirm states, and sanitized failure rendering.
+
+Verification allowed before UI parity completion:
+
+- `npm run typecheck`
+- focused renderer/unit tests for touched owners
+- `npm run verify:maintainability`
+- `npm run verify:docs` for docs changes
+- `npm run verify:redaction`
+- `git diff --check`
+- read-only implementation review
+
+Verification explicitly paused until this unit is complete and reviewed:
+
+- Electron app launch proof
+- smoke/electron proof for this RD-23 setup route
+- Windows live manual proof
+- restart/recovery runtime proof
+- screenshot/pixel/UI proof
+- any proof that asks the user to manually test the setup flow before the
+  upstream-shaped UI is complete
+
+Acceptance criteria before app proof resumes:
+
+- The reachable Channel setup route no longer presents fake draft setup as a
+  product workflow.
+- A user can understand the intended path from UI alone: choose/auth Plex,
+  select a movie/show library source, configure/create channels, review result,
+  and recover/rerun from Settings.
+- The setup panel never says no library is selected when a current movie/show
+  library section is selected.
+- Media item preview is visually secondary and cannot be mistaken for the
+  channel-creation input.
+- Replace and confirm replace states are understandable and only shown when
+  applicable.
+- Sanitized runtime failures are visible where the user attempted the action.
+- The implementation review is clean for UI parity, renderer state ownership,
+  stale selection behavior, and no fake-route leakage.
+
+Stop/replan triggers:
+
+- The UI parity unit needs scheduler guide runtime, playback, media options,
+  package/release behavior, backup/restore, raw Plex payloads, renderer-owned
+  storage, or private proof.
+- A copied/adapted upstream source slice lacks an import-ledger row.
+- File-shape guardrails are breached without a reviewed split.
+- The implementation cannot preserve Desktop process/security boundaries while
+  matching the upstream setup flow.
+
+## Continuation Handoff
 
 MODEL_SUGGESTION
-PLANNER: n/a
+PLANNER: gpt-5 high reasoning if scope must be rewritten again
 IMPLEMENTER: gpt-5 high reasoning
 REVIEWER: gpt-5 high reasoning
-WHY: RD-23 is Tier 3 work across live Plex library state, pure channel domain, main-owned persistence, preload IPC, renderer UI, upstream source adaptation, redaction, file-shape guardrails, and Windows proof.
+WHY: RD-23 remains Tier 3 cross-boundary work, but the immediate blocker is
+upstream setup UI parity before app proof. The next worker must understand
+renderer UI composition, live Plex renderer state, main-owned persistence, and
+import-ledger duties.
 
 NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
-TASK: Review RD-23 Live Channel Setup And Runtime Persistence Plan
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
+TASK: Continue RD-23 With Live-Onboarding Setup UI Parity Before Proof
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/rd-23-live-channel-setup-runtime-persistence.md
-ARTIFACT: active RD-23 tracked plan
+ARTIFACT: active RD-23 tracked plan with 2026-05-31 direction correction
 FILES:
 - docs/plans/rd-23-live-channel-setup-runtime-persistence.md
+- AGENTS.md
+- docs/AGENTIC_DEV_WORKFLOW.md
 - docs/architecture/CURRENT_STATE.md
 - docs/architecture/file-shape-guardrails.md
 - docs/architecture/security-and-secret-flow.md
@@ -771,13 +1049,38 @@ FILES:
 - docs/roadmap/desktop-port-roadmap.md
 - docs/product/lineup-product-parity-matrix.md
 - docs/development/windows-ui-proof-plan.md
-BLOCKERS: none known; implementation must not start until read-only plan review is clean.
+- C:\Software\Lineup\src\modules\ui\channel-setup\**
+- C:\Software\Lineup\src\core\channel-setup\**
+- C:\Software\Lineup\src\modules\ui\settings\**
+- src/renderer/staticDom.ts
+- src/renderer/workflow.ts
+- src/renderer/routeDom.ts
+- src/renderer/settingsSetup.ts
+- src/renderer/index.ts
+- src/renderer/plexRuntime*.ts
+- src/renderer/channelRuntime*.ts
+- src/__tests__/renderer/**
+CURRENT_WORKTREE:
+- Branch `initial-build` is ahead of origin.
+- RD-23 commits already created: plan activation, persisted setup recovery seam,
+  and live library-backed channel commit.
+- Uncommitted product/test changes from the 2026-05-31 worker exist and are not
+  approved as a standalone checkpoint. Inspect and either fold them into the
+  parity unit or replace them cleanly.
+BLOCKERS:
+- No app proof is allowed until the upstream-shaped setup UI is implemented and
+  reviewed clean.
+- Existing Windows proof remains blocked by `CHANNEL_VALIDATION_FAILED`, but
+  that runtime diagnosis is intentionally deferred until the UI is coherent.
 MESSAGE:
-Review the active RD-23 plan for decision completeness before implementation.
-Prioritize architecture seams, file-shape decisions for preload/channel
-hotspots, exact files in/out of scope, import-ledger duties, fake setup route
-retirement, Windows proof requirements, verification commands, acceptance
-criteria, and stop/replan triggers. Confirm whether the bounded vertical units
-cover the whole RD-23 roadmap item without pulling in RD-24 guide runtime,
-RD-25 playback, RD-26 media options, backup/restore, broad RPC, renderer-owned
-storage, raw Plex material, credentials, app paths, or private proof.
+Use the feature-quality loop as controller. Start by reading this direction
+correction and the upstream source paths listed above. Do not run Electron app
+proof, Windows proof, or manual proof for RD-23 channel setup yet. First
+implement the RD-23 Live-Onboarding Setup Parity unit: remove/fence fake draft
+setup from the reachable product route, adapt the upstream setup/settings flow
+into Desktop renderer boundaries, make live library selection and persisted
+status the only product setup sources, and add focused unit coverage. Record
+any copied/adapted upstream source in the import ledger before or with the
+implementation. After focused checks and clean read-only implementation review,
+only then resume runtime/app proof to diagnose any remaining
+`CHANNEL_VALIDATION_FAILED` commit path.
