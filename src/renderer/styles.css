@@ -1,5 +1,6 @@
 @import "./styles/base.css";
 @import "./styles/player-overlays.css";
+@import "./styles/guide-epg.css";
 @import "./styles/workflow-screens.css";
 @import "./styles/plex-onboarding.css";
 @import "./styles/plex-onboarding-cards.css";

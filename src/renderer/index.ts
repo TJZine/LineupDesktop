@@ -4,7 +4,7 @@ import { clickFocusedRendererElement, focusRendererTarget, moveRendererFocus, re
 import { createDesktopKeyboardInputListener, startDesktopGamepadRuntime } from './desktopInput.js';
 import { createDesktopCursorRuntime } from './desktopCursor.js';
 import { FocusRegistry, type AppRouteId, type DesktopInputButton, type FocusState } from './navigation.js';
-import { applyPlayerOverlayAction, createFakePlayerSnapshot, createPlayerOverlayView, createPlayerOverlayState, resolvePlayerOverlayFocusId, type PlayerOverlayActionId } from './overlays.js';
+import { applyPlayerOverlayAction, createPlayerOverlayView, createPlayerOverlayState, resolvePlayerOverlayFocusId, type PlayerOverlayActionId } from './overlays.js';
 import { renderRouteDom, renderWorkflowDom } from './routeDom.js';
 import { mountStaticRendererDom } from './staticDom.js';
 import { applySupportBundleExportResult } from './supportBundleExport.js';
@@ -13,15 +13,17 @@ import { resolveChannelSetupLiveSelection } from './channelSetup/liveSelection.j
 import { createChannelRuntimeController } from './channelRuntimeActions.js';
 import { readPlexHomeUserId, readPlexRatingKey, readPlexSectionId, readPlexServerId, renderPlexRuntimeDom } from './plexRuntimeDom.js';
 import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowChannelSetupAction, applyWorkflowEpgAction, applyWorkflowSettingsAction, createWorkflowState, type ChannelSetupActionId, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
+import { createRendererPresentationFixtures } from './presentationFixtures.js';
 
 mountStaticRendererDom();
 
 const dom = queryRendererDom();
 
 let fullscreenEnabled = false;
-let workflowState = createWorkflowState('player');
-let overlayState = createPlayerOverlayState();
-const playerSnapshot = createFakePlayerSnapshot();
+const presentationFixtures = createRendererPresentationFixtures();
+let workflowState = createWorkflowState('player', presentationFixtures.guide);
+let overlayState = createPlayerOverlayState(presentationFixtures.overlays);
+const playerSnapshot = presentationFixtures.playerSnapshot;
 const focusRegistry = new FocusRegistry();
 let focusState: FocusState;
 const plexController = createPlexRuntimeController({
@@ -302,8 +304,11 @@ function applyEpgAction(action: EpgActionId): void {
 }
 
 function applyOverlayAction(action: PlayerOverlayActionId): void {
-  overlayState = applyPlayerOverlayAction(overlayState, action);
-  const view = createPlayerOverlayView(overlayState, playerSnapshot);
+  overlayState = applyPlayerOverlayAction(overlayState, action, Date.now(), presentationFixtures.overlays);
+  const view = createPlayerOverlayView(overlayState, {
+    ...presentationFixtures.overlays,
+    playerSnapshot,
+  });
   focusState = focusRegistry.focusTarget(focusState, resolvePlayerOverlayFocusId(view)).state;
   renderApp();
 }
@@ -452,6 +457,7 @@ function renderApp(): void {
     dom,
     channelController.getState(),
     liveSelection,
+    presentationFixtures.overlays,
   );
   renderPlexRuntimeDom(plexState, dom);
   syncRendererFocusTargets(focusRegistry, dom);

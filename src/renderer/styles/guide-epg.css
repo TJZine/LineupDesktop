@@ -1,0 +1,226 @@
+.guide-detail {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  margin-top: var(--space-1);
+  padding: var(--space-6);
+  border: 1px solid var(--color-focus-border);
+  border-radius: var(--radius-control);
+  background: rgba(121, 199, 255, 0.1);
+}
+
+.guide-detail h3 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.guide-detail p {
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.epg-grid {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin-top: var(--space-1);
+  overflow: auto;
+}
+
+.epg-shell {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 760px;
+}
+
+.epg-classic-header,
+.epg-now-watching-banner,
+.epg-state-panel {
+  display: grid;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.epg-classic-header {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: rgba(0, 0, 0, 0.46);
+}
+
+.epg-classic-header strong {
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.epg-classic-header span,
+.epg-now-watching-banner span,
+.epg-state-panel strong,
+.epg-state-panel span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.epg-classic-header span,
+.epg-now-watching-banner span,
+.epg-state-panel span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.epg-now-watching-banner {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--color-focus-border);
+  border-radius: var(--radius-control);
+  background: rgba(121, 199, 255, 0.1);
+}
+
+.epg-state-panel {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.epg-state-panel span {
+  font-size: 12px;
+}
+
+.epg-time-header,
+.epg-grid__row {
+  display: grid;
+  grid-template-columns: 132px minmax(520px, 1fr);
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.epg-time-header {
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.epg-time-header-slots,
+.epg-grid__programs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.epg-time-slot,
+.epg-grid__channel,
+.epg-grid__program,
+.epg-grid__programs {
+  min-width: 0;
+}
+
+.epg-grid__channel,
+.epg-grid__program {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+
+.epg-grid__channel {
+  display: grid;
+  align-content: center;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+}
+
+.epg-grid__channel strong,
+.epg-grid__program strong,
+.epg-grid__channel span,
+.epg-grid__program span {
+  display: block;
+}
+
+.epg-grid__channel span,
+.epg-grid__program span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.epg-grid__program span {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.epg-grid__channel span {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.epg-grid__programs {
+  gap: var(--space-2);
+}
+
+.epg-grid__program {
+  display: grid;
+  align-content: center;
+  position: relative;
+  min-height: 58px;
+  padding: var(--space-3) var(--space-4);
+  overflow: hidden;
+  background: var(--color-surface-raised);
+}
+
+.epg-grid__program[data-temporal-state="past"] {
+  opacity: 0.62;
+}
+
+.epg-grid__program[data-temporal-state="current"] {
+  border-color: var(--color-focus-border);
+}
+
+.epg-grid__program[data-width-tier="narrow"] .epg-cell-meta {
+  display: none;
+}
+
+.epg-cell-meta {
+  color: var(--color-text-subtle);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.epg-cell-progress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.epg-cell-progress::before {
+  display: block;
+  width: var(--epg-cell-progress);
+  height: 100%;
+  background: var(--color-focus);
+  content: "";
+}
+
+.epg-grid__program[data-selected-program="true"] {
+  border-color: var(--color-focus);
+  background: var(--color-inverse-bg);
+  color: var(--color-inverse-text);
+}
+
+.epg-grid__program[data-selected-program="true"] span {
+  color: var(--color-selected-muted);
+}
+
+.epg-grid__row[data-selected-channel="true"] .epg-grid__channel {
+  border-color: var(--color-focus-border-strong);
+  background: var(--color-focus-surface);
+}

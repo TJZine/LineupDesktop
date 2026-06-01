@@ -18,12 +18,33 @@ const STATIC_SCREEN_MARKUP = `
           <div class="overlay-progress" data-overlay-progress role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
         </section>
         <section class="player-overlay osd-overlay" data-overlay="playerOsd" aria-label="Player controls">
-          <button type="button" data-overlay-action="openMiniGuide" data-focus-id="overlay-mini-guide">Mini guide</button>
-          <button type="button" data-overlay-action="togglePlaybackOptions" data-focus-id="overlay-playback-options">Options</button>
-          <button type="button" data-overlay-action="channelDigit1" data-focus-id="overlay-channel-1">1</button>
-          <button type="button" data-overlay-action="channelDigit0" data-focus-id="overlay-channel-0">0</button>
-          <button type="button" data-overlay-action="channelDigit4" data-focus-id="overlay-channel-4">4</button>
-          <button type="button" data-overlay-action="closeTopOverlay" data-focus-id="overlay-close">Close</button>
+          <div class="player-osd__content">
+            <div class="player-osd__status" data-osd-status role="status"></div>
+            <div class="player-osd__title" data-osd-title></div>
+            <div class="player-osd__subtitle" data-osd-subtitle></div>
+            <div class="player-osd__pills">
+              <span data-osd-audio></span>
+              <span data-osd-subtitles></span>
+            </div>
+            <div class="player-osd__up-next" data-osd-up-next></div>
+          </div>
+          <div class="player-osd__actions">
+            <button type="button" data-overlay-action="openMiniGuide" data-focus-id="overlay-mini-guide">Mini guide</button>
+            <button type="button" data-overlay-action="togglePlaybackOptions" data-focus-id="overlay-playback-options">Options</button>
+            <button type="button" data-overlay-action="channelDigit1" data-focus-id="overlay-channel-1">1</button>
+            <button type="button" data-overlay-action="channelDigit0" data-focus-id="overlay-channel-0">0</button>
+            <button type="button" data-overlay-action="channelDigit4" data-focus-id="overlay-channel-4">4</button>
+            <button type="button" data-overlay-action="closeTopOverlay" data-focus-id="overlay-close">Close</button>
+          </div>
+          <div class="player-osd__meta">
+            <span data-osd-timecode></span>
+            <span data-osd-ends-at></span>
+            <span data-osd-buffer-text></span>
+          </div>
+          <div class="player-osd__bar" aria-hidden="true">
+            <span class="player-osd__bar-buffer" data-osd-buffer-bar></span>
+            <span class="player-osd__bar-played" data-osd-played-bar></span>
+          </div>
         </section>
         <section class="player-overlay mini-guide" data-overlay="miniGuide" aria-label="Mini guide" hidden>
           <div class="mini-guide__controls">
@@ -71,15 +92,15 @@ const STATIC_SCREEN_MARKUP = `
       </div>
   </div>
   <section id="screen-player" class="screen screen--active" data-screen="player" data-style-surface="screen" aria-labelledby="screen-player-title">
-    <div class="screen__content">
+      <div class="screen__content">
       <div class="screen-shell-state" data-shell-state="active">
-        <span>Player preview</span>
-        <strong data-screen-state-text="player">Player controls are available for the local preview surface.</strong>
+        <span>Player</span>
+        <strong data-screen-state-text="player">Player controls are available for the current program.</strong>
       </div>
       <p class="screen__kicker" data-workflow-kicker="player">Now playing</p>
       <h2 id="screen-player-title">Player</h2>
       <p data-workflow-primary="player">Ready for playback.</p>
-      <p data-workflow-secondary="player">Playback preview is local-only.</p>
+      <p data-workflow-secondary="player">Playback controls, guide access, and route chrome stay visible over the player.</p>
       <dl class="program-summary">
         <div><dt>Channel</dt><dd data-current-channel></dd></div>
         <div><dt>Program</dt><dd data-current-program></dd></div>
@@ -96,13 +117,13 @@ const STATIC_SCREEN_MARKUP = `
   <section id="screen-guide" class="screen" data-screen="guide" data-style-surface="screen" aria-labelledby="screen-guide-title" hidden>
     <div class="screen__content">
       <div class="screen-shell-state" data-shell-state="active">
-        <span>Guide preview</span>
-        <strong data-screen-state-text="guide">Guide rows show the current local lineup preview.</strong>
+        <span>Guide</span>
+        <strong data-screen-state-text="guide">Guide rows show the current lineup.</strong>
       </div>
       <p class="screen__kicker" data-workflow-kicker="guide">Guide</p>
       <h2 id="screen-guide-title">Guide</h2>
       <p data-workflow-primary="guide">Tonight at a glance.</p>
-      <p data-workflow-secondary="guide">Lineup preview.</p>
+      <p data-workflow-secondary="guide">Lineup guide.</p>
       <div class="guide-controls" aria-label="Guide shell controls">
         <button type="button" data-epg-action="previousWindow" data-focus-id="guide-window-previous">Earlier</button>
         <button type="button" data-epg-action="nextWindow" data-focus-id="guide-window-next">Later</button>
@@ -130,13 +151,13 @@ const STATIC_SCREEN_MARKUP = `
   <section id="screen-settings" class="screen" data-screen="settings" data-style-surface="screen" aria-labelledby="screen-settings-title" hidden>
     <div class="screen__content">
       <div class="screen-shell-state" data-shell-state="active">
-        <span>Settings preview</span>
-        <strong data-screen-state-text="settings">Preference changes apply to this local preview session only.</strong>
+        <span>Settings</span>
+        <strong data-screen-state-text="settings">Preference changes apply to this app session.</strong>
       </div>
       <p class="screen__kicker" data-workflow-kicker="settings">Settings</p>
       <h2 id="screen-settings-title">Settings</h2>
       <p data-workflow-primary="settings">Desktop preferences.</p>
-      <p data-workflow-secondary="settings">Desktop local preview.</p>
+      <p data-workflow-secondary="settings">Desktop preferences.</p>
       <dl class="settings-summary">
         <div><dt>Source</dt><dd data-settings-source></dd></div>
         <div><dt>Channels</dt><dd data-settings-channels></dd></div>

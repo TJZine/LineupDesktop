@@ -120,11 +120,102 @@
 .osd-overlay {
   right: var(--space-11);
   bottom: var(--space-11);
+  display: grid;
+  gap: var(--space-3);
+  width: min(720px, calc(100% - (var(--space-11) * 2)));
+  padding: var(--space-5);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-panel);
+  background: rgba(6, 9, 13, 0.86);
+}
+
+.player-osd__content {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-1) var(--space-4);
+  min-width: 0;
+}
+
+.player-osd__status {
+  grid-row: 1 / span 3;
+  align-self: center;
+  width: 44px;
+  border-radius: var(--radius-control);
+  background: var(--color-inverse-bg);
+  color: var(--color-inverse-text);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 34px;
+  text-align: center;
+}
+
+.player-osd__title,
+.player-osd__subtitle,
+.player-osd__up-next,
+.player-osd__meta span,
+.player-osd__pills span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-osd__title {
+  font-size: 20px;
+  font-weight: 850;
+}
+
+.player-osd__subtitle,
+.player-osd__up-next,
+.player-osd__meta {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.player-osd__pills,
+.player-osd__actions,
+.player-osd__meta {
   display: flex;
   flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.player-osd__pills span {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.player-osd__actions {
   justify-content: end;
-  gap: var(--space-3);
-  width: min(560px, calc(100% - (var(--space-11) * 2)));
+}
+
+.player-osd__bar {
+  position: relative;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.player-osd__bar span {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+}
+
+.player-osd__bar-buffer {
+  --osd-buffer: 0%;
+  width: var(--osd-buffer);
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.player-osd__bar-played {
+  --osd-played: 0%;
+  width: var(--osd-played);
+  background: var(--color-focus);
 }
 
 .mini-guide,
@@ -195,6 +286,24 @@
 
 .mini-guide__item[data-selected-channel="true"] p {
   color: var(--color-selected-muted);
+}
+
+.mini-guide__progress {
+  --mini-guide-progress: 0%;
+  display: block;
+  height: 3px;
+  margin-top: var(--space-2);
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.mini-guide__progress::before {
+  display: block;
+  width: var(--mini-guide-progress);
+  height: 100%;
+  background: var(--color-focus);
+  content: "";
 }
 
 .channel-number-overlay {

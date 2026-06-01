@@ -7,8 +7,10 @@ import {
   applyEpgAction,
   createEpgGuideView,
   createEpgState,
+  DEFAULT_EPG_PRESENTATION_SOURCE,
   type EpgActionId,
   type EpgGuideViewModel,
+  type EpgPresentationSource,
   type EpgState,
 } from './epg.js';
 import {
@@ -112,41 +114,8 @@ export interface WorkflowState {
   settingsDraft: SettingsDraftState;
   channelSetupDraft: ChannelSetupDraftState;
   epg: EpgState;
+  guidePresentation: EpgPresentationSource;
 }
-
-const DEMO_BASE_TIME_MS = Date.UTC(2026, 4, 12, 20, 0, 0);
-
-const CURRENT_PROGRAM = {
-  title: 'The Midnight Archive',
-  subtitle: 'Episode 4 - Signal Lost',
-  channelName: 'Liminal One',
-  startsAtMs: DEMO_BASE_TIME_MS,
-  endsAtMs: DEMO_BASE_TIME_MS + 3_600_000,
-} as const satisfies ProgramSummaryViewModel;
-
-const CHANNELS = [
-  {
-    id: 'channel-liminal-one',
-    number: '101',
-    name: 'Liminal One',
-    currentTitle: CURRENT_PROGRAM.title,
-    nextTitle: 'After Hours Cinema',
-  },
-  {
-    id: 'channel-vault',
-    number: '204',
-    name: 'The Vault',
-    currentTitle: 'Restored Feature',
-    nextTitle: 'Director Notes',
-  },
-  {
-    id: 'channel-weekend',
-    number: '310',
-    name: 'Weekend Queue',
-    currentTitle: 'Pilot Block',
-    nextTitle: 'Comfort Marathon',
-  },
-] as const satisfies readonly ChannelSummaryViewModel[];
 
 const ROUTE_ACTIONS = {
   player: [
@@ -154,13 +123,13 @@ const ROUTE_ACTIONS = {
       id: 'openGuide',
       label: 'Open guide',
       targetRoute: 'guide',
-      statusText: 'Guide opened from the player preview.',
+      statusText: 'Guide opened from the player.',
     },
     {
       id: 'openSettings',
       label: 'Settings',
       targetRoute: 'settings',
-      statusText: 'Settings opened from the player preview.',
+      statusText: 'Settings opened from the player.',
     },
   ],
   guide: [
@@ -168,7 +137,7 @@ const ROUTE_ACTIONS = {
       id: 'resumePlayer',
       label: 'Watch now',
       targetRoute: 'player',
-      statusText: 'Player preview focused on the highlighted program.',
+      statusText: 'Player focused on the highlighted program.',
     },
     {
       id: 'openChannelSetup',
@@ -188,7 +157,7 @@ const ROUTE_ACTIONS = {
       id: 'resumePlayer',
       label: 'Back to player',
       targetRoute: 'player',
-      statusText: 'Returned to player preview from settings.',
+      statusText: 'Returned to player from settings.',
     },
   ],
   channelSetup: [],
@@ -199,17 +168,17 @@ const ROUTE_COPY = {
     title: 'Player',
     kicker: 'Now playing',
     tone: 'ready',
-    primaryText: `${CURRENT_PROGRAM.title} is cued on ${CURRENT_PROGRAM.channelName}.`,
-    secondaryText: 'Player chrome, OSD, mini guide, badge, and options are available as local preview surfaces.',
-    defaultStatus: 'Player shell ready with renderer-safe preview data.',
+    primaryText: 'Current program is cued on the active channel.',
+    secondaryText: 'Player chrome, OSD, mini guide, badge, and options are available on the player route.',
+    defaultStatus: 'Player shell ready with renderer-safe data.',
   },
   guide: {
     title: 'Guide',
     kicker: 'Tonight',
     tone: 'ready',
-    primaryText: `${CHANNELS.length} preview channels are available in the guide shell.`,
+    primaryText: 'Channels are available in the guide shell.',
     secondaryText: 'Guide rows prefer channel number, name, and program text over category color cues.',
-    defaultStatus: 'Guide shell showing renderer-local lineup preview data.',
+    defaultStatus: 'Guide shell showing renderer-safe lineup data.',
   },
   settings: {
     title: 'Settings',
@@ -239,7 +208,10 @@ const ROUTE_COPY = {
   }
 >;
 
-export function createWorkflowState(initialRoute: AppRouteId = 'player'): WorkflowState {
+export function createWorkflowState(
+  initialRoute: AppRouteId = 'player',
+  guidePresentation: EpgPresentationSource = DEFAULT_EPG_PRESENTATION_SOURCE,
+): WorkflowState {
   return {
     routeState: {
       activeRoute: initialRoute,
@@ -249,7 +221,8 @@ export function createWorkflowState(initialRoute: AppRouteId = 'player'): Workfl
     lastActionRoute: null,
     settingsDraft: createSettingsDraftState(),
     channelSetupDraft: createChannelSetupDraftState(),
-    epg: createEpgState(),
+    epg: createEpgState(guidePresentation),
+    guidePresentation,
   };
 }
 
@@ -261,6 +234,7 @@ export function activateWorkflowRoute(state: WorkflowState, route: AppRouteId): 
     settingsDraft: state.settingsDraft,
     channelSetupDraft: state.channelSetupDraft,
     epg: state.epg,
+    guidePresentation: state.guidePresentation,
   };
 }
 
@@ -280,6 +254,7 @@ export function applyWorkflowAction(
     settingsDraft: state.settingsDraft,
     channelSetupDraft: state.channelSetupDraft,
     epg: state.epg,
+    guidePresentation: state.guidePresentation,
   };
 }
 
@@ -290,6 +265,8 @@ export function getRouteWorkflowView(
 ): RouteWorkflowViewModel {
   const route = state.routeState.activeRoute;
   const copy = ROUTE_COPY[route];
+  const currentProgram = createCurrentProgramSummary(state.guidePresentation);
+  const channels = createChannelSummaries(state.guidePresentation);
   const persistedSummary = channelRuntime?.summary ?? null;
   const persistedChannelCount = persistedSummary?.channelCount ?? 0;
   const selectedLibraryItemCount = persistedSummary?.channels.reduce(
@@ -307,18 +284,22 @@ export function getRouteWorkflowView(
     kicker: copy.kicker,
     statusText,
     tone: copy.tone,
-    primaryText: copy.primaryText,
+    primaryText: route === 'player'
+      ? `${currentProgram.title} is cued on ${currentProgram.channelName}.`
+      : route === 'guide'
+        ? `${String(channels.length)} channels are available in the guide shell.`
+        : copy.primaryText,
     secondaryText: copy.secondaryText,
-    currentProgram: CURRENT_PROGRAM,
-    channels: CHANNELS,
-    guide: createEpgGuideView(state.epg),
+    currentProgram,
+    channels,
+    guide: createEpgGuideView(state.epg, state.guidePresentation),
     settings: {
       libraryName: persistedSummary?.currentChannelName ?? 'No persisted channel library',
       channelCount: persistedChannelCount,
       playbackMode:
         state.settingsDraft.launchMode === 'windowed'
-          ? 'Windowed desktop preview'
-          : 'Fullscreen desktop preview',
+          ? 'Windowed desktop player'
+          : 'Fullscreen desktop player',
       setupState: channelRuntime?.pending
         ? 'Loading persisted status'
         : channelRuntime?.errorText ?? formatChannelSetupStatus(persistedSummary),
@@ -342,6 +323,27 @@ export function getRouteWorkflowView(
     ),
     actions: ROUTE_ACTIONS[route],
   };
+}
+
+function createCurrentProgramSummary(presentation: EpgPresentationSource): ProgramSummaryViewModel {
+  const channel = presentation.channels.find((candidate) => candidate.id === presentation.nowWatching.channelId);
+  return {
+    title: presentation.nowWatching.title,
+    subtitle: presentation.nowWatching.subtitle,
+    channelName: channel?.name ?? 'Channel',
+    startsAtMs: presentation.nowWatching.startsAtMs,
+    endsAtMs: presentation.nowWatching.endsAtMs,
+  };
+}
+
+function createChannelSummaries(presentation: EpgPresentationSource): readonly ChannelSummaryViewModel[] {
+  return presentation.channels.map((channel) => ({
+    id: channel.id,
+    number: channel.number,
+    name: channel.name,
+    currentTitle: channel.programs[0]?.title ?? 'No current program',
+    nextTitle: channel.programs[1]?.title ?? 'No upcoming program',
+  }));
 }
 
 function formatRecoveryDetail(
@@ -392,7 +394,7 @@ export function applyWorkflowEpgAction(
 ): WorkflowState {
   return {
     ...state,
-    epg: applyEpgAction(state.epg, actionId),
+    epg: applyEpgAction(state.epg, actionId, state.guidePresentation),
   };
 }
 

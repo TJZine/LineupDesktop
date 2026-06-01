@@ -78,6 +78,17 @@ export interface RendererDomBindings {
   overlayPlaybackSummaryElement: HTMLElement | null;
   overlayAudioOptionsElement: HTMLElement | null;
   overlaySubtitleOptionsElement: HTMLElement | null;
+  osdStatusElement: HTMLElement | null;
+  osdTitleElement: HTMLElement | null;
+  osdSubtitleElement: HTMLElement | null;
+  osdAudioElement: HTMLElement | null;
+  osdSubtitlesElement: HTMLElement | null;
+  osdUpNextElement: HTMLElement | null;
+  osdTimecodeElement: HTMLElement | null;
+  osdEndsAtElement: HTMLElement | null;
+  osdBufferTextElement: HTMLElement | null;
+  osdBufferBarElement: HTMLElement | null;
+  osdPlayedBarElement: HTMLElement | null;
 }
 
 export function queryRendererDom(documentRef: Document = document): RendererDomBindings {
@@ -198,6 +209,17 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     overlaySubtitleOptionsElement: documentRef.querySelector<HTMLElement>(
       '[data-overlay-subtitle-options]',
     ),
+    osdStatusElement: documentRef.querySelector<HTMLElement>('[data-osd-status]'),
+    osdTitleElement: documentRef.querySelector<HTMLElement>('[data-osd-title]'),
+    osdSubtitleElement: documentRef.querySelector<HTMLElement>('[data-osd-subtitle]'),
+    osdAudioElement: documentRef.querySelector<HTMLElement>('[data-osd-audio]'),
+    osdSubtitlesElement: documentRef.querySelector<HTMLElement>('[data-osd-subtitles]'),
+    osdUpNextElement: documentRef.querySelector<HTMLElement>('[data-osd-up-next]'),
+    osdTimecodeElement: documentRef.querySelector<HTMLElement>('[data-osd-timecode]'),
+    osdEndsAtElement: documentRef.querySelector<HTMLElement>('[data-osd-ends-at]'),
+    osdBufferTextElement: documentRef.querySelector<HTMLElement>('[data-osd-buffer-text]'),
+    osdBufferBarElement: documentRef.querySelector<HTMLElement>('[data-osd-buffer-bar]'),
+    osdPlayedBarElement: documentRef.querySelector<HTMLElement>('[data-osd-played-bar]'),
   };
 }
 

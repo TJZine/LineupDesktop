@@ -14,6 +14,9 @@ export interface OverlayChannelViewModel {
   name: string;
   currentTitle: string;
   nextTitle: string;
+  nowStartLabel: string;
+  nowProgressPercent: number;
+  buildStrategy: 'movies' | 'shows' | 'mixed';
 }
 
 export interface NowPlayingOverlayViewModel {
@@ -26,6 +29,30 @@ export interface NowPlayingOverlayViewModel {
   positionLabel: string;
   durationLabel: string;
   progressPercent: number;
+  description: string;
+  badges: readonly string[];
+  metaLines: readonly string[];
+  playbackSummary: string;
+  upNextText: string;
+}
+
+export interface PlayerOsdViewModel {
+  statusLabel: 'PLAYING' | 'PAUSED' | 'BUFFERING' | 'STOPPED' | 'ERROR';
+  title: string;
+  subtitle: string;
+  timecode: string;
+  endsAtText: string;
+  bufferedPercent: number;
+  playedPercent: number;
+  audioLabel: string;
+  subtitleLabel: string;
+  upNextText: string;
+  bufferText: string;
+  actionIds: {
+    subtitles: string;
+    sleep: string;
+    audio: string;
+  };
 }
 
 export interface PlaybackOptionTrackViewModel {
@@ -50,6 +77,7 @@ export interface PlaybackOptionsViewModel {
 
 export interface PlayerOverlayState {
   stack: readonly PlayerOverlayId[];
+  currentChannelId: string;
   miniGuideSelectedChannelId: string;
   channelNumberBuffer: string;
   channelNumberUpdatedAtMs: number | null;
@@ -60,12 +88,18 @@ export interface PlayerOverlayState {
   playbackRate: number;
 }
 
+export interface PlayerOverlayPresentationSource {
+  channels: readonly OverlayChannelViewModel[];
+  playerSnapshot: PlayerSnapshot;
+}
+
 export interface PlayerOverlayViewModel {
   stack: readonly PlayerOverlayId[];
   visibleOverlays: Readonly<Record<PlayerOverlayId, boolean>>;
   activeOverlayId: PlayerOverlayId | null;
   activeFocusId: string | null;
   nowPlaying: NowPlayingOverlayViewModel;
+  playerOsd: PlayerOsdViewModel;
   miniGuideChannels: readonly (OverlayChannelViewModel & { selected: boolean })[];
   selectedMiniGuideChannel: OverlayChannelViewModel;
   channelBadge: OverlayChannelViewModel;
@@ -83,13 +117,16 @@ export const PLAYER_OVERLAY_IDS = [
   'playbackOptions',
 ] as const satisfies readonly PlayerOverlayId[];
 
-export const FAKE_OVERLAY_CHANNELS = [
+const DEFAULT_OVERLAY_CHANNELS = [
   {
     id: 'channel-liminal-one',
     number: '101',
     name: 'Liminal One',
     currentTitle: 'The Midnight Archive',
     nextTitle: 'After Hours Cinema',
+    nowStartLabel: '8:30 PM',
+    nowProgressPercent: 25,
+    buildStrategy: 'shows',
   },
   {
     id: 'channel-vault',
@@ -97,6 +134,9 @@ export const FAKE_OVERLAY_CHANNELS = [
     name: 'The Vault',
     currentTitle: 'Restored Feature',
     nextTitle: 'Director Notes',
+    nowStartLabel: '8:00 PM',
+    nowProgressPercent: 50,
+    buildStrategy: 'movies',
   },
   {
     id: 'channel-weekend',
@@ -104,6 +144,9 @@ export const FAKE_OVERLAY_CHANNELS = [
     name: 'Weekend Queue With A Long Channel Name',
     currentTitle: 'Pilot Block',
     nextTitle: 'Comfort Marathon',
+    nowStartLabel: '8:00 PM',
+    nowProgressPercent: 10,
+    buildStrategy: 'shows',
   },
   {
     id: 'channel-docs',
@@ -111,6 +154,9 @@ export const FAKE_OVERLAY_CHANNELS = [
     name: 'Documentary Shelf',
     currentTitle: 'Field Notes',
     nextTitle: 'Archive Interview',
+    nowStartLabel: '8:00 PM',
+    nowProgressPercent: 65,
+    buildStrategy: 'mixed',
   },
   {
     id: 'channel-late',
@@ -118,8 +164,16 @@ export const FAKE_OVERLAY_CHANNELS = [
     name: 'Late Signal',
     currentTitle: 'HLS Session Sample',
     nextTitle: 'Subtitle Burn-in Demo',
+    nowStartLabel: '8:00 PM',
+    nowProgressPercent: 40,
+    buildStrategy: 'movies',
   },
 ] as const satisfies readonly OverlayChannelViewModel[];
+
+export const DEFAULT_PLAYER_OVERLAY_PRESENTATION = {
+  channels: DEFAULT_OVERLAY_CHANNELS,
+  playerSnapshot: createRendererSafePlayerSnapshot(),
+} as const satisfies PlayerOverlayPresentationSource;
 
 export const PLAYBACK_AUDIO_TRACKS = [
   { id: 'audio-main', label: 'Main stereo', meta: 'Direct Play', available: true },
@@ -136,10 +190,15 @@ export const PLAYBACK_SUBTITLE_TRACKS = [
 
 export function createPlayerOverlayView(
   state: PlayerOverlayState,
-  snapshot: PlayerSnapshot = createFakePlayerSnapshot(),
+  presentation: PlayerOverlayPresentationSource = DEFAULT_PLAYER_OVERLAY_PRESENTATION,
 ): PlayerOverlayViewModel {
+  const { channels, playerSnapshot } = presentation;
   const selectedMiniGuideChannel =
-    findChannel(state.miniGuideSelectedChannelId) ?? FAKE_OVERLAY_CHANNELS[0];
+    findChannel(state.miniGuideSelectedChannelId, channels) ?? channels[0];
+  const currentChannel = findChannel(state.currentChannelId, channels) ?? channels[0];
+  if (selectedMiniGuideChannel === undefined || currentChannel === undefined) {
+    throw new Error('Player overlay presentation requires at least one channel');
+  }
   const visibleOverlays = Object.fromEntries(
     PLAYER_OVERLAY_IDS.map((overlayId) => [overlayId, state.stack.includes(overlayId)]),
   ) as Record<PlayerOverlayId, boolean>;
@@ -149,13 +208,14 @@ export function createPlayerOverlayView(
     visibleOverlays,
     activeOverlayId: activeOverlayId(state),
     activeFocusId: activeFocusId(state),
-    nowPlaying: createNowPlayingSummary(snapshot, selectedMiniGuideChannel),
-    miniGuideChannels: FAKE_OVERLAY_CHANNELS.map((channel) => ({
+    nowPlaying: createNowPlayingSummary(playerSnapshot, currentChannel),
+    playerOsd: createPlayerOsdSummary(state, playerSnapshot, currentChannel),
+    miniGuideChannels: channels.map((channel) => ({
       ...channel,
       selected: channel.id === selectedMiniGuideChannel.id,
     })),
     selectedMiniGuideChannel,
-    channelBadge: selectedMiniGuideChannel,
+    channelBadge: currentChannel,
     channelNumberBuffer: state.channelNumberBuffer,
     channelNumberDisplay:
       state.channelNumberBuffer.length === 0 ? '---' : state.channelNumberBuffer.padEnd(3, '-'),
@@ -163,18 +223,18 @@ export function createPlayerOverlayView(
   };
 }
 
-export function createFakePlayerSnapshot(): PlayerSnapshot {
+export function createRendererSafePlayerSnapshot(): PlayerSnapshot {
   return {
-    requestId: 'renderer-fake-player',
+    requestId: 'renderer-presentation-player',
     status: 'playing',
     media: {
-      id: 'renderer-fake-media',
+      id: 'renderer-presentation-media',
       title: 'The Midnight Archive',
       subtitle: 'Episode 4 - Signal Lost',
       durationMs: 3_600_000,
-      container: 'local-preview',
+      container: 'renderer-safe-presentation',
     },
-    capabilityProfileId: 'renderer-local-preview',
+    capabilityProfileId: 'renderer-presentation',
     positionMs: 12 * 60 * 1000,
     durationMs: 3_600_000,
     bufferedRanges: [{ startMs: 0, endMs: 18 * 60 * 1000 }],
@@ -221,8 +281,8 @@ export function createFakePlayerSnapshot(): PlayerSnapshot {
   };
 }
 
-export function getFakeOverlayChannels(): readonly OverlayChannelViewModel[] {
-  return FAKE_OVERLAY_CHANNELS;
+export function getDefaultOverlayPresentationChannels(): readonly OverlayChannelViewModel[] {
+  return DEFAULT_OVERLAY_CHANNELS;
 }
 
 export function activeOverlayId(state: PlayerOverlayState): PlayerOverlayId | null {
@@ -260,6 +320,45 @@ function createNowPlayingSummary(
     positionLabel: formatDuration(positionMs),
     durationLabel: durationMs <= 0 ? '--:--' : formatDuration(durationMs),
     progressPercent: durationMs <= 0 ? 0 : Math.round((positionMs / durationMs) * 100),
+    description: 'Renderer-safe now-playing details are visible without artwork URLs or private playback descriptors.',
+    badges: ['TV-14', '1080p', 'Direct Play'],
+    metaLines: [channel.name, snapshot.media?.container ?? 'Desktop playback', statusLabel(snapshot.status)],
+    playbackSummary: 'Direct Play / Direct Stream / HLS Session',
+    upNextText: `Up next: ${channel.nextTitle}`,
+  };
+}
+
+function createPlayerOsdSummary(
+  state: PlayerOverlayState,
+  snapshot: PlayerSnapshot,
+  channel: OverlayChannelViewModel,
+): PlayerOsdViewModel {
+  const nowPlaying = createNowPlayingSummary(snapshot, channel);
+  return {
+    statusLabel: snapshot.status === 'buffering'
+      ? 'BUFFERING'
+      : snapshot.status === 'error'
+        ? 'ERROR'
+        : snapshot.playing
+          ? 'PLAYING'
+          : snapshot.status === 'paused'
+            ? 'PAUSED'
+            : 'STOPPED',
+    title: nowPlaying.title,
+    subtitle: nowPlaying.subtitle,
+    timecode: `${nowPlaying.positionLabel} / ${nowPlaying.durationLabel}`,
+    endsAtText: 'Ends 9:30 PM',
+    bufferedPercent: Math.max(nowPlaying.progressPercent, 32),
+    playedPercent: nowPlaying.progressPercent,
+    audioLabel: createPlaybackOptionsView(state).selectedAudioLabel,
+    subtitleLabel: createPlaybackOptionsView(state).selectedSubtitleLabel,
+    upNextText: `Next on ${channel.number}: ${channel.nextTitle}`,
+    bufferText: snapshot.status === 'buffering' ? 'Buffering' : '',
+    actionIds: {
+      subtitles: 'overlay-subtitle-cycle',
+      sleep: 'overlay-close',
+      audio: 'overlay-audio-cycle',
+    },
   };
 }
 
@@ -294,8 +393,11 @@ function createPlaybackOptionsView(state: PlayerOverlayState): PlaybackOptionsVi
   };
 }
 
-function findChannel(channelId: string): OverlayChannelViewModel | undefined {
-  return FAKE_OVERLAY_CHANNELS.find((channel) => channel.id === channelId);
+function findChannel(
+  channelId: string,
+  channels: readonly OverlayChannelViewModel[],
+): OverlayChannelViewModel | undefined {
+  return channels.find((channel) => channel.id === channelId);
 }
 
 function formatDuration(valueMs: number): string {
