@@ -39,7 +39,10 @@ export interface RendererDomBindings {
   channelSetupBlocksElement: HTMLElement | null;
   setupStepsElement: HTMLElement | null;
   channelDraftListElement: HTMLElement | null;
+  channelSetupStrategyElement: HTMLElement | null;
+  channelSetupReviewElement: HTMLElement | null;
   setupValidationElement: HTMLElement | null;
+  channelSetupResultElement: HTMLElement | null;
   channelSetupFixtureStatusElement: HTMLElement | null;
   plexPanelElement: HTMLElement | null;
   plexActionButtons: HTMLButtonElement[];
@@ -126,7 +129,10 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     ),
     setupStepsElement: documentRef.querySelector<HTMLElement>('[data-channel-review-steps]'),
     channelDraftListElement: documentRef.querySelector<HTMLElement>('[data-channel-review-list]'),
+    channelSetupStrategyElement: documentRef.querySelector<HTMLElement>('[data-channel-strategy-options]'),
+    channelSetupReviewElement: documentRef.querySelector<HTMLElement>('[data-channel-review-impact]'),
     setupValidationElement: documentRef.querySelector<HTMLElement>('[data-channel-review-validation]'),
+    channelSetupResultElement: documentRef.querySelector<HTMLElement>('[data-channel-setup-result]'),
     channelSetupFixtureStatusElement: documentRef.querySelector<HTMLElement>(
       '[data-channel-setup-fixture-status]',
     ),
@@ -282,6 +288,9 @@ export function readChannelSetupActionId(value: string | undefined): ChannelSetu
     case 'toggleFeaturedChannel':
     case 'addDraftChannel':
     case 'resetDraftLineup':
+    case 'selectRecentlyAddedSource':
+    case 'selectAppendBuildMode':
+    case 'selectReplaceBuildMode':
       return value;
     default:
       return null;

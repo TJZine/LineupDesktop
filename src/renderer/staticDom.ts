@@ -210,7 +210,7 @@ const STATIC_SCREEN_MARKUP = `
         </section>
         <section class="plex-runtime__stage" aria-labelledby="plex-stage-library">
           <h4 id="plex-stage-library">3. Browse library</h4>
-          <p class="plex-runtime__stage-copy">Choose a library, browse items, or search before previewing metadata.</p>
+          <p class="plex-runtime__stage-copy">Choose a movie or show library section. Media items below are for metadata preview only.</p>
           <div class="plex-runtime__controls" aria-label="Plex library controls">
             <button type="button" data-plex-action="listLibrarySections" data-focus-id="plex-list-sections">Open libraries</button>
             <button type="button" data-plex-action="clearSelectedSection" data-focus-id="plex-clear-section">Change library</button>
@@ -223,18 +223,12 @@ const STATIC_SCREEN_MARKUP = `
           <div class="plex-runtime__list" data-plex-sections></div>
           <div class="plex-runtime__list" data-plex-items></div>
         </section>
-        <section class="plex-runtime__stage" aria-labelledby="plex-stage-metadata">
-          <h4 id="plex-stage-metadata">4. Preview item</h4>
-          <p class="plex-runtime__stage-copy">Review the selected media summary before continuing setup later.</p>
-          <button type="button" data-plex-action="clearMetadata" data-focus-id="plex-clear-metadata">Close preview</button>
-          <div class="plex-runtime__metadata" data-plex-metadata></div>
-        </section>
       </section>
       <section class="channel-setup-commit" aria-labelledby="channel-setup-commit-title">
         <header>
           <div>
             <p class="screen__kicker">Channel setup</p>
-            <h3 id="channel-setup-commit-title">Review and save channels</h3>
+            <h3 id="channel-setup-commit-title">Build channels</h3>
           </div>
           <strong data-channel-setup-fixture-status></strong>
         </header>
@@ -244,21 +238,36 @@ const STATIC_SCREEN_MARKUP = `
           <div><dt>Enabled channels</dt><dd data-channel-setup-enabled></dd></div>
           <div><dt>Blocks</dt><dd data-channel-setup-blocks></dd></div>
         </dl>
-        <div class="plex-runtime__controls" aria-label="Channel setup commit controls">
-          <button type="button" data-channel-commit-action="append" data-focus-id="channel-append">Append selected library</button>
-          <button type="button" data-channel-commit-action="replace" data-focus-id="channel-replace">Replace lineup</button>
-          <button type="button" data-channel-commit-action="confirmReplace" data-focus-id="channel-confirm-replace">Confirm replace</button>
-        </div>
         <div class="setup-review">
           <section>
-            <h4>Compact guide order</h4>
+            <h4>1. Library source</h4>
             <div class="channel-draft-list" data-channel-review-list></div>
           </section>
           <section>
-            <h4>Guarded review</h4>
+            <h4>2. Strategy</h4>
+            <div class="setup-list" data-channel-strategy-options></div>
+          </section>
+          <section>
+            <h4>3. Review</h4>
+            <div class="setup-preview-rows" data-channel-review-impact></div>
+          </section>
+          <section>
+            <h4>4. Result</h4>
             <div class="setup-validation" data-channel-review-validation></div>
+            <div class="setup-result" data-channel-setup-result></div>
           </section>
         </div>
+        <div class="plex-runtime__controls" aria-label="Channel setup commit controls">
+          <button type="button" data-channel-commit-action="append" data-focus-id="channel-append">Confirm & Build</button>
+          <button type="button" data-channel-commit-action="replace" data-focus-id="channel-replace">Review replacement</button>
+          <button type="button" data-channel-commit-action="confirmReplace" data-focus-id="channel-confirm-replace">Confirm & Replace</button>
+        </div>
+      </section>
+      <section class="plex-runtime__stage plex-runtime__stage--secondary" aria-labelledby="plex-stage-metadata">
+        <h4 id="plex-stage-metadata">Optional media preview</h4>
+        <p class="plex-runtime__stage-copy">Review a selected media summary only if needed. Channel creation uses the selected library section.</p>
+        <button type="button" data-plex-action="clearMetadata" data-focus-id="plex-clear-metadata">Close preview</button>
+        <div class="plex-runtime__metadata" data-plex-metadata></div>
       </section>
     </div>
   </section>

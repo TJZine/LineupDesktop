@@ -1,65 +1,18 @@
 import type { ShellStatusEvent } from '../contracts/shell.js';
-import {
-  queryRendererDom,
-  readChannelCommitActionId,
-  readChannelSetupActionId,
-  readEpgActionId,
-  readOverlayActionId,
-  readPlexRuntimeActionId,
-  readRouteActionId,
-  readRouteId,
-  readSettingsActionId,
-} from './domBindings.js';
-import {
-  clickFocusedRendererElement,
-  focusRendererTarget,
-  moveRendererFocus,
-  renderRendererFocus,
-  syncRendererFocusTargets,
-} from './focusDom.js';
-import {
-  createDesktopKeyboardInputListener,
-  startDesktopGamepadRuntime,
-} from './desktopInput.js';
+import { queryRendererDom, readChannelCommitActionId, readChannelSetupActionId, readEpgActionId, readOverlayActionId, readPlexRuntimeActionId, readRouteActionId, readRouteId, readSettingsActionId } from './domBindings.js';
+import { clickFocusedRendererElement, focusRendererTarget, moveRendererFocus, renderRendererFocus, syncRendererFocusTargets } from './focusDom.js';
+import { createDesktopKeyboardInputListener, startDesktopGamepadRuntime } from './desktopInput.js';
 import { createDesktopCursorRuntime } from './desktopCursor.js';
-import {
-  FocusRegistry,
-  type AppRouteId,
-  type DesktopInputButton,
-  type FocusState,
-} from './navigation.js';
-import {
-  applyPlayerOverlayAction,
-  createFakePlayerSnapshot,
-  createPlayerOverlayView,
-  createPlayerOverlayState,
-  resolvePlayerOverlayFocusId,
-  type PlayerOverlayActionId,
-} from './overlays.js';
+import { FocusRegistry, type AppRouteId, type DesktopInputButton, type FocusState } from './navigation.js';
+import { applyPlayerOverlayAction, createFakePlayerSnapshot, createPlayerOverlayView, createPlayerOverlayState, resolvePlayerOverlayFocusId, type PlayerOverlayActionId } from './overlays.js';
 import { renderRouteDom, renderWorkflowDom } from './routeDom.js';
 import { mountStaticRendererDom } from './staticDom.js';
 import { applySupportBundleExportResult } from './supportBundleExport.js';
 import { createPlexRuntimeController } from './plexRuntimeActions.js';
+import { resolveChannelSetupLiveSelection } from './channelSetup/liveSelection.js';
 import { createChannelRuntimeController } from './channelRuntimeActions.js';
-import {
-  readPlexHomeUserId,
-  readPlexRatingKey,
-  readPlexSectionId,
-  readPlexServerId,
-  renderPlexRuntimeDom,
-} from './plexRuntimeDom.js';
-import {
-  activateWorkflowRoute,
-  applyWorkflowAction,
-  applyWorkflowChannelSetupAction,
-  applyWorkflowEpgAction,
-  applyWorkflowSettingsAction,
-  createWorkflowState,
-  type ChannelSetupActionId,
-  type EpgActionId,
-  type RouteWorkflowActionId,
-  type SettingsActionId,
-} from './workflow.js';
+import { readPlexHomeUserId, readPlexRatingKey, readPlexSectionId, readPlexServerId, renderPlexRuntimeDom } from './plexRuntimeDom.js';
+import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowChannelSetupAction, applyWorkflowEpgAction, applyWorkflowSettingsAction, createWorkflowState, type ChannelSetupActionId, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
 
 mountStaticRendererDom();
 
@@ -143,6 +96,17 @@ for (const button of dom.setupActionButtons) {
   });
 }
 
+dom.channelSetupStrategyElement?.addEventListener('click', (event) => {
+  if (!(event.target instanceof HTMLElement)) {
+    return;
+  }
+  const button = event.target.closest<HTMLButtonElement>('[data-setup-action]');
+  const action = readChannelSetupActionId(button?.dataset.setupAction);
+  if (action !== null) {
+    applyChannelSetupAction(action);
+  }
+});
+
 for (const button of dom.channelCommitButtons) {
   button.addEventListener('click', () => {
     const action = readChannelCommitActionId(button.dataset.channelCommitAction);
@@ -201,10 +165,13 @@ dom.plexPanelElement?.addEventListener('click', (event) => {
   const ratingKey = itemButton === null ? null : readPlexRatingKey(itemButton);
 
   if (homeUserId !== null) {
+    clearChannelSetupActionStateForSourceChange();
     void plexController.switchHomeUser(homeUserId);
   } else if (serverId !== null) {
+    clearChannelSetupActionStateForSourceChange();
     void plexController.selectServer(serverId);
   } else if (sectionId !== null) {
+    clearChannelSetupActionStateForSourceChange();
     plexController.setSelectedSection(sectionId);
     void plexController.listLibraryItems(sectionId);
   } else if (ratingKey !== null) {
@@ -259,7 +226,7 @@ async function handleDesktopInput(input: DesktopInputButton): Promise<void> {
       clickFocusedRendererElement(focusState, dom);
       return;
     case 'back':
-      if (workflowState.routeState.activeRoute === 'channelSetup' && await plexController.handleBack()) {
+      if (workflowState.routeState.activeRoute === 'channelSetup' && await handlePlexBack()) {
         renderApp();
         scrollFocusedSetupControlIntoView();
         return;
@@ -317,6 +284,8 @@ async function applyChannelCommitAction(action: ReturnType<typeof readChannelCom
   const plexState = plexController.getState();
   const sectionId = resolveLiveSelectedPlexSectionId(plexState);
   if (sectionId === null) {
+    channelController.markBlocked('Choose a movie or show library section before saving channels. Selecting an individual media item only opens metadata preview.');
+    renderApp();
     return;
   }
   await channelController.commit({
@@ -386,6 +355,7 @@ async function applyPlexRuntimeAction(action: ReturnType<typeof readPlexRuntimeA
       await plexController.getHomeUsers();
       return;
     case 'restoreSelectedServer':
+      clearChannelSetupActionStateForSourceChange();
       await plexController.restoreSelectedServer();
       return;
     case 'refreshServers':
@@ -410,17 +380,42 @@ async function applyPlexRuntimeAction(action: ReturnType<typeof readPlexRuntimeA
       plexController.clearItems();
       return;
     case 'clearSelectedSection':
+      clearChannelSetupActionStateForSourceChange();
       plexController.clearSelectedSection();
       return;
     case 'clearSelectedServer':
+      clearChannelSetupActionStateForSourceChange();
       plexController.clearSelectedServer();
       return;
     case 'clearPinSubflow':
+      clearChannelSetupActionStateForSourceChange();
       await plexController.clearPinSubflow();
       return;
     case null:
       return;
   }
+}
+
+async function handlePlexBack(): Promise<boolean> {
+  const before = readLiveSetupSourceSignature();
+  const handled = await plexController.handleBack();
+  if (handled && before !== readLiveSetupSourceSignature()) {
+    clearChannelSetupActionStateForSourceChange();
+  }
+  return handled;
+}
+
+function clearChannelSetupActionStateForSourceChange(): void {
+  channelController.clearActionState();
+}
+
+function readLiveSetupSourceSignature(): string {
+  const state = plexController.getState();
+  return [
+    state.snapshot?.auth.profile?.accountId ?? '',
+    state.selectedServerId ?? '',
+    state.selectedSectionId ?? '',
+  ].join('|');
 }
 
 function cleanupPlexRuntimeForRouteChange(previousRoute: AppRouteId, nextRoute: AppRouteId): void {
@@ -448,14 +443,15 @@ function cleanupPlexRuntime(reason: 'beforeunload' | 'route-change'): void {
 
 function renderApp(): void {
   const plexState = plexController.getState();
-  renderRouteDom(workflowState, dom, channelController.getState());
+  const liveSelection = resolveChannelSetupLiveSelection(plexState);
+  renderRouteDom(workflowState, dom, channelController.getState(), liveSelection);
   renderWorkflowDom(
     workflowState,
     overlayState,
     playerSnapshot,
     dom,
     channelController.getState(),
-    resolveLiveSelectedPlexSectionId(plexState) !== null,
+    liveSelection,
   );
   renderPlexRuntimeDom(plexState, dom);
   syncRendererFocusTargets(focusRegistry, dom);
@@ -487,13 +483,5 @@ function scrollFocusedSetupControlIntoView(): void {
 function resolveLiveSelectedPlexSectionId(
   plexState: ReturnType<typeof plexController.getState>,
 ): string | null {
-  const sectionId = plexState.selectedSectionId;
-  if (sectionId === null) {
-    return null;
-  }
-  const section = plexState.snapshot?.library.sections.find((candidate) => (
-    candidate.id === sectionId &&
-    (candidate.type === 'movie' || candidate.type === 'show')
-  ));
-  return section === undefined ? null : sectionId;
+  return resolveChannelSetupLiveSelection(plexState)?.id ?? null;
 }

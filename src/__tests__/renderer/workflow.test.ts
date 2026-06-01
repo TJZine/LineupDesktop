@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 
 import { containsPlexForbiddenRendererField } from '../../contracts/plex.js';
 import {
+  channelSetupFailure,
+  channelSetupSuccess,
+  type ChannelSetupIpcResult,
+  type ChannelSetupSummary,
+} from '../../contracts/channel.js';
+import {
   activateWorkflowRoute,
   applyWorkflowChannelSetupAction,
   applyWorkflowEpgAction,
@@ -13,7 +19,11 @@ import {
   findRouteAction,
   getRouteWorkflowView,
 } from '../../renderer/workflow.js';
-import type { ChannelRuntimeRendererState } from '../../renderer/channelRuntimeState.js';
+import { createChannelRuntimeController } from '../../renderer/channelRuntimeActions.js';
+import {
+  sanitizeChannelRuntimeError,
+  type ChannelRuntimeRendererState,
+} from '../../renderer/channelRuntimeState.js';
 
 test('workflow state starts on the player route with fake program context', () => {
   const state = createWorkflowState();
@@ -192,8 +202,9 @@ test('settings surface uses persisted channel setup status when available', () =
   assert.equal(view.settings.channelCount, 2);
   assert.equal(view.settings.setupState, 'Recovered');
   assert.equal(view.settings.recoveryDetail, '2 persisted channels; Current channel 204.');
-  assert.equal(setupView.channelSetupSummary.enabledChannelCount, 2);
-  assert.equal(setupView.channelSetupSummary.totalBlockCount, 20);
+  assert.equal(setupView.channelSetupSummary.sourceName, 'No library selected');
+  assert.equal(setupView.channelSetupSummary.enabledChannelCount, 0);
+  assert.equal(setupView.channelSetupSummary.readyForPreview, false);
   assert.equal(
     view.settings.sections.find((section) => section.id === 'setup')?.items[0]?.valueLabel,
     '2',
@@ -241,14 +252,276 @@ test('draft setup state stays isolated until persisted channel status is availab
   assert.equal(view.channelSetupSummary.totalChannelCount, 0);
   assert.equal(view.channelSetupSummary.totalBlockCount, 0);
   assert.equal(view.channelSetupSummary.readyForPreview, false);
-  assert.equal(view.setupSteps.find((step) => step.id === 'review')?.state, 'current');
-  assert.deepEqual(view.setupValidationMessages, ['Choose a Plex library before saving channels.']);
+  assert.equal(view.channelSetupFlow.stages.find((step) => step.id === 'library')?.state, 'current');
+  assert.equal(view.channelSetupFlow.stages.find((step) => step.id === 'review')?.state, 'pending');
+  assert.deepEqual(view.setupValidationMessages, [
+    'Choose a movie or show library section before saving channels. Selecting an individual media item only opens metadata preview.',
+  ]);
   assert.doesNotMatch(viewText, /Demo Library|Liminal One|The Vault|Weekend Queue/u);
   assert.doesNotMatch(viewText, /2 of 3|6 programming blocks|16 programming blocks/u);
 
   const reset = applyWorkflowChannelSetupAction(review, 'resetDraftLineup');
   assert.equal(getRouteWorkflowView(reset).channelDrafts.length, 0);
   assert.deepEqual(getRouteWorkflowView(initial).actions, []);
+});
+
+test('channel setup view uses selected Plex library as the channel creation source', () => {
+  const view = getRouteWorkflowView(
+    createWorkflowState('channelSetup'),
+    configuredChannelRuntimeState(),
+    {
+      sourceName: 'Selected Movies',
+      sourceType: 'movie',
+      contentCount: 12,
+      loadedItemCount: 4,
+    },
+  );
+
+  assert.equal(view.channelSetupSummary.sourceName, 'Selected Movies');
+  assert.equal(view.channelSetupSummary.enabledChannelCount, 1);
+  assert.equal(view.channelSetupSummary.totalBlockCount, 4);
+  assert.equal(view.channelSetupSummary.readyForPreview, true);
+  assert.deepEqual(view.channelSetupCommitAvailability, {
+    append: true,
+    replace: true,
+    confirmReplace: false,
+  });
+  assert.match(view.setupSteps.map((step) => step.detail).join(' '), /Selected movie library: Selected Movies/u);
+  assert.deepEqual(view.channelSetupFlow.stages.map((stage) => stage.label), [
+    'Choose library',
+    'Configure channels',
+    'Review changes',
+    'Build result',
+  ]);
+  assert.equal(view.channelSetupFlow.library.marker, 'MOV');
+  assert.equal(view.channelSetupFlow.reviewRows[0]?.value, 'Selected Movies');
+  assert.equal(view.channelSetupFlow.reviewRows.find((row) => row.label === 'Build mode')?.value, 'Append to saved lineup');
+  assert.equal(view.channelSetupFlow.strategyOptions.find((option) => option.id === 'build-mode-append')?.selected, true);
+  assert.equal(view.channelSetupFlow.strategyOptions.find((option) => option.id === 'build-mode-replace')?.disabled, false);
+  assert.deepEqual(view.setupValidationMessages, [
+    'Selected library is ready. Review the strategy, then append it to saved channels or replace the lineup.',
+  ]);
+});
+
+test('channel setup local strategy actions update review state without persistence', () => {
+  const initial = createWorkflowState('channelSetup');
+  const replace = applyWorkflowChannelSetupAction(initial, 'selectReplaceBuildMode');
+  const append = applyWorkflowChannelSetupAction(replace, 'selectAppendBuildMode');
+  const source = applyWorkflowChannelSetupAction(append, 'selectRecentlyAddedSource');
+  const replaceView = getRouteWorkflowView(replace, configuredChannelRuntimeState(), {
+    sourceName: 'Selected Movies',
+    sourceType: 'movie',
+    contentCount: 12,
+    loadedItemCount: 4,
+  });
+  const appendView = getRouteWorkflowView(append, configuredChannelRuntimeState(), {
+    sourceName: 'Selected Movies',
+    sourceType: 'movie',
+    contentCount: 12,
+    loadedItemCount: 4,
+  });
+
+  assert.equal(replace.channelSetupDraft.buildMode, 'replace');
+  assert.equal(source.channelSetupDraft.sourceMode, 'recently-added');
+  assert.equal(replaceView.channelSetupFlow.buildMode, 'replace');
+  assert.equal(replaceView.channelSetupFlow.reviewRows.find((row) => row.label === 'Build mode')?.value, 'Replace saved lineup');
+  assert.equal(replaceView.channelSetupFlow.strategyOptions.find((option) => option.id === 'build-mode-replace')?.selected, true);
+  assert.equal(appendView.channelSetupFlow.buildMode, 'append');
+  assert.equal(appendView.channelSetupFlow.reviewRows.find((row) => row.label === 'Build mode')?.value, 'Append to saved lineup');
+});
+
+test('channel setup first-run create state only enables append for a selected library', () => {
+  const firstRunRuntime: ChannelRuntimeRendererState = {
+    pending: false,
+    statusText: 'No persisted channels',
+    errorText: null,
+    commitMode: 'append',
+    confirmReplace: false,
+    summary: {
+      status: 'not-configured',
+      channelCount: 0,
+      currentChannelId: null,
+      currentChannelNumber: null,
+      currentChannelName: null,
+      channelNumbers: [],
+      channels: [],
+      updatedAtMs: 123,
+      recovery: { loaded: true, repaired: false },
+    },
+  };
+  const view = getRouteWorkflowView(
+    createWorkflowState('channelSetup'),
+    firstRunRuntime,
+    {
+      sourceName: 'First Run Movies',
+      sourceType: 'movie',
+      contentCount: 12,
+      loadedItemCount: 0,
+    },
+  );
+
+  assert.deepEqual(view.channelSetupCommitAvailability, {
+    append: true,
+    replace: false,
+    confirmReplace: false,
+  });
+  assert.deepEqual(view.setupValidationMessages, [
+    'Selected library is ready. Review the strategy, then create channels from this library to continue.',
+  ]);
+});
+
+test('channel setup confirm state comes from explicit runtime confirmation', () => {
+  const view = getRouteWorkflowView(
+    createWorkflowState('channelSetup'),
+    {
+      ...configuredChannelRuntimeState(),
+      statusText: 'Channel status unavailable',
+      errorText: 'Replacing saved channels requires confirmation.',
+      commitMode: 'replace',
+      confirmReplace: true,
+    },
+    {
+      sourceName: 'Selected Movies',
+      sourceType: 'movie',
+      contentCount: 12,
+      loadedItemCount: 4,
+    },
+  );
+
+  assert.deepEqual(view.channelSetupCommitAvailability, {
+    append: true,
+    replace: true,
+    confirmReplace: true,
+  });
+  assert.deepEqual(view.setupValidationMessages, [
+    'Replacing saved channels requires confirmation.',
+  ]);
+});
+
+test('channel setup view surfaces sanitized commit failures in the review panel', () => {
+  const failedRuntime: ChannelRuntimeRendererState = {
+    ...configuredChannelRuntimeState(),
+    summary: null,
+    statusText: 'Channel status unavailable',
+    errorText: 'Selected Plex libraries did not return usable channel content.',
+  };
+  const view = getRouteWorkflowView(
+    createWorkflowState('channelSetup'),
+    failedRuntime,
+    {
+      sourceName: 'Selected Shows',
+      sourceType: 'show',
+      contentCount: 6,
+      loadedItemCount: 6,
+    },
+  );
+
+  assert.deepEqual(view.setupValidationMessages, [
+    'Selected Plex libraries did not return usable channel content.',
+  ]);
+  assert.equal(JSON.stringify(view).includes('serverUri'), false);
+  assert.equal(JSON.stringify(view).includes('token'), false);
+});
+
+test('channel runtime validation errors fall back when private terms remain', () => {
+  const safe = sanitizeChannelRuntimeError({
+    code: 'CHANNEL_VALIDATION_FAILED',
+    message: 'Selected Plex libraries did not return usable channel content.',
+    retryable: false,
+    recoverable: true,
+    operation: 'commit',
+  });
+  const unsafe = sanitizeChannelRuntimeError({
+    code: 'CHANNEL_VALIDATION_FAILED',
+    message: 'serverUri https://private.example/token failed for C:\\Users\\private',
+    retryable: false,
+    recoverable: true,
+    operation: 'commit',
+  });
+
+  assert.equal(safe, 'Selected Plex libraries did not return usable channel content.');
+  assert.equal(unsafe, 'Channel setup could not continue.');
+});
+
+test('channel setup action state clears without discarding pending status recovery', async () => {
+  const pendingStatus = deferred<ChannelSetupIpcResult<ChannelSetupSummary>>();
+  const pendingRefresh = deferred<ChannelSetupIpcResult<ChannelSetupSummary>>();
+  const pendingCommit = deferred<ChannelSetupIpcResult<ChannelSetupSummary>>();
+  const statusResults = [pendingStatus, pendingRefresh];
+  let renderCount = 0;
+  const controller = createChannelRuntimeController({
+    bridge: {
+      getStatus: async () => {
+        const next = statusResults.shift();
+        assert.ok(next);
+        return next.promise;
+      },
+      commit: async () => pendingCommit.promise,
+    },
+    onStateChanged: () => {
+      renderCount += 1;
+    },
+  });
+
+  const statusPromise = controller.loadStatus();
+  assert.equal(controller.getState().pending, true);
+  controller.clearActionState();
+  assert.equal(controller.getState().pending, true);
+  assert.equal(controller.getState().errorText, null);
+  pendingStatus.resolve(channelSetupSuccess('status-1', configuredChannelRuntimeState().summary as ChannelSetupSummary));
+  await statusPromise;
+  assert.equal(controller.getState().pending, false);
+  assert.equal(controller.getState().summary?.channelCount, 1);
+
+  controller.markBlocked('Choose a movie or show library section before saving channels.');
+  let view = getRouteWorkflowView(createWorkflowState('channelSetup'), controller.getState(), {
+    sourceName: 'Selected Movies',
+    sourceType: 'movie',
+    contentCount: 12,
+    loadedItemCount: 2,
+  });
+  assert.deepEqual(view.setupValidationMessages, [
+    'Choose a movie or show library section before saving channels.',
+  ]);
+
+  controller.clearActionState();
+  view = getRouteWorkflowView(createWorkflowState('channelSetup'), controller.getState(), {
+    sourceName: 'Selected Movies',
+    sourceType: 'movie',
+    contentCount: 12,
+    loadedItemCount: 2,
+  });
+  assert.deepEqual(view.setupValidationMessages, [
+    'Selected library is ready. Review the strategy, then append it to saved channels or replace the lineup.',
+  ]);
+  assert.equal(controller.getState().confirmReplace, false);
+
+  const commitPromise = controller.commit({ mode: 'replace', sectionIds: ['old-section'] });
+  assert.equal(controller.getState().pending, true);
+  controller.clearActionState();
+  assert.equal(controller.getState().pending, true);
+  assert.equal(controller.getState().errorText, null);
+  pendingCommit.resolve(channelSetupFailure('commit-1', {
+    code: 'CHANNEL_REPLACE_CONFIRMATION_REQUIRED',
+    message: 'Replacing saved channels requires confirmation.',
+    retryable: false,
+    recoverable: true,
+    operation: 'commit',
+  }));
+  await Promise.resolve();
+  assert.equal(controller.getState().pending, true);
+  pendingRefresh.resolve(channelSetupSuccess('status-2', {
+    ...configuredChannelRuntimeState().summary as ChannelSetupSummary,
+    channelCount: 2,
+    channelNumbers: [101, 102],
+  }));
+  await commitPromise;
+
+  assert.equal(controller.getState().errorText, null);
+  assert.equal(controller.getState().confirmReplace, false);
+  assert.equal(controller.getState().pending, false);
+  assert.equal(controller.getState().summary?.channelCount, 2);
+  assert.ok(renderCount >= 4);
 });
 
 test('channel setup route does not use draft setup fallback after status failure', () => {
@@ -282,6 +555,35 @@ test('channel setup route does not use draft setup fallback after status failure
   assert.doesNotMatch(viewText, /2 of 3|6 programming blocks|16 programming blocks/u);
 });
 
+test('channel setup disables commits after failed status even with a selected library', () => {
+  const failedRuntime: ChannelRuntimeRendererState = {
+    pending: false,
+    statusText: 'Channel status unavailable',
+    errorText: 'Channel setup status could not be loaded.',
+    commitMode: 'append',
+    confirmReplace: false,
+    summary: null,
+  };
+  const view = getRouteWorkflowView(createWorkflowState('channelSetup'), failedRuntime, {
+    sourceName: 'Selected Movies',
+    sourceType: 'movie',
+    contentCount: 12,
+    loadedItemCount: 4,
+  });
+
+  assert.deepEqual(view.channelSetupCommitAvailability, {
+    append: false,
+    replace: false,
+    confirmReplace: false,
+  });
+  assert.deepEqual(view.setupValidationMessages, [
+    'Channel setup status could not be loaded.',
+  ]);
+  assert.equal(view.channelSetupFlow.result.detail, 'Channel setup status could not be loaded.');
+  assert.equal(JSON.stringify(view).includes('serverUri'), false);
+  assert.equal(JSON.stringify(view).includes('token'), false);
+});
+
 test('EPG actions update only renderer-local guide state', () => {
   const initial = createWorkflowState('guide');
   const nextChannel = applyWorkflowEpgAction(initial, 'nextChannel');
@@ -302,3 +604,44 @@ test('fake workflow view models avoid Plex and player privileged renderer fields
     assert.equal(containsPlexForbiddenRendererField(view), false, routeId);
   }
 });
+
+function configuredChannelRuntimeState(): ChannelRuntimeRendererState {
+  return {
+    pending: false,
+    statusText: 'Recovered',
+    errorText: null,
+    commitMode: 'append',
+    confirmReplace: false,
+    summary: {
+      status: 'configured',
+      channelCount: 1,
+      currentChannelId: 'channel-one',
+      currentChannelNumber: 101,
+      currentChannelName: 'Channel One',
+      channelNumbers: [101],
+      channels: [
+        {
+          id: 'channel-one',
+          number: 101,
+          name: 'Channel One',
+          sourceLibraryId: 'movies',
+          sourceLibraryName: 'Movies',
+          itemCount: 4,
+        },
+      ],
+      updatedAtMs: 123,
+      recovery: { loaded: true, repaired: false },
+    },
+  };
+}
+
+function deferred<TValue>(): {
+  promise: Promise<TValue>;
+  resolve: (value: TValue) => void;
+} {
+  let resolve: (value: TValue) => void = () => undefined;
+  const promise = new Promise<TValue>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
+}

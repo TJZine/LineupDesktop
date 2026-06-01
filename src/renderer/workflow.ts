@@ -16,10 +16,8 @@ import {
   applySettingsAction,
   applySupportBundleExportStatus,
   createChannelSetupDraftState,
-  createChannelSetupSteps,
   createSettingsDraftState,
   createSettingsSections,
-  validateChannelSetupDraft,
   type ChannelDraftViewModel,
   type ChannelSetupActionId,
   type ChannelSetupDraftState,
@@ -30,6 +28,16 @@ import {
   type SettingsSectionViewModel,
   type SupportBundleExportStatusViewModel,
 } from './settingsSetup.js';
+import {
+  createChannelSetupCommitAvailability,
+  createChannelSetupFlow,
+  createLiveChannelSetupMessages,
+  createLiveChannelSetupSteps,
+  createLiveChannelSetupSummary,
+  type ChannelSetupFlowViewModel,
+  type ChannelSetupCommitAvailabilityViewModel,
+  type ChannelSetupLiveSelectionViewModel,
+} from './channelSetup/viewModel.js';
 
 export type { ChannelSetupActionId, SettingsActionId } from './settingsSetup.js';
 export type { EpgActionId } from './epg.js';
@@ -92,6 +100,8 @@ export interface RouteWorkflowViewModel {
   channelSetupSummary: ChannelSetupSummaryViewModel;
   setupSteps: readonly ChannelSetupStepViewModel[];
   setupValidationMessages: readonly string[];
+  channelSetupCommitAvailability: ChannelSetupCommitAvailabilityViewModel;
+  channelSetupFlow: ChannelSetupFlowViewModel;
   actions: readonly RouteActionViewModel[];
 }
 
@@ -229,14 +239,6 @@ const ROUTE_COPY = {
   }
 >;
 
-const UNAVAILABLE_CHANNEL_SETUP_SUMMARY = {
-  sourceName: 'Persisted channel status unavailable',
-  enabledChannelCount: 0,
-  totalChannelCount: 0,
-  totalBlockCount: 0,
-  readyForPreview: false,
-} as const satisfies ChannelSetupSummaryViewModel;
-
 export function createWorkflowState(initialRoute: AppRouteId = 'player'): WorkflowState {
   return {
     routeState: {
@@ -284,6 +286,7 @@ export function applyWorkflowAction(
 export function getRouteWorkflowView(
   state: WorkflowState,
   channelRuntime?: ChannelRuntimeRendererState,
+  liveSelection: ChannelSetupLiveSelectionViewModel | null = null,
 ): RouteWorkflowViewModel {
   const route = state.routeState.activeRoute;
   const copy = ROUTE_COPY[route];
@@ -322,30 +325,21 @@ export function getRouteWorkflowView(
       recoveryDetail: formatRecoveryDetail(persistedSummary),
       sections: createSettingsSections(state.settingsDraft, persistedSummary),
     },
-    channelDrafts: persistedSummary === null
-      ? []
-      : persistedSummary.channels.map((channel) => ({
-          id: channel.id,
-          number: String(channel.number),
-          name: channel.name,
-          enabled: true,
-          blockCount: channel.itemCount,
-          category: channel.sourceLibraryName ?? 'Plex library',
-          reviewStatus: 'active',
-        })),
-    channelSetupSummary: persistedSummary === null
-      ? UNAVAILABLE_CHANNEL_SETUP_SUMMARY
-      : {
-          sourceName: persistedSummary.currentChannelName ?? 'Persisted channels',
-          enabledChannelCount: persistedSummary.channelCount,
-          totalChannelCount: persistedSummary.channelCount,
-          totalBlockCount: selectedLibraryItemCount,
-          readyForPreview: persistedSummary.channelCount > 0,
-        },
-    setupSteps: createChannelSetupSteps(state.channelSetupDraft, persistedSummary),
-    setupValidationMessages: persistedSummary === null
-      ? ['Choose a Plex library before saving channels.']
-      : validateChannelSetupDraft(state.channelSetupDraft, persistedSummary),
+    channelDrafts: [],
+    channelSetupSummary: createLiveChannelSetupSummary(persistedSummary, selectedLibraryItemCount, liveSelection),
+    setupSteps: createLiveChannelSetupSteps(state.channelSetupDraft, persistedSummary, liveSelection),
+    setupValidationMessages: createLiveChannelSetupMessages(channelRuntime, persistedSummary, liveSelection),
+    channelSetupCommitAvailability: createChannelSetupCommitAvailability(
+      channelRuntime,
+      persistedSummary,
+      liveSelection,
+    ),
+    channelSetupFlow: createChannelSetupFlow(
+      persistedSummary,
+      channelRuntime,
+      liveSelection,
+      state.channelSetupDraft,
+    ),
     actions: ROUTE_ACTIONS[route],
   };
 }

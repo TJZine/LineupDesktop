@@ -75,26 +75,17 @@ export function registerRendererFocusTargets(
     registered.add(focusId);
   });
 
-  [
-    ...dom.epgActionButtons,
-    ...dom.settingsActionButtons,
-    ...dom.setupActionButtons,
-    ...dom.plexActionButtons,
-  ].forEach(
-    (button, index) => {
-      const route = readClosestRouteId(button);
-      const focusId = button.dataset.focusId;
-      if (route === null || focusId === undefined) {
-        return;
-      }
-      focusRegistry.register({
-        id: focusId,
-        route,
-        order: route === 'channelSetup' && button.dataset.plexAction !== undefined ? index : 80 + index,
-      });
-      registered.add(focusId);
-    },
+  [...dom.epgActionButtons, ...dom.settingsActionButtons, ...dom.setupActionButtons].forEach(
+    (button, index) => registerOrderedButton(focusRegistry, registered, button, 80 + index),
   );
+
+  dom.plexActionButtons.forEach((button, index) => {
+    registerOrderedButton(focusRegistry, registered, button, plexActionFocusOrder(button, index));
+  });
+
+  dom.channelCommitButtons.forEach((button, index) => {
+    registerOrderedButton(focusRegistry, registered, button, 40 + index);
+  });
 
   dom.focusableElements.forEach((element, index) => {
     const focusId = element.dataset.focusId;
@@ -105,7 +96,7 @@ export function registerRendererFocusTargets(
     focusRegistry.register({
       id: focusId,
       route,
-      order: 220 + index,
+      order: focusElementOrder(focusId, index),
     });
     registered.add(focusId);
   });
@@ -122,6 +113,38 @@ export function registerRendererFocusTargets(
     });
     registered.add(focusId);
   });
+}
+
+function registerOrderedButton(
+  focusRegistry: FocusRegistry,
+  registered: Set<string>,
+  button: HTMLButtonElement,
+  order: number,
+): void {
+  const route = readClosestRouteId(button);
+  const focusId = button.dataset.focusId;
+  if (route === null || focusId === undefined) {
+    return;
+  }
+  focusRegistry.register({ id: focusId, route, order });
+  registered.add(focusId);
+}
+
+function plexActionFocusOrder(button: HTMLButtonElement, index: number): number {
+  if (readClosestRouteId(button) !== 'channelSetup') {
+    return index;
+  }
+  return button.dataset.plexAction === 'clearMetadata' ? 140 + index : index;
+}
+
+function focusElementOrder(focusId: string, index: number): number {
+  if (focusId.startsWith('plex-dyn-section-')) {
+    return 35 + index / 1000;
+  }
+  if (focusId.startsWith('plex-dyn-item-')) {
+    return 150 + index / 1000;
+  }
+  return 220 + index;
 }
 
 export function moveRendererFocus(

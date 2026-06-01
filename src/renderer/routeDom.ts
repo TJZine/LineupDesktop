@@ -13,14 +13,17 @@ import {
   type RouteWorkflowViewModel,
   type WorkflowState,
 } from './workflow.js';
+import type { ChannelSetupLiveSelectionViewModel } from './channelSetup/viewModel.js';
+import { renderChannelSetupDom } from './channelSetup/dom.js';
 
 export function renderRouteDom(
   workflowState: WorkflowState,
   dom: RendererDomBindings,
   channelRuntime?: ChannelRuntimeRendererState,
+  liveSelection: ChannelSetupLiveSelectionViewModel | null = null,
 ): void {
   const activeRoute = workflowState.routeState.activeRoute;
-  const view = getRouteWorkflowView(workflowState, channelRuntime);
+  const view = getRouteWorkflowView(workflowState, channelRuntime, liveSelection);
   document.documentElement.dataset.activeRoute = activeRoute;
   if (dom.routeTitleElement) {
     dom.routeTitleElement.textContent = view.title;
@@ -54,9 +57,9 @@ export function renderWorkflowDom(
   playerSnapshot: PlayerSnapshot,
   dom: RendererDomBindings,
   channelRuntime?: ChannelRuntimeRendererState,
-  hasLiveSelectedPlexSection = false,
+  liveSelection: ChannelSetupLiveSelectionViewModel | null = null,
 ): void {
-  const view = getRouteWorkflowView(workflowState, channelRuntime);
+  const view = getRouteWorkflowView(workflowState, channelRuntime, liveSelection);
 
   setText(`[data-workflow-kicker="${view.route}"]`, view.kicker);
   setText(`[data-workflow-primary="${view.route}"]`, view.primaryText);
@@ -79,7 +82,7 @@ export function renderWorkflowDom(
   renderEpgGuideDom(view, dom);
   renderPlayerOverlaysDom(overlayState, playerSnapshot, dom, view.route);
   renderSettingsDom(view, dom);
-  renderChannelSetupDom(view, dom, hasLiveSelectedPlexSection);
+  renderChannelSetupDom(view, dom, liveSelection);
   renderRouteActionButtons(view, dom);
 }
 
@@ -140,99 +143,6 @@ function renderSettingsDom(view: RouteWorkflowViewModel, dom: RendererDomBinding
       }),
     );
   }
-}
-
-function renderChannelSetupDom(
-  view: RouteWorkflowViewModel,
-  dom: RendererDomBindings,
-  hasLiveSelectedPlexSection: boolean,
-): void {
-  if (dom.channelSetupFixtureStatusElement) {
-    dom.channelSetupFixtureStatusElement.textContent = view.channelSetupSummary.readyForPreview
-      ? 'Guarded review ready'
-      : 'Review disabled until one strategy is active';
-  }
-  if (dom.channelSetupSourceElement) {
-    dom.channelSetupSourceElement.textContent = view.channelSetupSummary.sourceName;
-  }
-  if (dom.channelSetupEnabledElement) {
-    dom.channelSetupEnabledElement.textContent =
-      `${view.channelSetupSummary.enabledChannelCount} of ${view.channelSetupSummary.totalChannelCount}`;
-  }
-  if (dom.channelSetupBlocksElement) {
-    dom.channelSetupBlocksElement.textContent =
-      view.channelSetupSummary.totalChannelCount === 0
-        ? '0 persisted channels'
-        : view.channelSetupSummary.readyForPreview && view.channelSetupSummary.totalBlockCount === 0
-        ? `${view.channelSetupSummary.enabledChannelCount} persisted channels`
-        : `${view.channelSetupSummary.totalBlockCount} library items`;
-  }
-  if (dom.setupStepsElement) {
-    dom.setupStepsElement.replaceChildren(
-      ...view.setupSteps.map((step) => {
-        const item = document.createElement('li');
-        item.dataset.stepState = step.state;
-        const label = document.createElement('strong');
-        label.textContent = step.label;
-        const detail = document.createElement('span');
-        detail.textContent = step.detail;
-        item.append(label, detail);
-        return item;
-      }),
-    );
-  }
-  if (dom.channelDraftListElement) {
-    dom.channelDraftListElement.replaceChildren(
-      ...view.channelDrafts.map((channel, index) => {
-        const item = document.createElement('article');
-        item.className = 'channel-draft-list__item';
-        item.dataset.channelEnabled = String(channel.enabled);
-        item.dataset.reviewStatus = channel.reviewStatus;
-        const number = document.createElement('span');
-        number.className = 'channel-list__number';
-        number.textContent = channel.number;
-        const copy = document.createElement('div');
-        const title = document.createElement('strong');
-        title.textContent = channel.name;
-        const detail = document.createElement('p');
-        detail.textContent = `#${index + 1} / ${channel.category} / ${channel.blockCount} blocks / ${channel.enabled ? 'active' : 'disabled'}`;
-        copy.append(title, detail);
-        item.append(number, copy);
-        return item;
-      }),
-    );
-  }
-  if (dom.setupValidationElement) {
-    const messages = view.setupValidationMessages.length === 0
-      ? ['Only active-enabled strategy rows would render in a live review.']
-      : view.setupValidationMessages;
-    dom.setupValidationElement.replaceChildren(
-      ...messages.map((message) => {
-        const item = document.createElement('p');
-        item.textContent = message;
-        return item;
-      }),
-    );
-  }
-  for (const button of dom.channelCommitButtons) {
-    const action = button.dataset.channelCommitAction;
-    button.disabled = channelCommitDisabled(action, view, hasLiveSelectedPlexSection);
-  }
-}
-
-function channelCommitDisabled(
-  action: string | undefined,
-  view: RouteWorkflowViewModel,
-  hasLiveSelectedPlexSection: boolean,
-): boolean {
-  if (action === 'confirmReplace') {
-    return view.settings.setupState === 'Loading persisted status' ||
-      !hasLiveSelectedPlexSection ||
-      !/requires confirmation/iu.test(view.settings.setupState);
-  }
-  return action !== 'append' && action !== 'replace'
-    ? true
-    : view.settings.setupState === 'Loading persisted status' || !hasLiveSelectedPlexSection;
 }
 
 function renderRouteActionButtons(view: RouteWorkflowViewModel, dom: RendererDomBindings): void {

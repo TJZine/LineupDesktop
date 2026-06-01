@@ -155,6 +155,11 @@ html[data-active-route="channelSetup"] [data-static-screen-root] {
   padding: var(--space-6);
 }
 
+.plex-runtime__stage--secondary {
+  border-style: dashed;
+  opacity: 0.82;
+}
+
 .plex-runtime__stage h4 {
   margin: 0;
   color: var(--plex-onboarding-text);
@@ -233,6 +238,7 @@ html[data-active-route="channelSetup"] [data-static-screen-root] {
   display: grid;
   gap: var(--space-2);
   min-width: 0;
+  color: var(--plex-onboarding-text-muted);
 }
 
 .plex-runtime__pin strong {
@@ -292,6 +298,15 @@ html[data-active-route="channelSetup"] [data-static-screen-root] {
   border-color: var(--plex-onboarding-accent);
   background: var(--plex-onboarding-accent-soft);
   color: var(--plex-onboarding-text);
+}
+
+[data-plex-items] button {
+  border-style: dashed;
+  opacity: 0.82;
+}
+
+[data-plex-items] button[data-selected="true"] {
+  opacity: 1;
 }
 
 @media (max-width: 880px) {

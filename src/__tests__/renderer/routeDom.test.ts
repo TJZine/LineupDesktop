@@ -6,7 +6,7 @@ import type { ChannelRuntimeRendererState } from '../../renderer/channelRuntimeS
 import { createFakePlayerSnapshot, createPlayerOverlayState } from '../../renderer/overlays.js';
 import { renderRouteDom, renderWorkflowDom } from '../../renderer/routeDom.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
-import { createWorkflowState } from '../../renderer/workflow.js';
+import { applyWorkflowChannelSetupAction, createWorkflowState } from '../../renderer/workflow.js';
 
 class ElementDouble {
   hidden = false;
@@ -315,11 +315,11 @@ test('route DOM renders channel setup review without privileged data', () => {
 
     const renderedText = [collectText(setupSteps), collectText(channelList), collectText(validation)].join(' ');
     assert.match(renderedText, /Choose library/u);
-    assert.match(renderedText, /Persisted channel status is not loaded yet/u);
+    assert.match(renderedText, /Select one movie or show library from this setup screen/u);
     assert.doesNotMatch(renderedText, /Liminal One/u);
     assert.doesNotMatch(renderedText, /Demo Library|The Vault|Weekend Queue/u);
     assert.doesNotMatch(renderedText, /2 of 3|6 programming blocks|16 programming blocks/u);
-    assert.match(renderedText, /Choose a Plex library before saving channels/u);
+    assert.match(renderedText, /Choose a movie or show library section before saving channels/u);
     assert.doesNotMatch(renderedText, /serverUri|token|https?:|raw payload/u);
   } finally {
     if (originalDocument === undefined) {
@@ -349,12 +349,14 @@ test('route DOM keeps channel commit controls disabled until a live Plex section
     appendButton.dataset.channelCommitAction = 'append';
     const replaceButton = new ElementDouble();
     replaceButton.dataset.channelCommitAction = 'replace';
+    const confirmButton = new ElementDouble();
+    confirmButton.dataset.channelCommitAction = 'confirmReplace';
     const dom = createOverlayDomBindings({
       overlayStack: new ElementDouble(),
       overlays: [],
       overlayActions: [],
     });
-    dom.channelCommitButtons = [appendButton, replaceButton] as unknown as HTMLButtonElement[];
+    dom.channelCommitButtons = [appendButton, replaceButton, confirmButton] as unknown as HTMLButtonElement[];
 
     renderWorkflowDom(
       createWorkflowState('channelSetup'),
@@ -362,11 +364,12 @@ test('route DOM keeps channel commit controls disabled until a live Plex section
       createFakePlayerSnapshot(),
       dom,
       configuredChannelRuntimeState(),
-      false,
+      null,
     );
 
     assert.equal(appendButton.disabled, true);
     assert.equal(replaceButton.disabled, true);
+    assert.equal(confirmButton.disabled, true);
 
     renderWorkflowDom(
       createWorkflowState('channelSetup'),
@@ -374,11 +377,12 @@ test('route DOM keeps channel commit controls disabled until a live Plex section
       createFakePlayerSnapshot(),
       dom,
       configuredChannelRuntimeState(),
-      true,
+      liveSelection(),
     );
 
     assert.equal(appendButton.disabled, false);
     assert.equal(replaceButton.disabled, false);
+    assert.equal(confirmButton.disabled, true);
 
     renderWorkflowDom(
       createWorkflowState('channelSetup'),
@@ -386,11 +390,288 @@ test('route DOM keeps channel commit controls disabled until a live Plex section
       createFakePlayerSnapshot(),
       dom,
       { ...configuredChannelRuntimeState(), pending: true },
-      true,
+      liveSelection(),
     );
 
     assert.equal(appendButton.disabled, true);
     assert.equal(replaceButton.disabled, true);
+    assert.equal(confirmButton.disabled, true);
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+});
+
+test('route DOM disables channel commits after status failure with selected library and shows sanitized result', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    createElement: () => new ElementDouble(),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const appendButton = new ElementDouble();
+    appendButton.dataset.channelCommitAction = 'append';
+    const replaceButton = new ElementDouble();
+    replaceButton.dataset.channelCommitAction = 'replace';
+    const confirmButton = new ElementDouble();
+    confirmButton.dataset.channelCommitAction = 'confirmReplace';
+    const validation = new ElementDouble();
+    const result = new ElementDouble();
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.channelCommitButtons = [appendButton, replaceButton, confirmButton] as unknown as HTMLButtonElement[];
+    dom.setupValidationElement = validation as unknown as HTMLElement;
+    dom.channelSetupResultElement = result as unknown as HTMLElement;
+
+    renderWorkflowDom(
+      createWorkflowState('channelSetup'),
+      createPlayerOverlayState(),
+      createFakePlayerSnapshot(),
+      dom,
+      {
+        pending: false,
+        statusText: 'Channel status unavailable',
+        errorText: 'Channel setup status could not be loaded.',
+        commitMode: 'append',
+        confirmReplace: false,
+        summary: null,
+      },
+      liveSelection(),
+    );
+
+    const renderedText = [collectText(validation), collectText(result)].join(' ');
+    assert.equal(appendButton.disabled, true);
+    assert.equal(replaceButton.disabled, true);
+    assert.equal(confirmButton.disabled, true);
+    assert.match(renderedText, /Channel setup status could not be loaded/u);
+    assert.doesNotMatch(renderedText, /serverUri|token|https?:|raw payload/u);
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+});
+
+test('route DOM derives replace and confirm controls from persisted status and explicit confirmation state', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const appendButton = new ElementDouble();
+    appendButton.dataset.channelCommitAction = 'append';
+    const replaceButton = new ElementDouble();
+    replaceButton.dataset.channelCommitAction = 'replace';
+    const confirmButton = new ElementDouble();
+    confirmButton.dataset.channelCommitAction = 'confirmReplace';
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.channelCommitButtons = [appendButton, replaceButton, confirmButton] as unknown as HTMLButtonElement[];
+
+    renderWorkflowDom(
+      createWorkflowState('channelSetup'),
+      createPlayerOverlayState(),
+      createFakePlayerSnapshot(),
+      dom,
+      {
+        ...configuredChannelRuntimeState(),
+        summary: {
+          status: 'not-configured',
+          channelCount: 0,
+          currentChannelId: null,
+          currentChannelNumber: null,
+          currentChannelName: null,
+          channelNumbers: [],
+          channels: [],
+          updatedAtMs: 123,
+          recovery: { loaded: true, repaired: false },
+        },
+      },
+      liveSelection(),
+    );
+
+    assert.equal(appendButton.disabled, false);
+    assert.equal(replaceButton.disabled, true);
+    assert.equal(confirmButton.disabled, true);
+
+    renderWorkflowDom(
+      createWorkflowState('channelSetup'),
+      createPlayerOverlayState(),
+      createFakePlayerSnapshot(),
+      dom,
+      {
+        ...configuredChannelRuntimeState(),
+        statusText: 'Channel status unavailable',
+        errorText: 'Replacing saved channels requires confirmation.',
+        commitMode: 'replace',
+        confirmReplace: true,
+      },
+      liveSelection(),
+    );
+
+    assert.equal(appendButton.disabled, false);
+    assert.equal(replaceButton.disabled, false);
+    assert.equal(confirmButton.disabled, false);
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+});
+
+test('route DOM renders strategy controls as focusable selected buttons', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    createElement: () => new ElementDouble(),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const strategy = new ElementDouble();
+    const review = new ElementDouble();
+    const appendButton = new ElementDouble();
+    appendButton.dataset.channelCommitAction = 'append';
+    const replaceButton = new ElementDouble();
+    replaceButton.dataset.channelCommitAction = 'replace';
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.channelSetupStrategyElement = strategy as unknown as HTMLElement;
+    dom.channelSetupReviewElement = review as unknown as HTMLElement;
+    dom.channelCommitButtons = [appendButton, replaceButton] as unknown as HTMLButtonElement[];
+
+    const replaceWorkflow = applyWorkflowChannelSetupAction(
+      createWorkflowState('channelSetup'),
+      'selectReplaceBuildMode',
+    );
+    renderWorkflowDom(
+      replaceWorkflow,
+      createPlayerOverlayState(),
+      createFakePlayerSnapshot(),
+      dom,
+      configuredChannelRuntimeState(),
+      liveSelection(),
+    );
+
+    const strategyButtons = strategy.children;
+    const replaceMode = strategyButtons.find((child) => child.dataset.strategyOption === 'build-mode-replace');
+    assert.equal(strategyButtons.every((child) => child.dataset.setupAction !== undefined), true);
+    assert.equal(strategyButtons.every((child) => child.dataset.focusId !== undefined), true);
+    assert.equal(replaceMode?.dataset.setupAction, 'selectReplaceBuildMode');
+    assert.equal(replaceMode?.dataset.focusId, 'channel-strategy-build-replace');
+    assert.equal(replaceMode?.disabled, false);
+    assert.equal(replaceMode?.getAttribute('aria-pressed'), 'true');
+    assert.match(collectText(review), /Replace saved lineup/u);
+    assert.equal(appendButton.textContent, 'Build appended channel');
+    assert.equal(replaceButton.textContent, 'Review replace mode');
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+});
+
+test('route DOM shows selected Plex library as the channel creation source', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    createElement: () => new ElementDouble(),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const status = new ElementDouble();
+    const source = new ElementDouble();
+    const enabled = new ElementDouble();
+    const blocks = new ElementDouble();
+    const setupSteps = new ElementDouble();
+    const sourceList = new ElementDouble();
+    const validation = new ElementDouble();
+    const appendButton = new ElementDouble();
+    appendButton.dataset.channelCommitAction = 'append';
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.channelSetupFixtureStatusElement = status as unknown as HTMLElement;
+    dom.channelSetupSourceElement = source as unknown as HTMLElement;
+    dom.channelSetupEnabledElement = enabled as unknown as HTMLElement;
+    dom.channelSetupBlocksElement = blocks as unknown as HTMLElement;
+    dom.setupStepsElement = setupSteps as unknown as HTMLElement;
+    dom.channelDraftListElement = sourceList as unknown as HTMLElement;
+    dom.setupValidationElement = validation as unknown as HTMLElement;
+    dom.channelCommitButtons = [appendButton] as unknown as HTMLButtonElement[];
+
+    renderWorkflowDom(
+      createWorkflowState('channelSetup'),
+      createPlayerOverlayState(),
+      createFakePlayerSnapshot(),
+      dom,
+      configuredChannelRuntimeState(),
+      liveSelection(),
+    );
+
+    const renderedText = [status, source, enabled, blocks, setupSteps, sourceList, validation]
+      .map((element) => collectText(element))
+      .join(' ');
+    assert.match(renderedText, /Step 3 of 4/u);
+    assert.match(renderedText, /Selected Movies/u);
+    assert.match(renderedText, /Configure channels/u);
+    assert.match(renderedText, /Movie library source selected for channel creation/u);
+    assert.match(renderedText, /2 known movies/u);
+    assert.match(renderedText, /Review the strategy, then append it to saved channels or replace the lineup/u);
+    assert.equal(appendButton.disabled, false);
   } finally {
     if (originalDocument === undefined) {
       Reflect.deleteProperty(globalThis, 'document');
@@ -585,6 +866,15 @@ function configuredChannelRuntimeState(): ChannelRuntimeRendererState {
   };
 }
 
+function liveSelection() {
+  return {
+    sourceName: 'Selected Movies',
+    sourceType: 'movie' as const,
+    contentCount: 24,
+    loadedItemCount: 2,
+  };
+}
+
 function createOverlayDomBindings({
   overlayStack,
   overlays,
@@ -626,7 +916,10 @@ function createOverlayDomBindings({
     channelSetupBlocksElement: null,
     setupStepsElement: null,
     channelDraftListElement: null,
+    channelSetupStrategyElement: null,
+    channelSetupReviewElement: null,
     setupValidationElement: null,
+    channelSetupResultElement: null,
     channelSetupFixtureStatusElement: null,
     plexPanelElement: null,
     plexActionButtons: [],

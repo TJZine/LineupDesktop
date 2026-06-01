@@ -14,6 +14,7 @@ import {
   syncRendererFocusTargets,
 } from '../../renderer/focusDom.js';
 import { FocusRegistry } from '../../renderer/navigation.js';
+import { resolveChannelSetupLiveSelection } from '../../renderer/channelSetup/liveSelection.js';
 import { createPlexRuntimeController } from '../../renderer/plexRuntimeActions.js';
 import { renderPlexRuntimeDom } from '../../renderer/plexRuntimeDom.js';
 import { sanitizePlexRuntimeError } from '../../renderer/plexRuntimeState.js';
@@ -40,15 +41,69 @@ test('static channel setup markup hosts reachable Plex setup controls', () => {
   assert.match(channelSetupMarkup, /Choose profile/u);
   assert.match(channelSetupMarkup, /Find servers/u);
   assert.match(channelSetupMarkup, /Open libraries/u);
-  assert.match(channelSetupMarkup, /Review and save channels/u);
+  assert.match(channelSetupMarkup, /Build channels/u);
   assert.match(channelSetupMarkup, /data-channel-commit-action="append"/u);
   assert.match(channelSetupMarkup, /data-channel-commit-action="confirmReplace"/u);
-  assert.match(channelSetupMarkup, /Guarded review/u);
+  assert.match(channelSetupMarkup, /Library source/u);
+  assert.match(channelSetupMarkup, /4\. Result/u);
+  assert.ok(
+    channelSetupMarkup.indexOf('data-channel-commit-action="append"') <
+      channelSetupMarkup.indexOf('id="plex-stage-metadata"'),
+  );
+  assert.match(channelSetupMarkup, /Optional media preview/u);
   assert.doesNotMatch(
     channelSetupMarkup,
     /Fake channel setup controls|data-setup-action|data-setup-steps|data-channel-draft-list|data-setup-validation|draft channel|fake blocks|debug|smoke|transport/u,
   );
   assert.doesNotMatch(channelSetupMarkup, /https?:|token|serverUri/u);
+});
+
+test('channel setup live selection ignores stale library item and search state', () => {
+  const currentSelection = resolveChannelSetupLiveSelection({
+    snapshot: snapshotWithItems(),
+    selectedSectionId: 'section-1',
+    selectedServerId: 'server-1',
+    selectedItemRatingKey: null,
+    searchQuery: '',
+    homeUserPin: '',
+    statusText: 'Ready',
+    errorText: null,
+    pending: pendingMap(false),
+    lastMetadata: null,
+  });
+
+  assert.equal(currentSelection?.sourceName, 'Movies');
+  assert.equal(currentSelection?.loadedItemCount, 1);
+
+  const mismatchedSnapshot = resolveChannelSetupLiveSelection({
+    snapshot: snapshotWithItems(),
+    selectedSectionId: 'section-2',
+    selectedServerId: 'server-1',
+    selectedItemRatingKey: null,
+    searchQuery: '',
+    homeUserPin: '',
+    statusText: 'Ready',
+    errorText: null,
+    pending: pendingMap(false),
+    lastMetadata: null,
+  });
+
+  assert.equal(mismatchedSnapshot, null);
+
+  const searchSelection = resolveChannelSetupLiveSelection({
+    snapshot: snapshotWithSearch('pilot'),
+    selectedSectionId: 'section-1',
+    selectedServerId: 'server-1',
+    selectedItemRatingKey: null,
+    searchQuery: 'pilot',
+    homeUserPin: '',
+    statusText: 'Ready',
+    errorText: null,
+    pending: pendingMap(false),
+    lastMetadata: null,
+  });
+
+  assert.equal(searchSelection?.loadedItemCount, 0);
 });
 
 test('static channel setup commit panel exposes the setup frame style hook', () => {
@@ -1195,7 +1250,10 @@ function createPlexDomBindings(overrides: Partial<RendererDomBindings> = {}): Re
     channelSetupBlocksElement: null,
     setupStepsElement: null,
     channelDraftListElement: null,
+    channelSetupStrategyElement: null,
+    channelSetupReviewElement: null,
     setupValidationElement: null,
+    channelSetupResultElement: null,
     channelSetupFixtureStatusElement: null,
     plexPanelElement: new ElementDouble() as unknown as HTMLElement,
     plexActionButtons: actions,
