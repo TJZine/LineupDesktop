@@ -2101,7 +2101,10 @@ const lineupDesktop: LineupDesktopPreloadApi = {
       const request = createChannelSetupCommitRequest(input);
       if (!request.ok) { return request.result; }
       try {
-        const result = await ipcRenderer.invoke(LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL, request);
+        const result = await ipcRenderer.invoke(LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL, {
+          requestId: request.requestId,
+          payload: request.payload,
+        });
         return isChannelSetupResult(result, request.requestId)
           ? result
           : channelSetupValidationFailure(request.requestId, 'commit');

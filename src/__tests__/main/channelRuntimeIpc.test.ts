@@ -308,15 +308,15 @@ test('channel runtime rejects mixed invalid or unknown section ids without parti
   }
 });
 
-test('channel runtime does not save channels when Plex item listing fails or is empty', async () => {
-  for (const listMode of ['failed', 'empty'] as const) {
-    const storage = createTrackedMemoryStorage(null);
+test('channel runtime commits from positive section summary when Plex item listing is empty or retryable', async () => {
+  for (const listMode of ['retryable-failed', 'empty'] as const) {
+    const storage = createMemoryStorage(null);
     const runtime = new ChannelRuntime({
       storage,
       clock: { now: () => 1_000 },
-      generateId: createIdGenerator(`unusable-${listMode}`),
+      generateId: createIdGenerator(`fallback-${listMode}`),
       plexRuntime: createPlexRuntimeFixture({}, async (requestId, payload) => {
-        if (listMode === 'failed') {
+        if (listMode === 'retryable-failed') {
           return {
             ok: false,
             requestId,
@@ -343,7 +343,53 @@ test('channel runtime does not save channels when Plex item listing fails or is 
       }),
     });
 
-    const result = await runtime.commit(`channel-commit-unusable-${listMode}`, {
+    const result = await runtime.commit(`channel-commit-fallback-${listMode}`, {
+      mode: 'append',
+      sectionIds: ['movies'],
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.ok ? result.value.channels : null, [
+      {
+        id: `fallback-${listMode}-1`,
+        number: 1,
+        name: 'Movies',
+        sourceLibraryId: 'movies',
+        sourceLibraryName: 'Movies',
+        itemCount: 2,
+      },
+    ]);
+    assert.equal(result.ok ? result.value.currentChannelId : null, `fallback-${listMode}-1`);
+    assert.doesNotMatch(JSON.stringify(result), /rawPayload|token|serverUri|https?:/u);
+  }
+});
+
+test('channel runtime does not fall back for hard Plex item listing failures', async () => {
+  for (const code of [
+    'PLEX_AUTH_REQUIRED',
+    'PLEX_RESOURCE_NOT_FOUND',
+    'PLEX_VALIDATION_FAILED',
+    'PLEX_PARSE_FAILED',
+  ] as const) {
+    const storage = createTrackedMemoryStorage(null);
+    const runtime = new ChannelRuntime({
+      storage,
+      clock: { now: () => 1_000 },
+      generateId: createIdGenerator(`hard-${code}`),
+      plexRuntime: createPlexRuntimeFixture({}, async (requestId) => ({
+        ok: false,
+        requestId,
+        error: {
+          code,
+          message: 'Library request failed.',
+          retryable: false,
+          recoverable: true,
+          operation: 'listLibraryItems',
+        },
+      })),
+    });
+
+    const result = await runtime.commit(`channel-commit-hard-${code}`, {
       mode: 'append',
       sectionIds: ['movies'],
     });
@@ -356,6 +402,47 @@ test('channel runtime does not save channels when Plex item listing fails or is 
     assert.equal(await storage.readStoredChannelData(), null);
     assert.doesNotMatch(JSON.stringify(result), /rawPayload|token|serverUri|https?:/u);
   }
+});
+
+test('channel runtime does not save truly empty selected sections without usable items', async () => {
+  const emptySnapshot = createSnapshot();
+  const storage = createTrackedMemoryStorage(null);
+  const runtime = new ChannelRuntime({
+    storage,
+    clock: { now: () => 1_000 },
+    generateId: createIdGenerator('empty-live-channel'),
+    plexRuntime: createPlexRuntimeFixture({
+      library: {
+        ...emptySnapshot.library,
+        sections: [
+          { id: 'movies', title: 'Movies', type: 'movie', contentCount: 0, lastScannedAtMs: 1 },
+        ],
+      },
+    }, async (requestId, payload) => ({
+      ok: true,
+      requestId,
+      value: {
+        sectionId: payload.sectionId,
+        offset: 0,
+        limit: 100,
+        items: [],
+        snapshot: emptySnapshot,
+      },
+    })),
+  });
+
+  const result = await runtime.commit('channel-commit-empty-selected-section', {
+    mode: 'append',
+    sectionIds: ['movies'],
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? null : result.error.code, 'CHANNEL_VALIDATION_FAILED');
+  assert.equal(result.ok ? null : result.error.operation, 'commit');
+  assert.equal(storage.writeStoredCalls, 0);
+  assert.equal(storage.writeCurrentCalls, 0);
+  assert.equal(await storage.readStoredChannelData(), null);
+  assert.doesNotMatch(JSON.stringify(result), /rawPayload|token|serverUri|https?:/u);
 });
 
 test('channel runtime preserves a valid current channel id when appending', async () => {

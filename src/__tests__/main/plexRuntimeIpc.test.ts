@@ -37,6 +37,7 @@ import {
   LivePlexTransport,
   type LivePlexLibraryTransport,
 } from '../../main/plex/livePlexTransport.js';
+import { PLEX_MEDIA_TYPES } from '../../main/plex/library/index.js';
 import {
   cloneRuntimeSnapshot,
   mapRuntimeError,
@@ -777,6 +778,68 @@ test('desktop plex runtime projects library sections, items, search, metadata, d
   const records = fixture.diagnostics.getRecords();
   assert.equal(JSON.stringify(records).includes('local.example'), false);
   assert.equal(JSON.stringify(records).includes(placeholderAccountToken), false);
+});
+
+test('desktop plex runtime enriches live library section counts with lightweight item probes', async () => {
+  const fixture = createRuntimeFixture();
+  await signInAndSelectServer(fixture);
+  fixture.libraryTransport.listSectionsResponse = {
+    kind: 'json',
+    data: {
+      MediaContainer: {
+        Directory: [
+          rawSection({ key: 'movies', title: 'Movies', type: 'movie' }),
+          rawSection({ key: 'shows', title: 'Shows', type: 'show' }),
+          rawSection({ key: 'music', title: 'Music', type: 'artist' }),
+          rawSection({ key: 'photos', title: 'Photos', type: 'photo' }),
+        ],
+      },
+    },
+  };
+  fixture.libraryTransport.listItemsResponses = [
+    { kind: 'json', data: { MediaContainer: { totalSize: 123 } } },
+    { kind: 'json', data: { MediaContainer: { totalSize: 456 } } },
+    { kind: 'json', data: { MediaContainer: { size: 789 } } },
+    { kind: 'json', data: { MediaContainer: { totalSize: 10 } } },
+    { kind: 'json', data: { MediaContainer: { totalSize: 999 } } },
+  ];
+
+  const sections = await fixture.runtime.listLibrarySections('sections-counts');
+
+  assert.equal(sections.ok, true);
+  assert.deepEqual(
+    sections.ok ? sections.value.sections.map((section) => ({
+      id: section.id,
+      contentCount: section.contentCount,
+      episodeCount: section.episodeCount,
+    })) : [],
+    [
+      { id: 'movies', contentCount: 123, episodeCount: undefined },
+      { id: 'shows', contentCount: 456, episodeCount: 999 },
+      { id: 'music', contentCount: 789, episodeCount: undefined },
+      { id: 'photos', contentCount: 10, episodeCount: undefined },
+    ],
+  );
+  assert.deepEqual(
+    fixture.libraryTransport.listItemsRequests.map((request) => ({
+      sectionId: request.sectionId,
+      offset: request.offset,
+      limit: request.limit,
+      filter: request.filter,
+    })),
+    [
+      { sectionId: 'movies', offset: 0, limit: 0, filter: undefined },
+      { sectionId: 'shows', offset: 0, limit: 0, filter: undefined },
+      { sectionId: 'music', offset: 0, limit: 0, filter: undefined },
+      { sectionId: 'photos', offset: 0, limit: 0, filter: undefined },
+      { sectionId: 'shows', offset: 0, limit: 0, filter: { type: PLEX_MEDIA_TYPES.EPISODE } },
+    ],
+  );
+  assert.deepEqual(
+    sections.ok ? sections.value.snapshot.library.sections : [],
+    sections.ok ? sections.value.sections : [],
+  );
+  assertRendererSafe(sections);
 });
 
 test('desktop plex runtime paginates library browse and forwards safe filters', async () => {
@@ -1879,12 +1942,12 @@ function connection(input: Partial<PlexConnection> = {}): PlexConnection {
   };
 }
 
-function rawSection(input: Partial<{ key: string; title: string }> = {}) {
+function rawSection(input: Partial<{ key: string; title: string; type: string }> = {}) {
   return {
     key: input.key ?? '1',
     uuid: 'library-1',
     title: input.title ?? 'Movies',
-    type: 'movie',
+    type: input.type ?? 'movie',
     agent: 'agent',
     scanner: 'scanner',
     scannedAt: 1_700_000_000,

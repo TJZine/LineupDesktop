@@ -49,6 +49,31 @@ export function markChannelCommitPending(
   };
 }
 
+export function markChannelRuntimeBlocked(
+  state: ChannelRuntimeRendererState,
+  message: string,
+): ChannelRuntimeRendererState {
+  return {
+    ...state,
+    pending: false,
+    statusText: 'Channel setup needs a library',
+    errorText: sanitizeRendererMessage(message),
+  };
+}
+
+export function clearChannelRuntimeActionState(
+  state: ChannelRuntimeRendererState,
+  options: { preservePending: boolean } = { preservePending: false },
+): ChannelRuntimeRendererState {
+  return {
+    ...state,
+    pending: options.preservePending,
+    statusText: options.preservePending ? state.statusText : formatChannelSetupStatus(state.summary),
+    errorText: null,
+    confirmReplace: false,
+  };
+}
+
 export function applyChannelStatusResult(
   state: ChannelRuntimeRendererState,
   result: ChannelSetupIpcResult<ChannelSetupSummary>,
@@ -89,6 +114,9 @@ export function formatChannelSetupStatus(summary: ChannelSetupSummary | null): s
 }
 
 export function sanitizeChannelRuntimeError(error: ChannelSetupRuntimeError): string {
+  if (error.code === 'CHANNEL_VALIDATION_FAILED' && error.message.trim().length > 0) {
+    return sanitizeRendererMessage(error.message);
+  }
   switch (error.code) {
     case 'CHANNEL_UNAUTHORIZED':
       return 'Channel setup status is not authorized.';
@@ -105,4 +133,26 @@ export function sanitizeChannelRuntimeError(error: ChannelSetupRuntimeError): st
     case 'CHANNEL_UNKNOWN':
       return 'Channel setup status could not be loaded.';
   }
+}
+
+function sanitizeRendererMessage(message: string): string {
+  const safe = Array.from(message)
+    .filter((char) => {
+      const codePoint = char.codePointAt(0);
+      return codePoint !== undefined && codePoint >= 0x20 && codePoint < 0x7f;
+    })
+    .join('')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  if (safe.length === 0 || containsPrivateRendererTerm(safe)) {
+    return 'Channel setup could not continue.';
+  }
+  return safe.slice(0, 220);
+}
+
+function containsPrivateRendererTerm(message: string): boolean {
+  return /\b(?:token|credential|secret|header|serverUri|connectionUri|endpointUrl|baseUrl|tokenizedUrl|appPath|userDataPath|filesystemPath|persistenceFilePath|rawPayload|rawPlexPayload|nativeHandle)\b/iu.test(message) ||
+    /\bhttps?:\/\/\S+/iu.test(message) ||
+    /\b[A-Za-z]:\\\S+/u.test(message) ||
+    /\/Users\/\S+/u.test(message);
 }

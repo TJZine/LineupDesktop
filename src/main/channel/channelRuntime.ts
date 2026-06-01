@@ -14,7 +14,7 @@ import {
   type ChannelSetupRuntimeError,
   type ChannelSetupSummary,
 } from '../../contracts/channel.js';
-import type { PlexLibrarySectionSummary, PlexMediaItemSummary, PlexRuntimeSnapshot } from '../../contracts/plex.js';
+import type { PlexIpcResult, PlexLibrarySectionSummary, PlexListLibraryItemsValue, PlexMediaItemSummary, PlexRuntimeSnapshot } from '../../contracts/plex.js';
 import type { DesktopPlexRuntime } from '../plex/desktopPlexRuntime.js';
 
 export interface ChannelRuntimeOptions {
@@ -139,20 +139,20 @@ export class ChannelRuntime {
       const committedChannels = [...baseChannels];
       const sectionContent = [];
       for (const section of selectedSections.value) {
-        const items = await this.getInitialContentForSection(requestId, section);
-        if (!items.ok) {
+        const content = await this.getInitialContentForSection(requestId, section);
+        if (!content.ok) {
           return channelSetupFailure(requestId, channelContentValidationError('commit'));
         }
-        sectionContent.push({ section, items: items.value });
+        sectionContent.push({ section, content: content.value });
       }
 
-      for (const { section, items } of sectionContent) {
+      for (const { section, content } of sectionContent) {
         const next = this.authoring.createChannel(
           createChannelInputForSection(section),
           committedChannels,
         );
-        next.itemCount = items.length;
-        next.totalDurationMs = items.reduce((sum, item) => sum + item.durationMs, 0);
+        next.itemCount = content.itemCount;
+        next.totalDurationMs = content.totalDurationMs;
         next.lastContentRefresh = this.clock.now();
         committedChannels.push(next);
       }
@@ -185,15 +185,34 @@ export class ChannelRuntime {
   private async getInitialContentForSection(
     requestId: string,
     section: PlexLibrarySectionSummary,
-  ): Promise<{ ok: true; value: ResolvedContentItem[] } | { ok: false }> {
+  ): Promise<{ ok: true; value: { itemCount: number; totalDurationMs: number } } | { ok: false }> {
     const result = await this.plexRuntime?.listLibraryItems(
       `channel-setup-items-${requestId}-${section.id}`,
       { sectionId: section.id, offset: 0, limit: 100 },
     );
-    if (!result?.ok || result.value.items.length === 0) {
-      return { ok: false };
+    if (result?.ok && result.value.items.length > 0) {
+      const items = result.value.items.map(mapPlexMediaItemToResolvedContentItem);
+      return {
+        ok: true,
+        value: {
+          itemCount: items.length,
+          totalDurationMs: items.reduce((sum, item) => sum + item.durationMs, 0),
+        },
+      };
     }
-    return { ok: true, value: result.value.items.map(mapPlexMediaItemToResolvedContentItem) };
+    if (
+      hasPositiveSectionContentCount(section) &&
+      (result?.ok === true || isRetryablePlexItemProbeFailure(result))
+    ) {
+      return {
+        ok: true,
+        value: {
+          itemCount: section.contentCount,
+          totalDurationMs: 0,
+        },
+      };
+    }
+    return { ok: false };
   }
 }
 
@@ -337,6 +356,29 @@ function isSafeCommitSectionId(value: unknown): value is string {
     value.length > 0 &&
     value.length <= 120 &&
     /^[A-Za-z0-9._-]+$/u.test(value);
+}
+
+function hasPositiveSectionContentCount(
+  section: PlexLibrarySectionSummary,
+): section is PlexLibrarySectionSummary & { contentCount: number } {
+  return typeof section.contentCount === 'number' &&
+    Number.isFinite(section.contentCount) &&
+    section.contentCount > 0;
+}
+
+const RETRYABLE_ITEM_PROBE_ERROR_CODES = new Set([
+  'PLEX_RATE_LIMITED',
+  'PLEX_SERVER_UNREACHABLE',
+  'PLEX_LIBRARY_FAILED',
+]);
+
+function isRetryablePlexItemProbeFailure(
+  result: PlexIpcResult<PlexListLibraryItemsValue> | undefined,
+): boolean {
+  return result?.ok === false &&
+    result.error.operation === 'listLibraryItems' &&
+    result.error.retryable === true &&
+    RETRYABLE_ITEM_PROBE_ERROR_CODES.has(result.error.code);
 }
 
 function createChannelInputForSection(section: PlexLibrarySectionSummary): ChannelCreateInput {

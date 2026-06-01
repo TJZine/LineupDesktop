@@ -3,7 +3,7 @@ import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.j
 import type { DesktopPlexAuthService } from './auth/index.js';
 import type { DesktopPlexCredentialStore } from './auth/desktopPlexCredentialStore.js';
 import type { DesktopPlexServerDiscovery } from './discovery/index.js';
-import { extractLibrarySectionDirectories, extractMetadataArray, extractSearchHubMetadata, extractSearchHubs, normalizeLibraryPagination, parseLibrarySections, parseMediaItems, PLEX_LIBRARY_CONSTANTS, toRendererSafeLibrarySectionSummary, toRendererSafeMediaItemSummary, type PlexMediaType, type RawLibrarySection, type RawMediaItem } from './library/index.js';
+import { extractLibrarySectionDirectories, extractMetadataArray, extractSearchHubMetadata, extractSearchHubs, normalizeLibraryPagination, parseLibrarySections, parseMediaItems, PLEX_LIBRARY_CONSTANTS, PLEX_MEDIA_TYPES, toRendererSafeLibrarySectionSummary, toRendererSafeMediaItemSummary, type PlexLibrarySection, type PlexMediaType, type RawLibrarySection, type RawMediaItem } from './library/index.js';
 import { PlexLibraryError } from './library/plexLibraryError.js';
 import { applyFailureSnapshot, applyServerSelectionSnapshot, authRequiredError, cloneRuntimeSnapshot, createInitialSnapshot, failureResult, isOptionalShortString, mapCredentialStatus, mapRuntimeError, normalizeOperationKey, payloadAsContainer, recordRuntimeDiagnostic, staleError, StaleRuntimeMutationError, storageError, stripPinSecretFields, success, validatePositiveInteger, validationError } from './desktopPlexRuntimeSupport.js';
 import { LivePlexTransportError, type LivePlexLibraryTransport } from './livePlexTransport.js';
@@ -225,9 +225,11 @@ export class DesktopPlexRuntime {
       const connection = this.requireSelectedConnection('listLibrarySections');
       this.setLibraryStatus('loading', commit);
       const payload = await this.libraryTransport.listLibrarySections({ connection, token, signal });
-      const sections = parseLibrarySections(
+      const parsedSections = parseLibrarySections(
         extractLibrarySectionDirectories(payloadAsContainer<RawLibrarySection>(payload), 'library sections'),
-      ).map(toRendererSafeLibrarySectionSummary);
+      );
+      await this.enrichLibrarySectionCounts(parsedSections, { connection, token, signal });
+      const sections = parsedSections.map(toRendererSafeLibrarySectionSummary);
       commit((snapshot) => ({
         ...snapshot,
         library: { ...snapshot.library, status: 'ready', sections },
@@ -587,6 +589,72 @@ export class DesktopPlexRuntime {
       nowMs: this.nowMs(),
     }));
   }
+
+  private async enrichLibrarySectionCounts(
+    sections: PlexLibrarySection[],
+    input: { connection: ReturnType<DesktopPlexServerDiscovery['getSelectedConnectionForMain']>; token: string; signal: AbortSignal },
+  ): Promise<void> {
+    const connection = input.connection;
+    if (connection === null) {
+      return;
+    }
+    await Promise.all(sections.map(async (section) => {
+      const contentCount = await this.getLibraryItemCount({
+        connection,
+        token: input.token,
+        sectionId: section.id,
+        signal: input.signal,
+      });
+      section.contentCount = contentCount;
+      if (section.type !== 'show' || contentCount === null) {
+        delete section.episodeCount;
+        return;
+      }
+      const episodeCount = await this.getLibraryItemCount({
+        connection,
+        token: input.token,
+        sectionId: section.id,
+        filter: { type: PLEX_MEDIA_TYPES.EPISODE },
+        signal: input.signal,
+      });
+      if (episodeCount === null) {
+        delete section.episodeCount;
+        return;
+      }
+      section.episodeCount = episodeCount;
+    }));
+  }
+
+  private async getLibraryItemCount(
+    input: {
+      connection: NonNullable<ReturnType<DesktopPlexServerDiscovery['getSelectedConnectionForMain']>>;
+      token: string;
+      sectionId: string;
+      filter?: Readonly<Record<string, string | number>>;
+      signal: AbortSignal;
+    },
+  ): Promise<number | null> {
+    try {
+      const payload = await this.libraryTransport.listLibraryItems({
+        connection: input.connection,
+        token: input.token,
+        sectionId: input.sectionId,
+        offset: 0,
+        limit: 0,
+        ...(input.filter !== undefined ? { filter: input.filter } : {}),
+        signal: input.signal,
+      });
+      const container = payloadAsContainer<RawMediaItem>(payload).MediaContainer;
+      const total = container.totalSize ?? container.size;
+      return typeof total === 'number' && Number.isFinite(total) ? total : null;
+    } catch (error) {
+      if (input.signal.aborted || error instanceof StaleRuntimeMutationError) {
+        throw error;
+      }
+      return null;
+    }
+  }
+
   private fail<T>(
     requestId: string,
     error: PlexRuntimeError,

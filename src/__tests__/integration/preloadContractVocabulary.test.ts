@@ -1196,6 +1196,8 @@ test('preload channel setup bridge validates status results before returning the
   const commitHarness = createPreloadHarness((channel, request, input) => {
     assert.equal(channel, LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL);
     assert.ok(isPlexInvokeRequest(request));
+    assert.deepEqual(Object.keys(request).sort(), ['payload', 'requestId']);
+    assert.equal(Object.hasOwn(request, 'ok'), false);
     assert.deepEqual(request.payload, { mode: 'append', sectionIds: ['movies'] });
     return input({
       ok: true,
