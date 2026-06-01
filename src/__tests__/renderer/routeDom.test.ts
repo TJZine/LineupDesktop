@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import type { ChannelRuntimeRendererState } from '../../renderer/channelRuntimeState.js';
-import { createFakePlayerSnapshot, createPlayerOverlayState } from '../../renderer/overlays.js';
+import { createRendererSafePlayerSnapshot, createPlayerOverlayState } from '../../renderer/overlays.js';
+import { setEpgPresentationState } from '../../renderer/epg.js';
 import { renderRouteDom, renderWorkflowDom } from '../../renderer/routeDom.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
 import { applyWorkflowChannelSetupAction, createWorkflowState } from '../../renderer/workflow.js';
@@ -78,7 +79,7 @@ test('route DOM workflow rendering hides and disables player overlays away from 
     renderWorkflowDom(
       createWorkflowState('guide'),
       createPlayerOverlayState(),
-      createFakePlayerSnapshot(),
+      createRendererSafePlayerSnapshot(),
       dom,
     );
 
@@ -96,7 +97,7 @@ test('route DOM workflow rendering hides and disables player overlays away from 
     renderWorkflowDom(
       createWorkflowState('player'),
       createPlayerOverlayState(),
-      createFakePlayerSnapshot(),
+      createRendererSafePlayerSnapshot(),
       dom,
     );
 
@@ -203,7 +204,7 @@ test('route DOM renders support bundle status without filesystem paths', () => {
     renderWorkflowDom(
       createWorkflowState('settings'),
       createPlayerOverlayState(),
-      createFakePlayerSnapshot(),
+      createRendererSafePlayerSnapshot(),
       dom,
     );
 
@@ -252,7 +253,7 @@ test('route DOM renders playback options enabled and disabled fixture rows', () 
     renderWorkflowDom(
       createWorkflowState('player'),
       createPlayerOverlayState(),
-      createFakePlayerSnapshot(),
+      createRendererSafePlayerSnapshot(),
       dom,
     );
 
@@ -263,6 +264,177 @@ test('route DOM renders playback options enabled and disabled fixture rows', () 
     assert.match(renderedText, /Unavailable/u);
     assert.equal(audioOptions.children.some((child) => child.dataset.available === 'false'), true);
     assert.equal(subtitleOptions.children.some((child) => child.dataset.selected === 'true'), true);
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+});
+
+test('route DOM renders upstream-shaped guide shell states and focused program details', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    createElement: () => new ElementDouble(),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const grid = new ElementDouble();
+    const detailChannel = new ElementDouble();
+    const detailTitle = new ElementDouble();
+    const detailTime = new ElementDouble();
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.epgGridElement = grid as unknown as HTMLElement;
+    dom.epgDetailChannelElement = detailChannel as unknown as HTMLElement;
+    dom.epgDetailTitleElement = detailTitle as unknown as HTMLElement;
+    dom.epgDetailTimeElement = detailTime as unknown as HTMLElement;
+
+    renderWorkflowDom(
+      createWorkflowState('guide'),
+      createPlayerOverlayState(),
+      createRendererSafePlayerSnapshot(),
+      dom,
+    );
+
+    const renderedText = [collectText(grid), detailChannel.textContent, detailTitle.textContent, detailTime.textContent].join(' ');
+    assert.match(renderedText, /LINEUP/u);
+    assert.match(renderedText, /Now playing 101 - Liminal One/u);
+    assert.match(renderedText, /Guide ready/u);
+    assert.doesNotMatch(renderedText, /Loading guide|No channels available|Guide unavailable/u);
+    assert.match(renderedText, /The Midnight Archive/u);
+    assert.match(renderedText, /S2 E4/u);
+    assert.equal(grid.children[0]?.className, 'epg-shell');
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+});
+
+test('route DOM renders upstream-shaped player OSD fields', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    createElement: () => new ElementDouble(),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.osdStatusElement = new ElementDouble() as unknown as HTMLElement;
+    dom.osdTitleElement = new ElementDouble() as unknown as HTMLElement;
+    dom.osdSubtitleElement = new ElementDouble() as unknown as HTMLElement;
+    dom.osdAudioElement = new ElementDouble() as unknown as HTMLElement;
+    dom.osdSubtitlesElement = new ElementDouble() as unknown as HTMLElement;
+    dom.osdUpNextElement = new ElementDouble() as unknown as HTMLElement;
+    dom.osdTimecodeElement = new ElementDouble() as unknown as HTMLElement;
+    dom.osdEndsAtElement = new ElementDouble() as unknown as HTMLElement;
+    dom.osdBufferTextElement = new ElementDouble() as unknown as HTMLElement;
+    dom.osdBufferBarElement = new ElementDouble() as unknown as HTMLElement;
+    dom.osdPlayedBarElement = new ElementDouble() as unknown as HTMLElement;
+
+    renderWorkflowDom(
+      createWorkflowState('player'),
+      createPlayerOverlayState(),
+      createRendererSafePlayerSnapshot(),
+      dom,
+    );
+
+    const renderedText = [
+      dom.osdStatusElement,
+      dom.osdTitleElement,
+      dom.osdSubtitleElement,
+      dom.osdAudioElement,
+      dom.osdSubtitlesElement,
+      dom.osdUpNextElement,
+      dom.osdTimecodeElement,
+      dom.osdEndsAtElement,
+    ].map((element) => collectText(element as unknown as ElementDouble)).join(' ');
+    assert.match(renderedText, /PLAYING/u);
+    assert.match(renderedText, /The Midnight Archive/u);
+    assert.match(renderedText, /Episode 4 - Signal Lost/u);
+    assert.match(renderedText, /Audio: Main stereo/u);
+    assert.match(renderedText, /Subs: Off/u);
+    assert.match(renderedText, /12:00 \/ 60:00/u);
+    assert.match(renderedText, /Next on 101: After Hours Cinema/u);
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+});
+
+test('route DOM renders guide loading empty and error states without populated rows', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    createElement: () => new ElementDouble(),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    for (const state of ['loading', 'empty', 'error'] as const) {
+      const grid = new ElementDouble();
+      const detailTitle = new ElementDouble();
+      const dom = createOverlayDomBindings({
+        overlayStack: new ElementDouble(),
+        overlays: [],
+        overlayActions: [],
+      });
+      dom.epgGridElement = grid as unknown as HTMLElement;
+      dom.epgDetailTitleElement = detailTitle as unknown as HTMLElement;
+      renderWorkflowDom(
+        {
+          ...createWorkflowState('guide'),
+          epg: setEpgPresentationState(createWorkflowState('guide').epg, state),
+        },
+        createPlayerOverlayState(),
+        createRendererSafePlayerSnapshot(),
+        dom,
+      );
+
+      const renderedText = collectText(grid);
+      const rowCount = grid.children.filter((child) => child.className === 'epg-row').length;
+      assert.match(renderedText, state === 'loading' ? /Loading guide/u : state === 'empty' ? /No channels available/u : /Guide unavailable/u);
+      assert.equal(rowCount, 0);
+      assert.match(detailTitle.textContent, state === 'loading' ? /Loading guide/u : state === 'empty' ? /No channels available/u : /Guide unavailable/u);
+    }
   } finally {
     if (originalDocument === undefined) {
       Reflect.deleteProperty(globalThis, 'document');
@@ -309,7 +481,7 @@ test('route DOM renders channel setup review without privileged data', () => {
     renderWorkflowDom(
       createWorkflowState('channelSetup'),
       createPlayerOverlayState(),
-      createFakePlayerSnapshot(),
+      createRendererSafePlayerSnapshot(),
       dom,
     );
 
@@ -361,7 +533,7 @@ test('route DOM keeps channel commit controls disabled until a live Plex section
     renderWorkflowDom(
       createWorkflowState('channelSetup'),
       createPlayerOverlayState(),
-      createFakePlayerSnapshot(),
+      createRendererSafePlayerSnapshot(),
       dom,
       configuredChannelRuntimeState(),
       null,
@@ -374,7 +546,7 @@ test('route DOM keeps channel commit controls disabled until a live Plex section
     renderWorkflowDom(
       createWorkflowState('channelSetup'),
       createPlayerOverlayState(),
-      createFakePlayerSnapshot(),
+      createRendererSafePlayerSnapshot(),
       dom,
       configuredChannelRuntimeState(),
       liveSelection(),
@@ -387,7 +559,7 @@ test('route DOM keeps channel commit controls disabled until a live Plex section
     renderWorkflowDom(
       createWorkflowState('channelSetup'),
       createPlayerOverlayState(),
-      createFakePlayerSnapshot(),
+      createRendererSafePlayerSnapshot(),
       dom,
       { ...configuredChannelRuntimeState(), pending: true },
       liveSelection(),
@@ -441,7 +613,7 @@ test('route DOM disables channel commits after status failure with selected libr
     renderWorkflowDom(
       createWorkflowState('channelSetup'),
       createPlayerOverlayState(),
-      createFakePlayerSnapshot(),
+      createRendererSafePlayerSnapshot(),
       dom,
       {
         pending: false,
@@ -500,7 +672,7 @@ test('route DOM derives replace and confirm controls from persisted status and e
     renderWorkflowDom(
       createWorkflowState('channelSetup'),
       createPlayerOverlayState(),
-      createFakePlayerSnapshot(),
+      createRendererSafePlayerSnapshot(),
       dom,
       {
         ...configuredChannelRuntimeState(),
@@ -526,7 +698,7 @@ test('route DOM derives replace and confirm controls from persisted status and e
     renderWorkflowDom(
       createWorkflowState('channelSetup'),
       createPlayerOverlayState(),
-      createFakePlayerSnapshot(),
+      createRendererSafePlayerSnapshot(),
       dom,
       {
         ...configuredChannelRuntimeState(),
@@ -588,7 +760,7 @@ test('route DOM renders strategy controls as focusable selected buttons', () => 
     renderWorkflowDom(
       replaceWorkflow,
       createPlayerOverlayState(),
-      createFakePlayerSnapshot(),
+      createRendererSafePlayerSnapshot(),
       dom,
       configuredChannelRuntimeState(),
       liveSelection(),
@@ -656,7 +828,7 @@ test('route DOM shows selected Plex library as the channel creation source', () 
     renderWorkflowDom(
       createWorkflowState('channelSetup'),
       createPlayerOverlayState(),
-      createFakePlayerSnapshot(),
+      createRendererSafePlayerSnapshot(),
       dom,
       configuredChannelRuntimeState(),
       liveSelection(),
@@ -742,7 +914,7 @@ test('reachable product route text avoids internal implementation-status terms',
       renderWorkflowDom(
         workflowState,
         createPlayerOverlayState(),
-        createFakePlayerSnapshot(),
+        createRendererSafePlayerSnapshot(),
         dom,
       );
 
@@ -955,5 +1127,16 @@ function createOverlayDomBindings({
     overlayPlaybackSummaryElement: null,
     overlayAudioOptionsElement: null,
     overlaySubtitleOptionsElement: null,
+    osdStatusElement: null,
+    osdTitleElement: null,
+    osdSubtitleElement: null,
+    osdAudioElement: null,
+    osdSubtitlesElement: null,
+    osdUpNextElement: null,
+    osdTimecodeElement: null,
+    osdEndsAtElement: null,
+    osdBufferTextElement: null,
+    osdBufferBarElement: null,
+    osdPlayedBarElement: null,
   };
 }

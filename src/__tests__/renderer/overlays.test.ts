@@ -5,10 +5,10 @@ import { containsPlexForbiddenRendererField } from '../../contracts/plex.js';
 import { hasPlayerForbiddenPrivilegedField } from '../../contracts/player.js';
 import {
   applyPlayerOverlayAction,
-  createFakePlayerSnapshot,
+  createRendererSafePlayerSnapshot,
   createPlayerOverlayState,
   createPlayerOverlayView,
-  getFakeOverlayChannels,
+  getDefaultOverlayPresentationChannels,
   PLAYER_OVERLAY_IDLE_FOCUS_ID,
   resolvePlayerOverlayFocusId,
 } from '../../renderer/overlays.js';
@@ -25,6 +25,10 @@ test('overlay state starts with now-playing, channel badge, and OSD visible', ()
   assert.equal(view.activeFocusId, 'overlay-mini-guide');
   assert.equal(view.nowPlaying.title, 'The Midnight Archive');
   assert.equal(view.nowPlaying.progressPercent, 20);
+  assert.equal(view.playerOsd.statusLabel, 'PLAYING');
+  assert.equal(view.playerOsd.timecode, '12:00 / 60:00');
+  assert.match(view.playerOsd.upNextText, /After Hours Cinema/u);
+  assert.deepEqual(view.nowPlaying.badges, ['TV-14', '1080p', 'Direct Play']);
 });
 
 test('overlay stack keeps mini guide focused above passive badge overlays', () => {
@@ -47,7 +51,10 @@ test('mini guide channel selection updates the selected channel and badge summar
   const view = createPlayerOverlayView(next);
 
   assert.equal(view.selectedMiniGuideChannel.number, '204');
-  assert.equal(view.channelBadge.name, 'The Vault');
+  assert.equal(view.channelBadge.name, 'Liminal One');
+  assert.equal(view.selectedMiniGuideChannel.nowStartLabel, '8:00 PM');
+  assert.equal(view.selectedMiniGuideChannel.nowProgressPercent, 50);
+  assert.equal(view.selectedMiniGuideChannel.buildStrategy, 'movies');
   assert.deepEqual(
     view.miniGuideChannels.map((channel) => [channel.number, channel.selected]),
     [
@@ -61,6 +68,20 @@ test('mini guide channel selection updates the selected channel and badge summar
 
   const previous = applyPlayerOverlayAction(next, 'previousMiniGuideChannel');
   assert.equal(createPlayerOverlayView(previous).selectedMiniGuideChannel.number, '101');
+});
+
+test('mini guide focus does not change now-playing or OSD current channel', () => {
+  const initialView = createPlayerOverlayView(createPlayerOverlayState());
+  const next = applyPlayerOverlayAction(createPlayerOverlayState(), 'nextMiniGuideChannel');
+  const view = createPlayerOverlayView(next);
+
+  assert.equal(view.selectedMiniGuideChannel.number, '204');
+  assert.equal(view.nowPlaying.channelNumber, initialView.nowPlaying.channelNumber);
+  assert.equal(view.nowPlaying.channelName, initialView.nowPlaying.channelName);
+  assert.equal(view.nowPlaying.title, initialView.nowPlaying.title);
+  assert.equal(view.nowPlaying.upNextText, initialView.nowPlaying.upNextText);
+  assert.equal(view.playerOsd.upNextText, initialView.playerOsd.upNextText);
+  assert.equal(view.channelBadge.number, initialView.channelBadge.number);
 });
 
 test('channel number buffer accepts digits, expires stale input, and tunes matches', () => {
@@ -78,6 +99,8 @@ test('channel number buffer accepts digits, expires stale input, and tunes match
   const tuned = applyPlayerOverlayAction(three, 'commitChannelNumber', 2_100);
   const tunedView = createPlayerOverlayView(tuned);
   assert.equal(tunedView.selectedMiniGuideChannel.number, '204');
+  assert.equal(tunedView.nowPlaying.channelNumber, '204');
+  assert.equal(tunedView.channelBadge.name, 'The Vault');
   assert.equal(tunedView.channelNumberBuffer, '');
   assert.equal(tunedView.visibleOverlays.channelNumber, false);
 
@@ -148,7 +171,7 @@ test('closing the last modal overlay falls back to the visible player OSD toggle
 
 test('overlay view can summarize a renderer-safe player snapshot', () => {
   const snapshot = {
-    ...createFakePlayerSnapshot(),
+    ...createRendererSafePlayerSnapshot(),
     status: 'paused',
     playing: false,
     positionMs: 30_000,
@@ -161,7 +184,10 @@ test('overlay view can summarize a renderer-safe player snapshot', () => {
       container: 'preview',
     },
   } as const;
-  const view = createPlayerOverlayView(createPlayerOverlayState(), snapshot);
+  const view = createPlayerOverlayView(createPlayerOverlayState(), {
+    channels: getDefaultOverlayPresentationChannels(),
+    playerSnapshot: snapshot,
+  });
 
   assert.equal(view.nowPlaying.title, 'Snapshot Title');
   assert.equal(view.nowPlaying.subtitle, 'Snapshot Subtitle');
@@ -172,8 +198,10 @@ test('overlay view can summarize a renderer-safe player snapshot', () => {
 });
 
 test('overlay view clamps now-playing progress to the visible media duration', () => {
-  const baseSnapshot = createFakePlayerSnapshot();
+  const baseSnapshot = createRendererSafePlayerSnapshot();
   const negativePositionView = createPlayerOverlayView(createPlayerOverlayState(), {
+    channels: getDefaultOverlayPresentationChannels(),
+    playerSnapshot: {
     ...baseSnapshot,
     positionMs: -30_000,
     durationMs: 60_000,
@@ -182,6 +210,7 @@ test('overlay view clamps now-playing progress to the visible media duration', (
       title: 'Clamped Media',
       durationMs: 60_000,
     },
+    },
   });
 
   assert.equal(negativePositionView.nowPlaying.positionLabel, '0:00');
@@ -189,6 +218,8 @@ test('overlay view clamps now-playing progress to the visible media duration', (
   assert.equal(negativePositionView.nowPlaying.progressPercent, 0);
 
   const beyondDurationView = createPlayerOverlayView(createPlayerOverlayState(), {
+    channels: getDefaultOverlayPresentationChannels(),
+    playerSnapshot: {
     ...baseSnapshot,
     positionMs: 90_000,
     durationMs: 60_000,
@@ -197,6 +228,7 @@ test('overlay view clamps now-playing progress to the visible media duration', (
       title: 'Clamped Media',
       durationMs: 60_000,
     },
+    },
   });
 
   assert.equal(beyondDurationView.nowPlaying.positionLabel, '1:00');
@@ -204,10 +236,10 @@ test('overlay view clamps now-playing progress to the visible media duration', (
   assert.equal(beyondDurationView.nowPlaying.progressPercent, 100);
 });
 
-test('fake overlay view models avoid privileged renderer fields', () => {
+test('overlay presentation view models avoid privileged renderer fields', () => {
   const view = createPlayerOverlayView(createPlayerOverlayState());
 
-  assert.equal(containsPlexForbiddenRendererField(getFakeOverlayChannels()), false);
+  assert.equal(containsPlexForbiddenRendererField(getDefaultOverlayPresentationChannels()), false);
   assert.equal(containsPlexForbiddenRendererField(view), false);
   assert.equal(hasPlayerForbiddenPrivilegedField(view), false);
 });

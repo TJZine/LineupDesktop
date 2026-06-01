@@ -1289,6 +1289,17 @@ function createPlexDomBindings(overrides: Partial<RendererDomBindings> = {}): Re
     overlayPlaybackSummaryElement: null,
     overlayAudioOptionsElement: null,
     overlaySubtitleOptionsElement: null,
+    osdStatusElement: null,
+    osdTitleElement: null,
+    osdSubtitleElement: null,
+    osdAudioElement: null,
+    osdSubtitlesElement: null,
+    osdUpNextElement: null,
+    osdTimecodeElement: null,
+    osdEndsAtElement: null,
+    osdBufferTextElement: null,
+    osdBufferBarElement: null,
+    osdPlayedBarElement: null,
     ...overrides,
   };
 }

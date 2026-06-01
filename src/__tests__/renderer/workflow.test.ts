@@ -24,8 +24,9 @@ import {
   sanitizeChannelRuntimeError,
   type ChannelRuntimeRendererState,
 } from '../../renderer/channelRuntimeState.js';
+import type { EpgPresentationSource } from '../../renderer/epg.js';
 
-test('workflow state starts on the player route with fake program context', () => {
+test('workflow state starts on the player route with injected presentation context', () => {
   const state = createWorkflowState();
   const view = getRouteWorkflowView(state);
 
@@ -35,7 +36,8 @@ test('workflow state starts on the player route with fake program context', () =
   assert.equal(view.route, 'player');
   assert.equal(view.title, 'Player');
   assert.equal(view.currentProgram.channelName, 'Liminal One');
-  assert.equal(view.guide.selectedProgram.title, 'The Midnight Archive');
+  assert.equal(view.currentProgram.title, 'The Midnight Archive');
+  assert.equal(view.guide.selectedProgram?.title, 'Signal Warmup');
   assert.equal(view.actions.map((action) => action.id).join(','), 'openGuide,openSettings');
 });
 
@@ -47,7 +49,7 @@ test('route actions move between existing route ids and carry status text', () =
   assert.deepEqual(guide.routeState, { activeRoute: 'guide', previousRoute: 'player' });
   assert.equal(guide.lastActionId, 'openGuide');
   assert.equal(guide.lastActionRoute, 'player');
-  assert.equal(guideView.statusText, 'Guide opened from the player preview.');
+  assert.equal(guideView.statusText, 'Guide opened from the player.');
 
   const setup = applyWorkflowAction(guide, 'openChannelSetup');
   assert.deepEqual(setup.routeState, { activeRoute: 'channelSetup', previousRoute: 'guide' });
@@ -80,7 +82,7 @@ test('settings player action uses settings-specific status text', () => {
   assert.deepEqual(player.routeState, { activeRoute: 'player', previousRoute: 'settings' });
   assert.equal(player.lastActionId, 'resumePlayer');
   assert.equal(player.lastActionRoute, 'settings');
-  assert.equal(getRouteWorkflowView(player).statusText, 'Returned to player preview from settings.');
+  assert.equal(getRouteWorkflowView(player).statusText, 'Returned to player from settings.');
 });
 
 test('direct route activation clears action status and preserves previous route', () => {
@@ -105,7 +107,7 @@ test('settings actions update only renderer-local settings draft state', () => {
   assert.equal(hiddenBadges.settingsDraft.launchMode, 'fullscreen-preview');
   assert.equal(hiddenBadges.settingsDraft.guideDensity, 'compact');
   assert.equal(hiddenBadges.settingsDraft.previewBadgesEnabled, false);
-  assert.equal(view.settings.playbackMode, 'Fullscreen desktop preview');
+  assert.equal(view.settings.playbackMode, 'Fullscreen desktop player');
   assert.equal(view.settings.sections.length, 3);
 });
 
@@ -156,6 +158,46 @@ test('support bundle status sanitizes display names and shows redaction outcomes
   assert.equal(unsafeBundle?.valueLabel, 'Bundle - 6 files (redaction failed)');
   assert.equal(pendingBundle?.valueLabel, 'lineup-desktop-support-bundle-3 - 6 files (redaction pending)');
   assert.equal(JSON.stringify(unsafe).includes('C:\\Users'), false);
+});
+
+test('workflow product route uses injected presentation fixtures', () => {
+  const presentation: EpgPresentationSource = {
+    channels: [
+      {
+        id: 'injected-channel',
+        number: '777',
+        name: 'Injected Channel',
+        programs: [
+          {
+            id: 'injected-program',
+            title: 'Injected Program',
+            subtitle: 'Injected Subtitle',
+            description: 'Injected guide description.',
+            showTitle: 'Injected Show',
+            episodeLabel: 'S1 E7',
+            rating: 'TV-G',
+            quality: ['HD'],
+            genres: ['Injected'],
+            startsAtMs: Date.UTC(2026, 4, 12, 20, 0, 0),
+            endsAtMs: Date.UTC(2026, 4, 12, 21, 0, 0),
+          },
+        ],
+      },
+    ],
+    nowWatching: {
+      title: 'Injected Now Watching',
+      subtitle: 'Current injected episode',
+      channelId: 'injected-channel',
+      startsAtMs: Date.UTC(2026, 4, 12, 20, 0, 0),
+      endsAtMs: Date.UTC(2026, 4, 12, 21, 0, 0),
+    },
+  };
+  const view = getRouteWorkflowView(createWorkflowState('player', presentation));
+
+  assert.equal(view.currentProgram.title, 'Injected Now Watching');
+  assert.equal(view.channels[0]?.name, 'Injected Channel');
+  assert.equal(view.guide.selectedProgram?.title, 'Injected Program');
+  assert.doesNotMatch(JSON.stringify(view), /Liminal|Midnight Archive|The Vault/u);
 });
 
 test('settings surface uses persisted channel setup status when available', () => {
@@ -592,11 +634,11 @@ test('EPG actions update only renderer-local guide state', () => {
 
   assert.deepEqual(later.routeState, initial.routeState);
   assert.equal(view.guide.windowStartMs, initial.epg.windowStartMs + 30 * 60 * 1000);
-  assert.equal(view.guide.selectedProgram.channelId, 'channel-vault');
-  assert.equal(view.guide.selectedProgram.title, 'Restored Feature');
+  assert.equal(view.guide.selectedProgram?.channelId, 'channel-vault');
+  assert.equal(view.guide.selectedProgram?.title, 'Restored Feature');
 });
 
-test('fake workflow view models avoid Plex and player privileged renderer fields', () => {
+test('workflow view models avoid Plex and player privileged renderer fields', () => {
   const routeIds = ['player', 'guide', 'settings', 'channelSetup'] as const;
 
   for (const routeId of routeIds) {
