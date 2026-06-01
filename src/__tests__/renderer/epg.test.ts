@@ -20,28 +20,28 @@ test('EPG guide view creates deterministic slots and clipped program spans', () 
   const view = createEpgGuideView(createEpgState());
 
   assert.equal(view.slots.length, 6);
-  assert.equal(view.slots[0].label, '8:00 PM');
-  assert.equal(view.slots[5].label, '10:30 PM');
+  assert.equal(view.slots[0].label, '8:30 PM');
+  assert.equal(view.slots[5].label, '11:00 PM');
   assert.equal(view.rows.length, 4);
   assert.equal(view.rows.some((row) => row.name.includes('Long Channel Name')), true);
 
   const selectedProgram = view.selectedProgram;
   assert.notEqual(selectedProgram, null);
   if (selectedProgram === null) return;
-  assert.equal(selectedProgram.id, 'liminal-cold-open');
+  assert.equal(selectedProgram.id, 'liminal-archive');
   assert.equal(selectedProgram.columnStart, 1);
-  assert.equal(selectedProgram.columnSpan, 1);
-  assert.equal(selectedProgram.temporalState, 'past');
+  assert.equal(selectedProgram.columnSpan, 2);
+  assert.equal(selectedProgram.temporalState, 'current');
   assert.equal(selectedProgram.progressPercent, 0);
-  assert.equal(selectedProgram.widthTier, 'narrow');
-  assert.equal(selectedProgram.timeLabel, '7:30 PM - 8:30 PM');
+  assert.equal(selectedProgram.widthTier, 'medium');
+  assert.equal(selectedProgram.timeLabel, '8:30 PM - 9:30 PM');
 
   const clippedProgram = view.rows[0].programs.find(
-    (program) => program.id === 'liminal-cold-open',
+    (program) => program.id === 'liminal-archive',
   );
   assert.equal(clippedProgram?.columnStart, 1);
-  assert.equal(clippedProgram?.columnSpan, 1);
-  assert.equal(clippedProgram?.temporalState, 'past');
+  assert.equal(clippedProgram?.columnSpan, 2);
+  assert.equal(clippedProgram?.temporalState, 'current');
 });
 
 test('EPG guide view exposes upstream-shaped shell, info panel, and route states', () => {
@@ -51,10 +51,10 @@ test('EPG guide view exposes upstream-shaped shell, info panel, and route states
   assert.equal(view.shell.layoutMode, 'classic');
   assert.match(view.shell.focusHint, /OK Select/u);
   assert.equal(view.shell.nowWatchingChannelLabel, '101 - Liminal One');
-  assert.equal(view.infoPanel?.eyebrow, 'Lineup Live');
-  assert.equal(view.infoPanel?.subtitle, 'S1 E1');
-  assert.deepEqual(view.infoPanel?.badges, ['TV-PG', 'HD', 'AAC']);
-  assert.match(view.infoPanel?.description ?? '', /warmup block/u);
+  assert.equal(view.infoPanel?.eyebrow, 'The Midnight Archive');
+  assert.equal(view.infoPanel?.subtitle, 'S2 E4');
+  assert.deepEqual(view.infoPanel?.badges, ['TV-14', '1080p', 'HDR', '5.1']);
+  assert.match(view.infoPanel?.description ?? '', /late-night archive episode/u);
   assert.equal(view.state.state, 'ready');
 });
 
@@ -100,12 +100,12 @@ test('EPG actions move the guide window and normalize selection to visible progr
   const later = applyEpgAction(initial, 'nextWindow');
   const laterView = createEpgGuideView(later);
 
-  assert.equal(later.windowStartMs, EPG_DEMO_BASE_TIME_MS + EPG_SLOT_DURATION_MS);
+  assert.equal(later.windowStartMs, EPG_DEMO_BASE_TIME_MS + EPG_SLOT_DURATION_MS * 2);
   assert.equal(laterView.windowStartMs, later.windowStartMs);
   assert.equal(laterView.selectedProgram?.id, 'liminal-archive');
 
-  const latest = applyEpgAction(applyEpgAction(later, 'nextWindow'), 'nextWindow');
-  assert.equal(latest.windowStartMs, EPG_DEMO_BASE_TIME_MS + EPG_SLOT_DURATION_MS * 2);
+  const latest = applyEpgAction(later, 'nextWindow');
+  assert.equal(latest.windowStartMs, later.windowStartMs);
 
   const clamped = applyEpgAction(latest, 'nextWindow');
   assert.equal(clamped.windowStartMs, latest.windowStartMs);
@@ -161,4 +161,48 @@ test('guide presentation state variants are mutually exclusive', () => {
 test('EPG presentation view models avoid Plex and player privileged renderer fields', () => {
   assert.equal(containsPlexForbiddenRendererField(getDefaultEpgPresentationChannels()), false);
   assert.equal(containsPlexForbiddenRendererField(createEpgGuideView(createEpgState())), false);
+});
+
+test('EPG state derives its initial window and selection from injected presentation timing', () => {
+  const presentation = {
+    channels: [
+      {
+        id: 'late-channel',
+        number: '900',
+        name: 'Late Channel',
+        programs: [
+          {
+            id: 'late-program',
+            title: 'Late Program',
+            subtitle: 'Night block',
+            description: 'Late injected schedule.',
+            showTitle: 'Late Program',
+            episodeLabel: '',
+            rating: 'TV-G',
+            quality: ['HD'],
+            genres: ['Drama'],
+            startsAtMs: Date.UTC(2026, 4, 13, 1, 0, 0),
+            endsAtMs: Date.UTC(2026, 4, 13, 2, 0, 0),
+          },
+        ],
+      },
+    ],
+    nowWatching: {
+      title: 'Late Program',
+      subtitle: 'Night block',
+      channelId: 'late-channel',
+      startsAtMs: Date.UTC(2026, 4, 13, 1, 0, 0),
+      endsAtMs: Date.UTC(2026, 4, 13, 2, 0, 0),
+    },
+  } as const;
+
+  const state = createEpgState(presentation);
+  const view = createEpgGuideView(state, presentation);
+
+  assert.equal(state.windowStartMs, Date.UTC(2026, 4, 13, 1, 0, 0));
+  assert.equal(state.selectedChannelId, 'late-channel');
+  assert.equal(state.selectedProgramId, 'late-program');
+  assert.equal(view.selectedProgram?.id, 'late-program');
+  assert.equal(view.selectedProgram?.temporalState, 'current');
+  assert.equal(view.slots[0]?.label, '1:00 AM');
 });

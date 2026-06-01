@@ -25,7 +25,7 @@ import {
   sanitizeChannelRuntimeError,
   type ChannelRuntimeRendererState,
 } from '../../renderer/channelRuntimeState.js';
-import type { EpgPresentationSource } from '../../renderer/epg.js';
+import { setEpgPresentationState, type EpgPresentationSource } from '../../renderer/epg.js';
 
 test('workflow state starts on the player route with injected presentation context', () => {
   const state = createWorkflowState();
@@ -38,7 +38,7 @@ test('workflow state starts on the player route with injected presentation conte
   assert.equal(view.title, 'Player');
   assert.equal(view.currentProgram.channelName, 'Liminal One');
   assert.equal(view.currentProgram.title, 'The Midnight Archive');
-  assert.equal(view.guide.selectedProgram?.title, 'Signal Warmup');
+  assert.equal(view.guide.selectedProgram?.title, 'The Midnight Archive');
   assert.equal(view.actions.map((action) => action.id).join(','), 'openGuide,openSettings');
 });
 
@@ -199,6 +199,38 @@ test('workflow product route uses injected presentation fixtures', () => {
   assert.equal(view.channels[0]?.name, 'Injected Channel');
   assert.equal(view.guide.selectedProgram?.title, 'Injected Program');
   assert.doesNotMatch(JSON.stringify(view), /Liminal|Midnight Archive|The Vault/u);
+});
+
+test('workflow route summaries fall back to guide-state placeholders until the guide is ready', () => {
+  const loadingState = {
+    ...createWorkflowState('guide'),
+    epg: setEpgPresentationState(createWorkflowState('guide').epg, 'loading'),
+  };
+  const guideView = getRouteWorkflowView(loadingState);
+  const playerView = getRouteWorkflowView({
+    ...createWorkflowState('player'),
+    epg: setEpgPresentationState(createWorkflowState('player').epg, 'error'),
+  });
+
+  assert.equal(guideView.channels.length, 0);
+  assert.equal(guideView.currentProgram.title, 'Loading guide');
+  assert.equal(guideView.currentProgram.startsAtMs, null);
+  assert.equal(guideView.primaryText, 'Schedule rows are preparing for the selected lineup.');
+  assert.equal(playerView.channels.length, 0);
+  assert.equal(playerView.currentProgram.title, 'Guide unavailable');
+  assert.equal(playerView.currentProgram.endsAtMs, null);
+  assert.equal(playerView.primaryText, 'Current program details are temporarily unavailable.');
+  assert.doesNotMatch(
+    JSON.stringify({
+      guidePrimaryText: guideView.primaryText,
+      guideCurrentProgram: guideView.currentProgram,
+      playerPrimaryText: playerView.primaryText,
+      playerCurrentProgram: playerView.currentProgram,
+      guideChannels: guideView.channels,
+      playerChannels: playerView.channels,
+    }),
+    /The Midnight Archive|4 channels are available|is cued on Liminal One/u,
+  );
 });
 
 test('settings surface uses persisted channel setup status when available', () => {

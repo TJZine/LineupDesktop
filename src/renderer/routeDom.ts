@@ -72,13 +72,19 @@ export function renderWorkflowDom(
     dom.currentChannelElement.textContent = view.currentProgram.channelName;
   }
   if (dom.currentProgramElement) {
-    dom.currentProgramElement.textContent = `${view.currentProgram.title} - ${view.currentProgram.subtitle}`;
+    dom.currentProgramElement.textContent = [
+      view.currentProgram.title,
+      view.currentProgram.subtitle,
+    ].filter((value) => value.length > 0).join(' - ');
   }
   if (dom.currentWindowElement) {
-    dom.currentWindowElement.textContent = formatEpgTimeWindow(
-      view.currentProgram.startsAtMs,
-      view.currentProgram.endsAtMs,
-    );
+    dom.currentWindowElement.textContent =
+      view.currentProgram.startsAtMs === null || view.currentProgram.endsAtMs === null
+        ? view.guide.state.detail
+        : formatEpgTimeWindow(
+          view.currentProgram.startsAtMs,
+          view.currentProgram.endsAtMs,
+        );
   }
 
   renderChannelList(view, dom);
@@ -275,7 +281,10 @@ function renderEpgGuideDom(view: RouteWorkflowViewModel, dom: RendererDomBinding
       cell.style.setProperty('--epg-cell-progress', `${program.progressPercent}%`);
       const meta = document.createElement('span');
       meta.className = 'epg-cell-meta';
-      meta.textContent = `${program.episodeLabel} - ${program.timeLabel}`;
+      meta.textContent = [
+        program.episodeLabel.trim(),
+        program.timeLabel,
+      ].filter((value) => value.length > 0).join(' - ');
       const title = document.createElement('strong');
       title.textContent = program.title;
       const subtitle = document.createElement('span');

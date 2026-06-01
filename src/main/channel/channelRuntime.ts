@@ -5,7 +5,7 @@ import {
 } from '../../domain/channel/index.js';
 import { ChannelPersistenceStore, type ChannelPersistenceStoragePort } from '../../domain/channel/channelPersistenceStore.js';
 import { ChannelRepository } from '../../domain/channel/channelRepository.js';
-import type { ChannelConfig, ChannelCreateInput, ResolvedContentItem } from '../../domain/channel/types.js';
+import type { ChannelConfig, ChannelCreateInput } from '../../domain/channel/types.js';
 import {
   channelSetupFailure,
   channelSetupSuccess,
@@ -187,7 +187,8 @@ export class ChannelRuntime {
     section: PlexLibrarySectionSummary,
   ): Promise<{ ok: true; value: { itemCount: number; totalDurationMs: number } } | { ok: false }> {
     const limit = 100;
-    const items: ResolvedContentItem[] = [];
+    let itemCount = 0;
+    let totalDurationMs = 0;
     let offset = 0;
     let firstResult: PlexIpcResult<PlexListLibraryItemsValue> | undefined;
 
@@ -198,7 +199,7 @@ export class ChannelRuntime {
       );
       firstResult ??= result;
       if (result?.ok !== true) {
-        if (items.length === 0 && shouldUseSectionContentCountFallback(section, result)) {
+        if (itemCount === 0 && shouldUseSectionContentCountFallback(section, result)) {
           return sectionContentCountFallback(section);
         }
         return { ok: false };
@@ -206,19 +207,23 @@ export class ChannelRuntime {
       if (result.value.items.length === 0) {
         break;
       }
-      items.push(...result.value.items.map(mapPlexMediaItemToResolvedContentItem));
+      itemCount += result.value.items.length;
+      totalDurationMs += result.value.items.reduce(
+        (sum, item) => sum + sanitizeDurationMs(item.durationMs),
+        0,
+      );
       if (result.value.items.length < limit) {
         break;
       }
       offset += result.value.items.length;
     }
 
-    if (items.length > 0) {
+    if (itemCount > 0) {
       return {
         ok: true,
         value: {
-          itemCount: items.length,
-          totalDurationMs: items.reduce((sum, item) => sum + item.durationMs, 0),
+          itemCount,
+          totalDurationMs,
         },
       };
     }
@@ -436,28 +441,6 @@ function createChannelInputForSection(section: PlexLibrarySectionSummary): Chann
   };
 }
 
-function mapPlexMediaItemToResolvedContentItem(
-  item: PlexMediaItemSummary,
-  index: number,
-): ResolvedContentItem {
-  return {
-    ratingKey: item.ratingKey,
-    type: item.type === 'show' || item.type === 'episode' ? item.type : 'movie',
-    title: item.title,
-    fullTitle: item.grandparentTitle ? `${item.grandparentTitle} - ${item.title}` : item.title,
-    ...(item.grandparentTitle !== undefined ? { showTitle: item.grandparentTitle } : {}),
-    durationMs: item.durationMs,
-    thumb: null,
-    year: item.year,
-    ...(item.seasonNumber !== undefined ? { seasonNumber: item.seasonNumber } : {}),
-    ...(item.episodeNumber !== undefined ? { episodeNumber: item.episodeNumber } : {}),
-    scheduledIndex: index,
-    ...(item.rating !== undefined ? { rating: item.rating } : {}),
-    ...(item.contentRating !== undefined ? { contentRating: item.contentRating } : {}),
-    ...(item.genres !== undefined ? { genres: [...item.genres] } : {}),
-    ...(item.directors !== undefined ? { directors: [...item.directors] } : {}),
-    ...(item.summary.length > 0 ? { summary: item.summary } : {}),
-    ...(item.viewCount !== undefined ? { watched: item.viewCount > 0 } : {}),
-    addedAt: item.addedAtMs,
-  };
+function sanitizeDurationMs(value: PlexMediaItemSummary['durationMs']): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
 }

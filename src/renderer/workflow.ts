@@ -65,8 +65,8 @@ export interface ProgramSummaryViewModel {
   title: string;
   subtitle: string;
   channelName: string;
-  startsAtMs: number;
-  endsAtMs: number;
+  startsAtMs: number | null;
+  endsAtMs: number | null;
 }
 
 export interface ChannelSummaryViewModel {
@@ -265,8 +265,12 @@ export function getRouteWorkflowView(
 ): RouteWorkflowViewModel {
   const route = state.routeState.activeRoute;
   const copy = ROUTE_COPY[route];
-  const currentProgram = createCurrentProgramSummary(state.guidePresentation);
-  const channels = createChannelSummaries(state.guidePresentation);
+  const guide = createEpgGuideView(state.epg, state.guidePresentation);
+  const guideReady = guide.presentationState === 'ready';
+  const currentProgram = guideReady
+    ? createCurrentProgramSummary(state.guidePresentation)
+    : createGuidePlaceholderProgramSummary(guide);
+  const channels = guideReady ? createChannelSummaries(state.guidePresentation) : [];
   const persistedSummary = channelRuntime?.summary ?? null;
   const persistedChannelCount = persistedSummary?.channelCount ?? 0;
   const selectedLibraryItemCount = persistedSummary?.channels.reduce(
@@ -284,15 +288,11 @@ export function getRouteWorkflowView(
     kicker: copy.kicker,
     statusText,
     tone: copy.tone,
-    primaryText: route === 'player'
-      ? `${currentProgram.title} is cued on ${currentProgram.channelName}.`
-      : route === 'guide'
-        ? `${String(channels.length)} channels are available in the guide shell.`
-        : copy.primaryText,
+    primaryText: createPrimaryText(route, copy.primaryText, guide, currentProgram, channels),
     secondaryText: copy.secondaryText,
     currentProgram,
     channels,
-    guide: createEpgGuideView(state.epg, state.guidePresentation),
+    guide,
     settings: {
       libraryName: persistedSummary?.currentChannelName ?? 'No persisted channel library',
       channelCount: persistedChannelCount,
@@ -336,6 +336,18 @@ function createCurrentProgramSummary(presentation: EpgPresentationSource): Progr
   };
 }
 
+function createGuidePlaceholderProgramSummary(
+  guide: EpgGuideViewModel,
+): ProgramSummaryViewModel {
+  return {
+    title: guide.state.label,
+    subtitle: '',
+    channelName: 'Guide',
+    startsAtMs: null,
+    endsAtMs: null,
+  };
+}
+
 function createChannelSummaries(presentation: EpgPresentationSource): readonly ChannelSummaryViewModel[] {
   return presentation.channels.map((channel) => ({
     id: channel.id,
@@ -344,6 +356,50 @@ function createChannelSummaries(presentation: EpgPresentationSource): readonly C
     currentTitle: channel.programs[0]?.title ?? 'No current program',
     nextTitle: channel.programs[1]?.title ?? 'No upcoming program',
   }));
+}
+
+function createPrimaryText(
+  route: AppRouteId,
+  defaultPrimaryText: string,
+  guide: EpgGuideViewModel,
+  currentProgram: ProgramSummaryViewModel,
+  channels: readonly ChannelSummaryViewModel[],
+): string {
+  if (route === 'player') {
+    return guide.presentationState === 'ready'
+      ? `${currentProgram.title} is cued on ${currentProgram.channelName}.`
+      : guidePlaceholderPrimaryText(guide.presentationState, 'player');
+  }
+  if (route === 'guide') {
+    return guide.presentationState === 'ready'
+      ? `${String(channels.length)} channels are available in the guide shell.`
+      : guidePlaceholderPrimaryText(guide.presentationState, 'guide');
+  }
+  return defaultPrimaryText;
+}
+
+function guidePlaceholderPrimaryText(
+  presentationState: EpgGuideViewModel['presentationState'],
+  route: 'player' | 'guide',
+): string {
+  switch (presentationState) {
+    case 'loading':
+      return route === 'player'
+        ? 'Current program details appear once guide data is ready.'
+        : 'Schedule rows are preparing for the selected lineup.';
+    case 'empty':
+      return route === 'player'
+        ? 'Current program details appear after channels are added.'
+        : 'Add channels from setup to populate this guide.';
+    case 'error':
+      return route === 'player'
+        ? 'Current program details are temporarily unavailable.'
+        : 'The guide could not be shown. Try again from the route controls.';
+    case 'ready':
+      return route === 'player'
+        ? 'Current program is cued on the active channel.'
+        : 'Channels are available in the guide shell.';
+  }
 }
 
 function formatRecoveryDetail(

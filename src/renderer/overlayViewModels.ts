@@ -175,6 +175,17 @@ export const DEFAULT_PLAYER_OVERLAY_PRESENTATION = {
   playerSnapshot: createRendererSafePlayerSnapshot(),
 } as const satisfies PlayerOverlayPresentationSource;
 
+const EMPTY_PLAYER_OVERLAY_CHANNEL = {
+  id: 'channel-unavailable',
+  number: '---',
+  name: 'Unavailable',
+  currentTitle: 'Program details unavailable',
+  nextTitle: 'Guide data unavailable',
+  nowStartLabel: '--:--',
+  nowProgressPercent: 0,
+  buildStrategy: 'mixed',
+} as const satisfies OverlayChannelViewModel;
+
 export const PLAYBACK_AUDIO_TRACKS = [
   { id: 'audio-main', label: 'Main stereo', meta: 'Direct Play', available: true },
   { id: 'audio-commentary', label: 'Commentary', meta: 'Audio Transcode', available: true },
@@ -188,17 +199,25 @@ export const PLAYBACK_SUBTITLE_TRACKS = [
   { id: 'subtitle-forced-missing', label: 'Forced track', meta: 'Unavailable', available: false },
 ] as const;
 
+export function normalizePlayerOverlayPresentation(
+  presentation: PlayerOverlayPresentationSource = DEFAULT_PLAYER_OVERLAY_PRESENTATION,
+): PlayerOverlayPresentationSource {
+  return presentation.channels.length > 0
+    ? presentation
+    : {
+      ...presentation,
+      channels: [EMPTY_PLAYER_OVERLAY_CHANNEL],
+    };
+}
+
 export function createPlayerOverlayView(
   state: PlayerOverlayState,
   presentation: PlayerOverlayPresentationSource = DEFAULT_PLAYER_OVERLAY_PRESENTATION,
 ): PlayerOverlayViewModel {
-  const { channels, playerSnapshot } = presentation;
+  const { channels, playerSnapshot } = normalizePlayerOverlayPresentation(presentation);
   const selectedMiniGuideChannel =
     findChannel(state.miniGuideSelectedChannelId, channels) ?? channels[0];
   const currentChannel = findChannel(state.currentChannelId, channels) ?? channels[0];
-  if (selectedMiniGuideChannel === undefined || currentChannel === undefined) {
-    throw new Error('Player overlay presentation requires at least one channel');
-  }
   const visibleOverlays = Object.fromEntries(
     PLAYER_OVERLAY_IDS.map((overlayId) => [overlayId, state.stack.includes(overlayId)]),
   ) as Record<PlayerOverlayId, boolean>;

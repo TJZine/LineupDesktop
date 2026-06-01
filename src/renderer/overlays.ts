@@ -1,6 +1,7 @@
 import {
   activeOverlayId,
   DEFAULT_PLAYER_OVERLAY_PRESENTATION,
+  normalizePlayerOverlayPresentation,
   PLAYBACK_AUDIO_TRACKS,
   PLAYBACK_SUBTITLE_TRACKS,
 } from './overlayViewModels.js';
@@ -63,10 +64,8 @@ const CHANNEL_NUMBER_MAX_LENGTH = 3;
 export function createPlayerOverlayState(
   presentation: PlayerOverlayPresentationSource = DEFAULT_PLAYER_OVERLAY_PRESENTATION,
 ): PlayerOverlayState {
-  const firstChannel = presentation.channels[0];
-  if (firstChannel === undefined) {
-    throw new Error('Player overlay presentation requires at least one channel');
-  }
+  const normalizedPresentation = normalizePlayerOverlayPresentation(presentation);
+  const firstChannel = normalizedPresentation.channels[0];
   return {
     stack: ['channelBadge', 'nowPlaying', 'playerOsd'],
     currentChannelId: firstChannel.id,
@@ -87,15 +86,16 @@ export function applyPlayerOverlayAction(
   nowMs = Date.now(),
   presentation: PlayerOverlayPresentationSource = DEFAULT_PLAYER_OVERLAY_PRESENTATION,
 ): PlayerOverlayState {
+  const normalizedPresentation = normalizePlayerOverlayPresentation(presentation);
   switch (actionId) {
     case 'toggleOsd':
       return toggleOverlay(state, 'playerOsd');
     case 'openMiniGuide':
       return showChannelBadge(openOverlay(state, 'miniGuide'));
     case 'previousMiniGuideChannel':
-      return selectMiniGuideChannel(state, -1, presentation);
+      return selectMiniGuideChannel(state, -1, normalizedPresentation);
     case 'nextMiniGuideChannel':
-      return selectMiniGuideChannel(state, 1, presentation);
+      return selectMiniGuideChannel(state, 1, normalizedPresentation);
     case 'togglePlaybackOptions':
       return openOverlay(openOverlay(state, 'playerOsd'), 'playbackOptions');
     case 'cycleAudioTrack':
@@ -124,7 +124,7 @@ export function applyPlayerOverlayAction(
         volume: clampVolume(state.volume + 0.1),
       };
     case 'commitChannelNumber':
-      return commitChannelNumber(state, presentation);
+      return commitChannelNumber(state, normalizedPresentation);
     case 'clearChannelNumber':
       return {
         ...removeOverlay(state, 'channelNumber'),

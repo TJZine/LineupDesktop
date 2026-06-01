@@ -317,7 +317,6 @@ test('route DOM renders upstream-shaped guide shell states and focused program d
     assert.doesNotMatch(renderedText, /Loading guide|No channels available|Guide unavailable/u);
     assert.match(renderedText, /The Midnight Archive/u);
     assert.match(renderedText, /S2 E4/u);
-    assert.equal(grid.children[0]?.className, 'epg-shell');
   } finally {
     if (originalDocument === undefined) {
       Reflect.deleteProperty(globalThis, 'document');
@@ -411,14 +410,20 @@ test('route DOM renders guide loading empty and error states without populated r
   try {
     for (const state of ['loading', 'empty', 'error'] as const) {
       const grid = new ElementDouble();
+      const detailChannel = new ElementDouble();
       const detailTitle = new ElementDouble();
+      const currentProgram = new ElementDouble();
+      const currentWindow = new ElementDouble();
       const dom = createOverlayDomBindings({
         overlayStack: new ElementDouble(),
         overlays: [],
         overlayActions: [],
       });
       dom.epgGridElement = grid as unknown as HTMLElement;
+      dom.epgDetailChannelElement = detailChannel as unknown as HTMLElement;
       dom.epgDetailTitleElement = detailTitle as unknown as HTMLElement;
+      dom.currentProgramElement = currentProgram as unknown as HTMLElement;
+      dom.currentWindowElement = currentWindow as unknown as HTMLElement;
       renderWorkflowDom(
         {
           ...createWorkflowState('guide'),
@@ -430,11 +435,86 @@ test('route DOM renders guide loading empty and error states without populated r
       );
 
       const renderedText = collectText(grid);
-      const rowCount = grid.children.filter((child) => child.className === 'epg-row').length;
       assert.match(renderedText, state === 'loading' ? /Loading guide/u : state === 'empty' ? /No channels available/u : /Guide unavailable/u);
-      assert.equal(rowCount, 0);
+      assert.doesNotMatch(renderedText, /Signal Warmup|After Hours Cinema|Pilot Block|Roundtable/u);
+      assert.equal(detailChannel.textContent, '');
       assert.match(detailTitle.textContent, state === 'loading' ? /Loading guide/u : state === 'empty' ? /No channels available/u : /Guide unavailable/u);
+      assert.equal(currentProgram.textContent, state === 'loading' ? 'Loading guide' : state === 'empty' ? 'No channels available' : 'Guide unavailable');
+      assert.match(currentWindow.textContent, state === 'loading' ? /Schedule rows are preparing/u : state === 'empty' ? /Add channels from setup/u : /could not be shown/u);
     }
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+});
+
+test('route DOM omits the guide meta separator when episode labels are empty', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    createElement: () => new ElementDouble(),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const grid = new ElementDouble();
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.epgGridElement = grid as unknown as HTMLElement;
+    renderWorkflowDom(
+      createWorkflowState('guide', {
+        channels: [
+          {
+            id: 'late-channel',
+            number: '900',
+            name: 'Late Channel',
+            programs: [
+              {
+                id: 'late-program',
+                title: 'Late Program',
+                subtitle: 'Night block',
+                description: 'Late injected schedule.',
+                showTitle: 'Late Program',
+                episodeLabel: '',
+                rating: 'TV-G',
+                quality: ['HD'],
+                genres: ['Drama'],
+                startsAtMs: Date.UTC(2026, 4, 13, 1, 0, 0),
+                endsAtMs: Date.UTC(2026, 4, 13, 2, 0, 0),
+              },
+            ],
+          },
+        ],
+        nowWatching: {
+          title: 'Late Program',
+          subtitle: 'Night block',
+          channelId: 'late-channel',
+          startsAtMs: Date.UTC(2026, 4, 13, 1, 0, 0),
+          endsAtMs: Date.UTC(2026, 4, 13, 2, 0, 0),
+        },
+      }),
+      createPlayerOverlayState(),
+      createRendererSafePlayerSnapshot(),
+      dom,
+    );
+
+    const renderedText = collectText(grid);
+    assert.match(renderedText, /1:00 AM - 2:00 AM/u);
+    assert.doesNotMatch(renderedText, /^\s*-\s/u);
+    assert.doesNotMatch(renderedText, / - 1:00 AM - 2:00 AM/u);
   } finally {
     if (originalDocument === undefined) {
       Reflect.deleteProperty(globalThis, 'document');

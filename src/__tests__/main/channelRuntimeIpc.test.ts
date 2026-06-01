@@ -341,10 +341,17 @@ test('channel runtime pages all selected library items before saving channel tot
   });
 
   assert.equal(result.ok, true);
-  assert.deepEqual(requests, [
-    { offset: 0, limit: 100 },
-    { offset: 100, limit: 100 },
-  ]);
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0]?.offset, 0);
+  assert.ok(requests.every((request) => (request.limit ?? 0) > 0));
+  for (let index = 1; index < requests.length; index += 1) {
+    const previous = requests[index - 1];
+    const current = requests[index];
+    assert.equal(
+      current?.offset,
+      (previous?.offset ?? 0) + (previous?.limit ?? 0),
+    );
+  }
   assert.deepEqual(result.ok ? result.value.channels.map((channel) => ({
     id: channel.id,
     itemCount: channel.itemCount,

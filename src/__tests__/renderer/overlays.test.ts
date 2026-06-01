@@ -243,3 +243,21 @@ test('overlay presentation view models avoid privileged renderer fields', () => 
   assert.equal(containsPlexForbiddenRendererField(view), false);
   assert.equal(hasPlayerForbiddenPrivilegedField(view), false);
 });
+
+test('overlay state and view normalize empty channel presentations to a safe placeholder', () => {
+  const presentation = {
+    channels: [],
+    playerSnapshot: createRendererSafePlayerSnapshot(),
+  };
+
+  const state = createPlayerOverlayState(presentation);
+  const view = createPlayerOverlayView(state, presentation);
+  const next = applyPlayerOverlayAction(state, 'nextMiniGuideChannel', 0, presentation);
+
+  assert.equal(state.currentChannelId, 'channel-unavailable');
+  assert.equal(state.miniGuideSelectedChannelId, 'channel-unavailable');
+  assert.equal(view.channelBadge.name, 'Unavailable');
+  assert.equal(view.selectedMiniGuideChannel.currentTitle, 'Program details unavailable');
+  assert.equal(view.miniGuideChannels.length, 1);
+  assert.equal(next.miniGuideSelectedChannelId, 'channel-unavailable');
+});
