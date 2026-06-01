@@ -6,6 +6,7 @@ import {
   type PlexIpcResult,
   type PlexRuntimeSnapshot,
 } from '../../contracts/plex.js';
+import { deferred } from '../helpers/deferred.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import {
@@ -14,6 +15,7 @@ import {
   syncRendererFocusTargets,
 } from '../../renderer/focusDom.js';
 import { FocusRegistry } from '../../renderer/navigation.js';
+import { resolveChannelSetupLiveSelection } from '../../renderer/channelSetup/liveSelection.js';
 import { createPlexRuntimeController } from '../../renderer/plexRuntimeActions.js';
 import { renderPlexRuntimeDom } from '../../renderer/plexRuntimeDom.js';
 import { sanitizePlexRuntimeError } from '../../renderer/plexRuntimeState.js';
@@ -34,15 +36,88 @@ test('static channel setup markup hosts reachable Plex setup controls', () => {
   assert.match(channelSetupMarkup, /data-plex-action="clearSelectedServer"/u);
   assert.match(channelSetupMarkup, /data-plex-action="clearMetadata"/u);
   assert.match(channelSetupMarkup, /data-plex-search-query/u);
+  assert.match(channelSetupMarkup, /screen--onboarding/u);
+  assert.match(channelSetupMarkup, /plex-onboarding-shell/u);
   assert.match(channelSetupMarkup, /Plex onboarding/u);
   assert.match(channelSetupMarkup, /Choose profile/u);
   assert.match(channelSetupMarkup, /Find servers/u);
   assert.match(channelSetupMarkup, /Open libraries/u);
+  assert.match(channelSetupMarkup, /Build channels/u);
+  assert.match(channelSetupMarkup, /data-channel-commit-action="append"/u);
+  assert.match(channelSetupMarkup, /data-channel-commit-action="confirmReplace"/u);
+  assert.match(channelSetupMarkup, /Library source/u);
+  assert.match(channelSetupMarkup, /4\. Result/u);
+  assert.ok(
+    channelSetupMarkup.indexOf('data-channel-commit-action="append"') <
+      channelSetupMarkup.indexOf('id="plex-stage-metadata"'),
+  );
+  assert.match(channelSetupMarkup, /Optional media preview/u);
   assert.doesNotMatch(
     channelSetupMarkup,
-    /Fake channel setup controls|data-setup-action|data-setup-steps|data-channel-draft-list|draft channel|fake blocks|debug|smoke|transport/u,
+    /Fake channel setup controls|data-setup-action|data-setup-steps|data-channel-draft-list|data-setup-validation|draft channel|fake blocks|debug|smoke|transport/u,
   );
   assert.doesNotMatch(channelSetupMarkup, /https?:|token|serverUri/u);
+});
+
+test('channel setup live selection ignores stale library item and search state', () => {
+  const currentSelection = resolveChannelSetupLiveSelection({
+    snapshot: snapshotWithItems(),
+    selectedSectionId: 'section-1',
+    selectedServerId: 'server-1',
+    selectedItemRatingKey: null,
+    searchQuery: '',
+    homeUserPin: '',
+    statusText: 'Ready',
+    errorText: null,
+    pending: pendingMap(false),
+    lastMetadata: null,
+  });
+
+  assert.equal(currentSelection?.sourceName, 'Movies');
+  assert.equal(currentSelection?.loadedItemCount, 1);
+
+  const mismatchedSnapshot = resolveChannelSetupLiveSelection({
+    snapshot: snapshotWithItems(),
+    selectedSectionId: 'section-2',
+    selectedServerId: 'server-1',
+    selectedItemRatingKey: null,
+    searchQuery: '',
+    homeUserPin: '',
+    statusText: 'Ready',
+    errorText: null,
+    pending: pendingMap(false),
+    lastMetadata: null,
+  });
+
+  assert.equal(mismatchedSnapshot, null);
+
+  const searchSelection = resolveChannelSetupLiveSelection({
+    snapshot: snapshotWithSearch('pilot'),
+    selectedSectionId: 'section-1',
+    selectedServerId: 'server-1',
+    selectedItemRatingKey: null,
+    searchQuery: 'pilot',
+    homeUserPin: '',
+    statusText: 'Ready',
+    errorText: null,
+    pending: pendingMap(false),
+    lastMetadata: null,
+  });
+
+  assert.equal(searchSelection?.loadedItemCount, 0);
+});
+
+test('static channel setup commit panel exposes the setup frame style hook', () => {
+  const root = { innerHTML: '', querySelector: () => null };
+  const documentDouble = {
+    querySelector: (selector: string) => selector === '[data-static-screen-root]' ? root : null,
+  };
+
+  mountStaticRendererDom(documentDouble as unknown as Document);
+
+  const channelSetupMarkup = readStaticChannelSetupMarkup(root.innerHTML);
+
+  assert.match(channelSetupMarkup, /class="channel-setup-commit"/u);
 });
 
 test('Plex runtime controller applies async setup, server, library, search, and metadata transitions', async () => {
@@ -772,6 +847,28 @@ test('Plex runtime error text describes auth parse failures as sign-in failures'
     }),
     'Plex library data could not be loaded.',
   );
+
+  assert.equal(
+    sanitizePlexRuntimeError({
+      code: 'PLEX_UNKNOWN',
+      operation: 'refreshServers',
+      message: 'Plex operation failed.',
+      retryable: true,
+      recoverable: true,
+    }),
+    'Plex server discovery failed.',
+  );
+
+  assert.equal(
+    sanitizePlexRuntimeError({
+      code: 'PLEX_UNKNOWN',
+      operation: 'listLibrarySections',
+      message: 'Plex operation failed.',
+      retryable: true,
+      recoverable: true,
+    }),
+    'Plex library request failed.',
+  );
 });
 
 test('Plex cleanup clears protected-home PIN input on next render', async () => {
@@ -916,6 +1013,14 @@ test('dynamic Plex buttons receive stable focus ids and are reachable by OK focu
     const serverButton = firstChild(dom.plexServersElement);
     const sectionButton = firstChild(dom.plexSectionsElement);
     const itemButton = firstChild(dom.plexItemsElement);
+    assert.equal(homeButton.className, 'profile-row');
+    assert.match(collectText(homeButton), /Profile\s+PIN/u);
+    assert.equal(serverButton.className, 'server-row active');
+    assert.match(collectText(serverButton), /Server .*Connected/u);
+    assert.equal(sectionButton.className, 'setup-toggle library-toggle selected');
+    assert.match(collectText(sectionButton), /Movies .*Selected/u);
+    assert.equal(itemButton.className, 'setup-toggle media-toggle selected');
+    assert.match(collectText(itemButton), /Pilot .*Previewing/u);
     const focusIds = [
       homeButton.dataset.focusId,
       serverButton.dataset.focusId,
@@ -1044,6 +1149,7 @@ test('dynamic Plex Home focus ids do not collide with static home controls', () 
 class ElementDouble {
   hidden = false;
   disabled = false;
+  className = '';
   textContent = '';
   value = '';
   type = '';
@@ -1123,6 +1229,7 @@ function createPlexDomBindings(overrides: Partial<RendererDomBindings> = {}): Re
     routeActionButtons: [],
     settingsActionButtons: [],
     setupActionButtons: [],
+    channelCommitButtons: [],
     epgActionButtons: [],
     overlayActionButtons: [],
     screens: [],
@@ -1144,7 +1251,11 @@ function createPlexDomBindings(overrides: Partial<RendererDomBindings> = {}): Re
     channelSetupBlocksElement: null,
     setupStepsElement: null,
     channelDraftListElement: null,
+    channelSetupStrategyElement: null,
+    channelSetupReviewElement: null,
     setupValidationElement: null,
+    channelSetupResultElement: null,
+    channelSetupFixtureStatusElement: null,
     plexPanelElement: new ElementDouble() as unknown as HTMLElement,
     plexActionButtons: actions,
     plexStatusElement: new ElementDouble() as unknown as HTMLElement,
@@ -1176,6 +1287,20 @@ function createPlexDomBindings(overrides: Partial<RendererDomBindings> = {}): Re
     overlaySubtitleLabelElement: null,
     overlayVolumeLabelElement: null,
     overlayRateLabelElement: null,
+    overlayPlaybackSummaryElement: null,
+    overlayAudioOptionsElement: null,
+    overlaySubtitleOptionsElement: null,
+    osdStatusElement: null,
+    osdTitleElement: null,
+    osdSubtitleElement: null,
+    osdAudioElement: null,
+    osdSubtitlesElement: null,
+    osdUpNextElement: null,
+    osdTimecodeElement: null,
+    osdEndsAtElement: null,
+    osdBufferTextElement: null,
+    osdBufferBarElement: null,
+    osdPlayedBarElement: null,
     ...overrides,
   };
 }
@@ -1223,17 +1348,6 @@ function failure<TValue>(
       operation: 'getHomeUsers',
     },
   };
-}
-
-function deferred<TValue>(): {
-  promise: Promise<TValue>;
-  resolve: (value: TValue) => void;
-} {
-  let resolve: (value: TValue) => void = () => undefined;
-  const promise = new Promise<TValue>((innerResolve) => {
-    resolve = innerResolve;
-  });
-  return { promise, resolve };
 }
 
 function inertScheduler() {

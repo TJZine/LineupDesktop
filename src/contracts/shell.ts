@@ -1,5 +1,10 @@
 import type { PlayerRendererIntentEnvelope, RendererIntentEnvelope } from './ipc.js';
 import type {
+  ChannelSetupCommitMode,
+  ChannelSetupIpcResult,
+  ChannelSetupSummary,
+} from './channel.js';
+import type {
   DiagnosticsExportSupportBundleResult,
   DiagnosticsGetSummaryResult,
   DiagnosticsRecordRendererEventResult,
@@ -139,6 +144,14 @@ export interface LineupDesktopPreloadApi {
     getMetadata: (input: {
       ratingKey: string;
     }) => Promise<PlexIpcResult<PlexGetMetadataValue>>;
+  };
+  channelSetup: {
+    getStatus: () => Promise<ChannelSetupIpcResult<ChannelSetupSummary>>;
+    commit: (input: {
+      mode: ChannelSetupCommitMode;
+      sectionIds: readonly string[];
+      confirmReplace?: boolean;
+    }) => Promise<ChannelSetupIpcResult<ChannelSetupSummary>>;
   };
 }
 

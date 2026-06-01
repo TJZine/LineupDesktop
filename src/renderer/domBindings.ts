@@ -17,6 +17,7 @@ export interface RendererDomBindings {
   routeActionButtons: HTMLButtonElement[];
   settingsActionButtons: HTMLButtonElement[];
   setupActionButtons: HTMLButtonElement[];
+  channelCommitButtons: HTMLButtonElement[];
   epgActionButtons: HTMLButtonElement[];
   overlayActionButtons: HTMLButtonElement[];
   screens: HTMLElement[];
@@ -38,7 +39,11 @@ export interface RendererDomBindings {
   channelSetupBlocksElement: HTMLElement | null;
   setupStepsElement: HTMLElement | null;
   channelDraftListElement: HTMLElement | null;
+  channelSetupStrategyElement: HTMLElement | null;
+  channelSetupReviewElement: HTMLElement | null;
   setupValidationElement: HTMLElement | null;
+  channelSetupResultElement: HTMLElement | null;
+  channelSetupFixtureStatusElement: HTMLElement | null;
   plexPanelElement: HTMLElement | null;
   plexActionButtons: HTMLButtonElement[];
   plexStatusElement: HTMLElement | null;
@@ -70,6 +75,20 @@ export interface RendererDomBindings {
   overlaySubtitleLabelElement: HTMLElement | null;
   overlayVolumeLabelElement: HTMLElement | null;
   overlayRateLabelElement: HTMLElement | null;
+  overlayPlaybackSummaryElement: HTMLElement | null;
+  overlayAudioOptionsElement: HTMLElement | null;
+  overlaySubtitleOptionsElement: HTMLElement | null;
+  osdStatusElement: HTMLElement | null;
+  osdTitleElement: HTMLElement | null;
+  osdSubtitleElement: HTMLElement | null;
+  osdAudioElement: HTMLElement | null;
+  osdSubtitlesElement: HTMLElement | null;
+  osdUpNextElement: HTMLElement | null;
+  osdTimecodeElement: HTMLElement | null;
+  osdEndsAtElement: HTMLElement | null;
+  osdBufferTextElement: HTMLElement | null;
+  osdBufferBarElement: HTMLElement | null;
+  osdPlayedBarElement: HTMLElement | null;
 }
 
 export function queryRendererDom(documentRef: Document = document): RendererDomBindings {
@@ -90,6 +109,9 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     ),
     setupActionButtons: Array.from(
       documentRef.querySelectorAll<HTMLButtonElement>('[data-setup-action]'),
+    ),
+    channelCommitButtons: Array.from(
+      documentRef.querySelectorAll<HTMLButtonElement>('[data-channel-commit-action]'),
     ),
     epgActionButtons: Array.from(documentRef.querySelectorAll<HTMLButtonElement>('[data-epg-action]')),
     overlayActionButtons: Array.from(
@@ -116,9 +138,15 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     channelSetupBlocksElement: documentRef.querySelector<HTMLElement>(
       '[data-channel-setup-blocks]',
     ),
-    setupStepsElement: documentRef.querySelector<HTMLElement>('[data-setup-steps]'),
-    channelDraftListElement: documentRef.querySelector<HTMLElement>('[data-channel-draft-list]'),
-    setupValidationElement: documentRef.querySelector<HTMLElement>('[data-setup-validation]'),
+    setupStepsElement: documentRef.querySelector<HTMLElement>('[data-channel-review-steps]'),
+    channelDraftListElement: documentRef.querySelector<HTMLElement>('[data-channel-review-list]'),
+    channelSetupStrategyElement: documentRef.querySelector<HTMLElement>('[data-channel-strategy-options]'),
+    channelSetupReviewElement: documentRef.querySelector<HTMLElement>('[data-channel-review-impact]'),
+    setupValidationElement: documentRef.querySelector<HTMLElement>('[data-channel-review-validation]'),
+    channelSetupResultElement: documentRef.querySelector<HTMLElement>('[data-channel-setup-result]'),
+    channelSetupFixtureStatusElement: documentRef.querySelector<HTMLElement>(
+      '[data-channel-setup-fixture-status]',
+    ),
     plexPanelElement: documentRef.querySelector<HTMLElement>('[data-plex-runtime-panel]'),
     plexActionButtons: Array.from(
       documentRef.querySelectorAll<HTMLButtonElement>('[data-plex-action]'),
@@ -172,6 +200,26 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
       '[data-overlay-volume-label]',
     ),
     overlayRateLabelElement: documentRef.querySelector<HTMLElement>('[data-overlay-rate-label]'),
+    overlayPlaybackSummaryElement: documentRef.querySelector<HTMLElement>(
+      '[data-overlay-playback-summary]',
+    ),
+    overlayAudioOptionsElement: documentRef.querySelector<HTMLElement>(
+      '[data-overlay-audio-options]',
+    ),
+    overlaySubtitleOptionsElement: documentRef.querySelector<HTMLElement>(
+      '[data-overlay-subtitle-options]',
+    ),
+    osdStatusElement: documentRef.querySelector<HTMLElement>('[data-osd-status]'),
+    osdTitleElement: documentRef.querySelector<HTMLElement>('[data-osd-title]'),
+    osdSubtitleElement: documentRef.querySelector<HTMLElement>('[data-osd-subtitle]'),
+    osdAudioElement: documentRef.querySelector<HTMLElement>('[data-osd-audio]'),
+    osdSubtitlesElement: documentRef.querySelector<HTMLElement>('[data-osd-subtitles]'),
+    osdUpNextElement: documentRef.querySelector<HTMLElement>('[data-osd-up-next]'),
+    osdTimecodeElement: documentRef.querySelector<HTMLElement>('[data-osd-timecode]'),
+    osdEndsAtElement: documentRef.querySelector<HTMLElement>('[data-osd-ends-at]'),
+    osdBufferTextElement: documentRef.querySelector<HTMLElement>('[data-osd-buffer-text]'),
+    osdBufferBarElement: documentRef.querySelector<HTMLElement>('[data-osd-buffer-bar]'),
+    osdPlayedBarElement: documentRef.querySelector<HTMLElement>('[data-osd-played-bar]'),
   };
 }
 
@@ -262,6 +310,22 @@ export function readChannelSetupActionId(value: string | undefined): ChannelSetu
     case 'toggleFeaturedChannel':
     case 'addDraftChannel':
     case 'resetDraftLineup':
+    case 'selectRecentlyAddedSource':
+    case 'selectAppendBuildMode':
+    case 'selectReplaceBuildMode':
+      return value;
+    default:
+      return null;
+  }
+}
+
+export type ChannelCommitActionId = 'append' | 'replace' | 'confirmReplace';
+
+export function readChannelCommitActionId(value: string | undefined): ChannelCommitActionId | null {
+  switch (value) {
+    case 'append':
+    case 'replace':
+    case 'confirmReplace':
       return value;
     default:
       return null;

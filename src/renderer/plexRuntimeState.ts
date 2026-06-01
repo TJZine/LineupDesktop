@@ -320,6 +320,28 @@ export function sanitizePlexRuntimeError(error: PlexRuntimeError): string {
     case 'PLEX_LIBRARY_FAILED':
       return 'Plex library data could not be loaded.';
     case 'PLEX_UNKNOWN':
+      return unknownFailureText(error.operation);
+  }
+}
+
+function unknownFailureText(operation: PlexRuntimeOperation): string {
+  switch (operation) {
+    case 'restoreSelectedServer':
+    case 'refreshServers':
+    case 'selectServer':
+      return 'Plex server discovery failed.';
+    case 'listLibrarySections':
+    case 'listLibraryItems':
+    case 'searchLibrary':
+    case 'getMetadata':
+      return 'Plex library request failed.';
+    case 'getHomeUsers':
+    case 'switchHomeUser':
+      return 'Plex profile data could not be loaded.';
+    case 'getSnapshot':
+    case 'requestPin':
+    case 'pollPin':
+    case 'cancelPin':
       return 'The Plex operation failed.';
   }
 }

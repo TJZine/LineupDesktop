@@ -307,7 +307,7 @@ export class DesktopPlexAuthService {
     const activeToken = await this.fetchUserProfile(authToken, options.signal ?? null);
     throwIfAborted(options.signal);
     this.activeToken = activeToken;
-    this.activeUserId = userId.trim().length > 0 ? userId.trim() : activeToken.userId;
+    this.activeUserId = activeToken.userId;
 
     return { activeProfile: toPlexAuthProfileSummary(activeToken) };
   }

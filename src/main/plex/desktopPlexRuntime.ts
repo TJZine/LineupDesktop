@@ -3,7 +3,7 @@ import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.j
 import type { DesktopPlexAuthService } from './auth/index.js';
 import type { DesktopPlexCredentialStore } from './auth/desktopPlexCredentialStore.js';
 import type { DesktopPlexServerDiscovery } from './discovery/index.js';
-import { extractLibrarySectionDirectories, extractMetadataArray, extractSearchHubMetadata, extractSearchHubs, normalizeLibraryPagination, parseLibrarySections, parseMediaItems, PLEX_LIBRARY_CONSTANTS, toRendererSafeLibrarySectionSummary, toRendererSafeMediaItemSummary, type PlexMediaType, type RawLibrarySection, type RawMediaItem } from './library/index.js';
+import { extractMetadataArray, extractSearchHubMetadata, extractSearchHubs, isSafeLibraryFilter, isSafeSearchLimit, isSafeSearchTypes, loadLibrarySectionsWithCounts, mapSearchHubTypeToMediaType, normalizeLibraryPagination, parseMediaItems, PLEX_LIBRARY_CONSTANTS, toRendererSafeMediaItemSummary, type PlexMediaType, type RawMediaItem } from './library/index.js';
 import { PlexLibraryError } from './library/plexLibraryError.js';
 import { applyFailureSnapshot, applyServerSelectionSnapshot, authRequiredError, cloneRuntimeSnapshot, createInitialSnapshot, failureResult, isOptionalShortString, mapCredentialStatus, mapRuntimeError, normalizeOperationKey, payloadAsContainer, recordRuntimeDiagnostic, staleError, StaleRuntimeMutationError, storageError, stripPinSecretFields, success, validatePositiveInteger, validationError } from './desktopPlexRuntimeSupport.js';
 import { LivePlexTransportError, type LivePlexLibraryTransport } from './livePlexTransport.js';
@@ -161,7 +161,7 @@ export class DesktopPlexRuntime {
 
   async restoreSelectedServer(requestId: string): Promise<PlexIpcResult<PlexRestoreSelectedServerValue>> {
     return this.runOperation(requestId, 'restoreSelectedServer', async ({ signal, commit }) => {
-      const token = await this.ensureAccountToken(signal, commit);
+      const token = await this.requireActiveToken(signal, commit, 'restoreSelectedServer');
       const profileId = this.requireActiveProfileId('restoreSelectedServer');
       this.setServerStatus('loading', commit);
       const selection = await this.serverDiscovery.restoreSelectedServer({ token, profileId, signal });
@@ -175,7 +175,7 @@ export class DesktopPlexRuntime {
 
   async refreshServers(requestId: string): Promise<PlexIpcResult<PlexRefreshServersValue>> {
     return this.runOperation(requestId, 'refreshServers', async ({ signal, commit }) => {
-      const token = await this.ensureAccountToken(signal, commit);
+      const token = await this.requireActiveToken(signal, commit, 'refreshServers');
       this.setServerStatus('loading', commit);
       const servers = await this.serverDiscovery.refreshServers({ token, signal });
       commit((snapshot) => ({
@@ -202,7 +202,7 @@ export class DesktopPlexRuntime {
       return this.fail(requestId, validationError('selectServer'));
     }
     return this.runOperation(requestId, 'selectServer', async ({ signal, commit }) => {
-      const token = await this.ensureAccountToken(signal, commit);
+      const token = await this.requireActiveToken(signal, commit, 'selectServer');
       const profileId = this.requireActiveProfileId('selectServer');
       this.setServerStatus('loading', commit);
       const selection = await this.serverDiscovery.selectServer(normalizedServerId, {
@@ -224,10 +224,13 @@ export class DesktopPlexRuntime {
       const token = await this.requireActiveToken(signal, commit, 'listLibrarySections');
       const connection = this.requireSelectedConnection('listLibrarySections');
       this.setLibraryStatus('loading', commit);
-      const payload = await this.libraryTransport.listLibrarySections({ connection, token, signal });
-      const sections = parseLibrarySections(
-        extractLibrarySectionDirectories(payloadAsContainer<RawLibrarySection>(payload), 'library sections'),
-      ).map(toRendererSafeLibrarySectionSummary);
+      const sections = await loadLibrarySectionsWithCounts({
+        libraryTransport: this.libraryTransport,
+        connection,
+        token,
+        signal,
+        shouldRethrowCountError: (error) => error instanceof StaleRuntimeMutationError,
+      });
       commit((snapshot) => ({
         ...snapshot,
         library: { ...snapshot.library, status: 'ready', sections },
@@ -587,6 +590,7 @@ export class DesktopPlexRuntime {
       nowMs: this.nowMs(),
     }));
   }
+
   private fail<T>(
     requestId: string,
     error: PlexRuntimeError,
@@ -615,50 +619,4 @@ export class DesktopPlexRuntime {
   private cloneSnapshot(): PlexRuntimeSnapshot {
     return cloneRuntimeSnapshot(this.snapshot);
   }
-}
-
-const SEARCH_HUB_MEDIA_TYPES: Readonly<Record<string, PlexMediaType>> = { movie: 'movie', movies: 'movie', show: 'show', shows: 'show', episode: 'episode', episodes: 'episode', track: 'track', tracks: 'track', clip: 'clip', clips: 'clip' };
-
-const SAFE_FILTER_KEY_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/u;
-const SAFE_LIBRARY_FILTER_KEYS = new Set(['actor', 'audienceRating', 'collection', 'contentRating', 'country', 'decade', 'director', 'episode.unwatched', 'genre', 'hdr', 'producer', 'rating', 'resolution', 'studio', 'subtitleLanguage', 'type', 'unwatched', 'watched', 'writer', 'year']);
-const SAFE_SEARCH_TYPES = new Set<PlexMediaType>(['movie', 'show', 'episode', 'track', 'clip']);
-
-function isSafeLibraryFilter(value: unknown): value is Readonly<Record<string, string | number>> | undefined {
-  if (value === undefined) {
-    return true;
-  }
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false;
-  }
-  for (const [key, child] of Object.entries(value)) {
-    if (!SAFE_FILTER_KEY_PATTERN.test(key) || !SAFE_LIBRARY_FILTER_KEYS.has(key)) {
-      return false;
-    }
-    if (typeof child === 'number' && Number.isFinite(child)) {
-      continue;
-    }
-    if (typeof child === 'string' && child.length > 0 && child.length <= 256) {
-      continue;
-    }
-    return false;
-  }
-  return true;
-}
-
-function isSafeSearchTypes(value: unknown): value is readonly PlexMediaType[] | undefined {
-  return (
-    value === undefined ||
-    (Array.isArray(value) &&
-      value.length <= SAFE_SEARCH_TYPES.size &&
-      value.every((type) => SAFE_SEARCH_TYPES.has(type)))
-  );
-}
-
-function isSafeSearchLimit(value: unknown): value is number | undefined {
-  return value === undefined ||
-    (typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value > 0);
-}
-
-function mapSearchHubTypeToMediaType(type: string): PlexMediaType | null {
-  return SEARCH_HUB_MEDIA_TYPES[type.trim().toLowerCase()] ?? null;
 }

@@ -9,7 +9,10 @@ export type ChannelSetupActionId =
   | 'advanceSetupStep'
   | 'toggleFeaturedChannel'
   | 'addDraftChannel'
-  | 'resetDraftLineup';
+  | 'resetDraftLineup'
+  | 'selectRecentlyAddedSource'
+  | 'selectAppendBuildMode'
+  | 'selectReplaceBuildMode';
 
 export type SettingsSectionId = 'playback' | 'guide' | 'setup';
 
@@ -48,12 +51,16 @@ export interface ChannelDraftViewModel {
   name: string;
   enabled: boolean;
   blockCount: number;
+  category: string;
+  reviewStatus: 'active' | 'disabled';
 }
 
 export interface ChannelSetupDraftState {
   activeStepId: ChannelSetupStepId;
   sourceName: string;
   channels: readonly ChannelDraftViewModel[];
+  sourceMode: 'recently-added';
+  buildMode: 'append' | 'replace';
 }
 
 export type ChannelSetupStepId = 'source' | 'channels' | 'review';
@@ -75,29 +82,7 @@ export interface ChannelSetupSummaryViewModel {
 
 const SETUP_STEP_ORDER: readonly ChannelSetupStepId[] = ['source', 'channels', 'review'];
 
-const DEFAULT_CHANNELS = [
-  {
-    id: 'draft-liminal-one',
-    number: '101',
-    name: 'Liminal One',
-    enabled: true,
-    blockCount: 8,
-  },
-  {
-    id: 'draft-vault',
-    number: '204',
-    name: 'The Vault',
-    enabled: true,
-    blockCount: 5,
-  },
-  {
-    id: 'draft-weekend',
-    number: '310',
-    name: 'Weekend Queue',
-    enabled: false,
-    blockCount: 3,
-  },
-] as const satisfies readonly ChannelDraftViewModel[];
+const DEFAULT_CHANNELS = [] as const satisfies readonly ChannelDraftViewModel[];
 
 export function createSettingsDraftState(): SettingsDraftState {
   return {
@@ -117,8 +102,10 @@ export function createSettingsDraftState(): SettingsDraftState {
 export function createChannelSetupDraftState(): ChannelSetupDraftState {
   return {
     activeStepId: 'channels',
-    sourceName: 'Demo Library',
+    sourceName: '',
     channels: DEFAULT_CHANNELS,
+    sourceMode: 'recently-added',
+    buildMode: 'append',
   };
 }
 
@@ -176,7 +163,11 @@ export function applyChannelSetupAction(
         ...state,
         channels: state.channels.map((channel) =>
           channel.id === state.channels[0]?.id
-            ? { ...channel, enabled: !channel.enabled }
+            ? {
+              ...channel,
+              enabled: !channel.enabled,
+              reviewStatus: channel.enabled ? 'disabled' : 'active',
+            }
             : channel,
         ),
       };
@@ -188,20 +179,36 @@ export function applyChannelSetupAction(
           {
             id: `draft-extra-${state.channels.length + 1}`,
             number: String(400 + state.channels.length + 1),
-            name: `Draft Channel ${state.channels.length + 1}`,
+            name: `Fixture Channel ${state.channels.length + 1}`,
             enabled: true,
             blockCount: 1,
+            category: 'Mixed',
+            reviewStatus: 'active',
           },
         ],
       };
     case 'resetDraftLineup':
       return createChannelSetupDraftState();
+    case 'selectRecentlyAddedSource':
+      return { ...state, sourceMode: 'recently-added' };
+    case 'selectAppendBuildMode':
+      return { ...state, buildMode: 'append' };
+    case 'selectReplaceBuildMode':
+      return { ...state, buildMode: 'replace' };
   }
 }
 
 export function createSettingsSections(
   state: SettingsDraftState,
+  persistedStatus?: {
+    channelCount: number;
+    currentChannelName: string | null;
+    currentChannelNumber?: number | null;
+    recovery?: { loaded: boolean; repaired: boolean };
+  } | null,
 ): readonly SettingsSectionViewModel[] {
+  const recoveryLoaded = persistedStatus?.recovery?.loaded === true;
+  const recoveryRepaired = persistedStatus?.recovery?.repaired === true;
   return [
     {
       id: 'playback',
@@ -219,33 +226,53 @@ export function createSettingsSections(
           id: 'preview-badges',
           label: 'Preview badges',
           valueLabel: state.previewBadgesEnabled ? 'Shown' : 'Hidden',
-          description: 'Controls local preview markers without changing playback runtime state.',
+          description: 'Controls local preview markers for this session only.',
         },
       ],
     },
     {
       id: 'guide',
       title: 'Guide display',
-      detail: 'Local guide presentation choices that do not contact live Plex or scheduler runtime.',
+      detail: 'Local guide presentation choices that do not contact Plex or save guide data.',
       items: [
         {
           id: 'guide-density',
           label: 'Density',
           valueLabel: state.guideDensity === 'comfortable' ? 'Comfortable' : 'Compact',
-          description: 'Adjusts renderer guide copy for this session only.',
+          description: 'Adjusts renderer guide spacing for this session only; no category color legend is used.',
         },
       ],
     },
     {
       id: 'setup',
-      title: 'Setup prompts',
-      detail: 'Draft reminders that do not write preferences.',
+      title: 'Channel setup recovery',
+      detail: 'Persisted channel status from the main-owned setup and recovery seam.',
       items: [
         {
-          id: 'setup-reminder',
-          label: 'Setup reminder',
-          valueLabel: state.setupReminderEnabled ? 'On' : 'Off',
-          description: 'Keeps the local channel setup route visible without writing preferences.',
+          id: 'setup-channel-count',
+          label: 'Persisted channels',
+          valueLabel: String(persistedStatus?.channelCount ?? 0),
+          description: persistedStatus?.currentChannelName
+            ? `Recovered current channel ${persistedStatus.currentChannelName}.`
+            : 'No persisted current channel is available yet.',
+        },
+        {
+          id: 'setup-recovery-state',
+          label: 'Recovery',
+          valueLabel: recoveryLoaded ? (recoveryRepaired ? 'Recovered with repairs' : 'Recovered') : 'Not recovered',
+          description: recoveryLoaded
+            ? 'Saved channel summaries are available for setup rerun and replacement review.'
+            : 'Open Channel setup to create channels from a selected library.',
+        },
+        {
+          id: 'setup-current-channel',
+          label: 'Current channel',
+          valueLabel: persistedStatus?.currentChannelNumber === null || persistedStatus?.currentChannelNumber === undefined
+            ? 'None'
+            : String(persistedStatus.currentChannelNumber),
+          description: persistedStatus?.currentChannelName
+            ? `Current saved channel is ${persistedStatus.currentChannelName}.`
+            : 'No current channel has been recovered.',
         },
         {
           id: 'support-bundle-export',
@@ -320,12 +347,13 @@ function isPrintableAscii(value: string): boolean {
 
 export function createChannelSetupSteps(
   state: ChannelSetupDraftState,
+  persistedStatus?: { channelCount: number } | null,
 ): readonly ChannelSetupStepViewModel[] {
   const activeIndex = SETUP_STEP_ORDER.indexOf(state.activeStepId);
   return SETUP_STEP_ORDER.map((stepId, index) => ({
     id: stepId,
     label: setupStepLabel(stepId),
-    detail: setupStepDetail(stepId, state),
+    detail: setupStepDetail(stepId, state, persistedStatus),
     state: index < activeIndex ? 'complete' : index === activeIndex ? 'current' : 'pending',
   }));
 }
@@ -344,17 +372,25 @@ export function summarizeChannelSetupDraft(
   };
 }
 
-export function validateChannelSetupDraft(state: ChannelSetupDraftState): readonly string[] {
+export function validateChannelSetupDraft(
+  state: ChannelSetupDraftState,
+  persistedStatus?: { channelCount: number } | null,
+): readonly string[] {
+  if (persistedStatus !== undefined && persistedStatus !== null) {
+    return persistedStatus.channelCount > 0
+      ? ['Saved channels are ready for recovery.']
+      : ['Choose a movie or show library section before saving channels.'];
+  }
   const failures: string[] = [];
   const summary = summarizeChannelSetupDraft(state);
   if (state.sourceName.trim().length === 0) {
-    failures.push('Choose a fake library source.');
+    failures.push('Choose a library source.');
   }
   if (summary.enabledChannelCount === 0) {
-    failures.push('Enable at least one draft channel.');
+    failures.push('Enable at least one preview channel.');
   }
   if (summary.totalBlockCount === 0) {
-    failures.push('Add at least one draft programming block.');
+    failures.push('Add at least one programming block.');
   }
   return failures;
 }
@@ -379,16 +415,39 @@ function setupStepLabel(stepId: ChannelSetupStepId): string {
 function setupStepDetail(
   stepId: ChannelSetupStepId,
   state: ChannelSetupDraftState,
+  persistedStatus?: { channelCount: number } | null,
 ): string {
+  if (persistedStatus !== undefined) {
+    if (persistedStatus === null) {
+      switch (stepId) {
+        case 'source':
+          return 'Persisted channel status is not loaded yet.';
+        case 'channels':
+          return 'Saved channel counts are unavailable until recovery status loads.';
+        case 'review':
+          return 'Saved channel review is disabled until persisted status is available.';
+      }
+    }
+    switch (stepId) {
+      case 'source':
+        return 'Use the selected Plex profile, server, and library from this setup screen.';
+      case 'channels':
+        return `${persistedStatus.channelCount} saved channels are available for recovery.`;
+      case 'review':
+        return persistedStatus.channelCount > 0
+          ? 'Saved channels can be replaced or appended from the selected library.'
+          : 'Select a movie or show library section before saving channels.';
+    }
+  }
   const summary = summarizeChannelSetupDraft(state);
   switch (stepId) {
     case 'source':
-      return `${summary.sourceName} is the fake source for this setup draft.`;
+      return `${summary.sourceName} is selected for this setup preview.`;
     case 'channels':
-      return `${summary.enabledChannelCount} of ${summary.totalChannelCount} draft channels are enabled.`;
+      return `${summary.enabledChannelCount} of ${summary.totalChannelCount} preview channels are enabled.`;
     case 'review':
       return summary.readyForPreview
-        ? `${summary.totalBlockCount} fake programming blocks are ready for preview.`
-        : 'Enable a draft channel before previewing the lineup.';
+        ? `${summary.totalBlockCount} programming blocks are ready for preview.`
+        : 'Enable a preview channel before previewing the lineup.';
   }
 }

@@ -18,12 +18,33 @@ const STATIC_SCREEN_MARKUP = `
           <div class="overlay-progress" data-overlay-progress role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
         </section>
         <section class="player-overlay osd-overlay" data-overlay="playerOsd" aria-label="Player controls">
-          <button type="button" data-overlay-action="openMiniGuide" data-focus-id="overlay-mini-guide">Mini guide</button>
-          <button type="button" data-overlay-action="togglePlaybackOptions" data-focus-id="overlay-playback-options">Options</button>
-          <button type="button" data-overlay-action="channelDigit1" data-focus-id="overlay-channel-1">1</button>
-          <button type="button" data-overlay-action="channelDigit0" data-focus-id="overlay-channel-0">0</button>
-          <button type="button" data-overlay-action="channelDigit4" data-focus-id="overlay-channel-4">4</button>
-          <button type="button" data-overlay-action="closeTopOverlay" data-focus-id="overlay-close">Close</button>
+          <div class="player-osd__content">
+            <div class="player-osd__status" data-osd-status role="status"></div>
+            <div class="player-osd__title" data-osd-title></div>
+            <div class="player-osd__subtitle" data-osd-subtitle></div>
+            <div class="player-osd__pills">
+              <span data-osd-audio></span>
+              <span data-osd-subtitles></span>
+            </div>
+            <div class="player-osd__up-next" data-osd-up-next></div>
+          </div>
+          <div class="player-osd__actions">
+            <button type="button" data-overlay-action="openMiniGuide" data-focus-id="overlay-mini-guide">Mini guide</button>
+            <button type="button" data-overlay-action="togglePlaybackOptions" data-focus-id="overlay-playback-options">Options</button>
+            <button type="button" data-overlay-action="channelDigit1" data-focus-id="overlay-channel-1">1</button>
+            <button type="button" data-overlay-action="channelDigit0" data-focus-id="overlay-channel-0">0</button>
+            <button type="button" data-overlay-action="channelDigit4" data-focus-id="overlay-channel-4">4</button>
+            <button type="button" data-overlay-action="closeTopOverlay" data-focus-id="overlay-close">Close</button>
+          </div>
+          <div class="player-osd__meta">
+            <span data-osd-timecode></span>
+            <span data-osd-ends-at></span>
+            <span data-osd-buffer-text></span>
+          </div>
+          <div class="player-osd__bar" aria-hidden="true">
+            <span class="player-osd__bar-buffer" data-osd-buffer-bar></span>
+            <span class="player-osd__bar-played" data-osd-played-bar></span>
+          </div>
         </section>
         <section class="player-overlay mini-guide" data-overlay="miniGuide" aria-label="Mini guide" hidden>
           <div class="mini-guide__controls">
@@ -40,12 +61,26 @@ const STATIC_SCREEN_MARKUP = `
           </div>
         </section>
         <section class="player-overlay playback-options" data-overlay="playbackOptions" aria-label="Playback options" hidden>
+          <header class="playback-options__header">
+            <p>Playback options</p>
+            <strong data-overlay-playback-summary></strong>
+          </header>
           <dl>
             <div><dt>Audio</dt><dd data-overlay-audio-label></dd></div>
             <div><dt>Subtitles</dt><dd data-overlay-subtitle-label></dd></div>
             <div><dt>Volume</dt><dd data-overlay-volume-label></dd></div>
             <div><dt>Rate</dt><dd data-overlay-rate-label></dd></div>
           </dl>
+          <div class="playback-options__lists">
+            <section>
+              <h4>Audio tracks</h4>
+              <div data-overlay-audio-options></div>
+            </section>
+            <section>
+              <h4>Subtitle tracks</h4>
+              <div data-overlay-subtitle-options></div>
+            </section>
+          </div>
           <div class="playback-options__controls">
             <button type="button" data-overlay-action="cycleAudioTrack" data-focus-id="overlay-audio-cycle">Audio</button>
             <button type="button" data-overlay-action="cycleSubtitleTrack" data-focus-id="overlay-subtitle-cycle">Subtitles</button>
@@ -57,11 +92,15 @@ const STATIC_SCREEN_MARKUP = `
       </div>
   </div>
   <section id="screen-player" class="screen screen--active" data-screen="player" data-style-surface="screen" aria-labelledby="screen-player-title">
-    <div class="screen__content">
+      <div class="screen__content">
+      <div class="screen-shell-state" data-shell-state="active">
+        <span>Player</span>
+        <strong data-screen-state-text="player">Player controls are available for the current program.</strong>
+      </div>
       <p class="screen__kicker" data-workflow-kicker="player">Now playing</p>
       <h2 id="screen-player-title">Player</h2>
       <p data-workflow-primary="player">Ready for playback.</p>
-      <p data-workflow-secondary="player">Playback preview is local-only.</p>
+      <p data-workflow-secondary="player">Playback controls, guide access, and route chrome stay visible over the player.</p>
       <dl class="program-summary">
         <div><dt>Channel</dt><dd data-current-channel></dd></div>
         <div><dt>Program</dt><dd data-current-program></dd></div>
@@ -77,11 +116,15 @@ const STATIC_SCREEN_MARKUP = `
   </section>
   <section id="screen-guide" class="screen" data-screen="guide" data-style-surface="screen" aria-labelledby="screen-guide-title" hidden>
     <div class="screen__content">
+      <div class="screen-shell-state" data-shell-state="active">
+        <span>Guide</span>
+        <strong data-screen-state-text="guide">Guide rows show the current lineup.</strong>
+      </div>
       <p class="screen__kicker" data-workflow-kicker="guide">Guide</p>
       <h2 id="screen-guide-title">Guide</h2>
       <p data-workflow-primary="guide">Tonight at a glance.</p>
-      <p data-workflow-secondary="guide">Lineup preview.</p>
-      <div class="guide-controls" aria-label="Fake guide controls">
+      <p data-workflow-secondary="guide">Lineup guide.</p>
+      <div class="guide-controls" aria-label="Guide shell controls">
         <button type="button" data-epg-action="previousWindow" data-focus-id="guide-window-previous">Earlier</button>
         <button type="button" data-epg-action="nextWindow" data-focus-id="guide-window-next">Later</button>
         <button type="button" data-epg-action="previousChannel" data-focus-id="guide-channel-previous">Channel up</button>
@@ -94,6 +137,10 @@ const STATIC_SCREEN_MARKUP = `
         <h3 data-epg-detail-title></h3>
         <p data-epg-detail-time></p>
       </section>
+      <div class="screen-shell-state" data-shell-state="empty">
+        <span>Empty state</span>
+        <strong>No saved channels are loaded for this local setup state.</strong>
+      </div>
       <div class="epg-grid" data-epg-grid aria-label="Guide schedule grid"></div>
       <div class="workflow-actions" data-workflow-actions="guide">
         <button type="button" data-route-action="resumePlayer" data-focus-id="guide-watch">Watch now</button>
@@ -103,17 +150,21 @@ const STATIC_SCREEN_MARKUP = `
   </section>
   <section id="screen-settings" class="screen" data-screen="settings" data-style-surface="screen" aria-labelledby="screen-settings-title" hidden>
     <div class="screen__content">
+      <div class="screen-shell-state" data-shell-state="active">
+        <span>Settings</span>
+        <strong data-screen-state-text="settings">Preference changes apply to this app session.</strong>
+      </div>
       <p class="screen__kicker" data-workflow-kicker="settings">Settings</p>
       <h2 id="screen-settings-title">Settings</h2>
       <p data-workflow-primary="settings">Desktop preferences.</p>
-      <p data-workflow-secondary="settings">Desktop local preview.</p>
+      <p data-workflow-secondary="settings">Desktop preferences.</p>
       <dl class="settings-summary">
         <div><dt>Source</dt><dd data-settings-source></dd></div>
         <div><dt>Channels</dt><dd data-settings-channels></dd></div>
         <div><dt>Status</dt><dd data-settings-state></dd></div>
       </dl>
       <div class="settings-sections" data-settings-sections></div>
-      <div class="settings-controls" aria-label="Fake settings controls">
+      <div class="settings-controls" aria-label="Settings shell controls">
         <button type="button" data-settings-action="cycleLaunchMode" data-focus-id="settings-launch-mode">Startup surface</button>
         <button type="button" data-settings-action="cycleGuideDensity" data-focus-id="settings-guide-density">Guide density</button>
         <button type="button" data-settings-action="togglePreviewBadges" data-focus-id="settings-preview-badges">Preview badges</button>
@@ -126,12 +177,18 @@ const STATIC_SCREEN_MARKUP = `
       </div>
     </div>
   </section>
-  <section id="screen-channel-setup" class="screen" data-screen="channelSetup" data-style-surface="screen" aria-labelledby="screen-channel-setup-title" hidden>
-    <div class="screen__content">
-      <p class="screen__kicker" data-workflow-kicker="channelSetup">Channel setup</p>
-      <h2 id="screen-channel-setup-title">Plex setup</h2>
-      <p data-workflow-primary="channelSetup">Connect Plex, choose a profile and server, then browse your library.</p>
-      <p data-workflow-secondary="channelSetup">Only renderer-safe account, server, library, and media summaries are shown here.</p>
+  <section id="screen-channel-setup" class="screen screen--onboarding" data-screen="channelSetup" data-style-surface="screen" aria-labelledby="screen-channel-setup-title" hidden>
+    <div class="screen__content plex-onboarding-shell">
+      <div class="plex-onboarding-hero">
+        <p class="screen__kicker" data-workflow-kicker="channelSetup">Channel setup</p>
+        <h2 id="screen-channel-setup-title">Plex setup</h2>
+        <p data-workflow-primary="channelSetup">Connect Plex, choose a profile and server, then browse your library.</p>
+        <p data-workflow-secondary="channelSetup">Lineup Desktop shows the account, server, library, and media details needed for setup.</p>
+      </div>
+      <div class="screen-shell-state" data-shell-state="loading">
+        <span>Persisted setup status</span>
+        <strong data-screen-state-text="channelSetup">Review account, server, library, and persisted channel recovery in one place.</strong>
+      </div>
       <section class="plex-runtime plex-onboarding" data-plex-runtime-panel aria-label="Plex onboarding">
         <header class="plex-runtime__header">
           <div>
@@ -164,7 +221,7 @@ const STATIC_SCREEN_MARKUP = `
         </section>
         <section class="plex-runtime__stage" aria-labelledby="plex-stage-server">
           <h4 id="plex-stage-server">2. Choose server</h4>
-          <p class="plex-runtime__stage-copy">Pick a reachable Plex server from the safe server summaries returned by the desktop runtime.</p>
+          <p class="plex-runtime__stage-copy">Pick the Plex server Lineup Desktop should use for this profile.</p>
           <div class="plex-runtime__controls" aria-label="Plex server controls">
             <button type="button" data-plex-action="restoreSelectedServer" data-focus-id="plex-restore-server">Use saved server</button>
             <button type="button" data-plex-action="refreshServers" data-focus-id="plex-refresh-servers">Find servers</button>
@@ -174,7 +231,7 @@ const STATIC_SCREEN_MARKUP = `
         </section>
         <section class="plex-runtime__stage" aria-labelledby="plex-stage-library">
           <h4 id="plex-stage-library">3. Browse library</h4>
-          <p class="plex-runtime__stage-copy">Choose a library, browse items, or search before previewing metadata.</p>
+          <p class="plex-runtime__stage-copy">Choose a movie or show library section. Media items below are for metadata preview only.</p>
           <div class="plex-runtime__controls" aria-label="Plex library controls">
             <button type="button" data-plex-action="listLibrarySections" data-focus-id="plex-list-sections">Open libraries</button>
             <button type="button" data-plex-action="clearSelectedSection" data-focus-id="plex-clear-section">Change library</button>
@@ -187,12 +244,51 @@ const STATIC_SCREEN_MARKUP = `
           <div class="plex-runtime__list" data-plex-sections></div>
           <div class="plex-runtime__list" data-plex-items></div>
         </section>
-        <section class="plex-runtime__stage" aria-labelledby="plex-stage-metadata">
-          <h4 id="plex-stage-metadata">4. Preview item</h4>
-          <p class="plex-runtime__stage-copy">Review the selected media summary before continuing setup later.</p>
-          <button type="button" data-plex-action="clearMetadata" data-focus-id="plex-clear-metadata">Close preview</button>
-          <div class="plex-runtime__metadata" data-plex-metadata></div>
-        </section>
+      </section>
+      <section class="channel-setup-commit" aria-labelledby="channel-setup-commit-title">
+        <header>
+          <div>
+            <p class="screen__kicker">Channel setup</p>
+            <h3 id="channel-setup-commit-title">Build channels</h3>
+          </div>
+          <strong data-channel-setup-fixture-status></strong>
+        </header>
+        <ol class="setup-steps" data-channel-review-steps></ol>
+        <dl class="setup-summary">
+          <div><dt>Source</dt><dd data-channel-setup-source></dd></div>
+          <div><dt>Enabled channels</dt><dd data-channel-setup-enabled></dd></div>
+          <div><dt>Blocks</dt><dd data-channel-setup-blocks></dd></div>
+        </dl>
+        <div class="setup-review">
+          <section>
+            <h4>1. Library source</h4>
+            <div class="channel-draft-list" data-channel-review-list></div>
+          </section>
+          <section>
+            <h4>2. Strategy</h4>
+            <div class="setup-list" data-channel-strategy-options></div>
+          </section>
+          <section>
+            <h4>3. Review</h4>
+            <div class="setup-preview-rows" data-channel-review-impact></div>
+          </section>
+          <section>
+            <h4>4. Result</h4>
+            <div class="setup-validation" data-channel-review-validation></div>
+            <div class="setup-result" data-channel-setup-result></div>
+          </section>
+        </div>
+        <div class="plex-runtime__controls" aria-label="Channel setup commit controls">
+          <button type="button" data-channel-commit-action="append" data-focus-id="channel-append">Confirm & Build</button>
+          <button type="button" data-channel-commit-action="replace" data-focus-id="channel-replace">Review replacement</button>
+          <button type="button" data-channel-commit-action="confirmReplace" data-focus-id="channel-confirm-replace">Confirm & Replace</button>
+        </div>
+      </section>
+      <section class="plex-runtime__stage plex-runtime__stage--secondary" aria-labelledby="plex-stage-metadata">
+        <h4 id="plex-stage-metadata">Optional media preview</h4>
+        <p class="plex-runtime__stage-copy">Review a selected media summary only if needed. Channel creation uses the selected library section.</p>
+        <button type="button" data-plex-action="clearMetadata" data-focus-id="plex-clear-metadata">Close preview</button>
+        <div class="plex-runtime__metadata" data-plex-metadata></div>
       </section>
     </div>
   </section>
