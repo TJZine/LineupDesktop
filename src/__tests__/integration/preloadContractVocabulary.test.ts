@@ -69,6 +69,8 @@ const preloadSourceUrl = new URL('../../preload/index.cts', import.meta.url);
 const preloadSourceText = readFileSync(preloadSourceUrl, 'utf8');
 const channelGuardSourceUrl = new URL('../../preload/channelBridgeGuards.cts', import.meta.url);
 const channelGuardSourceText = readFileSync(channelGuardSourceUrl, 'utf8');
+const channelSetupBridgeSourceUrl = new URL('../../preload/channelSetupBridge.cts', import.meta.url);
+const channelSetupBridgeSourceText = readFileSync(channelSetupBridgeSourceUrl, 'utf8');
 const preloadBundleToolSourceText = readFileSync(
   new URL('../../../tools/bundle-preload.mjs', import.meta.url),
   'utf8',
@@ -84,6 +86,13 @@ const preloadSourceFile = ts.createSourceFile(
 const channelGuardSourceFile = ts.createSourceFile(
   'src/preload/channelBridgeGuards.cts',
   channelGuardSourceText,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+);
+const channelSetupBridgeSourceFile = ts.createSourceFile(
+  'src/preload/channelSetupBridge.cts',
+  channelSetupBridgeSourceText,
   ts.ScriptTarget.Latest,
   true,
   ts.ScriptKind.TS,
@@ -112,6 +121,29 @@ function evaluateChannelGuardModule(): Record<string, unknown> {
   return moduleObject.exports as Record<string, unknown>;
 }
 
+function evaluateChannelSetupBridgeModule(
+  channelGuardExports: Record<string, unknown>,
+): Record<string, unknown> {
+  const exportsObject = {};
+  const moduleObject = { exports: exportsObject };
+  const compiled = ts.transpileModule(channelSetupBridgeSourceText, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: 'src/preload/channelSetupBridge.cts',
+  }).outputText;
+  const requireBridge = (moduleName: string) => {
+    if (moduleName === './channelBridgeGuards.cjs') {
+      return channelGuardExports;
+    }
+    assert.fail(`unexpected channel setup bridge require ${moduleName}`);
+  };
+  const evaluateBridge = new Function('require', 'exports', 'module', compiled);
+  evaluateBridge(requireBridge, exportsObject, moduleObject);
+  return moduleObject.exports as Record<string, unknown>;
+}
+
 function createPreloadHarness(
   invoke: (
     channel: string,
@@ -127,6 +159,7 @@ function createPreloadHarness(
   let exposedApi: unknown = null;
   const input = (value: unknown) => JSON.parse(JSON.stringify(value)) as unknown;
   const channelGuardExports = evaluateChannelGuardModule();
+  const channelSetupBridgeExports = evaluateChannelSetupBridgeModule(channelGuardExports);
   const compiled = ts.transpileModule(preloadSourceText, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -137,6 +170,9 @@ function createPreloadHarness(
   const requireElectron = (moduleName: string) => {
     if (moduleName === './channelBridgeGuards.cjs') {
       return channelGuardExports;
+    }
+    if (moduleName === './channelSetupBridge.cjs') {
+      return channelSetupBridgeExports;
     }
     assert.equal(moduleName, 'electron');
     return {
@@ -662,6 +698,24 @@ function isInvokePlexChannelParameter(node: ts.Identifier): boolean {
   return false;
 }
 
+function isInvokeChannelSetupChannelParameter(node: ts.Identifier): boolean {
+  if (node.text !== 'channel') {
+    return false;
+  }
+  let current: ts.Node | undefined = node;
+  while (current !== undefined && !ts.isSourceFile(current)) {
+    if (
+      ts.isVariableDeclaration(current) &&
+      ts.isIdentifier(current.name) &&
+      current.name.text === 'invokeChannelSetup'
+    ) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
 function assertApprovedElectronRequireBinding(): void {
   const declarations: ts.VariableDeclaration[] = [];
 
@@ -698,6 +752,42 @@ function collectInvokePlexChannelArguments(): string[] {
       assert.ok(ts.isIdentifier(channelExpression), 'invokePlex channel must be a constant');
       assertApprovedChannelIdentifier(channelExpression.text);
       channels.push(channelExpression.text);
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(preloadSourceFile);
+  return channels;
+}
+
+function collectCreateChannelSetupBridgeChannelArguments(): string[] {
+  const channels: string[] = [];
+
+  function visit(node: ts.Node): void {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'createChannelSetupBridge'
+    ) {
+      const [invokeExpression, channelsExpression] = node.arguments;
+      assert.ok(invokeExpression, 'createChannelSetupBridge must pass an invoke function');
+      assert.ok(
+        ts.isIdentifier(invokeExpression) && invokeExpression.text === 'invokeChannelSetup',
+        'createChannelSetupBridge must receive the narrow channel setup invoke function',
+      );
+      const channelBindings = channelsExpression === undefined
+        ? undefined
+        : unwrapExpression(channelsExpression);
+      assert.ok(
+        channelBindings !== undefined && ts.isObjectLiteralExpression(channelBindings),
+        'createChannelSetupBridge must receive literal channel bindings',
+      );
+      for (const property of channelBindings.properties) {
+        assert.ok(ts.isPropertyAssignment(property), 'channel setup bridge channels must be property assignments');
+        assert.ok(ts.isIdentifier(property.initializer), 'channel setup bridge channel values must be constants');
+        assertApprovedChannelIdentifier(property.initializer.text);
+        channels.push(property.initializer.text);
+      }
     }
     ts.forEachChild(node, visit);
   }
@@ -1347,8 +1437,11 @@ test('preload bridge guard rejects Electron value imports while allowing type im
 
 test('preload split keeps Electron values in index and built preload has no local preload requires', () => {
   assertNoElectronValueImports(channelGuardSourceFile);
+  assertNoElectronValueImports(channelSetupBridgeSourceFile);
   assert.doesNotMatch(channelGuardSourceText, /require\(['"]electron['"]\)/u);
-  assert.match(preloadSourceText, /from '\.\/channelBridgeGuards\.cjs'/u);
+  assert.doesNotMatch(channelSetupBridgeSourceText, /require\(['"]electron['"]\)/u);
+  assert.match(preloadSourceText, /from '\.\/channelSetupBridge\.cjs'/u);
+  assert.match(channelSetupBridgeSourceText, /from '\.\/channelBridgeGuards\.cjs'/u);
   assert.match(preloadBundleToolSourceText, /bundle:\s*true/u);
   assert.match(preloadBundleToolSourceText, /external:\s*\[\s*'electron'\s*\]/u);
   assert.ok(
@@ -1359,6 +1452,7 @@ test('preload split keeps Electron values in index and built preload has no loca
   const preloadBundleOutputText = readFileSync(preloadBundleOutputUrl, 'utf8');
   assert.match(preloadBundleOutputText, /require\(["']electron["']\)/u);
   assert.doesNotMatch(preloadBundleOutputText, /channelBridgeGuards\.cjs/u);
+  assert.doesNotMatch(preloadBundleOutputText, /channelSetupBridge\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /require\(["']\.(?:\/|\\)[^"']+["']\)/u);
   assert.doesNotMatch(preloadBundleOutputText, /\bfrom\s+["']\.(?:\/|\\)[^"']+["']/u);
   assert.doesNotMatch(preloadBundleOutputText, /\bimport\(["']\.(?:\/|\\)[^"']+["']\)/u);
@@ -1454,6 +1548,12 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
         return;
       }
 
+      if (isInvokeChannelSetupChannelParameter(channelExpression)) {
+        observedCalls.push(`${methodName}:invokeChannelSetup.channel`);
+        ts.forEachChild(node, visit);
+        return;
+      }
+
       const approvedChannels =
         APPROVED_IPC_CHANNELS_BY_METHOD[
           methodName as keyof typeof APPROVED_IPC_CHANNELS_BY_METHOD
@@ -1472,8 +1572,6 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
   visit(preloadSourceFile);
 
   assert.deepEqual(observedCalls.sort(), [
-    'invoke:LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL',
-    'invoke:LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
     'invoke:LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL',
     'invoke:LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL',
     'invoke:LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL',
@@ -1482,6 +1580,7 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
     'invoke:LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL',
     'invoke:LINEUP_SHELL_GET_CAPABILITIES_CHANNEL',
     'invoke:LINEUP_WINDOW_INTENT_CHANNEL',
+    'invoke:invokeChannelSetup.channel',
     'invoke:invokePlex.channel',
     'on:LINEUP_PLAYER_EVENT_CHANNEL',
     'on:LINEUP_SHELL_STATUS_CHANGED_CHANNEL',
@@ -1502,5 +1601,9 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
     'LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL',
     'LINEUP_PLEX_SELECT_SERVER_CHANNEL',
     'LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL',
+  ]);
+  assert.deepEqual(collectCreateChannelSetupBridgeChannelArguments().sort(), [
+    'LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
   ]);
 });

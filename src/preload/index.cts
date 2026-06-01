@@ -1,11 +1,9 @@
 import type { IpcRendererEvent } from 'electron';
 import type * as Electron from 'electron';
 import {
-  channelSetupValidationFailure,
-  createChannelSetupCommitRequest,
-  createChannelSetupEmptyRequest,
-  isChannelSetupResult,
-} from './channelBridgeGuards.cjs';
+  createChannelSetupBridge,
+  type ChannelSetupBridgeInvoke,
+} from './channelSetupBridge.cjs';
 import type {
   DiagnosticsExportSupportBundleResult,
   DiagnosticsGetSummaryResult,
@@ -1127,6 +1125,9 @@ async function invokePlex<TValue>(
     : plexValidationFailure<TValue>(operation, 'Plex result is invalid.', request.requestId);
 }
 
+const invokeChannelSetup: ChannelSetupBridgeInvoke = (channel, request) =>
+  ipcRenderer.invoke(channel, request);
+
 function isPlexPinSummary(value: unknown): boolean {
   return (
     isPlainRecord(value) &&
@@ -2087,32 +2088,10 @@ const lineupDesktop: LineupDesktopPreloadApi = {
       );
     },
   },
-  channelSetup: {
-    getStatus: async () => {
-      const request = createChannelSetupEmptyRequest();
-      try {
-        const result = await ipcRenderer.invoke(LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL, request);
-        return isChannelSetupResult(result, request.requestId)
-          ? result
-          : channelSetupValidationFailure(request.requestId, 'getStatus');
-      } catch { return channelSetupValidationFailure(request.requestId, 'getStatus'); }
-    },
-    commit: async (input) => {
-      const request = createChannelSetupCommitRequest(input);
-      if (!request.ok) { return request.result; }
-      try {
-        const result = await ipcRenderer.invoke(LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL, {
-          requestId: request.requestId,
-          payload: request.payload,
-        });
-        return isChannelSetupResult(result, request.requestId)
-          ? result
-          : channelSetupValidationFailure(request.requestId, 'commit');
-      } catch {
-        return channelSetupValidationFailure(request.requestId, 'commit');
-      }
-    },
-  },
+  channelSetup: createChannelSetupBridge(invokeChannelSetup, {
+    getStatus: LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
+    commit: LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
+  }),
 };
 
 contextBridge.exposeInMainWorld('lineupDesktop', lineupDesktop);
