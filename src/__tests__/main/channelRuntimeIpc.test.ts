@@ -308,6 +308,52 @@ test('channel runtime rejects mixed invalid or unknown section ids without parti
   }
 });
 
+test('channel runtime pages all selected library items before saving channel totals', async () => {
+  const storage = createMemoryStorage(null);
+  const requests: Array<{ offset?: number; limit?: number }> = [];
+  const runtime = new ChannelRuntime({
+    storage,
+    clock: { now: () => 1_000 },
+    generateId: createIdGenerator('paged-live-channel'),
+    plexRuntime: createPlexRuntimeFixture({}, async (requestId, payload) => {
+      requests.push({ offset: payload.offset, limit: payload.limit });
+      const pageIndex = Math.floor((payload.offset ?? 0) / 100);
+      const items = pageIndex === 0
+        ? Array.from({ length: 100 }, (_, index) => plexItem(`movie-${index}`, `Feature ${index}`, 'movie'))
+        : [plexItem('movie-100', 'Feature 100', 'movie')];
+      return {
+        ok: true,
+        requestId,
+        value: {
+          sectionId: payload.sectionId,
+          offset: payload.offset ?? 0,
+          limit: payload.limit ?? 100,
+          items,
+          snapshot: createSnapshot(),
+        },
+      };
+    }),
+  });
+
+  const result = await runtime.commit('channel-commit-paged-section', {
+    mode: 'append',
+    sectionIds: ['movies'],
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(requests, [
+    { offset: 0, limit: 100 },
+    { offset: 100, limit: 100 },
+  ]);
+  assert.deepEqual(result.ok ? result.value.channels.map((channel) => ({
+    id: channel.id,
+    itemCount: channel.itemCount,
+  })) : [], [
+    { id: 'paged-live-channel-1', itemCount: 101 },
+  ]);
+  assert.doesNotMatch(JSON.stringify(result), /rawPayload|token|serverUri|https?:/u);
+});
+
 test('channel runtime commits from positive section summary when Plex item listing is empty or retryable', async () => {
   for (const listMode of ['retryable-failed', 'empty'] as const) {
     const storage = createMemoryStorage(null);
@@ -684,7 +730,7 @@ function createPlexRuntimeFixture(
   snapshotPatch: Partial<PlexRuntimeSnapshot> = {},
   listLibraryItems?: (
     requestId: string,
-    payload: { sectionId: string },
+    payload: { sectionId: string; offset?: number; limit?: number },
   ) => ReturnType<NonNullable<ChannelRuntimeOptionsPlexRuntime['listLibraryItems']>>,
 ): ChannelRuntimeOptionsPlexRuntime {
   return {

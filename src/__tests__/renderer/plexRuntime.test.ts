@@ -6,6 +6,7 @@ import {
   type PlexIpcResult,
   type PlexRuntimeSnapshot,
 } from '../../contracts/plex.js';
+import { deferred } from '../helpers/deferred.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import {
@@ -1347,17 +1348,6 @@ function failure<TValue>(
       operation: 'getHomeUsers',
     },
   };
-}
-
-function deferred<TValue>(): {
-  promise: Promise<TValue>;
-  resolve: (value: TValue) => void;
-} {
-  let resolve: (value: TValue) => void = () => undefined;
-  const promise = new Promise<TValue>((innerResolve) => {
-    resolve = innerResolve;
-  });
-  return { promise, resolve };
 }
 
 function inertScheduler() {

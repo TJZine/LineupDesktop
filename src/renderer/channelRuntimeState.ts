@@ -133,6 +133,7 @@ export function sanitizeChannelRuntimeError(error: ChannelSetupRuntimeError): st
     case 'CHANNEL_UNKNOWN':
       return 'Channel setup status could not be loaded.';
   }
+  return assertNever(error.code);
 }
 
 function sanitizeRendererMessage(message: string): string {
@@ -154,5 +155,11 @@ function containsPrivateRendererTerm(message: string): boolean {
   return /\b(?:token|credential|secret|header|serverUri|connectionUri|endpointUrl|baseUrl|tokenizedUrl|appPath|userDataPath|filesystemPath|persistenceFilePath|rawPayload|rawPlexPayload|nativeHandle)\b/iu.test(message) ||
     /\bhttps?:\/\/\S+/iu.test(message) ||
     /\b[A-Za-z]:\\\S+/u.test(message) ||
-    /\/Users\/\S+/u.test(message);
+    /\/Users\/\S+/u.test(message) ||
+    /(?:^|\s)\/home\/\S+/u.test(message) ||
+    /\\\\[^\\\s]+\\[^\\\s]+(?:\\\S*)?/u.test(message);
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled channel setup runtime error code: ${String(value)}`);
 }

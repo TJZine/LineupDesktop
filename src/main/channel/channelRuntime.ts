@@ -186,12 +186,34 @@ export class ChannelRuntime {
     requestId: string,
     section: PlexLibrarySectionSummary,
   ): Promise<{ ok: true; value: { itemCount: number; totalDurationMs: number } } | { ok: false }> {
-    const result = await this.plexRuntime?.listLibraryItems(
-      `channel-setup-items-${requestId}-${section.id}`,
-      { sectionId: section.id, offset: 0, limit: 100 },
-    );
-    if (result?.ok && result.value.items.length > 0) {
-      const items = result.value.items.map(mapPlexMediaItemToResolvedContentItem);
+    const limit = 100;
+    const items: ResolvedContentItem[] = [];
+    let offset = 0;
+    let firstResult: PlexIpcResult<PlexListLibraryItemsValue> | undefined;
+
+    while (true) {
+      const result = await this.plexRuntime?.listLibraryItems(
+        `channel-setup-items-${requestId}-${section.id}-${offset}`,
+        { sectionId: section.id, offset, limit },
+      );
+      firstResult ??= result;
+      if (result?.ok !== true) {
+        if (items.length === 0 && shouldUseSectionContentCountFallback(section, result)) {
+          return sectionContentCountFallback(section);
+        }
+        return { ok: false };
+      }
+      if (result.value.items.length === 0) {
+        break;
+      }
+      items.push(...result.value.items.map(mapPlexMediaItemToResolvedContentItem));
+      if (result.value.items.length < limit) {
+        break;
+      }
+      offset += result.value.items.length;
+    }
+
+    if (items.length > 0) {
       return {
         ok: true,
         value: {
@@ -201,16 +223,9 @@ export class ChannelRuntime {
       };
     }
     if (
-      hasPositiveSectionContentCount(section) &&
-      (result?.ok === true || isRetryablePlexItemProbeFailure(result))
+      shouldUseSectionContentCountFallback(section, firstResult)
     ) {
-      return {
-        ok: true,
-        value: {
-          itemCount: section.contentCount,
-          totalDurationMs: 0,
-        },
-      };
+      return sectionContentCountFallback(section);
     }
     return { ok: false };
   }
@@ -364,6 +379,26 @@ function hasPositiveSectionContentCount(
   return typeof section.contentCount === 'number' &&
     Number.isFinite(section.contentCount) &&
     section.contentCount > 0;
+}
+
+function shouldUseSectionContentCountFallback(
+  section: PlexLibrarySectionSummary,
+  result: PlexIpcResult<PlexListLibraryItemsValue> | undefined,
+): section is PlexLibrarySectionSummary & { contentCount: number } {
+  return hasPositiveSectionContentCount(section) &&
+    (result?.ok === true || isRetryablePlexItemProbeFailure(result));
+}
+
+function sectionContentCountFallback(
+  section: PlexLibrarySectionSummary & { contentCount: number },
+): { ok: true; value: { itemCount: number; totalDurationMs: number } } {
+  return {
+    ok: true,
+    value: {
+      itemCount: section.contentCount,
+      totalDurationMs: 0,
+    },
+  };
 }
 
 const RETRYABLE_ITEM_PROBE_ERROR_CODES = new Set([

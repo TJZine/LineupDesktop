@@ -1,17 +1,17 @@
 import type { PlexMediaType } from './types.js';
 
-const SEARCH_HUB_MEDIA_TYPES: Readonly<Record<string, PlexMediaType>> = {
-  movie: 'movie',
-  movies: 'movie',
-  show: 'show',
-  shows: 'show',
-  episode: 'episode',
-  episodes: 'episode',
-  track: 'track',
-  tracks: 'track',
-  clip: 'clip',
-  clips: 'clip',
-};
+const SEARCH_HUB_MEDIA_TYPES = new Map<string, PlexMediaType>([
+  ['movie', 'movie'],
+  ['movies', 'movie'],
+  ['show', 'show'],
+  ['shows', 'show'],
+  ['episode', 'episode'],
+  ['episodes', 'episode'],
+  ['track', 'track'],
+  ['tracks', 'track'],
+  ['clip', 'clip'],
+  ['clips', 'clip'],
+]);
 
 const SAFE_FILTER_KEY_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/u;
 const SAFE_LIBRARY_FILTER_KEYS = new Set([
@@ -77,5 +77,5 @@ export function isSafeSearchLimit(value: unknown): value is number | undefined {
 }
 
 export function mapSearchHubTypeToMediaType(type: string): PlexMediaType | null {
-  return SEARCH_HUB_MEDIA_TYPES[type.trim().toLowerCase()] ?? null;
+  return SEARCH_HUB_MEDIA_TYPES.get(type.trim().toLowerCase()) ?? null;
 }

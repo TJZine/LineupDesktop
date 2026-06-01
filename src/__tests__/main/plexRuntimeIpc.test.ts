@@ -828,11 +828,11 @@ test('desktop plex runtime enriches live library section counts with lightweight
       filter: request.filter,
     })),
     [
-      { sectionId: 'movies', offset: 0, limit: 0, filter: undefined },
-      { sectionId: 'shows', offset: 0, limit: 0, filter: undefined },
-      { sectionId: 'music', offset: 0, limit: 0, filter: undefined },
-      { sectionId: 'photos', offset: 0, limit: 0, filter: undefined },
-      { sectionId: 'shows', offset: 0, limit: 0, filter: { type: PLEX_MEDIA_TYPES.EPISODE } },
+      { sectionId: 'movies', offset: 0, limit: 1, filter: undefined },
+      { sectionId: 'shows', offset: 0, limit: 1, filter: undefined },
+      { sectionId: 'music', offset: 0, limit: 1, filter: undefined },
+      { sectionId: 'photos', offset: 0, limit: 1, filter: undefined },
+      { sectionId: 'shows', offset: 0, limit: 1, filter: { type: PLEX_MEDIA_TYPES.EPISODE } },
     ],
   );
   assert.deepEqual(
@@ -1016,6 +1016,7 @@ test('desktop plex runtime forwards search types and skips non-requested hubs', 
         Hub: [
           { type: 'movie', Metadata: [rawItem({ ratingKey: 'movie-1', title: 'Movie' })] },
           { type: 'show', Metadata: [rawItem({ ratingKey: 'show-1', type: 'show', title: 'Show' })] },
+          { type: 'constructor', Metadata: [rawItem({ ratingKey: 'constructor-1', title: 'Constructor' })] },
           { type: 'unknown', Metadata: [rawItem({ ratingKey: 'unknown-1', title: 'Unknown' })] },
         ],
       },

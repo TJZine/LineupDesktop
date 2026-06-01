@@ -230,7 +230,8 @@ function isPersistedChannelSummary(value: unknown): boolean {
     isNullableSafeString(value.id) &&
     value.id !== null &&
     isChannelNumber(value.number) &&
-    isSafeChannelSetupString(value.name) &&
+    isNullableSafeDisplayString(value.name) &&
+    value.name !== null &&
     isNullableSafeString(value.sourceLibraryId) &&
     isNullableSafeDisplayString(value.sourceLibraryName) &&
     isFiniteNonNegativeInteger(value.itemCount)

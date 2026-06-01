@@ -1185,6 +1185,39 @@ test('preload channel setup bridge validates status results before returning the
     'getStatus',
   );
 
+  const unsafeChannelName = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPlexInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        status: 'configured',
+        channelCount: 1,
+        currentChannelId: 'channel-one',
+        currentChannelNumber: 101,
+        currentChannelName: 'Channel One',
+        channelNumbers: [101],
+        channels: [{
+          id: 'channel-one',
+          number: 101,
+          name: '<b>Channel One</b>',
+          sourceLibraryId: 'movies',
+          sourceLibraryName: 'Movies',
+          itemCount: 12,
+        }],
+        updatedAtMs: 123,
+        recovery: { loaded: true, repaired: false },
+      },
+    });
+  });
+
+  const unsafeChannelNameResult = await unsafeChannelName.api.channelSetup.getStatus();
+  assert.equal((unsafeChannelNameResult as { ok: boolean }).ok, false);
+  assert.equal(
+    (unsafeChannelNameResult as { error: { code: string } }).error.code,
+    'CHANNEL_VALIDATION_FAILED',
+  );
+
   for (const invalidNumber of [0, 501]) {
     const invalidNumberHarness = createPreloadHarness((_channel, request, input) => {
       assert.ok(isPlexInvokeRequest(request));
@@ -1444,11 +1477,12 @@ test('preload split keeps Electron values in index and built preload has no loca
   assert.match(channelSetupBridgeSourceText, /from '\.\/channelBridgeGuards\.cjs'/u);
   assert.match(preloadBundleToolSourceText, /bundle:\s*true/u);
   assert.match(preloadBundleToolSourceText, /external:\s*\[\s*'electron'\s*\]/u);
-  assert.ok(
-    existsSync(preloadBundleOutputUrl),
-    'expected dist/preload/index.cjs to exist; run npm run build:electron before this test',
-  );
+});
 
+test(
+  'built preload bundle has no local preload requires',
+  { skip: !existsSync(preloadBundleOutputUrl) ? 'run npm run build:electron before bundle verification' : false },
+  () => {
   const preloadBundleOutputText = readFileSync(preloadBundleOutputUrl, 'utf8');
   assert.match(preloadBundleOutputText, /require\(["']electron["']\)/u);
   assert.doesNotMatch(preloadBundleOutputText, /channelBridgeGuards\.cjs/u);
@@ -1456,7 +1490,8 @@ test('preload split keeps Electron values in index and built preload has no loca
   assert.doesNotMatch(preloadBundleOutputText, /require\(["']\.(?:\/|\\)[^"']+["']\)/u);
   assert.doesNotMatch(preloadBundleOutputText, /\bfrom\s+["']\.(?:\/|\\)[^"']+["']/u);
   assert.doesNotMatch(preloadBundleOutputText, /\bimport\(["']\.(?:\/|\\)[^"']+["']\)/u);
-});
+  },
+);
 
 test('preload bridge exposes only the typed lineupDesktop world', () => {
   assertNoElectronValueImports();

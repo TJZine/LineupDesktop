@@ -72,7 +72,8 @@ async function getLibraryItemCount(input: {
       token: input.token,
       sectionId: input.sectionId,
       offset: 0,
-      limit: 0,
+      // Request one item so Plex returns count metadata without relying on zero-sized pages.
+      limit: 1,
       ...(input.filter !== undefined ? { filter: input.filter } : {}),
       signal: input.signal,
     });

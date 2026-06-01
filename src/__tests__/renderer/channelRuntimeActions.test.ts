@@ -6,6 +6,7 @@ import {
   type ChannelSetupIpcResult,
   type ChannelSetupSummary,
 } from '../../contracts/channel.js';
+import { deferred } from '../helpers/deferred.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import { createChannelRuntimeController } from '../../renderer/channelRuntimeActions.js';
 
@@ -56,19 +57,5 @@ function summary(
     })),
     updatedAtMs: 1,
     recovery: { loaded: channels.length > 0, repaired: false },
-  };
-}
-
-function deferred<TValue>(): {
-  promise: Promise<TValue>;
-  resolve(value: TValue): void;
-} {
-  let resolveValue: (value: TValue) => void = () => undefined;
-  const promise = new Promise<TValue>((resolve) => {
-    resolveValue = resolve;
-  });
-  return {
-    promise,
-    resolve: resolveValue,
   };
 }

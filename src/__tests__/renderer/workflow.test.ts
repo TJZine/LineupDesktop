@@ -8,6 +8,7 @@ import {
   type ChannelSetupIpcResult,
   type ChannelSetupSummary,
 } from '../../contracts/channel.js';
+import { deferred } from '../helpers/deferred.js';
 import {
   activateWorkflowRoute,
   applyWorkflowChannelSetupAction,
@@ -480,9 +481,25 @@ test('channel runtime validation errors fall back when private terms remain', ()
     recoverable: true,
     operation: 'commit',
   });
+  const linuxPath = sanitizeChannelRuntimeError({
+    code: 'CHANNEL_VALIDATION_FAILED',
+    message: 'Failed at /home/alice/project/file',
+    retryable: false,
+    recoverable: true,
+    operation: 'commit',
+  });
+  const uncPath = sanitizeChannelRuntimeError({
+    code: 'CHANNEL_VALIDATION_FAILED',
+    message: 'Failed at \\\\server\\share\\file',
+    retryable: false,
+    recoverable: true,
+    operation: 'commit',
+  });
 
   assert.equal(safe, 'Selected Plex libraries did not return usable channel content.');
   assert.equal(unsafe, 'Channel setup could not continue.');
+  assert.equal(linuxPath, 'Channel setup could not continue.');
+  assert.equal(uncPath, 'Channel setup could not continue.');
 });
 
 test('channel setup action state clears without discarding pending status recovery', async () => {
@@ -675,15 +692,4 @@ function configuredChannelRuntimeState(): ChannelRuntimeRendererState {
       recovery: { loaded: true, repaired: false },
     },
   };
-}
-
-function deferred<TValue>(): {
-  promise: Promise<TValue>;
-  resolve: (value: TValue) => void;
-} {
-  let resolve: (value: TValue) => void = () => undefined;
-  const promise = new Promise<TValue>((innerResolve) => {
-    resolve = innerResolve;
-  });
-  return { promise, resolve };
 }
