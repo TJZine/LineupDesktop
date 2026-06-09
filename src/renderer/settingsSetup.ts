@@ -6,10 +6,6 @@ export type SettingsActionId =
   | 'exportSupportBundle';
 
 export type ChannelSetupActionId =
-  | 'advanceSetupStep'
-  | 'toggleFeaturedChannel'
-  | 'addDraftChannel'
-  | 'resetDraftLineup'
   | 'selectRecentlyAddedSource'
   | 'selectAppendBuildMode'
   | 'selectReplaceBuildMode';
@@ -81,7 +77,6 @@ export interface ChannelSetupSummaryViewModel {
 }
 
 const SETUP_STEP_ORDER: readonly ChannelSetupStepId[] = ['source', 'channels', 'review'];
-
 const DEFAULT_CHANNELS = [] as const satisfies readonly ChannelDraftViewModel[];
 
 export function createSettingsDraftState(): SettingsDraftState {
@@ -156,39 +151,6 @@ export function applyChannelSetupAction(
   actionId: ChannelSetupActionId,
 ): ChannelSetupDraftState {
   switch (actionId) {
-    case 'advanceSetupStep':
-      return { ...state, activeStepId: nextSetupStepId(state.activeStepId) };
-    case 'toggleFeaturedChannel':
-      return {
-        ...state,
-        channels: state.channels.map((channel) =>
-          channel.id === state.channels[0]?.id
-            ? {
-              ...channel,
-              enabled: !channel.enabled,
-              reviewStatus: channel.enabled ? 'disabled' : 'active',
-            }
-            : channel,
-        ),
-      };
-    case 'addDraftChannel':
-      return {
-        ...state,
-        channels: [
-          ...state.channels,
-          {
-            id: `draft-extra-${state.channels.length + 1}`,
-            number: String(400 + state.channels.length + 1),
-            name: `Fixture Channel ${state.channels.length + 1}`,
-            enabled: true,
-            blockCount: 1,
-            category: 'Mixed',
-            reviewStatus: 'active',
-          },
-        ],
-      };
-    case 'resetDraftLineup':
-      return createChannelSetupDraftState();
     case 'selectRecentlyAddedSource':
       return { ...state, sourceMode: 'recently-added' };
     case 'selectAppendBuildMode':
@@ -393,12 +355,6 @@ export function validateChannelSetupDraft(
     failures.push('Add at least one programming block.');
   }
   return failures;
-}
-
-function nextSetupStepId(currentStepId: ChannelSetupStepId): ChannelSetupStepId {
-  const currentIndex = SETUP_STEP_ORDER.indexOf(currentStepId);
-  const nextIndex = (currentIndex + 1) % SETUP_STEP_ORDER.length;
-  return SETUP_STEP_ORDER[nextIndex] ?? 'source';
 }
 
 function setupStepLabel(stepId: ChannelSetupStepId): string {
