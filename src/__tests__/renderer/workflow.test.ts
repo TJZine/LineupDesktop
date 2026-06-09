@@ -306,12 +306,12 @@ test('settings copy describes Desktop-local capabilities and avoids legacy platf
   assert.doesNotMatch(settingsCopy, /webOS|Luna|Palm|TV service/i);
 });
 
-test('draft setup state stays isolated until persisted channel status is available', () => {
+test('channel setup route is driven by live status and selected library only', () => {
   const initial = createWorkflowState('channelSetup');
-  const pausedFeatured = applyWorkflowChannelSetupAction(initial, 'toggleFeaturedChannel');
-  const withDraft = applyWorkflowChannelSetupAction(pausedFeatured, 'addDraftChannel');
-  const review = applyWorkflowChannelSetupAction(withDraft, 'advanceSetupStep');
-  const view = getRouteWorkflowView(review);
+  const replace = applyWorkflowChannelSetupAction(initial, 'selectReplaceBuildMode');
+  const append = applyWorkflowChannelSetupAction(replace, 'selectAppendBuildMode');
+  const source = applyWorkflowChannelSetupAction(append, 'selectRecentlyAddedSource');
+  const view = getRouteWorkflowView(source);
   const viewText = JSON.stringify({
     settings: view.settings,
     channelDrafts: view.channelDrafts,
@@ -320,7 +320,9 @@ test('draft setup state stays isolated until persisted channel status is availab
     setupValidationMessages: view.setupValidationMessages,
   });
 
-  assert.deepEqual(review.routeState, initial.routeState);
+  assert.deepEqual(source.routeState, initial.routeState);
+  assert.equal(source.channelSetupDraft.buildMode, 'append');
+  assert.equal(source.channelSetupDraft.sourceMode, 'recently-added');
   assert.equal(view.channelDrafts.length, 0);
   assert.equal(view.channelSetupSummary.sourceName, 'Persisted channel status unavailable');
   assert.equal(view.channelSetupSummary.enabledChannelCount, 0);
@@ -334,9 +336,6 @@ test('draft setup state stays isolated until persisted channel status is availab
   ]);
   assert.doesNotMatch(viewText, /Demo Library|Liminal One|The Vault|Weekend Queue/u);
   assert.doesNotMatch(viewText, /2 of 3|6 programming blocks|16 programming blocks/u);
-
-  const reset = applyWorkflowChannelSetupAction(review, 'resetDraftLineup');
-  assert.equal(getRouteWorkflowView(reset).channelDrafts.length, 0);
   assert.deepEqual(getRouteWorkflowView(initial).actions, []);
 });
 
