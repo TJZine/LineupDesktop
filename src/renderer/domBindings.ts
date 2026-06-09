@@ -306,10 +306,6 @@ export function readSettingsActionId(value: string | undefined): SettingsActionI
 
 export function readChannelSetupActionId(value: string | undefined): ChannelSetupActionId | null {
   switch (value) {
-    case 'advanceSetupStep':
-    case 'toggleFeaturedChannel':
-    case 'addDraftChannel':
-    case 'resetDraftLineup':
     case 'selectRecentlyAddedSource':
     case 'selectAppendBuildMode':
     case 'selectReplaceBuildMode':
