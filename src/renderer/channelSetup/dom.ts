@@ -7,8 +7,8 @@ export function renderChannelSetupDom(
   dom: RendererDomBindings,
   liveSelection: ChannelSetupLiveSelectionViewModel | null,
 ): void {
-  if (dom.channelSetupFixtureStatusElement) {
-    dom.channelSetupFixtureStatusElement.textContent = view.channelSetupFlow.stageLabel;
+  if (dom.channelSetupStatusElement) {
+    dom.channelSetupStatusElement.textContent = view.channelSetupFlow.stageLabel;
   }
   if (dom.channelSetupSourceElement) {
     dom.channelSetupSourceElement.textContent = view.channelSetupSummary.sourceName;
