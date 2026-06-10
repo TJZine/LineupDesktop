@@ -38,7 +38,12 @@ import {
 import { registerPlayerIpcHandlers, type PlayerIpcTeardown } from './player/playerIpc.js';
 import { DiagnosticEventStore } from './diagnostics/diagnosticEventStore.js';
 import { registerDiagnosticsIpcHandlers, type DiagnosticsIpcTeardown } from './diagnostics/supportBundleIpc.js';
-import { registerChannelComposition, type ChannelCompositionTeardown } from './channel/channelComposition.js';
+import { registerChannelComposition, type ChannelCompositionRegistration } from './channel/channelComposition.js';
+import {
+  createPlexPlaybackRuntimeComposition,
+  createDesktopPlayerAdapterRuntimePort,
+} from './player/plexPlaybackComposition.js';
+import type { PlexPlaybackRuntime } from './player/plexPlaybackRuntime.js';
 import { registerPlexComposition, type PlexCompositionRegistration } from './plex/plexComposition.js';
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
 import { registerShellAppCommandController } from './window/shellAppCommandController.js';
@@ -64,7 +69,7 @@ const shellWindowController = createShellWindowController({
 let teardownPlayerIpc: PlayerIpcTeardown | null = null;
 let teardownDiagnosticsIpc: DiagnosticsIpcTeardown | null = null;
 let plexComposition: PlexCompositionRegistration | null = null;
-let teardownChannelComposition: ChannelCompositionTeardown | null = null;
+let channelComposition: ChannelCompositionRegistration | null = null;
 let playerIpcQuitTeardownInProgress = false;
 let playerIpcQuitTeardownComplete = false;
 let containmentCounters: ShellContainmentCounters = {
@@ -104,14 +109,153 @@ app.whenReady()
       createRequestId,
       diagnosticEventStore,
     });
-    teardownChannelComposition = registerChannelComposition({
+    let playbackRuntime: PlexPlaybackRuntime | null = null;
+    let onChannelTunedCallback: ((channelId: string) => void | Promise<void>) | null = null;
+
+    channelComposition = registerChannelComposition({
       app,
       shellMode,
       isAuthorizedEvent,
       createRequestId,
       plexRuntime: plexComposition.runtime,
       diagnosticEventStore,
+      onChannelTuned: (channelId) => {
+        if (onChannelTunedCallback) {
+          void onChannelTunedCallback(channelId);
+        }
+      },
     });
+
+    const fakePlaybackResolver = {
+      async resolve(input: any) {
+        const payload = {
+          media: {
+            id: `plex-media-${input.mediaId}`,
+            title: input.title || 'Live Program',
+            durationMs: input.durationMs ?? 1_200_000,
+            container: 'mp4',
+          },
+          policy: {
+            autoplay: true,
+            startPositionMs: input.startPositionMs ?? 0,
+            preferredAudioTrackId: null,
+            preferredSubtitleTrackId: null,
+          },
+          capabilityProfileId: input.capabilityProfile?.id || 'desktop-default-profile',
+        };
+        return {
+          ok: true,
+          load: payload,
+          privatePlayback: {
+            requestId: input.requestId || 'mock-request-id',
+            decisionKind: 'direct-play',
+            playbackUrl: 'https://mock.plex.invalid/file.mp4',
+            credentialHeader: { name: 'X-Plex-Token', value: 'mock-token' },
+            selectedConnection: {
+              protocol: 'https',
+              address: 'mock.plex.invalid',
+              port: 443,
+              local: true,
+              relay: false,
+            },
+            media: { id: payload.media.id, title: payload.media.title },
+            setup: {
+              playbackMode: 'direct-play',
+              mediaPath: '/library/metadata/mock',
+              variantId: 'mock-variant',
+              partPath: '/library/parts/mock/file.mp4',
+              selectedTrackIds: { video: null, audio: null, subtitle: null },
+              selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+            },
+          },
+          decision: {
+            kind: 'direct-play',
+            candidateId: 'mock-candidate',
+            selectedTrackIds: { video: null, audio: null, subtitle: null },
+          },
+        } as any;
+      }
+    };
+
+    const fakePmsPort = {
+      async releaseSession() {
+        // No-op
+      }
+    };
+
+    const capabilityProfile = {
+      id: 'desktop-default-profile',
+      directPlayContainers: ['mp4'],
+      directPlayVideoCodecs: ['h264'],
+      directPlayAudioCodecs: ['aac'],
+      subtitleDeliveryModes: ['embedded', 'sidecar', 'none'],
+      headerAuthSetup: 'supported',
+      audioTrackSwitching: 'supported',
+      subtitleTrackSwitching: 'supported',
+      hdr: 'supported',
+      dolbyVision: 'unsupported',
+      directStream: {
+        containerRemux: 'supported',
+        audioTranscode: 'supported',
+        subtitleConversion: 'supported',
+      },
+      transcode: {
+        video: 'supported',
+        audio: 'supported',
+        subtitles: 'supported',
+        hdr: 'supported',
+      },
+    } as const;
+
+    const playerPort = teardownPlayerIpc.adapter
+      ? createDesktopPlayerAdapterRuntimePort(teardownPlayerIpc.adapter)
+      : {
+          dispatch: async () => ({ ok: true, events: [] }),
+          cleanup: async () => {},
+        };
+
+    const playbackRuntimeComposition = createPlexPlaybackRuntimeComposition({
+      scheduler: channelComposition.activeChannelScheduler,
+      resolver: fakePlaybackResolver,
+      player: playerPort,
+      pms: fakePmsPort,
+      capabilityProfile,
+      createRequestId,
+      diagnosticEventStore,
+    });
+    playbackRuntime = playbackRuntimeComposition.runtime;
+
+    channelComposition.activeChannelScheduler.on('programStart', () => {
+      if (playbackRuntime) {
+        void playbackRuntime.startCurrentPlayback('schedule-tick').catch((error: unknown) => {
+          reportMainProcessDiagnostic('Automatic schedule tick playback transition failed', error);
+        });
+      }
+    });
+
+    onChannelTunedCallback = async () => {
+      if (playbackRuntime) {
+        try {
+          await playbackRuntime.startCurrentPlayback('manual-switch');
+        } catch (error) {
+          reportMainProcessDiagnostic('Manual channel switch playback start failed', error);
+        }
+      }
+    };
+
+    void channelComposition.guideRuntime.initializeActiveChannel()
+      .then(async () => {
+        if (playbackRuntime) {
+          try {
+            await playbackRuntime.startCurrentPlayback('startup');
+          } catch (error) {
+            reportMainProcessDiagnostic('Startup playback start failed', error);
+          }
+        }
+      })
+      .catch((error) => {
+        reportMainProcessDiagnostic('Guide runtime active channel initialization failed', error);
+      });
     const shellWindow = shellWindowController.createWindow();
     registerShellAppCommandController(shellWindow, {
       reportDiagnostic: reportMainProcessDiagnostic,
@@ -142,11 +286,11 @@ app.on('before-quit', (event) => {
   if (playerIpcQuitTeardownComplete || teardown === null) {
     const teardownPlex = plexComposition?.teardown ?? null;
     plexComposition = null;
-    const teardownChannel = teardownChannelComposition;
-    teardownChannelComposition = null;
+    const localChannelComp = channelComposition;
+    channelComposition = null;
     void Promise.all([
       teardownPlex?.() ?? Promise.resolve(),
-      teardownChannel?.() ?? Promise.resolve(),
+      localChannelComp?.teardown() ?? Promise.resolve(),
     ]).catch((error: unknown) => {
       reportMainProcessDiagnostic('Runtime composition cleanup failed during quit', error);
     });
@@ -163,13 +307,13 @@ app.on('before-quit', (event) => {
   teardownDiagnosticsIpc = null;
     const teardownPlex = plexComposition?.teardown ?? null;
     plexComposition = null;
-  const teardownChannel = teardownChannelComposition;
-  teardownChannelComposition = null;
+  const localChannelComp = channelComposition;
+  channelComposition = null;
   playerIpcQuitTeardownInProgress = true;
   Promise.all([
-    teardown(),
+    teardown.teardown(),
     teardownPlex?.() ?? Promise.resolve(),
-    teardownChannel?.() ?? Promise.resolve(),
+    localChannelComp?.teardown() ?? Promise.resolve(),
   ])
     .catch((error: unknown) => {
       reportMainProcessDiagnostic('Player IPC cleanup failed during quit', error);

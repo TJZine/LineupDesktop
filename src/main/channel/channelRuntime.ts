@@ -46,6 +46,10 @@ export class ChannelRuntime {
     });
   }
 
+  public getRepository(): ChannelRepository {
+    return this.repository;
+  }
+
   public async getStatus(
     requestId: string,
   ): Promise<ChannelSetupIpcResult<ChannelSetupSummary>> {

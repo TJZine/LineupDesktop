@@ -14,6 +14,7 @@ import { createChannelRuntimeController } from './channelRuntimeActions.js';
 import { readPlexHomeUserId, readPlexRatingKey, readPlexSectionId, readPlexServerId, renderPlexRuntimeDom } from './plexRuntimeDom.js';
 import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowChannelSetupAction, applyWorkflowEpgAction, applyWorkflowSettingsAction, createWorkflowState, type ChannelSetupActionId, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
 import { createRendererPresentationFixtures } from './presentationFixtures.js';
+import { EPG_WINDOW_DURATION_MS, setEpgPresentationState, updateEpgState } from './epg.js';
 
 mountStaticRendererDom();
 
@@ -26,6 +27,9 @@ let overlayState = createPlayerOverlayState(presentationFixtures.overlays);
 const playerSnapshot = presentationFixtures.playerSnapshot;
 const focusRegistry = new FocusRegistry();
 let focusState: FocusState;
+const GUIDE_POLL_INTERVAL_MS = 15_000;
+let guidePollTimer: ReturnType<typeof setInterval> | null = null;
+let guidePresentationRequestId = 0;
 const plexController = createPlexRuntimeController({
   bridge: window.lineupDesktop.plex,
   onStateChanged: () => renderApp(),
@@ -59,6 +63,7 @@ window.addEventListener('beforeunload', () => {
   cursorRuntime.cleanup();
   gamepadRuntime.cleanup();
   unsubscribeShellStatus();
+  stopGuidePresentationPolling();
   cleanupPlexRuntime('beforeunload');
 });
 
@@ -75,7 +80,7 @@ for (const button of dom.routeActionButtons) {
   button.addEventListener('click', () => {
     const action = readRouteActionId(button.dataset.routeAction);
     if (action !== null) {
-      applyRouteAction(action);
+      void applyRouteAction(action);
     }
   });
 }
@@ -206,6 +211,9 @@ document.documentElement.dataset.shellBoot = 'ready';
 document.documentElement.dataset.activeRoute = workflowState.routeState.activeRoute;
 void plexController.loadSnapshot();
 void channelController.loadStatus();
+if (workflowState.routeState.activeRoute === 'guide') {
+  void startGuidePresentationPolling();
+}
 
 function renderStatus(event: ShellStatusEvent): void {
   if (dom.statusElement) {
@@ -251,16 +259,22 @@ function activateRoute(route: AppRouteId): void {
   const previousRoute = workflowState.routeState.activeRoute;
   workflowState = activateWorkflowRoute(workflowState, route);
   cleanupPlexRuntimeForRouteChange(previousRoute, workflowState.routeState.activeRoute);
+  reconcileGuidePresentationPolling(previousRoute, workflowState.routeState.activeRoute);
   focusState = focusRegistry.focusRoute(focusState, route).state;
   renderApp();
 }
 
-function applyRouteAction(action: RouteWorkflowActionId): void {
+async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
   const previousRoute = workflowState.routeState.activeRoute;
+  if (action === 'resumePlayer' && previousRoute === 'guide') {
+    await tuneGuideSelectedChannel();
+    return;
+  }
   workflowState = applyWorkflowAction(workflowState, action);
   const nextRoute = workflowState.routeState.activeRoute;
   if (previousRoute !== nextRoute) {
     cleanupPlexRuntimeForRouteChange(previousRoute, nextRoute);
+    reconcileGuidePresentationPolling(previousRoute, nextRoute);
     focusState = focusRegistry.focusRoute(focusState, nextRoute).state;
   }
   renderApp();
@@ -277,6 +291,16 @@ function applySettingsAction(action: SettingsActionId): void {
 function applyChannelSetupAction(action: ChannelSetupActionId): void {
   workflowState = applyWorkflowChannelSetupAction(workflowState, action);
   renderApp();
+}
+
+function reconcileGuidePresentationPolling(previousRoute: AppRouteId, nextRoute: AppRouteId): void {
+  if (previousRoute === 'guide' && nextRoute !== 'guide') {
+    stopGuidePresentationPolling();
+    return;
+  }
+  if (nextRoute === 'guide' && previousRoute !== 'guide') {
+    void startGuidePresentationPolling();
+  }
 }
 
 async function applyChannelCommitAction(action: ReturnType<typeof readChannelCommitActionId>): Promise<void> {
@@ -399,6 +423,115 @@ async function applyPlexRuntimeAction(action: ReturnType<typeof readPlexRuntimeA
     case null:
       return;
   }
+}
+
+function startGuidePresentationPolling(): void {
+  stopGuidePresentationPolling();
+  void refreshGuidePresentation('poll-start');
+  guidePollTimer = window.setInterval(() => {
+    void refreshGuidePresentation('poll-interval');
+  }, GUIDE_POLL_INTERVAL_MS);
+}
+
+function stopGuidePresentationPolling(): void {
+  if (guidePollTimer !== null) {
+    window.clearInterval(guidePollTimer);
+    guidePollTimer = null;
+  }
+  guidePresentationRequestId += 1;
+}
+
+async function refreshGuidePresentation(source: string): Promise<void> {
+  const requestId = ++guidePresentationRequestId;
+  if (workflowState.routeState.activeRoute !== 'guide') {
+    return;
+  }
+
+  workflowState = {
+    ...workflowState,
+    epg: setEpgPresentationState(workflowState.epg, 'loading'),
+  };
+  renderApp();
+
+  const result = await window.lineupDesktop.guide.getPresentation({
+    startTimeMs: workflowState.epg.windowStartMs,
+    durationMs: EPG_WINDOW_DURATION_MS,
+  });
+
+  if (requestId !== guidePresentationRequestId || workflowState.routeState.activeRoute !== 'guide') {
+    return;
+  }
+
+  if (!result.ok) {
+    workflowState = {
+      ...workflowState,
+      epg: setEpgPresentationState(workflowState.epg, 'error'),
+    };
+    renderApp();
+    void window.lineupDesktop.diagnostics.recordRendererEvent({
+      requestId: `guide-presentation-${source}-${Date.now()}`,
+      event: {
+        surface: 'renderer',
+        category: 'ipc',
+        severity: 'warning',
+        operation: 'guide.getPresentation',
+        message: `Failed to fetch guide presentation: ${result.error.message}`,
+        context: { route: workflowState.routeState.activeRoute, source },
+      },
+    }).catch(() => undefined);
+    return;
+  }
+
+  workflowState = {
+    ...workflowState,
+    guidePresentation: result.value,
+    epg: updateEpgState(workflowState.epg, result.value),
+  };
+  renderApp();
+}
+
+async function tuneGuideSelectedChannel(): Promise<void> {
+  const guideChannelId = workflowState.epg.selectedChannelId;
+  if (guideChannelId.length === 0) {
+    workflowState = {
+      ...workflowState,
+      epg: setEpgPresentationState(workflowState.epg, 'error'),
+    };
+    renderApp();
+    return;
+  }
+
+  const result = await window.lineupDesktop.player.tuneChannel({ channelId: guideChannelId });
+  if (result.ok) {
+    const previousRoute = workflowState.routeState.activeRoute;
+    workflowState = applyWorkflowAction(workflowState, 'resumePlayer');
+    const nextRoute = workflowState.routeState.activeRoute;
+    cleanupPlexRuntimeForRouteChange(previousRoute, nextRoute);
+    reconcileGuidePresentationPolling(previousRoute, nextRoute);
+    if (nextRoute === 'guide') {
+      return;
+    }
+    focusState = focusRegistry.focusRoute(focusState, nextRoute).state;
+    renderApp();
+    return;
+  }
+
+  workflowState = {
+    ...workflowState,
+    epg: setEpgPresentationState(workflowState.epg, 'error'),
+  };
+  renderApp();
+  void window.lineupDesktop.diagnostics.recordRendererEvent({
+    requestId: `guide-tune-${Date.now()}`,
+    event: {
+      surface: 'renderer',
+      category: 'ipc',
+      severity: 'warning',
+      operation: 'player.tuneChannel',
+      message: `Failed to tune guide channel: ${result.error.message}`,
+      context: { channelId: guideChannelId, route: 'guide' },
+    },
+  }).catch(() => undefined);
 }
 
 async function handlePlexBack(): Promise<boolean> {

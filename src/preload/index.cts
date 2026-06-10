@@ -4,6 +4,11 @@ import {
   createChannelSetupBridge,
   type ChannelSetupBridgeInvoke,
 } from './channelSetupBridge.cjs';
+import {
+  createGuideBridge,
+  createPlayerTuneBridge,
+  type GuideBridgeInvoke,
+} from './guideBridge.cjs';
 import type {
   DiagnosticsExportSupportBundleResult,
   DiagnosticsGetSummaryResult,
@@ -87,6 +92,8 @@ const LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL = 'lineup:plex:searchLibrary';
 const LINEUP_PLEX_GET_METADATA_CHANNEL = 'lineup:plex:getMetadata';
 const LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL = 'lineup:channelSetup:getStatus';
 const LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL = 'lineup:channelSetup:commit';
+const LINEUP_GUIDE_GET_PRESENTATION_CHANNEL = 'lineup:guide:getPresentation';
+const LINEUP_PLAYER_TUNE_CHANNEL = 'lineup:player:tuneChannel';
 const PLEX_REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,120}$/u;
 const PLEX_DEFAULT_PAGE_SIZE = 100;
 const PLEX_MAX_PAGE_SIZE = 5000;
@@ -1128,6 +1135,9 @@ async function invokePlex<TValue>(
 const invokeChannelSetup: ChannelSetupBridgeInvoke = (channel, request) =>
   ipcRenderer.invoke(channel, request);
 
+const invokeGuide: GuideBridgeInvoke = (channel, request) =>
+  ipcRenderer.invoke(channel, request);
+
 function isPlexPinSummary(value: unknown): boolean {
   return (
     isPlainRecord(value) &&
@@ -1876,6 +1886,11 @@ const lineupDesktop: LineupDesktopPreloadApi = {
         LINEUP_PLAYER_CLEANUP_CHANNEL,
         createWrapperRequest('player-cleanup'),
       ) as Promise<PlayerIpcResult<PlayerSnapshot>>,
+    tuneChannel: createPlayerTuneBridge(
+      invokeGuide,
+      LINEUP_PLAYER_TUNE_CHANNEL,
+      createRequestId,
+    ),
     onEvent: (listener) => {
       if (typeof listener !== 'function') {
         throw new TypeError('Player event listener must be a function.');
@@ -2092,6 +2107,14 @@ const lineupDesktop: LineupDesktopPreloadApi = {
     getStatus: LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
     commit: LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
   }),
+  guide: createGuideBridge(
+    invokeGuide,
+    {
+      getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
+    },
+    createRequestId,
+  ),
 };
 
 contextBridge.exposeInMainWorld('lineupDesktop', lineupDesktop);

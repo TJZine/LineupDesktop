@@ -630,3 +630,44 @@ function maxWindowStartMs(presentation: EpgPresentationSource): number {
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
+
+export function updateEpgState(
+  state: EpgState,
+  presentation: EpgPresentationSource,
+): EpgState {
+  if (!presentation.channels || presentation.channels.length === 0) {
+    return {
+      windowStartMs: state.windowStartMs,
+      selectedChannelId: '',
+      selectedProgramId: '',
+      presentationState: 'empty',
+    };
+  }
+
+  let selectedChannelId = state.selectedChannelId;
+  let channel = presentation.channels.find((c) => c.id === selectedChannelId);
+  if (!channel) {
+    const derived = deriveInitialEpgSelection(presentation);
+    return {
+      ...derived,
+      presentationState: 'ready',
+    };
+  }
+
+  const windowStartMs = clampWindowStartMs(state.windowStartMs, presentation);
+  let selectedProgramId = state.selectedProgramId;
+  const visiblePrograms = visibleProgramsForChannel(channel, windowStartMs);
+  const programExists = visiblePrograms.some((p) => p.id === selectedProgramId);
+
+  if (!programExists) {
+    const fallbackProgram = pickVisibleProgramForChannel(channel, windowStartMs, presentation.nowWatching || { startsAtMs: windowStartMs });
+    selectedProgramId = fallbackProgram?.id ?? channel.programs[0]?.id ?? '';
+  }
+
+  return normalizeEpgSelection({
+    windowStartMs,
+    selectedChannelId,
+    selectedProgramId,
+    presentationState: 'ready',
+  }, presentation);
+}

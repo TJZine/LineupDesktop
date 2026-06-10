@@ -7,21 +7,31 @@ import { DesktopChannelPersistenceStore } from '../persistence/desktopChannelPer
 import { registerChannelIpcHandlers, type ChannelIpcTeardown } from './channelIpc.js';
 import { ChannelRuntime } from './channelRuntime.js';
 import type { DesktopPlexRuntime } from '../plex/desktopPlexRuntime.js';
+import { PlexLibraryMinimalAdapter } from './plexLibraryMinimalAdapter.js';
+import { ChannelScheduler } from '../../domain/scheduler/channelScheduler.js';
+import { GuideRuntime } from './guideRuntime.js';
 
 export interface RegisterChannelCompositionOptions {
   app: Pick<App, 'getPath'>;
   shellMode: ShellMode;
   isAuthorizedEvent(event: IpcMainInvokeEvent): boolean;
   createRequestId(prefix: string): string;
-  plexRuntime?: Pick<DesktopPlexRuntime, 'getSnapshot' | 'listLibraryItems'>;
+  plexRuntime: DesktopPlexRuntime;
+  onChannelTuned?: (channelId: string) => void | Promise<void>;
   diagnosticEventStore?: DiagnosticEventStore;
 }
 
 export type ChannelCompositionTeardown = () => Promise<void>;
 
+export interface ChannelCompositionRegistration {
+  guideRuntime: GuideRuntime;
+  activeChannelScheduler: ChannelScheduler;
+  teardown: ChannelCompositionTeardown;
+}
+
 export function registerChannelComposition(
   options: RegisterChannelCompositionOptions,
-): ChannelCompositionTeardown {
+): ChannelCompositionRegistration {
   const paths = resolveDesktopAppDataPaths(options.app);
   const channelPersistenceFilePath = paths.channelPersistenceFilePath;
   if (channelPersistenceFilePath === undefined) {
@@ -33,8 +43,19 @@ export function registerChannelComposition(
     }),
     plexRuntime: options.plexRuntime,
   });
+
+  const plexLibraryAdapter = new PlexLibraryMinimalAdapter(options.plexRuntime);
+  const activeChannelScheduler = new ChannelScheduler();
+  const guideRuntime = new GuideRuntime({
+    repository: runtime.getRepository(),
+    plexLibraryAdapter,
+    activeChannelScheduler,
+    onChannelTuned: options.onChannelTuned,
+  });
+
   const teardownIpc: ChannelIpcTeardown = registerChannelIpcHandlers({
     runtime,
+    guideRuntime,
     isAuthorizedEvent: options.isAuthorizedEvent,
     createRequestId: options.createRequestId,
   });
@@ -52,7 +73,11 @@ export function registerChannelComposition(
     },
   });
 
-  return async () => {
-    await teardownIpc();
+  return {
+    guideRuntime,
+    activeChannelScheduler,
+    teardown: async () => {
+      await teardownIpc();
+    },
   };
 }

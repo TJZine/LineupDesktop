@@ -3,6 +3,7 @@ import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.j
 import type { DesktopPlexAuthService } from './auth/index.js';
 import type { DesktopPlexCredentialStore } from './auth/desktopPlexCredentialStore.js';
 import type { DesktopPlexServerDiscovery } from './discovery/index.js';
+import type { PlexConnection } from './discovery/types.js';
 import { extractMetadataArray, extractSearchHubMetadata, extractSearchHubs, isSafeLibraryFilter, isSafeSearchLimit, isSafeSearchTypes, loadLibrarySectionsWithCounts, mapSearchHubTypeToMediaType, normalizeLibraryPagination, parseMediaItems, PLEX_LIBRARY_CONSTANTS, toRendererSafeMediaItemSummary, type PlexMediaType, type RawMediaItem } from './library/index.js';
 import { PlexLibraryError } from './library/plexLibraryError.js';
 import { applyFailureSnapshot, applyServerSelectionSnapshot, authRequiredError, cloneRuntimeSnapshot, createInitialSnapshot, failureResult, isOptionalShortString, mapCredentialStatus, mapRuntimeError, normalizeOperationKey, payloadAsContainer, recordRuntimeDiagnostic, staleError, StaleRuntimeMutationError, storageError, stripPinSecretFields, success, validatePositiveInteger, validationError } from './desktopPlexRuntimeSupport.js';
@@ -38,6 +39,15 @@ export class DesktopPlexRuntime {
     this.diagnosticEventStore = options.diagnosticEventStore;
     this.nowMs = options.nowMs ?? Date.now;
     this.snapshot = createInitialSnapshot(this.nowMs());
+  }
+  getLibraryTransport(): LivePlexLibraryTransport {
+    return this.libraryTransport;
+  }
+  getActiveConnectionAndToken(): { connection: PlexConnection | null; token: string | null } {
+    return {
+      connection: this.serverDiscovery.getSelectedConnectionForMain(),
+      token: this.authService.getActiveTokenForMain(),
+    };
   }
   getSnapshot(requestId: string): PlexIpcResult<PlexRuntimeSnapshot> {
     return success(requestId, this.cloneSnapshot());

@@ -1619,7 +1619,7 @@ Stop and replan if:
 
 ### RD-24 Scheduler-Backed Guide And MVP Channel Runtime
 
-Status: not started.
+Status: complete.
 
 Depends on:
 

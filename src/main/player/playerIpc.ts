@@ -39,7 +39,12 @@ export interface RegisterPlayerIpcHandlersOptions {
   ipcMain?: PlayerIpcMain;
 }
 
-export type PlayerIpcTeardown = () => Promise<void>;
+export interface PlayerIpcRegistration {
+  adapter: DesktopPlayerAdapter | null;
+  teardown: () => Promise<void>;
+}
+
+export type PlayerIpcTeardown = PlayerIpcRegistration;
 
 const PLAYER_IPC_CHANNELS = [
   LINEUP_PLAYER_COMMAND_CHANNEL,
@@ -47,14 +52,9 @@ const PLAYER_IPC_CHANNELS = [
   LINEUP_PLAYER_CLEANUP_CHANNEL,
 ] as const;
 
-/**
- * Player IPC checks renderer authorization before adapter access. Development
- * and smoke shells use the fakeable host path; production remains an explicit
- * unsupported result until a native host is registered.
- */
 export function registerPlayerIpcHandlers(
   options: RegisterPlayerIpcHandlersOptions,
-): PlayerIpcTeardown {
+): PlayerIpcRegistration {
   const ipcMain = options.ipcMain ?? getElectronIpcMain();
   const runtime =
     options.shellMode === 'development' || options.shellMode === 'smoke'
@@ -135,27 +135,30 @@ export function registerPlayerIpcHandlers(
     return playerSuccess(requestId, result.snapshot);
   });
 
-  return async () => {
-    try {
-      const result = await runtime.adapter?.cleanup();
-      if (result !== undefined && !result.accepted) {
-        options.reportDiagnostic?.(
-          'Player IPC cleanup failed',
-          findResultError(result.events) ?? cleanupError(result.snapshot.requestId ?? 'player-cleanup'),
+  return {
+    adapter: runtime.adapter,
+    teardown: async () => {
+      try {
+        const result = await runtime.adapter?.cleanup();
+        if (result !== undefined && !result.accepted) {
+          options.reportDiagnostic?.(
+            'Player IPC cleanup failed',
+            findResultError(result.events) ?? cleanupError(result.snapshot.requestId ?? 'player-cleanup'),
+          );
+        }
+      } catch (error) {
+        options.reportDiagnostic?.('Player IPC cleanup failed', error);
+        recordPlayerIpcDiagnostic(
+          options.diagnosticEventStore,
+          'player-cleanup',
+          'cleanup',
+          'failed',
+          'PLAYER_OPERATION_UNAVAILABLE',
         );
-      }
-    } catch (error) {
-      options.reportDiagnostic?.('Player IPC cleanup failed', error);
-      recordPlayerIpcDiagnostic(
-        options.diagnosticEventStore,
-        'player-cleanup',
-        'cleanup',
-        'failed',
-        'PLAYER_OPERATION_UNAVAILABLE',
-      );
-    } finally {
-      for (const channel of PLAYER_IPC_CHANNELS) {
-        ipcMain.removeHandler(channel);
+      } finally {
+        for (const channel of PLAYER_IPC_CHANNELS) {
+          ipcMain.removeHandler(channel);
+        }
       }
     }
   };

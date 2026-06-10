@@ -123,6 +123,11 @@ export const LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL =
 export const LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL =
   'lineup:channelSetup:commit' as const;
 
+export const LINEUP_GUIDE_GET_PRESENTATION_CHANNEL =
+  'lineup:guide:getPresentation' as const;
+
+export const LINEUP_PLAYER_TUNE_CHANNEL = 'lineup:player:tuneChannel' as const;
+
 /**
  * Known privileged renderer payload field names are denied at contract seams.
  * Review additions/removals with secret-flow and native-handle exposure impact.

@@ -170,7 +170,7 @@ test('player IPC registers closed handlers and tears them down', async () => {
     LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
   ]);
 
-  await teardown();
+  await teardown.teardown();
 
   assert.deepEqual([...ipcMain.handlers.keys()], []);
 });
@@ -201,7 +201,7 @@ test('player IPC reports cleanup failures and still removes handlers', async () 
     LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
   ]);
 
-  await teardown();
+  await teardown.teardown();
 
   assert.deepEqual([...ipcMain.handlers.keys()], []);
   assert.equal(diagnostics.length, 1);

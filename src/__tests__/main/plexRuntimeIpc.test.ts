@@ -212,6 +212,9 @@ class FakeLibraryTransport implements LivePlexLibraryTransport {
     data: { MediaContainer: { Hub: [{ type: 'movie', Metadata: [rawItem({ ratingKey: 'search-1', title: 'Search' })] }] } },
   };
   public metadataResponse: unknown = { kind: 'json', data: { MediaContainer: { Metadata: [rawItem({ ratingKey: 'meta-1', title: 'Metadata' })] } } };
+  public collectionItemsResponse: unknown = { kind: 'json', data: { MediaContainer: { Metadata: [] } } };
+  public showEpisodesResponse: unknown = { kind: 'json', data: { MediaContainer: { Metadata: [] } } };
+  public playlistItemsResponse: unknown = { kind: 'json', data: { MediaContainer: { Metadata: [] } } };
   public sectionsError: unknown = null;
   public readonly listItemsRequests: Parameters<LivePlexLibraryTransport['listLibraryItems']>[0][] = [];
   public readonly searchRequests: Parameters<LivePlexLibraryTransport['searchLibrary']>[0][] = [];
@@ -235,6 +238,18 @@ class FakeLibraryTransport implements LivePlexLibraryTransport {
 
   async getMetadata() {
     return this.metadataResponse as never;
+  }
+
+  async getCollectionItems() {
+    return this.collectionItemsResponse as never;
+  }
+
+  async getShowEpisodes() {
+    return this.showEpisodesResponse as never;
+  }
+
+  async getPlaylistItems() {
+    return this.playlistItemsResponse as never;
   }
 }
 

@@ -6,6 +6,8 @@ import ts from 'typescript';
 import {
   LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
+  LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_PLAYER_TUNE_CHANNEL,
   LINEUP_PLAYER_CLEANUP_CHANNEL,
   LINEUP_PLAYER_COMMAND_CHANNEL,
   LINEUP_PLAYER_EVENT_CHANNEL,
@@ -71,6 +73,8 @@ const channelGuardSourceUrl = new URL('../../preload/channelBridgeGuards.cts', i
 const channelGuardSourceText = readFileSync(channelGuardSourceUrl, 'utf8');
 const channelSetupBridgeSourceUrl = new URL('../../preload/channelSetupBridge.cts', import.meta.url);
 const channelSetupBridgeSourceText = readFileSync(channelSetupBridgeSourceUrl, 'utf8');
+const guideBridgeSourceUrl = new URL('../../preload/guideBridge.cts', import.meta.url);
+const guideBridgeSourceText = readFileSync(guideBridgeSourceUrl, 'utf8');
 const preloadBundleToolSourceText = readFileSync(
   new URL('../../../tools/bundle-preload.mjs', import.meta.url),
   'utf8',
@@ -93,6 +97,13 @@ const channelGuardSourceFile = ts.createSourceFile(
 const channelSetupBridgeSourceFile = ts.createSourceFile(
   'src/preload/channelSetupBridge.cts',
   channelSetupBridgeSourceText,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+);
+const guideBridgeSourceFile = ts.createSourceFile(
+  'src/preload/guideBridge.cts',
+  guideBridgeSourceText,
   ts.ScriptTarget.Latest,
   true,
   ts.ScriptKind.TS,
@@ -144,6 +155,24 @@ function evaluateChannelSetupBridgeModule(
   return moduleObject.exports as Record<string, unknown>;
 }
 
+function evaluateGuideBridgeModule(): Record<string, unknown> {
+  const exportsObject = {};
+  const moduleObject = { exports: exportsObject };
+  const compiled = ts.transpileModule(guideBridgeSourceText, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: 'src/preload/guideBridge.cts',
+  }).outputText;
+  const requireGuide = (moduleName: string) => {
+    assert.fail(`unexpected guide bridge require ${moduleName}`);
+  };
+  const evaluateGuide = new Function('require', 'exports', 'module', compiled);
+  evaluateGuide(requireGuide, exportsObject, moduleObject);
+  return moduleObject.exports as Record<string, unknown>;
+}
+
 function createPreloadHarness(
   invoke: (
     channel: string,
@@ -160,6 +189,7 @@ function createPreloadHarness(
   const input = (value: unknown) => JSON.parse(JSON.stringify(value)) as unknown;
   const channelGuardExports = evaluateChannelGuardModule();
   const channelSetupBridgeExports = evaluateChannelSetupBridgeModule(channelGuardExports);
+  const guideBridgeExports = evaluateGuideBridgeModule();
   const compiled = ts.transpileModule(preloadSourceText, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -173,6 +203,9 @@ function createPreloadHarness(
     }
     if (moduleName === './channelSetupBridge.cjs') {
       return channelSetupBridgeExports;
+    }
+    if (moduleName === './guideBridge.cjs') {
+      return guideBridgeExports;
     }
     assert.equal(moduleName, 'electron');
     return {
@@ -286,6 +319,8 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_PLEX_GET_METADATA_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
   LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
+  LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_PLAYER_TUNE_CHANNEL,
 } as const;
 
 const APPROVED_IPC_CHANNELS_BY_METHOD = {
@@ -313,6 +348,8 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_PLEX_GET_METADATA_CHANNEL',
     'LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
     'LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL',
+    'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
+    'LINEUP_PLAYER_TUNE_CHANNEL',
   ]),
   on: new Set(['LINEUP_SHELL_STATUS_CHANGED_CHANNEL', 'LINEUP_PLAYER_EVENT_CHANNEL']),
   removeListener: new Set([
@@ -708,6 +745,24 @@ function isInvokeChannelSetupChannelParameter(node: ts.Identifier): boolean {
       ts.isVariableDeclaration(current) &&
       ts.isIdentifier(current.name) &&
       current.name.text === 'invokeChannelSetup'
+    ) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
+function isInvokeGuideChannelParameter(node: ts.Identifier): boolean {
+  if (node.text !== 'channel') {
+    return false;
+  }
+  let current: ts.Node | undefined = node;
+  while (current !== undefined && !ts.isSourceFile(current)) {
+    if (
+      ts.isVariableDeclaration(current) &&
+      ts.isIdentifier(current.name) &&
+      current.name.text === 'invokeGuide'
     ) {
       return true;
     }
@@ -1589,6 +1644,12 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
         return;
       }
 
+      if (isInvokeGuideChannelParameter(channelExpression)) {
+        observedCalls.push(`${methodName}:invokeGuide.channel`);
+        ts.forEachChild(node, visit);
+        return;
+      }
+
       const approvedChannels =
         APPROVED_IPC_CHANNELS_BY_METHOD[
           methodName as keyof typeof APPROVED_IPC_CHANNELS_BY_METHOD
@@ -1616,6 +1677,7 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
     'invoke:LINEUP_SHELL_GET_CAPABILITIES_CHANNEL',
     'invoke:LINEUP_WINDOW_INTENT_CHANNEL',
     'invoke:invokeChannelSetup.channel',
+    'invoke:invokeGuide.channel',
     'invoke:invokePlex.channel',
     'on:LINEUP_PLAYER_EVENT_CHANNEL',
     'on:LINEUP_SHELL_STATUS_CHANGED_CHANNEL',
@@ -1640,5 +1702,76 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
   assert.deepEqual(collectCreateChannelSetupBridgeChannelArguments().sort(), [
     'LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL',
     'LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
+  ]);
+
+  function collectCreateGuideBridgeChannelArguments(): string[] {
+    const channels: string[] = [];
+
+    function visit(node: ts.Node): void {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'createGuideBridge'
+      ) {
+        const [invokeExpression, channelsExpression] = node.arguments;
+        assert.ok(invokeExpression, 'createGuideBridge must pass an invoke function');
+        assert.ok(
+          ts.isIdentifier(invokeExpression) && invokeExpression.text === 'invokeGuide',
+          'createGuideBridge must receive the narrow guide invoke function',
+        );
+        const channelBindings = channelsExpression === undefined
+          ? undefined
+          : unwrapExpression(channelsExpression);
+        assert.ok(
+          channelBindings !== undefined && ts.isObjectLiteralExpression(channelBindings),
+          'createGuideBridge must receive literal channel bindings',
+        );
+        for (const property of channelBindings.properties) {
+          assert.ok(ts.isPropertyAssignment(property), 'guide bridge channels must be property assignments');
+          assert.ok(ts.isIdentifier(property.initializer), 'guide bridge channel values must be constants');
+          assertApprovedChannelIdentifier(property.initializer.text);
+          channels.push(property.initializer.text);
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+
+    visit(preloadSourceFile);
+    return channels;
+  }
+
+  assert.deepEqual(collectCreateGuideBridgeChannelArguments().sort(), [
+    'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
+    'LINEUP_PLAYER_TUNE_CHANNEL',
+  ]);
+
+  function collectCreatePlayerTuneBridgeChannelArguments(): string[] {
+    const channels: string[] = [];
+
+    function visit(node: ts.Node): void {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'createPlayerTuneBridge'
+      ) {
+        const [invokeExpression, channelExpression] = node.arguments;
+        assert.ok(invokeExpression, 'createPlayerTuneBridge must pass an invoke function');
+        assert.ok(
+          ts.isIdentifier(invokeExpression) && invokeExpression.text === 'invokeGuide',
+          'createPlayerTuneBridge must receive the narrow guide invoke function',
+        );
+        assert.ok(ts.isIdentifier(channelExpression), 'createPlayerTuneBridge channel must be a constant');
+        assertApprovedChannelIdentifier(channelExpression.text);
+        channels.push(channelExpression.text);
+      }
+      ts.forEachChild(node, visit);
+    }
+
+    visit(preloadSourceFile);
+    return channels;
+  }
+
+  assert.deepEqual(collectCreatePlayerTuneBridgeChannelArguments().sort(), [
+    'LINEUP_PLAYER_TUNE_CHANNEL',
   ]);
 });

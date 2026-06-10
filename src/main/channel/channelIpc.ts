@@ -15,13 +15,18 @@ import {
 import {
   LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
+  LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_PLAYER_TUNE_CHANNEL,
 } from '../../contracts/ipc.js';
 import type { ChannelRuntime } from './channelRuntime.js';
+import type { GuideRuntime } from './guideRuntime.js';
+import type { GuideIpcResult } from '../../contracts/guide.js';
 
 type ChannelIpcMain = Pick<IpcMain, 'handle' | 'removeHandler'>;
 
 export interface RegisterChannelIpcHandlersOptions {
   runtime: ChannelRuntime;
+  guideRuntime?: GuideRuntime;
   isAuthorizedEvent(event: IpcMainInvokeEvent): boolean;
   createRequestId(prefix: string): string;
   ipcMain?: ChannelIpcMain;
@@ -58,9 +63,72 @@ export function registerChannelIpcHandlers(
     return options.runtime.commit(request.requestId, request.payload);
   });
 
+  if (options.guideRuntime) {
+    const guideRuntime = options.guideRuntime;
+
+    ipcMain.handle(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL, async (event, payload: unknown) => {
+      const request = readPresentationRequest(payload, options);
+      if (!options.isAuthorizedEvent(event)) {
+        return unauthorizedGuideResult(request.requestId, 'getPresentation');
+      }
+      if (!request.ok) {
+        return validationGuideResult(request.requestId, 'getPresentation');
+      }
+      try {
+        const value = await guideRuntime.getPresentation(
+          request.payload.startTimeMs,
+          request.payload.durationMs,
+        );
+        return { ok: true, value, requestId: request.requestId };
+      } catch (error: any) {
+        return {
+          ok: false,
+          requestId: request.requestId,
+          error: {
+            code: 'GUIDE_PRESENTATION_FAILED',
+            message: error?.message || 'Failed to fetch guide presentation.',
+            retryable: true,
+            recoverable: true,
+            operation: 'getPresentation',
+          },
+        };
+      }
+    });
+
+    ipcMain.handle(LINEUP_PLAYER_TUNE_CHANNEL, async (event, payload: unknown) => {
+      const request = readTuneRequest(payload, options);
+      if (!options.isAuthorizedEvent(event)) {
+        return unauthorizedGuideResult(request.requestId, 'tuneChannel');
+      }
+      if (!request.ok) {
+        return validationGuideResult(request.requestId, 'tuneChannel');
+      }
+      try {
+        await guideRuntime.tuneChannel(request.payload.channelId);
+        return { ok: true, value: {}, requestId: request.requestId };
+      } catch (error: any) {
+        return {
+          ok: false,
+          requestId: request.requestId,
+          error: {
+            code: 'CHANNEL_TUNING_FAILED',
+            message: error?.message || 'Failed to tune channel.',
+            retryable: true,
+            recoverable: true,
+            operation: 'tuneChannel',
+          },
+        };
+      }
+    });
+  }
+
   return async () => {
     ipcMain.removeHandler(LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL);
     ipcMain.removeHandler(LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL);
+    if (options.guideRuntime) {
+      ipcMain.removeHandler(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL);
+      ipcMain.removeHandler(LINEUP_PLAYER_TUNE_CHANNEL);
+    }
   };
 }
 
@@ -195,3 +263,112 @@ function getElectronIpcMain(): ChannelIpcMain {
 }
 
 export type ChannelIpcRequestEnvelope = ChannelSetupEmptyRequest | ChannelSetupCommitRequest;
+
+type ReadPresentationRequestResult =
+  | { ok: true; requestId: string; payload: { startTimeMs: number; durationMs: number } }
+  | { ok: false; requestId: string; payload: Partial<{ startTimeMs: number; durationMs: number }> };
+
+function readPresentationRequest(
+  value: unknown,
+  options: Pick<RegisterChannelIpcHandlersOptions, 'createRequestId'>,
+): ReadPresentationRequestResult {
+  const fallbackRequestId = options.createRequestId('guide-presentation');
+  if (!isPlainRecord(value)) {
+    return { ok: false, requestId: fallbackRequestId, payload: {} };
+  }
+  const requestId =
+    typeof value.requestId === 'string' && REQUEST_ID_PATTERN.test(value.requestId)
+      ? value.requestId
+      : fallbackRequestId;
+  if (
+    typeof value.requestId !== 'string' ||
+    !REQUEST_ID_PATTERN.test(value.requestId) ||
+    !isPlainRecord(value.payload) ||
+    !hasOnlyKeys(value, ['requestId', 'payload']) ||
+    !hasOnlyKeys(value.payload, ['startTimeMs', 'durationMs']) ||
+    typeof value.payload.startTimeMs !== 'number' ||
+    !Number.isFinite(value.payload.startTimeMs) ||
+    typeof value.payload.durationMs !== 'number' ||
+    !Number.isFinite(value.payload.durationMs)
+  ) {
+    return { ok: false, requestId, payload: {} };
+  }
+  return {
+    ok: true,
+    requestId,
+    payload: {
+      startTimeMs: value.payload.startTimeMs,
+      durationMs: value.payload.durationMs,
+    },
+  };
+}
+
+type ReadTuneRequestResult =
+  | { ok: true; requestId: string; payload: { channelId: string } }
+  | { ok: false; requestId: string; payload: Partial<{ channelId: string }> };
+
+function readTuneRequest(
+  value: unknown,
+  options: Pick<RegisterChannelIpcHandlersOptions, 'createRequestId'>,
+): ReadTuneRequestResult {
+  const fallbackRequestId = options.createRequestId('player-tune');
+  if (!isPlainRecord(value)) {
+    return { ok: false, requestId: fallbackRequestId, payload: {} };
+  }
+  const requestId =
+    typeof value.requestId === 'string' && REQUEST_ID_PATTERN.test(value.requestId)
+      ? value.requestId
+      : fallbackRequestId;
+  if (
+    typeof value.requestId !== 'string' ||
+    !REQUEST_ID_PATTERN.test(value.requestId) ||
+    !isPlainRecord(value.payload) ||
+    !hasOnlyKeys(value, ['requestId', 'payload']) ||
+    !hasOnlyKeys(value.payload, ['channelId']) ||
+    typeof value.payload.channelId !== 'string' ||
+    value.payload.channelId.trim().length === 0
+  ) {
+    return { ok: false, requestId, payload: {} };
+  }
+  return {
+    ok: true,
+    requestId,
+    payload: {
+      channelId: value.payload.channelId,
+    },
+  };
+}
+
+function unauthorizedGuideResult(
+  requestId: string,
+  operation: 'getPresentation' | 'tuneChannel',
+): GuideIpcResult<never> {
+  return {
+    ok: false,
+    requestId,
+    error: {
+      code: 'GUIDE_UNAUTHORIZED',
+      message: 'Guide request is not authorized.',
+      retryable: false,
+      recoverable: false,
+      operation,
+    },
+  };
+}
+
+function validationGuideResult(
+  requestId: string,
+  operation: 'getPresentation' | 'tuneChannel',
+): GuideIpcResult<never> {
+  return {
+    ok: false,
+    requestId,
+    error: {
+      code: 'GUIDE_VALIDATION_FAILED',
+      message: 'Guide request payload is invalid.',
+      retryable: false,
+      recoverable: false,
+      operation,
+    },
+  };
+}
