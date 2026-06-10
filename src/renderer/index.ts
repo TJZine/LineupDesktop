@@ -28,7 +28,7 @@ const playerSnapshot = presentationFixtures.playerSnapshot;
 const focusRegistry = new FocusRegistry();
 let focusState: FocusState;
 const GUIDE_POLL_INTERVAL_MS = 15_000;
-let guidePollTimer: ReturnType<typeof setInterval> | null = null;
+let guidePollTimer: ReturnType<typeof window.setInterval> | null = null;
 let guidePresentationRequestId = 0;
 const plexController = createPlexRuntimeController({
   bridge: window.lineupDesktop.plex,
@@ -481,11 +481,21 @@ async function refreshGuidePresentation(source: string): Promise<void> {
     }).catch(() => undefined);
     return;
   }
+  const normalizedGuidePresentation = {
+    ...result.value,
+    nowWatching: result.value.nowWatching ?? {
+      title: '',
+      subtitle: '',
+      channelId: workflowState.guidePresentation.channels[0]?.id ?? '',
+      startsAtMs: workflowState.epg.windowStartMs,
+      endsAtMs: workflowState.epg.windowStartMs,
+    },
+  };
 
   workflowState = {
     ...workflowState,
-    guidePresentation: result.value,
-    epg: updateEpgState(workflowState.epg, result.value),
+    guidePresentation: normalizedGuidePresentation,
+    epg: updateEpgState(workflowState.epg, normalizedGuidePresentation),
   };
   renderApp();
 }

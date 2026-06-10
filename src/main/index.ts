@@ -70,6 +70,8 @@ let teardownPlayerIpc: PlayerIpcTeardown | null = null;
 let teardownDiagnosticsIpc: DiagnosticsIpcTeardown | null = null;
 let plexComposition: PlexCompositionRegistration | null = null;
 let channelComposition: ChannelCompositionRegistration | null = null;
+let playbackRuntime: PlexPlaybackRuntime | null = null;
+let channelSchedulerProgramStartHandler: (() => void | Promise<void>) | null = null;
 let playerIpcQuitTeardownInProgress = false;
 let playerIpcQuitTeardownComplete = false;
 let containmentCounters: ShellContainmentCounters = {
@@ -109,7 +111,6 @@ app.whenReady()
       createRequestId,
       diagnosticEventStore,
     });
-    let playbackRuntime: PlexPlaybackRuntime | null = null;
     let onChannelTunedCallback: ((channelId: string) => void | Promise<void>) | null = null;
 
     channelComposition = registerChannelComposition({
@@ -225,13 +226,17 @@ app.whenReady()
     });
     playbackRuntime = playbackRuntimeComposition.runtime;
 
-    channelComposition.activeChannelScheduler.on('programStart', () => {
-      if (playbackRuntime) {
-        void playbackRuntime.startCurrentPlayback('schedule-tick').catch((error: unknown) => {
-          reportMainProcessDiagnostic('Automatic schedule tick playback transition failed', error);
-        });
+    channelSchedulerProgramStartHandler = async () => {
+      if (playbackRuntime === null) {
+        return;
       }
-    });
+      try {
+        await playbackRuntime.startCurrentPlayback('schedule-tick');
+      } catch (error: unknown) {
+        reportMainProcessDiagnostic('Automatic schedule tick playback transition failed', error);
+      }
+    };
+    channelComposition.activeChannelScheduler.on('programStart', channelSchedulerProgramStartHandler);
 
     onChannelTunedCallback = async () => {
       if (playbackRuntime) {
@@ -284,13 +289,23 @@ app.on('before-quit', (event) => {
   publishShellStatus('closing');
   const teardown = teardownPlayerIpc;
   if (playerIpcQuitTeardownComplete || teardown === null) {
+    const localPlaybackRuntime = playbackRuntime;
+    playbackRuntime = null;
+    const localChannelComposition = channelComposition;
+    channelComposition = null;
+    if (localChannelComposition !== null && channelSchedulerProgramStartHandler !== null) {
+      localChannelComposition.activeChannelScheduler.off(
+        'programStart',
+        channelSchedulerProgramStartHandler,
+      );
+      channelSchedulerProgramStartHandler = null;
+    }
     const teardownPlex = plexComposition?.teardown ?? null;
     plexComposition = null;
-    const localChannelComp = channelComposition;
-    channelComposition = null;
     void Promise.all([
+      localPlaybackRuntime?.teardown() ?? Promise.resolve(),
       teardownPlex?.() ?? Promise.resolve(),
-      localChannelComp?.teardown() ?? Promise.resolve(),
+      localChannelComposition?.teardown() ?? Promise.resolve(),
     ]).catch((error: unknown) => {
       reportMainProcessDiagnostic('Runtime composition cleanup failed during quit', error);
     });
@@ -305,15 +320,25 @@ app.on('before-quit', (event) => {
   teardownPlayerIpc = null;
   teardownDiagnosticsIpc?.();
   teardownDiagnosticsIpc = null;
-    const teardownPlex = plexComposition?.teardown ?? null;
-    plexComposition = null;
-  const localChannelComp = channelComposition;
+  const teardownPlex = plexComposition?.teardown ?? null;
+  plexComposition = null;
+  const localChannelComposition = channelComposition;
   channelComposition = null;
   playerIpcQuitTeardownInProgress = true;
+  const localPlaybackRuntime = playbackRuntime;
+  playbackRuntime = null;
+  if (localChannelComposition !== null && channelSchedulerProgramStartHandler !== null) {
+    localChannelComposition.activeChannelScheduler.off(
+      'programStart',
+      channelSchedulerProgramStartHandler,
+    );
+    channelSchedulerProgramStartHandler = null;
+  }
   Promise.all([
     teardown.teardown(),
     teardownPlex?.() ?? Promise.resolve(),
-    localChannelComp?.teardown() ?? Promise.resolve(),
+    localChannelComposition?.teardown() ?? Promise.resolve(),
+    localPlaybackRuntime?.teardown() ?? Promise.resolve(),
   ])
     .catch((error: unknown) => {
       reportMainProcessDiagnostic('Player IPC cleanup failed during quit', error);
