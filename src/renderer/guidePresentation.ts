@@ -47,7 +47,7 @@ export function createEpgShellView(
   return {
     brandLabel: 'LINEUP',
     layoutMode: 'classic',
-    focusHint: 'OK Select - Left/Right Navigate - Back Close',
+    focusHint: 'OK Select · LEFT/RIGHT Navigate · BACK Close',
     nowWatching: {
       title: nowWatching.title,
       subtitle: nowWatching.subtitle,

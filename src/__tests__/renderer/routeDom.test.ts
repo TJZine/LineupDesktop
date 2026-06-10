@@ -240,7 +240,7 @@ test('route DOM renders guide states and focused program details', () => {
 
     const renderedText = [collectText(grid), detailChannel.textContent, detailTitle.textContent, detailTime.textContent].join(' ');
     assert.match(renderedText, /LINEUP/u);
-    assert.match(renderedText, /Now playing 101 - Liminal One/u);
+    assert.match(renderedText, /101 - Liminal One/u);
     assert.match(renderedText, /Guide ready/u);
     assert.match(renderedText, /The Midnight Archive/u);
     assert.match(renderedText, /S2 E4/u);

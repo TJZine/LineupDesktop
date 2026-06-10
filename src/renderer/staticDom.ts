@@ -123,7 +123,7 @@ const STATIC_SCREEN_MARKUP = `
       <p class="screen__kicker" data-workflow-kicker="guide">Guide</p>
       <h2 id="screen-guide-title">Guide</h2>
       <p data-workflow-primary="guide">Tonight at a glance.</p>
-      <p data-workflow-secondary="guide">Lineup guide.</p>
+      <p data-workflow-secondary="guide">Use directional controls to move through time windows, channels, and programs.</p>
       <div class="guide-controls" aria-label="Guide shell controls">
         <button type="button" data-epg-action="previousWindow" data-focus-id="guide-window-previous">Earlier</button>
         <button type="button" data-epg-action="nextWindow" data-focus-id="guide-window-next">Later</button>

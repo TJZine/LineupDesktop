@@ -177,8 +177,8 @@ const ROUTE_COPY = {
     title: 'Guide',
     kicker: 'Tonight',
     tone: 'ready',
-    primaryText: 'Channels are available in the guide shell.',
-    secondaryText: 'Guide rows prefer channel number, name, and program text over category color cues.',
+    primaryText: 'Tonight at a glance.',
+    secondaryText: 'Use directional controls to move through time windows, channels, and programs.',
     defaultStatus: 'Guide shell showing renderer-safe lineup data.',
   },
   settings: {
@@ -367,7 +367,7 @@ function createPrimaryText(
   defaultPrimaryText: string,
   guide: EpgGuideViewModel,
   currentProgram: ProgramSummaryViewModel,
-  channels: readonly ChannelSummaryViewModel[],
+  _channels: readonly ChannelSummaryViewModel[],
 ): string {
   if (route === 'player') {
     return guide.presentationState === 'ready'
@@ -376,7 +376,7 @@ function createPrimaryText(
   }
   if (route === 'guide') {
     return guide.presentationState === 'ready'
-      ? `${String(channels.length)} channels are available in the guide shell.`
+      ? defaultPrimaryText
       : guidePlaceholderPrimaryText(guide.presentationState, 'guide');
   }
   return defaultPrimaryText;
