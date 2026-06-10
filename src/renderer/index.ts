@@ -28,7 +28,7 @@ const playerSnapshot = presentationFixtures.playerSnapshot;
 const focusRegistry = new FocusRegistry();
 let focusState: FocusState;
 const GUIDE_POLL_INTERVAL_MS = 15_000;
-let guidePollTimer: ReturnType<typeof window.setInterval> | null = null;
+let guidePollTimer: number | null = null;
 let guidePresentationRequestId = 0;
 const plexController = createPlexRuntimeController({
   bridge: window.lineupDesktop.plex,
@@ -430,7 +430,7 @@ function startGuidePresentationPolling(): void {
   void refreshGuidePresentation('poll-start');
   guidePollTimer = window.setInterval(() => {
     void refreshGuidePresentation('poll-interval');
-  }, GUIDE_POLL_INTERVAL_MS);
+  }, GUIDE_POLL_INTERVAL_MS) as number;
 }
 
 function stopGuidePresentationPolling(): void {
