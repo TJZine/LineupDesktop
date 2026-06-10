@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GuideRuntime } from '../../main/channel/guideRuntime.js';
 import { ChannelScheduler } from '../../domain/scheduler/channelScheduler.js';
-import type { ChannelConfig, ResolvedContentItem } from '../../domain/channel/types.js';
+import type { ChannelConfig } from '../../domain/channel/types.js';
+import type { ChannelRepository } from '../../domain/channel/channelRepository.js';
+import type { PlexMediaItemMinimal } from '../../domain/channel/interfaces.js';
+import { PlexLibraryMinimalAdapter } from '../../main/channel/plexLibraryMinimalAdapter.js';
 
 class MockChannelRepository {
   public data = {
@@ -21,7 +24,47 @@ class MockChannelRepository {
 }
 
 class MockPlexLibraryAdapter {
-  // Not used directly in these tests since we stub contentResolver.resolveSource
+  private readonly libraryItems = new Map<string, readonly PlexMediaItemMinimal[]>();
+
+  setLibraryItems(sectionId: string, items: readonly PlexMediaItemMinimal[]): void {
+    this.libraryItems.set(sectionId, [...items]);
+  }
+
+  async getLibraryItems(
+    sectionId: string,
+    _options?: {
+      includeCollections?: boolean;
+      filter?: Record<string, string | number>;
+      signal?: { aborted?: boolean } | null;
+    },
+  ): Promise<PlexMediaItemMinimal[]> {
+    return [...(this.libraryItems.get(sectionId) ?? [])];
+  }
+
+  async getCollectionItems(
+    _collectionKey: string,
+    _options?: { signal?: { aborted?: boolean } | null },
+  ): Promise<PlexMediaItemMinimal[]> {
+    return [];
+  }
+
+  async getShowEpisodes(
+    _showKey: string,
+    _options?: { signal?: { aborted?: boolean } | null },
+  ): Promise<PlexMediaItemMinimal[]> {
+    return [];
+  }
+
+  async getPlaylistItems(
+    _playlistKey: string,
+    _options?: { signal?: { aborted?: boolean } | null },
+  ): Promise<PlexMediaItemMinimal[]> {
+    return [];
+  }
+
+  async getItem(_ratingKey: string): Promise<PlexMediaItemMinimal | null> {
+    return null;
+  }
 }
 
 function createChannelConfig(id: string, num: number, name: string, libraryId = 'lib-1'): ChannelConfig {
@@ -47,16 +90,14 @@ function createChannelConfig(id: string, num: number, name: string, libraryId = 
   };
 }
 
-function createResolvedItem(index: number, durationMs = 1_800_000): ResolvedContentItem {
+function createLibraryItem(index: number, durationMs = 1_800_000): PlexMediaItemMinimal {
   return {
     ratingKey: `item-${index}`,
     type: 'movie',
     title: `Movie ${index}`,
-    fullTitle: `Movie ${index}`,
     durationMs,
     thumb: 'thumb-key',
     year: 2026,
-    scheduledIndex: index,
   };
 }
 
@@ -66,8 +107,8 @@ test('GuideRuntime getPresentation returns empty channels list if none configure
   const activeScheduler = new ChannelScheduler({ clock: { now: () => 1000 } });
 
   const runtime = new GuideRuntime({
-    repository: repository as any,
-    plexLibraryAdapter: plexAdapter as any,
+    repository: repository as unknown as ChannelRepository,
+    plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
     activeChannelScheduler: activeScheduler,
     clock: { now: () => 1000 },
   });
@@ -87,23 +128,16 @@ test('GuideRuntime getPresentation generates schedule presentation for channels'
   repository.data.currentChannelId = 'chan-1';
 
   const plexAdapter = new MockPlexLibraryAdapter();
+  plexAdapter.setLibraryItems('lib-1', [createLibraryItem(0)]);
+  plexAdapter.setLibraryItems('lib-2', [createLibraryItem(1)]);
   const activeScheduler = new ChannelScheduler({ clock: { now: () => 1000 } });
 
-  // Resolve items: Movie 1 for Channel 1, Movie 2 for Channel 2
   const runtime = new GuideRuntime({
-    repository: repository as any,
-    plexLibraryAdapter: plexAdapter as any,
+    repository: repository as unknown as ChannelRepository,
+    plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
     activeChannelScheduler: activeScheduler,
     clock: { now: () => 1000 },
   });
-
-  // Stub contentResolver.resolveSource internally
-  (runtime as any).contentResolver.resolveSource = async (source: any) => {
-    if (source.libraryId === 'lib-1') {
-      return [createResolvedItem(0)];
-    }
-    return [createResolvedItem(1)];
-  };
 
   const presentation = await runtime.getPresentation(1000, 1_800_000);
 
@@ -123,18 +157,15 @@ test('GuideRuntime tuneChannel configures active scheduler and persists choice',
   repository.data.channels = [chan1];
 
   const plexAdapter = new MockPlexLibraryAdapter();
+  plexAdapter.setLibraryItems('lib-1', [createLibraryItem(0)]);
   const activeScheduler = new ChannelScheduler({ clock: { now: () => 1000 } });
 
   const runtime = new GuideRuntime({
-    repository: repository as any,
-    plexLibraryAdapter: plexAdapter as any,
+    repository: repository as unknown as ChannelRepository,
+    plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
     activeChannelScheduler: activeScheduler,
     clock: { now: () => 1000 },
   });
-
-  (runtime as any).contentResolver.resolveSource = async () => {
-    return [createResolvedItem(0)];
-  };
 
   await runtime.tuneChannel('chan-1');
 
@@ -155,18 +186,15 @@ test('GuideRuntime initializeActiveChannel tunes to last active channel', async 
   repository.data.currentChannelId = 'chan-1';
 
   const plexAdapter = new MockPlexLibraryAdapter();
+  plexAdapter.setLibraryItems('lib-1', [createLibraryItem(0)]);
   const activeScheduler = new ChannelScheduler({ clock: { now: () => 1000 } });
 
   const runtime = new GuideRuntime({
-    repository: repository as any,
-    plexLibraryAdapter: plexAdapter as any,
+    repository: repository as unknown as ChannelRepository,
+    plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
     activeChannelScheduler: activeScheduler,
     clock: { now: () => 1000 },
   });
-
-  (runtime as any).contentResolver.resolveSource = async () => {
-    return [createResolvedItem(0)];
-  };
 
   await runtime.initializeActiveChannel();
 

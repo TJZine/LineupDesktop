@@ -3,61 +3,81 @@ import assert from 'node:assert/strict';
 import { PlexLibraryMinimalAdapter } from '../../main/channel/plexLibraryMinimalAdapter.js';
 import type { DesktopPlexRuntime } from '../../main/plex/desktopPlexRuntime.js';
 import type { LivePlexLibraryTransport } from '../../main/plex/livePlexTransport.js';
+import type { PlexConnection } from '../../main/plex/discovery/types.js';
+import { type RawMediaItem } from '../../main/plex/library/index.js';
 
 class MockLibraryTransport implements Partial<LivePlexLibraryTransport> {
-  public listLibraryItemsMock = async (): Promise<any> => ({
+  public listLibraryItemsMock: () => ReturnType<LivePlexLibraryTransport['listLibraryItems']> = async () => ({
     kind: 'json',
-    data: { MediaContainer: { Metadata: [] } }
+    data: { MediaContainer: { Metadata: [] } },
   });
-  public getCollectionItemsMock = async (): Promise<any> => ({
+  public getCollectionItemsMock: () => ReturnType<LivePlexLibraryTransport['getCollectionItems']> = async () => ({
     kind: 'json',
-    data: { MediaContainer: { Metadata: [] } }
+    data: { MediaContainer: { Metadata: [] } },
   });
-  public getShowEpisodesMock = async (): Promise<any> => ({
+  public getShowEpisodesMock: () => ReturnType<LivePlexLibraryTransport['getShowEpisodes']> = async () => ({
     kind: 'json',
-    data: { MediaContainer: { Metadata: [] } }
+    data: { MediaContainer: { Metadata: [] } },
   });
-  public getPlaylistItemsMock = async (): Promise<any> => ({
+  public getPlaylistItemsMock: () => ReturnType<LivePlexLibraryTransport['getPlaylistItems']> = async () => ({
     kind: 'json',
-    data: { MediaContainer: { Metadata: [] } }
+    data: { MediaContainer: { Metadata: [] } },
   });
-  public getMetadataMock = async (): Promise<any> => ({
+  public getMetadataMock: () => ReturnType<LivePlexLibraryTransport['getMetadata']> = async () => ({
     kind: 'json',
-    data: { MediaContainer: { Metadata: [] } }
+    data: { MediaContainer: { Metadata: [] } },
   });
 
-  async listLibraryItems(input: any): Promise<any> {
+  async listLibraryItems(
+    _input: Parameters<LivePlexLibraryTransport['listLibraryItems']>[0],
+  ): ReturnType<LivePlexLibraryTransport['listLibraryItems']> {
     return this.listLibraryItemsMock();
   }
-  async getCollectionItems(input: any): Promise<any> {
+  async getCollectionItems(
+    _input: Parameters<LivePlexLibraryTransport['getCollectionItems']>[0],
+  ): ReturnType<LivePlexLibraryTransport['getCollectionItems']> {
     return this.getCollectionItemsMock();
   }
-  async getShowEpisodes(input: any): Promise<any> {
+  async getShowEpisodes(
+    _input: Parameters<LivePlexLibraryTransport['getShowEpisodes']>[0],
+  ): ReturnType<LivePlexLibraryTransport['getShowEpisodes']> {
     return this.getShowEpisodesMock();
   }
-  async getPlaylistItems(input: any): Promise<any> {
+  async getPlaylistItems(
+    _input: Parameters<LivePlexLibraryTransport['getPlaylistItems']>[0],
+  ): ReturnType<LivePlexLibraryTransport['getPlaylistItems']> {
     return this.getPlaylistItemsMock();
   }
-  async getMetadata(input: any): Promise<any> {
+  async getMetadata(
+    _input: Parameters<LivePlexLibraryTransport['getMetadata']>[0],
+  ): ReturnType<LivePlexLibraryTransport['getMetadata']> {
     return this.getMetadataMock();
   }
 }
 
 class MockPlexRuntime {
-  public connection: any = { uri: 'http://localhost:32400' };
+  public connection: PlexConnection = {
+    uri: 'http://localhost:32400',
+    protocol: 'http',
+    address: 'localhost',
+    port: 32400,
+    local: false,
+    relay: false,
+    latencyMs: null,
+  };
   public token: string | null = 'test-token';
   public transport = new MockLibraryTransport();
 
-  getActiveConnectionAndToken() {
+  getActiveConnectionAndToken(): { connection: PlexConnection; token: string | null } {
     return { connection: this.connection, token: this.token };
   }
 
-  getLibraryTransport() {
-    return this.transport as unknown as LivePlexLibraryTransport;
+  getLibraryTransport(): LivePlexLibraryTransport {
+    return this.transport as LivePlexLibraryTransport;
   }
 }
 
-function createRawEpisode(overrides: Record<string, any> = {}): Record<string, any> {
+function createRawEpisode(overrides: Partial<RawMediaItem> = {}): RawMediaItem {
   return {
     ratingKey: 'episode-1',
     key: 'metadata-key-episode-1',

@@ -48,6 +48,7 @@ import { registerPlexComposition, type PlexCompositionRegistration } from './ple
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
 import { registerShellAppCommandController } from './window/shellAppCommandController.js';
 import { createShellWindowController } from './window/shellWindowController.js';
+import type { PlexStreamResolverInput, PlexStreamResolverResult } from './plex/streamResolver.js';
 
 registerLineupProtocolScheme();
 
@@ -128,7 +129,20 @@ app.whenReady()
     });
 
     const fakePlaybackResolver = {
-      async resolve(input: any) {
+      async resolve(input: PlexStreamResolverInput): Promise<PlexStreamResolverResult> {
+        if (input.mediaId.length === 0) {
+          return {
+            ok: false,
+            error: {
+              code: 'resource-missing',
+              message: 'Missing media id',
+              retryable: false,
+              recoverable: false,
+              operation: 'stream.resolve',
+            },
+            diagnostics: [],
+          };
+        }
         const payload = {
           media: {
             id: `plex-media-${input.mediaId}`,
@@ -174,8 +188,10 @@ app.whenReady()
             candidateId: 'mock-candidate',
             selectedTrackIds: { video: null, audio: null, subtitle: null },
           },
-        } as any;
-      }
+          pmsSession: null,
+          diagnostics: [],
+        };
+      },
     };
 
     const fakePmsPort = {

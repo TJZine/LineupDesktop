@@ -101,13 +101,6 @@ const channelSetupBridgeSourceFile = ts.createSourceFile(
   true,
   ts.ScriptKind.TS,
 );
-const guideBridgeSourceFile = ts.createSourceFile(
-  'src/preload/guideBridge.cts',
-  guideBridgeSourceText,
-  ts.ScriptTarget.Latest,
-  true,
-  ts.ScriptKind.TS,
-);
 
 type PreloadInvokeCall = {
   channel: string;

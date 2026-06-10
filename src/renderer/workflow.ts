@@ -8,6 +8,7 @@ import {
   createEpgGuideView,
   createEpgState,
   DEFAULT_EPG_PRESENTATION_SOURCE,
+  ensureRendererReadyGuidePresentation,
   type EpgActionId,
   type EpgGuideViewModel,
   type EpgPresentationSource,
@@ -326,13 +327,16 @@ export function getRouteWorkflowView(
 }
 
 function createCurrentProgramSummary(presentation: EpgPresentationSource): ProgramSummaryViewModel {
-  const channel = presentation.channels.find((candidate) => candidate.id === presentation.nowWatching.channelId);
+  const normalizedPresentation = ensureRendererReadyGuidePresentation(presentation);
+  const channel = presentation.channels.find(
+    (candidate) => candidate.id === normalizedPresentation.nowWatching.channelId,
+  );
   return {
-    title: presentation.nowWatching.title,
-    subtitle: presentation.nowWatching.subtitle,
+    title: normalizedPresentation.nowWatching.title,
+    subtitle: normalizedPresentation.nowWatching.subtitle,
     channelName: channel?.name ?? 'Channel',
-    startsAtMs: presentation.nowWatching.startsAtMs,
-    endsAtMs: presentation.nowWatching.endsAtMs,
+    startsAtMs: normalizedPresentation.nowWatching.startsAtMs,
+    endsAtMs: normalizedPresentation.nowWatching.endsAtMs,
   };
 }
 

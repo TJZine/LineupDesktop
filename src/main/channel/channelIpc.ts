@@ -80,13 +80,13 @@ export function registerChannelIpcHandlers(
           request.payload.durationMs,
         );
         return { ok: true, value, requestId: request.requestId };
-      } catch (error: any) {
+      } catch (error: unknown) {
         return {
           ok: false,
           requestId: request.requestId,
           error: {
             code: 'GUIDE_PRESENTATION_FAILED',
-            message: error?.message || 'Failed to fetch guide presentation.',
+            message: readErrorMessage(error) || 'Failed to fetch guide presentation.',
             retryable: true,
             recoverable: true,
             operation: 'getPresentation',
@@ -106,13 +106,13 @@ export function registerChannelIpcHandlers(
       try {
         await guideRuntime.tuneChannel(request.payload.channelId);
         return { ok: true, value: {}, requestId: request.requestId };
-      } catch (error: any) {
+      } catch (error: unknown) {
         return {
           ok: false,
           requestId: request.requestId,
           error: {
             code: 'CHANNEL_TUNING_FAILED',
-            message: error?.message || 'Failed to tune channel.',
+            message: readErrorMessage(error) || 'Failed to tune channel.',
             retryable: true,
             recoverable: true,
             operation: 'tuneChannel',
@@ -301,6 +301,13 @@ function readPresentationRequest(
       durationMs: value.payload.durationMs,
     },
   };
+}
+
+function readErrorMessage(error: unknown): string | null {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return null;
 }
 
 type ReadTuneRequestResult =

@@ -115,8 +115,8 @@ function isGuideResult<T>(value: unknown): value is GuideIpcResult<T> {
     return (
       typeof record.error === 'object' &&
       record.error !== null &&
-      typeof (record.error as any).code === 'string' &&
-      typeof (record.error as any).message === 'string'
+      typeof (record.error as { code?: unknown }).code === 'string' &&
+      typeof (record.error as { message?: unknown }).message === 'string'
     );
   }
   return false;

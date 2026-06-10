@@ -9,6 +9,7 @@ import { ContentResolver } from '../../domain/channel/contentResolver.js';
 import type { ChannelRepository } from '../../domain/channel/channelRepository.js';
 import { ChannelScheduler } from '../../domain/scheduler/channelScheduler.js';
 import type {
+  ChannelLogger,
   ResolvedContentItem as SchedulerContentItem,
   ScheduledProgram,
   SchedulerPlaybackMode,
@@ -29,7 +30,7 @@ export class GuideRuntime {
     activeChannelScheduler: ChannelScheduler;
     clock?: ChannelClock;
     onChannelTuned?: (channelId: string) => void | Promise<void>;
-    logger?: any;
+    logger?: ChannelLogger;
   }) {
     this.repository = input.repository;
     this.clock = input.clock ?? { now: () => Date.now() };
@@ -194,7 +195,7 @@ export class GuideRuntime {
     if (currentChannelId) {
       try {
         await this.tuneChannel(currentChannelId);
-      } catch (error) {
+      } catch {
         // Log error internally but do not crash startup
       }
     }

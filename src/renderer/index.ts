@@ -14,7 +14,12 @@ import { createChannelRuntimeController } from './channelRuntimeActions.js';
 import { readPlexHomeUserId, readPlexRatingKey, readPlexSectionId, readPlexServerId, renderPlexRuntimeDom } from './plexRuntimeDom.js';
 import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowChannelSetupAction, applyWorkflowEpgAction, applyWorkflowSettingsAction, createWorkflowState, type ChannelSetupActionId, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
 import { createRendererPresentationFixtures } from './presentationFixtures.js';
-import { EPG_WINDOW_DURATION_MS, setEpgPresentationState, updateEpgState } from './epg.js';
+import {
+  EPG_WINDOW_DURATION_MS,
+  ensureRendererReadyGuidePresentation,
+  setEpgPresentationState,
+  updateEpgState,
+} from './epg.js';
 
 mountStaticRendererDom();
 
@@ -481,28 +486,10 @@ async function refreshGuidePresentation(source: string): Promise<void> {
     }).catch(() => undefined);
     return;
   }
-  const normalizedGuidePresentation = {
-    ...result.value,
-    nowWatching: result.value.nowWatching ?? (() => {
-      const fallbackChannel = workflowState.guidePresentation.channels[0] ?? result.value.channels[0];
-      const fallbackProgram = fallbackChannel?.programs[0];
-      return fallbackProgram === undefined
-        ? {
-          title: '',
-          subtitle: '',
-          channelId: fallbackChannel?.id ?? '',
-          startsAtMs: workflowState.epg.windowStartMs,
-          endsAtMs: workflowState.epg.windowStartMs,
-        }
-        : {
-          title: fallbackProgram.title,
-          subtitle: fallbackProgram.subtitle,
-          channelId: fallbackChannel?.id ?? '',
-          startsAtMs: fallbackProgram.startsAtMs,
-          endsAtMs: fallbackProgram.endsAtMs,
-        };
-    })(),
-  };
+  const normalizedGuidePresentation = ensureRendererReadyGuidePresentation(
+    result.value,
+    workflowState.epg.windowStartMs,
+  );
 
   workflowState = {
     ...workflowState,
