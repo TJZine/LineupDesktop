@@ -130,6 +130,9 @@ app.whenReady()
 
     const fakePlaybackResolver = {
       async resolve(input: PlexStreamResolverInput): Promise<PlexStreamResolverResult> {
+        const fakeMediaId = `plex-media-${input.mediaId}`;
+        const fakeMediaTitle = `Live Program ${input.mediaId}`;
+        const fakeMediaDurationMs = 1_200_000;
         if (input.mediaId.length === 0) {
           return {
             ok: false,
@@ -138,20 +141,19 @@ app.whenReady()
               message: 'Missing media id',
               retryable: false,
               recoverable: false,
-              operation: 'stream.resolve',
             },
             diagnostics: [],
           };
         }
         const payload = {
           media: {
-            id: `plex-media-${input.mediaId}`,
-            title: input.title || 'Live Program',
-            durationMs: input.durationMs ?? 1_200_000,
+            id: fakeMediaId,
+            title: fakeMediaTitle,
+            durationMs: fakeMediaDurationMs,
             container: 'mp4',
           },
           policy: {
-            autoplay: true,
+            autoplay: input.autoplay ?? true,
             startPositionMs: input.startPositionMs ?? 0,
             preferredAudioTrackId: null,
             preferredSubtitleTrackId: null,
@@ -162,7 +164,7 @@ app.whenReady()
           ok: true,
           load: payload,
           privatePlayback: {
-            requestId: input.requestId || 'mock-request-id',
+            requestId: input.requestId,
             decisionKind: 'direct-play',
             playbackUrl: 'https://mock.plex.invalid/file.mp4',
             credentialHeader: { name: 'X-Plex-Token', value: 'mock-token' },
@@ -187,6 +189,22 @@ app.whenReady()
             kind: 'direct-play',
             candidateId: 'mock-candidate',
             selectedTrackIds: { video: null, audio: null, subtitle: null },
+            summary: {
+              media: {
+                id: fakeMediaId,
+                title: fakeMediaTitle,
+              },
+              container: 'mp4',
+              videoCodec: 'h264',
+              audioCodec: 'aac',
+              audioLanguage: null,
+              subtitleDelivery: null,
+              subtitleLanguage: null,
+              dynamicRange: 'sdr',
+              action: 'direct-play',
+            },
+            reasonCodes: ['direct-play-supported'],
+            unknowns: [],
           },
           pmsSession: null,
           diagnostics: [],

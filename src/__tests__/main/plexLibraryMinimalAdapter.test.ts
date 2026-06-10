@@ -6,8 +6,16 @@ import type { LivePlexLibraryTransport } from '../../main/plex/livePlexTransport
 import type { PlexConnection } from '../../main/plex/discovery/types.js';
 import { type RawMediaItem } from '../../main/plex/library/index.js';
 
-class MockLibraryTransport implements Partial<LivePlexLibraryTransport> {
+class MockLibraryTransport implements LivePlexLibraryTransport {
   public listLibraryItemsMock: () => ReturnType<LivePlexLibraryTransport['listLibraryItems']> = async () => ({
+    kind: 'json',
+    data: { MediaContainer: { Metadata: [] } },
+  });
+  public listLibrarySectionsMock: () => ReturnType<LivePlexLibraryTransport['listLibrarySections']> = async () => ({
+    kind: 'json',
+    data: { MediaContainer: { Directory: [] } },
+  });
+  public searchLibraryMock: () => ReturnType<LivePlexLibraryTransport['searchLibrary']> = async () => ({
     kind: 'json',
     data: { MediaContainer: { Metadata: [] } },
   });
@@ -32,6 +40,16 @@ class MockLibraryTransport implements Partial<LivePlexLibraryTransport> {
     _input: Parameters<LivePlexLibraryTransport['listLibraryItems']>[0],
   ): ReturnType<LivePlexLibraryTransport['listLibraryItems']> {
     return this.listLibraryItemsMock();
+  }
+  async listLibrarySections(
+    _input: Parameters<LivePlexLibraryTransport['listLibrarySections']>[0],
+  ): ReturnType<LivePlexLibraryTransport['listLibrarySections']> {
+    return this.listLibrarySectionsMock();
+  }
+  async searchLibrary(
+    _input: Parameters<LivePlexLibraryTransport['searchLibrary']>[0],
+  ): ReturnType<LivePlexLibraryTransport['searchLibrary']> {
+    return this.searchLibraryMock();
   }
   async getCollectionItems(
     _input: Parameters<LivePlexLibraryTransport['getCollectionItems']>[0],
@@ -73,7 +91,7 @@ class MockPlexRuntime {
   }
 
   getLibraryTransport(): LivePlexLibraryTransport {
-    return this.transport as LivePlexLibraryTransport;
+    return this.transport;
   }
 }
 

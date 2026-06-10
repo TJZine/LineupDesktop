@@ -4,12 +4,11 @@ import type {
   EpgPresentationSource,
   EpgProgramViewModel,
 } from '../../contracts/guide.js';
-import type { ChannelClock } from '../../domain/channel/interfaces.js';
+import type { ChannelClock, ChannelLogger } from '../../domain/channel/interfaces.js';
 import { ContentResolver } from '../../domain/channel/contentResolver.js';
 import type { ChannelRepository } from '../../domain/channel/channelRepository.js';
 import { ChannelScheduler } from '../../domain/scheduler/channelScheduler.js';
 import type {
-  ChannelLogger,
   ResolvedContentItem as SchedulerContentItem,
   ScheduledProgram,
   SchedulerPlaybackMode,
