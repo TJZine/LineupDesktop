@@ -5,7 +5,7 @@ import { ChannelScheduler } from '../../domain/scheduler/channelScheduler.js';
 import type { ChannelConfig } from '../../domain/channel/types.js';
 import type { ChannelRepository } from '../../domain/channel/channelRepository.js';
 import type { PlexMediaItemMinimal } from '../../domain/channel/interfaces.js';
-import { PlexLibraryMinimalAdapter } from '../../main/channel/plexLibraryMinimalAdapter.js';
+import type { PlexLibraryMinimalAdapter } from '../../main/channel/plexLibraryMinimalAdapter.js';
 
 class MockChannelRepository {
   public data = {

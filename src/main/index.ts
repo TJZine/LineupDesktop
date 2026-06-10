@@ -138,6 +138,7 @@ app.whenReady()
             ok: false,
             error: {
               code: 'resource-missing',
+              category: 'source',
               message: 'Missing media id',
               retryable: false,
               recoverable: false,
