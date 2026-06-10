@@ -251,7 +251,7 @@ const STATIC_SCREEN_MARKUP = `
             <p class="screen__kicker">Channel setup</p>
             <h3 id="channel-setup-commit-title">Build channels</h3>
           </div>
-          <strong data-channel-setup-fixture-status></strong>
+          <strong data-channel-setup-status></strong>
         </header>
         <ol class="setup-steps" data-channel-review-steps></ol>
         <dl class="setup-summary">

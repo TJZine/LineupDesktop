@@ -183,7 +183,7 @@ function createFocusDomBindings(focusableElements: FocusElementDouble[]): Render
     channelSetupReviewElement: null,
     setupValidationElement: null,
     channelSetupResultElement: null,
-    channelSetupFixtureStatusElement: null,
+    channelSetupStatusElement: null,
     plexPanelElement: null,
     plexActionButtons: [],
     plexStatusElement: null,

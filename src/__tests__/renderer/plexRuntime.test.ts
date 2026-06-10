@@ -1255,7 +1255,7 @@ function createPlexDomBindings(overrides: Partial<RendererDomBindings> = {}): Re
     channelSetupReviewElement: null,
     setupValidationElement: null,
     channelSetupResultElement: null,
-    channelSetupFixtureStatusElement: null,
+    channelSetupStatusElement: null,
     plexPanelElement: new ElementDouble() as unknown as HTMLElement,
     plexActionButtons: actions,
     plexStatusElement: new ElementDouble() as unknown as HTMLElement,

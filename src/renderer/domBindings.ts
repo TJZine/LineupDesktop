@@ -43,7 +43,7 @@ export interface RendererDomBindings {
   channelSetupReviewElement: HTMLElement | null;
   setupValidationElement: HTMLElement | null;
   channelSetupResultElement: HTMLElement | null;
-  channelSetupFixtureStatusElement: HTMLElement | null;
+  channelSetupStatusElement: HTMLElement | null;
   plexPanelElement: HTMLElement | null;
   plexActionButtons: HTMLButtonElement[];
   plexStatusElement: HTMLElement | null;
@@ -144,9 +144,7 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     channelSetupReviewElement: documentRef.querySelector<HTMLElement>('[data-channel-review-impact]'),
     setupValidationElement: documentRef.querySelector<HTMLElement>('[data-channel-review-validation]'),
     channelSetupResultElement: documentRef.querySelector<HTMLElement>('[data-channel-setup-result]'),
-    channelSetupFixtureStatusElement: documentRef.querySelector<HTMLElement>(
-      '[data-channel-setup-fixture-status]',
-    ),
+    channelSetupStatusElement: documentRef.querySelector<HTMLElement>('[data-channel-setup-status]'),
     plexPanelElement: documentRef.querySelector<HTMLElement>('[data-plex-runtime-panel]'),
     plexActionButtons: Array.from(
       documentRef.querySelectorAll<HTMLButtonElement>('[data-plex-action]'),
@@ -306,10 +304,6 @@ export function readSettingsActionId(value: string | undefined): SettingsActionI
 
 export function readChannelSetupActionId(value: string | undefined): ChannelSetupActionId | null {
   switch (value) {
-    case 'advanceSetupStep':
-    case 'toggleFeaturedChannel':
-    case 'addDraftChannel':
-    case 'resetDraftLineup':
     case 'selectRecentlyAddedSource':
     case 'selectAppendBuildMode':
     case 'selectReplaceBuildMode':
