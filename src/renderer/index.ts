@@ -483,13 +483,25 @@ async function refreshGuidePresentation(source: string): Promise<void> {
   }
   const normalizedGuidePresentation = {
     ...result.value,
-    nowWatching: result.value.nowWatching ?? {
-      title: '',
-      subtitle: '',
-      channelId: workflowState.guidePresentation.channels[0]?.id ?? '',
-      startsAtMs: workflowState.epg.windowStartMs,
-      endsAtMs: workflowState.epg.windowStartMs,
-    },
+    nowWatching: result.value.nowWatching ?? (() => {
+      const fallbackChannel = workflowState.guidePresentation.channels[0] ?? result.value.channels[0];
+      const fallbackProgram = fallbackChannel?.programs[0];
+      return fallbackProgram === undefined
+        ? {
+          title: '',
+          subtitle: '',
+          channelId: fallbackChannel?.id ?? '',
+          startsAtMs: workflowState.epg.windowStartMs,
+          endsAtMs: workflowState.epg.windowStartMs,
+        }
+        : {
+          title: fallbackProgram.title,
+          subtitle: fallbackProgram.subtitle,
+          channelId: fallbackChannel?.id ?? '',
+          startsAtMs: fallbackProgram.startsAtMs,
+          endsAtMs: fallbackProgram.endsAtMs,
+        };
+    })(),
   };
 
   workflowState = {
