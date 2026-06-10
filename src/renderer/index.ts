@@ -1,78 +1,39 @@
 import type { ShellStatusEvent } from '../contracts/shell.js';
-import {
-  queryRendererDom,
-  readChannelSetupActionId,
-  readEpgActionId,
-  readOverlayActionId,
-  readPlexRuntimeActionId,
-  readRouteActionId,
-  readRouteId,
-  readSettingsActionId,
-} from './domBindings.js';
-import {
-  clickFocusedRendererElement,
-  focusRendererTarget,
-  moveRendererFocus,
-  renderRendererFocus,
-  syncRendererFocusTargets,
-} from './focusDom.js';
-import {
-  createDesktopKeyboardInputListener,
-  startDesktopGamepadRuntime,
-} from './desktopInput.js';
+import { queryRendererDom, readChannelCommitActionId, readChannelSetupActionId, readEpgActionId, readOverlayActionId, readPlexRuntimeActionId, readRouteActionId, readRouteId, readSettingsActionId } from './domBindings.js';
+import { clickFocusedRendererElement, focusRendererTarget, moveRendererFocus, renderRendererFocus, syncRendererFocusTargets } from './focusDom.js';
+import { createDesktopKeyboardInputListener, startDesktopGamepadRuntime } from './desktopInput.js';
 import { createDesktopCursorRuntime } from './desktopCursor.js';
-import {
-  FocusRegistry,
-  type AppRouteId,
-  type DesktopInputButton,
-  type FocusState,
-} from './navigation.js';
-import {
-  applyPlayerOverlayAction,
-  createFakePlayerSnapshot,
-  createPlayerOverlayView,
-  createPlayerOverlayState,
-  resolvePlayerOverlayFocusId,
-  type PlayerOverlayActionId,
-} from './overlays.js';
+import { FocusRegistry, type AppRouteId, type DesktopInputButton, type FocusState } from './navigation.js';
+import { applyPlayerOverlayAction, createPlayerOverlayView, createPlayerOverlayState, resolvePlayerOverlayFocusId, type PlayerOverlayActionId } from './overlays.js';
 import { renderRouteDom, renderWorkflowDom } from './routeDom.js';
 import { mountStaticRendererDom } from './staticDom.js';
 import { applySupportBundleExportResult } from './supportBundleExport.js';
 import { createPlexRuntimeController } from './plexRuntimeActions.js';
-import {
-  readPlexHomeUserId,
-  readPlexRatingKey,
-  readPlexSectionId,
-  readPlexServerId,
-  renderPlexRuntimeDom,
-} from './plexRuntimeDom.js';
-import {
-  activateWorkflowRoute,
-  applyWorkflowAction,
-  applyWorkflowChannelSetupAction,
-  applyWorkflowEpgAction,
-  applyWorkflowSettingsAction,
-  createWorkflowState,
-  type ChannelSetupActionId,
-  type EpgActionId,
-  type RouteWorkflowActionId,
-  type SettingsActionId,
-} from './workflow.js';
+import { resolveChannelSetupLiveSelection } from './channelSetup/liveSelection.js';
+import { createChannelRuntimeController } from './channelRuntimeActions.js';
+import { readPlexHomeUserId, readPlexRatingKey, readPlexSectionId, readPlexServerId, renderPlexRuntimeDom } from './plexRuntimeDom.js';
+import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowChannelSetupAction, applyWorkflowEpgAction, applyWorkflowSettingsAction, createWorkflowState, type ChannelSetupActionId, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
+import { createRendererPresentationFixtures } from './presentationFixtures.js';
 
 mountStaticRendererDom();
 
 const dom = queryRendererDom();
 
 let fullscreenEnabled = false;
-let workflowState = createWorkflowState('player');
-let overlayState = createPlayerOverlayState();
-const playerSnapshot = createFakePlayerSnapshot();
+const presentationFixtures = createRendererPresentationFixtures();
+let workflowState = createWorkflowState('player', presentationFixtures.guide);
+let overlayState = createPlayerOverlayState(presentationFixtures.overlays);
+const playerSnapshot = presentationFixtures.playerSnapshot;
 const focusRegistry = new FocusRegistry();
 let focusState: FocusState;
 const plexController = createPlexRuntimeController({
   bridge: window.lineupDesktop.plex,
   onStateChanged: () => renderApp(),
   recordRendererEvent: window.lineupDesktop.diagnostics.recordRendererEvent,
+});
+const channelController = createChannelRuntimeController({
+  bridge: window.lineupDesktop.channelSetup,
+  onStateChanged: () => renderApp(),
 });
 
 syncRendererFocusTargets(focusRegistry, dom);
@@ -137,6 +98,26 @@ for (const button of dom.setupActionButtons) {
   });
 }
 
+dom.channelSetupStrategyElement?.addEventListener('click', (event) => {
+  if (!(event.target instanceof HTMLElement)) {
+    return;
+  }
+  const button = event.target.closest<HTMLButtonElement>('[data-setup-action]');
+  const action = readChannelSetupActionId(button?.dataset.setupAction);
+  if (action !== null) {
+    applyChannelSetupAction(action);
+  }
+});
+
+for (const button of dom.channelCommitButtons) {
+  button.addEventListener('click', () => {
+    const action = readChannelCommitActionId(button.dataset.channelCommitAction);
+    if (action !== null) {
+      void applyChannelCommitAction(action);
+    }
+  });
+}
+
 for (const button of dom.epgActionButtons) {
   button.addEventListener('click', () => {
     const action = readEpgActionId(button.dataset.epgAction);
@@ -186,10 +167,13 @@ dom.plexPanelElement?.addEventListener('click', (event) => {
   const ratingKey = itemButton === null ? null : readPlexRatingKey(itemButton);
 
   if (homeUserId !== null) {
+    clearChannelSetupActionStateForSourceChange();
     void plexController.switchHomeUser(homeUserId);
   } else if (serverId !== null) {
+    clearChannelSetupActionStateForSourceChange();
     void plexController.selectServer(serverId);
   } else if (sectionId !== null) {
+    clearChannelSetupActionStateForSourceChange();
     plexController.setSelectedSection(sectionId);
     void plexController.listLibraryItems(sectionId);
   } else if (ratingKey !== null) {
@@ -221,6 +205,7 @@ if (dom.capabilitiesElement) {
 document.documentElement.dataset.shellBoot = 'ready';
 document.documentElement.dataset.activeRoute = workflowState.routeState.activeRoute;
 void plexController.loadSnapshot();
+void channelController.loadStatus();
 
 function renderStatus(event: ShellStatusEvent): void {
   if (dom.statusElement) {
@@ -243,7 +228,7 @@ async function handleDesktopInput(input: DesktopInputButton): Promise<void> {
       clickFocusedRendererElement(focusState, dom);
       return;
     case 'back':
-      if (workflowState.routeState.activeRoute === 'channelSetup' && await plexController.handleBack()) {
+      if (workflowState.routeState.activeRoute === 'channelSetup' && await handlePlexBack()) {
         renderApp();
         scrollFocusedSetupControlIntoView();
         return;
@@ -294,14 +279,36 @@ function applyChannelSetupAction(action: ChannelSetupActionId): void {
   renderApp();
 }
 
+async function applyChannelCommitAction(action: ReturnType<typeof readChannelCommitActionId>): Promise<void> {
+  if (action === null) {
+    return;
+  }
+  const plexState = plexController.getState();
+  const sectionId = resolveLiveSelectedPlexSectionId(plexState);
+  if (sectionId === null) {
+    channelController.markBlocked('Choose a movie or show library section before saving channels. Selecting an individual media item only opens metadata preview.');
+    renderApp();
+    return;
+  }
+  await channelController.commit({
+    mode: action === 'append' ? 'append' : 'replace',
+    sectionIds: [sectionId],
+    confirmReplace: action === 'confirmReplace',
+  });
+  renderApp();
+}
+
 function applyEpgAction(action: EpgActionId): void {
   workflowState = applyWorkflowEpgAction(workflowState, action);
   renderApp();
 }
 
 function applyOverlayAction(action: PlayerOverlayActionId): void {
-  overlayState = applyPlayerOverlayAction(overlayState, action);
-  const view = createPlayerOverlayView(overlayState, playerSnapshot);
+  overlayState = applyPlayerOverlayAction(overlayState, action, Date.now(), presentationFixtures.overlays);
+  const view = createPlayerOverlayView(overlayState, {
+    ...presentationFixtures.overlays,
+    playerSnapshot,
+  });
   focusState = focusRegistry.focusTarget(focusState, resolvePlayerOverlayFocusId(view)).state;
   renderApp();
 }
@@ -353,6 +360,7 @@ async function applyPlexRuntimeAction(action: ReturnType<typeof readPlexRuntimeA
       await plexController.getHomeUsers();
       return;
     case 'restoreSelectedServer':
+      clearChannelSetupActionStateForSourceChange();
       await plexController.restoreSelectedServer();
       return;
     case 'refreshServers':
@@ -377,17 +385,42 @@ async function applyPlexRuntimeAction(action: ReturnType<typeof readPlexRuntimeA
       plexController.clearItems();
       return;
     case 'clearSelectedSection':
+      clearChannelSetupActionStateForSourceChange();
       plexController.clearSelectedSection();
       return;
     case 'clearSelectedServer':
+      clearChannelSetupActionStateForSourceChange();
       plexController.clearSelectedServer();
       return;
     case 'clearPinSubflow':
+      clearChannelSetupActionStateForSourceChange();
       await plexController.clearPinSubflow();
       return;
     case null:
       return;
   }
+}
+
+async function handlePlexBack(): Promise<boolean> {
+  const before = readLiveSetupSourceSignature();
+  const handled = await plexController.handleBack();
+  if (handled && before !== readLiveSetupSourceSignature()) {
+    clearChannelSetupActionStateForSourceChange();
+  }
+  return handled;
+}
+
+function clearChannelSetupActionStateForSourceChange(): void {
+  channelController.clearActionState();
+}
+
+function readLiveSetupSourceSignature(): string {
+  const state = plexController.getState();
+  return [
+    state.snapshot?.auth.profile?.accountId ?? '',
+    state.selectedServerId ?? '',
+    state.selectedSectionId ?? '',
+  ].join('|');
 }
 
 function cleanupPlexRuntimeForRouteChange(previousRoute: AppRouteId, nextRoute: AppRouteId): void {
@@ -414,9 +447,19 @@ function cleanupPlexRuntime(reason: 'beforeunload' | 'route-change'): void {
 }
 
 function renderApp(): void {
-  renderRouteDom(workflowState, dom);
-  renderWorkflowDom(workflowState, overlayState, playerSnapshot, dom);
-  renderPlexRuntimeDom(plexController.getState(), dom);
+  const plexState = plexController.getState();
+  const liveSelection = resolveChannelSetupLiveSelection(plexState);
+  renderRouteDom(workflowState, dom, channelController.getState(), liveSelection);
+  renderWorkflowDom(
+    workflowState,
+    overlayState,
+    playerSnapshot,
+    dom,
+    channelController.getState(),
+    liveSelection,
+    presentationFixtures.overlays,
+  );
+  renderPlexRuntimeDom(plexState, dom);
   syncRendererFocusTargets(focusRegistry, dom);
   if (focusState.activeId !== null) {
     focusState = focusRegistry.focusTarget(focusState, focusState.activeId).state;
@@ -441,4 +484,10 @@ function scrollFocusedSetupControlIntoView(): void {
     `[data-focus-id="${CSS.escape(focusState.activeId)}"]`,
   );
   activeElement?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+function resolveLiveSelectedPlexSectionId(
+  plexState: ReturnType<typeof plexController.getState>,
+): string | null {
+  return resolveChannelSetupLiveSelection(plexState)?.id ?? null;
 }

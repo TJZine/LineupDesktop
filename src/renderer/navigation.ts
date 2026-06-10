@@ -29,6 +29,7 @@ export interface FocusTargetDefinition {
   route: AppRouteId;
   order: number;
   scope?: 'route' | 'global';
+  hiddenOnRoutes?: readonly AppRouteId[];
   neighbors?: Partial<Record<FocusDirection, string>>;
 }
 
@@ -48,6 +49,7 @@ export class FocusRegistry {
   register(target: FocusTargetDefinition): void {
     this.#targets.set(target.id, {
       ...target,
+      hiddenOnRoutes: target.hiddenOnRoutes === undefined ? undefined : [...target.hiddenOnRoutes],
       neighbors: target.neighbors === undefined ? undefined : { ...target.neighbors },
     });
   }
@@ -139,13 +141,20 @@ export class FocusRegistry {
 
   private routeTargets(route: AppRouteId): FocusTargetDefinition[] {
     return [...this.#targets.values()]
-      .filter((target) => target.scope === 'global' || target.route === route)
+      .filter((target) => this.isTargetAvailableOnRoute(target, route))
       .sort((left, right) => left.order - right.order || left.id.localeCompare(right.id));
   }
 
   private isRouteTarget(targetId: string, route: AppRouteId): boolean {
     const target = this.#targets.get(targetId);
-    return target !== undefined && (target.scope === 'global' || target.route === route);
+    return target !== undefined && this.isTargetAvailableOnRoute(target, route);
+  }
+
+  private isTargetAvailableOnRoute(target: FocusTargetDefinition, route: AppRouteId): boolean {
+    if (target.hiddenOnRoutes?.includes(route) === true) {
+      return false;
+    }
+    return target.scope === 'global' || target.route === route;
   }
 }
 

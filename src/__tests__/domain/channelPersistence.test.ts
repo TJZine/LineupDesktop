@@ -6,6 +6,7 @@ import { ChannelManager } from '../../domain/channel/channelManager.js';
 import { ChannelPersistenceCoordinator } from '../../domain/channel/channelPersistenceCoordinator.js';
 import { ChannelPersistenceSaveQueue } from '../../domain/channel/channelPersistenceSaveQueue.js';
 import {
+  CorruptChannelPersistenceDataError,
   ChannelPersistenceStore,
   type ChannelPersistenceStoragePort,
 } from '../../domain/channel/channelPersistenceStore.js';
@@ -110,7 +111,7 @@ test('channel persistence codec decodes only stored channel data shape', () => {
   assert.equal(decodeStoredChannelData(JSON.stringify({ channels: [], channelOrder: [], savedAt: Infinity })), null);
 });
 
-test('channel persistence store cleans empty and malformed records', async () => {
+test('channel persistence store cleans empty records and reports malformed records as corrupt', async () => {
   const storage = new MemoryChannelStorage();
   const store = new ChannelPersistenceStore(storage);
 
@@ -122,7 +123,10 @@ test('channel persistence store cleans empty and malformed records', async () =>
 
   storage.storedChannelData = '{bad-json';
   storage.currentChannelId = 'stale-current';
-  assert.equal(await store.readStoredChannelData(), null);
+  await assert.rejects(
+    () => store.readStoredChannelData(),
+    CorruptChannelPersistenceDataError,
+  );
   assert.equal(storage.clearCount, 2);
   assert.equal(storage.currentChannelId, null);
 

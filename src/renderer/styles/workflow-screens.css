@@ -7,22 +7,32 @@
   padding: var(--space-12);
 }
 
-.screen[data-screen="channelSetup"] {
-  overflow: auto;
-  overscroll-behavior: contain;
-  scroll-padding: var(--space-12);
-}
-
-.screen[data-screen="channelSetup"] .screen__content {
-  align-content: start;
-  width: min(1120px, 100%);
-  min-height: min-content;
-  padding-bottom: calc(var(--space-12) * 2);
-}
-
 .screen__content p:last-child {
   color: var(--color-text-muted);
   font-size: 16px;
+}
+
+.screen-shell-state {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.screen-shell-state span {
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.screen-shell-state strong {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
 }
 
 .screen__content button {
@@ -50,8 +60,7 @@
 .channel-list__item,
 .channel-draft-list__item,
 .settings-section,
-.setup-steps li,
-.plex-runtime {
+.setup-steps li {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
   background: var(--color-surface-raised);
@@ -96,6 +105,11 @@ dd {
   opacity: 0.72;
 }
 
+.channel-draft-list__item--source {
+  border-color: var(--plex-onboarding-accent-border, var(--color-border));
+  background: var(--plex-onboarding-accent-soft, var(--color-surface-raised));
+}
+
 .channel-list__number {
   align-self: start;
   border-radius: 5px;
@@ -122,6 +136,58 @@ dd {
   display: grid;
   gap: var(--space-3);
   padding: var(--space-5);
+}
+
+.channel-setup-fixture,
+.channel-setup-commit {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+  padding: var(--space-7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-panel);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.channel-setup-fixture > header,
+.channel-setup-commit > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.channel-setup-fixture h3,
+.channel-setup-fixture h4,
+.channel-setup-commit h3,
+.channel-setup-commit h4 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.channel-setup-fixture > header strong,
+.channel-setup-commit > header strong {
+  flex: 0 0 auto;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--plex-onboarding-accent-border, var(--color-border));
+  border-radius: 999px;
+  color: var(--plex-onboarding-text-muted, var(--color-text-muted));
+  font-size: 13px;
+}
+
+.setup-review {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.setup-review section {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
 }
 
 .settings-section h3 {
@@ -187,6 +253,10 @@ dd {
   content: "Pending";
 }
 
+.setup-steps li[data-step-state="blocked"]::before {
+  content: "Needs attention";
+}
+
 .setup-steps li strong,
 .setup-steps li span {
   display: block;
@@ -198,274 +268,79 @@ dd {
   font-size: 14px;
 }
 
+.setup-preview-rows,
+.setup-result {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.setup-preview-row,
+.setup-result-card {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-raised);
+}
+
+.setup-preview-row {
+  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.setup-preview-label {
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.setup-preview-value {
+  color: var(--color-text);
+  font-weight: 750;
+}
+
+.setup-preview-detail {
+  grid-column: 1 / -1;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.setup-result[data-result-tone="attention"] .setup-result-card {
+  border-color: rgba(255, 176, 90, 0.44);
+  background: rgba(255, 176, 90, 0.1);
+}
+
+.setup-result[data-result-tone="ready"] .setup-result-card {
+  border-color: var(--plex-onboarding-accent-border, var(--color-border));
+  background: var(--plex-onboarding-accent-soft, var(--color-surface-raised));
+}
+
 .workflow-actions,
 .settings-controls,
-.guide-controls,
-.plex-runtime__controls,
-.plex-runtime__list {
+.guide-controls {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4);
 }
 
 .settings-controls,
-.guide-controls,
-.plex-runtime__controls {
+.guide-controls {
   margin-top: var(--space-1);
 }
 
-.plex-runtime {
-  display: grid;
-  gap: var(--space-4);
-  max-height: none;
-  min-width: 0;
-  margin-top: var(--space-3);
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
+@media (max-width: 880px) {
+  .setup-review,
+  .program-summary,
+  .settings-summary,
+  .setup-summary {
+    grid-template-columns: 1fr;
+  }
 
-.plex-runtime__header {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: var(--space-5);
-  min-width: 0;
-}
-
-.plex-runtime__header h3 {
-  margin: 0;
-  font-size: 18px;
-  letter-spacing: 0;
-}
-
-.plex-runtime__header p,
-.plex-runtime__pin span,
-.plex-runtime__metadata p {
-  color: var(--color-text-muted);
-  font-size: 14px;
-}
-
-.plex-runtime__error {
-  max-width: min(360px, 100%);
-  color: var(--color-text-muted);
-  overflow-wrap: anywhere;
-}
-
-.plex-runtime__stage {
-  display: grid;
-  gap: var(--space-3);
-  min-width: 0;
-  padding-block: var(--space-3);
-  border-top: 1px solid var(--color-border);
-}
-
-.plex-runtime__stage h4 {
-  margin: 0;
-  font-size: 15px;
-  letter-spacing: 0;
-}
-
-.plex-runtime__stage-copy {
-  max-width: 760px;
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: 14px;
-}
-
-.plex-runtime__summary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-3);
-  margin: 0;
-}
-
-.plex-runtime__summary div {
-  min-width: 0;
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-}
-
-.plex-runtime input {
-  width: min(260px, 100%);
-  min-width: 120px;
-  min-height: var(--button-min-height);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--color-text);
-  font: inherit;
-  letter-spacing: 0;
-  padding: 0 var(--space-5);
-}
-
-.plex-runtime input:focus {
-  outline: var(--focus-ring);
-  outline-offset: 3px;
-}
-
-.plex-runtime button:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.plex-runtime__pin,
-.plex-runtime__metadata {
-  display: grid;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.plex-runtime__pin strong {
-  width: max-content;
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-control);
-  background: var(--color-inverse-bg);
-  color: var(--color-inverse-text);
-  letter-spacing: 0;
-}
-
-.plex-runtime__list button {
-  max-width: 100%;
-  min-height: 36px;
-  margin-top: 0;
-  overflow: hidden;
-  border: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--color-text);
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.plex-runtime__controls button,
-.plex-runtime__list button {
-  overflow-wrap: anywhere;
-}
-
-.plex-runtime__list p,
-.plex-runtime__pin p {
-  color: var(--color-text-muted);
-  font-size: 14px;
-}
-
-.plex-runtime__list button[data-selected="true"] {
-  border-color: var(--color-focus-border-strong);
-  background: var(--color-focus-surface);
-}
-
-.guide-detail {
-  display: grid;
-  gap: var(--space-1);
-  min-width: 0;
-  margin-top: var(--space-1);
-  padding: var(--space-6);
-  border: 1px solid var(--color-focus-border);
-  border-radius: var(--radius-control);
-  background: rgba(121, 199, 255, 0.1);
-}
-
-.guide-detail h3 {
-  margin: 0;
-  font-size: 18px;
-  letter-spacing: 0;
-}
-
-.guide-detail p {
-  color: var(--color-text-muted);
-  font-size: 14px;
-}
-
-.epg-grid {
-  display: grid;
-  gap: var(--space-2);
-  min-width: 0;
-  margin-top: var(--space-1);
-  overflow: auto;
-}
-
-.epg-grid__header,
-.epg-grid__row {
-  display: grid;
-  grid-template-columns: 132px minmax(520px, 1fr);
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.epg-grid__header {
-  color: var(--color-text-subtle);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.epg-grid__slots {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-}
-
-.epg-grid__slots span {
-  min-width: 0;
-}
-
-.epg-grid__channel,
-.epg-grid__program {
-  min-width: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-}
-
-.epg-grid__channel {
-  display: grid;
-  align-content: center;
-  gap: var(--space-1);
-  padding: var(--space-4);
-  background: var(--color-surface-raised);
-}
-
-.epg-grid__channel strong,
-.epg-grid__program strong {
-  display: block;
-}
-
-.epg-grid__channel span,
-.epg-grid__program span {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text-muted);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.epg-grid__programs {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.epg-grid__program {
-  display: grid;
-  align-content: center;
-  min-height: 58px;
-  padding: var(--space-3) var(--space-4);
-  overflow: hidden;
-  background: var(--color-surface-raised);
-}
-
-.epg-grid__program[data-selected-program="true"] {
-  border-color: var(--color-focus);
-  background: var(--color-inverse-bg);
-  color: var(--color-inverse-text);
-}
-
-.epg-grid__program[data-selected-program="true"] span {
-  color: var(--color-selected-muted);
-}
-
-.epg-grid__row[data-selected-channel="true"] .epg-grid__channel {
-  border-color: var(--color-focus-border-strong);
-  background: var(--color-focus-surface);
+  .channel-setup-fixture > header,
+  .channel-setup-commit > header {
+    flex-direction: column;
+  }
 }

@@ -59,6 +59,7 @@ export class DesktopPlexServerDiscovery {
   private readonly mixedContentConfig?: Partial<MixedContentConfig>;
   private readonly nowMs: () => number;
   private discoveryContextVersion = 0;
+  private refreshPromise: Promise<PlexServerSummary[]> | null = null;
   private servers: PlexServer[] = [];
   private selectedServer: PlexServer | null = null;
   private selectedConnection: PlexConnection | null = null;
@@ -72,6 +73,20 @@ export class DesktopPlexServerDiscovery {
   }
 
   async refreshServers(options: { token?: string; signal?: AbortSignal | null } = {}): Promise<PlexServerSummary[]> {
+    if (this.refreshPromise !== null) {
+      return this.refreshPromise;
+    }
+
+    const refreshPromise = this.doRefreshServers(options).finally(() => {
+      if (this.refreshPromise === refreshPromise) {
+        this.refreshPromise = null;
+      }
+    });
+    this.refreshPromise = refreshPromise;
+    return refreshPromise;
+  }
+
+  private async doRefreshServers(options: { token?: string; signal?: AbortSignal | null }): Promise<PlexServerSummary[]> {
     throwIfAborted(options.signal);
     const contextVersion = this.discoveryContextVersion;
     const resources = await this.discoverResources(options.signal ?? null, options.token);
@@ -115,6 +130,7 @@ export class DesktopPlexServerDiscovery {
 
   resetDiscoveryContext(): void {
     this.discoveryContextVersion += 1;
+    this.refreshPromise = null;
     this.servers = [];
     this.selectedServer = null;
     this.selectedConnection = null;

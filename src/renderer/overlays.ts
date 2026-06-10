@@ -1,19 +1,22 @@
 import {
   activeOverlayId,
-  FAKE_OVERLAY_CHANNELS,
+  DEFAULT_PLAYER_OVERLAY_PRESENTATION,
+  normalizePlayerOverlayPresentation,
   PLAYBACK_AUDIO_TRACKS,
   PLAYBACK_SUBTITLE_TRACKS,
 } from './overlayViewModels.js';
 import type {
+  PlayerOverlayPresentationSource,
   PlayerOverlayId,
   PlayerOverlayState,
   PlayerOverlayViewModel,
 } from './overlayViewModels.js';
 
 export {
-  createFakePlayerSnapshot,
+  createRendererSafePlayerSnapshot,
   createPlayerOverlayView,
-  getFakeOverlayChannels,
+  DEFAULT_PLAYER_OVERLAY_PRESENTATION,
+  getDefaultOverlayPresentationChannels,
 } from './overlayViewModels.js';
 export type {
   NowPlayingOverlayViewModel,
@@ -21,6 +24,7 @@ export type {
   PlaybackOptionsViewModel,
   PlaybackOptionTrackViewModel,
   PlayerOverlayId,
+  PlayerOverlayPresentationSource,
   PlayerOverlayState,
   PlayerOverlayViewModel,
 } from './overlayViewModels.js';
@@ -57,10 +61,15 @@ export const PLAYER_OVERLAY_IDLE_FOCUS_ID = 'player-osd';
 const CHANNEL_NUMBER_BUFFER_TIMEOUT_MS = 2_500;
 const CHANNEL_NUMBER_MAX_LENGTH = 3;
 
-export function createPlayerOverlayState(): PlayerOverlayState {
+export function createPlayerOverlayState(
+  presentation: PlayerOverlayPresentationSource = DEFAULT_PLAYER_OVERLAY_PRESENTATION,
+): PlayerOverlayState {
+  const normalizedPresentation = normalizePlayerOverlayPresentation(presentation);
+  const firstChannel = normalizedPresentation.channels[0];
   return {
     stack: ['channelBadge', 'nowPlaying', 'playerOsd'],
-    miniGuideSelectedChannelId: FAKE_OVERLAY_CHANNELS[0].id,
+    currentChannelId: firstChannel.id,
+    miniGuideSelectedChannelId: firstChannel.id,
     channelNumberBuffer: '',
     channelNumberUpdatedAtMs: null,
     selectedAudioTrackId: PLAYBACK_AUDIO_TRACKS[0].id,
@@ -75,16 +84,18 @@ export function applyPlayerOverlayAction(
   state: PlayerOverlayState,
   actionId: PlayerOverlayActionId,
   nowMs = Date.now(),
+  presentation: PlayerOverlayPresentationSource = DEFAULT_PLAYER_OVERLAY_PRESENTATION,
 ): PlayerOverlayState {
+  const normalizedPresentation = normalizePlayerOverlayPresentation(presentation);
   switch (actionId) {
     case 'toggleOsd':
       return toggleOverlay(state, 'playerOsd');
     case 'openMiniGuide':
       return showChannelBadge(openOverlay(state, 'miniGuide'));
     case 'previousMiniGuideChannel':
-      return selectMiniGuideChannel(state, -1);
+      return selectMiniGuideChannel(state, -1, normalizedPresentation);
     case 'nextMiniGuideChannel':
-      return selectMiniGuideChannel(state, 1);
+      return selectMiniGuideChannel(state, 1, normalizedPresentation);
     case 'togglePlaybackOptions':
       return openOverlay(openOverlay(state, 'playerOsd'), 'playbackOptions');
     case 'cycleAudioTrack':
@@ -113,7 +124,7 @@ export function applyPlayerOverlayAction(
         volume: clampVolume(state.volume + 0.1),
       };
     case 'commitChannelNumber':
-      return commitChannelNumber(state);
+      return commitChannelNumber(state, normalizedPresentation);
     case 'clearChannelNumber':
       return {
         ...removeOverlay(state, 'channelNumber'),
@@ -164,8 +175,11 @@ function appendChannelNumberDigit(
   );
 }
 
-function commitChannelNumber(state: PlayerOverlayState): PlayerOverlayState {
-  const channel = FAKE_OVERLAY_CHANNELS.find(
+function commitChannelNumber(
+  state: PlayerOverlayState,
+  presentation: PlayerOverlayPresentationSource,
+): PlayerOverlayState {
+  const channel = presentation.channels.find(
     (candidate) => candidate.number === state.channelNumberBuffer,
   );
   const nextState = {
@@ -180,21 +194,30 @@ function commitChannelNumber(state: PlayerOverlayState): PlayerOverlayState {
 
   return showChannelBadge({
     ...nextState,
+    currentChannelId: channel.id,
     miniGuideSelectedChannelId: channel.id,
   });
 }
 
-function selectMiniGuideChannel(state: PlayerOverlayState, offset: number): PlayerOverlayState {
+function selectMiniGuideChannel(
+  state: PlayerOverlayState,
+  offset: number,
+  presentation: PlayerOverlayPresentationSource,
+): PlayerOverlayState {
   const currentIndex = Math.max(
     0,
-    FAKE_OVERLAY_CHANNELS.findIndex((channel) => channel.id === state.miniGuideSelectedChannelId),
+    presentation.channels.findIndex((channel) => channel.id === state.miniGuideSelectedChannelId),
   );
-  const nextIndex = Math.max(0, Math.min(FAKE_OVERLAY_CHANNELS.length - 1, currentIndex + offset));
+  const nextIndex = Math.max(0, Math.min(presentation.channels.length - 1, currentIndex + offset));
+  const nextChannel = presentation.channels[nextIndex];
+  if (nextChannel === undefined) {
+    return state;
+  }
   return showChannelBadge(
     openOverlay(
       {
         ...state,
-        miniGuideSelectedChannelId: FAKE_OVERLAY_CHANNELS[nextIndex].id,
+        miniGuideSelectedChannelId: nextChannel.id,
       },
       'miniGuide',
     ),
@@ -234,19 +257,21 @@ function closeTopOverlay(state: PlayerOverlayState): PlayerOverlayState {
 }
 
 function nextAudioTrackId(currentTrackId: string): string {
-  const currentIndex = PLAYBACK_AUDIO_TRACKS.findIndex((track) => track.id === currentTrackId);
+  const availableTracks = PLAYBACK_AUDIO_TRACKS.filter((track) => track.available);
+  const currentIndex = availableTracks.findIndex((track) => track.id === currentTrackId);
   if (currentIndex === -1) {
-    return PLAYBACK_AUDIO_TRACKS[0].id;
+    return availableTracks[0]?.id ?? currentTrackId;
   }
-  return PLAYBACK_AUDIO_TRACKS[(currentIndex + 1) % PLAYBACK_AUDIO_TRACKS.length].id;
+  return availableTracks[(currentIndex + 1) % availableTracks.length]?.id ?? currentTrackId;
 }
 
 function nextSubtitleTrackId(currentTrackId: string | null): string | null {
-  const currentIndex = PLAYBACK_SUBTITLE_TRACKS.findIndex((track) => track.id === currentTrackId);
+  const availableTracks = PLAYBACK_SUBTITLE_TRACKS.filter((track) => track.available);
+  const currentIndex = availableTracks.findIndex((track) => track.id === currentTrackId);
   if (currentIndex === -1) {
-    return PLAYBACK_SUBTITLE_TRACKS[0].id;
+    return availableTracks[0]?.id ?? null;
   }
-  return PLAYBACK_SUBTITLE_TRACKS[(currentIndex + 1) % PLAYBACK_SUBTITLE_TRACKS.length].id;
+  return availableTracks[(currentIndex + 1) % availableTracks.length]?.id ?? null;
 }
 
 function readChannelDigit(actionId: PlayerOverlayDigitActionId): string {

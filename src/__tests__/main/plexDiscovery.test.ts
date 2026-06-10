@@ -60,6 +60,7 @@ class FakeSecureStringCodec implements SecureStringCodec {
 
 class FakeDiscoveryTransport implements DesktopPlexDiscoveryTransport {
   public resources: unknown = [];
+  public discoverRequestCount = 0;
   public readonly probeRequests: Array<{
     server: PlexServer;
     connection: PlexConnection;
@@ -90,6 +91,7 @@ class FakeDiscoveryTransport implements DesktopPlexDiscoveryTransport {
   }
 
   async discoverResources(): Promise<unknown> {
+    this.discoverRequestCount += 1;
     if (this.deferredResources) {
       const pending = this.deferredResources;
       this.deferredResources = null;
@@ -941,6 +943,63 @@ test('desktop plex discovery ignores stale in-flight discovery context', async (
 
   assert.deepEqual(await refresh, []);
   assert.deepEqual(discovery.getServerSummaries(), []);
+});
+
+test('desktop plex discovery coalesces concurrent refresh requests', async () => {
+  const transport = new FakeDiscoveryTransport();
+  const pending = transport.deferResources();
+  const discovery = new DesktopPlexServerDiscovery({ transport });
+
+  const first = discovery.refreshServers({ token: placeholderAuthValue });
+  const second = discovery.refreshServers({ token: placeholderAuthValue });
+  pending.resolve([
+    createPlexApiResource({
+      clientIdentifier: 'shared-server',
+      name: 'Shared',
+      connections: [createConnection({ address: 'shared' })],
+    }),
+  ]);
+
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+
+  assert.equal(transport.discoverRequestCount, 1);
+  assert.equal(firstResult.length, 1);
+  assert.deepEqual(secondResult, firstResult);
+  assert.equal(discovery.getServerSummaries().length, 1);
+});
+
+test('desktop plex discovery starts a fresh refresh after context reset while prior refresh is in flight', async () => {
+  const transport = new FakeDiscoveryTransport();
+  const stalePending = transport.deferResources();
+  const discovery = new DesktopPlexServerDiscovery({ transport });
+
+  const staleRefresh = discovery.refreshServers({ token: placeholderAuthValue });
+  discovery.resetDiscoveryContext();
+  transport.resources = [
+    createPlexApiResource({
+      clientIdentifier: 'fresh-server',
+      name: 'Fresh',
+      connections: [createConnection({ address: 'fresh' })],
+    }),
+  ];
+  const freshRefresh = discovery.refreshServers({ token: placeholderAuthValue });
+  stalePending.resolve([
+    createPlexApiResource({
+      clientIdentifier: 'stale-server',
+      name: 'Stale',
+      connections: [createConnection({ address: 'stale' })],
+    }),
+  ]);
+
+  const staleResult = await staleRefresh;
+  const freshResult = await freshRefresh;
+
+  assert.equal(staleResult.length, 1);
+  assert.equal(staleResult[0]?.serverId, 'fresh-server');
+  assert.equal(freshResult.length, 1);
+  assert.equal(freshResult[0]?.serverId, 'fresh-server');
+  assert.equal(transport.discoverRequestCount, 2);
+  assert.equal(discovery.getServerSummaries().length, 1);
 });
 
 test('desktop plex discovery ignores stale in-flight selection after context reset', async () => {

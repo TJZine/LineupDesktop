@@ -56,3 +56,12 @@ export {
   parseSeasons,
   parseStream,
 } from './parsing/index.js';
+export {
+  loadLibrarySectionsWithCounts,
+} from './librarySectionCountEnrichment.js';
+export {
+  isSafeLibraryFilter,
+  isSafeSearchLimit,
+  isSafeSearchTypes,
+  mapSearchHubTypeToMediaType,
+} from './libraryRuntimeValidation.js';

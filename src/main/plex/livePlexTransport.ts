@@ -5,6 +5,7 @@ import {
   type DesktopPlexAuthTransport,
   type DesktopPlexAuthTransportRequest,
   type DesktopPlexAuthTransportResponse,
+  type PlexAuthConfig,
   type PlexResponsePayload,
   readPlexResponse,
 } from './auth/index.js';
@@ -23,6 +24,7 @@ export { LivePlexTransportError } from './livePlexTransportError.js';
 export type { LivePlexTransportErrorCode } from './livePlexTransportError.js';
 
 export interface LivePlexTransportOptions {
+  authConfig?: PlexAuthConfig;
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
   nowMs?: () => number;
@@ -69,12 +71,14 @@ const PLEX_TOKEN_HEADER_NAME = ['X-Plex', 'Token'].join('-');
 export class LivePlexTransport
   implements DesktopPlexAuthTransport, DesktopPlexDiscoveryTransport, LivePlexLibraryTransport
 {
+  private readonly authConfig: PlexAuthConfig | undefined;
   private readonly fetchImpl: typeof globalThis.fetch;
   private readonly timeoutMs: number;
   private readonly nowMs: () => number;
   private readonly discoveryWaitMs: (delayMs: number) => Promise<void>;
 
   constructor(options: LivePlexTransportOptions = {}) {
+    this.authConfig = options.authConfig;
     this.fetchImpl = options.fetch ?? globalThis.fetch;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.nowMs = options.nowMs ?? Date.now;
@@ -93,6 +97,7 @@ export class LivePlexTransport
   async discoverResources(input: { token?: string; signal?: AbortSignal | null }): Promise<unknown> {
     return discoverPlexResourcesWithRequestPolicy({
       ...(input.token !== undefined ? { token: input.token } : {}),
+      headers: this.buildPlexRequestHeaders(input.token),
       signal: input.signal ?? null,
       fetchText: ({ url, init, signal }) => this.fetchTextNormalized(url, init, signal),
       waitMs: this.discoveryWaitMs,
@@ -110,10 +115,7 @@ export class LivePlexTransport
       new URL('/identity', normalizeBaseUri(input.connection.uri)),
       {
         method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          ...(input.token !== undefined ? { [PLEX_TOKEN_HEADER_NAME]: input.token } : {}),
-        },
+        headers: this.buildPlexRequestHeaders(input.token),
       },
       input.signal ?? null,
     );
@@ -240,10 +242,7 @@ export class LivePlexTransport
       url,
       {
         method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          [PLEX_TOKEN_HEADER_NAME]: token,
-        },
+        headers: this.buildPlexRequestHeaders(token),
       },
       signal,
     );
@@ -372,6 +371,18 @@ export class LivePlexTransport
       clearTimeout(timeout);
       signal?.removeEventListener('abort', onAbort);
     }
+  }
+
+  private buildPlexRequestHeaders(token?: string): Record<string, string> {
+    if (this.authConfig !== undefined) {
+      return buildPlexAuthRequestHeaders(this.authConfig, {
+        ...(token !== undefined ? { token } : {}),
+      });
+    }
+    return {
+      Accept: 'application/json',
+      ...(token !== undefined ? { [PLEX_TOKEN_HEADER_NAME]: token } : {}),
+    };
   }
 }
 

@@ -61,7 +61,19 @@ test('desktop channel persistence store writes a separate versioned temp-file-ba
   assert.deepEqual(await domainStore.readStoredChannelData(), data);
   assert.equal(await domainStore.readCurrentChannelId(), 'one');
 
-  await fs.writeFile(persistenceFilePath, '{"schemaVersion":1,"storedChannelData":"bad"}\n');
+  await fs.writeFile(persistenceFilePath, '{"schemaVersion":1,"storedChannelData":"bad","currentChannelId":null}\n');
+  await assert.rejects(
+    () => domainStore.readStoredChannelData(),
+    (error: unknown) => error instanceof Error && error.name === 'CorruptChannelPersistenceFileError',
+  );
+  const repaired = JSON.parse(await fs.readFile(persistenceFilePath, 'utf8')) as {
+    schemaVersion?: unknown;
+    storedChannelData?: unknown;
+    currentChannelId?: unknown;
+  };
+  assert.equal(repaired.schemaVersion, 1);
+  assert.equal(repaired.storedChannelData, null);
+  assert.equal(repaired.currentChannelId, null);
   assert.equal(await domainStore.readStoredChannelData(), null);
 });
 
@@ -84,7 +96,10 @@ test('desktop channel persistence store clears separate current-channel pointer 
     }),
   );
 
-  assert.equal(await domainStore.readStoredChannelData(), null);
+  await assert.rejects(
+    () => domainStore.readStoredChannelData(),
+    (error: unknown) => error instanceof Error && error.name === 'CorruptChannelPersistenceFileError',
+  );
   assert.equal(await domainStore.readCurrentChannelId(), null);
   const persisted = JSON.parse(await fs.readFile(persistenceFilePath, 'utf8')) as {
     storedChannelData?: unknown;
@@ -112,7 +127,10 @@ test('desktop channel persistence store validates savedAt and currentChannelId m
       currentChannelId: null,
     }),
   );
-  assert.equal(await domainStore.readStoredChannelData(), null);
+  await assert.rejects(
+    () => domainStore.readStoredChannelData(),
+    (error: unknown) => error instanceof Error && error.name === 'CorruptChannelPersistenceFileError',
+  );
 
   await fs.writeFile(
     persistenceFilePath,
@@ -123,6 +141,29 @@ test('desktop channel persistence store validates savedAt and currentChannelId m
     }),
   );
   assert.equal(await domainStore.readCurrentChannelId(), null);
+});
+
+test('desktop channel persistence store repairs top-level corrupt files while signaling recovery', async () => {
+  const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-channel-persistence-'));
+  const persistenceFilePath = path.join(temporaryDirectory, 'channels.json');
+  const adapter = new DesktopChannelPersistenceStore({ persistenceFilePath });
+
+  await fs.writeFile(persistenceFilePath, '{corrupt-json');
+
+  await assert.rejects(
+    () => adapter.readStoredChannelData(),
+    (error: unknown) => error instanceof Error && error.name === 'CorruptChannelPersistenceFileError',
+  );
+
+  const repaired = JSON.parse(await fs.readFile(persistenceFilePath, 'utf8')) as {
+    schemaVersion?: unknown;
+    storedChannelData?: unknown;
+    currentChannelId?: unknown;
+  };
+  assert.equal(repaired.schemaVersion, 1);
+  assert.equal(repaired.storedChannelData, null);
+  assert.equal(repaired.currentChannelId, null);
+  assert.equal(await adapter.readStoredChannelData(), null);
 });
 
 test('desktop channel persistence store preserves data when top-level current pointer is malformed', async () => {
@@ -256,10 +297,18 @@ test('desktop channel persistence store serializes corrupt repair with concurren
   });
 
   await fs.writeFile(persistenceFilePath, '{corrupt-json');
-  await Promise.all([
+  const [repairResult] = await Promise.allSettled([
     adapter.readStoredChannelData(),
     adapter.writeStoredChannelData(JSON.stringify(data)),
   ]);
+
+  assert.equal(repairResult.status, 'rejected');
+  assert.equal(
+    repairResult.status === 'rejected' && repairResult.reason instanceof Error
+      ? repairResult.reason.name
+      : null,
+    'CorruptChannelPersistenceFileError',
+  );
 
   const persisted = JSON.parse(await fs.readFile(persistenceFilePath, 'utf8')) as {
     storedChannelData?: StoredChannelData | null;

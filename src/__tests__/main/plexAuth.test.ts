@@ -764,6 +764,58 @@ test('desktop plex auth service validates tokens, home users, switches profiles,
   assert.equal(transport.requests.at(-1)?.action, 'cancel-pin');
 });
 
+test('desktop plex auth service scopes active profile id to the validated switched token', async () => {
+  const transport = new FakePlexAuthTransport();
+  const service = new DesktopPlexAuthService({
+    config: createDesktopPlexAuthConfig({ clientIdentifier: 'desktop-client' }),
+    transport,
+    credentialStore: createSuccessfulCredentialStore(),
+  });
+
+  transport.enqueue('check-pin-status', {
+    status: 200,
+    payload: {
+      id: 8,
+      code: 'ZZZZ',
+      expiresAt: '2026-05-10T12:05:00.000Z',
+      authToken: placeholderAuthValue,
+      clientIdentifier: 'desktop-client',
+    },
+  });
+  transport.enqueue('validate-token', {
+    status: 200,
+    payload: {
+      id: 'account-1',
+      username: 'viewer',
+      email: 'viewer@example.invalid',
+    },
+  });
+  await service.checkPinStatus(8);
+
+  transport.enqueue('switch-home-user', {
+    status: 200,
+    payload: { kind: 'json', data: { authToken: placeholderAuthValue } },
+  });
+  transport.enqueue('validate-token', {
+    status: 200,
+    payload: {
+      id: 'validated-profile',
+      username: 'kid',
+      email: 'kid@example.invalid',
+    },
+  });
+
+  const switched = await service.switchHomeUser('renderer-requested-id', { pin: '1234' });
+
+  assert.equal(service.getActiveUserId(), 'validated-profile');
+  assert.deepEqual(switched.activeProfile, {
+    accountId: 'validated-profile',
+    username: 'kid',
+    displayName: 'kid',
+    activeProfileId: 'validated-profile',
+  });
+});
+
 test('desktop plex auth service probes v2 then v1 home users when v2 is empty', async () => {
   const transport = new FakePlexAuthTransport();
   const service = new DesktopPlexAuthService({

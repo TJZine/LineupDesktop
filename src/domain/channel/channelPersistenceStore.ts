@@ -1,6 +1,13 @@
 import { decodeStoredChannelData, encodeStoredChannelData } from './storedChannelDataCodec.js';
 import type { StoredChannelData } from './types.js';
 
+export class CorruptChannelPersistenceDataError extends Error {
+  public constructor() {
+    super('Stored channel data is corrupt.');
+    this.name = 'CorruptChannelPersistenceDataError';
+  }
+}
+
 export interface ChannelPersistenceStoragePort {
   readStoredChannelData(): Promise<string | null>;
   /**
@@ -34,7 +41,7 @@ export class ChannelPersistenceStore {
     const parsed = decodeStoredChannelData(raw);
     if (parsed === null) {
       await this.storage.clearStoredChannelData();
-      return null;
+      throw new CorruptChannelPersistenceDataError();
     }
     return parsed;
   }

@@ -37,6 +37,7 @@ import {
   LivePlexTransport,
   type LivePlexLibraryTransport,
 } from '../../main/plex/livePlexTransport.js';
+import { PLEX_MEDIA_TYPES } from '../../main/plex/library/index.js';
 import {
   cloneRuntimeSnapshot,
   mapRuntimeError,
@@ -301,6 +302,52 @@ test('desktop plex runtime switches Plex Home users with active-profile token in
   assert.equal(fixture.credentialStore.secretValue, placeholderAccountToken);
   assert.equal(JSON.stringify(switched).includes(placeholderManagedToken), false);
   assertRendererSafe(switched);
+});
+
+test('desktop plex runtime uses active profile token for server discovery and probing after Home switch', async () => {
+  const fixture = createRuntimeFixture();
+  await signIn(fixture);
+  fixture.authTransport.enqueue('switch-home-user', {
+    status: 200,
+    payload: { kind: 'json', data: { authToken: placeholderManagedToken } },
+  });
+  fixture.authTransport.enqueue('validate-token', {
+    status: 200,
+    payload: { kind: 'json', data: accountPayload({ id: 'managed', username: 'managed' }) },
+  });
+  const switched = await fixture.runtime.switchHomeUser('switch-managed', {
+    userId: 'managed',
+    pin: '1234',
+  });
+  fixture.discoveryTransport.resources = [
+    createPlexApiResource({
+      clientIdentifier: 'server-1',
+      name: 'Managed Server',
+      connections: [connection({ address: 'managed-local', uri: 'https://managed.example:32400' })],
+    }),
+  ];
+  fixture.discoveryTransport.enqueueProbe('managed-local', { outcome: 'reachable', latencyMs: 12 });
+  fixture.discoveryTransport.enqueueProbe('managed-local', { outcome: 'reachable', latencyMs: 10 });
+
+  const refreshed = await fixture.runtime.refreshServers('refresh-managed');
+  const selected = await fixture.runtime.selectServer('select-managed', 'server-1');
+  const restored = await fixture.runtime.restoreSelectedServer('restore-managed');
+
+  assert.equal(switched.ok, true);
+  assert.equal(refreshed.ok, true);
+  assert.equal(selected.ok, true);
+  assert.equal(restored.ok, true);
+  assert.deepEqual(
+    fixture.discoveryTransport.discoverInputs.map((input) => input.token),
+    [placeholderManagedToken, placeholderManagedToken],
+  );
+  assert.deepEqual(
+    fixture.discoveryTransport.probeInputs.map((input) => input.token),
+    [placeholderManagedToken, placeholderManagedToken],
+  );
+  assert.equal(fixture.selectedServerStore.persistedByProfileId.get('managed')?.serverId, 'server-1');
+  assert.equal(fixture.credentialStore.secretValue, placeholderAccountToken);
+  assertRendererSafe([refreshed, selected, restored]);
 });
 
 test('desktop plex runtime does not reuse selected server across Plex Home profile switch', async () => {
@@ -733,6 +780,68 @@ test('desktop plex runtime projects library sections, items, search, metadata, d
   assert.equal(JSON.stringify(records).includes(placeholderAccountToken), false);
 });
 
+test('desktop plex runtime enriches live library section counts with lightweight item probes', async () => {
+  const fixture = createRuntimeFixture();
+  await signInAndSelectServer(fixture);
+  fixture.libraryTransport.listSectionsResponse = {
+    kind: 'json',
+    data: {
+      MediaContainer: {
+        Directory: [
+          rawSection({ key: 'movies', title: 'Movies', type: 'movie' }),
+          rawSection({ key: 'shows', title: 'Shows', type: 'show' }),
+          rawSection({ key: 'music', title: 'Music', type: 'artist' }),
+          rawSection({ key: 'photos', title: 'Photos', type: 'photo' }),
+        ],
+      },
+    },
+  };
+  fixture.libraryTransport.listItemsResponses = [
+    { kind: 'json', data: { MediaContainer: { totalSize: 123 } } },
+    { kind: 'json', data: { MediaContainer: { totalSize: 456 } } },
+    { kind: 'json', data: { MediaContainer: { size: 789 } } },
+    { kind: 'json', data: { MediaContainer: { totalSize: 10 } } },
+    { kind: 'json', data: { MediaContainer: { totalSize: 999 } } },
+  ];
+
+  const sections = await fixture.runtime.listLibrarySections('sections-counts');
+
+  assert.equal(sections.ok, true);
+  assert.deepEqual(
+    sections.ok ? sections.value.sections.map((section) => ({
+      id: section.id,
+      contentCount: section.contentCount,
+      episodeCount: section.episodeCount,
+    })) : [],
+    [
+      { id: 'movies', contentCount: 123, episodeCount: undefined },
+      { id: 'shows', contentCount: 456, episodeCount: 999 },
+      { id: 'music', contentCount: 789, episodeCount: undefined },
+      { id: 'photos', contentCount: 10, episodeCount: undefined },
+    ],
+  );
+  assert.deepEqual(
+    fixture.libraryTransport.listItemsRequests.map((request) => ({
+      sectionId: request.sectionId,
+      offset: request.offset,
+      limit: request.limit,
+      filter: request.filter,
+    })),
+    [
+      { sectionId: 'movies', offset: 0, limit: 1, filter: undefined },
+      { sectionId: 'shows', offset: 0, limit: 1, filter: undefined },
+      { sectionId: 'music', offset: 0, limit: 1, filter: undefined },
+      { sectionId: 'photos', offset: 0, limit: 1, filter: undefined },
+      { sectionId: 'shows', offset: 0, limit: 1, filter: { type: PLEX_MEDIA_TYPES.EPISODE } },
+    ],
+  );
+  assert.deepEqual(
+    sections.ok ? sections.value.snapshot.library.sections : [],
+    sections.ok ? sections.value.sections : [],
+  );
+  assertRendererSafe(sections);
+});
+
 test('desktop plex runtime paginates library browse and forwards safe filters', async () => {
   const fixture = createRuntimeFixture();
   await signInAndSelectServer(fixture);
@@ -907,6 +1016,7 @@ test('desktop plex runtime forwards search types and skips non-requested hubs', 
         Hub: [
           { type: 'movie', Metadata: [rawItem({ ratingKey: 'movie-1', title: 'Movie' })] },
           { type: 'show', Metadata: [rawItem({ ratingKey: 'show-1', type: 'show', title: 'Show' })] },
+          { type: 'constructor', Metadata: [rawItem({ ratingKey: 'constructor-1', title: 'Constructor' })] },
           { type: 'unknown', Metadata: [rawItem({ ratingKey: 'unknown-1', title: 'Unknown' })] },
         ],
       },
@@ -1330,6 +1440,7 @@ test('desktop plex discovery aborts in-flight selected-server persistence before
 test('live plex transport normalizes JSON/text responses, auth headers, status, and aborts', async () => {
   const seen: Array<{ url: string; headers: HeadersInit | undefined }> = [];
   const transport = new LivePlexTransport({
+    authConfig: authConfig(),
     fetch: async (url, init) => {
       seen.push({ url: String(url), headers: init?.headers });
       return new Response(JSON.stringify({ ok: true }), {
@@ -1355,6 +1466,8 @@ test('live plex transport normalizes JSON/text responses, auth headers, status, 
   assert.equal(probe.outcome, 'auth-required');
   assert.equal(new Headers(seen[0]?.headers).get('X-Plex-Token'), placeholderAccountToken);
   assert.equal(new Headers(seen[1]?.headers).get('X-Plex-Token'), placeholderAccountToken);
+  assert.equal(new Headers(seen[1]?.headers).get('X-Plex-Client-Identifier'), 'desktop-client');
+  assert.equal(new Headers(seen[1]?.headers).get('X-Plex-Product'), 'Lineup Desktop');
   assert.equal(JSON.stringify(auth).includes(placeholderAccountToken), false);
 });
 
@@ -1408,9 +1521,12 @@ test('live plex transport encodes library browse filters and search types safely
 });
 
 test('live plex transport sends account token for plex.tv discovery and separates timeout from caller abort', async () => {
+  const seenDiscoveryHeaders: Headers[] = [];
   const discoveryTransport = new LivePlexTransport({
+    authConfig: authConfig(),
     fetch: async (_url, init) => {
       const headers = new Headers(init?.headers);
+      seenDiscoveryHeaders.push(headers);
       return new Response(JSON.stringify([{ clientIdentifier: 'server-1' }]), {
         status: headers.get('X-Plex-Token') === placeholderAccountToken ? 200 : 401,
         headers: { 'Content-Type': 'application/json' },
@@ -1420,6 +1536,9 @@ test('live plex transport sends account token for plex.tv discovery and separate
   });
   const resources = await discoveryTransport.discoverResources({ token: placeholderAccountToken });
   assert.equal(Array.isArray(resources), true);
+  assert.equal(seenDiscoveryHeaders[0]?.get('X-Plex-Token'), placeholderAccountToken);
+  assert.equal(seenDiscoveryHeaders[0]?.get('X-Plex-Client-Identifier'), 'desktop-client');
+  assert.equal(seenDiscoveryHeaders[0]?.get('X-Plex-Product'), 'Lineup Desktop');
 
   const timeoutTransport = new LivePlexTransport({
     fetch: (_url, init) =>
@@ -1824,12 +1943,12 @@ function connection(input: Partial<PlexConnection> = {}): PlexConnection {
   };
 }
 
-function rawSection(input: Partial<{ key: string; title: string }> = {}) {
+function rawSection(input: Partial<{ key: string; title: string; type: string }> = {}) {
   return {
     key: input.key ?? '1',
     uuid: 'library-1',
     title: input.title ?? 'Movies',
-    type: 'movie',
+    type: input.type ?? 'movie',
     agent: 'agent',
     scanner: 'scanner',
     scannedAt: 1_700_000_000,
