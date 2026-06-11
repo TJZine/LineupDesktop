@@ -71,6 +71,11 @@ class MockLibraryTransport implements LivePlexLibraryTransport {
   ): ReturnType<LivePlexLibraryTransport['getMetadata']> {
     return this.getMetadataMock();
   }
+  async stopTranscodeSession(
+    _input: Parameters<LivePlexLibraryTransport['stopTranscodeSession']>[0],
+  ): Promise<void> {
+    // No-op
+  }
 }
 
 class MockPlexRuntime {

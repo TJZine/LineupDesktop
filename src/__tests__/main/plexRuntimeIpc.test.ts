@@ -251,6 +251,10 @@ class FakeLibraryTransport implements LivePlexLibraryTransport {
   async getPlaylistItems() {
     return this.playlistItemsResponse as never;
   }
+
+  async stopTranscodeSession() {
+    // No-op
+  }
 }
 
 test('desktop plex runtime signs in with PIN, cancels pending PIN, and rejects credential storage failures safely', async () => {

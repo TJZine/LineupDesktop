@@ -10,6 +10,8 @@ import type { PlexPlaybackRuntime } from './plexPlaybackRuntime.js';
 import type { DesktopPlayerAdapter } from './desktopPlayerAdapter.js';
 import type { DesktopStreamCapabilityProfile } from './streamPolicy/types.js';
 import type { PlexStreamResolverInput, PlexStreamResolverResult } from '../plex/streamResolver.js';
+import type { DesktopPlexRuntime } from '../plex/desktopPlexRuntime.js';
+import { createLivePlexStreamResolverComposition } from '../plex/streamResolverComposition.js';
 
 export interface PlaybackRuntimeBootstrapOptions {
   shellMode: ShellMode;
@@ -17,6 +19,7 @@ export interface PlaybackRuntimeBootstrapOptions {
   adapter: DesktopPlayerAdapter | null;
   createRequestId: (prefix: string) => string;
   diagnosticEventStore?: DiagnosticEventStore;
+  plexRuntime?: DesktopPlexRuntime;
 }
 
 export interface PlaybackRuntimeBootstrapResult {
@@ -26,7 +29,7 @@ export interface PlaybackRuntimeBootstrapResult {
 export function bootstrapPlaybackRuntime(
   options: PlaybackRuntimeBootstrapOptions,
 ): PlaybackRuntimeBootstrapResult {
-  const { shellMode, scheduler, adapter, createRequestId, diagnosticEventStore } = options;
+  const { shellMode, scheduler, adapter, createRequestId, diagnosticEventStore, plexRuntime } = options;
 
   if (shellMode === 'development' || shellMode === 'smoke') {
     // Development / Smoke: Use fake resolver and capability profile
@@ -61,75 +64,81 @@ export function bootstrapPlaybackRuntime(
   }
 
   // Production:
-  // For now (Unit 1), production native helper is not wired yet.
-  // We'll create a stub/unsupported composition that doesn't run fake playback resolver.
-  // When native helper / live resolver composition are implemented in subsequent units,
-  // we will replace this stub.
-  const unsupportedResolver = {
-    async resolve(input: PlexStreamResolverInput): Promise<PlexStreamResolverResult> {
-      return {
-        ok: false,
-        error: {
-          code: 'PLAYER_UNSUPPORTED_CAPABILITY',
-          category: 'unsupported-capability',
-          message: 'Desktop player playback is not available in production without native helper.',
-          retryable: false,
-          recoverable: false,
-          requestId: input.requestId,
-        },
-        diagnostics: [
-          {
-            component: 'playback-bootstrap',
-            operation: 'resolve',
-            status: 'unsupported',
-            reason: 'production native host is not registered',
-          },
-        ],
-      };
-    },
-  };
+  let resolver: any;
+  let pmsPort: any;
 
-  const unsupportedPmsPort = {
-    async releaseSession() {
-      // No-op
-    },
-  };
+  if (plexRuntime) {
+    const liveResolverComposition = createLivePlexStreamResolverComposition(plexRuntime);
+    resolver = liveResolverComposition.resolver;
+    pmsPort = liveResolverComposition.pmsSessionPort;
+  } else {
+    resolver = {
+      async resolve(input: PlexStreamResolverInput): Promise<PlexStreamResolverResult> {
+        return {
+          ok: false,
+          error: {
+            code: 'PLAYER_UNSUPPORTED_CAPABILITY',
+            category: 'unsupported-capability',
+            message: 'Desktop player playback is not available in production without Plex runtime.',
+            retryable: false,
+            recoverable: false,
+            requestId: input.requestId,
+          },
+          diagnostics: [
+            {
+              component: 'playback-bootstrap',
+              operation: 'resolve',
+              status: 'unsupported',
+              reason: 'Plex runtime is not registered',
+            },
+          ],
+        };
+      },
+    };
+    pmsPort = {
+      async releaseSession() {
+        // No-op
+      },
+    };
+  }
 
   const capabilityProfile = getDevelopmentCapabilityProfile();
 
-  const playerPort = {
-    dispatch: async () => {
-      return {
-        ok: false as const,
-        events: [
-          {
-            event: 'error',
-            requestId: null,
-            error: {
-              code: 'PLAYER_UNSUPPORTED_CAPABILITY',
-              category: 'unsupported-capability',
-              message: 'Desktop player playback is not available in this configuration.',
-              recoverable: false,
-              retryable: false,
-              diagnostic: {
-                component: 'playback-bootstrap',
-                operation: 'dispatch',
-                status: 'unsupported',
-                reason: 'production native helper unavailable',
+  const playerPort = adapter
+    ? createDesktopPlayerAdapterRuntimePort(adapter)
+    : {
+        dispatch: async () => {
+          return {
+            ok: false as const,
+            events: [
+              {
+                event: 'error',
+                requestId: null,
+                error: {
+                  code: 'PLAYER_UNSUPPORTED_CAPABILITY',
+                  category: 'unsupported-capability',
+                  message: 'Desktop player playback is not available in this configuration.',
+                  recoverable: false,
+                  retryable: false,
+                  diagnostic: {
+                    component: 'playback-bootstrap',
+                    operation: 'dispatch',
+                    status: 'unsupported',
+                    reason: 'production native helper unavailable',
+                  },
+                },
               },
-            },
-          },
-        ] as readonly PlayerEvent[],
+            ] as readonly PlayerEvent[],
+          };
+        },
+        cleanup: async () => {},
       };
-    },
-    cleanup: async () => {},
-  };
 
   const composition = createPlexPlaybackRuntimeComposition({
     scheduler,
-    resolver: unsupportedResolver,
+    resolver,
     player: playerPort,
-    pms: unsupportedPmsPort,
+    pms: pmsPort,
     capabilityProfile,
     createRequestId,
     diagnosticEventStore,

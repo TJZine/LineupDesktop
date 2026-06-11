@@ -134,6 +134,7 @@ app.whenReady()
       adapter: teardownPlayerIpc.adapter,
       createRequestId,
       diagnosticEventStore,
+      plexRuntime: plexComposition.runtime,
     });
     playbackRuntime = playbackRuntimeComposition.runtime;
 
