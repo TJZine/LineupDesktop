@@ -7,11 +7,17 @@
 
 Lineup Desktop is a new Windows-first Electron repository. It currently has a
 secure Electron shell frame, the RD-13 renderer app shell/navigation, workflow,
-settings/channel setup, fake-backed EPG, fake-backed overlay, and CSS/theme
-style surfaces, the RD-22A upstream-shaped fixture/injected app body, docs,
-workflow, contract, harness scaffolding, and main-owned Plex auth/discovery/
-library domain seams. There is no production native playback host, installer
-implementation, live Plex transport wiring, or renderer Plex API yet.
+settings/channel setup, runtime-backed guide/channel surfaces in progress,
+fake-backed overlay, and CSS/theme style surfaces, the RD-22A upstream-shaped
+fixture/injected app body, docs, workflow, contract, harness scaffolding,
+main-owned Plex auth/discovery/library domain seams, RD-22B live Plex
+onboarding/library runtime wiring, and RD-25 production native playback code
+whose Windows manual proof is still pending. There is no installer
+implementation, public release/signing pipeline, production native-helper media
+binary redistribution, or Windows-observed production playback closeout proof
+yet. Historical paragraphs below preserve the sequence of earlier RD slices;
+later RD notes supersede earlier "unsupported" or "not wired" statements where
+they describe completed code but not completed Windows product proof.
 RD-04 adds documentation and harness ownership for upstream behavior guardrails
 only; it does not import product runtime code. RD-05 adds a disposable
 dev-only external `mpv` POC tool and ignored redacted local evidence only; it
@@ -366,8 +372,8 @@ RD-25 code implementation is complete, manual proof pending. The production nati
 
 ## Not Yet Implemented
 
-- Windows-proven production native playback helper (manual proof pending)
-- Windows-proven production playback host (manual proof pending)
+- Windows manual proof pending: production native playback helper
+- Windows manual proof pending: production playback host
 - Production Plex-to-native-helper playback setup using the private RD-12 playback descriptor (code implemented, manual proof pending)
 - production renderer-to-Plex/player API wiring for playback
 - preload, contract, and product IPC expansion for live player runtime beyond

@@ -354,7 +354,8 @@ bounded change.
 
 ### RD-00 Repo Genesis And Control Plane
 
-Status: complete.
+Status: code complete and reviewed; product-complete parity classification is
+deferred until redaction-safe Windows runtime proof in RD-27.
 
 Depends on:
 
@@ -815,7 +816,8 @@ Observed closeout:
 
 ### RD-11 Scheduler, Channel, And Content Domain Import
 
-Status: complete.
+Status: code complete and reviewed; product-complete parity classification is
+deferred until redaction-safe Windows runtime proof in RD-27.
 
 Depends on:
 
