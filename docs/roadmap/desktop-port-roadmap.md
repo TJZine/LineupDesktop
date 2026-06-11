@@ -1564,7 +1564,7 @@ Stop and replan if:
 
 ### RD-23 Live Channel Setup And Runtime Persistence
 
-Status: not started.
+Status: complete.
 
 Depends on:
 
