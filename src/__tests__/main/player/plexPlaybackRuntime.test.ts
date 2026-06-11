@@ -587,7 +587,7 @@ test('RD-12 plex playback runtime does not echo unsafe rejected candidate ids wh
 });
 
 test('RD-12 plex playback runtime releases rejected mismatched PMS lease before player dispatch', async () => {
-  const { runtime, channel, player, pms } = createRuntime();
+  const { runtime, channel, player, pms, emitted } = createRuntime();
   channel.candidate = {
     ...channel.candidate,
     requestId: 'request-1',
@@ -614,12 +614,15 @@ test('RD-12 plex playback runtime releases rejected mismatched PMS lease before 
     assert.equal(result.events[0].error.requestId, 'request-1');
   }
   assertTextAbsent(result, 'request-from-other-runtime');
+  assertTextAbsent(emitted, 'request-from-other-runtime');
   assertNoForbiddenKeys(result);
+  assertNoForbiddenKeys(emitted);
   assertRendererSafePlayerEvents(result.events);
+  assertRendererSafePlayerEvents(emitted);
 });
 
 test('RD-12 plex playback runtime reports rejected PMS release failures as stale cleanup', async () => {
-  const { runtime, channel, player, pms } = createRuntime();
+  const { runtime, channel, player, pms, emitted } = createRuntime();
   pms.failure = new Error('private stale cleanup tokenizedUrl=https://secret.example');
   channel.candidate = {
     ...channel.candidate,
@@ -643,6 +646,10 @@ test('RD-12 plex playback runtime reports rejected PMS release failures as stale
   assert.equal(result.events[1]?.event, 'error');
   assertTextAbsent(result, 'request-from-other-runtime');
   assertTextAbsent(result, 'tokenizedUrl=https://secret.example');
+  assertTextAbsent(emitted, 'request-from-other-runtime');
+  assertTextAbsent(emitted, 'tokenizedUrl=https://secret.example');
   assertNoForbiddenKeys(result);
+  assertNoForbiddenKeys(emitted);
   assertRendererSafePlayerEvents(result.events);
+  assertRendererSafePlayerEvents(emitted);
 });

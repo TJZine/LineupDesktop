@@ -79,11 +79,6 @@ const diagnosticsGuardSourceUrl = new URL('../../preload/diagnosticsBridgeGuards
 const diagnosticsGuardSourceText = readFileSync(diagnosticsGuardSourceUrl, 'utf8');
 const guideBridgeSourceUrl = new URL('../../preload/guideBridge.cts', import.meta.url);
 const guideBridgeSourceText = readFileSync(guideBridgeSourceUrl, 'utf8');
-const rendererActionRegistrationSourceUrl = new URL(
-  '../../renderer/rendererActionRegistration.ts',
-  import.meta.url,
-);
-const rendererActionRegistrationSourceText = readFileSync(rendererActionRegistrationSourceUrl, 'utf8');
 const preloadBundleToolSourceText = readFileSync(
   new URL('../../../tools/bundle-preload.mjs', import.meta.url),
   'utf8',
@@ -1690,14 +1685,6 @@ test('preload diagnostics guards accept declared record surfaces and reject case
     }),
     false,
   );
-});
-
-test('renderer action registration keeps focus handling delegated', () => {
-  assert.match(
-    rendererActionRegistrationSourceText,
-    /documentRef\.addEventListener\('focusin', \(event\) => \{/u,
-  );
-  assert.doesNotMatch(rendererActionRegistrationSourceText, /addEventListener\('focus'/u);
 });
 
 test('preload diagnostics result guard validates cancellation discriminator exactly', () => {

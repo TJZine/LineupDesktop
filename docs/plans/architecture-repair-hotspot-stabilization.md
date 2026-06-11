@@ -10,7 +10,8 @@
 
 **Branch target:** `initial-build`
 
-**Current phase:** plan authored; read-only plan review required before any source edit.
+**Current phase:** handoff/closeout; Packages 1-7 are implemented, and final
+verification, review adjudication, and archival remain.
 
 **MODEL_SUGGESTION:** Use the repo planner/reviewer/worker roles named by
 `docs/agentic/session-prompts/feature-quality-loop.md`. Implementation workers
@@ -542,6 +543,10 @@ Package-specific commands:
   fails on stale guide/channel-setup/player smoke assertions:
   `npm run smoke:electron`, `npm run verify`, and focused source audit of
   `src/main/smokeAssertions.ts`.
+- Package 4U, only if Package 4T clears stale guide/channel-setup/player smoke
+  assertions and smoke then fails on fullscreen transition observation:
+  `npm run smoke:electron`, `npm run verify`, and focused source audit of
+  `src/main/smokeFullscreenAssertions.ts`.
 - Package 4V, only if Package 4U proves the smoke window remains unfocused after
   a bounded app/window focus request:
   `npm run smoke:electron`, `npm run verify`, and focused source audit of
@@ -603,6 +608,10 @@ Per-package acceptance:
   sanity, and preload bundling without requiring obsolete fake guide text,
   deleted fake setup controls, or brittle overlay rectangle non-overlap that is
   not part of the current architecture contract.
+- Package 4U: fullscreen smoke transition proof distinguishes renderer API
+  success from observed BrowserWindow fullscreen state without changing product
+  fullscreen behavior, renderer dispatch, preload contracts, or window
+  controller ownership.
 - Package 4V: fullscreen smoke still fails if a focused, fullscreen-capable
   smoke window does not enter fullscreen; only an observed inability to focus the
   smoke window may skip BrowserWindow transition proof while preserving renderer

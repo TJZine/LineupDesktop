@@ -92,7 +92,9 @@ export class PlexRuntimeOperationOwner {
     try {
       const value = await action({ signal: controller.signal, commit });
       if (!isCurrent()) {
-        return this.#fail(requestId, staleError(operation), { stale: true, mutateSnapshot: false });
+        const runtimeError = staleError(operation);
+        this.#recordDiagnostic(operation, 'failed', runtimeError.code);
+        return this.#fail(requestId, runtimeError, { stale: true, mutateSnapshot: false });
       }
       this.#recordDiagnostic(operation, 'succeeded');
       return success(requestId, value);

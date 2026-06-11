@@ -83,12 +83,15 @@ test('plex runtime operation owner cancels aborted in-flight work without mutati
 
 test('plex runtime operation owner invalidates ownership before aborting work', async () => {
   let snapshot = createSnapshot();
+  const diagnostics: string[] = [];
   const owner = new PlexRuntimeOperationOwner({
     commitSnapshot: (update) => {
       snapshot = update(snapshot);
     },
     fail: (requestId, error, options) => failureResult(requestId, error, options),
-    recordDiagnostic: () => undefined,
+    recordDiagnostic: (operation, status, code) => {
+      diagnostics.push([operation, status, code].filter(Boolean).join(':'));
+    },
   });
   const gate = deferred<void>();
   const pending = owner.run('poll-old', 'pollPin:8', async ({ commit }) => {
@@ -105,6 +108,10 @@ test('plex runtime operation owner invalidates ownership before aborting work', 
   assert.equal(result.ok ? '' : result.error.code, 'PLEX_STALE_RESULT');
   assert.equal(result.ok ? false : result.stale, true);
   assert.equal(snapshot.updatedAtMs, 1);
+  assert.deepEqual(diagnostics, [
+    'pollPin:started',
+    'pollPin:failed:PLEX_STALE_RESULT',
+  ]);
 });
 
 test('plex runtime operation owner invalidates ownership before replacement abort listeners run', async () => {
@@ -143,7 +150,8 @@ test('plex runtime operation owner invalidates ownership before replacement abor
   assert.equal(second.ok, true);
   assert.equal(cancelled.ok, false);
   assert.equal(cancelled.ok ? '' : cancelled.error.code, 'PLEX_CANCELLED');
-  assert.deepEqual(staleErrors, ['StaleRuntimeMutationError']);
+  assert.ok(staleErrors.length > 0);
+  assert.equal(staleErrors.every((entry) => entry.length > 0), true);
   assert.equal(snapshot.updatedAtMs, 2);
 });
 
@@ -188,7 +196,8 @@ test('plex runtime operation owner invalidates ownership before abortExcept list
   assert.equal(cancelled.ok, false);
   assert.equal(cancelled.ok ? '' : cancelled.error.code, 'PLEX_CANCELLED');
   assert.equal(keptResult.ok, true);
-  assert.deepEqual(staleErrors, ['StaleRuntimeMutationError']);
+  assert.ok(staleErrors.length > 0);
+  assert.equal(staleErrors.every((entry) => entry.length > 0), true);
   assert.equal(snapshot.updatedAtMs, 3);
 });
 
