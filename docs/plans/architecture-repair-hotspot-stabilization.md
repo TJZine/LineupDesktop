@@ -931,6 +931,18 @@ Acceptance: final program closeout records a reviewed keep/defer/follow-up
 decision for each watch-list owner, including current line count, tests
 protecting it, and revisit trigger.
 
+Package 7 closeout decisions, recorded 2026-06-11 after Packages 1-6:
+
+| Watch-list owner | Current lines | Decision | Protecting verification | Revisit trigger |
+| --- | ---: | --- | --- | --- |
+| `src/contracts/player.ts` | 703 | Keep centralized. This is stable public renderer-safe contract vocabulary; splitting it without a new contract family would add churn without reducing runtime coupling. | `npm run verify`; `src/__tests__/contracts/contracts.test.ts` player contract/event/guard coverage. | Revisit before adding a new public player command, event, snapshot, error, or capability-profile family. |
+| `src/main/plex/streamResolver.ts` | 660 | Defer split. Packages 3 and 5 did not require resolver projection changes, and the resolver remains a main-only private descriptor mapper. | `npm run verify`; `src/__tests__/main/streamResolver.test.ts`; player/Plex playback runtime tests. | Revisit before adding additional stream modes, resolver policy branches, or playback descriptor variants. |
+| `src/main/player/streamPolicy/desktopStreamPolicy.ts` | 624 | Defer split. The policy remains a deterministic fixture-proven decision owner, and no package added codec/platform/track policy behavior. | `npm run verify`; `src/__tests__/main/player/desktopStreamPolicy.test.ts`. | Revisit before adding codec families, platform capability matrices, subtitle/audio branches, or preferred-language policy. |
+| `src/domain/channel/channelManager.ts` | 1022 | Defer split. It is a pure domain mutation/current-channel/persistence coordination owner; no repair package expanded channel domain behavior. | `npm run verify`; `src/__tests__/domain/channelManager.test.ts`; domain boundary verifier. | Revisit before live channel editing, backup/restore, or another persisted mutation workflow grows the owner. |
+| `src/domain/channel/channelRepository.ts` | 770 | Defer split. It remains a pure domain import/source-resolution/cache owner; no package expanded import normalization or persistence schema behavior. | `npm run verify`; `src/__tests__/domain/channelRepository.test.ts`; domain boundary verifier. | Revisit before persisted channel editing, migrations, or import normalization grows this owner. |
+| `src/renderer/epg.ts` | 725 | Defer split. Package 6 moved guide polling freshness out of the renderer root without changing EPG state/view math, so splitting EPG now would be unrelated behavior-neutral churn. | `npm run verify`; `src/__tests__/renderer/epg.test.ts`; `src/__tests__/renderer/epgStateUpdate.test.ts`; Electron smoke guide assertions. | Revisit before adding scheduler-backed guide state families, new guide route interactions, or additional presentation normalization behavior. |
+| `src/renderer/routeDom.ts` | 511 | Defer split. Package 6 moved action registration and runtime subscriptions out of the root; route rendering remains only slightly over the guardrail and stable under existing route DOM tests. | `npm run verify`; `src/__tests__/renderer/routeDom.test.ts`; Electron smoke route assertions. | Revisit before adding route families, guide-specific render branches, or more route interaction rendering. |
+
 ## NEXT_SESSION_HANDOFF
 
 NEXT_SESSION_LAUNCHER: `lineup-desktop-feature-quality-loop`
@@ -945,19 +957,14 @@ PLAN: `docs/plans/architecture-repair-hotspot-stabilization.md`
 
 ARTIFACT: `docs/plans/architecture-repair-hotspot-stabilization.md`
 
-FILES: Start read-only plan review. Do not edit source. If plan review is
-clean, select Package 1 only:
-`src/main/player/nativePlayerHostProcess.ts`,
-`src/main/player/nativeHelperProtocol.ts`,
-`src/main/player/nativePlayerHostPort.ts` only if needed, and
-`src/__tests__/main/player/nativePlayerHostProcess.test.ts`.
+FILES: Packages 1-7 are implemented. If this handoff is resumed before final
+closeout, inspect the latest git status, rerun final verification, adjudicate any
+review findings, and then close/archive the plan per `docs/plans/README.md`
+after durable conclusions are reflected in architecture and guardrail docs.
 
-BLOCKERS: Source implementation is blocked until read-only plan review and
-adjudication are clean. Replan if RD-25 active work or user changes overlap
-the selected package files.
+BLOCKERS: Do not restart completed packages. Replan only if final verification
+or read-only closeout review finds a material ownership, behavior, security, or
+documentation regression.
 
-MESSAGE: Review this active Tier 3 plan first. Prioritize whether the package
-order, owner seams, watch-list deferrals, verification commands, and stop
-triggers are sufficient to prevent hotspot growth without changing product
-behavior. After a clean review, implement Package 1 only and return for
-implementation review before moving to Package 2.
+MESSAGE: This plan is in final closeout state. Verify the completed architecture
+repair program rather than selecting a new implementation package.
