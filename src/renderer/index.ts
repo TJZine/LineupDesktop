@@ -1,5 +1,5 @@
 import type { ShellStatusEvent } from '../contracts/shell.js';
-import { queryRendererDom, readChannelCommitActionId, readChannelSetupActionId, readEpgActionId, readOverlayActionId, readPlexRuntimeActionId, readRouteActionId, readRouteId, readSettingsActionId } from './domBindings.js';
+import { queryRendererDom, type ChannelCommitActionId, type PlexRuntimeActionId } from './domBindings.js';
 import { clickFocusedRendererElement, focusRendererTarget, moveRendererFocus, renderRendererFocus, syncRendererFocusTargets } from './focusDom.js';
 import { createDesktopKeyboardInputListener, startDesktopGamepadRuntime } from './desktopInput.js';
 import { createDesktopCursorRuntime } from './desktopCursor.js';
@@ -11,19 +11,18 @@ import { applySupportBundleExportResult } from './supportBundleExport.js';
 import { createPlexRuntimeController } from './plexRuntimeActions.js';
 import { resolveChannelSetupLiveSelection } from './channelSetup/liveSelection.js';
 import { createChannelRuntimeController } from './channelRuntimeActions.js';
-import { readPlexHomeUserId, readPlexRatingKey, readPlexSectionId, readPlexServerId, renderPlexRuntimeDom } from './plexRuntimeDom.js';
+import { renderPlexRuntimeDom } from './plexRuntimeDom.js';
 import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowChannelSetupAction, applyWorkflowEpgAction, applyWorkflowSettingsAction, createWorkflowState, type ChannelSetupActionId, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
 import { createRendererPresentationFixtures } from './presentationFixtures.js';
 import {
   recordRendererBridgeFailure,
   summarizeRendererBridgeError,
 } from './rendererBridgeFailures.js';
-import {
-  EPG_WINDOW_DURATION_MS,
-  ensureRendererReadyGuidePresentation,
-  setEpgPresentationState,
-  updateEpgState,
-} from './epg.js';
+import { setEpgPresentationState, updateEpgState } from './epg.js';
+import { registerRendererActions } from './rendererActionRegistration.js';
+import { subscribePlayerBridge } from './playerBridgeSubscription.js';
+import { createGuidePresentationPolling } from './guidePresentationPolling.js';
+import { dispatchPlexRuntimeAction } from './plexRuntimeActionDispatch.js';
 
 mountStaticRendererDom();
 
@@ -36,9 +35,6 @@ let overlayState = createPlayerOverlayState(presentationFixtures.overlays);
 let playerSnapshot = presentationFixtures.playerSnapshot;
 const focusRegistry = new FocusRegistry();
 let focusState: FocusState;
-const GUIDE_POLL_INTERVAL_MS = 15_000;
-let guidePollTimer: number | null = null;
-let guidePresentationRequestId = 0;
 const plexController = createPlexRuntimeController({
   bridge: window.lineupDesktop.plex,
   onStateChanged: () => renderApp(),
@@ -54,6 +50,37 @@ focusState = focusRegistry.createInitialState(workflowState.routeState.activeRou
 renderApp();
 
 const unsubscribeShellStatus = window.lineupDesktop.shell.onStatusChanged(renderStatus);
+const playerBridgeSubscription = subscribePlayerBridge({
+  player: window.lineupDesktop.player,
+  diagnostics: window.lineupDesktop.diagnostics,
+  getSnapshot: () => playerSnapshot,
+  setSnapshot: (snapshot) => {
+    playerSnapshot = snapshot;
+  },
+  render: renderApp,
+});
+const guidePresentationPolling = createGuidePresentationPolling({
+  guide: window.lineupDesktop.guide,
+  host: window,
+  getActiveRoute: () => workflowState.routeState.activeRoute,
+  getWindowStartMs: () => workflowState.epg.windowStartMs,
+  setLoading: () => {
+    workflowState = {
+      ...workflowState,
+      epg: setEpgPresentationState(workflowState.epg, 'loading'),
+    };
+    renderApp();
+  },
+  applyPresentation: (normalizedGuidePresentation) => {
+    workflowState = {
+      ...workflowState,
+      guidePresentation: normalizedGuidePresentation,
+      epg: updateEpgState(workflowState.epg, normalizedGuidePresentation),
+    };
+    renderApp();
+  },
+  handleFailure: handleGuidePresentationFailure,
+});
 const cursorRuntime = createDesktopCursorRuntime({
   host: window,
   root: document.documentElement,
@@ -68,199 +95,45 @@ const gamepadRuntime = startDesktopGamepadRuntime({
 
 window.addEventListener('keydown', keydownListener);
 
-const unsubscribePlayer = window.lineupDesktop.player.onEvent((event) => {
-  if (event.event === 'state.changed') {
-    playerSnapshot = event.snapshot;
-  } else if (event.event === 'time.updated') {
-    playerSnapshot = {
-      ...playerSnapshot,
-      positionMs: event.positionMs,
-      durationMs: event.durationMs,
-    };
-  } else if (event.event === 'buffer.updated') {
-    playerSnapshot = {
-      ...playerSnapshot,
-      bufferedRanges: event.bufferedRanges,
-    };
-  } else if (event.event === 'media.loaded') {
-    playerSnapshot = {
-      ...playerSnapshot,
-      status: 'ready',
-      media: event.media,
-      durationMs: event.durationMs,
-    };
-  } else if (event.event === 'tracks.changed') {
-    playerSnapshot = {
-      ...playerSnapshot,
-      tracks: event.tracks,
-    };
-  } else if (event.event === 'track.selection.changed') {
-    playerSnapshot = {
-      ...playerSnapshot,
-      selectedAudioTrackId: event.audioTrackId,
-      selectedSubtitleTrackId: event.subtitleTrackId,
-      selectedVideoTrackId: event.videoTrackId,
-    };
-  } else if (event.event === 'ended') {
-    playerSnapshot = {
-      ...playerSnapshot,
-      status: 'ended',
-      playing: false,
-    };
-  } else if (event.event === 'error') {
-    playerSnapshot = {
-      ...playerSnapshot,
-      status: 'error',
-      playing: false,
-      lastError: event.error,
-    };
-  }
-  renderApp();
-});
-
-void initializePlayerSnapshot();
+void playerBridgeSubscription.initializeSnapshot();
 
 window.addEventListener('beforeunload', () => {
   window.removeEventListener('keydown', keydownListener);
   cursorRuntime.cleanup();
   gamepadRuntime.cleanup();
   unsubscribeShellStatus();
-  unsubscribePlayer();
-  stopGuidePresentationPolling();
+  playerBridgeSubscription.unsubscribe();
+  guidePresentationPolling.stop();
   cleanupPlexRuntime('beforeunload');
 });
 
-for (const button of dom.routeButtons) {
-  button.addEventListener('click', () => {
-    const route = readRouteId(button.dataset.routeButton);
-    if (route !== null) {
-      activateRoute(route);
-    }
-  });
-}
-
-for (const button of dom.routeActionButtons) {
-  button.addEventListener('click', () => {
-    const action = readRouteActionId(button.dataset.routeAction);
-    if (action !== null) {
-      void applyRouteAction(action);
-    }
-  });
-}
-
-for (const button of dom.settingsActionButtons) {
-  button.addEventListener('click', () => {
-    const action = readSettingsActionId(button.dataset.settingsAction);
-    if (action !== null) {
-      applySettingsAction(action);
-    }
-  });
-}
-
-for (const button of dom.setupActionButtons) {
-  button.addEventListener('click', () => {
-    const action = readChannelSetupActionId(button.dataset.setupAction);
-    if (action !== null) {
-      applyChannelSetupAction(action);
-    }
-  });
-}
-
-dom.channelSetupStrategyElement?.addEventListener('click', (event) => {
-  if (!(event.target instanceof HTMLElement)) {
-    return;
-  }
-  const button = event.target.closest<HTMLButtonElement>('[data-setup-action]');
-  const action = readChannelSetupActionId(button?.dataset.setupAction);
-  if (action !== null) {
-    applyChannelSetupAction(action);
-  }
-});
-
-for (const button of dom.channelCommitButtons) {
-  button.addEventListener('click', () => {
-    const action = readChannelCommitActionId(button.dataset.channelCommitAction);
-    if (action !== null) {
-      void applyChannelCommitAction(action);
-    }
-  });
-}
-
-for (const button of dom.epgActionButtons) {
-  button.addEventListener('click', () => {
-    const action = readEpgActionId(button.dataset.epgAction);
-    if (action !== null) {
-      applyEpgAction(action);
-    }
-  });
-}
-
-for (const button of dom.overlayActionButtons) {
-  button.addEventListener('click', () => {
-    const action = readOverlayActionId(button.dataset.overlayAction);
-    if (action !== null) {
-      applyOverlayAction(action);
-    }
-  });
-}
-
-for (const button of dom.plexActionButtons) {
-  button.addEventListener('click', () => {
-    const action = readPlexRuntimeActionId(button.dataset.plexAction);
-    if (action !== null) {
-      void applyPlexRuntimeAction(action);
-    }
-  });
-}
-
-dom.plexHomeUserPinInput?.addEventListener('input', () => {
-  plexController.setHomeUserPin(dom.plexHomeUserPinInput?.value ?? '');
-});
-
-dom.plexSearchQueryInput?.addEventListener('input', () => {
-  plexController.setSearchQuery(dom.plexSearchQueryInput?.value ?? '');
-});
-
-dom.plexPanelElement?.addEventListener('click', (event) => {
-  if (!(event.target instanceof HTMLElement)) {
-    return;
-  }
-  const homeUserButton = event.target.closest<HTMLElement>('[data-plex-home-user-id]');
-  const serverButton = event.target.closest<HTMLElement>('[data-plex-server-id]');
-  const sectionButton = event.target.closest<HTMLElement>('[data-plex-section-id]');
-  const itemButton = event.target.closest<HTMLElement>('[data-plex-rating-key]');
-  const homeUserId = homeUserButton === null ? null : readPlexHomeUserId(homeUserButton);
-  const serverId = serverButton === null ? null : readPlexServerId(serverButton);
-  const sectionId = sectionButton === null ? null : readPlexSectionId(sectionButton);
-  const ratingKey = itemButton === null ? null : readPlexRatingKey(itemButton);
-
-  if (homeUserId !== null) {
+registerRendererActions(dom, document, {
+  activateRoute,
+  applyRouteAction: (action) => { void applyRouteAction(action); },
+  applySettingsAction,
+  applyChannelSetupAction,
+  applyChannelCommitAction: (action) => { void applyChannelCommitAction(action); },
+  applyEpgAction,
+  applyOverlayAction,
+  applyPlexRuntimeAction: (action) => { void applyPlexRuntimeAction(action); },
+  setPlexHomeUserPin: (value) => plexController.setHomeUserPin(value),
+  setPlexSearchQuery: (value) => plexController.setSearchQuery(value),
+  selectPlexHomeUser: (homeUserId) => {
     clearChannelSetupActionStateForSourceChange();
     void plexController.switchHomeUser(homeUserId);
-  } else if (serverId !== null) {
+  },
+  selectPlexServer: (serverId) => {
     clearChannelSetupActionStateForSourceChange();
     void plexController.selectServer(serverId);
-  } else if (sectionId !== null) {
+  },
+  selectPlexSection: (sectionId) => {
     clearChannelSetupActionStateForSourceChange();
     plexController.setSelectedSection(sectionId);
     void plexController.listLibraryItems(sectionId);
-  } else if (ratingKey !== null) {
-    void plexController.getMetadata(ratingKey);
-  }
-});
-
-for (const element of dom.focusableElements) {
-  element.addEventListener('focus', () => focusRendererElement(element));
-}
-
-document.addEventListener('focusin', (event) => {
-  if (event.target instanceof HTMLElement) {
-    focusRendererElement(event.target);
-  }
-});
-
-dom.fullscreenButton?.addEventListener('click', () => {
-  void toggleFullscreen();
+  },
+  openPlexMetadata: (ratingKey) => { void plexController.getMetadata(ratingKey); },
+  focusElement: focusRendererElement,
+  toggleFullscreen: () => { void toggleFullscreen(); },
 });
 
 const capabilities = await window.lineupDesktop.shell.getCapabilities();
@@ -275,7 +148,7 @@ document.documentElement.dataset.activeRoute = workflowState.routeState.activeRo
 void plexController.loadSnapshot();
 void channelController.loadStatus();
 if (workflowState.routeState.activeRoute === 'guide') {
-  void startGuidePresentationPolling();
+  guidePresentationPolling.start();
 }
 
 function renderStatus(event: ShellStatusEvent): void {
@@ -357,19 +230,10 @@ function applyChannelSetupAction(action: ChannelSetupActionId): void {
 }
 
 function reconcileGuidePresentationPolling(previousRoute: AppRouteId, nextRoute: AppRouteId): void {
-  if (previousRoute === 'guide' && nextRoute !== 'guide') {
-    stopGuidePresentationPolling();
-    return;
-  }
-  if (nextRoute === 'guide' && previousRoute !== 'guide') {
-    void startGuidePresentationPolling();
-  }
+  guidePresentationPolling.reconcile(previousRoute, nextRoute);
 }
 
-async function applyChannelCommitAction(action: ReturnType<typeof readChannelCommitActionId>): Promise<void> {
-  if (action === null) {
-    return;
-  }
+async function applyChannelCommitAction(action: ChannelCommitActionId): Promise<void> {
   const plexState = plexController.getState();
   const sectionId = resolveLiveSelectedPlexSectionId(plexState);
   if (sectionId === null) {
@@ -390,7 +254,7 @@ function applyEpgAction(action: EpgActionId): void {
   workflowState = applyWorkflowEpgAction(workflowState, action);
   renderApp();
   if (workflowState.epg.windowStartMs !== previousWindowStartMs) {
-    void refreshGuidePresentation('epg-window-change');
+    void guidePresentationPolling.refresh('epg-window-change');
   }
 }
 
@@ -433,125 +297,11 @@ async function exportSupportBundle(): Promise<void> {
   renderApp();
 }
 
-async function applyPlexRuntimeAction(action: ReturnType<typeof readPlexRuntimeActionId>): Promise<void> {
-  switch (action) {
-    case 'loadSnapshot':
-      await plexController.loadSnapshot();
-      return;
-    case 'requestPin':
-      await plexController.requestPin();
-      return;
-    case 'pollPin':
-      await plexController.pollPin();
-      return;
-    case 'cancelPin':
-      await plexController.cancelPin();
-      return;
-    case 'getHomeUsers':
-      await plexController.getHomeUsers();
-      return;
-    case 'restoreSelectedServer':
-      clearChannelSetupActionStateForSourceChange();
-      await plexController.restoreSelectedServer();
-      return;
-    case 'refreshServers':
-      await plexController.refreshServers();
-      return;
-    case 'listLibrarySections':
-      await plexController.listLibrarySections();
-      return;
-    case 'listLibraryItems':
-      await plexController.listLibraryItems();
-      return;
-    case 'searchLibrary':
-      await plexController.searchLibrary();
-      return;
-    case 'clearMetadata':
-      plexController.clearMetadata();
-      return;
-    case 'clearSearch':
-      plexController.clearSearch();
-      return;
-    case 'clearItems':
-      plexController.clearItems();
-      return;
-    case 'clearSelectedSection':
-      clearChannelSetupActionStateForSourceChange();
-      plexController.clearSelectedSection();
-      return;
-    case 'clearSelectedServer':
-      clearChannelSetupActionStateForSourceChange();
-      plexController.clearSelectedServer();
-      return;
-    case 'clearPinSubflow':
-      clearChannelSetupActionStateForSourceChange();
-      await plexController.clearPinSubflow();
-      return;
-    case null:
-      return;
-  }
-}
-
-function startGuidePresentationPolling(): void {
-  stopGuidePresentationPolling();
-  void refreshGuidePresentation('poll-start');
-  guidePollTimer = window.setInterval(() => {
-    void refreshGuidePresentation('poll-interval');
-  }, GUIDE_POLL_INTERVAL_MS) as number;
-}
-
-function stopGuidePresentationPolling(): void {
-  if (guidePollTimer !== null) {
-    window.clearInterval(guidePollTimer);
-    guidePollTimer = null;
-  }
-  guidePresentationRequestId += 1;
-}
-
-async function refreshGuidePresentation(source: string): Promise<void> {
-  const requestId = ++guidePresentationRequestId;
-  if (workflowState.routeState.activeRoute !== 'guide') {
-    return;
-  }
-
-  workflowState = {
-    ...workflowState,
-    epg: setEpgPresentationState(workflowState.epg, 'loading'),
-  };
-  renderApp();
-
-  let result: Awaited<ReturnType<typeof window.lineupDesktop.guide.getPresentation>>;
-  try {
-    result = await window.lineupDesktop.guide.getPresentation({
-      startTimeMs: workflowState.epg.windowStartMs,
-      durationMs: EPG_WINDOW_DURATION_MS,
-    });
-  } catch (error: unknown) {
-    if (requestId === guidePresentationRequestId && workflowState.routeState.activeRoute === 'guide') {
-      handleGuidePresentationFailure(source, summarizeRendererBridgeError(error));
-    }
-    return;
-  }
-
-  if (requestId !== guidePresentationRequestId || workflowState.routeState.activeRoute !== 'guide') {
-    return;
-  }
-
-  if (!result.ok) {
-    handleGuidePresentationFailure(source, result.error.message);
-    return;
-  }
-  const normalizedGuidePresentation = ensureRendererReadyGuidePresentation(
-    result.value,
-    workflowState.epg.windowStartMs,
-  );
-
-  workflowState = {
-    ...workflowState,
-    guidePresentation: normalizedGuidePresentation,
-    epg: updateEpgState(workflowState.epg, normalizedGuidePresentation),
-  };
-  renderApp();
+async function applyPlexRuntimeAction(action: PlexRuntimeActionId): Promise<void> {
+  await dispatchPlexRuntimeAction(action, {
+    controller: plexController,
+    clearSourceActionState: clearChannelSetupActionStateForSourceChange,
+  });
 }
 
 async function tuneGuideSelectedChannel(): Promise<void> {
@@ -587,25 +337,6 @@ async function tuneGuideSelectedChannel(): Promise<void> {
   }
 
   handleGuideTuneFailure(guideChannelId, result.error.message);
-}
-
-async function initializePlayerSnapshot(): Promise<void> {
-  try {
-    const result = await window.lineupDesktop.player.getSnapshot();
-    if (result.ok) {
-      playerSnapshot = result.value;
-      renderApp();
-      return;
-    }
-    recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'player.getSnapshot', result.error.message, {});
-  } catch (error: unknown) {
-    recordRendererBridgeFailure(
-      window.lineupDesktop.diagnostics.recordRendererEvent,
-      'player.getSnapshot',
-      summarizeRendererBridgeError(error),
-      {},
-    );
-  }
 }
 
 function handleGuidePresentationFailure(source: string, message: string): void {
