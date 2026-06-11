@@ -696,3 +696,78 @@ test('native host process drops stderr content before diagnostics storage', asyn
   assertTextAbsent(diagnostics.getRecords(), forbiddenUrl);
   assertTextAbsent(diagnostics.getRecords(), forbiddenHandle);
 });
+
+test('native host process serializes private playback details correctly', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+
+  const context = {
+    privatePlayback: {
+      requestId: 'native-load-1',
+      decisionKind: 'direct-play' as const,
+      playbackUrl: 'https://private.example/library/parts/main',
+      credentialHeader: {
+        name: 'X-Private-Header',
+        value: 'private-value',
+      },
+      setup: {
+        playbackMode: 'direct-play' as const,
+        mediaPath: '/library/metadata/rating-1',
+        variantId: 'plex-variant-main',
+        partPath: '/library/parts/main',
+        selectedTrackIds: { video: null, audio: null, subtitle: null },
+        selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+      },
+      selectedConnection: {
+        protocol: 'https' as const,
+        address: 'private.example',
+        port: 443,
+        local: false,
+        relay: false,
+      },
+      media: { id: 'media-1', title: 'Episode 1' },
+    },
+  };
+
+  const pending = host.execute(loadCommand, context);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(child.writes[0], {
+    type: 'command',
+    requestId: 'native-load-1',
+    command: 'load',
+    payload: loadCommand.payload,
+    setup: context.privatePlayback.setup,
+    playbackUrl: context.privatePlayback.playbackUrl,
+    credentialHeader: context.privatePlayback.credentialHeader,
+  });
+
+  child.send({ type: 'result', requestId: 'native-load-1', ok: true, events: [] });
+  const result = await pending;
+  assert.equal(result.ok, true);
+});
+
+test('native host process rejects oversized messages', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+
+  // Create an oversized command by adding a huge payload
+  const oversizedCommand = {
+    ...loadCommand,
+    payload: {
+      ...loadCommand.payload,
+      hugeField: 'x'.repeat(1024 * 1024 + 10),
+    },
+  };
+
+  const result = await host.execute(oversizedCommand);
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'PLAYER_HELPER_MESSAGE_TOO_LARGE');
+});
+

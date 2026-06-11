@@ -16,6 +16,9 @@ import type {
   NativePlayerHostLifecycleFailure,
   NativePlayerHostPort,
 } from './nativePlayerHostPort.js';
+import type { PrivilegedPlaybackDispatchContext } from './privilegedPlaybackDispatchContext.js';
+import { validateHelperMessageSize } from './nativeHelperProtocol.js';
+import type { NativeHelperInputMessage } from './nativeHelperProtocol.js';
 type ProcessMessage =
   | { type: 'result'; requestId: PlayerRequestId; ok: true; events?: readonly NativePlayerHostEvent[] }
   | { type: 'result'; requestId: PlayerRequestId; ok: false; error?: unknown }
@@ -60,7 +63,10 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     this.#cleanupGraceMs = options.cleanupGraceMs ?? DEFAULT_CLEANUP_GRACE_MS;
     this.#diagnosticEventStore = options.diagnosticEventStore;
   }
-  async execute(command: PlayerCommand): Promise<NativePlayerHostCommandResult> {
+  async execute(
+    command: PlayerCommand,
+    context?: PrivilegedPlaybackDispatchContext | null,
+  ): Promise<NativePlayerHostCommandResult> {
     const child = this.#getOrSpawnChild();
     if ('error' in child) {
       return { ok: false, error: child.error };
@@ -84,7 +90,10 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       };
       this.#pending.set(command.requestId, pending);
       try {
-        activeChild.stdin.write(`${JSON.stringify(toProcessCommand(command))}\n`, (error) => {
+        const procCmd = toProcessCommand(command, context);
+        const serialized = JSON.stringify(procCmd);
+        validateHelperMessageSize(serialized);
+        activeChild.stdin.write(`${serialized}\n`, (error) => {
           if (error !== null && error !== undefined) {
             this.#resolvePending(
               command.requestId,
@@ -95,10 +104,16 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
             );
           }
         });
-      } catch {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Write failed';
         this.#resolvePending(command.requestId, {
           ok: false,
-          error: safeFailure('PLAYER_HELPER_WRITE_FAILED', 'helper-failure', true, true),
+          error: safeFailure(
+            msg.includes('exceeds maximum limit') ? 'PLAYER_HELPER_MESSAGE_TOO_LARGE' : 'PLAYER_HELPER_WRITE_FAILED',
+            'helper-failure',
+            true,
+            true,
+          ),
         });
       }
     });
@@ -386,8 +401,28 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     });
   }
 }
-function toProcessCommand(command: PlayerCommand): Record<string, unknown> {
-  return { type: 'command', requestId: command.requestId, command: command.command, payload: command.payload };
+function toProcessCommand(
+  command: PlayerCommand,
+  context?: PrivilegedPlaybackDispatchContext | null,
+): NativeHelperInputMessage {
+  if (command.command === 'load' && context?.privatePlayback) {
+    const { setup, playbackUrl, credentialHeader } = context.privatePlayback;
+    return {
+      type: 'command',
+      requestId: command.requestId,
+      command: command.command,
+      payload: command.payload,
+      setup,
+      playbackUrl,
+      credentialHeader,
+    };
+  }
+  return {
+    type: 'command',
+    requestId: command.requestId,
+    command: command.command,
+    payload: command.payload,
+  };
 }
 function parseProcessMessage(
   line: string,
