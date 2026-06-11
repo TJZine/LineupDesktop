@@ -96,6 +96,7 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
       requestId,
       load: result.load,
       pmsSession: result.pmsSession,
+      privatePlayback: result.privatePlayback,
     };
   }
 

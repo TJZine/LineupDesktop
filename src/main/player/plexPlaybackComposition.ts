@@ -6,9 +6,17 @@ import type { PlexStreamResolverInput, PlexStreamResolverResult } from '../plex/
 import { PlexPlaybackBridge } from './plexPlaybackBridge.js';
 import { PlexPlaybackRuntime, type PlexPlaybackRuntimeClockPort, type PlexPlaybackRuntimePlayerPort, type PlexPlaybackRuntimePmsPort } from './plexPlaybackRuntime.js';
 import type { DesktopStreamCapabilityProfile } from './streamPolicy/types.js';
+import type { PrivilegedPlaybackDispatchContext } from './privilegedPlaybackDispatchContext.js';
 
 type DesktopPlayerAdapterRuntimePort = {
   dispatchRendererIntent(envelope: PlayerRendererIntentEnvelope): Promise<{
+    accepted: boolean;
+    events: readonly PlayerEvent[];
+  }>;
+  dispatchRuntimeCommand(
+    command: PlayerCommand,
+    context?: PrivilegedPlaybackDispatchContext | null,
+  ): Promise<{
     accepted: boolean;
     events: readonly PlayerEvent[];
   }>;
@@ -72,8 +80,8 @@ export function createDesktopPlayerAdapterRuntimePort(
   adapter: DesktopPlayerAdapterRuntimePort,
 ): PlexPlaybackRuntimePlayerPort {
   return {
-    async dispatch(command) {
-      const result = await adapter.dispatchRendererIntent(toRendererIntentEnvelope(command));
+    async dispatch(command, context) {
+      const result = await adapter.dispatchRuntimeCommand(command, context);
       return { ok: result.accepted, events: result.events };
     },
     async cleanup(_requestId) {

@@ -9,6 +9,8 @@ import {
   type PlayerRequestId,
 } from '../../contracts/player.js';
 import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.js';
+import type { PlexPrivilegedPlaybackDescriptor } from '../plex/streamResolver.js';
+import type { PrivilegedPlaybackDispatchContext } from './privilegedPlaybackDispatchContext.js';
 export type PlexPlaybackRuntimeCleanupReason =
   | 'stop'
   | 'switch'
@@ -38,6 +40,7 @@ export interface PlexPlaybackRuntimeCandidate {
   requestId?: PlayerRequestId;
   load: PlayerLoadCommandPayload;
   pmsSession?: PlexPlaybackPmsSessionLease | null;
+  privatePlayback?: PlexPrivilegedPlaybackDescriptor | null;
 }
 export interface PlexPlaybackRuntimeChannelPort {
   resolvePlaybackCandidate(
@@ -54,7 +57,7 @@ export type PlexPlaybackRuntimePlayerDispatchResult =
       events?: readonly PlayerEvent[];
     };
 export interface PlexPlaybackRuntimePlayerPort {
-  dispatch(command: PlayerCommand): Promise<PlexPlaybackRuntimePlayerDispatchResult>;
+  dispatch(command: PlayerCommand, context?: PrivilegedPlaybackDispatchContext | null): Promise<PlexPlaybackRuntimePlayerDispatchResult>;
   cleanup(requestId: PlayerRequestId | null): Promise<void>;
 }
 export interface PlexPlaybackRuntimePmsPort {
@@ -178,7 +181,8 @@ export class PlexPlaybackRuntime {
       this.#emit(events);
       return { accepted: false, epoch, requestId: null, events };
     }
-    if (!isSafeRuntimeCandidate(candidate)) {
+    const { privatePlayback, ...publicCandidate } = candidate;
+    if (!isSafeRuntimeCandidate(publicCandidate)) {
       const rejectedSession = readReleasablePmsSession(candidate);
       if (rejectedSession !== null) {
         events.push(...(await this.#releaseUnsafeCandidateSession(rejectedSession)));
@@ -212,7 +216,8 @@ export class PlexPlaybackRuntime {
     };
     let playerResult: PlexPlaybackRuntimePlayerDispatchResult;
     try {
-      playerResult = await this.#player.dispatch(command);
+      const context = candidate.privatePlayback ? { privatePlayback: candidate.privatePlayback } : null;
+      playerResult = await this.#player.dispatch(command, context);
     } catch {
       playerResult = { ok: false };
     }

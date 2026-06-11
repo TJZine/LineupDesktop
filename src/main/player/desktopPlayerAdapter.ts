@@ -26,6 +26,10 @@ import type {
   NativePlayerHostPort,
   NativePlayerHostStatus,
 } from './nativePlayerHostPort.js';
+import {
+  type PrivilegedPlaybackDispatchContext,
+  validatePrivilegedPlaybackDescriptor,
+} from './privilegedPlaybackDispatchContext.js';
 type UnknownRecord = Record<string, unknown>;
 interface CommandMappingResult {
   command: PlayerCommand;
@@ -42,6 +46,7 @@ export interface DesktopPlayerAdapterDispatchResult {
 export interface DesktopPlayerAdapterOptions {
   onEvents?: (events: readonly PlayerEvent[]) => void;
   diagnosticEventStore?: DiagnosticEventStore;
+  rejectRendererLoad?: boolean;
 }
 const EMPTY_PAYLOAD: Record<string, never> = {};
 const PLAYER_INTENT_TO_COMMAND = {
@@ -80,12 +85,14 @@ export class DesktopPlayerAdapter {
   readonly #host: NativePlayerHostPort;
   readonly #onEvents?: (events: readonly PlayerEvent[]) => void;
   readonly #diagnosticEventStore?: DiagnosticEventStore;
+  readonly #rejectRendererLoad: boolean;
   #snapshot: PlayerSnapshot = createInitialSnapshot();
   #pendingCommands = new Map<PlayerRequestId, PlayerCommandName>();
   constructor(host: NativePlayerHostPort, options: DesktopPlayerAdapterOptions = {}) {
     this.#host = host;
     this.#onEvents = options.onEvents;
     this.#diagnosticEventStore = options.diagnosticEventStore;
+    this.#rejectRendererLoad = options.rejectRendererLoad ?? false;
     host.onLifecycleFailure?.((failure) => {
       const events = this.handleHostLifecycleFailure(failure);
       if (events.length > 0) {
@@ -106,6 +113,22 @@ export class DesktopPlayerAdapter {
       return this.#result(false, null, events);
     }
     const { command } = commandResult;
+    if (command.command === 'load' && this.#rejectRendererLoad) {
+      const error = createPlayerError({
+        code: 'PLAYER_UNSUPPORTED_CAPABILITY',
+        category: 'unsupported-capability',
+        message: 'Renderer-originated load commands are not supported in production native mode.',
+        requestId: command.requestId,
+        diagnostic: {
+          component: 'desktop-player-adapter',
+          operation: 'load',
+          status: 'rejected',
+          reason: 'renderer load command blocked',
+        },
+      });
+      const events = this.#recordError(error);
+      return this.#result(false, command, events);
+    }
     this.#pendingCommands.set(command.requestId, command.command);
     const events: PlayerEvent[] = [];
     if (command.command === 'load') {
@@ -127,6 +150,117 @@ export class DesktopPlayerAdapter {
     }
     try {
       const hostResult = await this.#host.execute(command);
+      if (hostResult.ok) {
+        for (const hostEvent of hostResult.events ?? []) {
+          events.push(...this.handleHostEvent(hostEvent));
+        }
+        events.push({
+          event: 'command.settled',
+          requestId: command.requestId,
+          command: command.command,
+          ok: true,
+        });
+        return this.#result(true, command, events);
+      }
+      const error = hostFailureToError(command.requestId, hostResult.error);
+      this.#recordHelperDiagnostic(command.requestId, 'host.command', 'failed', error.code);
+      events.push(...this.#recordError(error));
+      events.push({
+        event: 'command.settled',
+        requestId: command.requestId,
+        command: command.command,
+        ok: false,
+        error,
+      });
+      return this.#result(true, command, events);
+    } catch {
+      const error = createPlayerError({
+        code: 'PLAYER_HELPER_COMMAND_FAILED',
+        category: 'helper-failure',
+        message: 'The player helper failed while handling the command.',
+        requestId: command.requestId,
+        diagnostic: {
+          component: 'desktop-player-adapter',
+          operation: command.command,
+          status: 'failed',
+          reason: 'helper command rejected',
+        },
+      });
+      this.#recordHelperDiagnostic(command.requestId, 'host.command', 'failed', 'PLAYER_HELPER_COMMAND_FAILED');
+      events.push(...this.#recordError(error));
+      events.push({
+        event: 'command.settled',
+        requestId: command.requestId,
+        command: command.command,
+        ok: false,
+        error,
+      });
+      return this.#result(true, command, events);
+    } finally {
+      this.#pendingCommands.delete(command.requestId);
+    }
+  }
+  async dispatchRuntimeCommand(
+    command: PlayerCommand,
+    context?: PrivilegedPlaybackDispatchContext | null,
+  ): Promise<DesktopPlayerAdapterDispatchResult> {
+    if (command.command === 'load') {
+      if (!context || !context.privatePlayback) {
+        const error = createPlayerError({
+          code: 'PLAYER_VALIDATION_FAILED',
+          category: 'validation-failure',
+          message: 'Privileged playback context is missing.',
+          requestId: command.requestId,
+          diagnostic: {
+            component: 'desktop-player-adapter',
+            operation: 'load',
+            status: 'rejected',
+            reason: 'missing private playback descriptor',
+          },
+        });
+        const events = this.#recordError(error);
+        return this.#result(false, command, events);
+      }
+      try {
+        validatePrivilegedPlaybackDescriptor(context.privatePlayback, command.requestId);
+      } catch (err: any) {
+        const error = createPlayerError({
+          code: 'PLAYER_VALIDATION_FAILED',
+          category: 'validation-failure',
+          message: err?.message || 'Invalid privileged playback descriptor.',
+          requestId: command.requestId,
+          diagnostic: {
+            component: 'desktop-player-adapter',
+            operation: 'load',
+            status: 'rejected',
+            reason: 'invalid private playback descriptor',
+          },
+        });
+        const events = this.#recordError(error);
+        return this.#result(false, command, events);
+      }
+    }
+    this.#pendingCommands.set(command.requestId, command.command);
+    const events: PlayerEvent[] = [];
+    if (command.command === 'load') {
+      this.#snapshot = {
+        ...this.#snapshot,
+        requestId: command.requestId,
+        status: 'loading',
+        media: command.payload.media,
+        capabilityProfileId: command.payload.capabilityProfileId ?? null,
+        positionMs: command.payload.policy.startPositionMs ?? 0,
+        durationMs: command.payload.media.durationMs ?? null,
+        selectedAudioTrackId: command.payload.policy.preferredAudioTrackId ?? null,
+        selectedSubtitleTrackId: command.payload.policy.preferredSubtitleTrackId ?? null,
+        selectedVideoTrackId: null,
+        tracks: [],
+        lastError: null,
+      };
+      events.push(this.#stateChanged());
+    }
+    try {
+      const hostResult = await this.#host.execute(command, context);
       if (hostResult.ok) {
         for (const hostEvent of hostResult.events ?? []) {
           events.push(...this.handleHostEvent(hostEvent));

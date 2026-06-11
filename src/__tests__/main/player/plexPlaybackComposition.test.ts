@@ -22,6 +22,7 @@ import type {
 } from '../../../main/player/plexPlaybackRuntime.js';
 import type { DesktopStreamCapabilityProfile } from '../../../main/player/streamPolicy/types.js';
 import { assertPublicSafe } from './playerPublicSafetyAssertions.js';
+import type { PrivilegedPlaybackDispatchContext } from '../../../main/player/privilegedPlaybackDispatchContext.js';
 
 const rawPrivateValues = [
   ['X', 'Plex', 'Token'].join('-'),
@@ -235,6 +236,30 @@ class FakeDesktopPlayerAdapter {
   }> {
     this.envelopes.push(envelope);
     return { accepted: true, events: [] };
+  }
+
+  async dispatchRuntimeCommand(
+    command: PlayerCommand,
+    context?: PrivilegedPlaybackDispatchContext | null,
+  ): Promise<{
+    accepted: boolean;
+    events: readonly PlayerEvent[];
+  }> {
+    const toRendererIntentEnvelope = (cmd: PlayerCommand): PlayerRendererIntentEnvelope => {
+      switch (cmd.command) {
+        case 'load':
+          return { intent: 'player.load', requestId: cmd.requestId, payload: cmd.payload };
+        case 'play':
+          return { intent: 'player.play', requestId: cmd.requestId, payload: {} };
+        case 'pause':
+          return { intent: 'player.pause', requestId: cmd.requestId, payload: {} };
+        case 'stop':
+          return { intent: 'player.stop', requestId: cmd.requestId, payload: {} };
+        default:
+          return { intent: 'player.play', requestId: cmd.requestId, payload: {} };
+      }
+    };
+    return this.dispatchRendererIntent(toRendererIntentEnvelope(command));
   }
 
   async cleanup(): Promise<{ accepted: boolean; events: readonly PlayerEvent[] }> {
