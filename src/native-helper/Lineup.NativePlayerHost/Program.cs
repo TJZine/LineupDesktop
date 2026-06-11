@@ -23,16 +23,21 @@ namespace Lineup.NativePlayerHost
         private const int GlColorBufferBit = 0x00004000;
         private const int SwpShowWindow = 0x0040;
         private static readonly IntPtr HwndTopmost = new IntPtr(-1);
+        private static readonly object MpvLock = new object();
 
         private static string? libmpvPath;
+        private static bool libmpvResolverRegistered = false;
         private static IntPtr mpvContext = IntPtr.Zero;
         private static string? currentRequestId;
+        private static string? currentMediaId;
+        private static string? currentMediaTitle;
         private static double cachedDurationSeconds = 0;
         private static bool isPaused = false;
         private static bool isBuffering = false;
 
         private static RenderSurface? renderSurface;
         private static Thread? renderThread;
+        private static Thread? eventThread;
         private static bool renderThreadRunning = false;
         private static IntPtr renderContext = IntPtr.Zero;
 
@@ -117,7 +122,7 @@ namespace Lineup.NativePlayerHost
             public string? value { get; set; }
         }
 
-        public static int Main()
+        public static int Main(string[] args)
         {
             try
             {
@@ -127,6 +132,8 @@ namespace Lineup.NativePlayerHost
                     WriteEvent("blocked", new Dictionary<string, object?> { ["reason"] = "windows-required" });
                     return 2;
                 }
+
+                ConfigureLibmpvPath(args);
 
                 // Process stdin NDJSON stream
                 Thread commandThread = new Thread(CommandLoop)
@@ -201,6 +208,8 @@ namespace Lineup.NativePlayerHost
                     }
 
                     InitializeMpv(msg);
+                    currentRequestId = msg.requestId;
+                    CacheLoadedMedia(msg);
 
                     // Configure headers
                     if (msg.credentialHeader != null && !string.IsNullOrEmpty(msg.credentialHeader.name) && !string.IsNullOrEmpty(msg.credentialHeader.value))
@@ -212,6 +221,8 @@ namespace Lineup.NativePlayerHost
                     int loadResult = Command(mpvContext, "loadfile", msg.playbackUrl, "replace");
                     if (loadResult == 0)
                     {
+                        ApplySelectedPrivateTracks(msg.setup.selectedPrivateTrackIds);
+
                         // Generate loading event
                         WriteOutputEvent(new Dictionary<string, object?>
                         {
@@ -296,89 +307,90 @@ namespace Lineup.NativePlayerHost
 
         private static void InitializeMpv(InputMessage msg)
         {
-            if (mpvContext != IntPtr.Zero)
+            lock (MpvLock)
             {
-                return;
+                if (mpvContext != IntPtr.Zero)
+                {
+                    TeardownMpvContext();
+                }
+
+                EnsureLibmpvResolverRegistered();
+
+                mpvContext = NativeMethods.mpv_create();
+                if (mpvContext == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException("Failed to create libmpv context.");
+                }
+
+                SetOption(mpvContext, "terminal", "no");
+                SetOption(mpvContext, "msg-level", "all=no");
+                SetOption(mpvContext, "vo", "libmpv");
+                SetOption(mpvContext, "osc", "no");
+
+                int initResult = NativeMethods.mpv_initialize(mpvContext);
+                if (initResult != 0)
+                {
+                    throw new InvalidOperationException($"Failed to initialize libmpv: {initResult}");
+                }
+
+                // Create topmost presentation window
+                renderSurface = RenderSurface.TryCreate();
+                if (renderSurface == null)
+                {
+                    throw new InvalidOperationException("Failed to create presentation render window.");
+                }
+
+                // Create OpenGL Render Context
+                IntPtr apiType = Marshal.StringToHGlobalAnsi("opengl");
+                MpvOpenGlInitParams initParams = new MpvOpenGlInitParams
+                {
+                    get_proc_address = Marshal.GetFunctionPointerForDelegate((MpvOpenGlGetProcAddressDelegate)GetOpenGlProcAddress),
+                    get_proc_address_ctx = IntPtr.Zero
+                };
+                IntPtr initParamsPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MpvOpenGlInitParams>());
+                Marshal.StructureToPtr(initParams, initParamsPtr, false);
+
+                IntPtr initParamArray = AllocRenderParams(
+                    new MpvRenderParam { type = 1, data = apiType },
+                    new MpvRenderParam { type = 2, data = initParamsPtr }
+                );
+
+                renderSurface.MakeCurrent();
+                int contextResult = NativeMethods.mpv_render_context_create(out renderContext, mpvContext, initParamArray);
+                NativeMethods.wglMakeCurrent(IntPtr.Zero, IntPtr.Zero);
+
+                Marshal.FreeHGlobal(initParamArray);
+                Marshal.FreeHGlobal(initParamsPtr);
+                Marshal.FreeHGlobal(apiType);
+
+                if (contextResult != 0 || renderContext == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException($"Failed to create libmpv render context: {contextResult}");
+                }
+
+                // Start rendering thread
+                renderThreadRunning = true;
+                renderThread = new Thread(RenderLoop)
+                {
+                    IsBackground = true,
+                    Name = "LineupRenderLoop"
+                };
+                renderThread.Start();
+
+                // Observe properties
+                NativeMethods.mpv_observe_property(mpvContext, 1, "time-pos", MpvFormatDouble);
+                NativeMethods.mpv_observe_property(mpvContext, 2, "duration", MpvFormatDouble);
+                NativeMethods.mpv_observe_property(mpvContext, 3, "pause", MpvFormatFlag);
+                NativeMethods.mpv_observe_property(mpvContext, 4, "core-idle", MpvFormatFlag);
+
+                // Start Event Poll Loop
+                eventThread = new Thread(EventPollLoop)
+                {
+                    IsBackground = true,
+                    Name = "LineupEventPollLoop"
+                };
+                eventThread.Start();
             }
-
-            // Setup dynamic library loading path
-            libmpvPath = "libmpv-2.dll";
-            NativeLibrary.SetDllImportResolver(typeof(Program).Assembly, ResolveLibmpv);
-
-            mpvContext = NativeMethods.mpv_create();
-            if (mpvContext == IntPtr.Zero)
-            {
-                throw new InvalidOperationException("Failed to create libmpv context.");
-            }
-
-            SetOption(mpvContext, "terminal", "no");
-            SetOption(mpvContext, "msg-level", "all=no");
-            SetOption(mpvContext, "vo", "libmpv");
-            SetOption(mpvContext, "osc", "no");
-
-            int initResult = NativeMethods.mpv_initialize(mpvContext);
-            if (initResult != 0)
-            {
-                throw new InvalidOperationException($"Failed to initialize libmpv: {initResult}");
-            }
-
-            // Create topmost presentation window
-            renderSurface = RenderSurface.TryCreate();
-            if (renderSurface == null)
-            {
-                throw new InvalidOperationException("Failed to create presentation render window.");
-            }
-
-            // Create OpenGL Render Context
-            IntPtr apiType = Marshal.StringToHGlobalAnsi("opengl");
-            MpvOpenGlInitParams initParams = new MpvOpenGlInitParams
-            {
-                get_proc_address = Marshal.GetFunctionPointerForDelegate((MpvOpenGlGetProcAddressDelegate)GetOpenGlProcAddress),
-                get_proc_address_ctx = IntPtr.Zero
-            };
-            IntPtr initParamsPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MpvOpenGlInitParams>());
-            Marshal.StructureToPtr(initParams, initParamsPtr, false);
-
-            IntPtr initParamArray = AllocRenderParams(
-                new MpvRenderParam { type = 1, data = apiType },
-                new MpvRenderParam { type = 2, data = initParamsPtr }
-            );
-
-            renderSurface.MakeCurrent();
-            int contextResult = NativeMethods.mpv_render_context_create(out renderContext, mpvContext, initParamArray);
-            NativeMethods.wglMakeCurrent(IntPtr.Zero, IntPtr.Zero);
-
-            Marshal.FreeHGlobal(initParamArray);
-            Marshal.FreeHGlobal(initParamsPtr);
-            Marshal.FreeHGlobal(apiType);
-
-            if (contextResult != 0 || renderContext == IntPtr.Zero)
-            {
-                throw new InvalidOperationException($"Failed to create libmpv render context: {contextResult}");
-            }
-
-            // Start rendering thread
-            renderThreadRunning = true;
-            renderThread = new Thread(RenderLoop)
-            {
-                IsBackground = true,
-                Name = "LineupRenderLoop"
-            };
-            renderThread.Start();
-
-            // Observe properties
-            NativeMethods.mpv_observe_property(mpvContext, 1, "time-pos", MpvFormatDouble);
-            NativeMethods.mpv_observe_property(mpvContext, 2, "duration", MpvFormatDouble);
-            NativeMethods.mpv_observe_property(mpvContext, 3, "pause", MpvFormatFlag);
-            NativeMethods.mpv_observe_property(mpvContext, 4, "core-idle", MpvFormatFlag);
-
-            // Start Event Poll Loop
-            Thread eventThread = new Thread(EventPollLoop)
-            {
-                IsBackground = true,
-                Name = "LineupEventPollLoop"
-            };
-            eventThread.Start();
         }
 
         private static void EventPollLoop()
@@ -404,8 +416,8 @@ namespace Lineup.NativePlayerHost
                         ["requestId"] = currentRequestId,
                         ["media"] = new Dictionary<string, object?>
                         {
-                            ["id"] = "loaded-item",
-                            ["title"] = "Media Stream"
+                            ["id"] = currentMediaId ?? "unknown-media",
+                            ["title"] = currentMediaTitle ?? "Untitled Media"
                         },
                         ["durationMs"] = (int)(cachedDurationSeconds * 1000),
                         ["tracks"] = new List<object>()
@@ -526,11 +538,47 @@ namespace Lineup.NativePlayerHost
 
         private static void HandleCleanup(string? requestId)
         {
+            lock (MpvLock)
+            {
+                TeardownMpvContext();
+            }
+        }
+
+        private static void ConfigureLibmpvPath(string[] args)
+        {
+            string? overridePath = null;
+            for (int index = 0; index < args.Length; index += 1)
+            {
+                if (args[index] == "--libmpv" && index + 1 < args.Length)
+                {
+                    overridePath = args[index + 1];
+                    break;
+                }
+            }
+
+            libmpvPath = !string.IsNullOrWhiteSpace(overridePath)
+                ? Path.GetFullPath(overridePath)
+                : Path.Combine(AppContext.BaseDirectory, "libmpv-2.dll");
+        }
+
+        private static void EnsureLibmpvResolverRegistered()
+        {
+            if (libmpvResolverRegistered)
+            {
+                return;
+            }
+            NativeLibrary.SetDllImportResolver(typeof(Program).Assembly, ResolveLibmpv);
+            libmpvResolverRegistered = true;
+        }
+
+        private static void TeardownMpvContext()
+        {
             renderThreadRunning = false;
             if (renderThread != null && renderThread.IsAlive)
             {
                 renderThread.Join();
             }
+            renderThread = null;
 
             if (renderContext != IntPtr.Zero)
             {
@@ -544,11 +592,66 @@ namespace Lineup.NativePlayerHost
                 mpvContext = IntPtr.Zero;
             }
 
+            if (eventThread != null && eventThread.IsAlive)
+            {
+                eventThread.Join();
+            }
+            eventThread = null;
+
             if (renderSurface != null)
             {
                 renderSurface.Dispose();
                 renderSurface = null;
             }
+
+            currentRequestId = null;
+            currentMediaId = null;
+            currentMediaTitle = null;
+            cachedDurationSeconds = 0;
+            isPaused = false;
+            isBuffering = false;
+        }
+
+        private static void CacheLoadedMedia(InputMessage msg)
+        {
+            currentMediaId = null;
+            currentMediaTitle = null;
+            if (msg.payload.ValueKind != JsonValueKind.Object ||
+                !msg.payload.TryGetProperty("media", out JsonElement media) ||
+                media.ValueKind != JsonValueKind.Object)
+            {
+                return;
+            }
+
+            if (media.TryGetProperty("id", out JsonElement id) && id.ValueKind == JsonValueKind.String)
+            {
+                currentMediaId = id.GetString();
+            }
+            if (media.TryGetProperty("title", out JsonElement title) && title.ValueKind == JsonValueKind.String)
+            {
+                currentMediaTitle = title.GetString();
+            }
+        }
+
+        private static void ApplySelectedPrivateTracks(PrivateTrackSelection? selection)
+        {
+            if (selection == null)
+            {
+                return;
+            }
+
+            SetTrackSelection("aid", selection.audio);
+            SetTrackSelection("sid", selection.subtitle);
+            SetTrackSelection("vid", selection.video);
+        }
+
+        private static void SetTrackSelection(string property, string? privateTrackId)
+        {
+            if (string.IsNullOrWhiteSpace(privateTrackId))
+            {
+                return;
+            }
+            Command(mpvContext, "set", property, privateTrackId);
         }
 
         private static void SetOption(IntPtr mpv, string name, string value)

@@ -693,7 +693,7 @@ export function updateEpgState(
     const derived = deriveInitialEpgSelection(normalizedPresentation);
     return {
       ...derived,
-      presentationState: 'ready',
+      presentationState: derived.selectedProgramId.length > 0 ? 'ready' : 'empty',
     };
   }
 

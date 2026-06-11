@@ -12,6 +12,7 @@ class MockChannelRepository {
     channels: [] as ChannelConfig[],
     currentChannelId: null as string | null,
   };
+  public saveError: Error | null = null;
   async loadNormalized() {
     if (this.data.channels.length === 0) {
       return null;
@@ -19,6 +20,9 @@ class MockChannelRepository {
     return { data: this.data, didMutate: false };
   }
   async saveCurrentChannelId(id: string | null) {
+    if (this.saveError !== null) {
+      throw this.saveError;
+    }
     this.data.currentChannelId = id;
   }
 }
@@ -185,6 +189,29 @@ test('GuideRuntime tuneChannel configures active scheduler and persists choice',
 
   // Verify persisted selection
   assert.equal(repository.data.currentChannelId, 'chan-1');
+});
+
+test('GuideRuntime tuneChannel does not mutate active scheduler when persistence fails', async () => {
+  const repository = new MockChannelRepository();
+  const chan1 = createChannelConfig('chan-1', 1, 'Channel 1');
+  repository.data.channels = [chan1];
+  repository.saveError = new Error('persist failed');
+
+  const plexAdapter = new MockPlexLibraryAdapter();
+  plexAdapter.setLibraryItems('lib-1', [createLibraryItem(0)]);
+  const activeScheduler = new ChannelScheduler({ clock: { now: () => 1000 } });
+
+  const runtime = new GuideRuntime({
+    repository: repository as unknown as ChannelRepository,
+    plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
+    activeChannelScheduler: activeScheduler,
+    clock: { now: () => 1000 },
+  });
+
+  await assert.rejects(() => runtime.tuneChannel('chan-1'), /persist failed/u);
+
+  assert.equal(activeScheduler.getState().isActive, false);
+  assert.equal(repository.data.currentChannelId, null);
 });
 
 test('GuideRuntime logs and isolates onChannelTuned callback failures', async () => {

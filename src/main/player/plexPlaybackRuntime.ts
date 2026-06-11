@@ -10,7 +10,10 @@ import {
 } from '../../contracts/player.js';
 import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.js';
 import type { PlexPrivilegedPlaybackDescriptor } from '../plex/streamResolver.js';
-import type { PrivilegedPlaybackDispatchContext } from './privilegedPlaybackDispatchContext.js';
+import {
+  type PrivilegedPlaybackDispatchContext,
+  validatePrivilegedPlaybackDescriptor,
+} from './privilegedPlaybackDispatchContext.js';
 export type PlexPlaybackRuntimeCleanupReason =
   | 'stop'
   | 'switch'
@@ -198,6 +201,19 @@ export class PlexPlaybackRuntime {
       events.push(this.#boundaryError(requestId, 'pms session request id did not match playback request'));
       this.#emit(events);
       return { accepted: false, epoch, requestId, events };
+    }
+    if (candidate.privatePlayback) {
+      const validation = validatePrivilegedPlaybackDescriptor(candidate.privatePlayback, requestId);
+      if (!validation.ok) {
+        events.push(...(await this.#releaseRejectedSession(candidate.pmsSession ?? null, requestId)));
+        events.push({
+          event: 'error',
+          requestId,
+          error: validation.error,
+        });
+        this.#emit(events);
+        return { accepted: false, epoch, requestId, events };
+      }
     }
     const active: ActivePlaybackSession = {
       epoch,

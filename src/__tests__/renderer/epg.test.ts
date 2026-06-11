@@ -13,6 +13,7 @@ import {
   formatEpgTimeWindow,
   getDefaultEpgPresentationChannels,
   setEpgPresentationState,
+  updateEpgState,
   type EpgProgramViewModel,
 } from '../../renderer/epg.js';
 
@@ -156,6 +157,32 @@ test('guide presentation state variants are mutually exclusive', () => {
   assert.equal(ready.presentationState, 'ready');
   assert.equal(ready.rows.length > 0, true);
   assert.notEqual(ready.selectedProgram, null);
+});
+
+test('EPG update falls back to empty state when missing channel has no selectable program', () => {
+  const initial = createEpgState();
+  const next = updateEpgState(
+    {
+      ...initial,
+      selectedChannelId: 'missing-channel',
+      selectedProgramId: 'missing-program',
+    },
+    {
+      channels: [
+        {
+          id: 'empty-channel',
+          number: '100',
+          name: 'Empty Channel',
+          programs: [],
+        },
+      ],
+      nowWatching: null,
+    },
+  );
+
+  assert.equal(next.presentationState, 'empty');
+  assert.equal(next.selectedChannelId, '');
+  assert.equal(next.selectedProgramId, '');
 });
 
 test('EPG presentation view models avoid Plex and player privileged renderer fields', () => {

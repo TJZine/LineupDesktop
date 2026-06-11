@@ -36,9 +36,14 @@ export class PmsPlaybackSessionPort
       return null;
     }
     try {
-      await this.#runtime.withActivePlexToken('getMetadata', async () => undefined);
+      await this.#runtime.withActivePlexToken('startPlayback', async () => undefined);
     } catch {
       return null;
+    }
+
+    if (this.#activeSessions.has(input.requestId)) {
+      // Session request IDs are release keys; reusing one would orphan the previous PMS session.
+      throw new Error(`Playback session already active for request ID: ${input.requestId}`);
     }
 
     this.#activeSessions.set(input.requestId, {
@@ -68,7 +73,7 @@ export class PmsPlaybackSessionPort
 
     const { connection, decisionKind } = sessionDetails;
     if (decisionKind === 'transcode' || decisionKind === 'direct-stream') {
-      await this.#runtime.withActivePlexToken('getMetadata', async (token) => {
+      await this.#runtime.withActivePlexToken('startPlayback', async (token) => {
         await this.#runtime.getLibraryTransport().stopTranscodeSession({
           connection,
           token,

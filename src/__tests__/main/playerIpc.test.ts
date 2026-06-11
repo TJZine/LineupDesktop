@@ -11,8 +11,10 @@ import {
   PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
   type PlayerCommand,
   type PlayerEvent,
+  type PlayerLoadCommandPayload,
 } from '../../contracts/player.js';
 import { registerPlayerIpcHandlers } from '../../main/player/playerIpc.js';
+import type { PrivilegedPlaybackDispatchContext } from '../../main/player/privilegedPlaybackDispatchContext.js';
 import { redactMainProcessError } from '../../main/redactedDiagnostics.js';
 import { DiagnosticEventStore } from '../../main/diagnostics/diagnosticEventStore.js';
 import type {
@@ -116,6 +118,45 @@ function loadEnvelope(requestId = 'player-load-1'): unknown {
         preferredSubtitleTrackId: null,
       },
       capabilityProfileId: 'desktop-ipc-test',
+    },
+  };
+}
+
+function runtimeLoadCommand(requestId: string): PlayerCommand {
+  const envelope = loadEnvelope(requestId) as { payload: PlayerLoadCommandPayload };
+  return {
+    command: 'load',
+    requestId,
+    payload: envelope.payload,
+  };
+}
+
+function privilegedPlaybackContext(requestId: string): PrivilegedPlaybackDispatchContext {
+  return {
+    privatePlayback: {
+      requestId,
+      decisionKind: 'direct-play',
+      playbackUrl: 'https://plex.example.invalid/library/parts/1/file.mp4',
+      credentialHeader: { name: 'X-Plex-Token', value: 'private-token' },
+      selectedConnection: {
+        protocol: 'https',
+        address: 'plex.example.invalid',
+        port: 443,
+        local: true,
+        relay: false,
+      },
+      media: {
+        id: 'media-1',
+        title: 'Episode 1',
+      },
+      setup: {
+        playbackMode: 'direct-play',
+        mediaPath: '/library/metadata/1',
+        variantId: 'variant-1',
+        partPath: '/library/parts/1/file.mp4',
+        selectedTrackIds: { video: null, audio: null, subtitle: null },
+        selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+      },
     },
   };
 }
@@ -627,7 +668,22 @@ test('production player IPC with nativeHostFactory instantiates adapter but reje
     (commandResult as { error: { category: string; code: string } }).error.code,
     'PLAYER_UNSUPPORTED_CAPABILITY',
   );
+
+  const loadCommand = runtimeLoadCommand('player-prod-runtime-2');
+  const privilegedContext = privilegedPlaybackContext(loadCommand.requestId);
+  const runtimeResult = await teardown.adapter?.dispatchRuntimeCommand(loadCommand, privilegedContext);
+  assert.equal(runtimeResult?.accepted, true);
+
+  const rendererResult = await teardown.adapter?.dispatchRendererIntent(loadEnvelope('player-prod-renderer-2'));
+  assert.equal(rendererResult?.accepted, false);
+  assert.equal(
+    rendererResult?.events.find((event) => event.event === 'error')?.error.code,
+    'PLAYER_UNSUPPORTED_CAPABILITY',
+  );
+
   assertNoForbiddenKeys(commandResult);
+  assertNoForbiddenKeys(runtimeResult);
+  assertNoForbiddenKeys(rendererResult);
   await teardown.teardown();
 });
 

@@ -53,7 +53,7 @@ export class DesktopPlexRuntime {
     return this.serverDiscovery.getSelectedConnectionForMain();
   }
   async withActivePlexToken<T>(
-    operation: Extract<PlexRuntimeOperation, 'listLibraryItems' | 'getMetadata'>,
+    operation: Extract<PlexRuntimeOperation, 'listLibraryItems' | 'getMetadata'> | 'startPlayback',
     run: (token: string) => Promise<T>,
   ): Promise<T> {
     const token = this.authService.getActiveTokenForMain();

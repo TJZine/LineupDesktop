@@ -199,10 +199,15 @@ class FakeResolver implements PlexPlaybackCompositionResolverPort {
 
 class FakePlayerPort {
   readonly commands: PlayerCommand[] = [];
+  readonly contexts: Array<PrivilegedPlaybackDispatchContext | null | undefined> = [];
   readonly cleanupRequestIds: Array<string | null> = [];
 
-  async dispatch(command: PlayerCommand): Promise<{ ok: true; events: readonly PlayerEvent[] }> {
+  async dispatch(
+    command: PlayerCommand,
+    context?: PrivilegedPlaybackDispatchContext | null,
+  ): Promise<{ ok: true; events: readonly PlayerEvent[] }> {
     this.commands.push(command);
+    this.contexts.push(context);
     return { ok: true, events: [] };
   }
 
@@ -294,6 +299,16 @@ test('RD-12 composition wires scheduler, resolver, runtime, player, and PMS thro
   assert.equal(player.commands.length, 1);
   assert.equal(player.commands[0]?.command, 'load');
   assert.deepEqual(player.commands[0]?.payload, loadPayload);
+  assert.equal(player.contexts.length, 1);
+  assert.equal(player.contexts[0]?.privatePlayback.requestId, 'request-from-runtime');
+  assert.equal(
+    player.contexts[0]?.privatePlayback.playbackUrl,
+    resolver.result.ok ? resolver.result.privatePlayback?.playbackUrl : undefined,
+  );
+  assert.equal(
+    player.contexts[0]?.privatePlayback.credentialHeader.name,
+    resolver.result.ok ? resolver.result.privatePlayback?.credentialHeader.name : undefined,
+  );
   assertPublicSafe(result, rawPrivateValues);
   assertPublicSafe(emitted, rawPrivateValues);
 

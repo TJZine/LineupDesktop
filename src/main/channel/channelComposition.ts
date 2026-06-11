@@ -97,7 +97,7 @@ function createGuideRuntimeLogger(
         status: 'observed',
         operation: 'channel.guideRuntime.warn',
         message,
-        context: sanitizeDiagnosticDetail(detail),
+        context: sanitizeChannelDiagnosticDetail(detail),
       });
     },
     error: (message, detail) => {
@@ -108,13 +108,13 @@ function createGuideRuntimeLogger(
         status: 'failed',
         operation: 'channel.guideRuntime.error',
         message,
-        context: sanitizeDiagnosticDetail(detail),
+        context: sanitizeChannelDiagnosticDetail(detail),
       });
     },
   };
 }
 
-function sanitizeDiagnosticDetail(detail: unknown): Record<string, unknown> {
+export function sanitizeChannelDiagnosticDetail(detail: unknown): Record<string, unknown> {
   if (typeof detail !== 'object' || detail === null || Array.isArray(detail)) {
     return {};
   }
@@ -139,11 +139,15 @@ function sanitizeDiagnosticRecord(
     } else if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
       result[key] = value;
     } else if (Array.isArray(value)) {
-      result[key] = value.slice(0, 20).map((entry) => (
-        typeof entry === 'object' && entry !== null
-          ? sanitizeDiagnosticRecord(entry as Record<string, unknown>, depth + 1)
-          : entry
-      ));
+      result[key] = value.slice(0, 20).map((entry) => {
+        if (typeof entry === 'string') {
+          return redactDiagnosticText(entry);
+        }
+        if (typeof entry === 'object' && entry !== null) {
+          return sanitizeDiagnosticRecord(entry as Record<string, unknown>, depth + 1);
+        }
+        return entry;
+      });
     } else if (typeof value === 'object' && value !== null) {
       result[key] = sanitizeDiagnosticRecord(value as Record<string, unknown>, depth + 1);
     }

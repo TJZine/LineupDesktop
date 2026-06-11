@@ -41,6 +41,7 @@ import { DiagnosticEventStore } from './diagnostics/diagnosticEventStore.js';
 import { registerDiagnosticsIpcHandlers, type DiagnosticsIpcTeardown } from './diagnostics/supportBundleIpc.js';
 import { registerChannelComposition, type ChannelCompositionRegistration } from './channel/channelComposition.js';
 import { bootstrapPlaybackRuntime } from './player/playbackRuntimeBootstrap.js';
+import { wirePlexPlaybackCleanup } from './player/plexPlaybackCleanupWiring.js';
 import type { PlexPlaybackRuntime } from './player/plexPlaybackRuntime.js';
 import { registerPlexComposition, type PlexCompositionRegistration } from './plex/plexComposition.js';
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
@@ -125,35 +126,11 @@ app.whenReady()
       diagnosticEventStore,
     });
     if (plexComposition) {
-      const originalSwitchHomeUser = plexComposition.runtime.switchHomeUser.bind(plexComposition.runtime);
-      plexComposition.runtime.switchHomeUser = async (requestId, input) => {
-        const result = await originalSwitchHomeUser(requestId, input);
-        if (result.ok) {
-          if (playbackRuntime) {
-            try {
-              await playbackRuntime.cleanup({ reason: 'profile-change' });
-            } catch (error) {
-              reportMainProcessDiagnostic('Playback cleanup on profile-change failed', error);
-            }
-          }
-        }
-        return result;
-      };
-
-      const originalSelectServer = plexComposition.runtime.selectServer.bind(plexComposition.runtime);
-      plexComposition.runtime.selectServer = async (requestId, serverId) => {
-        const result = await originalSelectServer(requestId, serverId);
-        if (result.ok) {
-          if (playbackRuntime) {
-            try {
-              await playbackRuntime.cleanup({ reason: 'server-change' });
-            } catch (error) {
-              reportMainProcessDiagnostic('Playback cleanup on server-change failed', error);
-            }
-          }
-        }
-        return result;
-      };
+      wirePlexPlaybackCleanup({
+        plexRuntime: plexComposition.runtime,
+        getPlaybackRuntime: () => playbackRuntime,
+        reportDiagnostic: reportMainProcessDiagnostic,
+      });
     }
     let onChannelTunedCallback: ((channelId: string) => void | Promise<void>) | null = null;
 

@@ -14,10 +14,12 @@ import {
   type PlayerCommand,
   type PlayerErrorCategory,
   type PlayerEvent,
+  type PlayerLoadCommandPayload,
   type PlayerMediaSummary,
   type PlayerTrackSummary,
 } from '../../../contracts/player.js';
 import type { RendererIntentEnvelope } from '../../../contracts/ipc.js';
+import type { PrivilegedPlaybackDispatchContext } from '../../../main/player/privilegedPlaybackDispatchContext.js';
 
 class FakeNativePlayerHost implements NativePlayerHostPort {
   readonly commands: PlayerCommand[] = [];
@@ -118,6 +120,41 @@ function loadEnvelope(requestId = 'request-load-1'): RendererIntentEnvelope<unkn
         preferredSubtitleTrackId: null,
       },
       capabilityProfileId: 'desktop-adapter-safe',
+    },
+  };
+}
+
+function runtimeLoadCommand(requestId = 'request-load-1'): PlayerCommand {
+  return {
+    command: 'load',
+    requestId,
+    payload: loadEnvelope(requestId).payload as PlayerLoadCommandPayload,
+  };
+}
+
+function privilegedContext(requestId = 'request-load-1'): PrivilegedPlaybackDispatchContext {
+  return {
+    privatePlayback: {
+      requestId,
+      decisionKind: 'direct-play',
+      playbackUrl: 'https://plex.example.invalid/library/parts/1/file.mp4',
+      credentialHeader: { name: 'X-Plex-Token', value: 'private-token' },
+      selectedConnection: {
+        protocol: 'https',
+        address: 'plex.example.invalid',
+        port: 443,
+        local: true,
+        relay: false,
+      },
+      media,
+      setup: {
+        playbackMode: 'direct-play',
+        mediaPath: '/library/metadata/1',
+        variantId: 'variant-1',
+        partPath: '/library/parts/1/file.mp4',
+        selectedTrackIds: { video: null, audio: null, subtitle: null },
+        selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+      },
     },
   };
 }
@@ -500,6 +537,44 @@ test('desktop player adapter rejects invalid renderer payloads before host calls
   assertErrorEvent(result.events, 'validation-failure');
   assert.deepEqual(result.snapshot, before);
   assert.deepEqual(adapter.getSnapshot(), before);
+});
+
+test('desktop player adapter rejects renderer loads in production mode without mutating active snapshot', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host, { rejectRendererLoad: true });
+
+  const runtimeResult = await adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('request-runtime-load'),
+    privilegedContext('request-runtime-load'),
+  );
+  assert.equal(runtimeResult.accepted, true);
+  const activeSnapshot = adapter.getSnapshot();
+
+  const rejected = await adapter.dispatchRendererIntent(loadEnvelope('request-renderer-load'));
+
+  assert.equal(rejected.accepted, false);
+  assertErrorEvent(rejected.events, 'unsupported-capability');
+  assert.equal(host.commands.length, 1);
+  assert.deepEqual(rejected.snapshot, activeSnapshot);
+  assert.deepEqual(adapter.getSnapshot(), activeSnapshot);
+});
+
+test('desktop player adapter rejects missing privileged runtime context without mutating active snapshot', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('request-runtime-load'),
+    privilegedContext('request-runtime-load'),
+  );
+  const activeSnapshot = adapter.getSnapshot();
+
+  const rejected = await adapter.dispatchRuntimeCommand(runtimeLoadCommand('request-missing-context'), null);
+
+  assert.equal(rejected.accepted, false);
+  assertErrorEvent(rejected.events, 'validation-failure');
+  assert.equal(host.commands.length, 1);
+  assert.deepEqual(rejected.snapshot, activeSnapshot);
+  assert.deepEqual(adapter.getSnapshot(), activeSnapshot);
 });
 
 test('desktop player adapter rejects unsupported payload fields without echoing field names', async () => {

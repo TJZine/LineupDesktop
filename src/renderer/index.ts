@@ -15,6 +15,10 @@ import { readPlexHomeUserId, readPlexRatingKey, readPlexSectionId, readPlexServe
 import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowChannelSetupAction, applyWorkflowEpgAction, applyWorkflowSettingsAction, createWorkflowState, type ChannelSetupActionId, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
 import { createRendererPresentationFixtures } from './presentationFixtures.js';
 import {
+  recordRendererBridgeFailure,
+  summarizeRendererBridgeError,
+} from './rendererBridgeFailures.js';
+import {
   EPG_WINDOW_DURATION_MS,
   ensureRendererReadyGuidePresentation,
   setEpgPresentationState,
@@ -114,12 +118,7 @@ const unsubscribePlayer = window.lineupDesktop.player.onEvent((event) => {
   renderApp();
 });
 
-void window.lineupDesktop.player.getSnapshot().then((result) => {
-  if (result.ok) {
-    playerSnapshot = result.value;
-    renderApp();
-  }
-});
+void initializePlayerSnapshot();
 
 window.addEventListener('beforeunload', () => {
   window.removeEventListener('keydown', keydownListener);
@@ -521,32 +520,25 @@ async function refreshGuidePresentation(source: string): Promise<void> {
   };
   renderApp();
 
-  const result = await window.lineupDesktop.guide.getPresentation({
-    startTimeMs: workflowState.epg.windowStartMs,
-    durationMs: EPG_WINDOW_DURATION_MS,
-  });
+  let result: Awaited<ReturnType<typeof window.lineupDesktop.guide.getPresentation>>;
+  try {
+    result = await window.lineupDesktop.guide.getPresentation({
+      startTimeMs: workflowState.epg.windowStartMs,
+      durationMs: EPG_WINDOW_DURATION_MS,
+    });
+  } catch (error: unknown) {
+    if (requestId === guidePresentationRequestId && workflowState.routeState.activeRoute === 'guide') {
+      handleGuidePresentationFailure(source, summarizeRendererBridgeError(error));
+    }
+    return;
+  }
 
   if (requestId !== guidePresentationRequestId || workflowState.routeState.activeRoute !== 'guide') {
     return;
   }
 
   if (!result.ok) {
-    workflowState = {
-      ...workflowState,
-      epg: setEpgPresentationState(workflowState.epg, 'error'),
-    };
-    renderApp();
-    void window.lineupDesktop.diagnostics.recordRendererEvent({
-      requestId: `guide-presentation-${source}-${Date.now()}`,
-      event: {
-        surface: 'renderer',
-        category: 'ipc',
-        severity: 'warning',
-        operation: 'guide.getPresentation',
-        message: `Failed to fetch guide presentation: ${result.error.message}`,
-        context: { route: workflowState.routeState.activeRoute, source },
-      },
-    }).catch(() => undefined);
+    handleGuidePresentationFailure(source, result.error.message);
     return;
   }
   const normalizedGuidePresentation = ensureRendererReadyGuidePresentation(
@@ -573,7 +565,13 @@ async function tuneGuideSelectedChannel(): Promise<void> {
     return;
   }
 
-  const result = await window.lineupDesktop.player.tuneChannel({ channelId: guideChannelId });
+  let result: Awaited<ReturnType<typeof window.lineupDesktop.player.tuneChannel>>;
+  try {
+    result = await window.lineupDesktop.player.tuneChannel({ channelId: guideChannelId });
+  } catch (error: unknown) {
+    handleGuideTuneFailure(guideChannelId, summarizeRendererBridgeError(error));
+    return;
+  }
   if (result.ok) {
     const previousRoute = workflowState.routeState.activeRoute;
     workflowState = applyWorkflowAction(workflowState, 'resumePlayer');
@@ -588,22 +586,50 @@ async function tuneGuideSelectedChannel(): Promise<void> {
     return;
   }
 
+  handleGuideTuneFailure(guideChannelId, result.error.message);
+}
+
+async function initializePlayerSnapshot(): Promise<void> {
+  try {
+    const result = await window.lineupDesktop.player.getSnapshot();
+    if (result.ok) {
+      playerSnapshot = result.value;
+      renderApp();
+      return;
+    }
+    recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'player.getSnapshot', result.error.message, {});
+  } catch (error: unknown) {
+    recordRendererBridgeFailure(
+      window.lineupDesktop.diagnostics.recordRendererEvent,
+      'player.getSnapshot',
+      summarizeRendererBridgeError(error),
+      {},
+    );
+  }
+}
+
+function handleGuidePresentationFailure(source: string, message: string): void {
   workflowState = {
     ...workflowState,
     epg: setEpgPresentationState(workflowState.epg, 'error'),
   };
   renderApp();
-  void window.lineupDesktop.diagnostics.recordRendererEvent({
-    requestId: `guide-tune-${Date.now()}`,
-    event: {
-      surface: 'renderer',
-      category: 'ipc',
-      severity: 'warning',
-      operation: 'player.tuneChannel',
-      message: `Failed to tune guide channel: ${result.error.message}`,
-      context: { channelId: guideChannelId, route: 'guide' },
-    },
-  }).catch(() => undefined);
+  recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'guide.getPresentation', message, {
+    route: workflowState.routeState.activeRoute,
+    source,
+  });
+}
+
+function handleGuideTuneFailure(channelId: string, message: string): void {
+  workflowState = {
+    ...workflowState,
+    epg: setEpgPresentationState(workflowState.epg, 'error'),
+  };
+  renderApp();
+  recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'player.tuneChannel', message, {
+    channelId,
+    route: 'guide',
+  });
 }
 
 async function handlePlexBack(): Promise<boolean> {

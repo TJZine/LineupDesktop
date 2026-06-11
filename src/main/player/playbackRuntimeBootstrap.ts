@@ -69,7 +69,9 @@ export function bootstrapPlaybackRuntime(
   let pmsPort: PlexPlaybackRuntimePmsPort;
 
   if (plexRuntime) {
-    const liveResolverComposition = createLivePlexStreamResolverComposition(plexRuntime);
+    const liveResolverComposition = createLivePlexStreamResolverComposition(plexRuntime, {
+      diagnosticEventStore,
+    });
     resolver = liveResolverComposition.resolver;
     pmsPort = liveResolverComposition.pmsSessionPort;
   } else {
@@ -103,7 +105,7 @@ export function bootstrapPlaybackRuntime(
     };
   }
 
-  const capabilityProfile = getDevelopmentCapabilityProfile();
+  const capabilityProfile = getProductionCapabilityProfile();
 
   const playerPort = adapter
     ? createDesktopPlayerAdapterRuntimePort(adapter)
@@ -259,6 +261,32 @@ function getDevelopmentCapabilityProfile(): DesktopStreamCapabilityProfile {
       audio: 'supported',
       subtitles: 'supported',
       hdr: 'supported',
+    },
+  };
+}
+
+export function getProductionCapabilityProfile(): DesktopStreamCapabilityProfile {
+  return {
+    id: 'windows-native-production-conservative',
+    directPlayContainers: ['mp4'],
+    directPlayVideoCodecs: ['h264'],
+    directPlayAudioCodecs: ['aac'],
+    subtitleDeliveryModes: ['none'],
+    headerAuthSetup: 'supported',
+    audioTrackSwitching: 'unsupported',
+    subtitleTrackSwitching: 'unsupported',
+    hdr: 'unsupported',
+    dolbyVision: 'unsupported',
+    directStream: {
+      containerRemux: 'unsupported',
+      audioTranscode: 'unsupported',
+      subtitleConversion: 'unsupported',
+    },
+    transcode: {
+      video: 'unsupported',
+      audio: 'unsupported',
+      subtitles: 'unsupported',
+      hdr: 'unsupported',
     },
   };
 }

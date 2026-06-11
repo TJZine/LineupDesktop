@@ -13,14 +13,16 @@ test('PmsPlaybackSessionPort startSession returns lease and stores details', asy
     relay: false,
     latencyMs: null,
   };
+  const operations: string[] = [];
   const mockRuntime = {
     getSelectedConnectionForMain() {
       return connection;
     },
     async withActivePlexToken(
-      _operation: 'getMetadata',
+      operation: string,
       run: (token: string) => Promise<unknown>,
     ) {
+      operations.push(operation);
       return run('token');
     },
   } as unknown as DesktopPlexRuntime;
@@ -36,6 +38,7 @@ test('PmsPlaybackSessionPort startSession returns lease and stores details', asy
   assert.ok(lease);
   assert.equal(lease.id, 'req-1');
   assert.equal(lease.requestId, 'req-1');
+  assert.deepEqual(operations, ['startPlayback']);
 });
 
 test('PmsPlaybackSessionPort startSession returns null if connection or token is missing', async () => {
@@ -77,6 +80,7 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
   };
 
   let stopSessionId: string | null = null;
+  const operations: string[] = [];
   const mockTransport = {
     async stopTranscodeSession(input: { sessionId: string }) {
       stopSessionId = input.sessionId;
@@ -88,9 +92,10 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
       return connection;
     },
     async withActivePlexToken(
-      _operation: 'getMetadata',
+      operation: string,
       run: (token: string) => Promise<unknown>,
     ) {
+      operations.push(operation);
       return run('token');
     },
     getLibraryTransport() {
@@ -115,6 +120,7 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
   );
 
   assert.equal(stopSessionId, 'req-transcode');
+  assert.deepEqual(operations, ['startPlayback', 'startPlayback']);
 
   // Start direct-stream session
   await port.startSession({
@@ -131,6 +137,7 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
   );
 
   assert.equal(stopSessionId, 'req-direct-stream');
+  assert.deepEqual(operations, ['startPlayback', 'startPlayback', 'startPlayback', 'startPlayback']);
 });
 
 test('PmsPlaybackSessionPort releaseSession does NOT invoke stopTranscodeSession for direct-play', async () => {
@@ -181,4 +188,60 @@ test('PmsPlaybackSessionPort releaseSession does NOT invoke stopTranscodeSession
   );
 
   assert.equal(stopCalled, false);
+});
+
+test('PmsPlaybackSessionPort rejects duplicate request IDs before replacing active session state', async () => {
+  const connection = {
+    uri: 'https://plex.local',
+    protocol: 'https' as const,
+    address: 'plex.local',
+    port: 32400,
+    local: true,
+    relay: false,
+    latencyMs: null,
+  };
+
+  let stopCalled = false;
+  const mockRuntime = {
+    getSelectedConnectionForMain() {
+      return connection;
+    },
+    async withActivePlexToken(
+      _operation: string,
+      run: (token: string) => Promise<unknown>,
+    ) {
+      return run('token');
+    },
+    getLibraryTransport() {
+      return {
+        async stopTranscodeSession() {
+          stopCalled = true;
+        },
+      };
+    },
+  } as unknown as DesktopPlexRuntime;
+
+  const port = new PmsPlaybackSessionPort(mockRuntime);
+  await port.startSession({
+    requestId: 'req-duplicate',
+    media: { id: 'media-1', title: 'Test' },
+    decisionKind: 'transcode',
+    connection,
+  });
+
+  await assert.rejects(
+    () => port.startSession({
+      requestId: 'req-duplicate',
+      media: { id: 'media-2', title: 'Replacement' },
+      decisionKind: 'direct-play',
+      connection,
+    }),
+    /already active/u,
+  );
+
+  await port.releaseSession(
+    { id: 'req-duplicate', requestId: 'req-duplicate' },
+    { reason: 'stop', requestId: 'req-duplicate' },
+  );
+  assert.equal(stopCalled, true);
 });

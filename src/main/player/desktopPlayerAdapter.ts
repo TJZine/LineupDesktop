@@ -126,7 +126,7 @@ export class DesktopPlayerAdapter {
           reason: 'renderer load command blocked',
         },
       });
-      const events = this.#recordError(error);
+      const events = this.#emitBoundaryError(error);
       return this.#result(false, command, events);
     }
     this.#pendingCommands.set(command.requestId, command.command);
@@ -218,25 +218,12 @@ export class DesktopPlayerAdapter {
             reason: 'missing private playback descriptor',
           },
         });
-        const events = this.#recordError(error);
+        const events = this.#emitBoundaryError(error);
         return this.#result(false, command, events);
       }
-      try {
-        validatePrivilegedPlaybackDescriptor(context.privatePlayback, command.requestId);
-      } catch (err: unknown) {
-        const error = createPlayerError({
-          code: 'PLAYER_VALIDATION_FAILED',
-          category: 'validation-failure',
-          message: (err instanceof Error ? err.message : '') || 'Invalid privileged playback descriptor.',
-          requestId: command.requestId,
-          diagnostic: {
-            component: 'desktop-player-adapter',
-            operation: 'load',
-            status: 'rejected',
-            reason: 'invalid private playback descriptor',
-          },
-        });
-        const events = this.#recordError(error);
+      const validation = validatePrivilegedPlaybackDescriptor(context.privatePlayback, command.requestId);
+      if (!validation.ok) {
+        const events = this.#emitBoundaryError(validation.error);
         return this.#result(false, command, events);
       }
     }

@@ -148,6 +148,8 @@ export class GuideRuntime {
     const schedulerPlaybackMode: SchedulerPlaybackMode =
       channel.playbackMode === 'random' ? 'shuffle' : channel.playbackMode;
 
+    await this.repository.saveCurrentChannelId(channelId);
+
     this.activeChannelScheduler.loadChannel({
       channelId: channel.id,
       anchorTime: channel.startTimeAnchor,
@@ -157,7 +159,6 @@ export class GuideRuntime {
       blockSize: channel.blockSize,
     });
 
-    await this.repository.saveCurrentChannelId(channelId);
     await this.notifyChannelTuned(channelId);
   }
 

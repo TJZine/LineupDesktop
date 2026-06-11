@@ -8,6 +8,7 @@ import type {
 } from './streamResolver.js';
 import { PlaybackMediaDetailPort } from './playbackMediaDetailPort.js';
 import { PmsPlaybackSessionPort } from './pmsPlaybackSessionPort.js';
+import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.js';
 
 export class PlaybackSelectedConnectionPort implements PlexStreamResolverSelectedConnectionPort {
   readonly #runtime: DesktopPlexRuntime;
@@ -47,11 +48,14 @@ export interface LiveStreamResolverComposition {
 
 export function createLivePlexStreamResolverComposition(
   runtime: DesktopPlexRuntime,
+  options: { diagnosticEventStore?: DiagnosticEventStore } = {},
 ): LiveStreamResolverComposition {
   const pmsSessionPort = new PmsPlaybackSessionPort(runtime);
   const selectedConnection = new PlaybackSelectedConnectionPort(runtime);
   const activeCredential = new PlaybackActiveCredentialPort(runtime);
-  const mediaDetail = new PlaybackMediaDetailPort(runtime);
+  const mediaDetail = new PlaybackMediaDetailPort(runtime, {
+    diagnosticEventStore: options.diagnosticEventStore,
+  });
 
   const resolver = new PlexStreamResolver({
     selectedConnection,

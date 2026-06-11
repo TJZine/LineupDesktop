@@ -157,6 +157,12 @@ class FakeResolver implements PlexPlaybackBridgeResolverPort {
 
   async resolve(input: PlexStreamResolverInput): Promise<PlexStreamResolverResult> {
     this.inputs.push(input);
+    if (this.result.ok) {
+      return {
+        ...this.result,
+        privatePlayback: { ...this.result.privatePlayback, requestId: input.requestId },
+      };
+    }
     return this.result;
   }
 }
