@@ -387,8 +387,12 @@ async function applyChannelCommitAction(action: ReturnType<typeof readChannelCom
 }
 
 function applyEpgAction(action: EpgActionId): void {
+  const previousWindowStartMs = workflowState.epg.windowStartMs;
   workflowState = applyWorkflowEpgAction(workflowState, action);
   renderApp();
+  if (workflowState.epg.windowStartMs !== previousWindowStartMs) {
+    void refreshGuidePresentation('epg-window-change');
+  }
 }
 
 function applyOverlayAction(action: PlayerOverlayActionId): void {

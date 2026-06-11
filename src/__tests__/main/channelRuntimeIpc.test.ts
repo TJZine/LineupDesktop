@@ -10,11 +10,13 @@ import { encodeStoredChannelData } from '../../domain/channel/storedChannelDataC
 import {
   LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
+  LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
 } from '../../contracts/ipc.js';
 import type { PlexRuntimeSnapshot } from '../../contracts/plex.js';
 import { ChannelRuntime, type ChannelRuntimeOptions } from '../../main/channel/channelRuntime.js';
 import { registerChannelIpcHandlers } from '../../main/channel/channelIpc.js';
 import { DesktopChannelPersistenceStore } from '../../main/persistence/desktopChannelPersistenceStore.js';
+import { LivePlexTransportError } from '../../main/plex/livePlexTransport.js';
 
 test('channel runtime exposes renderer-safe not-configured status when no channels are persisted', async () => {
   const runtime = new ChannelRuntime({
@@ -215,6 +217,86 @@ test('channel IPC authorizes and validates the status request envelope', async (
     LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
     LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
   ]);
+});
+
+test('channel IPC rejects invalid guide presentation windows before runtime invocation', async () => {
+  const handled = new Map<string, (event: unknown, payload: unknown) => unknown>();
+  const runtime = new ChannelRuntime({
+    storage: createMemoryStorage(null),
+    clock: { now: () => 123 },
+  });
+  let presentationCalls = 0;
+
+  registerChannelIpcHandlers({
+    runtime,
+    guideRuntime: {
+      getPresentation: async () => {
+        presentationCalls++;
+        return { channels: [], nowWatching: null };
+      },
+      tuneChannel: async () => undefined,
+    } as never,
+    isAuthorizedEvent: (event) => (event as unknown) === 'authorized',
+    createRequestId: () => 'fallback-request',
+    ipcMain: {
+      handle: (channelName, handler) => {
+        handled.set(channelName, handler as (event: unknown, payload: unknown) => unknown);
+      },
+      removeHandler: () => undefined,
+    },
+  });
+
+  const handler = handled.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL);
+  assert.ok(handler);
+
+  for (const payload of [
+    { requestId: 'guide-window-negative', payload: { startTimeMs: -1, durationMs: 1 } },
+    { requestId: 'guide-window-zero', payload: { startTimeMs: 0, durationMs: 0 } },
+    { requestId: 'guide-window-huge', payload: { startTimeMs: 0, durationMs: 8 * 24 * 60 * 60 * 1000 } },
+  ]) {
+    const result = await handler('authorized', payload);
+    assert.equal((result as { ok: boolean }).ok, false);
+    assert.equal((result as { error: { code: string } }).error.code, 'GUIDE_VALIDATION_FAILED');
+  }
+
+  assert.equal(presentationCalls, 0);
+});
+
+test('channel IPC maps known guide presentation errors to distinct renderer-safe codes', async () => {
+  const handled = new Map<string, (event: unknown, payload: unknown) => unknown>();
+  const runtime = new ChannelRuntime({
+    storage: createMemoryStorage(null),
+    clock: { now: () => 123 },
+  });
+
+  registerChannelIpcHandlers({
+    runtime,
+    guideRuntime: {
+      getPresentation: async () => {
+        throw new LivePlexTransportError('auth-required', 'Plex authentication is required');
+      },
+      tuneChannel: async () => undefined,
+    } as never,
+    isAuthorizedEvent: (event) => (event as unknown) === 'authorized',
+    createRequestId: () => 'fallback-request',
+    ipcMain: {
+      handle: (channelName, handler) => {
+        handled.set(channelName, handler as (event: unknown, payload: unknown) => unknown);
+      },
+      removeHandler: () => undefined,
+    },
+  });
+
+  const handler = handled.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL);
+  assert.ok(handler);
+
+  const result = await handler('authorized', {
+    requestId: 'guide-window-auth',
+    payload: { startTimeMs: 0, durationMs: 60_000 },
+  });
+
+  assert.equal((result as { ok: boolean }).ok, false);
+  assert.equal((result as { error: { code: string } }).error.code, 'GUIDE_AUTH_FAILED');
 });
 
 test('channel runtime commits selected Plex libraries as persisted channel summaries', async () => {

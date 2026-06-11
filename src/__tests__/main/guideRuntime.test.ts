@@ -25,9 +25,14 @@ class MockChannelRepository {
 
 class MockPlexLibraryAdapter {
   private readonly libraryItems = new Map<string, readonly PlexMediaItemMinimal[]>();
+  private readonly libraryErrors = new Map<string, unknown>();
 
   setLibraryItems(sectionId: string, items: readonly PlexMediaItemMinimal[]): void {
     this.libraryItems.set(sectionId, [...items]);
+  }
+
+  setLibraryError(sectionId: string, error: unknown): void {
+    this.libraryErrors.set(sectionId, error);
   }
 
   async getLibraryItems(
@@ -38,6 +43,9 @@ class MockPlexLibraryAdapter {
       signal?: { aborted?: boolean } | null;
     },
   ): Promise<PlexMediaItemMinimal[]> {
+    if (this.libraryErrors.has(sectionId)) {
+      throw this.libraryErrors.get(sectionId);
+    }
     return [...(this.libraryItems.get(sectionId) ?? [])];
   }
 
@@ -179,6 +187,66 @@ test('GuideRuntime tuneChannel configures active scheduler and persists choice',
   assert.equal(repository.data.currentChannelId, 'chan-1');
 });
 
+test('GuideRuntime logs and isolates onChannelTuned callback failures', async () => {
+  const repository = new MockChannelRepository();
+  const chan1 = createChannelConfig('chan-1', 1, 'Channel 1');
+  repository.data.channels = [chan1];
+
+  const plexAdapter = new MockPlexLibraryAdapter();
+  plexAdapter.setLibraryItems('lib-1', [createLibraryItem(0)]);
+  const activeScheduler = new ChannelScheduler({ clock: { now: () => 1000 } });
+  const errors: unknown[] = [];
+
+  const runtime = new GuideRuntime({
+    repository: repository as unknown as ChannelRepository,
+    plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
+    activeChannelScheduler: activeScheduler,
+    clock: { now: () => 1000 },
+    onChannelTuned: () => {
+      throw new Error('callback failed');
+    },
+    logger: {
+      warn: () => undefined,
+      error: (_message, detail) => errors.push(detail),
+    },
+  });
+
+  await runtime.tuneChannel('chan-1');
+
+  assert.equal(activeScheduler.getState().isActive, true);
+  assert.equal(repository.data.currentChannelId, 'chan-1');
+  assert.equal(errors.length, 1);
+  assert.match(JSON.stringify(errors[0]), /callback failed/u);
+});
+
+test('GuideRuntime logs content resolution failures while returning empty channel programs', async () => {
+  const repository = new MockChannelRepository();
+  const chan1 = createChannelConfig('chan-1', 1, 'Channel 1');
+  repository.data.channels = [chan1];
+  repository.data.currentChannelId = 'chan-1';
+
+  const plexAdapter = new MockPlexLibraryAdapter();
+  plexAdapter.setLibraryError('lib-1', new Error('library unavailable'));
+  const errors: unknown[] = [];
+
+  const runtime = new GuideRuntime({
+    repository: repository as unknown as ChannelRepository,
+    plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
+    activeChannelScheduler: new ChannelScheduler({ clock: { now: () => 1000 } }),
+    clock: { now: () => 1000 },
+    logger: {
+      warn: () => undefined,
+      error: (_message, detail) => errors.push(detail),
+    },
+  });
+
+  const presentation = await runtime.getPresentation(1000, 1_800_000);
+
+  assert.equal(presentation.channels[0]?.programs.length, 0);
+  assert.equal(errors.length, 2);
+  assert.match(JSON.stringify(errors[0]), /library unavailable/u);
+});
+
 test('GuideRuntime initializeActiveChannel tunes to last active channel', async () => {
   const repository = new MockChannelRepository();
   const chan1 = createChannelConfig('chan-1', 1, 'Channel 1');
@@ -201,4 +269,31 @@ test('GuideRuntime initializeActiveChannel tunes to last active channel', async 
   const state = activeScheduler.getState();
   assert.equal(state.isActive, true);
   assert.equal(state.channelId, 'chan-1');
+});
+
+test('GuideRuntime logs initializeActiveChannel tuning failures without throwing', async () => {
+  const repository = new MockChannelRepository();
+  const chan1 = createChannelConfig('chan-1', 1, 'Channel 1');
+  repository.data.channels = [chan1];
+  repository.data.currentChannelId = 'chan-1';
+
+  const plexAdapter = new MockPlexLibraryAdapter();
+  plexAdapter.setLibraryError('lib-1', new Error('startup tune failed'));
+  const errors: unknown[] = [];
+
+  const runtime = new GuideRuntime({
+    repository: repository as unknown as ChannelRepository,
+    plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
+    activeChannelScheduler: new ChannelScheduler({ clock: { now: () => 1000 } }),
+    clock: { now: () => 1000 },
+    logger: {
+      warn: () => undefined,
+      error: (_message, detail) => errors.push(detail),
+    },
+  });
+
+  await runtime.initializeActiveChannel();
+
+  assert.equal(errors.length, 1);
+  assert.match(JSON.stringify(errors[0]), /startup tune failed/u);
 });

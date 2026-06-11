@@ -14,8 +14,14 @@ test('PmsPlaybackSessionPort startSession returns lease and stores details', asy
     latencyMs: null,
   };
   const mockRuntime = {
-    getActiveConnectionAndToken() {
-      return { connection, token: 'token' };
+    getSelectedConnectionForMain() {
+      return connection;
+    },
+    async withActivePlexToken(
+      _operation: 'getMetadata',
+      run: (token: string) => Promise<unknown>,
+    ) {
+      return run('token');
     },
   } as unknown as DesktopPlexRuntime;
 
@@ -34,8 +40,11 @@ test('PmsPlaybackSessionPort startSession returns lease and stores details', asy
 
 test('PmsPlaybackSessionPort startSession returns null if connection or token is missing', async () => {
   const mockRuntime = {
-    getActiveConnectionAndToken() {
-      return { connection: null, token: null };
+    getSelectedConnectionForMain() {
+      return null;
+    },
+    async withActivePlexToken() {
+      throw new Error('missing token');
     },
   } as unknown as DesktopPlexRuntime;
 
@@ -75,8 +84,14 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
   };
 
   const mockRuntime = {
-    getActiveConnectionAndToken() {
-      return { connection, token: 'token' };
+    getSelectedConnectionForMain() {
+      return connection;
+    },
+    async withActivePlexToken(
+      _operation: 'getMetadata',
+      run: (token: string) => Promise<unknown>,
+    ) {
+      return run('token');
     },
     getLibraryTransport() {
       return mockTransport;
@@ -137,8 +152,14 @@ test('PmsPlaybackSessionPort releaseSession does NOT invoke stopTranscodeSession
   };
 
   const mockRuntime = {
-    getActiveConnectionAndToken() {
-      return { connection, token: 'token' };
+    getSelectedConnectionForMain() {
+      return connection;
+    },
+    async withActivePlexToken(
+      _operation: 'getMetadata',
+      run: (token: string) => Promise<unknown>,
+    ) {
+      return run('token');
     },
     getLibraryTransport() {
       return mockTransport;

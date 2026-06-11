@@ -101,6 +101,13 @@ const channelSetupBridgeSourceFile = ts.createSourceFile(
   true,
   ts.ScriptKind.TS,
 );
+const guideBridgeSourceFile = ts.createSourceFile(
+  'src/preload/guideBridge.cts',
+  guideBridgeSourceText,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+);
 
 type PreloadInvokeCall = {
   channel: string;
@@ -980,6 +987,103 @@ test('preload Plex bridge validates invoke results before returning them', async
   assert.equal((result as { ok: boolean }).ok, true);
 });
 
+test('guide bridge validates presentation request ranges and result envelopes', async () => {
+  const guideBridgeExports = evaluateGuideBridgeModule();
+  const createGuideBridge = guideBridgeExports.createGuideBridge as (
+    invoke: (channel: string, request: { requestId: string; payload: unknown }) => Promise<unknown>,
+    channels: { getPresentation: string; tuneChannel: string },
+    createRequestId: (prefix: string) => string,
+  ) => { getPresentation: (input: { startTimeMs: number; durationMs: number }) => Promise<unknown> };
+  const validPresentation = {
+    channels: [
+      {
+        id: 'channel-1',
+        number: '1',
+        name: 'Channel One',
+        programs: [
+          {
+            id: 'program-1',
+            title: 'Program One',
+            subtitle: '',
+            description: 'A safe description.',
+            showTitle: '',
+            episodeLabel: '',
+            rating: 'TV-PG',
+            quality: ['HD'],
+            genres: ['Drama'],
+            startsAtMs: 1,
+            endsAtMs: 2,
+          },
+        ],
+      },
+    ],
+    nowWatching: {
+      title: 'Program One',
+      subtitle: '',
+      channelId: 'channel-1',
+      startsAtMs: 1,
+      endsAtMs: 2,
+    },
+  };
+
+  let invoked = false;
+  const bridge = createGuideBridge(
+    async (_channel, request) => {
+      invoked = true;
+      return {
+        ok: true,
+        requestId: request.requestId,
+        value: validPresentation,
+      };
+    },
+    {
+      getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
+    },
+    () => 'guide-request-1',
+  );
+
+  const invalidRange = await bridge.getPresentation({ startTimeMs: 0, durationMs: 0 });
+  assert.equal((invalidRange as { ok: boolean }).ok, false);
+  assert.equal(invoked, false);
+
+  const valid = await bridge.getPresentation({ startTimeMs: 0, durationMs: 60_000 });
+  assert.equal((valid as { ok: boolean }).ok, true);
+
+  const wrongRequestBridge = createGuideBridge(
+    async () => ({
+      ok: true,
+      requestId: 'other-request',
+      value: validPresentation,
+    }),
+    {
+      getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
+    },
+    () => 'guide-request-2',
+  );
+  const wrongRequest = await wrongRequestBridge.getPresentation({ startTimeMs: 0, durationMs: 60_000 });
+  assert.equal((wrongRequest as { ok: boolean }).ok, false);
+
+  const extraFieldBridge = createGuideBridge(
+    async (_channel, request) => ({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        ...validPresentation,
+        token: 'secret-token',
+      },
+    }),
+    {
+      getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
+    },
+    () => 'guide-request-3',
+  );
+  const extraField = await extraFieldBridge.getPresentation({ startTimeMs: 0, durationMs: 60_000 });
+  assert.equal((extraField as { ok: boolean }).ok, false);
+});
+
 test('preload Plex bridge accepts nullable metadata and search types', async () => {
   const snapshot = createSafePlexSnapshot();
   const harness = createPreloadHarness((_channel, request, input) => {
@@ -1519,9 +1623,12 @@ test('preload bridge guard rejects Electron value imports while allowing type im
 test('preload split keeps Electron values in index and built preload has no local preload requires', () => {
   assertNoElectronValueImports(channelGuardSourceFile);
   assertNoElectronValueImports(channelSetupBridgeSourceFile);
+  assertNoElectronValueImports(guideBridgeSourceFile);
   assert.doesNotMatch(channelGuardSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(channelSetupBridgeSourceText, /require\(['"]electron['"]\)/u);
+  assert.doesNotMatch(guideBridgeSourceText, /require\(['"]electron['"]\)/u);
   assert.match(preloadSourceText, /from '\.\/channelSetupBridge\.cjs'/u);
+  assert.match(preloadSourceText, /from '\.\/guideBridge\.cjs'/u);
   assert.match(channelSetupBridgeSourceText, /from '\.\/channelBridgeGuards\.cjs'/u);
   assert.match(preloadBundleToolSourceText, /bundle:\s*true/u);
   assert.match(preloadBundleToolSourceText, /external:\s*\[\s*'electron'\s*\]/u);
@@ -1535,6 +1642,7 @@ test(
   assert.match(preloadBundleOutputText, /require\(["']electron["']\)/u);
   assert.doesNotMatch(preloadBundleOutputText, /channelBridgeGuards\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /channelSetupBridge\.cjs/u);
+  assert.doesNotMatch(preloadBundleOutputText, /guideBridge\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /require\(["']\.(?:\/|\\)[^"']+["']\)/u);
   assert.doesNotMatch(preloadBundleOutputText, /\bfrom\s+["']\.(?:\/|\\)[^"']+["']/u);
   assert.doesNotMatch(preloadBundleOutputText, /\bimport\(["']\.(?:\/|\\)[^"']+["']\)/u);

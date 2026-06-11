@@ -14,6 +14,7 @@ import type {
   SchedulerPlaybackMode,
 } from '../../domain/scheduler/types.js';
 import type { ResolvedContentItem as ChannelContentItem } from '../../domain/channel/types.js';
+import type { ChannelConfig } from '../../domain/channel/types.js';
 import type { PlexLibraryMinimalAdapter } from './plexLibraryMinimalAdapter.js';
 
 export class GuideRuntime {
@@ -22,6 +23,7 @@ export class GuideRuntime {
   private readonly activeChannelScheduler: ChannelScheduler;
   private readonly clock: ChannelClock;
   private readonly onChannelTuned?: (channelId: string) => void | Promise<void>;
+  private readonly logger: ChannelLogger;
 
   constructor(input: {
     repository: ChannelRepository;
@@ -40,6 +42,7 @@ export class GuideRuntime {
     );
     this.activeChannelScheduler = input.activeChannelScheduler;
     this.onChannelTuned = input.onChannelTuned;
+    this.logger = input.logger ?? { warn: () => undefined, error: () => undefined };
   }
 
   async getPresentation(
@@ -59,8 +62,8 @@ export class GuideRuntime {
         let channelItems: ChannelContentItem[] = [];
         try {
           channelItems = await this.contentResolver.resolveSource(channel.contentSource);
-        } catch {
-          // Fallback to empty if resolution fails
+        } catch (error) {
+          this.logContentResolutionFailure('GuideRuntime.getPresentation.channel', channel, error);
         }
 
         if (channelItems.length === 0) {
@@ -72,20 +75,7 @@ export class GuideRuntime {
           };
         }
 
-        const schedulerItems = channelItems.map(toSchedulerContentItem);
-        const schedulerPlaybackMode: SchedulerPlaybackMode =
-          channel.playbackMode === 'random' ? 'shuffle' : channel.playbackMode;
-
-        const scheduler = new ChannelScheduler({ clock: this.clock });
-        scheduler.loadChannel({
-          channelId: channel.id,
-          anchorTime: channel.startTimeAnchor,
-          content: schedulerItems,
-          playbackMode: schedulerPlaybackMode,
-          shuffleSeed: channel.shuffleSeed ?? 0,
-          blockSize: channel.blockSize,
-        });
-
+        const scheduler = createSchedulerForChannel(channel, channelItems, this.clock);
         const window = scheduler.getScheduleWindow(startTimeMs, startTimeMs + durationMs);
         const programs = window.programs.map((prog) =>
           mapScheduledProgramToViewModel(prog, channel.id, channelItems),
@@ -111,8 +101,8 @@ export class GuideRuntime {
         let currentItems: ChannelContentItem[] = [];
         try {
           currentItems = await this.contentResolver.resolveSource(currentChannel.contentSource);
-        } catch {
-          // Ignore
+        } catch (error) {
+          this.logContentResolutionFailure('GuideRuntime.getPresentation.nowWatching.active', currentChannel, error);
         }
         nowWatching = mapCurrentProgram(state.currentProgram, currentChannel.id, currentItems);
       } else {
@@ -120,23 +110,11 @@ export class GuideRuntime {
         let currentItems: ChannelContentItem[] = [];
         try {
           currentItems = await this.contentResolver.resolveSource(currentChannel.contentSource);
-        } catch {
-          // Ignore
+        } catch (error) {
+          this.logContentResolutionFailure('GuideRuntime.getPresentation.nowWatching.fallback', currentChannel, error);
         }
         if (currentItems.length > 0) {
-          const schedulerItems = currentItems.map(toSchedulerContentItem);
-          const schedulerPlaybackMode: SchedulerPlaybackMode =
-            currentChannel.playbackMode === 'random' ? 'shuffle' : currentChannel.playbackMode;
-
-          const scheduler = new ChannelScheduler({ clock: this.clock });
-          scheduler.loadChannel({
-            channelId: currentChannel.id,
-            anchorTime: currentChannel.startTimeAnchor,
-            content: schedulerItems,
-            playbackMode: schedulerPlaybackMode,
-            shuffleSeed: currentChannel.shuffleSeed ?? 0,
-            blockSize: currentChannel.blockSize,
-          });
+          const scheduler = createSchedulerForChannel(currentChannel, currentItems, this.clock);
           const currentProgram = scheduler.getCurrentProgram();
           if (currentProgram && currentProgram.isCurrent) {
             nowWatching = mapCurrentProgram(currentProgram, currentChannel.id, currentItems);
@@ -180,9 +158,7 @@ export class GuideRuntime {
     });
 
     await this.repository.saveCurrentChannelId(channelId);
-    if (this.onChannelTuned) {
-      await this.onChannelTuned(channelId);
-    }
+    await this.notifyChannelTuned(channelId);
   }
 
   async initializeActiveChannel(): Promise<void> {
@@ -194,10 +170,70 @@ export class GuideRuntime {
     if (currentChannelId) {
       try {
         await this.tuneChannel(currentChannelId);
-      } catch {
-        // Log error internally but do not crash startup
+      } catch (error) {
+        this.logger.error('GuideRuntime initializeActiveChannel failed to tune channel.', {
+          currentChannelId,
+          error: summarizeError(error),
+        });
       }
     }
+  }
+
+  private logContentResolutionFailure(operation: string, channel: ChannelConfig, error: unknown): void {
+    this.logger.error('GuideRuntime failed to resolve channel content.', {
+      operation,
+      channelId: channel.id,
+      contentSource: channel.contentSource,
+      error: summarizeError(error),
+    });
+  }
+
+  private async notifyChannelTuned(channelId: string): Promise<void> {
+    if (!this.onChannelTuned) {
+      return;
+    }
+    try {
+      await this.onChannelTuned(channelId);
+    } catch (error) {
+      this.logger.error('GuideRuntime onChannelTuned callback failed.', {
+        channelId,
+        error: summarizeError(error),
+      });
+    }
+  }
+}
+
+function createSchedulerForChannel(
+  channel: ChannelConfig,
+  items: readonly ChannelContentItem[],
+  clock: ChannelClock,
+): ChannelScheduler {
+  const schedulerItems = items.map(toSchedulerContentItem);
+  const schedulerPlaybackMode: SchedulerPlaybackMode =
+    channel.playbackMode === 'random' ? 'shuffle' : channel.playbackMode;
+  const scheduler = new ChannelScheduler({ clock });
+  scheduler.loadChannel({
+    channelId: channel.id,
+    anchorTime: channel.startTimeAnchor,
+    content: schedulerItems,
+    playbackMode: schedulerPlaybackMode,
+    shuffleSeed: channel.shuffleSeed ?? 0,
+    blockSize: channel.blockSize,
+  });
+  return scheduler;
+}
+
+function summarizeError(error: unknown): { name?: string; message: string } | string {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+    };
+  }
+  try {
+    return String(error);
+  } catch {
+    return 'unknown error';
   }
 }
 

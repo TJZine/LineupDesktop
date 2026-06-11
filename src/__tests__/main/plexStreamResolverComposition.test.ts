@@ -18,8 +18,8 @@ test('PlaybackSelectedConnectionPort returns connection from runtime', async () 
     latencyMs: null,
   };
   const mockRuntime = {
-    getActiveConnectionAndToken() {
-      return { connection, token: 'some-token' };
+    getSelectedConnectionForMain() {
+      return connection;
     },
   } as unknown as DesktopPlexRuntime;
 
@@ -30,8 +30,8 @@ test('PlaybackSelectedConnectionPort returns connection from runtime', async () 
 
 test('PlaybackSelectedConnectionPort returns null if no connection', async () => {
   const mockRuntime = {
-    getActiveConnectionAndToken() {
-      return { connection: null, token: null };
+    getSelectedConnectionForMain() {
+      return null;
     },
   } as unknown as DesktopPlexRuntime;
 
@@ -42,8 +42,11 @@ test('PlaybackSelectedConnectionPort returns null if no connection', async () =>
 
 test('PlaybackActiveCredentialPort returns credentials from runtime', async () => {
   const mockRuntime = {
-    getActiveConnectionAndToken() {
-      return { connection: null, token: 'secret-token' };
+    async withActivePlexToken(
+      _operation: 'getMetadata',
+      run: (token: string) => Promise<unknown>,
+    ) {
+      return run('secret-token');
     },
   } as unknown as DesktopPlexRuntime;
 
@@ -57,8 +60,8 @@ test('PlaybackActiveCredentialPort returns credentials from runtime', async () =
 
 test('PlaybackActiveCredentialPort returns null if no token', async () => {
   const mockRuntime = {
-    getActiveConnectionAndToken() {
-      return { connection: null, token: null };
+    async withActivePlexToken() {
+      throw new Error('missing token');
     },
   } as unknown as DesktopPlexRuntime;
 
@@ -69,8 +72,17 @@ test('PlaybackActiveCredentialPort returns null if no token', async () => {
 
 test('createLivePlexStreamResolverComposition instantiates resolver and pms session port', () => {
   const mockRuntime = {
-    getActiveConnectionAndToken() {
-      return { connection: null, token: null };
+    getSelectedConnectionForMain() {
+      return null;
+    },
+    async withActivePlexToken() {
+      throw new Error('missing token');
+    },
+    async withActiveLibraryContext() {
+      throw new Error('missing context');
+    },
+    getLibraryTransport() {
+      return {};
     },
   } as unknown as DesktopPlexRuntime;
 

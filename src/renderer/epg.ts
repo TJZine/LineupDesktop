@@ -707,6 +707,15 @@ export function updateEpgState(
     selectedProgramId = fallbackProgram?.id ?? channel.programs[0]?.id ?? '';
   }
 
+  if (selectedProgramId === '') {
+    return {
+      windowStartMs,
+      selectedChannelId: '',
+      selectedProgramId: '',
+      presentationState: 'empty',
+    };
+  }
+
   return normalizeEpgSelection({
     windowStartMs,
     selectedChannelId,

@@ -5,8 +5,8 @@ import type { DesktopPlexRuntime } from '../../main/plex/desktopPlexRuntime.js';
 
 test('PlaybackMediaDetailPort returns null for non-plex media ID', async () => {
   const mockRuntime = {
-    getActiveConnectionAndToken() {
-      return { connection: {}, token: 'token' };
+    async withActiveLibraryContext() {
+      throw new Error('should not be called');
     },
   } as unknown as DesktopPlexRuntime;
 
@@ -17,8 +17,8 @@ test('PlaybackMediaDetailPort returns null for non-plex media ID', async () => {
 
 test('PlaybackMediaDetailPort returns null if connection/token is missing', async () => {
   const mockRuntime = {
-    getActiveConnectionAndToken() {
-      return { connection: null, token: null };
+    async withActiveLibraryContext() {
+      throw new Error('missing context');
     },
   } as unknown as DesktopPlexRuntime;
 
@@ -70,14 +70,19 @@ test('PlaybackMediaDetailPort fetches and parses metadata', async () => {
   };
 
   const mockRuntime = {
-    getActiveConnectionAndToken() {
-      return {
+    async withActiveLibraryContext(
+      _operation: 'getMetadata',
+      run: (context: {
+        connection: { uri: string };
+        token: string;
+        transport: typeof mockTransport;
+      }) => Promise<unknown>,
+    ) {
+      return run({
         connection: { uri: 'http://localhost' },
         token: 'token',
-      };
-    },
-    getLibraryTransport() {
-      return mockTransport;
+        transport: mockTransport,
+      });
     },
   } as unknown as DesktopPlexRuntime;
 
@@ -98,14 +103,19 @@ test('PlaybackMediaDetailPort returns null on transport error', async () => {
   };
 
   const mockRuntime = {
-    getActiveConnectionAndToken() {
-      return {
+    async withActiveLibraryContext(
+      _operation: 'getMetadata',
+      run: (context: {
+        connection: { uri: string };
+        token: string;
+        transport: typeof mockTransport;
+      }) => Promise<unknown>,
+    ) {
+      return run({
         connection: { uri: 'http://localhost' },
         token: 'token',
-      };
-    },
-    getLibraryTransport() {
-      return mockTransport;
+        transport: mockTransport,
+      });
     },
   } as unknown as DesktopPlexRuntime;
 

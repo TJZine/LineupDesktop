@@ -12,10 +12,6 @@ export class PlaybackMediaDetailPort implements PlexStreamResolverMediaDetailPor
   }
 
   async getMediaDetail(input: { mediaId: string }): Promise<PlexMediaItem | null> {
-    const { connection, token } = this.#runtime.getActiveConnectionAndToken();
-    if (!connection || !token) {
-      return null;
-    }
     const prefix = 'plex-media-';
     if (!input.mediaId.startsWith(prefix)) {
       return null;
@@ -25,22 +21,23 @@ export class PlaybackMediaDetailPort implements PlexStreamResolverMediaDetailPor
       return null;
     }
 
-    const liveTransport = this.#runtime.getLibraryTransport();
     try {
-      const payload = await liveTransport.getMetadata({
-        connection,
-        token,
-        ratingKey,
+      return await this.#runtime.withActiveLibraryContext('getMetadata', async ({ connection, token, transport }) => {
+        const payload = await transport.getMetadata({
+          connection,
+          token,
+          ratingKey,
+        });
+
+        if (!payload) {
+          return null;
+        }
+
+        const parsedItems = parseMediaItems(
+          extractMetadataArray<RawMediaItem>(payloadAsContainer<RawMediaItem>(payload), 'metadata'),
+        );
+        return parsedItems[0] ?? null;
       });
-
-      if (!payload) {
-        return null;
-      }
-
-      const parsedItems = parseMediaItems(
-        extractMetadataArray<RawMediaItem>(payloadAsContainer<RawMediaItem>(payload), 'metadata'),
-      );
-      return parsedItems[0] ?? null;
     } catch {
       return null;
     }

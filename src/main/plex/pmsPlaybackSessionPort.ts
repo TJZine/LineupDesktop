@@ -31,8 +31,13 @@ export class PmsPlaybackSessionPort
   async startSession(
     input: PlexStreamResolverPmsSessionStartInput,
   ): Promise<PlexStreamResolverPmsSessionLease | null> {
-    const { connection, token } = this.#runtime.getActiveConnectionAndToken();
-    if (!connection || !token) {
+    const connection = this.#runtime.getSelectedConnectionForMain();
+    if (!connection) {
+      return null;
+    }
+    try {
+      await this.#runtime.withActivePlexToken('getMetadata', async () => undefined);
+    } catch {
       return null;
     }
 
@@ -63,16 +68,12 @@ export class PmsPlaybackSessionPort
 
     const { connection, decisionKind } = sessionDetails;
     if (decisionKind === 'transcode' || decisionKind === 'direct-stream') {
-      const { token } = this.#runtime.getActiveConnectionAndToken();
-      if (!token) {
-        return;
-      }
-
-      const liveTransport = this.#runtime.getLibraryTransport();
-      await liveTransport.stopTranscodeSession({
-        connection,
-        token,
-        sessionId: session.id,
+      await this.#runtime.withActivePlexToken('getMetadata', async (token) => {
+        await this.#runtime.getLibraryTransport().stopTranscodeSession({
+          connection,
+          token,
+          sessionId: session.id,
+        });
       }).catch(() => {
         // Safe no-op on failure
       });

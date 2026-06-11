@@ -20,6 +20,12 @@ export interface DesktopPlexRuntimeOptions {
   nowMs?: () => number;
 }
 
+export interface ActivePlexLibraryContext {
+  connection: PlexConnection;
+  token: string;
+  transport: LivePlexLibraryTransport;
+}
+
 export class DesktopPlexRuntime {
   private readonly authService: DesktopPlexAuthService;
   private readonly credentialStore: DesktopPlexRuntimeOptions['credentialStore'];
@@ -43,11 +49,30 @@ export class DesktopPlexRuntime {
   getLibraryTransport(): LivePlexLibraryTransport {
     return this.libraryTransport;
   }
-  getActiveConnectionAndToken(): { connection: PlexConnection | null; token: string | null } {
-    return {
-      connection: this.serverDiscovery.getSelectedConnectionForMain(),
-      token: this.authService.getActiveTokenForMain(),
-    };
+  getSelectedConnectionForMain(): PlexConnection | null {
+    return this.serverDiscovery.getSelectedConnectionForMain();
+  }
+  async withActivePlexToken<T>(
+    operation: Extract<PlexRuntimeOperation, 'listLibraryItems' | 'getMetadata'>,
+    run: (token: string) => Promise<T>,
+  ): Promise<T> {
+    const token = this.authService.getActiveTokenForMain();
+    if (token === null) {
+      throw new LivePlexTransportError('auth-required', `${operation} requires Plex authentication`);
+    }
+    return run(token);
+  }
+  async withActiveLibraryContext<T>(
+    operation: Extract<PlexRuntimeOperation, 'listLibraryItems' | 'getMetadata'>,
+    run: (context: ActivePlexLibraryContext) => Promise<T>,
+  ): Promise<T> {
+    const token = await this.withActivePlexToken(operation, async (activeToken) => activeToken);
+    const connection = this.requireSelectedConnection(operation);
+    return run({
+      connection,
+      token,
+      transport: this.libraryTransport,
+    });
   }
   getSnapshot(requestId: string): PlexIpcResult<PlexRuntimeSnapshot> {
     return success(requestId, this.cloneSnapshot());

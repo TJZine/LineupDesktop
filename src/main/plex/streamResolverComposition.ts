@@ -17,7 +17,7 @@ export class PlaybackSelectedConnectionPort implements PlexStreamResolverSelecte
   }
 
   async getSelectedConnection(): Promise<PlexConnection | null> {
-    return this.#runtime.getActiveConnectionAndToken().connection;
+    return this.#runtime.getSelectedConnectionForMain();
   }
 }
 
@@ -29,14 +29,14 @@ export class PlaybackActiveCredentialPort implements PlexStreamResolverActiveCre
   }
 
   async getActiveAuthHeader(): Promise<PlexStreamResolverAuthHeader | null> {
-    const { token } = this.#runtime.getActiveConnectionAndToken();
-    if (!token) {
+    try {
+      return await this.#runtime.withActivePlexToken('getMetadata', async (token) => ({
+        name: 'X-Plex-Token',
+        value: token,
+      }));
+    } catch {
       return null;
     }
-    return {
-      name: 'X-Plex-Token',
-      value: token,
-    };
   }
 }
 

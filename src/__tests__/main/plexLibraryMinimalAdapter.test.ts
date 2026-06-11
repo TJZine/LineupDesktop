@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PlexLibraryMinimalAdapter } from '../../main/channel/plexLibraryMinimalAdapter.js';
 import type { DesktopPlexRuntime } from '../../main/plex/desktopPlexRuntime.js';
-import type { LivePlexLibraryTransport } from '../../main/plex/livePlexTransport.js';
+import { LivePlexTransportError, type LivePlexLibraryTransport } from '../../main/plex/livePlexTransport.js';
 import type { PlexConnection } from '../../main/plex/discovery/types.js';
-import { type RawMediaItem } from '../../main/plex/library/index.js';
+import { PlexLibraryError, type RawMediaItem } from '../../main/plex/library/index.js';
 
 class MockLibraryTransport implements LivePlexLibraryTransport {
+  public lastListLibraryItemsInput: Parameters<LivePlexLibraryTransport['listLibraryItems']>[0] | null = null;
   public listLibraryItemsMock: () => ReturnType<LivePlexLibraryTransport['listLibraryItems']> = async () => ({
     kind: 'json',
     data: { MediaContainer: { Metadata: [] } },
@@ -37,8 +38,9 @@ class MockLibraryTransport implements LivePlexLibraryTransport {
   });
 
   async listLibraryItems(
-    _input: Parameters<LivePlexLibraryTransport['listLibraryItems']>[0],
+    input: Parameters<LivePlexLibraryTransport['listLibraryItems']>[0],
   ): ReturnType<LivePlexLibraryTransport['listLibraryItems']> {
+    this.lastListLibraryItemsInput = input;
     return this.listLibraryItemsMock();
   }
   async listLibrarySections(
@@ -91,12 +93,26 @@ class MockPlexRuntime {
   public token: string | null = 'test-token';
   public transport = new MockLibraryTransport();
 
-  getActiveConnectionAndToken(): { connection: PlexConnection; token: string | null } {
-    return { connection: this.connection, token: this.token };
-  }
-
   getLibraryTransport(): LivePlexLibraryTransport {
     return this.transport;
+  }
+
+  async withActiveLibraryContext<T>(
+    _operation: 'listLibraryItems' | 'getMetadata',
+    run: (context: {
+      connection: PlexConnection;
+      token: string;
+      transport: LivePlexLibraryTransport;
+    }) => Promise<T>,
+  ): Promise<T> {
+    if (this.token === null) {
+      throw new LivePlexTransportError('auth-required', 'Plex authentication is required');
+    }
+    return run({
+      connection: this.connection,
+      token: this.token,
+      transport: this.transport,
+    });
   }
 }
 
@@ -186,6 +202,57 @@ test('PlexLibraryMinimalAdapter getLibraryItems pages and parses items correctly
   assert.equal(items[0]?.ratingKey, 'ep-0');
   assert.equal(items[51]?.ratingKey, 'ep-51');
   assert.equal(calls, 2);
+});
+
+test('PlexLibraryMinimalAdapter maps domain abort signals to transport AbortSignal', async () => {
+  const runtime = new MockPlexRuntime();
+  const adapter = new PlexLibraryMinimalAdapter(runtime as unknown as DesktopPlexRuntime);
+  const abortHandlers: Array<() => void> = [];
+  const domainSignal = {
+    aborted: false,
+    addEventListener(event: 'abort', handler: () => void) {
+      assert.equal(event, 'abort');
+      abortHandlers.push(handler);
+    },
+  };
+
+  await adapter.getLibraryItems('library-1', { signal: domainSignal });
+
+  const transportSignal = runtime.transport.lastListLibraryItemsInput?.signal;
+  assert.ok(transportSignal instanceof AbortSignal);
+  assert.equal(transportSignal.aborted, false);
+  assert.equal(abortHandlers.length, 1);
+  abortHandlers[0]?.();
+  assert.equal(transportSignal.aborted, true);
+});
+
+test('PlexLibraryMinimalAdapter reports missing Plex credentials as structured transport errors', async () => {
+  const runtime = new MockPlexRuntime();
+  runtime.token = null;
+  const adapter = new PlexLibraryMinimalAdapter(runtime as unknown as DesktopPlexRuntime);
+
+  await assert.rejects(
+    () => adapter.getLibraryItems('library-1'),
+    (error) => error instanceof LivePlexTransportError && error.code === 'auth-required',
+  );
+});
+
+test('PlexLibraryMinimalAdapter guards infinite pagination with structured library error', async () => {
+  const runtime = new MockPlexRuntime();
+  const adapter = new PlexLibraryMinimalAdapter(runtime as unknown as DesktopPlexRuntime);
+  runtime.transport.listLibraryItemsMock = async () => ({
+    kind: 'json',
+    data: {
+      MediaContainer: {
+        Metadata: Array.from({ length: 50 }, (_, i) => createRawEpisode({ ratingKey: `loop-${i}` })),
+      },
+    },
+  });
+
+  await assert.rejects(
+    () => adapter.getLibraryItems('library-loop'),
+    (error) => error instanceof PlexLibraryError && error.code === 'pagination-limit-exceeded',
+  );
 });
 
 test('PlexLibraryMinimalAdapter getCollectionItems fetches and parses collection items', async () => {

@@ -64,3 +64,24 @@ test('updateEpgState sets empty state when presentation contains no channels', (
   assert.equal(updated.selectedProgramId, '');
   assert.equal(updated.presentationState, 'empty');
 });
+
+test('updateEpgState sets empty state when channels contain no selectable programs', () => {
+  const initial = createEpgState();
+  const emptyProgramPresentation: EpgPresentationSource = {
+    channels: [
+      {
+        id: initial.selectedChannelId,
+        number: '1',
+        name: 'Empty Channel',
+        programs: [],
+      },
+    ],
+    nowWatching: null,
+  };
+
+  const updated = updateEpgState(initial, emptyProgramPresentation);
+
+  assert.equal(updated.selectedChannelId, '');
+  assert.equal(updated.selectedProgramId, '');
+  assert.equal(updated.presentationState, 'empty');
+});

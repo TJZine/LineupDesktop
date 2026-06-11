@@ -20,7 +20,8 @@ import {
 } from '../../contracts/ipc.js';
 import type { ChannelRuntime } from './channelRuntime.js';
 import type { GuideRuntime } from './guideRuntime.js';
-import type { GuideIpcResult } from '../../contracts/guide.js';
+import type { GuideIpcResult, GuideRuntimeError } from '../../contracts/guide.js';
+import { LivePlexTransportError } from '../plex/livePlexTransport.js';
 
 type ChannelIpcMain = Pick<IpcMain, 'handle' | 'removeHandler'>;
 
@@ -35,6 +36,7 @@ export interface RegisterChannelIpcHandlersOptions {
 export type ChannelIpcTeardown = () => Promise<void>;
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,120}$/u;
+const MAX_GUIDE_PRESENTATION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function registerChannelIpcHandlers(
   options: RegisterChannelIpcHandlersOptions,
@@ -84,13 +86,7 @@ export function registerChannelIpcHandlers(
         return {
           ok: false,
           requestId: request.requestId,
-          error: {
-            code: 'GUIDE_PRESENTATION_FAILED',
-            message: readErrorMessage(error) || 'Failed to fetch guide presentation.',
-            retryable: true,
-            recoverable: true,
-            operation: 'getPresentation',
-          },
+          error: mapGuidePresentationError(error),
         };
       }
     });
@@ -288,8 +284,11 @@ function readPresentationRequest(
     !hasOnlyKeys(value.payload, ['startTimeMs', 'durationMs']) ||
     typeof value.payload.startTimeMs !== 'number' ||
     !Number.isFinite(value.payload.startTimeMs) ||
+    value.payload.startTimeMs < 0 ||
     typeof value.payload.durationMs !== 'number' ||
-    !Number.isFinite(value.payload.durationMs)
+    !Number.isFinite(value.payload.durationMs) ||
+    value.payload.durationMs <= 0 ||
+    value.payload.durationMs > MAX_GUIDE_PRESENTATION_DURATION_MS
   ) {
     return { ok: false, requestId, payload: {} };
   }
@@ -308,6 +307,32 @@ function readErrorMessage(error: unknown): string | null {
     return error.message;
   }
   return null;
+}
+
+function mapGuidePresentationError(error: unknown): GuideRuntimeError {
+  if (error instanceof LivePlexTransportError) {
+    const isAuthError = error.code === 'auth-required' || error.code === 'auth-invalid';
+    const isNotFoundError = error.code === 'resource-not-found';
+    return {
+      code: isAuthError
+        ? 'GUIDE_AUTH_FAILED'
+        : isNotFoundError
+          ? 'GUIDE_CHANNEL_NOT_FOUND'
+          : 'GUIDE_TRANSPORT_ERROR',
+      message: readErrorMessage(error) || 'Failed to fetch guide presentation.',
+      retryable: error.retryable,
+      recoverable: true,
+      operation: 'getPresentation',
+    };
+  }
+
+  return {
+    code: 'GUIDE_PRESENTATION_FAILED',
+    message: readErrorMessage(error) || 'Failed to fetch guide presentation.',
+    retryable: true,
+    recoverable: true,
+    operation: 'getPresentation',
+  };
 }
 
 type ReadTuneRequestResult =

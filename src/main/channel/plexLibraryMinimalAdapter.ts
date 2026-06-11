@@ -12,6 +12,8 @@ import type { DesktopPlexRuntime } from '../plex/desktopPlexRuntime.js';
 import {
   extractMetadataArray,
   parseMediaItems,
+  PLEX_LIBRARY_CONSTANTS,
+  PlexLibraryError,
   type PlexMediaItem,
   type RawMediaItem,
 } from '../plex/library/index.js';
@@ -33,141 +35,179 @@ export class PlexLibraryMinimalAdapter implements IPlexLibraryMinimal {
       signal?: ChannelAbortSignal | null;
     },
   ): Promise<PlexMediaItemMinimal[]> {
-    const { connection, token } = this.runtime.getActiveConnectionAndToken();
-    if (!connection || !token) {
-      throw new Error('Plex authentication or server selection is missing');
-    }
-    const transport = this.runtime.getLibraryTransport();
-    const items: RawMediaItem[] = [];
-    let offset = 0;
-    const limit = 50;
-    let iterations = 0;
+    return this.runtime.withActiveLibraryContext('listLibraryItems', async ({ connection, token, transport }) => {
+      const mappedSignal = mapChannelSignalToAbortSignal(options?.signal);
+      const items: RawMediaItem[] = [];
+      let offset = 0;
+      const limit = 50;
+      let iterations = 0;
 
-    while (true) {
-      if (++iterations > 1000) {
-        throw new Error('Pagination limit exceeded');
+      try {
+        while (true) {
+          if (++iterations > PLEX_LIBRARY_CONSTANTS.MAX_PAGINATION_ITERATIONS) {
+            throw new PlexLibraryError(
+              'pagination-limit-exceeded',
+              'Plex library pagination limit was exceeded in PlexLibraryMinimalAdapter.getLibraryItems',
+            );
+          }
+          const payload = await transport.listLibraryItems({
+            connection,
+            token,
+            sectionId: libraryId,
+            offset,
+            limit,
+            filter: options?.filter,
+            includeCollections: options?.includeCollections,
+            signal: mappedSignal.signal,
+          });
+          const pageItems = extractMetadataArray<RawMediaItem>(
+            payloadAsContainer<RawMediaItem>(payload),
+            'library items',
+          );
+          items.push(...pageItems);
+          if (pageItems.length < limit) {
+            break;
+          }
+          offset += pageItems.length;
+        }
+      } finally {
+        mappedSignal.cleanup();
       }
-      const payload = await transport.listLibraryItems({
-        connection,
-        token,
-        sectionId: libraryId,
-        offset,
-        limit,
-        filter: options?.filter,
-        includeCollections: options?.includeCollections,
-        signal: options?.signal as AbortSignal | null,
-      });
-      const pageItems = extractMetadataArray<RawMediaItem>(
-        payloadAsContainer<RawMediaItem>(payload),
-        'library items',
-      );
-      items.push(...pageItems);
-      if (pageItems.length < limit) {
-        break;
-      }
-      offset += pageItems.length;
-    }
-    return parseMediaItems(items).map(toDomainMediaItem);
+      return parseMediaItems(items).map(toDomainMediaItem);
+    });
   }
 
   async getCollectionItems(
     collectionKey: string,
     options?: ChannelResolveOptions,
   ): Promise<PlexMediaItemMinimal[]> {
-    const { connection, token } = this.runtime.getActiveConnectionAndToken();
-    if (!connection || !token) {
-      throw new Error('Plex authentication or server selection is missing');
-    }
-    const transport = this.runtime.getLibraryTransport();
-    const payload = await transport.getCollectionItems({
-      connection,
-      token,
-      collectionKey,
-      signal: options?.signal as AbortSignal | null,
+    return this.runtime.withActiveLibraryContext('listLibraryItems', async ({ connection, token, transport }) => {
+      const mappedSignal = mapChannelSignalToAbortSignal(options?.signal);
+      try {
+        const payload = await transport.getCollectionItems({
+          connection,
+          token,
+          collectionKey,
+          signal: mappedSignal.signal,
+        });
+        const items = extractMetadataArray<RawMediaItem>(
+          payloadAsContainer<RawMediaItem>(payload),
+          'collection items',
+        );
+        return parseMediaItems(items).map(toDomainMediaItem);
+      } finally {
+        mappedSignal.cleanup();
+      }
     });
-    const items = extractMetadataArray<RawMediaItem>(
-      payloadAsContainer<RawMediaItem>(payload),
-      'collection items',
-    );
-    return parseMediaItems(items).map(toDomainMediaItem);
   }
 
   async getShowEpisodes(
     showKey: string,
     options?: ChannelResolveOptions,
   ): Promise<PlexMediaItemMinimal[]> {
-    const { connection, token } = this.runtime.getActiveConnectionAndToken();
-    if (!connection || !token) {
-      throw new Error('Plex authentication or server selection is missing');
-    }
-    const transport = this.runtime.getLibraryTransport();
-    const payload = await transport.getShowEpisodes({
-      connection,
-      token,
-      showKey,
-      signal: options?.signal as AbortSignal | null,
+    return this.runtime.withActiveLibraryContext('listLibraryItems', async ({ connection, token, transport }) => {
+      const mappedSignal = mapChannelSignalToAbortSignal(options?.signal);
+      try {
+        const payload = await transport.getShowEpisodes({
+          connection,
+          token,
+          showKey,
+          signal: mappedSignal.signal,
+        });
+        const items = extractMetadataArray<RawMediaItem>(
+          payloadAsContainer<RawMediaItem>(payload),
+          'show episodes',
+        );
+        return parseMediaItems(items).map(toDomainMediaItem);
+      } finally {
+        mappedSignal.cleanup();
+      }
     });
-    const items = extractMetadataArray<RawMediaItem>(
-      payloadAsContainer<RawMediaItem>(payload),
-      'show episodes',
-    );
-    return parseMediaItems(items).map(toDomainMediaItem);
   }
 
   async getPlaylistItems(
     playlistKey: string,
     options?: ChannelResolveOptions,
   ): Promise<PlexMediaItemMinimal[]> {
-    const { connection, token } = this.runtime.getActiveConnectionAndToken();
-    if (!connection || !token) {
-      throw new Error('Plex authentication or server selection is missing');
-    }
-    const transport = this.runtime.getLibraryTransport();
-    const payload = await transport.getPlaylistItems({
-      connection,
-      token,
-      playlistKey,
-      signal: options?.signal as AbortSignal | null,
+    return this.runtime.withActiveLibraryContext('listLibraryItems', async ({ connection, token, transport }) => {
+      const mappedSignal = mapChannelSignalToAbortSignal(options?.signal);
+      try {
+        const payload = await transport.getPlaylistItems({
+          connection,
+          token,
+          playlistKey,
+          signal: mappedSignal.signal,
+        });
+        const items = extractMetadataArray<RawMediaItem>(
+          payloadAsContainer<RawMediaItem>(payload),
+          'playlist items',
+        );
+        return parseMediaItems(items).map(toDomainMediaItem);
+      } finally {
+        mappedSignal.cleanup();
+      }
     });
-    const items = extractMetadataArray<RawMediaItem>(
-      payloadAsContainer<RawMediaItem>(payload),
-      'playlist items',
-    );
-    return parseMediaItems(items).map(toDomainMediaItem);
   }
 
   async getItem(
     ratingKey: string,
     options?: ChannelResolveOptions,
   ): Promise<PlexMediaItemMinimal | null> {
-    const { connection, token } = this.runtime.getActiveConnectionAndToken();
-    if (!connection || !token) {
-      throw new Error('Plex authentication or server selection is missing');
-    }
-    const transport = this.runtime.getLibraryTransport();
-    try {
-      const payload = await transport.getMetadata({
-        connection,
-        token,
-        ratingKey,
-        signal: options?.signal as AbortSignal | null,
-      });
-      const items = extractMetadataArray<RawMediaItem>(
-        payloadAsContainer<RawMediaItem>(payload),
-        'metadata',
-      );
-      const parsed = parseMediaItems(items);
-      if (parsed.length === 0 || !parsed[0]) {
-        return null;
+    return this.runtime.withActiveLibraryContext('getMetadata', async ({ connection, token, transport }) => {
+      const mappedSignal = mapChannelSignalToAbortSignal(options?.signal);
+      try {
+        const payload = await transport.getMetadata({
+          connection,
+          token,
+          ratingKey,
+          signal: mappedSignal.signal,
+        });
+        const items = extractMetadataArray<RawMediaItem>(
+          payloadAsContainer<RawMediaItem>(payload),
+          'metadata',
+        );
+        const parsed = parseMediaItems(items);
+        if (parsed.length === 0 || !parsed[0]) {
+          return null;
+        }
+        return toDomainMediaItem(parsed[0]);
+      } catch (error) {
+        if (error instanceof LivePlexTransportError && error.code === 'resource-not-found') {
+          return null;
+        }
+        throw error;
+      } finally {
+        mappedSignal.cleanup();
       }
-      return toDomainMediaItem(parsed[0]);
-    } catch (error) {
-      if (error instanceof LivePlexTransportError && error.code === 'resource-not-found') {
-        return null;
-      }
-      throw error;
-    }
+    });
   }
+}
+
+function mapChannelSignalToAbortSignal(signal?: ChannelAbortSignal | null): {
+  signal: AbortSignal | null;
+  cleanup: () => void;
+} {
+  if (!signal) {
+    return { signal: null, cleanup: () => undefined };
+  }
+  if (typeof AbortSignal !== 'undefined' && signal instanceof AbortSignal) {
+    return { signal, cleanup: () => undefined };
+  }
+  const controller = new AbortController();
+  if (signal.aborted) {
+    controller.abort();
+    return { signal: controller.signal, cleanup: () => undefined };
+  }
+  const abort = () => {
+    controller.abort();
+  };
+  signal.addEventListener?.('abort', abort, { once: true });
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      signal.removeEventListener?.('abort', abort);
+    },
+  };
 }
 
 function toDomainMediaItem(item: PlexMediaItem): PlexMediaItemMinimal {

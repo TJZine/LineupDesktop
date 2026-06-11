@@ -10,6 +10,7 @@ import type { DesktopPlexRuntime } from '../plex/desktopPlexRuntime.js';
 import { PlexLibraryMinimalAdapter } from './plexLibraryMinimalAdapter.js';
 import { ChannelScheduler } from '../../domain/scheduler/channelScheduler.js';
 import { GuideRuntime } from './guideRuntime.js';
+import type { ChannelLogger } from '../../domain/channel/interfaces.js';
 
 export interface RegisterChannelCompositionOptions {
   app: Pick<App, 'getPath'>;
@@ -46,11 +47,13 @@ export function registerChannelComposition(
 
   const plexLibraryAdapter = new PlexLibraryMinimalAdapter(options.plexRuntime);
   const activeChannelScheduler = new ChannelScheduler();
+  const guideLogger = createGuideRuntimeLogger(options.diagnosticEventStore);
   const guideRuntime = new GuideRuntime({
     repository: runtime.getRepository(),
     plexLibraryAdapter,
     activeChannelScheduler,
-    onChannelTuned: options.onChannelTuned,
+    onChannelTuned: typeof options.onChannelTuned === 'function' ? options.onChannelTuned : undefined,
+    logger: guideLogger,
   });
 
   const teardownIpc: ChannelIpcTeardown = registerChannelIpcHandlers({
@@ -80,4 +83,82 @@ export function registerChannelComposition(
       await teardownIpc();
     },
   };
+}
+
+function createGuideRuntimeLogger(
+  diagnosticEventStore: DiagnosticEventStore | undefined,
+): ChannelLogger {
+  return {
+    warn: (message, detail) => {
+      diagnosticEventStore?.record({
+        surface: 'main',
+        category: 'lifecycle',
+        severity: 'warning',
+        status: 'observed',
+        operation: 'channel.guideRuntime.warn',
+        message,
+        context: sanitizeDiagnosticDetail(detail),
+      });
+    },
+    error: (message, detail) => {
+      diagnosticEventStore?.record({
+        surface: 'main',
+        category: 'lifecycle',
+        severity: 'error',
+        status: 'failed',
+        operation: 'channel.guideRuntime.error',
+        message,
+        context: sanitizeDiagnosticDetail(detail),
+      });
+    },
+  };
+}
+
+function sanitizeDiagnosticDetail(detail: unknown): Record<string, unknown> {
+  if (typeof detail !== 'object' || detail === null || Array.isArray(detail)) {
+    return {};
+  }
+  return sanitizeDiagnosticRecord(detail as Record<string, unknown>, 0);
+}
+
+function sanitizeDiagnosticRecord(
+  detail: Record<string, unknown>,
+  depth: number,
+): Record<string, unknown> {
+  if (depth > 2) {
+    return { summary: 'detail-depth-exceeded' };
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(detail)) {
+    if (isSensitiveDiagnosticKey(key)) {
+      result[key] = '[redacted]';
+      continue;
+    }
+    if (typeof value === 'string') {
+      result[key] = redactDiagnosticText(value);
+    } else if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
+      result[key] = value;
+    } else if (Array.isArray(value)) {
+      result[key] = value.slice(0, 20).map((entry) => (
+        typeof entry === 'object' && entry !== null
+          ? sanitizeDiagnosticRecord(entry as Record<string, unknown>, depth + 1)
+          : entry
+      ));
+    } else if (typeof value === 'object' && value !== null) {
+      result[key] = sanitizeDiagnosticRecord(value as Record<string, unknown>, depth + 1);
+    }
+  }
+  return result;
+}
+
+function isSensitiveDiagnosticKey(key: string): boolean {
+  return /token|secret|credential|password|auth|header|url|uri|path|file/i.test(key);
+}
+
+function redactDiagnosticText(value: string): string {
+  return value
+    .replace(/([?&][^=]*token[^=]*=)[^&\s]+/giu, '$1[redacted]')
+    .replace(/\b(bearer)\s+[-A-Za-z0-9._~+/=]+/giu, '$1 [redacted]')
+    .replace(/\b(?:https?|file):\/\/\S+/giu, '[redacted-url]')
+    .slice(0, 2000);
 }
