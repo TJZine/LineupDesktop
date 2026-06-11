@@ -1,21 +1,6 @@
 # Playback Architecture
 
-Lineup Desktop runtime playback is only partially wired. RD-07 adds a
-main-owned Desktop player adapter boundary core, a narrow runtime main/preload
-player IPC bridge backed by a development/smoke fake host, and a native-host
-process seam behind the adapter host port. Windows closeout proof covers the
-process seam with a real spawned helper test double and reruns the RD-06
-app-owned native-presentation smoke as RD-07's native surface proof. Production
-player commands currently return renderer-safe unsupported failures. RD-12 adds
-an injected main-owned Plex stream resolver and playback runtime, but production
-native-helper playback, live Plex transport composition, renderer UI
-integration with live Plex/player APIs, and product helper wiring remain
-unimplemented. RD-15 proves fake-backed renderer UI composition over the
-reviewed dev-only native-presentation boundary; it does not change production
-playback wiring. RD-16 hardens deterministic subtitle, audio, HDR, and track
-identity policy/resolver behavior and records redacted Windows media-matrix
-proof through the dev-only native-presentation harness, but it still does not
-enable production native-helper playback or live Plex transport.
+Lineup Desktop runtime playback is code-complete, with manual proof pending. RD-25 implements the production native playback MVP, replacing the fake playback bootstrap with a production-shaped, main/helper-owned native playback path for live Plex-backed scheduled media. A main-only privileged load context propagates the private playback descriptor to the helper host, which runs a repo-owned C# native helper process. The helper communicates with the main process via an NDJSON protocol over stdin/stdout. Live Plex stream resolution, media detail, and PMS session ports are composed and wired. Renderer player UI state binds dynamically to safe player IPC events. Manual proof of running native playback on Windows is deferred to the later MVP QA pass, leaving production native playback proof pending.
 
 ## Current Hypothesis
 
@@ -273,3 +258,18 @@ Renderer-facing track state uses opaque UI ids only. Privileged mappings to
 engine ids, Plex stream ids, Plex part keys, stream keys, URLs, headers, or
 native handles belong behind main/helper or domain-owned boundaries and require
 a reviewed plan before they are introduced.
+
+## RD-25 Production Native Playback MVP
+
+RD-25 code implementation is complete, manual proof pending. The production native playback MVP replaces the fake playback bootstrap with a production-shaped, main/helper-owned native playback path for live Plex-backed scheduled media.
+
+### Seam Propagation and Setup Flow
+
+1. **Privileged Setup Handoff**: A main-only privileged load context propagates the `PlexPrivilegedPlaybackDescriptor` from `PlexStreamResolver` through `PlexPlaybackBridge`, `PlexPlaybackRuntime`, and `DesktopPlayerAdapter` into `NativePlayerHostProcess`.
+2. **Helper Command Execution**: The process setup is serialized into a private helper command and written to the C# helper (`Lineup.NativePlayerHost`) stdin using NDJSON, preventing secrets from leaking into argv, env, or process lists.
+3. **Plex Live Transport Composition**: A live stream resolver composition wires PMS session start/release ports and selected connection/token settings from `DesktopPlexRuntime` to obtain real stream details instead of fake placeholders.
+4. **Lifecycle Hooks and Cleanup**: App cleanup, user profile switches, server selection changes, program scheduling transitions, manual stops, and native helper crashes successfully trigger runtime cleanups and PMS session releases.
+5. **Renderer Binding**: The renderer player UI dynamically updates from IPC event notifications, keeping track of safe player snapshots without exposing tokenized URLs, credential headers, or libmpv details.
+
+Manual proof of running native playback on Windows is deferred to the later MVP QA pass, leaving production native playback proof pending.
+

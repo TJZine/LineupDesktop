@@ -181,7 +181,8 @@ export class PlexPlaybackRuntime {
       this.#emit(events);
       return { accepted: false, epoch, requestId: null, events };
     }
-    const { privatePlayback, ...publicCandidate } = candidate;
+    const publicCandidate = { ...candidate };
+    delete (publicCandidate as { privatePlayback?: unknown }).privatePlayback;
     if (!isSafeRuntimeCandidate(publicCandidate)) {
       const rejectedSession = readReleasablePmsSession(candidate);
       if (rejectedSession !== null) {

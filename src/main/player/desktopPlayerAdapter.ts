@@ -223,11 +223,11 @@ export class DesktopPlayerAdapter {
       }
       try {
         validatePrivilegedPlaybackDescriptor(context.privatePlayback, command.requestId);
-      } catch (err: any) {
+      } catch (err: unknown) {
         const error = createPlayerError({
           code: 'PLAYER_VALIDATION_FAILED',
           category: 'validation-failure',
-          message: err?.message || 'Invalid privileged playback descriptor.',
+          message: (err instanceof Error ? err.message : '') || 'Invalid privileged playback descriptor.',
           requestId: command.requestId,
           diagnostic: {
             component: 'desktop-player-adapter',

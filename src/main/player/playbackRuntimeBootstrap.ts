@@ -5,8 +5,9 @@ import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.j
 import {
   createPlexPlaybackRuntimeComposition,
   createDesktopPlayerAdapterRuntimePort,
+  type PlexPlaybackCompositionResolverPort,
 } from './plexPlaybackComposition.js';
-import type { PlexPlaybackRuntime } from './plexPlaybackRuntime.js';
+import type { PlexPlaybackRuntime, PlexPlaybackRuntimePmsPort } from './plexPlaybackRuntime.js';
 import type { DesktopPlayerAdapter } from './desktopPlayerAdapter.js';
 import type { DesktopStreamCapabilityProfile } from './streamPolicy/types.js';
 import type { PlexStreamResolverInput, PlexStreamResolverResult } from '../plex/streamResolver.js';
@@ -64,8 +65,8 @@ export function bootstrapPlaybackRuntime(
   }
 
   // Production:
-  let resolver: any;
-  let pmsPort: any;
+  let resolver: PlexPlaybackCompositionResolverPort;
+  let pmsPort: PlexPlaybackRuntimePmsPort;
 
   if (plexRuntime) {
     const liveResolverComposition = createLivePlexStreamResolverComposition(plexRuntime);

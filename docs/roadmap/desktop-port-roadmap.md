@@ -1671,7 +1671,7 @@ Stop and replan if:
 
 ### RD-25 Production Native Playback MVP
 
-Status: not started.
+Status: in progress / code implemented / manual proof pending.
 
 Depends on:
 

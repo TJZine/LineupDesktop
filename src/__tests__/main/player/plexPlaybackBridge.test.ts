@@ -441,7 +441,8 @@ test('RD-12 bridge keeps streamDescriptor private and public outputs redacted', 
   }
   const candidate = await bridge.resolvePlaybackCandidate(selection);
 
-  const { privatePlayback, ...publicCandidate } = candidate;
+  const publicCandidate = { ...candidate };
+  delete (publicCandidate as { privatePlayback?: unknown }).privatePlayback;
   assert.equal(resolver.inputs[0]?.mediaId, 'rating-1');
   assertPublicSafe(selection, rawPrivateValues);
   assertPublicSafe(publicCandidate, rawPrivateValues);

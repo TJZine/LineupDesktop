@@ -240,7 +240,7 @@ class FakeDesktopPlayerAdapter {
 
   async dispatchRuntimeCommand(
     command: PlayerCommand,
-    context?: PrivilegedPlaybackDispatchContext | null,
+    _context?: PrivilegedPlaybackDispatchContext | null,
   ): Promise<{
     accepted: boolean;
     events: readonly PlayerEvent[];

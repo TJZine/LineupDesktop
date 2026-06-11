@@ -49,7 +49,7 @@ export class PmsPlaybackSessionPort
 
   async releaseSession(
     session: PlexPlaybackPmsSessionLease,
-    input: {
+    _input: {
       reason: PlexPlaybackRuntimeCleanupReason | 'stale';
       requestId: PlayerRequestId;
     },

@@ -29,7 +29,7 @@ let fullscreenEnabled = false;
 const presentationFixtures = createRendererPresentationFixtures();
 let workflowState = createWorkflowState('player', presentationFixtures.guide);
 let overlayState = createPlayerOverlayState(presentationFixtures.overlays);
-const playerSnapshot = presentationFixtures.playerSnapshot;
+let playerSnapshot = presentationFixtures.playerSnapshot;
 const focusRegistry = new FocusRegistry();
 let focusState: FocusState;
 const GUIDE_POLL_INTERVAL_MS = 15_000;
@@ -63,11 +63,70 @@ const gamepadRuntime = startDesktopGamepadRuntime({
 });
 
 window.addEventListener('keydown', keydownListener);
+
+const unsubscribePlayer = window.lineupDesktop.player.onEvent((event) => {
+  if (event.event === 'state.changed') {
+    playerSnapshot = event.snapshot;
+  } else if (event.event === 'time.updated') {
+    playerSnapshot = {
+      ...playerSnapshot,
+      positionMs: event.positionMs,
+      durationMs: event.durationMs,
+    };
+  } else if (event.event === 'buffer.updated') {
+    playerSnapshot = {
+      ...playerSnapshot,
+      bufferedRanges: event.bufferedRanges,
+    };
+  } else if (event.event === 'media.loaded') {
+    playerSnapshot = {
+      ...playerSnapshot,
+      status: 'ready',
+      media: event.media,
+      durationMs: event.durationMs,
+    };
+  } else if (event.event === 'tracks.changed') {
+    playerSnapshot = {
+      ...playerSnapshot,
+      tracks: event.tracks,
+    };
+  } else if (event.event === 'track.selection.changed') {
+    playerSnapshot = {
+      ...playerSnapshot,
+      selectedAudioTrackId: event.audioTrackId,
+      selectedSubtitleTrackId: event.subtitleTrackId,
+      selectedVideoTrackId: event.videoTrackId,
+    };
+  } else if (event.event === 'ended') {
+    playerSnapshot = {
+      ...playerSnapshot,
+      status: 'ended',
+      playing: false,
+    };
+  } else if (event.event === 'error') {
+    playerSnapshot = {
+      ...playerSnapshot,
+      status: 'error',
+      playing: false,
+      lastError: event.error,
+    };
+  }
+  renderApp();
+});
+
+void window.lineupDesktop.player.getSnapshot().then((result) => {
+  if (result.ok) {
+    playerSnapshot = result.value;
+    renderApp();
+  }
+});
+
 window.addEventListener('beforeunload', () => {
   window.removeEventListener('keydown', keydownListener);
   cursorRuntime.cleanup();
   gamepadRuntime.cleanup();
   unsubscribeShellStatus();
+  unsubscribePlayer();
   stopGuidePresentationPolling();
   cleanupPlexRuntime('beforeunload');
 });

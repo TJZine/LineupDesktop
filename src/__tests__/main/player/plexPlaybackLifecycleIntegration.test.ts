@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { DesktopPlexRuntime } from '../../../main/plex/desktopPlexRuntime.js';
 import type { PlexPlaybackRuntime } from '../../../main/player/plexPlaybackRuntime.js';
 import type { NativePlayerHostPort, NativePlayerHostLifecycleFailure } from '../../../main/player/nativePlayerHostPort.js';
-import type { PlexIpcResult, PlexSwitchHomeUserValue, PlexSelectServerValue } from '../../../contracts/plex.js';
+import type { PlexIpcResult, PlexSwitchHomeUserValue, PlexSelectServerValue, PlexRuntimeSnapshot } from '../../../contracts/plex.js';
 
 test('playback cleanup is triggered on switchHomeUser success', async () => {
   let cleanupReason: string | null = null;
@@ -15,7 +15,7 @@ test('playback cleanup is triggered on switchHomeUser success', async () => {
   } as unknown as PlexPlaybackRuntime;
 
   const mockPlexRuntime = {
-    async switchHomeUser(requestId: string, input: { userId: string; pin?: string | null }) {
+    async switchHomeUser(requestId: string, _input: { userId: string; pin?: string | null }) {
       return {
         ok: true,
         value: {
@@ -23,7 +23,7 @@ test('playback cleanup is triggered on switchHomeUser success', async () => {
             accountId: 'user-1',
             username: 'user1',
           },
-          snapshot: {} as any,
+          snapshot: {} as unknown as PlexRuntimeSnapshot,
         },
         requestId,
       } satisfies PlexIpcResult<PlexSwitchHomeUserValue>;
@@ -58,7 +58,7 @@ test('playback cleanup is NOT triggered on switchHomeUser failure', async () => 
   } as unknown as PlexPlaybackRuntime;
 
   const mockPlexRuntime = {
-    async switchHomeUser(requestId: string, input: { userId: string; pin?: string | null }) {
+    async switchHomeUser(requestId: string, _input: { userId: string; pin?: string | null }) {
       return {
         ok: false,
         error: {
@@ -69,7 +69,7 @@ test('playback cleanup is NOT triggered on switchHomeUser failure', async () => 
           operation: 'switchHomeUser',
         },
         requestId,
-      } as any;
+      } as unknown as PlexIpcResult<PlexSwitchHomeUserValue>;
     },
   } as unknown as DesktopPlexRuntime;
 
@@ -101,15 +101,25 @@ test('playback cleanup is triggered on selectServer success', async () => {
   } as unknown as PlexPlaybackRuntime;
 
   const mockPlexRuntime = {
-    async selectServer(requestId: string, serverId: string) {
+    async selectServer(requestId: string, _serverId: string) {
       return {
         ok: true,
         value: {
           selection: {
             kind: 'selected',
-            serverId: 'server-1',
+            server: {
+              serverId: 'server-1',
+              name: 'server1',
+              owned: true,
+              connectionCount: 1,
+              hasLocalConnection: true,
+              hasRemoteConnection: false,
+              hasRelayConnection: false,
+              selected: true,
+            },
+            persisted: true,
           },
-          snapshot: {} as any,
+          snapshot: {} as unknown as PlexRuntimeSnapshot,
         },
         requestId,
       } satisfies PlexIpcResult<PlexSelectServerValue>;
@@ -144,7 +154,7 @@ test('playback cleanup is NOT triggered on selectServer failure', async () => {
   } as unknown as PlexPlaybackRuntime;
 
   const mockPlexRuntime = {
-    async selectServer(requestId: string, serverId: string) {
+    async selectServer(requestId: string, _serverId: string) {
       return {
         ok: false,
         error: {
@@ -155,7 +165,7 @@ test('playback cleanup is NOT triggered on selectServer failure', async () => {
           operation: 'selectServer',
         },
         requestId,
-      } as any;
+      } as unknown as PlexIpcResult<PlexSelectServerValue>;
     },
   } as unknown as DesktopPlexRuntime;
 
@@ -199,34 +209,32 @@ test('helper crash is wired to playbackRuntime handleHelperCrash via host onLife
   const originalNativeHostFactory = () => mockHost;
 
   // Simulate the wrapping behavior from index.ts
-  const nativeHostFactory = originalNativeHostFactory
-    ? () => {
-        const host = originalNativeHostFactory();
-        host.onLifecycleFailure?.(() => {
-          if (mockPlaybackRuntime) {
-            void mockPlaybackRuntime.handleHelperCrash();
-          }
-        });
-        return host;
+  const nativeHostFactory = () => {
+    const host = originalNativeHostFactory();
+    host.onLifecycleFailure?.(() => {
+      if (mockPlaybackRuntime) {
+        void mockPlaybackRuntime.handleHelperCrash();
       }
-    : null;
+    });
+    return host;
+  };
 
-  assert.ok(nativeHostFactory);
   const hostInstance = nativeHostFactory();
   assert.equal(hostInstance, mockHost);
-  assert.ok(lifecycleListener);
 
-  // Trigger helper crash event
-  lifecycleListener!({
-    requestId: 'req-1',
-    error: {
-      code: 'PLAYER_HELPER_CRASHED',
-      message: 'Helper crashed',
-      category: 'helper-failure',
-      recoverable: false,
-      retryable: false,
-    },
-  });
+  const callback = lifecycleListener as unknown as ((failure: NativePlayerHostLifecycleFailure) => void) | null;
+  if (callback) {
+    callback({
+      requestId: 'req-1',
+      error: {
+        code: 'PLAYER_HELPER_CRASHED',
+        message: 'Helper crashed',
+        category: 'helper-failure',
+        recoverable: false,
+        retryable: false,
+      },
+    });
+  }
 
   assert.equal(handleHelperCrashCalled, true);
 });

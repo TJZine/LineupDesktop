@@ -28,7 +28,7 @@ export function getProductionHelperPath(): string | null {
   }
 
   // 1. Packaged location
-  const resourcesPath = (process as any).resourcesPath;
+  const resourcesPath = (process as unknown as { resourcesPath?: string }).resourcesPath;
   if (resourcesPath) {
     const packagedPath = path.join(resourcesPath, 'Lineup.NativePlayerHost.exe');
     if (fs.existsSync(packagedPath)) {
