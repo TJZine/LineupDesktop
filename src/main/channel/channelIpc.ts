@@ -358,7 +358,9 @@ function readTuneRequest(
     !hasOnlyKeys(value, ['requestId', 'payload']) ||
     !hasOnlyKeys(value.payload, ['channelId']) ||
     typeof value.payload.channelId !== 'string' ||
-    value.payload.channelId.trim().length === 0
+    value.payload.channelId.trim().length === 0 ||
+    value.payload.channelId.length > 120 ||
+    !REQUEST_ID_PATTERN.test(value.payload.channelId)
   ) {
     return { ok: false, requestId, payload: {} };
   }

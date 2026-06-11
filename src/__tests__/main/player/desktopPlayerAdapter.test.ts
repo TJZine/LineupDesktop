@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { setImmediate } from 'node:timers';
 
 import { DesktopPlayerAdapter } from '../../../main/player/desktopPlayerAdapter.js';
 import { DiagnosticEventStore } from '../../../main/diagnostics/diagnosticEventStore.js';
@@ -557,6 +558,44 @@ test('desktop player adapter rejects renderer loads in production mode without m
   assert.equal(host.commands.length, 1);
   assert.deepEqual(rejected.snapshot, activeSnapshot);
   assert.deepEqual(adapter.getSnapshot(), activeSnapshot);
+});
+
+test('desktop player adapter rejects duplicate in-flight renderer request IDs before host dispatch', async () => {
+  const host = new DeferredNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+
+  const first = adapter.dispatchRendererIntent(emptyEnvelope('player.play', 'request-duplicate'));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const second = await adapter.dispatchRendererIntent(emptyEnvelope('player.pause', 'request-duplicate'));
+
+  assert.equal(second.accepted, false);
+  assertErrorEvent(second.events, 'validation-failure');
+  assert.equal(host.commands.length, 1);
+
+  host.resolveNext();
+  assert.equal((await first).accepted, true);
+});
+
+test('desktop player adapter rejects duplicate in-flight runtime request IDs before host dispatch', async () => {
+  const host = new DeferredNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+
+  const first = adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('request-runtime-duplicate'),
+    privilegedContext('request-runtime-duplicate'),
+  );
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const second = await adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('request-runtime-duplicate'),
+    privilegedContext('request-runtime-duplicate'),
+  );
+
+  assert.equal(second.accepted, false);
+  assertErrorEvent(second.events, 'validation-failure');
+  assert.equal(host.commands.length, 1);
+
+  host.resolveNext();
+  assert.equal((await first).accepted, true);
 });
 
 test('desktop player adapter rejects missing privileged runtime context without mutating active snapshot', async () => {

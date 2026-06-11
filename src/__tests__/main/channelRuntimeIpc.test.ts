@@ -11,6 +11,7 @@ import {
   LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_PLAYER_TUNE_CHANNEL,
 } from '../../contracts/ipc.js';
 import type { PlexRuntimeSnapshot } from '../../contracts/plex.js';
 import { ChannelRuntime, type ChannelRuntimeOptions } from '../../main/channel/channelRuntime.js';
@@ -260,6 +261,48 @@ test('channel IPC rejects invalid guide presentation windows before runtime invo
   }
 
   assert.equal(presentationCalls, 0);
+});
+
+test('channel IPC rejects unsafe tune channel IDs before runtime invocation', async () => {
+  const handled = new Map<string, (event: unknown, payload: unknown) => unknown>();
+  const runtime = new ChannelRuntime({
+    storage: createMemoryStorage(null),
+    clock: { now: () => 123 },
+  });
+  let tuneCalls = 0;
+
+  registerChannelIpcHandlers({
+    runtime,
+    guideRuntime: {
+      getPresentation: async () => ({ channels: [], nowWatching: null }),
+      tuneChannel: async () => {
+        tuneCalls++;
+      },
+    } as never,
+    isAuthorizedEvent: (event) => (event as unknown) === 'authorized',
+    createRequestId: () => 'fallback-request',
+    ipcMain: {
+      handle: (channelName, handler) => {
+        handled.set(channelName, handler as (event: unknown, payload: unknown) => unknown);
+      },
+      removeHandler: () => undefined,
+    },
+  });
+
+  const handler = handled.get(LINEUP_PLAYER_TUNE_CHANNEL);
+  assert.ok(handler);
+
+  for (const payload of [
+    { requestId: 'player-tune-space', payload: { channelId: 'bad id' } },
+    { requestId: 'player-tune-html', payload: { channelId: '<script>' } },
+    { requestId: 'player-tune-long', payload: { channelId: 'a'.repeat(121) } },
+  ]) {
+    const result = await handler('authorized', payload);
+    assert.equal((result as { ok: boolean }).ok, false);
+    assert.equal((result as { error: { code: string } }).error.code, 'GUIDE_VALIDATION_FAILED');
+  }
+
+  assert.equal(tuneCalls, 0);
 });
 
 test('channel IPC maps known guide presentation errors to distinct renderer-safe codes', async () => {

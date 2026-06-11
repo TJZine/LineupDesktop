@@ -67,6 +67,12 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     command: PlayerCommand,
     context?: PrivilegedPlaybackDispatchContext | null,
   ): Promise<NativePlayerHostCommandResult> {
+    if (this.#pending.has(command.requestId)) {
+      return {
+        ok: false,
+        error: safeFailure('PLAYER_HELPER_DUPLICATE_REQUEST', 'helper-failure', false, false),
+      };
+    }
     const child = this.#getOrSpawnChild();
     if ('error' in child) {
       return { ok: false, error: child.error };

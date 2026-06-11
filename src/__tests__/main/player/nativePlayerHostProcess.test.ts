@@ -225,6 +225,29 @@ test('native host process translates commands and returns safe host events', asy
   assertNoForbiddenKeys(result);
 });
 
+test('native host process rejects duplicate in-flight request IDs without overwriting pending commands', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+
+  const first = host.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const duplicate = await host.execute({
+    command: 'play',
+    requestId: 'native-load-1',
+    payload: {},
+  });
+
+  assert.equal(duplicate.ok, false);
+  assert.equal(duplicate.ok ? null : duplicate.error.code, 'PLAYER_HELPER_DUPLICATE_REQUEST');
+  assert.equal(child.writes.length, 1);
+
+  child.send({ type: 'result', requestId: 'native-load-1', ok: true, events: [] });
+  assert.equal((await first).ok, true);
+});
+
 test('native host process reports idle helper lifecycle failures to subscribers', async () => {
   const child = new FakeHostChildProcess();
   const lifecycleFailures: NativePlayerHostLifecycleFailure[] = [];
@@ -770,4 +793,3 @@ test('native host process rejects oversized messages', async () => {
   assert.equal(result.ok, false);
   assert.equal(result.error.code, 'PLAYER_HELPER_MESSAGE_TOO_LARGE');
 });
-

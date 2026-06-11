@@ -35,3 +35,11 @@ test('native helper tears down mpv before reinitializing and applies private tra
   assert.match(source, /SetTrackSelection\("sid", selection\.subtitle\)/u);
   assert.match(source, /SetTrackSelection\("vid", selection\.video\)/u);
 });
+
+test('native helper rejects controls before media is loaded', async () => {
+  const source = await readFile(programPath, 'utf8');
+
+  assert.match(source, /msg\.command != "load" && mpvContext == IntPtr\.Zero/u);
+  assert.match(source, /PLAYER_HELPER_NOT_READY/u);
+  assert.match(source, /Player helper has not loaded media\./u);
+});

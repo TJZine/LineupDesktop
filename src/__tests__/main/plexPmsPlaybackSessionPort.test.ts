@@ -80,13 +80,16 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
   };
 
   let stopSessionId: string | null = null;
+  let stopToken: string | null = null;
   const operations: string[] = [];
   const mockTransport = {
-    async stopTranscodeSession(input: { sessionId: string }) {
+    async stopTranscodeSession(input: { sessionId: string; token: string }) {
       stopSessionId = input.sessionId;
+      stopToken = input.token;
     },
   };
 
+  const tokens = ['start-token-1', 'start-token-2'];
   const mockRuntime = {
     getSelectedConnectionForMain() {
       return connection;
@@ -96,7 +99,7 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
       run: (token: string) => Promise<unknown>,
     ) {
       operations.push(operation);
-      return run('token');
+      return run(tokens.shift() ?? 'unexpected-token');
     },
     getLibraryTransport() {
       return mockTransport;
@@ -104,7 +107,7 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
   } as unknown as DesktopPlexRuntime;
 
   const port = new PmsPlaybackSessionPort(mockRuntime);
-  
+
   // Start transcode session
   await port.startSession({
     requestId: 'req-transcode',
@@ -120,7 +123,8 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
   );
 
   assert.equal(stopSessionId, 'req-transcode');
-  assert.deepEqual(operations, ['startPlayback', 'startPlayback']);
+  assert.equal(stopToken, 'start-token-1');
+  assert.deepEqual(operations, ['startPlayback']);
 
   // Start direct-stream session
   await port.startSession({
@@ -137,7 +141,8 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
   );
 
   assert.equal(stopSessionId, 'req-direct-stream');
-  assert.deepEqual(operations, ['startPlayback', 'startPlayback', 'startPlayback', 'startPlayback']);
+  assert.equal(stopToken, 'start-token-2');
+  assert.deepEqual(operations, ['startPlayback', 'startPlayback']);
 });
 
 test('PmsPlaybackSessionPort releaseSession does NOT invoke stopTranscodeSession for direct-play', async () => {

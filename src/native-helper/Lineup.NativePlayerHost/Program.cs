@@ -199,6 +199,12 @@ namespace Lineup.NativePlayerHost
         {
             try
             {
+                if (msg.command != "load" && mpvContext == IntPtr.Zero)
+                {
+                    WriteResult(msg.requestId!, false, "PLAYER_HELPER_NOT_READY", "Player helper has not loaded media.");
+                    return;
+                }
+
                 if (msg.command == "load")
                 {
                     if (msg.playbackUrl == null || msg.setup == null)

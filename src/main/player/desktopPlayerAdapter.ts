@@ -113,6 +113,10 @@ export class DesktopPlayerAdapter {
       return this.#result(false, null, events);
     }
     const { command } = commandResult;
+    if (this.#pendingCommands.has(command.requestId)) {
+      const events = this.#emitBoundaryError(duplicateRequestError(command.requestId));
+      return this.#result(false, command, events);
+    }
     if (command.command === 'load' && this.#rejectRendererLoad) {
       const error = createPlayerError({
         code: 'PLAYER_UNSUPPORTED_CAPABILITY',
@@ -204,6 +208,10 @@ export class DesktopPlayerAdapter {
     command: PlayerCommand,
     context?: PrivilegedPlaybackDispatchContext | null,
   ): Promise<DesktopPlayerAdapterDispatchResult> {
+    if (this.#pendingCommands.has(command.requestId)) {
+      const events = this.#emitBoundaryError(duplicateRequestError(command.requestId));
+      return this.#result(false, command, events);
+    }
     if (command.command === 'load') {
       if (!context || !context.privatePlayback) {
         const error = createPlayerError({
@@ -1019,6 +1027,20 @@ function validationFailure(requestId: PlayerRequestId | undefined, reason: strin
       },
     }),
   };
+}
+function duplicateRequestError(requestId: PlayerRequestId): PlayerError {
+  return createPlayerError({
+    code: 'PLAYER_DUPLICATE_REQUEST_ID',
+    category: 'validation-failure',
+    message: 'The player request was rejected because it reused an active request ID.',
+    requestId,
+    diagnostic: {
+      component: 'desktop-player-adapter',
+      operation: 'validation',
+      status: 'rejected',
+      reason: 'duplicate request id',
+    },
+  });
 }
 function hostFailureToError(requestId: PlayerRequestId, failure: NativePlayerHostFailure): PlayerError {
   const hostFailure: UnknownRecord =

@@ -21,6 +21,7 @@ export class PmsPlaybackSessionPort
     {
       connection: PlexConnection;
       decisionKind: string;
+      token: string;
     }
   >();
 
@@ -35,8 +36,9 @@ export class PmsPlaybackSessionPort
     if (!connection) {
       return null;
     }
+    let token: string;
     try {
-      await this.#runtime.withActivePlexToken('startPlayback', async () => undefined);
+      token = await this.#runtime.withActivePlexToken('startPlayback', async (activeToken) => activeToken);
     } catch {
       return null;
     }
@@ -49,6 +51,7 @@ export class PmsPlaybackSessionPort
     this.#activeSessions.set(input.requestId, {
       connection,
       decisionKind: input.decisionKind,
+      token,
     });
 
     return {
@@ -71,14 +74,12 @@ export class PmsPlaybackSessionPort
 
     this.#activeSessions.delete(session.id);
 
-    const { connection, decisionKind } = sessionDetails;
+    const { connection, decisionKind, token } = sessionDetails;
     if (decisionKind === 'transcode' || decisionKind === 'direct-stream') {
-      await this.#runtime.withActivePlexToken('startPlayback', async (token) => {
-        await this.#runtime.getLibraryTransport().stopTranscodeSession({
-          connection,
-          token,
-          sessionId: session.id,
-        });
+      await this.#runtime.getLibraryTransport().stopTranscodeSession({
+        connection,
+        token,
+        sessionId: session.id,
       }).catch(() => {
         // Safe no-op on failure
       });
