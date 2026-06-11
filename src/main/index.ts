@@ -94,9 +94,20 @@ app.whenReady()
       getShellWindow: () => shellWindowController.getWindow(),
       appVersion: app.getVersion(),
     });
-    const nativeHostFactory = createProductionNativeHostFactory({
+    const originalNativeHostFactory = createProductionNativeHostFactory({
       diagnosticEventStore,
     });
+    const nativeHostFactory = originalNativeHostFactory
+      ? () => {
+          const host = originalNativeHostFactory();
+          host.onLifecycleFailure?.(() => {
+            if (playbackRuntime) {
+              void playbackRuntime.handleHelperCrash();
+            }
+          });
+          return host;
+        }
+      : null;
     teardownPlayerIpc = registerPlayerIpcHandlers({
       shellMode,
       isAuthorizedEvent,
@@ -113,6 +124,37 @@ app.whenReady()
       createRequestId,
       diagnosticEventStore,
     });
+    if (plexComposition) {
+      const originalSwitchHomeUser = plexComposition.runtime.switchHomeUser.bind(plexComposition.runtime);
+      plexComposition.runtime.switchHomeUser = async (requestId, input) => {
+        const result = await originalSwitchHomeUser(requestId, input);
+        if (result.ok) {
+          if (playbackRuntime) {
+            try {
+              await playbackRuntime.cleanup({ reason: 'profile-change' });
+            } catch (error) {
+              reportMainProcessDiagnostic('Playback cleanup on profile-change failed', error);
+            }
+          }
+        }
+        return result;
+      };
+
+      const originalSelectServer = plexComposition.runtime.selectServer.bind(plexComposition.runtime);
+      plexComposition.runtime.selectServer = async (requestId, serverId) => {
+        const result = await originalSelectServer(requestId, serverId);
+        if (result.ok) {
+          if (playbackRuntime) {
+            try {
+              await playbackRuntime.cleanup({ reason: 'server-change' });
+            } catch (error) {
+              reportMainProcessDiagnostic('Playback cleanup on server-change failed', error);
+            }
+          }
+        }
+        return result;
+      };
+    }
     let onChannelTunedCallback: ((channelId: string) => void | Promise<void>) | null = null;
 
     channelComposition = registerChannelComposition({
