@@ -129,6 +129,9 @@ export const DIAGNOSTIC_FORBIDDEN_FIELD_KEYS = [
   'credential',
   'secret',
 ] as const;
+const DIAGNOSTIC_FORBIDDEN_FIELD_KEY_SET = new Set(
+  DIAGNOSTIC_FORBIDDEN_FIELD_KEYS.map((key) => key.toLowerCase()),
+);
 
 export function diagnosticsValidationFailure(
   requestId: string,
@@ -192,7 +195,7 @@ function hasForbiddenDiagnosticField(value: unknown): boolean {
   }
   return Object.entries(value).some(([key, child]) => {
     return (
-      (DIAGNOSTIC_FORBIDDEN_FIELD_KEYS as readonly string[]).includes(key) ||
+      DIAGNOSTIC_FORBIDDEN_FIELD_KEY_SET.has(key.toLowerCase()) ||
       hasForbiddenDiagnosticField(child)
     );
   });
@@ -274,7 +277,7 @@ function isDiagnosticRecord(value: unknown): value is DiagnosticRecord {
     value.schemaVersion === 1 &&
     isNonEmptyString(value.id) &&
     isFiniteNonNegativeNumber(value.timestampMs) &&
-    value.surface === 'renderer' &&
+    isStringInSet(value.surface, DIAGNOSTIC_SURFACES) &&
     isStringInSet(value.category, DIAGNOSTIC_CATEGORIES) &&
     isStringInSet(value.severity, DIAGNOSTIC_SEVERITIES) &&
     isStringInSet(value.status, DIAGNOSTIC_STATUSES) &&

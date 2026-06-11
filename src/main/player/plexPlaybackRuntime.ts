@@ -29,9 +29,9 @@ import {
   PlexPlaybackRuntimeStaleCustody,
   readEventRequestId,
 } from './plexPlaybackRuntimeStaleCustody.js';
-export type PlexPlaybackRuntimeCleanupReason =
-  | 'stop'
+export type PlexPlaybackRuntimeCleanupReason = 'stop'
   | 'switch'
+  | 'stale'
   | 'error'
   | 'helper-crash'
   | 'logout'
@@ -82,7 +82,7 @@ export interface PlexPlaybackRuntimePmsPort {
   releaseSession(
     session: PlexPlaybackPmsSessionLease,
     input: {
-      reason: PlexPlaybackRuntimeCleanupReason | 'stale';
+      reason: PlexPlaybackRuntimeCleanupReason;
       requestId: PlayerRequestId;
     },
   ): Promise<void>;

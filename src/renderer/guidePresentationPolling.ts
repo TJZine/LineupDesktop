@@ -22,7 +22,11 @@ export interface GuidePresentationPollingController {
   reconcile(previousRoute: AppRouteId, nextRoute: AppRouteId): void;
   start(): void;
   stop(): void;
-  refresh(source: string): Promise<void>;
+  refresh(source: string, options?: GuidePresentationRefreshOptions): Promise<void>;
+}
+
+export interface GuidePresentationRefreshOptions {
+  showLoading?: boolean;
 }
 
 export function createGuidePresentationPolling(
@@ -39,13 +43,18 @@ export function createGuidePresentationPolling(
     guidePresentationRequestId += 1;
   };
 
-  const refresh = async (source: string): Promise<void> => {
+  const refresh = async (
+    source: string,
+    refreshOptions: GuidePresentationRefreshOptions = {},
+  ): Promise<void> => {
     const requestId = ++guidePresentationRequestId;
     if (options.getActiveRoute() !== 'guide') {
       return;
     }
     const windowStartMs = options.getWindowStartMs();
-    options.setLoading();
+    if (refreshOptions.showLoading === true) {
+      options.setLoading();
+    }
 
     let result: Awaited<ReturnType<typeof options.guide.getPresentation>>;
     try {
@@ -72,7 +81,7 @@ export function createGuidePresentationPolling(
 
   const start = (): void => {
     stop();
-    void refresh('poll-start');
+    void refresh('poll-start', { showLoading: true });
     guidePollTimer = options.host.setInterval(() => {
       void refresh('poll-interval');
     }, GUIDE_POLL_INTERVAL_MS) as number;

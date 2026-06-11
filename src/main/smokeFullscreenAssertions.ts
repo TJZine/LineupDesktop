@@ -15,7 +15,7 @@ export async function assertFullscreenContinuity(
   try {
     await ensureVisibleForFullscreen(window);
     const fullscreenOn = await setRendererFullscreenAndWait(window, true);
-    if (!isExpectedFullscreenResult(fullscreenOn.result, true)) {
+    if (!isExpectedFullscreenResult(fullscreenOn.result, true) || !fullscreenOn.observed) {
       failures.push('fullscreen on ' + JSON.stringify(fullscreenOn.result));
       return;
     }
@@ -55,7 +55,7 @@ export async function assertFullscreenContinuity(
   } finally {
     try {
       const fullscreenOff = await setRendererFullscreenAndWait(window, false);
-      if (!isExpectedFullscreenResult(fullscreenOff.result, false)) {
+      if (!isExpectedFullscreenResult(fullscreenOff.result, false) || !fullscreenOff.observed) {
         failures.push('fullscreen off ' + JSON.stringify(fullscreenOff.result));
       }
     } catch (error) {

@@ -79,6 +79,11 @@ const diagnosticsGuardSourceUrl = new URL('../../preload/diagnosticsBridgeGuards
 const diagnosticsGuardSourceText = readFileSync(diagnosticsGuardSourceUrl, 'utf8');
 const guideBridgeSourceUrl = new URL('../../preload/guideBridge.cts', import.meta.url);
 const guideBridgeSourceText = readFileSync(guideBridgeSourceUrl, 'utf8');
+const rendererActionRegistrationSourceUrl = new URL(
+  '../../renderer/rendererActionRegistration.ts',
+  import.meta.url,
+);
+const rendererActionRegistrationSourceText = readFileSync(rendererActionRegistrationSourceUrl, 'utf8');
 const preloadBundleToolSourceText = readFileSync(
   new URL('../../../tools/bundle-preload.mjs', import.meta.url),
   'utf8',
@@ -1645,6 +1650,54 @@ test('preload diagnostics guards validate count map keys and values', () => {
     diagnosticsGuardSourceText.includes('isFiniteNonNegativeNumberMap(value.findingsByLabel, REDACTION_SCAN_FINDING_LABELS)'),
     true,
   );
+});
+
+test('preload diagnostics guards accept declared record surfaces and reject case-variant forbidden fields', () => {
+  const diagnosticsGuardExports = evaluateDiagnosticsGuardModule();
+  const isDiagnosticsRecordRendererEventResult =
+    diagnosticsGuardExports.isDiagnosticsRecordRendererEventResult as (value: unknown) => boolean;
+
+  const baseRecord = {
+    schemaVersion: 1,
+    id: 'diagnostic-record-1',
+    timestampMs: 1,
+    surface: 'main',
+    category: 'lifecycle',
+    severity: 'info',
+    status: 'observed',
+    operation: 'startup',
+    message: 'ready',
+  };
+
+  assert.equal(
+    isDiagnosticsRecordRendererEventResult({
+      ok: true,
+      requestId: 'diagnostics-record-1',
+      value: baseRecord,
+    }),
+    true,
+  );
+  assert.equal(
+    isDiagnosticsRecordRendererEventResult({
+      ok: true,
+      requestId: 'diagnostics-record-2',
+      value: {
+        ...baseRecord,
+        context: {
+          RawAuthHeaders: 'Bearer secret',
+        },
+      },
+    }),
+    false,
+  );
+});
+
+test('renderer action registration keeps focus handling delegated', () => {
+  assert.match(
+    rendererActionRegistrationSourceText,
+    /documentRef\.addEventListener\('focusin', \(event\) => \{/u,
+  );
+  assert.doesNotMatch(rendererActionRegistrationSourceText, /addEventListener\('focus'/u);
 });
 
 test('preload diagnostics result guard validates cancellation discriminator exactly', () => {

@@ -81,6 +81,117 @@ test('plex runtime operation owner cancels aborted in-flight work without mutati
   assert.deepEqual(diagnostics, ['pollPin:started', 'pollPin:cancelled:PLEX_CANCELLED']);
 });
 
+test('plex runtime operation owner invalidates ownership before aborting work', async () => {
+  let snapshot = createSnapshot();
+  const owner = new PlexRuntimeOperationOwner({
+    commitSnapshot: (update) => {
+      snapshot = update(snapshot);
+    },
+    fail: (requestId, error, options) => failureResult(requestId, error, options),
+    recordDiagnostic: () => undefined,
+  });
+  const gate = deferred<void>();
+  const pending = owner.run('poll-old', 'pollPin:8', async ({ commit }) => {
+    await gate.promise;
+    commit((current) => ({ ...current, updatedAtMs: 123 }));
+    return { value: 'old' };
+  });
+
+  owner.abort('pollPin:8');
+  gate.resolve();
+  const result = await pending;
+
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? '' : result.error.code, 'PLEX_STALE_RESULT');
+  assert.equal(result.ok ? false : result.stale, true);
+  assert.equal(snapshot.updatedAtMs, 1);
+});
+
+test('plex runtime operation owner invalidates ownership before replacement abort listeners run', async () => {
+  let snapshot = createSnapshot();
+  const staleErrors: string[] = [];
+  const owner = new PlexRuntimeOperationOwner({
+    commitSnapshot: (update) => {
+      snapshot = update(snapshot);
+    },
+    fail: (requestId, error, options) => failureResult(requestId, error, options),
+    recordDiagnostic: () => undefined,
+  });
+  const firstGate = deferred<void>();
+  const first = owner.run('request-old', 'listLibrarySections', async ({ signal, commit }) => {
+    signal.addEventListener('abort', () => {
+      try {
+        commit((current) => ({ ...current, updatedAtMs: 99 }));
+      } catch (error) {
+        staleErrors.push(error instanceof Error ? error.constructor.name : String(error));
+      }
+    });
+    await firstGate.promise;
+    if (signal.aborted) {
+      throw new LivePlexTransportError('aborted', 'Plex request was aborted');
+    }
+    return { value: 'old' };
+  });
+
+  const second = await owner.run('request-new', 'listLibrarySections', async ({ commit }) => {
+    commit((current) => ({ ...current, updatedAtMs: 2 }));
+    return { value: 'new' };
+  });
+  firstGate.resolve();
+  const cancelled = await first;
+
+  assert.equal(second.ok, true);
+  assert.equal(cancelled.ok, false);
+  assert.equal(cancelled.ok ? '' : cancelled.error.code, 'PLEX_CANCELLED');
+  assert.deepEqual(staleErrors, ['StaleRuntimeMutationError']);
+  assert.equal(snapshot.updatedAtMs, 2);
+});
+
+test('plex runtime operation owner invalidates ownership before abortExcept listeners run', async () => {
+  let snapshot = createSnapshot();
+  const staleErrors: string[] = [];
+  const owner = new PlexRuntimeOperationOwner({
+    commitSnapshot: (update) => {
+      snapshot = update(snapshot);
+    },
+    fail: (requestId, error, options) => failureResult(requestId, error, options),
+    recordDiagnostic: () => undefined,
+  });
+  const abortedGate = deferred<void>();
+  const keptGate = deferred<void>();
+  const aborted = owner.run('request-aborted', 'pollPin:aborted', async ({ signal, commit }) => {
+    signal.addEventListener('abort', () => {
+      try {
+        commit((current) => ({ ...current, updatedAtMs: 99 }));
+      } catch (error) {
+        staleErrors.push(error instanceof Error ? error.constructor.name : String(error));
+      }
+    });
+    await abortedGate.promise;
+    if (signal.aborted) {
+      throw new LivePlexTransportError('aborted', 'Plex request was aborted');
+    }
+    return { value: 'aborted' };
+  });
+  const kept = owner.run('request-kept', 'pollPin:kept', async ({ commit }) => {
+    await keptGate.promise;
+    commit((current) => ({ ...current, updatedAtMs: 3 }));
+    return { value: 'kept' };
+  });
+
+  owner.abortExcept('pollPin:kept');
+  abortedGate.resolve();
+  keptGate.resolve();
+  const cancelled = await aborted;
+  const keptResult = await kept;
+
+  assert.equal(cancelled.ok, false);
+  assert.equal(cancelled.ok ? '' : cancelled.error.code, 'PLEX_CANCELLED');
+  assert.equal(keptResult.ok, true);
+  assert.deepEqual(staleErrors, ['StaleRuntimeMutationError']);
+  assert.equal(snapshot.updatedAtMs, 3);
+});
+
 test('desktop plex library operation executor preserves requested-limit pagination and safe summaries', async () => {
   const transport = new FakeLibraryTransport([
     mediaPayload([

@@ -42,6 +42,7 @@ export interface DesktopPlayerAdapterOptions {
   diagnosticEventStore?: DiagnosticEventStore;
   rejectRendererLoad?: boolean;
 }
+type PlayerLoadCommand = Extract<PlayerCommand, { command: 'load' }>;
 
 /**
  * Maps renderer intents into closed host commands, validates host event
@@ -102,21 +103,7 @@ export class DesktopPlayerAdapter {
     this.#requestCustody.begin(command);
     const events: PlayerEvent[] = [];
     if (command.command === 'load') {
-      this.#snapshot = {
-        ...this.#snapshot,
-        requestId: command.requestId,
-        status: 'loading',
-        media: command.payload.media,
-        capabilityProfileId: command.payload.capabilityProfileId ?? null,
-        positionMs: command.payload.policy.startPositionMs ?? 0,
-        durationMs: command.payload.media.durationMs ?? null,
-        selectedAudioTrackId: command.payload.policy.preferredAudioTrackId ?? null,
-        selectedSubtitleTrackId: command.payload.policy.preferredSubtitleTrackId ?? null,
-        selectedVideoTrackId: null,
-        tracks: [],
-        lastError: null,
-      };
-      events.push(this.#stateChanged());
+      events.push(this.#applyLoadSnapshot(command));
     }
     try {
       const hostResult = await this.#host.execute(command);
@@ -204,21 +191,7 @@ export class DesktopPlayerAdapter {
     this.#requestCustody.begin(command);
     const events: PlayerEvent[] = [];
     if (command.command === 'load') {
-      this.#snapshot = {
-        ...this.#snapshot,
-        requestId: command.requestId,
-        status: 'loading',
-        media: command.payload.media,
-        capabilityProfileId: command.payload.capabilityProfileId ?? null,
-        positionMs: command.payload.policy.startPositionMs ?? 0,
-        durationMs: command.payload.media.durationMs ?? null,
-        selectedAudioTrackId: command.payload.policy.preferredAudioTrackId ?? null,
-        selectedSubtitleTrackId: command.payload.policy.preferredSubtitleTrackId ?? null,
-        selectedVideoTrackId: null,
-        tracks: [],
-        lastError: null,
-      };
-      events.push(this.#stateChanged());
+      events.push(this.#applyLoadSnapshot(command));
     }
     try {
       const hostResult = await this.#host.execute(command, context);
@@ -469,6 +442,23 @@ export class DesktopPlayerAdapter {
       },
       this.#stateChanged(),
     ];
+  }
+  #applyLoadSnapshot(command: PlayerLoadCommand): PlayerEvent {
+    this.#snapshot = {
+      ...this.#snapshot,
+      requestId: command.requestId,
+      status: 'loading',
+      media: command.payload.media,
+      capabilityProfileId: command.payload.capabilityProfileId ?? null,
+      positionMs: command.payload.policy.startPositionMs ?? 0,
+      durationMs: command.payload.media.durationMs ?? null,
+      selectedAudioTrackId: command.payload.policy.preferredAudioTrackId ?? null,
+      selectedSubtitleTrackId: command.payload.policy.preferredSubtitleTrackId ?? null,
+      selectedVideoTrackId: null,
+      tracks: [],
+      lastError: null,
+    };
+    return this.#stateChanged();
   }
   #stateChanged(): PlayerEvent {
     return {

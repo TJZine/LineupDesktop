@@ -112,9 +112,6 @@ export function registerRendererActions(
     else if (sectionId !== null) handlers.selectPlexSection(sectionId);
     else if (ratingKey !== null) handlers.openPlexMetadata(ratingKey);
   });
-  for (const element of dom.focusableElements) {
-    element.addEventListener('focus', () => handlers.focusElement(element));
-  }
   documentRef.addEventListener('focusin', (event) => {
     if (event.target instanceof HTMLElement) handlers.focusElement(event.target);
   });

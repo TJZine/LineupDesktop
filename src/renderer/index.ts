@@ -254,7 +254,7 @@ function applyEpgAction(action: EpgActionId): void {
   workflowState = applyWorkflowEpgAction(workflowState, action);
   renderApp();
   if (workflowState.epg.windowStartMs !== previousWindowStartMs) {
-    void guidePresentationPolling.refresh('epg-window-change');
+    void guidePresentationPolling.refresh('epg-window-change', { showLoading: true });
   }
 }
 

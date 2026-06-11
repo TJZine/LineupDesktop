@@ -9,13 +9,21 @@ import type {
   PlexPlaybackRuntimeCleanupReason,
   PlexPlaybackPmsSessionLease,
 } from '../player/plexPlaybackRuntime.js';
-import type { DesktopPlexRuntime } from './desktopPlexRuntime.js';
 import type { PlexConnection } from './discovery/types.js';
+import type { LivePlexLibraryTransport } from './livePlexTransport.js';
+
+export interface PmsPlaybackSessionRuntimePort {
+  getLibraryTransport(): Pick<LivePlexLibraryTransport, 'stopTranscodeSession'>;
+  withActivePlexToken<T>(
+    operation: 'getMetadata' | 'listLibraryItems' | 'startPlayback',
+    run: (token: string) => Promise<T>,
+  ): Promise<T>;
+}
 
 export class PmsPlaybackSessionPort
   implements PlexStreamResolverPmsSessionPort, PlexPlaybackRuntimePmsPort
 {
-  readonly #runtime: DesktopPlexRuntime;
+  readonly #runtime: PmsPlaybackSessionRuntimePort;
   readonly #activeSessions = new Map<
     string,
     {
@@ -25,7 +33,7 @@ export class PmsPlaybackSessionPort
     }
   >();
 
-  constructor(runtime: DesktopPlexRuntime) {
+  constructor(runtime: PmsPlaybackSessionRuntimePort) {
     this.#runtime = runtime;
   }
 
@@ -63,7 +71,7 @@ export class PmsPlaybackSessionPort
   async releaseSession(
     session: PlexPlaybackPmsSessionLease,
     _input: {
-      reason: PlexPlaybackRuntimeCleanupReason | 'stale';
+      reason: PlexPlaybackRuntimeCleanupReason;
       requestId: PlayerRequestId;
     },
   ): Promise<void> {

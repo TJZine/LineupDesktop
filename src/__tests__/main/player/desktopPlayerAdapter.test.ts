@@ -4,6 +4,10 @@ import { setImmediate } from 'node:timers';
 
 import { DesktopPlayerAdapter } from '../../../main/player/desktopPlayerAdapter.js';
 import { DiagnosticEventStore } from '../../../main/diagnostics/diagnosticEventStore.js';
+import {
+  normalizeNativeHelperFailure,
+  parseNativeHelperProcessMessage,
+} from '../../../main/player/nativeHelperProtocolCodec.js';
 import type {
   NativePlayerHostCommandResult,
   NativePlayerHostEvent,
@@ -243,6 +247,30 @@ test('desktop player adapter maps renderer intents to closed player commands', a
   assert.equal(audioCommand?.payload.trackId, 'audio-ui-2');
   assert.equal(subtitleCommand?.payload.trackId, null);
   assertNoForbiddenKeys(host.commands);
+});
+
+test('native helper protocol codec normalizes failure codes and rejects top-level arrays', () => {
+  assert.deepEqual(
+    normalizeNativeHelperFailure({
+      code: 'helper failed: bad-code',
+      category: 'helper-failure',
+      recoverable: false,
+      retryable: true,
+    }),
+    {
+      code: 'HELPER_FAILED__BAD_CODE',
+      category: 'helper-failure',
+      message: 'The player helper failed while handling the command.',
+      recoverable: false,
+      retryable: true,
+    },
+  );
+
+  const result = parseNativeHelperProcessMessage('[]');
+  assert.equal('error' in result, true);
+  if ('error' in result) {
+    assert.equal(result.error.code, 'PLAYER_HELPER_MALFORMED_OUTPUT');
+  }
 });
 
 test('desktop player adapter emits renderer-safe snapshots and host events', async () => {

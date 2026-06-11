@@ -90,7 +90,7 @@ export class PlexPlaybackRuntimeCleanupCoordinator {
       });
       return [];
     } catch {
-      return [createRuntimeCleanupFailure(active.requestId, 'switch', 'stale pms session release failed')];
+      return [createRuntimeCleanupFailure(active.requestId, 'stale', 'stale pms session release failed')];
     }
   }
 
@@ -109,7 +109,7 @@ export class PlexPlaybackRuntimeCleanupCoordinator {
       });
       return [];
     } catch {
-      return [createRuntimeCleanupFailure(requestId, 'switch', 'rejected pms session release failed')];
+      return [createRuntimeCleanupFailure(requestId, 'stale', 'rejected pms session release failed')];
     }
   }
 

@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PmsPlaybackSessionPort } from '../../main/plex/pmsPlaybackSessionPort.js';
-import type { DesktopPlexRuntime } from '../../main/plex/desktopPlexRuntime.js';
+import {
+  PmsPlaybackSessionPort,
+  type PmsPlaybackSessionRuntimePort,
+} from '../../main/plex/pmsPlaybackSessionPort.js';
 
 test('PmsPlaybackSessionPort startSession returns lease and stores details', async () => {
   const connection = {
@@ -14,18 +16,15 @@ test('PmsPlaybackSessionPort startSession returns lease and stores details', asy
     latencyMs: null,
   };
   const operations: string[] = [];
-  const mockRuntime = {
-    getSelectedConnectionForMain() {
-      return connection;
-    },
-    async withActivePlexToken(
-      operation: string,
-      run: (token: string) => Promise<unknown>,
+  const mockRuntime = createRuntimePort({
+    async withActivePlexToken<T>(
+      operation: Parameters<PmsPlaybackSessionRuntimePort['withActivePlexToken']>[0],
+      run: (token: string) => Promise<T>,
     ) {
       operations.push(operation);
       return run('token');
     },
-  } as unknown as DesktopPlexRuntime;
+  });
 
   const port = new PmsPlaybackSessionPort(mockRuntime);
   const lease = await port.startSession({
@@ -42,11 +41,14 @@ test('PmsPlaybackSessionPort startSession returns lease and stores details', asy
 });
 
 test('PmsPlaybackSessionPort startSession returns null if token is missing', async () => {
-  const mockRuntime = {
-    async withActivePlexToken() {
+  const mockRuntime = createRuntimePort({
+    async withActivePlexToken<T>(
+      _operation: Parameters<PmsPlaybackSessionRuntimePort['withActivePlexToken']>[0],
+      _run: (token: string) => Promise<T>,
+    ): Promise<T> {
       throw new Error('missing token');
     },
-  } as unknown as DesktopPlexRuntime;
+  });
 
   const port = new PmsPlaybackSessionPort(mockRuntime);
   const lease = await port.startSession({
@@ -69,12 +71,12 @@ test('PmsPlaybackSessionPort startSession returns null if token is missing', asy
 
 test('PmsPlaybackSessionPort startSession returns null for invalid input connection', async () => {
   let tokenRead = false;
-  const mockRuntime = {
-    async withActivePlexToken() {
+  const mockRuntime = createRuntimePort({
+    async withActivePlexToken<T>() {
       tokenRead = true;
-      return 'unexpected-token';
+      return 'unexpected-token' as T;
     },
-  } as unknown as DesktopPlexRuntime;
+  });
 
   const port = new PmsPlaybackSessionPort(mockRuntime);
   const lease = await port.startSession({
@@ -97,15 +99,6 @@ test('PmsPlaybackSessionPort startSession returns null for invalid input connect
 });
 
 test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for transcode and direct-stream', async () => {
-  const runtimeSelectedConnection = {
-    uri: 'https://selected-runtime.example',
-    protocol: 'https' as const,
-    address: 'selected-runtime.example',
-    port: 32400,
-    local: true,
-    relay: false,
-    latencyMs: null,
-  };
   const playbackConnection = {
     uri: 'http://playback-connection.example:32400',
     protocol: 'http' as const,
@@ -129,13 +122,10 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
   };
 
   const tokens = ['start-token-1', 'start-token-2'];
-  const mockRuntime = {
-    getSelectedConnectionForMain() {
-      return runtimeSelectedConnection;
-    },
-    async withActivePlexToken(
-      operation: string,
-      run: (token: string) => Promise<unknown>,
+  const mockRuntime = createRuntimePort({
+    async withActivePlexToken<T>(
+      operation: Parameters<PmsPlaybackSessionRuntimePort['withActivePlexToken']>[0],
+      run: (token: string) => Promise<T>,
     ) {
       operations.push(operation);
       return run(tokens.shift() ?? 'unexpected-token');
@@ -143,7 +133,7 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
     getLibraryTransport() {
       return mockTransport;
     },
-  } as unknown as DesktopPlexRuntime;
+  });
 
   const port = new PmsPlaybackSessionPort(mockRuntime);
 
@@ -204,20 +194,17 @@ test('PmsPlaybackSessionPort releaseSession does NOT invoke stopTranscodeSession
     },
   };
 
-  const mockRuntime = {
-    getSelectedConnectionForMain() {
-      return connection;
-    },
-    async withActivePlexToken(
-      _operation: 'getMetadata',
-      run: (token: string) => Promise<unknown>,
+  const mockRuntime = createRuntimePort({
+    async withActivePlexToken<T>(
+      _operation: Parameters<PmsPlaybackSessionRuntimePort['withActivePlexToken']>[0],
+      run: (token: string) => Promise<T>,
     ) {
       return run('token');
     },
     getLibraryTransport() {
       return mockTransport;
     },
-  } as unknown as DesktopPlexRuntime;
+  });
 
   const port = new PmsPlaybackSessionPort(mockRuntime);
 
@@ -248,13 +235,10 @@ test('PmsPlaybackSessionPort rejects duplicate request IDs before replacing acti
   };
 
   let stopCalled = false;
-  const mockRuntime = {
-    getSelectedConnectionForMain() {
-      return connection;
-    },
-    async withActivePlexToken(
-      _operation: string,
-      run: (token: string) => Promise<unknown>,
+  const mockRuntime = createRuntimePort({
+    async withActivePlexToken<T>(
+      _operation: Parameters<PmsPlaybackSessionRuntimePort['withActivePlexToken']>[0],
+      run: (token: string) => Promise<T>,
     ) {
       return run('token');
     },
@@ -265,7 +249,7 @@ test('PmsPlaybackSessionPort rejects duplicate request IDs before replacing acti
         },
       };
     },
-  } as unknown as DesktopPlexRuntime;
+  });
 
   const port = new PmsPlaybackSessionPort(mockRuntime);
   await port.startSession({
@@ -291,3 +275,21 @@ test('PmsPlaybackSessionPort rejects duplicate request IDs before replacing acti
   );
   assert.equal(stopCalled, true);
 });
+
+function createRuntimePort(
+  overrides: Partial<PmsPlaybackSessionRuntimePort> = {},
+): PmsPlaybackSessionRuntimePort {
+  return {
+    async withActivePlexToken(_operation, run) {
+      return run('token');
+    },
+    getLibraryTransport() {
+      return {
+        async stopTranscodeSession() {
+          return undefined;
+        },
+      };
+    },
+    ...overrides,
+  } satisfies PmsPlaybackSessionRuntimePort;
+}

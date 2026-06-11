@@ -132,7 +132,7 @@ function safeFailureMessage(category: NativePlayerHostFailure['category']): stri
 }
 
 function normalizeCode(code: string): string {
-  const normalized = code.replace(/[^A-Z0-9_]/g, '_').slice(0, 80);
+  const normalized = code.toUpperCase().replace(/[^A-Z0-9_]/g, '_').slice(0, 80);
   return normalized.length > 0 ? normalized : 'PLAYER_HELPER_COMMAND_FAILED';
 }
 
@@ -161,5 +161,5 @@ function hasForbiddenPrivilegedField(value: unknown): boolean {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

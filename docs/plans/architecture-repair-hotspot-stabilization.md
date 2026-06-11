@@ -449,6 +449,10 @@ Package order:
    instead of stale fake-route text when `npm run smoke:electron` reaches the
    renderer and fails only on outdated guide/channel-setup/player smoke
    expectations. This is harness proof maintenance, not product UI behavior.
+4U. **Fullscreen smoke observation realignment if needed after Package 4T.**
+   Owner seam: fullscreen smoke assertions may distinguish renderer API success
+   from observed BrowserWindow fullscreen state without expanding product
+   fullscreen behavior.
 4V. **Fullscreen focus-limited smoke fallback if needed after Package 4U.**
    Owner seam: fullscreen smoke proof may distinguish a focused fullscreen
    transition failure from an unfocused desktop smoke environment that cannot
@@ -936,7 +940,7 @@ Package 7 closeout decisions, recorded 2026-06-11 after Packages 1-6:
 | Watch-list owner | Current lines | Decision | Protecting verification | Revisit trigger |
 | --- | ---: | --- | --- | --- |
 | `src/contracts/player.ts` | 703 | Keep centralized. This is stable public renderer-safe contract vocabulary; splitting it without a new contract family would add churn without reducing runtime coupling. | `npm run verify`; `src/__tests__/contracts/contracts.test.ts` player contract/event/guard coverage. | Revisit before adding a new public player command, event, snapshot, error, or capability-profile family. |
-| `src/main/plex/streamResolver.ts` | 660 | Defer split. Packages 3 and 5 did not require resolver projection changes, and the resolver remains a main-only private descriptor mapper. | `npm run verify`; `src/__tests__/main/streamResolver.test.ts`; player/Plex playback runtime tests. | Revisit before adding additional stream modes, resolver policy branches, or playback descriptor variants. |
+| `src/main/plex/streamResolver.ts` | 660 | Defer split. Packages 3 and 5 did not require resolver projection changes, and the resolver remains a main-only private descriptor mapper. | `npm run verify`; `src/__tests__/main/plexStreamResolver.test.ts`; player/Plex playback runtime tests. | Revisit before adding additional stream modes, resolver policy branches, or playback descriptor variants. |
 | `src/main/player/streamPolicy/desktopStreamPolicy.ts` | 624 | Defer split. The policy remains a deterministic fixture-proven decision owner, and no package added codec/platform/track policy behavior. | `npm run verify`; `src/__tests__/main/player/desktopStreamPolicy.test.ts`. | Revisit before adding codec families, platform capability matrices, subtitle/audio branches, or preferred-language policy. |
 | `src/domain/channel/channelManager.ts` | 1022 | Defer split. It is a pure domain mutation/current-channel/persistence coordination owner; no repair package expanded channel domain behavior. | `npm run verify`; `src/__tests__/domain/channelManager.test.ts`; domain boundary verifier. | Revisit before live channel editing, backup/restore, or another persisted mutation workflow grows the owner. |
 | `src/domain/channel/channelRepository.ts` | 770 | Defer split. It remains a pure domain import/source-resolution/cache owner; no package expanded import normalization or persistence schema behavior. | `npm run verify`; `src/__tests__/domain/channelRepository.test.ts`; domain boundary verifier. | Revisit before persisted channel editing, migrations, or import normalization grows this owner. |

@@ -44,7 +44,12 @@ export class PlexRuntimeOperationOwner {
   }
 
   abort(operationKey: string): void {
-    this.#activeOperations.get(operationKey)?.abort();
+    const controller = this.#activeOperations.get(operationKey);
+    if (!controller) {
+      return;
+    }
+    this.#activeOperations.delete(operationKey);
+    controller.abort();
   }
 
   abortExcept(operationKey: string): void {
@@ -52,8 +57,8 @@ export class PlexRuntimeOperationOwner {
       if (activeOperationKey === operationKey) {
         continue;
       }
-      controller.abort();
       this.#activeOperations.delete(activeOperationKey);
+      controller.abort();
     }
   }
 
@@ -71,7 +76,7 @@ export class PlexRuntimeOperationOwner {
     action: (context: PlexRuntimeOperationContext) => Promise<T>,
   ): Promise<PlexIpcResult<T>> {
     const operation = normalizeOperationKey(operationKey);
-    this.#activeOperations.get(operationKey)?.abort();
+    this.abort(operationKey);
     const controller = new AbortController();
     const epoch = this.#runtimeEpoch;
     this.#activeOperations.set(operationKey, controller);
@@ -92,11 +97,13 @@ export class PlexRuntimeOperationOwner {
       this.#recordDiagnostic(operation, 'succeeded');
       return success(requestId, value);
     } catch (error) {
-      const stale = error instanceof StaleRuntimeMutationError || this.#runtimeEpoch !== epoch || !isCurrent();
-      const runtimeError = stale
+      const runtimeError = error instanceof StaleRuntimeMutationError
         ? staleError(operation)
         : mapRuntimeError(error, operation);
       const cancelled = runtimeError.code === 'PLEX_CANCELLED';
+      const stale =
+        !cancelled &&
+        (error instanceof StaleRuntimeMutationError || this.#runtimeEpoch !== epoch || !isCurrent());
       this.#recordDiagnostic(operation, cancelled ? 'cancelled' : 'failed', runtimeError.code);
       return this.#fail(requestId, runtimeError, {
         cancelled,

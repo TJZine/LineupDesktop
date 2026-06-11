@@ -101,10 +101,10 @@ test('guide presentation polling ignores stale and stopped refreshes', async () 
     },
   });
 
-  const first = polling.refresh('first');
+  const first = polling.refresh('first', { showLoading: true });
   const second = polling.refresh('second');
   assert.equal(requests.length, 2);
-  assert.equal(loadingCount, 2);
+  assert.equal(loadingCount, 1);
 
   requests[1]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
   await second;

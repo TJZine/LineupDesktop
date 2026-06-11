@@ -103,14 +103,14 @@ class FakePlayerPort implements PlexPlaybackRuntimePlayerPort {
 class FakePmsPort {
   readonly releases: Array<{
     session: PlexPlaybackPmsSessionLease;
-    reason: PlexPlaybackRuntimeCleanupReason | 'stale';
+    reason: PlexPlaybackRuntimeCleanupReason;
     requestId: string;
   }> = [];
   failure: Error | null = null;
 
   async releaseSession(
     session: PlexPlaybackPmsSessionLease,
-    input: { reason: PlexPlaybackRuntimeCleanupReason | 'stale'; requestId: string },
+    input: { reason: PlexPlaybackRuntimeCleanupReason; requestId: string },
   ): Promise<void> {
     this.releases.push({ session, reason: input.reason, requestId: input.requestId });
     if (this.failure !== null) {
@@ -614,6 +614,35 @@ test('RD-12 plex playback runtime releases rejected mismatched PMS lease before 
     assert.equal(result.events[0].error.requestId, 'request-1');
   }
   assertTextAbsent(result, 'request-from-other-runtime');
+  assertNoForbiddenKeys(result);
+  assertRendererSafePlayerEvents(result.events);
+});
+
+test('RD-12 plex playback runtime reports rejected PMS release failures as stale cleanup', async () => {
+  const { runtime, channel, player, pms } = createRuntime();
+  pms.failure = new Error('private stale cleanup tokenizedUrl=https://secret.example');
+  channel.candidate = {
+    ...channel.candidate,
+    requestId: 'request-1',
+    pmsSession: { id: 'pms-other-request', requestId: 'request-from-other-runtime' },
+  };
+
+  const result = await runtime.startCurrentPlayback('schedule-tick');
+
+  assert.equal(result.accepted, false);
+  assert.equal(result.requestId, 'request-1');
+  assert.equal(player.commands.length, 0);
+  assert.equal(result.events.length, 2);
+  const cleanupFailure = result.events[0];
+  assert.equal(cleanupFailure?.event, 'error');
+  if (cleanupFailure?.event === 'error') {
+    assert.equal(cleanupFailure.error.code, 'PLAYER_PLAYBACK_CLEANUP_FAILED');
+    assert.equal(cleanupFailure.error.diagnostic?.operation, 'cleanup');
+    assert.deepEqual(cleanupFailure.error.diagnostic?.counts, { stale: 1 });
+  }
+  assert.equal(result.events[1]?.event, 'error');
+  assertTextAbsent(result, 'request-from-other-runtime');
+  assertTextAbsent(result, 'tokenizedUrl=https://secret.example');
   assertNoForbiddenKeys(result);
   assertRendererSafePlayerEvents(result.events);
 });
