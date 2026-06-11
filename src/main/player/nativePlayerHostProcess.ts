@@ -3,8 +3,6 @@ import type { Buffer } from 'node:buffer';
 import type { EventEmitter } from 'node:events';
 import type { Readable, Writable } from 'node:stream';
 import {
-  PLAYER_ERROR_CATEGORIES,
-  PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
   type PlayerCommand,
   type PlayerRequestId,
 } from '../../contracts/player.js';
@@ -18,11 +16,14 @@ import type {
 } from './nativePlayerHostPort.js';
 import type { PrivilegedPlaybackDispatchContext } from './privilegedPlaybackDispatchContext.js';
 import { validateHelperMessageSize } from './nativeHelperProtocol.js';
-import type { NativeHelperInputMessage } from './nativeHelperProtocol.js';
-type ProcessMessage =
-  | { type: 'result'; requestId: PlayerRequestId; ok: true; events?: readonly NativePlayerHostEvent[] }
-  | { type: 'result'; requestId: PlayerRequestId; ok: false; error?: unknown }
-  | { type: 'event'; event: NativePlayerHostEvent };
+import {
+  normalizeNativeHelperFailure,
+  parseNativeHelperProcessMessage,
+  safeNativeHostFailure,
+  toNativeHelperCleanupMessage,
+  toNativeHelperCommand,
+} from './nativeHelperProtocolCodec.js';
+
 type PendingCommand = {
   requestId: PlayerRequestId; resolve(result: NativePlayerHostCommandResult): void;
   timeout: ReturnType<typeof setTimeout>; events: NativePlayerHostEvent[];
@@ -43,9 +44,6 @@ export interface NativePlayerHostProcessOptions {
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
 const DEFAULT_CLEANUP_GRACE_MS = 500;
 const MAX_LINE_LENGTH = 64 * 1024;
-const SAFE_FAILURE_CATEGORIES = PLAYER_ERROR_CATEGORIES.filter(
-  (category) => category !== 'stale-request' && category !== 'validation-failure',
-) as readonly NativePlayerHostFailure['category'][];
 // Adapter-level validation stays outside this process-framing owner.
 export class NativePlayerHostProcess implements NativePlayerHostPort {
   readonly #spawnHostProcess: () => NativePlayerHostChildProcess;
@@ -70,7 +68,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     if (this.#pending.has(command.requestId)) {
       return {
         ok: false,
-        error: safeFailure('PLAYER_HELPER_DUPLICATE_REQUEST', 'helper-failure', false, false),
+        error: safeNativeHostFailure('PLAYER_HELPER_DUPLICATE_REQUEST', 'helper-failure', false, false),
       };
     }
     const child = this.#getOrSpawnChild();
@@ -82,7 +80,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       const timeout = setTimeout(() => {
         this.#quarantineChild(
           activeChild,
-          safeFailure('PLAYER_HELPER_TIMEOUT', 'timeout', true, true),
+          safeNativeHostFailure('PLAYER_HELPER_TIMEOUT', 'timeout', true, true),
         );
       }, this.#requestTimeoutMs);
       const pending: PendingCommand = {
@@ -96,7 +94,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       };
       this.#pending.set(command.requestId, pending);
       try {
-        const procCmd = toProcessCommand(command, context);
+        const procCmd = toNativeHelperCommand(command, context);
         const serialized = JSON.stringify(procCmd);
         validateHelperMessageSize(serialized);
         activeChild.stdin.write(`${serialized}\n`, (error) => {
@@ -105,7 +103,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
               command.requestId,
               {
                 ok: false,
-                error: safeFailure('PLAYER_HELPER_WRITE_FAILED', 'helper-failure', true, true),
+                error: safeNativeHostFailure('PLAYER_HELPER_WRITE_FAILED', 'helper-failure', true, true),
               },
             );
           }
@@ -114,7 +112,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
         const msg = err instanceof Error ? err.message : 'Write failed';
         this.#resolvePending(command.requestId, {
           ok: false,
-          error: safeFailure(
+          error: safeNativeHostFailure(
             msg.includes('exceeds maximum limit') ? 'PLAYER_HELPER_MESSAGE_TOO_LARGE' : 'PLAYER_HELPER_WRITE_FAILED',
             'helper-failure',
             true,
@@ -128,13 +126,13 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     const child = this.#child;
     this.#child = null;
     this.#lineBuffer = '';
-    this.#rejectAllPending(safeFailure('PLAYER_HELPER_CLEANED_UP', 'aborted', true, false));
+    this.#rejectAllPending(safeNativeHostFailure('PLAYER_HELPER_CLEANED_UP', 'aborted', true, false));
     if (child === null) {
       return;
     }
     let writeError: unknown;
     try {
-      child.stdin.write(`${JSON.stringify({ type: 'cleanup', requestId })}\n`, () => undefined);
+      child.stdin.write(`${JSON.stringify(toNativeHelperCleanupMessage(requestId))}\n`, () => undefined);
     } catch (error: unknown) {
       writeError = error;
     }
@@ -186,21 +184,21 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       child.stderr.on('error', () => this.#handleChildStreamError(child));
       child.once('error', () => {
         if (this.#child === child) {
-          const failure = safeFailure('PLAYER_HELPER_SPAWN_FAILED', 'helper-failure', true, true);
+          const failure = safeNativeHostFailure('PLAYER_HELPER_SPAWN_FAILED', 'helper-failure', true, true);
           this.#child = null;
           this.#settleProcessFailure(failure);
         }
       });
       child.once('close', () => {
         if (this.#child === child) {
-          const failure = safeFailure('PLAYER_HELPER_EXITED', 'helper-failure', true, true);
+          const failure = safeNativeHostFailure('PLAYER_HELPER_EXITED', 'helper-failure', true, true);
           this.#child = null;
           this.#settleProcessFailure(failure);
         }
       });
       return { child };
     } catch {
-      const error = safeFailure('PLAYER_HELPER_SPAWN_FAILED', 'helper-failure', true, true);
+      const error = safeNativeHostFailure('PLAYER_HELPER_SPAWN_FAILED', 'helper-failure', true, true);
       this.#recordFailure(null, error, { operation: 'helper.spawn', status: 'failed' });
       return {
         error,
@@ -213,7 +211,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     }
     this.#child = null;
     this.#lineBuffer = '';
-    const failure = safeFailure('PLAYER_HELPER_STREAM_FAILED', 'helper-failure', true, true);
+    const failure = safeNativeHostFailure('PLAYER_HELPER_STREAM_FAILED', 'helper-failure', true, true);
     const requestId = this.#firstPendingRequestId();
     this.#settleProcessFailure(failure);
     this.#reapChild(child).catch(() => this.#recordCleanupFailure(requestId));
@@ -235,7 +233,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     }
     this.#lineBuffer += chunk.toString();
     if (this.#lineBuffer.length > MAX_LINE_LENGTH) {
-      const failure = safeFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true);
+      const failure = safeNativeHostFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true);
       this.#quarantineChild(child, failure);
       return;
     }
@@ -250,7 +248,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     }
   }
   #handleLine(child: NativePlayerHostChildProcess, line: string): void {
-    const message = parseProcessMessage(line);
+    const message = parseNativeHelperProcessMessage(line);
     if ('error' in message) {
       this.#quarantineChild(child, message.error);
       return;
@@ -275,7 +273,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     }
     this.#resolvePending(pending.requestId, {
       ok: false,
-      error: normalizeFailure(message.message.error),
+      error: normalizeNativeHelperFailure(message.message.error),
     });
   }
   #resolvePending(requestId: PlayerRequestId, result: NativePlayerHostCommandResult): void {
@@ -407,135 +405,6 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     });
   }
 }
-function toProcessCommand(
-  command: PlayerCommand,
-  context?: PrivilegedPlaybackDispatchContext | null,
-): NativeHelperInputMessage {
-  if (command.command === 'load' && context?.privatePlayback) {
-    const { setup, playbackUrl, credentialHeader } = context.privatePlayback;
-    return {
-      type: 'command',
-      requestId: command.requestId,
-      command: command.command,
-      payload: command.payload,
-      setup,
-      playbackUrl,
-      credentialHeader,
-    };
-  }
-  return {
-    type: 'command',
-    requestId: command.requestId,
-    command: command.command,
-    payload: command.payload,
-  };
-}
-function parseProcessMessage(
-  line: string,
-): { message: ProcessMessage } | { error: NativePlayerHostFailure } {
-  let value: unknown;
-  try {
-    value = JSON.parse(line);
-  } catch {
-    return { error: safeFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true) };
-  }
-  if (hasForbiddenPrivilegedField(value) || !isRecord(value)) {
-    return { error: safeFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true) };
-  }
-  if (value.type === 'event' && isRecord(value.event)) {
-    return { message: { type: 'event', event: value.event as NativePlayerHostEvent } };
-  }
-  if (value.type === 'result' && typeof value.requestId === 'string' && value.requestId.length > 0) {
-    if (value.ok === true) {
-      return {
-        message: {
-          type: 'result',
-          requestId: value.requestId,
-          ok: true,
-          events: Array.isArray(value.events) ? (value.events as NativePlayerHostEvent[]) : undefined,
-        },
-      };
-    }
-    if (value.ok === false) {
-      return { message: { type: 'result', requestId: value.requestId, ok: false, error: value.error } };
-    }
-  }
-  return { error: safeFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true) };
-}
-function normalizeFailure(value: unknown): NativePlayerHostFailure {
-  if (!isRecord(value) || hasForbiddenPrivilegedField(value)) {
-    return safeFailure('PLAYER_HELPER_COMMAND_FAILED', 'helper-failure', true, true);
-  }
-  const category =
-    typeof value.category === 'string' && isSafeFailureCategory(value.category)
-      ? value.category
-      : 'helper-failure';
-  return safeFailure(
-    typeof value.code === 'string' && value.code.length > 0
-      ? normalizeCode(value.code)
-      : 'PLAYER_HELPER_COMMAND_FAILED',
-    category,
-    typeof value.recoverable === 'boolean' ? value.recoverable : true,
-    typeof value.retryable === 'boolean' ? value.retryable : true,
-  );
-}
-function safeFailure(
-  code: string,
-  category: NativePlayerHostFailure['category'],
-  recoverable: boolean,
-  retryable: boolean,
-): NativePlayerHostFailure {
-  return {
-    code: normalizeCode(code),
-    category,
-    message: safeFailureMessage(category),
-    recoverable,
-    retryable,
-  };
-}
 function diagnosticCategoryForFailure(error: NativePlayerHostFailure): DiagnosticEventInput['category'] {
   return error.category === 'aborted' ? 'cleanup' : 'helper-crash';
-}
-function safeFailureMessage(category: NativePlayerHostFailure['category']): string {
-  switch (category) {
-    case 'timeout':
-      return 'The player helper did not respond in time.';
-    case 'aborted':
-      return 'The player helper operation was stopped.';
-    case 'cleanup-failure':
-      return 'The player helper could not be cleaned up safely.';
-    case 'unsupported-capability':
-      return 'The player helper cannot perform this operation.';
-    default:
-      return 'The player helper failed while handling the command.';
-  }
-}
-function normalizeCode(code: string): string {
-  const normalized = code.replace(/[^A-Z0-9_]/g, '_').slice(0, 80);
-  return normalized.length > 0 ? normalized : 'PLAYER_HELPER_COMMAND_FAILED';
-}
-function isSafeFailureCategory(value: string): value is NativePlayerHostFailure['category'] {
-  return (SAFE_FAILURE_CATEGORIES as readonly string[]).includes(value);
-}
-function hasForbiddenPrivilegedField(value: unknown): boolean {
-  if (Array.isArray(value)) {
-    return value.some((item) => hasForbiddenPrivilegedField(item));
-  }
-  if (!isRecord(value)) {
-    return false;
-  }
-  for (const [key, child] of Object.entries(value)) {
-    if (
-      PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS.includes(
-        key as (typeof PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS)[number],
-      ) ||
-      hasForbiddenPrivilegedField(child)
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }
