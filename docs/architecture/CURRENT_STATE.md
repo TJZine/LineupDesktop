@@ -7,17 +7,19 @@
 
 Lineup Desktop is a new Windows-first Electron repository. It currently has a
 secure Electron shell frame, the RD-13 renderer app shell/navigation, workflow,
-settings/channel setup, runtime-backed guide/channel surfaces in progress,
-fake-backed overlay, and CSS/theme style surfaces, the RD-22A upstream-shaped
-fixture/injected app body, docs, workflow, contract, harness scaffolding,
-main-owned Plex auth/discovery/library domain seams, RD-22B live Plex
-onboarding/library runtime wiring, and RD-25 production native playback code
-whose Windows manual proof is still pending. There is no installer
+settings/channel setup, RD-23/RD-24 runtime-backed channel setup, guide, and
+channel surfaces complete for the current code state, fake-backed overlay, and
+CSS/theme style surfaces, the RD-22A upstream-shaped fixture/injected app body,
+docs, workflow, contract, harness scaffolding, main-owned Plex
+auth/discovery/library domain seams, RD-22B live Plex onboarding/library runtime
+wiring, and RD-25 production native playback code whose Windows manual proof is
+still pending. There is no installer
 implementation, public release/signing pipeline, production native-helper media
 binary redistribution, or Windows-observed production playback closeout proof
 yet. Historical paragraphs below preserve the sequence of earlier RD slices;
-later RD notes supersede earlier "unsupported" or "not wired" statements where
-they describe completed code but not completed Windows product proof.
+later RD notes supersede earlier "unsupported", "not wired", or "in progress"
+statements where they describe completed code but not completed Windows product
+proof.
 RD-04 adds documentation and harness ownership for upstream behavior guardrails
 only; it does not import product runtime code. RD-05 adds a disposable
 dev-only external `mpv` POC tool and ignored redacted local evidence only; it
@@ -364,7 +366,7 @@ The watch-list owners that remain over 500 lines stay in
 | Plex stream resolver boundary | `src/main/plex/streamResolver.ts`, `src/main/plex/streamResolverComposition.ts`, `src/main/plex/playbackMediaDetailPort.ts`, and `src/main/plex/pmsPlaybackSessionPort.ts` | Main-owned resolver and live composition. RD-25 resolves Plex media details and manages PMS session leases with request-scoped start/release ports. |
 | Plex playback runtime boundary | `src/main/player/plexPlaybackRuntime.ts`, `src/main/player/plexPlaybackRuntimeCleanup.ts`, `src/main/player/plexPlaybackCleanupWiring.ts`, `src/main/player/plexPlaybackBridge.ts`, `src/main/player/plexPlaybackComposition.ts`, `src/main/player/playbackRuntimeBootstrap.ts`, and `src/main/player/privilegedPlaybackDispatchContext.ts` | Main-owned runtime, cleanup sequencing owners, and scheduler/channel bridge. RD-25 hooks scheduled playback lifecycle transitions (program ticks, user switch, server switch, helper crashes) to native helper lifecycle and cleanup; ARCH-02 keeps cleanup ordering and cleanup dependency wiring outside the main runtime owner. |
 | Product native helper | `src/native-helper/Lineup.NativePlayerHost/**` | C#/.NET native player host executable source that instantiates libmpv and speaks the NDJSON protocol over stdin/stdout. Built binaries are untracked. |
-| Desktop persistence boundary | `src/main/persistence/appDataPaths.ts`, `src/main/persistence/secureStorageCodec.ts`, and `src/main/persistence/desktopPersistenceStore.ts` | Main-owned RD-09 app-data path, Electron safeStorage codec, encrypted Plex credential record, selected-server state, unavailable/corrupt classification, fail-closed no-plaintext fallback, and renderer-safe snapshot owner; RD-22B wires credential availability and selected-server restore into the Plex runtime while backup/restore and scheduler/channel persistence remain unimplemented |
+| Desktop persistence boundary | `src/main/persistence/appDataPaths.ts`, `src/main/persistence/secureStorageCodec.ts`, `src/main/persistence/desktopPersistenceStore.ts`, and `src/main/persistence/desktopChannelPersistenceStore.ts` | Main-owned RD-09 app-data path, Electron safeStorage codec, encrypted Plex credential record, selected-server state, unavailable/corrupt classification, fail-closed no-plaintext fallback, renderer-safe snapshot owner, and RD-23 channel persistence file adapter; RD-22B wires credential availability and selected-server restore into the Plex runtime, RD-23 wires channel setup persistence, and backup/restore remains unimplemented |
 | Desktop Plex runtime | `src/main/plex/desktopPlexRuntime.ts`, `src/main/plex/plexRuntimeOperationOwner.ts`, `src/main/plex/desktopPlexLibraryOperationExecutor.ts`, `src/main/plex/desktopPlexRuntimeSupport.ts`, `src/main/plex/livePlexTransport.ts`, `src/main/plex/plexComposition.ts`, and `src/main/plex/plexIpc.ts` | Main-owned RD-22B live Plex onboarding/library runtime and IPC composition for auth/PIN, credential restore status, Plex Home/profile switching, selected-server restore, server discovery/selection, library sections/items/search/metadata, stale/cancel/error normalization, and renderer-safe snapshots while retaining tokens, selected connections, transport details, raw payloads, endpoint URLs, and app paths in main custody. ARCH-02 gives stale/cancel/error operation custody and library browse/search/metadata execution focused owners under the main Plex runtime boundary. |
 | Desktop Plex library domain | `src/main/plex/library/*` | Main-owned RD-10 imported/adapted Plex library parser/domain owner for library sections, media metadata, seasons, collections, playlists, tag directories, search hubs, pagination, request intent, and renderer-safe summaries; RD-22B uses these seams through main-owned live runtime composition, with image URL construction, stream resolver runtime, and playback URL setup still out of scope |
 | Desktop Plex auth domain | `src/main/plex/auth/*` | Main-owned RD-10 imported/adapted Plex auth owner for PIN/profile/token validation, Plex Home users, profile switching, injected auth transport, sanitized errors, Desktop identity metadata, and RD-09 credential storage adapter; RD-22B wires live auth/PIN, Plex Home/profile switching, credential restore status, and protected-user PIN failure handling through main/preload/renderer-safe runtime composition |
