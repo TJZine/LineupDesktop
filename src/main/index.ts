@@ -36,6 +36,7 @@ import {
   type ShellIpcAuthorizationDetails,
 } from './shellSecurity.js';
 import { registerPlayerIpcHandlers, type PlayerIpcTeardown } from './player/playerIpc.js';
+import { createProductionNativeHostFactory } from './player/productionNativeHostFactory.js';
 import { DiagnosticEventStore } from './diagnostics/diagnosticEventStore.js';
 import { registerDiagnosticsIpcHandlers, type DiagnosticsIpcTeardown } from './diagnostics/supportBundleIpc.js';
 import { registerChannelComposition, type ChannelCompositionRegistration } from './channel/channelComposition.js';
@@ -93,6 +94,9 @@ app.whenReady()
       getShellWindow: () => shellWindowController.getWindow(),
       appVersion: app.getVersion(),
     });
+    const nativeHostFactory = createProductionNativeHostFactory({
+      diagnosticEventStore,
+    });
     teardownPlayerIpc = registerPlayerIpcHandlers({
       shellMode,
       isAuthorizedEvent,
@@ -100,6 +104,7 @@ app.whenReady()
       createRequestId,
       reportDiagnostic: reportMainProcessDiagnostic,
       diagnosticEventStore,
+      nativeHostFactory: nativeHostFactory ?? undefined,
     });
     plexComposition = await registerPlexComposition({
       app,

@@ -64,7 +64,15 @@ export function registerPlayerIpcHandlers(
             diagnosticEventStore: options.diagnosticEventStore,
           }),
         }
-      : { adapter: null };
+      : options.nativeHostFactory
+        ? {
+            adapter: new DesktopPlayerAdapter(options.nativeHostFactory(), {
+              onEvents: (events) => emitEvents(options, events),
+              diagnosticEventStore: options.diagnosticEventStore,
+              rejectRendererLoad: true,
+            }),
+          }
+        : { adapter: null };
 
   ipcMain.handle(LINEUP_PLAYER_COMMAND_CHANNEL, async (event, payload: unknown) => {
     const requestId = getPayloadRequestId(payload) ?? options.createRequestId('player-command');

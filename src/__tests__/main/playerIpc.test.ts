@@ -554,16 +554,11 @@ test('player IPC enforces main authorization before adapter access', async () =>
 test('production player IPC returns unsupported failures and does not activate fake playback', async () => {
   const ipcMain = new FakeIpcMain();
   const events: PlayerEvent[] = [];
-  let nativeHostCreated = false;
   registerPlayerIpcHandlers({
     shellMode: 'production',
     isAuthorizedEvent,
     sendPlayerEvent: (event) => events.push(event),
     createRequestId,
-    nativeHostFactory: () => {
-      nativeHostCreated = true;
-      return new ConfigurableNativeHost();
-    },
     ipcMain,
   });
 
@@ -584,7 +579,6 @@ test('production player IPC returns unsupported failures and does not activate f
   );
 
   assert.equal((commandResult as { ok: boolean }).ok, false);
-  assert.equal(nativeHostCreated, false);
   assert.equal(
     (commandResult as { error: { category: string; code: string } }).error.category,
     'unsupported-capability',
@@ -602,6 +596,39 @@ test('production player IPC returns unsupported failures and does not activate f
   assertNoForbiddenKeys(snapshotResult);
   assertNoForbiddenKeys(cleanupResult);
   assertNoForbiddenKeys(events);
+});
+
+test('production player IPC with nativeHostFactory instantiates adapter but rejects renderer loads', async () => {
+  const ipcMain = new FakeIpcMain();
+  const events: PlayerEvent[] = [];
+  let nativeHostCreated = false;
+  const host = new ConfigurableNativeHost();
+  const teardown = registerPlayerIpcHandlers({
+    shellMode: 'production',
+    isAuthorizedEvent,
+    sendPlayerEvent: (event) => events.push(event),
+    createRequestId,
+    nativeHostFactory: () => {
+      nativeHostCreated = true;
+      return host;
+    },
+    ipcMain,
+  });
+
+  const commandResult = await ipcMain.invoke(
+    LINEUP_PLAYER_COMMAND_CHANNEL,
+    authorizedEvent(),
+    loadEnvelope('player-prod-2'),
+  );
+
+  assert.equal(nativeHostCreated, true);
+  assert.equal((commandResult as { ok: boolean }).ok, false);
+  assert.equal(
+    (commandResult as { error: { category: string; code: string } }).error.code,
+    'PLAYER_UNSUPPORTED_CAPABILITY',
+  );
+  assertNoForbiddenKeys(commandResult);
+  await teardown.teardown();
 });
 
 test('player IPC cleanup returns a safe failure envelope when host cleanup fails', async () => {
