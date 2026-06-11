@@ -39,16 +39,12 @@ import { registerPlayerIpcHandlers, type PlayerIpcTeardown } from './player/play
 import { DiagnosticEventStore } from './diagnostics/diagnosticEventStore.js';
 import { registerDiagnosticsIpcHandlers, type DiagnosticsIpcTeardown } from './diagnostics/supportBundleIpc.js';
 import { registerChannelComposition, type ChannelCompositionRegistration } from './channel/channelComposition.js';
-import {
-  createPlexPlaybackRuntimeComposition,
-  createDesktopPlayerAdapterRuntimePort,
-} from './player/plexPlaybackComposition.js';
+import { bootstrapPlaybackRuntime } from './player/playbackRuntimeBootstrap.js';
 import type { PlexPlaybackRuntime } from './player/plexPlaybackRuntime.js';
 import { registerPlexComposition, type PlexCompositionRegistration } from './plex/plexComposition.js';
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
 import { registerShellAppCommandController } from './window/shellAppCommandController.js';
 import { createShellWindowController } from './window/shellWindowController.js';
-import type { PlexStreamResolverInput, PlexStreamResolverResult } from './plex/streamResolver.js';
 
 registerLineupProtocolScheme();
 
@@ -127,135 +123,10 @@ app.whenReady()
         }
       },
     });
-
-    const fakePlaybackResolver = {
-      async resolve(input: PlexStreamResolverInput): Promise<PlexStreamResolverResult> {
-        const fakeMediaId = `plex-media-${input.mediaId}`;
-        const fakeMediaTitle = `Live Program ${input.mediaId}`;
-        const fakeMediaDurationMs = 1_200_000;
-        if (input.mediaId.length === 0) {
-          return {
-            ok: false,
-            error: {
-              code: 'resource-missing',
-              category: 'source',
-              message: 'Missing media id',
-              retryable: false,
-              recoverable: false,
-            },
-            diagnostics: [],
-          };
-        }
-        const payload = {
-          media: {
-            id: fakeMediaId,
-            title: fakeMediaTitle,
-            durationMs: fakeMediaDurationMs,
-            container: 'mp4',
-          },
-          policy: {
-            autoplay: input.autoplay ?? true,
-            startPositionMs: input.startPositionMs ?? 0,
-            preferredAudioTrackId: null,
-            preferredSubtitleTrackId: null,
-          },
-          capabilityProfileId: input.capabilityProfile?.id || 'desktop-default-profile',
-        };
-        return {
-          ok: true,
-          load: payload,
-          privatePlayback: {
-            requestId: input.requestId,
-            decisionKind: 'direct-play',
-            playbackUrl: 'https://mock.plex.invalid/file.mp4',
-            credentialHeader: { name: 'X-Plex-Token', value: 'mock-token' },
-            selectedConnection: {
-              protocol: 'https',
-              address: 'mock.plex.invalid',
-              port: 443,
-              local: true,
-              relay: false,
-            },
-            media: { id: payload.media.id, title: payload.media.title },
-            setup: {
-              playbackMode: 'direct-play',
-              mediaPath: '/library/metadata/mock',
-              variantId: 'mock-variant',
-              partPath: '/library/parts/mock/file.mp4',
-              selectedTrackIds: { video: null, audio: null, subtitle: null },
-              selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
-            },
-          },
-          decision: {
-            kind: 'direct-play',
-            candidateId: 'mock-candidate',
-            selectedTrackIds: { video: null, audio: null, subtitle: null },
-            summary: {
-              media: {
-                id: fakeMediaId,
-                title: fakeMediaTitle,
-              },
-              container: 'mp4',
-              videoCodec: 'h264',
-              audioCodec: 'aac',
-              audioLanguage: null,
-              subtitleDelivery: null,
-              subtitleLanguage: null,
-              dynamicRange: 'sdr',
-              action: 'direct-play',
-            },
-            reasonCodes: ['direct-play-supported'],
-            unknowns: [],
-          },
-          pmsSession: null,
-          diagnostics: [],
-        };
-      },
-    };
-
-    const fakePmsPort = {
-      async releaseSession() {
-        // No-op
-      }
-    };
-
-    const capabilityProfile = {
-      id: 'desktop-default-profile',
-      directPlayContainers: ['mp4'],
-      directPlayVideoCodecs: ['h264'],
-      directPlayAudioCodecs: ['aac'],
-      subtitleDeliveryModes: ['embedded', 'sidecar', 'none'],
-      headerAuthSetup: 'supported',
-      audioTrackSwitching: 'supported',
-      subtitleTrackSwitching: 'supported',
-      hdr: 'supported',
-      dolbyVision: 'unsupported',
-      directStream: {
-        containerRemux: 'supported',
-        audioTranscode: 'supported',
-        subtitleConversion: 'supported',
-      },
-      transcode: {
-        video: 'supported',
-        audio: 'supported',
-        subtitles: 'supported',
-        hdr: 'supported',
-      },
-    } as const;
-
-    const playerPort = teardownPlayerIpc.adapter
-      ? createDesktopPlayerAdapterRuntimePort(teardownPlayerIpc.adapter)
-      : {
-          dispatch: async () => ({ ok: true, events: [] }),
-          cleanup: async () => {},
-        };
-
-    const playbackRuntimeComposition = createPlexPlaybackRuntimeComposition({
+    const playbackRuntimeComposition = bootstrapPlaybackRuntime({
+      shellMode,
       scheduler: channelComposition.activeChannelScheduler,
-      resolver: fakePlaybackResolver,
-      player: playerPort,
-      pms: fakePmsPort,
-      capabilityProfile,
+      adapter: teardownPlayerIpc.adapter,
       createRequestId,
       diagnosticEventStore,
     });
