@@ -261,7 +261,7 @@ class FakeDesktopPlayerAdapter {
         case 'stop':
           return { intent: 'player.stop', requestId: cmd.requestId, payload: {} };
         default:
-          return { intent: 'player.play', requestId: cmd.requestId, payload: {} };
+          return assertUnhandledRendererIntentCommand(cmd);
       }
     };
     return this.dispatchRendererIntent(toRendererIntentEnvelope(command));
@@ -270,6 +270,10 @@ class FakeDesktopPlayerAdapter {
   async cleanup(): Promise<{ accepted: boolean; events: readonly PlayerEvent[] }> {
     return { accepted: this.cleanupAccepted, events: [] };
   }
+}
+
+function assertUnhandledRendererIntentCommand(command: PlayerCommand): never {
+  throw new Error(`Unhandled PlayerCommand in composition test fake: ${command.command}`);
 }
 
 test('RD-12 composition wires scheduler, resolver, runtime, player, and PMS through injected main seams', async () => {

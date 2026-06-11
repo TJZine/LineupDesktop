@@ -41,11 +41,8 @@ test('PmsPlaybackSessionPort startSession returns lease and stores details', asy
   assert.deepEqual(operations, ['startPlayback']);
 });
 
-test('PmsPlaybackSessionPort startSession returns null if connection or token is missing', async () => {
+test('PmsPlaybackSessionPort startSession returns null if token is missing', async () => {
   const mockRuntime = {
-    getSelectedConnectionForMain() {
-      return null;
-    },
     async withActivePlexToken() {
       throw new Error('missing token');
     },
@@ -57,42 +54,84 @@ test('PmsPlaybackSessionPort startSession returns null if connection or token is
     media: { id: 'media-1', title: 'Test' },
     decisionKind: 'transcode',
     connection: {
+      uri: 'https://plex.local',
       protocol: 'https',
       address: 'plex.local',
       port: 32400,
       local: true,
       relay: false,
+      latencyMs: null,
     },
   });
 
   assert.equal(lease, null);
 });
 
+test('PmsPlaybackSessionPort startSession returns null for invalid input connection', async () => {
+  let tokenRead = false;
+  const mockRuntime = {
+    async withActivePlexToken() {
+      tokenRead = true;
+      return 'unexpected-token';
+    },
+  } as unknown as DesktopPlexRuntime;
+
+  const port = new PmsPlaybackSessionPort(mockRuntime);
+  const lease = await port.startSession({
+    requestId: 'req-invalid-connection',
+    media: { id: 'media-1', title: 'Test' },
+    decisionKind: 'transcode',
+    connection: {
+      uri: '',
+      protocol: 'https',
+      address: '',
+      port: 0,
+      local: true,
+      relay: false,
+      latencyMs: null,
+    },
+  });
+
+  assert.equal(lease, null);
+  assert.equal(tokenRead, false);
+});
+
 test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for transcode and direct-stream', async () => {
-  const connection = {
-    uri: 'https://plex.local',
+  const runtimeSelectedConnection = {
+    uri: 'https://selected-runtime.example',
     protocol: 'https' as const,
-    address: 'plex.local',
+    address: 'selected-runtime.example',
     port: 32400,
     local: true,
     relay: false,
     latencyMs: null,
   };
+  const playbackConnection = {
+    uri: 'http://playback-connection.example:32400',
+    protocol: 'http' as const,
+    address: 'playback-connection.example',
+    port: 32400,
+    local: false,
+    relay: true,
+    latencyMs: 25,
+  };
 
   let stopSessionId: string | null = null;
   let stopToken: string | null = null;
+  let stopConnection: unknown = null;
   const operations: string[] = [];
   const mockTransport = {
-    async stopTranscodeSession(input: { sessionId: string; token: string }) {
+    async stopTranscodeSession(input: { connection: unknown; sessionId: string; token: string }) {
       stopSessionId = input.sessionId;
       stopToken = input.token;
+      stopConnection = input.connection;
     },
   };
 
   const tokens = ['start-token-1', 'start-token-2'];
   const mockRuntime = {
     getSelectedConnectionForMain() {
-      return connection;
+      return runtimeSelectedConnection;
     },
     async withActivePlexToken(
       operation: string,
@@ -113,7 +152,7 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
     requestId: 'req-transcode',
     media: { id: 'media-1', title: 'Test' },
     decisionKind: 'transcode',
-    connection,
+    connection: playbackConnection,
   });
 
   // Release it
@@ -124,6 +163,7 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
 
   assert.equal(stopSessionId, 'req-transcode');
   assert.equal(stopToken, 'start-token-1');
+  assert.deepEqual(stopConnection, playbackConnection);
   assert.deepEqual(operations, ['startPlayback']);
 
   // Start direct-stream session
@@ -131,7 +171,7 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
     requestId: 'req-direct-stream',
     media: { id: 'media-2', title: 'Test 2' },
     decisionKind: 'direct-stream',
-    connection,
+    connection: playbackConnection,
   });
 
   // Release it
@@ -142,6 +182,7 @@ test('PmsPlaybackSessionPort releaseSession invokes stopTranscodeSession for tra
 
   assert.equal(stopSessionId, 'req-direct-stream');
   assert.equal(stopToken, 'start-token-2');
+  assert.deepEqual(stopConnection, playbackConnection);
   assert.deepEqual(operations, ['startPlayback', 'startPlayback']);
 });
 

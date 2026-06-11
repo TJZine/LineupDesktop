@@ -9,6 +9,12 @@ import type { PlexPlaybackRuntime } from './plexPlaybackRuntime.js';
 export type PlaybackCleanupPlexRuntime = Pick<DesktopPlexRuntime, 'switchHomeUser' | 'selectServer'>;
 export type PlaybackCleanupRuntime = Pick<PlexPlaybackRuntime, 'cleanup'>;
 
+const PLAYBACK_CLEANUP_WIRED = Symbol('lineup.plexPlaybackCleanupWired');
+
+type WireablePlaybackCleanupPlexRuntime = PlaybackCleanupPlexRuntime & {
+  [PLAYBACK_CLEANUP_WIRED]?: true;
+};
+
 export interface PlaybackCleanupWiringOptions {
   plexRuntime: PlaybackCleanupPlexRuntime;
   getPlaybackRuntime: () => PlaybackCleanupRuntime | null;
@@ -16,9 +22,17 @@ export interface PlaybackCleanupWiringOptions {
 }
 
 export function wirePlexPlaybackCleanup(options: PlaybackCleanupWiringOptions): void {
-  const { plexRuntime, getPlaybackRuntime, reportDiagnostic } = options;
+  const { getPlaybackRuntime, reportDiagnostic } = options;
+  const plexRuntime = options.plexRuntime as WireablePlaybackCleanupPlexRuntime;
+  if (plexRuntime[PLAYBACK_CLEANUP_WIRED]) {
+    return;
+  }
+
   const originalSwitchHomeUser = plexRuntime.switchHomeUser.bind(plexRuntime);
-  plexRuntime.switchHomeUser = async (requestId, input): Promise<PlexIpcResult<PlexSwitchHomeUserValue>> => {
+  const switchHomeUserWithPlaybackCleanup = async (
+    requestId: string,
+    input: Parameters<PlaybackCleanupPlexRuntime['switchHomeUser']>[1],
+  ): Promise<PlexIpcResult<PlexSwitchHomeUserValue>> => {
     const result = await originalSwitchHomeUser(requestId, input);
     if (result.ok) {
       await cleanupPlaybackRuntime(
@@ -32,7 +46,10 @@ export function wirePlexPlaybackCleanup(options: PlaybackCleanupWiringOptions): 
   };
 
   const originalSelectServer = plexRuntime.selectServer.bind(plexRuntime);
-  plexRuntime.selectServer = async (requestId, serverId): Promise<PlexIpcResult<PlexSelectServerValue>> => {
+  const selectServerWithPlaybackCleanup = async (
+    requestId: string,
+    serverId: Parameters<PlaybackCleanupPlexRuntime['selectServer']>[1],
+  ): Promise<PlexIpcResult<PlexSelectServerValue>> => {
     const result = await originalSelectServer(requestId, serverId);
     if (result.ok) {
       await cleanupPlaybackRuntime(
@@ -44,6 +61,14 @@ export function wirePlexPlaybackCleanup(options: PlaybackCleanupWiringOptions): 
     }
     return result;
   };
+
+  Object.defineProperty(plexRuntime, PLAYBACK_CLEANUP_WIRED, {
+    value: true,
+    enumerable: false,
+    configurable: false,
+  });
+  plexRuntime.switchHomeUser = switchHomeUserWithPlaybackCleanup;
+  plexRuntime.selectServer = selectServerWithPlaybackCleanup;
 }
 
 async function cleanupPlaybackRuntime(

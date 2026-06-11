@@ -198,6 +198,43 @@ test('playback cleanup failures are reported without failing Plex runtime calls'
   ]);
 });
 
+test('playback cleanup wiring is idempotent for the same Plex runtime instance', async () => {
+  let cleanupCount = 0;
+  const mockPlaybackRuntime = {
+    async cleanup(input: { reason: 'profile-change' | 'server-change' }) {
+      assert.equal(input.reason, 'profile-change');
+      cleanupCount += 1;
+      return [];
+    },
+  } satisfies PlaybackCleanupRuntime;
+  const mockPlexRuntime = createPlexRuntime({
+    switchHomeUserResult: (requestId) => ({
+      ok: true,
+      value: {
+        profile: {
+          accountId: 'user-1',
+          username: 'user1',
+        },
+        snapshot,
+      },
+      requestId,
+    }) satisfies PlexIpcResult<PlexSwitchHomeUserValue>,
+  });
+
+  const wiringOptions = {
+    plexRuntime: mockPlexRuntime,
+    getPlaybackRuntime: () => mockPlaybackRuntime,
+    reportDiagnostic: () => undefined,
+  };
+  wirePlexPlaybackCleanup(wiringOptions);
+  wirePlexPlaybackCleanup(wiringOptions);
+
+  const result = await mockPlexRuntime.switchHomeUser('req-123', { userId: 'user-1' });
+
+  assert.equal(result.ok, true);
+  assert.equal(cleanupCount, 1);
+});
+
 test('helper crash is wired to playbackRuntime handleHelperCrash via host onLifecycleFailure', async () => {
   let handleHelperCrashCalled = false;
   const mockPlaybackRuntime = {

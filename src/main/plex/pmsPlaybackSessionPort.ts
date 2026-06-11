@@ -32,8 +32,8 @@ export class PmsPlaybackSessionPort
   async startSession(
     input: PlexStreamResolverPmsSessionStartInput,
   ): Promise<PlexStreamResolverPmsSessionLease | null> {
-    const connection = this.#runtime.getSelectedConnectionForMain();
-    if (!connection) {
+    const resolvedConnection = input.connection;
+    if (!isValidPlexConnection(resolvedConnection)) {
       return null;
     }
     let token: string;
@@ -49,7 +49,7 @@ export class PmsPlaybackSessionPort
     }
 
     this.#activeSessions.set(input.requestId, {
-      connection,
+      connection: resolvedConnection,
       decisionKind: input.decisionKind,
       token,
     });
@@ -85,4 +85,15 @@ export class PmsPlaybackSessionPort
       });
     }
   }
+}
+
+function isValidPlexConnection(connection: PlexConnection): boolean {
+  return (
+    (connection.protocol === 'http' || connection.protocol === 'https') &&
+    connection.address.trim().length > 0 &&
+    Number.isInteger(connection.port) &&
+    connection.port > 0 &&
+    connection.port <= 65_535 &&
+    connection.uri.trim().length > 0
+  );
 }

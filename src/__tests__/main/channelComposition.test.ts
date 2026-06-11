@@ -34,6 +34,8 @@ test('channel diagnostic sanitization redacts string primitives inside arrays', 
     '=secret-token',
   ].join('');
   const authorizationHeader = ['Author', 'ization', ': ', 'Bearer', ' secret-token'].join('');
+  const rawHeaderMap = ['headers={X-Plex-', 'Token: secret-token}'].join('');
+  const localPath = ['/Users/example/Library/Application Support/Lineup/secret.json'].join('');
   const nestedTokenUrl = [
     'https://nested.example.invalid/path',
     '?',
@@ -46,6 +48,8 @@ test('channel diagnostic sanitization redacts string primitives inside arrays', 
       tokenQueryUrl,
       authorizationHeader,
       'file://C:/Users/example/AppData/secret.json',
+      rawHeaderMap,
+      localPath,
       {
         nestedUrl: nestedTokenUrl,
       },
@@ -57,8 +61,9 @@ test('channel diagnostic sanitization redacts string primitives inside arrays', 
   assert.equal(serialized.includes('nested-secret'), false);
   assert.equal(serialized.includes('https://plex.example.invalid'), false);
   assert.equal(serialized.includes('file://C:/Users/example'), false);
-  assert.match(serialized, /\[redacted-url\]/u);
-  assert.match(serialized, /Bearer \[redacted\]/u);
+  assert.equal(serialized.includes('/Users/example'), false);
+  assert.match(serialized, /\[redacted\]/u);
+  assert.equal(serialized.includes('Authorization'), false);
 });
 
 test('channel composition injects a clock into the active channel scheduler', async () => {

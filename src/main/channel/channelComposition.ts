@@ -1,5 +1,6 @@
 import type { App, IpcMainInvokeEvent } from 'electron';
 
+import { redactDiagnosticText } from '../../contracts/diagnostics.js';
 import type { ShellMode } from '../../contracts/shell.js';
 import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.js';
 import { resolveDesktopAppDataPaths } from '../persistence/appDataPaths.js';
@@ -138,13 +139,13 @@ function sanitizeDiagnosticRecord(
       continue;
     }
     if (typeof value === 'string') {
-      result[key] = redactDiagnosticText(value);
+      result[key] = redactDiagnosticText(value).slice(0, 2000);
     } else if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
       result[key] = value;
     } else if (Array.isArray(value)) {
       result[key] = value.slice(0, 20).map((entry) => {
         if (typeof entry === 'string') {
-          return redactDiagnosticText(entry);
+          return redactDiagnosticText(entry).slice(0, 2000);
         }
         if (typeof entry === 'object' && entry !== null) {
           return sanitizeDiagnosticRecord(entry as Record<string, unknown>, depth + 1);
@@ -160,12 +161,4 @@ function sanitizeDiagnosticRecord(
 
 function isSensitiveDiagnosticKey(key: string): boolean {
   return /token|secret|credential|password|auth|header|url|uri|path|file/i.test(key);
-}
-
-function redactDiagnosticText(value: string): string {
-  return value
-    .replace(/([?&][^=]*token[^=]*=)[^&\s]+/giu, '$1[redacted]')
-    .replace(/\b(bearer)\s+[-A-Za-z0-9._~+/=]+/giu, '$1 [redacted]')
-    .replace(/\b(?:https?|file):\/\/\S+/giu, '[redacted-url]')
-    .slice(0, 2000);
 }

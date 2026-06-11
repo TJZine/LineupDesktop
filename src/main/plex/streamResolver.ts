@@ -47,7 +47,7 @@ export interface PlexStreamResolverPmsSessionStartInput {
   requestId: PlayerRequestId;
   media: Pick<PlayerMediaSummary, 'id' | 'title'>;
   decisionKind: DesktopStreamPolicyDecision['kind'];
-  connection: Pick<PlexConnection, 'protocol' | 'address' | 'port' | 'local' | 'relay'>;
+  connection: PlexConnection;
 }
 
 export interface PlexStreamResolverOptions {
@@ -271,7 +271,7 @@ export class PlexStreamResolver {
         requestId,
         media: { id: media.id, title: media.title },
         decisionKind,
-        connection: projectConnection(connection),
+        connection,
       });
     } catch {
       diagnostics.push({
