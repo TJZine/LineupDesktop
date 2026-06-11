@@ -10,7 +10,7 @@ import type { DesktopPlexRuntime } from '../plex/desktopPlexRuntime.js';
 import { PlexLibraryMinimalAdapter } from './plexLibraryMinimalAdapter.js';
 import { ChannelScheduler } from '../../domain/scheduler/channelScheduler.js';
 import { GuideRuntime } from './guideRuntime.js';
-import type { ChannelLogger } from '../../domain/channel/interfaces.js';
+import type { ChannelClock, ChannelLogger } from '../../domain/channel/interfaces.js';
 
 export interface RegisterChannelCompositionOptions {
   app: Pick<App, 'getPath'>;
@@ -38,20 +38,23 @@ export function registerChannelComposition(
   if (channelPersistenceFilePath === undefined) {
     throw new Error('Channel persistence path was not resolved.');
   }
+  const clock: ChannelClock = { now: () => Date.now() };
   const runtime = new ChannelRuntime({
     storage: new DesktopChannelPersistenceStore({
       persistenceFilePath: channelPersistenceFilePath,
     }),
     plexRuntime: options.plexRuntime,
+    clock,
   });
 
   const plexLibraryAdapter = new PlexLibraryMinimalAdapter(options.plexRuntime);
-  const activeChannelScheduler = new ChannelScheduler();
+  const activeChannelScheduler = new ChannelScheduler({ clock });
   const guideLogger = createGuideRuntimeLogger(options.diagnosticEventStore);
   const guideRuntime = new GuideRuntime({
     repository: runtime.getRepository(),
     plexLibraryAdapter,
     activeChannelScheduler,
+    clock,
     onChannelTuned: typeof options.onChannelTuned === 'function' ? options.onChannelTuned : undefined,
     logger: guideLogger,
   });

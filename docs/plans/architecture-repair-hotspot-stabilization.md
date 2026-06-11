@@ -439,6 +439,20 @@ Package order:
 4. **Preload guard/channel-family split.** Owner seam: preload remains the
    single sandbox-compatible typed bridge and may split guard families only into
    preload-local modules. No new bridge namespace or broad RPC shape.
+4S. **Smoke blocker repair if needed before accepting Package 4.** Owner seam:
+   main/channel composition may inject the scheduler clock required by the
+   existing domain scheduler constructor when `npm run smoke:electron` fails
+   before preload smoke proof can complete. This is not a product feature and
+   must stay limited to restoring the already-required smoke gate.
+4T. **Smoke assertion realignment if needed after Package 4S.** Owner seam:
+   smoke assertions may be updated to prove current live-runtime/shell safety
+   instead of stale fake-route text when `npm run smoke:electron` reaches the
+   renderer and fails only on outdated guide/channel-setup/player smoke
+   expectations. This is harness proof maintenance, not product UI behavior.
+4V. **Fullscreen focus-limited smoke fallback if needed after Package 4U.**
+   Owner seam: fullscreen smoke proof may distinguish a focused fullscreen
+   transition failure from an unfocused desktop smoke environment that cannot
+   activate the window even after an explicit app/window focus request.
 5. **Desktop Plex runtime operation split.** Owner seam:
    `DesktopPlexRuntime` remains the main-owned runtime facade while
    server/profile orchestration, library operations, and operation abort/stale
@@ -516,6 +530,18 @@ Package-specific commands:
 - Package 4:
   `node --import tsx --test src/__tests__/integration/preloadContractVocabulary.test.ts`
   and `npm run smoke:electron`.
+- Package 4S, only if Package 4 smoke proof is blocked by
+  `ChannelScheduler requires an injected SchedulerClock`:
+  `node --import tsx --test src/__tests__/main/channelComposition.test.ts`,
+  `npm run smoke:electron`, and `npm run verify`.
+- Package 4T, only if Package 4S clears scheduler construction and smoke then
+  fails on stale guide/channel-setup/player smoke assertions:
+  `npm run smoke:electron`, `npm run verify`, and focused source audit of
+  `src/main/smokeAssertions.ts`.
+- Package 4V, only if Package 4U proves the smoke window remains unfocused after
+  a bounded app/window focus request:
+  `npm run smoke:electron`, `npm run verify`, and focused source audit of
+  `src/main/smokeFullscreenAssertions.ts`.
 - Package 5:
   `node --import tsx --test src/__tests__/main/plexRuntimeIpc.test.ts` after
   build/typecheck, plus focused tests for extracted operation owners.
@@ -563,6 +589,20 @@ Per-package acceptance:
 - Package 4: the single `window.lineupDesktop` bridge, approved channel
   constants, runtime guard behavior, listener cleanup, sandbox compatibility,
   and smoke containment remain equivalent.
+- Package 4S: main/channel composition injects a stable scheduler clock into
+  `ChannelScheduler` without changing channel runtime, guide behavior,
+  renderer/preload APIs, scheduler domain policy, persistence schema, or Plex
+  behavior; `npm run smoke:electron` reaches its normal preload/shell proof
+  instead of failing on scheduler construction.
+- Package 4T: smoke assertions prove current renderer route reachability,
+  bridge containment, safe live guide/setup/player states, overlay/focus
+  sanity, and preload bundling without requiring obsolete fake guide text,
+  deleted fake setup controls, or brittle overlay rectangle non-overlap that is
+  not part of the current architecture contract.
+- Package 4V: fullscreen smoke still fails if a focused, fullscreen-capable
+  smoke window does not enter fullscreen; only an observed inability to focus the
+  smoke window may skip BrowserWindow transition proof while preserving renderer
+  bridge envelope, route/focus, z-order, and non-fullscreen cleanup checks.
 - Package 5: auth/profile/server/library results, operation abort/stale
   handling, snapshot mutation, token/connection custody, validation, and
   diagnostics remain equivalent.
@@ -699,6 +739,130 @@ listener cleanup, and sandbox smoke containment.
 Stop triggers: bundling breaks sandbox preload, a guard split needs raw Electron
 objects in renderer, a new bridge namespace appears, or parity tests cannot
 cover the split.
+
+### Package 4S: Smoke Blocker Clock Injection
+
+Priority rationale: Package 4 requires `npm run smoke:electron`, and current
+smoke proof is blocked after successful preload bundling by
+`ChannelScheduler requires an injected SchedulerClock`. Direct evidence points
+to `src/main/channel/channelComposition.ts` constructing `new
+ChannelScheduler()` without options while `ChannelScheduler` requires an
+injected clock. This is a gate-restoration repair, not a new feature.
+
+Owner seam: main/channel composition may own process-local scheduler clock
+injection for the active guide scheduler. The scheduler domain requirement
+remains unchanged, and channel runtime, guide runtime, renderer, preload,
+Plex, persistence schema, player, package/dependency, and product behavior
+must not expand.
+
+Files in scope:
+
+- `src/main/channel/channelComposition.ts`
+- `src/__tests__/main/channelComposition.test.ts`
+
+Acceptance: focused main/channel composition proof covers clock injection;
+`npm run smoke:electron` no longer fails during channel composition scheduler
+construction; `npm run verify` passes.
+
+Stop triggers: the fix needs scheduler domain policy changes, persisted state
+changes, renderer/preload/API changes, guide behavior changes, Plex/runtime
+changes, package/dependency changes, or Windows/native proof.
+
+### Package 4T: Smoke Assertion Realignment
+
+Priority rationale: after Package 4S clears the scheduler-construction blocker,
+`npm run smoke:electron` reaches renderer assertions and may fail on stale
+fake-route expectations: fake guide detail text, fake guide grid data, absence
+of old setup controls, or OSD/now-playing rectangle overlap. These assertions
+can block Package 4 preload proof even when preload bundling and security
+containment are intact.
+
+Owner seam: `src/main/smokeAssertions.ts` owns Electron smoke proof
+expectations. It may be realigned to current runtime-backed guide/setup/player
+states only as proof maintenance. Renderer source, preload API, main runtime
+composition, guide/channel behavior, player behavior, CSS layout, tests, and
+product copy are out of scope unless a fresh reviewed replan promotes a real
+product defect.
+
+Files in scope:
+
+- `src/main/smokeAssertions.ts`
+
+Acceptance: `npm run smoke:electron` passes; `npm run verify` passes; the
+smoke still proves shell URL/CSP, bridge containment, route reachability,
+preload/player/diagnostics/Plex/channel bridge availability, guide/setup/player
+safe-state rendering, overlay stack/focus basics, and containment counters.
+
+Stop triggers: the failure requires renderer behavior, CSS layout, route DOM,
+preload API, main runtime, scheduler/channel/Plex/player changes, or a new
+smoke-only fixture; the smoke would stop proving a meaningful security or
+route-reachability contract; or the assertion change would hide a real
+renderer overlap/accessibility bug without separate proof.
+
+### Package 4U: Fullscreen Smoke Transition Proof
+
+Priority rationale: after Package 4T realigns stale renderer smoke assertions,
+`npm run smoke:electron` may reach `src/main/smokeFullscreenAssertions.ts` and
+fail on `fullscreen enter BrowserWindow state` even though the renderer bridge
+returns the expected fullscreen result envelope. Package 4 acceptance still
+needs smoke proof, but fullscreen transition polling is a smoke harness concern
+unless fresh evidence shows the window controller or renderer fullscreen flow is
+defective.
+
+Owner seam: `src/main/smokeFullscreenAssertions.ts` owns fullscreen continuity
+smoke proof. It may improve transition observation, diagnostics, or platform
+fallback handling for smoke mode only. `src/main/window/shellWindowController.ts`,
+renderer fullscreen dispatch, preload/window API, CSS layout, package/dependency
+configuration, and product fullscreen behavior are out of scope unless reviewed
+evidence promotes a real defect.
+
+Files in scope:
+
+- `src/main/smokeFullscreenAssertions.ts`
+
+Acceptance: `npm run smoke:electron` passes; `npm run verify` passes; fullscreen
+smoke still proves the renderer bridge returns expected fullscreen envelopes,
+player route/focus continuity, presentation/screen/overlay z-order, and
+restoration to non-fullscreen when Electron reports fullscreen support.
+
+Stop triggers: the fix requires changing the window controller, renderer
+fullscreen behavior, preload/window contracts, CSS, package/dependency settings,
+or platform/runtime assumptions beyond smoke harness proof; or Electron reports
+a deterministic product fullscreen failure rather than an unsupported or
+unobservable smoke transition.
+
+### Package 4V: Fullscreen Smoke Focus-Limited Fallback
+
+Priority rationale: Package 4U retained the supported-window BrowserWindow
+transition proof and added bounded focus attempts. In the current smoke run,
+Electron reports the window as visible and fullscreenable but not focused even
+after `app.focus({ steal: true })` and `window.focus()`, then never reports
+fullscreen entry. This blocks Package 4 acceptance through an environment-limited
+smoke observation failure, not through evidence of a window controller or
+renderer fullscreen behavior regression.
+
+Owner seam: `src/main/smokeFullscreenAssertions.ts` may distinguish focused
+fullscreen transition failures from unfocused smoke-session limitations. It must
+not change `src/main/window/shellWindowController.ts`, renderer fullscreen
+dispatch, preload/window API, CSS, package/dependency configuration, or product
+fullscreen behavior.
+
+Files in scope:
+
+- `src/main/smokeFullscreenAssertions.ts`
+
+Acceptance: `npm run smoke:electron` passes; `npm run verify` passes; fullscreen
+smoke still validates the renderer bridge returns expected fullscreen envelopes,
+player route/focus continuity, presentation/screen/overlay z-order, and
+non-fullscreen cleanup. A focused fullscreen-capable window that fails to enter
+fullscreen must still fail smoke. An unfocused window may skip only the
+BrowserWindow fullscreen transition proof after the harness records bounded
+focus evidence.
+
+Stop triggers: the smoke window becomes focused but still cannot enter
+fullscreen; focus failure requires app/window creation, shell controller,
+renderer, preload, CSS, package/dependency, or OS permission changes; or the
+fallback would suppress route/focus/z-order/bridge envelope proof.
 
 ### Package 5: Desktop Plex Runtime Operation Owners
 

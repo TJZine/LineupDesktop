@@ -69,10 +69,14 @@ import { SHELL_STATUS_VALUES } from '../../contracts/shell.js';
 
 const preloadSourceUrl = new URL('../../preload/index.cts', import.meta.url);
 const preloadSourceText = readFileSync(preloadSourceUrl, 'utf8');
+const preloadChannelsSourceUrl = new URL('../../preload/channels.cts', import.meta.url);
+const preloadChannelsSourceText = readFileSync(preloadChannelsSourceUrl, 'utf8');
 const channelGuardSourceUrl = new URL('../../preload/channelBridgeGuards.cts', import.meta.url);
 const channelGuardSourceText = readFileSync(channelGuardSourceUrl, 'utf8');
 const channelSetupBridgeSourceUrl = new URL('../../preload/channelSetupBridge.cts', import.meta.url);
 const channelSetupBridgeSourceText = readFileSync(channelSetupBridgeSourceUrl, 'utf8');
+const diagnosticsGuardSourceUrl = new URL('../../preload/diagnosticsBridgeGuards.cts', import.meta.url);
+const diagnosticsGuardSourceText = readFileSync(diagnosticsGuardSourceUrl, 'utf8');
 const guideBridgeSourceUrl = new URL('../../preload/guideBridge.cts', import.meta.url);
 const guideBridgeSourceText = readFileSync(guideBridgeSourceUrl, 'utf8');
 const preloadBundleToolSourceText = readFileSync(
@@ -87,9 +91,23 @@ const preloadSourceFile = ts.createSourceFile(
   true,
   ts.ScriptKind.TS,
 );
+const preloadChannelsSourceFile = ts.createSourceFile(
+  'src/preload/channels.cts',
+  preloadChannelsSourceText,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+);
 const channelGuardSourceFile = ts.createSourceFile(
   'src/preload/channelBridgeGuards.cts',
   channelGuardSourceText,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+);
+const diagnosticsGuardSourceFile = ts.createSourceFile(
+  'src/preload/diagnosticsBridgeGuards.cts',
+  diagnosticsGuardSourceText,
   ts.ScriptTarget.Latest,
   true,
   ts.ScriptKind.TS,
@@ -129,6 +147,42 @@ function evaluateChannelGuardModule(): Record<string, unknown> {
   };
   const evaluateGuards = new Function('require', 'exports', 'module', compiled);
   evaluateGuards(requireGuard, exportsObject, moduleObject);
+  return moduleObject.exports as Record<string, unknown>;
+}
+
+function evaluateDiagnosticsGuardModule(): Record<string, unknown> {
+  const exportsObject = {};
+  const moduleObject = { exports: exportsObject };
+  const compiled = ts.transpileModule(diagnosticsGuardSourceText, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: 'src/preload/diagnosticsBridgeGuards.cts',
+  }).outputText;
+  const requireGuard = (moduleName: string) => {
+    assert.fail(`unexpected diagnostics bridge guard require ${moduleName}`);
+  };
+  const evaluateGuards = new Function('require', 'exports', 'module', compiled);
+  evaluateGuards(requireGuard, exportsObject, moduleObject);
+  return moduleObject.exports as Record<string, unknown>;
+}
+
+function evaluatePreloadChannelsModule(): Record<string, unknown> {
+  const exportsObject = {};
+  const moduleObject = { exports: exportsObject };
+  const compiled = ts.transpileModule(preloadChannelsSourceText, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: 'src/preload/channels.cts',
+  }).outputText;
+  const requireChannels = (moduleName: string) => {
+    assert.fail(`unexpected preload channels require ${moduleName}`);
+  };
+  const evaluateChannels = new Function('require', 'exports', 'module', compiled);
+  evaluateChannels(requireChannels, exportsObject, moduleObject);
   return moduleObject.exports as Record<string, unknown>;
 }
 
@@ -188,6 +242,8 @@ function createPreloadHarness(
   let exposedApi: unknown = null;
   const input = (value: unknown) => JSON.parse(JSON.stringify(value)) as unknown;
   const channelGuardExports = evaluateChannelGuardModule();
+  const diagnosticsGuardExports = evaluateDiagnosticsGuardModule();
+  const preloadChannelExports = evaluatePreloadChannelsModule();
   const channelSetupBridgeExports = evaluateChannelSetupBridgeModule(channelGuardExports);
   const guideBridgeExports = evaluateGuideBridgeModule();
   const compiled = ts.transpileModule(preloadSourceText, {
@@ -201,8 +257,14 @@ function createPreloadHarness(
     if (moduleName === './channelBridgeGuards.cjs') {
       return channelGuardExports;
     }
+    if (moduleName === './channels.cjs') {
+      return preloadChannelExports;
+    }
     if (moduleName === './channelSetupBridge.cjs') {
       return channelSetupBridgeExports;
+    }
+    if (moduleName === './diagnosticsBridgeGuards.cjs') {
+      return diagnosticsGuardExports;
     }
     if (moduleName === './guideBridge.cjs') {
       return guideBridgeExports;
@@ -363,13 +425,19 @@ const APPROVED_IPC_METHODS = new Set(Object.keys(APPROVED_IPC_CHANNELS_BY_METHOD
 function readPreloadStringArrayConst(name: string): string[] {
   const declaration = findPreloadVariableDeclaration(name);
   assert.ok(declaration?.initializer, `expected ${name} in preload entrypoint`);
-  return readStringArrayInitializer(name, declaration.initializer);
+  return readStringArrayInitializer(preloadSourceFile, name, declaration.initializer);
 }
 
 function readChannelGuardStringArrayConst(name: string): string[] {
   const declaration = findVariableDeclaration(channelGuardSourceFile, name);
   assert.ok(declaration?.initializer, `expected ${name} in channel bridge guards`);
-  return readStringArrayInitializer(name, declaration.initializer);
+  return readStringArrayInitializer(channelGuardSourceFile, name, declaration.initializer);
+}
+
+function readDiagnosticsGuardStringArrayConst(name: string): string[] {
+  const declaration = findVariableDeclaration(diagnosticsGuardSourceFile, name);
+  assert.ok(declaration?.initializer, `expected ${name} in diagnostics bridge guards`);
+  return readStringArrayInitializer(diagnosticsGuardSourceFile, name, declaration.initializer);
 }
 
 function findPreloadVariableDeclaration(name: string): ts.VariableDeclaration | null {
@@ -397,7 +465,14 @@ function findVariableDeclaration(
   return result;
 }
 
-function findPreloadFunctionDeclaration(name: string): ts.FunctionDeclaration | null {
+function findDiagnosticsGuardFunctionDeclaration(name: string): ts.FunctionDeclaration | null {
+  return findFunctionDeclaration(diagnosticsGuardSourceFile, name);
+}
+
+function findFunctionDeclaration(
+  sourceFile: ts.SourceFile,
+  name: string,
+): ts.FunctionDeclaration | null {
   let result: ts.FunctionDeclaration | null = null;
 
   function visit(node: ts.Node): void {
@@ -411,18 +486,22 @@ function findPreloadFunctionDeclaration(name: string): ts.FunctionDeclaration | 
     ts.forEachChild(node, visit);
   }
 
-  visit(preloadSourceFile);
+  visit(sourceFile);
   return result;
 }
 
-function readStringArrayInitializer(name: string, initializer: ts.Expression): string[] {
+function readStringArrayInitializer(
+  sourceFile: ts.SourceFile,
+  name: string,
+  initializer: ts.Expression,
+): string[] {
   const expression = unwrapExpression(initializer);
   assert.ok(ts.isArrayLiteralExpression(expression), `expected ${name} to be an array literal`);
   return expression.elements.flatMap((element) => {
     if (ts.isSpreadElement(element) && ts.isIdentifier(element.expression)) {
-      const declaration = findPreloadVariableDeclaration(element.expression.text);
-      assert.ok(declaration?.initializer, `expected ${name} spread ${element.expression.text} in preload entrypoint`);
-      return readStringArrayInitializer(element.expression.text, declaration.initializer);
+      const declaration = findVariableDeclaration(sourceFile, element.expression.text);
+      assert.ok(declaration?.initializer, `expected ${name} spread ${element.expression.text} in ${sourceFile.fileName}`);
+      return readStringArrayInitializer(sourceFile, element.expression.text, declaration.initializer);
     }
     assert.ok(ts.isStringLiteral(element), `expected ${name} to contain only string literals or const spreads`);
     return [element.text];
@@ -438,7 +517,17 @@ function readStringConstInitializer(name: string, initializer: ts.Expression): s
 function readRegExpConstInitializer(name: string): { pattern: string; flags: string } {
   const declaration = findPreloadVariableDeclaration(name);
   assert.ok(declaration?.initializer, `expected ${name} in preload entrypoint`);
-  const expression = unwrapExpression(declaration.initializer);
+  return readRegExpInitializer(name, declaration.initializer);
+}
+
+function readDiagnosticsGuardRegExpConstInitializer(name: string): { pattern: string; flags: string } {
+  const declaration = findVariableDeclaration(diagnosticsGuardSourceFile, name);
+  assert.ok(declaration?.initializer, `expected ${name} in diagnostics bridge guards`);
+  return readRegExpInitializer(name, declaration.initializer);
+}
+
+function readRegExpInitializer(name: string, initializer: ts.Expression): { pattern: string; flags: string } {
+  const expression = unwrapExpression(initializer);
   assert.ok(ts.isRegularExpressionLiteral(expression), `expected ${name} to be a RegExp literal`);
   const match = /^\/(.*)\/([a-z]*)$/su.exec(expression.text);
   assert.ok(match, `expected ${name} to have a parseable RegExp literal`);
@@ -481,7 +570,7 @@ function collectPreloadChannelConstants(): Map<string, string> {
     ts.forEachChild(node, visit);
   }
 
-  visit(preloadSourceFile);
+  visit(preloadChannelsSourceFile);
   return constants;
 }
 
@@ -706,8 +795,8 @@ function assertApprovedChannelIdentifier(name: string): void {
   const bindings = collectBindingIdentifiers(name);
   assert.equal(bindings.length, 1, `${name} must have exactly one binding`);
 
-  const declaration = findPreloadVariableDeclaration(name);
-  assert.ok(declaration, `${name} must be declared in preload source`);
+  const declaration = findVariableDeclaration(preloadChannelsSourceFile, name);
+  assert.ok(declaration, `${name} must be declared in preload channel constants`);
   assert.ok(isTopLevelConstDeclaration(declaration), `${name} must be a top-level const`);
   assert.ok(declaration.initializer, `${name} must have a string initializer`);
   assert.equal(
@@ -869,7 +958,7 @@ function assertNoForbiddenElectronAccess(node: ts.Node): void {
 
 test('preload guard vocabulary matches contract vocabulary', () => {
   assert.doesNotMatch(preloadSourceText, /\.\/vocabulary\.cjs/u);
-  assert.deepEqual(readRegExpConstInitializer('DIAGNOSTICS_REQUEST_ID_PATTERN'), {
+  assert.deepEqual(readDiagnosticsGuardRegExpConstInitializer('DIAGNOSTICS_REQUEST_ID_PATTERN'), {
     pattern: DIAGNOSTICS_REQUEST_ID_PATTERN_SOURCE,
     flags: 'u',
   });
@@ -877,7 +966,7 @@ test('preload guard vocabulary matches contract vocabulary', () => {
     pattern: '^[A-Za-z0-9._-]{1,120}$',
     flags: 'u',
   });
-  assert.deepEqual(readRegExpConstInitializer('DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN'), {
+  assert.deepEqual(readDiagnosticsGuardRegExpConstInitializer('DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN'), {
     pattern: DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN_SOURCE,
     flags: 'iu',
   });
@@ -899,28 +988,28 @@ test('preload guard vocabulary matches contract vocabulary', () => {
     readPreloadStringArrayConst('PLAYER_TRACK_DELIVERY_TYPE_VALUES'),
     [...PLAYER_TRACK_DELIVERY_TYPE_VALUES],
   );
-  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTIC_SURFACES'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('DIAGNOSTIC_SURFACES'), [
     ...DIAGNOSTIC_SURFACES,
   ]);
-  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTIC_CATEGORIES'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('DIAGNOSTIC_CATEGORIES'), [
     ...DIAGNOSTIC_CATEGORIES,
   ]);
-  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTIC_SEVERITIES'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('DIAGNOSTIC_SEVERITIES'), [
     ...DIAGNOSTIC_SEVERITIES,
   ]);
-  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTIC_STATUSES'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('DIAGNOSTIC_STATUSES'), [
     ...DIAGNOSTIC_STATUSES,
   ]);
-  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTICS_RENDERER_EVENT_CATEGORIES'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('DIAGNOSTICS_RENDERER_EVENT_CATEGORIES'), [
     ...DIAGNOSTICS_RENDERER_EVENT_CATEGORIES,
   ]);
-  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTICS_RENDERER_EVENT_SEVERITIES'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('DIAGNOSTICS_RENDERER_EVENT_SEVERITIES'), [
     ...DIAGNOSTICS_RENDERER_EVENT_SEVERITIES,
   ]);
-  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTICS_ERROR_CODES'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('DIAGNOSTICS_ERROR_CODES'), [
     ...DIAGNOSTICS_ERROR_CODES,
   ]);
-  assert.deepEqual(readPreloadStringArrayConst('REDACTION_SCAN_FINDING_LABELS'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('REDACTION_SCAN_FINDING_LABELS'), [
     ...REDACTION_SCAN_FINDING_LABELS,
   ]);
   assert.deepEqual(readPreloadStringArrayConst('PLEX_RUNTIME_OPERATIONS'), [
@@ -1535,34 +1624,34 @@ test('preload channel setup bridge rejects malformed commit inputs without IPC',
 
 test('preload diagnostics guards validate count map keys and values', () => {
   assert.equal(
-    preloadSourceText.includes(
+    diagnosticsGuardSourceText.includes(
       'function isFiniteNonNegativeNumberMap(value: unknown, allowedKeys: readonly string[]): boolean {',
     ),
     true,
   );
   assert.match(
-    preloadSourceText,
+    diagnosticsGuardSourceText,
     /hasOnlyKeys\(value, \[\], allowedKeys\) &&\s*Object\.values\(value\)\.every\(isFiniteNonNegativeNumber\)/u,
   );
   assert.equal(
-    preloadSourceText.includes('isFiniteNonNegativeNumberMap(value.surfaceCounts, DIAGNOSTIC_SURFACES)'),
+    diagnosticsGuardSourceText.includes('isFiniteNonNegativeNumberMap(value.surfaceCounts, DIAGNOSTIC_SURFACES)'),
     true,
   );
   assert.equal(
-    preloadSourceText.includes('isFiniteNonNegativeNumberMap(value.severityCounts, DIAGNOSTIC_SEVERITIES)'),
+    diagnosticsGuardSourceText.includes('isFiniteNonNegativeNumberMap(value.severityCounts, DIAGNOSTIC_SEVERITIES)'),
     true,
   );
   assert.equal(
-    preloadSourceText.includes('isFiniteNonNegativeNumberMap(value.findingsByLabel, REDACTION_SCAN_FINDING_LABELS)'),
+    diagnosticsGuardSourceText.includes('isFiniteNonNegativeNumberMap(value.findingsByLabel, REDACTION_SCAN_FINDING_LABELS)'),
     true,
   );
 });
 
 test('preload diagnostics result guard validates cancellation discriminator exactly', () => {
-  const declaration = findPreloadFunctionDeclaration('isDiagnosticsResult');
+  const declaration = findDiagnosticsGuardFunctionDeclaration('isDiagnosticsResult');
   assert.ok(declaration, 'expected preload diagnostics result guard to be declared');
 
-  const source = declaration.getText(preloadSourceFile);
+  const source = declaration.getText(diagnosticsGuardSourceFile);
   assert.match(
     source,
     /const hasValidCancellationFlag = value\.cancelled === undefined \|\| value\.cancelled === true;/u,
@@ -1622,12 +1711,18 @@ test('preload bridge guard rejects Electron value imports while allowing type im
 
 test('preload split keeps Electron values in index and built preload has no local preload requires', () => {
   assertNoElectronValueImports(channelGuardSourceFile);
+  assertNoElectronValueImports(preloadChannelsSourceFile);
   assertNoElectronValueImports(channelSetupBridgeSourceFile);
+  assertNoElectronValueImports(diagnosticsGuardSourceFile);
   assertNoElectronValueImports(guideBridgeSourceFile);
   assert.doesNotMatch(channelGuardSourceText, /require\(['"]electron['"]\)/u);
+  assert.doesNotMatch(preloadChannelsSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(channelSetupBridgeSourceText, /require\(['"]electron['"]\)/u);
+  assert.doesNotMatch(diagnosticsGuardSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(guideBridgeSourceText, /require\(['"]electron['"]\)/u);
+  assert.match(preloadSourceText, /from '\.\/channels\.cjs'/u);
   assert.match(preloadSourceText, /from '\.\/channelSetupBridge\.cjs'/u);
+  assert.match(preloadSourceText, /from '\.\/diagnosticsBridgeGuards\.cjs'/u);
   assert.match(preloadSourceText, /from '\.\/guideBridge\.cjs'/u);
   assert.match(channelSetupBridgeSourceText, /from '\.\/channelBridgeGuards\.cjs'/u);
   assert.match(preloadBundleToolSourceText, /bundle:\s*true/u);
@@ -1640,8 +1735,10 @@ test(
   () => {
   const preloadBundleOutputText = readFileSync(preloadBundleOutputUrl, 'utf8');
   assert.match(preloadBundleOutputText, /require\(["']electron["']\)/u);
+  assert.doesNotMatch(preloadBundleOutputText, /channels\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /channelBridgeGuards\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /channelSetupBridge\.cjs/u);
+  assert.doesNotMatch(preloadBundleOutputText, /diagnosticsBridgeGuards\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /guideBridge\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /require\(["']\.(?:\/|\\)[^"']+["']\)/u);
   assert.doesNotMatch(preloadBundleOutputText, /\bfrom\s+["']\.(?:\/|\\)[^"']+["']/u);

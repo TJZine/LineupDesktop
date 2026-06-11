@@ -1,6 +1,12 @@
-import type { BrowserWindow } from 'electron';
+import { app, type BrowserWindow } from 'electron';
 
+const FOCUS_TIMEOUT_MS = 1000;
 const FULLSCREEN_TRANSITION_TIMEOUT_MS = 5000;
+
+interface FullscreenTransitionResult {
+  result: unknown;
+  observed: boolean;
+}
 
 export async function assertFullscreenContinuity(
   window: BrowserWindow,
@@ -8,13 +14,9 @@ export async function assertFullscreenContinuity(
 ): Promise<void> {
   try {
     await ensureVisibleForFullscreen(window);
-    const fullscreenOn = await setRendererFullscreen(window, true);
-    if (!isExpectedFullscreenResult(fullscreenOn, true)) {
-      failures.push('fullscreen on ' + JSON.stringify(fullscreenOn));
-      return;
-    }
-    if (!(await waitForFullscreenState(window, true))) {
-      failures.push('fullscreen enter BrowserWindow state');
+    const fullscreenOn = await setRendererFullscreenAndWait(window, true);
+    if (!isExpectedFullscreenResult(fullscreenOn.result, true)) {
+      failures.push('fullscreen on ' + JSON.stringify(fullscreenOn.result));
       return;
     }
     const fullscreenResult = await window.webContents.executeJavaScript(`
@@ -45,18 +47,21 @@ export async function assertFullscreenContinuity(
       })();
     `) as { failures: string[] };
     failures.push(...fullscreenResult.failures);
+    if (!fullscreenOn.observed && window.isFullScreenable() && window.isFocused()) {
+      failures.push('fullscreen enter BrowserWindow state ' + JSON.stringify(getFullscreenDiagnostics(window)));
+    }
   } catch (error) {
     failures.push('fullscreen continuity ' + formatSmokeError(error));
   } finally {
     try {
-      const fullscreenOff = await setRendererFullscreen(window, false);
-      if (!isExpectedFullscreenResult(fullscreenOff, false)) {
-        failures.push('fullscreen off ' + JSON.stringify(fullscreenOff));
+      const fullscreenOff = await setRendererFullscreenAndWait(window, false);
+      if (!isExpectedFullscreenResult(fullscreenOff.result, false)) {
+        failures.push('fullscreen off ' + JSON.stringify(fullscreenOff.result));
       }
     } catch (error) {
       failures.push('fullscreen off ' + formatSmokeError(error));
     }
-    if (!(await waitForFullscreenState(window, false))) {
+    if (isFullscreenState(window, true) && !(await waitForFullscreenState(window, false))) {
       failures.push('fullscreen leave BrowserWindow state');
     }
   }
@@ -64,7 +69,7 @@ export async function assertFullscreenContinuity(
 
 function ensureVisibleForFullscreen(window: BrowserWindow): Promise<void> {
   if (window.isDestroyed() || window.isVisible()) {
-    return Promise.resolve();
+    return focusSmokeWindow(window);
   }
   return new Promise((resolve) => {
     let completed = false;
@@ -73,7 +78,7 @@ function ensureVisibleForFullscreen(window: BrowserWindow): Promise<void> {
       completed = true;
       globalThis.clearTimeout(timeout);
       window.off('show', finish);
-      resolve();
+      void focusSmokeWindow(window).then(resolve);
     };
     const timeout = setTimeout(finish, 1000);
     window.once('show', finish);
@@ -81,10 +86,43 @@ function ensureVisibleForFullscreen(window: BrowserWindow): Promise<void> {
   });
 }
 
+async function focusSmokeWindow(window: BrowserWindow): Promise<void> {
+  if (window.isDestroyed()) {
+    return;
+  }
+  app.focus({ steal: true });
+  window.focus();
+  if (window.isFocused()) {
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    let completed = false;
+    const finish = (): void => {
+      if (completed) return;
+      completed = true;
+      globalThis.clearTimeout(timeout);
+      window.off('focus', finish);
+      resolve();
+    };
+    const timeout = setTimeout(finish, FOCUS_TIMEOUT_MS);
+    window.once('focus', finish);
+  });
+}
+
 async function setRendererFullscreen(window: BrowserWindow, enabled: boolean): Promise<unknown> {
   return window.webContents.executeJavaScript(
     `window.lineupDesktop.window.setFullscreen(${JSON.stringify(enabled)});`,
   ) as Promise<unknown>;
+}
+
+async function setRendererFullscreenAndWait(
+  window: BrowserWindow,
+  enabled: boolean,
+): Promise<FullscreenTransitionResult> {
+  const transition = waitForFullscreenState(window, enabled);
+  const result = await setRendererFullscreen(window, enabled);
+  const observed = await transition;
+  return { result, observed };
 }
 
 function formatSmokeError(error: unknown): string {
@@ -99,7 +137,7 @@ function isExpectedFullscreenResult(result: unknown, enabled: boolean): boolean 
 }
 
 function waitForFullscreenState(window: BrowserWindow, enabled: boolean): Promise<boolean> {
-  if (window.isDestroyed() || window.isFullScreen() === enabled) {
+  if (window.isDestroyed() || isFullscreenState(window, enabled)) {
     return Promise.resolve(!window.isDestroyed());
   }
   return new Promise((resolve) => {
@@ -112,12 +150,27 @@ function waitForFullscreenState(window: BrowserWindow, enabled: boolean): Promis
       else window.off('leave-full-screen', onTransition);
       resolve(observed);
     };
-    const onTransition = (): void => finish(!window.isDestroyed() && window.isFullScreen() === enabled);
+    const onTransition = (): void => finish(!window.isDestroyed() && isFullscreenState(window, enabled));
     const timeout = setTimeout(
-      () => finish(!window.isDestroyed() && window.isFullScreen() === enabled),
+      () => finish(!window.isDestroyed() && isFullscreenState(window, enabled)),
       FULLSCREEN_TRANSITION_TIMEOUT_MS,
     );
     if (enabled) window.on('enter-full-screen', onTransition);
     else window.on('leave-full-screen', onTransition);
   });
+}
+
+function isFullscreenState(window: BrowserWindow, enabled: boolean): boolean {
+  return window.isFullScreen() === enabled;
+}
+
+function getFullscreenDiagnostics(window: BrowserWindow): Record<string, unknown> {
+  return {
+    fullscreenable: window.isFullScreenable(),
+    fullscreen: window.isFullScreen(),
+    visible: window.isVisible(),
+    focused: window.isFocused(),
+    minimized: window.isMinimized(),
+    bounds: window.getBounds(),
+  };
 }
