@@ -210,29 +210,52 @@ function renderEpgGuideDom(view: RouteWorkflowViewModel, dom: RendererDomBinding
 
   const classicHeader = document.createElement('header');
   classicHeader.className = 'epg-classic-header';
+  const headerBrand = document.createElement('div');
+  headerBrand.className = 'epg-classic-header-brand';
   const brand = document.createElement('strong');
+  brand.className = 'epg-classic-header-title';
   brand.textContent = view.guide.shell.brandLabel;
-  const nowPlaying = document.createElement('span');
-  nowPlaying.textContent = `Now playing ${view.guide.shell.nowWatchingChannelLabel}`;
-  const focusHint = document.createElement('span');
-  focusHint.textContent = view.guide.shell.focusHint;
-  classicHeader.append(brand, nowPlaying, focusHint);
+  headerBrand.append(brand);
+
+  const nowPlaying = document.createElement('div');
+  nowPlaying.className = 'epg-classic-now-playing';
+  const nowLabel = document.createElement('span');
+  nowLabel.className = 'epg-classic-now-playing-label';
+  nowLabel.textContent = 'NOW PLAYING';
+  const nowPlayingChannel = document.createElement('span');
+  nowPlayingChannel.className = 'epg-classic-now-playing-channel';
+  nowPlayingChannel.textContent = view.guide.shell.nowWatchingChannelLabel;
+  nowPlaying.append(nowLabel, nowPlayingChannel);
+
+  const focusHint = document.createElement('div');
+  focusHint.className = 'epg-classic-header-actions';
+  for (const hintAction of view.guide.shell.focusHint.split('·').map((value) => value.trim()).filter(Boolean)) {
+    const action = document.createElement('span');
+    action.textContent = (focusHint.childElementCount === 0 ? hintAction : `· ${hintAction}`);
+    focusHint.append(action);
+  }
+
+  classicHeader.append(headerBrand, nowPlaying, focusHint);
 
   const nowWatching = document.createElement('div');
   nowWatching.className = 'epg-now-watching-banner';
   nowWatching.setAttribute('aria-live', 'polite');
-  const nowLabel = document.createElement('span');
-  nowLabel.textContent = 'NOW PLAYING';
+  const nowBannerLabel = document.createElement('span');
+  nowBannerLabel.className = 'epg-now-watching-live';
+  nowBannerLabel.textContent = 'NOW PLAYING';
   const nowChannel = document.createElement('strong');
+  nowChannel.className = 'epg-now-watching-channel';
   nowChannel.textContent = view.guide.shell.nowWatchingChannelLabel;
   const nowProgram = document.createElement('span');
+  nowProgram.className = 'epg-now-watching-program';
   nowProgram.textContent = view.guide.shell.nowWatching.title;
   const nowTime = document.createElement('span');
+  nowTime.className = 'epg-now-watching-time';
   nowTime.textContent = formatEpgTimeWindow(
     view.guide.shell.nowWatching.startsAtMs,
     view.guide.shell.nowWatching.endsAtMs,
   );
-  nowWatching.append(nowLabel, nowChannel, nowProgram, nowTime);
+  nowWatching.append(nowBannerLabel, nowChannel, nowProgram, nowTime);
 
   const stateElement = document.createElement('article');
   stateElement.className = 'epg-state-panel';

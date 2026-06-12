@@ -1,5 +1,5 @@
 import type { ShellStatusEvent } from '../contracts/shell.js';
-import { queryRendererDom, readChannelCommitActionId, readChannelSetupActionId, readEpgActionId, readOverlayActionId, readPlexRuntimeActionId, readRouteActionId, readRouteId, readSettingsActionId } from './domBindings.js';
+import { queryRendererDom, type ChannelCommitActionId, type PlexRuntimeActionId } from './domBindings.js';
 import { clickFocusedRendererElement, focusRendererTarget, moveRendererFocus, renderRendererFocus, syncRendererFocusTargets } from './focusDom.js';
 import { createDesktopKeyboardInputListener, startDesktopGamepadRuntime } from './desktopInput.js';
 import { createDesktopCursorRuntime } from './desktopCursor.js';
@@ -11,9 +11,18 @@ import { applySupportBundleExportResult } from './supportBundleExport.js';
 import { createPlexRuntimeController } from './plexRuntimeActions.js';
 import { resolveChannelSetupLiveSelection } from './channelSetup/liveSelection.js';
 import { createChannelRuntimeController } from './channelRuntimeActions.js';
-import { readPlexHomeUserId, readPlexRatingKey, readPlexSectionId, readPlexServerId, renderPlexRuntimeDom } from './plexRuntimeDom.js';
+import { renderPlexRuntimeDom } from './plexRuntimeDom.js';
 import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowChannelSetupAction, applyWorkflowEpgAction, applyWorkflowSettingsAction, createWorkflowState, type ChannelSetupActionId, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
 import { createRendererPresentationFixtures } from './presentationFixtures.js';
+import {
+  recordRendererBridgeFailure,
+  summarizeRendererBridgeError,
+} from './rendererBridgeFailures.js';
+import { setEpgPresentationState, updateEpgState } from './epg.js';
+import { registerRendererActions } from './rendererActionRegistration.js';
+import { subscribePlayerBridge } from './playerBridgeSubscription.js';
+import { createGuidePresentationPolling } from './guidePresentationPolling.js';
+import { dispatchPlexRuntimeAction } from './plexRuntimeActionDispatch.js';
 
 mountStaticRendererDom();
 
@@ -23,7 +32,7 @@ let fullscreenEnabled = false;
 const presentationFixtures = createRendererPresentationFixtures();
 let workflowState = createWorkflowState('player', presentationFixtures.guide);
 let overlayState = createPlayerOverlayState(presentationFixtures.overlays);
-const playerSnapshot = presentationFixtures.playerSnapshot;
+let playerSnapshot = presentationFixtures.playerSnapshot;
 const focusRegistry = new FocusRegistry();
 let focusState: FocusState;
 const plexController = createPlexRuntimeController({
@@ -41,6 +50,37 @@ focusState = focusRegistry.createInitialState(workflowState.routeState.activeRou
 renderApp();
 
 const unsubscribeShellStatus = window.lineupDesktop.shell.onStatusChanged(renderStatus);
+const playerBridgeSubscription = subscribePlayerBridge({
+  player: window.lineupDesktop.player,
+  diagnostics: window.lineupDesktop.diagnostics,
+  getSnapshot: () => playerSnapshot,
+  setSnapshot: (snapshot) => {
+    playerSnapshot = snapshot;
+  },
+  render: renderApp,
+});
+const guidePresentationPolling = createGuidePresentationPolling({
+  guide: window.lineupDesktop.guide,
+  host: window,
+  getActiveRoute: () => workflowState.routeState.activeRoute,
+  getWindowStartMs: () => workflowState.epg.windowStartMs,
+  setLoading: () => {
+    workflowState = {
+      ...workflowState,
+      epg: setEpgPresentationState(workflowState.epg, 'loading'),
+    };
+    renderApp();
+  },
+  applyPresentation: (normalizedGuidePresentation) => {
+    workflowState = {
+      ...workflowState,
+      guidePresentation: normalizedGuidePresentation,
+      epg: updateEpgState(workflowState.epg, normalizedGuidePresentation),
+    };
+    renderApp();
+  },
+  handleFailure: handleGuidePresentationFailure,
+});
 const cursorRuntime = createDesktopCursorRuntime({
   host: window,
   root: document.documentElement,
@@ -54,145 +94,46 @@ const gamepadRuntime = startDesktopGamepadRuntime({
 });
 
 window.addEventListener('keydown', keydownListener);
+
+void playerBridgeSubscription.initializeSnapshot();
+
 window.addEventListener('beforeunload', () => {
   window.removeEventListener('keydown', keydownListener);
   cursorRuntime.cleanup();
   gamepadRuntime.cleanup();
   unsubscribeShellStatus();
+  playerBridgeSubscription.unsubscribe();
+  guidePresentationPolling.stop();
   cleanupPlexRuntime('beforeunload');
 });
 
-for (const button of dom.routeButtons) {
-  button.addEventListener('click', () => {
-    const route = readRouteId(button.dataset.routeButton);
-    if (route !== null) {
-      activateRoute(route);
-    }
-  });
-}
-
-for (const button of dom.routeActionButtons) {
-  button.addEventListener('click', () => {
-    const action = readRouteActionId(button.dataset.routeAction);
-    if (action !== null) {
-      applyRouteAction(action);
-    }
-  });
-}
-
-for (const button of dom.settingsActionButtons) {
-  button.addEventListener('click', () => {
-    const action = readSettingsActionId(button.dataset.settingsAction);
-    if (action !== null) {
-      applySettingsAction(action);
-    }
-  });
-}
-
-for (const button of dom.setupActionButtons) {
-  button.addEventListener('click', () => {
-    const action = readChannelSetupActionId(button.dataset.setupAction);
-    if (action !== null) {
-      applyChannelSetupAction(action);
-    }
-  });
-}
-
-dom.channelSetupStrategyElement?.addEventListener('click', (event) => {
-  if (!(event.target instanceof HTMLElement)) {
-    return;
-  }
-  const button = event.target.closest<HTMLButtonElement>('[data-setup-action]');
-  const action = readChannelSetupActionId(button?.dataset.setupAction);
-  if (action !== null) {
-    applyChannelSetupAction(action);
-  }
-});
-
-for (const button of dom.channelCommitButtons) {
-  button.addEventListener('click', () => {
-    const action = readChannelCommitActionId(button.dataset.channelCommitAction);
-    if (action !== null) {
-      void applyChannelCommitAction(action);
-    }
-  });
-}
-
-for (const button of dom.epgActionButtons) {
-  button.addEventListener('click', () => {
-    const action = readEpgActionId(button.dataset.epgAction);
-    if (action !== null) {
-      applyEpgAction(action);
-    }
-  });
-}
-
-for (const button of dom.overlayActionButtons) {
-  button.addEventListener('click', () => {
-    const action = readOverlayActionId(button.dataset.overlayAction);
-    if (action !== null) {
-      applyOverlayAction(action);
-    }
-  });
-}
-
-for (const button of dom.plexActionButtons) {
-  button.addEventListener('click', () => {
-    const action = readPlexRuntimeActionId(button.dataset.plexAction);
-    if (action !== null) {
-      void applyPlexRuntimeAction(action);
-    }
-  });
-}
-
-dom.plexHomeUserPinInput?.addEventListener('input', () => {
-  plexController.setHomeUserPin(dom.plexHomeUserPinInput?.value ?? '');
-});
-
-dom.plexSearchQueryInput?.addEventListener('input', () => {
-  plexController.setSearchQuery(dom.plexSearchQueryInput?.value ?? '');
-});
-
-dom.plexPanelElement?.addEventListener('click', (event) => {
-  if (!(event.target instanceof HTMLElement)) {
-    return;
-  }
-  const homeUserButton = event.target.closest<HTMLElement>('[data-plex-home-user-id]');
-  const serverButton = event.target.closest<HTMLElement>('[data-plex-server-id]');
-  const sectionButton = event.target.closest<HTMLElement>('[data-plex-section-id]');
-  const itemButton = event.target.closest<HTMLElement>('[data-plex-rating-key]');
-  const homeUserId = homeUserButton === null ? null : readPlexHomeUserId(homeUserButton);
-  const serverId = serverButton === null ? null : readPlexServerId(serverButton);
-  const sectionId = sectionButton === null ? null : readPlexSectionId(sectionButton);
-  const ratingKey = itemButton === null ? null : readPlexRatingKey(itemButton);
-
-  if (homeUserId !== null) {
+registerRendererActions(dom, document, {
+  activateRoute,
+  applyRouteAction: (action) => { void applyRouteAction(action); },
+  applySettingsAction,
+  applyChannelSetupAction,
+  applyChannelCommitAction: (action) => { void applyChannelCommitAction(action); },
+  applyEpgAction,
+  applyOverlayAction,
+  applyPlexRuntimeAction: (action) => { void applyPlexRuntimeAction(action); },
+  setPlexHomeUserPin: (value) => plexController.setHomeUserPin(value),
+  setPlexSearchQuery: (value) => plexController.setSearchQuery(value),
+  selectPlexHomeUser: (homeUserId) => {
     clearChannelSetupActionStateForSourceChange();
     void plexController.switchHomeUser(homeUserId);
-  } else if (serverId !== null) {
+  },
+  selectPlexServer: (serverId) => {
     clearChannelSetupActionStateForSourceChange();
     void plexController.selectServer(serverId);
-  } else if (sectionId !== null) {
+  },
+  selectPlexSection: (sectionId) => {
     clearChannelSetupActionStateForSourceChange();
     plexController.setSelectedSection(sectionId);
     void plexController.listLibraryItems(sectionId);
-  } else if (ratingKey !== null) {
-    void plexController.getMetadata(ratingKey);
-  }
-});
-
-for (const element of dom.focusableElements) {
-  element.addEventListener('focus', () => focusRendererElement(element));
-}
-
-document.addEventListener('focusin', (event) => {
-  if (event.target instanceof HTMLElement) {
-    focusRendererElement(event.target);
-  }
-});
-
-dom.fullscreenButton?.addEventListener('click', () => {
-  void toggleFullscreen();
+  },
+  openPlexMetadata: (ratingKey) => { void plexController.getMetadata(ratingKey); },
+  focusElement: focusRendererElement,
+  toggleFullscreen: () => { void toggleFullscreen(); },
 });
 
 const capabilities = await window.lineupDesktop.shell.getCapabilities();
@@ -206,6 +147,9 @@ document.documentElement.dataset.shellBoot = 'ready';
 document.documentElement.dataset.activeRoute = workflowState.routeState.activeRoute;
 void plexController.loadSnapshot();
 void channelController.loadStatus();
+if (workflowState.routeState.activeRoute === 'guide') {
+  guidePresentationPolling.start();
+}
 
 function renderStatus(event: ShellStatusEvent): void {
   if (dom.statusElement) {
@@ -251,16 +195,22 @@ function activateRoute(route: AppRouteId): void {
   const previousRoute = workflowState.routeState.activeRoute;
   workflowState = activateWorkflowRoute(workflowState, route);
   cleanupPlexRuntimeForRouteChange(previousRoute, workflowState.routeState.activeRoute);
+  reconcileGuidePresentationPolling(previousRoute, workflowState.routeState.activeRoute);
   focusState = focusRegistry.focusRoute(focusState, route).state;
   renderApp();
 }
 
-function applyRouteAction(action: RouteWorkflowActionId): void {
+async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
   const previousRoute = workflowState.routeState.activeRoute;
+  if (action === 'resumePlayer' && previousRoute === 'guide') {
+    await tuneGuideSelectedChannel();
+    return;
+  }
   workflowState = applyWorkflowAction(workflowState, action);
   const nextRoute = workflowState.routeState.activeRoute;
   if (previousRoute !== nextRoute) {
     cleanupPlexRuntimeForRouteChange(previousRoute, nextRoute);
+    reconcileGuidePresentationPolling(previousRoute, nextRoute);
     focusState = focusRegistry.focusRoute(focusState, nextRoute).state;
   }
   renderApp();
@@ -279,10 +229,11 @@ function applyChannelSetupAction(action: ChannelSetupActionId): void {
   renderApp();
 }
 
-async function applyChannelCommitAction(action: ReturnType<typeof readChannelCommitActionId>): Promise<void> {
-  if (action === null) {
-    return;
-  }
+function reconcileGuidePresentationPolling(previousRoute: AppRouteId, nextRoute: AppRouteId): void {
+  guidePresentationPolling.reconcile(previousRoute, nextRoute);
+}
+
+async function applyChannelCommitAction(action: ChannelCommitActionId): Promise<void> {
   const plexState = plexController.getState();
   const sectionId = resolveLiveSelectedPlexSectionId(plexState);
   if (sectionId === null) {
@@ -299,8 +250,12 @@ async function applyChannelCommitAction(action: ReturnType<typeof readChannelCom
 }
 
 function applyEpgAction(action: EpgActionId): void {
+  const previousWindowStartMs = workflowState.epg.windowStartMs;
   workflowState = applyWorkflowEpgAction(workflowState, action);
   renderApp();
+  if (workflowState.epg.windowStartMs !== previousWindowStartMs) {
+    void guidePresentationPolling.refresh('epg-window-change', { showLoading: true });
+  }
 }
 
 function applyOverlayAction(action: PlayerOverlayActionId): void {
@@ -342,63 +297,70 @@ async function exportSupportBundle(): Promise<void> {
   renderApp();
 }
 
-async function applyPlexRuntimeAction(action: ReturnType<typeof readPlexRuntimeActionId>): Promise<void> {
-  switch (action) {
-    case 'loadSnapshot':
-      await plexController.loadSnapshot();
-      return;
-    case 'requestPin':
-      await plexController.requestPin();
-      return;
-    case 'pollPin':
-      await plexController.pollPin();
-      return;
-    case 'cancelPin':
-      await plexController.cancelPin();
-      return;
-    case 'getHomeUsers':
-      await plexController.getHomeUsers();
-      return;
-    case 'restoreSelectedServer':
-      clearChannelSetupActionStateForSourceChange();
-      await plexController.restoreSelectedServer();
-      return;
-    case 'refreshServers':
-      await plexController.refreshServers();
-      return;
-    case 'listLibrarySections':
-      await plexController.listLibrarySections();
-      return;
-    case 'listLibraryItems':
-      await plexController.listLibraryItems();
-      return;
-    case 'searchLibrary':
-      await plexController.searchLibrary();
-      return;
-    case 'clearMetadata':
-      plexController.clearMetadata();
-      return;
-    case 'clearSearch':
-      plexController.clearSearch();
-      return;
-    case 'clearItems':
-      plexController.clearItems();
-      return;
-    case 'clearSelectedSection':
-      clearChannelSetupActionStateForSourceChange();
-      plexController.clearSelectedSection();
-      return;
-    case 'clearSelectedServer':
-      clearChannelSetupActionStateForSourceChange();
-      plexController.clearSelectedServer();
-      return;
-    case 'clearPinSubflow':
-      clearChannelSetupActionStateForSourceChange();
-      await plexController.clearPinSubflow();
-      return;
-    case null:
-      return;
+async function applyPlexRuntimeAction(action: PlexRuntimeActionId): Promise<void> {
+  await dispatchPlexRuntimeAction(action, {
+    controller: plexController,
+    clearSourceActionState: clearChannelSetupActionStateForSourceChange,
+  });
+}
+
+async function tuneGuideSelectedChannel(): Promise<void> {
+  const guideChannelId = workflowState.epg.selectedChannelId;
+  if (guideChannelId.length === 0) {
+    workflowState = {
+      ...workflowState,
+      epg: setEpgPresentationState(workflowState.epg, 'error'),
+    };
+    renderApp();
+    return;
   }
+
+  let result: Awaited<ReturnType<typeof window.lineupDesktop.player.tuneChannel>>;
+  try {
+    result = await window.lineupDesktop.player.tuneChannel({ channelId: guideChannelId });
+  } catch (error: unknown) {
+    handleGuideTuneFailure(guideChannelId, summarizeRendererBridgeError(error));
+    return;
+  }
+  if (result.ok) {
+    const previousRoute = workflowState.routeState.activeRoute;
+    workflowState = applyWorkflowAction(workflowState, 'resumePlayer');
+    const nextRoute = workflowState.routeState.activeRoute;
+    cleanupPlexRuntimeForRouteChange(previousRoute, nextRoute);
+    reconcileGuidePresentationPolling(previousRoute, nextRoute);
+    if (nextRoute === 'guide') {
+      return;
+    }
+    focusState = focusRegistry.focusRoute(focusState, nextRoute).state;
+    renderApp();
+    return;
+  }
+
+  handleGuideTuneFailure(guideChannelId, result.error.message);
+}
+
+function handleGuidePresentationFailure(source: string, message: string): void {
+  workflowState = {
+    ...workflowState,
+    epg: setEpgPresentationState(workflowState.epg, 'error'),
+  };
+  renderApp();
+  recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'guide.getPresentation', message, {
+    route: workflowState.routeState.activeRoute,
+    source,
+  });
+}
+
+function handleGuideTuneFailure(channelId: string, message: string): void {
+  workflowState = {
+    ...workflowState,
+    epg: setEpgPresentationState(workflowState.epg, 'error'),
+  };
+  renderApp();
+  recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'player.tuneChannel', message, {
+    channelId,
+    route: 'guide',
+  });
 }
 
 async function handlePlexBack(): Promise<boolean> {

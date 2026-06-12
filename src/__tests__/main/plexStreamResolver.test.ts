@@ -132,6 +132,7 @@ test('plex stream resolver projects direct play to safe load payload and private
   assertPublicProjectionSafe(result);
   assert.equal(result.pmsSession?.id, 'lease-request-direct-play');
   assert.deepEqual(pmsStarts.map((start) => start.decisionKind), ['direct-play']);
+  assert.deepEqual(pmsStarts.map((start) => start.connection), [selectedConnection]);
 });
 
 test('plex stream resolver projects direct stream when policy requires remux', async () => {

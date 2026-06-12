@@ -3,12 +3,12 @@ import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.j
 import type { DesktopPlexAuthService } from './auth/index.js';
 import type { DesktopPlexCredentialStore } from './auth/desktopPlexCredentialStore.js';
 import type { DesktopPlexServerDiscovery } from './discovery/index.js';
-import { extractMetadataArray, extractSearchHubMetadata, extractSearchHubs, isSafeLibraryFilter, isSafeSearchLimit, isSafeSearchTypes, loadLibrarySectionsWithCounts, mapSearchHubTypeToMediaType, normalizeLibraryPagination, parseMediaItems, PLEX_LIBRARY_CONSTANTS, toRendererSafeMediaItemSummary, type PlexMediaType, type RawMediaItem } from './library/index.js';
-import { PlexLibraryError } from './library/plexLibraryError.js';
-import { applyFailureSnapshot, applyServerSelectionSnapshot, authRequiredError, cloneRuntimeSnapshot, createInitialSnapshot, failureResult, isOptionalShortString, mapCredentialStatus, mapRuntimeError, normalizeOperationKey, payloadAsContainer, recordRuntimeDiagnostic, staleError, StaleRuntimeMutationError, storageError, stripPinSecretFields, success, validatePositiveInteger, validationError } from './desktopPlexRuntimeSupport.js';
+import type { PlexConnection } from './discovery/types.js';
+import { isSafeLibraryFilter, isSafeSearchLimit, isSafeSearchTypes, normalizeLibraryPagination, type PlexMediaType } from './library/index.js';
+import { applyFailureSnapshot, applyServerSelectionSnapshot, authRequiredError, cloneRuntimeSnapshot, createInitialSnapshot, failureResult, isOptionalShortString, mapCredentialStatus, recordRuntimeDiagnostic, storageError, stripPinSecretFields, success, validatePositiveInteger, validationError } from './desktopPlexRuntimeSupport.js';
+import { DesktopPlexLibraryOperationExecutor } from './desktopPlexLibraryOperationExecutor.js';
 import { LivePlexTransportError, type LivePlexLibraryTransport } from './livePlexTransport.js';
-
-type SnapshotCommit = (update: (snapshot: PlexRuntimeSnapshot) => PlexRuntimeSnapshot) => void;
+import { PlexRuntimeOperationOwner, type PlexRuntimeSnapshotCommit } from './plexRuntimeOperationOwner.js';
 
 export interface DesktopPlexRuntimeOptions {
   authService: DesktopPlexAuthService;
@@ -19,15 +19,21 @@ export interface DesktopPlexRuntimeOptions {
   nowMs?: () => number;
 }
 
+export interface ActivePlexLibraryContext {
+  connection: PlexConnection;
+  token: string;
+  transport: LivePlexLibraryTransport;
+}
+
 export class DesktopPlexRuntime {
   private readonly authService: DesktopPlexAuthService;
   private readonly credentialStore: DesktopPlexRuntimeOptions['credentialStore'];
   private readonly serverDiscovery: DesktopPlexServerDiscovery;
   private readonly libraryTransport: LivePlexLibraryTransport;
+  private readonly libraryOperations: DesktopPlexLibraryOperationExecutor;
+  private readonly operationOwner: PlexRuntimeOperationOwner;
   private readonly diagnosticEventStore?: DiagnosticEventStore;
   private readonly nowMs: () => number;
-  private readonly activeOperations = new Map<string, AbortController>();
-  private runtimeEpoch = 0;
   private snapshot: PlexRuntimeSnapshot;
 
   constructor(options: DesktopPlexRuntimeOptions) {
@@ -35,15 +41,54 @@ export class DesktopPlexRuntime {
     this.credentialStore = options.credentialStore;
     this.serverDiscovery = options.serverDiscovery;
     this.libraryTransport = options.libraryTransport;
+    this.libraryOperations = new DesktopPlexLibraryOperationExecutor(options.libraryTransport);
     this.diagnosticEventStore = options.diagnosticEventStore;
     this.nowMs = options.nowMs ?? Date.now;
     this.snapshot = createInitialSnapshot(this.nowMs());
+    this.operationOwner = new PlexRuntimeOperationOwner({
+      commitSnapshot: (update) => {
+        this.snapshot = update(this.snapshot);
+      },
+      fail: <T>(requestId: string, error: PlexRuntimeError, failOptions = {}) =>
+        this.fail<T>(requestId, error, failOptions),
+      recordDiagnostic: (operation, status, code) => {
+        this.recordDiagnostic(operation, status, code);
+      },
+    });
+  }
+  getLibraryTransport(): LivePlexLibraryTransport {
+    return this.libraryTransport;
+  }
+  getSelectedConnectionForMain(): PlexConnection | null {
+    return this.serverDiscovery.getSelectedConnectionForMain();
+  }
+  async withActivePlexToken<T>(
+    operation: Extract<PlexRuntimeOperation, 'listLibraryItems' | 'getMetadata'> | 'startPlayback',
+    run: (token: string) => Promise<T>,
+  ): Promise<T> {
+    const token = this.authService.getActiveTokenForMain();
+    if (token === null) {
+      throw new LivePlexTransportError('auth-required', `${operation} requires Plex authentication`);
+    }
+    return run(token);
+  }
+  async withActiveLibraryContext<T>(
+    operation: Extract<PlexRuntimeOperation, 'listLibraryItems' | 'getMetadata'>,
+    run: (context: ActivePlexLibraryContext) => Promise<T>,
+  ): Promise<T> {
+    const token = await this.withActivePlexToken(operation, async (activeToken) => activeToken);
+    const connection = this.requireSelectedConnection(operation);
+    return run({
+      connection,
+      token,
+      transport: this.libraryTransport,
+    });
   }
   getSnapshot(requestId: string): PlexIpcResult<PlexRuntimeSnapshot> {
     return success(requestId, this.cloneSnapshot());
   }
   async requestPin(requestId: string): Promise<PlexIpcResult<PlexRequestPinValue>> {
-    return this.runOperation(requestId, 'requestPin', async ({ signal, commit }) => {
+    return this.operationOwner.run(requestId, 'requestPin', async ({ signal, commit }) => {
       const pin = stripPinSecretFields(await this.authService.requestPin({ signal }));
       commit((snapshot) => ({
         ...snapshot,
@@ -60,7 +105,7 @@ export class DesktopPlexRuntime {
     if (validation !== null) {
       return this.fail(requestId, validation);
     }
-    return this.runOperation(requestId, `pollPin:${pinId}`, async ({ signal, commit }) => {
+    return this.operationOwner.run(requestId, `pollPin:${pinId}`, async ({ signal, commit }) => {
       const result = await this.authService.pollForPin(pinId, { signal });
       const pin = stripPinSecretFields(result.pin);
       commit((snapshot) => ({
@@ -84,8 +129,8 @@ export class DesktopPlexRuntime {
     if (validation !== null) {
       return this.fail(requestId, validation);
     }
-    this.activeOperations.get(`pollPin:${pinId}`)?.abort();
-    return this.runOperation(requestId, `cancelPin:${pinId}`, async ({ signal, commit }) => {
+    this.operationOwner.abort(`pollPin:${pinId}`);
+    return this.operationOwner.run(requestId, `cancelPin:${pinId}`, async ({ signal, commit }) => {
       await this.authService.cancelPin(pinId, { signal });
       commit((snapshot) => ({
         ...snapshot,
@@ -102,7 +147,7 @@ export class DesktopPlexRuntime {
   }
 
   async getHomeUsers(requestId: string): Promise<PlexIpcResult<PlexGetHomeUsersValue>> {
-    return this.runOperation(requestId, 'getHomeUsers', async ({ signal, commit }) => {
+    return this.operationOwner.run(requestId, 'getHomeUsers', async ({ signal, commit }) => {
       await this.ensureAccountToken(signal, commit);
       const users = await this.authService.getHomeUsers({ signal });
       commit((snapshot) => ({
@@ -123,13 +168,13 @@ export class DesktopPlexRuntime {
     if (userId.length === 0 || !isOptionalShortString(input.pin)) {
       return this.fail(requestId, validationError('switchHomeUser'));
     }
-    return this.runOperation(requestId, 'switchHomeUser', async ({ signal, commit }) => {
+    return this.operationOwner.run(requestId, 'switchHomeUser', async ({ signal, commit }) => {
       await this.ensureAccountToken(signal, commit);
       const result = await this.authService.switchHomeUser(userId, {
         pin: input.pin ?? null,
         signal,
       });
-      this.abortActiveOperationsExcept('switchHomeUser');
+      this.operationOwner.abortExcept('switchHomeUser');
       this.serverDiscovery.resetDiscoveryContext();
       commit((snapshot) => ({
         ...snapshot,
@@ -160,13 +205,13 @@ export class DesktopPlexRuntime {
   }
 
   async restoreSelectedServer(requestId: string): Promise<PlexIpcResult<PlexRestoreSelectedServerValue>> {
-    return this.runOperation(requestId, 'restoreSelectedServer', async ({ signal, commit }) => {
+    return this.operationOwner.run(requestId, 'restoreSelectedServer', async ({ signal, commit }) => {
       const token = await this.requireActiveToken(signal, commit, 'restoreSelectedServer');
       const profileId = this.requireActiveProfileId('restoreSelectedServer');
       this.setServerStatus('loading', commit);
       const selection = await this.serverDiscovery.restoreSelectedServer({ token, profileId, signal });
       if (selection.kind === 'selected') {
-        this.abortActiveOperationsExcept('restoreSelectedServer');
+        this.operationOwner.abortExcept('restoreSelectedServer');
       }
       this.applyServerSelection(selection, commit);
       return { selection, snapshot: this.cloneSnapshot() };
@@ -174,7 +219,7 @@ export class DesktopPlexRuntime {
   }
 
   async refreshServers(requestId: string): Promise<PlexIpcResult<PlexRefreshServersValue>> {
-    return this.runOperation(requestId, 'refreshServers', async ({ signal, commit }) => {
+    return this.operationOwner.run(requestId, 'refreshServers', async ({ signal, commit }) => {
       const token = await this.requireActiveToken(signal, commit, 'refreshServers');
       this.setServerStatus('loading', commit);
       const servers = await this.serverDiscovery.refreshServers({ token, signal });
@@ -201,7 +246,7 @@ export class DesktopPlexRuntime {
     if (normalizedServerId.length === 0) {
       return this.fail(requestId, validationError('selectServer'));
     }
-    return this.runOperation(requestId, 'selectServer', async ({ signal, commit }) => {
+    return this.operationOwner.run(requestId, 'selectServer', async ({ signal, commit }) => {
       const token = await this.requireActiveToken(signal, commit, 'selectServer');
       const profileId = this.requireActiveProfileId('selectServer');
       this.setServerStatus('loading', commit);
@@ -212,7 +257,7 @@ export class DesktopPlexRuntime {
         signal,
       });
       if (selection.kind === 'selected') {
-        this.abortActiveOperationsExcept('selectServer');
+        this.operationOwner.abortExcept('selectServer');
       }
       this.applyServerSelection(selection, commit);
       return { selection, snapshot: this.cloneSnapshot() };
@@ -220,16 +265,14 @@ export class DesktopPlexRuntime {
   }
 
   async listLibrarySections(requestId: string): Promise<PlexIpcResult<PlexListLibrarySectionsValue>> {
-    return this.runOperation(requestId, 'listLibrarySections', async ({ signal, commit }) => {
+    return this.operationOwner.run(requestId, 'listLibrarySections', async ({ signal, commit }) => {
       const token = await this.requireActiveToken(signal, commit, 'listLibrarySections');
       const connection = this.requireSelectedConnection('listLibrarySections');
       this.setLibraryStatus('loading', commit);
-      const sections = await loadLibrarySectionsWithCounts({
-        libraryTransport: this.libraryTransport,
+      const sections = await this.libraryOperations.listSections({
         connection,
         token,
         signal,
-        shouldRethrowCountError: (error) => error instanceof StaleRuntimeMutationError,
       });
       commit((snapshot) => ({
         ...snapshot,
@@ -262,7 +305,7 @@ export class DesktopPlexRuntime {
       return this.fail(requestId, validationError('listLibraryItems'));
     }
     if (typeof input.limit === 'number' && Number.isFinite(input.limit) && input.limit <= 0) {
-      return this.runOperation(requestId, 'listLibraryItems', async ({ commit }) => {
+      return this.operationOwner.run(requestId, 'listLibraryItems', async ({ commit }) => {
         commit((snapshot) => ({
           ...snapshot,
           library: {
@@ -277,57 +320,33 @@ export class DesktopPlexRuntime {
         return { sectionId, offset: normalizeLibraryPagination(input).offset, limit: 0, items: [], snapshot: this.cloneSnapshot() };
       });
     }
-    const { offset, limit } = normalizeLibraryPagination(input);
-    const hasRequestedLimit = typeof input.limit === 'number' && Number.isFinite(input.limit);
-    return this.runOperation(requestId, 'listLibraryItems', async ({ signal, commit }) => {
+    return this.operationOwner.run(requestId, 'listLibraryItems', async ({ signal, commit }) => {
       const token = await this.requireActiveToken(signal, commit, 'listLibraryItems');
       const connection = this.requireSelectedConnection('listLibraryItems');
       this.setLibraryStatus('loading', commit);
-      const items: RawMediaItem[] = [];
-      let nextOffset = offset;
-      let iterations = 0;
-      while (true) {
-        if (++iterations > PLEX_LIBRARY_CONSTANTS.MAX_PAGINATION_ITERATIONS) {
-          throw new PlexLibraryError(
-            'pagination-limit-exceeded',
-            'Plex library pagination limit was exceeded',
-          );
-        }
-        const payload = await this.libraryTransport.listLibraryItems({
-          connection,
-          token,
+      const result = await this.libraryOperations.listItems(
+        {
           sectionId,
-          offset: nextOffset,
-          limit,
+          ...(input.offset !== undefined ? { offset: input.offset } : {}),
+          ...(input.limit !== undefined ? { limit: input.limit } : {}),
           ...(input.sort !== undefined ? { sort: input.sort } : {}),
           ...(input.filter !== undefined ? { filter: input.filter } : {}),
           ...(input.includeCollections !== undefined ? { includeCollections: input.includeCollections } : {}),
-          signal,
-        });
-        const pageItems = extractMetadataArray<RawMediaItem>(
-          payloadAsContainer<RawMediaItem>(payload),
-          'library items',
-        );
-        items.push(...pageItems);
-        if (pageItems.length < limit || (hasRequestedLimit && items.length >= limit)) {
-          break;
-        }
-        nextOffset += pageItems.length;
-      }
-      const summaries = parseMediaItems(hasRequestedLimit ? items.slice(0, limit) : items)
-        .map(toRendererSafeMediaItemSummary);
+        },
+        { connection, token, signal },
+      );
       commit((snapshot) => ({
         ...snapshot,
         library: {
           ...snapshot.library,
           status: 'ready',
           selectedSectionId: sectionId,
-          items: summaries,
+          items: result.items,
         },
         lastError: null,
         updatedAtMs: this.nowMs(),
       }));
-      return { sectionId, offset, limit, items: summaries, snapshot: this.cloneSnapshot() };
+      return { sectionId, offset: result.offset, limit: result.limit, items: result.items, snapshot: this.cloneSnapshot() };
     });
   }
 
@@ -346,31 +365,19 @@ export class DesktopPlexRuntime {
       return this.fail(requestId, validationError('searchLibrary'));
     }
     const limit = normalizeLibraryPagination({ limit: input.limit }).limit;
-    return this.runOperation(requestId, 'searchLibrary', async ({ signal, commit }) => {
+    return this.operationOwner.run(requestId, 'searchLibrary', async ({ signal, commit }) => {
       const token = await this.requireActiveToken(signal, commit, 'searchLibrary');
       const connection = this.requireSelectedConnection('searchLibrary');
       this.setLibraryStatus('loading', commit);
-      const payload = await this.libraryTransport.searchLibrary({
-        connection,
-        token,
-        query,
-        sectionId,
-        limit,
-        ...(input.types !== undefined ? { types: input.types } : {}),
-        signal,
-      });
-      const items = extractSearchHubs(payloadAsContainer<RawMediaItem>(payload), 'search')
-        .flatMap((hub) => {
-          if (input.types !== undefined && input.types.length > 0) {
-            const hubType = mapSearchHubTypeToMediaType(hub.type);
-            if (hubType === null || !input.types.includes(hubType)) {
-              return [];
-            }
-          }
-          return extractSearchHubMetadata(hub, `search hub "${hub.type}"`);
-        })
-        .slice(0, limit);
-      const summaries = parseMediaItems(items).map(toRendererSafeMediaItemSummary);
+      const summaries = await this.libraryOperations.search(
+        {
+          query,
+          sectionId,
+          limit,
+          ...(input.types !== undefined ? { types: input.types } : {}),
+        },
+        { connection, token, signal },
+      );
       commit((snapshot) => ({
         ...snapshot,
         library: {
@@ -393,33 +400,14 @@ export class DesktopPlexRuntime {
     if (normalizedRatingKey.length === 0) {
       return this.fail(requestId, validationError('getMetadata'));
     }
-    return this.runOperation(requestId, 'getMetadata', async ({ signal, commit }) => {
+    return this.operationOwner.run(requestId, 'getMetadata', async ({ signal, commit }) => {
       const token = await this.requireActiveToken(signal, commit, 'getMetadata');
       const connection = this.requireSelectedConnection('getMetadata');
       this.setLibraryStatus('loading', commit);
-      const payload = await this.libraryTransport.getMetadata({
-        connection,
-        token,
-        ratingKey: normalizedRatingKey,
-        signal,
-      }).catch((error: unknown) => {
-        if (error instanceof LivePlexTransportError && error.code === 'resource-not-found') {
-          return null;
-        }
-        throw error;
-      });
-      if (payload === null) {
-        commit((snapshot) => ({
-          ...snapshot,
-          library: { ...snapshot.library, status: 'ready', metadata: null },
-          lastError: null,
-          updatedAtMs: this.nowMs(),
-        }));
-        return { item: null, snapshot: this.cloneSnapshot() };
-      }
-      const item = parseMediaItems(
-        extractMetadataArray<RawMediaItem>(payloadAsContainer<RawMediaItem>(payload), 'metadata'),
-      ).map(toRendererSafeMediaItemSummary)[0];
+      const item = await this.libraryOperations.getMetadata(
+        normalizedRatingKey,
+        { connection, token, signal },
+      );
       commit((snapshot) => ({
         ...snapshot,
         library: { ...snapshot.library, status: 'ready', metadata: item ?? null },
@@ -431,71 +419,12 @@ export class DesktopPlexRuntime {
   }
 
   async shutdown(): Promise<void> {
-    this.runtimeEpoch += 1;
-    for (const controller of this.activeOperations.values()) {
-      controller.abort();
-    }
-    this.activeOperations.clear();
-  }
-  private async runOperation<T>(
-    requestId: string,
-    operationKey: string,
-    action: (context: { signal: AbortSignal; commit: SnapshotCommit }) => Promise<T>,
-  ): Promise<PlexIpcResult<T>> {
-    const operation = normalizeOperationKey(operationKey);
-    const previous = this.activeOperations.get(operationKey);
-    previous?.abort();
-    const controller = new AbortController();
-    const epoch = this.runtimeEpoch;
-    this.activeOperations.set(operationKey, controller);
-    this.recordDiagnostic(operation, 'started');
-    const isCurrent = () =>
-      this.runtimeEpoch === epoch && this.activeOperations.get(operationKey) === controller;
-    const commit: SnapshotCommit = (update) => {
-      if (!isCurrent()) {
-        throw new StaleRuntimeMutationError();
-      }
-      this.snapshot = update(this.snapshot);
-    };
-    try {
-      const value = await action({ signal: controller.signal, commit });
-      if (!isCurrent()) {
-        return this.fail(requestId, staleError(operation), { stale: true, mutateSnapshot: false });
-      }
-      this.recordDiagnostic(operation, 'succeeded');
-      return success(requestId, value);
-    } catch (error) {
-      const stale = error instanceof StaleRuntimeMutationError || this.runtimeEpoch !== epoch || !isCurrent();
-      const runtimeError = stale
-        ? staleError(operation)
-        : mapRuntimeError(error, operation);
-      const cancelled = runtimeError.code === 'PLEX_CANCELLED';
-      this.recordDiagnostic(operation, cancelled ? 'cancelled' : 'failed', runtimeError.code);
-      return this.fail(requestId, runtimeError, {
-        cancelled,
-        stale,
-        mutateSnapshot: !stale && !cancelled,
-      });
-    } finally {
-      if (this.activeOperations.get(operationKey) === controller) {
-        this.activeOperations.delete(operationKey);
-      }
-    }
-  }
-
-  private abortActiveOperationsExcept(operationKey: string): void {
-    for (const [activeOperationKey, controller] of this.activeOperations.entries()) {
-      if (activeOperationKey === operationKey) {
-        continue;
-      }
-      controller.abort();
-      this.activeOperations.delete(activeOperationKey);
-    }
+    this.operationOwner.shutdown();
   }
 
   private async ensureAccountToken(
     signal: AbortSignal,
-    commit: SnapshotCommit,
+    commit: PlexRuntimeSnapshotCommit,
   ): Promise<string> {
     const existingToken = this.authService.getAccountTokenForMain();
     if (existingToken !== null) {
@@ -526,7 +455,7 @@ export class DesktopPlexRuntime {
 
   private async requireActiveToken(
     signal: AbortSignal,
-    commit: SnapshotCommit,
+    commit: PlexRuntimeSnapshotCommit,
     operation: PlexRuntimeOperation,
   ): Promise<string> {
     await this.ensureAccountToken(signal, commit);
@@ -558,7 +487,7 @@ export class DesktopPlexRuntime {
 
   private setServerStatus(
     status: PlexRuntimeSnapshot['servers']['status'],
-    commit: SnapshotCommit,
+    commit: PlexRuntimeSnapshotCommit,
   ): void {
     commit((snapshot) => ({
       ...snapshot,
@@ -569,7 +498,7 @@ export class DesktopPlexRuntime {
 
   private setLibraryStatus(
     status: PlexRuntimeSnapshot['library']['status'],
-    commit: SnapshotCommit,
+    commit: PlexRuntimeSnapshotCommit,
   ): void {
     commit((snapshot) => ({
       ...snapshot,
@@ -580,7 +509,7 @@ export class DesktopPlexRuntime {
 
   private applyServerSelection(
     selection: PlexServerSelectionSummary,
-    commit: SnapshotCommit,
+    commit: PlexRuntimeSnapshotCommit,
   ): void {
     commit((snapshot) => applyServerSelectionSnapshot({
       snapshot,

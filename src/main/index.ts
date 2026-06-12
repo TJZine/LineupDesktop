@@ -36,9 +36,13 @@ import {
   type ShellIpcAuthorizationDetails,
 } from './shellSecurity.js';
 import { registerPlayerIpcHandlers, type PlayerIpcTeardown } from './player/playerIpc.js';
+import { createProductionNativeHostFactory } from './player/productionNativeHostFactory.js';
 import { DiagnosticEventStore } from './diagnostics/diagnosticEventStore.js';
 import { registerDiagnosticsIpcHandlers, type DiagnosticsIpcTeardown } from './diagnostics/supportBundleIpc.js';
-import { registerChannelComposition, type ChannelCompositionTeardown } from './channel/channelComposition.js';
+import { registerChannelComposition, type ChannelCompositionRegistration } from './channel/channelComposition.js';
+import { bootstrapPlaybackRuntime } from './player/playbackRuntimeBootstrap.js';
+import { wirePlexPlaybackCleanup } from './player/plexPlaybackCleanupWiring.js';
+import type { PlexPlaybackRuntime } from './player/plexPlaybackRuntime.js';
 import { registerPlexComposition, type PlexCompositionRegistration } from './plex/plexComposition.js';
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
 import { registerShellAppCommandController } from './window/shellAppCommandController.js';
@@ -64,7 +68,9 @@ const shellWindowController = createShellWindowController({
 let teardownPlayerIpc: PlayerIpcTeardown | null = null;
 let teardownDiagnosticsIpc: DiagnosticsIpcTeardown | null = null;
 let plexComposition: PlexCompositionRegistration | null = null;
-let teardownChannelComposition: ChannelCompositionTeardown | null = null;
+let channelComposition: ChannelCompositionRegistration | null = null;
+let playbackRuntime: PlexPlaybackRuntime | null = null;
+let channelSchedulerProgramStartHandler: (() => void | Promise<void>) | null = null;
 let playerIpcQuitTeardownInProgress = false;
 let playerIpcQuitTeardownComplete = false;
 let containmentCounters: ShellContainmentCounters = {
@@ -89,6 +95,20 @@ app.whenReady()
       getShellWindow: () => shellWindowController.getWindow(),
       appVersion: app.getVersion(),
     });
+    const originalNativeHostFactory = createProductionNativeHostFactory({
+      diagnosticEventStore,
+    });
+    const nativeHostFactory = originalNativeHostFactory
+      ? () => {
+          const host = originalNativeHostFactory();
+          host.onLifecycleFailure?.(() => {
+            if (playbackRuntime) {
+              void playbackRuntime.handleHelperCrash();
+            }
+          });
+          return host;
+        }
+      : null;
     teardownPlayerIpc = registerPlayerIpcHandlers({
       shellMode,
       isAuthorizedEvent,
@@ -96,6 +116,7 @@ app.whenReady()
       createRequestId,
       reportDiagnostic: reportMainProcessDiagnostic,
       diagnosticEventStore,
+      nativeHostFactory: nativeHostFactory ?? undefined,
     });
     plexComposition = await registerPlexComposition({
       app,
@@ -104,14 +125,73 @@ app.whenReady()
       createRequestId,
       diagnosticEventStore,
     });
-    teardownChannelComposition = registerChannelComposition({
+    if (plexComposition) {
+      wirePlexPlaybackCleanup({
+        plexRuntime: plexComposition.runtime,
+        getPlaybackRuntime: () => playbackRuntime,
+        reportDiagnostic: reportMainProcessDiagnostic,
+      });
+    }
+    let onChannelTunedCallback: ((channelId: string) => void | Promise<void>) | null = null;
+
+    channelComposition = registerChannelComposition({
       app,
       shellMode,
       isAuthorizedEvent,
       createRequestId,
       plexRuntime: plexComposition.runtime,
       diagnosticEventStore,
+      onChannelTuned: (channelId) => {
+        if (onChannelTunedCallback) {
+          void onChannelTunedCallback(channelId);
+        }
+      },
     });
+    const playbackRuntimeComposition = bootstrapPlaybackRuntime({
+      shellMode,
+      scheduler: channelComposition.activeChannelScheduler,
+      adapter: teardownPlayerIpc.adapter,
+      createRequestId,
+      diagnosticEventStore,
+      plexRuntime: plexComposition.runtime,
+    });
+    playbackRuntime = playbackRuntimeComposition.runtime;
+
+    channelSchedulerProgramStartHandler = async () => {
+      if (playbackRuntime === null) {
+        return;
+      }
+      try {
+        await playbackRuntime.startCurrentPlayback('schedule-tick');
+      } catch (error: unknown) {
+        reportMainProcessDiagnostic('Automatic schedule tick playback transition failed', error);
+      }
+    };
+    channelComposition.activeChannelScheduler.on('programStart', channelSchedulerProgramStartHandler);
+
+    onChannelTunedCallback = async () => {
+      if (playbackRuntime) {
+        try {
+          await playbackRuntime.startCurrentPlayback('manual-switch');
+        } catch (error) {
+          reportMainProcessDiagnostic('Manual channel switch playback start failed', error);
+        }
+      }
+    };
+
+    void channelComposition.guideRuntime.initializeActiveChannel()
+      .then(async () => {
+        if (playbackRuntime) {
+          try {
+            await playbackRuntime.startCurrentPlayback('startup');
+          } catch (error) {
+            reportMainProcessDiagnostic('Startup playback start failed', error);
+          }
+        }
+      })
+      .catch((error) => {
+        reportMainProcessDiagnostic('Guide runtime active channel initialization failed', error);
+      });
     const shellWindow = shellWindowController.createWindow();
     registerShellAppCommandController(shellWindow, {
       reportDiagnostic: reportMainProcessDiagnostic,
@@ -140,13 +220,23 @@ app.on('before-quit', (event) => {
   publishShellStatus('closing');
   const teardown = teardownPlayerIpc;
   if (playerIpcQuitTeardownComplete || teardown === null) {
+    const localPlaybackRuntime = playbackRuntime;
+    playbackRuntime = null;
+    const localChannelComposition = channelComposition;
+    channelComposition = null;
+    if (localChannelComposition !== null && channelSchedulerProgramStartHandler !== null) {
+      localChannelComposition.activeChannelScheduler.off(
+        'programStart',
+        channelSchedulerProgramStartHandler,
+      );
+      channelSchedulerProgramStartHandler = null;
+    }
     const teardownPlex = plexComposition?.teardown ?? null;
     plexComposition = null;
-    const teardownChannel = teardownChannelComposition;
-    teardownChannelComposition = null;
     void Promise.all([
+      localPlaybackRuntime?.teardown() ?? Promise.resolve(),
       teardownPlex?.() ?? Promise.resolve(),
-      teardownChannel?.() ?? Promise.resolve(),
+      localChannelComposition?.teardown() ?? Promise.resolve(),
     ]).catch((error: unknown) => {
       reportMainProcessDiagnostic('Runtime composition cleanup failed during quit', error);
     });
@@ -161,15 +251,25 @@ app.on('before-quit', (event) => {
   teardownPlayerIpc = null;
   teardownDiagnosticsIpc?.();
   teardownDiagnosticsIpc = null;
-    const teardownPlex = plexComposition?.teardown ?? null;
-    plexComposition = null;
-  const teardownChannel = teardownChannelComposition;
-  teardownChannelComposition = null;
+  const teardownPlex = plexComposition?.teardown ?? null;
+  plexComposition = null;
+  const localChannelComposition = channelComposition;
+  channelComposition = null;
   playerIpcQuitTeardownInProgress = true;
+  const localPlaybackRuntime = playbackRuntime;
+  playbackRuntime = null;
+  if (localChannelComposition !== null && channelSchedulerProgramStartHandler !== null) {
+    localChannelComposition.activeChannelScheduler.off(
+      'programStart',
+      channelSchedulerProgramStartHandler,
+    );
+    channelSchedulerProgramStartHandler = null;
+  }
   Promise.all([
-    teardown(),
+    teardown.teardown(),
     teardownPlex?.() ?? Promise.resolve(),
-    teardownChannel?.() ?? Promise.resolve(),
+    localChannelComposition?.teardown() ?? Promise.resolve(),
+    localPlaybackRuntime?.teardown() ?? Promise.resolve(),
   ])
     .catch((error: unknown) => {
       reportMainProcessDiagnostic('Player IPC cleanup failed during quit', error);

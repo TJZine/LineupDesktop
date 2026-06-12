@@ -57,11 +57,32 @@ export interface LivePlexGetMetadataRequest extends LivePlexLibraryRequest {
   ratingKey: string;
 }
 
+export interface LivePlexGetCollectionItemsRequest extends LivePlexLibraryRequest {
+  collectionKey: string;
+}
+
+export interface LivePlexGetShowEpisodesRequest extends LivePlexLibraryRequest {
+  showKey: string;
+}
+
+export interface LivePlexGetPlaylistItemsRequest extends LivePlexLibraryRequest {
+  playlistKey: string;
+}
+
 export interface LivePlexLibraryTransport {
   listLibrarySections(input: LivePlexLibraryRequest): Promise<PlexResponsePayload>;
   listLibraryItems(input: LivePlexListLibraryItemsRequest): Promise<PlexResponsePayload>;
   searchLibrary(input: LivePlexSearchLibraryRequest): Promise<PlexResponsePayload>;
   getMetadata(input: LivePlexGetMetadataRequest): Promise<PlexResponsePayload>;
+  getCollectionItems(input: LivePlexGetCollectionItemsRequest): Promise<PlexResponsePayload>;
+  getShowEpisodes(input: LivePlexGetShowEpisodesRequest): Promise<PlexResponsePayload>;
+  getPlaylistItems(input: LivePlexGetPlaylistItemsRequest): Promise<PlexResponsePayload>;
+  stopTranscodeSession(input: {
+    connection: PlexConnection;
+    token: string;
+    sessionId: string;
+    signal?: AbortSignal | null;
+  }): Promise<void>;
 }
 
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -176,6 +197,46 @@ export class LivePlexTransport
       input.token,
       input.signal ?? null,
     );
+  }
+
+  async getCollectionItems(input: LivePlexGetCollectionItemsRequest): Promise<PlexResponsePayload> {
+    return this.fetchPmsPayload(
+      input.connection,
+      `/library/collections/${encodeURIComponent(input.collectionKey)}/items`,
+      input.token,
+      input.signal ?? null,
+    );
+  }
+
+  async getShowEpisodes(input: LivePlexGetShowEpisodesRequest): Promise<PlexResponsePayload> {
+    return this.fetchPmsPayload(
+      input.connection,
+      `/library/metadata/${encodeURIComponent(input.showKey)}/allLeaves`,
+      input.token,
+      input.signal ?? null,
+    );
+  }
+
+  async getPlaylistItems(input: LivePlexGetPlaylistItemsRequest): Promise<PlexResponsePayload> {
+    return this.fetchPmsPayload(
+      input.connection,
+      `/library/playlists/${encodeURIComponent(input.playlistKey)}/items`,
+      input.token,
+      input.signal ?? null,
+    );
+  }
+
+  async stopTranscodeSession(input: {
+    connection: PlexConnection;
+    token: string;
+    sessionId: string;
+    signal?: AbortSignal | null;
+  }): Promise<void> {
+    const url = new URL('/video/:/transcode/universal/stop', normalizeBaseUri(input.connection.uri));
+    url.searchParams.set('session', input.sessionId);
+    await this.fetchPmsUrlPayload(url, input.token, input.signal ?? null).catch(() => {
+      // Ignore stop failures per plan
+    });
   }
 
   private buildAuthRequest(input: DesktopPlexAuthTransportRequest): {

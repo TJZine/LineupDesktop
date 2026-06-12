@@ -157,6 +157,12 @@ class FakeResolver implements PlexPlaybackBridgeResolverPort {
 
   async resolve(input: PlexStreamResolverInput): Promise<PlexStreamResolverResult> {
     this.inputs.push(input);
+    if (this.result.ok) {
+      return {
+        ...this.result,
+        privatePlayback: { ...this.result.privatePlayback, requestId: input.requestId },
+      };
+    }
     return this.result;
   }
 }
@@ -441,9 +447,11 @@ test('RD-12 bridge keeps streamDescriptor private and public outputs redacted', 
   }
   const candidate = await bridge.resolvePlaybackCandidate(selection);
 
+  const publicCandidate = { ...candidate };
+  delete (publicCandidate as { privatePlayback?: unknown }).privatePlayback;
   assert.equal(resolver.inputs[0]?.mediaId, 'rating-1');
   assertPublicSafe(selection, rawPrivateValues);
-  assertPublicSafe(candidate, rawPrivateValues);
+  assertPublicSafe(publicCandidate, rawPrivateValues);
   assertPublicSafe(resolver.inputs[0], rawPrivateValues);
 });
 

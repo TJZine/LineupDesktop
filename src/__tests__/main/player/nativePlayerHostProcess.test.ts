@@ -225,6 +225,29 @@ test('native host process translates commands and returns safe host events', asy
   assertNoForbiddenKeys(result);
 });
 
+test('native host process rejects duplicate in-flight request IDs without overwriting pending commands', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+
+  const first = host.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const duplicate = await host.execute({
+    command: 'play',
+    requestId: 'native-load-1',
+    payload: {},
+  });
+
+  assert.equal(duplicate.ok, false);
+  assert.equal(duplicate.ok ? null : duplicate.error.code, 'PLAYER_HELPER_DUPLICATE_REQUEST');
+  assert.equal(child.writes.length, 1);
+
+  child.send({ type: 'result', requestId: 'native-load-1', ok: true, events: [] });
+  assert.equal((await first).ok, true);
+});
+
 test('native host process reports idle helper lifecycle failures to subscribers', async () => {
   const child = new FakeHostChildProcess();
   const lifecycleFailures: NativePlayerHostLifecycleFailure[] = [];
@@ -695,4 +718,78 @@ test('native host process drops stderr content before diagnostics storage', asyn
   assert.equal(diagnostics.getRecords().some((record) => record.operation === 'helper.output'), true);
   assertTextAbsent(diagnostics.getRecords(), forbiddenUrl);
   assertTextAbsent(diagnostics.getRecords(), forbiddenHandle);
+});
+
+test('native host process serializes private playback details correctly', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+
+  const context = {
+    privatePlayback: {
+      requestId: 'native-load-1',
+      decisionKind: 'direct-play' as const,
+      playbackUrl: 'https://private.example/library/parts/main',
+      credentialHeader: {
+        name: 'X-Private-Header',
+        value: 'private-value',
+      },
+      setup: {
+        playbackMode: 'direct-play' as const,
+        mediaPath: '/library/metadata/rating-1',
+        variantId: 'plex-variant-main',
+        partPath: '/library/parts/main',
+        selectedTrackIds: { video: null, audio: null, subtitle: null },
+        selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+      },
+      selectedConnection: {
+        protocol: 'https' as const,
+        address: 'private.example',
+        port: 443,
+        local: false,
+        relay: false,
+      },
+      media: { id: 'media-1', title: 'Episode 1' },
+    },
+  };
+
+  const pending = host.execute(loadCommand, context);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(child.writes[0], {
+    type: 'command',
+    requestId: 'native-load-1',
+    command: 'load',
+    payload: loadCommand.payload,
+    setup: context.privatePlayback.setup,
+    playbackUrl: context.privatePlayback.playbackUrl,
+    credentialHeader: context.privatePlayback.credentialHeader,
+  });
+
+  child.send({ type: 'result', requestId: 'native-load-1', ok: true, events: [] });
+  const result = await pending;
+  assert.equal(result.ok, true);
+});
+
+test('native host process rejects oversized messages', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+
+  // Create an oversized command by adding a huge payload
+  const oversizedCommand = {
+    ...loadCommand,
+    payload: {
+      ...loadCommand.payload,
+      hugeField: 'x'.repeat(1024 * 1024 + 10),
+    },
+  };
+
+  const result = await host.execute(oversizedCommand);
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'PLAYER_HELPER_MESSAGE_TOO_LARGE');
 });

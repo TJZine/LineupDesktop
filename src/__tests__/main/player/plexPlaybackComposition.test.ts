@@ -22,6 +22,7 @@ import type {
 } from '../../../main/player/plexPlaybackRuntime.js';
 import type { DesktopStreamCapabilityProfile } from '../../../main/player/streamPolicy/types.js';
 import { assertPublicSafe } from './playerPublicSafetyAssertions.js';
+import type { PrivilegedPlaybackDispatchContext } from '../../../main/player/privilegedPlaybackDispatchContext.js';
 
 const rawPrivateValues = [
   ['X', 'Plex', 'Token'].join('-'),
@@ -198,10 +199,15 @@ class FakeResolver implements PlexPlaybackCompositionResolverPort {
 
 class FakePlayerPort {
   readonly commands: PlayerCommand[] = [];
+  readonly contexts: Array<PrivilegedPlaybackDispatchContext | null | undefined> = [];
   readonly cleanupRequestIds: Array<string | null> = [];
 
-  async dispatch(command: PlayerCommand): Promise<{ ok: true; events: readonly PlayerEvent[] }> {
+  async dispatch(
+    command: PlayerCommand,
+    context?: PrivilegedPlaybackDispatchContext | null,
+  ): Promise<{ ok: true; events: readonly PlayerEvent[] }> {
     this.commands.push(command);
+    this.contexts.push(context);
     return { ok: true, events: [] };
   }
 
@@ -237,9 +243,37 @@ class FakeDesktopPlayerAdapter {
     return { accepted: true, events: [] };
   }
 
+  async dispatchRuntimeCommand(
+    command: PlayerCommand,
+    _context?: PrivilegedPlaybackDispatchContext | null,
+  ): Promise<{
+    accepted: boolean;
+    events: readonly PlayerEvent[];
+  }> {
+    const toRendererIntentEnvelope = (cmd: PlayerCommand): PlayerRendererIntentEnvelope => {
+      switch (cmd.command) {
+        case 'load':
+          return { intent: 'player.load', requestId: cmd.requestId, payload: cmd.payload };
+        case 'play':
+          return { intent: 'player.play', requestId: cmd.requestId, payload: {} };
+        case 'pause':
+          return { intent: 'player.pause', requestId: cmd.requestId, payload: {} };
+        case 'stop':
+          return { intent: 'player.stop', requestId: cmd.requestId, payload: {} };
+        default:
+          return assertUnhandledRendererIntentCommand(cmd);
+      }
+    };
+    return this.dispatchRendererIntent(toRendererIntentEnvelope(command));
+  }
+
   async cleanup(): Promise<{ accepted: boolean; events: readonly PlayerEvent[] }> {
     return { accepted: this.cleanupAccepted, events: [] };
   }
+}
+
+function assertUnhandledRendererIntentCommand(command: PlayerCommand): never {
+  throw new Error(`Unhandled PlayerCommand in composition test fake: ${command.command}`);
 }
 
 test('RD-12 composition wires scheduler, resolver, runtime, player, and PMS through injected main seams', async () => {
@@ -269,6 +303,16 @@ test('RD-12 composition wires scheduler, resolver, runtime, player, and PMS thro
   assert.equal(player.commands.length, 1);
   assert.equal(player.commands[0]?.command, 'load');
   assert.deepEqual(player.commands[0]?.payload, loadPayload);
+  assert.equal(player.contexts.length, 1);
+  assert.equal(player.contexts[0]?.privatePlayback.requestId, 'request-from-runtime');
+  assert.equal(
+    player.contexts[0]?.privatePlayback.playbackUrl,
+    resolver.result.ok ? resolver.result.privatePlayback?.playbackUrl : undefined,
+  );
+  assert.equal(
+    player.contexts[0]?.privatePlayback.credentialHeader.name,
+    resolver.result.ok ? resolver.result.privatePlayback?.credentialHeader.name : undefined,
+  );
   assertPublicSafe(result, rawPrivateValues);
   assertPublicSafe(emitted, rawPrivateValues);
 

@@ -8,6 +8,7 @@ import {
   createEpgGuideView,
   createEpgState,
   DEFAULT_EPG_PRESENTATION_SOURCE,
+  ensureRendererReadyGuidePresentation,
   type EpgActionId,
   type EpgGuideViewModel,
   type EpgPresentationSource,
@@ -176,8 +177,8 @@ const ROUTE_COPY = {
     title: 'Guide',
     kicker: 'Tonight',
     tone: 'ready',
-    primaryText: 'Channels are available in the guide shell.',
-    secondaryText: 'Guide rows prefer channel number, name, and program text over category color cues.',
+    primaryText: 'Tonight at a glance.',
+    secondaryText: 'Use directional controls to move through time windows, channels, and programs.',
     defaultStatus: 'Guide shell showing renderer-safe lineup data.',
   },
   settings: {
@@ -326,13 +327,16 @@ export function getRouteWorkflowView(
 }
 
 function createCurrentProgramSummary(presentation: EpgPresentationSource): ProgramSummaryViewModel {
-  const channel = presentation.channels.find((candidate) => candidate.id === presentation.nowWatching.channelId);
+  const normalizedPresentation = ensureRendererReadyGuidePresentation(presentation);
+  const channel = presentation.channels.find(
+    (candidate) => candidate.id === normalizedPresentation.nowWatching.channelId,
+  );
   return {
-    title: presentation.nowWatching.title,
-    subtitle: presentation.nowWatching.subtitle,
+    title: normalizedPresentation.nowWatching.title,
+    subtitle: normalizedPresentation.nowWatching.subtitle,
     channelName: channel?.name ?? 'Channel',
-    startsAtMs: presentation.nowWatching.startsAtMs,
-    endsAtMs: presentation.nowWatching.endsAtMs,
+    startsAtMs: normalizedPresentation.nowWatching.startsAtMs,
+    endsAtMs: normalizedPresentation.nowWatching.endsAtMs,
   };
 }
 
@@ -363,7 +367,7 @@ function createPrimaryText(
   defaultPrimaryText: string,
   guide: EpgGuideViewModel,
   currentProgram: ProgramSummaryViewModel,
-  channels: readonly ChannelSummaryViewModel[],
+  _channels: readonly ChannelSummaryViewModel[],
 ): string {
   if (route === 'player') {
     return guide.presentationState === 'ready'
@@ -372,7 +376,7 @@ function createPrimaryText(
   }
   if (route === 'guide') {
     return guide.presentationState === 'ready'
-      ? `${String(channels.length)} channels are available in the guide shell.`
+      ? defaultPrimaryText
       : guidePlaceholderPrimaryText(guide.presentationState, 'guide');
   }
   return defaultPrimaryText;

@@ -6,6 +6,8 @@ import ts from 'typescript';
 import {
   LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
+  LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_PLAYER_TUNE_CHANNEL,
   LINEUP_PLAYER_CLEANUP_CHANNEL,
   LINEUP_PLAYER_COMMAND_CHANNEL,
   LINEUP_PLAYER_EVENT_CHANNEL,
@@ -67,10 +69,16 @@ import { SHELL_STATUS_VALUES } from '../../contracts/shell.js';
 
 const preloadSourceUrl = new URL('../../preload/index.cts', import.meta.url);
 const preloadSourceText = readFileSync(preloadSourceUrl, 'utf8');
+const preloadChannelsSourceUrl = new URL('../../preload/channels.cts', import.meta.url);
+const preloadChannelsSourceText = readFileSync(preloadChannelsSourceUrl, 'utf8');
 const channelGuardSourceUrl = new URL('../../preload/channelBridgeGuards.cts', import.meta.url);
 const channelGuardSourceText = readFileSync(channelGuardSourceUrl, 'utf8');
 const channelSetupBridgeSourceUrl = new URL('../../preload/channelSetupBridge.cts', import.meta.url);
 const channelSetupBridgeSourceText = readFileSync(channelSetupBridgeSourceUrl, 'utf8');
+const diagnosticsGuardSourceUrl = new URL('../../preload/diagnosticsBridgeGuards.cts', import.meta.url);
+const diagnosticsGuardSourceText = readFileSync(diagnosticsGuardSourceUrl, 'utf8');
+const guideBridgeSourceUrl = new URL('../../preload/guideBridge.cts', import.meta.url);
+const guideBridgeSourceText = readFileSync(guideBridgeSourceUrl, 'utf8');
 const preloadBundleToolSourceText = readFileSync(
   new URL('../../../tools/bundle-preload.mjs', import.meta.url),
   'utf8',
@@ -83,6 +91,13 @@ const preloadSourceFile = ts.createSourceFile(
   true,
   ts.ScriptKind.TS,
 );
+const preloadChannelsSourceFile = ts.createSourceFile(
+  'src/preload/channels.cts',
+  preloadChannelsSourceText,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+);
 const channelGuardSourceFile = ts.createSourceFile(
   'src/preload/channelBridgeGuards.cts',
   channelGuardSourceText,
@@ -90,9 +105,23 @@ const channelGuardSourceFile = ts.createSourceFile(
   true,
   ts.ScriptKind.TS,
 );
+const diagnosticsGuardSourceFile = ts.createSourceFile(
+  'src/preload/diagnosticsBridgeGuards.cts',
+  diagnosticsGuardSourceText,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+);
 const channelSetupBridgeSourceFile = ts.createSourceFile(
   'src/preload/channelSetupBridge.cts',
   channelSetupBridgeSourceText,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+);
+const guideBridgeSourceFile = ts.createSourceFile(
+  'src/preload/guideBridge.cts',
+  guideBridgeSourceText,
   ts.ScriptTarget.Latest,
   true,
   ts.ScriptKind.TS,
@@ -121,6 +150,42 @@ function evaluateChannelGuardModule(): Record<string, unknown> {
   return moduleObject.exports as Record<string, unknown>;
 }
 
+function evaluateDiagnosticsGuardModule(): Record<string, unknown> {
+  const exportsObject = {};
+  const moduleObject = { exports: exportsObject };
+  const compiled = ts.transpileModule(diagnosticsGuardSourceText, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: 'src/preload/diagnosticsBridgeGuards.cts',
+  }).outputText;
+  const requireGuard = (moduleName: string) => {
+    assert.fail(`unexpected diagnostics bridge guard require ${moduleName}`);
+  };
+  const evaluateGuards = new Function('require', 'exports', 'module', compiled);
+  evaluateGuards(requireGuard, exportsObject, moduleObject);
+  return moduleObject.exports as Record<string, unknown>;
+}
+
+function evaluatePreloadChannelsModule(): Record<string, unknown> {
+  const exportsObject = {};
+  const moduleObject = { exports: exportsObject };
+  const compiled = ts.transpileModule(preloadChannelsSourceText, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: 'src/preload/channels.cts',
+  }).outputText;
+  const requireChannels = (moduleName: string) => {
+    assert.fail(`unexpected preload channels require ${moduleName}`);
+  };
+  const evaluateChannels = new Function('require', 'exports', 'module', compiled);
+  evaluateChannels(requireChannels, exportsObject, moduleObject);
+  return moduleObject.exports as Record<string, unknown>;
+}
+
 function evaluateChannelSetupBridgeModule(
   channelGuardExports: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -144,6 +209,24 @@ function evaluateChannelSetupBridgeModule(
   return moduleObject.exports as Record<string, unknown>;
 }
 
+function evaluateGuideBridgeModule(): Record<string, unknown> {
+  const exportsObject = {};
+  const moduleObject = { exports: exportsObject };
+  const compiled = ts.transpileModule(guideBridgeSourceText, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: 'src/preload/guideBridge.cts',
+  }).outputText;
+  const requireGuide = (moduleName: string) => {
+    assert.fail(`unexpected guide bridge require ${moduleName}`);
+  };
+  const evaluateGuide = new Function('require', 'exports', 'module', compiled);
+  evaluateGuide(requireGuide, exportsObject, moduleObject);
+  return moduleObject.exports as Record<string, unknown>;
+}
+
 function createPreloadHarness(
   invoke: (
     channel: string,
@@ -159,7 +242,10 @@ function createPreloadHarness(
   let exposedApi: unknown = null;
   const input = (value: unknown) => JSON.parse(JSON.stringify(value)) as unknown;
   const channelGuardExports = evaluateChannelGuardModule();
+  const diagnosticsGuardExports = evaluateDiagnosticsGuardModule();
+  const preloadChannelExports = evaluatePreloadChannelsModule();
   const channelSetupBridgeExports = evaluateChannelSetupBridgeModule(channelGuardExports);
+  const guideBridgeExports = evaluateGuideBridgeModule();
   const compiled = ts.transpileModule(preloadSourceText, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -171,8 +257,17 @@ function createPreloadHarness(
     if (moduleName === './channelBridgeGuards.cjs') {
       return channelGuardExports;
     }
+    if (moduleName === './channels.cjs') {
+      return preloadChannelExports;
+    }
     if (moduleName === './channelSetupBridge.cjs') {
       return channelSetupBridgeExports;
+    }
+    if (moduleName === './diagnosticsBridgeGuards.cjs') {
+      return diagnosticsGuardExports;
+    }
+    if (moduleName === './guideBridge.cjs') {
+      return guideBridgeExports;
     }
     assert.equal(moduleName, 'electron');
     return {
@@ -286,6 +381,8 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_PLEX_GET_METADATA_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
   LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
+  LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_PLAYER_TUNE_CHANNEL,
 } as const;
 
 const APPROVED_IPC_CHANNELS_BY_METHOD = {
@@ -313,6 +410,8 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_PLEX_GET_METADATA_CHANNEL',
     'LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
     'LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL',
+    'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
+    'LINEUP_PLAYER_TUNE_CHANNEL',
   ]),
   on: new Set(['LINEUP_SHELL_STATUS_CHANGED_CHANNEL', 'LINEUP_PLAYER_EVENT_CHANNEL']),
   removeListener: new Set([
@@ -326,13 +425,19 @@ const APPROVED_IPC_METHODS = new Set(Object.keys(APPROVED_IPC_CHANNELS_BY_METHOD
 function readPreloadStringArrayConst(name: string): string[] {
   const declaration = findPreloadVariableDeclaration(name);
   assert.ok(declaration?.initializer, `expected ${name} in preload entrypoint`);
-  return readStringArrayInitializer(name, declaration.initializer);
+  return readStringArrayInitializer(preloadSourceFile, name, declaration.initializer);
 }
 
 function readChannelGuardStringArrayConst(name: string): string[] {
   const declaration = findVariableDeclaration(channelGuardSourceFile, name);
   assert.ok(declaration?.initializer, `expected ${name} in channel bridge guards`);
-  return readStringArrayInitializer(name, declaration.initializer);
+  return readStringArrayInitializer(channelGuardSourceFile, name, declaration.initializer);
+}
+
+function readDiagnosticsGuardStringArrayConst(name: string): string[] {
+  const declaration = findVariableDeclaration(diagnosticsGuardSourceFile, name);
+  assert.ok(declaration?.initializer, `expected ${name} in diagnostics bridge guards`);
+  return readStringArrayInitializer(diagnosticsGuardSourceFile, name, declaration.initializer);
 }
 
 function findPreloadVariableDeclaration(name: string): ts.VariableDeclaration | null {
@@ -360,7 +465,14 @@ function findVariableDeclaration(
   return result;
 }
 
-function findPreloadFunctionDeclaration(name: string): ts.FunctionDeclaration | null {
+function findDiagnosticsGuardFunctionDeclaration(name: string): ts.FunctionDeclaration | null {
+  return findFunctionDeclaration(diagnosticsGuardSourceFile, name);
+}
+
+function findFunctionDeclaration(
+  sourceFile: ts.SourceFile,
+  name: string,
+): ts.FunctionDeclaration | null {
   let result: ts.FunctionDeclaration | null = null;
 
   function visit(node: ts.Node): void {
@@ -374,18 +486,22 @@ function findPreloadFunctionDeclaration(name: string): ts.FunctionDeclaration | 
     ts.forEachChild(node, visit);
   }
 
-  visit(preloadSourceFile);
+  visit(sourceFile);
   return result;
 }
 
-function readStringArrayInitializer(name: string, initializer: ts.Expression): string[] {
+function readStringArrayInitializer(
+  sourceFile: ts.SourceFile,
+  name: string,
+  initializer: ts.Expression,
+): string[] {
   const expression = unwrapExpression(initializer);
   assert.ok(ts.isArrayLiteralExpression(expression), `expected ${name} to be an array literal`);
   return expression.elements.flatMap((element) => {
     if (ts.isSpreadElement(element) && ts.isIdentifier(element.expression)) {
-      const declaration = findPreloadVariableDeclaration(element.expression.text);
-      assert.ok(declaration?.initializer, `expected ${name} spread ${element.expression.text} in preload entrypoint`);
-      return readStringArrayInitializer(element.expression.text, declaration.initializer);
+      const declaration = findVariableDeclaration(sourceFile, element.expression.text);
+      assert.ok(declaration?.initializer, `expected ${name} spread ${element.expression.text} in ${sourceFile.fileName}`);
+      return readStringArrayInitializer(sourceFile, element.expression.text, declaration.initializer);
     }
     assert.ok(ts.isStringLiteral(element), `expected ${name} to contain only string literals or const spreads`);
     return [element.text];
@@ -401,7 +517,17 @@ function readStringConstInitializer(name: string, initializer: ts.Expression): s
 function readRegExpConstInitializer(name: string): { pattern: string; flags: string } {
   const declaration = findPreloadVariableDeclaration(name);
   assert.ok(declaration?.initializer, `expected ${name} in preload entrypoint`);
-  const expression = unwrapExpression(declaration.initializer);
+  return readRegExpInitializer(name, declaration.initializer);
+}
+
+function readDiagnosticsGuardRegExpConstInitializer(name: string): { pattern: string; flags: string } {
+  const declaration = findVariableDeclaration(diagnosticsGuardSourceFile, name);
+  assert.ok(declaration?.initializer, `expected ${name} in diagnostics bridge guards`);
+  return readRegExpInitializer(name, declaration.initializer);
+}
+
+function readRegExpInitializer(name: string, initializer: ts.Expression): { pattern: string; flags: string } {
+  const expression = unwrapExpression(initializer);
   assert.ok(ts.isRegularExpressionLiteral(expression), `expected ${name} to be a RegExp literal`);
   const match = /^\/(.*)\/([a-z]*)$/su.exec(expression.text);
   assert.ok(match, `expected ${name} to have a parseable RegExp literal`);
@@ -444,7 +570,7 @@ function collectPreloadChannelConstants(): Map<string, string> {
     ts.forEachChild(node, visit);
   }
 
-  visit(preloadSourceFile);
+  visit(preloadChannelsSourceFile);
   return constants;
 }
 
@@ -669,8 +795,8 @@ function assertApprovedChannelIdentifier(name: string): void {
   const bindings = collectBindingIdentifiers(name);
   assert.equal(bindings.length, 1, `${name} must have exactly one binding`);
 
-  const declaration = findPreloadVariableDeclaration(name);
-  assert.ok(declaration, `${name} must be declared in preload source`);
+  const declaration = findVariableDeclaration(preloadChannelsSourceFile, name);
+  assert.ok(declaration, `${name} must be declared in preload channel constants`);
   assert.ok(isTopLevelConstDeclaration(declaration), `${name} must be a top-level const`);
   assert.ok(declaration.initializer, `${name} must have a string initializer`);
   assert.equal(
@@ -708,6 +834,24 @@ function isInvokeChannelSetupChannelParameter(node: ts.Identifier): boolean {
       ts.isVariableDeclaration(current) &&
       ts.isIdentifier(current.name) &&
       current.name.text === 'invokeChannelSetup'
+    ) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
+function isInvokeGuideChannelParameter(node: ts.Identifier): boolean {
+  if (node.text !== 'channel') {
+    return false;
+  }
+  let current: ts.Node | undefined = node;
+  while (current !== undefined && !ts.isSourceFile(current)) {
+    if (
+      ts.isVariableDeclaration(current) &&
+      ts.isIdentifier(current.name) &&
+      current.name.text === 'invokeGuide'
     ) {
       return true;
     }
@@ -814,7 +958,7 @@ function assertNoForbiddenElectronAccess(node: ts.Node): void {
 
 test('preload guard vocabulary matches contract vocabulary', () => {
   assert.doesNotMatch(preloadSourceText, /\.\/vocabulary\.cjs/u);
-  assert.deepEqual(readRegExpConstInitializer('DIAGNOSTICS_REQUEST_ID_PATTERN'), {
+  assert.deepEqual(readDiagnosticsGuardRegExpConstInitializer('DIAGNOSTICS_REQUEST_ID_PATTERN'), {
     pattern: DIAGNOSTICS_REQUEST_ID_PATTERN_SOURCE,
     flags: 'u',
   });
@@ -822,7 +966,7 @@ test('preload guard vocabulary matches contract vocabulary', () => {
     pattern: '^[A-Za-z0-9._-]{1,120}$',
     flags: 'u',
   });
-  assert.deepEqual(readRegExpConstInitializer('DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN'), {
+  assert.deepEqual(readDiagnosticsGuardRegExpConstInitializer('DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN'), {
     pattern: DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN_SOURCE,
     flags: 'iu',
   });
@@ -844,28 +988,28 @@ test('preload guard vocabulary matches contract vocabulary', () => {
     readPreloadStringArrayConst('PLAYER_TRACK_DELIVERY_TYPE_VALUES'),
     [...PLAYER_TRACK_DELIVERY_TYPE_VALUES],
   );
-  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTIC_SURFACES'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('DIAGNOSTIC_SURFACES'), [
     ...DIAGNOSTIC_SURFACES,
   ]);
-  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTIC_CATEGORIES'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('DIAGNOSTIC_CATEGORIES'), [
     ...DIAGNOSTIC_CATEGORIES,
   ]);
-  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTIC_SEVERITIES'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('DIAGNOSTIC_SEVERITIES'), [
     ...DIAGNOSTIC_SEVERITIES,
   ]);
-  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTIC_STATUSES'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('DIAGNOSTIC_STATUSES'), [
     ...DIAGNOSTIC_STATUSES,
   ]);
-  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTICS_RENDERER_EVENT_CATEGORIES'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('DIAGNOSTICS_RENDERER_EVENT_CATEGORIES'), [
     ...DIAGNOSTICS_RENDERER_EVENT_CATEGORIES,
   ]);
-  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTICS_RENDERER_EVENT_SEVERITIES'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('DIAGNOSTICS_RENDERER_EVENT_SEVERITIES'), [
     ...DIAGNOSTICS_RENDERER_EVENT_SEVERITIES,
   ]);
-  assert.deepEqual(readPreloadStringArrayConst('DIAGNOSTICS_ERROR_CODES'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('DIAGNOSTICS_ERROR_CODES'), [
     ...DIAGNOSTICS_ERROR_CODES,
   ]);
-  assert.deepEqual(readPreloadStringArrayConst('REDACTION_SCAN_FINDING_LABELS'), [
+  assert.deepEqual(readDiagnosticsGuardStringArrayConst('REDACTION_SCAN_FINDING_LABELS'), [
     ...REDACTION_SCAN_FINDING_LABELS,
   ]);
   assert.deepEqual(readPreloadStringArrayConst('PLEX_RUNTIME_OPERATIONS'), [
@@ -930,6 +1074,103 @@ test('preload Plex bridge validates invoke results before returning them', async
     includeCollections: true,
   });
   assert.equal((result as { ok: boolean }).ok, true);
+});
+
+test('guide bridge validates presentation request ranges and result envelopes', async () => {
+  const guideBridgeExports = evaluateGuideBridgeModule();
+  const createGuideBridge = guideBridgeExports.createGuideBridge as (
+    invoke: (channel: string, request: { requestId: string; payload: unknown }) => Promise<unknown>,
+    channels: { getPresentation: string; tuneChannel: string },
+    createRequestId: (prefix: string) => string,
+  ) => { getPresentation: (input: { startTimeMs: number; durationMs: number }) => Promise<unknown> };
+  const validPresentation = {
+    channels: [
+      {
+        id: 'channel-1',
+        number: '1',
+        name: 'Channel One',
+        programs: [
+          {
+            id: 'program-1',
+            title: 'Program One',
+            subtitle: '',
+            description: 'A safe description.',
+            showTitle: '',
+            episodeLabel: '',
+            rating: 'TV-PG',
+            quality: ['HD'],
+            genres: ['Drama'],
+            startsAtMs: 1,
+            endsAtMs: 2,
+          },
+        ],
+      },
+    ],
+    nowWatching: {
+      title: 'Program One',
+      subtitle: '',
+      channelId: 'channel-1',
+      startsAtMs: 1,
+      endsAtMs: 2,
+    },
+  };
+
+  let invoked = false;
+  const bridge = createGuideBridge(
+    async (_channel, request) => {
+      invoked = true;
+      return {
+        ok: true,
+        requestId: request.requestId,
+        value: validPresentation,
+      };
+    },
+    {
+      getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
+    },
+    () => 'guide-request-1',
+  );
+
+  const invalidRange = await bridge.getPresentation({ startTimeMs: 0, durationMs: 0 });
+  assert.equal((invalidRange as { ok: boolean }).ok, false);
+  assert.equal(invoked, false);
+
+  const valid = await bridge.getPresentation({ startTimeMs: 0, durationMs: 60_000 });
+  assert.equal((valid as { ok: boolean }).ok, true);
+
+  const wrongRequestBridge = createGuideBridge(
+    async () => ({
+      ok: true,
+      requestId: 'other-request',
+      value: validPresentation,
+    }),
+    {
+      getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
+    },
+    () => 'guide-request-2',
+  );
+  const wrongRequest = await wrongRequestBridge.getPresentation({ startTimeMs: 0, durationMs: 60_000 });
+  assert.equal((wrongRequest as { ok: boolean }).ok, false);
+
+  const extraFieldBridge = createGuideBridge(
+    async (_channel, request) => ({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        ...validPresentation,
+        token: 'secret-token',
+      },
+    }),
+    {
+      getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
+    },
+    () => 'guide-request-3',
+  );
+  const extraField = await extraFieldBridge.getPresentation({ startTimeMs: 0, durationMs: 60_000 });
+  assert.equal((extraField as { ok: boolean }).ok, false);
 });
 
 test('preload Plex bridge accepts nullable metadata and search types', async () => {
@@ -1383,34 +1624,74 @@ test('preload channel setup bridge rejects malformed commit inputs without IPC',
 
 test('preload diagnostics guards validate count map keys and values', () => {
   assert.equal(
-    preloadSourceText.includes(
+    diagnosticsGuardSourceText.includes(
       'function isFiniteNonNegativeNumberMap(value: unknown, allowedKeys: readonly string[]): boolean {',
     ),
     true,
   );
   assert.match(
-    preloadSourceText,
+    diagnosticsGuardSourceText,
     /hasOnlyKeys\(value, \[\], allowedKeys\) &&\s*Object\.values\(value\)\.every\(isFiniteNonNegativeNumber\)/u,
   );
   assert.equal(
-    preloadSourceText.includes('isFiniteNonNegativeNumberMap(value.surfaceCounts, DIAGNOSTIC_SURFACES)'),
+    diagnosticsGuardSourceText.includes('isFiniteNonNegativeNumberMap(value.surfaceCounts, DIAGNOSTIC_SURFACES)'),
     true,
   );
   assert.equal(
-    preloadSourceText.includes('isFiniteNonNegativeNumberMap(value.severityCounts, DIAGNOSTIC_SEVERITIES)'),
+    diagnosticsGuardSourceText.includes('isFiniteNonNegativeNumberMap(value.severityCounts, DIAGNOSTIC_SEVERITIES)'),
     true,
   );
   assert.equal(
-    preloadSourceText.includes('isFiniteNonNegativeNumberMap(value.findingsByLabel, REDACTION_SCAN_FINDING_LABELS)'),
+    diagnosticsGuardSourceText.includes('isFiniteNonNegativeNumberMap(value.findingsByLabel, REDACTION_SCAN_FINDING_LABELS)'),
     true,
   );
 });
 
+test('preload diagnostics guards accept declared record surfaces and reject case-variant forbidden fields', () => {
+  const diagnosticsGuardExports = evaluateDiagnosticsGuardModule();
+  const isDiagnosticsRecordRendererEventResult =
+    diagnosticsGuardExports.isDiagnosticsRecordRendererEventResult as (value: unknown) => boolean;
+
+  const baseRecord = {
+    schemaVersion: 1,
+    id: 'diagnostic-record-1',
+    timestampMs: 1,
+    surface: 'main',
+    category: 'lifecycle',
+    severity: 'info',
+    status: 'observed',
+    operation: 'startup',
+    message: 'ready',
+  };
+
+  assert.equal(
+    isDiagnosticsRecordRendererEventResult({
+      ok: true,
+      requestId: 'diagnostics-record-1',
+      value: baseRecord,
+    }),
+    true,
+  );
+  assert.equal(
+    isDiagnosticsRecordRendererEventResult({
+      ok: true,
+      requestId: 'diagnostics-record-2',
+      value: {
+        ...baseRecord,
+        context: {
+          RawAuthHeaders: 'Bearer secret',
+        },
+      },
+    }),
+    false,
+  );
+});
+
 test('preload diagnostics result guard validates cancellation discriminator exactly', () => {
-  const declaration = findPreloadFunctionDeclaration('isDiagnosticsResult');
+  const declaration = findDiagnosticsGuardFunctionDeclaration('isDiagnosticsResult');
   assert.ok(declaration, 'expected preload diagnostics result guard to be declared');
 
-  const source = declaration.getText(preloadSourceFile);
+  const source = declaration.getText(diagnosticsGuardSourceFile);
   assert.match(
     source,
     /const hasValidCancellationFlag = value\.cancelled === undefined \|\| value\.cancelled === true;/u,
@@ -1470,10 +1751,19 @@ test('preload bridge guard rejects Electron value imports while allowing type im
 
 test('preload split keeps Electron values in index and built preload has no local preload requires', () => {
   assertNoElectronValueImports(channelGuardSourceFile);
+  assertNoElectronValueImports(preloadChannelsSourceFile);
   assertNoElectronValueImports(channelSetupBridgeSourceFile);
+  assertNoElectronValueImports(diagnosticsGuardSourceFile);
+  assertNoElectronValueImports(guideBridgeSourceFile);
   assert.doesNotMatch(channelGuardSourceText, /require\(['"]electron['"]\)/u);
+  assert.doesNotMatch(preloadChannelsSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(channelSetupBridgeSourceText, /require\(['"]electron['"]\)/u);
+  assert.doesNotMatch(diagnosticsGuardSourceText, /require\(['"]electron['"]\)/u);
+  assert.doesNotMatch(guideBridgeSourceText, /require\(['"]electron['"]\)/u);
+  assert.match(preloadSourceText, /from '\.\/channels\.cjs'/u);
   assert.match(preloadSourceText, /from '\.\/channelSetupBridge\.cjs'/u);
+  assert.match(preloadSourceText, /from '\.\/diagnosticsBridgeGuards\.cjs'/u);
+  assert.match(preloadSourceText, /from '\.\/guideBridge\.cjs'/u);
   assert.match(channelSetupBridgeSourceText, /from '\.\/channelBridgeGuards\.cjs'/u);
   assert.match(preloadBundleToolSourceText, /bundle:\s*true/u);
   assert.match(preloadBundleToolSourceText, /external:\s*\[\s*'electron'\s*\]/u);
@@ -1485,8 +1775,11 @@ test(
   () => {
   const preloadBundleOutputText = readFileSync(preloadBundleOutputUrl, 'utf8');
   assert.match(preloadBundleOutputText, /require\(["']electron["']\)/u);
+  assert.doesNotMatch(preloadBundleOutputText, /channels\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /channelBridgeGuards\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /channelSetupBridge\.cjs/u);
+  assert.doesNotMatch(preloadBundleOutputText, /diagnosticsBridgeGuards\.cjs/u);
+  assert.doesNotMatch(preloadBundleOutputText, /guideBridge\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /require\(["']\.(?:\/|\\)[^"']+["']\)/u);
   assert.doesNotMatch(preloadBundleOutputText, /\bfrom\s+["']\.(?:\/|\\)[^"']+["']/u);
   assert.doesNotMatch(preloadBundleOutputText, /\bimport\(["']\.(?:\/|\\)[^"']+["']\)/u);
@@ -1589,6 +1882,12 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
         return;
       }
 
+      if (isInvokeGuideChannelParameter(channelExpression)) {
+        observedCalls.push(`${methodName}:invokeGuide.channel`);
+        ts.forEachChild(node, visit);
+        return;
+      }
+
       const approvedChannels =
         APPROVED_IPC_CHANNELS_BY_METHOD[
           methodName as keyof typeof APPROVED_IPC_CHANNELS_BY_METHOD
@@ -1616,6 +1915,7 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
     'invoke:LINEUP_SHELL_GET_CAPABILITIES_CHANNEL',
     'invoke:LINEUP_WINDOW_INTENT_CHANNEL',
     'invoke:invokeChannelSetup.channel',
+    'invoke:invokeGuide.channel',
     'invoke:invokePlex.channel',
     'on:LINEUP_PLAYER_EVENT_CHANNEL',
     'on:LINEUP_SHELL_STATUS_CHANGED_CHANNEL',
@@ -1640,5 +1940,76 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
   assert.deepEqual(collectCreateChannelSetupBridgeChannelArguments().sort(), [
     'LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL',
     'LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
+  ]);
+
+  function collectCreateGuideBridgeChannelArguments(): string[] {
+    const channels: string[] = [];
+
+    function visit(node: ts.Node): void {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'createGuideBridge'
+      ) {
+        const [invokeExpression, channelsExpression] = node.arguments;
+        assert.ok(invokeExpression, 'createGuideBridge must pass an invoke function');
+        assert.ok(
+          ts.isIdentifier(invokeExpression) && invokeExpression.text === 'invokeGuide',
+          'createGuideBridge must receive the narrow guide invoke function',
+        );
+        const channelBindings = channelsExpression === undefined
+          ? undefined
+          : unwrapExpression(channelsExpression);
+        assert.ok(
+          channelBindings !== undefined && ts.isObjectLiteralExpression(channelBindings),
+          'createGuideBridge must receive literal channel bindings',
+        );
+        for (const property of channelBindings.properties) {
+          assert.ok(ts.isPropertyAssignment(property), 'guide bridge channels must be property assignments');
+          assert.ok(ts.isIdentifier(property.initializer), 'guide bridge channel values must be constants');
+          assertApprovedChannelIdentifier(property.initializer.text);
+          channels.push(property.initializer.text);
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+
+    visit(preloadSourceFile);
+    return channels;
+  }
+
+  assert.deepEqual(collectCreateGuideBridgeChannelArguments().sort(), [
+    'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
+    'LINEUP_PLAYER_TUNE_CHANNEL',
+  ]);
+
+  function collectCreatePlayerTuneBridgeChannelArguments(): string[] {
+    const channels: string[] = [];
+
+    function visit(node: ts.Node): void {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'createPlayerTuneBridge'
+      ) {
+        const [invokeExpression, channelExpression] = node.arguments;
+        assert.ok(invokeExpression, 'createPlayerTuneBridge must pass an invoke function');
+        assert.ok(
+          ts.isIdentifier(invokeExpression) && invokeExpression.text === 'invokeGuide',
+          'createPlayerTuneBridge must receive the narrow guide invoke function',
+        );
+        assert.ok(ts.isIdentifier(channelExpression), 'createPlayerTuneBridge channel must be a constant');
+        assertApprovedChannelIdentifier(channelExpression.text);
+        channels.push(channelExpression.text);
+      }
+      ts.forEachChild(node, visit);
+    }
+
+    visit(preloadSourceFile);
+    return channels;
+  }
+
+  assert.deepEqual(collectCreatePlayerTuneBridgeChannelArguments().sort(), [
+    'LINEUP_PLAYER_TUNE_CHANNEL',
   ]);
 });

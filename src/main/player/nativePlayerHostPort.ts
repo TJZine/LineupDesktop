@@ -90,8 +90,13 @@ export type NativePlayerHostCommandResult =
       error: NativePlayerHostFailure;
     };
 
+import type { PrivilegedPlaybackDispatchContext } from './privilegedPlaybackDispatchContext.js';
+
 export interface NativePlayerHostPort {
-  execute(command: PlayerCommand): Promise<NativePlayerHostCommandResult>;
+  execute(
+    command: PlayerCommand,
+    context?: PrivilegedPlaybackDispatchContext | null,
+  ): Promise<NativePlayerHostCommandResult>;
   cleanup(requestId: PlayerRequestId | null): Promise<void>;
   onLifecycleFailure?(
     listener: (failure: NativePlayerHostLifecycleFailure) => void,

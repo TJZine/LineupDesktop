@@ -354,7 +354,8 @@ bounded change.
 
 ### RD-00 Repo Genesis And Control Plane
 
-Status: complete.
+Status: code complete and reviewed; product-complete parity classification is
+deferred until redaction-safe Windows runtime proof in RD-27.
 
 Depends on:
 
@@ -815,7 +816,8 @@ Observed closeout:
 
 ### RD-11 Scheduler, Channel, And Content Domain Import
 
-Status: complete.
+Status: code complete and reviewed; product-complete parity classification is
+deferred until redaction-safe Windows runtime proof in RD-27.
 
 Depends on:
 
@@ -1564,7 +1566,7 @@ Stop and replan if:
 
 ### RD-23 Live Channel Setup And Runtime Persistence
 
-Status: not started.
+Status: complete.
 
 Depends on:
 
@@ -1619,7 +1621,7 @@ Stop and replan if:
 
 ### RD-24 Scheduler-Backed Guide And MVP Channel Runtime
 
-Status: not started.
+Status: complete.
 
 Depends on:
 
@@ -1671,7 +1673,7 @@ Stop and replan if:
 
 ### RD-25 Production Native Playback MVP
 
-Status: not started.
+Status: in progress / code implemented / manual proof pending.
 
 Depends on:
 

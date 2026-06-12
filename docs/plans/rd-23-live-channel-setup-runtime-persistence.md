@@ -1,6 +1,6 @@
 # RD-23 Live Channel Setup And Runtime Persistence
 
-**Plan Status:** active
+**Plan Status:** completed
 **Task family:** feature/design
 **Tier:** Tier 3
 

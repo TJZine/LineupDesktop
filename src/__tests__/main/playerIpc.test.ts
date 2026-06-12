@@ -11,8 +11,10 @@ import {
   PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
   type PlayerCommand,
   type PlayerEvent,
+  type PlayerLoadCommandPayload,
 } from '../../contracts/player.js';
 import { registerPlayerIpcHandlers } from '../../main/player/playerIpc.js';
+import type { PrivilegedPlaybackDispatchContext } from '../../main/player/privilegedPlaybackDispatchContext.js';
 import { redactMainProcessError } from '../../main/redactedDiagnostics.js';
 import { DiagnosticEventStore } from '../../main/diagnostics/diagnosticEventStore.js';
 import type {
@@ -120,6 +122,45 @@ function loadEnvelope(requestId = 'player-load-1'): unknown {
   };
 }
 
+function runtimeLoadCommand(requestId: string): PlayerCommand {
+  const envelope = loadEnvelope(requestId) as { payload: PlayerLoadCommandPayload };
+  return {
+    command: 'load',
+    requestId,
+    payload: envelope.payload,
+  };
+}
+
+function privilegedPlaybackContext(requestId: string): PrivilegedPlaybackDispatchContext {
+  return {
+    privatePlayback: {
+      requestId,
+      decisionKind: 'direct-play',
+      playbackUrl: 'https://plex.example.invalid/library/parts/1/file.mp4',
+      credentialHeader: { name: 'X-Plex-Token', value: 'private-token' },
+      selectedConnection: {
+        protocol: 'https',
+        address: 'plex.example.invalid',
+        port: 443,
+        local: true,
+        relay: false,
+      },
+      media: {
+        id: 'media-1',
+        title: 'Episode 1',
+      },
+      setup: {
+        playbackMode: 'direct-play',
+        mediaPath: '/library/metadata/1',
+        variantId: 'variant-1',
+        partPath: '/library/parts/1/file.mp4',
+        selectedTrackIds: { video: null, audio: null, subtitle: null },
+        selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+      },
+    },
+  };
+}
+
 function helperFailure(): NativePlayerHostFailure {
   return {
     code: 'PLAYER_HELPER_EXITED',
@@ -170,7 +211,7 @@ test('player IPC registers closed handlers and tears them down', async () => {
     LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
   ]);
 
-  await teardown();
+  await teardown.teardown();
 
   assert.deepEqual([...ipcMain.handlers.keys()], []);
 });
@@ -201,7 +242,7 @@ test('player IPC reports cleanup failures and still removes handlers', async () 
     LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
   ]);
 
-  await teardown();
+  await teardown.teardown();
 
   assert.deepEqual([...ipcMain.handlers.keys()], []);
   assert.equal(diagnostics.length, 1);
@@ -554,16 +595,11 @@ test('player IPC enforces main authorization before adapter access', async () =>
 test('production player IPC returns unsupported failures and does not activate fake playback', async () => {
   const ipcMain = new FakeIpcMain();
   const events: PlayerEvent[] = [];
-  let nativeHostCreated = false;
   registerPlayerIpcHandlers({
     shellMode: 'production',
     isAuthorizedEvent,
     sendPlayerEvent: (event) => events.push(event),
     createRequestId,
-    nativeHostFactory: () => {
-      nativeHostCreated = true;
-      return new ConfigurableNativeHost();
-    },
     ipcMain,
   });
 
@@ -584,7 +620,6 @@ test('production player IPC returns unsupported failures and does not activate f
   );
 
   assert.equal((commandResult as { ok: boolean }).ok, false);
-  assert.equal(nativeHostCreated, false);
   assert.equal(
     (commandResult as { error: { category: string; code: string } }).error.category,
     'unsupported-capability',
@@ -602,6 +637,54 @@ test('production player IPC returns unsupported failures and does not activate f
   assertNoForbiddenKeys(snapshotResult);
   assertNoForbiddenKeys(cleanupResult);
   assertNoForbiddenKeys(events);
+});
+
+test('production player IPC with nativeHostFactory instantiates adapter but rejects renderer loads', async () => {
+  const ipcMain = new FakeIpcMain();
+  const events: PlayerEvent[] = [];
+  let nativeHostCreated = false;
+  const host = new ConfigurableNativeHost();
+  const teardown = registerPlayerIpcHandlers({
+    shellMode: 'production',
+    isAuthorizedEvent,
+    sendPlayerEvent: (event) => events.push(event),
+    createRequestId,
+    nativeHostFactory: () => {
+      nativeHostCreated = true;
+      return host;
+    },
+    ipcMain,
+  });
+
+  const commandResult = await ipcMain.invoke(
+    LINEUP_PLAYER_COMMAND_CHANNEL,
+    authorizedEvent(),
+    loadEnvelope('player-prod-2'),
+  );
+
+  assert.equal(nativeHostCreated, true);
+  assert.equal((commandResult as { ok: boolean }).ok, false);
+  assert.equal(
+    (commandResult as { error: { category: string; code: string } }).error.code,
+    'PLAYER_UNSUPPORTED_CAPABILITY',
+  );
+
+  const loadCommand = runtimeLoadCommand('player-prod-runtime-2');
+  const privilegedContext = privilegedPlaybackContext(loadCommand.requestId);
+  const runtimeResult = await teardown.adapter?.dispatchRuntimeCommand(loadCommand, privilegedContext);
+  assert.equal(runtimeResult?.accepted, true);
+
+  const rendererResult = await teardown.adapter?.dispatchRendererIntent(loadEnvelope('player-prod-renderer-2'));
+  assert.equal(rendererResult?.accepted, false);
+  assert.equal(
+    rendererResult?.events.find((event) => event.event === 'error')?.error.code,
+    'PLAYER_UNSUPPORTED_CAPABILITY',
+  );
+
+  assertNoForbiddenKeys(commandResult);
+  assertNoForbiddenKeys(runtimeResult);
+  assertNoForbiddenKeys(rendererResult);
+  await teardown.teardown();
 });
 
 test('player IPC cleanup returns a safe failure envelope when host cleanup fails', async () => {

@@ -17,6 +17,10 @@ import type {
   PlayerSnapshot,
 } from './player.js';
 import type {
+  EpgPresentationSource,
+  GuideIpcResult,
+} from './guide.js';
+import type {
   PlexCancelPinValue,
   PlexGetHomeUsersValue,
   PlexGetMetadataValue,
@@ -102,6 +106,7 @@ export interface LineupDesktopPreloadApi {
     ) => Promise<PlayerIpcResult<PlayerDispatchResult>>;
     getSnapshot: () => Promise<PlayerIpcResult<PlayerSnapshot>>;
     cleanup: () => Promise<PlayerIpcResult<PlayerSnapshot>>;
+    tuneChannel: (input: { channelId: string }) => Promise<GuideIpcResult<never>>;
     onEvent: (listener: (event: PlayerEvent) => void) => () => void;
   };
   diagnostics: {
@@ -152,6 +157,12 @@ export interface LineupDesktopPreloadApi {
       sectionIds: readonly string[];
       confirmReplace?: boolean;
     }) => Promise<ChannelSetupIpcResult<ChannelSetupSummary>>;
+  };
+  guide: {
+    getPresentation: (input: {
+      startTimeMs: number;
+      durationMs: number;
+    }) => Promise<GuideIpcResult<EpgPresentationSource>>;
   };
 }
 

@@ -6,9 +6,17 @@ import type { PlexStreamResolverInput, PlexStreamResolverResult } from '../plex/
 import { PlexPlaybackBridge } from './plexPlaybackBridge.js';
 import { PlexPlaybackRuntime, type PlexPlaybackRuntimeClockPort, type PlexPlaybackRuntimePlayerPort, type PlexPlaybackRuntimePmsPort } from './plexPlaybackRuntime.js';
 import type { DesktopStreamCapabilityProfile } from './streamPolicy/types.js';
+import type { PrivilegedPlaybackDispatchContext } from './privilegedPlaybackDispatchContext.js';
 
 type DesktopPlayerAdapterRuntimePort = {
   dispatchRendererIntent(envelope: PlayerRendererIntentEnvelope): Promise<{
+    accepted: boolean;
+    events: readonly PlayerEvent[];
+  }>;
+  dispatchRuntimeCommand(
+    command: PlayerCommand,
+    context?: PrivilegedPlaybackDispatchContext | null,
+  ): Promise<{
     accepted: boolean;
     events: readonly PlayerEvent[];
   }>;
@@ -72,8 +80,8 @@ export function createDesktopPlayerAdapterRuntimePort(
   adapter: DesktopPlayerAdapterRuntimePort,
 ): PlexPlaybackRuntimePlayerPort {
   return {
-    async dispatch(command) {
-      const result = await adapter.dispatchRendererIntent(toRendererIntentEnvelope(command));
+    async dispatch(command, context) {
+      const result = await adapter.dispatchRuntimeCommand(command, context);
       return { ok: result.accepted, events: result.events };
     },
     async cleanup(_requestId) {
@@ -85,62 +93,4 @@ export function createDesktopPlayerAdapterRuntimePort(
   };
 }
 
-function toRendererIntentEnvelope(command: PlayerCommand): PlayerRendererIntentEnvelope {
-  switch (command.command) {
-    case 'load':
-      return {
-        intent: 'player.load',
-        requestId: command.requestId,
-        payload: command.payload,
-      };
-    case 'play':
-      return emptyPayloadIntent('player.play', command.requestId);
-    case 'pause':
-      return emptyPayloadIntent('player.pause', command.requestId);
-    case 'stop':
-      return emptyPayloadIntent('player.stop', command.requestId);
-    case 'seek.absolute':
-      return {
-        intent: 'player.seekAbsolute',
-        requestId: command.requestId,
-        payload: command.payload,
-      };
-    case 'seek.relative':
-      return {
-        intent: 'player.seekRelative',
-        requestId: command.requestId,
-        payload: command.payload,
-      };
-    case 'volume.set':
-      return {
-        intent: 'player.setVolume',
-        requestId: command.requestId,
-        payload: command.payload,
-      };
-    case 'mute.set':
-      return {
-        intent: 'player.setMute',
-        requestId: command.requestId,
-        payload: command.payload,
-      };
-    case 'track.audio.select':
-      return {
-        intent: 'player.selectAudio',
-        requestId: command.requestId,
-        payload: command.payload,
-      };
-    case 'track.subtitle.select':
-      return {
-        intent: 'player.selectSubtitle',
-        requestId: command.requestId,
-        payload: command.payload,
-      };
-  }
-}
 
-function emptyPayloadIntent(
-  intent: PlayerRendererIntentEnvelope['intent'],
-  requestId: PlayerRequestId,
-): PlayerRendererIntentEnvelope {
-  return { intent, requestId, payload: {} };
-}

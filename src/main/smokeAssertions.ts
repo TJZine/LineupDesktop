@@ -3,6 +3,7 @@ import type { BrowserWindow } from 'electron';
 import { LINEUP_SHELL_URL } from '../contracts/shell.js';
 import { LINEUP_CSP } from './protocol.js';
 import { assertFullscreenContinuity } from './smokeFullscreenAssertions.js';
+import { GUIDE_SMOKE_ASSERTIONS_SOURCE } from './smokeGuideAssertions.js';
 
 export interface ShellContainmentCounters {
   navigationDenied: number;
@@ -121,6 +122,26 @@ export async function runSmokeAssertions(
       if (!bridge?.player?.getSnapshot) failures.push('player snapshot api');
       if (!bridge?.player?.cleanup) failures.push('player cleanup api');
       if (!bridge?.player?.onEvent) failures.push('player event api');
+      const assertBridgeMethods = (namespace, methods) => {
+        const api = bridge?.[namespace];
+        if (!api || typeof api !== 'object') {
+          failures.push(namespace + ' api');
+          return;
+        }
+        for (const method of methods) {
+          if (typeof api[method] !== 'function') {
+            failures.push(namespace + ' api method ' + method);
+          }
+        }
+      };
+      assertBridgeMethods('diagnostics', ['recordRendererEvent', 'getSummary', 'exportSupportBundle']);
+      assertBridgeMethods('plex', [
+        'getSnapshot', 'requestPin', 'pollPin', 'cancelPin', 'getHomeUsers', 'switchHomeUser',
+        'restoreSelectedServer', 'refreshServers', 'selectServer', 'listLibrarySections',
+        'listLibraryItems', 'searchLibrary', 'getMetadata',
+      ]);
+      assertBridgeMethods('channelSetup', ['getStatus', 'commit']);
+      assertBridgeMethods('guide', ['getPresentation']);
       if (bridge && typeof bridge === 'object' && 'ipcRenderer' in bridge) failures.push('raw ipc bridge');
       if (bridge && typeof bridge === 'object' && 'invoke' in bridge) failures.push('raw invoke bridge');
       if (failures.length > 0) return { failures };
@@ -213,48 +234,7 @@ export async function runSmokeAssertions(
           );
         }
       };
-      const rectsOverlap = (left, right) => {
-        const leftRect = left.getBoundingClientRect();
-        const rightRect = right.getBoundingClientRect();
-        return (
-          leftRect.left < rightRect.right &&
-          leftRect.right > rightRect.left &&
-          leftRect.top < rightRect.bottom &&
-          leftRect.bottom > rightRect.top
-        );
-      };
-      const guideButton = document.querySelector('[data-route-button="guide"]');
-      if (!(guideButton instanceof HTMLButtonElement)) {
-        failures.push('guide route button');
-      } else {
-        guideButton.click();
-      }
-      const guideScreen = document.querySelector('[data-screen="guide"]');
-      const guideGrid = document.querySelector('[data-epg-grid]');
-      const guideActions = Array.from(document.querySelectorAll('[data-epg-action]'));
-      const overlayStack = document.querySelector('[data-overlay-stack]');
-      const offRouteOverlayAction = document.querySelector('[data-overlay-action="openMiniGuide"]');
-      const detailChannel = document.querySelector('[data-epg-detail-channel]')?.textContent ?? '';
-      const detailTitle = document.querySelector('[data-epg-detail-title]')?.textContent ?? '';
-      const detailTime = document.querySelector('[data-epg-detail-time]')?.textContent ?? '';
-      const guideGridText = guideGrid?.textContent ?? '';
-      if (document.documentElement.dataset.activeRoute !== 'guide') failures.push('guide route activation');
-      if (!(guideScreen instanceof HTMLElement) || guideScreen.hidden) failures.push('guide screen visible');
-      if (!(overlayStack instanceof HTMLElement) || !overlayStack.hidden) failures.push('guide overlay stack hidden');
-      if (overlayStack instanceof HTMLElement && overlayStack.getAttribute('aria-hidden') !== 'true') {
-        failures.push('guide overlay stack aria hidden');
-      }
-      if (!(offRouteOverlayAction instanceof HTMLButtonElement) || !offRouteOverlayAction.disabled) {
-        failures.push('off-route overlay action disabled');
-      }
-      if (document.documentElement.dataset.activeOverlay !== '') failures.push('off-route active overlay');
-      if (!detailChannel.includes('101 Liminal One')) failures.push('guide detail channel ' + detailChannel);
-      if (detailTitle !== 'The Midnight Archive') failures.push('guide detail title ' + detailTitle);
-      if (detailTime !== 'Signal Lost - 8:30 PM - 9:30 PM') failures.push('guide detail time ' + detailTime);
-      if (!guideGridText.includes('8:00 PM') || !guideGridText.includes('The Midnight Archive')) {
-        failures.push('guide grid fake data');
-      }
-      if (guideActions.length !== 6) failures.push('guide actions ' + guideActions.length);
+      ${GUIDE_SMOKE_ASSERTIONS_SOURCE}
 
       const settingsButton = document.querySelector('[data-route-button="settings"]');
       if (!(settingsButton instanceof HTMLButtonElement)) {
@@ -282,29 +262,55 @@ export async function runSmokeAssertions(
       }
       if (!(setupScreen instanceof HTMLElement) || setupScreen.hidden) failures.push('channel setup screen visible');
       const plexRuntimePanel = document.querySelector('[data-plex-runtime-panel]');
+      const channelSetupCommit = document.querySelector('.channel-setup-commit');
+      const plexActionButtons = Array.from(document.querySelectorAll('[data-plex-action]'));
+      const channelCommitButtons = Array.from(document.querySelectorAll('[data-channel-commit-action]'));
+      const currentSetupTargets = {
+        hasPlexRuntimePanel: plexRuntimePanel instanceof HTMLElement,
+        hasChannelSetupCommit: channelSetupCommit instanceof HTMLElement,
+        plexActionCount: plexActionButtons.length,
+        channelCommitActionCount: channelCommitButtons.length,
+        hasChannelReviewSteps: document.querySelector('[data-channel-review-steps]') instanceof HTMLElement,
+        hasChannelReviewList: document.querySelector('[data-channel-review-list]') instanceof HTMLElement,
+        hasChannelReviewValidation: document.querySelector('[data-channel-review-validation]') instanceof HTMLElement,
+      };
       const setupText = setupScreen instanceof HTMLElement ? setupScreen.textContent ?? '' : '';
       const setupOverflow = setupScreen instanceof HTMLElement ? getComputedStyle(setupScreen).overflowY : '';
-      const oldSetupControls = document.querySelector(
-        '[data-setup-action], [data-setup-steps], [data-channel-draft-list], [data-setup-validation]',
+      const obsoleteSetupSelectors = Array.from(
+        setupScreen instanceof HTMLElement
+          ? setupScreen.querySelectorAll('[data-setup-steps], [data-channel-draft-list], [data-setup-validation]')
+          : [],
+        (element) => element instanceof HTMLElement ? {
+          tag: element.tagName.toLowerCase(),
+          dataset: { ...element.dataset },
+          text: (element.textContent ?? '').replace(/\\s+/g, ' ').trim().slice(0, 120),
+        } : null,
       );
       if (
-        !(plexRuntimePanel instanceof HTMLElement) ||
+        !currentSetupTargets.hasPlexRuntimePanel ||
+        !currentSetupTargets.hasChannelSetupCommit ||
+        currentSetupTargets.plexActionCount < 8 ||
+        currentSetupTargets.channelCommitActionCount !== 3 ||
+        !currentSetupTargets.hasChannelReviewSteps ||
+        !currentSetupTargets.hasChannelReviewList ||
+        !currentSetupTargets.hasChannelReviewValidation ||
         !setupText.includes('Plex onboarding') ||
         !setupText.includes('Get link code') ||
         !setupText.includes('Open libraries') ||
+        !setupText.includes('Build channels') ||
         setupOverflow !== 'auto' ||
-        oldSetupControls !== null
+        obsoleteSetupSelectors.length > 0
       ) {
         failures.push(
           'channel setup plex flow content ' +
             JSON.stringify({
-              hasPlexRuntimePanel: plexRuntimePanel instanceof HTMLElement,
+              ...currentSetupTargets,
               hasPlexOnboarding: setupText.includes('Plex onboarding'),
               hasLinkCode: setupText.includes('Get link code'),
               hasOpenLibraries: setupText.includes('Open libraries'),
+              hasBuildChannels: setupText.includes('Build channels'),
               setupOverflow,
-              hasOldSetupControls: oldSetupControls !== null,
-              hasSetupValidation: document.querySelector('[data-setup-validation]') !== null,
+              obsoleteSetupSelectors,
             }),
         );
       }
@@ -352,25 +358,19 @@ export async function runSmokeAssertions(
           failures.push('rd15 z-order ' + JSON.stringify({ presentationZ, screenZ, overlayZ }));
         }
       }
-      if (nowPlayingTitle !== 'The Midnight Archive') failures.push('now playing title ' + nowPlayingTitle);
+      if (nowPlayingTitle.trim().length === 0 || /undefined|null|NaN/i.test(nowPlayingTitle)) {
+        failures.push('now playing title ' + nowPlayingTitle);
+      }
       if (!(miniGuideOverlay instanceof HTMLElement) || miniGuideOverlay.hidden) failures.push('mini guide visible');
       assertTopElementAtCenter(miniGuideOverlay, 'mini guide z-order');
-      if (!miniGuideText.includes('101') || !miniGuideText.includes('The Midnight Archive')) {
-        failures.push('mini guide fake data');
+      if (miniGuideText.trim().length < 12 || /undefined|null|NaN/i.test(miniGuideText)) {
+        failures.push('mini guide data ' + miniGuideText);
       }
       if (!(channelNumberOverlay instanceof HTMLElement) || channelNumberOverlay.hidden) {
         failures.push('channel number visible');
       }
       assertTopElementAtCenter(channelNumberOverlay, 'channel number z-order');
       if (channelNumberValue !== '4--') failures.push('channel number value ' + channelNumberValue);
-      const nowPlayingOverlay = document.querySelector('[data-overlay="nowPlaying"]');
-      if (
-        osdOverlay instanceof HTMLElement &&
-        nowPlayingOverlay instanceof HTMLElement &&
-        rectsOverlap(osdOverlay, nowPlayingOverlay)
-      ) {
-        failures.push('OSD now-playing incoherent overlap');
-      }
 
       const closeOverlayButton = document.querySelector('[data-overlay-action="closeTopOverlay"]');
       const playerOsdButton = document.querySelector('[data-focus-id="player-osd"]');

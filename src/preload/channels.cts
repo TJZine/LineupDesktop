@@ -1,0 +1,30 @@
+export const LINEUP_SHELL_GET_CAPABILITIES_CHANNEL = 'lineup:shell:getCapabilities';
+export const LINEUP_WINDOW_INTENT_CHANNEL = 'lineup:window:intent';
+export const LINEUP_SHELL_STATUS_CHANGED_CHANNEL = 'lineup:shell:statusChanged';
+export const LINEUP_PLAYER_COMMAND_CHANNEL = 'lineup:player:command';
+export const LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL = 'lineup:player:getSnapshot';
+export const LINEUP_PLAYER_CLEANUP_CHANNEL = 'lineup:player:cleanup';
+export const LINEUP_PLAYER_EVENT_CHANNEL = 'lineup:player:event';
+export const LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL =
+  'lineup:diagnostics:recordRendererEvent';
+export const LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL =
+  'lineup:diagnostics:getSummary';
+export const LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL =
+  'lineup:diagnostics:exportSupportBundle';
+export const LINEUP_PLEX_GET_SNAPSHOT_CHANNEL = 'lineup:plex:getSnapshot';
+export const LINEUP_PLEX_REQUEST_PIN_CHANNEL = 'lineup:plex:requestPin';
+export const LINEUP_PLEX_POLL_PIN_CHANNEL = 'lineup:plex:pollPin';
+export const LINEUP_PLEX_CANCEL_PIN_CHANNEL = 'lineup:plex:cancelPin';
+export const LINEUP_PLEX_GET_HOME_USERS_CHANNEL = 'lineup:plex:getHomeUsers';
+export const LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL = 'lineup:plex:switchHomeUser';
+export const LINEUP_PLEX_RESTORE_SELECTED_SERVER_CHANNEL = 'lineup:plex:restoreSelectedServer';
+export const LINEUP_PLEX_REFRESH_SERVERS_CHANNEL = 'lineup:plex:refreshServers';
+export const LINEUP_PLEX_SELECT_SERVER_CHANNEL = 'lineup:plex:selectServer';
+export const LINEUP_PLEX_LIST_LIBRARY_SECTIONS_CHANNEL = 'lineup:plex:listLibrarySections';
+export const LINEUP_PLEX_LIST_LIBRARY_ITEMS_CHANNEL = 'lineup:plex:listLibraryItems';
+export const LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL = 'lineup:plex:searchLibrary';
+export const LINEUP_PLEX_GET_METADATA_CHANNEL = 'lineup:plex:getMetadata';
+export const LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL = 'lineup:channelSetup:getStatus';
+export const LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL = 'lineup:channelSetup:commit';
+export const LINEUP_GUIDE_GET_PRESENTATION_CHANNEL = 'lineup:guide:getPresentation';
+export const LINEUP_PLAYER_TUNE_CHANNEL = 'lineup:player:tuneChannel';
