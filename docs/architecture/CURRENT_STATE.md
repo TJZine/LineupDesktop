@@ -315,6 +315,17 @@ behavior, or public readiness claims.
 
 RD-23 is complete. It implements live channel setup and runtime persistence, turning the live Plex library browsing into persisted Desktop channels. It integrates the channel domain, main-owned channel persistence store, and narrow preload channel setup bridge. The renderer setup route is adapted to support live selection, strategy config (shuffling, block schedules), replace/confirm replace logic, and settings state recovery. Preload validation and selection hardening prevent stale data access.
 RD-24 is complete. It integrates scheduler-backed guide data and the channel runtime. Persisted channel configurations feed the schedule DayRollover and EPG calculations. Player route, overlays, now-playing, mini-guide, and channel badge are wired to real scheduler state. The app handles manual channel switches, scheduling ticks, and program transitions cleanly.
+Custom Channels Core is complete as a 2026-06-12 feature package on top of
+RD-23/RD-24. It adds renderer-safe custom-channel contracts, main-owned custom
+channel mutation runtime, safe Plex media picker/artwork projection, named
+custom-channel IPC/preload methods, a desktop authoring workspace on the
+channel setup route, and guide/runtime refresh after custom-channel save,
+delete, hide/unhide, and reorder. Renderer authoring state stays unprivileged:
+it receives safe summaries/cards only, invalidates stale media on Plex source
+changes, resets selected cart state when source custody changes, and does not
+fabricate direct edit drafts from saved-channel summaries. Direct in-place edit
+of persisted channels remains deferred until a reviewed main/preload edit-draft
+API returns full content with `expectedRevision`.
 RD-25 code implementation is complete and reviewed; Windows/manual product proof
 remains pending and is deferred to RD-27. The production native playback MVP
 replaces the fake playback bootstrap with a production-shaped, main/helper-owned

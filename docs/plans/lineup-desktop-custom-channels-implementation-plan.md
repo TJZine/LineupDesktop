@@ -1,6 +1,6 @@
 # Lineup Desktop User-Created Custom Channels Implementation Plan
 
-**Plan Status:** active
+**Plan Status:** complete
 
 **Task family:** feature/design
 

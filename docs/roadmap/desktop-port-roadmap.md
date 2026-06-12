@@ -210,6 +210,13 @@ durable completion summary.
   categories, and clear/back/cancel/text-entry/scroll behavior. No raw private
   Plex evidence is tracked, and RD-23+
   channel/scheduler/playback/package scope remains unimplemented.
+- [x] Custom Channels Core completed on 2026-06-12 through the reviewed custom
+  channels implementation plan. The feature adds renderer-safe authoring
+  contracts, main-owned custom-channel persistence/mutation runtime, safe media
+  picker/artwork projection, named IPC/preload bridge methods, a desktop
+  authoring workspace, stale source invalidation, and guide/runtime refresh
+  after save/delete/hide/reorder. Direct persisted-channel edit is intentionally
+  deferred behind a future reviewed edit-draft API with `expectedRevision`.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
