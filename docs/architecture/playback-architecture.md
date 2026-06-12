@@ -273,3 +273,16 @@ RD-25 code implementation is complete, manual proof pending. The production nati
 
 Manual proof of running native playback on Windows is deferred to the later MVP QA pass, leaving production native playback proof pending.
 
+## RD-26 Runtime Media Options And Playback Quality
+
+RD-26 code implementation is complete, manual proof pending. It implements runtime media options and playback quality over the production native playback path.
+
+### Seam Propagation and Setup Flow
+
+1. **Track and Quality State Management**: The C# native helper (`Lineup.NativePlayerHost`) is extended to observe libmpv properties (`aid`, `sid`, `vid`, `video-params`, `video-codec`, `audio-codec`) and emit public track and quality summaries over NDJSON.
+2. **Main Selection Validation**: The main process (`DesktopPlayerAdapter` and `playerTrackSelectionValidation.ts`) gates renderer track selection requests against the player snapshot, validating that the requested track is available and active before delegating to the native helper.
+3. **Renderer Option Views**: The renderer overlay views query the active player snapshot's track and quality summaries to dynamically render track buttons and playback quality status, replacing the old mock controls.
+4. **Renderer Action Dispatch**: Selecting a track row or toggling volume/mute in the renderer overlays constructs and dispatches corresponding player intents (`player.selectAudio`, `player.selectSubtitle`, `player.setVolume`, `player.setMute`) to the player bridge.
+
+Manual proof on Windows is deferred to the later MVP QA pass, leaving production native playback and media options proof pending.
+

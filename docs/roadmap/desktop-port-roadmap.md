@@ -1725,7 +1725,7 @@ Stop and replan if:
 
 ### RD-26 Runtime Media Options And Playback Quality
 
-Status: not started.
+Status: complete (Windows proof deferred to RD-27).
 
 Depends on:
 
