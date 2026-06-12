@@ -20,13 +20,12 @@ namespace Lineup.NativePlayerHost
             string? audioCodec = MpvCommandExecutor.GetPropertyString(_mpv, "audio-codec");
 
             string sourceDynamicRange = GetSourceDynamicRange();
-            string outputDynamicRange = GetOutputDynamicRange(sourceDynamicRange);
 
             var summary = new Dictionary<string, object?>
             {
                 ["mode"] = _playbackMode,
                 ["sourceDynamicRange"] = sourceDynamicRange,
-                ["outputDynamicRangeStatus"] = outputDynamicRange
+                ["outputDynamicRangeStatus"] = "unproven"
             };
 
             if (!string.IsNullOrEmpty(videoCodec))
@@ -51,19 +50,6 @@ namespace Lineup.NativePlayerHost
                 return "hdr10";
             }
             if (!string.IsNullOrEmpty(primaries))
-            {
-                return "sdr";
-            }
-            return "unknown";
-        }
-
-        private string GetOutputDynamicRange(string sourceRange)
-        {
-            if (sourceRange == "hdr10" || sourceRange == "dolby-vision")
-            {
-                return "tone-mapped";
-            }
-            if (sourceRange == "sdr")
             {
                 return "sdr";
             }

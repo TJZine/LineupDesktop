@@ -25,6 +25,7 @@ import {
 } from './playerAdapterErrors.js';
 import { PlayerAdapterRequestCustody } from './playerAdapterRequestCustody.js';
 import {
+  applyTrackSelectionSnapshot,
   applyTrackSnapshot,
   cloneSnapshot,
   createInitialSnapshot,
@@ -61,12 +62,8 @@ export class DesktopPlayerAdapter {
     this.#onEvents = options.onEvents;
     this.#diagnosticEventStore = options.diagnosticEventStore;
     this.#rejectRendererLoad = options.rejectRendererLoad ?? false;
-    host.onLifecycleFailure?.((failure) => {
-      const events = this.handleHostLifecycleFailure(failure);
-      if (events.length > 0) {
-        this.#onEvents?.(events);
-      }
-    });
+    host.onLifecycleFailure?.((failure) => { const events = this.handleHostLifecycleFailure(failure); this.#onEvents?.(events); });
+    host.onEvent?.((event) => { const events = this.handleHostEvent(event); this.#onEvents?.(events); });
   }
   getSnapshot(): PlayerSnapshot {
     return cloneSnapshot(this.#snapshot);
@@ -117,6 +114,7 @@ export class DesktopPlayerAdapter {
         for (const hostEvent of hostResult.events ?? []) {
           events.push(...this.handleHostEvent(hostEvent));
         }
+        events.push(...this.#applySuccessfulCommandMutation(command));
         events.push({
           event: 'command.settled',
           requestId: command.requestId,
@@ -210,6 +208,7 @@ export class DesktopPlayerAdapter {
         for (const hostEvent of hostResult.events ?? []) {
           events.push(...this.handleHostEvent(hostEvent));
         }
+        events.push(...this.#applySuccessfulCommandMutation(command));
         events.push({
           event: 'command.settled',
           requestId: command.requestId,
@@ -344,13 +343,7 @@ export class DesktopPlayerAdapter {
           this.#stateChanged(),
         ];
       case 'track.selection.changed':
-        this.#snapshot = {
-          ...this.#snapshot,
-          requestId: hostEvent.requestId,
-          selectedAudioTrackId: hostEvent.audioTrackId,
-          selectedSubtitleTrackId: hostEvent.subtitleTrackId,
-          selectedVideoTrackId: hostEvent.videoTrackId,
-        };
+        this.#snapshot = applyTrackSelectionSnapshot(this.#snapshot, hostEvent.requestId, hostEvent);
         return [
           {
             event: 'track.selection.changed',
@@ -490,23 +483,25 @@ export class DesktopPlayerAdapter {
     return this.#stateChanged();
   }
   #stateChanged(): PlayerEvent {
-    return {
-      event: 'state.changed',
-      requestId: this.#snapshot.requestId,
-      snapshot: cloneSnapshot(this.#snapshot),
-    };
+    return { event: 'state.changed', requestId: this.#snapshot.requestId, snapshot: cloneSnapshot(this.#snapshot) };
+  }
+  #applySuccessfulCommandMutation(command: PlayerCommand): readonly PlayerEvent[] {
+    if (command.command === 'volume.set') {
+      this.#snapshot = { ...this.#snapshot, volume: command.payload.volume };
+      return [this.#stateChanged()];
+    }
+    if (command.command === 'mute.set') {
+      this.#snapshot = { ...this.#snapshot, muted: command.payload.muted };
+      return [this.#stateChanged()];
+    }
+    return [];
   }
   #result(
     accepted: boolean,
     command: PlayerCommand | null,
     events: readonly PlayerEvent[],
   ): DesktopPlayerAdapterDispatchResult {
-    return {
-      accepted,
-      command,
-      events,
-      snapshot: cloneSnapshot(this.#snapshot),
-    };
+    return { accepted, command, events, snapshot: cloneSnapshot(this.#snapshot) };
   }
   #staleHostEventWarning(
     hostEvent: NativePlayerHostEvent,

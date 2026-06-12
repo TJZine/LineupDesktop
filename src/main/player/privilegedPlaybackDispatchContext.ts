@@ -13,6 +13,14 @@ export function validatePrivilegedPlaybackDescriptor(
   descriptor: PlexPrivilegedPlaybackDescriptor,
   commandRequestId: PlayerRequestId,
 ): PrivilegedPlaybackDescriptorValidationResult {
+  if (!isRecord(descriptor)) {
+    return invalidPrivilegedPlaybackDescriptor(
+      commandRequestId,
+      'descriptor-not-object',
+      'Privileged playback descriptor is invalid.',
+    );
+  }
+
   if (descriptor.requestId !== commandRequestId) {
     return invalidPrivilegedPlaybackDescriptor(
       commandRequestId,
@@ -27,6 +35,14 @@ export function validatePrivilegedPlaybackDescriptor(
       commandRequestId,
       'unsupported-decision-kind',
       'Unsupported privileged playback decision kind.',
+    );
+  }
+
+  if (!isRecord(descriptor.setup)) {
+    return invalidPrivilegedPlaybackDescriptor(
+      commandRequestId,
+      'missing-setup',
+      'Privileged playback setup is missing required fields.',
     );
   }
 
@@ -55,7 +71,56 @@ export function validatePrivilegedPlaybackDescriptor(
     );
   }
 
+  const trackMapValidation = validateTrackMap(descriptor.setup.trackMap);
+  if (!trackMapValidation.ok) {
+    return invalidPrivilegedPlaybackDescriptor(
+      commandRequestId,
+      trackMapValidation.reason,
+      'Privileged playback track map is missing required fields.',
+    );
+  }
+
   return { ok: true };
+}
+
+function validateTrackMap(value: unknown): { ok: true } | { ok: false; reason: string } {
+  if (!isRecord(value)) {
+    return { ok: false, reason: 'missing-track-map' };
+  }
+  for (const key of ['video', 'audio', 'subtitle'] as const) {
+    const tracks = value[key];
+    if (!Array.isArray(tracks)) {
+      return { ok: false, reason: `invalid-${key}-track-map` };
+    }
+    for (const track of tracks) {
+      if (!isRecord(track)) {
+        return { ok: false, reason: `invalid-${key}-track-map-item` };
+      }
+      if (!isNonEmptyString(track.publicTrackId)) {
+        return { ok: false, reason: `missing-${key}-public-track-id` };
+      }
+      if (!(track.privateTrackId === null || isNonEmptyString(track.privateTrackId))) {
+        return { ok: false, reason: `invalid-${key}-private-track-id` };
+      }
+      if (key === 'video') {
+        if (track.codec !== null && track.codec !== undefined && typeof track.codec !== 'string') {
+          return { ok: false, reason: 'invalid-video-codec' };
+        }
+        if (!isNonEmptyString(track.dynamicRange)) {
+          return { ok: false, reason: 'invalid-video-dynamic-range' };
+        }
+      }
+    }
+  }
+  return { ok: true };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 function invalidPrivilegedPlaybackDescriptor(

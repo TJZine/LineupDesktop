@@ -226,7 +226,6 @@ namespace Lineup.NativePlayerHost
 
                     if (message.type == "command" && message.requestId != null && message.command != null)
                     {
-                        currentRequestId = message.requestId;
                         HandleCommand(message);
                     }
                 }
@@ -255,8 +254,8 @@ namespace Lineup.NativePlayerHost
                         return;
                     }
 
-                    InitializeMpv(msg);
                     currentRequestId = msg.requestId;
+                    InitializeMpv(msg);
                     CacheLoadedMedia(msg);
 
                     // Configure headers
@@ -327,7 +326,7 @@ namespace Lineup.NativePlayerHost
                     double volume = 100;
                     if (msg.payload.TryGetProperty("volume", out JsonElement val))
                     {
-                        volume = val.GetDouble();
+                        volume = val.GetDouble() * 100.0;
                     }
                     SetPropertyDouble(mpvContext, "volume", volume);
                     WriteResult(msg.requestId!, true, null, null);
@@ -352,7 +351,7 @@ namespace Lineup.NativePlayerHost
                         string? mpvTrackId = trackState?.GetMpvTrackId(publicTrackId);
                         if (string.IsNullOrEmpty(mpvTrackId))
                         {
-                            WriteResult(msg.requestId!, false, "PLAYER_HELPER_TRACK_NOT_FOUND", $"Audio track {publicTrackId} is not available.");
+                            WriteResult(msg.requestId!, false, "PLAYER_HELPER_TRACK_NOT_FOUND", "Requested audio track is not available.");
                             return;
                         }
                         int res = MpvCommandExecutor.SetPropertyString(mpvContext, "aid", mpvTrackId);
@@ -393,7 +392,7 @@ namespace Lineup.NativePlayerHost
                             string? mpvTrackId = trackState?.GetMpvTrackId(publicTrackId);
                             if (string.IsNullOrEmpty(mpvTrackId))
                             {
-                                WriteResult(msg.requestId!, false, "PLAYER_HELPER_TRACK_NOT_FOUND", $"Subtitle track {publicTrackId} is not available.");
+                                WriteResult(msg.requestId!, false, "PLAYER_HELPER_TRACK_NOT_FOUND", "Requested subtitle track is not available.");
                                 return;
                             }
                             int res = MpvCommandExecutor.SetPropertyString(mpvContext, "sid", mpvTrackId);
@@ -1106,7 +1105,7 @@ namespace Lineup.NativePlayerHost
             }
         }
 
-        private static class NativeMethods
+        internal static class NativeMethods
         {
             [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)]
             public static extern IntPtr mpv_create();

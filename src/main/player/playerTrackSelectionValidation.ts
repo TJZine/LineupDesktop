@@ -31,7 +31,7 @@ export function validateTrackSelectionCommand(
       return createPlayerError({
         code: 'PLAYER_VALIDATION_FAILED',
         category: 'validation-failure',
-        message: `Audio track ${trackId} does not exist.`,
+        message: 'The requested audio track does not exist.',
         requestId: command.requestId,
         diagnostic: {
           component: 'player-track-validation',
@@ -46,7 +46,7 @@ export function validateTrackSelectionCommand(
       return createPlayerError({
         code: 'PLAYER_VALIDATION_FAILED',
         category: 'validation-failure',
-        message: `Track ${trackId} is not an audio track.`,
+        message: 'The requested track is not an audio track.',
         requestId: command.requestId,
         diagnostic: {
           component: 'player-track-validation',
@@ -61,7 +61,7 @@ export function validateTrackSelectionCommand(
       return createPlayerError({
         code: 'PLAYER_VALIDATION_FAILED',
         category: 'validation-failure',
-        message: `Audio track ${trackId} is not available.`,
+        message: 'The requested audio track is not available.',
         requestId: command.requestId,
         diagnostic: {
           component: 'player-track-validation',
@@ -81,7 +81,7 @@ export function validateTrackSelectionCommand(
         return createPlayerError({
           code: 'PLAYER_VALIDATION_FAILED',
           category: 'validation-failure',
-          message: `Subtitle track ${trackId} does not exist.`,
+          message: 'The requested subtitle track does not exist.',
           requestId: command.requestId,
           diagnostic: {
             component: 'player-track-validation',
@@ -96,7 +96,7 @@ export function validateTrackSelectionCommand(
         return createPlayerError({
           code: 'PLAYER_VALIDATION_FAILED',
           category: 'validation-failure',
-          message: `Track ${trackId} is not a subtitle track.`,
+          message: 'The requested track is not a subtitle track.',
           requestId: command.requestId,
           diagnostic: {
             component: 'player-track-validation',
@@ -111,7 +111,7 @@ export function validateTrackSelectionCommand(
         return createPlayerError({
           code: 'PLAYER_VALIDATION_FAILED',
           category: 'validation-failure',
-          message: `Subtitle track ${trackId} is not available.`,
+          message: 'The requested subtitle track is not available.',
           requestId: command.requestId,
           diagnostic: {
             component: 'player-track-validation',

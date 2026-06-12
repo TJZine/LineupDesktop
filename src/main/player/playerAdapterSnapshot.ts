@@ -21,6 +21,36 @@ export function applyTrackSnapshot(
   };
 }
 
+export function applyTrackSelectionSnapshot(
+  snapshot: PlayerSnapshot,
+  requestId: string,
+  selection: {
+    audioTrackId: PlayerTrackId | null;
+    subtitleTrackId: PlayerTrackId | null;
+    videoTrackId: PlayerTrackId | null;
+  },
+): PlayerSnapshot {
+  return {
+    ...snapshot,
+    requestId,
+    selectedAudioTrackId: selection.audioTrackId,
+    selectedSubtitleTrackId: selection.subtitleTrackId,
+    selectedVideoTrackId: selection.videoTrackId,
+    tracks: snapshot.tracks.map((track) => {
+      if (track.kind === 'audio') {
+        return { ...track, selected: track.id === selection.audioTrackId };
+      }
+      if (track.kind === 'subtitle') {
+        return { ...track, selected: track.id === selection.subtitleTrackId };
+      }
+      if (track.kind === 'video') {
+        return { ...track, selected: track.id === selection.videoTrackId };
+      }
+      return track;
+    }),
+  };
+}
+
 export function createInitialSnapshot(): PlayerSnapshot {
   return {
     requestId: null,

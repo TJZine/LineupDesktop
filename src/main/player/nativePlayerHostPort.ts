@@ -107,6 +107,9 @@ export interface NativePlayerHostPort {
   onLifecycleFailure?(
     listener: (failure: NativePlayerHostLifecycleFailure) => void,
   ): () => void;
+  onEvent?(
+    listener: (event: NativePlayerHostEvent) => void,
+  ): () => void;
 }
 
 export type NativePlayerHostFactory = () => NativePlayerHostPort;

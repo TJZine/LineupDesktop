@@ -36,10 +36,6 @@ namespace Lineup.NativePlayerHost
                 return;
             }
 
-            int audioIdx = 0;
-            int subtitleIdx = 0;
-            int videoIdx = 0;
-
             for (int i = 0; i < count; i++)
             {
                 string? type = MpvCommandExecutor.GetPropertyString(_mpv, $"track-list/{i}/type");
@@ -52,43 +48,56 @@ namespace Lineup.NativePlayerHost
 
                 if (type == "audio")
                 {
-                    if (_setup.trackMap.audio != null && audioIdx < _setup.trackMap.audio.Count)
-                    {
-                        var trackInfo = _setup.trackMap.audio[audioIdx];
-                        if (trackInfo.publicTrackId != null)
-                        {
-                            _publicToMpvId[trackInfo.publicTrackId] = id;
-                            _mpvToPublicId[id] = trackInfo.publicTrackId;
-                        }
-                    }
-                    audioIdx++;
+                    MapTrackByPrivateId(_setup.trackMap.audio, id);
                 }
                 else if (type == "sub")
                 {
-                    if (_setup.trackMap.subtitle != null && subtitleIdx < _setup.trackMap.subtitle.Count)
-                    {
-                        var trackInfo = _setup.trackMap.subtitle[subtitleIdx];
-                        if (trackInfo.publicTrackId != null)
-                        {
-                            _publicToMpvId[trackInfo.publicTrackId] = id;
-                            _mpvToPublicId[id] = trackInfo.publicTrackId;
-                        }
-                    }
-                    subtitleIdx++;
+                    MapTrackByPrivateId(_setup.trackMap.subtitle, id);
                 }
                 else if (type == "video")
                 {
-                    if (_setup.trackMap.video != null && videoIdx < _setup.trackMap.video.Count)
-                    {
-                        var trackInfo = _setup.trackMap.video[videoIdx];
-                        if (trackInfo.publicTrackId != null)
-                        {
-                            _publicToMpvId[trackInfo.publicTrackId] = id;
-                            _mpvToPublicId[id] = trackInfo.publicTrackId;
-                        }
-                    }
-                    videoIdx++;
+                    MapTrackByPrivateId(_setup.trackMap.video, id);
                 }
+            }
+        }
+
+        private void MapTrackByPrivateId<TTrack>(IEnumerable<TTrack>? tracks, string mpvTrackId)
+            where TTrack : class
+        {
+            if (tracks == null)
+            {
+                return;
+            }
+
+            foreach (var track in tracks)
+            {
+                string? publicTrackId = null;
+                string? privateTrackId = null;
+
+                switch (track)
+                {
+                    case Program.AudioTrackMapItem audio:
+                        publicTrackId = audio.publicTrackId;
+                        privateTrackId = audio.privateTrackId;
+                        break;
+                    case Program.SubtitleTrackMapItem subtitle:
+                        publicTrackId = subtitle.publicTrackId;
+                        privateTrackId = subtitle.privateTrackId;
+                        break;
+                    case Program.VideoTrackMapItem video:
+                        publicTrackId = video.publicTrackId;
+                        privateTrackId = video.privateTrackId;
+                        break;
+                }
+
+                if (string.IsNullOrEmpty(publicTrackId) || privateTrackId != mpvTrackId)
+                {
+                    continue;
+                }
+
+                _publicToMpvId[publicTrackId] = mpvTrackId;
+                _mpvToPublicId[mpvTrackId] = publicTrackId;
+                return;
             }
         }
 
