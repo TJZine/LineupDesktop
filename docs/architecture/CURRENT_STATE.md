@@ -12,7 +12,9 @@ channel surfaces complete for the current code state, fake-backed overlay, and
 CSS/theme style surfaces, the RD-22A upstream-shaped fixture/injected app body,
 docs, workflow, contract, harness scaffolding, main-owned Plex
 auth/discovery/library domain seams, RD-22B live Plex onboarding/library runtime
-wiring, and RD-25 production native playback. The manual proof is complete for code implementation, with Windows proof deferred to RD-27. There is no installer
+wiring, and RD-25/RD-26 playback code implementation. Code implementation and
+review are complete for RD-25/RD-26, but Windows/manual product proof is
+deferred to RD-27 and remains pending. There is no installer
 implementation, public release/signing pipeline, production native-helper media
 binary redistribution, or Windows-observed production playback closeout proof
 yet. Historical paragraphs below preserve the sequence of earlier RD slices;
@@ -313,8 +315,24 @@ behavior, or public readiness claims.
 
 RD-23 is complete. It implements live channel setup and runtime persistence, turning the live Plex library browsing into persisted Desktop channels. It integrates the channel domain, main-owned channel persistence store, and narrow preload channel setup bridge. The renderer setup route is adapted to support live selection, strategy config (shuffling, block schedules), replace/confirm replace logic, and settings state recovery. Preload validation and selection hardening prevent stale data access.
 RD-24 is complete. It integrates scheduler-backed guide data and the channel runtime. Persisted channel configurations feed the schedule DayRollover and EPG calculations. Player route, overlays, now-playing, mini-guide, and channel badge are wired to real scheduler state. The app handles manual channel switches, scheduling ticks, and program transitions cleanly.
-RD-25 is complete. The production native playback MVP replaces the fake playback bootstrap with a production-shaped, main/helper-owned native playback path for live Plex-backed scheduled media. A main-only privileged load context propagates the private playback descriptor to the helper host, which runs a repo-owned C# native helper process. The helper communicates with the main process via an NDJSON protocol over stdin/stdout. Live Plex stream resolution, media detail, and PMS session ports are composed and wired. Renderer player UI state binds dynamically to safe player IPC events. Manual proof of running native playback on Windows is deferred to RD-27.
-RD-26 is complete. It implements runtime media options and playback quality over the production native playback path. The C# native helper is extended to manage audio and subtitle track states and video parameters via libmpv. Main process validation gates renderer selection requests against the player snapshot. The preload contract defines a clean command/event interface for track selection and quality updates. The renderer OSD and overlay views render options dynamically from the snapshot, and selection/volume actions dispatch player command intents to the backend. Manual proof on Windows is deferred to RD-27.
+RD-25 code implementation is complete and reviewed; Windows/manual product proof
+remains pending and is deferred to RD-27. The production native playback MVP
+replaces the fake playback bootstrap with a production-shaped, main/helper-owned
+native playback path for live Plex-backed scheduled media. A main-only
+privileged load context propagates the private playback descriptor to the helper
+host, which runs a repo-owned C# native helper process. The helper communicates
+with the main process via an NDJSON protocol over stdin/stdout. Live Plex stream
+resolution, media detail, and PMS session ports are composed and wired.
+Renderer player UI state binds dynamically to safe player IPC events.
+RD-26 code implementation is complete and reviewed; Windows/manual product proof
+remains pending and is deferred to RD-27. It implements runtime media options
+and playback quality over the production native playback path. The C# native
+helper is extended to manage audio and subtitle track states and video
+parameters via libmpv. Main process validation gates renderer selection requests
+against the player snapshot. The preload contract defines a clean command/event
+interface for track selection and quality updates. The renderer OSD and overlay
+views render options dynamically from the snapshot, and selection/volume actions
+dispatch player command intents to the backend.
 ARCH-02 is complete as behavior-preserving architecture hotspot stabilization.
 The repair program split native-helper process framing, player adapter request
 custody, Plex playback cleanup sequencing, preload bridge guard/channel

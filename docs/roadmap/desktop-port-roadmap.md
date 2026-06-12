@@ -1673,8 +1673,8 @@ Stop and replan if:
 
 ### RD-25 Production Native Playback MVP
 
-Status: code complete and reviewed; product-complete parity classification is
-deferred until Windows proof in RD-27.
+Status: code complete and reviewed; Windows/manual product proof remains
+pending and is deferred to RD-27 before product closeout.
 
 Depends on:
 
@@ -1725,11 +1725,13 @@ Stop and replan if:
 
 ### RD-26 Runtime Media Options And Playback Quality
 
-Status: complete (Windows proof deferred to RD-27).
+Status: code complete and reviewed; Windows/manual product proof remains
+pending and is deferred to RD-27 before product closeout.
 
 Depends on:
 
-- RD-25 complete and reviewed.
+- RD-25 code complete and reviewed; Windows/manual product proof pending in
+  RD-27.
 - RD-16 subtitle, audio, and HDR policy/resolver hardening complete.
 
 Objective:
@@ -1768,7 +1770,8 @@ Status: not started.
 
 Depends on:
 
-- RD-22A through RD-26 complete and reviewed, including RD-22B live Plex wiring.
+- RD-22A through RD-26 code complete and reviewed, including RD-22B live Plex
+  wiring; Windows/manual playback product proof pending in this RD-27 slice.
 - `docs/development/windows-ui-proof-plan.md` current.
 
 Objective:
