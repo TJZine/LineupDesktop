@@ -94,10 +94,11 @@ export type EpgPresentationState = 'ready' | 'loading' | 'empty' | 'error';
 export interface EpgPresentationSource {
   channels: readonly EpgChannelViewModel[];
   nowWatching: EpgCurrentProgramViewModel | null;
-  nowMs: number;
+  nowMs?: number;
 }
 
-export interface EpgPresentationSourceWithNowWatching extends EpgPresentationSource {
+export interface EpgPresentationSourceWithNowWatching extends Omit<EpgPresentationSource, 'nowMs' | 'nowWatching'> {
+  readonly nowMs: number;
   readonly nowWatching: EpgCurrentProgramViewModel;
 }
 
@@ -195,7 +196,10 @@ export function ensureRendererReadyGuidePresentation(
   presentation: EpgPresentationSource,
   fallbackWindowStartMs = EPG_DEMO_BASE_TIME_MS,
 ): EpgPresentationSourceWithNowWatching {
-  const nowMs = Number.isFinite(presentation.nowMs) && presentation.nowMs >= 0 ? presentation.nowMs : fallbackWindowStartMs;
+  const presentationNowMs = presentation.nowMs;
+  const nowMs = typeof presentationNowMs === 'number' && Number.isFinite(presentationNowMs) && presentationNowMs >= 0
+    ? presentationNowMs
+    : Date.now();
   if (presentation.nowWatching !== null) {
     return { ...presentation, nowMs, nowWatching: presentation.nowWatching };
   }
@@ -412,11 +416,10 @@ function getProgramTemporalState(
   program: EpgProgramViewModel,
   referenceNowMs: number,
 ): EpgProgramTemporalState {
-  const nowMs = referenceNowMs;
-  if (program.endsAtMs <= nowMs) {
+  if (program.endsAtMs <= referenceNowMs) {
     return 'past';
   }
-  if (program.startsAtMs <= nowMs && program.endsAtMs > nowMs) {
+  if (program.startsAtMs <= referenceNowMs && program.endsAtMs > referenceNowMs) {
     return 'current';
   }
   return 'upcoming';
@@ -429,9 +432,8 @@ function getProgramProgressPercent(
   if (getProgramTemporalState(program, referenceNowMs) !== 'current') {
     return 0;
   }
-  const nowMs = referenceNowMs;
   const durationMs = Math.max(1, program.endsAtMs - program.startsAtMs);
-  return Math.round(((nowMs - program.startsAtMs) / durationMs) * 100);
+  return Math.round(((referenceNowMs - program.startsAtMs) / durationMs) * 100);
 }
 
 function getProgramWidthTier(columnSpan: number): EpgProgramWidthTier {
@@ -440,7 +442,6 @@ function getProgramWidthTier(columnSpan: number): EpgProgramWidthTier {
   }
   return columnSpan === 2 ? 'medium' : 'narrow';
 }
-
 
 function normalizeEpgSelection(state: EpgState, presentation: EpgPresentationSource): EpgState {
   const windowStartMs = clampWindowStartMs(state.windowStartMs, presentation);

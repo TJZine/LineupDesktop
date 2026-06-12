@@ -214,9 +214,21 @@ durable completion summary.
   channels implementation plan. The feature adds renderer-safe authoring
   contracts, main-owned custom-channel persistence/mutation runtime, safe media
   picker/artwork projection, named IPC/preload bridge methods, a desktop
-  authoring workspace, stale source invalidation, and guide/runtime refresh
-  after save/delete/hide/reorder. Direct persisted-channel edit is intentionally
-  deferred behind a future reviewed edit-draft API with `expectedRevision`.
+  authoring workspace, stale source invalidation, and best-effort guide/runtime
+  refresh after save/delete/hide/reorder with safe stale-state degradation when
+  the post-commit refresh hook fails. Direct persisted-channel edit is
+  intentionally deferred behind a future reviewed edit-draft API with
+  `expectedRevision`.
+- [x] UI Parity closeout completed on 2026-06-12 through the reviewed UI parity
+  implementation plan. Units 1 through 6 brought the reachable Desktop body,
+  overlays, auth/profile/server surfaces, settings rail, responsive guide/EPG
+  time-math, and staged setup composition into the current WebOS-informed visual
+  posture while preserving an unprivileged renderer, existing main/preload
+  custody, support diagnostics, redaction, and file-shape guardrails. Review
+  fixes kept EPG timing renderer-local without adding public `nowMs`, made the
+  EPG track responsive instead of fixed-width, preserved global input handling
+  through the profile PIN modal, refreshed smoke assertions, and documented
+  custom-channel refresh as best-effort stale-state degradation.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -349,13 +361,13 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-26 are code complete and reviewed enough to route the next
-Tier 3 proof session to RD-27 Windows MVP UI Proof And Operational Soak through
-the quality loop after the active UI parity plan is closed or explicitly
-superseded. RD-21 superseded the former RD-21 Future Platform Review route and
-deferred platform expansion until after product-parity/MVP completion. Do not
-import additional original Lineup product code or broaden live Plex/native
-playback runtime behavior until a reviewed product slice plan explicitly
+RD-01 through RD-26 plus the UI parity closeout are code complete and reviewed
+enough to route the next Tier 3 proof session to RD-27 Windows MVP UI Proof And
+Operational Soak through the quality loop. RD-21 superseded the former RD-21
+Future Platform Review route and deferred platform expansion until after
+product-parity/MVP completion. Do not import additional original Lineup product
+code or broaden live Plex/native playback runtime behavior until a reviewed
+product slice plan explicitly
 authorizes a bounded change.
 
 ## Roadmap Checklist

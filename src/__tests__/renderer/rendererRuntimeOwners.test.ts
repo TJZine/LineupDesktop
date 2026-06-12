@@ -110,13 +110,13 @@ test('guide presentation polling ignores stale and stopped refreshes', async () 
   await second;
   assert.equal(applied.length, 1);
 
-  requests[0]?.resolve({ ok: true, value: { channels: [], nowWatching: null, nowMs: 0 } });
+  requests[0]?.resolve({ ok: true, value: { channels: [], nowWatching: null } });
   await first;
   assert.equal(applied.length, 1);
 
   const stopped = polling.refresh('stopped');
   polling.stop();
-  requests[2]?.resolve({ ok: true, value: { channels: [], nowWatching: null, nowMs: 0 } });
+  requests[2]?.resolve({ ok: true, value: { channels: [], nowWatching: null } });
   await stopped;
   assert.equal(applied.length, 1);
   assert.equal(failureCount, 0);

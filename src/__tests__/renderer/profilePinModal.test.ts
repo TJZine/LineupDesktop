@@ -173,11 +173,19 @@ test('Profile PIN Modal Suite', async (t) => {
         preventDefault: () => { prevented = true; },
         stopPropagation: () => { stopped = true; },
       } as KeyboardEvent);
-      assert.equal(prevented, true);
-      assert.equal(stopped, true);
+      assert.equal(prevented, false);
+      assert.equal(stopped, false);
 
       // Press '1'
-      keydown({ key: '1', preventDefault: () => {}, stopPropagation: () => {} } as KeyboardEvent);
+      prevented = false;
+      stopped = false;
+      keydown({
+        key: '1',
+        preventDefault: () => { prevented = true; },
+        stopPropagation: () => { stopped = true; },
+      } as KeyboardEvent);
+      assert.equal(prevented, true);
+      assert.equal(stopped, true);
       assert.equal(slots[0].textContent, '●');
 
       // Press '2'

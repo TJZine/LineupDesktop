@@ -74,13 +74,21 @@ export function openProfilePinModal(user: PlexHomeUserSummary): void {
   if (!keydownListener) {
     keydownListener = (event: KeyboardEvent) => {
       if (isSubmitting) return;
-      event.preventDefault();
-      event.stopPropagation();
       if (event.key >= '0' && event.key <= '9') {
+        event.preventDefault();
+        event.stopPropagation();
         handleNumpadInput(event.key);
       } else if (event.key === 'Backspace') {
+        event.preventDefault();
+        event.stopPropagation();
         handleNumpadInput('backspace');
+      } else if (event.key === 'Delete') {
+        event.preventDefault();
+        event.stopPropagation();
+        handleNumpadInput('clear');
       } else if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
         handleNumpadInput('cancel');
       }
     };

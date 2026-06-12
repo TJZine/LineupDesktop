@@ -130,10 +130,9 @@ function isGuideResult<T>(
 function isEpgPresentationSource(value: unknown): value is EpgPresentationSource {
   return (
     isPlainRecord(value) &&
-    hasOnlyKeys(value, ['channels', 'nowWatching', 'nowMs']) &&
+    hasOnlyKeys(value, ['channels', 'nowWatching']) &&
     Array.isArray(value.channels) &&
     value.channels.every(isEpgChannelViewModel) &&
-    isFiniteNonNegativeNumber(value.nowMs) &&
     (value.nowWatching === null || isEpgCurrentProgramViewModel(value.nowWatching))
   );
 }

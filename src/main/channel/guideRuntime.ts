@@ -50,13 +50,11 @@ export class GuideRuntime {
     durationMs: number,
   ): Promise<EpgPresentationSource> {
     const loaded = await this.repository.loadNormalized();
-    const nowMs = this.clock.now();
     const visibleChannels = loaded?.data.channels.filter(isVisibleChannel) ?? [];
     if (!loaded || visibleChannels.length === 0) {
       return {
         channels: [],
         nowWatching: null,
-        nowMs,
       };
     }
 
@@ -129,7 +127,6 @@ export class GuideRuntime {
     return {
       channels: epgChannels,
       nowWatching,
-      nowMs,
     };
   }
 

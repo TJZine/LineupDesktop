@@ -12,12 +12,14 @@ export interface CellPosition {
   isClippedEnd: boolean;
 }
 
+const GUIDE_TRACK_UNITS = 1000;
+
 export function guideCellPosition(
   startsAtMs: number,
   endsAtMs: number,
   windowStartMs: number,
   windowEndMs: number,
-  trackWidth: number = 1200
+  trackWidth: number = GUIDE_TRACK_UNITS,
 ): CellPosition {
   const isClippedStart = startsAtMs < windowStartMs;
   const isClippedEnd = endsAtMs > windowEndMs;
@@ -31,7 +33,7 @@ export function guideCellPosition(
 
   const left = Math.max(0, (startOffset / totalDuration) * trackWidth);
   const right = Math.min(trackWidth, (endOffset / totalDuration) * trackWidth);
-  const width = Math.max(0, right - left - 4);
+  const width = Math.max(0, right - left);
 
   return { left, width, isClippedStart, isClippedEnd };
 }
@@ -82,7 +84,7 @@ export function guideCellDom(
   program: EpgProgramCellViewModel,
   windowStartMs: number,
   windowEndMs: number,
-  trackWidth: number = 1200
+  trackWidth: number = GUIDE_TRACK_UNITS,
 ): HTMLElement {
   const pos = guideCellPosition(program.startsAtMs, program.endsAtMs, windowStartMs, windowEndMs, trackWidth);
   const pres = guidePresentation(pos.width, program.temporalState, program.isSelected);
@@ -96,8 +98,8 @@ export function guideCellDom(
   cell.dataset.clippedEnd = String(pos.isClippedEnd);
 
   cell.style.position = 'absolute';
-  cell.style.left = `${pos.left}px`;
-  cell.style.width = `${pos.width}px`;
+  cell.style.left = `${toTrackPercent(pos.left, trackWidth)}%`;
+  cell.style.width = `max(0px, calc(${toTrackPercent(pos.width, trackWidth)}% - 4px))`;
   cell.style.setProperty('--epg-cell-progress', `${program.progressPercent}%`);
 
   const meta = document.createElement('div');
@@ -164,7 +166,7 @@ export function renderEpgGuideDom(view: RouteWorkflowViewModel, dom: RendererDom
     return;
   }
 
-  const trackWidth = 1200;
+  const trackWidth = GUIDE_TRACK_UNITS;
 
   const shell = document.createElement('section');
   shell.className = 'epg-shell';
@@ -231,17 +233,17 @@ export function renderEpgGuideDom(view: RouteWorkflowViewModel, dom: RendererDom
   const header = document.createElement('div');
   header.className = 'epg-time-header';
   header.append(document.createElement('span'));
-  
+
   const slotTrack = document.createElement('div');
   slotTrack.className = 'epg-time-header-slots';
-  
+
   const slotWidth = trackWidth / view.guide.slots.length;
   view.guide.slots.forEach((slot, index) => {
     const label = document.createElement('span');
     label.className = 'epg-time-slot';
     label.style.position = 'absolute';
-    label.style.left = `${index * slotWidth}px`;
-    label.style.width = `${slotWidth}px`;
+    label.style.left = `${toTrackPercent(index * slotWidth, trackWidth)}%`;
+    label.style.width = `${toTrackPercent(slotWidth, trackWidth)}%`;
     label.textContent = slot.label;
     slotTrack.append(label);
   });
@@ -260,7 +262,7 @@ export function renderEpgGuideDom(view: RouteWorkflowViewModel, dom: RendererDom
 
     const marker = document.createElement('div');
     marker.className = 'epg-current-time-marker';
-    marker.style.left = `${markerLeft}px`;
+    marker.style.left = `${toTrackPercent(markerLeft, trackWidth)}%`;
     slotTrack.append(marker);
   }
 
@@ -281,7 +283,7 @@ export function renderEpgGuideDom(view: RouteWorkflowViewModel, dom: RendererDom
 
     const programs = document.createElement('div');
     programs.className = 'epg-grid__programs';
-    
+
     for (const program of row.programs) {
       const cell = guideCellDom(program, windowStartMs, windowEndMs, trackWidth);
       programs.append(cell);
@@ -290,7 +292,7 @@ export function renderEpgGuideDom(view: RouteWorkflowViewModel, dom: RendererDom
     if (hasMarker) {
       const line = document.createElement('div');
       line.className = 'epg-current-time-line';
-      line.style.left = `${markerLeft}px`;
+      line.style.left = `${toTrackPercent(markerLeft, trackWidth)}%`;
       programs.append(line);
     }
 
@@ -303,4 +305,12 @@ export function renderEpgGuideDom(view: RouteWorkflowViewModel, dom: RendererDom
     shell.append(header, ...rows);
   }
   dom.epgGridElement.replaceChildren(shell);
+}
+
+function toTrackPercent(value: number, trackWidth: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(trackWidth) || trackWidth <= 0) {
+    return 0;
+  }
+  const percent = Math.max(0, Math.min(100, (value / trackWidth) * 100));
+  return Math.round(percent * 1_000_000) / 1_000_000;
 }

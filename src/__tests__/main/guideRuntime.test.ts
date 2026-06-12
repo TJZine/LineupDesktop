@@ -129,7 +129,6 @@ test('GuideRuntime getPresentation returns empty channels list if none configure
   assert.deepEqual(presentation, {
     channels: [],
     nowWatching: null,
-    nowMs: 1000,
   });
 });
 
@@ -154,7 +153,6 @@ test('GuideRuntime getPresentation generates schedule presentation for channels'
 
   const presentation = await runtime.getPresentation(1000, 1_800_000);
 
-  assert.equal(presentation.nowMs, 1000);
   assert.equal(presentation.channels.length, 2);
   assert.equal(presentation.channels[0]?.id, 'chan-1');
   assert.equal(presentation.channels[0]?.programs.length, 1);

@@ -30,7 +30,6 @@ export interface EpgCurrentProgramViewModel {
 export interface EpgPresentationSource {
   channels: readonly EpgChannelViewModel[];
   nowWatching: EpgCurrentProgramViewModel | null;
-  nowMs: number;
 }
 
 export interface GuideGetPresentationRequest {

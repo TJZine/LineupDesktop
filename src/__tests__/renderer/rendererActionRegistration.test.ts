@@ -297,7 +297,7 @@ test('renderer action registration delegates settings category clicks', () => {
     const categoriesContainer = new TestElement();
     categoriesContainer.append(playbackCatBtn);
     settingsScreen.append(categoriesContainer);
-    
+
     let appliedCategory: string | null = null;
 
     registerRendererActions(

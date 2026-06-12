@@ -90,6 +90,10 @@ const mockDocument = {
 
 (globalThis as any).document = mockDocument as any;
 
+function assertAlmostEqual(actual: number, expected: number): void {
+  assert.ok(Math.abs(actual - expected) < 0.000001, `${String(actual)} !== ${String(expected)}`);
+}
+
 import {
   guideCellPosition,
   guideVisibleWindow,
@@ -101,28 +105,28 @@ import type { EpgProgramCellViewModel } from '../../../renderer/epg.js';
 test('guideCellPosition calculates correct left and width within window', () => {
   const windowStart = 1000;
   const windowEnd = 4000; // 3000ms duration
-  const trackWidth = 1200;
+  const trackWidth = 1000;
 
   // Fully inside
   const pos1 = guideCellPosition(1500, 2500, windowStart, windowEnd, trackWidth);
   assert.equal(pos1.isClippedStart, false);
   assert.equal(pos1.isClippedEnd, false);
-  assert.equal(pos1.left, ((1500 - 1000) / 3000) * 1200); // 200px
-  assert.equal(pos1.width, ((2500 - 1500) / 3000) * 1200 - 4); // 400px - 4px gap
+  assertAlmostEqual(pos1.left, ((1500 - 1000) / 3000) * trackWidth);
+  assertAlmostEqual(pos1.width, ((2500 - 1500) / 3000) * trackWidth);
 
   // Clipped start
   const pos2 = guideCellPosition(500, 2500, windowStart, windowEnd, trackWidth);
   assert.equal(pos2.isClippedStart, true);
   assert.equal(pos2.isClippedEnd, false);
   assert.equal(pos2.left, 0);
-  assert.equal(pos2.width, ((2500 - 1000) / 3000) * 1200 - 4); // 600px - 4px gap
+  assertAlmostEqual(pos2.width, ((2500 - 1000) / 3000) * trackWidth);
 
   // Clipped end
   const pos3 = guideCellPosition(2000, 5000, windowStart, windowEnd, trackWidth);
   assert.equal(pos3.isClippedStart, false);
   assert.equal(pos3.isClippedEnd, true);
-  assert.equal(pos3.left, ((2000 - 1000) / 3000) * 1200); // 400px
-  assert.equal(pos3.width, ((4000 - 2000) / 3000) * 1200 - 4); // 800px - 4px gap
+  assertAlmostEqual(pos3.left, ((2000 - 1000) / 3000) * trackWidth);
+  assertAlmostEqual(pos3.width, ((4000 - 2000) / 3000) * trackWidth);
 });
 
 test('guideVisibleWindow clips times to window boundary', () => {
@@ -187,7 +191,7 @@ test('guideCellDom builds valid DOM elements', () => {
 
   const windowStart = 1000;
   const windowEnd = 4000;
-  const trackWidth = 1200;
+  const trackWidth = 1000;
 
   const cell = guideCellDom(program, windowStart, windowEnd, trackWidth) as any;
 
@@ -196,9 +200,8 @@ test('guideCellDom builds valid DOM elements', () => {
   assert.equal(cell.dataset.selectedProgram, 'true');
   assert.equal(cell.dataset.temporalState, 'current');
   assert.equal(cell.style.position, 'absolute');
-  assert.equal(cell.style.left, '200px');
-  // 400px width minus 4px gap
-  assert.equal(cell.style.width, '396px');
+  assert.equal(cell.style.left, '16.666667%');
+  assert.equal(cell.style.width, 'max(0px, calc(33.333333% - 4px))');
   assert.equal(cell.style.getPropertyValue('--epg-cell-progress'), '40%');
 
   const liveBadge = cell.querySelector('.epg-badge--live');
