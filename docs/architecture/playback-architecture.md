@@ -1,6 +1,6 @@
 # Playback Architecture
 
-Lineup Desktop runtime playback is code-complete, with manual proof pending. RD-25 implements the production native playback MVP, replacing the fake playback bootstrap with a production-shaped, main/helper-owned native playback path for live Plex-backed scheduled media. A main-only privileged load context propagates the private playback descriptor to the helper host, which runs a repo-owned C# native helper process. The helper communicates with the main process via an NDJSON protocol over stdin/stdout. Live Plex stream resolution, media detail, and PMS session ports are composed and wired. Renderer player UI state binds dynamically to safe player IPC events. Manual proof of running native playback on Windows is deferred to the later MVP QA pass, leaving production native playback proof pending.
+Lineup Desktop runtime playback is complete and reviewed. RD-25 implements the production native playback MVP, replacing the fake playback bootstrap with a production-shaped, main/helper-owned native playback path for live Plex-backed scheduled media. A main-only privileged load context propagates the private playback descriptor to the helper host, which runs a repo-owned C# native helper process. The helper communicates with the main process via an NDJSON protocol over stdin/stdout. Live Plex stream resolution, media detail, and PMS session ports are composed and wired. Renderer player UI state binds dynamically to safe player IPC events. Manual proof of running native playback on Windows is deferred to RD-27.
 
 ## Current Hypothesis
 

@@ -1673,7 +1673,8 @@ Stop and replan if:
 
 ### RD-25 Production Native Playback MVP
 
-Status: in progress / code implemented / manual proof pending.
+Status: code complete and reviewed; product-complete parity classification is
+deferred until Windows proof in RD-27.
 
 Depends on:
 

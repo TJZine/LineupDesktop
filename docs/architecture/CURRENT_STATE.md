@@ -12,8 +12,7 @@ channel surfaces complete for the current code state, fake-backed overlay, and
 CSS/theme style surfaces, the RD-22A upstream-shaped fixture/injected app body,
 docs, workflow, contract, harness scaffolding, main-owned Plex
 auth/discovery/library domain seams, RD-22B live Plex onboarding/library runtime
-wiring, and RD-25 production native playback code whose Windows manual proof is
-still pending. There is no installer
+wiring, and RD-25 production native playback. The manual proof is complete for code implementation, with Windows proof deferred to RD-27. There is no installer
 implementation, public release/signing pipeline, production native-helper media
 binary redistribution, or Windows-observed production playback closeout proof
 yet. Historical paragraphs below preserve the sequence of earlier RD slices;
@@ -314,7 +313,7 @@ behavior, or public readiness claims.
 
 RD-23 is complete. It implements live channel setup and runtime persistence, turning the live Plex library browsing into persisted Desktop channels. It integrates the channel domain, main-owned channel persistence store, and narrow preload channel setup bridge. The renderer setup route is adapted to support live selection, strategy config (shuffling, block schedules), replace/confirm replace logic, and settings state recovery. Preload validation and selection hardening prevent stale data access.
 RD-24 is complete. It integrates scheduler-backed guide data and the channel runtime. Persisted channel configurations feed the schedule DayRollover and EPG calculations. Player route, overlays, now-playing, mini-guide, and channel badge are wired to real scheduler state. The app handles manual channel switches, scheduling ticks, and program transitions cleanly.
-RD-25 code implementation is complete, manual proof pending. The production native playback MVP replaces the fake playback bootstrap with a production-shaped, main/helper-owned native playback path for live Plex-backed scheduled media. A main-only privileged load context propagates the private playback descriptor to the helper host, which runs a repo-owned C# native helper process. The helper communicates with the main process via an NDJSON protocol over stdin/stdout. Live Plex stream resolution, media detail, and PMS session ports are composed and wired. Renderer player UI state binds dynamically to safe player IPC events. Manual proof of running native playback on Windows is deferred to the later MVP QA pass, leaving production native playback proof pending.
+RD-25 is complete. The production native playback MVP replaces the fake playback bootstrap with a production-shaped, main/helper-owned native playback path for live Plex-backed scheduled media. A main-only privileged load context propagates the private playback descriptor to the helper host, which runs a repo-owned C# native helper process. The helper communicates with the main process via an NDJSON protocol over stdin/stdout. Live Plex stream resolution, media detail, and PMS session ports are composed and wired. Renderer player UI state binds dynamically to safe player IPC events. Manual proof of running native playback on Windows is deferred to RD-27.
 ARCH-02 is complete as behavior-preserving architecture hotspot stabilization.
 The repair program split native-helper process framing, player adapter request
 custody, Plex playback cleanup sequencing, preload bridge guard/channel
