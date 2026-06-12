@@ -961,11 +961,11 @@ export function isValidChannelConfig(value: unknown): value is ChannelConfig {
   ) {
     return false;
   }
-
   if (channel.sortOrder !== undefined && !isValidSortOrder(channel.sortOrder)) return false;
   if (channel.buildStrategy !== undefined && !isValidBuildStrategy(channel.buildStrategy)) return false;
   if (channel.contentFilters !== undefined && !isValidContentFilterArray(channel.contentFilters)) return false;
   if (channel.description !== undefined && typeof channel.description !== 'string') return false;
+  if (channel.hidden !== undefined && typeof channel.hidden !== 'boolean') return false;
   if (channel.icon !== undefined && typeof channel.icon !== 'string') return false;
   if (channel.color !== undefined && typeof channel.color !== 'string') return false;
   if (channel.sourceLibraryId !== undefined && !isValidIdString(channel.sourceLibraryId)) return false;

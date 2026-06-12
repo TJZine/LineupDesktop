@@ -1692,6 +1692,8 @@ test('channel domain validates complete channel config numeric fields strictly',
   assert.equal(isValidChannelConfig({ ...valid, playbackMode: 'bad' as never }), false);
   assert.equal(isValidChannelConfig({ ...valid, sortOrder: 'bad' as never }), false);
   assert.equal(isValidChannelConfig({ ...valid, buildStrategy: 'bad' as never }), false);
+  assert.equal(isValidChannelConfig({ ...valid, hidden: false }), true);
+  assert.equal(isValidChannelConfig({ ...valid, hidden: 'yes' as never }), false);
   assert.equal(isValidChannelConfig({ ...valid, contentFilters: { field: 'genre' } as never }), false);
   assert.equal(isValidChannelConfig({ ...valid, contentFilters: [{ field: 'bad' }] as never }), false);
   assert.equal(
