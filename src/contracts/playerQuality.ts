@@ -48,7 +48,7 @@ export function isRendererSafePlayerPlaybackQualitySummary(
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
   }
-  
+
   if (hasForbiddenField(value)) {
     return false;
   }

@@ -143,7 +143,7 @@ namespace Lineup.NativePlayerHost
                     if (track.publicTrackId == null) continue;
                     string? mpvId = GetMpvTrackId(track.publicTrackId);
                     bool selected = mpvId != null && selectedMpvIds.Contains(mpvId);
-                    
+
                     var item = new Dictionary<string, object>
                     {
                         ["id"] = track.publicTrackId,
