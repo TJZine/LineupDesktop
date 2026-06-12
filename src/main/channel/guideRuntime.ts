@@ -180,6 +180,22 @@ export class GuideRuntime {
     }
   }
 
+  async refreshActiveChannelSelection(): Promise<void> {
+    const loaded = await this.repository.loadNormalized();
+    if (!loaded || loaded.data.channels.length === 0 || !loaded.data.currentChannelId) {
+      this.activeChannelScheduler.unloadChannel();
+      return;
+    }
+    const currentChannel = loaded.data.channels.find((channel) =>
+      channel.id === loaded.data.currentChannelId && channel.hidden !== true
+    );
+    if (!currentChannel) {
+      this.activeChannelScheduler.unloadChannel();
+      return;
+    }
+    await this.tuneChannel(currentChannel.id);
+  }
+
   private logContentResolutionFailure(operation: string, channel: ChannelConfig, error: unknown): void {
     this.logger.error('GuideRuntime failed to resolve channel content.', {
       operation,

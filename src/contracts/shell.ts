@@ -37,6 +37,22 @@ import type {
   PlexSelectServerValue,
   PlexSwitchHomeUserValue,
 } from './plex.js';
+import type {
+  CustomChannelDeleteRequest,
+  CustomChannelDraftInput,
+  CustomChannelDraftResult,
+  CustomChannelDraftValidationSummary,
+  CustomChannelDuplicateDraftRequest,
+  CustomChannelGetMediaMetadataRequest,
+  CustomChannelIpcResult,
+  CustomChannelListMediaRequest,
+  CustomChannelMediaMetadata,
+  CustomChannelMediaPage,
+  CustomChannelMutationResult,
+  CustomChannelReorderRequest,
+  CustomChannelSnapshot,
+  CustomChannelVisibilityRequest,
+} from './customChannels.js';
 
 export const LINEUP_PROTOCOL_ORIGIN = 'lineup://shell' as const;
 export const LINEUP_SHELL_URL = 'lineup://shell/index.html' as const;
@@ -157,6 +173,33 @@ export interface LineupDesktopPreloadApi {
       sectionIds: readonly string[];
       confirmReplace?: boolean;
     }) => Promise<ChannelSetupIpcResult<ChannelSetupSummary>>;
+  };
+  customChannels: {
+    getSnapshot: () => Promise<CustomChannelIpcResult<CustomChannelSnapshot>>;
+    listMedia: (
+      input: CustomChannelListMediaRequest['payload'],
+    ) => Promise<CustomChannelIpcResult<CustomChannelMediaPage>>;
+    getMediaMetadata: (
+      input: CustomChannelGetMediaMetadataRequest['payload'],
+    ) => Promise<CustomChannelIpcResult<CustomChannelMediaMetadata>>;
+    validateDraft: (
+      input: CustomChannelDraftInput,
+    ) => Promise<CustomChannelIpcResult<CustomChannelDraftValidationSummary>>;
+    saveDraft: (
+      input: CustomChannelDraftInput,
+    ) => Promise<CustomChannelIpcResult<CustomChannelMutationResult>>;
+    deleteChannel: (
+      input: CustomChannelDeleteRequest['payload'],
+    ) => Promise<CustomChannelIpcResult<CustomChannelMutationResult>>;
+    duplicateChannelDraft: (
+      input: CustomChannelDuplicateDraftRequest['payload'],
+    ) => Promise<CustomChannelIpcResult<CustomChannelDraftResult>>;
+    reorderChannels: (
+      input: CustomChannelReorderRequest['payload'],
+    ) => Promise<CustomChannelIpcResult<CustomChannelMutationResult>>;
+    setChannelVisibility: (
+      input: CustomChannelVisibilityRequest['payload'],
+    ) => Promise<CustomChannelIpcResult<CustomChannelMutationResult>>;
   };
   guide: {
     getPresentation: (input: {

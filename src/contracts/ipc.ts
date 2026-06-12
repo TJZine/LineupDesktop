@@ -128,6 +128,33 @@ export const LINEUP_GUIDE_GET_PRESENTATION_CHANNEL =
 
 export const LINEUP_PLAYER_TUNE_CHANNEL = 'lineup:player:tuneChannel' as const;
 
+export const LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL =
+  'lineup:customChannels:getSnapshot' as const;
+
+export const LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL =
+  'lineup:customChannels:listMedia' as const;
+
+export const LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL =
+  'lineup:customChannels:getMediaMetadata' as const;
+
+export const LINEUP_CUSTOM_CHANNEL_VALIDATE_DRAFT_CHANNEL =
+  'lineup:customChannels:validateDraft' as const;
+
+export const LINEUP_CUSTOM_CHANNEL_SAVE_DRAFT_CHANNEL =
+  'lineup:customChannels:saveDraft' as const;
+
+export const LINEUP_CUSTOM_CHANNEL_DELETE_CHANNEL =
+  'lineup:customChannels:deleteChannel' as const;
+
+export const LINEUP_CUSTOM_CHANNEL_DUPLICATE_DRAFT_CHANNEL =
+  'lineup:customChannels:duplicateChannelDraft' as const;
+
+export const LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL =
+  'lineup:customChannels:reorderChannels' as const;
+
+export const LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL =
+  'lineup:customChannels:setChannelVisibility' as const;
+
 /**
  * Known privileged renderer payload field names are denied at contract seams.
  * Review additions/removals with secret-flow and native-handle exposure impact.

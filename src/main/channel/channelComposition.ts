@@ -7,6 +7,9 @@ import { resolveDesktopAppDataPaths } from '../persistence/appDataPaths.js';
 import { DesktopChannelPersistenceStore } from '../persistence/desktopChannelPersistenceStore.js';
 import { registerChannelIpcHandlers, type ChannelIpcTeardown } from './channelIpc.js';
 import { ChannelRuntime } from './channelRuntime.js';
+import { registerCustomChannelIpcHandlers, type CustomChannelIpcTeardown } from './customChannelIpc.js';
+import { CustomChannelMediaPicker } from './customChannelMediaPicker.js';
+import { CustomChannelRuntime } from './customChannelRuntime.js';
 import type { DesktopPlexRuntime } from '../plex/desktopPlexRuntime.js';
 import { PlexLibraryMinimalAdapter } from './plexLibraryMinimalAdapter.js';
 import { ChannelScheduler } from '../../domain/scheduler/channelScheduler.js';
@@ -47,8 +50,10 @@ export function registerChannelComposition(
     plexRuntime: options.plexRuntime,
     clock,
   });
-
   const plexLibraryAdapter = new PlexLibraryMinimalAdapter(options.plexRuntime);
+  const customChannelMediaPicker = new CustomChannelMediaPicker({
+    plexRuntime: options.plexRuntime,
+  });
   const activeChannelScheduler = new ChannelScheduler({ clock });
   const guideLogger = createGuideRuntimeLogger(options.diagnosticEventStore);
   const guideRuntime = new GuideRuntime({
@@ -59,10 +64,26 @@ export function registerChannelComposition(
     onChannelTuned: typeof options.onChannelTuned === 'function' ? options.onChannelTuned : undefined,
     logger: guideLogger,
   });
+  const customChannelRuntime = new CustomChannelRuntime({
+    storage: new DesktopChannelPersistenceStore({
+      persistenceFilePath: channelPersistenceFilePath,
+    }),
+    clock,
+    logger: guideLogger,
+    onChannelsChanged: async () => {
+      await guideRuntime.refreshActiveChannelSelection();
+    },
+  });
 
   const teardownIpc: ChannelIpcTeardown = registerChannelIpcHandlers({
     runtime,
     guideRuntime,
+    isAuthorizedEvent: options.isAuthorizedEvent,
+    createRequestId: options.createRequestId,
+  });
+  const teardownCustomChannelIpc: CustomChannelIpcTeardown = registerCustomChannelIpcHandlers({
+    runtime: customChannelRuntime,
+    mediaPicker: customChannelMediaPicker,
     isAuthorizedEvent: options.isAuthorizedEvent,
     createRequestId: options.createRequestId,
   });
@@ -84,6 +105,7 @@ export function registerChannelComposition(
     guideRuntime,
     activeChannelScheduler,
     teardown: async () => {
+      await teardownCustomChannelIpc();
       await teardownIpc();
     },
   };
