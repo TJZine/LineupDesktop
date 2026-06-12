@@ -1108,3 +1108,84 @@ test('desktop player adapter rejects malformed privileged track maps before help
   assertErrorEvent(result.events, 'validation-failure');
   assertTextAbsent(result, 'trackMap');
 });
+
+test('desktop player adapter rejects unsafe privileged track-map details before helper dispatch', async () => {
+  const cases: Array<{
+    name: string;
+    setup: unknown;
+    absentText: string;
+  }> = [
+    {
+      name: 'extra private-looking field',
+      absentText: 'rawMediaUrl',
+      setup: {
+        selectedTrackIds: { video: null, audio: null, subtitle: null },
+        selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+        trackMap: {
+          video: [],
+          audio: [{ publicTrackId: 'audio-public', privateTrackId: 'audio-private', rawMediaUrl: 'secret' }],
+          subtitle: [],
+        },
+      },
+    },
+    {
+      name: 'duplicate public id',
+      absentText: 'duplicated-public-id',
+      setup: {
+        selectedTrackIds: { video: null, audio: null, subtitle: null },
+        selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+        trackMap: {
+          video: [],
+          audio: [{ publicTrackId: 'duplicated-public-id', privateTrackId: 'audio-private' }],
+          subtitle: [{ publicTrackId: 'duplicated-public-id', privateTrackId: 'subtitle-private' }],
+        },
+      },
+    },
+    {
+      name: 'selected public id missing from map',
+      absentText: 'selected-public-id',
+      setup: {
+        selectedTrackIds: { video: null, audio: 'selected-public-id', subtitle: null },
+        selectedPrivateTrackIds: { video: null, audio: 'selected-private-id', subtitle: null },
+        trackMap: { video: [], audio: [], subtitle: [] },
+      },
+    },
+    {
+      name: 'selected private id does not match map',
+      absentText: 'wrong-private-id',
+      setup: {
+        selectedTrackIds: { video: null, audio: 'selected-public-id', subtitle: null },
+        selectedPrivateTrackIds: { video: null, audio: 'wrong-private-id', subtitle: null },
+        trackMap: {
+          video: [],
+          audio: [{ publicTrackId: 'selected-public-id', privateTrackId: 'expected-private-id' }],
+          subtitle: [],
+        },
+      },
+    },
+  ];
+
+  for (const [index, testCase] of cases.entries()) {
+    const host = new FakeNativePlayerHost();
+    const adapter = new DesktopPlayerAdapter(host);
+    const requestId = `request-unsafe-track-map-${index}`;
+    const context = privilegedContext(requestId);
+    const malformedContext = {
+      privatePlayback: {
+        ...context.privatePlayback,
+        setup: {
+          ...context.privatePlayback.setup,
+          ...(testCase.setup as Record<string, unknown>),
+        },
+      },
+    } as unknown as PrivilegedPlaybackDispatchContext;
+
+    const result = await adapter.dispatchRuntimeCommand(runtimeLoadCommand(requestId), malformedContext);
+
+    assert.equal(result.accepted, false, testCase.name);
+    assert.equal(host.commands.length, 0, testCase.name);
+    assertErrorEvent(result.events, 'validation-failure');
+    assertTextAbsent(result, testCase.absentText);
+    assertNoForbiddenKeys(result);
+  }
+});
