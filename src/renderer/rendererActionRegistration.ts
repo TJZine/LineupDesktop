@@ -40,6 +40,7 @@ export interface RendererActionHandlers {
   toggleFullscreen(): void;
   selectAudioTrack(trackId: string): void;
   selectSubtitleTrack(trackId: string | null): void;
+  applySettingsCategory?(category: string): void;
 }
 
 export function registerRendererActions(
@@ -64,7 +65,15 @@ export function registerRendererActions(
     if (!(event.target instanceof HTMLElement)) return;
     const button = event.target.closest<HTMLButtonElement>('[data-settings-action]');
     const action = readSettingsActionId(button?.dataset.settingsAction);
-    if (action !== null) handlers.applySettingsAction(action);
+    if (action !== null) {
+      handlers.applySettingsAction(action);
+      return;
+    }
+    const catButton = event.target.closest<HTMLButtonElement>('[data-settings-category]');
+    const category = catButton?.dataset.settingsCategory;
+    if (category) {
+      handlers.applySettingsCategory?.(category);
+    }
   });
   for (const button of dom.setupActionButtons) {
     button.addEventListener('click', () => {

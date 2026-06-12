@@ -27,6 +27,7 @@ import { subscribePlayerBridge } from './playerBridgeSubscription.js';
 import { createGuidePresentationPolling } from './guidePresentationPolling.js';
 import { dispatchPlexRuntimeAction } from './plexRuntimeActionDispatch.js';
 import { initializeProfilePinModal, openProfilePinModal, isProfilePinModalActive, closeProfilePinModal } from './profilePinModal.js';
+import type { SettingsSectionId } from './settingsSetup.js';
 
 mountStaticRendererDom();
 
@@ -37,6 +38,7 @@ const presentationFixtures = createRendererPresentationFixtures();
 let workflowState = createWorkflowState('player', presentationFixtures.guide);
 let overlayState = createPlayerOverlayState(presentationFixtures.overlays);
 let playerSnapshot = presentationFixtures.playerSnapshot;
+let activeSettingsCategory: SettingsSectionId = 'playback';
 const focusRegistry = new FocusRegistry();
 let focusState: FocusState;
 const plexController = createPlexRuntimeController({
@@ -129,6 +131,10 @@ registerRendererActions(dom, document, {
   activateRoute,
   applyRouteAction: (action) => { void applyRouteAction(action); },
   applySettingsAction,
+  applySettingsCategory: (category) => {
+    activeSettingsCategory = category as SettingsSectionId;
+    renderApp();
+  },
   applyChannelSetupAction,
   applyChannelCommitAction: (action) => { void applyChannelCommitAction(action); },
   applyEpgAction,
@@ -198,10 +204,24 @@ async function handleDesktopInput(input: DesktopInputButton): Promise<void> {
     case 'up':
     case 'down':
     case 'left':
-    case 'right':
+    case 'right': {
+      const prevActiveId = focusState.activeId;
       focusState = moveRendererFocus(focusRegistry, focusState, input, dom);
+      if (focusState.activeId !== prevActiveId) {
+        if (focusState.activeId === 'settings-cat-playback') {
+          activeSettingsCategory = 'playback';
+          renderApp();
+        } else if (focusState.activeId === 'settings-cat-guide') {
+          activeSettingsCategory = 'guide';
+          renderApp();
+        } else if (focusState.activeId === 'settings-cat-setup') {
+          activeSettingsCategory = 'setup';
+          renderApp();
+        }
+      }
       scrollFocusedSetupControlIntoView();
       return;
+    }
     case 'ok':
       clickFocusedRendererElement(focusState, dom);
       return;
@@ -583,6 +603,7 @@ function renderApp(): void {
     channelController.getState(),
     liveSelection,
     presentationFixtures.overlays,
+    activeSettingsCategory,
   );
   renderPlexRuntimeDom(plexState, dom);
   renderCustomChannelWorkspace(customChannelController.getState(), dom);
@@ -598,6 +619,16 @@ function focusRendererElement(element: HTMLElement): void {
   const focusId = element.dataset.focusId;
   if (focusId !== undefined) {
     focusState = focusRendererTarget(focusRegistry, focusState, focusId, dom);
+    if (focusId === 'settings-cat-playback') {
+      activeSettingsCategory = 'playback';
+      renderApp();
+    } else if (focusId === 'settings-cat-guide') {
+      activeSettingsCategory = 'guide';
+      renderApp();
+    } else if (focusId === 'settings-cat-setup') {
+      activeSettingsCategory = 'setup';
+      renderApp();
+    }
     scrollFocusedSetupControlIntoView();
   }
 }

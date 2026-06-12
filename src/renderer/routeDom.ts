@@ -2,6 +2,7 @@ import type { PlayerSnapshot } from '../contracts/player.js';
 import { formatEpgTimeWindow } from './epg.js';
 import type { ChannelRuntimeRendererState } from './channelRuntimeState.js';
 import type { RendererDomBindings } from './domBindings.js';
+import type { SettingsSectionId } from './settingsSetup.js';
 import { readClosestRouteId, readRouteActionId, readRouteId } from './domBindings.js';
 import {
   createPlayerOverlayView,
@@ -17,6 +18,8 @@ import {
 import type { ChannelSetupLiveSelectionViewModel } from './channelSetup/viewModel.js';
 import { renderChannelSetupDom } from './channelSetup/dom.js';
 import { DEFAULT_PLAYER_OVERLAY_PRESENTATION } from './overlayViewModels.js';
+import { renderSettingsDom } from './settingsSetupDom.js';
+
 
 export function renderRouteDom(
   workflowState: WorkflowState,
@@ -61,6 +64,7 @@ export function renderWorkflowDom(
   channelRuntime?: ChannelRuntimeRendererState,
   liveSelection: ChannelSetupLiveSelectionViewModel | null = null,
   overlayPresentation: PlayerOverlayPresentationSource = DEFAULT_PLAYER_OVERLAY_PRESENTATION,
+  activeSettingsCategory: SettingsSectionId = 'playback',
 ): void {
   const view = getRouteWorkflowView(workflowState, channelRuntime, liveSelection);
 
@@ -93,7 +97,7 @@ export function renderWorkflowDom(
     ...overlayPresentation,
     playerSnapshot,
   });
-  renderSettingsDom(view, dom);
+  renderSettingsDom(view, dom, activeSettingsCategory);
   renderChannelSetupDom(view, dom, liveSelection);
   renderRouteActionButtons(view, dom);
 }
@@ -119,42 +123,6 @@ function renderChannelList(view: RouteWorkflowViewModel, dom: RendererDomBinding
       return item;
     }),
   );
-}
-
-function renderSettingsDom(view: RouteWorkflowViewModel, dom: RendererDomBindings): void {
-  if (dom.settingsSourceElement) {
-    dom.settingsSourceElement.textContent = view.settings.libraryName;
-  }
-  if (dom.settingsChannelsElement) {
-    dom.settingsChannelsElement.textContent = String(view.settings.channelCount);
-  }
-  if (dom.settingsStateElement) {
-    dom.settingsStateElement.textContent = `${view.settings.setupState}; ${view.settings.recoveryDetail}`;
-  }
-  if (dom.settingsSectionsElement) {
-    dom.settingsSectionsElement.replaceChildren(
-      ...view.settings.sections.map((section) => {
-        const article = document.createElement('article');
-        article.className = 'settings-section';
-        const title = document.createElement('h3');
-        title.textContent = section.title;
-        const detail = document.createElement('p');
-        detail.textContent = section.detail;
-        const list = document.createElement('dl');
-        for (const setting of section.items) {
-          const row = document.createElement('div');
-          const label = document.createElement('dt');
-          label.textContent = setting.label;
-          const value = document.createElement('dd');
-          value.textContent = `${setting.valueLabel} - ${setting.description}`;
-          row.append(label, value);
-          list.append(row);
-        }
-        article.append(title, detail, list);
-        return article;
-      }),
-    );
-  }
 }
 
 function renderRouteActionButtons(view: RouteWorkflowViewModel, dom: RendererDomBindings): void {

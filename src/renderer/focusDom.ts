@@ -93,7 +93,11 @@ export function registerRendererFocusTargets(
     if (focusId === undefined || registered.has(focusId) || route === null) {
       return;
     }
-    const neighbors = focusId.startsWith('numpad-') ? getNumpadNeighbors(focusId) : undefined;
+    const neighbors = focusId.startsWith('numpad-')
+      ? getNumpadNeighbors(focusId)
+      : focusId.startsWith('settings-')
+      ? getSettingsNeighbors(focusId)
+      : undefined;
     focusRegistry.register({
       id: focusId,
       route,
@@ -273,3 +277,31 @@ function getNumpadNeighbors(focusId: string): Partial<Record<FocusDirection, str
   };
   return mapping[focusId] ?? {};
 }
+
+function getSettingsNeighbors(focusId: string): Partial<Record<FocusDirection, string>> | undefined {
+  switch (focusId) {
+    case 'settings-cat-playback':
+      return { right: 'settings-launch-mode', down: 'settings-cat-guide' };
+    case 'settings-cat-guide':
+      return { right: 'settings-guide-density', up: 'settings-cat-playback', down: 'settings-cat-setup' };
+    case 'settings-cat-setup':
+      return { right: 'settings-support-bundle', up: 'settings-cat-guide', down: 'settings-setup' };
+    case 'settings-setup':
+      return { up: 'settings-cat-setup', down: 'settings-player' };
+    case 'settings-player':
+      return { up: 'settings-setup' };
+    case 'settings-launch-mode':
+      return { left: 'settings-cat-playback', down: 'settings-preview-badges' };
+    case 'settings-preview-badges':
+      return { left: 'settings-cat-playback', up: 'settings-launch-mode' };
+    case 'settings-guide-density':
+      return { left: 'settings-cat-guide', down: 'settings-setup-reminder' };
+    case 'settings-setup-reminder':
+      return { left: 'settings-cat-guide', up: 'settings-guide-density' };
+    case 'settings-support-bundle':
+      return { left: 'settings-cat-setup' };
+    default:
+      return undefined;
+  }
+}
+

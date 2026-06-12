@@ -178,32 +178,36 @@ const STATIC_SCREEN_MARKUP = `
     </div>
   </section>
   <section id="screen-settings" class="screen" data-screen="settings" data-style-surface="screen" aria-labelledby="screen-settings-title" hidden>
-    <div class="screen__content">
-      <div class="screen-shell-state" data-shell-state="active">
-        <span>Settings</span>
-        <strong data-screen-state-text="settings">Preference changes apply to this app session.</strong>
-      </div>
-      <p class="screen__kicker" data-workflow-kicker="settings">Settings</p>
-      <h2 id="screen-settings-title">Settings</h2>
-      <p data-workflow-primary="settings">Desktop preferences.</p>
-      <p data-workflow-secondary="settings">Desktop preferences.</p>
-      <dl class="settings-summary">
-        <div><dt>Source</dt><dd data-settings-source></dd></div>
-        <div><dt>Channels</dt><dd data-settings-channels></dd></div>
-        <div><dt>Status</dt><dd data-settings-state></dd></div>
-      </dl>
-      <div class="settings-sections" data-settings-sections></div>
-      <div class="settings-controls" aria-label="Settings shell controls">
-        <button type="button" data-settings-action="cycleLaunchMode" data-focus-id="settings-launch-mode">Startup surface</button>
-        <button type="button" data-settings-action="cycleGuideDensity" data-focus-id="settings-guide-density">Guide density</button>
-        <button type="button" data-settings-action="togglePreviewBadges" data-focus-id="settings-preview-badges">Preview badges</button>
-        <button type="button" data-settings-action="toggleSetupReminder" data-focus-id="settings-setup-reminder">Setup reminder</button>
-        <button type="button" data-settings-action="exportSupportBundle" data-focus-id="settings-support-bundle">Export support bundle</button>
-      </div>
-      <div class="workflow-actions" data-workflow-actions="settings">
-        <button type="button" data-route-action="openChannelSetup" data-focus-id="settings-setup">Channel setup</button>
-        <button type="button" data-route-action="resumePlayer" data-focus-id="settings-player">Back to player</button>
-      </div>
+    <div class="screen__content settings-shell">
+      <nav class="settings-rail" aria-label="Settings categories">
+        <div class="settings-profile-row">
+          <div class="settings-profile-avatar">P</div>
+          <span class="settings-profile-name">Plex Profile</span>
+        </div>
+        <div class="settings-rail-categories">
+          <button type="button" data-settings-category="playback" data-focus-id="settings-cat-playback" class="settings-cat-btn">Playback</button>
+          <button type="button" data-settings-category="guide" data-focus-id="settings-cat-guide" class="settings-cat-btn">Guide</button>
+          <button type="button" data-settings-category="setup" data-focus-id="settings-cat-setup" class="settings-cat-btn">Recovery</button>
+        </div>
+        <div class="settings-rail-nav">
+          <button type="button" data-route-action="openChannelSetup" data-focus-id="settings-setup">Channel setup</button>
+          <button type="button" data-route-action="resumePlayer" data-focus-id="settings-player">Back to player</button>
+        </div>
+      </nav>
+      <main class="settings-detail-pane">
+        <header class="settings-detail-header">
+          <p class="screen__kicker" data-workflow-kicker="settings">Settings</p>
+          <h2 id="screen-settings-title">Settings</h2>
+          <p class="settings-subtitle" data-workflow-primary="settings">Desktop preferences.</p>
+          <p data-workflow-secondary="settings" style="display: none;"></p>
+        </header>
+        <dl class="settings-summary" style="display: none;">
+          <div><dt>Source</dt><dd data-settings-source></dd></div>
+          <div><dt>Channels</dt><dd data-settings-channels></dd></div>
+          <div><dt>Status</dt><dd data-settings-state></dd></div>
+        </dl>
+        <div class="settings-sections" data-settings-sections></div>
+      </main>
     </div>
   </section>
   <section id="screen-channel-setup" class="screen screen--onboarding" data-screen="channelSetup" data-style-surface="screen" aria-labelledby="screen-channel-setup-title" hidden>

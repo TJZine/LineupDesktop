@@ -203,6 +203,12 @@ export function createSettingsSections(
           valueLabel: state.guideDensity === 'comfortable' ? 'Comfortable' : 'Compact',
           description: 'Adjusts renderer guide spacing for this session only; no category color legend is used.',
         },
+        {
+          id: 'setup-reminder',
+          label: 'Setup reminder',
+          valueLabel: state.setupReminderEnabled ? 'Shown' : 'Hidden',
+          description: 'Controls local channel setup reminder state for this session only.',
+        },
       ],
     },
     {
