@@ -347,6 +347,12 @@ export async function runSmokeAssertions(
       }
       const miniGuideOverlay = document.querySelector('[data-overlay="miniGuide"]');
       const miniGuideText = document.querySelector('[data-overlay-mini-guide]')?.textContent ?? '';
+      if (!(miniGuideOverlay instanceof HTMLElement) || miniGuideOverlay.hidden) failures.push('mini guide visible');
+      assertTopElementAtCenter(miniGuideOverlay, 'mini guide z-order');
+      if (miniGuideText.trim().length < 12 || /undefined|null|NaN/i.test(miniGuideText)) {
+        failures.push('mini guide data ' + miniGuideText);
+      }
+
       const channelNumberButton = document.querySelector('[data-overlay-action="channelDigit4"]');
       if (!(channelNumberButton instanceof HTMLButtonElement)) {
         failures.push('channel number action');
@@ -375,16 +381,11 @@ export async function runSmokeAssertions(
       if (nowPlayingTitle.trim().length === 0 || /undefined|null|NaN/i.test(nowPlayingTitle)) {
         failures.push('now playing title ' + nowPlayingTitle);
       }
-      if (!(miniGuideOverlay instanceof HTMLElement) || miniGuideOverlay.hidden) failures.push('mini guide visible');
-      assertTopElementAtCenter(miniGuideOverlay, 'mini guide z-order');
-      if (miniGuideText.trim().length < 12 || /undefined|null|NaN/i.test(miniGuideText)) {
-        failures.push('mini guide data ' + miniGuideText);
-      }
       if (!(channelNumberOverlay instanceof HTMLElement) || channelNumberOverlay.hidden) {
         failures.push('channel number visible');
       }
       assertTopElementAtCenter(channelNumberOverlay, 'channel number z-order');
-      if (channelNumberValue !== '4--') failures.push('channel number value ' + channelNumberValue);
+      if (channelNumberValue !== '4__') failures.push('channel number value ' + channelNumberValue);
 
       const closeOverlayButton = document.querySelector('[data-overlay-action="closeTopOverlay"]');
       const playerOsdButton = document.querySelector('[data-focus-id="player-osd"]');

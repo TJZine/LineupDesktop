@@ -331,3 +331,12 @@ h2 {
 .screen[hidden] {
   display: none;
 }
+
+/* Disable transitions and animations during smoke tests to avoid race conditions */
+html[data-shell-mode="smoke"] *,
+html[data-shell-mode="smoke"] *::before,
+html[data-shell-mode="smoke"] *::after {
+  transition: none !important;
+  animation-duration: 0.01ms !important;
+}
+

@@ -167,6 +167,9 @@ registerRendererActions(dom, document, {
 });
 
 const capabilities = await window.lineupDesktop.shell.getCapabilities();
+if (capabilities.ok) {
+  document.documentElement.dataset.shellMode = capabilities.value.shellMode;
+}
 if (dom.capabilitiesElement) {
   dom.capabilitiesElement.textContent = capabilities.ok
     ? `${capabilities.value.appName} ${capabilities.value.appVersion} ${capabilities.value.shellMode}`
