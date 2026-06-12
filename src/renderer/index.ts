@@ -4,7 +4,7 @@ import { clickFocusedRendererElement, focusRendererTarget, moveRendererFocus, re
 import { createDesktopKeyboardInputListener, startDesktopGamepadRuntime } from './desktopInput.js';
 import { createDesktopCursorRuntime } from './desktopCursor.js';
 import { FocusRegistry, type AppRouteId, type DesktopInputButton, type FocusState } from './navigation.js';
-import { applyPlayerOverlayAction, createPlayerOverlayView, createPlayerOverlayState, resolvePlayerOverlayFocusId, type PlayerOverlayActionId } from './overlays.js';
+import { createPlayerOverlayState, type PlayerOverlayActionId } from './overlays.js';
 import { renderRouteDom, renderWorkflowDom } from './routeDom.js';
 import { mountStaticRendererDom } from './staticDom.js';
 import { applySupportBundleExportResult } from './supportBundleExport.js';
@@ -28,6 +28,13 @@ import { createGuidePresentationPolling } from './guidePresentationPolling.js';
 import { dispatchPlexRuntimeAction } from './plexRuntimeActionDispatch.js';
 import { initializeProfilePinModal, openProfilePinModal, isProfilePinModalActive, closeProfilePinModal } from './profilePinModal.js';
 import type { SettingsSectionId } from './settingsSetup.js';
+import {
+  applyOverlayAction as dispatchOverlayAction,
+  selectAudioTrack as dispatchSelectAudioTrack,
+  selectSubtitleTrack as dispatchSelectSubtitleTrack,
+  toggleFullscreen as dispatchToggleFullscreen,
+  type PlayerOverlayActionContext,
+} from './playerOverlayActions.js';
 
 mountStaticRendererDom();
 
@@ -39,8 +46,22 @@ let workflowState = createWorkflowState('player', presentationFixtures.guide);
 let overlayState = createPlayerOverlayState(presentationFixtures.overlays);
 let playerSnapshot = presentationFixtures.playerSnapshot;
 let activeSettingsCategory: SettingsSectionId = 'playback';
+let activeSetupStage = 'account';
 const focusRegistry = new FocusRegistry();
 let focusState: FocusState;
+const overlayActionContext: PlayerOverlayActionContext = {
+  getOverlayState: () => overlayState,
+  setOverlayState: (state) => { overlayState = state; },
+  getPlayerSnapshot: () => playerSnapshot,
+  getFocusState: () => focusState,
+  setFocusState: (state) => { focusState = state; },
+  getFocusRegistry: () => focusRegistry,
+  getDom: () => dom,
+  getPresentationFixtures: () => presentationFixtures,
+  getFullscreenEnabled: () => fullscreenEnabled,
+  setFullscreenEnabled: (val) => { fullscreenEnabled = val; },
+  renderApp,
+};
 const plexController = createPlexRuntimeController({
   bridge: window.lineupDesktop.plex,
   onStateChanged: () => renderApp(),
@@ -135,6 +156,10 @@ registerRendererActions(dom, document, {
     activeSettingsCategory = category as SettingsSectionId;
     renderApp();
   },
+  applySetupStage: (stage) => {
+    activeSetupStage = stage;
+    renderApp();
+  },
   applyChannelSetupAction,
   applyChannelCommitAction: (action) => { void applyChannelCommitAction(action); },
   applyEpgAction,
@@ -216,6 +241,24 @@ async function handleDesktopInput(input: DesktopInputButton): Promise<void> {
           renderApp();
         } else if (focusState.activeId === 'settings-cat-setup') {
           activeSettingsCategory = 'setup';
+          renderApp();
+        } else if (focusState.activeId === 'setup-stage-account') {
+          activeSetupStage = 'account';
+          renderApp();
+        } else if (focusState.activeId === 'setup-stage-server') {
+          activeSetupStage = 'server';
+          renderApp();
+        } else if (focusState.activeId === 'setup-stage-library') {
+          activeSetupStage = 'library';
+          renderApp();
+        } else if (focusState.activeId === 'setup-stage-preview') {
+          activeSetupStage = 'preview';
+          renderApp();
+        } else if (focusState.activeId === 'setup-stage-build') {
+          activeSetupStage = 'build';
+          renderApp();
+        } else if (focusState.activeId === 'setup-stage-custom') {
+          activeSetupStage = 'custom';
           renderApp();
         }
       }
@@ -322,123 +365,19 @@ function applyEpgAction(action: EpgActionId): void {
 }
 
 async function selectAudioTrack(trackId: string): Promise<void> {
-  const requestId = `select-audio-${Date.now()}`;
-  const snapshotRequestId = playerSnapshot.requestId;
-  if (snapshotRequestId === null) {
-    recordPlayerDispatchFailure('player.selectAudio', requestId, new Error('Player snapshot request id is unavailable.'));
-    return;
-  }
-  try {
-    await window.lineupDesktop.player.dispatch({
-      intent: 'player.selectAudio',
-      requestId,
-      payload: { trackId, snapshotRequestId },
-    });
-  } catch (error: unknown) {
-    recordPlayerDispatchFailure('player.selectAudio', requestId, error);
-  }
+  await dispatchSelectAudioTrack(trackId, overlayActionContext);
 }
 
 async function selectSubtitleTrack(trackId: string | null): Promise<void> {
-  const requestId = `select-subtitle-${Date.now()}`;
-  const snapshotRequestId = playerSnapshot.requestId;
-  if (snapshotRequestId === null) {
-    recordPlayerDispatchFailure('player.selectSubtitle', requestId, new Error('Player snapshot request id is unavailable.'));
-    return;
-  }
-  try {
-    await window.lineupDesktop.player.dispatch({
-      intent: 'player.selectSubtitle',
-      requestId,
-      payload: { trackId, snapshotRequestId },
-    });
-  } catch (error: unknown) {
-    recordPlayerDispatchFailure('player.selectSubtitle', requestId, error);
-  }
+  await dispatchSelectSubtitleTrack(trackId, overlayActionContext);
 }
-
-function recordPlayerDispatchFailure(operation: string, requestId: string, error: unknown): void {
-  recordRendererBridgeFailure(
-    window.lineupDesktop.diagnostics.recordRendererEvent,
-    'player.dispatch',
-    summarizeRendererBridgeError(error),
-    { operation, requestId },
-  );
-}
-
-let channelCommitTimeoutId: number | null = null;
 
 function applyOverlayAction(action: PlayerOverlayActionId): void {
-  if (action.startsWith('channelDigit')) {
-    if (channelCommitTimeoutId !== null) {
-      window.clearTimeout(channelCommitTimeoutId);
-    }
-    channelCommitTimeoutId = window.setTimeout(() => {
-      channelCommitTimeoutId = null;
-      applyOverlayAction('commitChannelNumber');
-    }, 2500);
-  } else if (
-    action === 'commitChannelNumber' ||
-    action === 'clearChannelNumber' ||
-    action === 'closeTopOverlay'
-  ) {
-    if (channelCommitTimeoutId !== null) {
-      window.clearTimeout(channelCommitTimeoutId);
-      channelCommitTimeoutId = null;
-    }
-  }
-
-  if (action === 'volumeUp' || action === 'volumeDown') {
-    const currentVolume = playerSnapshot.volume;
-    const nextVolume = action === 'volumeUp'
-      ? Math.min(1, Math.round((currentVolume + 0.1) * 10) / 10)
-      : Math.max(0, Math.round((currentVolume - 0.1) * 10) / 10);
-    const requestId = `volume-change-${Date.now()}`;
-    void window.lineupDesktop.player.dispatch({
-      intent: 'player.setVolume',
-      requestId,
-      payload: { volume: nextVolume },
-    }).catch((error: unknown) => recordPlayerDispatchFailure('player.setVolume', requestId, error));
-  } else if (action === 'toggleMute') {
-    const requestId = `mute-change-${Date.now()}`;
-    void window.lineupDesktop.player.dispatch({
-      intent: 'player.setMute',
-      requestId,
-      payload: { muted: !playerSnapshot.muted },
-    }).catch((error: unknown) => recordPlayerDispatchFailure('player.setMute', requestId, error));
-  } else if (action === 'cycleAudioTrack') {
-    const audioTracks = playerSnapshot.tracks.filter((t) => t.kind === 'audio' && t.available);
-    if (audioTracks.length > 0) {
-      const selectedAudioIndex = audioTracks.findIndex((t) => t.selected);
-      const nextAudioTrack = audioTracks[(selectedAudioIndex + 1) % audioTracks.length];
-      if (nextAudioTrack) {
-        void selectAudioTrack(nextAudioTrack.id);
-      }
-    }
-  } else if (action === 'cycleSubtitleTrack') {
-    const subtitleTracks = playerSnapshot.tracks.filter((t) => t.kind === 'subtitle' && t.available);
-    const subtitleOptions: (string | null)[] = [null, ...subtitleTracks.map((t) => t.id)];
-    const currentSub = playerSnapshot.selectedSubtitleTrackId;
-    const currentIndex = subtitleOptions.indexOf(currentSub);
-    const nextSub = subtitleOptions[(currentIndex + 1) % subtitleOptions.length];
-    void selectSubtitleTrack(nextSub);
-  }
-
-  overlayState = applyPlayerOverlayAction(overlayState, action, Date.now(), presentationFixtures.overlays);
-  const view = createPlayerOverlayView(overlayState, {
-    ...presentationFixtures.overlays,
-    playerSnapshot,
-  });
-  focusState = focusRegistry.focusTarget(focusState, resolvePlayerOverlayFocusId(view)).state;
-  renderApp();
+  dispatchOverlayAction(action, overlayActionContext);
 }
 
 async function toggleFullscreen(): Promise<void> {
-  const result = await window.lineupDesktop.window.setFullscreen(!fullscreenEnabled);
-  if (result.ok) {
-    fullscreenEnabled = result.value.enabled;
-    dom.fullscreenButton?.setAttribute('aria-pressed', String(fullscreenEnabled));
-  }
+  await dispatchToggleFullscreen(overlayActionContext);
 }
 
 async function exportSupportBundle(): Promise<void> {
@@ -604,6 +543,7 @@ function renderApp(): void {
     liveSelection,
     presentationFixtures.overlays,
     activeSettingsCategory,
+    activeSetupStage,
   );
   renderPlexRuntimeDom(plexState, dom);
   renderCustomChannelWorkspace(customChannelController.getState(), dom);
@@ -627,6 +567,24 @@ function focusRendererElement(element: HTMLElement): void {
       renderApp();
     } else if (focusId === 'settings-cat-setup') {
       activeSettingsCategory = 'setup';
+      renderApp();
+    } else if (focusId === 'setup-stage-account') {
+      activeSetupStage = 'account';
+      renderApp();
+    } else if (focusId === 'setup-stage-server') {
+      activeSetupStage = 'server';
+      renderApp();
+    } else if (focusId === 'setup-stage-library') {
+      activeSetupStage = 'library';
+      renderApp();
+    } else if (focusId === 'setup-stage-preview') {
+      activeSetupStage = 'preview';
+      renderApp();
+    } else if (focusId === 'setup-stage-build') {
+      activeSetupStage = 'build';
+      renderApp();
+    } else if (focusId === 'setup-stage-custom') {
+      activeSetupStage = 'custom';
       renderApp();
     }
     scrollFocusedSetupControlIntoView();

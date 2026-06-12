@@ -41,6 +41,7 @@ export interface RendererActionHandlers {
   selectAudioTrack(trackId: string): void;
   selectSubtitleTrack(trackId: string | null): void;
   applySettingsCategory?(category: string): void;
+  applySetupStage?(stage: string): void;
 }
 
 export function registerRendererActions(
@@ -73,6 +74,15 @@ export function registerRendererActions(
     const category = catButton?.dataset.settingsCategory;
     if (category) {
       handlers.applySettingsCategory?.(category);
+    }
+  });
+  const setupScreen = documentRef.getElementById('screen-channel-setup');
+  setupScreen?.addEventListener('click', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    const catButton = event.target.closest<HTMLButtonElement>('[data-setup-stage]');
+    const stage = catButton?.dataset.setupStage;
+    if (stage) {
+      handlers.applySetupStage?.(stage);
     }
   });
   for (const button of dom.setupActionButtons) {

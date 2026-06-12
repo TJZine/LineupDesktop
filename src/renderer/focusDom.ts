@@ -97,6 +97,8 @@ export function registerRendererFocusTargets(
       ? getNumpadNeighbors(focusId)
       : focusId.startsWith('settings-')
       ? getSettingsNeighbors(focusId)
+      : focusId.startsWith('setup-') || focusId.startsWith('plex-') || focusId.startsWith('channel-') || focusId.startsWith('custom-')
+      ? getSetupNeighbors(focusId)
       : undefined;
     focusRegistry.register({
       id: focusId,
@@ -300,6 +302,80 @@ function getSettingsNeighbors(focusId: string): Partial<Record<FocusDirection, s
       return { left: 'settings-cat-guide', up: 'settings-guide-density' };
     case 'settings-support-bundle':
       return { left: 'settings-cat-setup' };
+    default:
+      return undefined;
+  }
+}
+
+function getSetupNeighbors(focusId: string): Partial<Record<FocusDirection, string>> | undefined {
+  if (focusId.startsWith('plex-dyn-home-')) return { left: 'setup-stage-account' };
+  if (focusId.startsWith('plex-dyn-server-')) return { left: 'setup-stage-server' };
+  if (focusId.startsWith('plex-dyn-section-') || focusId.startsWith('plex-dyn-item-')) return { left: 'setup-stage-library' };
+  if (focusId.startsWith('custom-channel-') || focusId.startsWith('custom-media-') || focusId.startsWith('custom-draft-')) return { left: 'setup-stage-custom' };
+
+  switch (focusId) {
+    case 'setup-stage-account':
+      return { right: 'plex-load', down: 'setup-stage-server' };
+    case 'setup-stage-server':
+      return { right: 'plex-restore-server', up: 'setup-stage-account', down: 'setup-stage-library' };
+    case 'setup-stage-library':
+      return { right: 'plex-list-sections', up: 'setup-stage-server', down: 'setup-stage-preview' };
+    case 'setup-stage-preview':
+      return { right: 'plex-clear-metadata', up: 'setup-stage-library', down: 'setup-stage-build' };
+    case 'setup-stage-build':
+      return { right: 'channel-append', up: 'setup-stage-preview', down: 'setup-stage-custom' };
+    case 'setup-stage-custom':
+      return { right: 'custom-channel-refresh', up: 'setup-stage-build', down: 'setup-settings' };
+    case 'setup-settings':
+      return { up: 'setup-stage-custom', down: 'setup-player' };
+    case 'setup-player':
+      return { up: 'setup-settings' };
+
+    case 'plex-load':
+    case 'plex-request-pin':
+    case 'plex-poll-pin':
+    case 'plex-cancel-pin':
+    case 'plex-clear-pin':
+    case 'plex-home-pin':
+    case 'plex-home-users':
+      return { left: 'setup-stage-account' };
+
+    case 'plex-restore-server':
+    case 'plex-refresh-servers':
+    case 'plex-clear-server':
+      return { left: 'setup-stage-server' };
+
+    case 'plex-list-sections':
+    case 'plex-clear-section':
+    case 'plex-list-items':
+    case 'plex-clear-items':
+    case 'plex-search-query':
+    case 'plex-search':
+    case 'plex-clear-search':
+      return { left: 'setup-stage-library' };
+
+    case 'plex-clear-metadata':
+      return { left: 'setup-stage-preview' };
+
+    case 'channel-append':
+    case 'channel-replace':
+    case 'channel-confirm-replace':
+      return { left: 'setup-stage-build' };
+
+    case 'custom-channel-refresh':
+    case 'custom-channel-search-query':
+    case 'custom-channel-browse':
+    case 'custom-channel-search':
+    case 'custom-channel-clear-search':
+    case 'custom-channel-filter-all':
+    case 'custom-channel-filter-movies':
+    case 'custom-channel-filter-episodes':
+    case 'custom-channel-name':
+    case 'custom-channel-number':
+    case 'custom-channel-hidden':
+    case 'custom-channel-save':
+      return { left: 'setup-stage-custom' };
+
     default:
       return undefined;
   }

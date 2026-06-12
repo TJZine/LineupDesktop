@@ -66,6 +66,7 @@ export function renderWorkflowDom(
   liveSelection: ChannelSetupLiveSelectionViewModel | null = null,
   overlayPresentation: PlayerOverlayPresentationSource = DEFAULT_PLAYER_OVERLAY_PRESENTATION,
   activeSettingsCategory: SettingsSectionId = 'playback',
+  activeSetupStage: string = 'account',
 ): void {
   const view = getRouteWorkflowView(workflowState, channelRuntime, liveSelection);
 
@@ -99,7 +100,7 @@ export function renderWorkflowDom(
     playerSnapshot,
   });
   renderSettingsDom(view, dom, activeSettingsCategory);
-  renderChannelSetupDom(view, dom, liveSelection);
+  renderChannelSetupDom(view, dom, liveSelection, activeSetupStage);
   renderRouteActionButtons(view, dom);
 }
 

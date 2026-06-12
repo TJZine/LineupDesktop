@@ -38,7 +38,7 @@ test('static channel setup markup hosts reachable Plex setup controls', () => {
   assert.match(channelSetupMarkup, /data-plex-search-query/u);
   assert.match(channelSetupMarkup, /screen--onboarding/u);
   assert.match(channelSetupMarkup, /plex-onboarding-shell/u);
-  assert.match(channelSetupMarkup, /Plex onboarding/u);
+  assert.match(channelSetupMarkup, /Plex setup/u);
   assert.match(channelSetupMarkup, /Choose profile/u);
   assert.match(channelSetupMarkup, /Find servers/u);
   assert.match(channelSetupMarkup, /Open libraries/u);
@@ -55,8 +55,8 @@ test('static channel setup markup hosts reachable Plex setup controls', () => {
   assert.match(channelSetupMarkup, /Library source/u);
   assert.match(channelSetupMarkup, /4\. Result/u);
   assert.ok(
-    channelSetupMarkup.indexOf('data-channel-commit-action="append"') <
-      channelSetupMarkup.indexOf('id="plex-stage-metadata"'),
+    channelSetupMarkup.indexOf('id="plex-stage-metadata"') <
+      channelSetupMarkup.indexOf('data-channel-commit-action="append"'),
   );
   assert.match(channelSetupMarkup, /Optional media preview/u);
   assert.doesNotMatch(
@@ -124,7 +124,7 @@ test('static channel setup commit panel exposes the setup frame style hook', () 
 
   const channelSetupMarkup = readStaticChannelSetupMarkup(root.innerHTML);
 
-  assert.match(channelSetupMarkup, /class="channel-setup-commit"/u);
+  assert.match(channelSetupMarkup, /class="channel-setup-commit setup-section"/u);
 });
 
 test('Plex runtime controller applies async setup, server, library, search, and metadata transitions', async () => {
