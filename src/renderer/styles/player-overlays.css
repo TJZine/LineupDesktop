@@ -17,7 +17,7 @@
 .overlay-stack {
   position: absolute;
   inset: 0;
-  z-index: 30;
+  z-index: var(--z-overlay);
   pointer-events: none;
 }
 
@@ -102,7 +102,7 @@
 
 .overlay-progress {
   --overlay-progress: 0%;
-  height: 6px;
+  height: var(--progress-height-sm);
   margin-top: var(--space-1);
   overflow: hidden;
   border-radius: 999px;
@@ -194,7 +194,7 @@
 
 .player-osd__bar {
   position: relative;
-  height: 5px;
+  height: var(--progress-height-lg);
   overflow: hidden;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.16);
@@ -233,6 +233,8 @@
   display: grid;
   gap: var(--space-4);
   width: min(620px, calc(100% - (var(--space-11) * 2)));
+  max-height: calc(100% - 120px);
+  overflow-y: auto;
   padding: var(--space-6);
 }
 
@@ -291,7 +293,7 @@
 .mini-guide__progress {
   --mini-guide-progress: 0%;
   display: block;
-  height: 3px;
+  height: var(--progress-height-sm);
   margin-top: var(--space-2);
   overflow: hidden;
   border-radius: 999px;
@@ -307,12 +309,12 @@
 }
 
 .channel-number-overlay {
-  top: var(--space-11);
+  top: var(--space-3);
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-3);
   justify-items: center;
   min-width: 220px;
-  padding: var(--space-8);
+  padding: var(--space-4);
 }
 
 .channel-number-overlay span {

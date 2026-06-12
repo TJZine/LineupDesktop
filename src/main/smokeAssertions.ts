@@ -226,9 +226,23 @@ export async function runSmokeAssertions(
               ' top element ' +
               JSON.stringify({
                 expected: element.getAttribute('data-overlay') ?? element.className,
+                rect: {
+                  left: rect.left,
+                  top: rect.top,
+                  width: rect.width,
+                  height: rect.height
+                },
+                coords: { x, y },
+                window: { width: window.innerWidth, height: window.innerHeight },
                 actual:
                   topElement instanceof HTMLElement
-                    ? topElement.getAttribute('data-overlay') ?? topElement.className
+                    ? {
+                        tag: topElement.tagName.toLowerCase(),
+                        id: topElement.id,
+                        class: topElement.className,
+                        overlay: topElement.getAttribute('data-overlay'),
+                        rect: topElement.getBoundingClientRect()
+                      }
                     : null,
               }),
           );
