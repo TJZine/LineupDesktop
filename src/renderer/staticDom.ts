@@ -319,6 +319,35 @@ const STATIC_SCREEN_MARKUP = `
         <button type="button" data-plex-action="clearMetadata" data-focus-id="plex-clear-metadata">Close preview</button>
         <div class="plex-runtime__metadata" data-plex-metadata></div>
       </section>
+      <div class="profile-pin-modal" id="profile-pin-modal" hidden>
+        <div class="profile-pin-modal__dialog">
+          <header class="profile-pin-modal__header">
+            <h3 id="profile-pin-modal-title">Enter Profile PIN</h3>
+            <p class="profile-pin-modal__user-name" id="profile-pin-modal-username"></p>
+          </header>
+          <div class="profile-pin-modal__slots">
+            <span class="profile-pin-modal__slot" data-pin-slot="0"></span>
+            <span class="profile-pin-modal__slot" data-pin-slot="1"></span>
+            <span class="profile-pin-modal__slot" data-pin-slot="2"></span>
+            <span class="profile-pin-modal__slot" data-pin-slot="3"></span>
+          </div>
+          <p class="profile-pin-modal__error" id="profile-pin-modal-error" hidden>Incorrect PIN. Please try again.</p>
+          <div class="profile-pin-modal__numpad">
+            <button type="button" class="numpad-btn" data-numpad="1" data-focus-id="numpad-1">1</button>
+            <button type="button" class="numpad-btn" data-numpad="2" data-focus-id="numpad-2">2</button>
+            <button type="button" class="numpad-btn" data-numpad="3" data-focus-id="numpad-3">3</button>
+            <button type="button" class="numpad-btn" data-numpad="4" data-focus-id="numpad-4">4</button>
+            <button type="button" class="numpad-btn" data-numpad="5" data-focus-id="numpad-5">5</button>
+            <button type="button" class="numpad-btn" data-numpad="6" data-focus-id="numpad-6">6</button>
+            <button type="button" class="numpad-btn" data-numpad="7" data-focus-id="numpad-7">7</button>
+            <button type="button" class="numpad-btn" data-numpad="8" data-focus-id="numpad-8">8</button>
+            <button type="button" class="numpad-btn" data-numpad="9" data-focus-id="numpad-9">9</button>
+            <button type="button" class="numpad-btn numpad-btn--clear" data-numpad="clear" data-focus-id="numpad-clear">Clear</button>
+            <button type="button" class="numpad-btn" data-numpad="0" data-focus-id="numpad-0">0</button>
+            <button type="button" class="numpad-btn numpad-btn--cancel" data-numpad="cancel" data-focus-id="numpad-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 </section>`;

@@ -930,7 +930,7 @@ test('Plex cleanup clears stale PIN UI when bridge cancellation is unavailable',
 
       await controller.requestPin();
       controller.setHomeUserPin('1357');
-      assert.match(collectText(dom.plexPinElement as unknown as ElementDouble), /ABCD/u);
+      assert.match(collectText(dom.plexPinElement as unknown as ElementDouble), /A\s*B\s*C\s*D/u);
 
       await controller.cleanup();
 

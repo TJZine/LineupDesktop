@@ -23,6 +23,7 @@ import { registerRendererActions } from './rendererActionRegistration.js';
 import { subscribePlayerBridge } from './playerBridgeSubscription.js';
 import { createGuidePresentationPolling } from './guidePresentationPolling.js';
 import { dispatchPlexRuntimeAction } from './plexRuntimeActionDispatch.js';
+import { initializeProfilePinModal, openProfilePinModal, isProfilePinModalActive, closeProfilePinModal } from './profilePinModal.js';
 
 mountStaticRendererDom();
 
@@ -43,6 +44,16 @@ const plexController = createPlexRuntimeController({
 const channelController = createChannelRuntimeController({
   bridge: window.lineupDesktop.channelSetup,
   onStateChanged: () => renderApp(),
+});
+
+initializeProfilePinModal({
+  getPlexController: () => plexController,
+  getFocusState: () => focusState,
+  setFocusState: (state) => {
+    focusState = state;
+  },
+  getFocusRegistry: () => focusRegistry,
+  renderApp,
 });
 
 syncRendererFocusTargets(focusRegistry, dom);
@@ -120,7 +131,13 @@ registerRendererActions(dom, document, {
   setPlexSearchQuery: (value) => plexController.setSearchQuery(value),
   selectPlexHomeUser: (homeUserId) => {
     clearChannelSetupActionStateForSourceChange();
-    void plexController.switchHomeUser(homeUserId);
+    const state = plexController.getState();
+    const user = state.snapshot?.auth.homeUsers.find((u) => u.id === homeUserId);
+    if (user?.protected) {
+      openProfilePinModal(user);
+    } else {
+      void plexController.switchHomeUser(homeUserId);
+    }
   },
   selectPlexServer: (serverId) => {
     clearChannelSetupActionStateForSourceChange();
@@ -174,6 +191,10 @@ async function handleDesktopInput(input: DesktopInputButton): Promise<void> {
       clickFocusedRendererElement(focusState, dom);
       return;
     case 'back':
+      if (isProfilePinModalActive()) {
+        closeProfilePinModal();
+        return;
+      }
       if (workflowState.routeState.activeRoute === 'channelSetup' && await handlePlexBack()) {
         renderApp();
         scrollFocusedSetupControlIntoView();
@@ -469,6 +490,9 @@ function cleanupPlexRuntimeForRouteChange(previousRoute: AppRouteId, nextRoute: 
 }
 
 function cleanupPlexRuntime(reason: 'beforeunload' | 'route-change'): void {
+  if (isProfilePinModalActive()) {
+    closeProfilePinModal({ refocus: false });
+  }
   void plexController.cleanup().catch((error: unknown) => {
     const errorName = error instanceof Error ? error.name : typeof error;
     void window.lineupDesktop.diagnostics.recordRendererEvent({

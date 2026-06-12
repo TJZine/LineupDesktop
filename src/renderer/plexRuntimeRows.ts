@@ -42,21 +42,58 @@ export function renderServers(
     button.dataset.plexServerId = server.serverId;
     button.dataset.focusId = createPlexFocusId('plex-dyn-server', server.serverId);
     button.dataset.selected = String(server.serverId === selectedServerId);
+
     const main = document.createElement('span');
     main.className = 'server-main';
+
     const name = document.createElement('strong');
     name.className = 'server-name';
     name.textContent = server.name;
+
     const meta = document.createElement('span');
     meta.className = 'server-meta';
-    meta.textContent = formatServerSummary(server);
+    const ownership = server.owned ? 'Owner' : 'Shared';
+    const connectionKind = server.health?.connectionKind ?? 'unknown';
+    const typeLabel = connectionKind.charAt(0).toUpperCase() + connectionKind.slice(1);
+    const latencyPart = (server.health?.latencyMs !== undefined && server.health.latencyMs !== null)
+      ? ` / ${server.health.latencyMs}ms`
+      : '';
+    meta.textContent = `${typeLabel} / ${ownership}${latencyPart}`;
+
     main.append(name, meta);
+
+    const statusPill = document.createElement('span');
+    statusPill.className = 'server-status-pill';
+    const serverStatus = server.health?.status ?? 'offline';
+    const pillStatus = serverStatus === 'ok' ? 'online' : serverStatus;
+    statusPill.dataset.status = pillStatus;
+    statusPill.textContent = formatServerStatusLabel(serverStatus);
+
     const action = document.createElement('span');
     action.className = 'server-actions';
     action.textContent = server.serverId === selectedServerId ? 'Connected' : 'Connect';
-    button.append(main, action);
+
+    button.append(main, statusPill, action);
     return button;
   });
+}
+
+function formatServerStatusLabel(status: string): string {
+  switch (status) {
+    case 'ok':
+    case 'online':
+      return 'Online';
+    case 'offline':
+      return 'Offline';
+    case 'unreachable':
+      return 'Unreachable';
+    case 'auth-required':
+      return 'Auth Needed';
+    case 'access-denied':
+      return 'Access Denied';
+    default:
+      return 'Unknown';
+  }
 }
 
 export function renderSections(
@@ -201,36 +238,6 @@ function formatItemsEmptyText(status: string, searchQuery: string | null): strin
       return 'No items found in this library.';
     default:
       return 'Browse a library or search to see items.';
-  }
-}
-
-function formatServerSummary(server: PlexServerSummary): string {
-  const connectionTypes = [
-    server.hasLocalConnection ? 'local' : null,
-    server.hasRemoteConnection ? 'remote' : null,
-    server.hasRelayConnection ? 'relay' : null,
-  ].filter((value): value is string => value !== null);
-  const owner = server.owned ? 'Owned' : 'Shared';
-  const health = formatServerHealth(server);
-  const connections = connectionTypes.length === 0 ? `${server.connectionCount} connections` : connectionTypes.join(', ');
-  return `${owner} / ${connections} / ${health}`;
-}
-
-function formatServerHealth(server: PlexServerSummary): string {
-  if (server.health === undefined) {
-    return server.selected ? 'Selected' : 'Available';
-  }
-  switch (server.health.status) {
-    case 'ok':
-      return server.selected ? 'Selected' : 'Available';
-    case 'unreachable':
-      return 'Unreachable';
-    case 'auth-required':
-      return 'Sign-in required';
-    case 'access-denied':
-      return 'Access denied';
-    default:
-      return assertUnreachable(server.health.status);
   }
 }
 
