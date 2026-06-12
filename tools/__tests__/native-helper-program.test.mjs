@@ -36,6 +36,16 @@ test('native helper tears down mpv before reinitializing and applies private tra
   assert.match(source, /SetTrackSelection\("vid", selection\.video\)/u);
 });
 
+test('native helper preserves replacement load request id after teardown', async () => {
+  const source = await readFile(programPath, 'utf8');
+
+  assert.doesNotMatch(source, /currentRequestId\s*=\s*msg\.requestId;\s*InitializeMpv\(msg\)/u);
+  assert.match(
+    source,
+    /if \(mpvContext != IntPtr\.Zero\)\s*\{\s*TeardownMpvContext\(\);\s*\}\s*currentRequestId\s*=\s*msg\.requestId;\s*EnsureLibmpvResolverRegistered\(\);/su,
+  );
+});
+
 test('native helper rejects controls before media is loaded', async () => {
   const source = await readFile(programPath, 'utf8');
 

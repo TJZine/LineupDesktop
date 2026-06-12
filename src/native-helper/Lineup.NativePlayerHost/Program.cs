@@ -254,7 +254,6 @@ namespace Lineup.NativePlayerHost
                         return;
                     }
 
-                    currentRequestId = msg.requestId;
                     InitializeMpv(msg);
                     CacheLoadedMedia(msg);
 
@@ -435,6 +434,7 @@ namespace Lineup.NativePlayerHost
                     TeardownMpvContext();
                 }
 
+                currentRequestId = msg.requestId;
                 EnsureLibmpvResolverRegistered();
 
                 mpvContext = NativeMethods.mpv_create();
