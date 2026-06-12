@@ -175,6 +175,8 @@ test('renderer action registration delegates bubbling focusin events only', () =
         openPlexMetadata: () => undefined,
         focusElement: (element) => focused.push(element as unknown as TestElement),
         toggleFullscreen: () => undefined,
+        selectAudioTrack: () => undefined,
+        selectSubtitleTrack: () => undefined,
       },
     );
 

@@ -226,7 +226,7 @@ export function createPlayerOverlayView(
     stack: state.stack,
     visibleOverlays,
     activeOverlayId: activeOverlayId(state),
-    activeFocusId: activeFocusId(state),
+    activeFocusId: activeFocusId(state, playerSnapshot),
     nowPlaying: createNowPlayingSummary(playerSnapshot, currentChannel),
     playerOsd: createPlayerOsdSummary(state, playerSnapshot, currentChannel),
     miniGuideChannels: channels.map((channel) => ({
@@ -238,7 +238,7 @@ export function createPlayerOverlayView(
     channelNumberBuffer: state.channelNumberBuffer,
     channelNumberDisplay:
       state.channelNumberBuffer.length === 0 ? '---' : state.channelNumberBuffer.padEnd(3, '-'),
-    playbackOptions: createPlaybackOptionsView(state),
+    playbackOptions: createPlaybackOptionsView(state, playerSnapshot),
   };
 }
 
@@ -309,7 +309,10 @@ export function activeOverlayId(state: PlayerOverlayState): PlayerOverlayId | nu
   return [...state.stack].reverse().find((overlayId) => !NON_MODAL_OVERLAYS.has(overlayId)) ?? null;
 }
 
-export function activeFocusId(state: PlayerOverlayState): string | null {
+export function activeFocusId(
+  state: PlayerOverlayState,
+  snapshot: PlayerSnapshot = DEFAULT_PLAYER_OVERLAY_PRESENTATION.playerSnapshot,
+): string | null {
   switch (activeOverlayId(state)) {
     case 'playerOsd':
       return 'overlay-mini-guide';
@@ -317,8 +320,19 @@ export function activeFocusId(state: PlayerOverlayState): string | null {
       return 'overlay-mini-next';
     case 'channelNumber':
       return 'overlay-channel-commit';
-    case 'playbackOptions':
-      return 'overlay-audio-cycle';
+    case 'playbackOptions': {
+      if (snapshot.tracks.length > 0) {
+        const firstAudio = snapshot.tracks.find((t) => t.kind === 'audio' && t.available);
+        if (firstAudio) {
+          return `overlay-audio-track-${firstAudio.id}`;
+        }
+        const firstSub = snapshot.tracks.find((t) => t.kind === 'subtitle' && t.available);
+        if (firstSub) {
+          return `overlay-subtitle-track-${firstSub.id}`;
+        }
+      }
+      return 'overlay-subtitle-track-subtitles-off';
+    }
     default:
       return null;
   }
@@ -370,8 +384,8 @@ function createPlayerOsdSummary(
     endsAtText: 'Ends 9:30 PM',
     bufferedPercent: Math.max(nowPlaying.progressPercent, 32),
     playedPercent: nowPlaying.progressPercent,
-    audioLabel: createPlaybackOptionsView(state).selectedAudioLabel,
-    subtitleLabel: createPlaybackOptionsView(state).selectedSubtitleLabel,
+    audioLabel: createPlaybackOptionsView(state, snapshot).selectedAudioLabel,
+    subtitleLabel: createPlaybackOptionsView(state, snapshot).selectedSubtitleLabel,
     upNextText: `Next on ${channel.number}: ${channel.nextTitle}`,
     bufferText: snapshot.status === 'buffering' ? 'Buffering' : '',
     actionIds: {
@@ -382,34 +396,90 @@ function createPlayerOsdSummary(
   };
 }
 
-function createPlaybackOptionsView(state: PlayerOverlayState): PlaybackOptionsViewModel {
-  const audioTracks = PLAYBACK_AUDIO_TRACKS.map((track) => ({
-    ...track,
-    selected: track.id === state.selectedAudioTrackId,
-    stateLabel: track.id === state.selectedAudioTrackId ? 'Selected' : track.available ? 'Available' : 'Unavailable',
-  }));
-  const subtitleTracks = PLAYBACK_SUBTITLE_TRACKS.map((track) => ({
-    id: track.id ?? 'subtitles-off',
-    label: track.label,
-    selected: track.id === state.selectedSubtitleTrackId,
-    available: track.available,
-    meta: track.meta,
-    stateLabel: track.id === state.selectedSubtitleTrackId ? 'Selected' : track.available ? 'Available' : 'Unavailable',
-  }));
+function createPlaybackOptionsView(
+  state: PlayerOverlayState,
+  snapshot: PlayerSnapshot = DEFAULT_PLAYER_OVERLAY_PRESENTATION.playerSnapshot,
+): PlaybackOptionsViewModel {
+  const audioTracks = snapshot.tracks
+    .filter((track) => track.kind === 'audio')
+    .map((track) => {
+      let meta = 'Available';
+      if (track.codec) {
+        meta = track.codec.toUpperCase();
+        if (track.channelCount) {
+          meta += ` ${track.channelCount}ch`;
+        }
+      }
+      return {
+        id: track.id,
+        label: track.label,
+        selected: track.selected,
+        available: track.available,
+        meta,
+        stateLabel: track.selected ? 'Selected' : track.available ? 'Available' : 'Unavailable',
+      };
+    });
+
+  const subtitleTracks = [
+    {
+      id: 'subtitles-off',
+      label: 'Off',
+      selected: snapshot.selectedSubtitleTrackId === null,
+      available: true,
+      meta: '',
+      stateLabel: snapshot.selectedSubtitleTrackId === null ? 'Selected' : 'Available',
+    },
+    ...snapshot.tracks
+      .filter((track) => track.kind === 'subtitle')
+      .map((track) => {
+        let meta = track.deliveryType === 'burned-in' ? 'Burn-in' : 'External';
+        if (track.forced) {
+          meta += ' (Forced)';
+        }
+        return {
+          id: track.id,
+          label: track.label,
+          selected: track.selected,
+          available: track.available,
+          meta,
+          stateLabel: track.selected ? 'Selected' : track.available ? 'Available' : 'Unavailable',
+        };
+      }),
+  ];
+
   const selectedAudioLabel =
-    audioTracks.find((track) => track.selected)?.label ?? PLAYBACK_AUDIO_TRACKS[0].label;
+    audioTracks.find((track) => track.selected)?.label ?? 'None';
   const selectedSubtitleLabel =
-    subtitleTracks.find((track) => track.selected)?.label ?? PLAYBACK_SUBTITLE_TRACKS[0].label;
+    subtitleTracks.find((track) => track.selected)?.label ?? 'Off';
+
+  let playbackSummary = 'Playback: Direct Play';
+  if (snapshot.quality) {
+    const q = snapshot.quality;
+    const modeLabel =
+      q.mode === 'direct-play'
+        ? 'Direct Play'
+        : q.mode === 'direct-stream'
+          ? 'Direct Stream'
+          : q.mode === 'transcode'
+            ? 'Transcode'
+            : 'Unknown Mode';
+    let videoPart = q.videoCodec ? q.videoCodec.toUpperCase() : 'Unknown Video';
+    if (q.sourceDynamicRange && q.sourceDynamicRange !== 'unknown') {
+      videoPart += ` (${q.sourceDynamicRange.toUpperCase()})`;
+    }
+    const audioPart = q.audioCodec ? q.audioCodec.toUpperCase() : 'Unknown Audio';
+    playbackSummary = `Playback: ${modeLabel} / Video: ${videoPart} / Audio: ${audioPart}`;
+  }
 
   return {
-    volumePercent: Math.round(state.volume * 100),
-    muted: state.muted,
-    playbackRateLabel: `${state.playbackRate.toFixed(1)}x`,
+    volumePercent: Math.round(snapshot.volume * 100),
+    muted: snapshot.muted,
+    playbackRateLabel: `${snapshot.playbackRate.toFixed(1)}x`,
     audioTracks,
     subtitleTracks,
     selectedAudioLabel,
     selectedSubtitleLabel,
-    playbackSummary: 'Playback: Direct Play / Direct Stream / HLS Session / Audio Transcode / Video Transcode',
+    playbackSummary,
   };
 }
 

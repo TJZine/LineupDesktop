@@ -35,6 +35,9 @@ namespace Lineup.NativePlayerHost
         private static bool isPaused = false;
         private static bool isBuffering = false;
 
+        private static MpvTrackState? trackState;
+        private static MpvPlaybackQualityState? qualityState;
+
         private static RenderSurface? renderSurface;
         private static Thread? renderThread;
         private static Thread? eventThread;
@@ -100,6 +103,45 @@ namespace Lineup.NativePlayerHost
             public string? partPath { get; set; }
             public TrackSelection? selectedTrackIds { get; set; }
             public PrivateTrackSelection? selectedPrivateTrackIds { get; set; }
+            public PlaybackTrackMap? trackMap { get; set; }
+        }
+
+        public sealed class PlaybackTrackMap
+        {
+            public List<VideoTrackMapItem>? video { get; set; }
+            public List<AudioTrackMapItem>? audio { get; set; }
+            public List<SubtitleTrackMapItem>? subtitle { get; set; }
+        }
+
+        public sealed class VideoTrackMapItem
+        {
+            public string? publicTrackId { get; set; }
+            public string? privateTrackId { get; set; }
+            public string? codec { get; set; }
+            public string? dynamicRange { get; set; }
+        }
+
+        public sealed class AudioTrackMapItem
+        {
+            public string? publicTrackId { get; set; }
+            public string? privateTrackId { get; set; }
+            public string? label { get; set; }
+            public string? language { get; set; }
+            public string? codec { get; set; }
+            public int? channelCount { get; set; }
+            public bool? @default { get; set; }
+        }
+
+        public sealed class SubtitleTrackMapItem
+        {
+            public string? publicTrackId { get; set; }
+            public string? privateTrackId { get; set; }
+            public string? label { get; set; }
+            public string? language { get; set; }
+            public string? format { get; set; }
+            public string? deliveryType { get; set; }
+            public bool? forced { get; set; }
+            public bool? @default { get; set; }
         }
 
         public sealed class TrackSelection
@@ -300,6 +342,80 @@ namespace Lineup.NativePlayerHost
                     SetPropertyBool(mpvContext, "mute", muted);
                     WriteResult(msg.requestId!, true, null, null);
                 }
+                else if (msg.command == "track.audio.select")
+                {
+                    if (msg.payload.ValueKind == JsonValueKind.Object &&
+                        msg.payload.TryGetProperty("trackId", out JsonElement val) &&
+                        val.ValueKind == JsonValueKind.String)
+                    {
+                        string publicTrackId = val.GetString()!;
+                        string? mpvTrackId = trackState?.GetMpvTrackId(publicTrackId);
+                        if (string.IsNullOrEmpty(mpvTrackId))
+                        {
+                            WriteResult(msg.requestId!, false, "PLAYER_HELPER_TRACK_NOT_FOUND", $"Audio track {publicTrackId} is not available.");
+                            return;
+                        }
+                        int res = MpvCommandExecutor.SetPropertyString(mpvContext, "aid", mpvTrackId);
+                        if (res == 0)
+                        {
+                            WriteResult(msg.requestId!, true, null, null);
+                        }
+                        else
+                        {
+                            WriteResult(msg.requestId!, false, "PLAYER_HELPER_COMMAND_FAILED", "Failed to select audio track.");
+                        }
+                    }
+                    else
+                    {
+                        WriteResult(msg.requestId!, false, "PLAYER_HELPER_INVALID_COMMAND", "Missing or invalid trackId.");
+                    }
+                }
+                else if (msg.command == "track.subtitle.select")
+                {
+                    if (msg.payload.ValueKind == JsonValueKind.Object &&
+                        msg.payload.TryGetProperty("trackId", out JsonElement val))
+                    {
+                        if (val.ValueKind == JsonValueKind.Null)
+                        {
+                            int res = MpvCommandExecutor.SetPropertyString(mpvContext, "sid", "no");
+                            if (res == 0)
+                            {
+                                WriteResult(msg.requestId!, true, null, null);
+                            }
+                            else
+                            {
+                                WriteResult(msg.requestId!, false, "PLAYER_HELPER_COMMAND_FAILED", "Failed to disable subtitle track.");
+                            }
+                        }
+                        else if (val.ValueKind == JsonValueKind.String)
+                        {
+                            string publicTrackId = val.GetString()!;
+                            string? mpvTrackId = trackState?.GetMpvTrackId(publicTrackId);
+                            if (string.IsNullOrEmpty(mpvTrackId))
+                            {
+                                WriteResult(msg.requestId!, false, "PLAYER_HELPER_TRACK_NOT_FOUND", $"Subtitle track {publicTrackId} is not available.");
+                                return;
+                            }
+                            int res = MpvCommandExecutor.SetPropertyString(mpvContext, "sid", mpvTrackId);
+                            if (res == 0)
+                            {
+                                WriteResult(msg.requestId!, true, null, null);
+                            }
+                            else
+                            {
+                                WriteResult(msg.requestId!, false, "PLAYER_HELPER_COMMAND_FAILED", "Failed to select subtitle track.");
+                            }
+                        }
+                        else
+                        {
+                            WriteResult(msg.requestId!, false, "PLAYER_HELPER_INVALID_COMMAND", "Invalid trackId format.");
+                        }
+                    }
+                    else
+                    {
+                        WriteResult(msg.requestId!, false, "PLAYER_HELPER_INVALID_COMMAND", "Missing trackId.");
+                    }
+                }
                 else
                 {
                     WriteResult(msg.requestId!, false, "PLAYER_HELPER_UNSUPPORTED_COMMAND", $"Command {msg.command} is not supported.");
@@ -383,11 +499,20 @@ namespace Lineup.NativePlayerHost
                 };
                 renderThread.Start();
 
+                trackState = new MpvTrackState(mpvContext, msg.setup);
+                qualityState = new MpvPlaybackQualityState(mpvContext, msg.setup?.playbackMode ?? "unknown");
+
                 // Observe properties
                 NativeMethods.mpv_observe_property(mpvContext, 1, "time-pos", MpvFormatDouble);
                 NativeMethods.mpv_observe_property(mpvContext, 2, "duration", MpvFormatDouble);
                 NativeMethods.mpv_observe_property(mpvContext, 3, "pause", MpvFormatFlag);
                 NativeMethods.mpv_observe_property(mpvContext, 4, "core-idle", MpvFormatFlag);
+                NativeMethods.mpv_observe_property(mpvContext, 5, "aid", MpvFormatString);
+                NativeMethods.mpv_observe_property(mpvContext, 6, "sid", MpvFormatString);
+                NativeMethods.mpv_observe_property(mpvContext, 7, "vid", MpvFormatString);
+                NativeMethods.mpv_observe_property(mpvContext, 8, "video-params", MpvFormatString);
+                NativeMethods.mpv_observe_property(mpvContext, 9, "video-codec", MpvFormatString);
+                NativeMethods.mpv_observe_property(mpvContext, 10, "audio-codec", MpvFormatString);
 
                 // Start Event Poll Loop
                 eventThread = new Thread(EventPollLoop)
@@ -416,6 +541,19 @@ namespace Lineup.NativePlayerHost
                 }
                 else if (ev.event_id == MpvEventFileLoaded)
                 {
+                    trackState?.RefreshTrackMappings();
+
+                    // Emit tracks.changed event
+                    WriteOutputEvent(new Dictionary<string, object?>
+                    {
+                        ["type"] = "tracks.changed",
+                        ["requestId"] = currentRequestId,
+                        ["tracks"] = trackState?.GetTracksSummary() ?? new List<Dictionary<string, object>>()
+                    });
+
+                    // Emit quality.changed event
+                    EmitQualityChanged();
+
                     WriteOutputEvent(new Dictionary<string, object?>
                     {
                         ["type"] = "media.loaded",
@@ -426,7 +564,7 @@ namespace Lineup.NativePlayerHost
                             ["title"] = currentMediaTitle ?? "Untitled Media"
                         },
                         ["durationMs"] = (int)(cachedDurationSeconds * 1000),
-                        ["tracks"] = new List<object>()
+                        ["tracks"] = trackState?.GetTracksSummary() ?? new List<Dictionary<string, object>>()
                     });
 
                     isBuffering = false;
@@ -488,6 +626,14 @@ namespace Lineup.NativePlayerHost
                     isBuffering = idleVal != 0;
                     UpdatePlaybackState();
                 }
+            }
+            else if (prop.name == "aid" || prop.name == "sid" || prop.name == "vid")
+            {
+                EmitTrackSelectionChanged();
+            }
+            else if (prop.name == "video-params" || prop.name == "video-codec" || prop.name == "audio-codec")
+            {
+                EmitQualityChanged();
             }
         }
 
@@ -616,6 +762,8 @@ namespace Lineup.NativePlayerHost
             cachedDurationSeconds = 0;
             isPaused = false;
             isBuffering = false;
+            trackState = null;
+            qualityState = null;
         }
 
         private static void CacheLoadedMedia(InputMessage msg)
@@ -637,6 +785,30 @@ namespace Lineup.NativePlayerHost
             {
                 currentMediaTitle = title.GetString();
             }
+        }
+
+        private static void EmitTrackSelectionChanged()
+        {
+            if (trackState == null) return;
+            WriteOutputEvent(new Dictionary<string, object?>
+            {
+                ["type"] = "track.selection.changed",
+                ["requestId"] = currentRequestId,
+                ["audioTrackId"] = trackState.GetSelectedAudioTrackId(),
+                ["subtitleTrackId"] = trackState.GetSelectedSubtitleTrackId(),
+                ["videoTrackId"] = trackState.GetSelectedVideoTrackId()
+            });
+        }
+
+        private static void EmitQualityChanged()
+        {
+            if (qualityState == null) return;
+            WriteOutputEvent(new Dictionary<string, object?>
+            {
+                ["type"] = "quality.changed",
+                ["requestId"] = currentRequestId,
+                ["quality"] = qualityState.GetQualitySummary()
+            });
         }
 
         private static void ApplySelectedPrivateTracks(PrivateTrackSelection? selection)

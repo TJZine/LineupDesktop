@@ -210,6 +210,22 @@ function assertTextAbsent(value: unknown, text: string): void {
 
 test('desktop player adapter maps renderer intents to closed player commands', async () => {
   const host = new FakeNativePlayerHost();
+  host.executeResult = {
+    ok: true,
+    events: [
+      {
+        type: 'media.loaded',
+        requestId: 'request-load-1',
+        media,
+        durationMs: 120_000,
+        tracks: [
+          audioTrack,
+          { ...audioTrack, id: 'audio-ui-2', label: 'French' },
+          subtitleTrack,
+        ],
+      },
+    ],
+  };
   const adapter = new DesktopPlayerAdapter(host);
 
   await adapter.dispatchRendererIntent(loadEnvelope('request-load-1'));
@@ -851,3 +867,60 @@ test('desktop player adapter shared diagnostics summary counts one cleanup incid
   assert.equal(diagnostics.getCrashRecoverySummary().events.filter((event) => event.category === 'cleanup').length, 2);
   assertTextAbsent(diagnostics.getRecords(), 'shared-cleanup-secret');
 });
+
+test('desktop player adapter validates audio and subtitle track selection commands against snapshot tracks', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+
+  // 1. Dispatch selectAudio when no tracks exist -> expect validation failure
+  const result1 = await adapter.dispatchRendererIntent({
+    intent: 'player.selectAudio',
+    requestId: 'sel-aud-invalid',
+    payload: { trackId: 'audio-ui-1' },
+  } as RendererIntentEnvelope<unknown>);
+  assert.equal(host.commands.length, 0);
+  assertErrorEvent(result1.events, 'validation-failure');
+
+  // 2. Load media to populate tracks
+  host.executeResult = {
+    ok: true,
+    events: [
+      {
+        type: 'media.loaded',
+        requestId: 'request-load-1',
+        media,
+        durationMs: 120_000,
+        tracks: [audioTrack, subtitleTrack],
+      },
+    ],
+  };
+  await adapter.dispatchRendererIntent(loadEnvelope('request-load-1'));
+
+  // 3. Dispatch selectAudio with valid trackId -> expect success (host command executed)
+  const result2 = await adapter.dispatchRendererIntent({
+    intent: 'player.selectAudio',
+    requestId: 'sel-aud-valid',
+    payload: { trackId: 'audio-ui-1' },
+  } as RendererIntentEnvelope<unknown>);
+  assert.equal(result2.accepted, true);
+  assert.equal(host.commands.length, 2); // load, track.audio.select
+  assert.equal(host.commands[1]?.command, 'track.audio.select');
+
+  // 4. Dispatch selectSubtitle with invalid trackId -> expect validation failure
+  const result3 = await adapter.dispatchRendererIntent({
+    intent: 'player.selectSubtitle',
+    requestId: 'sel-sub-invalid',
+    payload: { trackId: 'subtitle-ui-invalid' },
+  } as RendererIntentEnvelope<unknown>);
+  assertErrorEvent(result3.events, 'validation-failure');
+
+  // 5. Dispatch selectSubtitle with null (turn off) -> expect success
+  const result4 = await adapter.dispatchRendererIntent({
+    intent: 'player.selectSubtitle',
+    requestId: 'sel-sub-null',
+    payload: { trackId: null },
+  } as RendererIntentEnvelope<unknown>);
+  assert.equal(result4.accepted, true);
+  assert.equal(host.commands[2]?.command, 'track.subtitle.select');
+});
+

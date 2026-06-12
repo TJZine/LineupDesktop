@@ -30,6 +30,7 @@ import {
   createInitialSnapshot,
 } from './playerAdapterSnapshot.js';
 import { mapRendererIntentToCommand } from './rendererIntentMapping.js';
+import { validateTrackSelectionCommand } from './playerTrackSelectionValidation.js';
 
 export interface DesktopPlayerAdapterDispatchResult {
   accepted: boolean;
@@ -82,6 +83,11 @@ export class DesktopPlayerAdapter {
     const { command } = commandResult;
     if (this.#requestCustody.has(command.requestId)) {
       const events = this.#emitBoundaryError(duplicateRequestError(command.requestId));
+      return this.#result(false, command, events);
+    }
+    const validationError = validateTrackSelectionCommand(command, this.#snapshot);
+    if (validationError) {
+      const events = this.#emitBoundaryError(validationError);
       return this.#result(false, command, events);
     }
     if (command.command === 'load' && this.#rejectRendererLoad) {
@@ -163,6 +169,11 @@ export class DesktopPlayerAdapter {
   ): Promise<DesktopPlayerAdapterDispatchResult> {
     if (this.#requestCustody.has(command.requestId)) {
       const events = this.#emitBoundaryError(duplicateRequestError(command.requestId));
+      return this.#result(false, command, events);
+    }
+    const validationError = validateTrackSelectionCommand(command, this.#snapshot);
+    if (validationError) {
+      const events = this.#emitBoundaryError(validationError);
       return this.#result(false, command, events);
     }
     if (command.command === 'load') {
@@ -263,14 +274,17 @@ export class DesktopPlayerAdapter {
       );
     }
     switch (hostEvent.type) {
-      case 'media.loaded':
+      case 'media.loaded': {
+        const withTracks = applyTrackSnapshot(
+          this.#snapshot,
+          hostEvent.requestId,
+          hostEvent.tracks ?? this.#snapshot.tracks,
+        );
         this.#snapshot = {
-          ...this.#snapshot,
-          requestId: hostEvent.requestId,
+          ...withTracks,
           status: 'ready',
           media: hostEvent.media,
           durationMs: hostEvent.durationMs,
-          tracks: hostEvent.tracks ?? this.#snapshot.tracks,
           lastError: null,
         };
         return [
@@ -282,6 +296,7 @@ export class DesktopPlayerAdapter {
           },
           this.#stateChanged(),
         ];
+      }
       case 'playback.state':
         this.#snapshot = {
           ...this.#snapshot,

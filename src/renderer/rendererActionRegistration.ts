@@ -33,6 +33,8 @@ export interface RendererActionHandlers {
   openPlexMetadata(ratingKey: string): void;
   focusElement(element: HTMLElement): void;
   toggleFullscreen(): void;
+  selectAudioTrack(trackId: string): void;
+  selectSubtitleTrack(trackId: string | null): void;
 }
 
 export function registerRendererActions(
@@ -117,6 +119,21 @@ export function registerRendererActions(
   });
   dom.fullscreenButton?.addEventListener('click', () => {
     handlers.toggleFullscreen();
+  });
+  dom.overlayAudioOptionsElement?.addEventListener('click', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    const button = event.target.closest<HTMLButtonElement>('.playback-options__row');
+    if (button && button.dataset.trackId) {
+      handlers.selectAudioTrack(button.dataset.trackId);
+    }
+  });
+  dom.overlaySubtitleOptionsElement?.addEventListener('click', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    const button = event.target.closest<HTMLButtonElement>('.playback-options__row');
+    if (button) {
+      const trackId = button.dataset.trackId;
+      handlers.selectSubtitleTrack(trackId === 'subtitles-off' || !trackId ? null : trackId);
+    }
   });
 }
 

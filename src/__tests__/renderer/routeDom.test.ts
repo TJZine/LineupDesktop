@@ -309,10 +309,21 @@ test('route DOM renders player OSD fields and playback option rows', () => {
     dom.overlaySubtitleOptionsElement = new ElementDouble() as unknown as HTMLElement;
     dom.overlayPlaybackSummaryElement = new ElementDouble() as unknown as HTMLElement;
 
+    const snapshot = {
+      ...createRendererSafePlayerSnapshot(),
+      quality: {
+        mode: 'direct-play' as const,
+        sourceDynamicRange: 'sdr' as const,
+        outputDynamicRangeStatus: 'sdr' as const,
+        videoCodec: 'h264',
+        audioCodec: 'aac',
+      },
+    };
+
     renderWorkflowDom(
       createWorkflowState('player'),
       createPlayerOverlayState(),
-      createRendererSafePlayerSnapshot(),
+      snapshot,
       dom,
     );
 
@@ -340,8 +351,8 @@ test('route DOM renders player OSD fields and playback option rows', () => {
     assert.match(osdText, /12:00 \/ 60:00/u);
     assert.match(osdText, /Next on 101: After Hours Cinema/u);
     assert.match(optionsText, /Direct Play/u);
-    assert.match(optionsText, /Audio Transcode/u);
-    assert.match(optionsText, /Burn-in/u);
+    assert.match(optionsText, /AAC/u);
+    assert.match(optionsText, /External/u);
   } finally {
     restoreDocument(originalDocument);
   }

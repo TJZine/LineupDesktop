@@ -134,6 +134,8 @@ registerRendererActions(dom, document, {
   openPlexMetadata: (ratingKey) => { void plexController.getMetadata(ratingKey); },
   focusElement: focusRendererElement,
   toggleFullscreen: () => { void toggleFullscreen(); },
+  selectAudioTrack: (trackId) => { void selectAudioTrack(trackId); },
+  selectSubtitleTrack: (trackId) => { void selectSubtitleTrack(trackId); },
 });
 
 const capabilities = await window.lineupDesktop.shell.getCapabilities();
@@ -258,7 +260,61 @@ function applyEpgAction(action: EpgActionId): void {
   }
 }
 
+async function selectAudioTrack(trackId: string): Promise<void> {
+  const requestId = `select-audio-${Date.now()}`;
+  await window.lineupDesktop.player.dispatch({
+    intent: 'player.selectAudio',
+    requestId,
+    payload: { trackId },
+  });
+}
+
+async function selectSubtitleTrack(trackId: string | null): Promise<void> {
+  const requestId = `select-subtitle-${Date.now()}`;
+  await window.lineupDesktop.player.dispatch({
+    intent: 'player.selectSubtitle',
+    requestId,
+    payload: { trackId },
+  });
+}
+
 function applyOverlayAction(action: PlayerOverlayActionId): void {
+  if (action === 'volumeUp' || action === 'volumeDown') {
+    const currentVolume = playerSnapshot.volume;
+    const nextVolume = action === 'volumeUp'
+      ? Math.min(1, Math.round((currentVolume + 0.1) * 10) / 10)
+      : Math.max(0, Math.round((currentVolume - 0.1) * 10) / 10);
+    const requestId = `volume-change-${Date.now()}`;
+    void window.lineupDesktop.player.dispatch({
+      intent: 'player.setVolume',
+      requestId,
+      payload: { volume: nextVolume },
+    });
+  } else if (action === 'toggleMute') {
+    const requestId = `mute-change-${Date.now()}`;
+    void window.lineupDesktop.player.dispatch({
+      intent: 'player.setMute',
+      requestId,
+      payload: { muted: !playerSnapshot.muted },
+    });
+  } else if (action === 'cycleAudioTrack') {
+    const audioTracks = playerSnapshot.tracks.filter((t) => t.kind === 'audio' && t.available);
+    if (audioTracks.length > 0) {
+      const selectedAudioIndex = audioTracks.findIndex((t) => t.selected);
+      const nextAudioTrack = audioTracks[(selectedAudioIndex + 1) % audioTracks.length];
+      if (nextAudioTrack) {
+        void selectAudioTrack(nextAudioTrack.id);
+      }
+    }
+  } else if (action === 'cycleSubtitleTrack') {
+    const subtitleTracks = playerSnapshot.tracks.filter((t) => t.kind === 'subtitle' && t.available);
+    const subtitleOptions: (string | null)[] = [null, ...subtitleTracks.map((t) => t.id)];
+    const currentSub = playerSnapshot.selectedSubtitleTrackId;
+    const currentIndex = subtitleOptions.indexOf(currentSub);
+    const nextSub = subtitleOptions[(currentIndex + 1) % subtitleOptions.length];
+    void selectSubtitleTrack(nextSub);
+  }
+
   overlayState = applyPlayerOverlayAction(overlayState, action, Date.now(), presentationFixtures.overlays);
   const view = createPlayerOverlayView(overlayState, {
     ...presentationFixtures.overlays,

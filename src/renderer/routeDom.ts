@@ -481,23 +481,30 @@ function renderPlayerOverlaysDom(
   }
   dom.osdBufferBarElement?.style.setProperty('--osd-buffer', `${view.playerOsd.bufferedPercent}%`);
   dom.osdPlayedBarElement?.style.setProperty('--osd-played', `${view.playerOsd.playedPercent}%`);
-  renderPlaybackOptionRows(dom.overlayAudioOptionsElement, view.playbackOptions.audioTracks);
-  renderPlaybackOptionRows(dom.overlaySubtitleOptionsElement, view.playbackOptions.subtitleTracks);
+  renderPlaybackOptionRows(dom.overlayAudioOptionsElement, view.playbackOptions.audioTracks, 'overlay-audio-track-');
+  renderPlaybackOptionRows(dom.overlaySubtitleOptionsElement, view.playbackOptions.subtitleTracks, 'overlay-subtitle-track-');
 }
 
 function renderPlaybackOptionRows(
   host: HTMLElement | null,
   tracks: readonly PlaybackOptionTrackViewModel[],
+  focusIdPrefix: string,
 ): void {
   if (!host) {
     return;
   }
   host.replaceChildren(
     ...tracks.map((track) => {
-      const row = document.createElement('div');
+      const row = document.createElement('button');
+      row.type = 'button';
       row.className = 'playback-options__row';
+      row.dataset.trackId = track.id;
       row.dataset.selected = String(track.selected);
       row.dataset.available = String(track.available);
+      row.disabled = !track.available;
+      if (track.available) {
+        row.dataset.focusId = `${focusIdPrefix}${track.id}`;
+      }
       const label = document.createElement('strong');
       label.textContent = track.label;
       const meta = document.createElement('span');
