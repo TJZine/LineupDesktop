@@ -1,6 +1,7 @@
 import {
   readChannelCommitActionId,
   readChannelSetupActionId,
+  readCustomChannelActionId,
   readEpgActionId,
   readOverlayActionId,
   readPlexRuntimeActionId,
@@ -25,8 +26,12 @@ export interface RendererActionHandlers {
   applyEpgAction(action: NonNullable<ReturnType<typeof readEpgActionId>>): void;
   applyOverlayAction(action: NonNullable<ReturnType<typeof readOverlayActionId>>): void;
   applyPlexRuntimeAction(action: NonNullable<ReturnType<typeof readPlexRuntimeActionId>>): void;
+  applyCustomChannelAction?(action: NonNullable<ReturnType<typeof readCustomChannelActionId>>, detail?: string): void;
   setPlexHomeUserPin(value: string): void;
   setPlexSearchQuery(value: string): void;
+  setCustomChannelName?(value: string): void;
+  setCustomChannelNumber?(value: string): void;
+  setCustomChannelSearchQuery?(value: string): void;
   selectPlexHomeUser(homeUserId: string): void;
   selectPlexServer(serverId: string): void;
   selectPlexSection(sectionId: string): void;
@@ -79,6 +84,12 @@ export function registerRendererActions(
       if (action !== null) handlers.applyChannelCommitAction(action);
     });
   }
+  dom.customChannelPanelElement?.addEventListener('click', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    const button = event.target.closest<HTMLButtonElement>('[data-custom-channel-action]');
+    const action = readCustomChannelActionId(button?.dataset.customChannelAction);
+    if (action !== null) handlers.applyCustomChannelAction?.(action, button?.dataset.customChannelDetail);
+  });
   for (const button of dom.epgActionButtons) {
     button.addEventListener('click', () => {
       const action = readEpgActionId(button.dataset.epgAction);
@@ -102,6 +113,15 @@ export function registerRendererActions(
   });
   dom.plexSearchQueryInput?.addEventListener('input', () => {
     handlers.setPlexSearchQuery(dom.plexSearchQueryInput?.value ?? '');
+  });
+  dom.customChannelNameInput?.addEventListener('input', () => {
+    handlers.setCustomChannelName?.(dom.customChannelNameInput?.value ?? '');
+  });
+  dom.customChannelNumberInput?.addEventListener('input', () => {
+    handlers.setCustomChannelNumber?.(dom.customChannelNumberInput?.value ?? '');
+  });
+  dom.customChannelSearchInput?.addEventListener('input', () => {
+    handlers.setCustomChannelSearchQuery?.(dom.customChannelSearchInput?.value ?? '');
   });
   dom.plexPanelElement?.addEventListener('click', (event) => {
     if (!(event.target instanceof HTMLElement)) return;

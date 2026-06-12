@@ -4,6 +4,7 @@
 @import "./styles/workflow-screens.css";
 @import "./styles/plex-onboarding.css";
 @import "./styles/plex-onboarding-cards.css";
+@import "./styles/custom-channels.css";
 @import "./styles/responsive-accessibility.css";
 
 @media (prefers-reduced-motion: reduce) {

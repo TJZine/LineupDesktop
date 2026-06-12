@@ -11,6 +11,9 @@ import { applySupportBundleExportResult } from './supportBundleExport.js';
 import { createPlexRuntimeController } from './plexRuntimeActions.js';
 import { resolveChannelSetupLiveSelection } from './channelSetup/liveSelection.js';
 import { createChannelRuntimeController } from './channelRuntimeActions.js';
+import { createCustomChannelController, type CustomChannelActionId } from './customChannels/controller.js';
+import { dispatchCustomChannelAction } from './customChannels/actionDispatch.js';
+import { renderCustomChannelWorkspace } from './customChannels/dom.js';
 import { renderPlexRuntimeDom } from './plexRuntimeDom.js';
 import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowChannelSetupAction, applyWorkflowEpgAction, applyWorkflowSettingsAction, createWorkflowState, type ChannelSetupActionId, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
 import { createRendererPresentationFixtures } from './presentationFixtures.js';
@@ -43,6 +46,10 @@ const plexController = createPlexRuntimeController({
 });
 const channelController = createChannelRuntimeController({
   bridge: window.lineupDesktop.channelSetup,
+  onStateChanged: () => renderApp(),
+});
+const customChannelController = createCustomChannelController({
+  bridge: window.lineupDesktop.customChannels,
   onStateChanged: () => renderApp(),
 });
 
@@ -127,8 +134,12 @@ registerRendererActions(dom, document, {
   applyEpgAction,
   applyOverlayAction,
   applyPlexRuntimeAction: (action) => { void applyPlexRuntimeAction(action); },
+  applyCustomChannelAction: (action, detail) => { void applyCustomChannelAction(action, detail); },
   setPlexHomeUserPin: (value) => plexController.setHomeUserPin(value),
   setPlexSearchQuery: (value) => plexController.setSearchQuery(value),
+  setCustomChannelName: (value) => customChannelController.setDraftName(value),
+  setCustomChannelNumber: (value) => customChannelController.setDraftNumber(value),
+  setCustomChannelSearchQuery: (value) => customChannelController.setSearchQuery(value),
   selectPlexHomeUser: (homeUserId) => {
     clearChannelSetupActionStateForSourceChange();
     const state = plexController.getState();
@@ -166,6 +177,7 @@ document.documentElement.dataset.shellBoot = 'ready';
 document.documentElement.dataset.activeRoute = workflowState.routeState.activeRoute;
 void plexController.loadSnapshot();
 void channelController.loadStatus();
+void customChannelController.loadSnapshot();
 if (workflowState.routeState.activeRoute === 'guide') {
   guidePresentationPolling.start();
 }
@@ -193,6 +205,11 @@ async function handleDesktopInput(input: DesktopInputButton): Promise<void> {
     case 'back':
       if (isProfilePinModalActive()) {
         closeProfilePinModal();
+        return;
+      }
+      if (workflowState.routeState.activeRoute === 'channelSetup' && customChannelController.handleBack()) {
+        renderApp();
+        scrollFocusedSetupControlIntoView();
         return;
       }
       if (workflowState.routeState.activeRoute === 'channelSetup' && await handlePlexBack()) {
@@ -429,6 +446,21 @@ async function applyPlexRuntimeAction(action: PlexRuntimeActionId): Promise<void
   });
 }
 
+async function applyCustomChannelAction(
+  action: CustomChannelActionId,
+  detail: string | undefined,
+): Promise<void> {
+  await dispatchCustomChannelAction({
+    action,
+    detail,
+    selectedSourceId: resolveLiveSelectedPlexSectionId(plexController.getState()),
+    controller: customChannelController,
+    refreshChannels: () => { void channelController.loadStatus(); },
+    refreshGuide: () => { void guidePresentationPolling.refresh('custom-channel-change', { showLoading: false }); },
+    render: renderApp,
+  });
+}
+
 async function tuneGuideSelectedChannel(): Promise<void> {
   const guideChannelId = workflowState.epg.selectedChannelId;
   if (guideChannelId.length === 0) {
@@ -496,9 +528,9 @@ async function handlePlexBack(): Promise<boolean> {
   }
   return handled;
 }
-
 function clearChannelSetupActionStateForSourceChange(): void {
   channelController.clearActionState();
+  customChannelController.clearMediaForSourceChange();
 }
 
 function readLiveSetupSourceSignature(): string {
@@ -550,6 +582,7 @@ function renderApp(): void {
     presentationFixtures.overlays,
   );
   renderPlexRuntimeDom(plexState, dom);
+  renderCustomChannelWorkspace(customChannelController.getState(), dom);
   syncRendererFocusTargets(focusRegistry, dom);
   if (focusState.activeId !== null) {
     focusState = focusRegistry.focusTarget(focusState, focusState.activeId).state;

@@ -6,25 +6,25 @@ import type {
   FocusState,
 } from './navigation.js';
 
-const dynamicPlexFocusIdsByRegistry = new WeakMap<FocusRegistry, Set<string>>();
+const dynamicFocusIdsByRegistry = new WeakMap<FocusRegistry, Set<string>>();
 
 export function syncRendererFocusTargets(
   focusRegistry: FocusRegistry,
   dom: RendererDomBindings,
 ): void {
   const focusableElements = readCurrentFocusableElements(dom);
-  const currentDynamicPlexIds = new Set(
+  const currentDynamicIds = new Set(
     focusableElements
       .map((element) => element.dataset.focusId)
-      .filter((focusId): focusId is string => isDynamicPlexFocusId(focusId)),
+      .filter((focusId): focusId is string => isDynamicFocusId(focusId)),
   );
-  const previousDynamicPlexIds = dynamicPlexFocusIdsByRegistry.get(focusRegistry) ?? new Set();
-  for (const focusId of previousDynamicPlexIds) {
-    if (!currentDynamicPlexIds.has(focusId)) {
+  const previousDynamicIds = dynamicFocusIdsByRegistry.get(focusRegistry) ?? new Set();
+  for (const focusId of previousDynamicIds) {
+    if (!currentDynamicIds.has(focusId)) {
       focusRegistry.unregister(focusId);
     }
   }
-  dynamicPlexFocusIdsByRegistry.set(focusRegistry, currentDynamicPlexIds);
+  dynamicFocusIdsByRegistry.set(focusRegistry, currentDynamicIds);
   dom.focusableElements.splice(0, dom.focusableElements.length, ...focusableElements);
   registerRendererFocusTargets(focusRegistry, dom);
 }
@@ -146,6 +146,15 @@ function focusElementOrder(focusId: string, index: number): number {
   if (focusId.startsWith('plex-dyn-item-')) {
     return 150 + index / 1000;
   }
+  if (focusId.startsWith('custom-channel-')) {
+    return 170 + index / 1000;
+  }
+  if (focusId.startsWith('custom-media-')) {
+    return 180 + index / 1000;
+  }
+  if (focusId.startsWith('custom-draft-')) {
+    return 190 + index / 1000;
+  }
   return 220 + index;
 }
 
@@ -218,20 +227,21 @@ function readCurrentFocusableElements(dom: RendererDomBindings): HTMLElement[] {
       dom.plexServersElement,
       dom.plexSectionsElement,
       dom.plexItemsElement,
+      dom.customChannelPanelElement,
     ].flatMap((element) => (
-      element === null || typeof element.querySelectorAll !== 'function'
+      element == null || typeof element.querySelectorAll !== 'function'
         ? []
         : Array.from(element.querySelectorAll<HTMLElement>('[data-focus-id]'))
     ));
   return [
     ...new Set([
-      ...dom.focusableElements.filter((element) => !isDynamicPlexFocusId(element.dataset.focusId)),
+      ...dom.focusableElements.filter((element) => !isDynamicFocusId(element.dataset.focusId)),
       ...dynamicPlexElements,
     ]),
   ];
 }
 
-function isDynamicPlexFocusId(focusId: string | undefined): focusId is string {
+function isDynamicFocusId(focusId: string | undefined): focusId is string {
   return (
     focusId !== undefined
     && (
@@ -239,6 +249,9 @@ function isDynamicPlexFocusId(focusId: string | undefined): focusId is string {
       || focusId.startsWith('plex-dyn-server-')
       || focusId.startsWith('plex-dyn-section-')
       || focusId.startsWith('plex-dyn-item-')
+      || focusId.startsWith('custom-channel-')
+      || focusId.startsWith('custom-media-')
+      || focusId.startsWith('custom-draft-')
     )
   );
 }

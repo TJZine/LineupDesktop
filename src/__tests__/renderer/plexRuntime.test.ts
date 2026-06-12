@@ -45,6 +45,13 @@ test('static channel setup markup hosts reachable Plex setup controls', () => {
   assert.match(channelSetupMarkup, /Build channels/u);
   assert.match(channelSetupMarkup, /data-channel-commit-action="append"/u);
   assert.match(channelSetupMarkup, /data-channel-commit-action="confirmReplace"/u);
+  assert.match(channelSetupMarkup, /data-custom-channel-panel/u);
+  assert.match(channelSetupMarkup, /data-custom-channel-action="browseSource"/u);
+  assert.match(channelSetupMarkup, /data-custom-channel-action="saveDraft"/u);
+  assert.match(channelSetupMarkup, /data-custom-channel-action="setFilterMovies"/u);
+  assert.match(channelSetupMarkup, /data-custom-channel-action="setFilterEpisodes"/u);
+  assert.match(channelSetupMarkup, /data-custom-channel-name/u);
+  assert.match(channelSetupMarkup, /data-custom-channel-search/u);
   assert.match(channelSetupMarkup, /Library source/u);
   assert.match(channelSetupMarkup, /4\. Result/u);
   assert.ok(

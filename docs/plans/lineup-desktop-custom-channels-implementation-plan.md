@@ -18,6 +18,13 @@ Package 1 source scope to renderer-safe contracts and pure domain/persistence
 modeling; `LineupDesktopPreloadApi`, IPC constants, and preload/main bridge
 exposure move to Package 4 so each committed checkpoint remains buildable.
 
+**Implementation note, 2026-06-12:** Package 5 ships create, duplicate-to-draft,
+delete, hide/unhide, reorder, media browse/search/filter, metadata preview, and
+manual cart authoring in the renderer workspace. Direct in-place editing of a
+persisted channel is deferred until a reviewed main/preload edit-draft API can
+return full editable content with `expectedRevision`; the renderer must not
+fabricate edit drafts from saved-channel summaries.
+
 ## Goal
 
 Implement user-created custom channels for Lineup Desktop as a full desktop-first channel authoring workspace that builds on the existing RD-23/RD-24 channel setup, scheduler, and Plex runtime seams without weakening Electron security, renderer privilege limits, redaction policy, or maintainability guardrails.
@@ -562,7 +569,7 @@ Manual proof script:
 7. Try adding an existing selected item and verify duplicate prevention or explicit duplicate-allowed setting behaves as designed.
 8. Set channel name, channel number, ordering mode, and color/icon.
 9. Save the draft and verify guide/player channel list refreshes without app restart.
-10. Edit the saved channel, remove an item, reorder items, save again, and verify guide changes.
+10. Verify direct saved-channel edit is not exposed in Package 5; duplicate the saved channel into a draft, remove an item, save, and verify guide changes.
 11. Duplicate the saved channel into a draft, change number/name, save, and verify both channels exist.
 12. Hide a channel and verify it is preserved in management UI but excluded from guide/channel surfing.
 13. Delete a channel after explicit confirmation and verify current channel fallback behavior is safe.
@@ -579,7 +586,7 @@ Manual proof script:
 - The workspace shows saved channels with number, name, item count, visibility state, and current-channel marker when available.
 - A first-run user can still build starter channels from library sections, but the path clearly offers custom channel creation and no longer presents fake setup controls as product behavior.
 - A user can create a custom channel from one or more eligible Plex media selections and save it to persisted channel data.
-- A user can edit an existing channel’s name, number, description, color/icon, content selections, order mode, block size where applicable, filters/sort options, include-watched behavior, skip-intro/credits flags if still relevant, and visibility.
+- Package 5 does not fabricate direct edit drafts from saved-channel summaries. A user can duplicate an existing channel into an editable draft; direct in-place edit remains deferred until a reviewed main/preload edit-draft API returns full content with `expectedRevision`.
 - A user can duplicate an existing channel into an editable draft without immediately persisting accidental duplicate data.
 - A user can delete a channel only after explicit confirmation; current-channel fallback is deterministic.
 - A user can reorder channels and see guide/channel surfing order reflect the change after save.
@@ -697,7 +704,7 @@ Use a three-pane desktop workspace at medium and large widths:
 1. **Left pane: Channel lineup**
    - Shows saved channels sorted by channel order.
    - Each row shows channel number, name, visibility, item/source count, and current-channel marker if applicable.
-   - Actions near the list: New Channel, Edit, Duplicate, Hide/Unhide, Delete, Move Up/Down or drag handle if later implemented safely.
+   - Actions near the list: New Channel, Duplicate, Hide/Unhide, Delete, Move Up/Down or drag handle if later implemented safely. Direct Edit requires a reviewed edit-draft API and is deferred from Package 5.
    - Search/filter saved channels if channel count exceeds a small threshold, but do not add global fuzzy search dependency.
 
 2. **Center pane: Media picker**
@@ -728,7 +735,7 @@ When no persisted channels exist:
 ### Saved-channel management
 
 - **New:** opens empty draft with next available channel number and default order mode based on content type once content is added.
-- **Edit:** loads persisted channel into draft. If source contains unsupported legacy fields, show safe read-only warning and require migration/rebuild before saving.
+- **Edit:** deferred from Package 5 until the main/preload bridge can load a persisted channel into a draft with full content and `expectedRevision`. Do not synthesize this draft in the renderer from saved-channel summary rows.
 - **Duplicate:** creates a draft copy with next available number, name suffix “Copy,” hidden false by default, and new deterministic seeds. It must not immediately persist until Save.
 - **Delete:** requires confirmation with channel number/name and consequence. After delete, current channel fallback chooses the next visible channel by order, previous visible channel if no next, or null if none.
 - **Hide/Unhide:** toggles visibility without deleting. Hidden channels remain visible in management pane and excluded from guide/channel surfing by default.

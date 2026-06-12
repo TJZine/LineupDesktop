@@ -6,6 +6,7 @@ import type {
   SettingsActionId,
 } from './workflow.js';
 import type { PlayerOverlayActionId } from './overlays.js';
+import { CUSTOM_CHANNEL_ACTIONS, type CustomChannelActionId } from './customChannels/controller.js';
 
 export interface RendererDomBindings {
   statusElement: HTMLElement | null;
@@ -44,6 +45,15 @@ export interface RendererDomBindings {
   setupValidationElement: HTMLElement | null;
   channelSetupResultElement: HTMLElement | null;
   channelSetupStatusElement: HTMLElement | null;
+  customChannelPanelElement?: HTMLElement | null;
+  customChannelActionButtons?: HTMLButtonElement[];
+  customChannelStatusElement?: HTMLElement | null;
+  customChannelListElement?: HTMLElement | null;
+  customChannelMediaElement?: HTMLElement | null;
+  customChannelDraftElement?: HTMLElement | null;
+  customChannelNameInput?: HTMLInputElement | null;
+  customChannelNumberInput?: HTMLInputElement | null;
+  customChannelSearchInput?: HTMLInputElement | null;
   plexPanelElement: HTMLElement | null;
   plexActionButtons: HTMLButtonElement[];
   plexStatusElement: HTMLElement | null;
@@ -151,6 +161,17 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     setupValidationElement: documentRef.querySelector<HTMLElement>('[data-channel-review-validation]'),
     channelSetupResultElement: documentRef.querySelector<HTMLElement>('[data-channel-setup-result]'),
     channelSetupStatusElement: documentRef.querySelector<HTMLElement>('[data-channel-setup-status]'),
+    customChannelPanelElement: documentRef.querySelector<HTMLElement>('[data-custom-channel-panel]'),
+    customChannelActionButtons: Array.from(
+      documentRef.querySelectorAll<HTMLButtonElement>('[data-custom-channel-action]'),
+    ),
+    customChannelStatusElement: documentRef.querySelector<HTMLElement>('[data-custom-channel-status]'),
+    customChannelListElement: documentRef.querySelector<HTMLElement>('[data-custom-channel-list]'),
+    customChannelMediaElement: documentRef.querySelector<HTMLElement>('[data-custom-channel-media]'),
+    customChannelDraftElement: documentRef.querySelector<HTMLElement>('[data-custom-channel-draft]'),
+    customChannelNameInput: documentRef.querySelector<HTMLInputElement>('[data-custom-channel-name]'),
+    customChannelNumberInput: documentRef.querySelector<HTMLInputElement>('[data-custom-channel-number]'),
+    customChannelSearchInput: documentRef.querySelector<HTMLInputElement>('[data-custom-channel-search-query]'),
     plexPanelElement: documentRef.querySelector<HTMLElement>('[data-plex-runtime-panel]'),
     plexActionButtons: Array.from(
       documentRef.querySelectorAll<HTMLButtonElement>('[data-plex-action]'),
@@ -311,6 +332,12 @@ export function readRouteActionId(value: string | undefined): RouteWorkflowActio
     default:
       return null;
   }
+}
+
+export function readCustomChannelActionId(value: string | undefined): CustomChannelActionId | null {
+  return typeof value === 'string' && CUSTOM_CHANNEL_ACTIONS.includes(value as CustomChannelActionId)
+    ? value as CustomChannelActionId
+    : null;
 }
 
 export function readSettingsActionId(value: string | undefined): SettingsActionId | null {

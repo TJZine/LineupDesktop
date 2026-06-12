@@ -319,6 +319,53 @@ const STATIC_SCREEN_MARKUP = `
         <button type="button" data-plex-action="clearMetadata" data-focus-id="plex-clear-metadata">Close preview</button>
         <div class="plex-runtime__metadata" data-plex-metadata></div>
       </section>
+      <section class="custom-channel-workspace" data-custom-channel-panel aria-labelledby="custom-channel-workspace-title">
+        <header class="custom-channel-workspace__header">
+          <div>
+            <p class="screen__kicker">Custom channels</p>
+            <h3 id="custom-channel-workspace-title">Author channels</h3>
+          </div>
+          <p data-custom-channel-status>Custom channels have not loaded yet.</p>
+          <button type="button" data-custom-channel-action="loadSnapshot" data-focus-id="custom-channel-refresh">Refresh</button>
+        </header>
+        <div class="custom-channel-workspace__grid">
+          <section class="custom-channel-panel custom-channel-panel--list" aria-label="Saved custom channels">
+            <h4>Saved channels</h4>
+            <div class="custom-channel-list" data-custom-channel-list></div>
+          </section>
+          <section class="custom-channel-panel custom-channel-panel--media" aria-label="Custom channel media picker">
+            <header class="custom-channel-panel__toolbar">
+              <h4>Media picker</h4>
+              <div class="custom-channel-search">
+                <input data-custom-channel-search-query data-focus-id="custom-channel-search-query" maxlength="128" aria-label="Custom channel media search" />
+                <button type="button" data-custom-channel-action="browseSource" data-focus-id="custom-channel-browse">Browse source</button>
+                <button type="button" data-custom-channel-action="searchMedia" data-focus-id="custom-channel-search">Search</button>
+                <button type="button" data-custom-channel-action="clearSearch" data-focus-id="custom-channel-clear-search">Clear</button>
+              </div>
+              <div class="custom-channel-filterbar" aria-label="Media filters">
+                <button type="button" data-custom-channel-action="setFilterAll" data-focus-id="custom-channel-filter-all">All</button>
+                <button type="button" data-custom-channel-action="setFilterMovies" data-focus-id="custom-channel-filter-movies">Movies</button>
+                <button type="button" data-custom-channel-action="setFilterEpisodes" data-focus-id="custom-channel-filter-episodes">Episodes</button>
+              </div>
+            </header>
+            <div class="custom-channel-media-grid" data-custom-channel-media></div>
+          </section>
+          <section class="custom-channel-panel custom-channel-panel--draft" aria-label="Custom channel editor">
+            <h4>Channel editor</h4>
+            <label class="custom-channel-field">
+              <span>Name</span>
+              <input data-custom-channel-name data-focus-id="custom-channel-name" maxlength="120" />
+            </label>
+            <label class="custom-channel-field">
+              <span>Number</span>
+              <input data-custom-channel-number data-focus-id="custom-channel-number" inputmode="numeric" maxlength="3" />
+            </label>
+            <button type="button" data-custom-channel-action="toggleDraftHidden" data-focus-id="custom-channel-hidden">Toggle hidden</button>
+            <div data-custom-channel-draft></div>
+            <button type="button" data-custom-channel-action="saveDraft" data-focus-id="custom-channel-save">Save custom channel</button>
+          </section>
+        </div>
+      </section>
       <div class="profile-pin-modal" id="profile-pin-modal" hidden>
         <div class="profile-pin-modal__dialog">
           <header class="profile-pin-modal__header">
