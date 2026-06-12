@@ -31,6 +31,7 @@ namespace Lineup.NativePlayerHost
         private static string? currentRequestId;
         private static string? currentMediaId;
         private static string? currentMediaTitle;
+        private static PlaybackSetup? currentPlaybackSetup;
         private static double cachedDurationSeconds = 0;
         private static bool isPaused = false;
         private static bool isBuffering = false;
@@ -267,8 +268,6 @@ namespace Lineup.NativePlayerHost
                     int loadResult = Command(mpvContext, "loadfile", msg.playbackUrl, "replace");
                     if (loadResult == 0)
                     {
-                        ApplySelectedPrivateTracks(msg.setup.selectedPrivateTrackIds);
-
                         // Generate loading event
                         WriteOutputEvent(new Dictionary<string, object?>
                         {
@@ -500,6 +499,7 @@ namespace Lineup.NativePlayerHost
 
                 trackState = new MpvTrackState(mpvContext, msg.setup);
                 qualityState = new MpvPlaybackQualityState(mpvContext, msg.setup?.playbackMode ?? "unknown");
+                currentPlaybackSetup = msg.setup;
 
                 // Observe properties
                 NativeMethods.mpv_observe_property(mpvContext, 1, "time-pos", MpvFormatDouble);
@@ -541,6 +541,7 @@ namespace Lineup.NativePlayerHost
                 else if (ev.event_id == MpvEventFileLoaded)
                 {
                     trackState?.RefreshTrackMappings();
+                    ApplySelectedTracks(currentPlaybackSetup?.selectedTrackIds);
 
                     // Emit tracks.changed event
                     WriteOutputEvent(new Dictionary<string, object?>
@@ -758,6 +759,7 @@ namespace Lineup.NativePlayerHost
             currentRequestId = null;
             currentMediaId = null;
             currentMediaTitle = null;
+            currentPlaybackSetup = null;
             cachedDurationSeconds = 0;
             isPaused = false;
             isBuffering = false;
@@ -810,25 +812,30 @@ namespace Lineup.NativePlayerHost
             });
         }
 
-        private static void ApplySelectedPrivateTracks(PrivateTrackSelection? selection)
+        private static void ApplySelectedTracks(TrackSelection? selection)
         {
             if (selection == null)
             {
                 return;
             }
 
-            SetTrackSelection("aid", selection.audio);
-            SetTrackSelection("sid", selection.subtitle);
-            SetTrackSelection("vid", selection.video);
+            SetSelectedPublicTrack("aid", selection.audio);
+            SetSelectedPublicTrack("sid", selection.subtitle);
+            SetSelectedPublicTrack("vid", selection.video);
         }
 
-        private static void SetTrackSelection(string property, string? privateTrackId)
+        private static void SetSelectedPublicTrack(string property, string? publicTrackId)
         {
-            if (string.IsNullOrWhiteSpace(privateTrackId))
+            if (string.IsNullOrWhiteSpace(publicTrackId))
             {
                 return;
             }
-            Command(mpvContext, "set", property, privateTrackId);
+            string? mpvTrackId = trackState?.GetMpvTrackId(publicTrackId);
+            if (string.IsNullOrWhiteSpace(mpvTrackId))
+            {
+                return;
+            }
+            MpvCommandExecutor.SetPropertyString(mpvContext, property, mpvTrackId);
         }
 
         private static void SetOption(IntPtr mpv, string name, string value)

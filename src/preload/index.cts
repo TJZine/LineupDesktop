@@ -431,6 +431,17 @@ function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
   );
 }
 
+function isPlayerDispatchResult(value: unknown): value is PlayerDispatchResult {
+  return (
+    isPlainRecord(value) &&
+    hasOnlyKeys(value, ['accepted', 'events', 'snapshot']) &&
+    typeof value.accepted === 'boolean' &&
+    Array.isArray(value.events) &&
+    value.events.every((event) => isPlayerEvent(event)) &&
+    isPlayerSnapshot(value.snapshot)
+  );
+}
+
 function isPlayerPlaybackQualitySummary(value: unknown): boolean {
   if (!isPlainRecord(value)) {
     return false;
@@ -608,6 +619,44 @@ function playerValidationFailure<T>(
       },
     },
   };
+}
+
+function isPlayerDispatchIpcResult(
+  value: unknown,
+  requestId: string,
+): value is PlayerIpcResult<PlayerDispatchResult> {
+  if (!isPlainRecord(value) || value.requestId !== requestId || typeof value.ok !== 'boolean') {
+    return false;
+  }
+  if (value.ok) {
+    return hasOnlyKeys(value, ['ok', 'requestId', 'value']) && isPlayerDispatchResult(value.value);
+  }
+  return hasOnlyKeys(value, ['ok', 'requestId', 'error']) && isPlayerError(value.error);
+}
+
+async function invokePlayerDispatchBridge(
+  envelope: PlayerRendererIntentEnvelope<unknown>,
+): Promise<PlayerIpcResult<PlayerDispatchResult>> {
+  let result: unknown;
+  try {
+    result = await ipcRenderer.invoke(LINEUP_PLAYER_COMMAND_CHANNEL, envelope);
+  } catch {
+    return playerValidationFailure<PlayerDispatchResult>(
+      envelope.requestId,
+      'Player dispatch invoke failed.',
+      'dispatch',
+      'invoke rejected',
+    );
+  }
+  if (!isPlayerDispatchIpcResult(result, envelope.requestId)) {
+    return playerValidationFailure<PlayerDispatchResult>(
+      envelope.requestId,
+      'Player dispatch returned an invalid result.',
+      'dispatch',
+      'invalid invoke result',
+    );
+  }
+  return result;
 }
 
 type PlexValidationResult<TPayload> =
@@ -1540,10 +1589,7 @@ const lineupDesktop: LineupDesktopPreloadApi = {
           ),
         );
       }
-      return ipcRenderer.invoke(
-        LINEUP_PLAYER_COMMAND_CHANNEL,
-        envelope,
-      ) as Promise<PlayerIpcResult<PlayerDispatchResult>>;
+      return invokePlayerDispatchBridge(envelope);
     },
     getSnapshot: playerSnapshotBridge.getSnapshot,
     cleanup: playerSnapshotBridge.cleanup,

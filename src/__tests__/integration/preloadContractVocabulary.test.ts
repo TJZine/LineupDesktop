@@ -1213,6 +1213,66 @@ test('preload player bridge converts malformed or privileged snapshot results to
   );
 });
 
+test('preload player dispatch validates invoke results before returning them', async () => {
+  const snapshot = createSafePlayerSnapshot();
+  const harness = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPreloadInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        accepted: true,
+        events: [{ event: 'state.changed', requestId: request.requestId, snapshot }],
+        snapshot,
+      },
+    });
+  });
+
+  const result = await harness.api.player.dispatch(harness.input({
+    intent: 'player.play',
+    requestId: 'player-command-1',
+    payload: {},
+  }));
+
+  assert.equal(harness.calls.length, 1);
+  assert.equal((result as { ok: boolean }).ok, true);
+});
+
+test('preload player dispatch converts malformed or privileged invoke results to local validation failures', async () => {
+  const harness = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPreloadInvokeRequest(request));
+    const snapshot = createSafePlayerSnapshot();
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        accepted: true,
+        events: [{
+          event: 'state.changed',
+          requestId: request.requestId,
+          snapshot: {
+            ...snapshot,
+            media: { id: 'media-1', title: 'Episode 1', playbackUrl: 'private' },
+          },
+        }],
+        snapshot,
+      },
+    });
+  });
+
+  const result = await harness.api.player.dispatch(harness.input({
+    intent: 'player.play',
+    requestId: 'player-command-2',
+    payload: {},
+  }));
+
+  assert.equal((result as { ok: boolean }).ok, false);
+  assert.equal(
+    (result as { error: { code: string } }).error.code,
+    'PLAYER_VALIDATION_FAILED',
+  );
+});
+
 test('guide bridge validates presentation request ranges and result envelopes', async () => {
   const guideBridgeExports = evaluateGuideBridgeModule();
   const createGuideBridge = guideBridgeExports.createGuideBridge as (

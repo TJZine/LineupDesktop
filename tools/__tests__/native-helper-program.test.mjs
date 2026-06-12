@@ -25,15 +25,21 @@ test('native helper emits loaded media metadata from command payload', async () 
   assert.doesNotMatch(source, /\["title"\]\s*=\s*"Media Stream"/u);
 });
 
-test('native helper tears down mpv before reinitializing and applies private track selection', async () => {
+test('native helper tears down mpv before reinitializing and applies mapped public track selection', async () => {
   const source = await readFile(programPath, 'utf8');
 
   assert.match(source, /if \(mpvContext != IntPtr\.Zero\)\s*\{\s*TeardownMpvContext\(\);/su);
   assert.match(source, /NativeMethods\.mpv_terminate_destroy\(mpvContext\)/u);
-  assert.match(source, /ApplySelectedPrivateTracks\(msg\.setup\.selectedPrivateTrackIds\)/u);
-  assert.match(source, /SetTrackSelection\("aid", selection\.audio\)/u);
-  assert.match(source, /SetTrackSelection\("sid", selection\.subtitle\)/u);
-  assert.match(source, /SetTrackSelection\("vid", selection\.video\)/u);
+  assert.doesNotMatch(source, /ApplySelectedPrivateTracks\(msg\.setup\.selectedPrivateTrackIds\)/u);
+  assert.match(source, /currentPlaybackSetup\s*=\s*msg\.setup/u);
+  assert.match(
+    source,
+    /trackState\?\.RefreshTrackMappings\(\);\s*ApplySelectedTracks\(currentPlaybackSetup\?\.selectedTrackIds\);/su,
+  );
+  assert.match(source, /SetSelectedPublicTrack\("aid", selection\.audio\)/u);
+  assert.match(source, /SetSelectedPublicTrack\("sid", selection\.subtitle\)/u);
+  assert.match(source, /SetSelectedPublicTrack\("vid", selection\.video\)/u);
+  assert.match(source, /trackState\?\.GetMpvTrackId\(publicTrackId\)/u);
 });
 
 test('native helper preserves replacement load request id after teardown', async () => {

@@ -552,7 +552,7 @@ function mapDynamicRange(stream: PlexStream | undefined): DesktopStreamDynamicRa
   if (facts.some((value) => value.includes('dolby') || value.includes('dovi'))) {
     return 'dolby-vision';
   }
-  if (facts.some((value) => value.includes('hlg'))) {
+  if (facts.some((value) => value.includes('hlg') || value.includes('arib-std-b67'))) {
     return 'hlg';
   }
   if (facts.some((value) => value.includes('hdr') || value.includes('bt2020') || value.includes('smpte'))) {

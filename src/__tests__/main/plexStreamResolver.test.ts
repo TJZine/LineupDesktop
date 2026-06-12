@@ -419,6 +419,19 @@ test('plex media detail candidate mapping preserves HLG dynamic range', () => {
   assert.equal(candidate?.video.dynamicRange, 'hlg');
 });
 
+test('plex media detail candidate mapping recognizes HLG transfer metadata', () => {
+  const mediaDetail = createMediaDetail();
+  const videoStream = mediaDetail.media[0]?.parts[0]?.streams.find((stream) => stream.streamType === 1);
+  assert.ok(videoStream);
+  delete videoStream.dynamicRange;
+  delete videoStream.hdr;
+  videoStream.colorTrc = 'arib-std-b67';
+
+  const [candidate] = mapPlexMediaDetailsToDesktopStreamCandidates(mediaDetail);
+
+  assert.equal(candidate?.video.dynamicRange, 'hlg');
+});
+
 test('plex media detail candidate mapping projects rich track facts without private ids', () => {
   const [candidate] = mapPlexMediaDetailsToDesktopStreamCandidates(createRichMediaDetail());
 
