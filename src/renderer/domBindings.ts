@@ -65,6 +65,12 @@ export interface RendererDomBindings {
   overlayNowPlayingSubtitleElement: HTMLElement | null;
   overlayNowPlayingChannelElement: HTMLElement | null;
   overlayNowPlayingStatusElement: HTMLElement | null;
+  overlayNowPlayingDescriptionElement: HTMLElement | null;
+  overlayNowPlayingBadgesElement: HTMLElement | null;
+  overlayNowPlayingSummaryElement: HTMLElement | null;
+  overlayNowPlayingPositionElement: HTMLElement | null;
+  overlayNowPlayingDurationElement: HTMLElement | null;
+  overlayNowPlayingUpNextElement: HTMLElement | null;
   overlayProgressElement: HTMLElement | null;
   overlayMiniGuideElement: HTMLElement | null;
   overlayChannelNumberElement: HTMLElement | null;
@@ -175,6 +181,24 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     ),
     overlayNowPlayingStatusElement: documentRef.querySelector<HTMLElement>(
       '[data-overlay-now-playing-status]',
+    ),
+    overlayNowPlayingDescriptionElement: documentRef.querySelector<HTMLElement>(
+      '[data-overlay-now-playing-description]',
+    ),
+    overlayNowPlayingBadgesElement: documentRef.querySelector<HTMLElement>(
+      '[data-overlay-now-playing-badges]',
+    ),
+    overlayNowPlayingSummaryElement: documentRef.querySelector<HTMLElement>(
+      '[data-overlay-now-playing-summary]',
+    ),
+    overlayNowPlayingPositionElement: documentRef.querySelector<HTMLElement>(
+      '[data-overlay-now-playing-position]',
+    ),
+    overlayNowPlayingDurationElement: documentRef.querySelector<HTMLElement>(
+      '[data-overlay-now-playing-duration]',
+    ),
+    overlayNowPlayingUpNextElement: documentRef.querySelector<HTMLElement>(
+      '[data-overlay-now-playing-up-next]',
     ),
     overlayProgressElement: documentRef.querySelector<HTMLElement>('[data-overlay-progress]'),
     overlayMiniGuideElement: documentRef.querySelector<HTMLElement>('[data-overlay-mini-guide]'),

@@ -385,6 +385,31 @@ function renderPlayerOverlaysDom(
       view.nowPlaying.description,
     ].join(' - ');
   }
+  if (dom.overlayNowPlayingDescriptionElement) {
+    dom.overlayNowPlayingDescriptionElement.textContent = view.nowPlaying.description;
+  }
+  if (dom.overlayNowPlayingSummaryElement) {
+    dom.overlayNowPlayingSummaryElement.textContent = view.nowPlaying.playbackSummary;
+  }
+  if (dom.overlayNowPlayingPositionElement) {
+    dom.overlayNowPlayingPositionElement.textContent = view.nowPlaying.positionLabel;
+  }
+  if (dom.overlayNowPlayingDurationElement) {
+    dom.overlayNowPlayingDurationElement.textContent = view.nowPlaying.durationLabel;
+  }
+  if (dom.overlayNowPlayingUpNextElement) {
+    dom.overlayNowPlayingUpNextElement.textContent = view.nowPlaying.upNextText;
+  }
+  if (dom.overlayNowPlayingBadgesElement) {
+    dom.overlayNowPlayingBadgesElement.replaceChildren(
+      ...view.nowPlaying.badges.map((badge) => {
+        const span = document.createElement('span');
+        span.className = 'now-playing__badge';
+        span.textContent = badge;
+        return span;
+      }),
+    );
+  }
   if (dom.overlayProgressElement) {
     dom.overlayProgressElement.style.setProperty(
       '--overlay-progress',
@@ -399,25 +424,36 @@ function renderPlayerOverlaysDom(
         item.className = 'mini-guide__item';
         item.dataset.selectedChannel = String(channel.selected);
         const number = document.createElement('strong');
+        number.className = 'mini-guide__channel-number';
         number.textContent = channel.number;
+        const logo = document.createElement('div');
+        logo.className = 'mini-guide__icon-placeholder';
         const copy = document.createElement('div');
+        copy.className = 'mini-guide__details';
         const name = document.createElement('span');
+        name.className = 'mini-guide__channel-name';
         name.textContent = channel.name;
         const title = document.createElement('p');
+        title.className = 'mini-guide__current-title';
         title.textContent = `${channel.nowStartLabel} ${channel.currentTitle}`;
         const next = document.createElement('p');
+        next.className = 'mini-guide__next-title';
         next.textContent = `Next: ${channel.nextTitle}`;
         const progress = document.createElement('i');
         progress.className = 'mini-guide__progress';
         progress.style.setProperty('--mini-guide-progress', `${channel.nowProgressPercent}%`);
         copy.append(name, title, next, progress);
-        item.append(number, copy);
+        item.append(number, logo, copy);
         return item;
       }),
     );
   }
   if (dom.overlayChannelNumberElement) {
     dom.overlayChannelNumberElement.textContent = view.channelNumberDisplay;
+    const container = dom.overlayChannelNumberElement.parentElement;
+    if (container) {
+      container.dataset.invalid = String(view.channelNumberInvalid);
+    }
   }
   if (dom.overlayChannelBadgeNumberElement) {
     dom.overlayChannelBadgeNumberElement.textContent = view.channelBadge.number;
@@ -512,6 +548,17 @@ function renderPlaybackOptionRows(
       const state = document.createElement('em');
       state.textContent = track.stateLabel;
       row.append(label, meta, state);
+
+      if (track.selected && focusIdPrefix === 'overlay-audio-track-') {
+        const eq = document.createElement('div');
+        eq.className = 'playback-options__equalizer';
+        for (let i = 0; i < 4; i++) {
+          const bar = document.createElement('span');
+          eq.append(bar);
+        }
+        row.append(eq);
+      }
+
       return row;
     }),
   );

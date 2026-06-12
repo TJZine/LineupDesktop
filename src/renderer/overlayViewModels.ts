@@ -120,6 +120,7 @@ export interface PlayerOverlayViewModel {
   channelBadge: OverlayChannelViewModel;
   channelNumberBuffer: string;
   channelNumberDisplay: string;
+  channelNumberInvalid: boolean;
   playbackOptions: PlaybackOptionsViewModel;
 }
 
@@ -170,7 +171,10 @@ export function createPlayerOverlayView(
     channelBadge: currentChannel,
     channelNumberBuffer: state.channelNumberBuffer,
     channelNumberDisplay:
-      state.channelNumberBuffer.length === 0 ? '---' : state.channelNumberBuffer.padEnd(3, '-'),
+      state.channelNumberBuffer.length === 0 ? '---' : state.channelNumberBuffer.padEnd(3, '_'),
+    channelNumberInvalid:
+      state.channelNumberBuffer.length > 0 &&
+      !channels.some((c) => c.number.startsWith(state.channelNumberBuffer)),
     playbackOptions: createPlaybackOptionsView(state, playerSnapshot),
   };
 }

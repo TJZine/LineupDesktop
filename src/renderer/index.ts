@@ -278,7 +278,28 @@ async function selectSubtitleTrack(trackId: string | null): Promise<void> {
   });
 }
 
+let channelCommitTimeoutId: number | null = null;
+
 function applyOverlayAction(action: PlayerOverlayActionId): void {
+  if (action.startsWith('channelDigit')) {
+    if (channelCommitTimeoutId !== null) {
+      window.clearTimeout(channelCommitTimeoutId);
+    }
+    channelCommitTimeoutId = window.setTimeout(() => {
+      channelCommitTimeoutId = null;
+      applyOverlayAction('commitChannelNumber');
+    }, 2500);
+  } else if (
+    action === 'commitChannelNumber' ||
+    action === 'clearChannelNumber' ||
+    action === 'closeTopOverlay'
+  ) {
+    if (channelCommitTimeoutId !== null) {
+      window.clearTimeout(channelCommitTimeoutId);
+      channelCommitTimeoutId = null;
+    }
+  }
+
   if (action === 'volumeUp' || action === 'volumeDown') {
     const currentVolume = playerSnapshot.volume;
     const nextVolume = action === 'volumeUp'
