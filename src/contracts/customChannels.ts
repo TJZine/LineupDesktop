@@ -1,3 +1,5 @@
+import type { ArtworkRef } from './artwork.js';
+
 export const CUSTOM_CHANNEL_OPERATIONS = [
   'getSnapshot',
   'listMedia',
@@ -185,7 +187,7 @@ export interface CustomChannelSnapshot {
 }
 
 export interface CustomChannelSourceRef {
-  sourceType: CustomChannelContentType;
+  sourceType: 'library' | 'search';
   sourceId: string;
   title: string;
 }
@@ -202,6 +204,7 @@ export interface CustomChannelMediaCard {
   episodeNumber?: number;
   contentRating?: string;
   source: CustomChannelSourceRef;
+  artwork?: ArtworkRef;
   availability: 'available' | 'stale' | 'unsupported';
 }
 
@@ -218,6 +221,7 @@ export interface CustomChannelMediaMetadata {
   episodeNumber?: number;
   contentRating?: string;
   genres: readonly string[];
+  artwork?: ArtworkRef;
   availability: 'available' | 'stale' | 'unsupported';
 }
 
@@ -315,7 +319,7 @@ export type CustomChannelEmptyRequest = {
 export type CustomChannelListMediaRequest = {
   requestId: string;
   payload: {
-    sourceType: 'library' | 'collection' | 'playlist' | 'show' | 'search';
+    sourceType: 'library' | 'search';
     sourceId?: string;
     query?: string;
     offset?: number;
