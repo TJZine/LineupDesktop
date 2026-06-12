@@ -1,3 +1,10 @@
+import {
+  type PlayerPlaybackQualitySummary,
+  isRendererSafePlayerPlaybackQualitySummary,
+} from './playerQuality.js';
+
+export * from './playerQuality.js';
+
 export type PlayerRequestId = string;
 
 export type PlayerMediaId = string;
@@ -267,6 +274,7 @@ export interface PlayerSnapshot {
   selectedSubtitleTrackId: PlayerTrackId | null;
   selectedVideoTrackId: PlayerTrackId | null;
   tracks: readonly PlayerTrackSummary[];
+  quality: PlayerPlaybackQualitySummary;
   lastError: PlayerError | null;
 }
 
@@ -319,6 +327,11 @@ export type PlayerEvent =
       audioTrackId: PlayerTrackId | null;
       subtitleTrackId: PlayerTrackId | null;
       videoTrackId: PlayerTrackId | null;
+    }
+  | {
+      event: 'quality.changed';
+      requestId: PlayerRequestId;
+      quality: PlayerPlaybackQualitySummary;
     }
   | {
       event: 'command.settled';
@@ -439,6 +452,12 @@ export function isRendererSafePlayerEvent(value: unknown): value is PlayerEvent 
         isNullableNonEmptyString(value.subtitleTrackId) &&
         isNullableNonEmptyString(value.videoTrackId)
       );
+    case 'quality.changed':
+      return (
+        hasOnlyKeys(value, ['event', 'requestId', 'quality']) &&
+        isNonEmptyString(value.requestId) &&
+        isRendererSafePlayerPlaybackQualitySummary(value.quality)
+      );
     case 'command.settled': {
       if (
         !isNonEmptyString(value.requestId) ||
@@ -512,6 +531,7 @@ function isRendererSafePlayerSnapshot(value: unknown): value is PlayerSnapshot {
       'selectedSubtitleTrackId',
       'selectedVideoTrackId',
       'tracks',
+      'quality',
       'lastError',
     ]) &&
     isNullableNonEmptyString(value.requestId) &&
@@ -529,6 +549,7 @@ function isRendererSafePlayerSnapshot(value: unknown): value is PlayerSnapshot {
     isNullableNonEmptyString(value.selectedSubtitleTrackId) &&
     isNullableNonEmptyString(value.selectedVideoTrackId) &&
     isRendererSafeTracks(value.tracks) &&
+    isRendererSafePlayerPlaybackQualitySummary(value.quality) &&
     (value.lastError === null || isRendererSafePlayerError(value.lastError))
   );
 }

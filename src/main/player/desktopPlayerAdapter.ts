@@ -354,6 +354,20 @@ export class DesktopPlayerAdapter {
           playing: false,
         };
         return [{ event: 'ended', requestId: hostEvent.requestId }, this.#stateChanged()];
+      case 'quality.changed':
+        this.#snapshot = {
+          ...this.#snapshot,
+          requestId: hostEvent.requestId,
+          quality: hostEvent.quality,
+        };
+        return [
+          {
+            event: 'quality.changed',
+            requestId: hostEvent.requestId,
+            quality: hostEvent.quality,
+          },
+          this.#stateChanged(),
+        ];
       case 'error':
         return this.#recordError(hostEvent.error);
     }

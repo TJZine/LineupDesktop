@@ -743,6 +743,7 @@ test('native host process serializes private playback details correctly', async 
         partPath: '/library/parts/main',
         selectedTrackIds: { video: null, audio: null, subtitle: null },
         selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+        trackMap: { video: [], audio: [], subtitle: [] },
       },
       selectedConnection: {
         protocol: 'https' as const,

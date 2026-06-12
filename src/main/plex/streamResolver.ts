@@ -16,6 +16,7 @@ import type {
 } from '../player/streamPolicy/types.js';
 import type { PlexConnection } from './discovery/types.js';
 import type { PlexMediaFile, PlexMediaItem, PlexMediaPart, PlexStream } from './library/types.js';
+import { buildPlaybackTrackMap, type PlaybackTrackMap } from './streamTrackMapping.js';
 
 export interface PlexStreamResolverSelectedConnectionPort {
   getSelectedConnection(): Promise<PlexConnection | null>;
@@ -107,6 +108,7 @@ export interface PlexPrivilegedPlaybackDescriptor {
       audio: string | null;
       subtitle: string | null;
     };
+    trackMap: PlaybackTrackMap;
   };
 }
 
@@ -393,6 +395,7 @@ function buildPrivatePlaybackDescriptor(input: {
       partPath: input.selectedPart.key,
       selectedTrackIds: input.decision.selectedTrackIds,
       selectedPrivateTrackIds: mapSelectedPrivateTrackIds(input.selectedPart, input.candidate, input.decision),
+      trackMap: buildPlaybackTrackMap(input.selectedPart, input.candidate),
     },
   };
 }

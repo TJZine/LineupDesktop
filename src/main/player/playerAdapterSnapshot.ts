@@ -38,6 +38,7 @@ export function createInitialSnapshot(): PlayerSnapshot {
     selectedSubtitleTrackId: null,
     selectedVideoTrackId: null,
     tracks: [],
+    quality: { mode: 'unknown', sourceDynamicRange: 'unknown', outputDynamicRangeStatus: 'unknown' },
     lastError: null,
   };
 }

@@ -296,6 +296,7 @@ export function createRendererSafePlayerSnapshot(): PlayerSnapshot {
         available: true,
       },
     ],
+    quality: { mode: 'unknown', sourceDynamicRange: 'unknown', outputDynamicRangeStatus: 'unknown' },
     lastError: null,
   };
 }

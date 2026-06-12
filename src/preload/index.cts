@@ -340,6 +340,12 @@ function isPlayerEvent(value: unknown): value is PlayerEvent {
         isNullableNonEmptyString(value.subtitleTrackId) &&
         isNullableNonEmptyString(value.videoTrackId)
       );
+    case 'quality.changed':
+      return (
+        hasOnlyKeys(value, ['event', 'requestId', 'quality']) &&
+        isNonEmptyString(value.requestId) &&
+        isPlayerPlaybackQualitySummary(value.quality)
+      );
     case 'command.settled': {
       if (
         !isNonEmptyString(value.requestId) ||
@@ -397,6 +403,7 @@ function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
       'selectedSubtitleTrackId',
       'selectedVideoTrackId',
       'tracks',
+      'quality',
       'lastError',
     ]) &&
     isNullableNonEmptyString(value.requestId) &&
@@ -414,7 +421,43 @@ function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
     isNullableNonEmptyString(value.selectedSubtitleTrackId) &&
     isNullableNonEmptyString(value.selectedVideoTrackId) &&
     isPlayerTracks(value.tracks) &&
+    isPlayerPlaybackQualitySummary(value.quality) &&
     (value.lastError === null || isPlayerError(value.lastError))
+  );
+}
+
+function isPlayerPlaybackQualitySummary(value: unknown): boolean {
+  if (!isPlainRecord(value)) {
+    return false;
+  }
+  const keys = Object.keys(value);
+  const allowed = new Set([
+    'mode',
+    'videoCodec',
+    'audioCodec',
+    'sourceDynamicRange',
+    'outputDynamicRangeStatus',
+    'fallbackReason',
+  ]);
+  for (const key of keys) {
+    if (!allowed.has(key)) {
+      return false;
+    }
+  }
+  return (
+    isStringInSet(value.mode, ['direct-play', 'direct-stream', 'transcode', 'unknown']) &&
+    isStringInSet(value.sourceDynamicRange, ['sdr', 'hdr10', 'dolby-vision', 'unknown']) &&
+    isStringInSet(value.outputDynamicRangeStatus, [
+      'sdr',
+      'hdr10',
+      'dolby-vision',
+      'tone-mapped',
+      'unknown',
+      'unproven',
+    ]) &&
+    (value.videoCodec === undefined || typeof value.videoCodec === 'string') &&
+    (value.audioCodec === undefined || typeof value.audioCodec === 'string') &&
+    (value.fallbackReason === undefined || typeof value.fallbackReason === 'string')
   );
 }
 

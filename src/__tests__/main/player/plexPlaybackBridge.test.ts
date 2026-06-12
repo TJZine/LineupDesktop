@@ -126,6 +126,7 @@ class FakeResolver implements PlexPlaybackBridgeResolverPort {
           audio: null,
           subtitle: null,
         },
+        trackMap: { video: [], audio: [], subtitle: [] },
       },
     },
     load: loadPayload,

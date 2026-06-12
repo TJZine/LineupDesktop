@@ -8,6 +8,7 @@ import type {
   PlayerTimeRange,
   PlayerTrackId,
   PlayerTrackSummary,
+  PlayerPlaybackQualitySummary,
 } from '../../contracts/player.js';
 
 export type NativePlayerHostStatus = Extract<
@@ -56,6 +57,11 @@ export type NativePlayerHostEvent =
       audioTrackId: PlayerTrackId | null;
       subtitleTrackId: PlayerTrackId | null;
       videoTrackId: PlayerTrackId | null;
+    }
+  | {
+      type: 'quality.changed';
+      requestId: PlayerRequestId;
+      quality: PlayerPlaybackQualitySummary;
     }
   | {
       type: 'ended';
