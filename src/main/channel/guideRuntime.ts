@@ -50,15 +50,18 @@ export class GuideRuntime {
     durationMs: number,
   ): Promise<EpgPresentationSource> {
     const loaded = await this.repository.loadNormalized();
-    if (!loaded || loaded.data.channels.length === 0) {
+    const nowMs = this.clock.now();
+    const visibleChannels = loaded?.data.channels.filter(isVisibleChannel) ?? [];
+    if (!loaded || visibleChannels.length === 0) {
       return {
         channels: [],
         nowWatching: null,
+        nowMs,
       };
     }
 
     const epgChannels: EpgChannelViewModel[] = await Promise.all(
-      loaded.data.channels.map(async (channel) => {
+      visibleChannels.map(async (channel) => {
         let channelItems: ChannelContentItem[] = [];
         try {
           channelItems = await this.contentResolver.resolveSource(channel.contentSource);
@@ -91,7 +94,7 @@ export class GuideRuntime {
     );
 
     let nowWatching: EpgCurrentProgramViewModel | null = null;
-    const currentChannel = loaded.data.channels.find(
+    const currentChannel = visibleChannels.find(
       (c) => c.id === loaded.data.currentChannelId,
     );
 
@@ -126,6 +129,7 @@ export class GuideRuntime {
     return {
       channels: epgChannels,
       nowWatching,
+      nowMs,
     };
   }
 
@@ -134,7 +138,7 @@ export class GuideRuntime {
     if (!loaded) {
       throw new Error('No channels configured');
     }
-    const channel = loaded.data.channels.find((c) => c.id === channelId);
+    const channel = loaded.data.channels.find((c) => c.id === channelId && isVisibleChannel(c));
     if (!channel) {
       throw new Error(`Channel not found: ${channelId}`);
     }
@@ -164,10 +168,13 @@ export class GuideRuntime {
 
   async initializeActiveChannel(): Promise<void> {
     const loaded = await this.repository.loadNormalized();
-    if (!loaded || loaded.data.channels.length === 0) {
+    const visibleChannels = loaded?.data.channels.filter(isVisibleChannel) ?? [];
+    if (!loaded || visibleChannels.length === 0) {
       return;
     }
-    const currentChannelId = loaded.data.currentChannelId || loaded.data.channels[0]?.id;
+    const currentChannelId = visibleChannels.some((channel) => channel.id === loaded.data.currentChannelId)
+      ? loaded.data.currentChannelId
+      : visibleChannels[0]?.id;
     if (currentChannelId) {
       try {
         await this.tuneChannel(currentChannelId);
@@ -218,6 +225,10 @@ export class GuideRuntime {
       });
     }
   }
+}
+
+function isVisibleChannel(channel: ChannelConfig): boolean {
+  return channel.hidden !== true;
 }
 
 function createSchedulerForChannel(

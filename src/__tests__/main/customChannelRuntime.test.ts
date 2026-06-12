@@ -266,6 +266,7 @@ test('custom channel runtime maps write and refresh failures to safe results', a
     storage: createMemoryStorage(null),
     clock: { now: () => 6_600 },
     generateId: createIdGenerator('refresh'),
+    logger: { warn: (_message, detail) => { diagnostics.push(detail); } },
     onChannelsChanged: () => {
       throw new Error('refresh failed token=secret');
     },
@@ -277,12 +278,13 @@ test('custom channel runtime maps write and refresh failures to safe results', a
   assert.equal(writeResult.ok, false);
   assert.equal(writeResult.ok ? null : writeResult.error.code, 'CUSTOM_CHANNEL_STORAGE_UNAVAILABLE');
   assert.equal(containsCustomChannelForbiddenRendererField(writeResult), false);
-  assert.equal(refreshResult.ok, false);
-  assert.equal(refreshResult.ok ? null : refreshResult.error.code, 'CUSTOM_CHANNEL_STORAGE_UNAVAILABLE');
+  assert.equal(refreshResult.ok, true);
+  assert.equal(refreshResult.ok ? refreshResult.value.snapshot.channels[0]?.id : null, 'refresh-1');
   assert.equal(containsCustomChannelForbiddenRendererField(refreshResult), false);
   assert.doesNotMatch(JSON.stringify(writeResult), /EACCES|Users|channels\.json|token|secret/u);
   assert.doesNotMatch(JSON.stringify(refreshResult), /token|secret/u);
   assert.doesNotMatch(JSON.stringify(diagnostics), /EACCES|Users|channels\.json|token|secret/u);
+  assert.match(JSON.stringify(diagnostics), /refresh-1/u);
 });
 
 test('custom channel runtime reports storage failures without leaking details', async () => {

@@ -296,12 +296,9 @@ export class CustomChannelRuntime {
     });
   }
 
-  private async refresh(
-    operation: CustomChannelOperation,
-    reason: CustomChannelRefreshReason,
-    changedChannelId: string | null,
-  ): Promise<void> {
-    await this.onChannelsChanged?.({ operation, reason, changedChannelId });
+  private async refresh(operation: CustomChannelOperation, reason: CustomChannelRefreshReason, changedChannelId: string | null): Promise<void> {
+    try { await this.onChannelsChanged?.({ operation, reason, changedChannelId }); }
+    catch { this.logger?.warn('Custom channel refresh failed after committed mutation.', { operation, reason, changedChannelId }); }
   }
 
   private failure<TValue>(

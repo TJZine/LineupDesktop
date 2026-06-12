@@ -33,7 +33,7 @@ test('EPG guide view creates deterministic slots and clipped program spans', () 
   assert.equal(selectedProgram.columnStart, 1);
   assert.equal(selectedProgram.columnSpan, 2);
   assert.equal(selectedProgram.temporalState, 'current');
-  assert.equal(selectedProgram.progressPercent, 0);
+  assert.equal(selectedProgram.progressPercent, 50);
   assert.equal(selectedProgram.widthTier, 'medium');
   assert.equal(selectedProgram.timeLabel, '8:30 PM - 9:30 PM');
 
@@ -177,6 +177,7 @@ test('EPG update falls back to empty state when missing channel has no selectabl
         },
       ],
       nowWatching: null,
+      nowMs: EPG_DEMO_BASE_TIME_MS,
     },
   );
 
@@ -221,6 +222,7 @@ test('EPG state derives its initial window and selection from injected presentat
       startsAtMs: Date.UTC(2026, 4, 13, 1, 0, 0),
       endsAtMs: Date.UTC(2026, 4, 13, 2, 0, 0),
     },
+    nowMs: Date.UTC(2026, 4, 13, 1, 30, 0),
   } as const;
 
   const state = createEpgState(presentation);
@@ -231,5 +233,6 @@ test('EPG state derives its initial window and selection from injected presentat
   assert.equal(state.selectedProgramId, 'late-program');
   assert.equal(view.selectedProgram?.id, 'late-program');
   assert.equal(view.selectedProgram?.temporalState, 'current');
+  assert.equal(view.selectedProgram?.progressPercent, 50);
   assert.equal(view.slots[0]?.label, '1:00 AM');
 });

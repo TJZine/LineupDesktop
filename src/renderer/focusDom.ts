@@ -7,12 +7,25 @@ import type {
 } from './navigation.js';
 
 const dynamicFocusIdsByRegistry = new WeakMap<FocusRegistry, Set<string>>();
+const focusIdsByRegistry = new WeakMap<FocusRegistry, Set<string>>();
 
 export function syncRendererFocusTargets(
   focusRegistry: FocusRegistry,
   dom: RendererDomBindings,
 ): void {
   const focusableElements = readCurrentFocusableElements(dom);
+  const currentFocusIds = new Set(
+    focusableElements
+      .map((element) => element.dataset.focusId)
+      .filter((focusId): focusId is string => focusId !== undefined),
+  );
+  const previousFocusIds = focusIdsByRegistry.get(focusRegistry) ?? new Set();
+  for (const focusId of previousFocusIds) {
+    if (!currentFocusIds.has(focusId)) {
+      focusRegistry.unregister(focusId);
+    }
+  }
+  focusIdsByRegistry.set(focusRegistry, currentFocusIds);
   const currentDynamicIds = new Set(
     focusableElements
       .map((element) => element.dataset.focusId)
@@ -37,7 +50,7 @@ export function registerRendererFocusTargets(
   dom.routeButtons.forEach((button, index) => {
     const route = readRouteId(button.dataset.routeButton);
     const focusId = button.dataset.focusId;
-    if (route === null || focusId === undefined) {
+    if (route === null || focusId === undefined || isElementHiddenFromFocus(button)) {
       return;
     }
     focusRegistry.register({
@@ -51,7 +64,7 @@ export function registerRendererFocusTargets(
     registered.add(focusId);
   });
 
-  if (dom.fullscreenButton) {
+  if (dom.fullscreenButton && !isElementHiddenFromFocus(dom.fullscreenButton)) {
     focusRegistry.register({
       id: 'player-fullscreen',
       route: 'player',
@@ -64,7 +77,7 @@ export function registerRendererFocusTargets(
   dom.routeActionButtons.forEach((button, index) => {
     const route = readClosestRouteId(button);
     const focusId = button.dataset.focusId;
-    if (route === null || focusId === undefined) {
+    if (route === null || focusId === undefined || isElementHiddenFromFocus(button)) {
       return;
     }
     focusRegistry.register({
@@ -111,7 +124,7 @@ export function registerRendererFocusTargets(
 
   dom.overlayActionButtons.forEach((button, index) => {
     const focusId = button.dataset.focusId;
-    if (focusId === undefined) {
+    if (focusId === undefined || isElementHiddenFromFocus(button)) {
       return;
     }
     focusRegistry.register({
@@ -129,6 +142,9 @@ function registerOrderedButton(
   button: HTMLButtonElement,
   order: number,
 ): void {
+  if (isElementHiddenFromFocus(button)) {
+    return;
+  }
   const route = readClosestRouteId(button);
   const focusId = button.dataset.focusId;
   if (route === null || focusId === undefined) {
@@ -194,7 +210,7 @@ export function renderRendererFocus(focusState: FocusState, dom: RendererDomBind
   for (const element of dom.focusableElements) {
     const isActive = element.dataset.focusId === focusState.activeId;
     const isPrimaryRouteButton = readRouteId(element.dataset.routeButton) !== null;
-    const isHiddenFromRoute = element.closest('[hidden], [aria-hidden="true"]') !== null;
+    const isHiddenFromRoute = isElementHiddenFromFocus(element);
     element.classList.toggle('is-focused', isActive);
     element.tabIndex = !isHiddenFromRoute && (isActive || isPrimaryRouteButton) ? 0 : -1;
     if (isActive && !isHiddenFromRoute && document.activeElement !== element) {
@@ -222,7 +238,7 @@ function readCurrentFocusableElements(dom: RendererDomBindings): HTMLElement[] {
       if (modal) {
         return !modal.hasAttribute('hidden') && modal.getAttribute('aria-hidden') !== 'true';
       }
-      return true;
+      return !isElementHiddenFromFocus(el);
     });
   }
 
@@ -245,6 +261,10 @@ function readCurrentFocusableElements(dom: RendererDomBindings): HTMLElement[] {
       ...dynamicPlexElements,
     ]),
   ];
+}
+
+function isElementHiddenFromFocus(element: HTMLElement): boolean {
+  return element.closest('[hidden], [aria-hidden="true"]') !== null;
 }
 
 function isDynamicFocusId(focusId: string | undefined): focusId is string {
@@ -380,4 +400,3 @@ function getSetupNeighbors(focusId: string): Partial<Record<FocusDirection, stri
       return undefined;
   }
 }
-

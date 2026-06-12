@@ -1536,6 +1536,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
       startsAtMs: 1,
       endsAtMs: 2,
     },
+    nowMs: 1,
   };
 
   let invoked = false;

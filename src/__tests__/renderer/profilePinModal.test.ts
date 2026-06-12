@@ -120,22 +120,35 @@ test('Profile PIN Modal Suite', async (t) => {
 
     let focusState: FocusState = { activeId: null, activeRoute: 'channelSetup' };
     let renderAppCalled = false;
+    let renderAppCalls = 0;
+    let modalTargetsRegistered = false;
 
     const mockContext = {
       getPlexController: () => mockController,
       getFocusState: () => focusState,
       setFocusState: (state: FocusState) => { focusState = state; },
       getFocusRegistry: () => ({
-        focusTarget: (state: FocusState, id: string) => ({ state: { ...state, activeId: id }, changed: true }),
+        focusTarget: (state: FocusState, id: string) => (
+          !id.startsWith('numpad-') || (modalTargetsRegistered && modalEl.hidden === false)
+            ? { state: { ...state, activeId: id }, changed: true }
+            : { state, changed: false }
+        ),
         focusRoute: (state: FocusState, route: AppRouteId) => ({ state: { ...state, activeId: 'default', activeRoute: route }, changed: true }),
       } as unknown as FocusRegistry),
-      renderApp: () => { renderAppCalled = true; },
+      renderApp: () => {
+        renderAppCalled = true;
+        renderAppCalls += 1;
+        modalTargetsRegistered = modalEl.hidden === false;
+      },
     };
 
     // Initialize
     initializeProfilePinModal(mockContext);
 
     await t.test('openProfilePinModal should show modal, set username, and focus numpad-1', () => {
+      renderAppCalled = false;
+      renderAppCalls = 0;
+      modalTargetsRegistered = false;
       const user: PlexHomeUserSummary = { id: 'user-1', title: 'Test User', admin: false, protected: true };
       openProfilePinModal(user);
 
@@ -146,11 +159,22 @@ test('Profile PIN Modal Suite', async (t) => {
       assert.equal(focusState.activeId, 'numpad-1');
       assert.equal(slots[0].textContent, '');
       assert.equal(renderAppCalled, true);
+      assert.equal(renderAppCalls, 2);
     });
 
     await t.test('Keyboard inputs should update slots and submit on 4 digits', async () => {
       const keydown = windowListeners['keydown']?.[0];
       assert.ok(keydown);
+
+      let prevented = false;
+      let stopped = false;
+      keydown({
+        key: 'Enter',
+        preventDefault: () => { prevented = true; },
+        stopPropagation: () => { stopped = true; },
+      } as KeyboardEvent);
+      assert.equal(prevented, true);
+      assert.equal(stopped, true);
 
       // Press '1'
       keydown({ key: '1', preventDefault: () => {}, stopPropagation: () => {} } as KeyboardEvent);

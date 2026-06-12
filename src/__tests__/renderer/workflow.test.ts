@@ -192,6 +192,7 @@ test('workflow product route uses injected presentation fixtures', () => {
       startsAtMs: Date.UTC(2026, 4, 12, 20, 0, 0),
       endsAtMs: Date.UTC(2026, 4, 12, 21, 0, 0),
     },
+    nowMs: Date.UTC(2026, 4, 12, 20, 30, 0),
   };
   const view = getRouteWorkflowView(createWorkflowState('player', presentation));
 

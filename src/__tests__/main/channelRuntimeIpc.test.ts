@@ -233,7 +233,7 @@ test('channel IPC rejects invalid guide presentation windows before runtime invo
     guideRuntime: {
       getPresentation: async () => {
         presentationCalls++;
-        return { channels: [], nowWatching: null };
+        return { channels: [], nowWatching: null, nowMs: 123 };
       },
       tuneChannel: async () => undefined,
     } as never,
@@ -274,7 +274,7 @@ test('channel IPC rejects unsafe tune channel IDs before runtime invocation', as
   registerChannelIpcHandlers({
     runtime,
     guideRuntime: {
-      getPresentation: async () => ({ channels: [], nowWatching: null }),
+      getPresentation: async () => ({ channels: [], nowWatching: null, nowMs: 123 }),
       tuneChannel: async () => {
         tuneCalls++;
       },

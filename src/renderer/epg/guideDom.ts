@@ -247,14 +247,14 @@ export function renderEpgGuideDom(view: RouteWorkflowViewModel, dom: RendererDom
   });
 
   // Render current-time marker in header if within window
-  const nowMs = view.guide.shell.nowWatching?.startsAtMs;
+  const nowMs = view.guide.nowMs;
   const windowStartMs = view.guide.windowStartMs;
   const windowEndMs = view.guide.windowEndMs;
   const totalDuration = windowEndMs - windowStartMs;
   let hasMarker = false;
   let markerLeft = 0;
 
-  if (nowMs !== undefined && nowMs >= windowStartMs && nowMs <= windowEndMs && totalDuration > 0) {
+  if (nowMs >= windowStartMs && nowMs <= windowEndMs && totalDuration > 0) {
     markerLeft = ((nowMs - windowStartMs) / totalDuration) * trackWidth;
     hasMarker = true;
 

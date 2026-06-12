@@ -349,13 +349,14 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-22B are complete enough to route the next Tier 3 session to
-RD-23 Live Channel Setup And Runtime Persistence through the quality loop.
-RD-21 superseded the former RD-21 Future Platform Review route and deferred
-platform expansion until after product-parity/MVP completion. Do not import
-additional original Lineup product code or broaden live Plex/native playback
-runtime behavior until a reviewed product slice plan explicitly authorizes a
-bounded change.
+RD-01 through RD-26 are code complete and reviewed enough to route the next
+Tier 3 proof session to RD-27 Windows MVP UI Proof And Operational Soak through
+the quality loop after the active UI parity plan is closed or explicitly
+superseded. RD-21 superseded the former RD-21 Future Platform Review route and
+deferred platform expansion until after product-parity/MVP completion. Do not
+import additional original Lineup product code or broaden live Plex/native
+playback runtime behavior until a reviewed product slice plan explicitly
+authorizes a bounded change.
 
 ## Roadmap Checklist
 

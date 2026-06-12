@@ -1,10 +1,10 @@
 # Lineup Desktop UI Parity Implementation Plan
 
-**Plan Status:** active  
-**Task family:** feature/design  
-**Target Desktop branch:** `TJZine/LineupDesktop@initial-build`  
-**Reference WebOS branch:** `TJZine/Lineup@code-health`  
-**Created:** 2026-06-12  
+**Plan Status:** active
+**Task family:** feature/design
+**Target Desktop branch:** `TJZine/LineupDesktop@initial-build`
+**Reference WebOS branch:** `TJZine/Lineup@code-health`
+**Created:** 2026-06-12
 **Primary goal:** bring `LineupDesktop` Windows UI style, density, overlay choreography, focus language, artwork readiness, settings/onboarding composition, and EPG rendering into close parity with WebOS `Lineup`, without weakening Desktop's Electron, Plex, persistence, playback, diagnostics, redaction, or maintainability boundaries.
 
 > This is a durable implementation plan intended to be saved as:
@@ -364,28 +364,28 @@ Run these after any production source shape change.
 
 ## Planner Self-Check
 
-1. **Is any product, architecture, ownership, dependency, or verification decision unresolved?**  
+1. **Is any product, architecture, ownership, dependency, or verification decision unresolved?**
    Yes for actual live artwork delivery and measured latency. The plan resolves this by allowing placeholder/artwork-ready UI only in the first parity pass and requiring replan for any tokenized-image proxy or measured latency data seam.
 
-2. **Does the plan depend on adjacent files needing contract or type changes that are not in scope?**  
+2. **Does the plan depend on adjacent files needing contract or type changes that are not in scope?**
    No for token/shell/overlay/settings CSS parity. Possibly yes for live artwork and EPG presentation if current renderer-safe state lacks data; those are explicit stop/replan triggers.
 
-3. **Did the plan freeze any file out of scope while relying on hidden wiring inside it?**  
+3. **Did the plan freeze any file out of scope while relying on hidden wiring inside it?**
    No. Main/Plex/preload/native owners are frozen unless a focused subplan approves a safe data seam.
 
-4. **Did the plan record evidence path and fallback reads?**  
+4. **Did the plan record evidence path and fallback reads?**
    Yes. Branch-qualified source reads and the audit are recorded. Implementer must refresh with local `rg`/Codanna before each unit.
 
-5. **Is the work assigned to the repo-preferred owner, or is it growing a hotspot?**  
+5. **Is the work assigned to the repo-preferred owner, or is it growing a hotspot?**
    Renderer UI owns visual composition. Hotspot growth is controlled by focused helper extraction and file-shape guardrails.
 
-6. **Did Tier 3 work include Architecture Health evidence and a decomposition, avoidance, or allowlist decision for touched hotspots?**  
+6. **Did Tier 3 work include Architecture Health evidence and a decomposition, avoidance, or allowlist decision for touched hotspots?**
    Yes. Avoid/pre-split decisions are above.
 
-7. **Would a fresh implementer need to invent security, IPC, playback, persistence, packaging, import, or verification policy?**  
+7. **Would a fresh implementer need to invent security, IPC, playback, persistence, packaging, import, or verification policy?**
    No. Security and boundary policy are explicit; IPC/preload/main changes require replan; verification commands and manual proof are named.
 
-8. **Did the plan record exact verification commands, expected outcomes, and stop/replan triggers?**  
+8. **Did the plan record exact verification commands, expected outcomes, and stop/replan triggers?**
    Yes.
 
 ---

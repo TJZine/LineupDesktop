@@ -70,6 +70,7 @@ export interface EpgChannelRowViewModel {
 
 export interface EpgGuideViewModel {
   presentationState: EpgPresentationState;
+  nowMs: number;
   windowStartMs: number;
   windowEndMs: number;
   slots: readonly EpgTimeSlotViewModel[];
@@ -93,6 +94,7 @@ export type EpgPresentationState = 'ready' | 'loading' | 'empty' | 'error';
 export interface EpgPresentationSource {
   channels: readonly EpgChannelViewModel[];
   nowWatching: EpgCurrentProgramViewModel | null;
+  nowMs: number;
 }
 
 export interface EpgPresentationSourceWithNowWatching extends EpgPresentationSource {
@@ -186,19 +188,22 @@ export const DEFAULT_EPG_PRESENTATION_SOURCE = {
     startsAtMs: EPG_DEMO_BASE_TIME_MS + EPG_SLOT_DURATION_MS,
     endsAtMs: EPG_DEMO_BASE_TIME_MS + EPG_SLOT_DURATION_MS * 3,
   },
+  nowMs: EPG_DEMO_BASE_TIME_MS + EPG_SLOT_DURATION_MS * 2,
 } as const satisfies EpgPresentationSource;
 
 export function ensureRendererReadyGuidePresentation(
   presentation: EpgPresentationSource,
   fallbackWindowStartMs = EPG_DEMO_BASE_TIME_MS,
 ): EpgPresentationSourceWithNowWatching {
+  const nowMs = Number.isFinite(presentation.nowMs) && presentation.nowMs >= 0 ? presentation.nowMs : fallbackWindowStartMs;
   if (presentation.nowWatching !== null) {
-    return { ...presentation, nowWatching: presentation.nowWatching };
+    return { ...presentation, nowMs, nowWatching: presentation.nowWatching };
   }
   const fallbackChannel = presentation.channels[0];
   const fallbackProgram = fallbackChannel?.programs[0];
   return {
     ...presentation,
+    nowMs,
     nowWatching: fallbackProgram === undefined
       ? {
         title: '',
@@ -264,10 +269,7 @@ export function applyEpgAction(
   }
 }
 
-export function setEpgPresentationState(
-  state: EpgState,
-  presentationState: EpgPresentationState,
-): EpgState {
+export function setEpgPresentationState(state: EpgState, presentationState: EpgPresentationState): EpgState {
   return { ...state, presentationState };
 }
 
@@ -294,18 +296,14 @@ export function createEpgGuideView(
     name: channel.name,
     isSelected: channel.id === normalizedState.selectedChannelId,
     programs: channel.programs
-      .filter((program) =>
-        isProgramVisible(program, normalizedState.windowStartMs, windowEndMs),
-      )
-      .map((program) =>
-          createProgramCell(
-            program,
-            channel.id,
-            normalizedState,
-            windowEndMs,
-            presentationForRender.nowWatching.startsAtMs,
-          ),
-      ),
+      .filter((program) => isProgramVisible(program, normalizedState.windowStartMs, windowEndMs))
+      .map((program) => createProgramCell(
+        program,
+        channel.id,
+        normalizedState,
+        windowEndMs,
+        presentationForRender.nowMs,
+      )),
   })) : [];
 
   const selectedProgram = rows
@@ -318,6 +316,7 @@ export function createEpgGuideView(
 
   return {
     presentationState: normalizedState.presentationState,
+    nowMs: presentationForRender.nowMs,
     windowStartMs: normalizedState.windowStartMs,
     windowEndMs,
     slots,
