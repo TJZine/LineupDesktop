@@ -66,7 +66,7 @@ export type DesktopStreamPolicyUnknownCode =
   | 'candidate-hdr-unknown'
   | 'desktop-parity-unproven';
 
-export type DesktopStreamDynamicRange = 'sdr' | 'hdr10' | 'dolby-vision' | 'unknown';
+export type DesktopStreamDynamicRange = 'sdr' | 'hdr10' | 'hlg' | 'dolby-vision' | 'unknown';
 
 export interface DesktopStreamCapabilityProfile {
   id: string;

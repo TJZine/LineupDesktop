@@ -23,6 +23,7 @@ import { registerRendererActions } from './rendererActionRegistration.js';
 import { subscribePlayerBridge } from './playerBridgeSubscription.js';
 import { createGuidePresentationPolling } from './guidePresentationPolling.js';
 import { dispatchPlexRuntimeAction } from './plexRuntimeActionDispatch.js';
+import { initializeProfilePinModal, openProfilePinModal, isProfilePinModalActive, closeProfilePinModal } from './profilePinModal.js';
 
 mountStaticRendererDom();
 
@@ -43,6 +44,16 @@ const plexController = createPlexRuntimeController({
 const channelController = createChannelRuntimeController({
   bridge: window.lineupDesktop.channelSetup,
   onStateChanged: () => renderApp(),
+});
+
+initializeProfilePinModal({
+  getPlexController: () => plexController,
+  getFocusState: () => focusState,
+  setFocusState: (state) => {
+    focusState = state;
+  },
+  getFocusRegistry: () => focusRegistry,
+  renderApp,
 });
 
 syncRendererFocusTargets(focusRegistry, dom);
@@ -120,7 +131,13 @@ registerRendererActions(dom, document, {
   setPlexSearchQuery: (value) => plexController.setSearchQuery(value),
   selectPlexHomeUser: (homeUserId) => {
     clearChannelSetupActionStateForSourceChange();
-    void plexController.switchHomeUser(homeUserId);
+    const state = plexController.getState();
+    const user = state.snapshot?.auth.homeUsers.find((u) => u.id === homeUserId);
+    if (user?.protected) {
+      openProfilePinModal(user);
+    } else {
+      void plexController.switchHomeUser(homeUserId);
+    }
   },
   selectPlexServer: (serverId) => {
     clearChannelSetupActionStateForSourceChange();
@@ -134,6 +151,8 @@ registerRendererActions(dom, document, {
   openPlexMetadata: (ratingKey) => { void plexController.getMetadata(ratingKey); },
   focusElement: focusRendererElement,
   toggleFullscreen: () => { void toggleFullscreen(); },
+  selectAudioTrack: (trackId) => { void selectAudioTrack(trackId); },
+  selectSubtitleTrack: (trackId) => { void selectSubtitleTrack(trackId); },
 });
 
 const capabilities = await window.lineupDesktop.shell.getCapabilities();
@@ -172,6 +191,10 @@ async function handleDesktopInput(input: DesktopInputButton): Promise<void> {
       clickFocusedRendererElement(focusState, dom);
       return;
     case 'back':
+      if (isProfilePinModalActive()) {
+        closeProfilePinModal();
+        return;
+      }
       if (workflowState.routeState.activeRoute === 'channelSetup' && await handlePlexBack()) {
         renderApp();
         scrollFocusedSetupControlIntoView();
@@ -258,7 +281,109 @@ function applyEpgAction(action: EpgActionId): void {
   }
 }
 
+async function selectAudioTrack(trackId: string): Promise<void> {
+  const requestId = `select-audio-${Date.now()}`;
+  const snapshotRequestId = playerSnapshot.requestId;
+  if (snapshotRequestId === null) {
+    recordPlayerDispatchFailure('player.selectAudio', requestId, new Error('Player snapshot request id is unavailable.'));
+    return;
+  }
+  try {
+    await window.lineupDesktop.player.dispatch({
+      intent: 'player.selectAudio',
+      requestId,
+      payload: { trackId, snapshotRequestId },
+    });
+  } catch (error: unknown) {
+    recordPlayerDispatchFailure('player.selectAudio', requestId, error);
+  }
+}
+
+async function selectSubtitleTrack(trackId: string | null): Promise<void> {
+  const requestId = `select-subtitle-${Date.now()}`;
+  const snapshotRequestId = playerSnapshot.requestId;
+  if (snapshotRequestId === null) {
+    recordPlayerDispatchFailure('player.selectSubtitle', requestId, new Error('Player snapshot request id is unavailable.'));
+    return;
+  }
+  try {
+    await window.lineupDesktop.player.dispatch({
+      intent: 'player.selectSubtitle',
+      requestId,
+      payload: { trackId, snapshotRequestId },
+    });
+  } catch (error: unknown) {
+    recordPlayerDispatchFailure('player.selectSubtitle', requestId, error);
+  }
+}
+
+function recordPlayerDispatchFailure(operation: string, requestId: string, error: unknown): void {
+  recordRendererBridgeFailure(
+    window.lineupDesktop.diagnostics.recordRendererEvent,
+    'player.dispatch',
+    summarizeRendererBridgeError(error),
+    { operation, requestId },
+  );
+}
+
+let channelCommitTimeoutId: number | null = null;
+
 function applyOverlayAction(action: PlayerOverlayActionId): void {
+  if (action.startsWith('channelDigit')) {
+    if (channelCommitTimeoutId !== null) {
+      window.clearTimeout(channelCommitTimeoutId);
+    }
+    channelCommitTimeoutId = window.setTimeout(() => {
+      channelCommitTimeoutId = null;
+      applyOverlayAction('commitChannelNumber');
+    }, 2500);
+  } else if (
+    action === 'commitChannelNumber' ||
+    action === 'clearChannelNumber' ||
+    action === 'closeTopOverlay'
+  ) {
+    if (channelCommitTimeoutId !== null) {
+      window.clearTimeout(channelCommitTimeoutId);
+      channelCommitTimeoutId = null;
+    }
+  }
+
+  if (action === 'volumeUp' || action === 'volumeDown') {
+    const currentVolume = playerSnapshot.volume;
+    const nextVolume = action === 'volumeUp'
+      ? Math.min(1, Math.round((currentVolume + 0.1) * 10) / 10)
+      : Math.max(0, Math.round((currentVolume - 0.1) * 10) / 10);
+    const requestId = `volume-change-${Date.now()}`;
+    void window.lineupDesktop.player.dispatch({
+      intent: 'player.setVolume',
+      requestId,
+      payload: { volume: nextVolume },
+    }).catch((error: unknown) => recordPlayerDispatchFailure('player.setVolume', requestId, error));
+  } else if (action === 'toggleMute') {
+    const requestId = `mute-change-${Date.now()}`;
+    void window.lineupDesktop.player.dispatch({
+      intent: 'player.setMute',
+      requestId,
+      payload: { muted: !playerSnapshot.muted },
+    }).catch((error: unknown) => recordPlayerDispatchFailure('player.setMute', requestId, error));
+  } else if (action === 'cycleAudioTrack') {
+    const audioTracks = playerSnapshot.tracks.filter((t) => t.kind === 'audio' && t.available);
+    if (audioTracks.length > 0) {
+      const selectedAudioIndex = audioTracks.findIndex((t) => t.selected);
+      const nextAudioTrack = audioTracks[(selectedAudioIndex + 1) % audioTracks.length];
+      if (nextAudioTrack) {
+        void selectAudioTrack(nextAudioTrack.id);
+      }
+    }
+  } else if (action === 'cycleSubtitleTrack') {
+    const subtitleTracks = playerSnapshot.tracks.filter((t) => t.kind === 'subtitle' && t.available);
+    const subtitleOptions: (string | null)[] = [null, ...subtitleTracks.map((t) => t.id)];
+    const currentSub = playerSnapshot.selectedSubtitleTrackId;
+    const currentIndex = subtitleOptions.indexOf(currentSub);
+    const nextSub = subtitleOptions[(currentIndex + 1) % subtitleOptions.length];
+    void selectSubtitleTrack(nextSub);
+  }
+
   overlayState = applyPlayerOverlayAction(overlayState, action, Date.now(), presentationFixtures.overlays);
   const view = createPlayerOverlayView(overlayState, {
     ...presentationFixtures.overlays,
@@ -392,6 +517,9 @@ function cleanupPlexRuntimeForRouteChange(previousRoute: AppRouteId, nextRoute: 
 }
 
 function cleanupPlexRuntime(reason: 'beforeunload' | 'route-change'): void {
+  if (isProfilePinModalActive()) {
+    closeProfilePinModal({ refocus: false });
+  }
   void plexController.cleanup().catch((error: unknown) => {
     const errorName = error instanceof Error ? error.name : typeof error;
     void window.lineupDesktop.diagnostics.recordRendererEvent({

@@ -9,6 +9,7 @@ import {
   isStringInSet,
   readRequestId,
   validateMediaSummary,
+  validatePlaybackQualitySummary,
   validateTimeRanges,
   validateTracks,
 } from './playerAdapterValidation.js';
@@ -124,6 +125,14 @@ export function validateHostEvent(
           videoTrackId: event.videoTrackId,
         },
       };
+    }
+    case 'quality.changed': {
+      const requestId = event.requestId;
+      const quality = validatePlaybackQualitySummary(event.quality);
+      if (!isNonEmptyString(requestId) || 'error' in quality) {
+        return validationFailure(readRequestId(event), 'quality host event was invalid');
+      }
+      return { event: { type, requestId, quality: quality.value } };
     }
     case 'ended': {
       const requestId = event.requestId;

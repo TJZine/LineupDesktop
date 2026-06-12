@@ -92,17 +92,62 @@ function renderPin(
   dom.plexPinElement.replaceChildren();
   if (pin === null) {
     const idle = document.createElement('p');
+    idle.className = 'plex-runtime__pin-idle';
     idle.textContent = 'Start Plex sign-in to request a link code.';
     dom.plexPinElement.append(idle);
     return;
   }
-  const code = document.createElement('strong');
-  code.textContent = pin.code;
-  const detail = document.createElement('span');
-  detail.textContent = pin.claimed
-    ? 'Code claimed. Checking account status.'
-    : `Use Plex sign-in or the Plex Auth App link flow and enter this code. Expires ${formatTime(pin.expiresAtMs)}.`;
-  dom.plexPinElement.append(code, detail);
+
+  const container = document.createElement('div');
+  container.className = 'plex-runtime__pin-container';
+
+  // Left side: QR Code placeholder card
+  const qrCard = document.createElement('div');
+  qrCard.className = 'plex-runtime__qr-card';
+
+  const qrBox = document.createElement('div');
+  qrBox.className = 'plex-runtime__qr-box';
+  for (let i = 0; i < 9; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'plex-runtime__qr-cell';
+    qrBox.append(cell);
+  }
+
+  const qrLabel = document.createElement('span');
+  qrLabel.className = 'plex-runtime__qr-label';
+  qrLabel.textContent = 'Scan to link';
+
+  qrCard.append(qrBox, qrLabel);
+
+  // Right side: Character-separated PIN boxes
+  const pinDetails = document.createElement('div');
+  pinDetails.className = 'plex-runtime__pin-details';
+
+  const pinBoxes = document.createElement('div');
+  pinBoxes.className = 'plex-runtime__pin-boxes';
+
+  const chars = pin.code.split('');
+  for (const char of chars) {
+    const box = document.createElement('span');
+    box.className = 'plex-runtime__pin-char';
+    box.textContent = char;
+    pinBoxes.append(box);
+  }
+
+  const instruction = document.createElement('p');
+  instruction.className = 'plex-runtime__pin-instruction';
+  instruction.innerHTML = 'Visit <strong class="plex-accent-text">plex.tv/link</strong> on your phone or computer and enter the code above.';
+
+  const expiry = document.createElement('span');
+  expiry.className = 'plex-runtime__pin-expiry';
+  const remainingSecs = Math.max(0, Math.round((pin.expiresAtMs - Date.now()) / 1000));
+  expiry.textContent = pin.claimed
+    ? 'Code claimed. Checking account status...'
+    : `Code expires in ${remainingSecs}s (at ${formatTime(pin.expiresAtMs)}).`;
+
+  pinDetails.append(pinBoxes, instruction, expiry);
+  container.append(qrCard, pinDetails);
+  dom.plexPinElement.append(container);
 }
 
 function shouldDisableAction(

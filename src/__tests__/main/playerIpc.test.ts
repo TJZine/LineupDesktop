@@ -156,6 +156,7 @@ function privilegedPlaybackContext(requestId: string): PrivilegedPlaybackDispatc
         partPath: '/library/parts/1/file.mp4',
         selectedTrackIds: { video: null, audio: null, subtitle: null },
         selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+        trackMap: { video: [], audio: [], subtitle: [] },
       },
     },
   };

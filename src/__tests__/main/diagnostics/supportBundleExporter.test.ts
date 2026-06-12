@@ -436,6 +436,7 @@ function createUnsafePlayerSnapshot() {
     selectedSubtitleTrackId: null,
     selectedVideoTrackId: null,
     tracks: [],
+    quality: { mode: 'unknown', sourceDynamicRange: 'unknown', outputDynamicRangeStatus: 'unknown' },
     lastError: null,
     [processKey]: 12345,
     [nativeKey]: 987654321,

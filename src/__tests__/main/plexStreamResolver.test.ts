@@ -234,6 +234,27 @@ test('plex stream resolver preserves language delivery default forced and HDR fa
   assertPublicProjectionSafe(result);
 });
 
+test('plex stream resolver excludes synthetic audio fallback from private track map', async () => {
+  const mediaDetail = createMediaDetail();
+  const streams = mediaDetail.media[0]?.parts[0]?.streams;
+  assert.ok(streams);
+  mediaDetail.media[0]!.parts[0]!.streams = streams.filter((stream) => stream.streamType !== 2);
+
+  const result = await createResolver({
+    mediaDetail,
+  }).resolve({
+    requestId: 'request-synthetic-audio-map',
+    mediaId: 'media-input-synthetic-audio-map',
+    capabilityProfile: directPlayProfile,
+  });
+
+  assertResolved(result, 'direct-play');
+  assert.equal(result.load.policy.preferredAudioTrackId, 'plex-track-audio-1-1-1');
+  assert.equal(result.privatePlayback.setup.selectedPrivateTrackIds.audio, null);
+  assert.deepEqual(result.privatePlayback.setup.trackMap.audio, []);
+  assertPublicProjectionSafe(result);
+});
+
 test('plex stream resolver preserves Plex-selected subtitle before auto forced fallback', async () => {
   const mediaDetail = createRichMediaDetail();
   const selectedSubtitle = mediaDetail.media[0]?.parts[0]?.streams.find(
@@ -384,6 +405,31 @@ test('plex media detail candidate mapping remains public-policy safe', () => {
   assert.equal(candidates[0]?.subtitleTracks[0]?.language, 'en');
   assertPublicSafe(candidates, 'candidates');
   assertPublicOutputDoesNotContain(candidates, RAW_PLEX_PRIVATE_VALUES, 'candidates');
+});
+
+test('plex media detail candidate mapping preserves HLG dynamic range', () => {
+  const mediaDetail = createMediaDetail();
+  const videoStream = mediaDetail.media[0]?.parts[0]?.streams.find((stream) => stream.streamType === 1);
+  assert.ok(videoStream);
+  videoStream.dynamicRange = 'HLG';
+  videoStream.colorTrc = 'arib-std-b67';
+
+  const [candidate] = mapPlexMediaDetailsToDesktopStreamCandidates(mediaDetail);
+
+  assert.equal(candidate?.video.dynamicRange, 'hlg');
+});
+
+test('plex media detail candidate mapping recognizes HLG transfer metadata', () => {
+  const mediaDetail = createMediaDetail();
+  const videoStream = mediaDetail.media[0]?.parts[0]?.streams.find((stream) => stream.streamType === 1);
+  assert.ok(videoStream);
+  delete videoStream.dynamicRange;
+  delete videoStream.hdr;
+  videoStream.colorTrc = 'arib-std-b67';
+
+  const [candidate] = mapPlexMediaDetailsToDesktopStreamCandidates(mediaDetail);
+
+  assert.equal(candidate?.video.dynamicRange, 'hlg');
 });
 
 test('plex media detail candidate mapping projects rich track facts without private ids', () => {

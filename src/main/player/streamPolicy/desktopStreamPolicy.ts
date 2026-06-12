@@ -617,7 +617,7 @@ function isDynamicRangeSupported(
   if (dynamicRange === 'dolby-vision') {
     return profile.dolbyVision === 'supported';
   }
-  if (dynamicRange === 'hdr10') {
+  if (dynamicRange === 'hdr10' || dynamicRange === 'hlg') {
     return profile.hdr === 'supported';
   }
   return true;

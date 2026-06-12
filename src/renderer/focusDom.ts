@@ -93,10 +93,12 @@ export function registerRendererFocusTargets(
     if (focusId === undefined || registered.has(focusId) || route === null) {
       return;
     }
+    const neighbors = focusId.startsWith('numpad-') ? getNumpadNeighbors(focusId) : undefined;
     focusRegistry.register({
       id: focusId,
       route,
       order: focusElementOrder(focusId, index),
+      neighbors,
     });
     registered.add(focusId);
   });
@@ -200,7 +202,13 @@ export function clickFocusedRendererElement(
 
 function readCurrentFocusableElements(dom: RendererDomBindings): HTMLElement[] {
   if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
-    return Array.from(document.querySelectorAll<HTMLElement>('[data-focus-id]'));
+    return Array.from(document.querySelectorAll<HTMLElement>('[data-focus-id]')).filter((el) => {
+      const modal = el.closest('.profile-pin-modal');
+      if (modal) {
+        return !modal.hasAttribute('hidden') && modal.getAttribute('aria-hidden') !== 'true';
+      }
+      return true;
+    });
   }
 
   const dynamicPlexElements =
@@ -233,4 +241,22 @@ function isDynamicPlexFocusId(focusId: string | undefined): focusId is string {
       || focusId.startsWith('plex-dyn-item-')
     )
   );
+}
+
+function getNumpadNeighbors(focusId: string): Partial<Record<FocusDirection, string>> {
+  const mapping: Record<string, Record<FocusDirection, string>> = {
+    'numpad-1': { up: 'numpad-clear', down: 'numpad-4', left: 'numpad-3', right: 'numpad-2' },
+    'numpad-2': { up: 'numpad-0', down: 'numpad-5', left: 'numpad-1', right: 'numpad-3' },
+    'numpad-3': { up: 'numpad-cancel', down: 'numpad-6', left: 'numpad-2', right: 'numpad-1' },
+    'numpad-4': { up: 'numpad-1', down: 'numpad-7', left: 'numpad-6', right: 'numpad-5' },
+    'numpad-5': { up: 'numpad-2', down: 'numpad-8', left: 'numpad-4', right: 'numpad-6' },
+    'numpad-6': { up: 'numpad-3', down: 'numpad-9', left: 'numpad-5', right: 'numpad-4' },
+    'numpad-7': { up: 'numpad-4', down: 'numpad-clear', left: 'numpad-9', right: 'numpad-8' },
+    'numpad-8': { up: 'numpad-5', down: 'numpad-0', left: 'numpad-7', right: 'numpad-9' },
+    'numpad-9': { up: 'numpad-6', down: 'numpad-cancel', left: 'numpad-8', right: 'numpad-7' },
+    'numpad-clear': { up: 'numpad-7', down: 'numpad-1', left: 'numpad-cancel', right: 'numpad-0' },
+    'numpad-0': { up: 'numpad-8', down: 'numpad-2', left: 'numpad-clear', right: 'numpad-cancel' },
+    'numpad-cancel': { up: 'numpad-9', down: 'numpad-3', left: 'numpad-0', right: 'numpad-clear' },
+  };
+  return mapping[focusId] ?? {};
 }

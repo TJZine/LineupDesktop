@@ -239,6 +239,7 @@ test('RD-25 plex playback runtime rejects invalid privileged descriptors before 
         partPath: '/library/parts/1/file.mp4',
         selectedTrackIds: { video: null, audio: null, subtitle: null },
         selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+        trackMap: { video: [], audio: [], subtitle: [] },
       },
     },
   };

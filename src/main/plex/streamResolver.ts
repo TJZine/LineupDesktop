@@ -16,6 +16,7 @@ import type {
 } from '../player/streamPolicy/types.js';
 import type { PlexConnection } from './discovery/types.js';
 import type { PlexMediaFile, PlexMediaItem, PlexMediaPart, PlexStream } from './library/types.js';
+import { buildPlaybackTrackMap, type PlaybackTrackMap } from './streamTrackMapping.js';
 
 export interface PlexStreamResolverSelectedConnectionPort {
   getSelectedConnection(): Promise<PlexConnection | null>;
@@ -107,6 +108,7 @@ export interface PlexPrivilegedPlaybackDescriptor {
       audio: string | null;
       subtitle: string | null;
     };
+    trackMap: PlaybackTrackMap;
   };
 }
 
@@ -393,6 +395,7 @@ function buildPrivatePlaybackDescriptor(input: {
       partPath: input.selectedPart.key,
       selectedTrackIds: input.decision.selectedTrackIds,
       selectedPrivateTrackIds: mapSelectedPrivateTrackIds(input.selectedPart, input.candidate, input.decision),
+      trackMap: buildPlaybackTrackMap(input.selectedPart, input.candidate),
     },
   };
 }
@@ -548,6 +551,9 @@ function mapDynamicRange(stream: PlexStream | undefined): DesktopStreamDynamicRa
     .map((value) => value.toLowerCase());
   if (facts.some((value) => value.includes('dolby') || value.includes('dovi'))) {
     return 'dolby-vision';
+  }
+  if (facts.some((value) => value.includes('hlg') || value.includes('arib-std-b67'))) {
+    return 'hlg';
   }
   if (facts.some((value) => value.includes('hdr') || value.includes('bt2020') || value.includes('smpte'))) {
     return 'hdr10';

@@ -209,6 +209,7 @@ function createFakeResolver() {
             partPath: '/library/parts/mock/file.mp4',
             selectedTrackIds: { video: null, audio: null, subtitle: null },
             selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+            trackMap: { video: [], audio: [], subtitle: [] },
           },
         },
         decision: {

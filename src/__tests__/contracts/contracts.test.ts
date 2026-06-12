@@ -445,6 +445,7 @@ test('player command, event, and snapshot contracts carry request ids', () => {
     selectedSubtitleTrackId: null,
     selectedVideoTrackId: 'video-ui-1',
     tracks: [],
+    quality: { mode: 'unknown', sourceDynamicRange: 'unknown', outputDynamicRangeStatus: 'unknown' },
     lastError: null,
   };
   const event: PlayerEvent = {
@@ -496,6 +497,7 @@ test('player events make stale updates identifiable without engine state', () =>
     selectedSubtitleTrackId: null,
     selectedVideoTrackId: null,
     tracks: [],
+    quality: { mode: 'unknown', sourceDynamicRange: 'unknown', outputDynamicRangeStatus: 'unknown' },
     lastError: null,
   };
   const staleEvent: PlayerEvent = {
@@ -877,6 +879,7 @@ test('player IPC result and dispatch contracts stay renderer-safe', () => {
     selectedSubtitleTrackId: null,
     selectedVideoTrackId: null,
     tracks: [],
+    quality: { mode: 'unknown', sourceDynamicRange: 'unknown', outputDynamicRangeStatus: 'unknown' },
     lastError: null,
   };
   const dispatch: PlayerDispatchResult = {
@@ -926,6 +929,7 @@ test('player event runtime guard rejects unsafe renderer-facing payloads', () =>
     selectedSubtitleTrackId: null,
     selectedVideoTrackId: null,
     tracks: [],
+    quality: { mode: 'unknown', sourceDynamicRange: 'unknown', outputDynamicRangeStatus: 'unknown' },
     lastError: null,
   };
 
@@ -962,6 +966,31 @@ test('player event runtime guard rejects unsafe renderer-facing payloads', () =>
           nativeHandle: 'redacted',
         },
       ],
+    }),
+    false,
+  );
+  assert.equal(
+    isRendererSafePlayerEvent({
+      event: 'quality.changed',
+      requestId: 'player-request-1',
+      quality: {
+        mode: 'direct-play',
+        sourceDynamicRange: 'hlg',
+        outputDynamicRangeStatus: 'unknown',
+      },
+    }),
+    true,
+  );
+  assert.equal(
+    isRendererSafePlayerEvent({
+      event: 'quality.changed',
+      requestId: 'player-request-1',
+      quality: {
+        mode: 'direct-play',
+        sourceDynamicRange: 'hlg',
+        outputDynamicRangeStatus: 'unknown',
+        rawQualitySource: 'redacted',
+      },
     }),
     false,
   );

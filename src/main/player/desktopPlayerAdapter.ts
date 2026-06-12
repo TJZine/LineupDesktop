@@ -25,11 +25,13 @@ import {
 } from './playerAdapterErrors.js';
 import { PlayerAdapterRequestCustody } from './playerAdapterRequestCustody.js';
 import {
+  applyTrackSelectionSnapshot,
   applyTrackSnapshot,
   cloneSnapshot,
   createInitialSnapshot,
 } from './playerAdapterSnapshot.js';
 import { mapRendererIntentToCommand } from './rendererIntentMapping.js';
+import { validateTrackSelectionCommand } from './playerTrackSelectionValidation.js';
 
 export interface DesktopPlayerAdapterDispatchResult {
   accepted: boolean;
@@ -60,12 +62,8 @@ export class DesktopPlayerAdapter {
     this.#onEvents = options.onEvents;
     this.#diagnosticEventStore = options.diagnosticEventStore;
     this.#rejectRendererLoad = options.rejectRendererLoad ?? false;
-    host.onLifecycleFailure?.((failure) => {
-      const events = this.handleHostLifecycleFailure(failure);
-      if (events.length > 0) {
-        this.#onEvents?.(events);
-      }
-    });
+    host.onLifecycleFailure?.((failure) => { const events = this.handleHostLifecycleFailure(failure); this.#onEvents?.(events); });
+    host.onEvent?.((event) => { const events = this.handleHostEvent(event); this.#onEvents?.(events); });
   }
   getSnapshot(): PlayerSnapshot {
     return cloneSnapshot(this.#snapshot);
@@ -82,6 +80,11 @@ export class DesktopPlayerAdapter {
     const { command } = commandResult;
     if (this.#requestCustody.has(command.requestId)) {
       const events = this.#emitBoundaryError(duplicateRequestError(command.requestId));
+      return this.#result(false, command, events);
+    }
+    const validationError = validateTrackSelectionCommand(command, this.#snapshot);
+    if (validationError) {
+      const events = this.#emitBoundaryError(validationError);
       return this.#result(false, command, events);
     }
     if (command.command === 'load' && this.#rejectRendererLoad) {
@@ -111,6 +114,7 @@ export class DesktopPlayerAdapter {
         for (const hostEvent of hostResult.events ?? []) {
           events.push(...this.handleHostEvent(hostEvent));
         }
+        events.push(...this.#applySuccessfulCommandMutation(command));
         events.push({
           event: 'command.settled',
           requestId: command.requestId,
@@ -165,6 +169,11 @@ export class DesktopPlayerAdapter {
       const events = this.#emitBoundaryError(duplicateRequestError(command.requestId));
       return this.#result(false, command, events);
     }
+    const validationError = validateTrackSelectionCommand(command, this.#snapshot);
+    if (validationError) {
+      const events = this.#emitBoundaryError(validationError);
+      return this.#result(false, command, events);
+    }
     if (command.command === 'load') {
       if (!context || !context.privatePlayback) {
         const error = createPlayerError({
@@ -199,6 +208,7 @@ export class DesktopPlayerAdapter {
         for (const hostEvent of hostResult.events ?? []) {
           events.push(...this.handleHostEvent(hostEvent));
         }
+        events.push(...this.#applySuccessfulCommandMutation(command));
         events.push({
           event: 'command.settled',
           requestId: command.requestId,
@@ -263,14 +273,17 @@ export class DesktopPlayerAdapter {
       );
     }
     switch (hostEvent.type) {
-      case 'media.loaded':
+      case 'media.loaded': {
+        const withTracks = applyTrackSnapshot(
+          this.#snapshot,
+          hostEvent.requestId,
+          hostEvent.tracks ?? this.#snapshot.tracks,
+        );
         this.#snapshot = {
-          ...this.#snapshot,
-          requestId: hostEvent.requestId,
+          ...withTracks,
           status: 'ready',
           media: hostEvent.media,
           durationMs: hostEvent.durationMs,
-          tracks: hostEvent.tracks ?? this.#snapshot.tracks,
           lastError: null,
         };
         return [
@@ -282,6 +295,7 @@ export class DesktopPlayerAdapter {
           },
           this.#stateChanged(),
         ];
+      }
       case 'playback.state':
         this.#snapshot = {
           ...this.#snapshot,
@@ -329,13 +343,7 @@ export class DesktopPlayerAdapter {
           this.#stateChanged(),
         ];
       case 'track.selection.changed':
-        this.#snapshot = {
-          ...this.#snapshot,
-          requestId: hostEvent.requestId,
-          selectedAudioTrackId: hostEvent.audioTrackId,
-          selectedSubtitleTrackId: hostEvent.subtitleTrackId,
-          selectedVideoTrackId: hostEvent.videoTrackId,
-        };
+        this.#snapshot = applyTrackSelectionSnapshot(this.#snapshot, hostEvent.requestId, hostEvent);
         return [
           {
             event: 'track.selection.changed',
@@ -354,6 +362,20 @@ export class DesktopPlayerAdapter {
           playing: false,
         };
         return [{ event: 'ended', requestId: hostEvent.requestId }, this.#stateChanged()];
+      case 'quality.changed':
+        this.#snapshot = {
+          ...this.#snapshot,
+          requestId: hostEvent.requestId,
+          quality: hostEvent.quality,
+        };
+        return [
+          {
+            event: 'quality.changed',
+            requestId: hostEvent.requestId,
+            quality: hostEvent.quality,
+          },
+          this.#stateChanged(),
+        ];
       case 'error':
         return this.#recordError(hostEvent.error);
     }
@@ -461,23 +483,25 @@ export class DesktopPlayerAdapter {
     return this.#stateChanged();
   }
   #stateChanged(): PlayerEvent {
-    return {
-      event: 'state.changed',
-      requestId: this.#snapshot.requestId,
-      snapshot: cloneSnapshot(this.#snapshot),
-    };
+    return { event: 'state.changed', requestId: this.#snapshot.requestId, snapshot: cloneSnapshot(this.#snapshot) };
+  }
+  #applySuccessfulCommandMutation(command: PlayerCommand): readonly PlayerEvent[] {
+    if (command.command === 'volume.set') {
+      this.#snapshot = { ...this.#snapshot, volume: command.payload.volume };
+      return [this.#stateChanged()];
+    }
+    if (command.command === 'mute.set') {
+      this.#snapshot = { ...this.#snapshot, muted: command.payload.muted };
+      return [this.#stateChanged()];
+    }
+    return [];
   }
   #result(
     accepted: boolean,
     command: PlayerCommand | null,
     events: readonly PlayerEvent[],
   ): DesktopPlayerAdapterDispatchResult {
-    return {
-      accepted,
-      command,
-      events,
-      snapshot: cloneSnapshot(this.#snapshot),
-    };
+    return { accepted, command, events, snapshot: cloneSnapshot(this.#snapshot) };
   }
   #staleHostEventWarning(
     hostEvent: NativePlayerHostEvent,

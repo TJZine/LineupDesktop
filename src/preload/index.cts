@@ -10,6 +10,10 @@ import {
   type GuideBridgeInvoke,
 } from './guideBridge.cjs';
 import {
+  createPlayerSnapshotBridge,
+  type PlayerSnapshotBridgeInvoke,
+} from './playerBridge.cjs';
+import {
   LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
   LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
@@ -61,6 +65,7 @@ import type {
 } from '../contracts/shell.js';
 import type {
   PlayerDispatchResult,
+  PlayerError,
   PlayerEvent,
   PlayerIpcResult,
   PlayerSnapshot,
@@ -340,6 +345,12 @@ function isPlayerEvent(value: unknown): value is PlayerEvent {
         isNullableNonEmptyString(value.subtitleTrackId) &&
         isNullableNonEmptyString(value.videoTrackId)
       );
+    case 'quality.changed':
+      return (
+        hasOnlyKeys(value, ['event', 'requestId', 'quality']) &&
+        isNonEmptyString(value.requestId) &&
+        isPlayerPlaybackQualitySummary(value.quality)
+      );
     case 'command.settled': {
       if (
         !isNonEmptyString(value.requestId) ||
@@ -397,6 +408,7 @@ function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
       'selectedSubtitleTrackId',
       'selectedVideoTrackId',
       'tracks',
+      'quality',
       'lastError',
     ]) &&
     isNullableNonEmptyString(value.requestId) &&
@@ -414,7 +426,54 @@ function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
     isNullableNonEmptyString(value.selectedSubtitleTrackId) &&
     isNullableNonEmptyString(value.selectedVideoTrackId) &&
     isPlayerTracks(value.tracks) &&
+    isPlayerPlaybackQualitySummary(value.quality) &&
     (value.lastError === null || isPlayerError(value.lastError))
+  );
+}
+
+function isPlayerDispatchResult(value: unknown): value is PlayerDispatchResult {
+  return (
+    isPlainRecord(value) &&
+    hasOnlyKeys(value, ['accepted', 'events', 'snapshot']) &&
+    typeof value.accepted === 'boolean' &&
+    Array.isArray(value.events) &&
+    value.events.every((event) => isPlayerEvent(event)) &&
+    isPlayerSnapshot(value.snapshot)
+  );
+}
+
+function isPlayerPlaybackQualitySummary(value: unknown): boolean {
+  if (!isPlainRecord(value)) {
+    return false;
+  }
+  const keys = Object.keys(value);
+  const allowed = new Set([
+    'mode',
+    'videoCodec',
+    'audioCodec',
+    'sourceDynamicRange',
+    'outputDynamicRangeStatus',
+    'fallbackReason',
+  ]);
+  for (const key of keys) {
+    if (!allowed.has(key)) {
+      return false;
+    }
+  }
+  return (
+    isStringInSet(value.mode, ['direct-play', 'direct-stream', 'transcode', 'unknown']) &&
+    isStringInSet(value.sourceDynamicRange, ['sdr', 'hdr10', 'hlg', 'dolby-vision', 'unknown']) &&
+    isStringInSet(value.outputDynamicRangeStatus, [
+      'sdr',
+      'hdr10',
+      'dolby-vision',
+      'tone-mapped',
+      'unknown',
+      'unproven',
+    ]) &&
+    (value.videoCodec === undefined || typeof value.videoCodec === 'string') &&
+    (value.audioCodec === undefined || typeof value.audioCodec === 'string') &&
+    (value.fallbackReason === undefined || typeof value.fallbackReason === 'string')
   );
 }
 
@@ -481,7 +540,7 @@ function isTimeRanges(value: unknown): boolean {
   });
 }
 
-function isPlayerError(value: unknown): boolean {
+function isPlayerError(value: unknown): value is PlayerError {
   return (
     isPlainRecord(value) &&
     hasOnlyKeys(
@@ -536,7 +595,12 @@ function isDiagnosticMedia(value: unknown): boolean {
   );
 }
 
-function playerValidationFailure<T>(requestId: string, message: string): PlayerIpcResult<T> {
+function playerValidationFailure<T>(
+  requestId: string,
+  message: string,
+  operation = 'dispatch',
+  reason = 'invalid renderer request',
+): PlayerIpcResult<T> {
   return {
     ok: false,
     requestId,
@@ -549,12 +613,50 @@ function playerValidationFailure<T>(requestId: string, message: string): PlayerI
       requestId,
       diagnostic: {
         component: 'preload-player-bridge',
-        operation: 'dispatch',
+        operation,
         status: 'rejected',
-        reason: 'invalid renderer request',
+        reason,
       },
     },
   };
+}
+
+function isPlayerDispatchIpcResult(
+  value: unknown,
+  requestId: string,
+): value is PlayerIpcResult<PlayerDispatchResult> {
+  if (!isPlainRecord(value) || value.requestId !== requestId || typeof value.ok !== 'boolean') {
+    return false;
+  }
+  if (value.ok) {
+    return hasOnlyKeys(value, ['ok', 'requestId', 'value']) && isPlayerDispatchResult(value.value);
+  }
+  return hasOnlyKeys(value, ['ok', 'requestId', 'error']) && isPlayerError(value.error);
+}
+
+async function invokePlayerDispatchBridge(
+  envelope: PlayerRendererIntentEnvelope<unknown>,
+): Promise<PlayerIpcResult<PlayerDispatchResult>> {
+  let result: unknown;
+  try {
+    result = await ipcRenderer.invoke(LINEUP_PLAYER_COMMAND_CHANNEL, envelope);
+  } catch {
+    return playerValidationFailure<PlayerDispatchResult>(
+      envelope.requestId,
+      'Player dispatch invoke failed.',
+      'dispatch',
+      'invoke rejected',
+    );
+  }
+  if (!isPlayerDispatchIpcResult(result, envelope.requestId)) {
+    return playerValidationFailure<PlayerDispatchResult>(
+      envelope.requestId,
+      'Player dispatch returned an invalid result.',
+      'dispatch',
+      'invalid invoke result',
+    );
+  }
+  return result;
 }
 
 type PlexValidationResult<TPayload> =
@@ -995,6 +1097,9 @@ const invokeChannelSetup: ChannelSetupBridgeInvoke = (channel, request) =>
 const invokeGuide: GuideBridgeInvoke = (channel, request) =>
   ipcRenderer.invoke(channel, request);
 
+const invokePlayerSnapshot: PlayerSnapshotBridgeInvoke = (channel, request) =>
+  ipcRenderer.invoke(channel, request);
+
 function isPlexPinSummary(value: unknown): boolean {
   return (
     isPlainRecord(value) &&
@@ -1349,10 +1454,6 @@ function isPlexGetMetadataValue(value: unknown): value is PlexGetMetadataValue {
   );
 }
 
-function createWrapperRequest(prefix: string): { requestId: string } {
-  return { requestId: createRequestId(prefix) };
-}
-
 function readCommandRequestId(value: unknown): string {
   if (isPlainRecord(value) && isNonEmptyString(value.requestId)) {
     return value.requestId;
@@ -1424,6 +1525,19 @@ function hasForbiddenPrivilegedField(value: unknown): boolean {
   });
 }
 
+const playerSnapshotBridge = createPlayerSnapshotBridge(
+  invokePlayerSnapshot,
+  {
+    getSnapshot: LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
+    cleanup: LINEUP_PLAYER_CLEANUP_CHANNEL,
+  },
+  createRequestId,
+  {
+    isPlayerSnapshot,
+    isPlayerError,
+  },
+);
+
 const lineupDesktop: LineupDesktopPreloadApi = {
   shell: {
     getCapabilities: () =>
@@ -1475,21 +1589,10 @@ const lineupDesktop: LineupDesktopPreloadApi = {
           ),
         );
       }
-      return ipcRenderer.invoke(
-        LINEUP_PLAYER_COMMAND_CHANNEL,
-        envelope,
-      ) as Promise<PlayerIpcResult<PlayerDispatchResult>>;
+      return invokePlayerDispatchBridge(envelope);
     },
-    getSnapshot: () =>
-      ipcRenderer.invoke(
-        LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
-        createWrapperRequest('player-snapshot'),
-      ) as Promise<PlayerIpcResult<PlayerSnapshot>>,
-    cleanup: () =>
-      ipcRenderer.invoke(
-        LINEUP_PLAYER_CLEANUP_CHANNEL,
-        createWrapperRequest('player-cleanup'),
-      ) as Promise<PlayerIpcResult<PlayerSnapshot>>,
+    getSnapshot: playerSnapshotBridge.getSnapshot,
+    cleanup: playerSnapshotBridge.cleanup,
     tuneChannel: createPlayerTuneBridge(
       invokeGuide,
       LINEUP_PLAYER_TUNE_CHANNEL,

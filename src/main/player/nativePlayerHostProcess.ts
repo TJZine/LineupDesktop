@@ -54,6 +54,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
   #pending = new Map<PlayerRequestId, PendingCommand>();
   #lineBuffer = '';
   #lifecycleFailureListeners = new Set<(failure: NativePlayerHostLifecycleFailure) => void>();
+  #eventListeners = new Set<(event: NativePlayerHostEvent) => void>();
   #spawnCount = 0;
   constructor(options: NativePlayerHostProcessOptions) {
     this.#spawnHostProcess = options.spawnHostProcess;
@@ -158,6 +159,12 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       this.#lifecycleFailureListeners.delete(listener);
     };
   }
+  onEvent(listener: (event: NativePlayerHostEvent) => void): () => void {
+    this.#eventListeners.add(listener);
+    return () => {
+      this.#eventListeners.delete(listener);
+    };
+  }
   #getOrSpawnChild():
     | { child: NativePlayerHostChildProcess }
     | { error: NativePlayerHostFailure } {
@@ -255,9 +262,12 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     }
     if (message.message.type === 'event') {
       const requestId = message.message.event.requestId;
-      if (requestId !== null) {
-        this.#pending.get(requestId)?.events.push(message.message.event);
+      const pending = requestId === null ? undefined : this.#pending.get(requestId);
+      if (pending !== undefined) {
+        pending.events.push(message.message.event);
+        return;
       }
+      this.#emitEvent(message.message.event);
       return;
     }
     const pending = this.#pending.get(message.message.requestId);
@@ -326,6 +336,15 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
         listener(failure);
       } catch {
         // Lifecycle failure delivery is best effort; one observer must not block the rest.
+      }
+    }
+  }
+  #emitEvent(event: NativePlayerHostEvent): void {
+    for (const listener of [...this.#eventListeners]) {
+      try {
+        listener(event);
+      } catch {
+        // Event delivery is best effort; one observer must not block the rest.
       }
     }
   }

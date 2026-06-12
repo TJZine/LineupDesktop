@@ -99,31 +99,42 @@ export function mapRendererIntentToCommand(envelope: unknown): CommandMappingRes
       return { command: { command: 'mute.set', requestId, payload: { muted: payload.value.muted } } };
     }
     case 'track.audio.select': {
-      const payload = validateObjectPayload(envelope.payload, ['trackId']);
-      if ('error' in payload || !isNonEmptyString(payload.value.trackId)) {
-        return validationFailure(requestId, 'audio track payload must include opaque trackId');
+      const payload = validateObjectPayload(envelope.payload, ['trackId', 'snapshotRequestId']);
+      if (
+        'error' in payload ||
+        !isNonEmptyString(payload.value.trackId) ||
+        !isNonEmptyString(payload.value.snapshotRequestId)
+      ) {
+        return validationFailure(requestId, 'audio track payload must include opaque trackId and snapshotRequestId');
       }
       return {
         command: {
           command: 'track.audio.select',
           requestId,
-          payload: { trackId: payload.value.trackId },
+          payload: {
+            trackId: payload.value.trackId,
+            snapshotRequestId: payload.value.snapshotRequestId,
+          },
         },
       };
     }
     case 'track.subtitle.select': {
-      const payload = validateObjectPayload(envelope.payload, ['trackId']);
+      const payload = validateObjectPayload(envelope.payload, ['trackId', 'snapshotRequestId']);
       if (
         'error' in payload ||
-        !(payload.value.trackId === null || isNonEmptyString(payload.value.trackId))
+        !(payload.value.trackId === null || isNonEmptyString(payload.value.trackId)) ||
+        !isNonEmptyString(payload.value.snapshotRequestId)
       ) {
-        return validationFailure(requestId, 'subtitle track payload must include opaque trackId or null');
+        return validationFailure(requestId, 'subtitle track payload must include opaque trackId or null and snapshotRequestId');
       }
       return {
         command: {
           command: 'track.subtitle.select',
           requestId,
-          payload: { trackId: payload.value.trackId },
+          payload: {
+            trackId: payload.value.trackId,
+            snapshotRequestId: payload.value.snapshotRequestId,
+          },
         },
       };
     }

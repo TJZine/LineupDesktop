@@ -115,7 +115,76 @@ test('playback options cycle renderer-local track and volume state', () => {
   const subtitle = applyPlayerOverlayAction(audio, 'cycleSubtitleTrack');
   const louder = applyPlayerOverlayAction(subtitle, 'volumeUp');
   const muted = applyPlayerOverlayAction(louder, 'toggleMute');
-  const view = createPlayerOverlayView(muted);
+  const snapshot = {
+    ...createRendererSafePlayerSnapshot(),
+    volume: louder.volume,
+    muted: muted.muted,
+    selectedAudioTrackId: audio.selectedAudioTrackId,
+    selectedSubtitleTrackId: subtitle.selectedSubtitleTrackId,
+    tracks: [
+      {
+        id: 'audio-main',
+        kind: 'audio',
+        label: 'Main stereo',
+        language: 'en',
+        codec: 'aac',
+        deliveryType: 'embedded',
+        selected: audio.selectedAudioTrackId === 'audio-main',
+        available: true,
+      },
+      {
+        id: 'audio-commentary',
+        kind: 'audio',
+        label: 'Commentary',
+        language: 'en',
+        codec: 'aac',
+        deliveryType: 'embedded',
+        selected: audio.selectedAudioTrackId === 'audio-commentary',
+        available: true,
+      },
+      {
+        id: 'audio-described',
+        kind: 'audio',
+        label: 'Descriptive audio',
+        language: 'en',
+        codec: 'aac',
+        deliveryType: 'embedded',
+        selected: false,
+        available: false,
+      },
+      {
+        id: 'subtitle-english',
+        kind: 'subtitle',
+        label: 'English',
+        language: 'en',
+        format: 'srt',
+        deliveryType: 'sidecar',
+        selected: subtitle.selectedSubtitleTrackId === 'subtitle-english',
+        available: true,
+      },
+      {
+        id: 'subtitle-sdh',
+        kind: 'subtitle',
+        label: 'English SDH',
+        language: 'en',
+        format: 'srt',
+        deliveryType: 'burned-in',
+        selected: subtitle.selectedSubtitleTrackId === 'subtitle-sdh',
+        available: true,
+      },
+    ],
+    quality: {
+      mode: 'direct-play',
+      sourceDynamicRange: 'sdr',
+      outputDynamicRangeStatus: 'sdr',
+      videoCodec: 'h264',
+      audioCodec: 'aac',
+    },
+  } as const;
+  const view = createPlayerOverlayView(muted, {
+    channels: getDefaultOverlayPresentationChannels(),
+    playerSnapshot: snapshot,
+  });
 
   assert.equal(view.visibleOverlays.playbackOptions, true);
   assert.equal(view.activeOverlayId, 'playbackOptions');
@@ -125,7 +194,7 @@ test('playback options cycle renderer-local track and volume state', () => {
   assert.equal(view.playbackOptions.muted, true);
   assert.equal(view.playbackOptions.audioTracks.some((track) => !track.available), true);
   assert.equal(view.playbackOptions.subtitleTracks.some((track) => track.meta === 'Burn-in'), true);
-  assert.match(view.playbackOptions.playbackSummary, /Direct Play .*Video Transcode/u);
+  assert.match(view.playbackOptions.playbackSummary, /Direct Play/u);
 });
 
 test('playback options normalize unknown track ids to the first option when cycling', () => {
@@ -137,7 +206,15 @@ test('playback options normalize unknown track ids to the first option when cycl
 
   const audio = applyPlayerOverlayAction(initial, 'cycleAudioTrack');
   const subtitle = applyPlayerOverlayAction(audio, 'cycleSubtitleTrack');
-  const view = createPlayerOverlayView(subtitle);
+  const snapshot = {
+    ...createRendererSafePlayerSnapshot(),
+    selectedAudioTrackId: subtitle.selectedAudioTrackId,
+    selectedSubtitleTrackId: subtitle.selectedSubtitleTrackId,
+  };
+  const view = createPlayerOverlayView(subtitle, {
+    channels: getDefaultOverlayPresentationChannels(),
+    playerSnapshot: snapshot,
+  });
 
   assert.equal(subtitle.selectedAudioTrackId, 'audio-main');
   assert.equal(subtitle.selectedSubtitleTrackId, null);
@@ -152,8 +229,8 @@ test('primary playback options action opens options above the visible OSD', () =
   assert.equal(view.visibleOverlays.playerOsd, true);
   assert.equal(view.visibleOverlays.playbackOptions, true);
   assert.equal(view.activeOverlayId, 'playbackOptions');
-  assert.equal(view.activeFocusId, 'overlay-audio-cycle');
-  assert.equal(resolvePlayerOverlayFocusId(view), 'overlay-audio-cycle');
+  assert.equal(view.activeFocusId, 'overlay-audio-track-audio-main');
+  assert.equal(resolvePlayerOverlayFocusId(view), 'overlay-audio-track-audio-main');
 });
 
 test('closing the last modal overlay falls back to the visible player OSD toggle focus', () => {

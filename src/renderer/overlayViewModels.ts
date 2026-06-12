@@ -1,4 +1,19 @@
 import type { PlayerSnapshot, PlayerStatus } from '../contracts/player.js';
+import {
+  findChannel,
+  formatDuration,
+  statusLabel,
+  DEFAULT_PLAYER_OVERLAY_PRESENTATION,
+  EMPTY_PLAYER_OVERLAY_CHANNEL,
+} from './overlayViewModelHelpers.js';
+
+export {
+  createRendererSafePlayerSnapshot,
+  getDefaultOverlayPresentationChannels,
+  DEFAULT_PLAYER_OVERLAY_PRESENTATION,
+  PLAYBACK_AUDIO_TRACKS,
+  PLAYBACK_SUBTITLE_TRACKS,
+} from './overlayViewModelHelpers.js';
 
 export type PlayerOverlayId =
   | 'playerOsd'
@@ -105,6 +120,7 @@ export interface PlayerOverlayViewModel {
   channelBadge: OverlayChannelViewModel;
   channelNumberBuffer: string;
   channelNumberDisplay: string;
+  channelNumberInvalid: boolean;
   playbackOptions: PlaybackOptionsViewModel;
 }
 
@@ -116,88 +132,6 @@ export const PLAYER_OVERLAY_IDS = [
   'channelBadge',
   'playbackOptions',
 ] as const satisfies readonly PlayerOverlayId[];
-
-const DEFAULT_OVERLAY_CHANNELS = [
-  {
-    id: 'channel-liminal-one',
-    number: '101',
-    name: 'Liminal One',
-    currentTitle: 'The Midnight Archive',
-    nextTitle: 'After Hours Cinema',
-    nowStartLabel: '8:30 PM',
-    nowProgressPercent: 25,
-    buildStrategy: 'shows',
-  },
-  {
-    id: 'channel-vault',
-    number: '204',
-    name: 'The Vault',
-    currentTitle: 'Restored Feature',
-    nextTitle: 'Director Notes',
-    nowStartLabel: '8:00 PM',
-    nowProgressPercent: 50,
-    buildStrategy: 'movies',
-  },
-  {
-    id: 'channel-weekend',
-    number: '310',
-    name: 'Weekend Queue With A Long Channel Name',
-    currentTitle: 'Pilot Block',
-    nextTitle: 'Comfort Marathon',
-    nowStartLabel: '8:00 PM',
-    nowProgressPercent: 10,
-    buildStrategy: 'shows',
-  },
-  {
-    id: 'channel-docs',
-    number: '411',
-    name: 'Documentary Shelf',
-    currentTitle: 'Field Notes',
-    nextTitle: 'Archive Interview',
-    nowStartLabel: '8:00 PM',
-    nowProgressPercent: 65,
-    buildStrategy: 'mixed',
-  },
-  {
-    id: 'channel-late',
-    number: '512',
-    name: 'Late Signal',
-    currentTitle: 'HLS Session Sample',
-    nextTitle: 'Subtitle Burn-in Demo',
-    nowStartLabel: '8:00 PM',
-    nowProgressPercent: 40,
-    buildStrategy: 'movies',
-  },
-] as const satisfies readonly OverlayChannelViewModel[];
-
-export const DEFAULT_PLAYER_OVERLAY_PRESENTATION = {
-  channels: DEFAULT_OVERLAY_CHANNELS,
-  playerSnapshot: createRendererSafePlayerSnapshot(),
-} as const satisfies PlayerOverlayPresentationSource;
-
-const EMPTY_PLAYER_OVERLAY_CHANNEL = {
-  id: 'channel-unavailable',
-  number: '---',
-  name: 'Unavailable',
-  currentTitle: 'Program details unavailable',
-  nextTitle: 'Guide data unavailable',
-  nowStartLabel: '--:--',
-  nowProgressPercent: 0,
-  buildStrategy: 'mixed',
-} as const satisfies OverlayChannelViewModel;
-
-export const PLAYBACK_AUDIO_TRACKS = [
-  { id: 'audio-main', label: 'Main stereo', meta: 'Direct Play', available: true },
-  { id: 'audio-commentary', label: 'Commentary', meta: 'Audio Transcode', available: true },
-  { id: 'audio-described', label: 'Descriptive audio', meta: 'Unavailable', available: false },
-] as const;
-
-export const PLAYBACK_SUBTITLE_TRACKS = [
-  { id: null, label: 'Off', meta: 'Direct', available: true },
-  { id: 'subtitle-english', label: 'English', meta: 'Extract', available: true },
-  { id: 'subtitle-sdh', label: 'English SDH', meta: 'Burn-in', available: true },
-  { id: 'subtitle-forced-missing', label: 'Forced track', meta: 'Unavailable', available: false },
-] as const;
 
 export function normalizePlayerOverlayPresentation(
   presentation: PlayerOverlayPresentationSource = DEFAULT_PLAYER_OVERLAY_PRESENTATION,
@@ -226,7 +160,7 @@ export function createPlayerOverlayView(
     stack: state.stack,
     visibleOverlays,
     activeOverlayId: activeOverlayId(state),
-    activeFocusId: activeFocusId(state),
+    activeFocusId: activeFocusId(state, playerSnapshot),
     nowPlaying: createNowPlayingSummary(playerSnapshot, currentChannel),
     playerOsd: createPlayerOsdSummary(state, playerSnapshot, currentChannel),
     miniGuideChannels: channels.map((channel) => ({
@@ -237,78 +171,22 @@ export function createPlayerOverlayView(
     channelBadge: currentChannel,
     channelNumberBuffer: state.channelNumberBuffer,
     channelNumberDisplay:
-      state.channelNumberBuffer.length === 0 ? '---' : state.channelNumberBuffer.padEnd(3, '-'),
-    playbackOptions: createPlaybackOptionsView(state),
+      state.channelNumberBuffer.length === 0 ? '---' : state.channelNumberBuffer.padEnd(3, '_'),
+    channelNumberInvalid:
+      state.channelNumberBuffer.length > 0 &&
+      !channels.some((c) => c.number.startsWith(state.channelNumberBuffer)),
+    playbackOptions: createPlaybackOptionsView(state, playerSnapshot),
   };
-}
-
-export function createRendererSafePlayerSnapshot(): PlayerSnapshot {
-  return {
-    requestId: 'renderer-presentation-player',
-    status: 'playing',
-    media: {
-      id: 'renderer-presentation-media',
-      title: 'The Midnight Archive',
-      subtitle: 'Episode 4 - Signal Lost',
-      durationMs: 3_600_000,
-      container: 'renderer-safe-presentation',
-    },
-    capabilityProfileId: 'renderer-presentation',
-    positionMs: 12 * 60 * 1000,
-    durationMs: 3_600_000,
-    bufferedRanges: [{ startMs: 0, endMs: 18 * 60 * 1000 }],
-    playing: true,
-    volume: 0.72,
-    muted: false,
-    playbackRate: 1,
-    selectedAudioTrackId: 'audio-main',
-    selectedSubtitleTrackId: null,
-    selectedVideoTrackId: 'video-main',
-    tracks: [
-      {
-        id: 'audio-main',
-        kind: 'audio',
-        label: 'Main stereo',
-        language: 'en',
-        codec: 'aac',
-        deliveryType: 'embedded',
-        selected: true,
-        available: true,
-      },
-      {
-        id: 'audio-commentary',
-        kind: 'audio',
-        label: 'Commentary',
-        language: 'en',
-        codec: 'aac',
-        deliveryType: 'embedded',
-        selected: false,
-        available: true,
-      },
-      {
-        id: 'subtitle-english',
-        kind: 'subtitle',
-        label: 'English',
-        language: 'en',
-        format: 'srt',
-        deliveryType: 'sidecar',
-        selected: false,
-        available: true,
-      },
-    ],
-    lastError: null,
-  };
-}
-
-export function getDefaultOverlayPresentationChannels(): readonly OverlayChannelViewModel[] {
-  return DEFAULT_OVERLAY_CHANNELS;
 }
 
 export function activeOverlayId(state: PlayerOverlayState): PlayerOverlayId | null {
   return [...state.stack].reverse().find((overlayId) => !NON_MODAL_OVERLAYS.has(overlayId)) ?? null;
 }
 
-export function activeFocusId(state: PlayerOverlayState): string | null {
+export function activeFocusId(
+  state: PlayerOverlayState,
+  snapshot: PlayerSnapshot = DEFAULT_PLAYER_OVERLAY_PRESENTATION.playerSnapshot,
+): string | null {
   switch (activeOverlayId(state)) {
     case 'playerOsd':
       return 'overlay-mini-guide';
@@ -316,11 +194,43 @@ export function activeFocusId(state: PlayerOverlayState): string | null {
       return 'overlay-mini-next';
     case 'channelNumber':
       return 'overlay-channel-commit';
-    case 'playbackOptions':
-      return 'overlay-audio-cycle';
+    case 'playbackOptions': {
+      if (snapshot.tracks.length > 0) {
+        const firstAudio = snapshot.tracks.find((t) => t.kind === 'audio' && t.available);
+        if (firstAudio) {
+          return `overlay-audio-track-${firstAudio.id}`;
+        }
+        const firstSub = snapshot.tracks.find((t) => t.kind === 'subtitle' && t.available);
+        if (firstSub) {
+          return `overlay-subtitle-track-${firstSub.id}`;
+        }
+      }
+      return 'overlay-subtitle-track-subtitles-off';
+    }
     default:
       return null;
   }
+}
+
+export function createPlayerOverlayViewForBadge(
+  currentChannel: OverlayChannelViewModel
+): NowPlayingOverlayViewModel {
+  return {
+    title: currentChannel.currentTitle,
+    subtitle: currentChannel.name,
+    channelNumber: currentChannel.number,
+    channelName: currentChannel.name,
+    status: 'idle',
+    statusLabel: 'Stopped',
+    positionLabel: '0:00',
+    durationLabel: '--:--',
+    progressPercent: 0,
+    description: '',
+    badges: [],
+    metaLines: [],
+    playbackSummary: '',
+    upNextText: `Up next: ${currentChannel.nextTitle}`,
+  };
 }
 
 function createNowPlayingSummary(
@@ -369,8 +279,8 @@ function createPlayerOsdSummary(
     endsAtText: 'Ends 9:30 PM',
     bufferedPercent: Math.max(nowPlaying.progressPercent, 32),
     playedPercent: nowPlaying.progressPercent,
-    audioLabel: createPlaybackOptionsView(state).selectedAudioLabel,
-    subtitleLabel: createPlaybackOptionsView(state).selectedSubtitleLabel,
+    audioLabel: createPlaybackOptionsView(state, snapshot).selectedAudioLabel,
+    subtitleLabel: createPlaybackOptionsView(state, snapshot).selectedSubtitleLabel,
     upNextText: `Next on ${channel.number}: ${channel.nextTitle}`,
     bufferText: snapshot.status === 'buffering' ? 'Buffering' : '',
     actionIds: {
@@ -381,56 +291,91 @@ function createPlayerOsdSummary(
   };
 }
 
-function createPlaybackOptionsView(state: PlayerOverlayState): PlaybackOptionsViewModel {
-  const audioTracks = PLAYBACK_AUDIO_TRACKS.map((track) => ({
-    ...track,
-    selected: track.id === state.selectedAudioTrackId,
-    stateLabel: track.id === state.selectedAudioTrackId ? 'Selected' : track.available ? 'Available' : 'Unavailable',
-  }));
-  const subtitleTracks = PLAYBACK_SUBTITLE_TRACKS.map((track) => ({
-    id: track.id ?? 'subtitles-off',
-    label: track.label,
-    selected: track.id === state.selectedSubtitleTrackId,
-    available: track.available,
-    meta: track.meta,
-    stateLabel: track.id === state.selectedSubtitleTrackId ? 'Selected' : track.available ? 'Available' : 'Unavailable',
-  }));
+function createPlaybackOptionsView(
+  state: PlayerOverlayState,
+  snapshot: PlayerSnapshot = DEFAULT_PLAYER_OVERLAY_PRESENTATION.playerSnapshot,
+): PlaybackOptionsViewModel {
+  const audioTracks = snapshot.tracks
+    .filter((track) => track.kind === 'audio')
+    .map((track) => {
+      let meta = 'Available';
+      if (track.codec) {
+        meta = track.codec.toUpperCase();
+        if (track.channelCount) {
+          meta += ` ${track.channelCount}ch`;
+        }
+      }
+      return {
+        id: track.id,
+        label: track.label,
+        selected: track.selected,
+        available: track.available,
+        meta,
+        stateLabel: track.selected ? 'Selected' : track.available ? 'Available' : 'Unavailable',
+      };
+    });
+
+  const subtitleTracks = [
+    {
+      id: 'subtitles-off',
+      label: 'Off',
+      selected: snapshot.selectedSubtitleTrackId === null,
+      available: true,
+      meta: '',
+      stateLabel: snapshot.selectedSubtitleTrackId === null ? 'Selected' : 'Available',
+    },
+    ...snapshot.tracks
+      .filter((track) => track.kind === 'subtitle')
+      .map((track) => {
+        let meta = track.deliveryType === 'burned-in' ? 'Burn-in' : 'External';
+        if (track.forced) {
+          meta += ' (Forced)';
+        }
+        return {
+          id: track.id,
+          label: track.label,
+          selected: track.selected,
+          available: track.available,
+          meta,
+          stateLabel: track.selected ? 'Selected' : track.available ? 'Available' : 'Unavailable',
+        };
+      }),
+  ];
+
   const selectedAudioLabel =
-    audioTracks.find((track) => track.selected)?.label ?? PLAYBACK_AUDIO_TRACKS[0].label;
+    audioTracks.find((track) => track.selected)?.label ?? 'None';
   const selectedSubtitleLabel =
-    subtitleTracks.find((track) => track.selected)?.label ?? PLAYBACK_SUBTITLE_TRACKS[0].label;
+    subtitleTracks.find((track) => track.selected)?.label ?? 'Off';
+
+  let playbackSummary = 'Playback: Direct Play';
+  if (snapshot.quality) {
+    const q = snapshot.quality;
+    const modeLabel =
+      q.mode === 'direct-play'
+        ? 'Direct Play'
+        : q.mode === 'direct-stream'
+          ? 'Direct Stream'
+          : q.mode === 'transcode'
+            ? 'Transcode'
+            : 'Unknown Mode';
+    let videoPart = q.videoCodec ? q.videoCodec.toUpperCase() : 'Unknown Video';
+    if (q.sourceDynamicRange && q.sourceDynamicRange !== 'unknown') {
+      videoPart += ` (${q.sourceDynamicRange.toUpperCase()})`;
+    }
+    const audioPart = q.audioCodec ? q.audioCodec.toUpperCase() : 'Unknown Audio';
+    playbackSummary = `Playback: ${modeLabel} / Video: ${videoPart} / Audio: ${audioPart}`;
+  }
 
   return {
-    volumePercent: Math.round(state.volume * 100),
-    muted: state.muted,
-    playbackRateLabel: `${state.playbackRate.toFixed(1)}x`,
+    volumePercent: Math.round(snapshot.volume * 100),
+    muted: snapshot.muted,
+    playbackRateLabel: `${snapshot.playbackRate.toFixed(1)}x`,
     audioTracks,
     subtitleTracks,
     selectedAudioLabel,
     selectedSubtitleLabel,
-    playbackSummary: 'Playback: Direct Play / Direct Stream / HLS Session / Audio Transcode / Video Transcode',
+    playbackSummary,
   };
-}
-
-function findChannel(
-  channelId: string,
-  channels: readonly OverlayChannelViewModel[],
-): OverlayChannelViewModel | undefined {
-  return channels.find((channel) => channel.id === channelId);
-}
-
-function formatDuration(valueMs: number): string {
-  const totalSeconds = Math.floor(valueMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = String(totalSeconds % 60).padStart(2, '0');
-  return `${minutes}:${seconds}`;
-}
-
-function statusLabel(status: PlayerStatus): string {
-  return status
-    .split('-')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
 }
 
 const NON_MODAL_OVERLAYS = new Set<PlayerOverlayId>(['channelBadge', 'nowPlaying']);

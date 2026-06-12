@@ -1,6 +1,16 @@
 # Playback Architecture
 
-Lineup Desktop runtime playback is code-complete, with manual proof pending. RD-25 implements the production native playback MVP, replacing the fake playback bootstrap with a production-shaped, main/helper-owned native playback path for live Plex-backed scheduled media. A main-only privileged load context propagates the private playback descriptor to the helper host, which runs a repo-owned C# native helper process. The helper communicates with the main process via an NDJSON protocol over stdin/stdout. Live Plex stream resolution, media detail, and PMS session ports are composed and wired. Renderer player UI state binds dynamically to safe player IPC events. Manual proof of running native playback on Windows is deferred to the later MVP QA pass, leaving production native playback proof pending.
+Lineup Desktop runtime playback is code complete and reviewed, with
+Windows/manual product proof still pending. RD-25 implements the production
+native playback MVP, replacing the fake playback bootstrap with a
+production-shaped, main/helper-owned native playback path for live Plex-backed
+scheduled media. A main-only privileged load context propagates the private
+playback descriptor to the helper host, which runs a repo-owned C# native helper
+process. The helper communicates with the main process via an NDJSON protocol
+over stdin/stdout. Live Plex stream resolution, media detail, and PMS session
+ports are composed and wired. Renderer player UI state binds dynamically to safe
+player IPC events. Manual proof of running native playback on Windows is
+deferred to RD-27 and remains pending.
 
 ## Current Hypothesis
 
@@ -261,7 +271,7 @@ a reviewed plan before they are introduced.
 
 ## RD-25 Production Native Playback MVP
 
-RD-25 code implementation is complete, manual proof pending. The production native playback MVP replaces the fake playback bootstrap with a production-shaped, main/helper-owned native playback path for live Plex-backed scheduled media.
+RD-25 code implementation is complete and reviewed; Windows/manual product proof remains deferred to RD-27. The production native playback MVP replaces the fake playback bootstrap with a production-shaped, main/helper-owned native playback path for live Plex-backed scheduled media.
 
 ### Seam Propagation and Setup Flow
 
@@ -271,5 +281,17 @@ RD-25 code implementation is complete, manual proof pending. The production nati
 4. **Lifecycle Hooks and Cleanup**: App cleanup, user profile switches, server selection changes, program scheduling transitions, manual stops, and native helper crashes successfully trigger runtime cleanups and PMS session releases.
 5. **Renderer Binding**: The renderer player UI dynamically updates from IPC event notifications, keeping track of safe player snapshots without exposing tokenized URLs, credential headers, or libmpv details.
 
-Manual proof of running native playback on Windows is deferred to the later MVP QA pass, leaving production native playback proof pending.
+Manual proof of running native playback on Windows is deferred to RD-27, leaving production native playback proof pending.
 
+## RD-26 Runtime Media Options And Playback Quality
+
+RD-26 code implementation is complete and reviewed; Windows/manual product proof remains deferred to RD-27. It implements runtime media options and playback quality over the production native playback path.
+
+### Seam Propagation and Setup Flow
+
+1. **Track and Quality State Management**: The C# native helper (`Lineup.NativePlayerHost`) is extended to observe libmpv properties (`aid`, `sid`, `vid`, `video-params`, `video-codec`, `audio-codec`) and emit public track and quality summaries over NDJSON.
+2. **Main Selection Validation**: The main process (`DesktopPlayerAdapter` and `playerTrackSelectionValidation.ts`) gates renderer track selection requests against the player snapshot, validating that the request targets the current snapshot and that the requested track exists and is selectable before delegating the actual switch to the native helper.
+3. **Renderer Option Views**: The renderer overlay views query the active player snapshot's track and quality summaries to dynamically render track buttons and playback quality status, replacing the old mock controls.
+4. **Renderer Action Dispatch**: Selecting a track row or toggling volume/mute in the renderer overlays constructs and dispatches corresponding player intents (`player.selectAudio`, `player.selectSubtitle`, `player.setVolume`, `player.setMute`) to the player bridge.
+
+Manual proof on Windows is deferred to RD-27, leaving production native playback and media options proof pending.

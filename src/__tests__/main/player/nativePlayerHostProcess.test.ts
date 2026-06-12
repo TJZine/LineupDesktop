@@ -225,6 +225,43 @@ test('native host process translates commands and returns safe host events', asy
   assertNoForbiddenKeys(result);
 });
 
+test('native host process delivers helper events emitted after command results out of band', async () => {
+  const child = new FakeHostChildProcess();
+  const asyncEvents: unknown[] = [];
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+  host.onEvent((event) => asyncEvents.push(event));
+
+  const pending = host.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.send({ type: 'result', requestId: 'native-load-1', ok: true, events: [] });
+  const result = await pending;
+
+  child.send({
+    type: 'event',
+    event: {
+      type: 'time.updated',
+      requestId: 'native-load-1',
+      positionMs: 750,
+      durationMs: 1_000,
+    },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(asyncEvents, [
+    {
+      type: 'time.updated',
+      requestId: 'native-load-1',
+      positionMs: 750,
+      durationMs: 1_000,
+    },
+  ]);
+  assertNoForbiddenKeys(asyncEvents);
+});
+
 test('native host process rejects duplicate in-flight request IDs without overwriting pending commands', async () => {
   const child = new FakeHostChildProcess();
   const host = new NativePlayerHostProcess({
@@ -743,6 +780,7 @@ test('native host process serializes private playback details correctly', async 
         partPath: '/library/parts/main',
         selectedTrackIds: { video: null, audio: null, subtitle: null },
         selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+        trackMap: { video: [], audio: [], subtitle: [] },
       },
       selectedConnection: {
         protocol: 'https' as const,

@@ -21,6 +21,36 @@ export function applyTrackSnapshot(
   };
 }
 
+export function applyTrackSelectionSnapshot(
+  snapshot: PlayerSnapshot,
+  requestId: string,
+  selection: {
+    audioTrackId: PlayerTrackId | null;
+    subtitleTrackId: PlayerTrackId | null;
+    videoTrackId: PlayerTrackId | null;
+  },
+): PlayerSnapshot {
+  return {
+    ...snapshot,
+    requestId,
+    selectedAudioTrackId: selection.audioTrackId,
+    selectedSubtitleTrackId: selection.subtitleTrackId,
+    selectedVideoTrackId: selection.videoTrackId,
+    tracks: snapshot.tracks.map((track) => {
+      if (track.kind === 'audio') {
+        return { ...track, selected: track.id === selection.audioTrackId };
+      }
+      if (track.kind === 'subtitle') {
+        return { ...track, selected: track.id === selection.subtitleTrackId };
+      }
+      if (track.kind === 'video') {
+        return { ...track, selected: track.id === selection.videoTrackId };
+      }
+      return track;
+    }),
+  };
+}
+
 export function createInitialSnapshot(): PlayerSnapshot {
   return {
     requestId: null,
@@ -38,6 +68,7 @@ export function createInitialSnapshot(): PlayerSnapshot {
     selectedSubtitleTrackId: null,
     selectedVideoTrackId: null,
     tracks: [],
+    quality: { mode: 'unknown', sourceDynamicRange: 'unknown', outputDynamicRangeStatus: 'unknown' },
     lastError: null,
   };
 }
@@ -48,6 +79,7 @@ export function cloneSnapshot(snapshot: PlayerSnapshot): PlayerSnapshot {
     media: snapshot.media === null ? null : { ...snapshot.media },
     bufferedRanges: snapshot.bufferedRanges.map((range) => ({ ...range })),
     tracks: snapshot.tracks.map((track) => ({ ...track })),
+    quality: { ...snapshot.quality },
     lastError: snapshot.lastError === null ? null : sanitizePlayerError(snapshot.lastError, 'PLAYER_ERROR'),
   };
 }

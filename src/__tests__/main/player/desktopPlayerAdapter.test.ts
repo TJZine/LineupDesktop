@@ -29,6 +29,7 @@ import type { PrivilegedPlaybackDispatchContext } from '../../../main/player/pri
 class FakeNativePlayerHost implements NativePlayerHostPort {
   readonly commands: PlayerCommand[] = [];
   readonly cleanupRequestIds: Array<string | null> = [];
+  private readonly eventListeners = new Set<(event: NativePlayerHostEvent) => void>();
   executeResult: NativePlayerHostCommandResult = { ok: true };
   cleanupError: Error | null = null;
 
@@ -41,6 +42,19 @@ class FakeNativePlayerHost implements NativePlayerHostPort {
     this.cleanupRequestIds.push(requestId);
     if (this.cleanupError !== null) {
       throw this.cleanupError;
+    }
+  }
+
+  onEvent(listener: (event: NativePlayerHostEvent) => void): () => void {
+    this.eventListeners.add(listener);
+    return () => {
+      this.eventListeners.delete(listener);
+    };
+  }
+
+  emitEvent(event: NativePlayerHostEvent): void {
+    for (const listener of [...this.eventListeners]) {
+      listener(event);
     }
   }
 }
@@ -159,6 +173,7 @@ function privilegedContext(requestId = 'request-load-1'): PrivilegedPlaybackDisp
         partPath: '/library/parts/1/file.mp4',
         selectedTrackIds: { video: null, audio: null, subtitle: null },
         selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+        trackMap: { video: [], audio: [], subtitle: [] },
       },
     },
   };
@@ -209,6 +224,22 @@ function assertTextAbsent(value: unknown, text: string): void {
 
 test('desktop player adapter maps renderer intents to closed player commands', async () => {
   const host = new FakeNativePlayerHost();
+  host.executeResult = {
+    ok: true,
+    events: [
+      {
+        type: 'media.loaded',
+        requestId: 'request-load-1',
+        media,
+        durationMs: 120_000,
+        tracks: [
+          audioTrack,
+          { ...audioTrack, id: 'audio-ui-2', label: 'French' },
+          subtitleTrack,
+        ],
+      },
+    ],
+  };
   const adapter = new DesktopPlayerAdapter(host);
 
   await adapter.dispatchRendererIntent(loadEnvelope('request-load-1'));
@@ -226,12 +257,12 @@ test('desktop player adapter maps renderer intents to closed player commands', a
   await adapter.dispatchRendererIntent({
     intent: 'player.selectAudio',
     requestId: 'request-audio-1',
-    payload: { trackId: 'audio-ui-2' },
+    payload: { trackId: 'audio-ui-2', snapshotRequestId: 'request-load-1' },
   });
   await adapter.dispatchRendererIntent({
     intent: 'player.selectSubtitle',
     requestId: 'request-subtitle-1',
-    payload: { trackId: null },
+    payload: { trackId: null, snapshotRequestId: 'request-load-1' },
   });
 
   assert.deepEqual(
@@ -849,4 +880,362 @@ test('desktop player adapter shared diagnostics summary counts one cleanup incid
   assert.equal(diagnostics.getCrashRecoverySummary().cleanupFailureCount, 1);
   assert.equal(diagnostics.getCrashRecoverySummary().events.filter((event) => event.category === 'cleanup').length, 2);
   assertTextAbsent(diagnostics.getRecords(), 'shared-cleanup-secret');
+});
+
+test('desktop player adapter validates audio and subtitle track selection commands against snapshot tracks', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+
+  // 1. Dispatch selectAudio when no tracks exist -> expect validation failure
+  const result1 = await adapter.dispatchRendererIntent({
+    intent: 'player.selectAudio',
+    requestId: 'sel-aud-invalid',
+    payload: { trackId: 'audio-ui-1', snapshotRequestId: 'missing-load' },
+  } as RendererIntentEnvelope<unknown>);
+  assert.equal(host.commands.length, 0);
+  assertErrorEvent(result1.events, 'stale-request');
+
+  // 2. Load media to populate tracks
+  host.executeResult = {
+    ok: true,
+    events: [
+      {
+        type: 'media.loaded',
+        requestId: 'request-load-1',
+        media,
+        durationMs: 120_000,
+        tracks: [audioTrack, subtitleTrack],
+      },
+    ],
+  };
+  await adapter.dispatchRendererIntent(loadEnvelope('request-load-1'));
+
+  // 3. Dispatch selectAudio with valid trackId -> expect success (host command executed)
+  const result2 = await adapter.dispatchRendererIntent({
+    intent: 'player.selectAudio',
+    requestId: 'sel-aud-valid',
+    payload: { trackId: 'audio-ui-1', snapshotRequestId: 'request-load-1' },
+  } as RendererIntentEnvelope<unknown>);
+  assert.equal(result2.accepted, true);
+  assert.equal(host.commands.length, 2); // load, track.audio.select
+  assert.equal(host.commands[1]?.command, 'track.audio.select');
+
+  // 4. Dispatch selectSubtitle with invalid trackId -> expect validation failure
+  const result3 = await adapter.dispatchRendererIntent({
+    intent: 'player.selectSubtitle',
+    requestId: 'sel-sub-invalid',
+    payload: { trackId: 'subtitle-ui-invalid', snapshotRequestId: 'request-load-1' },
+  } as RendererIntentEnvelope<unknown>);
+  assertErrorEvent(result3.events, 'validation-failure');
+
+  // 5. Dispatch selectSubtitle with null (turn off) -> expect success
+  const result4 = await adapter.dispatchRendererIntent({
+    intent: 'player.selectSubtitle',
+    requestId: 'sel-sub-null',
+    payload: { trackId: null, snapshotRequestId: 'request-load-1' },
+  } as RendererIntentEnvelope<unknown>);
+  assert.equal(result4.accepted, true);
+  assert.equal(host.commands[2]?.command, 'track.subtitle.select');
+});
+
+test('desktop player adapter rejects stale snapshot track selection commands before host dispatch', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  host.executeResult = {
+    ok: true,
+    events: [
+      {
+        type: 'media.loaded',
+        requestId: 'request-current-load',
+        media,
+        durationMs: 120_000,
+        tracks: [audioTrack, subtitleTrack],
+      },
+    ],
+  };
+  await adapter.dispatchRendererIntent(loadEnvelope('request-current-load'));
+
+  const result = await adapter.dispatchRendererIntent({
+    intent: 'player.selectAudio',
+    requestId: 'request-stale-select',
+    payload: { trackId: 'audio-ui-1', snapshotRequestId: 'request-previous-load' },
+  } as RendererIntentEnvelope<unknown>);
+
+  assert.equal(result.accepted, false);
+  assert.equal(host.commands.length, 1);
+  assert.equal(result.events[0]?.event, 'error');
+  assert.equal(result.events[0]?.error.category, 'stale-request');
+  assertTextAbsent(result.events, 'request-previous-load');
+});
+
+test('desktop player adapter accepts validated quality host events', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRendererIntent(loadEnvelope('request-quality-load'));
+
+  const events = adapter.handleHostEvent({
+    type: 'quality.changed',
+    requestId: 'request-quality-load',
+    quality: {
+      mode: 'direct-play',
+      videoCodec: 'h264',
+      audioCodec: 'aac',
+      sourceDynamicRange: 'hdr10',
+      outputDynamicRangeStatus: 'unproven',
+    },
+  } satisfies NativePlayerHostEvent);
+
+  assert.equal(events.some((event) => event.event === 'quality.changed'), true);
+  assert.equal(adapter.getSnapshot().quality.videoCodec, 'h264');
+  assert.equal(adapter.getSnapshot().quality.outputDynamicRangeStatus, 'unproven');
+  assertNoForbiddenKeys(events);
+});
+
+test('desktop player adapter snapshots clone playback quality state', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRendererIntent(loadEnvelope('request-quality-clone-load'));
+  adapter.handleHostEvent({
+    type: 'quality.changed',
+    requestId: 'request-quality-clone-load',
+    quality: {
+      mode: 'direct-play',
+      sourceDynamicRange: 'hlg',
+      outputDynamicRangeStatus: 'unknown',
+    },
+  } satisfies NativePlayerHostEvent);
+
+  const snapshot = adapter.getSnapshot();
+  snapshot.quality.sourceDynamicRange = 'sdr';
+
+  assert.equal(adapter.getSnapshot().quality.sourceDynamicRange, 'hlg');
+});
+
+test('desktop player adapter receives async host events through host event callback', async () => {
+  const host = new FakeNativePlayerHost();
+  const emittedEvents: PlayerEvent[] = [];
+  const adapter = new DesktopPlayerAdapter(host, {
+    onEvents: (events) => emittedEvents.push(...events),
+  });
+  await adapter.dispatchRendererIntent(loadEnvelope('request-async-load'));
+
+  host.emitEvent({
+    type: 'time.updated',
+    requestId: 'request-async-load',
+    positionMs: 32_000,
+    durationMs: 120_000,
+  });
+
+  assert.equal(adapter.getSnapshot().positionMs, 32_000);
+  assert.equal(emittedEvents.some((event) => event.event === 'time.updated'), true);
+  assertNoForbiddenKeys(emittedEvents);
+});
+
+test('desktop player adapter keeps media-option events under active playback request custody', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  host.executeResult = {
+    ok: true,
+    events: [
+      {
+        type: 'media.loaded',
+        requestId: 'request-playback-load',
+        media,
+        durationMs: 120_000,
+        tracks: [
+          audioTrack,
+          { ...audioTrack, id: 'audio-ui-2', label: 'French', selected: false },
+          subtitleTrack,
+        ],
+      },
+    ],
+  };
+  await adapter.dispatchRendererIntent(loadEnvelope('request-playback-load'));
+  host.executeResult = { ok: true };
+  await adapter.dispatchRendererIntent({
+    intent: 'player.selectAudio',
+    requestId: 'request-select-command',
+    payload: { trackId: 'audio-ui-2', snapshotRequestId: 'request-playback-load' },
+  } as RendererIntentEnvelope<unknown>);
+
+  const acceptedEvents = adapter.handleHostEvent({
+    type: 'track.selection.changed',
+    requestId: 'request-playback-load',
+    audioTrackId: 'audio-ui-2',
+    subtitleTrackId: null,
+    videoTrackId: null,
+  } satisfies NativePlayerHostEvent);
+  const staleEvents = adapter.handleHostEvent({
+    type: 'quality.changed',
+    requestId: 'request-select-command',
+    quality: { mode: 'direct-play', sourceDynamicRange: 'unknown', outputDynamicRangeStatus: 'unproven' },
+  } satisfies NativePlayerHostEvent);
+
+  assert.equal(adapter.getSnapshot().selectedAudioTrackId, 'audio-ui-2');
+  assert.equal(adapter.getSnapshot().tracks.find((track) => track.id === 'audio-ui-1')?.selected, false);
+  assert.equal(adapter.getSnapshot().tracks.find((track) => track.id === 'audio-ui-2')?.selected, true);
+  assert.equal(acceptedEvents.some((event) => event.event === 'track.selection.changed'), true);
+  assert.equal(staleEvents[0]?.event, 'warning');
+  assertNoForbiddenKeys([acceptedEvents, staleEvents]);
+});
+
+test('desktop player adapter updates volume and mute snapshot after successful host commands', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRendererIntent(loadEnvelope('request-volume-load'));
+
+  const volume = await adapter.dispatchRendererIntent({
+    intent: 'player.setVolume',
+    requestId: 'request-volume-set',
+    payload: { volume: 0.25 },
+  } as RendererIntentEnvelope<unknown>);
+  const mute = await adapter.dispatchRendererIntent({
+    intent: 'player.setMute',
+    requestId: 'request-mute-set',
+    payload: { muted: true },
+  } as RendererIntentEnvelope<unknown>);
+
+  assert.equal(volume.snapshot.volume, 0.25);
+  assert.equal(mute.snapshot.muted, true);
+  assert.equal(adapter.getSnapshot().volume, 0.25);
+  assert.equal(adapter.getSnapshot().muted, true);
+  assert.equal(volume.events.some((event) => event.event === 'state.changed'), true);
+  assert.equal(mute.events.some((event) => event.event === 'state.changed'), true);
+});
+
+test('desktop player adapter rejects invalid track IDs without echoing raw IDs', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  host.executeResult = {
+    ok: true,
+    events: [
+      {
+        type: 'media.loaded',
+        requestId: 'request-redacted-track-load',
+        media,
+        durationMs: 120_000,
+        tracks: [audioTrack, subtitleTrack],
+      },
+    ],
+  };
+  await adapter.dispatchRendererIntent(loadEnvelope('request-redacted-track-load'));
+  const rawTrackId = 'raw-rejected-track-id';
+
+  const result = await adapter.dispatchRendererIntent({
+    intent: 'player.selectSubtitle',
+    requestId: 'request-redacted-track',
+    payload: { trackId: rawTrackId, snapshotRequestId: 'request-redacted-track-load' },
+  } as RendererIntentEnvelope<unknown>);
+
+  assert.equal(result.accepted, false);
+  assertErrorEvent(result.events, 'validation-failure');
+  assertTextAbsent(result.events, rawTrackId);
+  assertTextAbsent(result.snapshot, rawTrackId);
+  assertNoForbiddenKeys(result);
+});
+
+test('desktop player adapter rejects malformed privileged track maps before helper dispatch', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  const context = privilegedContext('request-malformed-track-map');
+  const malformedContext = {
+    privatePlayback: {
+      ...context.privatePlayback,
+      setup: {
+        ...context.privatePlayback.setup,
+        trackMap: { audio: [], subtitle: [] },
+      },
+    },
+  } as unknown as PrivilegedPlaybackDispatchContext;
+
+  const result = await adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('request-malformed-track-map'),
+    malformedContext,
+  );
+
+  assert.equal(result.accepted, false);
+  assert.equal(host.commands.length, 0);
+  assertErrorEvent(result.events, 'validation-failure');
+  assertTextAbsent(result, 'trackMap');
+});
+
+test('desktop player adapter rejects unsafe privileged track-map details before helper dispatch', async () => {
+  const cases: Array<{
+    name: string;
+    setup: unknown;
+    absentText: string;
+  }> = [
+    {
+      name: 'extra private-looking field',
+      absentText: 'rawMediaUrl',
+      setup: {
+        selectedTrackIds: { video: null, audio: null, subtitle: null },
+        selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+        trackMap: {
+          video: [],
+          audio: [{ publicTrackId: 'audio-public', privateTrackId: 'audio-private', rawMediaUrl: 'secret' }],
+          subtitle: [],
+        },
+      },
+    },
+    {
+      name: 'duplicate public id',
+      absentText: 'duplicated-public-id',
+      setup: {
+        selectedTrackIds: { video: null, audio: null, subtitle: null },
+        selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+        trackMap: {
+          video: [],
+          audio: [{ publicTrackId: 'duplicated-public-id', privateTrackId: 'audio-private' }],
+          subtitle: [{ publicTrackId: 'duplicated-public-id', privateTrackId: 'subtitle-private' }],
+        },
+      },
+    },
+    {
+      name: 'selected public id missing from map',
+      absentText: 'selected-public-id',
+      setup: {
+        selectedTrackIds: { video: null, audio: 'selected-public-id', subtitle: null },
+        selectedPrivateTrackIds: { video: null, audio: 'selected-private-id', subtitle: null },
+        trackMap: { video: [], audio: [], subtitle: [] },
+      },
+    },
+    {
+      name: 'selected private id does not match map',
+      absentText: 'wrong-private-id',
+      setup: {
+        selectedTrackIds: { video: null, audio: 'selected-public-id', subtitle: null },
+        selectedPrivateTrackIds: { video: null, audio: 'wrong-private-id', subtitle: null },
+        trackMap: {
+          video: [],
+          audio: [{ publicTrackId: 'selected-public-id', privateTrackId: 'expected-private-id' }],
+          subtitle: [],
+        },
+      },
+    },
+  ];
+
+  for (const [index, testCase] of cases.entries()) {
+    const host = new FakeNativePlayerHost();
+    const adapter = new DesktopPlayerAdapter(host);
+    const requestId = `request-unsafe-track-map-${index}`;
+    const context = privilegedContext(requestId);
+    const malformedContext = {
+      privatePlayback: {
+        ...context.privatePlayback,
+        setup: {
+          ...context.privatePlayback.setup,
+          ...(testCase.setup as Record<string, unknown>),
+        },
+      },
+    } as unknown as PrivilegedPlaybackDispatchContext;
+
+    const result = await adapter.dispatchRuntimeCommand(runtimeLoadCommand(requestId), malformedContext);
+
+    assert.equal(result.accepted, false, testCase.name);
+    assert.equal(host.commands.length, 0, testCase.name);
+    assertErrorEvent(result.events, 'validation-failure');
+    assertTextAbsent(result, testCase.absentText);
+    assertNoForbiddenKeys(result);
+  }
 });

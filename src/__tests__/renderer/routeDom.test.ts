@@ -15,6 +15,7 @@ class ElementDouble {
   textContent = '';
   className = '';
   type = '';
+  readonly tagName: string;
   readonly dataset: Record<string, string> = {};
   readonly attributes = new Map<string, string>();
   readonly style: { gridColumn?: string; setProperty: (name: string, value: string) => void } = {
@@ -32,6 +33,10 @@ class ElementDouble {
       this.className = [...names].join(' ');
     },
   };
+
+  constructor(tagName = 'div') {
+    this.tagName = tagName.toUpperCase();
+  }
 
   setAttribute(name: string, value: string): void {
     this.attributes.set(name, value);
@@ -171,7 +176,7 @@ test('route DOM renders support bundle status without filesystem paths', () => {
   const documentDouble = {
     documentElement: { dataset: {} },
     querySelector: () => null,
-    createElement: () => new ElementDouble(),
+    createElement: (tagName: string) => new ElementDouble(tagName),
   };
   Object.defineProperty(globalThis, 'document', {
     value: documentDouble,
@@ -209,7 +214,7 @@ test('route DOM renders guide states and focused program details', () => {
   const documentDouble = {
     documentElement: { dataset: {} },
     querySelector: () => null,
-    createElement: () => new ElementDouble(),
+    createElement: (tagName: string) => new ElementDouble(tagName),
   };
   Object.defineProperty(globalThis, 'document', {
     value: documentDouble,
@@ -281,7 +286,7 @@ test('route DOM renders player OSD fields and playback option rows', () => {
   const documentDouble = {
     documentElement: { dataset: {} },
     querySelector: () => null,
-    createElement: () => new ElementDouble(),
+    createElement: (tagName: string) => new ElementDouble(tagName),
   };
   Object.defineProperty(globalThis, 'document', {
     value: documentDouble,
@@ -309,10 +314,39 @@ test('route DOM renders player OSD fields and playback option rows', () => {
     dom.overlaySubtitleOptionsElement = new ElementDouble() as unknown as HTMLElement;
     dom.overlayPlaybackSummaryElement = new ElementDouble() as unknown as HTMLElement;
 
+    const snapshot = {
+      ...createRendererSafePlayerSnapshot(),
+      tracks: [
+        ...createRendererSafePlayerSnapshot().tracks,
+        {
+          id: 'audio-unavailable',
+          kind: 'audio' as const,
+          label: 'Director mix',
+          selected: false,
+          available: false,
+        },
+        {
+          id: 'subtitle-unavailable',
+          kind: 'subtitle' as const,
+          label: 'Unavailable captions',
+          deliveryType: 'external' as const,
+          selected: false,
+          available: false,
+        },
+      ],
+      quality: {
+        mode: 'direct-play' as const,
+        sourceDynamicRange: 'sdr' as const,
+        outputDynamicRangeStatus: 'sdr' as const,
+        videoCodec: 'h264',
+        audioCodec: 'aac',
+      },
+    };
+
     renderWorkflowDom(
       createWorkflowState('player'),
       createPlayerOverlayState(),
-      createRendererSafePlayerSnapshot(),
+      snapshot,
       dom,
     );
 
@@ -340,8 +374,30 @@ test('route DOM renders player OSD fields and playback option rows', () => {
     assert.match(osdText, /12:00 \/ 60:00/u);
     assert.match(osdText, /Next on 101: After Hours Cinema/u);
     assert.match(optionsText, /Direct Play/u);
-    assert.match(optionsText, /Audio Transcode/u);
-    assert.match(optionsText, /Burn-in/u);
+    assert.match(optionsText, /AAC/u);
+    assert.match(optionsText, /External/u);
+
+    const audioRows = (dom.overlayAudioOptionsElement as unknown as ElementDouble).children;
+    const subtitleRows = (dom.overlaySubtitleOptionsElement as unknown as ElementDouble).children;
+    const audioMain = audioRows.find((row) => row.dataset.trackId === 'audio-main');
+    const audioUnavailable = audioRows.find((row) => row.dataset.trackId === 'audio-unavailable');
+    const subtitleEnglish = subtitleRows.find((row) => row.dataset.trackId === 'subtitle-english');
+    const subtitleUnavailable = subtitleRows.find((row) => row.dataset.trackId === 'subtitle-unavailable');
+
+    assert.equal(audioMain?.tagName, 'BUTTON');
+    assert.equal(audioMain?.type, 'button');
+    assert.equal(audioMain?.dataset.focusId, 'overlay-audio-track-audio-main');
+    assert.equal(audioMain?.disabled, false);
+    assert.equal(audioMain?.getAttribute('aria-disabled'), 'false');
+    assert.equal(audioUnavailable?.tagName, 'BUTTON');
+    assert.equal(audioUnavailable?.disabled, true);
+    assert.equal(audioUnavailable?.getAttribute('aria-disabled'), 'true');
+    assert.equal(Object.hasOwn(audioUnavailable?.dataset ?? {}, 'focusId'), false);
+    assert.equal(subtitleEnglish?.tagName, 'BUTTON');
+    assert.equal(subtitleEnglish?.dataset.focusId, 'overlay-subtitle-track-subtitle-english');
+    assert.equal(subtitleUnavailable?.tagName, 'BUTTON');
+    assert.equal(subtitleUnavailable?.disabled, true);
+    assert.equal(subtitleUnavailable?.getAttribute('aria-disabled'), 'true');
   } finally {
     restoreDocument(originalDocument);
   }
@@ -352,7 +408,7 @@ test('route DOM renders channel setup review without privileged data', () => {
   const documentDouble = {
     documentElement: { dataset: {} },
     querySelector: () => null,
-    createElement: () => new ElementDouble(),
+    createElement: (tagName: string) => new ElementDouble(tagName),
   };
   Object.defineProperty(globalThis, 'document', {
     value: documentDouble,
@@ -472,7 +528,7 @@ test('route DOM renders selected Plex library and strategy controls through prod
   const documentDouble = {
     documentElement: { dataset: {} },
     querySelector: () => null,
-    createElement: () => new ElementDouble(),
+    createElement: (tagName: string) => new ElementDouble(tagName),
   };
   Object.defineProperty(globalThis, 'document', {
     value: documentDouble,
@@ -551,7 +607,7 @@ test('reachable product route text avoids internal implementation-status terms',
   const documentDouble = {
     documentElement: { dataset: {} },
     querySelector: (selector: string) => selectorTextHosts.get(selector) ?? null,
-    createElement: () => new ElementDouble(),
+    createElement: (tagName: string) => new ElementDouble(tagName),
   };
   Object.defineProperty(globalThis, 'document', {
     value: documentDouble,
@@ -809,6 +865,12 @@ function createOverlayDomBindings({
     overlayNowPlayingSubtitleElement: null,
     overlayNowPlayingChannelElement: null,
     overlayNowPlayingStatusElement: null,
+    overlayNowPlayingDescriptionElement: null,
+    overlayNowPlayingBadgesElement: null,
+    overlayNowPlayingSummaryElement: null,
+    overlayNowPlayingPositionElement: null,
+    overlayNowPlayingDurationElement: null,
+    overlayNowPlayingUpNextElement: null,
     overlayProgressElement: null,
     overlayMiniGuideElement: null,
     overlayChannelNumberElement: null,

@@ -11,11 +11,33 @@ const STATIC_SCREEN_MARKUP = `
           </div>
         </section>
         <section class="player-overlay now-playing-overlay" data-overlay="nowPlaying" aria-label="Now playing">
-          <p data-overlay-now-playing-channel></p>
-          <h3 data-overlay-now-playing-title></h3>
-          <p data-overlay-now-playing-subtitle></p>
-          <p data-overlay-now-playing-status></p>
-          <div class="overlay-progress" data-overlay-progress role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+          <div class="now-playing__backdrop" aria-hidden="true"></div>
+          <div class="now-playing__content-wrapper">
+            <div class="now-playing__poster" aria-hidden="true">
+              <div class="now-playing__poster-placeholder"></div>
+            </div>
+            <div class="now-playing__details">
+              <div class="now-playing__logo-zone">
+                <div class="now-playing__clear-logo-placeholder"></div>
+                <h3 data-overlay-now-playing-title class="now-playing__title"></h3>
+              </div>
+              <p data-overlay-now-playing-subtitle class="now-playing__subtitle"></p>
+              <div class="now-playing__badges-row" data-overlay-now-playing-badges></div >
+              <div class="now-playing__meta-row">
+                <span data-overlay-now-playing-channel class="now-playing__channel"></span>
+                <span data-overlay-now-playing-summary class="now-playing__summary"></span>
+              </div>
+              <p data-overlay-now-playing-description class="now-playing__description"></p>
+              <div class="now-playing__progress-section">
+                <div class="overlay-progress" data-overlay-progress role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+                <div class="now-playing__time-row">
+                  <span data-overlay-now-playing-position class="now-playing__position"></span>
+                  <span data-overlay-now-playing-duration class="now-playing__duration"></span>
+                </div>
+              </div>
+              <p data-overlay-now-playing-up-next class="now-playing__up-next"></p>
+            </div>
+          </div>
         </section>
         <section class="player-overlay osd-overlay" data-overlay="playerOsd" aria-label="Player controls">
           <div class="player-osd__content">
@@ -29,12 +51,16 @@ const STATIC_SCREEN_MARKUP = `
             <div class="player-osd__up-next" data-osd-up-next></div>
           </div>
           <div class="player-osd__actions">
+            <button type="button" data-overlay-action="cycleAudioTrack" data-focus-id="overlay-audio-cycle">Audio</button>
+            <button type="button" data-overlay-action="cycleSubtitleTrack" data-focus-id="overlay-subtitle-cycle">Subtitles</button>
             <button type="button" data-overlay-action="openMiniGuide" data-focus-id="overlay-mini-guide">Mini guide</button>
             <button type="button" data-overlay-action="togglePlaybackOptions" data-focus-id="overlay-playback-options">Options</button>
+            <button type="button" data-overlay-action="closeTopOverlay" data-focus-id="overlay-close">Close</button>
+          </div>
+          <div class="player-osd__digit-entry" aria-label="Digit entry">
             <button type="button" data-overlay-action="channelDigit1" data-focus-id="overlay-channel-1">1</button>
             <button type="button" data-overlay-action="channelDigit0" data-focus-id="overlay-channel-0">0</button>
             <button type="button" data-overlay-action="channelDigit4" data-focus-id="overlay-channel-4">4</button>
-            <button type="button" data-overlay-action="closeTopOverlay" data-focus-id="overlay-close">Close</button>
           </div>
           <div class="player-osd__meta">
             <span data-osd-timecode></span>
@@ -52,10 +78,13 @@ const STATIC_SCREEN_MARKUP = `
             <button type="button" data-overlay-action="nextMiniGuideChannel" data-focus-id="overlay-mini-next">Channel down</button>
           </div>
           <div class="mini-guide__list" data-overlay-mini-guide></div>
+          <footer class="mini-guide__footer">
+            <span>Use Up/Down to select, Enter to tune.</span>
+          </footer>
         </section>
         <section class="player-overlay channel-number-overlay" data-overlay="channelNumber" aria-label="Channel number" hidden>
           <span data-overlay-channel-number-value>---</span>
-          <div>
+          <div class="channel-number-overlay__controls">
             <button type="button" data-overlay-action="commitChannelNumber" data-focus-id="overlay-channel-commit">Tune</button>
             <button type="button" data-overlay-action="clearChannelNumber" data-focus-id="overlay-channel-clear">Clear</button>
           </div>
@@ -65,18 +94,18 @@ const STATIC_SCREEN_MARKUP = `
             <p>Playback options</p>
             <strong data-overlay-playback-summary></strong>
           </header>
-          <dl>
+          <dl class="playback-options__summary-list">
             <div><dt>Audio</dt><dd data-overlay-audio-label></dd></div>
             <div><dt>Subtitles</dt><dd data-overlay-subtitle-label></dd></div>
             <div><dt>Volume</dt><dd data-overlay-volume-label></dd></div>
             <div><dt>Rate</dt><dd data-overlay-rate-label></dd></div>
           </dl>
           <div class="playback-options__lists">
-            <section>
+            <section class="playback-options__section">
               <h4>Audio tracks</h4>
               <div data-overlay-audio-options></div>
             </section>
-            <section>
+            <section class="playback-options__section">
               <h4>Subtitle tracks</h4>
               <div data-overlay-subtitle-options></div>
             </section>
@@ -290,6 +319,35 @@ const STATIC_SCREEN_MARKUP = `
         <button type="button" data-plex-action="clearMetadata" data-focus-id="plex-clear-metadata">Close preview</button>
         <div class="plex-runtime__metadata" data-plex-metadata></div>
       </section>
+      <div class="profile-pin-modal" id="profile-pin-modal" hidden>
+        <div class="profile-pin-modal__dialog">
+          <header class="profile-pin-modal__header">
+            <h3 id="profile-pin-modal-title">Enter Profile PIN</h3>
+            <p class="profile-pin-modal__user-name" id="profile-pin-modal-username"></p>
+          </header>
+          <div class="profile-pin-modal__slots">
+            <span class="profile-pin-modal__slot" data-pin-slot="0"></span>
+            <span class="profile-pin-modal__slot" data-pin-slot="1"></span>
+            <span class="profile-pin-modal__slot" data-pin-slot="2"></span>
+            <span class="profile-pin-modal__slot" data-pin-slot="3"></span>
+          </div>
+          <p class="profile-pin-modal__error" id="profile-pin-modal-error" hidden>Incorrect PIN. Please try again.</p>
+          <div class="profile-pin-modal__numpad">
+            <button type="button" class="numpad-btn" data-numpad="1" data-focus-id="numpad-1">1</button>
+            <button type="button" class="numpad-btn" data-numpad="2" data-focus-id="numpad-2">2</button>
+            <button type="button" class="numpad-btn" data-numpad="3" data-focus-id="numpad-3">3</button>
+            <button type="button" class="numpad-btn" data-numpad="4" data-focus-id="numpad-4">4</button>
+            <button type="button" class="numpad-btn" data-numpad="5" data-focus-id="numpad-5">5</button>
+            <button type="button" class="numpad-btn" data-numpad="6" data-focus-id="numpad-6">6</button>
+            <button type="button" class="numpad-btn" data-numpad="7" data-focus-id="numpad-7">7</button>
+            <button type="button" class="numpad-btn" data-numpad="8" data-focus-id="numpad-8">8</button>
+            <button type="button" class="numpad-btn" data-numpad="9" data-focus-id="numpad-9">9</button>
+            <button type="button" class="numpad-btn numpad-btn--clear" data-numpad="clear" data-focus-id="numpad-clear">Clear</button>
+            <button type="button" class="numpad-btn" data-numpad="0" data-focus-id="numpad-0">0</button>
+            <button type="button" class="numpad-btn numpad-btn--cancel" data-numpad="cancel" data-focus-id="numpad-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 </section>`;

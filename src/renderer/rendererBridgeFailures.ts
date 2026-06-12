@@ -1,6 +1,7 @@
 import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
 
 export type RendererBridgeFailureOperation =
+  | 'player.dispatch'
   | 'player.getSnapshot'
   | 'guide.getPresentation'
   | 'player.tuneChannel';

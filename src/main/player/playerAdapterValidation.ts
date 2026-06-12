@@ -1,9 +1,11 @@
 import {
   PLAYER_ERROR_CATEGORIES,
   PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
+  isRendererSafePlayerPlaybackQualitySummary,
   type PlayerErrorCategory,
   type PlayerLoadCommandPayload,
   type PlayerMediaSummary,
+  type PlayerPlaybackQualitySummary,
   type PlayerRendererSafeDiagnostic,
   type PlayerTimeRange,
   type PlayerTrackDeliveryType,
@@ -213,6 +215,15 @@ export function validateTimeRanges(value: unknown): { value: readonly PlayerTime
     ranges.push({ startMs: payload.value.startMs, endMs: payload.value.endMs });
   }
   return { value: ranges };
+}
+
+export function validatePlaybackQualitySummary(
+  value: unknown,
+): { value: PlayerPlaybackQualitySummary } | { error: string } {
+  if (!isRendererSafePlayerPlaybackQualitySummary(value)) {
+    return { error: 'playback quality summary must include safe fields' };
+  }
+  return { value };
 }
 
 export function validateObjectPayload(

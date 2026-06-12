@@ -8,6 +8,7 @@ import type {
   PlayerTimeRange,
   PlayerTrackId,
   PlayerTrackSummary,
+  PlayerPlaybackQualitySummary,
 } from '../../contracts/player.js';
 
 export type NativePlayerHostStatus = Extract<
@@ -58,6 +59,11 @@ export type NativePlayerHostEvent =
       videoTrackId: PlayerTrackId | null;
     }
   | {
+      type: 'quality.changed';
+      requestId: PlayerRequestId;
+      quality: PlayerPlaybackQualitySummary;
+    }
+  | {
       type: 'ended';
       requestId: PlayerRequestId;
     }
@@ -100,6 +106,9 @@ export interface NativePlayerHostPort {
   cleanup(requestId: PlayerRequestId | null): Promise<void>;
   onLifecycleFailure?(
     listener: (failure: NativePlayerHostLifecycleFailure) => void,
+  ): () => void;
+  onEvent?(
+    listener: (event: NativePlayerHostEvent) => void,
   ): () => void;
 }
 

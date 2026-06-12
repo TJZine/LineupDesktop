@@ -1,4 +1,5 @@
 import type { PlayerTrackId } from '../../contracts/player.js';
+import type { PlaybackTrackMap } from '../plex/streamTrackMapping.js';
 
 export interface NativeHelperPlaybackSetup {
   playbackMode: 'direct-play' | 'direct-stream' | 'transcode';
@@ -15,4 +16,5 @@ export interface NativeHelperPlaybackSetup {
     audio: string | null;
     subtitle: string | null;
   };
+  trackMap: PlaybackTrackMap;
 }

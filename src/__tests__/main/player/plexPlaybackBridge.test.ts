@@ -123,8 +123,27 @@ class FakeResolver implements PlexPlaybackBridgeResolverPort {
         },
         selectedPrivateTrackIds: {
           video: rawPrivateValues[0],
-          audio: null,
+          audio: 'private-audio-stream',
           subtitle: null,
+        },
+        trackMap: {
+          video: [
+            {
+              publicTrackId: 'plex-track-video-1',
+              privateTrackId: rawPrivateValues[0],
+              codec: 'h264',
+              dynamicRange: 'sdr',
+            },
+          ],
+          audio: [
+            {
+              publicTrackId: 'plex-track-audio-1',
+              privateTrackId: 'private-audio-stream',
+              label: 'AAC',
+              codec: 'aac',
+            },
+          ],
+          subtitle: [],
         },
       },
     },

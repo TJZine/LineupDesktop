@@ -150,6 +150,25 @@ class FakeResolver implements PlexPlaybackCompositionResolverPort {
           audio: 'private-audio-stream',
           subtitle: null,
         },
+        trackMap: {
+          video: [
+            {
+              publicTrackId: 'plex-track-video-1-1-1',
+              privateTrackId: 'private-video-stream',
+              codec: 'h264',
+              dynamicRange: 'sdr',
+            },
+          ],
+          audio: [
+            {
+              publicTrackId: 'plex-track-audio-1-1-1',
+              privateTrackId: 'private-audio-stream',
+              label: 'AAC',
+              codec: 'aac',
+            },
+          ],
+          subtitle: [],
+        },
       },
     },
     load: loadPayload,
