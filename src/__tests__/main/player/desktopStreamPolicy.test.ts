@@ -426,6 +426,26 @@ test('desktop stream policy preserves HDR only when profile explicitly supports 
   assert.deepEqual(decision.reasonCodes, ['direct-play-supported', 'no-subtitle-selected']);
 });
 
+test('desktop stream policy treats HLG as HDR capability-gated dynamic range', () => {
+  const [hdrCandidate] = desktopStreamPolicyInputs.hdr.candidates;
+  assert.ok(hdrCandidate);
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.hdr,
+    candidates: [{
+      ...hdrCandidate,
+      candidateId: 'candidate-hlg',
+      video: {
+        ...hdrCandidate.video,
+        dynamicRange: 'hlg',
+      },
+    }],
+  });
+
+  assert.equal(decision.kind, 'direct-play');
+  assert.equal(decision.summary.dynamicRange, 'hlg');
+  assert.deepEqual(decision.reasonCodes, ['direct-play-supported', 'no-subtitle-selected']);
+});
+
 test('desktop stream policy transcodes Dolby Vision when preservation is unsupported', () => {
   const decision = decideFixture('dolbyVision');
 

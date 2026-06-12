@@ -156,10 +156,12 @@ export interface PlayerSetMutePayload {
 
 export interface PlayerSelectAudioTrackPayload {
   trackId: PlayerTrackId;
+  snapshotRequestId: PlayerRequestId;
 }
 
 export interface PlayerSelectSubtitleTrackPayload {
   trackId: PlayerTrackId | null;
+  snapshotRequestId: PlayerRequestId;
 }
 
 export type PlayerCommand =

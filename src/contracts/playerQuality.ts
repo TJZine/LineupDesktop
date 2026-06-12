@@ -1,7 +1,7 @@
 import { PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS, type PlayerForbiddenPrivilegedFieldKey } from './player.js';
 
 export type PlayerPlaybackMode = 'direct-play' | 'direct-stream' | 'transcode' | 'unknown';
-export type PlayerDynamicRange = 'sdr' | 'hdr10' | 'dolby-vision' | 'unknown';
+export type PlayerDynamicRange = 'sdr' | 'hdr10' | 'hlg' | 'dolby-vision' | 'unknown';
 export type PlayerOutputDynamicRange =
   | 'sdr'
   | 'hdr10'
@@ -29,6 +29,7 @@ export const PLAYER_PLAYBACK_MODE_VALUES = [
 export const PLAYER_DYNAMIC_RANGE_VALUES = [
   'sdr',
   'hdr10',
+  'hlg',
   'dolby-vision',
   'unknown',
 ] as const;

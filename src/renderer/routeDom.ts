@@ -538,6 +538,7 @@ function renderPlaybackOptionRows(
       row.dataset.selected = String(track.selected);
       row.dataset.available = String(track.available);
       row.disabled = !track.available;
+      row.setAttribute('aria-disabled', String(!track.available));
       if (track.available) {
         row.dataset.focusId = `${focusIdPrefix}${track.id}`;
       }

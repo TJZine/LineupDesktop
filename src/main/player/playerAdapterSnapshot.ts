@@ -79,6 +79,7 @@ export function cloneSnapshot(snapshot: PlayerSnapshot): PlayerSnapshot {
     media: snapshot.media === null ? null : { ...snapshot.media },
     bufferedRanges: snapshot.bufferedRanges.map((range) => ({ ...range })),
     tracks: snapshot.tracks.map((track) => ({ ...track })),
+    quality: { ...snapshot.quality },
     lastError: snapshot.lastError === null ? null : sanitizePlayerError(snapshot.lastError, 'PLAYER_ERROR'),
   };
 }

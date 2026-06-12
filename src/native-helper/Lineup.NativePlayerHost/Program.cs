@@ -1116,6 +1116,15 @@ namespace Lineup.NativePlayerHost
             [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)]
             public static extern int mpv_set_option_string(IntPtr context, string name, string value);
 
+            [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+            public static extern int mpv_set_property_string(IntPtr context, string name, string value);
+
+            [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+            public static extern IntPtr mpv_get_property_string(IntPtr context, string name);
+
+            [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)]
+            public static extern void mpv_free(IntPtr data);
+
             [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)]
             public static extern int mpv_command(IntPtr context, IntPtr args);
 

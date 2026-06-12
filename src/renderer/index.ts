@@ -283,20 +283,47 @@ function applyEpgAction(action: EpgActionId): void {
 
 async function selectAudioTrack(trackId: string): Promise<void> {
   const requestId = `select-audio-${Date.now()}`;
-  await window.lineupDesktop.player.dispatch({
-    intent: 'player.selectAudio',
-    requestId,
-    payload: { trackId },
-  });
+  const snapshotRequestId = playerSnapshot.requestId;
+  if (snapshotRequestId === null) {
+    recordPlayerDispatchFailure('player.selectAudio', requestId, new Error('Player snapshot request id is unavailable.'));
+    return;
+  }
+  try {
+    await window.lineupDesktop.player.dispatch({
+      intent: 'player.selectAudio',
+      requestId,
+      payload: { trackId, snapshotRequestId },
+    });
+  } catch (error: unknown) {
+    recordPlayerDispatchFailure('player.selectAudio', requestId, error);
+  }
 }
 
 async function selectSubtitleTrack(trackId: string | null): Promise<void> {
   const requestId = `select-subtitle-${Date.now()}`;
-  await window.lineupDesktop.player.dispatch({
-    intent: 'player.selectSubtitle',
-    requestId,
-    payload: { trackId },
-  });
+  const snapshotRequestId = playerSnapshot.requestId;
+  if (snapshotRequestId === null) {
+    recordPlayerDispatchFailure('player.selectSubtitle', requestId, new Error('Player snapshot request id is unavailable.'));
+    return;
+  }
+  try {
+    await window.lineupDesktop.player.dispatch({
+      intent: 'player.selectSubtitle',
+      requestId,
+      payload: { trackId, snapshotRequestId },
+    });
+  } catch (error: unknown) {
+    recordPlayerDispatchFailure('player.selectSubtitle', requestId, error);
+  }
+}
+
+function recordPlayerDispatchFailure(operation: string, requestId: string, error: unknown): void {
+  recordRendererBridgeFailure(
+    window.lineupDesktop.diagnostics.recordRendererEvent,
+    'player.dispatch',
+    summarizeRendererBridgeError(error),
+    { operation, requestId },
+  );
 }
 
 let channelCommitTimeoutId: number | null = null;
@@ -331,14 +358,14 @@ function applyOverlayAction(action: PlayerOverlayActionId): void {
       intent: 'player.setVolume',
       requestId,
       payload: { volume: nextVolume },
-    });
+    }).catch((error: unknown) => recordPlayerDispatchFailure('player.setVolume', requestId, error));
   } else if (action === 'toggleMute') {
     const requestId = `mute-change-${Date.now()}`;
     void window.lineupDesktop.player.dispatch({
       intent: 'player.setMute',
       requestId,
       payload: { muted: !playerSnapshot.muted },
-    });
+    }).catch((error: unknown) => recordPlayerDispatchFailure('player.setMute', requestId, error));
   } else if (action === 'cycleAudioTrack') {
     const audioTracks = playerSnapshot.tracks.filter((t) => t.kind === 'audio' && t.available);
     if (audioTracks.length > 0) {

@@ -45,9 +45,13 @@ namespace Lineup.NativePlayerHost
             string? primaries = MpvCommandExecutor.GetPropertyString(_mpv, "video-params/primaries");
             string? gamma = MpvCommandExecutor.GetPropertyString(_mpv, "video-params/gamma");
 
-            if (primaries == "bt.2020" && (gamma == "pq" || gamma == "hlg"))
+            if (primaries == "bt.2020" && gamma == "pq")
             {
                 return "hdr10";
+            }
+            if (primaries == "bt.2020" && gamma == "hlg")
+            {
+                return "hlg";
             }
             if (!string.IsNullOrEmpty(primaries))
             {

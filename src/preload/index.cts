@@ -10,6 +10,10 @@ import {
   type GuideBridgeInvoke,
 } from './guideBridge.cjs';
 import {
+  createPlayerSnapshotBridge,
+  type PlayerSnapshotBridgeInvoke,
+} from './playerBridge.cjs';
+import {
   LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
   LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
@@ -61,6 +65,7 @@ import type {
 } from '../contracts/shell.js';
 import type {
   PlayerDispatchResult,
+  PlayerError,
   PlayerEvent,
   PlayerIpcResult,
   PlayerSnapshot,
@@ -446,7 +451,7 @@ function isPlayerPlaybackQualitySummary(value: unknown): boolean {
   }
   return (
     isStringInSet(value.mode, ['direct-play', 'direct-stream', 'transcode', 'unknown']) &&
-    isStringInSet(value.sourceDynamicRange, ['sdr', 'hdr10', 'dolby-vision', 'unknown']) &&
+    isStringInSet(value.sourceDynamicRange, ['sdr', 'hdr10', 'hlg', 'dolby-vision', 'unknown']) &&
     isStringInSet(value.outputDynamicRangeStatus, [
       'sdr',
       'hdr10',
@@ -524,7 +529,7 @@ function isTimeRanges(value: unknown): boolean {
   });
 }
 
-function isPlayerError(value: unknown): boolean {
+function isPlayerError(value: unknown): value is PlayerError {
   return (
     isPlainRecord(value) &&
     hasOnlyKeys(
@@ -579,7 +584,12 @@ function isDiagnosticMedia(value: unknown): boolean {
   );
 }
 
-function playerValidationFailure<T>(requestId: string, message: string): PlayerIpcResult<T> {
+function playerValidationFailure<T>(
+  requestId: string,
+  message: string,
+  operation = 'dispatch',
+  reason = 'invalid renderer request',
+): PlayerIpcResult<T> {
   return {
     ok: false,
     requestId,
@@ -592,9 +602,9 @@ function playerValidationFailure<T>(requestId: string, message: string): PlayerI
       requestId,
       diagnostic: {
         component: 'preload-player-bridge',
-        operation: 'dispatch',
+        operation,
         status: 'rejected',
-        reason: 'invalid renderer request',
+        reason,
       },
     },
   };
@@ -1038,6 +1048,9 @@ const invokeChannelSetup: ChannelSetupBridgeInvoke = (channel, request) =>
 const invokeGuide: GuideBridgeInvoke = (channel, request) =>
   ipcRenderer.invoke(channel, request);
 
+const invokePlayerSnapshot: PlayerSnapshotBridgeInvoke = (channel, request) =>
+  ipcRenderer.invoke(channel, request);
+
 function isPlexPinSummary(value: unknown): boolean {
   return (
     isPlainRecord(value) &&
@@ -1392,10 +1405,6 @@ function isPlexGetMetadataValue(value: unknown): value is PlexGetMetadataValue {
   );
 }
 
-function createWrapperRequest(prefix: string): { requestId: string } {
-  return { requestId: createRequestId(prefix) };
-}
-
 function readCommandRequestId(value: unknown): string {
   if (isPlainRecord(value) && isNonEmptyString(value.requestId)) {
     return value.requestId;
@@ -1467,6 +1476,19 @@ function hasForbiddenPrivilegedField(value: unknown): boolean {
   });
 }
 
+const playerSnapshotBridge = createPlayerSnapshotBridge(
+  invokePlayerSnapshot,
+  {
+    getSnapshot: LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
+    cleanup: LINEUP_PLAYER_CLEANUP_CHANNEL,
+  },
+  createRequestId,
+  {
+    isPlayerSnapshot,
+    isPlayerError,
+  },
+);
+
 const lineupDesktop: LineupDesktopPreloadApi = {
   shell: {
     getCapabilities: () =>
@@ -1523,16 +1545,8 @@ const lineupDesktop: LineupDesktopPreloadApi = {
         envelope,
       ) as Promise<PlayerIpcResult<PlayerDispatchResult>>;
     },
-    getSnapshot: () =>
-      ipcRenderer.invoke(
-        LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
-        createWrapperRequest('player-snapshot'),
-      ) as Promise<PlayerIpcResult<PlayerSnapshot>>,
-    cleanup: () =>
-      ipcRenderer.invoke(
-        LINEUP_PLAYER_CLEANUP_CHANNEL,
-        createWrapperRequest('player-cleanup'),
-      ) as Promise<PlayerIpcResult<PlayerSnapshot>>,
+    getSnapshot: playerSnapshotBridge.getSnapshot,
+    cleanup: playerSnapshotBridge.cleanup,
     tuneChannel: createPlayerTuneBridge(
       invokeGuide,
       LINEUP_PLAYER_TUNE_CHANNEL,

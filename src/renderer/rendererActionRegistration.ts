@@ -54,12 +54,13 @@ export function registerRendererActions(
       if (action !== null) handlers.applyRouteAction(action);
     });
   }
-  for (const button of dom.settingsActionButtons) {
-    button.addEventListener('click', () => {
-      const action = readSettingsActionId(button.dataset.settingsAction);
-      if (action !== null) handlers.applySettingsAction(action);
-    });
-  }
+  const settingsScreen = documentRef.getElementById('screen-settings');
+  settingsScreen?.addEventListener('click', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    const button = event.target.closest<HTMLButtonElement>('[data-settings-action]');
+    const action = readSettingsActionId(button?.dataset.settingsAction);
+    if (action !== null) handlers.applySettingsAction(action);
+  });
   for (const button of dom.setupActionButtons) {
     button.addEventListener('click', () => {
       const action = readChannelSetupActionId(button.dataset.setupAction);

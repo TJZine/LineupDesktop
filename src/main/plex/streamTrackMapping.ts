@@ -52,17 +52,20 @@ export function buildPlaybackTrackMap(
     },
   ];
 
-  const audioMap: AudioTrackMapItem[] = candidate.audioTracks.map((track, index) => {
-    const stream = audioStreams[index];
-    return {
+  const audioMap: AudioTrackMapItem[] = candidate.audioTracks.flatMap((track, index) => {
+    const privateTrackId = audioStreams[index]?.id;
+    if (privateTrackId === undefined) {
+      return [];
+    }
+    return [{
       publicTrackId: track.id,
-      privateTrackId: stream?.id ?? null,
+      privateTrackId,
       label: track.label,
       language: track.language,
       codec: track.codec ?? undefined,
       channelCount: track.channelCount,
       default: track.default,
-    };
+    }];
   });
 
   const subtitleMap: SubtitleTrackMapItem[] = candidate.subtitleTracks.map((track, index) => {

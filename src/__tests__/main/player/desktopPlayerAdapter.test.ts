@@ -257,12 +257,12 @@ test('desktop player adapter maps renderer intents to closed player commands', a
   await adapter.dispatchRendererIntent({
     intent: 'player.selectAudio',
     requestId: 'request-audio-1',
-    payload: { trackId: 'audio-ui-2' },
+    payload: { trackId: 'audio-ui-2', snapshotRequestId: 'request-load-1' },
   });
   await adapter.dispatchRendererIntent({
     intent: 'player.selectSubtitle',
     requestId: 'request-subtitle-1',
-    payload: { trackId: null },
+    payload: { trackId: null, snapshotRequestId: 'request-load-1' },
   });
 
   assert.deepEqual(
@@ -890,10 +890,10 @@ test('desktop player adapter validates audio and subtitle track selection comman
   const result1 = await adapter.dispatchRendererIntent({
     intent: 'player.selectAudio',
     requestId: 'sel-aud-invalid',
-    payload: { trackId: 'audio-ui-1' },
+    payload: { trackId: 'audio-ui-1', snapshotRequestId: 'missing-load' },
   } as RendererIntentEnvelope<unknown>);
   assert.equal(host.commands.length, 0);
-  assertErrorEvent(result1.events, 'validation-failure');
+  assertErrorEvent(result1.events, 'stale-request');
 
   // 2. Load media to populate tracks
   host.executeResult = {
@@ -914,7 +914,7 @@ test('desktop player adapter validates audio and subtitle track selection comman
   const result2 = await adapter.dispatchRendererIntent({
     intent: 'player.selectAudio',
     requestId: 'sel-aud-valid',
-    payload: { trackId: 'audio-ui-1' },
+    payload: { trackId: 'audio-ui-1', snapshotRequestId: 'request-load-1' },
   } as RendererIntentEnvelope<unknown>);
   assert.equal(result2.accepted, true);
   assert.equal(host.commands.length, 2); // load, track.audio.select
@@ -924,7 +924,7 @@ test('desktop player adapter validates audio and subtitle track selection comman
   const result3 = await adapter.dispatchRendererIntent({
     intent: 'player.selectSubtitle',
     requestId: 'sel-sub-invalid',
-    payload: { trackId: 'subtitle-ui-invalid' },
+    payload: { trackId: 'subtitle-ui-invalid', snapshotRequestId: 'request-load-1' },
   } as RendererIntentEnvelope<unknown>);
   assertErrorEvent(result3.events, 'validation-failure');
 
@@ -932,10 +932,40 @@ test('desktop player adapter validates audio and subtitle track selection comman
   const result4 = await adapter.dispatchRendererIntent({
     intent: 'player.selectSubtitle',
     requestId: 'sel-sub-null',
-    payload: { trackId: null },
+    payload: { trackId: null, snapshotRequestId: 'request-load-1' },
   } as RendererIntentEnvelope<unknown>);
   assert.equal(result4.accepted, true);
   assert.equal(host.commands[2]?.command, 'track.subtitle.select');
+});
+
+test('desktop player adapter rejects stale snapshot track selection commands before host dispatch', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  host.executeResult = {
+    ok: true,
+    events: [
+      {
+        type: 'media.loaded',
+        requestId: 'request-current-load',
+        media,
+        durationMs: 120_000,
+        tracks: [audioTrack, subtitleTrack],
+      },
+    ],
+  };
+  await adapter.dispatchRendererIntent(loadEnvelope('request-current-load'));
+
+  const result = await adapter.dispatchRendererIntent({
+    intent: 'player.selectAudio',
+    requestId: 'request-stale-select',
+    payload: { trackId: 'audio-ui-1', snapshotRequestId: 'request-previous-load' },
+  } as RendererIntentEnvelope<unknown>);
+
+  assert.equal(result.accepted, false);
+  assert.equal(host.commands.length, 1);
+  assert.equal(result.events[0]?.event, 'error');
+  assert.equal(result.events[0]?.error.category, 'stale-request');
+  assertTextAbsent(result.events, 'request-previous-load');
 });
 
 test('desktop player adapter accepts validated quality host events', async () => {
@@ -959,6 +989,26 @@ test('desktop player adapter accepts validated quality host events', async () =>
   assert.equal(adapter.getSnapshot().quality.videoCodec, 'h264');
   assert.equal(adapter.getSnapshot().quality.outputDynamicRangeStatus, 'unproven');
   assertNoForbiddenKeys(events);
+});
+
+test('desktop player adapter snapshots clone playback quality state', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRendererIntent(loadEnvelope('request-quality-clone-load'));
+  adapter.handleHostEvent({
+    type: 'quality.changed',
+    requestId: 'request-quality-clone-load',
+    quality: {
+      mode: 'direct-play',
+      sourceDynamicRange: 'hlg',
+      outputDynamicRangeStatus: 'unknown',
+    },
+  } satisfies NativePlayerHostEvent);
+
+  const snapshot = adapter.getSnapshot();
+  snapshot.quality.sourceDynamicRange = 'sdr';
+
+  assert.equal(adapter.getSnapshot().quality.sourceDynamicRange, 'hlg');
 });
 
 test('desktop player adapter receives async host events through host event callback', async () => {
@@ -1005,7 +1055,7 @@ test('desktop player adapter keeps media-option events under active playback req
   await adapter.dispatchRendererIntent({
     intent: 'player.selectAudio',
     requestId: 'request-select-command',
-    payload: { trackId: 'audio-ui-2' },
+    payload: { trackId: 'audio-ui-2', snapshotRequestId: 'request-playback-load' },
   } as RendererIntentEnvelope<unknown>);
 
   const acceptedEvents = adapter.handleHostEvent({
@@ -1074,7 +1124,7 @@ test('desktop player adapter rejects invalid track IDs without echoing raw IDs',
   const result = await adapter.dispatchRendererIntent({
     intent: 'player.selectSubtitle',
     requestId: 'request-redacted-track',
-    payload: { trackId: rawTrackId },
+    payload: { trackId: rawTrackId, snapshotRequestId: 'request-redacted-track-load' },
   } as RendererIntentEnvelope<unknown>);
 
   assert.equal(result.accepted, false);

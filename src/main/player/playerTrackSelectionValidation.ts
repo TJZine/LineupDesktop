@@ -9,6 +9,24 @@ export function validateTrackSelectionCommand(
   command: PlayerCommand,
   snapshot: PlayerSnapshot,
 ): PlayerError | null {
+  if (
+    (command.command === 'track.audio.select' || command.command === 'track.subtitle.select') &&
+    command.payload.snapshotRequestId !== snapshot.requestId
+  ) {
+    return createPlayerError({
+      code: 'PLAYER_VALIDATION_FAILED',
+      category: 'stale-request',
+      message: 'Track selection targeted a stale player snapshot.',
+      requestId: command.requestId,
+      diagnostic: {
+        component: 'player-track-validation',
+        operation: command.command,
+        status: 'rejected',
+        reason: 'snapshot request mismatch',
+      },
+    });
+  }
+
   if (command.command === 'track.audio.select') {
     const { trackId } = command.payload;
     if (trackId === null) {

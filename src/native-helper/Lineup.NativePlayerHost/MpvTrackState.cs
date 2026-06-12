@@ -36,6 +36,10 @@ namespace Lineup.NativePlayerHost
                 return;
             }
 
+            var audioMpvIds = new List<string>();
+            var subtitleMpvIds = new List<string>();
+            var videoMpvIds = new List<string>();
+
             for (int i = 0; i < count; i++)
             {
                 string? type = MpvCommandExecutor.GetPropertyString(_mpv, $"track-list/{i}/type");
@@ -48,20 +52,24 @@ namespace Lineup.NativePlayerHost
 
                 if (type == "audio")
                 {
-                    MapTrackByPrivateId(_setup.trackMap.audio, id);
+                    audioMpvIds.Add(id);
                 }
                 else if (type == "sub")
                 {
-                    MapTrackByPrivateId(_setup.trackMap.subtitle, id);
+                    subtitleMpvIds.Add(id);
                 }
                 else if (type == "video")
                 {
-                    MapTrackByPrivateId(_setup.trackMap.video, id);
+                    videoMpvIds.Add(id);
                 }
             }
+
+            MapTracksByOrder(_setup.trackMap.audio, audioMpvIds);
+            MapTracksByOrder(_setup.trackMap.subtitle, subtitleMpvIds);
+            MapTracksByOrder(_setup.trackMap.video, videoMpvIds);
         }
 
-        private void MapTrackByPrivateId<TTrack>(IEnumerable<TTrack>? tracks, string mpvTrackId)
+        private void MapTracksByOrder<TTrack>(IEnumerable<TTrack>? tracks, IReadOnlyList<string> mpvTrackIds)
             where TTrack : class
         {
             if (tracks == null)
@@ -69,36 +77,38 @@ namespace Lineup.NativePlayerHost
                 return;
             }
 
+            int index = 0;
             foreach (var track in tracks)
             {
-                string? publicTrackId = null;
-                string? privateTrackId = null;
-
-                switch (track)
+                if (index >= mpvTrackIds.Count)
                 {
-                    case Program.AudioTrackMapItem audio:
-                        publicTrackId = audio.publicTrackId;
-                        privateTrackId = audio.privateTrackId;
-                        break;
-                    case Program.SubtitleTrackMapItem subtitle:
-                        publicTrackId = subtitle.publicTrackId;
-                        privateTrackId = subtitle.privateTrackId;
-                        break;
-                    case Program.VideoTrackMapItem video:
-                        publicTrackId = video.publicTrackId;
-                        privateTrackId = video.privateTrackId;
-                        break;
+                    return;
                 }
 
-                if (string.IsNullOrEmpty(publicTrackId) || privateTrackId != mpvTrackId)
+                string? publicTrackId = GetPublicTrackId(track);
+                if (string.IsNullOrEmpty(publicTrackId))
                 {
+                    index += 1;
                     continue;
                 }
 
+                string mpvTrackId = mpvTrackIds[index];
                 _publicToMpvId[publicTrackId] = mpvTrackId;
                 _mpvToPublicId[mpvTrackId] = publicTrackId;
-                return;
+                index += 1;
             }
+        }
+
+        private static string? GetPublicTrackId<TTrack>(TTrack track)
+            where TTrack : class
+        {
+            return track switch
+            {
+                Program.AudioTrackMapItem audio => audio.publicTrackId,
+                Program.SubtitleTrackMapItem subtitle => subtitle.publicTrackId,
+                Program.VideoTrackMapItem video => video.publicTrackId,
+                _ => null
+            };
         }
 
         public string? GetMpvTrackId(string publicTrackId)

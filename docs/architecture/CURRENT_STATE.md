@@ -406,9 +406,10 @@ The watch-list owners that remain over 500 lines stay in
 - Windows manual proof pending: production native playback helper
 - Windows manual proof pending: production playback host
 - Production Plex-to-native-helper playback setup using the private RD-12 playback descriptor (code implemented, manual proof pending)
-- production renderer-to-Plex/player API wiring for playback
-- preload, contract, and product IPC expansion for live player runtime beyond
-  the RD-17 local diagnostics and RD-22B Plex onboarding/library surfaces
+- Windows manual proof pending: production renderer-to-Plex/player playback
+  wiring
+- preload, contract, and product IPC Windows/manual playback proof beyond the
+  RD-17 local diagnostics and RD-22B Plex onboarding/library surfaces
 - preload/renderer persistence IPC wiring
 - encrypted credential backup/restore implementation
 - public signing/update pipeline
@@ -427,10 +428,13 @@ The renderer remains unprivileged. It receives only
 `window.lineupDesktop.window.setFullscreen(enabled)` from preload for shell
 behavior. RD-07 also exposes the narrow `window.lineupDesktop.player` methods
 `dispatch(envelope)`, `getSnapshot()`, `cleanup()`, and `onEvent(listener)`.
-Player preload events are runtime-guarded before listener invocation. Runtime
-commands remain backed by a development/smoke fake host by default, and the
-main/player process seam is covered by in-memory and real spawned helper
-test-double proof. Fullscreen requests map to the existing
+Player preload events are runtime-guarded before listener invocation.
+Development and smoke modes still use the development/smoke host and fake
+playback resolver for deterministic proof. In production mode, player IPC uses
+the production native host factory when a Windows helper binary is available and
+otherwise fails closed with renderer-safe unsupported-capability results.
+RD-25/RD-26 code is complete and reviewed, while Windows/manual product proof
+remains deferred to RD-27. Fullscreen requests map to the existing
 `window.enterFullscreen` and `window.exitFullscreen` renderer intents.
 RD-17 also exposes `window.lineupDesktop.diagnostics.recordRendererEvent()`,
 `window.lineupDesktop.diagnostics.getSummary()`, and

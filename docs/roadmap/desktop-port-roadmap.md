@@ -1696,21 +1696,22 @@ Objective:
 
 Platform proof label:
 
-- `Windows proof required before closeout` for production native playback,
-  switching, stop, fullscreen, crash recovery, cleanup, and redaction.
+- `Windows proof deferred to RD-27` for production native playback, switching,
+  stop, fullscreen, crash recovery, cleanup, and redaction.
 
 Exit gates:
 
 - Reviewed plan authorizes the native-helper boundary, packaging expectations
   for local proof, and exact playback verification surface.
-- Live Plex-backed playback works for the MVP modes named by the plan and
-  unsupported modes fail safely.
+- Live Plex-backed playback code handles the MVP modes named by the plan and
+  unsupported modes fail safely; Windows/manual product proof is routed to
+  RD-27.
 - Production playback controls and playback-state presentation over native
   video preserve the upstream OSD/player-control interaction feel where
   compatible with Desktop boundaries, with redaction-safe Windows proof in
   windowed and fullscreen modes.
-- Redacted Windows proof covers playback lifecycle, fullscreen, crash recovery,
-  cleanup, and no forbidden evidence.
+- RD-27 owns redacted Windows proof for playback lifecycle, fullscreen, crash
+  recovery, cleanup, and no forbidden evidence.
 - `npm run verify` passes unless the reviewed plan names a narrower verified
   surface with justification.
 - Implementation review is clean.
@@ -1742,13 +1743,14 @@ Objective:
 
 Platform proof label:
 
-- `Windows proof required before closeout` for runtime media option selection,
-  fallback behavior, and video/UI composition.
+- `Windows proof deferred to RD-27` for runtime media option selection, fallback
+  behavior, and video/UI composition.
 
 Exit gates:
 
-- Runtime subtitle/audio/HDR behavior is proven beyond fixtures and policy
-  tests for the MVP sample matrix named by the reviewed plan.
+- Runtime subtitle/audio/HDR code is covered by fixtures and policy tests for
+  the MVP sample matrix named by the reviewed plan; Windows/manual product proof
+  is routed to RD-27.
 - Subtitle, audio, and HDR option UI has reviewed upstream parity evidence for
   menu structure, selected/off/default/forced states, fallback/error states,
   focus/back behavior, and renderer-safe track identifiers.

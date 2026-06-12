@@ -79,6 +79,8 @@ const diagnosticsGuardSourceUrl = new URL('../../preload/diagnosticsBridgeGuards
 const diagnosticsGuardSourceText = readFileSync(diagnosticsGuardSourceUrl, 'utf8');
 const guideBridgeSourceUrl = new URL('../../preload/guideBridge.cts', import.meta.url);
 const guideBridgeSourceText = readFileSync(guideBridgeSourceUrl, 'utf8');
+const playerBridgeSourceUrl = new URL('../../preload/playerBridge.cts', import.meta.url);
+const playerBridgeSourceText = readFileSync(playerBridgeSourceUrl, 'utf8');
 const preloadBundleToolSourceText = readFileSync(
   new URL('../../../tools/bundle-preload.mjs', import.meta.url),
   'utf8',
@@ -126,10 +128,17 @@ const guideBridgeSourceFile = ts.createSourceFile(
   true,
   ts.ScriptKind.TS,
 );
+const playerBridgeSourceFile = ts.createSourceFile(
+  'src/preload/playerBridge.cts',
+  playerBridgeSourceText,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+);
 
 type PreloadInvokeCall = {
   channel: string;
-  request: { requestId: string; payload: unknown };
+  request: { requestId: string; payload?: unknown };
 };
 
 function evaluateChannelGuardModule(): Record<string, unknown> {
@@ -227,6 +236,24 @@ function evaluateGuideBridgeModule(): Record<string, unknown> {
   return moduleObject.exports as Record<string, unknown>;
 }
 
+function evaluatePlayerBridgeModule(): Record<string, unknown> {
+  const exportsObject = {};
+  const moduleObject = { exports: exportsObject };
+  const compiled = ts.transpileModule(playerBridgeSourceText, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: 'src/preload/playerBridge.cts',
+  }).outputText;
+  const requirePlayerBridge = (moduleName: string) => {
+    assert.fail(`unexpected player bridge require ${moduleName}`);
+  };
+  const evaluatePlayerBridge = new Function('require', 'exports', 'module', compiled);
+  evaluatePlayerBridge(requirePlayerBridge, exportsObject, moduleObject);
+  return moduleObject.exports as Record<string, unknown>;
+}
+
 function createPreloadHarness(
   invoke: (
     channel: string,
@@ -246,6 +273,7 @@ function createPreloadHarness(
   const preloadChannelExports = evaluatePreloadChannelsModule();
   const channelSetupBridgeExports = evaluateChannelSetupBridgeModule(channelGuardExports);
   const guideBridgeExports = evaluateGuideBridgeModule();
+  const playerBridgeExports = evaluatePlayerBridgeModule();
   const compiled = ts.transpileModule(preloadSourceText, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -269,6 +297,9 @@ function createPreloadHarness(
     if (moduleName === './guideBridge.cjs') {
       return guideBridgeExports;
     }
+    if (moduleName === './playerBridge.cjs') {
+      return playerBridgeExports;
+    }
     assert.equal(moduleName, 'electron');
     return {
       contextBridge: {
@@ -279,7 +310,7 @@ function createPreloadHarness(
       },
       ipcRenderer: {
         invoke: async (channel: string, request: unknown) => {
-          assert.ok(isPlexInvokeRequest(request));
+          assert.ok(isPreloadInvokeRequest(request));
           calls.push({ channel, request });
           return invoke(channel, request, input);
         },
@@ -299,14 +330,17 @@ function createPreloadHarness(
   };
 }
 
-function isPlexInvokeRequest(value: unknown): value is { requestId: string; payload: unknown } {
+function isPreloadInvokeRequest(value: unknown): value is { requestId: string; payload?: unknown } {
   return (
     typeof value === 'object' &&
     value !== null &&
     'requestId' in value &&
-    typeof value.requestId === 'string' &&
-    'payload' in value
+    typeof value.requestId === 'string'
   );
+}
+
+function isPlexInvokeRequest(value: unknown): value is { requestId: string; payload: unknown } {
+  return isPreloadInvokeRequest(value) && 'payload' in value;
 }
 
 function createSafePlexSnapshot(): Record<string, unknown> {
@@ -352,6 +386,32 @@ function createSafePlexFailure(
       recoverable: true,
       operation,
     },
+  };
+}
+
+function createSafePlayerSnapshot(): Record<string, unknown> {
+  return {
+    requestId: 'player-load-1',
+    status: 'playing',
+    media: { id: 'media-1', title: 'Episode 1' },
+    capabilityProfileId: 'profile-1',
+    positionMs: 1,
+    durationMs: null,
+    bufferedRanges: [],
+    playing: true,
+    volume: 1,
+    muted: false,
+    playbackRate: 1,
+    selectedAudioTrackId: null,
+    selectedSubtitleTrackId: null,
+    selectedVideoTrackId: null,
+    tracks: [],
+    quality: {
+      mode: 'direct-play',
+      sourceDynamicRange: 'hlg',
+      outputDynamicRangeStatus: 'unknown',
+    },
+    lastError: null,
   };
 }
 
@@ -860,6 +920,24 @@ function isInvokeGuideChannelParameter(node: ts.Identifier): boolean {
   return false;
 }
 
+function isInvokePlayerSnapshotChannelParameter(node: ts.Identifier): boolean {
+  if (node.text !== 'channel') {
+    return false;
+  }
+  let current: ts.Node | undefined = node;
+  while (current !== undefined && !ts.isSourceFile(current)) {
+    if (
+      ts.isVariableDeclaration(current) &&
+      ts.isIdentifier(current.name) &&
+      current.name.text === 'invokePlayerSnapshot'
+    ) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
 function assertApprovedElectronRequireBinding(): void {
   const declarations: ts.VariableDeclaration[] = [];
 
@@ -1074,6 +1152,65 @@ test('preload Plex bridge validates invoke results before returning them', async
     includeCollections: true,
   });
   assert.equal((result as { ok: boolean }).ok, true);
+});
+
+test('preload player bridge validates snapshot invoke results before returning them', async () => {
+  const snapshot = createSafePlayerSnapshot();
+  const harness = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPreloadInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: snapshot,
+    });
+  });
+
+  const result = await harness.api.player.getSnapshot();
+
+  assert.equal(harness.calls.length, 1);
+  assert.equal((result as { ok: boolean }).ok, true);
+});
+
+test('preload player bridge converts malformed or privileged snapshot results to local validation failures', async () => {
+  const privileged = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPreloadInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        ...createSafePlayerSnapshot(),
+        quality: {
+          mode: 'direct-play',
+          sourceDynamicRange: 'hlg',
+          outputDynamicRangeStatus: 'unknown',
+          rawQualitySource: 'private',
+        },
+      },
+    });
+  });
+  const privilegedResult = await privileged.api.player.getSnapshot();
+
+  assert.equal((privilegedResult as { ok: boolean }).ok, false);
+  assert.equal(
+    (privilegedResult as { error: { code: string } }).error.code,
+    'PLAYER_VALIDATION_FAILED',
+  );
+
+  const mismatched = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPreloadInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: `${request.requestId}-mismatch`,
+      value: createSafePlayerSnapshot(),
+    });
+  });
+  const mismatchedResult = await mismatched.api.player.cleanup();
+
+  assert.equal((mismatchedResult as { ok: boolean }).ok, false);
+  assert.equal(
+    (mismatchedResult as { error: { code: string } }).error.code,
+    'PLAYER_VALIDATION_FAILED',
+  );
 });
 
 test('guide bridge validates presentation request ranges and result envelopes', async () => {
@@ -1755,15 +1892,18 @@ test('preload split keeps Electron values in index and built preload has no loca
   assertNoElectronValueImports(channelSetupBridgeSourceFile);
   assertNoElectronValueImports(diagnosticsGuardSourceFile);
   assertNoElectronValueImports(guideBridgeSourceFile);
+  assertNoElectronValueImports(playerBridgeSourceFile);
   assert.doesNotMatch(channelGuardSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(preloadChannelsSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(channelSetupBridgeSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(diagnosticsGuardSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(guideBridgeSourceText, /require\(['"]electron['"]\)/u);
+  assert.doesNotMatch(playerBridgeSourceText, /require\(['"]electron['"]\)/u);
   assert.match(preloadSourceText, /from '\.\/channels\.cjs'/u);
   assert.match(preloadSourceText, /from '\.\/channelSetupBridge\.cjs'/u);
   assert.match(preloadSourceText, /from '\.\/diagnosticsBridgeGuards\.cjs'/u);
   assert.match(preloadSourceText, /from '\.\/guideBridge\.cjs'/u);
+  assert.match(preloadSourceText, /from '\.\/playerBridge\.cjs'/u);
   assert.match(channelSetupBridgeSourceText, /from '\.\/channelBridgeGuards\.cjs'/u);
   assert.match(preloadBundleToolSourceText, /bundle:\s*true/u);
   assert.match(preloadBundleToolSourceText, /external:\s*\[\s*'electron'\s*\]/u);
@@ -1780,6 +1920,7 @@ test(
   assert.doesNotMatch(preloadBundleOutputText, /channelSetupBridge\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /diagnosticsBridgeGuards\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /guideBridge\.cjs/u);
+  assert.doesNotMatch(preloadBundleOutputText, /playerBridge\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /require\(["']\.(?:\/|\\)[^"']+["']\)/u);
   assert.doesNotMatch(preloadBundleOutputText, /\bfrom\s+["']\.(?:\/|\\)[^"']+["']/u);
   assert.doesNotMatch(preloadBundleOutputText, /\bimport\(["']\.(?:\/|\\)[^"']+["']\)/u);
@@ -1888,6 +2029,12 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
         return;
       }
 
+      if (isInvokePlayerSnapshotChannelParameter(channelExpression)) {
+        observedCalls.push(`${methodName}:invokePlayerSnapshot.channel`);
+        ts.forEachChild(node, visit);
+        return;
+      }
+
       const approvedChannels =
         APPROVED_IPC_CHANNELS_BY_METHOD[
           methodName as keyof typeof APPROVED_IPC_CHANNELS_BY_METHOD
@@ -1909,13 +2056,12 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
     'invoke:LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL',
     'invoke:LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL',
     'invoke:LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL',
-    'invoke:LINEUP_PLAYER_CLEANUP_CHANNEL',
     'invoke:LINEUP_PLAYER_COMMAND_CHANNEL',
-    'invoke:LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL',
     'invoke:LINEUP_SHELL_GET_CAPABILITIES_CHANNEL',
     'invoke:LINEUP_WINDOW_INTENT_CHANNEL',
     'invoke:invokeChannelSetup.channel',
     'invoke:invokeGuide.channel',
+    'invoke:invokePlayerSnapshot.channel',
     'invoke:invokePlex.channel',
     'on:LINEUP_PLAYER_EVENT_CHANNEL',
     'on:LINEUP_SHELL_STATUS_CHANGED_CHANNEL',
@@ -1981,6 +2127,47 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
   assert.deepEqual(collectCreateGuideBridgeChannelArguments().sort(), [
     'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
     'LINEUP_PLAYER_TUNE_CHANNEL',
+  ]);
+
+  function collectCreatePlayerSnapshotBridgeChannelArguments(): string[] {
+    const channels: string[] = [];
+
+    function visit(node: ts.Node): void {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'createPlayerSnapshotBridge'
+      ) {
+        const [invokeExpression, channelsExpression] = node.arguments;
+        assert.ok(invokeExpression, 'createPlayerSnapshotBridge must pass an invoke function');
+        assert.ok(
+          ts.isIdentifier(invokeExpression) && invokeExpression.text === 'invokePlayerSnapshot',
+          'createPlayerSnapshotBridge must receive the narrow player snapshot invoke function',
+        );
+        const channelBindings = channelsExpression === undefined
+          ? undefined
+          : unwrapExpression(channelsExpression);
+        assert.ok(
+          channelBindings !== undefined && ts.isObjectLiteralExpression(channelBindings),
+          'createPlayerSnapshotBridge must receive literal channel bindings',
+        );
+        for (const property of channelBindings.properties) {
+          assert.ok(ts.isPropertyAssignment(property), 'player snapshot bridge channels must be property assignments');
+          assert.ok(ts.isIdentifier(property.initializer), 'player snapshot bridge channel values must be constants');
+          assertApprovedChannelIdentifier(property.initializer.text);
+          channels.push(property.initializer.text);
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+
+    visit(preloadSourceFile);
+    return channels;
+  }
+
+  assert.deepEqual(collectCreatePlayerSnapshotBridgeChannelArguments().sort(), [
+    'LINEUP_PLAYER_CLEANUP_CHANNEL',
+    'LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL',
   ]);
 
   function collectCreatePlayerTuneBridgeChannelArguments(): string[] {

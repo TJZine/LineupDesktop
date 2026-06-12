@@ -971,6 +971,31 @@ test('player event runtime guard rejects unsafe renderer-facing payloads', () =>
   );
   assert.equal(
     isRendererSafePlayerEvent({
+      event: 'quality.changed',
+      requestId: 'player-request-1',
+      quality: {
+        mode: 'direct-play',
+        sourceDynamicRange: 'hlg',
+        outputDynamicRangeStatus: 'unknown',
+      },
+    }),
+    true,
+  );
+  assert.equal(
+    isRendererSafePlayerEvent({
+      event: 'quality.changed',
+      requestId: 'player-request-1',
+      quality: {
+        mode: 'direct-play',
+        sourceDynamicRange: 'hlg',
+        outputDynamicRangeStatus: 'unknown',
+        rawQualitySource: 'redacted',
+      },
+    }),
+    false,
+  );
+  assert.equal(
+    isRendererSafePlayerEvent({
       event: 'error',
       requestId: 'player-request-1',
       error: {
