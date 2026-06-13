@@ -1391,6 +1391,10 @@ test('preload custom channel bridge rejects forbidden invoke result fields', asy
   });
   const failureResult = await privilegedFailure.api.customChannels.getSnapshot();
   assert.equal((failureResult as { ok: boolean }).ok, false);
+  assert.doesNotMatch(
+    (failureResult as { error: { message: string } }).error.message,
+    /token=|private/u,
+  );
   assert.equal(
     (failureResult as { error: { code: string } }).error.code,
     'CUSTOM_CHANNEL_VALIDATION_FAILED',
@@ -2176,21 +2180,27 @@ test('preload split keeps Electron values in index and built preload has no loca
   assertNoElectronValueImports(channelGuardSourceFile);
   assertNoElectronValueImports(preloadChannelsSourceFile);
   assertNoElectronValueImports(channelSetupBridgeSourceFile);
+  assertNoElectronValueImports(customChannelGuardSourceFile);
+  assertNoElectronValueImports(customChannelBridgeSourceFile);
   assertNoElectronValueImports(diagnosticsGuardSourceFile);
   assertNoElectronValueImports(guideBridgeSourceFile);
   assertNoElectronValueImports(playerBridgeSourceFile);
   assert.doesNotMatch(channelGuardSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(preloadChannelsSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(channelSetupBridgeSourceText, /require\(['"]electron['"]\)/u);
+  assert.doesNotMatch(customChannelGuardSourceText, /require\(['"]electron['"]\)/u);
+  assert.doesNotMatch(customChannelBridgeSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(diagnosticsGuardSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(guideBridgeSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(playerBridgeSourceText, /require\(['"]electron['"]\)/u);
   assert.match(preloadSourceText, /from '\.\/channels\.cjs'/u);
   assert.match(preloadSourceText, /from '\.\/channelSetupBridge\.cjs'/u);
+  assert.match(preloadSourceText, /from '\.\/customChannelBridge\.cjs'/u);
   assert.match(preloadSourceText, /from '\.\/diagnosticsBridgeGuards\.cjs'/u);
   assert.match(preloadSourceText, /from '\.\/guideBridge\.cjs'/u);
   assert.match(preloadSourceText, /from '\.\/playerBridge\.cjs'/u);
   assert.match(channelSetupBridgeSourceText, /from '\.\/channelBridgeGuards\.cjs'/u);
+  assert.match(customChannelBridgeSourceText, /from '\.\/customChannelBridgeGuards\.cjs'/u);
   assert.match(preloadBundleToolSourceText, /bundle:\s*true/u);
   assert.match(preloadBundleToolSourceText, /external:\s*\[\s*'electron'\s*\]/u);
 });
@@ -2204,6 +2214,8 @@ test(
   assert.doesNotMatch(preloadBundleOutputText, /channels\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /channelBridgeGuards\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /channelSetupBridge\.cjs/u);
+  assert.doesNotMatch(preloadBundleOutputText, /customChannelBridge\.cjs/u);
+  assert.doesNotMatch(preloadBundleOutputText, /customChannelBridgeGuards\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /diagnosticsBridgeGuards\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /guideBridge\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /playerBridge\.cjs/u);
@@ -2212,6 +2224,43 @@ test(
   assert.doesNotMatch(preloadBundleOutputText, /\bimport\(["']\.(?:\/|\\)[^"']+["']\)/u);
   },
 );
+
+test('preload custom channel reorder request rejects duplicate ids and clones nested season filters', () => {
+  const customChannelGuardExports = evaluateCustomChannelGuardModule();
+  const createReorderRequest = customChannelGuardExports.createCustomChannelReorderRequest as
+    ((input: { channelIds: readonly string[] }) => { ok: boolean; result: { error: { code: string } } });
+  const createListMediaRequest = customChannelGuardExports.createCustomChannelListMediaRequest as
+    ((input: {
+      sourceType: 'search';
+      query: string;
+      draftContent: readonly [{ type: 'show'; sourceId: string; title: string; seasonFilter: readonly number[] }];
+    }) => {
+      ok: boolean;
+      payload?: { draftContent?: readonly [{ type: 'show'; seasonFilter?: readonly number[] }] };
+    });
+  const duplicateIds = createReorderRequest({ channelIds: ['channel-1', 'channel-1'] });
+  assert.equal(duplicateIds.ok, false);
+  assert.equal(duplicateIds.result.error.code, 'CUSTOM_CHANNEL_VALIDATION_FAILED');
+
+  const originalSeasonFilter = [1, 2];
+  const request = createListMediaRequest({
+    sourceType: 'search',
+    query: 'episodes',
+    draftContent: [{ type: 'show', sourceId: 'show-1', title: 'Show One', seasonFilter: originalSeasonFilter }],
+  });
+  assert.equal(request.ok, true);
+  if (request.ok !== true || request.payload === undefined) {
+    assert.fail('expected cloned list media request payload');
+  }
+  {
+    const draftEntry = request.payload.draftContent?.[0];
+    assert.equal(draftEntry?.type, 'show');
+    if (draftEntry?.type === 'show' && draftEntry.seasonFilter) {
+      assert.notEqual(draftEntry.seasonFilter, originalSeasonFilter);
+      assert.deepEqual(draftEntry.seasonFilter, originalSeasonFilter);
+    }
+  }
+});
 
 test('preload bridge exposes only the typed lineupDesktop world', () => {
   assertNoElectronValueImports();

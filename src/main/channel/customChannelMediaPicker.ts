@@ -18,6 +18,7 @@ import type {
   PlexRendererMediaType,
 } from '../../contracts/plex.js';
 import type { DesktopPlexRuntime } from '../plex/desktopPlexRuntime.js';
+import { PLEX_MEDIA_TYPES } from '../plex/library/index.js';
 
 export interface CustomChannelMediaPickerOptions {
   plexRuntime: Pick<DesktopPlexRuntime, 'listLibraryItems' | 'searchLibrary' | 'getMetadata'>;
@@ -49,10 +50,12 @@ export class CustomChannelMediaPicker {
     const limit = normalizeLimit(input.limit);
     if (input.sourceType === 'library') {
       if (!isSafeId(input.sourceId)) return { ok: false, error: validationError('listMedia') };
+      const filter = libraryFilterForMediaTypes(input.mediaTypes);
       const result = await this.plexRuntime.listLibraryItems(requestId, {
         sectionId: input.sourceId,
         offset,
         limit,
+        ...(filter !== undefined ? { filter } : {}),
       });
       return mapListResult(result, input.sourceId, input.draftContent ?? [], this.artworkForItem);
     }
@@ -217,6 +220,25 @@ function mapPlexSearchTypes(values: readonly CustomChannelMediaType[]): PlexRend
   return values.flatMap((value) => (
     value === 'movie' || value === 'show' || value === 'episode' ? [value] : []
   ));
+}
+
+function libraryFilterForMediaTypes(
+  values: readonly CustomChannelMediaType[] | undefined,
+): Readonly<Record<string, string | number>> | undefined {
+  if (values === undefined || values.length !== 1) {
+    return undefined;
+  }
+  const [value] = values;
+  if (value === 'movie') {
+    return { type: PLEX_MEDIA_TYPES.MOVIE };
+  }
+  if (value === 'show') {
+    return { type: PLEX_MEDIA_TYPES.SHOW };
+  }
+  if (value === 'episode') {
+    return { type: PLEX_MEDIA_TYPES.EPISODE };
+  }
+  return undefined;
 }
 
 const DEFAULT_SEARCH_MEDIA_TYPES: readonly PlexRendererMediaType[] = ['movie', 'show', 'episode'];

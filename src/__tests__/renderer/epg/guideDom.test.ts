@@ -88,6 +88,7 @@ const mockDocument = {
   }
 };
 
+const originalDocument = globalThis.document;
 (globalThis as any).document = mockDocument as any;
 
 function assertAlmostEqual(actual: number, expected: number): void {
@@ -101,6 +102,14 @@ import {
   guideCellDom,
 } from '../../../renderer/epg/guideDom.js';
 import type { EpgProgramCellViewModel } from '../../../renderer/epg.js';
+
+test.after(() => {
+  if (originalDocument === undefined) {
+    delete (globalThis as { document?: Document }).document;
+    return;
+  }
+  (globalThis as { document: Document }).document = originalDocument;
+});
 
 test('guideCellPosition calculates correct left and width within window', () => {
   const windowStart = 1000;

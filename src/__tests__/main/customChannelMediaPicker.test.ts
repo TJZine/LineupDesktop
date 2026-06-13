@@ -6,10 +6,12 @@ import { containsCustomChannelForbiddenRendererField } from '../../contracts/cus
 import type { PlexIpcResult, PlexListLibraryItemsValue, PlexMediaItemSummary, PlexSearchLibraryValue, PlexGetMetadataValue } from '../../contracts/plex.js';
 import { CustomChannelArtworkProxy } from '../../main/channel/customChannelArtworkProxy.js';
 import { CustomChannelMediaPicker } from '../../main/channel/customChannelMediaPicker.js';
+import { PLEX_MEDIA_TYPES } from '../../main/plex/library/index.js';
 
 test('custom channel media picker lists safe paged media cards', async () => {
+  const listRequests: unknown[] = [];
   const picker = new CustomChannelMediaPicker({
-    plexRuntime: plexRuntimeFixture(),
+    plexRuntime: plexRuntimeFixture({ listRequests }),
     artworkForItem: (item) => ({
       id: `artwork-${item.ratingKey}abcdefghijkl`,
       kind: 'poster',
@@ -40,9 +42,31 @@ test('custom channel media picker lists safe paged media cards', async () => {
 	    sourceType: 'library',
 	    artwork: 'available',
 	    availability: 'available',
-	  }]);
+		  }]);
+  assert.deepEqual(listRequests, [{ sectionId: 'movies', offset: 0, limit: 24 }]);
   assert.equal(containsCustomChannelForbiddenRendererField(result), false);
   assert.doesNotMatch(JSON.stringify(result), /"thumb"|"art"|url|token|library\/metadata/u);
+});
+
+test('custom channel media picker passes Plex browse filters for media type constrained library requests', async () => {
+  const listRequests: unknown[] = [];
+  const picker = new CustomChannelMediaPicker({
+    plexRuntime: plexRuntimeFixture({ listRequests }),
+  });
+
+  const result = await picker.listMedia('media-list-episodes', {
+    sourceType: 'library',
+    sourceId: 'shows',
+    mediaTypes: ['episode'],
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(listRequests, [{
+    sectionId: 'shows',
+    offset: 0,
+    limit: 24,
+    filter: { type: PLEX_MEDIA_TYPES.EPISODE },
+  }]);
 });
 
 test('custom channel media picker searches with offset and returns safe metadata', async () => {
@@ -210,24 +234,87 @@ test('custom channel artwork proxy times out non-cooperative fetchers', async ()
   assert.deepEqual(await proxy.read(ref.id), { ok: false, reason: 'timeout' });
 });
 
+test('custom channel artwork proxy clears pending timeout when fetch completes first', async () => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const timerHandles: number[] = [];
+  const clearedHandles: number[] = [];
+  let nextHandle = 1;
+  (globalThis as typeof globalThis & {
+    setTimeout: typeof globalThis.setTimeout;
+    clearTimeout: typeof globalThis.clearTimeout;
+  }).setTimeout = (((_handler: TimerHandler) => {
+    const handle = nextHandle++;
+    timerHandles.push(handle);
+    return handle;
+  }) as unknown) as typeof globalThis.setTimeout;
+  (globalThis as typeof globalThis & {
+    clearTimeout: typeof globalThis.clearTimeout;
+  }).clearTimeout = (((handle: number) => {
+    clearedHandles.push(handle);
+  }) as unknown) as typeof globalThis.clearTimeout;
+
+  try {
+    const proxy = new CustomChannelArtworkProxy({
+      now: () => 1,
+      timeoutMs: 50,
+      fetcher: async () => ({
+        contentType: 'image/png',
+        bytes: new Uint8Array([1]),
+      }),
+    });
+    const ref = proxy.register({ ratingKey: 'movie-1', sourceKey: 'private-key', kind: 'poster', altText: 'Feature' });
+    await proxy.read(ref.id);
+    assert.deepEqual(timerHandles, [1]);
+    assert.deepEqual(clearedHandles, [1]);
+  } finally {
+    (globalThis as typeof globalThis & {
+      setTimeout: typeof globalThis.setTimeout;
+      clearTimeout: typeof globalThis.clearTimeout;
+    }).setTimeout = originalSetTimeout;
+    (globalThis as typeof globalThis & {
+      clearTimeout: typeof globalThis.clearTimeout;
+    }).clearTimeout = originalClearTimeout;
+  }
+});
+
 function plexRuntimeFixture(options: {
   fail?: boolean;
   includeUnsupported?: boolean;
   metadataType?: PlexMediaItemSummary['type'];
   searchItems?: PlexMediaItemSummary[];
   searchRequests?: unknown[];
+  listRequests?: unknown[];
 } = {}) {
   return {
-    listLibraryItems: async (requestId: string): Promise<PlexIpcResult<PlexListLibraryItemsValue>> => {
+    listLibraryItems: async (
+      requestId: string,
+      payload: { sectionId: string; offset?: number; limit?: number; filter?: Readonly<Record<string, string | number>> },
+    ): Promise<PlexIpcResult<PlexListLibraryItemsValue>> => {
       if (options.fail) return failure(requestId, 'listLibraryItems');
+      options.listRequests?.push({
+        sectionId: payload.sectionId,
+        offset: payload.offset ?? 0,
+        limit: payload.limit ?? 24,
+        ...(payload.filter !== undefined ? { filter: payload.filter } : {}),
+      });
       return {
         ok: true,
         requestId,
         value: {
-          sectionId: 'movies',
-          offset: 0,
-          limit: 24,
-	          items: options.includeUnsupported ? [mediaItem(), mediaItem({ ratingKey: 'track-1', type: 'track' })] : [mediaItem()],
+          sectionId: payload.sectionId,
+          offset: payload.offset ?? 0,
+          limit: payload.limit ?? 24,
+          items: payload.filter?.type === PLEX_MEDIA_TYPES.EPISODE
+            ? [mediaItem({
+              ratingKey: 'episode-1',
+              type: 'episode',
+              title: 'Episode One',
+              parentTitle: 'Show One',
+              seasonNumber: 1,
+              episodeNumber: 1,
+            })]
+            : options.includeUnsupported ? [mediaItem(), mediaItem({ ratingKey: 'track-1', type: 'track' })] : [mediaItem()],
           snapshot: snapshot(),
         },
       };

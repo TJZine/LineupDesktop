@@ -2,10 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  LINEUP_CUSTOM_CHANNEL_DUPLICATE_DRAFT_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_DELETE_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_SAVE_DRAFT_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_VALIDATE_DRAFT_CHANNEL,
 } from '../../contracts/ipc.js';
 import { customChannelSuccess, type CustomChannelDraftInput } from '../../contracts/customChannels.js';
 import { registerCustomChannelIpcHandlers } from '../../main/channel/customChannelIpc.js';
@@ -55,8 +60,17 @@ test('custom channel IPC authorizes and validates snapshot requests', async () =
   assert.equal(snapshotCalls, 1);
 
   await teardown();
-  assert.ok(removed.includes(LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL));
-  assert.ok(removed.includes(LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL));
+  assert.deepEqual(removed.sort(), [
+    LINEUP_CUSTOM_CHANNEL_DELETE_CHANNEL,
+    LINEUP_CUSTOM_CHANNEL_DUPLICATE_DRAFT_CHANNEL,
+    LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL,
+    LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL,
+    LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL,
+    LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL,
+    LINEUP_CUSTOM_CHANNEL_SAVE_DRAFT_CHANNEL,
+    LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL,
+    LINEUP_CUSTOM_CHANNEL_VALIDATE_DRAFT_CHANNEL,
+  ].sort());
 });
 
 test('custom channel IPC validates media requests before invoking picker', async () => {

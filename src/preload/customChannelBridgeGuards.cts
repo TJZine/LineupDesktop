@@ -252,7 +252,8 @@ export function createCustomChannelReorderRequest(input: { channelIds: readonly 
     !Array.isArray(input.channelIds) ||
     input.channelIds.length === 0 ||
     input.channelIds.length > 500 ||
-    !input.channelIds.every(isSafeCustomChannelId)
+    !input.channelIds.every(isSafeCustomChannelId) ||
+    new Set(input.channelIds).size !== input.channelIds.length
   ) {
     return customChannelPreloadValidationFailure(requestId, 'reorderChannels', 'Custom channel reorder request payload is invalid.');
   }
@@ -665,7 +666,11 @@ function isCustomChannelError(value: unknown): boolean {
 function cloneContent(
   content: readonly CustomChannelContentEntryInput[],
 ): readonly CustomChannelContentEntryInput[] {
-  return content.map((entry) => ({ ...entry }));
+  return content.map((entry) => (
+    entry.type === 'show' && entry.seasonFilter !== undefined
+      ? { ...entry, seasonFilter: [...entry.seasonFilter] }
+      : { ...entry }
+  ));
 }
 
 function customChannelPreloadValidationFailure<TPayload, TValue>(

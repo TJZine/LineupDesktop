@@ -355,6 +355,34 @@ test('GuideRuntime initializeActiveChannel skips hidden stored current channel',
   assert.equal(repository.data.currentChannelId, 'visible-chan');
 });
 
+test('GuideRuntime refreshActiveChannelSelection retunes to a visible fallback before unloading', async () => {
+  const repository = new MockChannelRepository();
+  const hidden = createChannelConfig('hidden-chan', 1, 'Hidden Channel', 'lib-hidden');
+  hidden.hidden = true;
+  const visible = createChannelConfig('visible-chan', 2, 'Visible Channel', 'lib-visible');
+  repository.data.channels = [hidden, visible];
+  repository.data.currentChannelId = 'hidden-chan';
+
+  const plexAdapter = new MockPlexLibraryAdapter();
+  plexAdapter.setLibraryItems('lib-hidden', [createLibraryItem(0)]);
+  plexAdapter.setLibraryItems('lib-visible', [createLibraryItem(1)]);
+  const activeScheduler = new ChannelScheduler({ clock: { now: () => 1000 } });
+
+  const runtime = new GuideRuntime({
+    repository: repository as unknown as ChannelRepository,
+    plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
+    activeChannelScheduler: activeScheduler,
+    clock: { now: () => 1000 },
+  });
+
+  await runtime.refreshActiveChannelSelection();
+
+  const state = activeScheduler.getState();
+  assert.equal(state.isActive, true);
+  assert.equal(state.channelId, 'visible-chan');
+  assert.equal(repository.data.currentChannelId, 'visible-chan');
+});
+
 test('GuideRuntime logs initializeActiveChannel tuning failures without throwing', async () => {
   const repository = new MockChannelRepository();
   const chan1 = createChannelConfig('chan-1', 1, 'Channel 1');

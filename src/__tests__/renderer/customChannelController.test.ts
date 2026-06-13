@@ -211,6 +211,7 @@ test('custom channel controller maps rejected bridge work to safe local errors',
 test('custom channel controller supports filters metadata back unwind and source invalidation', async () => {
   const bridge = createBridge();
   const mediaRequests: CustomChannelListMediaRequest['payload'][] = [];
+  const metadataRequests: string[] = [];
   bridge.listMedia = async (input) => {
     mediaRequests.push(input);
     return customChannelSuccess('media-1', {
@@ -233,6 +234,23 @@ test('custom channel controller supports filters metadata back unwind and source
       hasMore: false,
     });
   };
+  bridge.getMediaMetadata = async ({ ratingKey }) => {
+    metadataRequests.push(ratingKey);
+    return customChannelSuccess('metadata-1', {
+      ratingKey,
+      type: 'episode',
+      title: `Title ${ratingKey}`,
+      subtitle: `Parent ${ratingKey}`,
+      summary: null,
+      year: 2026,
+      durationMs: 7_200_000,
+      parentTitle: `Parent ${ratingKey}`,
+      seasonNumber: 1,
+      episodeNumber: 1,
+      genres: [],
+      availability: 'available',
+    });
+  };
   const controller = createCustomChannelController({
     bridge,
     onStateChanged: () => undefined,
@@ -244,7 +262,21 @@ test('custom channel controller supports filters metadata back unwind and source
   assert.deepEqual(mediaRequests.at(-1)?.mediaTypes, ['episode']);
 
   await controller.applyAction('openMetadata', 'rating-episode');
-  assert.equal(controller.getState().metadata?.title, 'Movie One');
+  assert.equal(metadataRequests.at(-1), 'rating-episode');
+  assert.deepEqual(controller.getState().metadata, {
+    ratingKey: 'rating-episode',
+    type: 'episode',
+    title: 'Title rating-episode',
+    subtitle: 'Parent rating-episode',
+    summary: null,
+    year: 2026,
+    durationMs: 7_200_000,
+    parentTitle: 'Parent rating-episode',
+    seasonNumber: 1,
+    episodeNumber: 1,
+    genres: [],
+    availability: 'available',
+  });
   assert.equal(controller.handleBack(), true);
   assert.equal(controller.getState().metadata, null);
 
@@ -281,14 +313,19 @@ function createBridge(): LineupDesktopPreloadApi['customChannels'] {
       total: 1,
       hasMore: false,
     }),
-    getMediaMetadata: async () => customChannelSuccess('metadata-1', {
-      ratingKey: 'rating-1',
-      type: 'movie',
-      title: 'Movie One',
-      subtitle: '2026',
+    getMediaMetadata: async ({ ratingKey }) => customChannelSuccess('metadata-1', {
+      ratingKey,
+      type: ratingKey.includes('episode') ? 'episode' : 'movie',
+      title: `Title ${ratingKey}`,
+      subtitle: ratingKey.includes('episode') ? `Parent ${ratingKey}` : '2026',
       summary: null,
       year: 2026,
       durationMs: 7_200_000,
+      ...(ratingKey.includes('episode') ? {
+        parentTitle: `Parent ${ratingKey}`,
+        seasonNumber: 1,
+        episodeNumber: 1,
+      } : {}),
       genres: [],
       availability: 'available',
     }),

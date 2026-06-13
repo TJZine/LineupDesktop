@@ -447,7 +447,11 @@ function isContentEntry(value: unknown): value is CustomChannelContentEntryInput
 function cloneContent(
   content: readonly CustomChannelContentEntryInput[],
 ): readonly CustomChannelContentEntryInput[] {
-  return content.map((entry) => ({ ...entry }));
+  return content.map((entry) => (
+    entry.type === 'show' && entry.seasonFilter !== undefined
+      ? { ...entry, seasonFilter: [...entry.seasonFilter] }
+      : { ...entry }
+  ));
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

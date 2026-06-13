@@ -89,10 +89,11 @@ export class CustomChannelArtworkProxy {
     if (cached !== undefined) return { ok: true, value: cached };
 
     const controller = new AbortController();
+    const timeout = timeoutAfter(this.timeoutMs, controller);
     try {
       const fetched = await Promise.race([
         this.fetcher({ ...source }, controller.signal),
-        timeoutAfter(this.timeoutMs, controller),
+        timeout.promise,
       ]);
       const contentType = normalizeContentType(fetched.contentType);
       if (contentType === null) return { ok: false, reason: 'invalid-content' };
@@ -109,6 +110,7 @@ export class CustomChannelArtworkProxy {
         ? { ok: false, reason: 'timeout' }
         : { ok: false, reason: 'failed' };
     } finally {
+      timeout.clear();
       controller.abort();
     }
   }
@@ -126,11 +128,24 @@ function normalizeContentType(value: string): CustomChannelArtworkFetchResult['c
     : null;
 }
 
-function timeoutAfter(timeoutMs: number, controller: AbortController): Promise<never> {
-  return new Promise((_, reject) => {
-    globalThis.setTimeout(() => {
-      controller.abort();
-      reject(new DOMException('Artwork request timed out.', 'AbortError'));
-    }, timeoutMs);
-  });
+function timeoutAfter(timeoutMs: number, controller: AbortController): {
+  promise: Promise<never>;
+  clear: () => void;
+} {
+  let timer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  return {
+    promise: new Promise((_, reject) => {
+      timer = globalThis.setTimeout(() => {
+        timer = null;
+        controller.abort();
+        reject(new DOMException('Artwork request timed out.', 'AbortError'));
+      }, timeoutMs);
+    }),
+    clear: () => {
+      if (timer !== null) {
+        globalThis.clearTimeout(timer);
+        timer = null;
+      }
+    },
+  };
 }

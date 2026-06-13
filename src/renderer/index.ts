@@ -233,34 +233,7 @@ async function handleDesktopInput(input: DesktopInputButton): Promise<void> {
       const prevActiveId = focusState.activeId;
       focusState = moveRendererFocus(focusRegistry, focusState, input, dom);
       if (focusState.activeId !== prevActiveId) {
-        if (focusState.activeId === 'settings-cat-playback') {
-          activeSettingsCategory = 'playback';
-          renderApp();
-        } else if (focusState.activeId === 'settings-cat-guide') {
-          activeSettingsCategory = 'guide';
-          renderApp();
-        } else if (focusState.activeId === 'settings-cat-setup') {
-          activeSettingsCategory = 'setup';
-          renderApp();
-        } else if (focusState.activeId === 'setup-stage-account') {
-          activeSetupStage = 'account';
-          renderApp();
-        } else if (focusState.activeId === 'setup-stage-server') {
-          activeSetupStage = 'server';
-          renderApp();
-        } else if (focusState.activeId === 'setup-stage-library') {
-          activeSetupStage = 'library';
-          renderApp();
-        } else if (focusState.activeId === 'setup-stage-preview') {
-          activeSetupStage = 'preview';
-          renderApp();
-        } else if (focusState.activeId === 'setup-stage-build') {
-          activeSetupStage = 'build';
-          renderApp();
-        } else if (focusState.activeId === 'setup-stage-custom') {
-          activeSetupStage = 'custom';
-          renderApp();
-        }
+        updateActiveFromFocus(focusState.activeId);
       }
       scrollFocusedSetupControlIntoView();
       return;
@@ -559,35 +532,55 @@ function focusRendererElement(element: HTMLElement): void {
   const focusId = element.dataset.focusId;
   if (focusId !== undefined) {
     focusState = focusRendererTarget(focusRegistry, focusState, focusId, dom);
-    if (focusId === 'settings-cat-playback') {
-      activeSettingsCategory = 'playback';
-      renderApp();
-    } else if (focusId === 'settings-cat-guide') {
-      activeSettingsCategory = 'guide';
-      renderApp();
-    } else if (focusId === 'settings-cat-setup') {
-      activeSettingsCategory = 'setup';
-      renderApp();
-    } else if (focusId === 'setup-stage-account') {
-      activeSetupStage = 'account';
-      renderApp();
-    } else if (focusId === 'setup-stage-server') {
-      activeSetupStage = 'server';
-      renderApp();
-    } else if (focusId === 'setup-stage-library') {
-      activeSetupStage = 'library';
-      renderApp();
-    } else if (focusId === 'setup-stage-preview') {
-      activeSetupStage = 'preview';
-      renderApp();
-    } else if (focusId === 'setup-stage-build') {
-      activeSetupStage = 'build';
-      renderApp();
-    } else if (focusId === 'setup-stage-custom') {
-      activeSetupStage = 'custom';
-      renderApp();
-    }
+    updateActiveFromFocus(focusId);
     scrollFocusedSetupControlIntoView();
+  }
+}
+
+function updateActiveFromFocus(focusId: string | null): void {
+  if (focusId === 'settings-cat-playback' && activeSettingsCategory !== 'playback') {
+    activeSettingsCategory = 'playback';
+    renderApp();
+    return;
+  }
+  if (focusId === 'settings-cat-guide' && activeSettingsCategory !== 'guide') {
+    activeSettingsCategory = 'guide';
+    renderApp();
+    return;
+  }
+  if (focusId === 'settings-cat-setup' && activeSettingsCategory !== 'setup') {
+    activeSettingsCategory = 'setup';
+    renderApp();
+    return;
+  }
+  if (focusId === 'setup-stage-account' && activeSetupStage !== 'account') {
+    activeSetupStage = 'account';
+    renderApp();
+    return;
+  }
+  if (focusId === 'setup-stage-server' && activeSetupStage !== 'server') {
+    activeSetupStage = 'server';
+    renderApp();
+    return;
+  }
+  if (focusId === 'setup-stage-library' && activeSetupStage !== 'library') {
+    activeSetupStage = 'library';
+    renderApp();
+    return;
+  }
+  if (focusId === 'setup-stage-preview' && activeSetupStage !== 'preview') {
+    activeSetupStage = 'preview';
+    renderApp();
+    return;
+  }
+  if (focusId === 'setup-stage-build' && activeSetupStage !== 'build') {
+    activeSetupStage = 'build';
+    renderApp();
+    return;
+  }
+  if (focusId === 'setup-stage-custom' && activeSetupStage !== 'custom') {
+    activeSetupStage = 'custom';
+    renderApp();
   }
 }
 

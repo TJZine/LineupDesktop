@@ -43,10 +43,11 @@ export function registerChannelComposition(
     throw new Error('Channel persistence path was not resolved.');
   }
   const clock: ChannelClock = { now: () => Date.now() };
+  const sharedChannelStore = new DesktopChannelPersistenceStore({
+    persistenceFilePath: channelPersistenceFilePath,
+  });
   const runtime = new ChannelRuntime({
-    storage: new DesktopChannelPersistenceStore({
-      persistenceFilePath: channelPersistenceFilePath,
-    }),
+    storage: sharedChannelStore,
     plexRuntime: options.plexRuntime,
     clock,
   });
@@ -65,9 +66,7 @@ export function registerChannelComposition(
     logger: guideLogger,
   });
   const customChannelRuntime = new CustomChannelRuntime({
-    storage: new DesktopChannelPersistenceStore({
-      persistenceFilePath: channelPersistenceFilePath,
-    }),
+    storage: sharedChannelStore,
     clock,
     logger: guideLogger,
     onChannelsChanged: async () => {

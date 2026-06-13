@@ -186,7 +186,7 @@ export class GuideRuntime {
 
   async refreshActiveChannelSelection(): Promise<void> {
     const loaded = await this.repository.loadNormalized();
-    if (!loaded || loaded.data.channels.length === 0 || !loaded.data.currentChannelId) {
+    if (!loaded || loaded.data.channels.length === 0) {
       this.activeChannelScheduler.unloadChannel();
       return;
     }
@@ -194,6 +194,11 @@ export class GuideRuntime {
       channel.id === loaded.data.currentChannelId && channel.hidden !== true
     );
     if (!currentChannel) {
+      const fallbackChannel = loaded.data.channels.find((channel) => channel.hidden !== true);
+      if (fallbackChannel) {
+        await this.tuneChannel(fallbackChannel.id);
+        return;
+      }
       this.activeChannelScheduler.unloadChannel();
       return;
     }
