@@ -31,3 +31,11 @@ Worker slices must have disjoint write scopes. Keep architecture decisions,
 integration, final verification, and commit judgment in the controller session.
 Do not delegate work that needs the worker to choose the seam, broaden scope, or
 decide test depth mid-task.
+
+## Delegation Record
+
+Before dispatch, record the selected role and its `.codex/agents/<role>.toml`
+path in the worker packet. At closeout, report that role, config path, `model`,
+and `model_reasoning_effort` read from the TOML. Treat the worker's
+`CONFIGURED ROLE` opening line as a visibility aid, not independent proof of
+the model selection.

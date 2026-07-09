@@ -109,6 +109,15 @@ a fresh Desktop chat. Desktop carries forward the relevant guardrails through
 this runbook, launcher docs, `.agents/skills/`, verifier checks, and desktop
 architecture references.
 
+## Subagent Transparency
+
+When dispatching a subagent, record the selected role and its
+`.codex/agents/<role>.toml` path. At task closeout, list each role used with
+the `model` and `model_reasoning_effort` read from that TOML. The child role's
+`CONFIGURED ROLE` opening line is a visible confirmation of the selected role;
+the TOML remains the authoritative configuration and avoids duplicating model
+names in prompts or workflow docs.
+
 ## Guidance Baseline
 
 This workflow follows the current official guidance summarized in
