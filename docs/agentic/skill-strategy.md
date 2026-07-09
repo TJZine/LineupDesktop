@@ -28,12 +28,17 @@ improving fresh-chat reliability.
 
 Use the smallest role set that keeps work reliable:
 
-- `explorer`: read-only evidence and impact discovery
-- `docs_researcher`: read-only official documentation checks
-- `planner`: durable plans and handoff artifacts
-- `worker`: one bounded implementation unit
-- `reviewer`: read-only adversarial review
-- `monitor`: waits, polling, and status checks
+- `explorer`: `gpt-5.3-codex-spark xhigh` for read-only evidence and impact
+  discovery; `explorer_fallback` uses `gpt-5.6-terra high`
+- `docs_researcher`: `gpt-5.6-terra medium` for read-only official
+  documentation checks
+- `planner`: `gpt-5.6-sol high` for durable plans and handoff artifacts
+- `worker`: `gpt-5.6-sol medium` for normal bounded implementation units
+- `worker_terra`: `gpt-5.6-terra medium` for explicitly eligible, exact,
+  bounded, cheap-to-verify implementation units
+- `reviewer`: `gpt-5.6-sol high` for read-only adversarial review
+- `monitor`: `gpt-5.3-codex-spark low` for waits, polling, and status checks;
+  `monitor_fallback` uses `gpt-5.6-luna low`
 
 Desktop does not define a dedicated maintenance-worker role yet. If this repo
 later needs a maintenance backlog, add that role in a separate reviewed

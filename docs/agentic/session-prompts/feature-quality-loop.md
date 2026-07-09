@@ -75,9 +75,11 @@ are complete or explicitly blocked.
   units require explicit disjoint owners, files, and verification. For MVP
   product slices, prefer bounded vertical units that make the intended user
   journey testable over layer-only units that leave fake app routes in place.
-- `implement`: use a tracked `worker` pass for the approved execution unit. If
-  the work is small enough for controller-local editing, downgrade the task out
-  of this Tier 3 loop before editing. Do not preserve fake/scaffold UI in a
+- `implement`: use a tracked `worker` pass for the approved execution unit by
+  default. Use `worker_terra` only when the reviewed plan explicitly declares
+  the unit eligible as exact, bounded, and cheap to verify with stop/escalation
+  rules. If the work is small enough for controller-local editing, downgrade
+  the task out of this Tier 3 loop before editing. Do not preserve fake/scaffold UI in a
   reachable product route once the approved unit owns the real workflow; move
   remaining fake behavior to tests, smoke fixtures, or explicit dev-only
   harnesses.

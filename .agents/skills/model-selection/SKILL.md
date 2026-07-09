@@ -15,15 +15,29 @@ Read:
 
 Use the smallest capable role/model:
 
-- `planner` for Tier 3 plans and durable handoffs.
-- `reviewer` for adversarial plan, implementation, workflow, security, and
-  boundary review.
-- `worker` for approved bounded implementation units.
-- `docs_researcher` for official framework/API documentation checks.
-- `explorer` for read-only repo evidence.
-- `monitor` for waits and polling.
+- `planner`: `gpt-5.6-sol high` for Tier 3 plans and durable handoffs.
+- `reviewer`: `gpt-5.6-sol high` for adversarial plan, implementation,
+  workflow, security, and boundary review.
+- `worker`: `gpt-5.6-sol medium`; the default for normal approved bounded
+  implementation units.
+- `worker_terra`: `gpt-5.6-terra medium`; use only when an approved plan or
+  handoff explicitly declares an exact, bounded, cheap-to-verify unit eligible
+  and supplies stop/escalation conditions.
+- `docs_researcher`: `gpt-5.6-terra medium` for official framework/API checks.
+- `explorer`: keep `gpt-5.3-codex-spark xhigh` for latency-sensitive read-only
+  repo evidence; use `explorer_fallback` at `gpt-5.6-terra high` when Spark is
+  unavailable or constrained.
+- `monitor`: keep `gpt-5.3-codex-spark low`; use `monitor_fallback` at
+  `gpt-5.6-luna low` when Spark is unavailable or constrained.
 
-Recommend higher reasoning for Electron IPC/security, native playback,
-storage/secrets, packaging/release, broad imports, or workflow harness changes.
+For routine work, preserve the tracked reasoning effort. Recommend direct Sol
+`xhigh` only for unusually difficult Electron IPC/security, native playback,
+storage/secrets, packaging/release, broad-import, or workflow-harness work.
+Reserve `max` for measured quality-first cases where `xhigh` is insufficient;
+do not make `max` or host-specific `ultra` a tracked default.
+
+Use `gpt-5.5` at the same effort as the reliability fallback for Sol/Terra
+roles when GPT-5.6 is unavailable. Use `gpt-5.4-mini` only for low-risk,
+cost-sensitive work that would otherwise use Luna or a lightweight Terra role.
 Do not add model guidance to routine handoffs unless the user asks or the plan
 is high risk.

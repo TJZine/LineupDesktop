@@ -39,6 +39,10 @@ scope.
   moves to the local ignored archive.
 - For Tier 3, identify the first bounded execution unit and whether any
   parallelism is allowed.
+- For every bounded execution unit, record `IMPLEMENTER_ROLE_ELIGIBILITY`.
+  Default to `worker`; include `worker_terra` only for exact, bounded,
+  cheap-to-verify units with direct verification and explicit stop/escalation
+  conditions.
 - Run the Planner Self-Check from the plan standard before calling the plan
   implementation-ready.
 

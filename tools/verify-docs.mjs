@@ -18,6 +18,7 @@ const requiredFiles = [
   '.codex/agents/planner.toml',
   '.codex/agents/reviewer.toml',
   '.codex/agents/worker.toml',
+  '.codex/agents/worker-terra.toml',
   '.github/CODEOWNERS',
   '.github/PULL_REQUEST_TEMPLATE.md',
   '.github/workflows/ci.yml',
@@ -136,6 +137,7 @@ const requiredCodexRoles = {
   docs_researcher: 'agents/docs-researcher.toml',
   planner: 'agents/planner.toml',
   worker: 'agents/worker.toml',
+  worker_terra: 'agents/worker-terra.toml',
   monitor: 'agents/monitor.toml',
   monitor_fallback: 'agents/monitor-fallback.toml',
 };

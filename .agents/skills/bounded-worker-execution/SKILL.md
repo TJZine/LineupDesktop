@@ -22,6 +22,11 @@ Delegate only after the plan names:
 - required verification and expected outcome
 - stop/replan conditions
 
+Use `worker` (`gpt-5.6-sol medium`) by default. Use `worker_terra`
+(`gpt-5.6-terra medium`) only when the approved plan or handoff explicitly
+selects it for an exact, bounded, cheap-to-verify unit with direct verification
+and stop/escalation rules.
+
 Worker slices must have disjoint write scopes. Keep architecture decisions,
 integration, final verification, and commit judgment in the controller session.
 Do not delegate work that needs the worker to choose the seam, broaden scope, or
