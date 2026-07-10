@@ -343,7 +343,7 @@ throughput. Do not replace the default workflow with always-on delegation.
 - Use `planner` for durable planning artifacts and execution-ready handoffs.
 - Use `worker` (`gpt-5.6-sol medium`) by default for approved, bounded
   implementation units with disjoint write scopes.
-- Use `worker_terra` (`gpt-5.6-terra medium`) only when an approved plan or
+- Use `worker_luna` (`gpt-5.6-luna xhigh`) only when an approved plan or
   handoff explicitly declares an exact, bounded, cheap-to-verify unit eligible
   and supplies direct verification plus stop/escalation rules.
 - Use `reviewer` for read-only adversarial review of plans, diffs, workflow
@@ -352,7 +352,7 @@ throughput. Do not replace the default workflow with always-on delegation.
 - Keep read-only roles read-only. Do not route edits through explorer,
   docs_researcher, reviewer, or monitor.
 - Do not let a worker invent architecture seams, broaden scope, or choose
-  verification depth. This applies equally to `worker` and `worker_terra`.
+  verification depth. This applies equally to `worker` and `worker_luna`.
 - Once a delegated planner is active, do not draft a competing local plan unless
   the planner blocks, fails, or is explicitly abandoned.
 - Treat a wait timeout from a planner, worker, reviewer, or monitor as

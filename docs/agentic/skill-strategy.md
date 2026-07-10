@@ -29,12 +29,12 @@ improving fresh-chat reliability.
 Use the smallest role set that keeps work reliable:
 
 - `explorer`: `gpt-5.3-codex-spark xhigh` for read-only evidence and impact
-  discovery; `explorer_fallback` uses `gpt-5.6-terra high`
-- `docs_researcher`: `gpt-5.6-terra medium` for read-only official
+  discovery; `explorer_fallback` uses `gpt-5.6-luna xhigh`
+- `docs_researcher`: `gpt-5.6-luna high` for read-only official
   documentation checks
 - `planner`: `gpt-5.6-sol high` for durable plans and handoff artifacts
 - `worker`: `gpt-5.6-sol medium` for normal bounded implementation units
-- `worker_terra`: `gpt-5.6-terra medium` for explicitly eligible, exact,
+- `worker_luna`: `gpt-5.6-luna xhigh` for explicitly eligible, exact,
   bounded, cheap-to-verify implementation units
 - `reviewer`: `gpt-5.6-sol high` for read-only adversarial review
 - `monitor`: `gpt-5.3-codex-spark low` for waits, polling, and status checks;

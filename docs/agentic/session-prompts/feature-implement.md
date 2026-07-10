@@ -1,7 +1,7 @@
 # Feature Implement Launcher
 
 Use this launcher to implement an approved Lineup Desktop feature/design plan.
-Tier 2 uses the tracked `worker` role by default. `worker_terra` is allowed only
+Tier 2 uses the tracked `worker` role by default. `worker_luna` is allowed only
 when the approved plan or handoff explicitly declares the unit eligible as
 exact, bounded, and cheap to verify with stop/escalation rules. Tier 3 uses the
 same eligible implementer inside the feature-quality loop with the active run
@@ -24,7 +24,7 @@ bundle as task context.
 - Keep implementation inside the approved files, owner, and seam.
 - Execute one bounded unit at a time unless the plan explicitly authorizes
   parallel work.
-- If a `worker_terra` unit reveals ambiguity, plan contradiction, required
+- If a `worker_luna` unit reveals ambiguity, plan contradiction, required
   scope expansion, unexpected cross-boundary coupling, or verification failure
   needing diagnosis, stop and escalate instead of improvising.
 - Stop and replan if Electron IPC/security, native playback, storage/secrets,

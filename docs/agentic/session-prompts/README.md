@@ -58,7 +58,7 @@ Recommended project skill entrypoints:
 Each skill should load `AGENTS.md`, `docs/AGENTIC_DEV_WORKFLOW.md`, and the
 matching launcher in this directory, then follow the tracked launcher exactly.
 
-Run feature implementation through `worker` by default. Use `worker_terra` only
+Run feature implementation through `worker` by default. Use `worker_luna` only
 when the approved plan or handoff explicitly marks an exact, bounded,
 cheap-to-verify unit eligible and includes direct verification plus
 stop/escalation rules.

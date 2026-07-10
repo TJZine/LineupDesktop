@@ -22,8 +22,8 @@ Delegate only after the plan names:
 - required verification and expected outcome
 - stop/replan conditions
 
-Use `worker` (`gpt-5.6-sol medium`) by default. Use `worker_terra`
-(`gpt-5.6-terra medium`) only when the approved plan or handoff explicitly
+Use `worker` (`gpt-5.6-sol medium`) by default. Use `worker_luna`
+(`gpt-5.6-luna xhigh`) only when the approved plan or handoff explicitly
 selects it for an exact, bounded, cheap-to-verify unit with direct verification
 and stop/escalation rules.
 
