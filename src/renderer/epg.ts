@@ -70,6 +70,7 @@ export interface EpgChannelRowViewModel {
 
 export interface EpgGuideViewModel {
   presentationState: EpgPresentationState;
+  nowMs: number;
   windowStartMs: number;
   windowEndMs: number;
   slots: readonly EpgTimeSlotViewModel[];
@@ -93,9 +94,11 @@ export type EpgPresentationState = 'ready' | 'loading' | 'empty' | 'error';
 export interface EpgPresentationSource {
   channels: readonly EpgChannelViewModel[];
   nowWatching: EpgCurrentProgramViewModel | null;
+  nowMs?: number;
 }
 
-export interface EpgPresentationSourceWithNowWatching extends EpgPresentationSource {
+export interface EpgPresentationSourceWithNowWatching extends Omit<EpgPresentationSource, 'nowMs' | 'nowWatching'> {
+  readonly nowMs: number;
   readonly nowWatching: EpgCurrentProgramViewModel;
 }
 
@@ -186,19 +189,25 @@ export const DEFAULT_EPG_PRESENTATION_SOURCE = {
     startsAtMs: EPG_DEMO_BASE_TIME_MS + EPG_SLOT_DURATION_MS,
     endsAtMs: EPG_DEMO_BASE_TIME_MS + EPG_SLOT_DURATION_MS * 3,
   },
+  nowMs: EPG_DEMO_BASE_TIME_MS + EPG_SLOT_DURATION_MS * 2,
 } as const satisfies EpgPresentationSource;
 
 export function ensureRendererReadyGuidePresentation(
   presentation: EpgPresentationSource,
   fallbackWindowStartMs = EPG_DEMO_BASE_TIME_MS,
 ): EpgPresentationSourceWithNowWatching {
+  const presentationNowMs = presentation.nowMs;
+  const nowMs = typeof presentationNowMs === 'number' && Number.isFinite(presentationNowMs) && presentationNowMs >= 0
+    ? presentationNowMs
+    : Date.now();
   if (presentation.nowWatching !== null) {
-    return { ...presentation, nowWatching: presentation.nowWatching };
+    return { ...presentation, nowMs, nowWatching: presentation.nowWatching };
   }
   const fallbackChannel = presentation.channels[0];
   const fallbackProgram = fallbackChannel?.programs[0];
   return {
     ...presentation,
+    nowMs,
     nowWatching: fallbackProgram === undefined
       ? {
         title: '',
@@ -264,10 +273,7 @@ export function applyEpgAction(
   }
 }
 
-export function setEpgPresentationState(
-  state: EpgState,
-  presentationState: EpgPresentationState,
-): EpgState {
+export function setEpgPresentationState(state: EpgState, presentationState: EpgPresentationState): EpgState {
   return { ...state, presentationState };
 }
 
@@ -294,18 +300,14 @@ export function createEpgGuideView(
     name: channel.name,
     isSelected: channel.id === normalizedState.selectedChannelId,
     programs: channel.programs
-      .filter((program) =>
-        isProgramVisible(program, normalizedState.windowStartMs, windowEndMs),
-      )
-      .map((program) =>
-          createProgramCell(
-            program,
-            channel.id,
-            normalizedState,
-            windowEndMs,
-            presentationForRender.nowWatching.startsAtMs,
-          ),
-      ),
+      .filter((program) => isProgramVisible(program, normalizedState.windowStartMs, windowEndMs))
+      .map((program) => createProgramCell(
+        program,
+        channel.id,
+        normalizedState,
+        windowEndMs,
+        presentationForRender.nowMs,
+      )),
   })) : [];
 
   const selectedProgram = rows
@@ -318,6 +320,7 @@ export function createEpgGuideView(
 
   return {
     presentationState: normalizedState.presentationState,
+    nowMs: presentationForRender.nowMs,
     windowStartMs: normalizedState.windowStartMs,
     windowEndMs,
     slots,
@@ -413,11 +416,10 @@ function getProgramTemporalState(
   program: EpgProgramViewModel,
   referenceNowMs: number,
 ): EpgProgramTemporalState {
-  const nowMs = referenceNowMs;
-  if (program.endsAtMs <= nowMs) {
+  if (program.endsAtMs <= referenceNowMs) {
     return 'past';
   }
-  if (program.startsAtMs <= nowMs && program.endsAtMs > nowMs) {
+  if (program.startsAtMs <= referenceNowMs && program.endsAtMs > referenceNowMs) {
     return 'current';
   }
   return 'upcoming';
@@ -430,9 +432,8 @@ function getProgramProgressPercent(
   if (getProgramTemporalState(program, referenceNowMs) !== 'current') {
     return 0;
   }
-  const nowMs = referenceNowMs;
   const durationMs = Math.max(1, program.endsAtMs - program.startsAtMs);
-  return Math.round(((nowMs - program.startsAtMs) / durationMs) * 100);
+  return Math.round(((referenceNowMs - program.startsAtMs) / durationMs) * 100);
 }
 
 function getProgramWidthTier(columnSpan: number): EpgProgramWidthTier {
@@ -441,7 +442,6 @@ function getProgramWidthTier(columnSpan: number): EpgProgramWidthTier {
   }
   return columnSpan === 2 ? 'medium' : 'narrow';
 }
-
 
 function normalizeEpgSelection(state: EpgState, presentation: EpgPresentationSource): EpgState {
   const windowStartMs = clampWindowStartMs(state.windowStartMs, presentation);

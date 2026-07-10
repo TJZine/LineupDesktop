@@ -6,7 +6,27 @@ export function renderChannelSetupDom(
   view: RouteWorkflowViewModel,
   dom: RendererDomBindings,
   liveSelection: ChannelSetupLiveSelectionViewModel | null,
+  activeSetupStage: string,
 ): void {
+  // Update stage category rail active states and visibility of setup sections
+  if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
+    const stageButtons = document.querySelectorAll<HTMLButtonElement>('[data-setup-stage]');
+    for (const button of Array.from(stageButtons)) {
+      const isActive = button.dataset.setupStage === activeSetupStage;
+      button.classList.toggle('is-active', isActive);
+    }
+
+    const setupSections = document.querySelectorAll<HTMLElement>('[data-setup-section]');
+    for (const section of Array.from(setupSections)) {
+      const isActive = section.dataset.setupSection === activeSetupStage;
+      if (isActive) {
+        section.removeAttribute('hidden');
+      } else {
+        section.setAttribute('hidden', '');
+      }
+    }
+  }
+
   if (dom.channelSetupStatusElement) {
     dom.channelSetupStatusElement.textContent = view.channelSetupFlow.stageLabel;
   }

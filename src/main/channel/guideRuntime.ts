@@ -50,7 +50,8 @@ export class GuideRuntime {
     durationMs: number,
   ): Promise<EpgPresentationSource> {
     const loaded = await this.repository.loadNormalized();
-    if (!loaded || loaded.data.channels.length === 0) {
+    const visibleChannels = loaded?.data.channels.filter(isVisibleChannel) ?? [];
+    if (!loaded || visibleChannels.length === 0) {
       return {
         channels: [],
         nowWatching: null,
@@ -58,7 +59,7 @@ export class GuideRuntime {
     }
 
     const epgChannels: EpgChannelViewModel[] = await Promise.all(
-      loaded.data.channels.map(async (channel) => {
+      visibleChannels.map(async (channel) => {
         let channelItems: ChannelContentItem[] = [];
         try {
           channelItems = await this.contentResolver.resolveSource(channel.contentSource);
@@ -91,7 +92,7 @@ export class GuideRuntime {
     );
 
     let nowWatching: EpgCurrentProgramViewModel | null = null;
-    const currentChannel = loaded.data.channels.find(
+    const currentChannel = visibleChannels.find(
       (c) => c.id === loaded.data.currentChannelId,
     );
 
@@ -134,7 +135,7 @@ export class GuideRuntime {
     if (!loaded) {
       throw new Error('No channels configured');
     }
-    const channel = loaded.data.channels.find((c) => c.id === channelId);
+    const channel = loaded.data.channels.find((c) => c.id === channelId && isVisibleChannel(c));
     if (!channel) {
       throw new Error(`Channel not found: ${channelId}`);
     }
@@ -164,10 +165,13 @@ export class GuideRuntime {
 
   async initializeActiveChannel(): Promise<void> {
     const loaded = await this.repository.loadNormalized();
-    if (!loaded || loaded.data.channels.length === 0) {
+    const visibleChannels = loaded?.data.channels.filter(isVisibleChannel) ?? [];
+    if (!loaded || visibleChannels.length === 0) {
       return;
     }
-    const currentChannelId = loaded.data.currentChannelId || loaded.data.channels[0]?.id;
+    const currentChannelId = visibleChannels.some((channel) => channel.id === loaded.data.currentChannelId)
+      ? loaded.data.currentChannelId
+      : visibleChannels[0]?.id;
     if (currentChannelId) {
       try {
         await this.tuneChannel(currentChannelId);
@@ -178,6 +182,27 @@ export class GuideRuntime {
         });
       }
     }
+  }
+
+  async refreshActiveChannelSelection(): Promise<void> {
+    const loaded = await this.repository.loadNormalized();
+    if (!loaded || loaded.data.channels.length === 0) {
+      this.activeChannelScheduler.unloadChannel();
+      return;
+    }
+    const currentChannel = loaded.data.channels.find((channel) =>
+      channel.id === loaded.data.currentChannelId && channel.hidden !== true
+    );
+    if (!currentChannel) {
+      const fallbackChannel = loaded.data.channels.find((channel) => channel.hidden !== true);
+      if (fallbackChannel) {
+        await this.tuneChannel(fallbackChannel.id);
+        return;
+      }
+      this.activeChannelScheduler.unloadChannel();
+      return;
+    }
+    await this.tuneChannel(currentChannel.id);
   }
 
   private logContentResolutionFailure(operation: string, channel: ChannelConfig, error: unknown): void {
@@ -202,6 +227,10 @@ export class GuideRuntime {
       });
     }
   }
+}
+
+function isVisibleChannel(channel: ChannelConfig): boolean {
+  return channel.hidden !== true;
 }
 
 function createSchedulerForChannel(

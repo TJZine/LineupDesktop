@@ -252,6 +252,35 @@ test('channel persistence repository repairs persisted runtime limits without dr
   assert.equal(loaded.data.channels[3]?.maxEpisodeRunTimeMs, 60_000);
 });
 
+test('channel persistence repository preserves hidden channel visibility and repairs malformed values', async () => {
+  const storage = new MemoryChannelStorage();
+  const repository = new ChannelRepository({
+    store: new ChannelPersistenceStore(storage),
+    clock: new FakeClock(9_000),
+  });
+  storage.storedChannelData = JSON.stringify({
+    channels: [
+      { ...channel('hidden', 1), hidden: true },
+      { ...channel('visible', 2), hidden: false },
+      { ...channel('legacy', 3) },
+      { ...channel('repair-hidden', 4), hidden: 'yes' },
+    ],
+    channelOrder: ['hidden', 'visible', 'legacy', 'repair-hidden'],
+    currentChannelId: 'hidden',
+    savedAt: 8_000,
+  });
+
+  const loaded = await repository.loadNormalized();
+
+  assert.ok(loaded);
+  assert.equal(loaded.didMutate, true);
+  assert.equal(loaded.data.channels[0]?.hidden, true);
+  assert.equal(loaded.data.channels[1]?.hidden, false);
+  assert.equal(loaded.data.channels[2]?.hidden, false);
+  assert.equal(loaded.data.channels[3]?.hidden, false);
+  assert.deepEqual(auditChannelDomainValueForForbiddenFields(loaded.data), []);
+});
+
 test('channel persistence coordinator repairs invalid separate current-channel pointers', async () => {
   const storage = new MemoryChannelStorage();
   const clock = new FakeClock(9_500);

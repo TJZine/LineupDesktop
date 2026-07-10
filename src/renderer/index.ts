@@ -4,13 +4,16 @@ import { clickFocusedRendererElement, focusRendererTarget, moveRendererFocus, re
 import { createDesktopKeyboardInputListener, startDesktopGamepadRuntime } from './desktopInput.js';
 import { createDesktopCursorRuntime } from './desktopCursor.js';
 import { FocusRegistry, type AppRouteId, type DesktopInputButton, type FocusState } from './navigation.js';
-import { applyPlayerOverlayAction, createPlayerOverlayView, createPlayerOverlayState, resolvePlayerOverlayFocusId, type PlayerOverlayActionId } from './overlays.js';
+import { createPlayerOverlayState, type PlayerOverlayActionId } from './overlays.js';
 import { renderRouteDom, renderWorkflowDom } from './routeDom.js';
 import { mountStaticRendererDom } from './staticDom.js';
 import { applySupportBundleExportResult } from './supportBundleExport.js';
 import { createPlexRuntimeController } from './plexRuntimeActions.js';
 import { resolveChannelSetupLiveSelection } from './channelSetup/liveSelection.js';
 import { createChannelRuntimeController } from './channelRuntimeActions.js';
+import { createCustomChannelController, type CustomChannelActionId } from './customChannels/controller.js';
+import { dispatchCustomChannelAction } from './customChannels/actionDispatch.js';
+import { renderCustomChannelWorkspace } from './customChannels/dom.js';
 import { renderPlexRuntimeDom } from './plexRuntimeDom.js';
 import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowChannelSetupAction, applyWorkflowEpgAction, applyWorkflowSettingsAction, createWorkflowState, type ChannelSetupActionId, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
 import { createRendererPresentationFixtures } from './presentationFixtures.js';
@@ -24,6 +27,14 @@ import { subscribePlayerBridge } from './playerBridgeSubscription.js';
 import { createGuidePresentationPolling } from './guidePresentationPolling.js';
 import { dispatchPlexRuntimeAction } from './plexRuntimeActionDispatch.js';
 import { initializeProfilePinModal, openProfilePinModal, isProfilePinModalActive, closeProfilePinModal } from './profilePinModal.js';
+import type { SettingsSectionId } from './settingsSetup.js';
+import {
+  applyOverlayAction as dispatchOverlayAction,
+  selectAudioTrack as dispatchSelectAudioTrack,
+  selectSubtitleTrack as dispatchSelectSubtitleTrack,
+  toggleFullscreen as dispatchToggleFullscreen,
+  type PlayerOverlayActionContext,
+} from './playerOverlayActions.js';
 
 mountStaticRendererDom();
 
@@ -34,8 +45,23 @@ const presentationFixtures = createRendererPresentationFixtures();
 let workflowState = createWorkflowState('player', presentationFixtures.guide);
 let overlayState = createPlayerOverlayState(presentationFixtures.overlays);
 let playerSnapshot = presentationFixtures.playerSnapshot;
+let activeSettingsCategory: SettingsSectionId = 'playback';
+let activeSetupStage = 'account';
 const focusRegistry = new FocusRegistry();
 let focusState: FocusState;
+const overlayActionContext: PlayerOverlayActionContext = {
+  getOverlayState: () => overlayState,
+  setOverlayState: (state) => { overlayState = state; },
+  getPlayerSnapshot: () => playerSnapshot,
+  getFocusState: () => focusState,
+  setFocusState: (state) => { focusState = state; },
+  getFocusRegistry: () => focusRegistry,
+  getDom: () => dom,
+  getPresentationFixtures: () => presentationFixtures,
+  getFullscreenEnabled: () => fullscreenEnabled,
+  setFullscreenEnabled: (val) => { fullscreenEnabled = val; },
+  renderApp,
+};
 const plexController = createPlexRuntimeController({
   bridge: window.lineupDesktop.plex,
   onStateChanged: () => renderApp(),
@@ -43,6 +69,10 @@ const plexController = createPlexRuntimeController({
 });
 const channelController = createChannelRuntimeController({
   bridge: window.lineupDesktop.channelSetup,
+  onStateChanged: () => renderApp(),
+});
+const customChannelController = createCustomChannelController({
+  bridge: window.lineupDesktop.customChannels,
   onStateChanged: () => renderApp(),
 });
 
@@ -122,13 +152,25 @@ registerRendererActions(dom, document, {
   activateRoute,
   applyRouteAction: (action) => { void applyRouteAction(action); },
   applySettingsAction,
+  applySettingsCategory: (category) => {
+    activeSettingsCategory = category as SettingsSectionId;
+    renderApp();
+  },
+  applySetupStage: (stage) => {
+    activeSetupStage = stage;
+    renderApp();
+  },
   applyChannelSetupAction,
   applyChannelCommitAction: (action) => { void applyChannelCommitAction(action); },
   applyEpgAction,
   applyOverlayAction,
   applyPlexRuntimeAction: (action) => { void applyPlexRuntimeAction(action); },
+  applyCustomChannelAction: (action, detail) => { void applyCustomChannelAction(action, detail); },
   setPlexHomeUserPin: (value) => plexController.setHomeUserPin(value),
   setPlexSearchQuery: (value) => plexController.setSearchQuery(value),
+  setCustomChannelName: (value) => customChannelController.setDraftName(value),
+  setCustomChannelNumber: (value) => customChannelController.setDraftNumber(value),
+  setCustomChannelSearchQuery: (value) => customChannelController.setSearchQuery(value),
   selectPlexHomeUser: (homeUserId) => {
     clearChannelSetupActionStateForSourceChange();
     const state = plexController.getState();
@@ -156,6 +198,9 @@ registerRendererActions(dom, document, {
 });
 
 const capabilities = await window.lineupDesktop.shell.getCapabilities();
+if (capabilities.ok) {
+  document.documentElement.dataset.shellMode = capabilities.value.shellMode;
+}
 if (dom.capabilitiesElement) {
   dom.capabilitiesElement.textContent = capabilities.ok
     ? `${capabilities.value.appName} ${capabilities.value.appVersion} ${capabilities.value.shellMode}`
@@ -166,6 +211,7 @@ document.documentElement.dataset.shellBoot = 'ready';
 document.documentElement.dataset.activeRoute = workflowState.routeState.activeRoute;
 void plexController.loadSnapshot();
 void channelController.loadStatus();
+void customChannelController.loadSnapshot();
 if (workflowState.routeState.activeRoute === 'guide') {
   guidePresentationPolling.start();
 }
@@ -183,16 +229,26 @@ async function handleDesktopInput(input: DesktopInputButton): Promise<void> {
     case 'up':
     case 'down':
     case 'left':
-    case 'right':
+    case 'right': {
+      const prevActiveId = focusState.activeId;
       focusState = moveRendererFocus(focusRegistry, focusState, input, dom);
+      if (focusState.activeId !== prevActiveId) {
+        updateActiveFromFocus(focusState.activeId);
+      }
       scrollFocusedSetupControlIntoView();
       return;
+    }
     case 'ok':
       clickFocusedRendererElement(focusState, dom);
       return;
     case 'back':
       if (isProfilePinModalActive()) {
         closeProfilePinModal();
+        return;
+      }
+      if (workflowState.routeState.activeRoute === 'channelSetup' && customChannelController.handleBack()) {
+        renderApp();
+        scrollFocusedSetupControlIntoView();
         return;
       }
       if (workflowState.routeState.activeRoute === 'channelSetup' && await handlePlexBack()) {
@@ -282,123 +338,19 @@ function applyEpgAction(action: EpgActionId): void {
 }
 
 async function selectAudioTrack(trackId: string): Promise<void> {
-  const requestId = `select-audio-${Date.now()}`;
-  const snapshotRequestId = playerSnapshot.requestId;
-  if (snapshotRequestId === null) {
-    recordPlayerDispatchFailure('player.selectAudio', requestId, new Error('Player snapshot request id is unavailable.'));
-    return;
-  }
-  try {
-    await window.lineupDesktop.player.dispatch({
-      intent: 'player.selectAudio',
-      requestId,
-      payload: { trackId, snapshotRequestId },
-    });
-  } catch (error: unknown) {
-    recordPlayerDispatchFailure('player.selectAudio', requestId, error);
-  }
+  await dispatchSelectAudioTrack(trackId, overlayActionContext);
 }
 
 async function selectSubtitleTrack(trackId: string | null): Promise<void> {
-  const requestId = `select-subtitle-${Date.now()}`;
-  const snapshotRequestId = playerSnapshot.requestId;
-  if (snapshotRequestId === null) {
-    recordPlayerDispatchFailure('player.selectSubtitle', requestId, new Error('Player snapshot request id is unavailable.'));
-    return;
-  }
-  try {
-    await window.lineupDesktop.player.dispatch({
-      intent: 'player.selectSubtitle',
-      requestId,
-      payload: { trackId, snapshotRequestId },
-    });
-  } catch (error: unknown) {
-    recordPlayerDispatchFailure('player.selectSubtitle', requestId, error);
-  }
+  await dispatchSelectSubtitleTrack(trackId, overlayActionContext);
 }
-
-function recordPlayerDispatchFailure(operation: string, requestId: string, error: unknown): void {
-  recordRendererBridgeFailure(
-    window.lineupDesktop.diagnostics.recordRendererEvent,
-    'player.dispatch',
-    summarizeRendererBridgeError(error),
-    { operation, requestId },
-  );
-}
-
-let channelCommitTimeoutId: number | null = null;
 
 function applyOverlayAction(action: PlayerOverlayActionId): void {
-  if (action.startsWith('channelDigit')) {
-    if (channelCommitTimeoutId !== null) {
-      window.clearTimeout(channelCommitTimeoutId);
-    }
-    channelCommitTimeoutId = window.setTimeout(() => {
-      channelCommitTimeoutId = null;
-      applyOverlayAction('commitChannelNumber');
-    }, 2500);
-  } else if (
-    action === 'commitChannelNumber' ||
-    action === 'clearChannelNumber' ||
-    action === 'closeTopOverlay'
-  ) {
-    if (channelCommitTimeoutId !== null) {
-      window.clearTimeout(channelCommitTimeoutId);
-      channelCommitTimeoutId = null;
-    }
-  }
-
-  if (action === 'volumeUp' || action === 'volumeDown') {
-    const currentVolume = playerSnapshot.volume;
-    const nextVolume = action === 'volumeUp'
-      ? Math.min(1, Math.round((currentVolume + 0.1) * 10) / 10)
-      : Math.max(0, Math.round((currentVolume - 0.1) * 10) / 10);
-    const requestId = `volume-change-${Date.now()}`;
-    void window.lineupDesktop.player.dispatch({
-      intent: 'player.setVolume',
-      requestId,
-      payload: { volume: nextVolume },
-    }).catch((error: unknown) => recordPlayerDispatchFailure('player.setVolume', requestId, error));
-  } else if (action === 'toggleMute') {
-    const requestId = `mute-change-${Date.now()}`;
-    void window.lineupDesktop.player.dispatch({
-      intent: 'player.setMute',
-      requestId,
-      payload: { muted: !playerSnapshot.muted },
-    }).catch((error: unknown) => recordPlayerDispatchFailure('player.setMute', requestId, error));
-  } else if (action === 'cycleAudioTrack') {
-    const audioTracks = playerSnapshot.tracks.filter((t) => t.kind === 'audio' && t.available);
-    if (audioTracks.length > 0) {
-      const selectedAudioIndex = audioTracks.findIndex((t) => t.selected);
-      const nextAudioTrack = audioTracks[(selectedAudioIndex + 1) % audioTracks.length];
-      if (nextAudioTrack) {
-        void selectAudioTrack(nextAudioTrack.id);
-      }
-    }
-  } else if (action === 'cycleSubtitleTrack') {
-    const subtitleTracks = playerSnapshot.tracks.filter((t) => t.kind === 'subtitle' && t.available);
-    const subtitleOptions: (string | null)[] = [null, ...subtitleTracks.map((t) => t.id)];
-    const currentSub = playerSnapshot.selectedSubtitleTrackId;
-    const currentIndex = subtitleOptions.indexOf(currentSub);
-    const nextSub = subtitleOptions[(currentIndex + 1) % subtitleOptions.length];
-    void selectSubtitleTrack(nextSub);
-  }
-
-  overlayState = applyPlayerOverlayAction(overlayState, action, Date.now(), presentationFixtures.overlays);
-  const view = createPlayerOverlayView(overlayState, {
-    ...presentationFixtures.overlays,
-    playerSnapshot,
-  });
-  focusState = focusRegistry.focusTarget(focusState, resolvePlayerOverlayFocusId(view)).state;
-  renderApp();
+  dispatchOverlayAction(action, overlayActionContext);
 }
 
 async function toggleFullscreen(): Promise<void> {
-  const result = await window.lineupDesktop.window.setFullscreen(!fullscreenEnabled);
-  if (result.ok) {
-    fullscreenEnabled = result.value.enabled;
-    dom.fullscreenButton?.setAttribute('aria-pressed', String(fullscreenEnabled));
-  }
+  await dispatchToggleFullscreen(overlayActionContext);
 }
 
 async function exportSupportBundle(): Promise<void> {
@@ -426,6 +378,21 @@ async function applyPlexRuntimeAction(action: PlexRuntimeActionId): Promise<void
   await dispatchPlexRuntimeAction(action, {
     controller: plexController,
     clearSourceActionState: clearChannelSetupActionStateForSourceChange,
+  });
+}
+
+async function applyCustomChannelAction(
+  action: CustomChannelActionId,
+  detail: string | undefined,
+): Promise<void> {
+  await dispatchCustomChannelAction({
+    action,
+    detail,
+    selectedSourceId: resolveLiveSelectedPlexSectionId(plexController.getState()),
+    controller: customChannelController,
+    refreshChannels: () => { void channelController.loadStatus(); },
+    refreshGuide: () => { void guidePresentationPolling.refresh('custom-channel-change', { showLoading: false }); },
+    render: renderApp,
   });
 }
 
@@ -496,9 +463,9 @@ async function handlePlexBack(): Promise<boolean> {
   }
   return handled;
 }
-
 function clearChannelSetupActionStateForSourceChange(): void {
   channelController.clearActionState();
+  customChannelController.clearMediaForSourceChange();
 }
 
 function readLiveSetupSourceSignature(): string {
@@ -548,8 +515,11 @@ function renderApp(): void {
     channelController.getState(),
     liveSelection,
     presentationFixtures.overlays,
+    activeSettingsCategory,
+    activeSetupStage,
   );
   renderPlexRuntimeDom(plexState, dom);
+  renderCustomChannelWorkspace(customChannelController.getState(), dom);
   syncRendererFocusTargets(focusRegistry, dom);
   if (focusState.activeId !== null) {
     focusState = focusRegistry.focusTarget(focusState, focusState.activeId).state;
@@ -562,7 +532,55 @@ function focusRendererElement(element: HTMLElement): void {
   const focusId = element.dataset.focusId;
   if (focusId !== undefined) {
     focusState = focusRendererTarget(focusRegistry, focusState, focusId, dom);
+    updateActiveFromFocus(focusId);
     scrollFocusedSetupControlIntoView();
+  }
+}
+
+function updateActiveFromFocus(focusId: string | null): void {
+  if (focusId === 'settings-cat-playback' && activeSettingsCategory !== 'playback') {
+    activeSettingsCategory = 'playback';
+    renderApp();
+    return;
+  }
+  if (focusId === 'settings-cat-guide' && activeSettingsCategory !== 'guide') {
+    activeSettingsCategory = 'guide';
+    renderApp();
+    return;
+  }
+  if (focusId === 'settings-cat-setup' && activeSettingsCategory !== 'setup') {
+    activeSettingsCategory = 'setup';
+    renderApp();
+    return;
+  }
+  if (focusId === 'setup-stage-account' && activeSetupStage !== 'account') {
+    activeSetupStage = 'account';
+    renderApp();
+    return;
+  }
+  if (focusId === 'setup-stage-server' && activeSetupStage !== 'server') {
+    activeSetupStage = 'server';
+    renderApp();
+    return;
+  }
+  if (focusId === 'setup-stage-library' && activeSetupStage !== 'library') {
+    activeSetupStage = 'library';
+    renderApp();
+    return;
+  }
+  if (focusId === 'setup-stage-preview' && activeSetupStage !== 'preview') {
+    activeSetupStage = 'preview';
+    renderApp();
+    return;
+  }
+  if (focusId === 'setup-stage-build' && activeSetupStage !== 'build') {
+    activeSetupStage = 'build';
+    renderApp();
+    return;
+  }
+  if (focusId === 'setup-stage-custom' && activeSetupStage !== 'custom') {
+    activeSetupStage = 'custom';
+    renderApp();
   }
 }
 

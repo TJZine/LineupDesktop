@@ -1,6 +1,7 @@
 import {
   readChannelCommitActionId,
   readChannelSetupActionId,
+  readCustomChannelActionId,
   readEpgActionId,
   readOverlayActionId,
   readPlexRuntimeActionId,
@@ -25,8 +26,12 @@ export interface RendererActionHandlers {
   applyEpgAction(action: NonNullable<ReturnType<typeof readEpgActionId>>): void;
   applyOverlayAction(action: NonNullable<ReturnType<typeof readOverlayActionId>>): void;
   applyPlexRuntimeAction(action: NonNullable<ReturnType<typeof readPlexRuntimeActionId>>): void;
+  applyCustomChannelAction?(action: NonNullable<ReturnType<typeof readCustomChannelActionId>>, detail?: string): void;
   setPlexHomeUserPin(value: string): void;
   setPlexSearchQuery(value: string): void;
+  setCustomChannelName?(value: string): void;
+  setCustomChannelNumber?(value: string): void;
+  setCustomChannelSearchQuery?(value: string): void;
   selectPlexHomeUser(homeUserId: string): void;
   selectPlexServer(serverId: string): void;
   selectPlexSection(sectionId: string): void;
@@ -35,6 +40,8 @@ export interface RendererActionHandlers {
   toggleFullscreen(): void;
   selectAudioTrack(trackId: string): void;
   selectSubtitleTrack(trackId: string | null): void;
+  applySettingsCategory?(category: string): void;
+  applySetupStage?(stage: string): void;
 }
 
 export function registerRendererActions(
@@ -59,7 +66,24 @@ export function registerRendererActions(
     if (!(event.target instanceof HTMLElement)) return;
     const button = event.target.closest<HTMLButtonElement>('[data-settings-action]');
     const action = readSettingsActionId(button?.dataset.settingsAction);
-    if (action !== null) handlers.applySettingsAction(action);
+    if (action !== null) {
+      handlers.applySettingsAction(action);
+      return;
+    }
+    const catButton = event.target.closest<HTMLButtonElement>('[data-settings-category]');
+    const category = catButton?.dataset.settingsCategory;
+    if (category) {
+      handlers.applySettingsCategory?.(category);
+    }
+  });
+  const setupScreen = documentRef.getElementById('screen-channel-setup');
+  setupScreen?.addEventListener('click', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    const catButton = event.target.closest<HTMLButtonElement>('[data-setup-stage]');
+    const stage = catButton?.dataset.setupStage;
+    if (stage) {
+      handlers.applySetupStage?.(stage);
+    }
   });
   for (const button of dom.setupActionButtons) {
     button.addEventListener('click', () => {
@@ -79,6 +103,12 @@ export function registerRendererActions(
       if (action !== null) handlers.applyChannelCommitAction(action);
     });
   }
+  dom.customChannelPanelElement?.addEventListener('click', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    const button = event.target.closest<HTMLButtonElement>('[data-custom-channel-action]');
+    const action = readCustomChannelActionId(button?.dataset.customChannelAction);
+    if (action !== null) handlers.applyCustomChannelAction?.(action, button?.dataset.customChannelDetail);
+  });
   for (const button of dom.epgActionButtons) {
     button.addEventListener('click', () => {
       const action = readEpgActionId(button.dataset.epgAction);
@@ -102,6 +132,15 @@ export function registerRendererActions(
   });
   dom.plexSearchQueryInput?.addEventListener('input', () => {
     handlers.setPlexSearchQuery(dom.plexSearchQueryInput?.value ?? '');
+  });
+  dom.customChannelNameInput?.addEventListener('input', () => {
+    handlers.setCustomChannelName?.(dom.customChannelNameInput?.value ?? '');
+  });
+  dom.customChannelNumberInput?.addEventListener('input', () => {
+    handlers.setCustomChannelNumber?.(dom.customChannelNumberInput?.value ?? '');
+  });
+  dom.customChannelSearchInput?.addEventListener('input', () => {
+    handlers.setCustomChannelSearchQuery?.(dom.customChannelSearchInput?.value ?? '');
   });
   dom.plexPanelElement?.addEventListener('click', (event) => {
     if (!(event.target instanceof HTMLElement)) return;

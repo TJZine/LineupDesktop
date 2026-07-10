@@ -282,6 +282,10 @@ export async function runSmokeAssertions(
       const currentSetupTargets = {
         hasPlexRuntimePanel: plexRuntimePanel instanceof HTMLElement,
         hasChannelSetupCommit: channelSetupCommit instanceof HTMLElement,
+        hasSetupRail: document.querySelector('.setup-rail') instanceof HTMLElement,
+        hasSetupDetailPane: document.querySelector('.setup-detail-pane') instanceof HTMLElement,
+        setupStageCount: document.querySelectorAll('[data-setup-stage]').length,
+        setupSectionCount: document.querySelectorAll('[data-setup-section]').length,
         plexActionCount: plexActionButtons.length,
         channelCommitActionCount: channelCommitButtons.length,
         hasChannelReviewSteps: document.querySelector('[data-channel-review-steps]') instanceof HTMLElement,
@@ -303,12 +307,16 @@ export async function runSmokeAssertions(
       if (
         !currentSetupTargets.hasPlexRuntimePanel ||
         !currentSetupTargets.hasChannelSetupCommit ||
+        !currentSetupTargets.hasSetupRail ||
+        !currentSetupTargets.hasSetupDetailPane ||
+        currentSetupTargets.setupStageCount < 5 ||
+        currentSetupTargets.setupSectionCount < 5 ||
         currentSetupTargets.plexActionCount < 8 ||
         currentSetupTargets.channelCommitActionCount !== 3 ||
         !currentSetupTargets.hasChannelReviewSteps ||
         !currentSetupTargets.hasChannelReviewList ||
         !currentSetupTargets.hasChannelReviewValidation ||
-        !setupText.includes('Plex onboarding') ||
+        !setupText.includes('Plex setup') ||
         !setupText.includes('Get link code') ||
         !setupText.includes('Open libraries') ||
         !setupText.includes('Build channels') ||
@@ -319,7 +327,7 @@ export async function runSmokeAssertions(
           'channel setup plex flow content ' +
             JSON.stringify({
               ...currentSetupTargets,
-              hasPlexOnboarding: setupText.includes('Plex onboarding'),
+              hasPlexSetup: setupText.includes('Plex setup'),
               hasLinkCode: setupText.includes('Get link code'),
               hasOpenLibraries: setupText.includes('Open libraries'),
               hasBuildChannels: setupText.includes('Build channels'),
@@ -347,6 +355,12 @@ export async function runSmokeAssertions(
       }
       const miniGuideOverlay = document.querySelector('[data-overlay="miniGuide"]');
       const miniGuideText = document.querySelector('[data-overlay-mini-guide]')?.textContent ?? '';
+      if (!(miniGuideOverlay instanceof HTMLElement) || miniGuideOverlay.hidden) failures.push('mini guide visible');
+      assertTopElementAtCenter(miniGuideOverlay, 'mini guide z-order');
+      if (miniGuideText.trim().length < 12 || /undefined|null|NaN/i.test(miniGuideText)) {
+        failures.push('mini guide data ' + miniGuideText);
+      }
+
       const channelNumberButton = document.querySelector('[data-overlay-action="channelDigit4"]');
       if (!(channelNumberButton instanceof HTMLButtonElement)) {
         failures.push('channel number action');
@@ -375,16 +389,11 @@ export async function runSmokeAssertions(
       if (nowPlayingTitle.trim().length === 0 || /undefined|null|NaN/i.test(nowPlayingTitle)) {
         failures.push('now playing title ' + nowPlayingTitle);
       }
-      if (!(miniGuideOverlay instanceof HTMLElement) || miniGuideOverlay.hidden) failures.push('mini guide visible');
-      assertTopElementAtCenter(miniGuideOverlay, 'mini guide z-order');
-      if (miniGuideText.trim().length < 12 || /undefined|null|NaN/i.test(miniGuideText)) {
-        failures.push('mini guide data ' + miniGuideText);
-      }
       if (!(channelNumberOverlay instanceof HTMLElement) || channelNumberOverlay.hidden) {
         failures.push('channel number visible');
       }
       assertTopElementAtCenter(channelNumberOverlay, 'channel number z-order');
-      if (channelNumberValue !== '4--') failures.push('channel number value ' + channelNumberValue);
+      if (channelNumberValue !== '4__') failures.push('channel number value ' + channelNumberValue);
 
       const closeOverlayButton = document.querySelector('[data-overlay-action="closeTopOverlay"]');
       const playerOsdButton = document.querySelector('[data-focus-id="player-osd"]');

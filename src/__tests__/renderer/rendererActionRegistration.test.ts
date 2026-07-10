@@ -18,6 +18,7 @@ class TestDomEvent {
 class TestElement {
   parentElement: TestElement | null = null;
   className = '';
+  id = '';
   readonly dataset: Record<string, string> = {};
   readonly children: TestElement[] = [];
   readonly listeners = new Map<string, TestEventListener[]>();
@@ -33,10 +34,16 @@ class TestElement {
     this.children.push(child);
   }
 
-  closest(_selector: string): TestElement | null {
+  closest(selector: string): TestElement | null {
     let current: TestElement | null = this;
     while (current !== null) {
-      if (current.className.split(' ').includes('playback-options__row')) {
+      if (selector.includes('playback-options__row') && current.className.split(' ').includes('playback-options__row')) {
+        return current;
+      }
+      if (selector.includes('data-settings-action') && current.dataset.settingsAction !== undefined) {
+        return current;
+      }
+      if (selector.includes('data-settings-category') && current.dataset.settingsCategory !== undefined) {
         return current;
       }
       current = current.parentElement;
@@ -57,8 +64,16 @@ class TestElement {
 }
 
 class TestDocument extends TestElement {
-  getElementById(): TestElement | null {
-    return null;
+  getElementById(id: string): TestElement | null {
+    const search = (el: TestElement): TestElement | null => {
+      if (el.id === id) return el;
+      for (const child of el.children) {
+        const found = search(child);
+        if (found) return found;
+      }
+      return null;
+    };
+    return search(this);
   }
 }
 
@@ -267,5 +282,55 @@ test('renderer action registration delegates media-option row selections', () =>
 
     assert.deepEqual(audioSelections, ['audio-ui-1']);
     assert.deepEqual(subtitleSelections, ['subtitle-ui-1', null]);
+  });
+});
+
+test('renderer action registration delegates settings category clicks', () => {
+  withTestHTMLElement(() => {
+    const documentRef = new TestDocument();
+    const settingsScreen = new TestElement();
+    settingsScreen.id = 'screen-settings';
+    documentRef.append(settingsScreen);
+
+    const playbackCatBtn = new TestElement();
+    playbackCatBtn.dataset.settingsCategory = 'playback';
+    const categoriesContainer = new TestElement();
+    categoriesContainer.append(playbackCatBtn);
+    settingsScreen.append(categoriesContainer);
+
+    let appliedCategory: string | null = null;
+
+    registerRendererActions(
+      emptyRendererDomBindings(),
+      documentRef as unknown as Document,
+      {
+        activateRoute: () => undefined,
+        applyRouteAction: () => undefined,
+        applySettingsAction: () => undefined,
+        applySettingsCategory: (cat) => {
+          appliedCategory = cat;
+        },
+        applyChannelSetupAction: () => undefined,
+        applyChannelCommitAction: () => undefined,
+        applyEpgAction: () => undefined,
+        applyOverlayAction: () => undefined,
+        applyPlexRuntimeAction: () => undefined,
+        setPlexHomeUserPin: () => undefined,
+        setPlexSearchQuery: () => undefined,
+        selectPlexHomeUser: () => undefined,
+        selectPlexServer: () => undefined,
+        selectPlexSection: () => undefined,
+        openPlexMetadata: () => undefined,
+        focusElement: () => undefined,
+        toggleFullscreen: () => undefined,
+        selectAudioTrack: () => undefined,
+        selectSubtitleTrack: () => undefined,
+      },
+    );
+
+    // Dispatch click on the category button
+    playbackCatBtn.dispatchEvent(new TestDomEvent('click', true));
+
+    assert.equal(appliedCategory, 'playback');
   });
 });

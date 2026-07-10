@@ -13,6 +13,7 @@ export * from './constants.js';
 export * from './contentItemMapper.js';
 export * from './contentResolver.js';
 export * from './contentSelectionPolicy.js';
+export * from './customChannelDraft.js';
 export * from './interfaces.js';
 export * from './sourceResolutionCache.js';
 export * from './types.js';

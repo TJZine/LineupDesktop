@@ -56,6 +56,7 @@ test('updateEpgState sets empty state when presentation contains no channels', (
   const emptyPresentation: EpgPresentationSource = {
     channels: [],
     nowWatching: null,
+    nowMs: DEFAULT_EPG_PRESENTATION_SOURCE.nowMs,
   };
 
   const updated = updateEpgState(initial, emptyPresentation);
@@ -77,6 +78,7 @@ test('updateEpgState sets empty state when channels contain no selectable progra
       },
     ],
     nowWatching: null,
+    nowMs: DEFAULT_EPG_PRESENTATION_SOURCE.nowMs,
   };
 
   const updated = updateEpgState(initial, emptyProgramPresentation);

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { IpcMainInvokeEvent } from 'electron';
 
+import { LINEUP_CUSTOM_CHANNEL_SAVE_DRAFT_CHANNEL } from '../../contracts/ipc.js';
 import {
   registerChannelComposition,
   sanitizeChannelDiagnosticDetail,
@@ -117,6 +118,68 @@ test('channel composition injects a clock into the active channel scheduler', as
     assert.equal(state.isActive, true);
     assert.equal(state.channelId, 'channel-1');
     assert.equal(typeof state.lastSyncTime, 'number');
+
+    await registration.teardown();
+  } finally {
+    restoreElectron();
+    await rm(userDataDirectory, { recursive: true, force: true });
+  }
+});
+
+test('channel composition refreshes active scheduler after custom channel save', async () => {
+  const fakeIpcMain = new FakeIpcMain();
+  const restoreElectron = replaceElectronIpcMain(fakeIpcMain);
+  const userDataDirectory = await mkdtemp(join(tmpdir(), 'lineup-custom-channel-composition-'));
+  try {
+    const registration = registerChannelComposition({
+      app: {
+        getPath: (name) => {
+          assert.equal(name, 'userData');
+          return userDataDirectory;
+        },
+      },
+      shellMode: 'smoke',
+      isAuthorizedEvent: () => true,
+      createRequestId: (prefix) => `${prefix}-test`,
+      plexRuntime: {
+        getSnapshot: (requestId: string) => ({
+          ok: true,
+          requestId,
+          value: { updatedAtMs: 1 },
+        }),
+        listLibraryItems: () => ({
+          ok: true,
+          requestId: 'channel-composition-test',
+          value: { sectionId: '1', offset: 0, limit: 0, items: [], snapshot: { updatedAtMs: 1 } },
+        }),
+      } as never,
+    });
+    const saveHandler = fakeIpcMain.handlers.get(LINEUP_CUSTOM_CHANNEL_SAVE_DRAFT_CHANNEL);
+    assert.ok(saveHandler);
+
+    const result = await saveHandler({} as IpcMainInvokeEvent, {
+      requestId: 'custom-save-composition',
+      payload: {
+        number: 101,
+        name: 'Manual Custom',
+        hidden: false,
+        content: [{
+          type: 'manualItem',
+          ratingKey: 'movie-1',
+          title: 'Movie 1',
+          durationMs: 60_000,
+          mediaType: 'movie',
+        }],
+        playbackMode: 'sequential',
+      },
+    });
+
+    assert.equal((result as { ok: boolean }).ok, true);
+    const currentChannelId = (result as { value: { currentChannelId: string | null } }).value.currentChannelId;
+    assert.equal(typeof currentChannelId, 'string');
+    const schedulerState = registration.activeChannelScheduler.getState();
+    assert.equal(schedulerState.isActive, true);
+    assert.equal(schedulerState.channelId, currentChannelId);
 
     await registration.teardown();
   } finally {

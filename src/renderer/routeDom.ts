@@ -2,6 +2,7 @@ import type { PlayerSnapshot } from '../contracts/player.js';
 import { formatEpgTimeWindow } from './epg.js';
 import type { ChannelRuntimeRendererState } from './channelRuntimeState.js';
 import type { RendererDomBindings } from './domBindings.js';
+import type { SettingsSectionId } from './settingsSetup.js';
 import { readClosestRouteId, readRouteActionId, readRouteId } from './domBindings.js';
 import {
   createPlayerOverlayView,
@@ -17,6 +18,9 @@ import {
 import type { ChannelSetupLiveSelectionViewModel } from './channelSetup/viewModel.js';
 import { renderChannelSetupDom } from './channelSetup/dom.js';
 import { DEFAULT_PLAYER_OVERLAY_PRESENTATION } from './overlayViewModels.js';
+import { renderSettingsDom } from './settingsSetupDom.js';
+import { renderEpgGuideDom } from './epg/guideDom.js';
+
 
 export function renderRouteDom(
   workflowState: WorkflowState,
@@ -61,6 +65,8 @@ export function renderWorkflowDom(
   channelRuntime?: ChannelRuntimeRendererState,
   liveSelection: ChannelSetupLiveSelectionViewModel | null = null,
   overlayPresentation: PlayerOverlayPresentationSource = DEFAULT_PLAYER_OVERLAY_PRESENTATION,
+  activeSettingsCategory: SettingsSectionId = 'playback',
+  activeSetupStage: string = 'account',
 ): void {
   const view = getRouteWorkflowView(workflowState, channelRuntime, liveSelection);
 
@@ -93,8 +99,8 @@ export function renderWorkflowDom(
     ...overlayPresentation,
     playerSnapshot,
   });
-  renderSettingsDom(view, dom);
-  renderChannelSetupDom(view, dom, liveSelection);
+  renderSettingsDom(view, dom, activeSettingsCategory);
+  renderChannelSetupDom(view, dom, liveSelection, activeSetupStage);
   renderRouteActionButtons(view, dom);
 }
 
@@ -121,42 +127,6 @@ function renderChannelList(view: RouteWorkflowViewModel, dom: RendererDomBinding
   );
 }
 
-function renderSettingsDom(view: RouteWorkflowViewModel, dom: RendererDomBindings): void {
-  if (dom.settingsSourceElement) {
-    dom.settingsSourceElement.textContent = view.settings.libraryName;
-  }
-  if (dom.settingsChannelsElement) {
-    dom.settingsChannelsElement.textContent = String(view.settings.channelCount);
-  }
-  if (dom.settingsStateElement) {
-    dom.settingsStateElement.textContent = `${view.settings.setupState}; ${view.settings.recoveryDetail}`;
-  }
-  if (dom.settingsSectionsElement) {
-    dom.settingsSectionsElement.replaceChildren(
-      ...view.settings.sections.map((section) => {
-        const article = document.createElement('article');
-        article.className = 'settings-section';
-        const title = document.createElement('h3');
-        title.textContent = section.title;
-        const detail = document.createElement('p');
-        detail.textContent = section.detail;
-        const list = document.createElement('dl');
-        for (const setting of section.items) {
-          const row = document.createElement('div');
-          const label = document.createElement('dt');
-          label.textContent = setting.label;
-          const value = document.createElement('dd');
-          value.textContent = `${setting.valueLabel} - ${setting.description}`;
-          row.append(label, value);
-          list.append(row);
-        }
-        article.append(title, detail, list);
-        return article;
-      }),
-    );
-  }
-}
-
 function renderRouteActionButtons(view: RouteWorkflowViewModel, dom: RendererDomBindings): void {
   for (const button of dom.routeActionButtons) {
     const action = readRouteActionId(button.dataset.routeAction);
@@ -178,156 +148,7 @@ function setText(selector: string, value: string): void {
   }
 }
 
-function renderEpgGuideDom(view: RouteWorkflowViewModel, dom: RendererDomBindings): void {
-  const selectedRow = view.guide.selectedProgram === null
-    ? undefined
-    : view.guide.rows.find((row) => row.id === view.guide.selectedProgram?.channelId);
-  if (dom.epgDetailChannelElement) {
-    dom.epgDetailChannelElement.textContent =
-      selectedRow === undefined ? '' : `${selectedRow.number} - ${selectedRow.name}`;
-  }
-  if (dom.epgDetailTitleElement) {
-    dom.epgDetailTitleElement.textContent = view.guide.infoPanel?.title ?? view.guide.state.label;
-  }
-  if (dom.epgDetailTimeElement) {
-    dom.epgDetailTimeElement.textContent = view.guide.infoPanel === null ? view.guide.state.detail : [
-      view.guide.infoPanel.eyebrow,
-      view.guide.infoPanel.subtitle,
-      view.guide.infoPanel.timeLabel,
-      view.guide.infoPanel.badges.join(' / '),
-      view.guide.infoPanel.genres,
-      view.guide.infoPanel.description,
-    ].filter(Boolean).join(' - ');
-  }
 
-  if (!dom.epgGridElement) {
-    return;
-  }
-
-  const shell = document.createElement('section');
-  shell.className = 'epg-shell';
-  shell.dataset.epgLayout = view.guide.shell.layoutMode;
-
-  const classicHeader = document.createElement('header');
-  classicHeader.className = 'epg-classic-header';
-  const headerBrand = document.createElement('div');
-  headerBrand.className = 'epg-classic-header-brand';
-  const brand = document.createElement('strong');
-  brand.className = 'epg-classic-header-title';
-  brand.textContent = view.guide.shell.brandLabel;
-  headerBrand.append(brand);
-
-  const nowPlaying = document.createElement('div');
-  nowPlaying.className = 'epg-classic-now-playing';
-  const nowLabel = document.createElement('span');
-  nowLabel.className = 'epg-classic-now-playing-label';
-  nowLabel.textContent = 'NOW PLAYING';
-  const nowPlayingChannel = document.createElement('span');
-  nowPlayingChannel.className = 'epg-classic-now-playing-channel';
-  nowPlayingChannel.textContent = view.guide.shell.nowWatchingChannelLabel;
-  nowPlaying.append(nowLabel, nowPlayingChannel);
-
-  const focusHint = document.createElement('div');
-  focusHint.className = 'epg-classic-header-actions';
-  for (const hintAction of view.guide.shell.focusHint.split('·').map((value) => value.trim()).filter(Boolean)) {
-    const action = document.createElement('span');
-    action.textContent = (focusHint.childElementCount === 0 ? hintAction : `· ${hintAction}`);
-    focusHint.append(action);
-  }
-
-  classicHeader.append(headerBrand, nowPlaying, focusHint);
-
-  const nowWatching = document.createElement('div');
-  nowWatching.className = 'epg-now-watching-banner';
-  nowWatching.setAttribute('aria-live', 'polite');
-  const nowBannerLabel = document.createElement('span');
-  nowBannerLabel.className = 'epg-now-watching-live';
-  nowBannerLabel.textContent = 'NOW PLAYING';
-  const nowChannel = document.createElement('strong');
-  nowChannel.className = 'epg-now-watching-channel';
-  nowChannel.textContent = view.guide.shell.nowWatchingChannelLabel;
-  const nowProgram = document.createElement('span');
-  nowProgram.className = 'epg-now-watching-program';
-  nowProgram.textContent = view.guide.shell.nowWatching.title;
-  const nowTime = document.createElement('span');
-  nowTime.className = 'epg-now-watching-time';
-  nowTime.textContent = formatEpgTimeWindow(
-    view.guide.shell.nowWatching.startsAtMs,
-    view.guide.shell.nowWatching.endsAtMs,
-  );
-  nowWatching.append(nowBannerLabel, nowChannel, nowProgram, nowTime);
-
-  const stateElement = document.createElement('article');
-  stateElement.className = 'epg-state-panel';
-  stateElement.dataset.epgState = view.guide.state.state;
-  const stateLabel = document.createElement('strong');
-  stateLabel.textContent = view.guide.state.label;
-  const stateDetail = document.createElement('span');
-  stateDetail.textContent = view.guide.state.detail;
-  stateElement.append(stateLabel, stateDetail);
-
-  const header = document.createElement('div');
-  header.className = 'epg-time-header';
-  header.append(document.createElement('span'));
-  const slotTrack = document.createElement('div');
-  slotTrack.className = 'epg-time-header-slots';
-  for (const slot of view.guide.slots) {
-    const label = document.createElement('span');
-    label.className = 'epg-time-slot';
-    label.textContent = slot.label;
-    slotTrack.append(label);
-  }
-  header.append(slotTrack);
-
-  const rows = view.guide.rows.map((row) => {
-    const rowElement = document.createElement('section');
-    rowElement.className = 'epg-grid__row';
-    rowElement.dataset.selectedChannel = String(row.isSelected);
-    const channel = document.createElement('div');
-    channel.className = 'epg-grid__channel';
-    const number = document.createElement('strong');
-    number.textContent = row.number;
-    const name = document.createElement('span');
-    name.textContent = row.name;
-    channel.append(number, name);
-    rowElement.append(channel);
-
-    const programs = document.createElement('div');
-    programs.className = 'epg-grid__programs';
-    for (const program of row.programs) {
-      const cell = document.createElement('article');
-      cell.className = 'epg-grid__program';
-      cell.dataset.selectedProgram = String(program.isSelected);
-      cell.dataset.temporalState = program.temporalState;
-      cell.dataset.widthTier = program.widthTier;
-      cell.style.gridColumn = `${program.columnStart} / span ${program.columnSpan}`;
-      cell.style.setProperty('--epg-cell-progress', `${program.progressPercent}%`);
-      const meta = document.createElement('span');
-      meta.className = 'epg-cell-meta';
-      meta.textContent = [
-        program.episodeLabel.trim(),
-        program.timeLabel,
-      ].filter((value) => value.length > 0).join(' - ');
-      const title = document.createElement('strong');
-      title.textContent = program.title;
-      const subtitle = document.createElement('span');
-      subtitle.textContent = program.subtitle;
-      const progress = document.createElement('i');
-      progress.className = 'epg-cell-progress';
-      progress.setAttribute('aria-hidden', 'true');
-      cell.append(meta, title, subtitle, progress);
-      programs.append(cell);
-    }
-    rowElement.append(programs);
-    return rowElement;
-  });
-
-  shell.append(classicHeader, nowWatching, stateElement);
-  if (view.guide.presentationState === 'ready') {
-    shell.append(header, ...rows);
-  }
-  dom.epgGridElement.replaceChildren(shell);
-}
 
 function renderPlayerOverlaysDom(
   overlayState: PlayerOverlayState,

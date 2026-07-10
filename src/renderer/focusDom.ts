@@ -6,25 +6,38 @@ import type {
   FocusState,
 } from './navigation.js';
 
-const dynamicPlexFocusIdsByRegistry = new WeakMap<FocusRegistry, Set<string>>();
+const dynamicFocusIdsByRegistry = new WeakMap<FocusRegistry, Set<string>>();
+const focusIdsByRegistry = new WeakMap<FocusRegistry, Set<string>>();
 
 export function syncRendererFocusTargets(
   focusRegistry: FocusRegistry,
   dom: RendererDomBindings,
 ): void {
   const focusableElements = readCurrentFocusableElements(dom);
-  const currentDynamicPlexIds = new Set(
+  const currentFocusIds = new Set(
     focusableElements
       .map((element) => element.dataset.focusId)
-      .filter((focusId): focusId is string => isDynamicPlexFocusId(focusId)),
+      .filter((focusId): focusId is string => focusId !== undefined),
   );
-  const previousDynamicPlexIds = dynamicPlexFocusIdsByRegistry.get(focusRegistry) ?? new Set();
-  for (const focusId of previousDynamicPlexIds) {
-    if (!currentDynamicPlexIds.has(focusId)) {
+  const previousFocusIds = focusIdsByRegistry.get(focusRegistry) ?? new Set();
+  for (const focusId of previousFocusIds) {
+    if (!currentFocusIds.has(focusId)) {
       focusRegistry.unregister(focusId);
     }
   }
-  dynamicPlexFocusIdsByRegistry.set(focusRegistry, currentDynamicPlexIds);
+  focusIdsByRegistry.set(focusRegistry, currentFocusIds);
+  const currentDynamicIds = new Set(
+    focusableElements
+      .map((element) => element.dataset.focusId)
+      .filter((focusId): focusId is string => isDynamicFocusId(focusId)),
+  );
+  const previousDynamicIds = dynamicFocusIdsByRegistry.get(focusRegistry) ?? new Set();
+  for (const focusId of previousDynamicIds) {
+    if (!currentDynamicIds.has(focusId)) {
+      focusRegistry.unregister(focusId);
+    }
+  }
+  dynamicFocusIdsByRegistry.set(focusRegistry, currentDynamicIds);
   dom.focusableElements.splice(0, dom.focusableElements.length, ...focusableElements);
   registerRendererFocusTargets(focusRegistry, dom);
 }
@@ -37,7 +50,7 @@ export function registerRendererFocusTargets(
   dom.routeButtons.forEach((button, index) => {
     const route = readRouteId(button.dataset.routeButton);
     const focusId = button.dataset.focusId;
-    if (route === null || focusId === undefined) {
+    if (route === null || focusId === undefined || isElementHiddenFromFocus(button)) {
       return;
     }
     focusRegistry.register({
@@ -51,7 +64,7 @@ export function registerRendererFocusTargets(
     registered.add(focusId);
   });
 
-  if (dom.fullscreenButton) {
+  if (dom.fullscreenButton && !isElementHiddenFromFocus(dom.fullscreenButton)) {
     focusRegistry.register({
       id: 'player-fullscreen',
       route: 'player',
@@ -64,7 +77,7 @@ export function registerRendererFocusTargets(
   dom.routeActionButtons.forEach((button, index) => {
     const route = readClosestRouteId(button);
     const focusId = button.dataset.focusId;
-    if (route === null || focusId === undefined) {
+    if (route === null || focusId === undefined || isElementHiddenFromFocus(button)) {
       return;
     }
     focusRegistry.register({
@@ -93,7 +106,13 @@ export function registerRendererFocusTargets(
     if (focusId === undefined || registered.has(focusId) || route === null) {
       return;
     }
-    const neighbors = focusId.startsWith('numpad-') ? getNumpadNeighbors(focusId) : undefined;
+    const neighbors = focusId.startsWith('numpad-')
+      ? getNumpadNeighbors(focusId)
+      : focusId.startsWith('settings-')
+      ? getSettingsNeighbors(focusId)
+      : focusId.startsWith('setup-') || focusId.startsWith('plex-') || focusId.startsWith('channel-') || focusId.startsWith('custom-')
+      ? getSetupNeighbors(focusId)
+      : undefined;
     focusRegistry.register({
       id: focusId,
       route,
@@ -105,7 +124,7 @@ export function registerRendererFocusTargets(
 
   dom.overlayActionButtons.forEach((button, index) => {
     const focusId = button.dataset.focusId;
-    if (focusId === undefined) {
+    if (focusId === undefined || isElementHiddenFromFocus(button)) {
       return;
     }
     focusRegistry.register({
@@ -123,6 +142,9 @@ function registerOrderedButton(
   button: HTMLButtonElement,
   order: number,
 ): void {
+  if (isElementHiddenFromFocus(button)) {
+    return;
+  }
   const route = readClosestRouteId(button);
   const focusId = button.dataset.focusId;
   if (route === null || focusId === undefined) {
@@ -145,6 +167,15 @@ function focusElementOrder(focusId: string, index: number): number {
   }
   if (focusId.startsWith('plex-dyn-item-')) {
     return 150 + index / 1000;
+  }
+  if (focusId.startsWith('custom-channel-')) {
+    return 170 + index / 1000;
+  }
+  if (focusId.startsWith('custom-media-')) {
+    return 180 + index / 1000;
+  }
+  if (focusId.startsWith('custom-draft-')) {
+    return 190 + index / 1000;
   }
   return 220 + index;
 }
@@ -179,7 +210,7 @@ export function renderRendererFocus(focusState: FocusState, dom: RendererDomBind
   for (const element of dom.focusableElements) {
     const isActive = element.dataset.focusId === focusState.activeId;
     const isPrimaryRouteButton = readRouteId(element.dataset.routeButton) !== null;
-    const isHiddenFromRoute = element.closest('[hidden], [aria-hidden="true"]') !== null;
+    const isHiddenFromRoute = isElementHiddenFromFocus(element);
     element.classList.toggle('is-focused', isActive);
     element.tabIndex = !isHiddenFromRoute && (isActive || isPrimaryRouteButton) ? 0 : -1;
     if (isActive && !isHiddenFromRoute && document.activeElement !== element) {
@@ -207,7 +238,7 @@ function readCurrentFocusableElements(dom: RendererDomBindings): HTMLElement[] {
       if (modal) {
         return !modal.hasAttribute('hidden') && modal.getAttribute('aria-hidden') !== 'true';
       }
-      return true;
+      return !isElementHiddenFromFocus(el);
     });
   }
 
@@ -218,20 +249,25 @@ function readCurrentFocusableElements(dom: RendererDomBindings): HTMLElement[] {
       dom.plexServersElement,
       dom.plexSectionsElement,
       dom.plexItemsElement,
+      dom.customChannelPanelElement,
     ].flatMap((element) => (
-      element === null || typeof element.querySelectorAll !== 'function'
+      element == null || typeof element.querySelectorAll !== 'function'
         ? []
         : Array.from(element.querySelectorAll<HTMLElement>('[data-focus-id]'))
     ));
   return [
     ...new Set([
-      ...dom.focusableElements.filter((element) => !isDynamicPlexFocusId(element.dataset.focusId)),
+      ...dom.focusableElements.filter((element) => !isDynamicFocusId(element.dataset.focusId)),
       ...dynamicPlexElements,
     ]),
   ];
 }
 
-function isDynamicPlexFocusId(focusId: string | undefined): focusId is string {
+function isElementHiddenFromFocus(element: HTMLElement): boolean {
+  return element.closest('[hidden], [aria-hidden="true"]') !== null;
+}
+
+function isDynamicFocusId(focusId: string | undefined): focusId is string {
   return (
     focusId !== undefined
     && (
@@ -239,6 +275,9 @@ function isDynamicPlexFocusId(focusId: string | undefined): focusId is string {
       || focusId.startsWith('plex-dyn-server-')
       || focusId.startsWith('plex-dyn-section-')
       || focusId.startsWith('plex-dyn-item-')
+      || focusId.startsWith('custom-channel-')
+      || focusId.startsWith('custom-media-')
+      || focusId.startsWith('custom-draft-')
     )
   );
 }
@@ -259,4 +298,105 @@ function getNumpadNeighbors(focusId: string): Partial<Record<FocusDirection, str
     'numpad-cancel': { up: 'numpad-9', down: 'numpad-3', left: 'numpad-0', right: 'numpad-clear' },
   };
   return mapping[focusId] ?? {};
+}
+
+function getSettingsNeighbors(focusId: string): Partial<Record<FocusDirection, string>> | undefined {
+  switch (focusId) {
+    case 'settings-cat-playback':
+      return { right: 'settings-launch-mode', down: 'settings-cat-guide' };
+    case 'settings-cat-guide':
+      return { right: 'settings-guide-density', up: 'settings-cat-playback', down: 'settings-cat-setup' };
+    case 'settings-cat-setup':
+      return { right: 'settings-support-bundle', up: 'settings-cat-guide', down: 'settings-setup' };
+    case 'settings-setup':
+      return { up: 'settings-cat-setup', down: 'settings-player' };
+    case 'settings-player':
+      return { up: 'settings-setup' };
+    case 'settings-launch-mode':
+      return { left: 'settings-cat-playback', down: 'settings-preview-badges' };
+    case 'settings-preview-badges':
+      return { left: 'settings-cat-playback', up: 'settings-launch-mode' };
+    case 'settings-guide-density':
+      return { left: 'settings-cat-guide', down: 'settings-setup-reminder' };
+    case 'settings-setup-reminder':
+      return { left: 'settings-cat-guide', up: 'settings-guide-density' };
+    case 'settings-support-bundle':
+      return { left: 'settings-cat-setup' };
+    default:
+      return undefined;
+  }
+}
+
+function getSetupNeighbors(focusId: string): Partial<Record<FocusDirection, string>> | undefined {
+  if (focusId.startsWith('plex-dyn-home-')) return { left: 'setup-stage-account' };
+  if (focusId.startsWith('plex-dyn-server-')) return { left: 'setup-stage-server' };
+  if (focusId.startsWith('plex-dyn-section-') || focusId.startsWith('plex-dyn-item-')) return { left: 'setup-stage-library' };
+  if (focusId.startsWith('custom-channel-') || focusId.startsWith('custom-media-') || focusId.startsWith('custom-draft-')) return { left: 'setup-stage-custom' };
+
+  switch (focusId) {
+    case 'setup-stage-account':
+      return { right: 'plex-load', down: 'setup-stage-server' };
+    case 'setup-stage-server':
+      return { right: 'plex-restore-server', up: 'setup-stage-account', down: 'setup-stage-library' };
+    case 'setup-stage-library':
+      return { right: 'plex-list-sections', up: 'setup-stage-server', down: 'setup-stage-preview' };
+    case 'setup-stage-preview':
+      return { right: 'plex-clear-metadata', up: 'setup-stage-library', down: 'setup-stage-build' };
+    case 'setup-stage-build':
+      return { right: 'channel-append', up: 'setup-stage-preview', down: 'setup-stage-custom' };
+    case 'setup-stage-custom':
+      return { right: 'custom-channel-refresh', up: 'setup-stage-build', down: 'setup-settings' };
+    case 'setup-settings':
+      return { up: 'setup-stage-custom', down: 'setup-player' };
+    case 'setup-player':
+      return { up: 'setup-settings' };
+
+    case 'plex-load':
+    case 'plex-request-pin':
+    case 'plex-poll-pin':
+    case 'plex-cancel-pin':
+    case 'plex-clear-pin':
+    case 'plex-home-pin':
+    case 'plex-home-users':
+      return { left: 'setup-stage-account' };
+
+    case 'plex-restore-server':
+    case 'plex-refresh-servers':
+    case 'plex-clear-server':
+      return { left: 'setup-stage-server' };
+
+    case 'plex-list-sections':
+    case 'plex-clear-section':
+    case 'plex-list-items':
+    case 'plex-clear-items':
+    case 'plex-search-query':
+    case 'plex-search':
+    case 'plex-clear-search':
+      return { left: 'setup-stage-library' };
+
+    case 'plex-clear-metadata':
+      return { left: 'setup-stage-preview' };
+
+    case 'channel-append':
+    case 'channel-replace':
+    case 'channel-confirm-replace':
+      return { left: 'setup-stage-build' };
+
+    case 'custom-channel-refresh':
+    case 'custom-channel-search-query':
+    case 'custom-channel-browse':
+    case 'custom-channel-search':
+    case 'custom-channel-clear-search':
+    case 'custom-channel-filter-all':
+    case 'custom-channel-filter-movies':
+    case 'custom-channel-filter-episodes':
+    case 'custom-channel-name':
+    case 'custom-channel-number':
+    case 'custom-channel-hidden':
+    case 'custom-channel-save':
+      return { left: 'setup-stage-custom' };
+
+    default:
+      return undefined;
+  }
 }

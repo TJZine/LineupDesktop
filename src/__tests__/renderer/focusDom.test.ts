@@ -38,6 +38,9 @@ class FocusElementDouble {
   }
 
   closest(selector: string): object | null {
+    if (selector === '.profile-pin-modal') {
+      return null;
+    }
     if (selector === '[data-screen]') {
       return { dataset: { screen: this.dataset.routeButton ?? 'channelSetup' } };
     }
@@ -82,6 +85,60 @@ test('renderer focus suppresses browser focus and tab stops inside hidden trees'
     assert.equal(documentDouble.activeElement, visibleActive);
   } finally {
     documentDouble.activeElement = null;
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+});
+
+test('focus sync excludes controls inside inactive hidden setup sections', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const visibleStage = new FocusElementDouble('setup-stage-account');
+  const visibleServerControl = new FocusElementDouble('plex-restore-server');
+  const hiddenServerControl = new FocusElementDouble('plex-restore-server', true);
+  let queryElements = [visibleStage, visibleServerControl];
+  const documentWithFocusableQuery = {
+    querySelectorAll: () => queryElements,
+    activeElement: null,
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentWithFocusableQuery,
+    configurable: true,
+  });
+
+  try {
+    const registry = new FocusRegistry();
+    const dom = createFocusDomBindings([]);
+
+    syncRendererFocusTargets(registry, dom);
+    assert.deepEqual(dom.focusableElements.map((element) => element.dataset.focusId), [
+      'setup-stage-account',
+      'plex-restore-server',
+    ]);
+    assert.deepEqual(registry.focusTarget(
+      { activeRoute: 'channelSetup', activeId: 'setup-stage-account' },
+      'plex-restore-server',
+    ).state, {
+      activeRoute: 'channelSetup',
+      activeId: 'plex-restore-server',
+    });
+
+    queryElements = [visibleStage, hiddenServerControl];
+    syncRendererFocusTargets(registry, dom);
+    assert.deepEqual(dom.focusableElements.map((element) => element.dataset.focusId), ['setup-stage-account']);
+    assert.deepEqual(registry.focusTarget(
+      { activeRoute: 'channelSetup', activeId: 'setup-stage-account' },
+      'plex-restore-server',
+    ).state, {
+      activeRoute: 'channelSetup',
+      activeId: 'setup-stage-account',
+    });
+  } finally {
     if (originalDocument === undefined) {
       Reflect.deleteProperty(globalThis, 'document');
     } else {

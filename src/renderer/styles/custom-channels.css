@@ -1,0 +1,210 @@
+.custom-channel-workspace {
+  display: grid;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-panel);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.custom-channel-workspace__header,
+.custom-channel-panel__toolbar,
+.custom-channel-search,
+.custom-draft__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.custom-channel-workspace__header {
+  align-items: end;
+}
+
+.custom-channel-workspace__header p {
+  margin: 0;
+  color: var(--plex-onboarding-text-muted);
+}
+
+.custom-channel-workspace__grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.4fr) minmax(260px, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.custom-channel-panel {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.custom-channel-list,
+.custom-channel-media-grid,
+.custom-draft__items {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.custom-channel-filterbar,
+.custom-media-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.custom-channel-list,
+.custom-channel-media-grid {
+  max-height: min(60vh, 680px);
+  overflow: auto;
+  padding-right: var(--space-2);
+}
+
+.custom-channel-row,
+.custom-media-card,
+.custom-draft-item {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-control);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.custom-channel-row {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.custom-channel-row__number,
+.custom-media-card__poster {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--plex-onboarding-text);
+  font-weight: 800;
+}
+
+.custom-channel-row__copy,
+.custom-media-card__copy,
+.custom-draft-item {
+  min-width: 0;
+}
+
+.custom-channel-row__copy,
+.custom-media-card__copy {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.custom-channel-row__copy strong,
+.custom-media-card__copy strong,
+.custom-draft-item strong {
+  overflow: hidden;
+  color: var(--plex-onboarding-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-channel-row__copy span,
+.custom-media-card__copy span,
+.custom-draft-item span,
+.custom-channel-empty,
+.custom-draft__summary span,
+.custom-draft__validation {
+  color: var(--plex-onboarding-text-muted);
+  font-size: 13px;
+}
+
+.custom-channel-row__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.custom-media-metadata {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-control);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.custom-media-metadata p {
+  margin: 0;
+  color: var(--plex-onboarding-text-muted);
+}
+
+.custom-media-card {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.custom-channel-field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.custom-channel-field input,
+.custom-channel-search input {
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-control);
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--plex-onboarding-text);
+}
+
+.custom-channel-search {
+  flex-wrap: wrap;
+  justify-content: end;
+}
+
+.custom-channel-search input {
+  width: min(240px, 100%);
+}
+
+.custom-draft__validation:empty {
+  display: none;
+}
+
+@media (max-width: 1120px) {
+  .custom-channel-workspace__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .custom-channel-list,
+  .custom-channel-media-grid {
+    max-height: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .custom-channel-workspace__header,
+  .custom-channel-panel__toolbar,
+  .custom-channel-search,
+  .custom-media-card {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+}
+
+@media (forced-colors: active) {
+  .custom-channel-workspace,
+  .custom-channel-row,
+  .custom-media-card,
+  .custom-media-metadata,
+  .custom-draft-item,
+  .custom-channel-field input,
+  .custom-channel-search input {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    color: CanvasText;
+    forced-color-adjust: auto;
+  }
+}

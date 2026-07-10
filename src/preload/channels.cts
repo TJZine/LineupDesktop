@@ -28,3 +28,15 @@ export const LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL = 'lineup:channelSetup:getS
 export const LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL = 'lineup:channelSetup:commit';
 export const LINEUP_GUIDE_GET_PRESENTATION_CHANNEL = 'lineup:guide:getPresentation';
 export const LINEUP_PLAYER_TUNE_CHANNEL = 'lineup:player:tuneChannel';
+export const LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL = 'lineup:customChannels:getSnapshot';
+export const LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL = 'lineup:customChannels:listMedia';
+export const LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL =
+  'lineup:customChannels:getMediaMetadata';
+export const LINEUP_CUSTOM_CHANNEL_VALIDATE_DRAFT_CHANNEL = 'lineup:customChannels:validateDraft';
+export const LINEUP_CUSTOM_CHANNEL_SAVE_DRAFT_CHANNEL = 'lineup:customChannels:saveDraft';
+export const LINEUP_CUSTOM_CHANNEL_DELETE_CHANNEL = 'lineup:customChannels:deleteChannel';
+export const LINEUP_CUSTOM_CHANNEL_DUPLICATE_DRAFT_CHANNEL =
+  'lineup:customChannels:duplicateChannelDraft';
+export const LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL = 'lineup:customChannels:reorderChannels';
+export const LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL =
+  'lineup:customChannels:setChannelVisibility';

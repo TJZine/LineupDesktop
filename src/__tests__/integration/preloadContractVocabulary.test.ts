@@ -6,6 +6,15 @@ import ts from 'typescript';
 import {
   LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_DELETE_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_DUPLICATE_DRAFT_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_SAVE_DRAFT_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_VALIDATE_DRAFT_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
   LINEUP_PLAYER_CLEANUP_CHANNEL,
@@ -41,6 +50,12 @@ import {
   CHANNEL_SETUP_STATUS_VALUES,
 } from '../../contracts/channel.js';
 import {
+  CUSTOM_CHANNEL_ERROR_CODES,
+  CUSTOM_CHANNEL_FORBIDDEN_RENDERER_FIELD_KEYS,
+  CUSTOM_CHANNEL_OPERATIONS,
+  CUSTOM_CHANNEL_VALIDATION_CODES,
+} from '../../contracts/customChannels.js';
+import {
   DIAGNOSTIC_CATEGORIES,
   DIAGNOSTIC_SEVERITIES,
   DIAGNOSTIC_STATUSES,
@@ -75,6 +90,10 @@ const channelGuardSourceUrl = new URL('../../preload/channelBridgeGuards.cts', i
 const channelGuardSourceText = readFileSync(channelGuardSourceUrl, 'utf8');
 const channelSetupBridgeSourceUrl = new URL('../../preload/channelSetupBridge.cts', import.meta.url);
 const channelSetupBridgeSourceText = readFileSync(channelSetupBridgeSourceUrl, 'utf8');
+const customChannelGuardSourceUrl = new URL('../../preload/customChannelBridgeGuards.cts', import.meta.url);
+const customChannelGuardSourceText = readFileSync(customChannelGuardSourceUrl, 'utf8');
+const customChannelBridgeSourceUrl = new URL('../../preload/customChannelBridge.cts', import.meta.url);
+const customChannelBridgeSourceText = readFileSync(customChannelBridgeSourceUrl, 'utf8');
 const diagnosticsGuardSourceUrl = new URL('../../preload/diagnosticsBridgeGuards.cts', import.meta.url);
 const diagnosticsGuardSourceText = readFileSync(diagnosticsGuardSourceUrl, 'utf8');
 const guideBridgeSourceUrl = new URL('../../preload/guideBridge.cts', import.meta.url);
@@ -117,6 +136,20 @@ const diagnosticsGuardSourceFile = ts.createSourceFile(
 const channelSetupBridgeSourceFile = ts.createSourceFile(
   'src/preload/channelSetupBridge.cts',
   channelSetupBridgeSourceText,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+);
+const customChannelGuardSourceFile = ts.createSourceFile(
+  'src/preload/customChannelBridgeGuards.cts',
+  customChannelGuardSourceText,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+);
+const customChannelBridgeSourceFile = ts.createSourceFile(
+  'src/preload/customChannelBridge.cts',
+  customChannelBridgeSourceText,
   ts.ScriptTarget.Latest,
   true,
   ts.ScriptKind.TS,
@@ -218,6 +251,47 @@ function evaluateChannelSetupBridgeModule(
   return moduleObject.exports as Record<string, unknown>;
 }
 
+function evaluateCustomChannelGuardModule(): Record<string, unknown> {
+  const exportsObject = {};
+  const moduleObject = { exports: exportsObject };
+  const compiled = ts.transpileModule(customChannelGuardSourceText, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: 'src/preload/customChannelBridgeGuards.cts',
+  }).outputText;
+  const requireGuard = (moduleName: string) => {
+    assert.fail(`unexpected custom channel bridge guard require ${moduleName}`);
+  };
+  const evaluateGuards = new Function('require', 'exports', 'module', compiled);
+  evaluateGuards(requireGuard, exportsObject, moduleObject);
+  return moduleObject.exports as Record<string, unknown>;
+}
+
+function evaluateCustomChannelBridgeModule(
+  customChannelGuardExports: Record<string, unknown>,
+): Record<string, unknown> {
+  const exportsObject = {};
+  const moduleObject = { exports: exportsObject };
+  const compiled = ts.transpileModule(customChannelBridgeSourceText, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: 'src/preload/customChannelBridge.cts',
+  }).outputText;
+  const requireBridge = (moduleName: string) => {
+    if (moduleName === './customChannelBridgeGuards.cjs') {
+      return customChannelGuardExports;
+    }
+    assert.fail(`unexpected custom channel bridge require ${moduleName}`);
+  };
+  const evaluateBridge = new Function('require', 'exports', 'module', compiled);
+  evaluateBridge(requireBridge, exportsObject, moduleObject);
+  return moduleObject.exports as Record<string, unknown>;
+}
+
 function evaluateGuideBridgeModule(): Record<string, unknown> {
   const exportsObject = {};
   const moduleObject = { exports: exportsObject };
@@ -272,6 +346,8 @@ function createPreloadHarness(
   const diagnosticsGuardExports = evaluateDiagnosticsGuardModule();
   const preloadChannelExports = evaluatePreloadChannelsModule();
   const channelSetupBridgeExports = evaluateChannelSetupBridgeModule(channelGuardExports);
+  const customChannelGuardExports = evaluateCustomChannelGuardModule();
+  const customChannelBridgeExports = evaluateCustomChannelBridgeModule(customChannelGuardExports);
   const guideBridgeExports = evaluateGuideBridgeModule();
   const playerBridgeExports = evaluatePlayerBridgeModule();
   const compiled = ts.transpileModule(preloadSourceText, {
@@ -290,6 +366,9 @@ function createPreloadHarness(
     }
     if (moduleName === './channelSetupBridge.cjs') {
       return channelSetupBridgeExports;
+    }
+    if (moduleName === './customChannelBridge.cjs') {
+      return customChannelBridgeExports;
     }
     if (moduleName === './diagnosticsBridgeGuards.cjs') {
       return diagnosticsGuardExports;
@@ -415,6 +494,19 @@ function createSafePlayerSnapshot(): Record<string, unknown> {
   };
 }
 
+function createSafeCustomChannelSnapshot(): Record<string, unknown> {
+  return {
+    channels: [],
+    currentChannelId: null,
+    visibleChannelCount: 0,
+    hiddenChannelCount: 0,
+    maxChannels: 500,
+    nextAvailableNumber: 1,
+    updatedAtMs: 3,
+    storage: { status: 'ready', repaired: false },
+  };
+}
+
 const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
@@ -441,6 +533,15 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_PLEX_GET_METADATA_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
   LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_VALIDATE_DRAFT_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_SAVE_DRAFT_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_DELETE_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_DUPLICATE_DRAFT_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
 } as const;
@@ -470,6 +571,15 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_PLEX_GET_METADATA_CHANNEL',
     'LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
     'LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_VALIDATE_DRAFT_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_SAVE_DRAFT_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_DELETE_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_DUPLICATE_DRAFT_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL',
     'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
     'LINEUP_PLAYER_TUNE_CHANNEL',
   ]),
@@ -492,6 +602,12 @@ function readChannelGuardStringArrayConst(name: string): string[] {
   const declaration = findVariableDeclaration(channelGuardSourceFile, name);
   assert.ok(declaration?.initializer, `expected ${name} in channel bridge guards`);
   return readStringArrayInitializer(channelGuardSourceFile, name, declaration.initializer);
+}
+
+function readCustomChannelGuardStringArrayConst(name: string): string[] {
+  const declaration = findVariableDeclaration(customChannelGuardSourceFile, name);
+  assert.ok(declaration?.initializer, `expected ${name} in custom channel bridge guards`);
+  return readStringArrayInitializer(customChannelGuardSourceFile, name, declaration.initializer);
 }
 
 function readDiagnosticsGuardStringArrayConst(name: string): string[] {
@@ -902,6 +1018,24 @@ function isInvokeChannelSetupChannelParameter(node: ts.Identifier): boolean {
   return false;
 }
 
+function isInvokeCustomChannelsChannelParameter(node: ts.Identifier): boolean {
+  if (node.text !== 'channel') {
+    return false;
+  }
+  let current: ts.Node | undefined = node;
+  while (current !== undefined && !ts.isSourceFile(current)) {
+    if (
+      ts.isVariableDeclaration(current) &&
+      ts.isIdentifier(current.name) &&
+      current.name.text === 'invokeCustomChannels'
+    ) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
 function isInvokeGuideChannelParameter(node: ts.Identifier): boolean {
   if (node.text !== 'channel') {
     return false;
@@ -1112,6 +1246,19 @@ test('preload guard vocabulary matches contract vocabulary', () => {
     readChannelGuardStringArrayConst('CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS'),
     [...CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS],
   );
+  assert.deepEqual(readCustomChannelGuardStringArrayConst('CUSTOM_CHANNEL_OPERATIONS'), [
+    ...CUSTOM_CHANNEL_OPERATIONS,
+  ]);
+  assert.deepEqual(readCustomChannelGuardStringArrayConst('CUSTOM_CHANNEL_ERROR_CODES'), [
+    ...CUSTOM_CHANNEL_ERROR_CODES,
+  ]);
+  assert.deepEqual(readCustomChannelGuardStringArrayConst('CUSTOM_CHANNEL_VALIDATION_CODES'), [
+    ...CUSTOM_CHANNEL_VALIDATION_CODES,
+  ]);
+  assert.deepEqual(
+    readCustomChannelGuardStringArrayConst('CUSTOM_CHANNEL_FORBIDDEN_RENDERER_FIELD_KEYS'),
+    [...CUSTOM_CHANNEL_FORBIDDEN_RENDERER_FIELD_KEYS],
+  );
   const preloadPlexForbiddenKeys = readPreloadStringArrayConst('PLEX_FORBIDDEN_RENDERER_FIELD_KEYS');
   assert.deepEqual(
     [...new Set(preloadPlexForbiddenKeys)].sort(),
@@ -1169,6 +1316,89 @@ test('preload player bridge validates snapshot invoke results before returning t
 
   assert.equal(harness.calls.length, 1);
   assert.equal((result as { ok: boolean }).ok, true);
+});
+
+test('preload custom channel bridge validates renderer requests and invoke results', async () => {
+  const harness = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPreloadInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        items: [],
+        offset: 0,
+        limit: 24,
+        total: null,
+        hasMore: false,
+      },
+    });
+  });
+
+  const invalid = await harness.api.customChannels.listMedia(harness.input({
+    sourceType: 'search',
+    query: 'http://private',
+  }));
+  assert.equal((invalid as { ok: boolean }).ok, false);
+  assert.equal((invalid as { error: { code: string } }).error.code, 'CUSTOM_CHANNEL_VALIDATION_FAILED');
+  assert.equal(harness.calls.length, 0);
+
+  const valid = await harness.api.customChannels.listMedia(harness.input({
+    sourceType: 'search',
+    query: 'movie',
+    limit: 24,
+  }));
+  assert.equal((valid as { ok: boolean }).ok, true);
+  assert.equal(harness.calls.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(harness.calls[0]?.request.payload)), {
+    sourceType: 'search',
+    query: 'movie',
+    limit: 24,
+  });
+});
+
+test('preload custom channel bridge rejects forbidden invoke result fields', async () => {
+  const privilegedSuccess = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPreloadInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        ...createSafeCustomChannelSnapshot(),
+        token: 'private',
+      },
+    });
+  });
+  const successResult = await privilegedSuccess.api.customChannels.getSnapshot();
+  assert.equal((successResult as { ok: boolean }).ok, false);
+  assert.equal(
+    (successResult as { error: { code: string } }).error.code,
+    'CUSTOM_CHANNEL_VALIDATION_FAILED',
+  );
+
+  const privilegedFailure = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPreloadInvokeRequest(request));
+    return input({
+      ok: false,
+      requestId: request.requestId,
+      error: {
+        code: 'CUSTOM_CHANNEL_UNKNOWN',
+        message: 'Failed with token=private.',
+        retryable: false,
+        recoverable: false,
+        operation: 'getSnapshot',
+      },
+    });
+  });
+  const failureResult = await privilegedFailure.api.customChannels.getSnapshot();
+  assert.equal((failureResult as { ok: boolean }).ok, false);
+  assert.doesNotMatch(
+    (failureResult as { error: { message: string } }).error.message,
+    /token=|private/u,
+  );
+  assert.equal(
+    (failureResult as { error: { code: string } }).error.code,
+    'CUSTOM_CHANNEL_VALIDATION_FAILED',
+  );
 });
 
 test('preload player bridge converts malformed or privileged snapshot results to local validation failures', async () => {
@@ -1950,21 +2180,27 @@ test('preload split keeps Electron values in index and built preload has no loca
   assertNoElectronValueImports(channelGuardSourceFile);
   assertNoElectronValueImports(preloadChannelsSourceFile);
   assertNoElectronValueImports(channelSetupBridgeSourceFile);
+  assertNoElectronValueImports(customChannelGuardSourceFile);
+  assertNoElectronValueImports(customChannelBridgeSourceFile);
   assertNoElectronValueImports(diagnosticsGuardSourceFile);
   assertNoElectronValueImports(guideBridgeSourceFile);
   assertNoElectronValueImports(playerBridgeSourceFile);
   assert.doesNotMatch(channelGuardSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(preloadChannelsSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(channelSetupBridgeSourceText, /require\(['"]electron['"]\)/u);
+  assert.doesNotMatch(customChannelGuardSourceText, /require\(['"]electron['"]\)/u);
+  assert.doesNotMatch(customChannelBridgeSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(diagnosticsGuardSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(guideBridgeSourceText, /require\(['"]electron['"]\)/u);
   assert.doesNotMatch(playerBridgeSourceText, /require\(['"]electron['"]\)/u);
   assert.match(preloadSourceText, /from '\.\/channels\.cjs'/u);
   assert.match(preloadSourceText, /from '\.\/channelSetupBridge\.cjs'/u);
+  assert.match(preloadSourceText, /from '\.\/customChannelBridge\.cjs'/u);
   assert.match(preloadSourceText, /from '\.\/diagnosticsBridgeGuards\.cjs'/u);
   assert.match(preloadSourceText, /from '\.\/guideBridge\.cjs'/u);
   assert.match(preloadSourceText, /from '\.\/playerBridge\.cjs'/u);
   assert.match(channelSetupBridgeSourceText, /from '\.\/channelBridgeGuards\.cjs'/u);
+  assert.match(customChannelBridgeSourceText, /from '\.\/customChannelBridgeGuards\.cjs'/u);
   assert.match(preloadBundleToolSourceText, /bundle:\s*true/u);
   assert.match(preloadBundleToolSourceText, /external:\s*\[\s*'electron'\s*\]/u);
 });
@@ -1978,6 +2214,8 @@ test(
   assert.doesNotMatch(preloadBundleOutputText, /channels\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /channelBridgeGuards\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /channelSetupBridge\.cjs/u);
+  assert.doesNotMatch(preloadBundleOutputText, /customChannelBridge\.cjs/u);
+  assert.doesNotMatch(preloadBundleOutputText, /customChannelBridgeGuards\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /diagnosticsBridgeGuards\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /guideBridge\.cjs/u);
   assert.doesNotMatch(preloadBundleOutputText, /playerBridge\.cjs/u);
@@ -1986,6 +2224,43 @@ test(
   assert.doesNotMatch(preloadBundleOutputText, /\bimport\(["']\.(?:\/|\\)[^"']+["']\)/u);
   },
 );
+
+test('preload custom channel reorder request rejects duplicate ids and clones nested season filters', () => {
+  const customChannelGuardExports = evaluateCustomChannelGuardModule();
+  const createReorderRequest = customChannelGuardExports.createCustomChannelReorderRequest as
+    ((input: { channelIds: readonly string[] }) => { ok: boolean; result: { error: { code: string } } });
+  const createListMediaRequest = customChannelGuardExports.createCustomChannelListMediaRequest as
+    ((input: {
+      sourceType: 'search';
+      query: string;
+      draftContent: readonly [{ type: 'show'; sourceId: string; title: string; seasonFilter: readonly number[] }];
+    }) => {
+      ok: boolean;
+      payload?: { draftContent?: readonly [{ type: 'show'; seasonFilter?: readonly number[] }] };
+    });
+  const duplicateIds = createReorderRequest({ channelIds: ['channel-1', 'channel-1'] });
+  assert.equal(duplicateIds.ok, false);
+  assert.equal(duplicateIds.result.error.code, 'CUSTOM_CHANNEL_VALIDATION_FAILED');
+
+  const originalSeasonFilter = [1, 2];
+  const request = createListMediaRequest({
+    sourceType: 'search',
+    query: 'episodes',
+    draftContent: [{ type: 'show', sourceId: 'show-1', title: 'Show One', seasonFilter: originalSeasonFilter }],
+  });
+  assert.equal(request.ok, true);
+  if (request.ok !== true || request.payload === undefined) {
+    assert.fail('expected cloned list media request payload');
+  }
+  {
+    const draftEntry = request.payload.draftContent?.[0];
+    assert.equal(draftEntry?.type, 'show');
+    if (draftEntry?.type === 'show' && draftEntry.seasonFilter) {
+      assert.notEqual(draftEntry.seasonFilter, originalSeasonFilter);
+      assert.deepEqual(draftEntry.seasonFilter, originalSeasonFilter);
+    }
+  }
+});
 
 test('preload bridge exposes only the typed lineupDesktop world', () => {
   assertNoElectronValueImports();
@@ -2083,6 +2358,12 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
         return;
       }
 
+      if (isInvokeCustomChannelsChannelParameter(channelExpression)) {
+        observedCalls.push(`${methodName}:invokeCustomChannels.channel`);
+        ts.forEachChild(node, visit);
+        return;
+      }
+
       if (isInvokeGuideChannelParameter(channelExpression)) {
         observedCalls.push(`${methodName}:invokeGuide.channel`);
         ts.forEachChild(node, visit);
@@ -2120,6 +2401,7 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
     'invoke:LINEUP_SHELL_GET_CAPABILITIES_CHANNEL',
     'invoke:LINEUP_WINDOW_INTENT_CHANNEL',
     'invoke:invokeChannelSetup.channel',
+    'invoke:invokeCustomChannels.channel',
     'invoke:invokeGuide.channel',
     'invoke:invokePlayerSnapshot.channel',
     'invoke:invokePlex.channel',
@@ -2146,6 +2428,55 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
   assert.deepEqual(collectCreateChannelSetupBridgeChannelArguments().sort(), [
     'LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL',
     'LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
+  ]);
+
+  function collectCreateCustomChannelBridgeChannelArguments(): string[] {
+    const channels: string[] = [];
+    assert.ok(customChannelBridgeSourceFile.statements.length > 0);
+
+    function visit(node: ts.Node): void {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'createCustomChannelBridge'
+      ) {
+        const [invokeExpression, channelsExpression] = node.arguments;
+        assert.ok(invokeExpression, 'createCustomChannelBridge must pass an invoke function');
+        assert.ok(
+          ts.isIdentifier(invokeExpression) && invokeExpression.text === 'invokeCustomChannels',
+          'createCustomChannelBridge must receive the narrow custom channel invoke function',
+        );
+        const channelBindings = channelsExpression === undefined
+          ? undefined
+          : unwrapExpression(channelsExpression);
+        assert.ok(
+          channelBindings !== undefined && ts.isObjectLiteralExpression(channelBindings),
+          'createCustomChannelBridge must receive literal channel bindings',
+        );
+        for (const property of channelBindings.properties) {
+          assert.ok(ts.isPropertyAssignment(property), 'custom channel bridge channels must be property assignments');
+          assert.ok(ts.isIdentifier(property.initializer), 'custom channel bridge channel values must be constants');
+          assertApprovedChannelIdentifier(property.initializer.text);
+          channels.push(property.initializer.text);
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+
+    visit(preloadSourceFile);
+    return channels;
+  }
+
+  assert.deepEqual(collectCreateCustomChannelBridgeChannelArguments().sort(), [
+    'LINEUP_CUSTOM_CHANNEL_DELETE_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_DUPLICATE_DRAFT_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_SAVE_DRAFT_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL',
+    'LINEUP_CUSTOM_CHANNEL_VALIDATE_DRAFT_CHANNEL',
   ]);
 
   function collectCreateGuideBridgeChannelArguments(): string[] {

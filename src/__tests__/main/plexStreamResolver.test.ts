@@ -234,7 +234,7 @@ test('plex stream resolver preserves language delivery default forced and HDR fa
   assertPublicProjectionSafe(result);
 });
 
-test('plex stream resolver excludes synthetic audio fallback from private track map', async () => {
+test('plex stream resolver keeps synthetic audio fallback in public track map without a private id', async () => {
   const mediaDetail = createMediaDetail();
   const streams = mediaDetail.media[0]?.parts[0]?.streams;
   assert.ok(streams);
@@ -251,7 +251,15 @@ test('plex stream resolver excludes synthetic audio fallback from private track 
   assertResolved(result, 'direct-play');
   assert.equal(result.load.policy.preferredAudioTrackId, 'plex-track-audio-1-1-1');
   assert.equal(result.privatePlayback.setup.selectedPrivateTrackIds.audio, null);
-  assert.deepEqual(result.privatePlayback.setup.trackMap.audio, []);
+  assert.deepEqual(result.privatePlayback.setup.trackMap.audio, [{
+    publicTrackId: 'plex-track-audio-1-1-1',
+    privateTrackId: null,
+    label: 'Audio aac',
+    language: undefined,
+    codec: 'aac',
+    channelCount: 2,
+    default: true,
+  }]);
   assertPublicProjectionSafe(result);
 });
 

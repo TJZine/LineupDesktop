@@ -75,22 +75,27 @@ export function openProfilePinModal(user: PlexHomeUserSummary): void {
     keydownListener = (event: KeyboardEvent) => {
       if (isSubmitting) return;
       if (event.key >= '0' && event.key <= '9') {
+        event.preventDefault();
+        event.stopPropagation();
         handleNumpadInput(event.key);
-        event.preventDefault();
-        event.stopPropagation();
       } else if (event.key === 'Backspace') {
+        event.preventDefault();
+        event.stopPropagation();
         handleNumpadInput('backspace');
+      } else if (event.key === 'Delete') {
         event.preventDefault();
         event.stopPropagation();
+        handleNumpadInput('clear');
       } else if (event.key === 'Escape') {
-        handleNumpadInput('cancel');
         event.preventDefault();
         event.stopPropagation();
+        handleNumpadInput('cancel');
       }
     };
     window.addEventListener('keydown', keydownListener, { capture: true });
   }
 
+  context.renderApp();
   const focusRegistry = context.getFocusRegistry();
   const focusState = context.getFocusState();
   context.setFocusState(focusRegistry.focusTarget(focusState, 'numpad-1').state);

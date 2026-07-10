@@ -5,6 +5,10 @@ import {
   type ChannelSetupBridgeInvoke,
 } from './channelSetupBridge.cjs';
 import {
+  createCustomChannelBridge,
+  type CustomChannelBridgeInvoke,
+} from './customChannelBridge.cjs';
+import {
   createGuideBridge,
   createPlayerTuneBridge,
   type GuideBridgeInvoke,
@@ -16,6 +20,15 @@ import {
 import {
   LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_DELETE_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_DUPLICATE_DRAFT_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_SAVE_DRAFT_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL,
+  LINEUP_CUSTOM_CHANNEL_VALIDATE_DRAFT_CHANNEL,
   LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
   LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL,
   LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL,
@@ -1094,6 +1107,9 @@ async function invokePlex<TValue>(
 const invokeChannelSetup: ChannelSetupBridgeInvoke = (channel, request) =>
   ipcRenderer.invoke(channel, request);
 
+const invokeCustomChannels: CustomChannelBridgeInvoke = (channel, request) =>
+  ipcRenderer.invoke(channel, request);
+
 const invokeGuide: GuideBridgeInvoke = (channel, request) =>
   ipcRenderer.invoke(channel, request);
 
@@ -1813,6 +1829,17 @@ const lineupDesktop: LineupDesktopPreloadApi = {
   channelSetup: createChannelSetupBridge(invokeChannelSetup, {
     getStatus: LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
     commit: LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
+  }),
+  customChannels: createCustomChannelBridge(invokeCustomChannels, {
+    getSnapshot: LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL,
+    listMedia: LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL,
+    getMediaMetadata: LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL,
+    validateDraft: LINEUP_CUSTOM_CHANNEL_VALIDATE_DRAFT_CHANNEL,
+    saveDraft: LINEUP_CUSTOM_CHANNEL_SAVE_DRAFT_CHANNEL,
+    deleteChannel: LINEUP_CUSTOM_CHANNEL_DELETE_CHANNEL,
+    duplicateChannelDraft: LINEUP_CUSTOM_CHANNEL_DUPLICATE_DRAFT_CHANNEL,
+    reorderChannels: LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL,
+    setChannelVisibility: LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL,
   }),
   guide: createGuideBridge(
     invokeGuide,
