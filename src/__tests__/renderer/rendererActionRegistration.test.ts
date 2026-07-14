@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
-import { registerRendererActions } from '../../renderer/rendererActionRegistration.js';
+import { isEligibleDelegatedAction, registerRendererActions } from '../../renderer/rendererActionRegistration.js';
+import { clickFocusedRendererElement } from '../../renderer/focusDom.js';
 
 type TestEventListener = (event: TestDomEvent) => void;
 
@@ -22,6 +23,8 @@ class TestElement {
   readonly dataset: Record<string, string> = {};
   readonly children: TestElement[] = [];
   readonly listeners = new Map<string, TestEventListener[]>();
+  readonly attributes = new Map<string, string>();
+  disabled = false;
 
   addEventListener(type: string, listener: TestEventListener): void {
     const listeners = this.listeners.get(type) ?? [];
@@ -46,6 +49,22 @@ class TestElement {
       if (selector.includes('data-settings-category') && current.dataset.settingsCategory !== undefined) {
         return current;
       }
+      if (selector.includes('data-setup-stage') && current.dataset.setupStage !== undefined) {
+        return current;
+      }
+      if (selector.includes('data-setup-flow-action') && current.dataset.setupFlowAction !== undefined) return current;
+      if (selector.includes('data-plex-section-id') && current.dataset.plexSectionId !== undefined) return current;
+      if (selector.includes('data-custom-channel-action') && current.dataset.customChannelAction !== undefined) {
+        return current;
+      }
+      if (selector === '[data-staged-owner]' && current.dataset.stagedOwner !== undefined) {
+        return current;
+      }
+      if (selector.includes('[hidden]') && (
+        current.attributes.has('hidden')
+        || current.attributes.has('inert')
+        || current.getAttribute('aria-hidden') === 'true'
+      )) return current;
       current = current.parentElement;
     }
     return null;
@@ -60,6 +79,18 @@ class TestElement {
       this.parentElement?.dispatchEvent(event);
     }
     return true;
+  }
+
+  click(): void {
+    this.dispatchEvent(new TestDomEvent('click', true));
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attributes.set(name, value);
+  }
+
+  getAttribute(name: string): string | null {
+    return this.attributes.get(name) ?? null;
   }
 }
 
@@ -171,7 +202,12 @@ function emptyRendererDomBindings(): RendererDomBindings {
 
 function withTestHTMLElement(callback: () => void): void {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'HTMLElement');
+  const buttonDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'HTMLButtonElement');
   Object.defineProperty(globalThis, 'HTMLElement', {
+    configurable: true,
+    value: TestElement,
+  });
+  Object.defineProperty(globalThis, 'HTMLButtonElement', {
     configurable: true,
     value: TestElement,
   });
@@ -183,6 +219,8 @@ function withTestHTMLElement(callback: () => void): void {
     } else {
       Object.defineProperty(globalThis, 'HTMLElement', descriptor);
     }
+    if (buttonDescriptor === undefined) Reflect.deleteProperty(globalThis, 'HTMLButtonElement');
+    else Object.defineProperty(globalThis, 'HTMLButtonElement', buttonDescriptor);
   }
 }
 
@@ -224,6 +262,155 @@ test('renderer action registration delegates bubbling focusin events only', () =
     input.dispatchEvent(new TestDomEvent('focus', false));
 
     assert.deepEqual(focused, [input]);
+  });
+});
+
+test('renderer action registration ignores disabled server stage pointer activation', () => {
+  withTestHTMLElement(() => {
+    const documentRef = new TestDocument();
+    const setupScreen = new TestElement();
+    const switchProfile = new TestElement();
+    setupScreen.id = 'screen-channel-setup';
+    switchProfile.dataset.setupStage = 'profile';
+    setupScreen.append(switchProfile);
+    documentRef.append(setupScreen);
+    const stages: string[] = [];
+
+    registerRendererActions(emptyRendererDomBindings(), documentRef as unknown as Document, {
+      activateRoute: () => undefined,
+      applyRouteAction: () => undefined,
+      applySettingsAction: () => undefined,
+      applyChannelSetupAction: () => undefined,
+      applyChannelCommitAction: () => undefined,
+      applyEpgAction: () => undefined,
+      applyOverlayAction: () => undefined,
+      applyPlexRuntimeAction: () => undefined,
+      setPlexHomeUserPin: () => undefined,
+      setPlexSearchQuery: () => undefined,
+      selectPlexHomeUser: () => undefined,
+      selectPlexServer: () => undefined,
+      selectPlexSection: () => undefined,
+      openPlexMetadata: () => undefined,
+      focusElement: () => undefined,
+      toggleFullscreen: () => undefined,
+      selectAudioTrack: () => undefined,
+      selectSubtitleTrack: () => undefined,
+      applySetupStage: (stage) => stages.push(stage),
+    });
+
+    switchProfile.disabled = true;
+    switchProfile.dispatchEvent(new TestDomEvent('click', true));
+    switchProfile.disabled = false;
+    switchProfile.setAttribute('aria-disabled', 'true');
+    switchProfile.dispatchEvent(new TestDomEvent('click', true));
+    switchProfile.setAttribute('aria-disabled', 'false');
+    switchProfile.dispatchEvent(new TestDomEvent('click', true));
+    assert.deepEqual(stages, ['profile']);
+  });
+});
+
+test('delegated staged and Plex actions reject hidden inert and aria-hidden ancestry and dispatch once', () => {
+  withTestHTMLElement(() => {
+    const documentRef = new TestDocument();
+    const setupScreen = new TestElement(); setupScreen.id = 'screen-channel-setup';
+    const owner = new TestElement(); owner.dataset.stagedOwner = 'preview'; owner.dataset.ownerActive = 'true';
+    const flow = new TestElement(); flow.dataset.setupFlowAction = 'previewNext';
+    owner.append(flow); setupScreen.append(owner); documentRef.append(setupScreen);
+    const plexPanel = new TestElement(); const plexOwner = new TestElement(); const section = new TestElement();
+    section.dataset.plexSectionId = 'movies'; plexOwner.append(section); plexPanel.append(plexOwner); documentRef.append(plexPanel);
+    const dom = emptyRendererDomBindings(); dom.plexPanelElement = plexPanel as unknown as HTMLElement;
+    const flowActions: string[] = []; const sections: string[] = [];
+    registerRendererActions(dom, documentRef as unknown as Document, {
+      activateRoute: () => undefined, applyRouteAction: () => undefined, applySettingsAction: () => undefined,
+      applyChannelSetupAction: () => undefined, applyChannelCommitAction: () => undefined, applyEpgAction: () => undefined,
+      applyOverlayAction: () => undefined, applyPlexRuntimeAction: () => undefined,
+      applyStagedSetupAction: (action) => flowActions.push(action),
+      setPlexHomeUserPin: () => undefined, setPlexSearchQuery: () => undefined,
+      selectPlexHomeUser: () => undefined, selectPlexServer: () => undefined,
+      selectPlexSection: (id) => sections.push(id), openPlexMetadata: () => undefined,
+      focusElement: () => undefined, toggleFullscreen: () => undefined,
+      selectAudioTrack: () => undefined, selectSubtitleTrack: () => undefined,
+    });
+    flow.click(); section.click();
+    owner.setAttribute('hidden', ''); plexOwner.setAttribute('inert', '');
+    flow.click(); section.click();
+    owner.attributes.delete('hidden'); owner.setAttribute('aria-hidden', 'true');
+    plexOwner.attributes.delete('inert'); plexOwner.setAttribute('aria-hidden', 'true');
+    flow.click(); section.click();
+    assert.deepEqual(flowActions, ['previewNext']);
+    assert.deepEqual(sections, ['movies']);
+    assert.equal(isEligibleDelegatedAction(flow as unknown as HTMLElement), false);
+  });
+});
+
+test('renderer action registration delegates custom editor media and delete actions only from the active owner', () => {
+  withTestHTMLElement(() => {
+    const documentRef = new TestDocument();
+    const setupScreen = new TestElement();
+    const editorOwner = new TestElement();
+    const deleteOwner = new TestElement();
+    const save = new TestElement();
+    const media = new TestElement();
+    const confirmDelete = new TestElement();
+    setupScreen.id = 'screen-channel-setup';
+    editorOwner.dataset.stagedOwner = 'custom-edit';
+    editorOwner.dataset.ownerActive = 'true';
+    deleteOwner.dataset.stagedOwner = 'custom-delete-confirm';
+    deleteOwner.dataset.ownerActive = 'false';
+    save.dataset.customChannelAction = 'saveDraft';
+    media.dataset.customChannelAction = 'addMedia';
+    media.dataset.customChannelDetail = 'rating-1';
+    confirmDelete.dataset.customChannelAction = 'confirmDeleteChannel';
+    confirmDelete.dataset.customChannelDetail = 'channel-1';
+    editorOwner.append(save);
+    editorOwner.append(media);
+    deleteOwner.append(confirmDelete);
+    setupScreen.append(editorOwner);
+    setupScreen.append(deleteOwner);
+    documentRef.append(setupScreen);
+    const actions: string[] = [];
+
+    registerRendererActions(emptyRendererDomBindings(), documentRef as unknown as Document, {
+      activateRoute: () => undefined,
+      applyRouteAction: () => undefined,
+      applySettingsAction: () => undefined,
+      applyChannelSetupAction: () => undefined,
+      applyChannelCommitAction: () => undefined,
+      applyEpgAction: () => undefined,
+      applyOverlayAction: () => undefined,
+      applyPlexRuntimeAction: () => undefined,
+      applyCustomChannelAction: (action, detail) => actions.push(`${action}:${detail ?? ''}`),
+      setPlexHomeUserPin: () => undefined,
+      setPlexSearchQuery: () => undefined,
+      selectPlexHomeUser: () => undefined,
+      selectPlexServer: () => undefined,
+      selectPlexSection: () => undefined,
+      openPlexMetadata: () => undefined,
+      focusElement: () => undefined,
+      toggleFullscreen: () => undefined,
+      selectAudioTrack: () => undefined,
+      selectSubtitleTrack: () => undefined,
+    });
+
+    save.dispatchEvent(new TestDomEvent('click', true));
+    media.dispatchEvent(new TestDomEvent('click', true));
+    save.disabled = true;
+    save.dispatchEvent(new TestDomEvent('click', true));
+    editorOwner.setAttribute('aria-hidden', 'true');
+    media.dispatchEvent(new TestDomEvent('click', true));
+    editorOwner.setAttribute('aria-hidden', 'false');
+    editorOwner.dataset.ownerActive = 'false';
+    deleteOwner.dataset.ownerActive = 'true';
+    confirmDelete.dataset.focusId = 'custom-delete-confirm';
+    const focusDom = emptyRendererDomBindings();
+    focusDom.focusableElements = [confirmDelete as unknown as HTMLElement];
+    clickFocusedRendererElement({ activeRoute: 'channelSetup', activeId: 'custom-delete-confirm' }, focusDom);
+
+    assert.deepEqual(actions, [
+      'saveDraft:',
+      'addMedia:rating-1',
+      'confirmDeleteChannel:channel-1',
+    ]);
   });
 });
 

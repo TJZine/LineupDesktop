@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { initializeProfilePinModal, openProfilePinModal, closeProfilePinModal, isProfilePinModalActive } from '../../renderer/profilePinModal.js';
 import type { PlexHomeUserSummary } from '../../contracts/plex.js';
 import type { FocusState, AppRouteId, FocusRegistry } from '../../renderer/navigation.js';
+import { mountStaticRendererDom } from '../../renderer/staticDom.js';
 
 class MockElement {
   id: string;
@@ -60,6 +61,7 @@ test('Profile PIN Modal Suite', async (t) => {
 
   const modalEl = new MockElement('profile-pin-modal');
   const nameEl = new MockElement('profile-pin-modal-username');
+  const avatarEl = new MockElement('profile-pin-avatar');
   const errorEl = new MockElement('profile-pin-modal-error');
   const slots = [
     new MockElement('slot-0'),
@@ -82,6 +84,9 @@ test('Profile PIN Modal Suite', async (t) => {
   const globalDocument = {
     getElementById: (id: string) => elementsMap[id] || null,
     querySelector: (selector: string) => {
+      if (selector === '[data-profile-pin-avatar]') {
+        return avatarEl;
+      }
       const slotMatch = selector.match(/\[data-pin-slot="(\d)"\]/);
       if (slotMatch) {
         return slots[parseInt(slotMatch[1])];
@@ -89,7 +94,7 @@ test('Profile PIN Modal Suite', async (t) => {
       return null;
     },
     querySelectorAll: (selector: string) => {
-      if (selector === '.numpad-btn') {
+      if (selector === '[data-numpad]') {
         return numpadButtons;
       }
       return [];
@@ -106,6 +111,7 @@ test('Profile PIN Modal Suite', async (t) => {
     let switchHomeUserCalled = false;
     let switchedUserId = '';
     let hasError = false;
+    let invalidationCount = 0;
 
     const mockController = {
       setHomeUserPin: (pin: string) => { homeUserPinSet = pin; },
@@ -116,6 +122,10 @@ test('Profile PIN Modal Suite', async (t) => {
       getState: () => ({
         errorText: hasError ? 'Incorrect PIN' : null,
       }),
+      invalidateProfileSwitch: () => {
+        invalidationCount += 1;
+        hasError = false;
+      },
     };
 
     let focusState: FocusState = { activeId: null, activeRoute: 'channelSetup' };
@@ -128,7 +138,7 @@ test('Profile PIN Modal Suite', async (t) => {
       setFocusState: (state: FocusState) => { focusState = state; },
       getFocusRegistry: () => ({
         focusTarget: (state: FocusState, id: string) => (
-          !id.startsWith('numpad-') || (modalTargetsRegistered && modalEl.hidden === false)
+          !id.startsWith('btn-profile-pin-') || (modalTargetsRegistered && modalEl.hidden === false)
             ? { state: { ...state, activeId: id }, changed: true }
             : { state, changed: false }
         ),
@@ -143,7 +153,7 @@ test('Profile PIN Modal Suite', async (t) => {
     // Initialize
     initializeProfilePinModal(mockContext);
 
-    await t.test('openProfilePinModal should show modal, set username, and focus numpad-1', () => {
+    await t.test('openProfilePinModal should show modal, set username, and focus the center 5', () => {
       renderAppCalled = false;
       modalTargetsRegistered = false;
       const user: PlexHomeUserSummary = { id: 'user-1', title: 'Test User', admin: false, protected: true };
@@ -153,7 +163,8 @@ test('Profile PIN Modal Suite', async (t) => {
       assert.equal(modalEl.hidden, false);
       assert.equal(modalEl.getAttribute('aria-hidden'), 'false');
       assert.equal(nameEl.textContent, 'Test User');
-      assert.equal(focusState.activeId, 'numpad-1');
+      assert.equal(avatarEl.textContent, 'T');
+      assert.equal(focusState.activeId, 'btn-profile-pin-5');
       assert.equal(slots[0].textContent, '');
       assert.equal(renderAppCalled, true);
       assert.equal(modalEl.hidden, false);
@@ -213,6 +224,7 @@ test('Profile PIN Modal Suite', async (t) => {
 
     await t.test('openProfilePinModal handling error path', async () => {
       hasError = true;
+      focusState = { activeId: 'btn-profile-profile-2', activeRoute: 'channelSetup' };
       const user: PlexHomeUserSummary = { id: 'user-2', title: 'Error User', admin: false, protected: true };
       openProfilePinModal(user);
 
@@ -230,12 +242,17 @@ test('Profile PIN Modal Suite', async (t) => {
       assert.equal(errorEl.hidden, false);
       assert.equal(errorEl.textContent, 'Incorrect PIN');
       assert.equal(slots[0].textContent, '');
+      assert.equal(focusState.activeId, 'btn-profile-pin-9');
+      assert.equal(isProfilePinModalActive(), true);
     });
 
     await t.test('closeProfilePinModal should unmount keydown listeners', () => {
-      closeProfilePinModal({ refocus: false });
+      closeProfilePinModal();
       assert.equal(isProfilePinModalActive(), false);
       assert.equal(windowListeners['keydown']?.length ?? 0, 0);
+      assert.equal(invalidationCount, 1);
+      assert.equal(hasError, false);
+      assert.equal(focusState.activeId, 'btn-profile-profile-2');
     });
 
   } finally {
@@ -250,4 +267,29 @@ test('Profile PIN Modal Suite', async (t) => {
       Object.defineProperty(globalThis, 'window', { value: originalWindow, configurable: true });
     }
   }
+});
+
+test('Profile PIN modal keeps the upstream-shaped local header, 11-key grid, separate Cancel, and frozen focus ids', () => {
+  const root = { innerHTML: '', querySelector: () => null };
+  mountStaticRendererDom({
+    querySelector: (selector: string) => selector === '[data-static-screen-root]' ? root : null,
+  } as unknown as Document);
+  const markup = root.innerHTML;
+  const numpadMarkup = markup.match(/<div class="profile-pin-modal__numpad">([^]*?)<\/div>/u)?.[1] ?? '';
+  assert.match(markup, /<div class="profile-pin-user" aria-hidden="true">\s*<div class="profile-pin-avatar profile-pin-avatar-fallback" data-profile-pin-avatar><\/div>\s*<\/div>\s*<header class="profile-pin-modal__header">/u);
+  assert.equal(markup.match(/data-pin-slot="[0-3]"/gu)?.length, 4);
+  assert.equal(numpadMarkup.match(/class="numpad-btn(?: [^"]+)?"/gu)?.length, 11);
+  assert.doesNotMatch(numpadMarkup, /btn-profile-pin-cancel/u);
+  assert.match(markup, /<\/div>\s*<p class="profile-pin-modal__error"[^>]*>[^<]*<\/p>\s*<button type="button" class="profile-pin-cancel" data-numpad="cancel" data-focus-id="btn-profile-pin-cancel">Cancel<\/button>/u);
+
+  const frozenFocusIds = [
+    'btn-profile-pin-1', 'btn-profile-pin-2', 'btn-profile-pin-3',
+    'btn-profile-pin-4', 'btn-profile-pin-5', 'btn-profile-pin-6',
+    'btn-profile-pin-7', 'btn-profile-pin-8', 'btn-profile-pin-9',
+    'btn-profile-pin-backspace', 'btn-profile-pin-0', 'btn-profile-pin-cancel',
+  ];
+  assert.deepEqual(
+    Array.from(markup.matchAll(/data-focus-id="(btn-profile-pin-[^"]+)"/gu), (match) => match[1]),
+    frozenFocusIds,
+  );
 });

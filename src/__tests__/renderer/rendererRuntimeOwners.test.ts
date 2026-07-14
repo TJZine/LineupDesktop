@@ -9,6 +9,9 @@ import { createGuidePresentationPolling } from '../../renderer/guidePresentation
 import { dispatchPlexRuntimeAction } from '../../renderer/plexRuntimeActionDispatch.js';
 import { subscribePlayerBridge } from '../../renderer/playerBridgeSubscription.js';
 import type { PlexRuntimeController } from '../../renderer/plexRuntimeActions.js';
+import { createShellController } from '../../renderer/shell/shellController.js';
+import { createRendererShellState, type RendererShellState } from '../../renderer/shell/shellState.js';
+import { mountStaticRendererDom } from '../../renderer/staticDom.js';
 
 test('player bridge subscription owns event projection and unsubscribe cleanup', async () => {
   const fixtures = createRendererPresentationFixtures();
@@ -126,6 +129,168 @@ test('guide presentation polling ignores stale and stopped refreshes', async () 
   assert.equal(requests.length, 3);
 });
 
+test('shell controller rejects stale capabilities and exposes recoverable safe startup failure', async () => {
+  const requests: Array<Deferred<Awaited<ReturnType<LineupDesktopPreloadApi['shell']['getCapabilities']>>>> = [];
+  let state = createRendererShellState();
+  const focused: string[] = [];
+  const controller = createShellController({
+    shell: {
+      getCapabilities: () => {
+        const request = createDeferred<Awaited<ReturnType<LineupDesktopPreloadApi['shell']['getCapabilities']>>>();
+        requests.push(request);
+        return request.promise;
+      },
+      onStatusChanged: () => () => undefined,
+    },
+    windowBridge: { setFullscreen: async () => { throw new Error('unused'); } },
+    host: { setTimeout: () => 1, clearTimeout: () => undefined },
+    getState: () => state,
+    setState: (next) => { state = next; },
+    render: () => undefined,
+    applyCapabilities: () => undefined,
+    applyFullscreen: () => undefined,
+    restoreFocus: (id) => focused.push(id),
+  });
+
+  const first = controller.start();
+  controller.cleanup();
+  requests[0]?.resolve({
+    ok: true,
+    requestId: 'late',
+    value: {
+      appName: 'Lineup Desktop',
+      appVersion: '1.0.0',
+      platform: 'darwin',
+      shellMode: 'development',
+      protocolOrigin: 'lineup://shell',
+    },
+  });
+  await first;
+  assert.equal(state.bootstrap, 'splash');
+
+  let retryState = createRendererShellState();
+  const retryController = createShellController({
+    shell: {
+      getCapabilities: async () => { throw new Error('private bridge detail'); },
+      onStatusChanged: () => () => undefined,
+    },
+    windowBridge: { setFullscreen: async () => { throw new Error('unused'); } },
+    host: { setTimeout: () => 1, clearTimeout: () => undefined },
+    getState: () => retryState,
+    setState: (next) => { retryState = next; },
+    render: () => undefined,
+    applyCapabilities: () => undefined,
+    applyFullscreen: () => undefined,
+    restoreFocus: (id) => focused.push(id),
+  });
+  await retryController.start();
+  assert.equal(retryState.bootstrap, 'error');
+  assert.equal(retryState.blockingErrorMessage, 'Lineup could not start.');
+  assert.equal(focused.at(-1), 'shell-error-retry');
+});
+
+test('shell controller preserves fullscreen focus and owns 5000/200/1500 toast timing', async () => {
+  let state = createRendererShellState();
+  state = { ...state, bootstrap: 'ready' };
+  let enabled = false;
+  let now = 2000;
+  let nextTimer = 1;
+  const timers = new Map<number, { callback: () => void; delay: number }>();
+  const focused: string[] = [];
+  const controller = createShellController({
+    shell: {
+      getCapabilities: async () => { throw new Error('unused'); },
+      onStatusChanged: () => () => undefined,
+    },
+    windowBridge: {
+      setFullscreen: async (desired) => ({
+        ok: true,
+        requestId: `fullscreen-${desired}`,
+        value: { enabled: desired },
+      }),
+    },
+    host: {
+      setTimeout: (callback, delay) => {
+        const id = nextTimer++;
+        timers.set(id, { callback, delay });
+        return id;
+      },
+      clearTimeout: (id) => { timers.delete(id); },
+    },
+    getState: () => state,
+    setState: (next) => { state = next; },
+    render: () => undefined,
+    applyCapabilities: () => undefined,
+    applyFullscreen: (next) => { enabled = next; },
+    restoreFocus: (id) => focused.push(id),
+    nowMs: () => now,
+  });
+
+  await controller.requestFullscreen(true, 'player-osd');
+  assert.equal(enabled, true);
+  assert.equal(focused.at(-1), 'player-osd');
+  assert.equal(state.toast?.message, 'Entered fullscreen');
+  assert.deepEqual([...timers.values()].map((timer) => timer.delay), [5000]);
+  const visibleTimer = [...timers.entries()][0];
+  visibleTimer?.[1].callback();
+  assert.equal(state.toast?.phase, 'fading');
+  assert.deepEqual([...timers.values()].map((timer) => timer.delay), [5000, 200]);
+
+  now = 2500;
+  await controller.requestFullscreen(false, 'player-fullscreen');
+  assert.equal(state.toast?.message, 'Entered fullscreen');
+  now = 4000;
+  await controller.requestFullscreen(true, 'player-fullscreen');
+  assert.equal(state.toast?.message, 'Entered fullscreen');
+});
+
+test('fullscreen retry keeps inline owner pending and restores retry focus after rejection', async () => {
+  const request = createDeferred<Awaited<ReturnType<LineupDesktopPreloadApi['window']['setFullscreen']>>>();
+  let calls = 0;
+  let state: RendererShellState = {
+    ...createRendererShellState(),
+    bootstrap: 'ready' as const,
+    inlineError: { desiredFullscreen: true, message: 'Try the fullscreen action again.' },
+  };
+  const focused: string[] = [];
+  const controller = createShellController({
+    shell: {
+      getCapabilities: async () => { throw new Error('unused'); },
+      onStatusChanged: () => () => undefined,
+    },
+    windowBridge: {
+      setFullscreen: () => {
+        calls += 1;
+        return request.promise;
+      },
+    },
+    host: { setTimeout: () => 1, clearTimeout: () => undefined },
+    getState: () => state,
+    setState: (next) => { state = next; },
+    render: () => undefined,
+    applyCapabilities: () => undefined,
+    applyFullscreen: () => undefined,
+    restoreFocus: (id) => focused.push(id),
+  });
+
+  const retry = controller.retryFullscreen();
+  const duplicate = controller.retryFullscreen();
+  assert.equal(calls, 1);
+  assert.equal(state.fullscreenPending, true);
+  assert.equal(state.inlineError?.desiredFullscreen, true);
+  await duplicate;
+
+  request.resolve({
+    ok: false,
+    requestId: 'fullscreen-retry-failed',
+    error: { code: 'operation-failed', message: 'private detail must not render' },
+  });
+  await retry;
+  assert.equal(state.fullscreenPending, false);
+  assert.equal(state.inlineError?.message, 'Try the fullscreen action again.');
+  assert.equal(focused.at(-1), 'shell-inline-retry');
+});
+
 test('Plex runtime action dispatch preserves source cleanup ownership', async () => {
   const calls: string[] = [];
   const controller = createPlexControllerStub(calls);
@@ -145,6 +310,16 @@ test('Plex runtime action dispatch preserves source cleanup ownership', async ()
     'restoreSelectedServer',
     'clearMetadata',
   ]);
+});
+
+test('shell splash and loading reserve both exact production brand assets', () => {
+  const root = { innerHTML: '', querySelector: () => null };
+  mountStaticRendererDom({
+    querySelector: (selector: string) => selector === '[data-static-screen-root]' ? root : null,
+  } as unknown as Document);
+  assert.equal(root.innerHTML.match(/src="\.\/assets\/lineup-logo-mark\.png"/gu)?.length, 2);
+  assert.equal(root.innerHTML.match(/src="\.\/assets\/lineup-wordmark\.png"/gu)?.length, 2);
+  assert.doesNotMatch(root.innerHTML, /shell-brand-mark|LINE<span>U<\/span>P/u);
 });
 
 interface Deferred<TValue> {
@@ -187,6 +362,9 @@ function createPlexControllerStub(calls: string[]): PlexRuntimeController {
     clearSelectedSection: () => record('clearSelectedSection'),
     clearSelectedServer: () => record('clearSelectedServer'),
     clearPinSubflow: () => recordAsync('clearPinSubflow'),
+    dismissPinError: () => record('dismissPinError'),
+    invalidateProfileSwitch: () => record('invalidateProfileSwitch'),
+    invalidateOnboardingOperations: () => record('invalidateOnboardingOperations'),
     handleBack: async () => false,
     loadSnapshot: () => recordAsync('loadSnapshot'),
     requestPin: () => recordAsync('requestPin'),

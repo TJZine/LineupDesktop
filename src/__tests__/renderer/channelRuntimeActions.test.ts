@@ -32,11 +32,13 @@ test('channel runtime controller ignores direct duplicate commits while one is p
   pendingCommit.resolve(channelSetupSuccess('commit', summary([
     { id: 'channel-movies', number: 1, name: 'Movies', itemCount: 2 },
   ])));
-  await Promise.all([first, second]);
+  const [firstOutcome, secondOutcome] = await Promise.all([first, second]);
 
   assert.equal(commitCalls.length, 1);
   assert.equal(controller.getState().pending, false);
   assert.equal(controller.getState().summary?.channelCount, 1);
+  assert.equal(firstOutcome, 'succeeded');
+  assert.equal(secondOutcome, 'skipped');
   assert.deepEqual(states, ['Saving channels', 'Recovered']);
 });
 

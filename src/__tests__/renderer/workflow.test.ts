@@ -26,6 +26,8 @@ import {
   type ChannelRuntimeRendererState,
 } from '../../renderer/channelRuntimeState.js';
 import { setEpgPresentationState, type EpgPresentationSource } from '../../renderer/epg.js';
+import { createStagedSetupController, dispatchStagedSetupAction, handleStagedSetupBack } from '../../renderer/setup/stagedSetupController.js';
+import { createCustomChannelController } from '../../renderer/customChannels/controller.js';
 
 test('workflow state starts on the player route with injected presentation context', () => {
   const state = createWorkflowState();
@@ -311,8 +313,7 @@ test('channel setup route is driven by live status and selected library only', (
   const initial = createWorkflowState('channelSetup');
   const replace = applyWorkflowChannelSetupAction(initial, 'selectReplaceBuildMode');
   const append = applyWorkflowChannelSetupAction(replace, 'selectAppendBuildMode');
-  const source = applyWorkflowChannelSetupAction(append, 'selectRecentlyAddedSource');
-  const view = getRouteWorkflowView(source);
+  const view = getRouteWorkflowView(append);
   const viewText = JSON.stringify({
     settings: view.settings,
     channelDrafts: view.channelDrafts,
@@ -321,9 +322,9 @@ test('channel setup route is driven by live status and selected library only', (
     setupValidationMessages: view.setupValidationMessages,
   });
 
-  assert.deepEqual(source.routeState, initial.routeState);
-  assert.equal(source.channelSetupDraft.buildMode, 'append');
-  assert.equal(source.channelSetupDraft.sourceMode, 'recently-added');
+  assert.deepEqual(append.routeState, initial.routeState);
+  assert.equal(append.channelSetupDraft.buildMode, 'append');
+  assert.equal('sourceMode' in append.channelSetupDraft, false);
   assert.equal(view.channelDrafts.length, 0);
   assert.equal(view.channelSetupSummary.sourceName, 'Persisted channel status unavailable');
   assert.equal(view.channelSetupSummary.enabledChannelCount, 0);
@@ -382,7 +383,6 @@ test('channel setup local strategy actions update review state without persisten
   const initial = createWorkflowState('channelSetup');
   const replace = applyWorkflowChannelSetupAction(initial, 'selectReplaceBuildMode');
   const append = applyWorkflowChannelSetupAction(replace, 'selectAppendBuildMode');
-  const source = applyWorkflowChannelSetupAction(append, 'selectRecentlyAddedSource');
   const replaceView = getRouteWorkflowView(replace, configuredChannelRuntimeState(), {
     sourceName: 'Selected Movies',
     sourceType: 'movie',
@@ -397,7 +397,7 @@ test('channel setup local strategy actions update review state without persisten
   });
 
   assert.equal(replace.channelSetupDraft.buildMode, 'replace');
-  assert.equal(source.channelSetupDraft.sourceMode, 'recently-added');
+  assert.equal('sourceMode' in append.channelSetupDraft, false);
   assert.equal(replaceView.channelSetupFlow.buildMode, 'replace');
   assert.equal(replaceView.channelSetupFlow.reviewRows.find((row) => row.label === 'Build mode')?.value, 'Replace saved lineup');
   assert.equal(replaceView.channelSetupFlow.strategyOptions.find((option) => option.id === 'build-mode-replace')?.selected, true);
@@ -694,6 +694,330 @@ test('workflow view models avoid Plex and player privileged renderer fields', ()
     const view = getRouteWorkflowView(createWorkflowState(routeId));
     assert.equal(containsPlexForbiddenRendererField(view), false, routeId);
   }
+});
+
+test('staged setup keeps one owner, invalidates cancelled progress, and chooses Watch deterministically', () => {
+  const controller = createStagedSetupController({ onStateChanged: () => undefined });
+  controller.enter('settings', 'settings-setup');
+  controller.showOwner('preview', 'setup-preview-toggle');
+  controller.showOwner('build', 'setup-confirm');
+  const staleGeneration = controller.beginCommit();
+  controller.cancelCommitView();
+  assert.equal(controller.completeCommit(staleGeneration, 'append', null, configuredChannelRuntimeState().summary), false);
+  assert.equal(controller.getState().owner, 'build');
+
+  const generation = controller.beginCommit();
+  const after = configuredChannelRuntimeState().summary;
+  assert.equal(controller.completeCommit(generation, 'append', null, after), true);
+  assert.equal(controller.getState().owner, 'result');
+  assert.equal(controller.getState().resultWatchChannelId, 'channel-one');
+  assert.equal(controller.getState().returnRoute, 'settings');
+  assert.equal(controller.getState().returnFocusId, 'settings-setup');
+});
+
+test('library Retry inspects failure and restores retained, first eligible, or empty focus', async () => {
+  const controller = createStagedSetupController({ onStateChanged: () => undefined });
+  const movies = { id: 'movies', title: 'Movies', type: 'movie' as const, contentCount: 1, lastScannedAtMs: 0 };
+  const shows = { id: 'shows', title: 'Shows', type: 'show' as const, contentCount: 1, lastScannedAtMs: 0 };
+  let sections = [movies, shows];
+  type LibraryState = 'ready' | 'empty' | 'error';
+  let library: LibraryState = 'ready';
+  let nextLibrary: LibraryState = 'ready';
+  let plexError: string | null = null;
+  const runtime = {
+    getState: () => ({ library, preview: 'collapsed', serverId: 'server-1', previewSectionId: null, previewRatingKey: null }),
+    retryLibraries: async () => { library = nextLibrary; },
+  } as unknown as Parameters<typeof dispatchStagedSetupAction>[0]['runtime'];
+  const dispatch = () => dispatchStagedSetupAction({
+    action: controller.getState().owner === 'recovery-error' ? 'recoveryRetry' : 'libraryRetry', controller, runtime,
+    channelController: {} as Parameters<typeof dispatchStagedSetupAction>[0]['channelController'],
+    sections, getSections: () => sections, getCurrentPlexError: () => plexError,
+    previewCursor: null, getPreviewRatingKey: () => null, sectionsServerId: () => 'server-1',
+    setPreviewCursor: () => undefined, closePreviewMetadata: () => undefined, returnToServer: () => undefined,
+    closeSetup: () => undefined, tuneChannel: async () => false, startBlankCustomDraft: () => undefined,
+    cancelCustomDraft: () => undefined, cancelCustomDeleteConfirmation: () => undefined,
+  });
+
+  controller.toggleLibrary('shows', sections);
+  await dispatch();
+  assert.equal(controller.getState().focusIntent, 'plex-dyn-section-shows');
+  controller.clearLibraries(sections);
+  sections = [movies];
+  await dispatch();
+  assert.equal(controller.getState().focusIntent, 'plex-dyn-section-movies');
+
+  sections = [];
+  nextLibrary = 'empty';
+  await dispatch();
+  assert.equal(controller.getState().focusIntent, 'setup-library-retry');
+  nextLibrary = 'error';
+  plexError = 'Libraries are offline.';
+  await dispatch();
+  assert.equal(controller.getState().owner, 'recovery-error');
+  assert.equal(controller.getState().safeError, 'Libraries are offline.');
+  assert.equal(controller.getState().focusIntent, 'setup-error-retry');
+  await dispatch();
+  assert.equal(controller.getState().owner, 'recovery-error');
+  assert.equal(controller.getState().focusIntent, 'setup-error-retry');
+  sections = [movies];
+  nextLibrary = 'ready';
+  plexError = null;
+  await dispatch();
+  assert.equal(controller.getState().owner, 'library');
+  assert.equal(controller.getState().focusIntent, 'plex-dyn-section-movies');
+  controller.toggleLibrary('movies', sections);
+  nextLibrary = 'error';
+  plexError = 'Libraries are offline.';
+  await dispatch();
+  nextLibrary = 'ready';
+  plexError = null;
+  await dispatch();
+  assert.equal(controller.getState().focusIntent, 'plex-dyn-section-movies');
+});
+
+test('staged setup projects the 24-library selection limit into renderer state', () => {
+  const controller = createStagedSetupController({ onStateChanged: () => undefined });
+  const sections = Array.from({ length: 25 }, (_, index) => ({
+    id: `library-${String(index + 1)}`, title: `Library ${String(index + 1)}`, type: 'movie' as const, contentCount: 1, lastScannedAtMs: 0,
+  }));
+  controller.selectAllLibraries(sections, null);
+  assert.equal(controller.getState().selectedSectionIds.length, 24);
+  assert.equal(controller.getState().selectionLimitReached, true);
+  controller.clearLibraries(sections);
+  assert.equal(controller.getState().selectionLimitReached, false);
+  assert.equal(controller.getState().focusIntent, 'plex-dyn-section-library-1');
+});
+
+test('library Retry continuations cannot reopen an invalidated or newer setup owner', async () => {
+  const controller = createStagedSetupController({ onStateChanged: () => undefined });
+  const first = deferred<void>();
+  const second = deferred<void>();
+  const retries = [first, second];
+  let call = 0;
+  const runtime = {
+    getState: () => ({ library: 'ready', preview: 'collapsed', serverId: 'server-1', previewSectionId: null, previewRatingKey: null }),
+    retryLibraries: async () => { await retries[call++]?.promise; },
+  } as unknown as Parameters<typeof dispatchStagedSetupAction>[0]['runtime'];
+  const dispatch = (action: 'libraryRetry' | 'recoveryRetry') => dispatchStagedSetupAction({
+    action, controller, runtime,
+    channelController: {} as Parameters<typeof dispatchStagedSetupAction>[0]['channelController'],
+    sections: [], getSections: () => [], getCurrentPlexError: () => null,
+    previewCursor: null, getPreviewRatingKey: () => null, sectionsServerId: () => 'server-1',
+    setPreviewCursor: () => undefined, closePreviewMetadata: () => undefined, returnToServer: () => undefined,
+    closeSetup: () => undefined, tuneChannel: async () => false, startBlankCustomDraft: () => undefined,
+    cancelCustomDraft: () => undefined, cancelCustomDeleteConfirmation: () => undefined,
+  });
+
+  const staleLibrary = dispatch('libraryRetry');
+  await Promise.resolve();
+  controller.invalidateAsync();
+  controller.showOwner('preview', 'setup-category-build');
+  first.resolve();
+  await staleLibrary;
+  assert.equal(controller.getState().owner, 'preview');
+  assert.equal(controller.getState().focusIntent, 'setup-category-build');
+
+  controller.showRecovery('Libraries are offline.', { originStep: 'library', operation: 'listLibraries', invokerFocusId: 'setup-library-retry' });
+  const staleRecovery = dispatch('recoveryRetry');
+  await Promise.resolve();
+  controller.invalidateAsync();
+  second.resolve();
+  await staleRecovery;
+  assert.equal(controller.getState().owner, 'library');
+  assert.equal(controller.getState().focusIntent, 'setup-select-all');
+});
+
+test('result Watch ignores invalidation during tune before closing or restoring result', async () => {
+  for (const tuned of [true, false]) {
+    const controller = createStagedSetupController({ onStateChanged: () => undefined });
+    const generation = controller.beginCommit();
+    controller.completeCommit(generation, 'append', null, configuredChannelRuntimeState().summary);
+    const pendingTune = deferred<boolean>();
+    let closeCalls = 0;
+    const action = dispatchStagedSetupAction({
+      action: 'resultWatch', controller,
+      runtime: {} as Parameters<typeof dispatchStagedSetupAction>[0]['runtime'],
+      channelController: {} as Parameters<typeof dispatchStagedSetupAction>[0]['channelController'], sections: [],
+      previewCursor: null, setPreviewCursor: () => undefined, closePreviewMetadata: () => undefined,
+      returnToServer: () => undefined, closeSetup: () => { closeCalls++; }, tuneChannel: async () => pendingTune.promise,
+      startBlankCustomDraft: () => undefined, cancelCustomDraft: () => undefined,
+      cancelCustomDeleteConfirmation: () => undefined,
+    });
+    await Promise.resolve();
+    controller.invalidateAsync();
+    controller.showOwner('preview', 'setup-category-build');
+    pendingTune.resolve(tuned);
+    await action;
+    assert.equal(closeCalls, 0);
+    assert.equal(controller.getState().owner, 'preview');
+    assert.equal(controller.getState().focusIntent, 'setup-category-build');
+  }
+});
+
+test('build recovery ignores invalidation during status load before restoring or reopening recovery', async () => {
+  for (const errorText of [null, 'Status remains unavailable.']) {
+    const controller = createStagedSetupController({ onStateChanged: () => undefined });
+    controller.showRecovery('Status unavailable.', { originStep: 'build', operation: 'refreshStatus', invokerFocusId: 'setup-confirm' });
+    const pendingStatus = deferred<void>();
+    const channelController = {
+      loadStatus: async () => pendingStatus.promise,
+      getState: () => ({ errorText }),
+    } as unknown as Parameters<typeof dispatchStagedSetupAction>[0]['channelController'];
+    const action = dispatchStagedSetupAction({
+      action: 'recoveryRetry', controller, channelController,
+      runtime: {} as Parameters<typeof dispatchStagedSetupAction>[0]['runtime'], sections: [], previewCursor: null,
+      setPreviewCursor: () => undefined, closePreviewMetadata: () => undefined, returnToServer: () => undefined,
+      closeSetup: () => undefined, tuneChannel: async () => false, startBlankCustomDraft: () => undefined,
+      cancelCustomDraft: () => undefined, cancelCustomDeleteConfirmation: () => undefined,
+    });
+    await Promise.resolve();
+    controller.invalidateAsync();
+    controller.showOwner('preview', 'setup-category-build');
+    pendingStatus.resolve();
+    await action;
+    assert.equal(controller.getState().owner, 'preview');
+    assert.equal(controller.getState().focusIntent, 'setup-category-build');
+  }
+});
+
+test('expanding preview loads the current cursor before requesting its first live metadata key', async () => {
+  const controller = createStagedSetupController({ onStateChanged: () => undefined });
+  controller.showOwner('preview', 'setup-preview-toggle');
+  const calls: string[] = [];
+  let preview: 'collapsed' | 'ready' | 'empty' = 'collapsed';
+  let sectionId: string | null = null;
+  let liveKey: string | null = null;
+  const runtime = {
+    getState: () => ({ library: 'ready', preview, serverId: 'server-1', previewSectionId: sectionId, previewRatingKey: null }),
+    loadPreview: async (id: string) => { calls.push(`items:${id}`); sectionId = id; preview = 'ready'; liveKey = 'rating-live'; },
+    loadPreviewMetadata: async (key: string) => { calls.push(`metadata:${key}`); },
+  } as Parameters<typeof dispatchStagedSetupAction>[0]['runtime'];
+  await dispatchStagedSetupAction({
+    action: 'previewToggle', controller, runtime,
+    channelController: {} as Parameters<typeof dispatchStagedSetupAction>[0]['channelController'], sections: [],
+    previewCursor: 'movies', getPreviewRatingKey: () => liveKey,
+    setPreviewCursor: () => undefined, closePreviewMetadata: () => undefined, returnToServer: () => undefined,
+    closeSetup: () => undefined, tuneChannel: async () => false, startBlankCustomDraft: () => undefined,
+    cancelCustomDraft: () => undefined, cancelCustomDeleteConfirmation: () => undefined,
+  });
+  assert.deepEqual(calls, ['items:movies', 'metadata:rating-live']);
+});
+
+test('cancelled progress blocks repeat Build while its channel commit remains pending', async () => {
+  const pendingCommit = deferred<ChannelSetupIpcResult<ChannelSetupSummary>>();
+  let commitCalls = 0;
+  const committedSectionIds: string[][] = [];
+  const channelController = createChannelRuntimeController({
+    bridge: {
+      getStatus: async () => channelSetupSuccess('status-after-cancel', configuredChannelRuntimeState().summary as ChannelSetupSummary),
+      commit: async (request) => {
+        commitCalls++;
+        committedSectionIds.push([...request.sectionIds]);
+        return pendingCommit.promise;
+      },
+    },
+    onStateChanged: () => undefined,
+  });
+  const controller = createStagedSetupController({ onStateChanged: () => undefined });
+  const sections = [
+    { id: 'movies', title: 'Movies', type: 'movie' as const, contentCount: 1, lastScannedAtMs: 0 },
+    { id: 'shows', title: 'Shows', type: 'show' as const, contentCount: 1, lastScannedAtMs: 0 },
+  ];
+  controller.toggleLibrary('movies', sections);
+  controller.toggleLibrary('shows', sections);
+  controller.showOwner('build', 'setup-confirm');
+  const dispatch = (action: Parameters<typeof dispatchStagedSetupAction>[0]['action']) => dispatchStagedSetupAction({
+    action,
+    controller,
+    channelController,
+    runtime: {} as Parameters<typeof dispatchStagedSetupAction>[0]['runtime'],
+    sections,
+    previewCursor: 'movies',
+    getPreviewRatingKey: () => null,
+    setPreviewCursor: () => undefined,
+    closePreviewMetadata: () => undefined,
+    returnToServer: () => undefined,
+    closeSetup: () => undefined,
+    tuneChannel: async () => true,
+    startBlankCustomDraft: () => undefined,
+    cancelCustomDraft: () => undefined,
+    cancelCustomDeleteConfirmation: () => undefined,
+  });
+
+  const firstBuild = dispatch('buildConfirm');
+  assert.equal(controller.getState().owner, 'progress');
+  assert.equal(channelController.getState().pending, true);
+  await dispatch('progressCancel');
+  assert.equal(controller.getState().owner, 'build');
+  assert.equal(channelController.getState().pending, true);
+
+  await dispatch('buildConfirm');
+  assert.equal(commitCalls, 1);
+  assert.deepEqual(committedSectionIds, [['movies', 'shows']]);
+  assert.equal(controller.getState().owner, 'build');
+
+  pendingCommit.resolve(channelSetupSuccess('stale-commit', configuredChannelRuntimeState().summary as ChannelSetupSummary));
+  await firstBuild;
+  assert.equal(controller.getState().owner, 'build');
+  assert.equal(channelController.getState().pending, false);
+});
+
+test('staged custom editor and delete modal restore exact list invokers', () => {
+  const controller = createStagedSetupController({ onStateChanged: () => undefined });
+  controller.showOwner('setup-custom', 'custom-channel-new');
+  controller.openCustomEditor('custom-channel-duplicate-custom-1');
+  controller.closeCustomEditor();
+  assert.equal(controller.getState().owner, 'setup-custom');
+  assert.equal(controller.getState().focusIntent, 'custom-channel-duplicate-custom-1');
+
+  controller.openDeleteConfirmation('custom-1', 'custom-channel-delete-custom-1');
+  assert.equal(controller.getState().owner, 'custom-delete-confirm');
+  controller.closeDeleteConfirmation('custom-channel-new');
+  assert.equal(controller.getState().owner, 'setup-custom');
+  assert.equal(controller.getState().focusIntent, 'custom-channel-new');
+});
+
+test('visible delete cancel clears custom substate before the next editor Back', async () => {
+  const controller = createStagedSetupController({ onStateChanged: () => undefined });
+  const customController = createCustomChannelController({
+    bridge: {} as Parameters<typeof createCustomChannelController>[0]['bridge'],
+    onStateChanged: () => undefined,
+  });
+  controller.showOwner('setup-custom', 'custom-channel-delete-custom-1');
+  controller.openDeleteConfirmation('custom-1', 'custom-channel-delete-custom-1');
+  await customController.applyAction('requestDeleteChannel', 'custom-1');
+  await dispatchStagedSetupAction({
+    action: 'customDeleteCancel',
+    controller,
+    runtime: {} as Parameters<typeof dispatchStagedSetupAction>[0]['runtime'],
+    channelController: {} as ReturnType<typeof createChannelRuntimeController>,
+    sections: [],
+    previewCursor: null,
+    getPreviewRatingKey: () => null,
+    setPreviewCursor: () => undefined,
+    closePreviewMetadata: () => undefined,
+    returnToServer: () => undefined,
+    closeSetup: () => undefined,
+    tuneChannel: async () => false,
+    startBlankCustomDraft: () => undefined,
+    cancelCustomDraft: () => customController.cancelDraft(),
+    cancelCustomDeleteConfirmation: () => customController.cancelDeleteConfirmation(),
+  });
+  assert.equal(customController.getState().deleteConfirmationChannelId, null);
+
+  controller.openCustomEditor('custom-channel-new');
+  await handleStagedSetupBack({
+    controller,
+    customController,
+    plexController: {} as Parameters<typeof handleStagedSetupBack>[0]['plexController'],
+    dispatch: async (action) => {
+      if (action === 'customCancel') {
+        customController.cancelDraft();
+        controller.closeCustomEditor();
+      }
+    },
+  });
+  assert.equal(controller.getState().owner, 'setup-custom');
 });
 
 function configuredChannelRuntimeState(): ChannelRuntimeRendererState {

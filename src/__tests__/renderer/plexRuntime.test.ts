@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   containsPlexForbiddenRendererField,
+  type PlexCancelPinValue,
   type PlexIpcResult,
   type PlexRuntimeSnapshot,
 } from '../../contracts/plex.js';
@@ -17,11 +18,13 @@ import {
 import { FocusRegistry } from '../../renderer/navigation.js';
 import { resolveChannelSetupLiveSelection } from '../../renderer/channelSetup/liveSelection.js';
 import { createPlexRuntimeController } from '../../renderer/plexRuntimeActions.js';
-import { renderPlexRuntimeDom } from '../../renderer/plexRuntimeDom.js';
-import { sanitizePlexRuntimeError } from '../../renderer/plexRuntimeState.js';
+import { readPlexOnboardingState, renderPlexRuntimeDom } from '../../renderer/plexRuntimeDom.js';
+import { createPlexRuntimeRendererState, sanitizePlexRuntimeError } from '../../renderer/plexRuntimeState.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
+import { createPlexOnboardingFlow } from '../../renderer/onboarding/plexOnboardingFlow.js';
+import type { PlexRuntimeController } from '../../renderer/plexRuntimeActions.js';
 
-test('static channel setup markup hosts reachable Plex setup controls', () => {
+test('static channel setup markup preserves onboarding and hosts the isolated Package 3 staged owners', () => {
   const root = { innerHTML: '', querySelector: () => null };
   const documentDouble = {
     querySelector: (selector: string) => selector === '[data-static-screen-root]' ? root : null,
@@ -32,19 +35,36 @@ test('static channel setup markup hosts reachable Plex setup controls', () => {
   const channelSetupMarkup = readStaticChannelSetupMarkup(root.innerHTML);
 
   assert.match(channelSetupMarkup, /data-plex-runtime-panel/u);
+  for (const stateId of ['auth-link-code', 'auth-waiting', 'auth-error', 'profile-select', 'server-select', 'server-error']) {
+    assert.match(channelSetupMarkup, new RegExp(`data-onboarding-owner="${stateId}"`, 'u'));
+  }
   assert.match(channelSetupMarkup, /data-plex-action="requestPin"/u);
-  assert.match(channelSetupMarkup, /data-plex-action="clearSelectedServer"/u);
-  assert.match(channelSetupMarkup, /data-plex-action="clearMetadata"/u);
-  assert.match(channelSetupMarkup, /data-plex-search-query/u);
+  assert.match(channelSetupMarkup, /data-plex-action="dismissPinError"/u);
+  assert.match(channelSetupMarkup, /data-focus-id="btn-profile-pin-5"/u);
+  assert.match(channelSetupMarkup, /data-focus-id="btn-profile-pin-backspace"/u);
+  assert.match(channelSetupMarkup, /data-focus-id="btn-server-switch-profile"/u);
   assert.match(channelSetupMarkup, /screen--onboarding/u);
-  assert.match(channelSetupMarkup, /plex-onboarding-shell/u);
-  assert.match(channelSetupMarkup, /Plex setup/u);
-  assert.match(channelSetupMarkup, /Choose profile/u);
-  assert.match(channelSetupMarkup, /Find servers/u);
-  assert.match(channelSetupMarkup, /Open libraries/u);
+  assert.match(channelSetupMarkup, /data-onboarding-host/u);
+  assert.match(channelSetupMarkup, /Who's watching\?/u);
+  assert.match(channelSetupMarkup, /Select Plex Server/u);
+  assert.match(channelSetupMarkup, /Select All/u);
   assert.match(channelSetupMarkup, /Build channels/u);
-  assert.match(channelSetupMarkup, /data-channel-commit-action="append"/u);
-  assert.match(channelSetupMarkup, /data-channel-commit-action="confirmReplace"/u);
+  for (const ownerId of [
+    'library',
+    'preview',
+    'build',
+    'progress',
+    'result',
+    'recovery-error',
+    'custom-list',
+    'custom-edit',
+    'custom-delete-confirm',
+  ]) {
+    assert.match(channelSetupMarkup, new RegExp(`data-staged-owner="${ownerId}"`, 'u'));
+  }
+  assert.match(channelSetupMarkup, /data-setup-flow-action="libraryNext"/u);
+  assert.match(channelSetupMarkup, /data-setup-flow-action="buildConfirm"/u);
+  assert.match(channelSetupMarkup, /data-focus-id="setup-category-build"/u);
   assert.match(channelSetupMarkup, /data-custom-channel-panel/u);
   assert.match(channelSetupMarkup, /data-custom-channel-action="browseSource"/u);
   assert.match(channelSetupMarkup, /data-custom-channel-action="saveDraft"/u);
@@ -52,16 +72,12 @@ test('static channel setup markup hosts reachable Plex setup controls', () => {
   assert.match(channelSetupMarkup, /data-custom-channel-action="setFilterEpisodes"/u);
   assert.match(channelSetupMarkup, /data-custom-channel-name/u);
   assert.match(channelSetupMarkup, /data-custom-channel-search/u);
-  assert.match(channelSetupMarkup, /Library source/u);
-  assert.match(channelSetupMarkup, /4\. Result/u);
-  assert.ok(
-    channelSetupMarkup.indexOf('id="plex-stage-metadata"') <
-      channelSetupMarkup.indexOf('data-channel-commit-action="append"'),
-  );
-  assert.match(channelSetupMarkup, /Optional media preview/u);
+  for (const focusId of ['custom-channel-hidden', 'custom-channel-search-query', 'custom-channel-browse', 'custom-channel-search', 'custom-channel-clear-search', 'custom-channel-filter-all', 'custom-channel-filter-movies', 'custom-channel-filter-episodes']) {
+    assert.match(channelSetupMarkup, new RegExp(`data-focus-id="${focusId}"`, 'u'));
+  }
   assert.doesNotMatch(
     channelSetupMarkup,
-    /Fake channel setup controls|data-setup-action|data-setup-steps|data-channel-draft-list|data-setup-validation|draft channel|fake blocks|debug|smoke|transport/u,
+    /data-setup-section="account"|data-setup-section="server"|plex-home-pin|plex-clear-server|Sign out|Clear Saved Server|Fake channel setup controls|data-setup-steps|data-channel-commit-action|plex-stage-metadata|4\. Result|Optional media preview|data-channel-draft-list|data-setup-validation|draft channel|fake blocks|debug|smoke|transport/u,
   );
   assert.doesNotMatch(channelSetupMarkup, /https?:|token|serverUri/u);
 });
@@ -114,7 +130,7 @@ test('channel setup live selection ignores stale library item and search state',
   assert.equal(searchSelection?.loadedItemCount, 0);
 });
 
-test('static channel setup commit panel exposes the setup frame style hook', () => {
+test('static channel setup uses the full-screen Package 3 workflow without the retired setup frame', () => {
   const root = { innerHTML: '', querySelector: () => null };
   const documentDouble = {
     querySelector: (selector: string) => selector === '[data-static-screen-root]' ? root : null,
@@ -124,7 +140,9 @@ test('static channel setup commit panel exposes the setup frame style hook', () 
 
   const channelSetupMarkup = readStaticChannelSetupMarkup(root.innerHTML);
 
-  assert.match(channelSetupMarkup, /class="channel-setup-commit setup-section"/u);
+  assert.match(channelSetupMarkup, /class="setup-workflow"/u);
+  assert.match(channelSetupMarkup, /data-staged-owner="build"/u);
+  assert.doesNotMatch(channelSetupMarkup, /class="channel-setup-commit setup-section"/u);
 });
 
 test('Plex runtime controller applies async setup, server, library, search, and metadata transitions', async () => {
@@ -244,6 +262,228 @@ test('Plex runtime controller sanitizes failures, cancels pending PIN, and ignor
   await controller.getHomeUsers();
   assert.equal(controller.getState().errorText, 'The selected Plex server is unreachable.');
   assert.doesNotMatch(JSON.stringify(controller.getState()), /token|serverUri/u);
+});
+
+test('Package 2 onboarding owner projection is exact and setup stages retire the blocking owner', () => {
+  const base = {
+    selectedSectionId: null,
+    selectedServerId: null,
+    selectedItemRatingKey: null,
+    searchQuery: '',
+    homeUserPin: '',
+    statusText: 'Ready',
+    errorText: null,
+    pending: pendingMap(false),
+    lastMetadata: null,
+  };
+  const signedOut = { ...base, snapshot: snapshotSignedOut() };
+  assert.equal(readPlexOnboardingState(signedOut), 'auth-link-code');
+  assert.equal(readPlexOnboardingState({ ...signedOut, snapshot: snapshotPinPending() }), 'auth-waiting');
+  assert.equal(readPlexOnboardingState({ ...signedOut, errorText: 'Safe failure' }), 'auth-error');
+  const signedIn = { ...base, snapshot: snapshotSignedIn() };
+  assert.equal(readPlexOnboardingState(signedIn, 'profile'), 'profile-select');
+  assert.equal(readPlexOnboardingState(signedIn, 'profile', true), 'profile-pin');
+  assert.equal(readPlexOnboardingState(signedIn, 'server'), 'server-select');
+  assert.equal(readPlexOnboardingState({ ...signedIn, errorText: 'Safe discovery failure' }, 'server'), 'server-error');
+  assert.equal(readPlexOnboardingState(signedIn, 'library'), null);
+});
+
+test('auth-error dismissal is renderer-local and invalidates late PIN completion', async () => {
+  const pendingPin = deferred<PlexIpcResult<{ pin: ReturnType<typeof pinSummary>; snapshot: PlexRuntimeSnapshot }>>();
+  let cancelCalls = 0;
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      requestPin: () => pendingPin.promise,
+      cancelPin: async ({ pinId }) => {
+        cancelCalls += 1;
+        return success({ pinId, snapshot: snapshotSignedOut() });
+      },
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  const request = controller.requestPin();
+  assert.equal(controller.getState().pending.requestPin, true);
+  controller.dismissPinError();
+  assert.equal(controller.getState().pending.requestPin, false);
+  assert.equal(controller.getState().errorText, null);
+  assert.equal(controller.getState().snapshot, null);
+  assert.equal(cancelCalls, 0);
+
+  pendingPin.resolve(success({ pin: pinSummary(), snapshot: snapshotPinPending() }));
+  await request;
+  assert.equal(controller.getState().snapshot, null);
+  assert.equal(cancelCalls, 0);
+});
+
+test('auth-waiting cancel is local-first, idempotent, and clean across bridge failures', async () => {
+  const cancellations: Array<LineupDesktopPreloadApi['plex']['cancelPin']> = [
+    async () => failure<PlexCancelPinValue>('PLEX_VALIDATION_FAILED', 'safe cancellation failure'),
+    async (): ReturnType<LineupDesktopPreloadApi['plex']['cancelPin']> => {
+      throw new Error('cancel bridge rejected');
+    },
+  ];
+  for (const cancelPin of cancellations) {
+    let cancelCalls = 0;
+    const controller = createPlexRuntimeController({
+      bridge: createBridge({
+        requestPin: async () => success({ pin: pinSummary(), snapshot: snapshotPinPending() }),
+        cancelPin: async (input) => {
+          cancelCalls += 1;
+          return cancelPin(input);
+        },
+      }),
+      onStateChanged: () => undefined,
+      scheduler: inertScheduler(),
+    });
+
+    await controller.requestPin();
+    controller.setHomeUserPin('1234');
+    await Promise.all([controller.cancelPin(), controller.cancelPin()]);
+
+    assert.equal(cancelCalls, 1);
+    assert.equal(controller.getState().snapshot?.auth.state, 'signed-out');
+    assert.equal(controller.getState().snapshot?.auth.pin, null);
+    assert.equal(controller.getState().homeUserPin, '');
+    assert.equal(controller.getState().errorText, null);
+    assert.equal(controller.getState().statusText, 'Ready to request a Plex sign-in code');
+    assert.equal(Object.values(controller.getState().pending).some(Boolean), false);
+  }
+});
+
+test('leaving server onboarding invalidates late discovery completion', async () => {
+  const pendingDiscovery = deferred<PlexIpcResult<{ servers: ReturnType<typeof servers>; snapshot: PlexRuntimeSnapshot }>>();
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({ refreshServers: () => pendingDiscovery.promise }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  const refresh = controller.refreshServers();
+  assert.equal(controller.getState().pending.refreshServers, true);
+  controller.invalidateOnboardingOperations();
+  assert.equal(controller.getState().pending.refreshServers, false);
+  pendingDiscovery.resolve(success({ servers: servers(), snapshot: snapshotServersReady() }));
+  await refresh;
+  assert.equal(controller.getState().snapshot, null);
+  assert.equal(controller.getState().pending.refreshServers, false);
+});
+
+test('server-owner invalidation can clear only its safe renderer error before profile reveal', async () => {
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      refreshServers: async () => failure('PLEX_SERVER_UNREACHABLE', 'safe discovery failure'),
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  await controller.refreshServers();
+  assert.equal(controller.getState().errorText, 'The selected Plex server is unreachable.');
+  controller.invalidateOnboardingOperations(true);
+  assert.equal(controller.getState().errorText, null);
+  assert.equal(Object.values(controller.getState().pending).some(Boolean), false);
+});
+
+test('leaving an onboarding owner invalidates late profile and server selection completions', async () => {
+  const pendingSwitch = deferred<PlexIpcResult<{ profile: ReturnType<typeof profile>; snapshot: PlexRuntimeSnapshot }>>();
+  const pendingSelection = deferred<PlexIpcResult<{ selection: ReturnType<typeof selectedServer>; snapshot: PlexRuntimeSnapshot }>>();
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      switchHomeUser: () => pendingSwitch.promise,
+      selectServer: () => pendingSelection.promise,
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  const switching = controller.switchHomeUser('home-1');
+  controller.invalidateOnboardingOperations();
+  pendingSwitch.resolve(success({ profile: profile(), snapshot: snapshotSignedIn() }));
+  await switching;
+  assert.equal(controller.getState().snapshot, null);
+
+  const selecting = controller.selectServer('server-1');
+  controller.invalidateOnboardingOperations();
+  pendingSelection.resolve(success({ selection: selectedServer(), snapshot: snapshotServersReady() }));
+  await selecting;
+  assert.equal(controller.getState().snapshot, null);
+  assert.equal(Object.values(controller.getState().pending).some(Boolean), false);
+});
+
+test('onboarding flow restores before refresh and applies exact renderer-local focus intents', async () => {
+  const calls: string[] = [];
+  let stage = 'profile';
+  let rowAvailable = true;
+  let rendererState = createPlexRuntimeRendererState();
+  const clearErrorFlags: boolean[] = [];
+  const controller = {
+    getState: () => rendererState,
+    invalidateOnboardingOperations: (clearError = false) => {
+      calls.push('invalidate');
+      clearErrorFlags.push(clearError);
+      if (clearError) rendererState = { ...rendererState, errorText: null };
+    },
+    restoreSelectedServer: async () => { calls.push('restore'); },
+    refreshServers: async () => { calls.push('refresh'); },
+    selectServer: async (serverId: string) => {
+      calls.push(`select:${serverId}`);
+      rendererState = { ...rendererState, selectedServerId: serverId };
+    },
+  } as unknown as PlexRuntimeController;
+  const documentRef = {
+    querySelector: () => rowAvailable
+      ? { dataset: { focusId: 'btn-server-select-server-1' } }
+      : null,
+  } as unknown as Document;
+  const flow = createPlexOnboardingFlow({
+    controller,
+    documentRef,
+    getRoute: () => 'channelSetup',
+    getStage: () => stage,
+    setStage: (nextStage) => { stage = nextStage; },
+    render: () => { calls.push(`render:${stage}`); },
+  });
+  const registry = new FocusRegistry();
+  for (const [order, id] of [
+    'btn-profile-profile-2',
+    'btn-server-refresh',
+    'btn-server-select-server-1',
+    'btn-server-setup',
+  ].entries()) registry.register({ id, route: 'channelSetup', order });
+  let focusState = registry.createInitialState('channelSetup');
+
+  flow.rememberProfileFocus('btn-profile-profile-2');
+  await flow.advanceToServerSelection();
+  assert.deepEqual(calls.slice(0, 4), ['invalidate', 'render:server', 'restore', 'refresh']);
+  focusState = flow.applyFocusIntent(registry, focusState);
+  assert.equal(focusState.activeId, 'btn-server-select-server-1');
+
+  await flow.selectServer('server-1');
+  focusState = flow.applyFocusIntent(registry, focusState);
+  assert.equal(focusState.activeId, 'btn-server-setup');
+
+  flow.returnToProfileSelection();
+  focusState = flow.applyFocusIntent(registry, focusState);
+  assert.equal(stage, 'profile');
+  assert.equal(focusState.activeId, 'btn-profile-profile-2');
+
+  stage = 'server';
+  rendererState = { ...rendererState, errorText: 'Safe server failure' };
+  await flow.changeStage('profile');
+  assert.equal(rendererState.errorText, null);
+  stage = 'server';
+  rendererState = { ...rendererState, errorText: 'Safe server failure' };
+  flow.returnToProfileSelection();
+  assert.equal(rendererState.errorText, null);
+  assert.deepEqual(clearErrorFlags.slice(-2), [true, true]);
+
+  stage = 'server';
+  rowAvailable = false;
+  await flow.refreshServerSelection();
+  focusState = flow.applyFocusIntent(registry, focusState);
+  assert.equal(focusState.activeId, 'btn-server-refresh');
 });
 
 test('Plex runtime controller treats cleared library snapshots as authoritative', async () => {
@@ -470,54 +710,33 @@ test('Plex clear and back ignore pending setup operation results', async () => {
   assert.equal(controller.getState().homeUserPin, '');
 });
 
-test('Plex runtime controller keeps newer matching operations pending after stale completion', async () => {
-  const firstMetadata = deferred<PlexIpcResult<{
-    item: ReturnType<typeof mediaItems>[number];
+test('Plex runtime controller ignores duplicate dispatch while the same operation is pending', async () => {
+  const pendingSwitch = deferred<PlexIpcResult<{
+    profile: ReturnType<typeof profile>;
     snapshot: PlexRuntimeSnapshot;
   }>>();
-  const secondMetadata = deferred<PlexIpcResult<{
-    item: ReturnType<typeof mediaItems>[number];
-    snapshot: PlexRuntimeSnapshot;
-  }>>();
-  let metadataCallCount = 0;
+  let switchCallCount = 0;
   const controller = createPlexRuntimeController({
     bridge: createBridge({
-      getSnapshot: async () => success(snapshotWithItems()),
-      getMetadata: () => {
-        metadataCallCount += 1;
-        return metadataCallCount === 1 ? firstMetadata.promise : secondMetadata.promise;
+      switchHomeUser: () => {
+        switchCallCount += 1;
+        return pendingSwitch.promise;
       },
     }),
     onStateChanged: () => undefined,
     scheduler: inertScheduler(),
   });
 
-  await controller.loadSnapshot();
-  const firstLoad = controller.getMetadata('rating-1');
-  const secondLoad = controller.getMetadata('rating-2');
-  assert.equal(controller.getState().pending.getMetadata, true);
+  const firstSwitch = controller.switchHomeUser('home-1');
+  const duplicateSwitch = controller.switchHomeUser('home-1');
+  assert.equal(controller.getState().pending.switchHomeUser, true);
+  await duplicateSwitch;
+  assert.equal(switchCallCount, 1);
 
-  firstMetadata.resolve(success({ item: mediaItems()[0], snapshot: snapshotWithMetadata() }));
-  await firstLoad;
-  assert.equal(controller.getState().pending.getMetadata, true);
-  assert.equal(controller.getState().lastMetadata, null);
-
-  const secondItem = { ...mediaItems()[0], ratingKey: 'rating-2', title: 'Second Pilot' };
-  const secondSnapshotWithItems = snapshotWithItems();
-  const secondSnapshot: PlexRuntimeSnapshot = {
-    ...secondSnapshotWithItems,
-    library: {
-      ...secondSnapshotWithItems.library,
-      items: [...secondSnapshotWithItems.library.items, secondItem],
-      metadata: secondItem,
-    },
-  };
-
-  secondMetadata.resolve(success({ item: secondItem, snapshot: secondSnapshot }));
-  await secondLoad;
-  assert.equal(controller.getState().pending.getMetadata, false);
-  assert.equal(controller.getState().lastMetadata?.ratingKey, 'rating-2');
-  assert.equal(controller.getState().lastMetadata?.title, 'Second Pilot');
+  pendingSwitch.resolve(success({ profile: profile(), snapshot: snapshotSignedIn() }));
+  await firstSwitch;
+  assert.equal(controller.getState().pending.switchHomeUser, false);
+  assert.equal(controller.getState().snapshot?.auth.profile?.accountId, profile().accountId);
 });
 
 test('Plex runtime controller ignores library item results after section input changes', async () => {
@@ -945,7 +1164,7 @@ test('Plex cleanup clears stale PIN UI when bridge cancellation is unavailable',
       assert.equal(controller.getState().homeUserPin, '');
       assert.match(
         collectText(dom.plexPinElement as unknown as ElementDouble),
-        /Start Plex sign-in/u,
+        /Plex sign-in is ready/u,
       );
       assert.equal(dom.plexActionButtons.find((button) => button.dataset.plexAction === 'pollPin')?.disabled, true);
       assert.equal(dom.plexActionButtons.find((button) => button.dataset.plexAction === 'cancelPin')?.disabled, true);
@@ -1024,8 +1243,8 @@ test('dynamic Plex buttons receive stable focus ids and are reachable by OK focu
     assert.match(collectText(homeButton), /Profile\s+PIN/u);
     assert.equal(serverButton.className, 'server-row active');
     assert.match(collectText(serverButton), /Server .*Connected/u);
-    assert.equal(sectionButton.className, 'setup-toggle library-toggle selected');
-    assert.match(collectText(sectionButton), /Movies .*Selected/u);
+    assert.equal(sectionButton.className, 'setup-toggle library-toggle previewing');
+    assert.match(collectText(sectionButton), /Movies .*Not selected/u);
     assert.equal(itemButton.className, 'setup-toggle media-toggle selected');
     assert.match(collectText(itemButton), /Pilot .*Previewing/u);
     const focusIds = [
@@ -1037,8 +1256,8 @@ test('dynamic Plex buttons receive stable focus ids and are reachable by OK focu
       assert.ok(focusId);
       return focusId;
     });
-    assert.equal(focusIds[0]?.startsWith('plex-dyn-home-'), true);
-    assert.equal(focusIds[1]?.startsWith('plex-dyn-server-'), true);
+    assert.equal(focusIds[0], 'btn-profile-profile-1');
+    assert.equal(focusIds[1], 'btn-server-select-server-1');
     assert.equal(focusIds[2]?.startsWith('plex-dyn-section-'), true);
     assert.equal(focusIds[3]?.startsWith('plex-dyn-item-'), true);
     assert.equal(new Set(focusIds).size, focusIds.length);
@@ -1121,15 +1340,15 @@ test('dynamic Plex Home focus ids do not collide with static home controls', () 
     const usersUserButton = childAt(dom.plexHomeUsersElement, 1);
     const pinUserFocusId = pinUserButton.dataset.focusId;
     const usersUserFocusId = usersUserButton.dataset.focusId;
-    assert.ok(pinUserFocusId?.startsWith('plex-dyn-home-'));
-    assert.ok(usersUserFocusId?.startsWith('plex-dyn-home-'));
+    assert.equal(pinUserFocusId, 'btn-profile-profile-1');
+    assert.equal(usersUserFocusId, 'btn-profile-profile-2');
     assert.notEqual(pinUserFocusId, 'plex-home-pin');
     assert.notEqual(usersUserFocusId, 'plex-home-users');
     assert.notEqual(pinUserFocusId, usersUserFocusId);
 
     const initial = registry.createInitialState('channelSetup');
     const focusedPinUser = registry.focusTarget(initial, pinUserFocusId);
-    assert.equal(focusedPinUser.changed, true);
+    assert.equal(focusedPinUser.state.activeId, 'btn-profile-profile-1');
     clickFocusedRendererElement(focusedPinUser.state, dom);
     assert.equal(pinUserButton.clickCount, 1);
     assert.equal(staticPinInput.clickCount, 0);
@@ -1153,6 +1372,66 @@ test('dynamic Plex Home focus ids do not collide with static home controls', () 
   }
 });
 
+test('pending onboarding rows and actions expose disabled and busy state together', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const setupButton = new ElementDouble();
+  const switchButton = new ElementDouble();
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    createElement: () => new ElementDouble(),
+    querySelector: (selector: string) => selector.includes('btn-server-setup') ? setupButton : null,
+    querySelectorAll: (selector: string) => selector.includes('btn-server-switch-profile')
+      ? [switchButton]
+      : [],
+  };
+  Object.defineProperty(globalThis, 'document', { value: documentDouble, configurable: true });
+
+  try {
+    const requestButton = new ElementDouble();
+    requestButton.dataset.plexAction = 'requestPin';
+    const dom = createPlexDomBindings({
+      plexActionButtons: [requestButton as unknown as HTMLButtonElement],
+    });
+    renderPlexRuntimeDom({
+      ...createPlexRuntimeRendererState(),
+      snapshot: snapshotServersReady(),
+      pending: {
+        ...pendingMap(false),
+        requestPin: true,
+        switchHomeUser: true,
+        selectServer: true,
+      },
+    }, dom, 'server');
+
+    const profileButton = firstChild(dom.plexHomeUsersElement);
+    const serverButton = firstChild(dom.plexServersElement);
+    for (const button of [requestButton, profileButton, serverButton]) {
+      assert.equal(button.disabled, true);
+      assert.equal(button.getAttribute('aria-disabled'), 'true');
+      assert.equal(button.getAttribute('aria-busy'), 'true');
+    }
+    for (const button of [setupButton, switchButton]) {
+      assert.equal(button.disabled, true);
+      assert.equal(button.getAttribute('aria-disabled'), 'true');
+      assert.equal(button.getAttribute('aria-busy'), 'true');
+    }
+
+    renderPlexRuntimeDom({
+      ...createPlexRuntimeRendererState(),
+      snapshot: snapshotServersReady(),
+      selectedServerId: 'server-1',
+    }, dom, 'server');
+    for (const button of [setupButton, switchButton]) {
+      assert.equal(button.disabled, false);
+      assert.equal(button.getAttribute('aria-disabled'), 'false');
+      assert.equal(button.getAttribute('aria-busy'), 'false');
+    }
+  } finally {
+    if (originalDocument === undefined) Reflect.deleteProperty(globalThis, 'document');
+    else Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
+  }
+});
+
 class ElementDouble {
   hidden = false;
   disabled = false;
@@ -1163,6 +1442,7 @@ class ElementDouble {
   clickCount = 0;
   readonly dataset: Record<string, string> = {};
   readonly children: ElementDouble[] = [];
+  readonly attributes = new Map<string, string>();
 
   append(...children: ElementDouble[]): void {
     this.children.push(...children);
@@ -1192,6 +1472,14 @@ class ElementDouble {
 
   toggleAttribute(): void {
     return;
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attributes.set(name, value);
+  }
+
+  getAttribute(name: string): string | null {
+    return this.attributes.get(name) ?? null;
   }
 }
 

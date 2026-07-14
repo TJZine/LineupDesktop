@@ -109,7 +109,6 @@
   --osd-pill-border-strong: rgba(255, 255, 255, 0.18);
   --osd-pill-border-focused: rgba(255, 255, 255, 0.35);
 
-  --route-rail-width: 236px;
   --button-min-height: 50px;
   --transition-fast: 120ms ease;
   --transition-normal: 200ms ease;
@@ -168,14 +167,11 @@ button:focus-visible,
 
 .app-shell {
   display: grid;
-  grid-template:
-    "topbar topbar" auto
-    "rail screens" minmax(0, 1fr) / var(--route-rail-width) minmax(0, 1fr);
+  grid-template: "screens" minmax(0, 1fr) / minmax(0, 1fr);
   height: 100vh;
   min-height: 0;
   overflow: hidden;
-  gap: var(--space-9);
-  padding: var(--space-10);
+  padding: 0;
 }
 
 @supports (height: 100dvh) {
@@ -185,29 +181,11 @@ button:focus-visible,
   }
 }
 
-.app-shell__topbar {
-  grid-area: topbar;
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: var(--space-10);
-  min-width: 0;
-  opacity: 0.35;
-  transition: opacity var(--transition-normal);
-}
-
-.app-shell__topbar:hover,
-.app-shell__topbar:focus-within {
-  opacity: 1;
-}
-
-.app-shell__eyebrow,
 .screen__kicker,
 p {
   margin: 0;
 }
 
-.app-shell__eyebrow,
 .screen__kicker {
   color: var(--color-text-subtle);
   font-size: var(--text-xs);
@@ -229,58 +207,6 @@ h1 {
 h2 {
   font-size: var(--text-xl);
   line-height: 1.1;
-}
-
-.shell-status {
-  display: grid;
-  justify-items: end;
-  gap: var(--space-1);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  line-height: 1.35;
-  text-align: right;
-}
-
-.route-status {
-  margin-top: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-}
-
-.route-rail {
-  grid-area: rail;
-  display: grid;
-  align-content: start;
-  gap: var(--space-4);
-  min-width: 0;
-  padding-top: var(--space-3);
-  opacity: 0.35;
-  transition: opacity var(--transition-normal);
-}
-
-.route-rail:hover,
-.route-rail:focus-within {
-  opacity: 1;
-}
-
-.route-rail button {
-  display: flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0 var(--space-6);
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--color-text);
-  text-align: left;
-}
-
-.route-rail button:hover {
-  background: var(--color-surface-raised-hover);
-}
-
-.route-rail button.is-active {
-  background: var(--color-inverse-bg);
-  color: var(--color-inverse-text);
-  font-weight: 700;
 }
 
 [data-static-screen-root] {
@@ -322,8 +248,8 @@ h2 {
   display: grid;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: var(--radius-panel);
+  border: 0;
+  border-radius: 0;
   background: var(--color-surface);
   box-shadow: var(--shadow-lg);
 }

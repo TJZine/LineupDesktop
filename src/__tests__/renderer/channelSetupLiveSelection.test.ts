@@ -123,7 +123,7 @@ test('legacy fake channel setup action ids are not accepted by renderer DOM acti
     assert.equal(readChannelSetupActionId(actionId), null);
   }
 
-  assert.equal(readChannelSetupActionId('selectRecentlyAddedSource'), 'selectRecentlyAddedSource');
+  assert.equal(readChannelSetupActionId('selectRecentlyAddedSource'), null);
   assert.equal(readChannelSetupActionId('selectAppendBuildMode'), 'selectAppendBuildMode');
   assert.equal(readChannelSetupActionId('selectReplaceBuildMode'), 'selectReplaceBuildMode');
 });

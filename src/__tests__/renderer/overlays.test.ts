@@ -13,16 +13,16 @@ import {
   resolvePlayerOverlayFocusId,
 } from '../../renderer/overlays.js';
 
-test('overlay state starts with now-playing, channel badge, and OSD visible', () => {
+test('overlay state starts with a video-black player and no default overlays', () => {
   const state = createPlayerOverlayState();
   const view = createPlayerOverlayView(state);
 
-  assert.deepEqual(view.stack, ['channelBadge', 'nowPlaying', 'playerOsd']);
-  assert.equal(view.visibleOverlays.playerOsd, true);
-  assert.equal(view.visibleOverlays.nowPlaying, true);
-  assert.equal(view.visibleOverlays.channelBadge, true);
-  assert.equal(view.activeOverlayId, 'playerOsd');
-  assert.equal(view.activeFocusId, 'overlay-mini-guide');
+  assert.deepEqual(view.stack, []);
+  assert.equal(view.visibleOverlays.playerOsd, false);
+  assert.equal(view.visibleOverlays.nowPlaying, false);
+  assert.equal(view.visibleOverlays.channelBadge, false);
+  assert.equal(view.activeOverlayId, null);
+  assert.equal(view.activeFocusId, null);
   assert.equal(view.nowPlaying.title, 'The Midnight Archive');
   assert.equal(view.nowPlaying.progressPercent, 20);
   assert.equal(view.playerOsd.statusLabel, 'PLAYING');
@@ -43,7 +43,7 @@ test('overlay stack keeps mini guide focused above passive badge overlays', () =
   const closed = applyPlayerOverlayAction(state, 'closeTopOverlay');
   const closedView = createPlayerOverlayView(closed);
   assert.equal(closedView.visibleOverlays.miniGuide, false);
-  assert.equal(closedView.activeOverlayId, 'playerOsd');
+  assert.equal(closedView.activeOverlayId, null);
 });
 
 test('mini guide channel selection updates the selected channel and badge summary', () => {
@@ -233,13 +233,13 @@ test('primary playback options action opens options above the visible OSD', () =
   assert.equal(resolvePlayerOverlayFocusId(view), 'overlay-audio-track-audio-main');
 });
 
-test('closing the last modal overlay falls back to the visible player OSD toggle focus', () => {
+test('idle overlay focus falls back to the transient player controls trigger', () => {
   const passiveOnly = applyPlayerOverlayAction(createPlayerOverlayState(), 'closeTopOverlay');
   const view = createPlayerOverlayView(passiveOnly);
 
-  assert.deepEqual(view.stack, ['channelBadge', 'nowPlaying']);
-  assert.equal(view.visibleOverlays.channelBadge, true);
-  assert.equal(view.visibleOverlays.nowPlaying, true);
+  assert.deepEqual(view.stack, []);
+  assert.equal(view.visibleOverlays.channelBadge, false);
+  assert.equal(view.visibleOverlays.nowPlaying, false);
   assert.equal(view.visibleOverlays.playerOsd, false);
   assert.equal(view.activeOverlayId, null);
   assert.equal(view.activeFocusId, null);

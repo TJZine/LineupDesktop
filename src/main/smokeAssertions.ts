@@ -2,8 +2,22 @@ import type { BrowserWindow } from 'electron';
 
 import { LINEUP_SHELL_URL } from '../contracts/shell.js';
 import { LINEUP_CSP } from './protocol.js';
-import { assertFullscreenContinuity } from './smokeFullscreenAssertions.js';
+import {
+  assertFullscreenContinuity,
+  assertRendererCloseLifecycle,
+} from './smokeFullscreenAssertions.js';
 import { GUIDE_SMOKE_ASSERTIONS_SOURCE } from './smokeGuideAssertions.js';
+
+const PACKAGE_ONE_GUIDE_SMOKE_ASSERTIONS_SOURCE = GUIDE_SMOKE_ASSERTIONS_SOURCE.replace(
+  `      const guideButton = document.querySelector('[data-route-button="guide"]');
+      if (!(guideButton instanceof HTMLButtonElement)) {
+        failures.push('guide route button');
+      } else {
+        guideButton.click();
+      }`,
+  `      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));`,
+);
 
 export interface ShellContainmentCounters {
   navigationDenied: number;
@@ -34,12 +48,11 @@ export async function runSmokeAssertions(
       } catch {}
       const rootStyle = getComputedStyle(document.documentElement);
       const appShell = document.querySelector('[data-style-surface="app-shell"]');
-      const routeRail = document.querySelector('[data-style-surface="route-rail"]');
       const screenRoot = document.querySelector('[data-static-screen-root]');
       const screenStack = document.querySelector('[data-static-screens-mounted]');
       const styledPlayerScreen = document.querySelector('[data-screen="player"]');
       const playerSurface = document.querySelector('.player-surface');
-      const playerRouteButton = document.querySelector('[data-route-button="player"]');
+      const playerFocusButton = document.querySelector('[data-focus-id="player-fullscreen"]');
       const stylesheetTexts = [];
       for (const sheet of Array.from(document.styleSheets)) {
         try {
@@ -58,12 +71,12 @@ export async function runSmokeAssertions(
       if (!(appShell instanceof HTMLElement) || getComputedStyle(appShell).display !== 'grid') {
         failures.push('app shell style loaded');
       }
-      if (!(routeRail instanceof HTMLElement) || getComputedStyle(routeRail).gridArea !== 'rail') {
-        failures.push('route rail style loaded');
+      if (document.querySelector('.app-shell__topbar, [data-style-surface="route-rail"], [data-focus-id^="nav-"]')) {
+        failures.push('removed shell chrome present');
       }
       if (
         !(styledPlayerScreen instanceof HTMLElement) ||
-        getComputedStyle(styledPlayerScreen).borderRadius !== '8px'
+        getComputedStyle(styledPlayerScreen).borderRadius !== '0px'
       ) {
         failures.push('screen style loaded');
       }
@@ -91,15 +104,15 @@ export async function runSmokeAssertions(
           );
         }
       }
-      if (!(playerRouteButton instanceof HTMLButtonElement)) {
+      if (!(playerFocusButton instanceof HTMLButtonElement)) {
         failures.push('focus style target');
       } else {
-        playerRouteButton.classList.add('is-focused');
-        const focusStyle = getComputedStyle(playerRouteButton);
+        playerFocusButton.classList.add('is-focused');
+        const focusStyle = getComputedStyle(playerFocusButton);
         if (focusStyle.outlineStyle !== 'solid' || focusStyle.outlineWidth !== '3px') {
           failures.push('focus style loaded');
         }
-        playerRouteButton.classList.remove('is-focused');
+        playerFocusButton.classList.remove('is-focused');
       }
       if (!stylesheetText.includes('@media (prefers-reduced-motion: reduce)')) {
         failures.push('reduced motion style policy');
@@ -248,14 +261,10 @@ export async function runSmokeAssertions(
           );
         }
       };
-      ${GUIDE_SMOKE_ASSERTIONS_SOURCE}
+      ${PACKAGE_ONE_GUIDE_SMOKE_ASSERTIONS_SOURCE}
 
-      const settingsButton = document.querySelector('[data-route-button="settings"]');
-      if (!(settingsButton instanceof HTMLButtonElement)) {
-        failures.push('settings route button');
-      } else {
-        settingsButton.click();
-      }
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
       const settingsScreen = document.querySelector('[data-screen="settings"]');
       const settingsSections = document.querySelector('[data-settings-sections]')?.textContent ?? '';
       if (document.documentElement.dataset.activeRoute !== 'settings') failures.push('settings route activation');
@@ -264,9 +273,9 @@ export async function runSmokeAssertions(
         failures.push('settings desktop copy');
       }
 
-      const setupButton = document.querySelector('[data-route-button="channelSetup"]');
+      const setupButton = document.querySelector('[data-focus-id="settings-setup"]');
       if (!(setupButton instanceof HTMLButtonElement)) {
-        failures.push('channel setup route button');
+        failures.push('channel setup pointer action');
       } else {
         setupButton.click();
       }
@@ -337,17 +346,19 @@ export async function runSmokeAssertions(
         );
       }
 
-      const playerButton = document.querySelector('[data-route-button="player"]');
-      if (!(playerButton instanceof HTMLButtonElement)) {
-        failures.push('player route button');
-      } else {
-        playerButton.click();
-      }
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 100));
       const playerScreen = document.querySelector('[data-screen="player"]');
       const playerPresentation = document.querySelector('[data-player-presentation-surface]');
       const osdOverlay = document.querySelector('[data-overlay="playerOsd"]');
       const nowPlayingTitle = document.querySelector('[data-overlay-now-playing-title]')?.textContent ?? '';
       const miniGuideButton = document.querySelector('[data-overlay-action="openMiniGuide"]');
+      const playerOsdButton = document.querySelector('[data-focus-id="player-osd"]');
+      if (!(playerOsdButton instanceof HTMLButtonElement)) {
+        failures.push('player controls trigger');
+      } else {
+        playerOsdButton.click();
+      }
       if (!(miniGuideButton instanceof HTMLButtonElement)) {
         failures.push('mini guide action');
       } else {
@@ -396,7 +407,6 @@ export async function runSmokeAssertions(
       if (channelNumberValue !== '4__') failures.push('channel number value ' + channelNumberValue);
 
       const closeOverlayButton = document.querySelector('[data-overlay-action="closeTopOverlay"]');
-      const playerOsdButton = document.querySelector('[data-focus-id="player-osd"]');
       if (!(closeOverlayButton instanceof HTMLButtonElement)) {
         failures.push('close overlay action');
       } else {
@@ -457,6 +467,24 @@ export async function runSmokeAssertions(
     result.failures.push('navigation containment');
   }
 
+  if (result.failures.length > 0) {
+    throw new Error(`Electron smoke failed: ${result.failures.join(', ')}`);
+  }
+  await window.loadURL(LINEUP_SHELL_URL);
+  await window.webContents.executeJavaScript(`
+    new Promise((resolve) => {
+      const deadline = performance.now() + 3000;
+      const poll = () => {
+        if (document.documentElement.dataset.shellBoot === 'ready' || performance.now() >= deadline) {
+          resolve(true);
+          return;
+        }
+        setTimeout(poll, 20);
+      };
+      poll();
+    });
+  `);
+  await assertRendererCloseLifecycle(window, result.failures);
   if (result.failures.length > 0) {
     throw new Error(`Electron smoke failed: ${result.failures.join(', ')}`);
   }

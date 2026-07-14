@@ -8,8 +8,10 @@ import {
   readRouteActionId,
   readRouteId,
   readSettingsActionId,
+  readStagedSetupFlowActionId,
   type RendererDomBindings,
 } from './domBindings.js';
+import type { StagedSetupFlowActionId } from './setup/stagedSetupController.js';
 import {
   readPlexHomeUserId,
   readPlexRatingKey,
@@ -42,6 +44,7 @@ export interface RendererActionHandlers {
   selectSubtitleTrack(trackId: string | null): void;
   applySettingsCategory?(category: string): void;
   applySetupStage?(stage: string): void;
+  applyStagedSetupAction?(action: StagedSetupFlowActionId): void;
 }
 
 export function registerRendererActions(
@@ -79,9 +82,21 @@ export function registerRendererActions(
   const setupScreen = documentRef.getElementById('screen-channel-setup');
   setupScreen?.addEventListener('click', (event) => {
     if (!(event.target instanceof HTMLElement)) return;
+    const customButton = event.target.closest<HTMLButtonElement>('[data-custom-channel-action]');
+    const customAction = readCustomChannelActionId(customButton?.dataset.customChannelAction);
+    if (customAction !== null && customButton !== null && isEligibleDelegatedAction(customButton) && isActiveStagedAction(customButton)) {
+      handlers.applyCustomChannelAction?.(customAction, customButton.dataset.customChannelDetail);
+      return;
+    }
+    const flowButton = event.target.closest<HTMLButtonElement>('[data-setup-flow-action]');
+    const flowAction = readStagedSetupFlowActionId(flowButton?.dataset.setupFlowAction);
+    if (flowAction !== null && flowButton !== null && isEligibleDelegatedAction(flowButton)) {
+      handlers.applyStagedSetupAction?.(flowAction);
+      return;
+    }
     const catButton = event.target.closest<HTMLButtonElement>('[data-setup-stage]');
     const stage = catButton?.dataset.setupStage;
-    if (stage) {
+    if (stage && catButton !== null && isEligibleDelegatedAction(catButton)) {
       handlers.applySetupStage?.(stage);
     }
   });
@@ -103,12 +118,6 @@ export function registerRendererActions(
       if (action !== null) handlers.applyChannelCommitAction(action);
     });
   }
-  dom.customChannelPanelElement?.addEventListener('click', (event) => {
-    if (!(event.target instanceof HTMLElement)) return;
-    const button = event.target.closest<HTMLButtonElement>('[data-custom-channel-action]');
-    const action = readCustomChannelActionId(button?.dataset.customChannelAction);
-    if (action !== null) handlers.applyCustomChannelAction?.(action, button?.dataset.customChannelDetail);
-  });
   for (const button of dom.epgActionButtons) {
     button.addEventListener('click', () => {
       const action = readEpgActionId(button.dataset.epgAction);
@@ -149,6 +158,8 @@ export function registerRendererActions(
     const sectionId = readClosestPlexId(event.target, '[data-plex-section-id]', readPlexSectionId);
     const ratingKey = readClosestPlexId(event.target, '[data-plex-rating-key]', readPlexRatingKey);
 
+    const plexButton = event.target.closest<HTMLElement>('[data-plex-home-user-id],[data-plex-server-id],[data-plex-section-id],[data-plex-rating-key]');
+    if (plexButton !== null && !isEligibleDelegatedAction(plexButton)) return;
     if (homeUserId !== null) handlers.selectPlexHomeUser(homeUserId);
     else if (serverId !== null) handlers.selectPlexServer(serverId);
     else if (sectionId !== null) handlers.selectPlexSection(sectionId);
@@ -177,11 +188,26 @@ export function registerRendererActions(
   });
 }
 
+function isActiveStagedAction(button: HTMLButtonElement): boolean {
+  return button.closest<HTMLElement>('[data-staged-owner]')?.dataset.ownerActive === 'true';
+}
+
+export function isEligibleDelegatedAction(element: HTMLElement): boolean {
+  if ((element as HTMLButtonElement).disabled || element.getAttribute('aria-disabled') === 'true') return false;
+  return element.closest('[hidden],[inert],[aria-hidden="true"]') === null;
+}
+
 function readClosestPlexId(
   target: HTMLElement,
   selector: string,
   read: (element: HTMLElement) => string | null,
 ): string | null {
   const element = target.closest<HTMLElement>(selector);
-  return element === null ? null : read(element);
+  if (
+    element === null
+    || !isEligibleDelegatedAction(element)
+  ) {
+    return null;
+  }
+  return read(element);
 }

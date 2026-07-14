@@ -52,6 +52,8 @@ export function renderRouteDom(
   for (const screen of dom.screens) {
     const isActive = screen.dataset.screen === activeRoute;
     screen.hidden = !isActive;
+    screen.inert = !isActive;
+    screen.setAttribute('aria-hidden', String(!isActive));
     screen.classList.toggle('screen--active', isActive);
     screen.dataset.workflowTone = isActive ? view.tone : '';
   }

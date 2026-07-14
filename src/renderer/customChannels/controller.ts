@@ -1,13 +1,21 @@
 import type {
   CustomChannelDraftInput,
   CustomChannelDraftValidationSummary,
-  CustomChannelMediaCard,
   CustomChannelMediaMetadata,
   CustomChannelMediaPage,
-  CustomChannelMediaType,
   CustomChannelSnapshot,
 } from '../../contracts/customChannels.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
+import {
+  addMediaCardToDraft,
+  createCustomChannelOperationOwner,
+  filterForAction,
+  mediaTypesForFilter,
+  normalizeDraftForSave,
+  removeDraftItem,
+  reorderChannel,
+  type CustomChannelOperationKind,
+} from './operationOwner.js';
 
 export const CUSTOM_CHANNEL_ACTIONS = [
   'loadSnapshot',
@@ -32,6 +40,7 @@ export const CUSTOM_CHANNEL_ACTIONS = [
 ] as const;
 
 export type CustomChannelActionId = (typeof CUSTOM_CHANNEL_ACTIONS)[number];
+export type CustomChannelActionOutcome = 'succeeded' | 'failed' | 'skipped' | 'stale';
 
 export interface CustomChannelRendererState {
   snapshot: CustomChannelSnapshot | null;
@@ -47,19 +56,25 @@ export interface CustomChannelRendererState {
   mediaTypeFilter: 'all' | 'movies' | 'episodes';
   deleteConfirmationChannelId: string | null;
   lastSavedChannelId: string | null;
+  pendingAction: CustomChannelOperationKind | null;
+  pendingChannelId: string | null;
 }
 
 export interface CustomChannelController {
   getState(): CustomChannelRendererState;
-  loadSnapshot(): Promise<void>;
-  browseSource(sourceId: string | null): Promise<void>;
-  searchMedia(sourceId: string | null): Promise<void>;
+  loadSnapshot(): Promise<CustomChannelActionOutcome>;
+  browseSource(sourceId: string | null): Promise<CustomChannelActionOutcome>;
+  searchMedia(sourceId: string | null): Promise<CustomChannelActionOutcome>;
   clearSearch(): void;
   clearMediaForSourceChange(): void;
+  invalidateOperations(): void;
+  startBlankDraft(): void;
+  cancelDraft(): void;
+  cancelDeleteConfirmation(): void;
   setDraftName(name: string): void;
   setDraftNumber(numberText: string): void;
   setSearchQuery(query: string): void;
-  applyAction(action: CustomChannelActionId, detail?: string): Promise<void>;
+  applyAction(action: CustomChannelActionId, detail?: string): Promise<CustomChannelActionOutcome>;
   handleBack(): boolean;
 }
 
@@ -70,9 +85,7 @@ export function createCustomChannelController(input: {
   onStateChanged(): void;
 }): CustomChannelController {
   let state: CustomChannelRendererState = createInitialState();
-  let operationSequence = 0;
-  let mediaOperationSequence = 0;
-  let metadataOperationSequence = 0;
+  const operations = createCustomChannelOperationOwner();
 
   const setState = (next: CustomChannelRendererState): void => {
     state = next;
@@ -80,66 +93,75 @@ export function createCustomChannelController(input: {
   };
 
   const runOperation = async (
+    kind: CustomChannelOperationKind,
+    detail: string | undefined,
     operation: () => Promise<CustomChannelRendererState>,
-  ): Promise<void> => {
-    const operationId = ++operationSequence;
-    setState({ ...state, pending: true, lastError: null });
+    successful?: (next: CustomChannelRendererState) => boolean,
+  ): Promise<CustomChannelActionOutcome> => {
+    if (state.pending) return 'skipped';
+    const operationId = operations.begin(kind, detail);
+    setState({ ...state, pending: true, pendingAction: kind, pendingChannelId: detail ?? null, lastError: null });
     try {
       const next = await operation();
-      if (operationId !== operationSequence) return;
-      setState({ ...next, pending: false });
+      if (!operations.isCurrent(operationId)) return 'stale';
+      operations.clear(operationId);
+      setState({ ...next, pending: false, pendingAction: null, pendingChannelId: null });
+      return (successful?.(next) ?? next.lastError === null) ? 'succeeded' : 'failed';
     } catch {
-      if (operationId !== operationSequence) return;
-      setState({ ...state, pending: false, lastError: 'Custom channel action failed. Try again.' });
+      if (!operations.isCurrent(operationId)) return 'stale';
+      operations.clear(operationId);
+      setState({ ...state, pending: false, pendingAction: null, pendingChannelId: null, lastError: 'Custom channel action failed. Try again.' });
+      return 'failed';
     }
   };
 
   const runMediaOperation = async (
     operation: () => Promise<CustomChannelRendererState>,
-  ): Promise<void> => {
-    const operationId = ++mediaOperationSequence;
+  ): Promise<CustomChannelActionOutcome> => {
+    const operationId = operations.beginMedia();
     setState({ ...state, mediaPending: true, lastError: null });
     try {
       const next = await operation();
-      if (operationId !== mediaOperationSequence) return;
+      if (!operations.isCurrentMedia(operationId)) return 'stale';
       setState({ ...next, mediaPending: false });
+      return next.lastError === null ? 'succeeded' : 'failed';
     } catch {
-      if (operationId !== mediaOperationSequence) return;
+      if (!operations.isCurrentMedia(operationId)) return 'stale';
       setState({ ...state, mediaPending: false, lastError: 'Media lookup failed. Try again.' });
+      return 'failed';
     }
   };
 
   const runMetadataOperation = async (
     operation: () => Promise<CustomChannelRendererState>,
-  ): Promise<void> => {
-    const operationId = ++metadataOperationSequence;
+  ): Promise<CustomChannelActionOutcome> => {
+    const operationId = operations.beginMetadata();
     setState({ ...state, metadataPending: true, lastError: null });
     try {
       const next = await operation();
-      if (operationId !== metadataOperationSequence) return;
+      if (!operations.isCurrentMetadata(operationId)) return 'stale';
       setState({ ...next, metadataPending: false });
+      return next.lastError === null ? 'succeeded' : 'failed';
     } catch {
-      if (operationId !== metadataOperationSequence) return;
+      if (!operations.isCurrentMetadata(operationId)) return 'stale';
       setState({ ...state, metadataPending: false, lastError: 'Media details failed to load. Try again.' });
+      return 'failed';
     }
   };
 
   const invalidateMediaOperations = (): void => {
-    mediaOperationSequence++;
-    metadataOperationSequence++;
+    operations.invalidateMedia();
   };
 
   return {
     getState: () => state,
-    loadSnapshot: async () => {
-      await runOperation(async () => applySnapshotResult(state, await input.bridge.getSnapshot()));
-    },
+    loadSnapshot: () => runOperation('snapshot', undefined, async () => applySnapshotResult(state, await input.bridge.getSnapshot())),
     browseSource: async (sourceId) => {
       if (sourceId === null) {
         setState({ ...state, mediaPage: null, lastError: 'Choose a library before browsing media.' });
-        return;
+        return 'failed';
       }
-      await runMediaOperation(async () =>
+      return runMediaOperation(async () =>
         applyMediaResult(state, await input.bridge.listMedia({
           sourceType: 'library',
           sourceId,
@@ -153,9 +175,9 @@ export function createCustomChannelController(input: {
       const query = state.query.trim();
       if (query.length === 0) {
         setState({ ...state, lastError: 'Enter a search term before searching media.' });
-        return;
+        return 'failed';
       }
-      await runMediaOperation(async () =>
+      return runMediaOperation(async () =>
         applyMediaResult(state, await input.bridge.listMedia({
           sourceType: 'search',
           ...(sourceId === null ? {} : { sourceId }),
@@ -184,6 +206,46 @@ export function createCustomChannelController(input: {
         lastError: null,
         lastSavedChannelId: null,
       });
+    },
+    invalidateOperations: () => {
+      operations.invalidateAll();
+      setState({
+        ...state,
+        pending: false,
+        mediaPending: false,
+        metadataPending: false,
+        pendingAction: null,
+        pendingChannelId: null,
+      });
+    },
+    startBlankDraft: () => {
+      operations.invalidateMedia();
+      setState({
+        ...state,
+        draft: createDraftFromSnapshotOrInitial(state.snapshot),
+        validation: null,
+        mediaPage: null,
+        metadata: null,
+        query: '',
+        lastError: null,
+        lastSavedChannelId: null,
+      });
+    },
+    cancelDraft: () => {
+      operations.invalidateMedia();
+      setState({
+        ...state,
+        draft: createDraftFromSnapshotOrInitial(state.snapshot),
+        validation: null,
+        mediaPage: null,
+        metadata: null,
+        query: '',
+        lastError: null,
+        lastSavedChannelId: null,
+      });
+    },
+    cancelDeleteConfirmation: () => {
+      setState({ ...state, deleteConfirmationChannelId: null, lastError: null });
     },
     setDraftName: (name) => {
       setState({
@@ -219,15 +281,14 @@ export function createCustomChannelController(input: {
     applyAction: async (action, detail) => {
       switch (action) {
         case 'loadSnapshot':
-          await runOperation(async () => applySnapshotResult(state, await input.bridge.getSnapshot()));
-          return;
+          return runOperation('snapshot', undefined, async () => applySnapshotResult(state, await input.bridge.getSnapshot()));
         case 'toggleDraftHidden':
           setState({
             ...state,
             draft: { ...state.draft, hidden: !state.draft.hidden },
             lastSavedChannelId: null,
           });
-          return;
+          return 'succeeded';
         case 'setFilterAll':
         case 'setFilterMovies':
         case 'setFilterEpisodes':
@@ -241,9 +302,9 @@ export function createCustomChannelController(input: {
             metadataPending: false,
             lastError: null,
           });
-          return;
+          return 'succeeded';
         case 'saveDraft':
-          await runOperation(async () => {
+          return runOperation('save', undefined, async () => {
             const draft = normalizeDraftForSave(state.draft);
             const validation = await input.bridge.validateDraft(draft);
             if (!validation.ok) return { ...state, lastError: validation.error.message };
@@ -265,28 +326,29 @@ export function createCustomChannelController(input: {
               lastError: null,
               lastSavedChannelId: result.value.changedChannelId,
             };
-          });
-          return;
+          }, (next) => next.lastError === null && next.validation?.valid === true);
         case 'addMedia':
-          if (detail !== undefined) setState(addMediaCardToDraft(state, detail));
-          return;
+          if (detail === undefined) return 'skipped';
+          setState(addMediaCardToDraft(state, detail));
+          return state.lastError === null ? 'succeeded' : 'failed';
         case 'openMetadata':
           if (detail !== undefined) {
-            await runMetadataOperation(async () =>
+            return runMetadataOperation(async () =>
               applyMetadataResult(state, await input.bridge.getMediaMetadata({ ratingKey: detail }))
             );
           }
-          return;
+          return 'skipped';
         case 'closeMetadata':
-          metadataOperationSequence++;
+          operations.invalidateMetadata();
           setState({ ...state, metadata: null, metadataPending: false, lastError: null });
-          return;
+          return 'succeeded';
         case 'removeDraftItem':
-          if (detail !== undefined) setState(removeDraftItem(state, detail));
-          return;
+          if (detail === undefined) return 'skipped';
+          setState(removeDraftItem(state, detail));
+          return 'succeeded';
         case 'duplicateChannel':
           if (detail !== undefined) {
-            await runOperation(async () => {
+            return runOperation('duplicate', detail, async () => {
               const result = await input.bridge.duplicateChannelDraft({ channelId: detail });
               if (!result.ok) return { ...state, lastError: result.error.message };
               return {
@@ -298,13 +360,14 @@ export function createCustomChannelController(input: {
               };
             });
           }
-          return;
+          return 'skipped';
         case 'requestDeleteChannel':
+          if (detail === undefined) return 'skipped';
           setState({ ...state, deleteConfirmationChannelId: detail ?? null, lastError: null });
-          return;
+          return 'succeeded';
         case 'confirmDeleteChannel':
           if (detail !== undefined) {
-            await runOperation(async () => {
+            return runOperation('delete', detail, async () => {
               const result = await input.bridge.deleteChannel({ channelId: detail, confirm: true });
               if (!result.ok) return { ...state, lastError: result.error.message };
               return {
@@ -313,14 +376,14 @@ export function createCustomChannelController(input: {
                 deleteConfirmationChannelId: null,
                 lastError: null,
               };
-            });
+            }, (next) => next.lastError === null && next.deleteConfirmationChannelId === null);
           }
-          return;
+          return 'skipped';
         case 'toggleChannelVisibility':
           if (detail !== undefined) {
             const channel = state.snapshot?.channels.find((candidate) => candidate.id === detail);
-            if (channel === undefined) return;
-            await runOperation(async () => {
+            if (channel === undefined) return 'skipped';
+            return runOperation('visibility', detail, async () => {
               const result = await input.bridge.setChannelVisibility({
                 channelId: detail,
                 hidden: !channel.hidden,
@@ -329,22 +392,22 @@ export function createCustomChannelController(input: {
               return { ...state, snapshot: result.value.snapshot, lastError: null };
             });
           }
-          return;
+          return 'skipped';
         case 'moveChannelUp':
         case 'moveChannelDown':
           if (detail !== undefined) {
-            await runOperation(async () => reorderChannel(state, input.bridge, detail, action === 'moveChannelUp' ? -1 : 1));
+            return runOperation('reorder', detail, async () => reorderChannel(state, input.bridge, detail, action === 'moveChannelUp' ? -1 : 1), (next) => next !== state && next.lastError === null);
           }
-          return;
+          return 'skipped';
         case 'browseSource':
         case 'searchMedia':
         case 'clearSearch':
-          return;
+          return 'skipped';
       }
     },
     handleBack: () => {
       if (state.metadata !== null || state.metadataPending) {
-        metadataOperationSequence++;
+        operations.invalidateMetadata();
         setState({ ...state, metadata: null, metadataPending: false });
         return true;
       }
@@ -383,6 +446,8 @@ function createInitialState(): CustomChannelRendererState {
     mediaTypeFilter: 'all',
     deleteConfirmationChannelId: null,
     lastSavedChannelId: null,
+    pendingAction: null,
+    pendingChannelId: null,
   };
 }
 
@@ -427,105 +492,4 @@ function applyMetadataResult(
 ): CustomChannelRendererState {
   if (!result.ok) return { ...current, metadata: null, lastError: result.error.message };
   return { ...current, metadata: result.value, lastError: null };
-}
-
-function mediaTypesForFilter(filter: CustomChannelRendererState['mediaTypeFilter']): readonly CustomChannelMediaType[] | undefined {
-  if (filter === 'movies') return ['movie'];
-  if (filter === 'episodes') return ['episode'];
-  return undefined;
-}
-
-function filterForAction(action: CustomChannelActionId): CustomChannelRendererState['mediaTypeFilter'] {
-  if (action === 'setFilterMovies') return 'movies';
-  if (action === 'setFilterEpisodes') return 'episodes';
-  return 'all';
-}
-
-function addMediaCardToDraft(
-  current: CustomChannelRendererState,
-  ratingKey: string,
-): CustomChannelRendererState {
-  const card = current.mediaPage?.items.find((item) => item.ratingKey === ratingKey);
-  if (card === undefined) return current;
-  if (card.availability === 'unsupported' || (card.type !== 'movie' && card.type !== 'episode')) {
-    return { ...current, lastError: 'Only playable movies and episodes can be added to a custom channel.' };
-  }
-  if (card.durationMs === null || card.durationMs <= 0) {
-    return { ...current, lastError: 'This item is missing a playable duration and cannot be added.' };
-  }
-  if (current.draft.content.some((entry) => entry.type === 'manualItem' && entry.ratingKey === card.ratingKey)) {
-    return { ...current, lastError: 'That item is already in the draft.' };
-  }
-  return {
-    ...current,
-    draft: {
-      ...current.draft,
-      content: [
-        ...current.draft.content,
-        mediaCardToManualItem(card),
-      ],
-    },
-    validation: null,
-    lastError: null,
-    lastSavedChannelId: null,
-  };
-}
-
-function removeDraftItem(
-  current: CustomChannelRendererState,
-  indexText: string,
-): CustomChannelRendererState {
-  const index = Number.parseInt(indexText, 10);
-  if (!Number.isInteger(index) || index < 0 || index >= current.draft.content.length) return current;
-  return {
-    ...current,
-    draft: {
-      ...current.draft,
-      content: current.draft.content.filter((_, candidateIndex) => candidateIndex !== index),
-    },
-    validation: null,
-    lastError: null,
-    lastSavedChannelId: null,
-  };
-}
-
-function mediaCardToManualItem(card: CustomChannelMediaCard): CustomChannelDraftInput['content'][number] {
-  return {
-    type: 'manualItem',
-    ratingKey: card.ratingKey,
-    title: card.title,
-    durationMs: card.durationMs ?? 1,
-    mediaType: card.type === 'episode' ? 'episode' : 'movie',
-    ...(card.parentTitle === undefined ? {} : { parentTitle: card.parentTitle }),
-    ...(card.year === null ? {} : { year: card.year }),
-    ...(card.seasonNumber === undefined ? {} : { seasonNumber: card.seasonNumber }),
-    ...(card.episodeNumber === undefined ? {} : { episodeNumber: card.episodeNumber }),
-  };
-}
-
-function normalizeDraftForSave(draft: CustomChannelDraftInput): CustomChannelDraftInput {
-  return {
-    ...draft,
-    name: draft.name.trim(),
-    content: [...draft.content],
-  };
-}
-
-async function reorderChannel(
-  current: CustomChannelRendererState,
-  bridge: LineupDesktopPreloadApi['customChannels'],
-  channelId: string,
-  delta: -1 | 1,
-): Promise<CustomChannelRendererState> {
-  const channels = current.snapshot?.channels ?? [];
-  const index = channels.findIndex((channel) => channel.id === channelId);
-  const nextIndex = index + delta;
-  if (index < 0 || nextIndex < 0 || nextIndex >= channels.length) return current;
-  const channelIds = channels.map((channel) => channel.id);
-  const [moved] = channelIds.splice(index, 1);
-  if (moved === undefined) return current;
-  channelIds.splice(nextIndex, 0, moved);
-  const result = await bridge.reorderChannels({ channelIds });
-  if (!result.ok) return { ...current, lastError: result.error.message };
-  return { ...current, snapshot: result.value.snapshot, lastError: null };
 }

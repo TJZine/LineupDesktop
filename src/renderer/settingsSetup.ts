@@ -6,7 +6,6 @@ export type SettingsActionId =
   | 'exportSupportBundle';
 
 export type ChannelSetupActionId =
-  | 'selectRecentlyAddedSource'
   | 'selectAppendBuildMode'
   | 'selectReplaceBuildMode';
 
@@ -55,7 +54,6 @@ export interface ChannelSetupDraftState {
   activeStepId: ChannelSetupStepId;
   sourceName: string;
   channels: readonly ChannelDraftViewModel[];
-  sourceMode: 'recently-added';
   buildMode: 'append' | 'replace';
 }
 
@@ -99,7 +97,6 @@ export function createChannelSetupDraftState(): ChannelSetupDraftState {
     activeStepId: 'channels',
     sourceName: '',
     channels: DEFAULT_CHANNELS,
-    sourceMode: 'recently-added',
     buildMode: 'append',
   };
 }
@@ -151,8 +148,6 @@ export function applyChannelSetupAction(
   actionId: ChannelSetupActionId,
 ): ChannelSetupDraftState {
   switch (actionId) {
-    case 'selectRecentlyAddedSource':
-      return { ...state, sourceMode: 'recently-added' };
     case 'selectAppendBuildMode':
       return { ...state, buildMode: 'append' };
     case 'selectReplaceBuildMode':

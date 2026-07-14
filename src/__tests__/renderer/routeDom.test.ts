@@ -8,6 +8,8 @@ import { setEpgPresentationState } from '../../renderer/epg.js';
 import { renderRouteDom, renderWorkflowDom } from '../../renderer/routeDom.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
 import { applyWorkflowChannelSetupAction, createWorkflowState } from '../../renderer/workflow.js';
+import { renderShellDom, type ShellDomBindings } from '../../renderer/shell/shellDom.js';
+import { beginFullscreenRequest, rejectFullscreenRequest } from '../../renderer/shell/shellState.js';
 
 class ElementDouble {
   hidden = false;
@@ -111,15 +113,66 @@ test('route DOM workflow rendering hides and disables player overlays away from 
     assert.equal(overlayStack.hidden, false);
     assert.equal(overlayStack.getAttribute('aria-hidden'), 'false');
     assert.equal(overlayStack.dataset.overlayRouteActive, 'true');
-    assert.equal(overlayStack.dataset.overlayStack, 'channelBadge,nowPlaying,playerOsd');
-    assert.equal(osdOverlay.hidden, false);
-    assert.equal(osdOverlay.getAttribute('aria-hidden'), 'false');
-    assert.equal(nowPlayingOverlay.hidden, false);
+    assert.equal(overlayStack.dataset.overlayStack, '');
+    assert.equal(osdOverlay.hidden, true);
+    assert.equal(osdOverlay.getAttribute('aria-hidden'), 'true');
+    assert.equal(nowPlayingOverlay.hidden, true);
     assert.equal(overlayAction.disabled, false);
-    assert.equal(documentDataset.activeOverlay, 'playerOsd');
+    assert.equal(documentDataset.activeOverlay, '');
   } finally {
     restoreDocument(originalDocument);
   }
+});
+
+test('inline shell error keeps Player visible but makes its background inert and retry pending', () => {
+  const player = new ElementDouble();
+  player.dataset.screen = 'player';
+  const presentation = new ElementDouble();
+  const inline = new ElementDouble();
+  const retry = new ElementDouble('button');
+  const dismiss = new ElementDouble('button');
+  const bindings = {
+    playerPresentation: presentation,
+    splash: null,
+    loading: null,
+    blockingError: null,
+    blockingErrorMessage: null,
+    retryStartupButton: null,
+    blockingExitButton: null,
+    inlineError: inline,
+    inlineErrorMessage: new ElementDouble(),
+    inlineDismissButton: dismiss,
+    inlineRetryButton: retry,
+    toast: null,
+    toastMessage: null,
+    exitConfirm: null,
+    exitCancelButton: null,
+    exitButton: null,
+  } as unknown as ShellDomBindings;
+  const failed = rejectFullscreenRequest({
+    bootstrap: 'ready',
+    blockingErrorMessage: null,
+    inlineError: null,
+    toast: null,
+    exitConfirmOpen: false,
+    fullscreenPending: false,
+  }, true);
+
+  renderShellDom(failed, bindings, [player as unknown as HTMLElement]);
+  assert.equal(player.hidden, false);
+  assert.equal((player as unknown as { inert: boolean }).inert, true);
+  assert.equal(player.getAttribute('aria-hidden'), 'true');
+  assert.equal(presentation.hidden, false);
+  assert.equal((presentation as unknown as { inert: boolean }).inert, true);
+  assert.equal(presentation.getAttribute('aria-hidden'), 'true');
+  assert.equal(inline.hidden, false);
+  assert.equal((inline as unknown as { inert: boolean }).inert, false);
+
+  renderShellDom(beginFullscreenRequest(failed, true), bindings, [player as unknown as HTMLElement]);
+  assert.equal(inline.hidden, false);
+  assert.equal(retry.disabled, true);
+  assert.equal(retry.getAttribute('aria-disabled'), 'true');
+  assert.equal(retry.getAttribute('aria-busy'), 'true');
 });
 
 test('route DOM marks channel setup as the isolated onboarding route', () => {
@@ -163,7 +216,11 @@ test('route DOM marks channel setup as the isolated onboarding route', () => {
     assert.equal(playerButton.getAttribute('aria-current'), null);
     assert.equal(setupButton.getAttribute('aria-current'), 'page');
     assert.equal(playerScreen.hidden, true);
+    assert.equal((playerScreen as unknown as { inert: boolean }).inert, true);
+    assert.equal(playerScreen.getAttribute('aria-hidden'), 'true');
     assert.equal(setupScreen.hidden, false);
+    assert.equal((setupScreen as unknown as { inert: boolean }).inert, false);
+    assert.equal(setupScreen.getAttribute('aria-hidden'), 'false');
     assert.equal(setupScreen.className, 'screen--active');
     assert.equal(setupScreen.dataset.workflowTone, 'attention');
   } finally {
@@ -441,9 +498,9 @@ test('route DOM renders channel setup review without privileged data', () => {
     );
 
     const renderedText = [status, setupSteps, channelList, validation].map(collectText).join(' ');
-    assert.match(renderedText, /Step 1 of 4/u);
+    assert.match(renderedText, /Step 1 of 3/u);
     assert.match(renderedText, /Choose library/u);
-    assert.match(renderedText, /Select one movie or show library from this setup screen/u);
+    assert.match(renderedText, /Select movie or show libraries from this setup screen/u);
     assert.match(renderedText, /Choose a movie or show library section before saving channels/u);
     assert.doesNotMatch(renderedText, /Demo Library|The Vault|Weekend Queue|Liminal One/u);
     assert.doesNotMatch(renderedText, /serverUri|token|https?:|raw payload/u);
@@ -583,7 +640,7 @@ test('route DOM renders selected Plex library and strategy controls through prod
       .join(' ');
     const replaceMode = strategy.children.find((child) => child.dataset.strategyOption === 'build-mode-replace');
 
-    assert.match(renderedText, /Step 3 of 4/u);
+    assert.match(renderedText, /Step 3 of 3/u);
     assert.match(renderedText, /Selected Movies/u);
     assert.match(renderedText, /Configure channels/u);
     assert.match(renderedText, /Movie library source selected for channel creation/u);

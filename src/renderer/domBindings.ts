@@ -7,6 +7,7 @@ import type {
 } from './workflow.js';
 import type { PlayerOverlayActionId } from './overlays.js';
 import { CUSTOM_CHANNEL_ACTIONS, type CustomChannelActionId } from './customChannels/controller.js';
+import type { StagedSetupFlowActionId } from './setup/stagedSetupController.js';
 
 export interface RendererDomBindings {
   statusElement: HTMLElement | null;
@@ -271,6 +272,7 @@ export type PlexRuntimeActionId =
   | 'requestPin'
   | 'pollPin'
   | 'cancelPin'
+  | 'dismissPinError'
   | 'getHomeUsers'
   | 'restoreSelectedServer'
   | 'refreshServers'
@@ -290,6 +292,7 @@ export function readPlexRuntimeActionId(value: string | undefined): PlexRuntimeA
     case 'requestPin':
     case 'pollPin':
     case 'cancelPin':
+    case 'dismissPinError':
     case 'getHomeUsers':
     case 'restoreSelectedServer':
     case 'refreshServers':
@@ -340,6 +343,36 @@ export function readCustomChannelActionId(value: string | undefined): CustomChan
     : null;
 }
 
+export function readStagedSetupFlowActionId(value: string | undefined): StagedSetupFlowActionId | null {
+  switch (value) {
+    case 'librarySelectAll':
+    case 'libraryClearAll':
+    case 'libraryRetry':
+    case 'libraryNext':
+    case 'previewRetry':
+    case 'previewToggle':
+    case 'previewNext':
+    case 'selectBuildCategory':
+    case 'toggleReplaceConfirm':
+    case 'buildConfirm':
+    case 'buildBack':
+    case 'progressCancel':
+    case 'resultDone':
+    case 'resultWatch':
+    case 'recoveryRetry':
+    case 'setupBack':
+    case 'openSetupCustom':
+    case 'customNew':
+    case 'customCancel':
+    case 'customDeleteCancel':
+    case 'customDone':
+    case 'customBack':
+      return value;
+    default:
+      return null;
+  }
+}
+
 export function readSettingsActionId(value: string | undefined): SettingsActionId | null {
   switch (value) {
     case 'cycleLaunchMode':
@@ -355,7 +388,6 @@ export function readSettingsActionId(value: string | undefined): SettingsActionI
 
 export function readChannelSetupActionId(value: string | undefined): ChannelSetupActionId | null {
   switch (value) {
-    case 'selectRecentlyAddedSource':
     case 'selectAppendBuildMode':
     case 'selectReplaceBuildMode':
       return value;

@@ -287,6 +287,28 @@ export function clearPlexRendererPinSubflow(
   };
 }
 
+export function dismissPlexRendererPinError(
+  state: PlexRuntimeRendererState,
+): PlexRuntimeRendererState {
+  const snapshot = state.snapshot === null
+    ? null
+    : {
+      ...state.snapshot,
+      auth: {
+        ...state.snapshot.auth,
+        state: 'signed-out' as const,
+        pin: null,
+        homeUsers: [],
+      },
+    } satisfies PlexRuntimeSnapshot;
+  return {
+    ...clearPlexRendererPending(state, 'Ready to request a Plex sign-in code'),
+    snapshot,
+    homeUserPin: '',
+    errorText: null,
+  };
+}
+
 export function sanitizePlexRuntimeError(error: PlexRuntimeError): string {
   if (error.code === 'PLEX_PARSE_FAILED') {
     return parseFailureText(error.operation);

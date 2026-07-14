@@ -166,13 +166,13 @@ export function createChannelSetupFlow(
   const pending = channelRuntime?.pending === true;
   const errorText = channelRuntime?.errorText ?? null;
   const confirmReplace = channelRuntime?.confirmReplace === true;
-  const stageLabel = pending ? 'Step 4 of 4' : hasLibrary ? 'Step 3 of 4' : 'Step 1 of 4';
+  const stageLabel = pending ? 'Step 3 of 3' : hasLibrary ? 'Step 3 of 3' : 'Step 1 of 3';
   const statusText = pending
     ? channelRuntime?.commitMode === 'replace' ? 'Replacing saved channels...' : 'Creating channels...'
     : errorText ?? (hasLibrary ? 'Review changes before building.' : 'Select the library to include.');
   const detailText = hasLibrary
-    ? 'Lineup Desktop will build a channel from the selected library using the current setup strategy.'
-    : 'Choose a movie or show library section after Plex sign-in, profile, and server selection.';
+    ? 'Lineup Desktop will build channels from the selected libraries using the chosen build mode.'
+    : 'Choose one or more movie or show libraries after Plex sign-in, profile, and server selection.';
   const result = createResult(persistedSummary, pending, errorText);
 
   return {
@@ -186,14 +186,14 @@ export function createChannelSetupFlow(
         label: 'Choose library',
         detail: hasLibrary
           ? `Selected ${libraryTypeLabel(liveSelection.sourceType).toLowerCase()}: ${liveSelection.sourceName}.`
-          : 'Select one movie or show library from this setup screen.',
+          : 'Select movie or show libraries from this setup screen.',
         state: hasLibrary ? 'complete' : 'current',
       },
       {
         id: 'strategy',
         label: 'Configure channels',
         detail: hasLibrary
-          ? 'Recently added source is enabled with Desktop-safe limits.'
+          ? 'Choose Append, Replace, or the Desktop custom-channel extension.'
           : 'Strategy controls unlock after a library is selected.',
         state: hasLibrary ? 'complete' : 'pending',
       },
@@ -248,16 +248,6 @@ function createStrategyOptions(
   buildMode: ChannelSetupDraftState['buildMode'],
 ): readonly ChannelSetupStrategyOptionViewModel[] {
   return [
-    {
-      id: 'recently-added',
-      actionId: 'selectRecentlyAddedSource',
-      focusId: 'channel-strategy-source-recently-added',
-      label: 'Recently added',
-      detail: 'Create one deterministic channel from the selected library.',
-      value: hasLibrary ? 'On' : 'Waiting',
-      selected: hasLibrary,
-      disabled: !hasLibrary,
-    },
     {
       id: 'build-mode-append',
       actionId: 'selectAppendBuildMode',

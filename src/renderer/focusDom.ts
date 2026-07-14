@@ -1,10 +1,11 @@
 import type { RendererDomBindings } from './domBindings.js';
-import { readClosestRouteId, readRouteId } from './domBindings.js';
+import { readClosestRouteId } from './domBindings.js';
 import type {
   FocusRegistry,
   FocusDirection,
   FocusState,
 } from './navigation.js';
+import { getStagedSetupNeighbors } from './setup/stagedSetupFocus.js';
 
 const dynamicFocusIdsByRegistry = new WeakMap<FocusRegistry, Set<string>>();
 const focusIdsByRegistry = new WeakMap<FocusRegistry, Set<string>>();
@@ -47,29 +48,11 @@ export function registerRendererFocusTargets(
   dom: RendererDomBindings,
 ): void {
   const registered = new Set<string>();
-  dom.routeButtons.forEach((button, index) => {
-    const route = readRouteId(button.dataset.routeButton);
-    const focusId = button.dataset.focusId;
-    if (route === null || focusId === undefined || isElementHiddenFromFocus(button)) {
-      return;
-    }
-    focusRegistry.register({
-      id: focusId,
-      route,
-      order: index,
-      scope: 'global',
-      hiddenOnRoutes: ['channelSetup'],
-      neighbors: { right: focusId === 'nav-player' ? 'player-fullscreen' : undefined },
-    });
-    registered.add(focusId);
-  });
-
   if (dom.fullscreenButton && !isElementHiddenFromFocus(dom.fullscreenButton)) {
     focusRegistry.register({
       id: 'player-fullscreen',
       route: 'player',
       order: 120,
-      neighbors: { up: 'nav-player', left: 'nav-player' },
     });
     registered.add('player-fullscreen');
   }
@@ -103,20 +86,22 @@ export function registerRendererFocusTargets(
   dom.focusableElements.forEach((element, index) => {
     const focusId = element.dataset.focusId;
     const route = readClosestRouteId(element);
-    if (focusId === undefined || registered.has(focusId) || route === null) {
+    if (focusId === undefined || registered.has(focusId)) {
       return;
     }
-    const neighbors = focusId.startsWith('numpad-')
+    const shellNeighbors = getShellNeighbors(focusId);
+    if (route === null && shellNeighbors === null) return;
+    const neighbors = focusId.startsWith('btn-profile-pin-')
       ? getNumpadNeighbors(focusId)
       : focusId.startsWith('settings-')
       ? getSettingsNeighbors(focusId)
-      : focusId.startsWith('setup-') || focusId.startsWith('plex-') || focusId.startsWith('channel-') || focusId.startsWith('custom-')
-      ? getSetupNeighbors(focusId)
-      : undefined;
+      : focusId.startsWith('setup-') || focusId.startsWith('plex-') || focusId.startsWith('channel-') || focusId.startsWith('custom-') || focusId.startsWith('btn-auth-') || focusId.startsWith('btn-profile-') || focusId.startsWith('btn-server-')
+      ? getStagedSetupNeighbors(focusId) ?? getSetupNeighbors(focusId)
+      : shellNeighbors ?? undefined;
     focusRegistry.register({
       id: focusId,
-      route,
-      order: focusElementOrder(focusId, index),
+      route: route ?? 'player',
+      order: shellFocusOrder(focusId) ?? focusElementOrder(focusId, index),
       neighbors,
     });
     registered.add(focusId);
@@ -134,6 +119,40 @@ export function registerRendererFocusTargets(
     });
     registered.add(focusId);
   });
+}
+
+function getShellNeighbors(focusId: string): Partial<Record<FocusDirection, string>> | null {
+  switch (focusId) {
+    case 'shell-error-retry':
+      return { up: focusId, down: 'shell-error-exit', left: focusId, right: focusId };
+    case 'shell-error-exit':
+      return { up: 'shell-error-retry', down: focusId, left: focusId, right: focusId };
+    case 'shell-inline-dismiss':
+      return { up: focusId, down: 'shell-inline-retry', left: focusId, right: focusId };
+    case 'shell-inline-retry':
+      return { up: 'shell-inline-dismiss', down: focusId, left: focusId, right: focusId };
+    case 'exit-confirm-cancel':
+      return { up: focusId, down: focusId, left: focusId, right: 'exit-confirm-exit' };
+    case 'exit-confirm-exit':
+      return { up: focusId, down: focusId, left: 'exit-confirm-cancel', right: focusId };
+    default:
+      return null;
+  }
+}
+
+function shellFocusOrder(focusId: string): number | null {
+  switch (focusId) {
+    case 'shell-error-retry':
+    case 'shell-inline-dismiss':
+    case 'exit-confirm-cancel':
+      return -2;
+    case 'shell-error-exit':
+    case 'shell-inline-retry':
+    case 'exit-confirm-exit':
+      return -1;
+    default:
+      return null;
+  }
 }
 
 function registerOrderedButton(
@@ -158,10 +177,20 @@ function plexActionFocusOrder(button: HTMLButtonElement, index: number): number 
   if (readClosestRouteId(button) !== 'channelSetup') {
     return index;
   }
+  const focusId = button.dataset.focusId;
+  if (focusId === 'btn-auth-request' || focusId === 'btn-auth-retry') return 0;
+  if (focusId === 'btn-auth-cancel') return 1;
+  if (focusId === 'btn-server-refresh') return 20;
   return button.dataset.plexAction === 'clearMetadata' ? 140 + index : index;
 }
 
 function focusElementOrder(focusId: string, index: number): number {
+  if (focusId.startsWith('btn-profile-profile-')) return 10 + index / 1000;
+  if (focusId === 'btn-profile-main') return 20;
+  if (focusId.startsWith('btn-server-select-server-')) return 10 + index / 1000;
+  if (focusId === 'btn-server-setup') return 21;
+  if (focusId === 'btn-server-switch-profile') return 22;
+  if (focusId.startsWith('btn-profile-pin-')) return 0 + index / 1000;
   if (focusId.startsWith('plex-dyn-section-')) {
     return 35 + index / 1000;
   }
@@ -209,10 +238,9 @@ export function focusRendererTarget(
 export function renderRendererFocus(focusState: FocusState, dom: RendererDomBindings): void {
   for (const element of dom.focusableElements) {
     const isActive = element.dataset.focusId === focusState.activeId;
-    const isPrimaryRouteButton = readRouteId(element.dataset.routeButton) !== null;
     const isHiddenFromRoute = isElementHiddenFromFocus(element);
     element.classList.toggle('is-focused', isActive);
-    element.tabIndex = !isHiddenFromRoute && (isActive || isPrimaryRouteButton) ? 0 : -1;
+    element.tabIndex = !isHiddenFromRoute && isActive ? 0 : -1;
     if (isActive && !isHiddenFromRoute && document.activeElement !== element) {
       element.focus({ preventScroll: true });
     }
@@ -227,7 +255,18 @@ export function clickFocusedRendererElement(
     (element) => element.dataset.focusId === focusState.activeId,
   );
   if (activeElement instanceof HTMLButtonElement) {
-    activeElement.click();
+    if (!activeElement.disabled && readAriaDisabled(activeElement) !== true) {
+      activeElement.click();
+    }
+    return;
+  }
+  if (typeof HTMLSelectElement !== 'undefined' && activeElement instanceof HTMLSelectElement) {
+    if (activeElement.disabled || readAriaDisabled(activeElement)) return;
+    const options = Array.from(activeElement.options).filter((option) => !option.disabled);
+    if (options.length === 0) return;
+    const currentIndex = options.findIndex((option) => option.value === activeElement.value);
+    activeElement.value = options[(currentIndex + 1) % options.length]?.value ?? activeElement.value;
+    activeElement.dispatchEvent(new Event('change', { bubbles: true }));
   }
 }
 
@@ -264,7 +303,13 @@ function readCurrentFocusableElements(dom: RendererDomBindings): HTMLElement[] {
 }
 
 function isElementHiddenFromFocus(element: HTMLElement): boolean {
-  return element.closest('[hidden], [aria-hidden="true"]') !== null;
+  return element.closest('[hidden], [aria-hidden="true"]') !== null
+    || (element as HTMLButtonElement).disabled === true
+    || readAriaDisabled(element);
+}
+
+function readAriaDisabled(element: HTMLElement): boolean {
+  return typeof element.getAttribute === 'function' && element.getAttribute('aria-disabled') === 'true';
 }
 
 function isDynamicFocusId(focusId: string | undefined): focusId is string {
@@ -284,18 +329,18 @@ function isDynamicFocusId(focusId: string | undefined): focusId is string {
 
 function getNumpadNeighbors(focusId: string): Partial<Record<FocusDirection, string>> {
   const mapping: Record<string, Record<FocusDirection, string>> = {
-    'numpad-1': { up: 'numpad-clear', down: 'numpad-4', left: 'numpad-3', right: 'numpad-2' },
-    'numpad-2': { up: 'numpad-0', down: 'numpad-5', left: 'numpad-1', right: 'numpad-3' },
-    'numpad-3': { up: 'numpad-cancel', down: 'numpad-6', left: 'numpad-2', right: 'numpad-1' },
-    'numpad-4': { up: 'numpad-1', down: 'numpad-7', left: 'numpad-6', right: 'numpad-5' },
-    'numpad-5': { up: 'numpad-2', down: 'numpad-8', left: 'numpad-4', right: 'numpad-6' },
-    'numpad-6': { up: 'numpad-3', down: 'numpad-9', left: 'numpad-5', right: 'numpad-4' },
-    'numpad-7': { up: 'numpad-4', down: 'numpad-clear', left: 'numpad-9', right: 'numpad-8' },
-    'numpad-8': { up: 'numpad-5', down: 'numpad-0', left: 'numpad-7', right: 'numpad-9' },
-    'numpad-9': { up: 'numpad-6', down: 'numpad-cancel', left: 'numpad-8', right: 'numpad-7' },
-    'numpad-clear': { up: 'numpad-7', down: 'numpad-1', left: 'numpad-cancel', right: 'numpad-0' },
-    'numpad-0': { up: 'numpad-8', down: 'numpad-2', left: 'numpad-clear', right: 'numpad-cancel' },
-    'numpad-cancel': { up: 'numpad-9', down: 'numpad-3', left: 'numpad-0', right: 'numpad-clear' },
+    'btn-profile-pin-1': { up: 'btn-profile-pin-1', down: 'btn-profile-pin-4', left: 'btn-profile-pin-1', right: 'btn-profile-pin-2' },
+    'btn-profile-pin-2': { up: 'btn-profile-pin-2', down: 'btn-profile-pin-5', left: 'btn-profile-pin-1', right: 'btn-profile-pin-3' },
+    'btn-profile-pin-3': { up: 'btn-profile-pin-3', down: 'btn-profile-pin-6', left: 'btn-profile-pin-2', right: 'btn-profile-pin-3' },
+    'btn-profile-pin-4': { up: 'btn-profile-pin-1', down: 'btn-profile-pin-7', left: 'btn-profile-pin-4', right: 'btn-profile-pin-5' },
+    'btn-profile-pin-5': { up: 'btn-profile-pin-2', down: 'btn-profile-pin-8', left: 'btn-profile-pin-4', right: 'btn-profile-pin-6' },
+    'btn-profile-pin-6': { up: 'btn-profile-pin-3', down: 'btn-profile-pin-9', left: 'btn-profile-pin-5', right: 'btn-profile-pin-6' },
+    'btn-profile-pin-7': { up: 'btn-profile-pin-4', down: 'btn-profile-pin-backspace', left: 'btn-profile-pin-7', right: 'btn-profile-pin-8' },
+    'btn-profile-pin-8': { up: 'btn-profile-pin-5', down: 'btn-profile-pin-0', left: 'btn-profile-pin-7', right: 'btn-profile-pin-9' },
+    'btn-profile-pin-9': { up: 'btn-profile-pin-6', down: 'btn-profile-pin-cancel', left: 'btn-profile-pin-8', right: 'btn-profile-pin-9' },
+    'btn-profile-pin-backspace': { up: 'btn-profile-pin-7', down: 'btn-profile-pin-backspace', left: 'btn-profile-pin-backspace', right: 'btn-profile-pin-0' },
+    'btn-profile-pin-0': { up: 'btn-profile-pin-8', down: 'btn-profile-pin-0', left: 'btn-profile-pin-backspace', right: 'btn-profile-pin-cancel' },
+    'btn-profile-pin-cancel': { up: 'btn-profile-pin-9', down: 'btn-profile-pin-cancel', left: 'btn-profile-pin-0', right: 'btn-profile-pin-cancel' },
   };
   return mapping[focusId] ?? {};
 }
@@ -328,6 +373,14 @@ function getSettingsNeighbors(focusId: string): Partial<Record<FocusDirection, s
 }
 
 function getSetupNeighbors(focusId: string): Partial<Record<FocusDirection, string>> | undefined {
+  if (focusId === 'btn-auth-request' || focusId === 'btn-auth-cancel') return { up: focusId, down: focusId, left: focusId, right: focusId };
+  if (focusId === 'btn-auth-retry') return { up: focusId, down: 'btn-auth-cancel', left: focusId, right: focusId };
+  if (focusId.startsWith('btn-profile-profile-')) return { up: focusId, down: 'btn-profile-main', left: focusId, right: focusId };
+  if (focusId === 'btn-profile-main') return { up: 'btn-profile-profile-1', down: focusId, left: focusId, right: focusId };
+  if (focusId.startsWith('btn-server-select-server-')) return { up: focusId, down: 'btn-server-refresh', left: focusId, right: focusId };
+  if (focusId === 'btn-server-refresh') return { up: 'btn-server-select-server-1', down: 'btn-server-setup', left: focusId, right: focusId };
+  if (focusId === 'btn-server-setup') return { up: 'btn-server-refresh', down: 'btn-server-switch-profile', left: focusId, right: focusId };
+  if (focusId === 'btn-server-switch-profile') return { up: 'btn-server-setup', down: focusId, left: focusId, right: focusId };
   if (focusId.startsWith('plex-dyn-home-')) return { left: 'setup-stage-account' };
   if (focusId.startsWith('plex-dyn-server-')) return { left: 'setup-stage-server' };
   if (focusId.startsWith('plex-dyn-section-') || focusId.startsWith('plex-dyn-item-')) return { left: 'setup-stage-library' };

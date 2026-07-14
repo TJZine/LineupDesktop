@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  customChannelFailure,
   customChannelSuccess,
   type CustomChannelListMediaRequest,
   type CustomChannelSnapshot,
 } from '../../contracts/customChannels.js';
 import { createCustomChannelController } from '../../renderer/customChannels/controller.js';
+import { dispatchCustomChannelAction } from '../../renderer/customChannels/actionDispatch.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import { deferred } from '../helpers/deferred.js';
 
@@ -58,6 +60,43 @@ test('custom channel controller saves draft and handles delete confirmation loca
   await controller.applyAction('requestDeleteChannel', 'channel-1');
   await controller.applyAction('confirmDeleteChannel', 'channel-1');
   assert.equal(controller.getState().snapshot?.channels.length, 0);
+});
+
+test('custom save with a null changed id still refreshes once and closes to New', async () => {
+  const bridge = createBridge();
+  let saveCalls = 0;
+  bridge.saveDraft = async () => {
+    saveCalls++;
+    return customChannelSuccess('save-null-id', {
+      snapshot: snapshot(['channel-1', 'channel-2']),
+      changedChannelId: null,
+      currentChannelId: 'channel-1',
+    });
+  };
+  const controller = createCustomChannelController({ bridge, onStateChanged: () => undefined });
+  await controller.loadSnapshot();
+  await controller.browseSource('library-1');
+  await controller.applyAction('addMedia', 'rating-1');
+  const effects: string[] = [];
+  await dispatchCustomChannelAction({
+    action: 'saveDraft',
+    detail: undefined,
+    selectedSourceId: 'library-1',
+    controller,
+    refreshChannels: () => effects.push('channels'),
+    refreshGuide: () => effects.push('guide'),
+    render: () => undefined,
+    flow: {
+      openEditor: () => undefined,
+      closeEditor: (channelId) => effects.push(`close:${channelId ?? 'new'}`),
+      openDelete: () => undefined,
+      closeDelete: () => undefined,
+      restoreDeleteFocus: () => undefined,
+      restoreListFocus: () => undefined,
+    },
+  });
+  assert.equal(saveCalls, 1);
+  assert.deepEqual(effects, ['channels', 'guide', 'close:new']);
 });
 
 test('custom channel controller surfaces validation and rejects unsupported media additions', async () => {
@@ -206,6 +245,121 @@ test('custom channel controller maps rejected bridge work to safe local errors',
 
   assert.equal(controller.getState().mediaPending, false);
   assert.equal(controller.getState().lastError, 'Media lookup failed. Try again.');
+});
+
+test('custom channel controller rejects duplicate dispatch while pending and ignores it after owner invalidation', async () => {
+  const bridge = createBridge();
+  const pending = deferred<Awaited<ReturnType<typeof bridge.duplicateChannelDraft>>>();
+  let calls = 0;
+  bridge.duplicateChannelDraft = async () => {
+    calls++;
+    return pending.promise;
+  };
+  const controller = createCustomChannelController({ bridge, onStateChanged: () => undefined });
+  const first = controller.applyAction('duplicateChannel', 'channel-1');
+  const duplicate = controller.applyAction('duplicateChannel', 'channel-1');
+  assert.equal(controller.getState().pendingAction, 'duplicate');
+  assert.equal(controller.getState().pendingChannelId, 'channel-1');
+  controller.invalidateOperations();
+  pending.resolve(customChannelSuccess('duplicate-stale', {
+    draft: { number: 200, name: 'Stale duplicate', hidden: false, content: [], playbackMode: 'sequential' },
+    validation: { valid: true, issues: [] },
+  }));
+  const [firstOutcome, duplicateOutcome] = await Promise.all([first, duplicate]);
+  assert.equal(calls, 1);
+  assert.notEqual(controller.getState().draft.name, 'Stale duplicate');
+  assert.equal(controller.getState().pending, false);
+  assert.equal(firstOutcome, 'stale');
+  assert.equal(duplicateOutcome, 'skipped');
+});
+
+test('custom dispatch ignores stale save completion and keeps delete failures modal', async () => {
+  const bridge = createBridge();
+  const pendingSave = deferred<Awaited<ReturnType<typeof bridge.saveDraft>>>();
+  bridge.saveDraft = async () => pendingSave.promise;
+  const controller = createCustomChannelController({ bridge, onStateChanged: () => undefined });
+  await controller.loadSnapshot();
+  await controller.browseSource('library-1');
+  await controller.applyAction('addMedia', 'rating-1');
+  const refreshed: string[] = [];
+  const flow: string[] = [];
+  const dispatch = (action: Parameters<typeof dispatchCustomChannelAction>[0]['action'], detail?: string) => dispatchCustomChannelAction({
+    action,
+    detail,
+    selectedSourceId: 'library-1',
+    controller,
+    refreshChannels: () => refreshed.push('channels'),
+    refreshGuide: () => refreshed.push('guide'),
+    render: () => undefined,
+    flow: {
+      openEditor: () => flow.push('open-editor'),
+      closeEditor: () => flow.push('close-editor'),
+      openDelete: () => flow.push('open-delete'),
+      closeDelete: (focusId) => flow.push(`close-delete:${focusId}`),
+      restoreDeleteFocus: (focusId) => flow.push(`restore-delete:${focusId}`),
+      restoreListFocus: () => flow.push('restore-list'),
+    },
+  });
+
+  const pendingDuplicate = deferred<Awaited<ReturnType<typeof bridge.duplicateChannelDraft>>>();
+  bridge.duplicateChannelDraft = async () => pendingDuplicate.promise;
+  const duplicate = dispatch('duplicateChannel', 'channel-1');
+  controller.invalidateOperations();
+  pendingDuplicate.resolve(customChannelSuccess('stale-duplicate', {
+    draft: { number: 190, name: 'Stale duplicate', hidden: false, content: [], playbackMode: 'sequential' },
+    validation: { valid: true, issues: [] },
+  }));
+  await duplicate;
+  assert.deepEqual(flow, []);
+
+  const save = dispatch('saveDraft');
+  controller.invalidateOperations();
+  pendingSave.resolve(customChannelSuccess('stale-save', {
+    snapshot: snapshot(['channel-stale']),
+    changedChannelId: 'channel-stale',
+    currentChannelId: 'channel-stale',
+  }));
+  await save;
+  assert.deepEqual(refreshed, []);
+  assert.deepEqual(flow, []);
+
+  await controller.applyAction('requestDeleteChannel', 'channel-1');
+  const pendingDelete = deferred<Awaited<ReturnType<typeof bridge.deleteChannel>>>();
+  bridge.deleteChannel = async () => pendingDelete.promise;
+  const staleDelete = dispatch('confirmDeleteChannel', 'channel-1');
+  controller.invalidateOperations();
+  pendingDelete.resolve(customChannelSuccess('stale-delete', {
+    snapshot: snapshot(['channel-2']),
+    changedChannelId: 'channel-1',
+    currentChannelId: 'channel-2',
+  }));
+  await staleDelete;
+  assert.deepEqual(flow, []);
+  assert.deepEqual(refreshed, []);
+  assert.equal(controller.getState().deleteConfirmationChannelId, 'channel-1');
+
+  bridge.deleteChannel = async () => customChannelFailure('delete-failed', {
+    code: 'CUSTOM_CHANNEL_STORAGE_UNAVAILABLE',
+    message: 'Custom channel could not be deleted. Try again.',
+    retryable: true,
+    recoverable: true,
+    operation: 'deleteChannel',
+  });
+  await dispatch('confirmDeleteChannel', 'channel-1');
+  assert.equal(controller.getState().deleteConfirmationChannelId, 'channel-1');
+  assert.equal(controller.getState().lastError, 'Custom channel could not be deleted. Try again.');
+  assert.deepEqual(flow, ['restore-delete:custom-delete-confirm']);
+  assert.deepEqual(refreshed, []);
+
+  bridge.deleteChannel = async () => customChannelSuccess('delete-success', {
+    snapshot: snapshot(['channel-2']),
+    changedChannelId: 'channel-1',
+    currentChannelId: 'channel-2',
+  });
+  await dispatch('confirmDeleteChannel', 'channel-1');
+  assert.equal(controller.getState().deleteConfirmationChannelId, null);
+  assert.equal(flow.at(-1), 'close-delete:custom-channel-duplicate-channel-2');
+  assert.deepEqual(refreshed, ['channels', 'guide']);
 });
 
 test('custom channel controller supports filters metadata back unwind and source invalidation', async () => {

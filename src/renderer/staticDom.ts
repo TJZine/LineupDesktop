@@ -1,3 +1,6 @@
+import { mountShellDom } from './shell/shellDom.js';
+import { createLineupBrandGlyph } from './onboarding/lineupBrandGlyph.js';
+
 const STATIC_SCREEN_MARKUP = `
 <section class="screen-stack" aria-live="polite" data-static-screens-mounted>
   <div class="player-presentation" data-player-presentation-surface aria-label="Player presentation surface">
@@ -120,28 +123,13 @@ const STATIC_SCREEN_MARKUP = `
         </section>
       </div>
   </div>
-  <section id="screen-player" class="screen screen--active" data-screen="player" data-style-surface="screen" aria-labelledby="screen-player-title">
-      <div class="screen__content">
-      <div class="screen-shell-state" data-shell-state="active">
-        <span>Player</span>
-        <strong data-screen-state-text="player">Player controls are available for the current program.</strong>
-      </div>
-      <p class="screen__kicker" data-workflow-kicker="player">Now playing</p>
-      <h2 id="screen-player-title">Player</h2>
-      <p data-workflow-primary="player">Ready for playback.</p>
-      <p data-workflow-secondary="player">Playback controls, guide access, and route chrome stay visible over the player.</p>
-      <dl class="program-summary">
-        <div><dt>Channel</dt><dd data-current-channel></dd></div>
-        <div><dt>Program</dt><dd data-current-program></dd></div>
-        <div><dt>Time</dt><dd data-current-window></dd></div>
-      </dl>
-      <div class="workflow-actions" data-workflow-actions="player">
+  <section id="screen-player" class="screen screen--active screen--player" data-screen="player" data-style-surface="screen" aria-label="Player">
+      <div class="player-quick-actions" aria-label="Player quick actions">
         <button type="button" data-route-action="openGuide" data-focus-id="player-guide">Open guide</button>
         <button type="button" data-route-action="openSettings" data-focus-id="player-settings">Settings</button>
+        <button type="button" data-overlay-action="toggleOsd" data-focus-id="player-osd">Player controls</button>
+        <button type="button" data-fullscreen-toggle data-focus-id="player-fullscreen" aria-pressed="false">Toggle fullscreen</button>
       </div>
-      <button type="button" data-overlay-action="toggleOsd" data-focus-id="player-osd">Toggle OSD</button>
-      <button type="button" data-fullscreen-toggle data-focus-id="player-fullscreen" aria-pressed="false">Toggle fullscreen</button>
-    </div>
   </section>
   <section id="screen-guide" class="screen" data-screen="guide" data-style-surface="screen" aria-labelledby="screen-guide-title" hidden>
     <div class="screen__content">
@@ -210,176 +198,94 @@ const STATIC_SCREEN_MARKUP = `
       </main>
     </div>
   </section>
-  <section id="screen-channel-setup" class="screen screen--onboarding" data-screen="channelSetup" data-style-surface="screen" aria-labelledby="screen-channel-setup-title" hidden>
-    <div class="screen__content plex-onboarding-shell">
-      <nav class="setup-rail" aria-label="Setup stages">
-        <div class="setup-profile-row">
-          <div class="setup-profile-avatar">S</div>
-          <span class="setup-profile-name">Setup Stages</span>
+  <section id="screen-channel-setup" class="screen screen--onboarding" data-screen="channelSetup" data-style-surface="screen" data-plex-runtime-panel aria-labelledby="screen-channel-setup-title" hidden>
+    <div class="onboarding-host" data-onboarding-host>
+      <section class="onboarding-owner onboarding-auth" data-onboarding-owner="auth-link-code" aria-labelledby="auth-link-title" hidden>
+        <div class="onboarding-panel">
+          <header><h2 id="auth-link-title">Sign in to Plex</h2><p>Scan the QR code or visit plex.tv/link</p></header>
+          <div class="auth-link-layout"><div class="auth-link-qr" data-plex-link-qr></div><p data-onboarding-status>Ready to request a sign-in code.</p></div>
+          <div class="onboarding-actions"><button type="button" data-plex-action="requestPin" data-focus-id="btn-auth-request">Request PIN</button></div>
         </div>
-        <div class="setup-rail-stages">
-          <button type="button" data-setup-stage="account" data-focus-id="setup-stage-account" class="setup-stage-btn">1. Sign In</button>
-          <button type="button" data-setup-stage="server" data-focus-id="setup-stage-server" class="setup-stage-btn">2. Choose Server</button>
-          <button type="button" data-setup-stage="library" data-focus-id="setup-stage-library" class="setup-stage-btn">3. Browse Library</button>
-          <button type="button" data-setup-stage="preview" data-focus-id="setup-stage-preview" class="setup-stage-btn">4. Media Preview</button>
-          <button type="button" data-setup-stage="build" data-focus-id="setup-stage-build" class="setup-stage-btn">5. Build Lineup</button>
-          <button type="button" data-setup-stage="custom" data-focus-id="setup-stage-custom" class="setup-stage-btn">6. Custom Channels</button>
+      </section>
+      <section class="onboarding-owner onboarding-auth" data-onboarding-owner="auth-waiting" aria-labelledby="auth-waiting-title" hidden>
+        <div class="onboarding-panel">
+          <header><h2 id="auth-waiting-title">Sign in to Plex</h2><p>Scan the QR code or visit plex.tv/link</p></header>
+          <div class="auth-link-layout"><div class="auth-link-qr" data-plex-link-qr></div><div class="auth-code" data-plex-pin></div></div>
+          <p data-onboarding-status aria-live="polite">Waiting for sign-in…</p>
+          <div class="onboarding-actions"><button type="button" data-plex-action="cancelPin" data-focus-id="btn-auth-cancel">Cancel</button></div>
         </div>
-        <div class="setup-rail-nav">
-          <button type="button" data-route-action="openSettings" data-focus-id="setup-settings">Settings</button>
-          <button type="button" data-route-action="resumePlayer" data-focus-id="setup-player">Back to player</button>
+      </section>
+      <section class="onboarding-owner onboarding-auth" data-onboarding-owner="auth-error" aria-labelledby="auth-error-title" hidden>
+        <div class="onboarding-panel">
+          <header><h2 id="auth-error-title">Sign in to Plex</h2><p>Scan the QR code or visit plex.tv/link</p></header>
+          <div class="auth-code auth-code--idle" aria-hidden="true"><span>–</span><span>–</span><span>–</span><span>–</span></div>
+          <div class="onboarding-error" role="alert" data-onboarding-error></div>
+          <div class="onboarding-actions onboarding-actions--stacked"><button type="button" data-plex-action="requestPin" data-focus-id="btn-auth-retry">Retry</button><button type="button" data-plex-action="dismissPinError" data-focus-id="btn-auth-cancel">Cancel</button></div>
         </div>
-      </nav>
-      <main class="setup-detail-pane">
-        <header class="plex-onboarding-hero">
-          <p class="screen__kicker" data-workflow-kicker="channelSetup">Channel setup</p>
-          <h2 id="screen-channel-setup-title">Plex setup</h2>
-          <p data-workflow-primary="channelSetup">Connect Plex, choose a profile and server, then browse your library.</p>
-          <p data-workflow-secondary="channelSetup">Lineup Desktop shows the account, server, library, and media details needed for setup.</p>
-        </header>
-        <div class="screen-shell-state" data-shell-state="loading">
-          <span>Persisted setup status</span>
-          <strong data-screen-state-text="channelSetup">Review account, server, library, and persisted channel recovery in one place.</strong>
+      </section>
+      <section class="onboarding-owner onboarding-profile" data-onboarding-owner="profile-select" aria-labelledby="profile-select-title" hidden>
+        <div class="onboarding-panel">
+          <header><span data-lineup-brand-glyph></span><h2 id="profile-select-title">Who's watching?</h2><p>Choose a Plex Home profile to continue.</p></header>
+          <p data-onboarding-status aria-live="polite"></p>
+          <div class="profile-list" data-plex-home-users role="listbox" aria-label="Plex Home profiles"></div>
+          <div class="onboarding-error" role="alert" data-onboarding-error hidden></div>
         </div>
-        <div class="setup-sections" data-plex-runtime-panel>
-          <section class="plex-runtime__stage setup-section" data-setup-section="account" aria-labelledby="plex-stage-account">
-            <h4 id="plex-stage-account">1. Sign in</h4>
-            <p class="plex-runtime__stage-copy">Link a Plex account and select the profile Lineup Desktop should use.</p>
-            <div class="plex-runtime__controls" aria-label="Plex sign-in controls">
-              <button type="button" data-plex-action="loadSnapshot" data-focus-id="plex-load">Resume setup</button>
-              <button type="button" data-plex-action="requestPin" data-focus-id="plex-request-pin">Get link code</button>
-              <button type="button" data-plex-action="pollPin" data-focus-id="plex-poll-pin">I signed in</button>
-              <button type="button" data-plex-action="cancelPin" data-focus-id="plex-cancel-pin">Cancel</button>
-              <button type="button" data-plex-action="clearPinSubflow" data-focus-id="plex-clear-pin">Start over</button>
-            </div>
-            <div class="plex-runtime__pin" data-plex-pin></div>
-            <div class="plex-runtime__controls" aria-label="Plex profile controls">
-              <input data-plex-home-user-pin data-focus-id="plex-home-pin" inputmode="numeric" autocomplete="off" maxlength="12" aria-label="Plex Home PIN" />
-              <button type="button" data-plex-action="getHomeUsers" data-focus-id="plex-home-users">Choose profile</button>
-            </div>
-            <div class="plex-runtime__list" data-plex-home-users></div>
-          </section>
-          <section class="plex-runtime__stage setup-section" data-setup-section="server" aria-labelledby="plex-stage-server" hidden>
-            <h4 id="plex-stage-server">2. Choose server</h4>
-            <p class="plex-runtime__stage-copy">Pick the Plex server Lineup Desktop should use for this profile.</p>
-            <div class="plex-runtime__controls" aria-label="Plex server controls">
-              <button type="button" data-plex-action="restoreSelectedServer" data-focus-id="plex-restore-server">Use saved server</button>
-              <button type="button" data-plex-action="refreshServers" data-focus-id="plex-refresh-servers">Find servers</button>
-              <button type="button" data-plex-action="clearSelectedServer" data-focus-id="plex-clear-server">Change server</button>
-            </div>
-            <div class="plex-runtime__list" data-plex-servers></div>
-          </section>
-          <section class="plex-runtime__stage setup-section" data-setup-section="library" aria-labelledby="plex-stage-library" hidden>
-            <h4 id="plex-stage-library">3. Browse library</h4>
-            <p class="plex-runtime__stage-copy">Choose a movie or show library section. Media items below are for metadata preview only.</p>
-            <div class="plex-runtime__controls" aria-label="Plex library controls">
-              <button type="button" data-plex-action="listLibrarySections" data-focus-id="plex-list-sections">Open libraries</button>
-              <button type="button" data-plex-action="clearSelectedSection" data-focus-id="plex-clear-section">Change library</button>
-              <button type="button" data-plex-action="listLibraryItems" data-focus-id="plex-list-items">Browse library</button>
-              <button type="button" data-plex-action="clearItems" data-focus-id="plex-clear-items">Clear results</button>
-              <input data-plex-search-query data-focus-id="plex-search-query" maxlength="120" aria-label="Library search" />
-              <button type="button" data-plex-action="searchLibrary" data-focus-id="plex-search">Search</button>
-              <button type="button" data-plex-action="clearSearch" data-focus-id="plex-clear-search">Clear search</button>
-            </div>
-            <div class="plex-runtime__list" data-plex-sections></div>
-            <div class="plex-runtime__list" data-plex-items></div>
-          </section>
-          <section class="plex-runtime__stage plex-runtime__stage--secondary setup-section" data-setup-section="preview" aria-labelledby="plex-stage-metadata" hidden>
-            <h4 id="plex-stage-metadata">Optional media preview</h4>
-            <p class="plex-runtime__stage-copy">Review a selected media summary only if needed. Channel creation uses the selected library section.</p>
-            <button type="button" data-plex-action="clearMetadata" data-focus-id="plex-clear-metadata">Close preview</button>
-            <div class="plex-runtime__metadata" data-plex-metadata></div>
-          </section>
-          <section class="channel-setup-commit setup-section" data-setup-section="build" aria-labelledby="channel-setup-commit-title" hidden>
-            <header>
-              <div>
-                <p class="screen__kicker">Channel setup</p>
-                <h3 id="channel-setup-commit-title">Build channels</h3>
-              </div>
-              <strong data-channel-setup-status></strong>
-            </header>
-            <ol class="setup-steps" data-channel-review-steps></ol>
-            <dl class="setup-summary">
-              <div><dt>Source</dt><dd data-channel-setup-source></dd></div>
-              <div><dt>Enabled channels</dt><dd data-channel-setup-enabled></dd></div>
-              <div><dt>Blocks</dt><dd data-channel-setup-blocks></dd></div>
-            </dl>
-            <div class="setup-review">
-              <section>
-                <h4>1. Library source</h4>
-                <div class="channel-draft-list" data-channel-review-list></div>
-              </section>
-              <section>
-                <h4>2. Strategy</h4>
-                <div class="setup-list" data-channel-strategy-options></div>
-              </section>
-              <section>
-                <h4>3. Review</h4>
-                <div class="setup-preview-rows" data-channel-review-impact></div>
-              </section>
-              <section>
-                <h4>4. Result</h4>
-                <div class="setup-validation" data-channel-review-validation></div>
-                <div class="setup-result" data-channel-setup-result></div>
-              </section>
-            </div>
-            <div class="plex-runtime__controls" aria-label="Channel setup commit controls">
-              <button type="button" data-channel-commit-action="append" data-focus-id="channel-append">Confirm & Build</button>
-              <button type="button" data-channel-commit-action="replace" data-focus-id="channel-replace">Review replacement</button>
-              <button type="button" data-channel-commit-action="confirmReplace" data-focus-id="channel-confirm-replace">Confirm & Replace</button>
-            </div>
-          </section>
-          <section class="custom-channel-workspace setup-section" data-custom-channel-panel data-setup-section="custom" aria-labelledby="custom-channel-workspace-title" hidden>
-            <header class="custom-channel-workspace__header">
-              <div>
-                <p class="screen__kicker">Custom channels</p>
-                <h3 id="custom-channel-workspace-title">Author channels</h3>
-              </div>
-              <p data-custom-channel-status>Custom channels have not loaded yet.</p>
-              <button type="button" data-custom-channel-action="loadSnapshot" data-focus-id="custom-channel-refresh">Refresh</button>
-            </header>
-            <div class="custom-channel-workspace__grid">
-              <section class="custom-channel-panel custom-channel-panel--list" aria-label="Saved custom channels">
-                <h4>Saved channels</h4>
-                <div class="custom-channel-list" data-custom-channel-list></div>
-              </section>
-              <section class="custom-channel-panel custom-channel-panel--media" aria-label="Custom channel media picker">
-                <header class="custom-channel-panel__toolbar">
-                  <h4>Media picker</h4>
-                  <div class="custom-channel-search">
-                    <input data-custom-channel-search-query data-focus-id="custom-channel-search-query" maxlength="128" aria-label="Custom channel media search" />
-                    <button type="button" data-custom-channel-action="browseSource" data-focus-id="custom-channel-browse">Browse source</button>
-                    <button type="button" data-custom-channel-action="searchMedia" data-focus-id="custom-channel-search">Search</button>
-                    <button type="button" data-custom-channel-action="clearSearch" data-focus-id="custom-channel-clear-search">Clear</button>
-                  </div>
-                  <div class="custom-channel-filterbar" aria-label="Media filters">
-                    <button type="button" data-custom-channel-action="setFilterAll" data-focus-id="custom-channel-filter-all">All</button>
-                    <button type="button" data-custom-channel-action="setFilterMovies" data-focus-id="custom-channel-filter-movies">Movies</button>
-                    <button type="button" data-custom-channel-action="setFilterEpisodes" data-focus-id="custom-channel-filter-episodes">Episodes</button>
-                  </div>
-                </header>
-                <div class="custom-channel-media-grid" data-custom-channel-media></div>
-              </section>
-              <section class="custom-channel-panel custom-channel-panel--draft" aria-label="Custom channel editor">
-                <h4>Channel editor</h4>
-                <label class="custom-channel-field">
-                  <span>Name</span>
-                  <input data-custom-channel-name data-focus-id="custom-channel-name" maxlength="120" />
-                </label>
-                <label class="custom-channel-field">
-                  <span>Number</span>
-                  <input data-custom-channel-number data-focus-id="custom-channel-number" inputmode="numeric" maxlength="3" />
-                </label>
-                <button type="button" data-custom-channel-action="toggleDraftHidden" data-focus-id="custom-channel-hidden">Toggle hidden</button>
-                <div data-custom-channel-draft></div>
-                <button type="button" data-custom-channel-action="saveDraft" data-focus-id="custom-channel-save">Save custom channel</button>
-              </section>
-            </div>
-          </section>
+      </section>
+      <section class="onboarding-owner onboarding-server" data-onboarding-owner="server-select" aria-labelledby="server-select-title" hidden>
+        <div class="onboarding-panel">
+          <header><span data-lineup-brand-glyph></span><h2 id="server-select-title">Select Plex Server</h2><p>Choose a server to continue setup.</p></header>
+          <p data-onboarding-status aria-live="polite"></p>
+          <div class="server-list" data-plex-servers role="listbox" aria-label="Plex servers"></div>
+          <div class="onboarding-actions"><button type="button" data-plex-action="refreshServers" data-focus-id="btn-server-refresh">Refresh</button><button type="button" data-setup-stage="library" data-focus-id="btn-server-setup">Setup</button><button type="button" data-setup-stage="profile" data-focus-id="btn-server-switch-profile">Switch Profile</button></div>
         </div>
-      </main>
-      <div class="profile-pin-modal" id="profile-pin-modal" hidden>
+      </section>
+      <section class="onboarding-owner onboarding-server" data-onboarding-owner="server-error" aria-labelledby="server-error-title" hidden>
+        <div class="onboarding-panel">
+          <header><span data-lineup-brand-glyph></span><h2 id="server-error-title">Select Plex Server</h2><p>Choose a server to continue setup.</p></header>
+          <div class="onboarding-error" role="alert" data-onboarding-error></div>
+          <div class="onboarding-actions onboarding-actions--stacked"><button type="button" data-plex-action="refreshServers" data-focus-id="btn-server-refresh">Refresh</button><button type="button" data-setup-stage="profile" data-focus-id="btn-server-switch-profile">Switch Profile</button></div>
+        </div>
+      </section>
+    </div>
+    <main class="setup-workflow" data-setup-workspace hidden>
+      <section class="setup-owner" data-staged-owner="library" aria-labelledby="setup-library-title">
+        <header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step">Step 1 of 3</span><div class="setup-owner__intro"><h3 id="setup-library-title">Choose libraries</h3><p>Choose the movie and show libraries that should become channels.</p></div></header>
+        <div class="setup-status" data-setup-library-status data-channel-setup-status role="status"></div>
+        <div class="setup-owner__body"><div class="setup-library-toolbar"><button type="button" data-setup-flow-action="librarySelectAll" data-focus-id="setup-select-all">Select All</button><button type="button" data-setup-flow-action="libraryClearAll" data-focus-id="setup-clear-all">Clear All</button></div><p class="setup-limit-message" data-setup-limit-message hidden>Up to 24 libraries can be selected.</p><div class="setup-library-list" data-plex-sections></div><div class="setup-library-empty" data-setup-library-empty hidden><p>No movie or show libraries are available.</p><button type="button" data-setup-flow-action="libraryRetry" data-focus-id="setup-library-retry">Retry</button></div></div>
+        <footer class="setup-owner__actions"><span data-channel-setup-source>No libraries selected</span><button type="button" data-setup-flow-action="libraryNext" data-focus-id="setup-next">Next</button><button type="button" data-setup-flow-action="setupBack" data-focus-id="setup-back">Back</button></footer>
+      </section>
+      <section class="setup-owner" data-staged-owner="preview" aria-labelledby="setup-preview-title" hidden>
+        <header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step">Step 2 of 3</span><div class="setup-owner__intro"><h3 id="setup-preview-title">Configure channels</h3><p>Choose how the selected libraries change your saved lineup.</p></div></header>
+        <div class="setup-owner__body"><div class="setup-strategy-split"><nav class="setup-strategy-rail" aria-label="Channel categories"><button type="button" class="selected" aria-pressed="true" data-setup-flow-action="selectBuildCategory" data-focus-id="setup-category-build"><strong>Build mode</strong><span>Append, replace, or customize</span></button></nav><section class="setup-strategy-detail"><h3>Build mode</h3><p>Choose one real Desktop build operation.</p><button type="button" data-setup-action="selectAppendBuildMode" data-focus-id="channel-strategy-build-append">Append</button><button type="button" data-setup-action="selectReplaceBuildMode" data-focus-id="channel-strategy-build-replace">Replace</button><button type="button" data-setup-flow-action="openSetupCustom" data-focus-id="channel-strategy-build-custom">Custom <small>Desktop extension</small></button></section></div><section class="setup-preview-strip"><button type="button" data-setup-flow-action="previewToggle" data-focus-id="setup-preview-toggle" aria-expanded="false">Library preview</button><div class="setup-preview-content" hidden><p data-setup-preview-status></p><div class="setup-preview-items" data-plex-items></div><div class="setup-preview-metadata" data-plex-metadata></div><button type="button" data-setup-flow-action="previewRetry" data-focus-id="setup-preview-retry" hidden>Retry preview</button></div></section></div>
+        <footer class="setup-owner__actions"><button type="button" data-setup-flow-action="previewNext" data-focus-id="setup-next">Next</button><button type="button" data-setup-flow-action="setupBack" data-focus-id="setup-back">Back</button></footer>
+      </section>
+      <section class="setup-owner" data-staged-owner="build" aria-labelledby="channel-setup-commit-title" hidden>
+        <header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step">Step 3 of 3</span><div class="setup-owner__intro"><h3 id="channel-setup-commit-title">Review and build</h3><p>Review the planned lineup change before the atomic build starts.</p></div></header>
+        <div class="setup-owner__body setup-review-layout"><div class="setup-build-review"><div data-channel-review-list></div><div data-channel-review-impact></div><div data-channel-review-validation role="status"></div><button type="button" class="setup-replace-confirm" data-setup-flow-action="toggleReplaceConfirm" data-focus-id="setup-replace-confirm" aria-pressed="false" hidden>Confirm replacement of the saved lineup</button></div><aside class="setup-summary-card"><span>Saved lineup</span><strong data-channel-setup-enabled></strong><p><span data-channel-setup-blocks></span></p></aside></div>
+        <footer class="setup-owner__actions"><button type="button" data-setup-flow-action="buildBack" data-focus-id="setup-back">Back</button><button type="button" data-setup-flow-action="buildConfirm" data-focus-id="setup-confirm">Build channels</button></footer>
+      </section>
+      <section class="setup-owner" data-staged-owner="progress" aria-labelledby="setup-progress-title" hidden><header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step">Step 3 of 3</span><div class="setup-owner__intro"><h3 id="setup-progress-title">Building lineup</h3><p>The atomic channel operation is in progress.</p></div></header><div class="setup-owner__body setup-operation-state"><div class="setup-progress-bar" role="progressbar"><span></span></div><p>Applying selected libraries. This view can be closed without claiming to cancel the saved operation.</p></div><footer class="setup-owner__actions"><button type="button" data-setup-flow-action="progressCancel" data-focus-id="setup-progress-cancel">Cancel build view</button></footer></section>
+      <section class="setup-owner" data-staged-owner="result" aria-labelledby="setup-result-title" hidden><header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step">Step 3 of 3</span><div class="setup-owner__intro"><h3 id="setup-result-title">Lineup ready</h3><p>The saved channel summary has been refreshed.</p></div></header><div class="setup-owner__body setup-operation-state"><span class="setup-success-mark" aria-hidden="true">✓</span><p data-channel-setup-result></p></div><footer class="setup-owner__actions"><button type="button" data-setup-flow-action="resultDone" data-focus-id="setup-done">Done</button><button type="button" data-setup-flow-action="resultWatch" data-focus-id="setup-result-watch">Watch built channel</button></footer></section>
+      <section class="setup-owner" data-staged-owner="recovery-error" aria-labelledby="setup-error-title" hidden><header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step" data-setup-recovery-step>Step 3 of 3</span><div class="setup-owner__intro"><h3 id="setup-error-title">Setup needs attention</h3><p>Retry the failed safe operation or return without changing the lineup.</p></div></header><div class="setup-owner__body setup-operation-state"><span class="setup-error-mark" aria-hidden="true">!</span><p data-setup-safe-error role="alert"></p></div><footer class="setup-owner__actions"><button type="button" data-setup-flow-action="recoveryRetry" data-focus-id="setup-error-retry">Retry</button><button type="button" data-setup-flow-action="setupBack" data-focus-id="setup-error-back">Back</button></footer></section>
+      <section class="setup-owner custom-channel-workspace" data-staged-owner="custom-list" data-custom-channel-panel aria-labelledby="custom-channel-workspace-title" hidden>
+        <header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step">Desktop extension</span><div class="setup-owner__intro"><h3 id="custom-channel-workspace-title">Custom channels</h3><p>Duplicate a saved channel or start with a blank channel.</p><span data-custom-channel-status></span></div></header>
+        <div class="setup-owner__body custom-channel-list" data-custom-channel-list></div>
+        <footer class="setup-owner__actions"><button type="button" data-setup-flow-action="customNew" data-focus-id="custom-channel-new">New custom channel</button><button type="button" data-setup-flow-action="customDone" data-focus-id="setup-done">Finish setup</button><button type="button" data-setup-flow-action="customBack" data-focus-id="setup-back">Back</button><button type="button" data-setup-flow-action="customBack" data-focus-id="custom-channel-back" hidden>Back to setup</button></footer>
+      </section>
+      <section class="setup-owner custom-channel-editor" data-staged-owner="custom-edit" aria-labelledby="custom-channel-editor-title" hidden>
+        <header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step">Desktop extension</span><div class="setup-owner__intro"><h3 id="custom-channel-editor-title">Channel editor</h3><p>Choose a name, number, and playable media.</p><span>New or duplicate</span></div></header>
+        <div class="setup-owner__body custom-editor-layout"><section class="custom-editor-fields"><label class="custom-channel-field"><span>Name</span><input data-custom-channel-name data-focus-id="custom-channel-name" maxlength="120" /></label><label class="custom-channel-field"><span>Number</span><input data-custom-channel-number data-focus-id="custom-channel-number" inputmode="numeric" maxlength="3" /></label><button type="button" data-custom-channel-action="toggleDraftHidden" data-focus-id="custom-channel-hidden">Toggle hidden</button><div data-custom-channel-draft></div></section><section class="custom-editor-media"><div class="custom-channel-search"><input data-custom-channel-search-query data-focus-id="custom-channel-search-query" maxlength="128" aria-label="Custom channel media search" /><button type="button" data-custom-channel-action="browseSource" data-focus-id="custom-channel-browse">Browse source</button><button type="button" data-custom-channel-action="searchMedia" data-focus-id="custom-channel-search">Search</button><button type="button" data-custom-channel-action="clearSearch" data-focus-id="custom-channel-clear-search">Clear</button></div><div class="custom-channel-filterbar"><button type="button" data-custom-channel-action="setFilterAll" data-focus-id="custom-channel-filter-all">All</button><button type="button" data-custom-channel-action="setFilterMovies" data-focus-id="custom-channel-filter-movies">Movies</button><button type="button" data-custom-channel-action="setFilterEpisodes" data-focus-id="custom-channel-filter-episodes">Episodes</button></div><div class="custom-channel-media-grid" data-custom-channel-media></div></section></div>
+        <footer class="setup-owner__actions"><button type="button" data-custom-channel-action="saveDraft" data-focus-id="custom-channel-save">Save custom channel</button><button type="button" data-setup-flow-action="customCancel" data-focus-id="custom-channel-cancel">Cancel</button></footer>
+      </section>
+      <section class="setup-modal" data-staged-owner="custom-delete-confirm" role="dialog" aria-modal="true" aria-labelledby="custom-delete-title" hidden><div class="setup-modal__dialog"><h2 id="custom-delete-title">Delete custom channel?</h2><p>The saved channel will be removed from this lineup.</p><p data-custom-delete-error role="alert"></p><button type="button" data-setup-flow-action="customDeleteCancel" data-focus-id="custom-delete-cancel">Cancel channel deletion</button><button type="button" data-custom-channel-action="confirmDeleteChannel" data-focus-id="custom-delete-confirm">Delete custom channel</button></div></section>
+      <input data-plex-search-query hidden aria-hidden="true" tabindex="-1" />
+      <div data-channel-review-steps hidden></div><div data-channel-strategy-options hidden></div>
+    </main>
+    <div class="profile-pin-modal" id="profile-pin-modal" role="dialog" aria-modal="true" aria-labelledby="profile-pin-modal-title" aria-hidden="true" hidden>
         <div class="profile-pin-modal__dialog">
+          <div class="profile-pin-user" aria-hidden="true">
+            <div class="profile-pin-avatar profile-pin-avatar-fallback" data-profile-pin-avatar></div>
+          </div>
           <header class="profile-pin-modal__header">
             <h3 id="profile-pin-modal-title">Enter Profile PIN</h3>
             <p class="profile-pin-modal__user-name" id="profile-pin-modal-username"></p>
@@ -390,23 +296,22 @@ const STATIC_SCREEN_MARKUP = `
             <span class="profile-pin-modal__slot" data-pin-slot="2"></span>
             <span class="profile-pin-modal__slot" data-pin-slot="3"></span>
           </div>
-          <p class="profile-pin-modal__error" id="profile-pin-modal-error" hidden>Incorrect PIN. Please try again.</p>
           <div class="profile-pin-modal__numpad">
-            <button type="button" class="numpad-btn" data-numpad="1" data-focus-id="numpad-1">1</button>
-            <button type="button" class="numpad-btn" data-numpad="2" data-focus-id="numpad-2">2</button>
-            <button type="button" class="numpad-btn" data-numpad="3" data-focus-id="numpad-3">3</button>
-            <button type="button" class="numpad-btn" data-numpad="4" data-focus-id="numpad-4">4</button>
-            <button type="button" class="numpad-btn" data-numpad="5" data-focus-id="numpad-5">5</button>
-            <button type="button" class="numpad-btn" data-numpad="6" data-focus-id="numpad-6">6</button>
-            <button type="button" class="numpad-btn" data-numpad="7" data-focus-id="numpad-7">7</button>
-            <button type="button" class="numpad-btn" data-numpad="8" data-focus-id="numpad-8">8</button>
-            <button type="button" class="numpad-btn" data-numpad="9" data-focus-id="numpad-9">9</button>
-            <button type="button" class="numpad-btn numpad-btn--clear" data-numpad="clear" data-focus-id="numpad-clear">Clear</button>
-            <button type="button" class="numpad-btn" data-numpad="0" data-focus-id="numpad-0">0</button>
-            <button type="button" class="numpad-btn numpad-btn--cancel" data-numpad="cancel" data-focus-id="numpad-cancel">Cancel</button>
+            <button type="button" class="numpad-btn" data-numpad="1" data-focus-id="btn-profile-pin-1">1</button>
+            <button type="button" class="numpad-btn" data-numpad="2" data-focus-id="btn-profile-pin-2">2</button>
+            <button type="button" class="numpad-btn" data-numpad="3" data-focus-id="btn-profile-pin-3">3</button>
+            <button type="button" class="numpad-btn" data-numpad="4" data-focus-id="btn-profile-pin-4">4</button>
+            <button type="button" class="numpad-btn" data-numpad="5" data-focus-id="btn-profile-pin-5">5</button>
+            <button type="button" class="numpad-btn" data-numpad="6" data-focus-id="btn-profile-pin-6">6</button>
+            <button type="button" class="numpad-btn" data-numpad="7" data-focus-id="btn-profile-pin-7">7</button>
+            <button type="button" class="numpad-btn" data-numpad="8" data-focus-id="btn-profile-pin-8">8</button>
+            <button type="button" class="numpad-btn" data-numpad="9" data-focus-id="btn-profile-pin-9">9</button>
+            <button type="button" class="numpad-btn numpad-btn--backspace" data-numpad="backspace" data-focus-id="btn-profile-pin-backspace" aria-label="Backspace">←</button>
+            <button type="button" class="numpad-btn" data-numpad="0" data-focus-id="btn-profile-pin-0">0</button>
           </div>
+          <p class="profile-pin-modal__error" id="profile-pin-modal-error" hidden>Incorrect PIN. Please try again.</p>
+          <button type="button" class="profile-pin-cancel" data-numpad="cancel" data-focus-id="btn-profile-pin-cancel">Cancel</button>
         </div>
-      </div>
     </div>
   </section>
 </section>`;
@@ -417,5 +322,17 @@ export function mountStaticRendererDom(documentRef: Document = document): void {
     return;
   }
 
-  root.innerHTML = STATIC_SCREEN_MARKUP;
+  mountShellDom(root, STATIC_SCREEN_MARKUP);
+  mountLineupBrandGlyphs(root, documentRef);
+}
+
+function mountLineupBrandGlyphs(root: HTMLElement, documentRef: Document): void {
+  const querySelectorAll = Reflect.get(root, 'querySelectorAll');
+  if (typeof querySelectorAll !== 'function') return;
+  const placeholders = Array.from(
+    root.querySelectorAll<HTMLElement>('[data-lineup-brand-glyph]'),
+  );
+  for (const placeholder of placeholders) {
+    placeholder.replaceWith(createLineupBrandGlyph('lineup-glyph', documentRef));
+  }
 }
