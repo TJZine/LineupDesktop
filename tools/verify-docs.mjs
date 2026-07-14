@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const architectureHealthDecisionPattern = /\b(?:Decision|Plan|Scope):[^\n]*(?:\b(?:avoid|avoids|avoided|avoidance|decompose|decomposes|decomposed|decomposition|split|splits|splitting|extract|extracts|extracted|extraction|revisit|revisits|revisited|allowlist|allowlisted|allowlisting)\b|\b(?:temporary row|guardrail row)\b|\bno\s+(?:(?:oversized|guarded)s?|large[- ]files?|owner hotspots?)\b)/iu;
+const architectureHealthDecisionPattern = /\bDecision:[^\n]*(?:cohesive growth|extract|no touched (?:owner )?hotspots?)\b/iu;
 const maintainabilityVerificationPattern = /\b(?:verify:maintainability|maintainability verification|npm run verify:maintainability|npm run verify:architecture|npm run verify(?!:))\b/iu;
 
 const requiredFiles = [
@@ -18,6 +18,7 @@ const requiredFiles = [
   '.codex/agents/planner.toml',
   '.codex/agents/reviewer.toml',
   '.codex/agents/worker.toml',
+  '.codex/agents/worker-sol-low.toml',
   '.codex/agents/worker-luna.toml',
   '.github/CODEOWNERS',
   '.github/PULL_REQUEST_TEMPLATE.md',
@@ -137,6 +138,7 @@ const requiredCodexRoles = {
   docs_researcher: 'agents/docs-researcher.toml',
   planner: 'agents/planner.toml',
   worker: 'agents/worker.toml',
+  worker_sol_low: 'agents/worker-sol-low.toml',
   worker_luna: 'agents/worker-luna.toml',
   monitor: 'agents/monitor.toml',
   monitor_fallback: 'agents/monitor-fallback.toml',
@@ -220,7 +222,7 @@ const workflowAnchorMarkers = [
         test: (content) => sectionHasConcepts(content, '## Production Engineering Guardrails', [
           /\bArchitecture Health\b/iu,
           /\bfile[- ]shape\b|\bowner hotspots?\b|\blarge[- ]files?\b/iu,
-          /\bdecomposition\b|\bavoidance\b|\ballowlist\b/iu,
+          /\bcohesion\b|\barchitecture disposition\b/iu,
         ]),
       },
       {
@@ -321,7 +323,7 @@ const planStandardStructures = [
     test: (content) => sectionHasConcepts(content, '## Architecture Health', [
       /\bfile[- ]shape\b/iu,
       /\bowner hotspots?\b/iu,
-      /\bdecomposition\b|\bavoidance\b|\btemporary allowlist\b|\ballowlist decision\b/iu,
+      /\bcohesion\b|\barchitecture disposition\b/iu,
     ]),
   },
   {
@@ -446,6 +448,7 @@ const requiredTransferredSkillNames = [
   'closeout-verification',
   'debugging-remediation',
   'execution-plan-authoring',
+  'large-task-orchestration',
   'model-selection',
   'parallel-sidecars',
   'persistence-boundaries',
@@ -666,7 +669,7 @@ function checkTier3MaintainabilityPreflight(relativePath, content, errors) {
     errors.push(`${relativePath}: Tier 3 architecture health section missing maintainability verification route`);
   }
   if (!architectureHealthDecisionPattern.test(section)) {
-    errors.push(`${relativePath}: Tier 3 architecture health section missing decomposition, avoidance, or allowlist decision`);
+    errors.push(`${relativePath}: Tier 3 architecture health section missing cohesion-based architecture disposition`);
   }
 }
 

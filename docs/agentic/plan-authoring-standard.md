@@ -126,12 +126,12 @@ unit remains single-owner or why the cross-boundary work cannot be split safely.
 
 ## Architecture Health
 
-State whether the plan grows, avoids, or decomposes existing architecture
-hotspots. For Tier 3 work, include file-shape evidence from
-`docs/architecture/file-shape-guardrails.md`, the affected owner hotspots, the
-decomposition, avoidance, or temporary allowlist decision for touched files over
-the guardrail threshold, and the maintainability verification route. Do not
-raise file-shape baselines to pre-authorize future growth.
+State whether the plan changes an existing owner's responsibility. For Tier 3
+work, include file-shape evidence from
+`docs/architecture/file-shape-guardrails.md`, affected owner hotspots, the
+compact cohesion-based architecture disposition, and the maintainability
+evidence route. Line count triggers attention or fresh review; it does not
+pre-authorize future growth or mandate decomposition.
 
 ## Planner Self-Check
 
@@ -145,8 +145,8 @@ Before treating a plan as implementation-ready, answer:
    wiring inside it?
 4. Did the plan record the evidence path and fallback reads?
 5. Is the work assigned to the repo-preferred owner, or is it growing a hotspot?
-6. Did Tier 3 work include Architecture Health evidence and a decomposition,
-   avoidance, or allowlist decision for any touched owner hotspot?
+6. Did Tier 3 work include Architecture Health evidence and a cohesion-based
+   disposition for every touched owner hotspot?
 7. Would a fresh implementer need to invent security, IPC, playback,
    persistence, packaging, import, or verification policy?
 8. Did the plan record exact verification commands, expected outcomes, and

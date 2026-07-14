@@ -49,10 +49,10 @@ extra guardrail is worth the maintenance cost.
 
 `npm run verify:maintainability` checks production `src/**` file size against
 [`docs/architecture/file-shape-guardrails.md`](../architecture/file-shape-guardrails.md).
-Files over the guardrail threshold need a temporary allowlist row with a
-reviewed baseline line count, rationale, and growth/decomposition trigger.
-Shrink below the baseline is allowed; growth above it requires a reviewed row
-update or decomposition.
+Files over 500 lines need a compact cohesion-based architecture disposition;
+files over 800 lines, named hotspots, and composition roots need fresh
+architecture review. These thresholds trigger attention, not automatic failure
+or decomposition.
 
 ## Redaction
 

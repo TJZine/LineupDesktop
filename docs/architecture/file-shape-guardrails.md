@@ -1,56 +1,42 @@
 # File Shape Guardrails
 
-Lineup Desktop treats file shape as an architecture surface. Large files are not
-forbidden, but unreviewed growth in composition roots, runtime owners, contracts,
-and CSS makes later feature work harder to review and easier to couple.
+Lineup Desktop uses file size as an architecture attention signal, never as a
+decomposition target or CI failure. Cohesion, ownership, dependency direction,
+and present requirements decide whether code stays together or is extracted.
 
 ## Policy
 
-- Production files under `src/**` over 500 lines require a temporary row in the
-  allowlist below. The row records a reviewed baseline line count. Current line
-  count may shrink below that baseline, but it must not grow above it without a
-  reviewed update to this file.
-- Files over 800 lines are hard-overage files. They need an explicit
-  decomposition trigger before further feature behavior grows that owner.
-- Rows are not permanent exceptions. Remove a row when the file drops to 500
-  lines or below.
-- Row updates are review decisions, not bulk bookkeeping. Do not raise a
-  baseline to pre-authorize future growth; raise it only with the source change
-  that needs the additional size and record why decomposition is not the better
-  move yet.
-- New Tier 3 plans must include an `## Architecture Health` section with current
-  large-file evidence, affected owner hotspots, and decomposition, avoidance, or
-  allowlist decisions before implementation unit selection.
-- Run `npm run verify:maintainability` after changing production source shape or
-  this guardrail.
+- Run `npm run verify:maintainability` after changing production source shape.
+  It reports deterministic evidence and never approves or rejects a design.
+- A touched production owner over 500 lines needs this compact disposition:
 
-## Current Allowlist
+  ```text
+  Owner:
+  Existing responsibility:
+  New behavior:
+  Decision: cohesive growth | extract
+  Evidence:
+  ```
 
-| Path | Baseline lines | Rationale | Growth/decomposition trigger |
-| --- | ---: | --- | --- |
-| src/main/player/desktopPlayerAdapter.ts | 553 | The adapter remains the main-owned player command/snapshot/event boundary after ARCH-02 moved request custody to `src/main/player/playerAdapterRequestCustody.ts` and native-helper process/protocol framing to focused owners. | Split adapter state projection or event mapping before adding new player command families, helper capabilities, or renderer-facing diagnostics. |
-| src/domain/channel/channelManager.ts | 1022 | RD-11 channel manager currently owns transactional channel mutation, persistence coordination, current-channel custody, and event emission invariants in one pure domain owner; comment-only seam documentation clarifies mutation serialization and current-channel persistence limits. | Split mutation queue, current-channel selection, and persistence coordination before adding live channel editing workflows or backup/restore behavior. |
-| src/main/player/plexPlaybackRuntime.ts | 550 | The playback runtime remains the main-owned scheduler/channel-to-player orchestration owner after ARCH-02 moved cleanup sequencing to `src/main/player/plexPlaybackRuntimeCleanup.ts` and `src/main/player/plexPlaybackCleanupWiring.ts`. | Split runtime transition handling or player dispatch coordination before new scheduler playback transitions, helper lifecycle behaviors, or Plex transport modes grow this file. |
-| src/domain/channel/channelRepository.ts | 770 | RD-11 repository owns channel import normalization, source resolution, cache behavior, and stale fallback semantics in a pure domain owner; comment-only seam documentation records the normalization/repair mutation signal. | Split cache/source resolution from import normalization before live library browsing or persisted channel editing expands the repository. |
-| src/contracts/player.ts | 726 | RD-07/RD-12 player contract vocabulary is intentionally centralized to keep renderer-safe command, event, snapshot, error, and guard vocabulary aligned; the 2026-06-12 growth is limited to requiring snapshot request ids on renderer track-selection payloads. | Split stable sub-vocabularies only when a new public player contract family is added and parity tests can protect each module. |
-| src/main/plex/streamResolver.ts | 666 | RD-12/RD-25 stream resolver maps injected Plex media details into private playback descriptors and renderer-safe load payloads while keeping privileged setup private; the 2026-06-12 growth is limited to preserving Plex HLG facts as a first-class public dynamic range. | Split candidate mapping from descriptor projection before additional stream modes, playback descriptor variants, or resolver policy branches are introduced. |
-| src/main/player/streamPolicy/desktopStreamPolicy.ts | 624 | RD-08/RD-16 stream policy keeps capability-driven direct play, direct stream, transcode, fallback, and unsupported decision logic together for deterministic fixture proof; comment-only seam documentation states the explicit-reason/unknown contract. | Split decision phases before adding new codec families, platform capability matrices, subtitle/audio policy branches, or preferred-language policy. |
-| src/preload/index.cts | 1854 | The sandbox-compatible preload entrypoint still owns the single `lineupDesktop` exposure and `ipcRenderer` calls, while ARCH-02 moved channel constants to `src/preload/channels.cts`, diagnostics guard families to `src/preload/diagnosticsBridgeGuards.cts`, snapshot RPC result hardening to `src/preload/playerBridge.cts`, and custom-channel validation to `src/preload/customChannelBridgeGuards.cts`; the 2026-06-12 growth is limited to wiring the custom-channel bridge namespace and named IPC channel bindings. | Split another invoke namespace or bridge composition helper out of the entrypoint before adding any next bridge namespace, renderer-safe RPC family, or direct `ipcRenderer.invoke` call. |
-| src/preload/customChannelBridgeGuards.cts | 754 | Custom-channel preload guards duplicate public contract vocabulary locally so sandboxed preload can validate renderer inputs and main results without importing runtime code or leaking privileged fields; Package 4 keeps all recursive custom-channel result and draft guard logic together while the ABI is being frozen, and the 2026-06-13 growth is limited to duplicate reorder-id rejection plus deep cloning of nested season filters. | Split request builders, result guards, or media/draft shape validators before Package 5 renderer authoring adds another draft field family, media source type, or validation taxonomy. |
-| src/contracts/diagnostics.ts | 553 | RD-17 centralizes diagnostics schema, renderer event envelopes, support-bundle result vocabulary, renderer-safe request-id and context-value shape, redaction labels, and sanitizer helpers while the diagnostics/support boundary is still being frozen across main, preload, player, and renderer seams. | Split sanitizer helpers from renderer-safe public vocabulary before adding another diagnostics schema version, export artifact family, scanner taxonomy, or non-RD-17 diagnostics surface. |
-| src/main/persistence/desktopPersistenceStore.ts | 625 | RD-22 Unit 2C keeps encrypted credential persistence, legacy selected-server compatibility, active-profile scoped selected-server summary persistence, and exact-shape selected-server sanitization in the RD-09 main-owned store while no separate schema/migration owner exists yet. | Split selected-server persistence records or schema parsing helpers out before adding another persisted state family, migration path, backup/restore behavior, or renderer-visible persistence snapshot expansion. |
-| src/main/plex/desktopPlexRuntime.ts | 551 | The Plex runtime remains the main-owned auth/discovery/selection coordinator after ARCH-02 moved operation stale/cancel/error custody to `src/main/plex/plexRuntimeOperationOwner.ts` and library browse/search/metadata execution to `src/main/plex/desktopPlexLibraryOperationExecutor.ts`. | Split server-selection/profile-switch orchestration from remaining runtime coordination before adding renderer onboarding, broader Plex runtime APIs, playback selection flows, another profile-scoped runtime behavior, or another library operation family. |
-| src/domain/channel/channelAuthoringService.ts | 521 | Channel authoring keeps validation, draft normalization, and safe update shaping together while channel workflows remain pure and runtime-free. | Extract validation helpers before adding richer channel setup persistence or live library-driven authoring. |
-| src/domain/channel/customChannelDraft.ts | 526 | Custom channel draft mapping centralizes renderer-originating draft validation and pure domain `ChannelCreateInput` projection for Package 1 so malformed payloads cannot slip into later main/preload packages as generic authoring failures. | Split validation helpers from source projection before Package 2 runtime mutation mapping or Package 5 renderer authoring adds another draft field family, media source type, or validation taxonomy. |
-| src/renderer/epg.ts | 725 | Renderer EPG currently keeps injected-presentation normalization, deterministic slot math, guide rendering view-model projection, and local action/selection behavior together in one renderer-only owner so the injected-schedule hardening remains reviewable in a single seam. The 2026-06-11 growth is limited to a no-selectable-program empty-state guard and focused regression proof. | Split documentation or business logic from presentation before adding live scheduler-backed guide data, another guide state family, or more renderer route-specific EPG behavior. |
-| src/renderer/index.ts | 650 | Main entrypoint of the renderer orchestration. Keeps route activation, controller composition, gamepad, keyboard bindings, and lifecycle listeners in one place. The 2026-06-12 Package 5 growth is limited to custom-channel controller composition, startup/back wiring, and render hookup after custom-channel action routing was extracted to `src/renderer/customChannels/actionDispatch.ts`. | Extract gamepad, keyboard listeners, player dispatch helpers, or the next route-specific controller composition before adding more route families, playback command families, or onboarding steps. |
-| src/renderer/styles/player-overlays.css | 717 | Contains all player overlay styles, now expanded to include WebOS-aligned cinematic panels, top-shelf mini guide, autocommit digit entries, and right-rail playback options layout with keyframe equalizer animations. | Decompose styles into component-specific sheets (e.g. now-playing.css, mini-guide.css) before starting any styling refactoring of media players or main route panels. |
-| src/renderer/styles/guide-epg.css | 506 | Contains all EPG/guide styling, now updated for WebOS-style absolute positioning, current time indicator line/marker, and media cell layout width tiers. | Decompose into component-level styles (e.g. guide-header.css, guide-grid.css) before expanding the EPG with more complex overlay features or additional guide views. |
+- A file over 800 lines, a named hotspot below, or a composition root requires
+  fresh `gpt-5.6-sol high` architecture review before closeout.
+- Line count alone never requires extraction. Keep behavior together when it
+  shares the owner's invariants, state, lifecycle, and reason to change.
+- Extract only a distinct current policy, lifecycle, trust boundary, or
+  consumer into a module that owns meaningful logic. Do not create forwarding
+  wrappers, speculative interfaces, or one-method services to reduce a count.
+- Composition roots own wiring and lifecycle coordination, not domain policy.
+  Dependency and Electron privilege rules remain hard mechanical gates.
 
+## Named Review Surfaces
 
-### Preload Bridge Allowlist Note
+Review these whenever touched, regardless of their current line count:
 
-ARCH-01 keeps guard vocabulary in the sandbox-compatible preload entrypoint while
-the parity/shape harness checks channel constants, the single `lineupDesktop`
-exposure, and approved `ipcRenderer` method/channel pairs against renderer-safe
-IPC contracts without importing or executing preload.
+- `src/main/index.ts`: main-process composition root
+- `src/preload/index.cts`: sandboxed preload bridge composition root
+- `src/renderer/index.ts`: renderer composition root
+- `src/domain/channel/channelManager.ts`: channel mutation and state owner
+- `src/main/player/desktopPlayerAdapter.ts`: player boundary adapter
+
+Update this list only when architecture ownership changes. Do not use it as an
+allowlist or line-count baseline.

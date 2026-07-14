@@ -286,7 +286,7 @@ Tracked files authorized across the plan, only in the package that names them:
 - `docs/architecture/CURRENT_STATE.md`
 - `docs/architecture/renderer-architecture.md`
 - `docs/architecture/security-and-secret-flow.md` for Package 4 persistence ownership and Package 8 closeout truth
-- `docs/architecture/file-shape-guardrails.md` only to remove obsolete rows after decomposition, never to raise baselines pre-emptively
+- `docs/architecture/file-shape-guardrails.md` only when the shared architecture-attention policy itself changes; it does not store per-file baselines or allowlist rows
 - `docs/architecture/import-ledger.md`
 - `docs/architecture/original-lineup-reference-compatibility-matrix.md`
 - `docs/architecture/original-lineup-divergence-register.md`
@@ -315,25 +315,25 @@ An implementer must stop before touching an out-of-scope file. “Mechanical wir
 
 Current file-shape evidence from `docs/architecture/file-shape-guardrails.md` and fresh line counts identifies the renderer hotspots most likely to be touched:
 
-- `src/renderer/epg.ts`: 725 lines, over the 500-line guardrail; must be decomposed before new Guide behavior.
-- `src/renderer/index.ts`: approximately 601 lines, over the guardrail; must lose route/overlay/setup composition rather than grow.
-- `src/renderer/styles/player-overlays.css`: 717 lines; split by overlay family before parity work grows it.
-- `src/renderer/styles/plex-onboarding.css`: approximately 648 lines; split stage/screen styles before setup work.
-- `src/renderer/styles/workflow-screens.css`: approximately 590 lines; extract Settings and screen-shell owners before growth.
-- `src/renderer/styles/guide-epg.css`: 506 lines; split shell/grid/cell styles before Guide expansion.
-- `src/preload/index.cts`: a hard-overage owner; Package 4 must extract Settings guards/builders and add only minimal namespace binding in the entrypoint.
-- `src/renderer/staticDom.ts`, `focusDom.ts`, `routeDom.ts`, `overlayViewModels.ts`, and `workflow.ts` are near enough to the guardrail that packages must extract focused owners instead of consolidating more behavior there.
+- `src/renderer/epg.ts`: Guide presentation, selection, and action responsibilities need an explicit cohesion disposition if touched.
+- `src/renderer/index.ts`: named renderer composition root; keep it to wiring and lifecycle coordination.
+- `src/renderer/styles/player-overlays.css`, `plex-onboarding.css`, `workflow-screens.css`, and `guide-epg.css`: extract only when a distinct current component family has independent styling ownership.
+- `src/preload/index.cts`: named preload composition root; Settings guards/builders belong in the focused validation owner while the entrypoint wires the namespace.
+- `src/renderer/staticDom.ts`, `focusDom.ts`, `routeDom.ts`, `overlayViewModels.ts`, and `workflow.ts`: do not consolidate unrelated product policy into these owners.
 
 Decisions:
 
-- **Decision:** decompose the named renderer/CSS owners before behavior grows them, avoid growing the preload entrypoint by extracting Settings guards, and use no new or raised allowlist row for planned work.
-- **Packages 1–3 correction evidence:** `src/renderer/index.ts` is currently 637 lines and remains untouched; `staticDom.ts` is 322; `shellDom.ts` is 158; `shell.css` is 186; `plex-auth.css` is 62; `plex-profile-server.css` is 15; `plex-onboarding-cards.css` is 187; `profile-pin-modal.css` is 161; `setup-workflow.css` is 169; `custom-channels.css` is 212; `src/main/protocol.ts` is 94; and `tools/copy-renderer-assets.mjs` is 19. Keep each new pure protocol/brand helper at or below 250 lines. The correction may refactor within the exact files below but may not grow `index.ts`, create a new owner over 500 lines, raise a baseline, or move behavior into CSS/markup.
-- No baseline increase is authorized for any renderer/CSS/preload hotspot.
-- Packages 1, 2, 3, 4, 5, 6, and 7 must perform same-owner extraction before adding behavior if their touched hotspot would grow.
+- **Decision: extract.** The planned renderer and preload extractions transfer current route, component-family, or validation responsibility; they are not required merely to reduce line counts.
+- Packages 0–3 are complete. Their recorded line-baseline, guardrail, or
+  decompose-first wording is historical evidence only and does not govern Packages
+  4–8. This Architecture Health section and the current file-shape guidance control
+  all remaining work.
+- **Packages 1–3 correction evidence:** `src/renderer/index.ts` remains a composition root; focused protocol, brand, DOM, and style owners must own meaningful current behavior rather than forwarding calls or satisfying numeric targets.
+- Packages 1 through 7 must record the compact architecture disposition for touched owners over 500 lines. Files over 800 lines, named hotspots, and composition roots require fresh Sol-high architecture review.
 - `index.ts` remains only a composition root; package-specific coordinators own timers, subscriptions, stage/overlay state, and rendering.
 - `staticDom.ts` stops being the monolithic owner for all product screens; focused screen DOM owners may retain trusted static templates.
 - Settings guards live outside `preload/index.cts`; the entrypoint keeps the single `lineupDesktop` exposure.
-- Run `npm run verify:maintainability` in every source package and remove allowlist rows when files fall to 500 lines or below.
+- Run `npm run verify:maintainability` in every source package as deterministic evidence; it does not fail or approve the architecture decision.
 
 ## Target Surface And Interaction Contract
 
@@ -1461,7 +1461,7 @@ at the frozen production URLs; one-column setup is accepted only at `<=600px`.
 `worker_luna` must stop, preserve the diff, and escalate only if an out-of-scope
 behavior/focus/accessibility/IPC/contract/persistence/player/Plex/native change,
 new dependency, other MIME, private/remote asset, unlisted file, CSP change,
-new owner boundary, baseline raise, or unsanitizable proof is required; if the
+new owner boundary, unresolved architecture disposition, or unsanitizable proof is required; if the
 asset hashes/source pin do not match; the pure protocol-policy extraction cannot
 preserve the existing default-session registration/response architecture; the
 brand-glyph adaptation would require unsafe inline HTML or cannot scope every id
@@ -1479,7 +1479,7 @@ Scope is the exact Settings contract/store/IPC/preload/renderer files listed und
 
 The exact Package 4 renderer consumer list is frozen to `src/renderer/index.ts`, `src/renderer/workflow.ts`, `src/renderer/staticDom.ts`, `src/renderer/focusDom.ts`, `src/renderer/domBindings.ts`, `src/renderer/routeDom.ts`, `src/renderer/epg/guideDom.ts`, `src/renderer/plexRuntimeDom.ts`, `src/renderer/plexRuntimeRows.ts`, `src/renderer/settingsSetup.ts`, `src/renderer/settingsSetupDom.ts`, and new `src/renderer/settings/settingsRuntime.ts`. `src/renderer/plexRuntimeDom.ts` is required because it is the only current caller that can propagate `previewBadgesEnabled` into the setup-preview row renderers in `plexRuntimeRows.ts`.
 
-The exact Package 4 CSS list is frozen to `src/renderer/styles.css`, `src/renderer/styles/workflow-screens.css`, new `src/renderer/styles/settings.css`, and `src/renderer/styles/guide-epg.css`. The focused `settings.css` extraction is already authorized and required by the Architecture Health decision and the global `src/renderer/styles/**` scope. `guide-epg.css` may not grow above its 506-line allowlist baseline: implement density behavior through net-neutral or shrinking rules, or stop for reviewed extraction.
+The exact Package 4 CSS list is frozen to `src/renderer/styles.css`, `src/renderer/styles/workflow-screens.css`, new `src/renderer/styles/settings.css`, and `src/renderer/styles/guide-epg.css`. The focused `settings.css` extraction is already authorized and required by the Architecture Health decision and the global `src/renderer/styles/**` scope. If `guide-epg.css` changes, record the compact architecture disposition for its existing Guide-style responsibility. Keep cohesive density rules there; extract only if the change reveals a distinct current style owner, and use the package's fresh architecture review to adjudicate that decision.
 
 `src/renderer/rendererActionRegistration.ts` remains excluded unless discovery proves that its existing action vocabulary or signature must change; if so, stop and return to the controller rather than self-authorizing it. `src/renderer/styles/player-overlays.css`, `src/renderer/styles/setup-workflow.css`, and `src/renderer/styles/responsive-accessibility.css` are also outside the exact Package 4 packet.
 
@@ -1576,7 +1576,7 @@ Exact Package 4 command: `node --import tsx --test src/__tests__/contracts/contr
 
 **IMPLEMENTER_ROLE_ELIGIBILITY:** `worker` only.
 
-Scope is Guide renderer presentation/state/polling/DOM/focus/CSS/tests. Decompose `epg.ts` and `guide-epg.css` first. Use existing Guide runtime presentation and persisted channels; no fixture fallback in production. Prove ready, loading, actionable no-channel empty, no-program empty, failure, stale-result, refresh, time-window, channel/program navigation, current marker, clipped cell, detail, tune, back, focus restoration, and cleanup states at both sizes.
+Scope is Guide renderer presentation/state/polling/DOM/focus/CSS/tests. Inspect the full `epg.ts` and `guide-epg.css` owners first and record the compact architecture disposition for each. Keep cohesive Guide behavior together; extract only a distinct present-day responsibility with meaningful ownership. Use existing Guide runtime presentation and persisted channels; no fixture fallback in production. Prove ready, loading, actionable no-channel empty, no-program empty, failure, stale-result, refresh, time-window, channel/program navigation, current marker, clipped cell, detail, tune, back, focus restoration, and cleanup states at both sizes.
 
 No new scheduler, channel, main, preload, or contract behavior is approved. If existing renderer-safe Guide data cannot represent a required target state, stop for a reviewed replan rather than synthesizing it.
 
@@ -1651,8 +1651,8 @@ No production package runs in parallel with another production package because a
 2. **Adjacent contract/type changes omitted?** No. The correction needs no contract/type/IPC change; Package 4 includes its exact Settings contracts, IPC, preload, main, renderer, and tests.
 3. **Any out-of-scope file relied on for hidden wiring?** Existing player/guide/Plex/channel owners are consumed through current public seams and are frozen. If those seams prove insufficient, the package stops.
 4. **Evidence and fallback recorded?** Yes. Codanna UI/doc results were noisy/broken; direct reads, CDP runtime observation, and scoped upstream reads are the reliable evidence.
-5. **Repo-preferred owners or hotspot growth?** Repo-preferred owners are used. Every affected hotspot has an extraction/avoidance decision.
-6. **Tier 3 Architecture Health complete?** Yes. Current large files, no-growth decisions, decomposition requirements, and maintainability command are explicit.
+5. **Repo-preferred owners or hotspot growth?** Repo-preferred owners are used. Every affected hotspot has a cohesion-based architecture disposition.
+6. **Tier 3 Architecture Health complete?** Yes. Current attention files, responsibility decisions, independent-review triggers, and maintainability evidence command are explicit.
 7. **Would a fresh implementer invent security, IPC, playback, persistence, packaging, import, or verification policy?** No. Renderer/main/preload ownership, Settings schema/record/status/error/channel/method/revision/stale/write policies, frozen runtime seams, no-dependency policy, provenance, and proof are decided.
 8. **Exact verification, expected outcomes, and replan triggers present?** Yes. Every package names an executable concrete test command or the exact full suite, expected outcomes, visual/focus proof, review gate, and replan triggers; no test-name placeholder remains.
 
@@ -1673,7 +1673,7 @@ Forbidden shortcuts:
 - raw Plex/media/artwork URLs, tokens, headers, payloads, file paths, native handles, or Electron/Node objects in renderer state;
 - old upstream path/class compatibility shims;
 - permanent product debug/navigation chrome;
-- raising file-size baselines to permit growth;
+- treating file-size thresholds as either permission to grow or a mandate to split;
 - adding fake upstream-only controls to satisfy a screenshot;
 - closing a package from source/test assertions without the required visual and focus evidence.
 
@@ -1695,7 +1695,7 @@ Run after every source package:
 
 - the exact `node --import tsx --test ...` command printed in that package — every named current/new test file passes; Package 4 and Package 8 additionally run the full `npm run test:contracts` suite;
 - `npm run typecheck` — renderer and cross-process types align;
-- `npm run verify:maintainability` — no unreviewed hotspot or topology growth;
+- `npm run verify:maintainability` — deterministic file-shape evidence is recorded; every triggered disposition and independent review is complete;
 - `npm run smoke:electron` — built Electron shell reaches each owned surface with containment intact; Packages 2 and 3 are explicit user-authorized exceptions where this command is optional/nonblocking and recorded only if attempted;
 - `npm run verify:redaction` — no forbidden contract/source/test/doc material;
 - `npm run verify` — full repo closeout gate passes;
@@ -1741,7 +1741,7 @@ Package 8 final proof additionally runs a local proof-bundle forbidden-material 
 - Each current upstream UI family has an accepted Desktop adaptation/divergence/defer disposition with evidence and revisit trigger.
 - Electron containment, renderer privilege limits, Plex/token custody, player/native custody, diagnostics/support bundle, fullscreen, accessibility, redaction, and import provenance remain intact.
 - No dependency/lockfile/CSP/native-helper/package/release change landed; protocol/build changes are limited to guarded self-only PNG serving and recursive copying of the two approved assets.
-- Architecture hotspots shrink or remain within reviewed baselines; no baseline was raised to pre-authorize growth.
+- Architecture hotspots retain one cohesive responsibility or transfer a distinct present-day responsibility to a meaningful owner; all attention and fresh-review triggers are satisfied.
 - Every package received clean/adjudicated adversarial review after fresh verification and visual/focus proof.
 - Final full verification and integrated review pass, and all roadmap/parity/current-state documents agree with the observed running app.
 - RD-27 remains blocked until all criteria above pass; then and only then may closeout route to a fresh RD-27 Tier 3 plan/quality-loop session.
@@ -1759,7 +1759,7 @@ Package 8 final proof additionally runs a local proof-bundle forbidden-material 
 - Setup parity needs new channel-domain mutation, broader Plex browsing, or direct persisted-channel edit semantics.
 - Overlay parity needs new native-helper/player commands, raw playback descriptors, or a new public media contract.
 - Any package requires dependency, package/lockfile, native-helper, packaging, signing, update, installer, or public-release changes.
-- A hotspot would grow past its reviewed baseline without the required decomposition.
+- A hotspot would gain a distinct responsibility without a reviewed extraction, or its required cohesion disposition cannot be justified.
 - Smoke/fullscreen/focus behavior regresses outside the current package seam.
 - Redaction scan, required command, capture matrix, or adversarial review has a material failure that cannot be fixed inside the package.
 - Another tracked active plan or roadmap update supersedes this prerequisite ordering.

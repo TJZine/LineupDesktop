@@ -9,6 +9,9 @@ workflow is shaped the way it is.
 OpenAI:
 
 - [How OpenAI uses Codex](https://openai.com/business/guides-and-resources/how-openai-uses-codex/)
+- [Codex models](https://learn.chatgpt.com/docs/models)
+- [Subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents)
+- [Harness engineering](https://openai.com/index/harness-engineering/)
 - [Evaluation best practices](https://developers.openai.com/api/docs/guides/evaluation-best-practices)
 - [Safety in building agents](https://developers.openai.com/api/docs/guides/agent-builder-safety)
 - [Agents SDK](https://platform.openai.com/docs/guides/agents-sdk/)
@@ -16,6 +19,8 @@ OpenAI:
 Anthropic:
 
 - [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents)
+- [Effective context engineering for AI agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+- [Harness design for long-running application development](https://www.anthropic.com/engineering/harness-design-long-running-apps)
 - [Claude Code memory](https://docs.anthropic.com/en/docs/claude-code/memory)
 - [Claude Code subagents](https://docs.anthropic.com/en/docs/claude-code/sub-agents)
 - [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks)
@@ -34,7 +39,11 @@ Production engineering:
 - [OWASP Developer Guide: secure coding](https://devguide.owasp.org/en/12-appendices/01-implementation-dos-donts/02-secure-coding/)
 - [Twelve-Factor App: config](https://www.12factor.net/config)
 
-Checked on 2026-05-08.
+Representative independent model evidence:
+
+- [Artificial Analysis coding-agent comparison](https://artificialanalysis.ai/agents/coding-agents/comparisons/claude-code-vs-codex)
+
+Checked on 2026-07-14.
 
 ## Local Conclusions
 
@@ -52,6 +61,10 @@ Checked on 2026-05-08.
   verification before closeout.
 - Use sidecars for bounded research, review, and context isolation when they
   materially improve reliability.
+- Route clear repeatable work to lower-cost roles, but keep architecture,
+  ambiguity, integration, and final review with the capable controller roles.
+  Current official guidance and representative independent benchmarks support
+  this routing; the repo does not maintain a local model-evaluation harness.
 - Use evaluator-style review loops when criteria are clear and iterative
   improvement is valuable.
 - Keep the owning session responsible for synthesis, scope, verification
@@ -63,6 +76,9 @@ Checked on 2026-05-08.
   scorecard.
 - Keep agent systems simple and composable. Add loops, project skills, hooks,
   or automations only when a manual workflow has proved the need.
+- Keep context small and high-signal. Prefer one-job skills, controller-owned
+  decisions, bounded packets, and canonical constraints over exhaustive edge-case
+  lists or repeated policy prose.
 - Treat verifiers, review prompts, and tool descriptions as part of the harness.
   They must be tested and reviewed like product code.
 - Preserve Electron secure defaults in workflow and plans: renderer sandboxing,

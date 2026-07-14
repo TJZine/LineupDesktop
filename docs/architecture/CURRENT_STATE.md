@@ -144,8 +144,8 @@ keeps preload single-file-compatible while hardening the preload bridge
 source-shape/parity harness for channel constants, the single `lineupDesktop`
 exposure, and approved `ipcRenderer` method/channel use; and leaves the
 remaining large player, Plex, channel, contract, policy, and native-helper
-owners in `docs/architecture/file-shape-guardrails.md` with reviewed deferral or
-leave-alone triggers. ARCH-01 does not add RD-14 product behavior, native
+owners under the cohesion policy in `docs/architecture/file-shape-guardrails.md`.
+ARCH-01 does not add RD-14 product behavior, native
 video/fullscreen behavior, live Plex transport, production native-helper
 playback, packaging/signing/update behavior, app-path or `safeStorage` runtime
 wiring, new preload/renderer APIs, dependencies, or copied/adapted upstream
@@ -367,8 +367,8 @@ dispatch into focused owners. The renderer remains unprivileged, preload still
 exposes only the reviewed `window.lineupDesktop` bridge, main keeps privileged
 Plex/player/persistence custody, and no new product feature, dependency,
 package, renderer privilege, compatibility shim, or behavior change was added.
-The watch-list owners that remain over 500 lines stay in
-`docs/architecture/file-shape-guardrails.md` with reviewed deferral triggers.
+The watch-list owners that remain over 500 lines are reported by
+`npm run verify:maintainability` and use reviewed architecture dispositions.
 
 ## Product Invariants
 
@@ -393,7 +393,7 @@ The watch-list owners that remain over 500 lines stay in
 | Import provenance | `docs/architecture/import-ledger.md` | Current copied/adapted upstream source ledger; RD-20 retained-test path corrections reviewed current; RD-22A Unit 3 upstream UI/CSS/copy/test provenance recorded at upstream HEAD `613b1c516c7c9e37f9c18ea3e92c474013472b11` |
 | Original Lineup compatibility | `docs/architecture/original-lineup-reference-compatibility-matrix.md` and `docs/architecture/original-lineup-divergence-register.md` | RD-20 tracked source-audit/provenance artifacts for copied/adapted coverage, reference-only behavior, proof context, and accepted Desktop divergences |
 | Product parity and MVP roadmap | `docs/product/lineup-product-parity-matrix.md`, `docs/development/windows-ui-proof-plan.md`, and `docs/roadmap/desktop-port-roadmap.md` | RD-21 product-parity artifact, Windows proof rules, revised MVP completion sequence, RD-22A fixture/body parity closeout, and RD-22B live Plex onboarding/library closeout; Future Platform Review is deferred behind RD-22 through RD-28 |
-| File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size guardrails, temporary oversized-file allowlist rationale, decomposition/revisit triggers, and Tier 3 file-shape verification |
+| File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size evidence, cohesion-based dispositions, fresh hotspot review triggers, and Tier 3 file-shape verification |
 | Electron main shell | `src/main/index.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with smoke-only assertion ownership split out of the startup/composition entrypoint, plus RD-14 Unit 2 main-owned BrowserWindow/fullscreen/display/restore controller and Unit 3 foreground app-command controller while `src/main/index.ts` remains composition and IPC wiring |
 | Preload bridge | `src/preload/index.cts`, `src/preload/channels.cts`, `src/preload/channelBridgeGuards.cts`, and `src/preload/diagnosticsBridgeGuards.cts` | Narrow shell/window/player/diagnostics/Plex/channel bridge with runtime payload guards; RD-22B exposes only validated `window.lineupDesktop.plex` operations for snapshot, PIN, Plex Home, server restore/discovery/selection, library sections/items/search, and metadata while rejecting malformed or privileged Plex results locally. ARCH-02 keeps the sandbox-compatible entrypoint as the only `contextBridge`/`ipcRenderer` value owner, while channel constants and diagnostics guard families live in focused preload modules. The integration seam reads preload source text plus renderer-safe contracts to parity-test guard vocabulary, channel constants, the single `lineupDesktop` exposure, and approved `ipcRenderer` method/channel pairs without importing or executing preload |
 | Renderer shell | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md), `src/renderer/index.ts`, `src/renderer/rendererActionRegistration.ts`, `src/renderer/playerBridgeSubscription.ts`, `src/renderer/guidePresentationPolling.ts`, and `src/renderer/plexRuntimeActionDispatch.ts` | RD-13/ARCH-01 unprivileged app shell with route, workflow, EPG, overlay, focus, and style surfaces; RD-14 focused desktop input and DOM cursor owners; RD-15 fake-backed UI-over-player-surface composition for overlays, guide/EPG, settings, channel setup, z-order, fullscreen bridge continuity, and deterministic renderer focus; RD-22A fixture/injected upstream-shaped app body parity; RD-22B live Plex onboarding/library binding; and ARCH-02 renderer runtime composition where `index.ts` wires owners while action registration, player bridge subscription, guide polling freshness, and Plex action dispatch stay in renderer-safe focused modules |

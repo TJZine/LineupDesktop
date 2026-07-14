@@ -24,6 +24,12 @@ Plan the expensive decisions, not every local helper:
 - verification classification, commands, and expected outcomes
 - acceptance criteria, rollback notes, and stop/replan triggers
 
+Select a lower-cost worker only for a controller-approved unit whose files,
+owner, invariants, verification, and stop conditions are frozen. The controller
+integrates the result and reruns verification. Prefer `worker_sol_low` when the
+unit needs codebase judgment and `worker_luna` only when it is repeatable and
+cheap to verify; otherwise use `worker`.
+
 See AGENTS.md and docs/AGENTIC_DEV_WORKFLOW.md for lifecycle and archival
 policy, including `docs/plans/` archival guidance. For Tier 3 work, route
 through the feature-quality loop before implementation.

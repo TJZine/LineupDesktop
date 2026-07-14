@@ -497,7 +497,7 @@ test('verifyDocs validates Tier 3 Architecture Health section semantically', () 
     '## Architecture Health',
     'General code health is noted.',
     'Verification route: npm run verify.',
-    'Decision: split if this grows.',
+    'Decision: extract.',
   ]));
   const missingEvidence = verifyDocs(root);
   assert(missingEvidence.some((error) => error.includes('missing file-shape evidence')));
@@ -505,7 +505,7 @@ test('verifyDocs validates Tier 3 Architecture Health section semantically', () 
   fs.writeFileSync(planPath, tier3Plan([
     '## Architecture Health',
     'File-shape evidence uses docs/architecture/file-shape-guardrails.md.',
-    'Decision: avoid guarded owner hotspots in this unit.',
+    'Decision: cohesive growth.',
   ]));
   const missingVerification = verifyDocs(root);
   assert(missingVerification.some((error) => error.includes('missing maintainability verification route')));
@@ -517,7 +517,7 @@ test('verifyDocs validates Tier 3 Architecture Health section semantically', () 
     'Current hotspots are recorded for review.',
   ]));
   const missingDecision = verifyDocs(root);
-  assert(missingDecision.some((error) => error.includes('missing decomposition, avoidance, or allowlist decision')));
+  assert(missingDecision.some((error) => error.includes('missing cohesion-based architecture disposition')));
 
   fs.writeFileSync(planPath, tier3Plan([
     '## Architecture Health',
@@ -526,7 +526,7 @@ test('verifyDocs validates Tier 3 Architecture Health section semantically', () 
     'Before implementation, the current owner hotspots are recorded for review.',
   ]));
   const beforeOnlyDecision = verifyDocs(root);
-  assert(beforeOnlyDecision.some((error) => error.includes('missing decomposition, avoidance, or allowlist decision')));
+  assert(beforeOnlyDecision.some((error) => error.includes('missing cohesion-based architecture disposition')));
 
   fs.writeFileSync(planPath, tier3Plan([
     '## Architecture Health',
@@ -535,13 +535,13 @@ test('verifyDocs validates Tier 3 Architecture Health section semantically', () 
     'Current hotspots are recorded with predecomposition notes for review.',
   ]));
   const partialDecision = verifyDocs(root);
-  assert(partialDecision.some((error) => error.includes('missing decomposition, avoidance, or allowlist decision')));
+  assert(partialDecision.some((error) => error.includes('missing cohesion-based architecture disposition')));
 
   fs.writeFileSync(planPath, tier3Plan([
     '## Architecture Health Notes',
     'File-shape evidence uses docs/architecture/file-shape-guardrails.md.',
     'Verification route: npm run verify:architecture.',
-    'Decision: avoid guarded owner hotspots in this unit.',
+    'Decision: cohesive growth.',
   ]));
   const wrongHeading = verifyDocs(root);
   assert(wrongHeading.some((error) => error.includes('missing ## Architecture Health or ## File Shape Preflight section')));
@@ -554,7 +554,7 @@ test('verifyDocs accepts Tier 3 Architecture Health without exact prose markers'
     '## Architecture Health',
     'Owner hotspot evidence comes from docs/architecture/file-shape-guardrails.md.',
     'Proof route is covered by npm run verify:architecture.',
-    'Decision: avoid guarded renderer and preload files in the first unit.',
+    'Decision: cohesive growth.',
   ]));
 
   assert.deepEqual(verifyDocs(root), []);
@@ -563,7 +563,7 @@ test('verifyDocs accepts Tier 3 Architecture Health without exact prose markers'
     '## Architecture Health',
     'Owner hotspot evidence comes from docs/architecture/file-shape-guardrails.md.',
     'Proof route is covered by npm run verify:architecture.',
-    'Decision: use the temporary row because decomposition is deferred before this owner grows again.',
+    'Decision: extract.',
   ]));
 
   assert.deepEqual(verifyDocs(root), []);
@@ -583,7 +583,7 @@ test('verifyDocs accepts reworded production-engineering structures', () => {
     '## Production Engineering Guardrails',
     'Dependency updates record the runtime owner and the verification that proves the change.',
     'Configuration, credentials, app paths, diagnostics, and logs are architecture surfaces.',
-    'Architecture Health records file-shape evidence, owner hotspots, and the decomposition, avoidance, or allowlist decision.',
+    'Architecture Health records file-shape evidence, owner hotspots, and the cohesion-based architecture disposition.',
     'Each committed checkpoint must remain buildable and reversible.',
     'Fake scaffold product UI in reachable app routes moves to tests, smoke harnesses, or dev-only fixtures.',
     '## Multi-Agent Usage',
@@ -855,6 +855,7 @@ function makeFixture(options = {}) {
       '.codex/agents/planner.toml',
       '.codex/agents/reviewer.toml',
       '.codex/agents/worker.toml',
+      '.codex/agents/worker-sol-low.toml',
       '.codex/agents/worker-luna.toml',
       'AGENTS.md',
       'LICENSE',
@@ -893,6 +894,7 @@ function makeFixture(options = {}) {
       '.agents/skills/closeout-verification/SKILL.md',
       '.agents/skills/debugging-remediation/SKILL.md',
       '.agents/skills/execution-plan-authoring/SKILL.md',
+      '.agents/skills/large-task-orchestration/SKILL.md',
       '.agents/skills/model-selection/SKILL.md',
       '.agents/skills/parallel-sidecars/SKILL.md',
       '.agents/skills/persistence-boundaries/SKILL.md',
@@ -961,6 +963,8 @@ function fixtureContent(relativePath) {
       'config_file = "agents/planner.toml"',
       '[agents.worker]',
       'config_file = "agents/worker.toml"',
+      '[agents.worker_sol_low]',
+      'config_file = "agents/worker-sol-low.toml"',
       '[agents.worker_luna]',
       'config_file = "agents/worker-luna.toml"',
       '[agents.monitor]',
@@ -992,7 +996,7 @@ function fixtureContent(relativePath) {
       '## Production Engineering Guardrails',
       'Dependency changes must name the runtime owner and verification route',
       'Configuration, credentials, app paths, diagnostics, logs',
-      'Architecture Health file-shape owner hotspots decomposition avoidance allowlist',
+      'Architecture Health file-shape owner hotspots cohesion architecture disposition',
       'Keep every committed checkpoint buildable and reversible',
       'Fake scaffold product UI in reachable app routes moves to tests, smoke harnesses, or dev-only fixtures.',
       '## Multi-Agent Usage',
@@ -1070,7 +1074,7 @@ function fixtureContent(relativePath) {
       '## Impact Snapshot',
       'dependency, build-tool, configuration, or lockfile changes',
       '## Architecture Health',
-      'file-shape evidence owner hotspots decomposition avoidance allowlist decision',
+      'file-shape evidence owner hotspots cohesion architecture disposition',
       'pre-authorize future growth',
       '## Files In Scope',
       '## Files Out Of Scope',

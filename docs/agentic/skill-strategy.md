@@ -34,7 +34,9 @@ Use the smallest role set that keeps work reliable:
   documentation checks
 - `planner`: `gpt-5.6-sol high` for durable plans and handoff artifacts
 - `worker`: `gpt-5.6-sol medium` for normal bounded implementation units
-- `worker_luna`: `gpt-5.6-luna xhigh` for explicitly eligible, exact,
+- `worker_sol_low`: `gpt-5.6-sol low` for frozen units that still need codebase
+  comprehension but no architecture or verification judgment
+- `worker_luna`: `gpt-5.6-luna high` for explicitly eligible, exact,
   bounded, cheap-to-verify implementation units
 - `reviewer`: `gpt-5.6-sol high` for read-only adversarial review
 - `monitor`: `gpt-5.3-codex-spark low` for waits, polling, and status checks;
@@ -76,6 +78,7 @@ Reusable Lineup workflow and boundary skills adapted for Desktop:
 - `closeout-verification`
 - `debugging-remediation`
 - `execution-plan-authoring`
+- `large-task-orchestration`
 - `model-selection`
 - `parallel-sidecars`
 - `persistence-boundaries`
@@ -99,7 +102,7 @@ maintenance-program mechanics stay behind.
 | verification strategy | `verification-strategy`, `docs/AGENTIC_DEV_WORKFLOW.md#verification-routing`, and active-plan verification classification; use focused contract, architecture, redaction, smoke, or manual proof instead of defaulting every change to brittle tests. |
 | closeout verification | `closeout-verification`, `docs/AGENTIC_DEV_WORKFLOW.md#review-before-closeout`, and the feature-quality-loop closeout phase; completion claims require observed evidence. |
 | review request and adjudication | `review-request`, `review-adjudication`, `lineup-desktop-feature-review`, and `lineup-desktop-workflow-harness-review`; reviewers stay read-only and the owning session adjudicates findings. |
-| bounded workers and sidecars | `bounded-worker-execution`, `parallel-sidecars`, `.codex/agents/*.toml`, and `feature-quality-loop.md`; delegate only bounded, disjoint units after plan/review gates. |
+| bounded workers and sidecars | `bounded-worker-execution`, `parallel-sidecars`, `large-task-orchestration`, `.codex/agents/*.toml`, and `feature-quality-loop.md`; delegate only bounded, disjoint units after plan/review gates. |
 | architecture boundaries | `architecture-boundaries`, `docs/AGENTIC_DEV_WORKFLOW.md#desktop-feature-quality-guardrails`, `docs/architecture/CURRENT_STATE.md`, and task-specific architecture docs; Electron main, preload, renderer, helper, Plex, scheduler, and packaging owners must stay narrow. |
 | persistence, Plex, UI, and playback boundaries | `persistence-boundaries`, `plex-integration-boundaries`, `ui-composition-patterns`, `docs/architecture/security-and-secret-flow.md`, `docs/architecture/playback-architecture.md`, `docs/architecture/import-ledger.md`, current-state docs, and active plans. |
 | debugging and model guidance | `debugging-remediation`, `model-selection`, the feature/design workflow, current architecture docs, and official docs checks. |

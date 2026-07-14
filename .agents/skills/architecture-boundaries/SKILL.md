@@ -34,3 +34,19 @@ Before editing, name the seam, files in scope, files out of scope, verification
 proof, and stop/replan triggers. Stop if implementation would add compatibility
 barrels, old upstream path shims, broad utility owners, or privileged renderer
 access not approved by the plan.
+
+Decide file shape from present responsibilities, not a target line count:
+
+- Keep behavior together when it shares the owner's invariants, state,
+  lifecycle, and reason to change.
+- Extract when the change introduces a distinct current policy, lifecycle,
+  trust boundary, or consumer and the extracted module owns meaningful logic.
+- Do not extract for line count, test convenience, speculative reuse, or a
+  preferred pattern. Reject forwarding wrappers and one-method "services."
+- Keep composition roots to wiring and lifecycle coordination; move domain
+  policy to its real owner.
+- For a touched owner over 500 lines, record `Owner`, `Existing responsibility`,
+  `New behavior`, `Decision: cohesive growth | extract`, and evidence.
+- For a file over 800 lines, a named hotspot, or a composition root, require a
+  fresh `gpt-5.6-sol high` architecture review. Size triggers review, never an
+  automatic split or failure.

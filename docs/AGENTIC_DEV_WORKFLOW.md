@@ -161,8 +161,8 @@ not merely make the next check pass.
   artifacts are architecture surfaces. Do not hide environment-specific behavior
   in constants, renderer storage, checked-in local files, or unredacted logs.
 - Architecture Health is required before Tier 3 scope is frozen. Record current
-  oversized production files, owner hotspots, and the decomposition, avoidance,
-  or temporary allowlist decision using
+  file-shape evidence, affected owner hotspots, and a cohesion-based
+  architecture disposition using
   [`docs/architecture/file-shape-guardrails.md`](./architecture/file-shape-guardrails.md).
 - Tests should protect stable behavior and public seams with actionable failure
   output. Avoid brittle private probes, broad snapshots, or tests that only
@@ -257,9 +257,9 @@ implementation would otherwise need to invent ownership or verification policy.
      route shell. A bounded unit may cross renderer submodules when the user
      journey needs sign-in, selection, browse, and clear/back behavior to be
      testable together.
-   - Prefer small durable owners over broad helpers, no-value forwarding,
-     compatibility wrappers, or framework setup that cannot be reviewed for
-     behavior.
+   - Prefer cohesive durable owners over broad helpers, no-value forwarding,
+     compatibility wrappers, forced file splitting, or framework setup that
+     cannot be reviewed for behavior.
    - Do not add old upstream path shims or fallback API variants unless the
      approved plan names the owner, reason, verification, and removal trigger.
 7. Verify based on risk.
@@ -343,7 +343,10 @@ throughput. Do not replace the default workflow with always-on delegation.
 - Use `planner` for durable planning artifacts and execution-ready handoffs.
 - Use `worker` (`gpt-5.6-sol medium`) by default for approved, bounded
   implementation units with disjoint write scopes.
-- Use `worker_luna` (`gpt-5.6-luna xhigh`) only when an approved plan or
+- Use `worker_sol_low` (`gpt-5.6-sol low`) for an approved bounded unit that
+  still needs repository comprehension but no unresolved architecture or proof
+  decision.
+- Use `worker_luna` (`gpt-5.6-luna high`) only when an approved plan or
   handoff explicitly declares an exact, bounded, cheap-to-verify unit eligible
   and supplies direct verification plus stop/escalation rules.
 - Use `reviewer` for read-only adversarial review of plans, diffs, workflow
@@ -352,7 +355,7 @@ throughput. Do not replace the default workflow with always-on delegation.
 - Keep read-only roles read-only. Do not route edits through explorer,
   docs_researcher, reviewer, or monitor.
 - Do not let a worker invent architecture seams, broaden scope, or choose
-  verification depth. This applies equally to `worker` and `worker_luna`.
+  verification depth. This applies equally to every worker role.
 - Once a delegated planner is active, do not draft a competing local plan unless
   the planner blocks, fails, or is explicitly abandoned.
 - Treat a wait timeout from a planner, worker, reviewer, or monitor as
@@ -360,12 +363,16 @@ throughput. Do not replace the default workflow with always-on delegation.
   supersede that role without explicit user approval unless the role reports a
   blocker/final failure or a newer user instruction makes the delegated task
   obsolete.
-- Keep delegation shallow; do not spawn nested worker trees.
+- Keep delegation shallow with at most six concurrent agents and depth one; do
+  not spawn nested worker trees. Use `large-task-orchestration` only for
+  explicit large tasks that benefit from controller-led decomposition.
 - Wait on a sidecar only when the next critical-path decision depends on its
   result.
 
 Use `parallel-sidecars` for optional read-only sidecars and
-`bounded-worker-execution` for approved implementation slices.
+`bounded-worker-execution` for approved implementation slices. Reuse a worker
+when its retained context helps an unchanged unit; use fresh context for final
+independent review or when prior assumptions could bias the result.
 
 ## Implementation Rules
 

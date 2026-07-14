@@ -20,7 +20,9 @@ Use the smallest capable role/model:
   workflow, security, and boundary review.
 - `worker`: `gpt-5.6-sol medium`; the default for normal approved bounded
   implementation units.
-- `worker_luna`: `gpt-5.6-luna xhigh`; use only when an approved plan or
+- `worker_sol_low`: `gpt-5.6-sol low`; use for approved bounded units that need
+  repository comprehension but no unresolved design or verification judgment.
+- `worker_luna`: `gpt-5.6-luna high`; use only when an approved plan or
   handoff explicitly declares an exact, bounded, cheap-to-verify unit eligible
   and supplies stop/escalation conditions.
 - `docs_researcher`: `gpt-5.6-luna high` for official framework/API checks.
@@ -31,12 +33,13 @@ Use the smallest capable role/model:
   `gpt-5.6-luna low` when Spark is unavailable or constrained.
 
 For routine work, preserve the tracked reasoning effort, including Luna
-`xhigh` for `worker_luna` and `explorer_fallback` and Luna `high` for
-`docs_researcher`. Recommend direct Sol `xhigh` only for unusually difficult
+`high` for `worker_luna` and `docs_researcher` and Luna `xhigh` for
+`explorer_fallback`. Recommend direct Sol `xhigh` only for unusually difficult
 Electron IPC/security, native playback, storage/secrets, packaging/release,
 broad-import, or workflow-harness work.
-Reserve `max` for measured quality-first cases where `xhigh` is insufficient;
-do not make `max` or host-specific `ultra` a tracked default.
+Do not add a tracked Luna Max role. Reserve `max` for explicit, measured
+quality-first cases where lower effort is insufficient; do not make `max` or
+host-specific `ultra` a tracked default.
 
 Use `gpt-5.5` at the same effort as the reliability fallback for Sol/Luna
 roles when GPT-5.6 is unavailable. Use `gpt-5.4-mini` only for low-risk,

@@ -40,9 +40,10 @@ scope.
 - For Tier 3, identify the first bounded execution unit and whether any
   parallelism is allowed.
 - For every bounded execution unit, record `IMPLEMENTER_ROLE_ELIGIBILITY`.
-  Default to `worker`; include `worker_luna` only for exact, bounded,
-  cheap-to-verify units with direct verification and explicit stop/escalation
-  conditions.
+  Default to `worker`; include `worker_sol_low` only for a frozen unit needing
+  repository comprehension but no design judgment, and `worker_luna` only for
+  exact, repeatable, cheap-to-verify work. Both require direct verification and
+  explicit stop/escalation conditions.
 - Run the Planner Self-Check from the plan standard before calling the plan
   implementation-ready.
 

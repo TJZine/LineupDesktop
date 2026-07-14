@@ -20,7 +20,7 @@ loop. Keep live execution state in `update_plan`.
   behavior, live transport growth, new renderer workflows, or Windows proof
   closeout unless explicitly required by the reviewed repair.
 - Do not do broad cleanup or rewrite files just to reduce line counts.
-- Do not raise file-shape baselines to pre-authorize future growth.
+- Do not use file-shape thresholds to pre-authorize growth or force extraction.
 - Do not add compatibility barrels, old path shims, fallback API variants,
   temporary adapters, or no-value forwarding owners.
 - Do not introduce renderer privilege, token-bearing renderer state, raw
@@ -152,7 +152,8 @@ overall program and for each repair package.
 - Dependency, build, package, lockfile, or native redistribution changes become
   necessary.
 - Behavior must change without stable proof.
-- A hotspot must grow beyond reviewed baseline without a better decomposition.
+- A hotspot gains a distinct responsibility without a reviewed extraction or
+  cohesive-growth disposition.
 - Tests fail for unrelated reasons.
 - User changes overlap planned files.
 - Review finds material architecture, security, or verification blockers.

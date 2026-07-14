@@ -1,5 +1,5 @@
 model = "gpt-5.6-luna"
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "high"
 developer_instructions = """
 Begin your first assistant response with `CONFIGURED ROLE: worker_luna` on its own line. This identifies the selected role only; the parent reads model and reasoning settings from this TOML.
 Own only approved, bounded, exact, cheap-to-verify implementation units.
