@@ -17,6 +17,7 @@ import {
 import {
   applyChannelSetupAction,
   applySettingsAction,
+  applyPersistedSettingsValues,
   applySupportBundleExportStatus,
   createChannelSetupDraftState,
   createSettingsDraftState,
@@ -41,6 +42,7 @@ import {
   type ChannelSetupCommitAvailabilityViewModel,
   type ChannelSetupLiveSelectionViewModel,
 } from './channelSetup/viewModel.js';
+import type { DesktopSettingsValues } from '../contracts/settings.js';
 
 export type { ChannelSetupActionId, SettingsActionId } from './settingsSetup.js';
 export type { EpgActionId } from './epg.js';
@@ -184,10 +186,10 @@ const ROUTE_COPY = {
   settings: {
     title: 'Settings',
     kicker: 'Desktop preferences',
-    tone: 'draft',
-    primaryText: 'Persisted channel recovery status is shown after the app reports it.',
-    secondaryText: 'Local display preferences apply to this renderer session; channel data is not inferred from setup drafts.',
-    defaultStatus: 'Settings shell is local-only and not persisted.',
+    tone: 'ready',
+    primaryText: 'Desktop preferences are stored securely by the main process.',
+    secondaryText: 'Appearance, Guide, and recovery choices apply across relaunches.',
+    defaultStatus: 'Desktop settings are ready.',
   },
   channelSetup: {
     title: 'Channel setup',
@@ -425,6 +427,16 @@ export function applyWorkflowSettingsAction(
   return {
     ...state,
     settingsDraft: applySettingsAction(state.settingsDraft, actionId),
+  };
+}
+
+export function applyWorkflowSettingsValues(
+  state: WorkflowState,
+  values: DesktopSettingsValues,
+): WorkflowState {
+  return {
+    ...state,
+    settingsDraft: applyPersistedSettingsValues(state.settingsDraft, values),
   };
 }
 

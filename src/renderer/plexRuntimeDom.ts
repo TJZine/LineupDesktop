@@ -45,6 +45,7 @@ export function renderPlexRuntimeDom(
   activeSetupStage = 'account',
   profilePinActive = false,
   setupSelectedSectionIds: readonly string[] = [],
+  previewBadgesEnabled = true,
 ): void {
   if (!dom.plexPanelElement) {
     return;
@@ -110,8 +111,9 @@ export function renderPlexRuntimeDom(
     snapshot?.library.status ?? 'idle',
     snapshot?.library.search?.query ?? null,
     dom,
+    previewBadgesEnabled,
   );
-  renderMetadata(state.lastMetadata ?? snapshot?.library.metadata ?? null, dom);
+  renderMetadata(state.lastMetadata ?? snapshot?.library.metadata ?? null, dom, previewBadgesEnabled);
 
   if (dom.plexHomeUserPinInput && dom.plexHomeUserPinInput.value !== state.homeUserPin) {
     dom.plexHomeUserPinInput.value = state.homeUserPin;

@@ -13,7 +13,7 @@ import { createCustomChannelController, type CustomChannelActionId } from './cus
 import { dispatchCustomChannelAction } from './customChannels/actionDispatch.js';
 import { renderCustomChannelWorkspace } from './customChannels/dom.js';
 import { readPlexOnboardingState, renderPlexRuntimeDom } from './plexRuntimeDom.js';
-import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowEpgAction, applyWorkflowSettingsAction, createWorkflowState, getRouteWorkflowView, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
+import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowEpgAction, applyWorkflowSettingsAction, applyWorkflowSettingsValues, createWorkflowState, getRouteWorkflowView, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
 import { createRendererPresentationFixtures } from './presentationFixtures.js';
 import { recordRendererBridgeFailure, summarizeRendererBridgeError } from './rendererBridgeFailures.js';
 import { setEpgPresentationState, updateEpgState } from './epg.js';
@@ -32,19 +32,30 @@ import { createPlexOnboardingFlow } from './onboarding/plexOnboardingFlow.js';
 import { handleStagedSetupBack } from './setup/stagedSetupController.js';
 import { renderStagedSetupDom } from './setup/stagedSetupDom.js';
 import { cleanupSetupRouteLifecycle, clearSetupSourceLifecycle, createSetupComposition } from './setup/setupComposition.js';
+import { createSettingsRuntime } from './settings/settingsRuntime.js';
 mountStaticRendererDom();
 const dom = queryRendererDom();
 const shellDom = queryShellDom();
-let fullscreenEnabled = false;
-let shellState: RendererShellState = createRendererShellState();
+let fullscreenEnabled = false, shellState: RendererShellState = createRendererShellState();
 const presentationFixtures = createRendererPresentationFixtures();
 let workflowState = createWorkflowState('player', presentationFixtures.guide);
 let overlayState = createPlayerOverlayState(presentationFixtures.overlays);
 let playerSnapshot = presentationFixtures.playerSnapshot;
-let activeSettingsCategory: SettingsSectionId = 'playback';
-let activeSetupStage = 'account';
-const focusRegistry = new FocusRegistry();
-let focusState: FocusState;
+let activeSettingsCategory: SettingsSectionId = 'appearance', activeSetupStage = 'account';
+const focusRegistry = new FocusRegistry(); let focusState: FocusState;
+const settingsRuntime = createSettingsRuntime({
+  settings: window.lineupDesktop.settings, windowBridge: window.lineupDesktop.window,
+  onStateChanged: (state) => {
+    workflowState = applyWorkflowSettingsValues(workflowState, state.values);
+    document.documentElement.dataset.settingsSaving = String(state.saving); document.documentElement.dataset.settingsErrorCode = state.errorCode ?? '';
+    const errorElement = document.querySelector<HTMLElement>('[data-settings-error]');
+    if (errorElement) { errorElement.textContent = state.errorMessage ?? ''; errorElement.hidden = state.errorMessage === null; }
+    if (!state.loading) renderApp();
+  },
+  applyFullscreen: (enabled) => {
+    fullscreenEnabled = enabled; dom.fullscreenButton?.setAttribute('aria-pressed', String(enabled));
+  },
+});
 const overlayActionContext: PlayerOverlayActionContext = {
   getOverlayState: () => overlayState,
   setOverlayState: (state) => { overlayState = state; },
@@ -107,7 +118,6 @@ initializeProfilePinModal({
 
 syncRendererFocusTargets(focusRegistry, dom);
 focusState = focusRegistry.createInitialState(workflowState.routeState.activeRoute);
-renderApp();
 const shellController = createShellController({
   shell: window.lineupDesktop.shell,
   windowBridge: window.lineupDesktop.window,
@@ -203,6 +213,7 @@ attachNavigationInputRuntime(navigationLifecycle, {
     playerBridgeSubscription.unsubscribe();
     guidePresentationPolling.stop();
     shellController.cleanup();
+    settingsRuntime.cleanup();
     cleanupPlexRuntime('beforeunload');
   },
 });
@@ -257,7 +268,7 @@ registerRendererActions(dom, document, {
 });
 
 document.documentElement.dataset.activeRoute = workflowState.routeState.activeRoute;
-void shellController.start().finally(() => {
+void settingsRuntime.initialize().then(() => shellController.start()).finally(() => {
   document.documentElement.dataset.shellBoot = 'ready';
 });
 void plexController.loadSnapshot().then(() => {
@@ -309,11 +320,13 @@ async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
 }
 
 function applySettingsAction(action: SettingsActionId): void {
-  workflowState = applyWorkflowSettingsAction(workflowState, action);
-  renderApp();
   if (action === 'exportSupportBundle') {
+    workflowState = applyWorkflowSettingsAction(workflowState, action);
+    renderApp();
     void exportSupportBundle();
+    return;
   }
+  void settingsRuntime.applyAction(action);
 }
 
 function closeStagedSetup(): void {
@@ -558,7 +571,7 @@ function renderApp(): void {
     activeSettingsCategory,
     activeSetupStage,
   );
-  renderPlexRuntimeDom(plexState, dom, activeSetupStage, isProfilePinModalActive(), stagedSetupController.getState().selectedSectionIds);
+  renderPlexRuntimeDom(plexState, dom, activeSetupStage, isProfilePinModalActive(), stagedSetupController.getState().selectedSectionIds, workflowState.settingsDraft.previewBadgesEnabled);
   renderCustomChannelWorkspace(customChannelController.getState(), dom);
   renderStagedSetupDom({
     state: stagedSetupController.getState(),
@@ -571,15 +584,15 @@ function renderApp(): void {
   });
   renderShellDom(shellState, shellDom, dom.screens);
   syncRendererFocusTargets(focusRegistry, dom);
-  focusState = onboardingFlow.applyFocusIntent(focusRegistry, focusState);
-  focusState = stagedSetupController.applyFocusIntent(focusRegistry, focusState);
+  if (workflowState.routeState.activeRoute === 'channelSetup') {
+    focusState = onboardingFlow.applyFocusIntent(focusRegistry, focusState); focusState = stagedSetupController.applyFocusIntent(focusRegistry, focusState);
+  }
   if (focusState.activeId !== null) {
     focusState = focusRegistry.focusTarget(focusState, focusState.activeId).state;
   }
   renderRendererFocus(focusState, dom);
   scrollFocusedSetupControlIntoView();
 }
-
 async function selectPlexHomeUser(homeUserId: string): Promise<void> {
   await plexController.switchHomeUser(homeUserId);
   if (!plexController.getState().pending.switchHomeUser && plexController.getState().errorText === null) {
@@ -603,18 +616,18 @@ function focusRendererElement(element: HTMLElement): void {
 }
 
 function updateActiveFromFocus(focusId: string | null): void {
-  if (focusId === 'settings-cat-playback' && activeSettingsCategory !== 'playback') {
-    activeSettingsCategory = 'playback';
+  if (focusId === 'settings-category-appearance' && activeSettingsCategory !== 'appearance') {
+    activeSettingsCategory = 'appearance';
     renderApp();
     return;
   }
-  if (focusId === 'settings-cat-guide' && activeSettingsCategory !== 'guide') {
+  if (focusId === 'settings-category-guide' && activeSettingsCategory !== 'guide') {
     activeSettingsCategory = 'guide';
     renderApp();
     return;
   }
-  if (focusId === 'settings-cat-setup' && activeSettingsCategory !== 'setup') {
-    activeSettingsCategory = 'setup';
+  if (focusId === 'settings-category-recovery' && activeSettingsCategory !== 'recovery') {
+    activeSettingsCategory = 'recovery';
     renderApp();
     return;
   }

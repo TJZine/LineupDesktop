@@ -161,6 +161,7 @@ export function renderItems(
   status: string,
   searchQuery: string | null,
   dom: RendererDomBindings,
+  previewBadgesEnabled = true,
 ): void {
   renderButtonList(dom.plexItemsElement, items, formatItemsEmptyText(status, searchQuery), (item) => {
     const button = document.createElement('button');
@@ -174,7 +175,8 @@ export function renderItems(
     label.textContent = item.title;
     const meta = document.createElement('span');
     meta.className = 'setup-toggle-meta';
-    meta.textContent = `${formatMediaType(item.type)} / ${formatYear(item.year)}`;
+    meta.textContent = previewBadgesEnabled ? `${formatMediaType(item.type)} / ${formatYear(item.year)}` : '';
+    meta.hidden = !previewBadgesEnabled;
     const state = document.createElement('span');
     state.className = 'setup-toggle-state';
     state.textContent = item.ratingKey === selectedItemRatingKey ? 'Previewing' : 'Preview';
@@ -183,7 +185,11 @@ export function renderItems(
   });
 }
 
-export function renderMetadata(item: PlexMediaItemSummary | null, dom: RendererDomBindings): void {
+export function renderMetadata(
+  item: PlexMediaItemSummary | null,
+  dom: RendererDomBindings,
+  previewBadgesEnabled = true,
+): void {
   if (!dom.plexMetadataElement) {
     return;
   }
@@ -197,12 +203,13 @@ export function renderMetadata(item: PlexMediaItemSummary | null, dom: RendererD
   const title = document.createElement('strong');
   title.textContent = item.title;
   const details = document.createElement('p');
-  details.textContent = [
+  details.textContent = previewBadgesEnabled ? [
     formatMediaType(item.type),
     formatYear(item.year),
     formatDuration(item.durationMs),
     item.contentRating ?? null,
-  ].filter((value): value is string => value !== null).join(' / ');
+  ].filter((value): value is string => value !== null).join(' / ') : '';
+  details.hidden = !previewBadgesEnabled;
   const summary = document.createElement('p');
   summary.textContent = item.summary;
   dom.plexMetadataElement.append(title, details, summary);

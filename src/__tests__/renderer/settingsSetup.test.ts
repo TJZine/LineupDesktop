@@ -25,7 +25,7 @@ test('settingsSetup initial state has expected default values', () => {
 test('applySettingsAction handles cycleLaunchMode state transition', () => {
   let state = createSettingsDraftState();
   state = applySettingsAction(state, 'cycleLaunchMode');
-  assert.equal(state.launchMode, 'fullscreen-preview');
+  assert.equal(state.launchMode, 'fullscreen');
   state = applySettingsAction(state, 'cycleLaunchMode');
   assert.equal(state.launchMode, 'windowed');
 });
@@ -169,16 +169,17 @@ test('createSettingsSections generates sections with expected structures', () =>
   });
 
   assert.equal(sections.length, 3);
-  assert.equal(sections[0]?.id, 'playback');
+  assert.equal(sections[0]?.id, 'appearance');
   assert.equal(sections[1]?.id, 'guide');
-  assert.equal(sections[2]?.id, 'setup');
+  assert.equal(sections[2]?.id, 'recovery');
 
   const setupSection = sections[2];
-  assert.equal(setupSection?.items.length, 4);
-  assert.equal(setupSection?.items[0]?.id, 'setup-channel-count');
-  assert.equal(setupSection?.items[0]?.valueLabel, '12');
-  assert.equal(setupSection?.items[1]?.id, 'setup-recovery-state');
-  assert.equal(setupSection?.items[1]?.valueLabel, 'Recovered');
-  assert.equal(setupSection?.items[2]?.id, 'setup-current-channel');
-  assert.equal(setupSection?.items[2]?.valueLabel, '101');
+  assert.equal(setupSection?.items.length, 5);
+  assert.equal(setupSection?.items[0]?.id, 'setup-reminder');
+  assert.equal(setupSection?.items[1]?.id, 'setup-channel-count');
+  assert.equal(setupSection?.items[1]?.valueLabel, '12');
+  assert.equal(setupSection?.items[2]?.id, 'setup-recovery-state');
+  assert.equal(setupSection?.items[2]?.valueLabel, 'Recovered');
+  assert.equal(setupSection?.items[3]?.id, 'setup-current-channel');
+  assert.equal(setupSection?.items[3]?.valueLabel, '101');
 });

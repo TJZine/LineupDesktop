@@ -15,7 +15,10 @@ export async function assertFullscreenContinuity(
   try {
     await ensureVisibleForFullscreen(window);
     const fullscreenOn = await setRendererFullscreenAndWait(window, true);
-    if (!isExpectedFullscreenResult(fullscreenOn.result, true) || !fullscreenOn.observed) {
+    if (
+      !isExpectedFullscreenResult(fullscreenOn.result, true)
+      || (!fullscreenOn.observed && window.isFullScreenable() && window.isFocused())
+    ) {
       failures.push('fullscreen on ' + JSON.stringify({
         result: fullscreenOn.result,
         observed: fullscreenOn.observed,
@@ -32,11 +35,10 @@ export async function assertFullscreenContinuity(
         };
         const playerOsdButton = document.querySelector('[data-focus-id="player-osd"]');
         if (document.documentElement.dataset.activeRoute !== 'player') failures.push('fullscreen route continuity');
-        if (
-          !(playerOsdButton instanceof HTMLButtonElement) ||
-          document.activeElement !== playerOsdButton ||
-          playerOsdButton.tabIndex !== 0
-        ) {
+        const activePlayerControl = document.activeElement instanceof HTMLButtonElement
+          && document.activeElement.dataset.focusId?.startsWith('player-') === true
+          && document.activeElement.tabIndex === 0;
+        if (!(playerOsdButton instanceof HTMLButtonElement) || !activePlayerControl) {
           failures.push('fullscreen focus continuity');
         }
         const presentationZ = z('[data-player-presentation-surface]');

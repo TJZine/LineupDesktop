@@ -3,6 +3,7 @@
 @import "./styles/player-overlays.css";
 @import "./styles/guide-epg.css";
 @import "./styles/workflow-screens.css";
+@import "./styles/settings.css";
 @import "./styles/plex-auth.css";
 @import "./styles/plex-profile-server.css";
 @import "./styles/setup-workflow.css";

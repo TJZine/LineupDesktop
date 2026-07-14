@@ -277,7 +277,7 @@ Tracked files authorized across the plan, only in the package that names them:
 - `src/main/settings/settingsIpc.ts` (new)
 - exact Settings composition wiring in `src/main/index.ts`
 - `src/preload/channels.cts`, `src/preload/settingsBridge.cts` (new), `src/preload/settingsBridgeGuards.cts` (new), and exact Settings bridge wiring in `src/preload/index.cts`
-- `src/__tests__/contracts/contracts.test.ts`, `src/__tests__/contracts/settingsContracts.test.ts` (new), `src/__tests__/main/settingsPersistence.test.ts` (new), `src/__tests__/main/settingsIpc.test.ts` (new), `src/__tests__/integration/preloadContractVocabulary.test.ts`, `src/__tests__/renderer/settingsSetup.test.ts`, and `src/__tests__/renderer/settingsRuntime.test.ts` (new)
+- `src/__tests__/contracts/contracts.test.ts`, `src/__tests__/contracts/settingsContracts.test.ts` (new), `src/__tests__/main/settingsPersistence.test.ts` (new), `src/__tests__/main/settingsIpc.test.ts` (new), `src/__tests__/integration/preloadContractVocabulary.test.ts`, `src/__tests__/renderer/settingsSetup.test.ts`, `src/__tests__/renderer/settingsRuntime.test.ts` (new), `src/__tests__/renderer/workflow.test.ts`, and `src/__tests__/renderer/supportBundleExport.test.ts`
 - `src/main/smokeAssertions.ts` and smoke/harness tests only for changed product-shell assertions
 - `src/main/protocol.ts` only for the exact `.png` → `image/png` self-only allowlist addition
 - `src/main/rendererProtocolPolicy.ts` (new) for pure renderer URL/path/content-type authorization and resolution
@@ -1477,6 +1477,12 @@ choices and must not block progress.
 
 Scope is the exact Settings contract/store/IPC/preload/renderer files listed under `Files In Scope`, plus `docs/architecture/security-and-secret-flow.md`. `src/preload/index.cts` receives minimal namespace binding only; request/result guards and bridge construction live in the two new focused preload modules. Remove renderer-session-only copy and inert labels for persisted values.
 
+The exact Package 4 renderer consumer list is frozen to `src/renderer/index.ts`, `src/renderer/workflow.ts`, `src/renderer/staticDom.ts`, `src/renderer/focusDom.ts`, `src/renderer/domBindings.ts`, `src/renderer/routeDom.ts`, `src/renderer/epg/guideDom.ts`, `src/renderer/plexRuntimeDom.ts`, `src/renderer/plexRuntimeRows.ts`, `src/renderer/settingsSetup.ts`, `src/renderer/settingsSetupDom.ts`, and new `src/renderer/settings/settingsRuntime.ts`. `src/renderer/plexRuntimeDom.ts` is required because it is the only current caller that can propagate `previewBadgesEnabled` into the setup-preview row renderers in `plexRuntimeRows.ts`.
+
+The exact Package 4 CSS list is frozen to `src/renderer/styles.css`, `src/renderer/styles/workflow-screens.css`, new `src/renderer/styles/settings.css`, and `src/renderer/styles/guide-epg.css`. The focused `settings.css` extraction is already authorized and required by the Architecture Health decision and the global `src/renderer/styles/**` scope. `guide-epg.css` may not grow above its 506-line allowlist baseline: implement density behavior through net-neutral or shrinking rules, or stop for reviewed extraction.
+
+`src/renderer/rendererActionRegistration.ts` remains excluded unless discovery proves that its existing action vocabulary or signature must change; if so, stop and return to the controller rather than self-authorizing it. `src/renderer/styles/player-overlays.css`, `src/renderer/styles/setup-workflow.css`, and `src/renderer/styles/responsive-accessibility.css` are also outside the exact Package 4 packet.
+
 Frozen product values and consumers:
 
 - `launchMode: 'windowed' | 'fullscreen'`, default `'windowed'`. After the initial Settings snapshot resolves and before the first stable product render, apply it through the existing `window.lineupDesktop.window.setFullscreen(value === 'fullscreen')` intent. On user change, issue that existing window intent immediately; persist only after the intent succeeds. If persistence fails, restore the last accepted value and issue the inverse fullscreen intent. Surface a renderer-safe failure if either forward or rollback intent fails.
@@ -1559,10 +1565,12 @@ Exact regression/contract tests:
 - `src/__tests__/main/settingsIpc.test.ts` (new): authorization, exact request validation, fallback/valid request-id behavior, echo on every result, get/replace channel/result behavior, every failure-class code/message mapping, handler/store exception capture, promises resolving instead of rejecting, no path/raw error leakage, and no write on validation/conflict/unsupported version.
 - `src/__tests__/integration/preloadContractVocabulary.test.ts`: both exact channel literals, one Settings namespace, only `getSnapshot`/`replace`, request/result guard parity, malformed request short-circuit without invoke, invoke rejection capture, result-id mismatch, fallback/echo behavior, no rejected public promise, exhaustive code/message preservation, and no added direct `ipcRenderer` owner outside reviewed preload composition.
 - `src/__tests__/renderer/settingsSetup.test.ts` and `src/__tests__/renderer/settingsRuntime.test.ts` (new): defaults, each real consumer, initial launch-mode intent, immediate changes, whole-snapshot replace, coalescing, conflict refetch/rebase-once, stale response ignore, all typed failure mappings, defensive catch producing only generic `operation-failed`, no rejected/raw error propagation, failure rollback, cleanup, support-bundle separation, focus restoration, and core setup navigation preserved when reminder is hidden.
+- `src/__tests__/renderer/workflow.test.ts`: replace the renderer-session-only Settings expectation, local-only `applyWorkflowSettingsAction` behavior, and stale `settingsDraft` field assertions with truthful persisted-runtime integration expectations while preserving workflow navigation, focus, and support-status coverage.
+- `src/__tests__/renderer/supportBundleExport.test.ts`: preserve safe support-bundle status behavior while updating the current `settingsDraft.guideDensity` and local Settings-action assertions to the persisted Settings runtime ownership.
 
 Run Codanna impact analysis for the new public Settings symbols if indexed; otherwise record `rg` import fallback. Verification uses the exact Package 4 command below, all architecture/redaction/smoke/full gates, a real relaunch proof for all four values, malformed/corrupt/unsupported record proof without private/path output, and adversarial review. Expected: every visible Settings value has real behavior and survives relaunch; writes are compare-and-swap/atomic; failed or stale work cannot lose newer state; renderer/browser storage is absent; preload remains narrow; security/secret-flow docs are current; and support bundle still works.
 
-Exact Package 4 command: `node --import tsx --test src/__tests__/contracts/contracts.test.ts src/__tests__/contracts/settingsContracts.test.ts src/__tests__/main/settingsPersistence.test.ts src/__tests__/main/settingsIpc.test.ts src/__tests__/integration/preloadContractVocabulary.test.ts src/__tests__/renderer/settingsSetup.test.ts src/__tests__/renderer/settingsRuntime.test.ts`. All seven files must pass before `npm run typecheck`, `npm run test:contracts`, `npm run verify:architecture`, `npm run verify:maintainability`, `npm run verify:redaction`, `npm run smoke:electron`, and `npm run verify` are run and observed passing.
+Exact Package 4 command: `node --import tsx --test src/__tests__/contracts/contracts.test.ts src/__tests__/contracts/settingsContracts.test.ts src/__tests__/main/settingsPersistence.test.ts src/__tests__/main/settingsIpc.test.ts src/__tests__/integration/preloadContractVocabulary.test.ts src/__tests__/renderer/settingsSetup.test.ts src/__tests__/renderer/settingsRuntime.test.ts src/__tests__/renderer/workflow.test.ts src/__tests__/renderer/supportBundleExport.test.ts`. All nine files must pass before `npm run typecheck`, `npm run test:contracts`, `npm run verify:architecture`, `npm run verify:maintainability`, `npm run verify:redaction`, `npm run smoke:electron`, and `npm run verify` are run and observed passing.
 
 ### Package 5 — Scheduler-backed Guide parity
 
@@ -1825,9 +1833,31 @@ FILES:
 - src/preload/settingsBridge.cts
 - src/preload/settingsBridgeGuards.cts
 - src/preload/index.cts
+- src/renderer/index.ts
+- src/renderer/workflow.ts
+- src/renderer/staticDom.ts
+- src/renderer/focusDom.ts
+- src/renderer/domBindings.ts
+- src/renderer/routeDom.ts
+- src/renderer/epg/guideDom.ts
+- src/renderer/plexRuntimeDom.ts
+- src/renderer/plexRuntimeRows.ts
 - src/renderer/settingsSetup.ts
 - src/renderer/settingsSetupDom.ts
 - src/renderer/settings/settingsRuntime.ts
+- src/renderer/styles.css
+- src/renderer/styles/workflow-screens.css
+- src/renderer/styles/settings.css
+- src/renderer/styles/guide-epg.css
+- src/__tests__/contracts/contracts.test.ts
+- src/__tests__/contracts/settingsContracts.test.ts
+- src/__tests__/main/settingsPersistence.test.ts
+- src/__tests__/main/settingsIpc.test.ts
+- src/__tests__/integration/preloadContractVocabulary.test.ts
+- src/__tests__/renderer/settingsSetup.test.ts
+- src/__tests__/renderer/settingsRuntime.test.ts
+- src/__tests__/renderer/workflow.test.ts
+- src/__tests__/renderer/supportBundleExport.test.ts
 - docs/architecture/security-and-secret-flow.md
 BLOCKERS: none for Package 4; RD-27 remains blocked pending Packages 4–8 and plan closeout.
 MESSAGE:
@@ -1838,8 +1868,9 @@ parity priority. Package 4 uses tracked worker, not worker_luna, under the curre
 reviewed plan. Implement only the exact four-setting main-owned atomic/CAS
 persistence, authorized total IPC/preload seam, real renderer consumers, and
 upstream-shaped Settings UI. Before worker delegation, the controller must
-record and obtain review of the exact existing renderer/CSS consumer filenames;
-the worker receives no wildcard write scope. Run the exact focused/full/smoke/
+confirm the frozen exact renderer/CSS consumer list against the freshness audit;
+any required owner outside that list returns for focused replan and re-review,
+and the worker receives no wildcard write scope. Run the exact focused/full/smoke/
 relaunch/failure/visual/reduced-motion/forced-colors proof and obtain clean fresh
 adversarial review. Small in-scope fixes do not require replanning. Pause after
 Package 4; do not begin Package 5.

@@ -53,6 +53,12 @@ import type {
   CustomChannelSnapshot,
   CustomChannelVisibilityRequest,
 } from './customChannels.js';
+import type {
+  DesktopSettingsGetSnapshotRequest,
+  DesktopSettingsIpcResult,
+  DesktopSettingsReplaceRequest,
+  DesktopSettingsSnapshot,
+} from './settings.js';
 
 export const LINEUP_PROTOCOL_ORIGIN = 'lineup://shell' as const;
 export const LINEUP_SHELL_URL = 'lineup://shell/index.html' as const;
@@ -115,6 +121,14 @@ export interface LineupDesktopPreloadApi {
     setFullscreen: (
       enabled: boolean,
     ) => Promise<ShellIpcResult<WindowFullscreenState>>;
+  };
+  settings: {
+    getSnapshot: (
+      input: DesktopSettingsGetSnapshotRequest,
+    ) => Promise<DesktopSettingsIpcResult<DesktopSettingsSnapshot>>;
+    replace: (
+      input: DesktopSettingsReplaceRequest,
+    ) => Promise<DesktopSettingsIpcResult<DesktopSettingsSnapshot>>;
   };
   player: {
     dispatch: (

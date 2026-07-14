@@ -15,6 +15,7 @@ import {
   applyWorkflowEpgAction,
   applyWorkflowAction,
   applyWorkflowSettingsAction,
+  applyWorkflowSettingsValues,
   applyWorkflowSupportBundleExportStatus,
   createWorkflowState,
   findRouteAction,
@@ -96,18 +97,21 @@ test('direct route activation clears action status and preserves previous route'
   assert.deepEqual(settings.routeState, { activeRoute: 'settings', previousRoute: 'guide' });
   assert.equal(settings.lastActionId, null);
   assert.equal(settings.lastActionRoute, null);
-  assert.equal(settingsView.statusText, 'Settings shell is local-only and not persisted.');
+  assert.equal(settingsView.statusText, 'Desktop settings are ready.');
 });
 
-test('settings actions update only renderer-local settings draft state', () => {
+test('workflow projects settings values accepted by the persisted runtime', () => {
   const initial = createWorkflowState('settings');
-  const fullscreen = applyWorkflowSettingsAction(initial, 'cycleLaunchMode');
-  const compact = applyWorkflowSettingsAction(fullscreen, 'cycleGuideDensity');
-  const hiddenBadges = applyWorkflowSettingsAction(compact, 'togglePreviewBadges');
+  const hiddenBadges = applyWorkflowSettingsValues(initial, {
+    launchMode: 'fullscreen',
+    guideDensity: 'compact',
+    previewBadgesEnabled: false,
+    setupReminderEnabled: true,
+  });
   const view = getRouteWorkflowView(hiddenBadges);
 
   assert.deepEqual(hiddenBadges.routeState, initial.routeState);
-  assert.equal(hiddenBadges.settingsDraft.launchMode, 'fullscreen-preview');
+  assert.equal(hiddenBadges.settingsDraft.launchMode, 'fullscreen');
   assert.equal(hiddenBadges.settingsDraft.guideDensity, 'compact');
   assert.equal(hiddenBadges.settingsDraft.previewBadgesEnabled, false);
   assert.equal(view.settings.playbackMode, 'Fullscreen desktop player');
@@ -132,7 +136,7 @@ test('support bundle settings action is user-gesture state and renders safe expo
   assert.equal(supportBundle?.valueLabel, 'lineup-desktop-support-bundle-1 - 6 files');
   assert.equal(JSON.stringify(view).includes('/Users/'), false);
   assert.equal(JSON.stringify(view).includes('C:\\'), false);
-  assert.equal(JSON.stringify(view).includes('path'), false);
+  assert.doesNotMatch(JSON.stringify(view), /(?:[A-Za-z]:\\|\/Users\/|\/home\/)/u);
 });
 
 test('support bundle status sanitizes display names and shows redaction outcomes', () => {
@@ -284,7 +288,7 @@ test('settings surface uses persisted channel setup status when available', () =
   assert.equal(setupView.channelSetupSummary.enabledChannelCount, 0);
   assert.equal(setupView.channelSetupSummary.readyForPreview, false);
   assert.equal(
-    view.settings.sections.find((section) => section.id === 'setup')?.items[0]?.valueLabel,
+    view.settings.sections.find((section) => section.id === 'recovery')?.items[1]?.valueLabel,
     '2',
   );
   assert.equal(containsPlexForbiddenRendererField(view.settings), false);
@@ -304,8 +308,8 @@ test('settings copy describes Desktop-local capabilities and avoids legacy platf
   ].join(' ');
 
   assert.match(settingsCopy, /Desktop|desktop/);
-  assert.match(settingsCopy, /renderer|local|session/);
-  assert.match(settingsCopy, /no desktop preference is saved|without writing preferences/);
+  assert.match(settingsCopy, /stored|relaunch|every launch/i);
+  assert.doesNotMatch(settingsCopy, /local-only|session only|no desktop preference is saved/i);
   assert.doesNotMatch(settingsCopy, /webOS|Luna|Palm|TV service/i);
 });
 

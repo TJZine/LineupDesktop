@@ -67,7 +67,7 @@ export function renderWorkflowDom(
   channelRuntime?: ChannelRuntimeRendererState,
   liveSelection: ChannelSetupLiveSelectionViewModel | null = null,
   overlayPresentation: PlayerOverlayPresentationSource = DEFAULT_PLAYER_OVERLAY_PRESENTATION,
-  activeSettingsCategory: SettingsSectionId = 'playback',
+  activeSettingsCategory: SettingsSectionId = 'appearance',
   activeSetupStage: string = 'account',
 ): void {
   const view = getRouteWorkflowView(workflowState, channelRuntime, liveSelection);
@@ -96,14 +96,24 @@ export function renderWorkflowDom(
   }
 
   renderChannelList(view, dom);
-  renderEpgGuideDom(view, dom);
+  renderEpgGuideDom(view, dom, workflowState.settingsDraft);
   renderPlayerOverlaysDom(overlayState, dom, view.route, {
     ...overlayPresentation,
     playerSnapshot,
-  });
+  }, workflowState.settingsDraft.previewBadgesEnabled);
   renderSettingsDom(view, dom, activeSettingsCategory);
   renderChannelSetupDom(view, dom, liveSelection, activeSetupStage);
   renderRouteActionButtons(view, dom);
+  renderSetupReminders(view, workflowState.settingsDraft.setupReminderEnabled);
+}
+
+function renderSetupReminders(view: RouteWorkflowViewModel, enabled: boolean): void {
+  if (typeof document.querySelectorAll !== 'function') return;
+  const visible = enabled && view.settings.channelCount === 0;
+  for (const reminder of Array.from(document.querySelectorAll<HTMLElement>('[data-setup-reminder]'))) {
+    reminder.hidden = !visible;
+    reminder.setAttribute('aria-hidden', String(!visible));
+  }
 }
 
 function renderChannelList(view: RouteWorkflowViewModel, dom: RendererDomBindings): void {
@@ -157,6 +167,7 @@ function renderPlayerOverlaysDom(
   dom: RendererDomBindings,
   activeRoute: RouteWorkflowViewModel['route'],
   overlayPresentation: PlayerOverlayPresentationSource,
+  previewBadgesEnabled: boolean,
 ): void {
   const view = createPlayerOverlayView(overlayState, overlayPresentation);
   const isPlayerRoute = activeRoute === 'player';
@@ -202,7 +213,7 @@ function renderPlayerOverlaysDom(
     dom.overlayNowPlayingStatusElement.textContent = [
       view.nowPlaying.statusLabel,
       `${view.nowPlaying.positionLabel} / ${view.nowPlaying.durationLabel}`,
-      view.nowPlaying.badges.join(' / '),
+      previewBadgesEnabled ? view.nowPlaying.badges.join(' / ') : '',
       view.nowPlaying.playbackSummary,
       view.nowPlaying.upNextText,
       view.nowPlaying.description,
@@ -225,7 +236,7 @@ function renderPlayerOverlaysDom(
   }
   if (dom.overlayNowPlayingBadgesElement) {
     dom.overlayNowPlayingBadgesElement.replaceChildren(
-      ...view.nowPlaying.badges.map((badge) => {
+      ...(previewBadgesEnabled ? view.nowPlaying.badges : []).map((badge) => {
         const span = document.createElement('span');
         span.className = 'now-playing__badge';
         span.textContent = badge;

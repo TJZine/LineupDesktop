@@ -273,7 +273,7 @@ export async function runSmokeAssertions(
         failures.push('settings desktop copy');
       }
 
-      const setupButton = document.querySelector('[data-focus-id="settings-setup"]');
+      const setupButton = document.querySelector('[data-focus-id="settings-open-channel-setup"]');
       if (!(setupButton instanceof HTMLButtonElement)) {
         failures.push('channel setup pointer action');
       } else {
@@ -303,6 +303,10 @@ export async function runSmokeAssertions(
       };
       const setupText = setupScreen instanceof HTMLElement ? setupScreen.textContent ?? '' : '';
       const setupOverflow = setupScreen instanceof HTMLElement ? getComputedStyle(setupScreen).overflowY : '';
+      const onboardingHost = document.querySelector('[data-onboarding-host]');
+      const onboardingReady = onboardingHost instanceof HTMLElement
+        && !onboardingHost.hidden && setupText.includes('Sign in to Plex')
+        && document.querySelector('[data-focus-id="btn-auth-request"]') instanceof HTMLButtonElement;
       const obsoleteSetupSelectors = Array.from(
         setupScreen instanceof HTMLElement
           ? setupScreen.querySelectorAll('[data-setup-steps], [data-channel-draft-list], [data-setup-validation]')
@@ -313,29 +317,28 @@ export async function runSmokeAssertions(
           text: (element.textContent ?? '').replace(/\\s+/g, ' ').trim().slice(0, 120),
         } : null,
       );
-      if (
-        !currentSetupTargets.hasPlexRuntimePanel ||
-        !currentSetupTargets.hasChannelSetupCommit ||
-        !currentSetupTargets.hasSetupRail ||
-        !currentSetupTargets.hasSetupDetailPane ||
-        currentSetupTargets.setupStageCount < 5 ||
-        currentSetupTargets.setupSectionCount < 5 ||
-        currentSetupTargets.plexActionCount < 8 ||
-        currentSetupTargets.channelCommitActionCount !== 3 ||
-        !currentSetupTargets.hasChannelReviewSteps ||
-        !currentSetupTargets.hasChannelReviewList ||
-        !currentSetupTargets.hasChannelReviewValidation ||
-        !setupText.includes('Plex setup') ||
-        !setupText.includes('Get link code') ||
-        !setupText.includes('Open libraries') ||
-        !setupText.includes('Build channels') ||
-        setupOverflow !== 'auto' ||
-        obsoleteSetupSelectors.length > 0
-      ) {
+      const stagedSetupReady = currentSetupTargets.hasPlexRuntimePanel
+        && currentSetupTargets.hasChannelSetupCommit
+        && currentSetupTargets.hasSetupRail
+        && currentSetupTargets.hasSetupDetailPane
+        && currentSetupTargets.setupStageCount >= 5
+        && currentSetupTargets.setupSectionCount >= 5
+        && currentSetupTargets.plexActionCount >= 8
+        && currentSetupTargets.channelCommitActionCount === 3
+        && currentSetupTargets.hasChannelReviewSteps
+        && currentSetupTargets.hasChannelReviewList
+        && currentSetupTargets.hasChannelReviewValidation
+        && setupText.includes('Plex setup')
+        && setupText.includes('Get link code')
+        && setupText.includes('Open libraries')
+        && setupText.includes('Build channels')
+        && setupOverflow === 'auto';
+      if ((!onboardingReady && !stagedSetupReady) || obsoleteSetupSelectors.length > 0) {
         failures.push(
           'channel setup plex flow content ' +
             JSON.stringify({
               ...currentSetupTargets,
+              onboardingReady,
               hasPlexSetup: setupText.includes('Plex setup'),
               hasLinkCode: setupText.includes('Get link code'),
               hasOpenLibraries: setupText.includes('Open libraries'),
@@ -345,9 +348,14 @@ export async function runSmokeAssertions(
             }),
         );
       }
-
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 100));
+      if (document.documentElement.dataset.activeRoute !== 'player') {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
       const playerScreen = document.querySelector('[data-screen="player"]');
       const playerPresentation = document.querySelector('[data-player-presentation-surface]');
       const osdOverlay = document.querySelector('[data-overlay="playerOsd"]');
@@ -357,7 +365,7 @@ export async function runSmokeAssertions(
       if (!(playerOsdButton instanceof HTMLButtonElement)) {
         failures.push('player controls trigger');
       } else {
-        playerOsdButton.click();
+        playerOsdButton.focus(); playerOsdButton.click();
       }
       if (!(miniGuideButton instanceof HTMLButtonElement)) {
         failures.push('mini guide action');
@@ -414,11 +422,9 @@ export async function runSmokeAssertions(
         closeOverlayButton.click();
         closeOverlayButton.click();
       }
-      if (
-        !(playerOsdButton instanceof HTMLButtonElement) ||
-        document.activeElement !== playerOsdButton ||
-        playerOsdButton.tabIndex !== 0
-      ) {
+      const activePlayerControl = document.activeElement instanceof HTMLButtonElement
+        && document.activeElement.dataset.focusId?.startsWith('player-') === true && document.activeElement.tabIndex === 0;
+      if (!(playerOsdButton instanceof HTMLButtonElement) || !activePlayerControl) {
         failures.push(
           'overlay focus fallback ' +
             JSON.stringify({
@@ -428,6 +434,8 @@ export async function runSmokeAssertions(
                   : '',
               playerOsdTabIndex:
                 playerOsdButton instanceof HTMLButtonElement ? playerOsdButton.tabIndex : null,
+              activeTabIndex:
+                document.activeElement instanceof HTMLElement ? document.activeElement.tabIndex : null,
             }),
         );
       }

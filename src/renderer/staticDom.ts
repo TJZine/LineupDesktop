@@ -130,6 +130,7 @@ const STATIC_SCREEN_MARKUP = `
         <button type="button" data-overlay-action="toggleOsd" data-focus-id="player-osd">Player controls</button>
         <button type="button" data-fullscreen-toggle data-focus-id="player-fullscreen" aria-pressed="false">Toggle fullscreen</button>
       </div>
+      <aside class="setup-reminder" data-setup-reminder="player" aria-label="Channel setup reminder" hidden><span>No channels are ready yet.</span><button type="button" data-route-action="openChannelSetup">Set up channels</button></aside>
   </section>
   <section id="screen-guide" class="screen" data-screen="guide" data-style-surface="screen" aria-labelledby="screen-guide-title" hidden>
     <div class="screen__content">
@@ -163,6 +164,7 @@ const STATIC_SCREEN_MARKUP = `
         <button type="button" data-route-action="resumePlayer" data-focus-id="guide-watch">Watch now</button>
         <button type="button" data-route-action="openChannelSetup" data-focus-id="guide-setup">Edit lineup</button>
       </div>
+      <aside class="setup-reminder" data-setup-reminder="guide" aria-label="Channel setup reminder" hidden><span>Add channels to fill the Guide.</span><button type="button" data-route-action="openChannelSetup">Set up channels</button></aside>
     </div>
   </section>
   <section id="screen-settings" class="screen" data-screen="settings" data-style-surface="screen" aria-labelledby="screen-settings-title" hidden>
@@ -173,12 +175,12 @@ const STATIC_SCREEN_MARKUP = `
           <span class="settings-profile-name">Plex Profile</span>
         </div>
         <div class="settings-rail-categories">
-          <button type="button" data-settings-category="playback" data-focus-id="settings-cat-playback" class="settings-cat-btn">Playback</button>
-          <button type="button" data-settings-category="guide" data-focus-id="settings-cat-guide" class="settings-cat-btn">Guide</button>
-          <button type="button" data-settings-category="setup" data-focus-id="settings-cat-setup" class="settings-cat-btn">Recovery</button>
+          <button type="button" data-settings-category="appearance" data-focus-id="settings-category-appearance" class="settings-cat-btn">Appearance</button>
+          <button type="button" data-settings-category="guide" data-focus-id="settings-category-guide" class="settings-cat-btn">Guide</button>
+          <button type="button" data-settings-category="recovery" data-focus-id="settings-category-recovery" class="settings-cat-btn">Recovery</button>
         </div>
         <div class="settings-rail-nav">
-          <button type="button" data-route-action="openChannelSetup" data-focus-id="settings-setup">Channel setup</button>
+          <button type="button" data-route-action="openChannelSetup" data-focus-id="settings-open-channel-setup">Channel setup</button>
           <button type="button" data-route-action="resumePlayer" data-focus-id="settings-player">Back to player</button>
         </div>
       </nav>
@@ -187,6 +189,7 @@ const STATIC_SCREEN_MARKUP = `
           <p class="screen__kicker" data-workflow-kicker="settings">Settings</p>
           <h2 id="screen-settings-title">Settings</h2>
           <p class="settings-subtitle" data-workflow-primary="settings">Desktop preferences.</p>
+          <p class="settings-error" data-settings-error role="status" hidden></p>
           <p data-workflow-secondary="settings" style="display: none;"></p>
         </header>
         <dl class="settings-summary" style="display: none;">

@@ -11,6 +11,10 @@
   gap: var(--space-4);
   min-width: 0;
 }
+.epg-shell[data-guide-density="compact"] { --guide-row-height: 72px; gap: var(--space-2); }
+.epg-shell[data-guide-density="compact"] .epg-grid { gap: var(--space-1); }
+.epg-shell[data-guide-density="compact"] .epg-grid__channel { gap: 2px; padding: var(--space-2); }
+.epg-shell[data-guide-density="compact"] .epg-grid__program { top: 2px; bottom: 2px; padding: var(--space-1) var(--space-2); }
 
 .epg-classic-header,
 .epg-now-watching-banner,
@@ -370,7 +374,6 @@
   border-color: var(--color-focus-border);
 }
 
-/* Width Tiers styling */
 .epg-grid__program[data-width-tier="sliver"] .epg-cell-meta,
 .epg-grid__program[data-width-tier="sliver"] .epg-cell-subtitle,
 .epg-grid__program[data-width-tier="narrow"] .epg-cell-meta,
@@ -386,7 +389,6 @@
   font-size: 13px;
 }
 
-/* Selected program state */
 .epg-grid__program[data-selected-program="true"] {
   border-color: var(--color-focus);
   background: var(--color-inverse-bg);
@@ -407,7 +409,6 @@
   color: rgba(17, 22, 29, 0.7);
 }
 
-/* Current time marker and line */
 .epg-current-time-marker {
   position: absolute;
   top: 0;
@@ -427,7 +428,6 @@
   pointer-events: none;
 }
 
-/* Clipped edges gradient masks */
 .epg-grid__program[data-clipped-start="true"] {
   mask-image: linear-gradient(to right, transparent 0px, black 12px);
   -webkit-mask-image: linear-gradient(to right, transparent 0px, black 12px);

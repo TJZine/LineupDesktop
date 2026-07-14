@@ -9,6 +9,7 @@ import {
 import {
   activateWorkflowRoute,
   applyWorkflowSettingsAction,
+  applyWorkflowSettingsValues,
   createWorkflowState,
 } from '../../renderer/workflow.js';
 import { applySupportBundleExportResult } from '../../renderer/supportBundleExport.js';
@@ -45,7 +46,12 @@ test('support bundle export result applies to the latest workflow state', async 
   );
 
   currentState = activateWorkflowRoute(
-    applyWorkflowSettingsAction(currentState, 'cycleGuideDensity'),
+    applyWorkflowSettingsValues(currentState, {
+      launchMode: 'windowed',
+      guideDensity: 'compact',
+      previewBadgesEnabled: true,
+      setupReminderEnabled: true,
+    }),
     'guide',
   );
   pendingExport.resolve({

@@ -56,6 +56,22 @@ after machine, profile, or password-manager changes. A future release plan must
 prove restore behavior, recovery UX, and credential cleanup before public
 distribution.
 
+Package 4 adds a separate, non-secret Desktop Settings record at
+`<appData>/lineup-desktop-settings.json`. Electron main alone resolves this
+path and owns serialized whole-record compare-and-swap reads and replacements.
+Writes use a same-directory mode-0600 temporary file and atomic rename; an
+unsupported schema version is neither rewritten nor replaced. The renderer
+holds only ephemeral renderer-safe Settings snapshots and has no filesystem,
+browser-storage, migration, or fallback-store access.
+
+Preload exposes exactly `settings.getSnapshot` and `settings.replace` on the
+existing `window.lineupDesktop` namespace. It validates exact request/result
+shapes and request-id echoing, catches invoke rejection, and never exposes raw
+Electron, filesystem paths, record contents, or exception detail. Main applies
+the existing shell sender, main-frame, and `lineup://shell` origin authorization
+before delegating to the Settings store. All expected failures resolve one
+fixed renderer-safe typed result rather than rejecting.
+
 ## Current Plex Domain Boundary
 
 RD-10 adds main-owned Plex library, auth, and discovery modules under

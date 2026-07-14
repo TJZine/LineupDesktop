@@ -155,6 +155,12 @@ export const LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL =
 export const LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL =
   'lineup:customChannels:setChannelVisibility' as const;
 
+export const LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL =
+  'lineup:settings:getSnapshot' as const;
+
+export const LINEUP_SETTINGS_REPLACE_CHANNEL =
+  'lineup:settings:replace' as const;
+
 /**
  * Known privileged renderer payload field names are denied at contract seams.
  * Review additions/removals with secret-flow and native-handle exposure impact.

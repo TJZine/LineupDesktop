@@ -9,10 +9,11 @@ export type ChannelSetupActionId =
   | 'selectAppendBuildMode'
   | 'selectReplaceBuildMode';
 
-export type SettingsSectionId = 'playback' | 'guide' | 'setup';
+import type { DesktopSettingsValues } from '../contracts/settings.js';
 
-export interface SettingsDraftState {
-  launchMode: 'windowed' | 'fullscreen-preview';
+export type SettingsSectionId = 'appearance' | 'guide' | 'recovery';
+
+export interface SettingsDraftState extends DesktopSettingsValues {
   guideDensity: 'comfortable' | 'compact';
   previewBadgesEnabled: boolean;
   setupReminderEnabled: boolean;
@@ -92,6 +93,13 @@ export function createSettingsDraftState(): SettingsDraftState {
   };
 }
 
+export function applyPersistedSettingsValues(
+  state: SettingsDraftState,
+  values: DesktopSettingsValues,
+): SettingsDraftState {
+  return { ...state, ...values };
+}
+
 export function createChannelSetupDraftState(): ChannelSetupDraftState {
   return {
     activeStepId: 'channels',
@@ -109,7 +117,7 @@ export function applySettingsAction(
     case 'cycleLaunchMode':
       return {
         ...state,
-        launchMode: state.launchMode === 'windowed' ? 'fullscreen-preview' : 'windowed',
+        launchMode: state.launchMode === 'windowed' ? 'fullscreen' : 'windowed',
       };
     case 'cycleGuideDensity':
       return {
@@ -168,49 +176,49 @@ export function createSettingsSections(
   const recoveryRepaired = persistedStatus?.recovery?.repaired === true;
   return [
     {
-      id: 'playback',
-      title: 'Desktop playback preview',
-      detail: 'Renderer-only defaults for the app-owned presentation surface.',
+      id: 'appearance',
+      title: 'Appearance',
+      detail: 'Choose how Lineup Desktop opens and how optional preview details appear.',
       items: [
         {
           id: 'launch-mode',
           label: 'Startup surface',
           valueLabel:
-            state.launchMode === 'windowed' ? 'Windowed' : 'Fullscreen presentation preview',
-          description: 'Changes this renderer session label only; no desktop preference is saved.',
+            state.launchMode === 'windowed' ? 'Windowed' : 'Fullscreen',
+          description: 'Opens the desktop window in the selected mode on every launch.',
         },
         {
           id: 'preview-badges',
           label: 'Preview badges',
           valueLabel: state.previewBadgesEnabled ? 'Shown' : 'Hidden',
-          description: 'Controls local preview markers for this session only.',
+          description: 'Shows optional quality and metadata badges in Guide, player, and setup previews.',
         },
       ],
     },
     {
       id: 'guide',
       title: 'Guide display',
-      detail: 'Local guide presentation choices that do not contact Plex or save guide data.',
+      detail: 'Tune the saved Guide presentation without changing channel or schedule data.',
       items: [
         {
           id: 'guide-density',
           label: 'Density',
           valueLabel: state.guideDensity === 'comfortable' ? 'Comfortable' : 'Compact',
-          description: 'Adjusts renderer guide spacing for this session only; no category color legend is used.',
-        },
-        {
-          id: 'setup-reminder',
-          label: 'Setup reminder',
-          valueLabel: state.setupReminderEnabled ? 'Shown' : 'Hidden',
-          description: 'Controls local channel setup reminder state for this session only.',
+          description: 'Changes row height, cell spacing, and visible schedule density.',
         },
       ],
     },
     {
-      id: 'setup',
+      id: 'recovery',
       title: 'Channel setup recovery',
-      detail: 'Persisted channel status from the main-owned setup and recovery seam.',
+      detail: 'Keep optional setup reminders and review the main-owned recovery state.',
       items: [
+        {
+          id: 'setup-reminder',
+          label: 'Setup reminder',
+          valueLabel: state.setupReminderEnabled ? 'Shown' : 'Hidden',
+          description: 'Shows an optional reminder when no channels exist; core setup paths remain available.',
+        },
         {
           id: 'setup-channel-count',
           label: 'Persisted channels',

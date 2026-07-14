@@ -63,7 +63,7 @@ export function renderSettingsDom(
             focusId = 'settings-setup-reminder';
           } else if (setting.id === 'support-bundle-export') {
             action = 'exportSupportBundle';
-            focusId = 'settings-support-bundle';
+            focusId = 'settings-export-support-bundle';
           }
 
           if (action !== null && focusId !== null) {
@@ -73,6 +73,8 @@ export function renderSettingsDom(
             row.className = 'settings-control-row';
             row.dataset.settingsAction = action;
             row.dataset.focusId = focusId;
+            row.disabled = document.documentElement.dataset.settingsSaving === 'true' &&
+              action !== 'exportSupportBundle';
 
             const labelContainer = document.createElement('div');
             labelContainer.className = 'settings-control-row__label-container';

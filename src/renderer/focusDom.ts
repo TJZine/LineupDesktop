@@ -67,6 +67,7 @@ export function registerRendererFocusTargets(
       id: focusId,
       route,
       order: 100 + index,
+      neighbors: focusId.startsWith('settings-') ? getSettingsNeighbors(focusId) : undefined,
     });
     registered.add(focusId);
   });
@@ -169,7 +170,12 @@ function registerOrderedButton(
   if (route === null || focusId === undefined) {
     return;
   }
-  focusRegistry.register({ id: focusId, route, order });
+  focusRegistry.register({
+    id: focusId,
+    route,
+    order,
+    neighbors: focusId.startsWith('settings-') ? getSettingsNeighbors(focusId) : undefined,
+  });
   registered.add(focusId);
 }
 
@@ -185,6 +191,9 @@ function plexActionFocusOrder(button: HTMLButtonElement, index: number): number 
 }
 
 function focusElementOrder(focusId: string, index: number): number {
+  if (focusId === 'settings-category-appearance') return 10;
+  if (focusId === 'settings-category-guide') return 11;
+  if (focusId === 'settings-category-recovery') return 12;
   if (focusId.startsWith('btn-profile-profile-')) return 10 + index / 1000;
   if (focusId === 'btn-profile-main') return 20;
   if (focusId.startsWith('btn-server-select-server-')) return 10 + index / 1000;
@@ -347,26 +356,26 @@ function getNumpadNeighbors(focusId: string): Partial<Record<FocusDirection, str
 
 function getSettingsNeighbors(focusId: string): Partial<Record<FocusDirection, string>> | undefined {
   switch (focusId) {
-    case 'settings-cat-playback':
-      return { right: 'settings-launch-mode', down: 'settings-cat-guide' };
-    case 'settings-cat-guide':
-      return { right: 'settings-guide-density', up: 'settings-cat-playback', down: 'settings-cat-setup' };
-    case 'settings-cat-setup':
-      return { right: 'settings-support-bundle', up: 'settings-cat-guide', down: 'settings-setup' };
-    case 'settings-setup':
-      return { up: 'settings-cat-setup', down: 'settings-player' };
+    case 'settings-category-appearance':
+      return { right: 'settings-launch-mode', down: 'settings-category-guide' };
+    case 'settings-category-guide':
+      return { right: 'settings-guide-density', up: 'settings-category-appearance', down: 'settings-category-recovery' };
+    case 'settings-category-recovery':
+      return { right: 'settings-setup-reminder', up: 'settings-category-guide', down: 'settings-setup-reminder' };
+    case 'settings-open-channel-setup':
+      return { left: 'settings-category-recovery', up: 'settings-setup-reminder', down: 'settings-export-support-bundle' };
     case 'settings-player':
-      return { up: 'settings-setup' };
+      return { up: 'settings-open-channel-setup' };
     case 'settings-launch-mode':
-      return { left: 'settings-cat-playback', down: 'settings-preview-badges' };
+      return { left: 'settings-category-appearance', up: 'settings-category-recovery', down: 'settings-preview-badges' };
     case 'settings-preview-badges':
-      return { left: 'settings-cat-playback', up: 'settings-launch-mode' };
+      return { left: 'settings-category-appearance', up: 'settings-launch-mode' };
     case 'settings-guide-density':
-      return { left: 'settings-cat-guide', down: 'settings-setup-reminder' };
+      return { left: 'settings-category-guide', up: 'settings-category-recovery' };
     case 'settings-setup-reminder':
-      return { left: 'settings-cat-guide', up: 'settings-guide-density' };
-    case 'settings-support-bundle':
-      return { left: 'settings-cat-setup' };
+      return { left: 'settings-category-recovery', up: 'settings-category-recovery', down: 'settings-open-channel-setup' };
+    case 'settings-export-support-bundle':
+      return { left: 'settings-category-recovery', up: 'settings-open-channel-setup' };
     default:
       return undefined;
   }
