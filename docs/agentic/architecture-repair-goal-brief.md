@@ -126,7 +126,8 @@ be preserved without new bridge behavior.
 
 Create or update a durable active plan in `docs/plans/` only if fresh-session
 handoff memory is needed. Follow `docs/agentic/plan-authoring-standard.md` and
-include `## Architecture Health` before implementation-unit selection.
+record current-unit file-shape evidence and cohesion dispositions in
+`## Architecture And Invariants` before implementation-unit selection.
 
 The plan must define scope, non-goals, files in and out, seam decisions,
 invariants, verification classification, exact commands, acceptance criteria,

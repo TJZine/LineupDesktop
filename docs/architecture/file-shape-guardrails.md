@@ -19,7 +19,7 @@ and present requirements decide whether code stays together or is extracted.
   ```
 
 - A file over 800 lines, a named hotspot below, or a composition root requires
-  fresh `gpt-5.6-sol high` architecture review before closeout.
+  a fresh `reviewer` architecture review before closeout.
 - Line count alone never requires extraction. Keep behavior together when it
   shares the owner's invariants, state, lifecycle, and reason to change.
 - Extract only a distinct current policy, lifecycle, trust boundary, or

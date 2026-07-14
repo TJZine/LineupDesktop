@@ -55,16 +55,15 @@ are complete or explicitly blocked.
   instruction makes that delegated task obsolete.
 - `scope-load`: confirm Tier 3 routing, load authority docs, identify the exact
   target, initialize `update_plan`, and create or refresh a gitignored local run
-  bundle when repeated handoff context is likely. Start the Architecture Health
-  preflight by identifying current owner hotspots and the file-shape guardrail
-  surface before plan authoring.
+  bundle when repeated handoff context is likely. Start architecture preflight
+  by identifying current owner hotspots and the file-shape guardrail surface
+  before plan authoring.
 - `plan`: route plan authoring through a tracked `planner` pass using
   `lineup-desktop-feature-plan`. The controller may resolve controller-only
   routing decisions, but it must not replace the planner for Tier 3 plan
-  authoring. The tracked plan must include an `## Architecture Health` section
-  with file-shape evidence, maintainability verification, and cohesion-based
-  architecture dispositions for files governed by
-  `docs/architecture/file-shape-guardrails.md`.
+  authoring. The tracked plan's `## Architecture And Invariants` section must
+  include file-shape evidence, maintainability verification, and cohesion-based
+  dispositions for current-unit files governed by the file-shape guardrails.
 - `plan-review`: use a fresh read-only `reviewer` pass. Do not implement while
   material plan findings remain.
 - `plan-revise`: route findings back to planning. Require a clean final review

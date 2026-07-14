@@ -341,12 +341,12 @@ throughput. Do not replace the default workflow with always-on delegation.
 - Use `docs_researcher` for official external documentation checks with a clear
   deliverable.
 - Use `planner` for durable planning artifacts and execution-ready handoffs.
-- Use `worker` (`gpt-5.6-sol medium`) by default for approved, bounded
+- Use `worker` by default for approved, bounded
   implementation units with disjoint write scopes.
-- Use `worker_sol_low` (`gpt-5.6-sol low`) for an approved bounded unit that
+- Use `worker_sol_low` for an approved bounded unit that
   still needs repository comprehension but no unresolved architecture or proof
   decision.
-- Use `worker_luna` (`gpt-5.6-luna high`) only when an approved plan or
+- Use `worker_luna` only when an approved plan or
   handoff explicitly declares an exact, bounded, cheap-to-verify unit eligible
   and supplies direct verification plus stop/escalation rules.
 - Use `reviewer` for read-only adversarial review of plans, diffs, workflow
@@ -356,6 +356,8 @@ throughput. Do not replace the default workflow with always-on delegation.
   docs_researcher, reviewer, or monitor.
 - Do not let a worker invent architecture seams, broaden scope, or choose
   verification depth. This applies equally to every worker role.
+- Read exact model and reasoning-effort settings only from the selected role's
+  `.codex/agents/*.toml`; do not repeat them in plans or workflow prose.
 - Once a delegated planner is active, do not draft a competing local plan unless
   the planner blocks, fails, or is explicitly abandoned.
 - Treat a wait timeout from a planner, worker, reviewer, or monitor as

@@ -22,11 +22,11 @@ Delegate only after the plan names:
 - required verification and expected outcome
 - stop/replan conditions
 
-Use `worker` (`gpt-5.6-sol medium`) by default. Use `worker_sol_low`
-(`gpt-5.6-sol low`) when the frozen unit still needs repository comprehension
-but no design judgment. Use `worker_luna` (`gpt-5.6-luna high`) only for exact,
-repeatable, cheap-to-verify work. Both lower-cost roles require explicit plan
-selection, direct verification, and stop/escalation rules.
+Use `worker` by default. Use `worker_sol_low` when the frozen unit still needs
+repository comprehension but no design judgment. Use `worker_luna` only for
+exact, repeatable, cheap-to-verify work. Both lower-cost roles require explicit
+plan selection, direct verification, and stop/escalation rules. Read exact model
+and effort settings from the selected role's TOML.
 
 Worker slices must have disjoint write scopes. Keep architecture decisions,
 integration, final verification, and commit judgment in the controller session.

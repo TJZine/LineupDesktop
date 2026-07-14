@@ -1,243 +1,120 @@
 # Plan Authoring Standard
 
-Use this standard for serious Lineup Desktop plans that must survive a fresh
-session handoff. The goal is decision-complete planning, not pseudo-code and not
-ceremony for its own sake.
+Use a tracked plan only when serious Lineup Desktop work must survive a fresh
+session. The plan freezes expensive decisions; it does not narrate discovery or
+specify every helper.
 
-When a tracked plan in `docs/plans/` is the current durable handoff surface,
-mark it before the first `##` heading with this exact line:
+## Activation And Metadata
+
+Before the first `##` heading, an active tracked plan declares:
 
 ```md
 **Plan Status:** active
+**Task family:** feature/design
+**Tier:** Tier 1 | Tier 2 | Tier 3
 ```
 
-`npm run verify:docs` uses that marker to decide whether the plan must satisfy
-the full active-plan structure.
-
-## Required Classification
-
-Every serious tracked plan must declare:
-
-- `**Task family:** feature/design`
-
-Do not declare cleanup subtypes or import upstream cleanup program package
-mechanics, detector ids, score artifacts, or checklist status as Desktop
-authority. If this repository later creates its own maintenance track, add it in
-a separate reviewed workflow pass.
+Tier 1 work normally stays local. Tier 2 uses a bounded plan when handoff value
+justifies it. Tier 3 routes through the feature-quality loop.
 
 ## Required Sections
 
-Active serious plans must include these exact headings:
+Active plans use these exact headings:
 
 1. `## Goal`
 2. `## Non-Goals`
-3. `## Parent Architecture Alignment`
-4. `## Required Reading`
-5. `## Required Skills`
-6. `## Evidence And Discovery`
-7. `## Impact Snapshot`
-8. `## Files In Scope`
-9. `## Files Out Of Scope`
-10. `## Planner Self-Check`
-11. `## Architecture Seam Decision Gate`
-12. `## Verification Commands`
-13. `## Acceptance Criteria`
-14. `## Replan Triggers`
-15. `## Rollback Notes`
-16. `## Commit Checkpoints`
+3. `## Architecture And Invariants`
+4. `## Files In Scope`
+5. `## Files Out Of Scope`
+6. `## Execution Packages`
+7. `## Verification Commands`
+8. `## Acceptance Criteria`
+9. `## Replan Triggers`
 
-Add optional sections for current-unit execution packets, interface snippets, or
-manual QA scripts only when they materially reduce implementation or review
-risk.
+Add rollback and commit checkpoints when the work has a meaningful partial-state
+or multi-commit risk. Add reading, evidence, import, or handoff sections only
+when they reduce a real implementation or review risk.
 
-Tier 3 active plans must also include `## Architecture Health` before
-implementation unit selection. Lower-tier plans should add that section only
-when their actual diff touches file shape, module topology, or known owner
-hotspots.
+## Decision-Complete Content
 
-## Fresh-Session Rules
+A fresh implementer must not invent product behavior, ownership, Electron/IPC or
+security policy, persistence, playback, packaging, imports, or proof depth.
+Record:
 
-- Assume the implementer starts with no task memory beyond tracked docs.
-- Include the minimum reading order needed to execute safely.
-- Add a freshness gate: if referenced files, ownership, dependency behavior, or
-  docs changed materially since the plan was written, update or re-review the
-  plan before editing.
-- Do not continue through contradicted assumptions because intent seems obvious.
-- Keep the plan decision-complete at seam, scope, ownership, and verification
-  level. Leave ordinary local coding choices to the implementer.
-- A fresh session should not need to invent Electron, IPC, security, playback,
-  persistence, packaging, import, or verification policy.
+- the current goal, explicit non-goals, public behavior, and trust boundaries;
+- the chosen owner seam, dependency direction, invariants, and forbidden
+  shortcuts;
+- exact files for the current execution unit and important adjacent files that
+  require replan before editing;
+- exact verification commands, expected outcomes, acceptance criteria, and
+  stop/replan conditions; and
+- rollback/commit intent when partial completion could create ambiguity.
 
-## Evidence And Discovery
+Future packages may remain less detailed until they become current. Before
+delegation, promote the current package to exact file scope and re-review the
+plan if ownership or contracts changed. A local execution packet may summarize
+the current unit, but it cannot contradict or replace tracked scope and policy.
 
-Plans should record enough evidence for a fresh session to see why the chosen
-scope and owner are correct:
+## Evidence, Skills, And Freshness
 
-- source files, symbols, docs, and contracts inspected
-- Codanna or repo-search evidence when code or repo-doc discovery matters
-- direct-read fallback when a preferred tool is unavailable, stale, too noisy, or
-  not the right surface
-- upstream Lineup source paths when copied/adapted code is in scope
-- import-ledger obligations
-- official external docs checks when changing Electron, dependency, platform,
-  packaging, signing, native player, API, or agent-control behavior
+Record only evidence that justifies a decision: inspected owners/contracts,
+targeted repository search or impact results, direct-read fallback, official
+platform guidance when external behavior changes, and upstream paths/import
+ledger obligations when code or assets are adapted. Do not preserve a search
+transcript.
 
-Use this evidence mini-template when the work is non-trivial:
+Name only the skills that constrain the task. Serious work commonly uses
+`execution-plan-authoring`, `verification-strategy`, the matching boundary and
+quality/test skills, `review-request`, and `closeout-verification`.
 
-- `semantic_search_with_context`: result summary or explicit fallback note
-- `semantic_search_docs` or repo-doc search: result summary or explicit fallback
-  note when repo-doc context matters
-- impact analysis: result summary or note that it was not required for the
-  current risk level
-- direct reads / `rg`: what was read and why fallback was needed
-- official docs: source checked and date checked when external behavior matters
+Before each package, compare current source, contracts, ownership, dependencies,
+and relevant docs with the plan. Refresh and re-review after a material
+contradiction; do not continue because the intended answer seems obvious.
 
-The evidence trail should justify decisions. It should not become a transcript.
+## Architecture And YAGNI Gate
 
-## Required Skills
+State whether the current unit changes an owner's responsibility. Apply
+`docs/architecture/file-shape-guardrails.md`: line count triggers attention, not
+decomposition. For each touched attention owner, record the compact cohesion
+disposition and required independent review. Extract only a distinct current
+responsibility, lifecycle, trust boundary, policy, or consumer into an owner
+with meaningful behavior.
 
-Name the project skills that should shape the task and why they apply. At
-minimum, serious Desktop plans usually need:
-
-- `execution-plan-authoring` for plan shape and decision completeness
-- `verification-strategy` when proof depth is not obvious
-- one or more boundary skills when the plan touches architecture, persistence,
-  Plex, UI, playback, packaging, or Electron process ownership
-- `review-request` when the next gate is read-only adversarial review
-- `closeout-verification` before staging, committing, or calling the work done
-
-Do not list skills as decoration. If a skill is named, its constraints should be
-visible in the plan.
-
-## Impact Snapshot
-
-State the expected blast radius before implementation:
-
-- owners that may change
-- public contracts that may change
-- dependency, build-tool, configuration, or lockfile changes and why they are
-  needed now
-- commands/tests/docs that must change
-- user-visible or runtime behavior that must not change
-- local-only artifacts that must stay untracked
-
-If more than one owner boundary is implicated, say whether the first execution
-unit remains single-owner or why the cross-boundary work cannot be split safely.
-
-## Architecture Health
-
-State whether the plan changes an existing owner's responsibility. For Tier 3
-work, include file-shape evidence from
-`docs/architecture/file-shape-guardrails.md`, affected owner hotspots, the
-compact cohesion-based architecture disposition, and the maintainability
-evidence route. Line count triggers attention or fresh review; it does not
-pre-authorize future growth or mandate decomposition.
-
-## Planner Self-Check
-
-Before treating a plan as implementation-ready, answer:
-
-1. Is any product, architecture, ownership, dependency, or verification decision
-   still unresolved?
-2. Does the plan depend on adjacent files needing contract or type changes that
-   are not in scope?
-3. Did the plan freeze any file out of scope while still relying on hidden
-   wiring inside it?
-4. Did the plan record the evidence path and fallback reads?
-5. Is the work assigned to the repo-preferred owner, or is it growing a hotspot?
-6. Did Tier 3 work include Architecture Health evidence and a cohesion-based
-   disposition for every touched owner hotspot?
-7. Would a fresh implementer need to invent security, IPC, playback,
-   persistence, packaging, import, or verification policy?
-8. Did the plan record exact verification commands, expected outcomes, and
-   explicit stop/replan triggers?
-
-If any answer exposes a live ambiguity, resolve it before implementation.
-
-## Architecture Seam Decision Gate
-
-- Name the chosen owner seam before implementation steps are locked.
-- Do not hide an unresolved architecture seam behind "mechanical wiring."
-- If adjacent contracts or ownership boundaries must change, include those files
-  in scope or explain how the execution unit works without changing them.
-- State forbidden shortcuts, such as broad RPC bridges, renderer privilege
-  concessions, compatibility shims, temporary adapters, raw secret exposure, or
-  old upstream path preservation.
-- Stop and replan when discovery invalidates the chosen seam.
-
-## Invariants And Scope Rules
-
-- Name exact files in scope and out of scope.
-- State which architecture boundary the task advances.
-- Preserve renderer privilege limits, preload narrowness, main/helper ownership,
-  redaction, and import provenance whenever implicated.
-- For dependency or build-tool changes, name the owner, reason, lockfile impact,
-  security/licensing/provenance considerations, and rollback or revisit trigger.
-- For UI/runtime work, include preservation contracts for focus, keyboard/remote
-  behavior, timers/listeners, accessibility, motion, media surface lifecycle, and
-  startup/shutdown ordering when relevant.
-- For source imports, update the import ledger before or with the import.
-- Do not add fallback paths, compatibility shims, or temporary adapters unless
-  the plan names one owner, reason, verification, and removal trigger.
+Do not plan forwarding wrappers, one-implementation interfaces, generic service
+layers, compatibility shims, speculative extension points, dependencies, or
+fallbacks without a demonstrated present requirement, one owner, proof, and a
+removal/revisit trigger.
 
 ## Verification Classification
 
-Each active serious plan must include exactly one exact marker:
+Include exactly one marker under `## Verification Commands`:
 
 - `new regression/contract test required`
 - `existing coverage sufficient`
 - `broader integration/manual proof required`
 - `no new automated test needed`
 
-The plan must name exact commands and expected outcomes. When the classification
-is `existing coverage sufficient`, name the existing proof target. When the
-classification is `broader integration/manual proof required` or
-`no new automated test needed`, name the manual, integration, smoke,
-static-analysis, or source-audit proof surface.
+Name the exact automated, manual, smoke, static-analysis, or source-audit proof
+and its expected outcome. Protect stable behavior and public seams; avoid tests
+that only restate private helpers or giant output snapshots.
 
-Do not default every plan to fail-first TDD. New tests are required when they
-protect a stable behavior or contract seam. Avoid tests that only restate helper
-internals likely to move during implementation.
+## Worker And Review Routing
 
-## Current-Unit Execution Packets
+Use `worker` by default. Select `worker_sol_low` only when ownership is frozen
+but repository comprehension remains material. Select `worker_luna` only for a
+controller-approved, exact, repeatable, cheap-to-verify unit with frozen files,
+invariants, proof, and stop conditions. The controller integrates and reruns
+verification.
 
-When an implementer needs more current-unit detail than the master plan should
-carry, emit a bounded execution packet instead of expanding the whole plan into
-pseudo-code.
+Require independent review when risk, novelty, blast radius, or weak evidence
+makes hidden risk substantial. Repeat only after a material finding or material
+review-surface change. Exact model and reasoning settings come only from the
+selected role TOML.
 
-The packet should name:
+## Closeout
 
-- exact execution unit
-- files in scope and out of scope
-- constraints and invariants
-- verification commands plus expected outcomes
-- explicit stop/replan conditions
-
-The packet may live inside a `NEXT_SESSION_HANDOFF` or a local run-bundle
-artifact. It does not replace the tracked plan as the durable source of scope,
-seam, and verification policy.
-
-## Commit Checkpoints
-
-Plans should state whether the execution unit should produce a focused commit.
-Use conventional commits. Keep workflow/control-plane changes separate from
-product implementation when practical, and do not stage unrelated local changes.
-
-For Tier 3 work, prefer one commit per reviewed execution unit unless the plan
-records why a no-commit handoff is safer.
-
-## Anti-Patterns To Avoid
-
-- vague scope such as "touch whatever is needed"
-- unresolved seams hidden inside "mechanical wiring"
-- pseudo-code for every future helper instead of seam and invariant decisions
-- broad framework setup that cannot be reviewed for behavior
-- raw Electron, Node, filesystem, token, auth-header, or native-handle access in
-  renderer-facing contracts
-- broad preload RPC or arbitrary channel strings from renderer code
-- copied upstream Lineup code without an import-ledger row
-- local-only artifact paths in tracked plan instructions when relative tracked
-  references are enough
-- brittle line-number anchoring without a freshness guard
-- verification commands without expected outcomes
-- handoffs that require the next session to reconstruct scope from prose
+Keep workflow/control-plane changes separate from product implementation when
+practical and use conventional commits. Before closeout, update current
+architecture/public-contract docs made stale by the change, inspect the diff,
+run risk-matched verification, preserve unrelated work, and follow the runbook's
+active-plan archival policy.

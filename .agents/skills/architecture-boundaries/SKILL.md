@@ -48,5 +48,5 @@ Decide file shape from present responsibilities, not a target line count:
 - For a touched owner over 500 lines, record `Owner`, `Existing responsibility`,
   `New behavior`, `Decision: cohesive growth | extract`, and evidence.
 - For a file over 800 lines, a named hotspot, or a composition root, require a
-  fresh `gpt-5.6-sol high` architecture review. Size triggers review, never an
+  fresh `reviewer` architecture review. Size triggers review, never an
   automatic split or failure.

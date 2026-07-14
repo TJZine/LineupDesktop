@@ -13,36 +13,23 @@ Read:
 2. `docs/AGENTIC_DEV_WORKFLOW.md`
 3. the active plan or handoff, if one exists
 
-Use the smallest capable role/model:
+Select the smallest capable role:
 
-- `planner`: `gpt-5.6-sol high` for Tier 3 plans and durable handoffs.
-- `reviewer`: `gpt-5.6-sol high` for adversarial plan, implementation,
-  workflow, security, and boundary review.
-- `worker`: `gpt-5.6-sol medium`; the default for normal approved bounded
-  implementation units.
-- `worker_sol_low`: `gpt-5.6-sol low`; use for approved bounded units that need
-  repository comprehension but no unresolved design or verification judgment.
-- `worker_luna`: `gpt-5.6-luna high`; use only when an approved plan or
-  handoff explicitly declares an exact, bounded, cheap-to-verify unit eligible
-  and supplies stop/escalation conditions.
-- `docs_researcher`: `gpt-5.6-luna high` for official framework/API checks.
-- `explorer`: keep `gpt-5.3-codex-spark xhigh` for latency-sensitive read-only
-  repo evidence; use `explorer_fallback` at `gpt-5.6-luna xhigh` when Spark is
-  unavailable or constrained.
-- `monitor`: keep `gpt-5.3-codex-spark low`; use `monitor_fallback` at
-  `gpt-5.6-luna low` when Spark is unavailable or constrained.
+- `planner`: Tier 3 plans and durable handoffs.
+- `reviewer`: adversarial plan, implementation, workflow, security, or boundary
+  review when the review gate is met.
+- `worker`: normal approved bounded implementation; this is the default writer.
+- `worker_sol_low`: approved bounded work with settled ownership that still
+  needs repository comprehension but no new design or verification judgment.
+- `worker_luna`: an explicitly eligible, exact, repeatable, cheap-to-verify unit
+  with frozen files, invariants, direct proof, and stop/escalation conditions.
+- `docs_researcher`: read-only official framework or API research.
+- `explorer`: latency-sensitive read-only repository evidence; use
+  `explorer_fallback` only when the primary role is unavailable or constrained.
+- `monitor`: waits and polling; use `monitor_fallback` only when needed.
 
-For routine work, preserve the tracked reasoning effort, including Luna
-`high` for `worker_luna` and `docs_researcher` and Luna `xhigh` for
-`explorer_fallback`. Recommend direct Sol `xhigh` only for unusually difficult
-Electron IPC/security, native playback, storage/secrets, packaging/release,
-broad-import, or workflow-harness work.
-Do not add a tracked Luna Max role. Reserve `max` for explicit, measured
-quality-first cases where lower effort is insufficient; do not make `max` or
-host-specific `ultra` a tracked default.
-
-Use `gpt-5.5` at the same effort as the reliability fallback for Sol/Luna
-roles when GPT-5.6 is unavailable. Use `gpt-5.4-mini` only for low-risk,
-cost-sensitive work that would otherwise use a lightweight Luna role.
-Do not add model guidance to routine handoffs unless the user asks or the plan
-is high risk.
+Treat `.codex/agents/<role>.toml` as the sole authority for exact model,
+reasoning effort, sandbox, and fallback configuration. Read and report that
+configuration when a handoff requires it; do not duplicate exact values in
+plans, prompts, or workflow docs. Add or change a tracked role only after current
+official guidance and representative evidence demonstrate a recurring need.

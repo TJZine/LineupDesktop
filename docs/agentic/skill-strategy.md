@@ -28,19 +28,21 @@ improving fresh-chat reliability.
 
 Use the smallest role set that keeps work reliable:
 
-- `explorer`: `gpt-5.3-codex-spark xhigh` for read-only evidence and impact
-  discovery; `explorer_fallback` uses `gpt-5.6-luna xhigh`
-- `docs_researcher`: `gpt-5.6-luna high` for read-only official
-  documentation checks
-- `planner`: `gpt-5.6-sol high` for durable plans and handoff artifacts
-- `worker`: `gpt-5.6-sol medium` for normal bounded implementation units
-- `worker_sol_low`: `gpt-5.6-sol low` for frozen units that still need codebase
-  comprehension but no architecture or verification judgment
-- `worker_luna`: `gpt-5.6-luna high` for explicitly eligible, exact,
-  bounded, cheap-to-verify implementation units
-- `reviewer`: `gpt-5.6-sol high` for read-only adversarial review
-- `monitor`: `gpt-5.3-codex-spark low` for waits, polling, and status checks;
-  `monitor_fallback` uses `gpt-5.6-luna low`
+- `explorer`: read-only evidence and impact discovery; use
+  `explorer_fallback` only when the primary role is unavailable or constrained
+- `docs_researcher`: read-only official documentation checks
+- `planner`: durable plans and handoff artifacts
+- `worker`: normal bounded implementation units
+- `worker_sol_low`: frozen units that still need repository comprehension but
+  no architecture or verification judgment
+- `worker_luna`: explicitly eligible, exact, bounded, cheap-to-verify units
+- `reviewer`: read-only adversarial review
+- `monitor`: waits, polling, and status checks; use `monitor_fallback` only when
+  the primary role is unavailable or constrained
+
+`.codex/agents/*.toml` is the sole authority for exact model, reasoning effort,
+sandbox, and fallback configuration. Do not duplicate those values here or in
+plans and prompts.
 
 Desktop does not define a dedicated maintenance-worker role yet. If this repo
 later needs a maintenance backlog, add that role in a separate reviewed
@@ -87,6 +89,8 @@ Reusable Lineup workflow and boundary skills adapted for Desktop:
 - `review-adjudication`
 - `review-request`
 - `ui-composition-patterns`
+- `typescript-quality-boundaries`
+- `typescript-test-design`
 - `verification-strategy`
 
 ## Legacy Skill Adaptation Audit
