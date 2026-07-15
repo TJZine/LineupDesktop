@@ -58,7 +58,7 @@ test('settings persistence maps non-missing read failures to storage unavailable
   await assert.rejects(() => store.loadSnapshot(), hasCode('storage-unavailable'));
 });
 
-test('settings persistence repairs corrupt revision zero with exact atomic record and 0600 mode', async (context) => {
+test('settings persistence repairs corrupt revision zero with an exact atomic record', async (context) => {
   const directory = await createSettingsWorkspace(context);
   const file = path.join(directory, 'settings.json');
   await fs.writeFile(file, '{bad');
@@ -69,7 +69,54 @@ test('settings persistence repairs corrupt revision zero with exact atomic recor
   assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), {
     schemaVersion: 1, revision: 1, values: nextValues,
   });
-  assert.equal((await fs.stat(file)).mode & 0o777, 0o600);
+  if (os.platform() !== 'win32') {
+    assert.equal((await fs.stat(file)).mode & 0o777, 0o600);
+  }
+});
+
+test('settings persistence requests private temp-file permissions before atomic publication', async () => {
+  const settingsFilePath = path.join('app-data', 'settings.json');
+  const operations: string[] = [];
+  let writtenFilePath: string | null = null;
+  let chmodFilePath: string | null = null;
+  let publishedSourcePath: string | null = null;
+  let publishedDestinationPath: string | null = null;
+  let writeMode: number | null = null;
+  let chmodMode: number | null = null;
+  const fileSystem: DesktopSettingsFileSystem = {
+    readFile: async () => {
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    },
+    mkdir: async () => undefined,
+    writeFile: async (filePath, _content, options) => {
+      operations.push('write');
+      writtenFilePath = filePath;
+      writeMode = options.mode;
+    },
+    chmod: async (filePath, mode) => {
+      operations.push('chmod');
+      chmodFilePath = filePath;
+      chmodMode = mode;
+    },
+    rename: async (sourcePath, destinationPath) => {
+      operations.push('rename');
+      publishedSourcePath = sourcePath;
+      publishedDestinationPath = destinationPath;
+    },
+    unlink: async () => undefined,
+  };
+
+  const store = new DesktopSettingsStore({ settingsFilePath, fileSystem, processId: 7 });
+  await store.replace(0, { ...DEFAULT_DESKTOP_SETTINGS_VALUES });
+
+  assert.deepEqual(operations, ['write', 'chmod', 'rename']);
+  assert.notEqual(writtenFilePath, settingsFilePath);
+  assert.equal(path.dirname(writtenFilePath ?? ''), path.dirname(settingsFilePath));
+  assert.equal(writeMode, 0o600);
+  assert.equal(chmodFilePath, writtenFilePath);
+  assert.equal(chmodMode, 0o600);
+  assert.equal(publishedSourcePath, writtenFilePath);
+  assert.equal(publishedDestinationPath, settingsFilePath);
 });
 
 test('settings persistence rejects unsupported versions and stale revisions without rewriting', async (context) => {
