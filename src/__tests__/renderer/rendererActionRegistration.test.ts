@@ -59,6 +59,8 @@ class TestElement {
       }
       if (selector.includes('data-guide-program-action') && current.dataset.guideProgramAction !== undefined) return current;
       if (selector.includes('data-guide-action') && current.dataset.guideAction !== undefined) return current;
+      if (selector.includes('data-overlay-channel-id') && current.dataset.overlayChannelId !== undefined) return current;
+      if (selector === '[data-overlay]' && current.dataset.overlay !== undefined) return current;
       if (selector === '[data-staged-owner]' && current.dataset.stagedOwner !== undefined) {
         return current;
       }
@@ -95,6 +97,128 @@ class TestElement {
     return this.attributes.get(name) ?? null;
   }
 }
+
+test('player actions use route-owned overlays while query-shaped bare presentation opens OSD exactly once', () => {
+  withTestHTMLElement(() => {
+    const documentRef = new TestDocument();
+    const presentation = new TestElement();
+    presentation.dataset.overlayAction = 'openOsd';
+    const playerScreen = new TestElement();
+    playerScreen.id = 'screen-player';
+    const overlay = new TestElement(); overlay.dataset.overlay = 'playerOsd';
+    const retry = new TestElement(); retry.dataset.overlayAction = 'retryPlayer';
+    const retryCopy = new TestElement(); retry.append(retryCopy);
+    const guide = new TestElement(); guide.dataset.routeAction = 'openGuide';
+    const audioHost = new TestElement();
+    const audioRow = new TestElement(); audioRow.className = 'playback-options__row';
+    audioRow.dataset.trackId = 'audio-alt'; audioRow.dataset.focusId = 'overlay-audio-track-audio-alt';
+    const audioCopy = new TestElement(); audioRow.append(audioCopy); audioHost.append(audioRow);
+    const miniHost = new TestElement();
+    const miniRow = new TestElement(); miniRow.dataset.overlayChannelId = 'two';
+    const miniCopy = new TestElement(); miniRow.append(miniCopy); miniHost.append(miniRow);
+    overlay.append(retry); overlay.append(guide); overlay.append(audioHost); overlay.append(miniHost);
+    playerScreen.append(overlay);
+    documentRef.append(presentation);
+    documentRef.append(playerScreen);
+    const calls: string[] = [];
+    const dom = emptyRendererDomBindings();
+    dom.playerPresentationElement = presentation as unknown as HTMLElement;
+    dom.overlayActionButtons = [presentation, retry] as unknown as HTMLButtonElement[];
+    dom.routeActionButtons = [guide as unknown as HTMLButtonElement];
+    dom.overlayAudioOptionsElement = audioHost as unknown as HTMLElement;
+    dom.overlayMiniGuideElement = miniHost as unknown as HTMLElement;
+    registerRendererActions(dom, documentRef as unknown as Document, {
+      activateRoute: () => undefined,
+      applyRouteAction: (action) => calls.push(`route:${action}`),
+      applySettingsAction: () => undefined,
+      applyChannelSetupAction: () => undefined,
+      applyChannelCommitAction: () => undefined,
+      applyEpgAction: () => undefined,
+      applyOverlayAction: (action) => calls.push(`overlay:${action}`),
+      applyPlexRuntimeAction: () => undefined,
+      setPlexHomeUserPin: () => undefined,
+      setPlexSearchQuery: () => undefined,
+      selectPlexHomeUser: () => undefined,
+      selectPlexServer: () => undefined,
+      selectPlexSection: () => undefined,
+      openPlexMetadata: () => undefined,
+      focusElement: () => undefined,
+      toggleFullscreen: () => undefined,
+      selectAudioTrack: (trackId, focusId) => calls.push(`audio:${trackId}:${focusId}`),
+      selectSubtitleTrack: () => undefined,
+      tuneOverlayChannel: (channelId) => calls.push(`mini:${channelId}`),
+    });
+    retryCopy.click();
+    guide.click();
+    audioCopy.click();
+    miniCopy.click();
+    presentation.click();
+    assert.deepEqual(calls, [
+      'overlay:retryPlayer', 'route:openGuide',
+      'audio:audio-alt:overlay-audio-track-audio-alt', 'mini:two', 'overlay:openOsd',
+    ]);
+
+    retry.setAttribute('aria-disabled', 'true');
+    retry.setAttribute('aria-busy', 'true');
+    retry.dataset.overlayBusyFocusCustody = 'true';
+    guide.setAttribute('aria-disabled', 'true');
+    audioRow.setAttribute('aria-disabled', 'true');
+    miniRow.setAttribute('aria-disabled', 'true');
+    retryCopy.click();
+    guide.click();
+    audioCopy.click();
+    miniCopy.click();
+    const focusDom = emptyRendererDomBindings();
+    focusDom.focusableElements = [retry as unknown as HTMLElement];
+    clickFocusedRendererElement({ activeRoute: 'player', activeId: 'overlay-player-retry' }, focusDom);
+    assert.deepEqual(calls, [
+      'overlay:retryPlayer', 'route:openGuide',
+      'audio:audio-alt:overlay-audio-track-audio-alt', 'mini:two', 'overlay:openOsd',
+    ]);
+
+    retry.setAttribute('aria-disabled', 'false');
+    guide.setAttribute('aria-disabled', 'false');
+    audioRow.setAttribute('aria-disabled', 'false');
+    miniRow.setAttribute('aria-disabled', 'false');
+    retry.click();
+    guide.click();
+    audioRow.click();
+    miniRow.click();
+    assert.deepEqual(calls.slice(-4), [
+      'overlay:retryPlayer', 'route:openGuide',
+      'audio:audio-alt:overlay-audio-track-audio-alt', 'mini:two',
+    ]);
+  });
+});
+
+test('direct route actions guard hidden inert native-disabled and aria-disabled activation', () => {
+  withTestHTMLElement(() => {
+    const documentRef = new TestDocument();
+    const player = new TestElement();
+    const guide = new TestElement();
+    guide.dataset.routeAction = 'openGuide';
+    player.append(guide);
+    documentRef.append(player);
+    const calls: string[] = [];
+    const dom = emptyRendererDomBindings();
+    dom.routeActionButtons = [guide as unknown as HTMLButtonElement];
+    registerRendererActions(dom, documentRef as unknown as Document, createActionHandlers(calls));
+
+    guide.click();
+    guide.disabled = true;
+    guide.click();
+    guide.disabled = false;
+    guide.setAttribute('aria-disabled', 'true');
+    guide.click();
+    guide.setAttribute('aria-disabled', 'false');
+    player.setAttribute('inert', '');
+    guide.click();
+    player.attributes.delete('inert');
+    player.setAttribute('hidden', '');
+    guide.click();
+    assert.deepEqual(calls, ['route:openGuide']);
+  });
+});
 
 test('renderer action registration delegates dynamic Guide state and program controls', () => {
   withTestHTMLElement(() => {
@@ -172,6 +296,29 @@ class TestDocument extends TestElement {
     };
     return search(this);
   }
+}
+
+function createActionHandlers(calls: string[]): Parameters<typeof registerRendererActions>[2] {
+  return {
+    activateRoute: () => undefined,
+    applyRouteAction: (action) => calls.push(`route:${action}`),
+    applySettingsAction: () => undefined,
+    applyChannelSetupAction: () => undefined,
+    applyChannelCommitAction: () => undefined,
+    applyEpgAction: () => undefined,
+    applyOverlayAction: () => undefined,
+    applyPlexRuntimeAction: () => undefined,
+    setPlexHomeUserPin: () => undefined,
+    setPlexSearchQuery: () => undefined,
+    selectPlexHomeUser: () => undefined,
+    selectPlexServer: () => undefined,
+    selectPlexSection: () => undefined,
+    openPlexMetadata: () => undefined,
+    focusElement: () => undefined,
+    toggleFullscreen: () => undefined,
+    selectAudioTrack: () => undefined,
+    selectSubtitleTrack: () => undefined,
+  };
 }
 
 function emptyRendererDomBindings(): RendererDomBindings {

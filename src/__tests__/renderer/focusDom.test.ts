@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
-import { renderRendererFocus, syncRendererFocusTargets } from '../../renderer/focusDom.js';
+import {
+  clickFocusedRendererElement,
+  focusRendererTarget,
+  renderRendererFocus,
+  syncRendererFocusTargets,
+} from '../../renderer/focusDom.js';
 import { FocusRegistry } from '../../renderer/navigation.js';
 import { getStagedSetupNeighbors } from '../../renderer/setup/stagedSetupFocus.js';
 
@@ -10,7 +15,10 @@ class FocusElementDouble {
   className = '';
   tabIndex = -1;
   focusCount = 0;
+  clickCount = 0;
+  disabled = false;
   readonly dataset: Record<string, string> = {};
+  readonly attributes = new Map<string, string>();
   readonly classList = {
     toggle: (name: string, enabled: boolean): void => {
       const names = new Set(this.className.split(' ').filter(Boolean));
@@ -52,12 +60,29 @@ class FocusElementDouble {
       '[hidden], [inert], [aria-hidden="true"]',
       '[hidden],[inert],[aria-hidden="true"]',
     ]).has(selector));
-    return this.hiddenFromRoute ? {} : null;
+    return this.hiddenFromRoute
+      || this.attributes.has('hidden')
+      || this.attributes.has('inert')
+      || this.attributes.get('aria-hidden') === 'true'
+      ? {}
+      : null;
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attributes.set(name, value);
+  }
+
+  getAttribute(name: string): string | null {
+    return this.attributes.get(name) ?? null;
   }
 
   focus(): void {
     this.focusCount += 1;
     documentDouble.activeElement = this;
+  }
+
+  click(): void {
+    this.clickCount += 1;
   }
 }
 
@@ -265,6 +290,57 @@ test('focus sync excludes controls inside inert ancestors', () => {
     syncRendererFocusTargets(new FocusRegistry(), dom);
     assert.deepEqual(dom.focusableElements, []);
   } finally {
+    if (originalDocument === undefined) Reflect.deleteProperty(globalThis, 'document');
+    else Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
+  }
+});
+
+test('overlay busy-focus custody preserves exact focus without granting activation', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const buttonDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'HTMLButtonElement');
+  const retry = new FocusElementDouble('overlay-player-retry', false, 'player');
+  retry.dataset.overlayAction = 'retryPlayer';
+  retry.dataset.overlayBusyFocusCustody = 'true';
+  retry.setAttribute('aria-disabled', 'true');
+  retry.setAttribute('aria-busy', 'true');
+  const ordinaryAriaDisabled = new FocusElementDouble('overlay-osd-audio', false, 'player');
+  ordinaryAriaDisabled.setAttribute('aria-disabled', 'true');
+  const nativeDisabled = new FocusElementDouble('overlay-osd-subtitles', false, 'player');
+  nativeDisabled.disabled = true;
+  let queryElements = [retry, ordinaryAriaDisabled, nativeDisabled];
+  Object.defineProperty(globalThis, 'document', {
+    value: { querySelectorAll: () => queryElements, activeElement: null },
+    configurable: true,
+  });
+  Object.defineProperty(globalThis, 'HTMLButtonElement', {
+    value: FocusElementDouble,
+    configurable: true,
+  });
+  try {
+    const registry = new FocusRegistry();
+    const dom = createFocusDomBindings([]);
+    dom.overlayActionButtons = [retry as unknown as HTMLButtonElement];
+    syncRendererFocusTargets(registry, dom);
+    assert.deepEqual(dom.focusableElements.map((element) => element.dataset.focusId), ['overlay-player-retry']);
+    const focused = focusRendererTarget(
+      registry,
+      { activeRoute: 'player', activeId: null },
+      'overlay-player-retry',
+      dom,
+    );
+    assert.equal(focused.activeId, 'overlay-player-retry');
+    assert.equal(retry.tabIndex, 0);
+    assert.equal(retry.focusCount, 1);
+    clickFocusedRendererElement(focused, dom);
+    assert.equal(retry.clickCount, 0);
+
+    queryElements = [];
+    retry.setAttribute('hidden', '');
+    syncRendererFocusTargets(registry, dom);
+    assert.equal(registry.createInitialState('player').activeId, null);
+  } finally {
+    if (buttonDescriptor === undefined) Reflect.deleteProperty(globalThis, 'HTMLButtonElement');
+    else Object.defineProperty(globalThis, 'HTMLButtonElement', buttonDescriptor);
     if (originalDocument === undefined) Reflect.deleteProperty(globalThis, 'document');
     else Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
   }

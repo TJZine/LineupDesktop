@@ -1,6 +1,7 @@
 import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
 import type { AppRouteId } from './navigation.js';
 import {
+  EPG_SLOT_DURATION_MS,
   EPG_WINDOW_DURATION_MS,
   ensureRendererReadyGuidePresentation,
 } from './epg.js';
@@ -13,12 +14,18 @@ export interface GuidePresentationPollingOptions {
   host: Window;
   getActiveRoute(): AppRouteId;
   getWindowStartMs(): number;
+  getNowMs?(): number;
   setLoading(generation: number): void;
   applyPresentation(
     presentation: ReturnType<typeof ensureRendererReadyGuidePresentation>,
     generation: number,
   ): void;
   handleFailure(source: string, message: string, generation: number): void;
+  applyPlayerPresentation?(
+    presentation: ReturnType<typeof ensureRendererReadyGuidePresentation>,
+    generation: number,
+  ): void;
+  handlePlayerFailure?(source: string, message: string, generation: number): void;
 }
 
 export interface GuidePresentationPollingController {
@@ -27,10 +34,12 @@ export interface GuidePresentationPollingController {
   stop(): void;
   refresh(source: string, options?: GuidePresentationRefreshOptions): Promise<void>;
   getGeneration(): number;
+  getLastValidPresentation(): ReturnType<typeof ensureRendererReadyGuidePresentation> | null;
 }
 
 export interface GuidePresentationRefreshOptions {
   showLoading?: boolean;
+  allowPlayerRoute?: boolean;
 }
 
 export function createGuidePresentationPolling(
@@ -38,6 +47,7 @@ export function createGuidePresentationPolling(
 ): GuidePresentationPollingController {
   let guidePollTimer: number | null = null;
   let guidePresentationRequestId = 0;
+  let lastValidPresentation: ReturnType<typeof ensureRendererReadyGuidePresentation> | null = null;
 
   const stop = (): void => {
     if (guidePollTimer !== null) {
@@ -52,10 +62,13 @@ export function createGuidePresentationPolling(
     refreshOptions: GuidePresentationRefreshOptions = {},
   ): Promise<void> => {
     const requestId = ++guidePresentationRequestId;
-    if (options.getActiveRoute() !== 'guide') {
+    const playerRefresh = options.getActiveRoute() === 'player' && refreshOptions.allowPlayerRoute === true;
+    if (options.getActiveRoute() !== 'guide' && !playerRefresh) {
       return;
     }
-    const windowStartMs = options.getWindowStartMs();
+    const windowStartMs = playerRefresh
+      ? Math.floor((options.getNowMs?.() ?? Date.now()) / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS
+      : options.getWindowStartMs();
     if (refreshOptions.showLoading === true) {
       options.setLoading(requestId);
     }
@@ -67,35 +80,44 @@ export function createGuidePresentationPolling(
         durationMs: EPG_WINDOW_DURATION_MS,
       });
     } catch (error: unknown) {
-      if (requestId === guidePresentationRequestId && options.getActiveRoute() === 'guide') {
-        options.handleFailure(source, summarizeRendererBridgeError(error), requestId);
+      if (requestId === guidePresentationRequestId) {
+        if (playerRefresh) options.handlePlayerFailure?.(source, summarizeRendererBridgeError(error), requestId);
+        else if (options.getActiveRoute() === 'guide') options.handleFailure(source, summarizeRendererBridgeError(error), requestId);
       }
       return;
     }
 
-    if (requestId !== guidePresentationRequestId || options.getActiveRoute() !== 'guide') {
+    if (requestId !== guidePresentationRequestId || (!playerRefresh && options.getActiveRoute() !== 'guide')) {
       return;
     }
     if (!result.ok) {
-      options.handleFailure(source, result.error.message, requestId);
+      if (playerRefresh) options.handlePlayerFailure?.(source, result.error.message, requestId);
+      else options.handleFailure(source, result.error.message, requestId);
       return;
     }
-    options.applyPresentation(ensureRendererReadyGuidePresentation(result.value, windowStartMs), requestId);
+    lastValidPresentation = ensureRendererReadyGuidePresentation(result.value, windowStartMs);
+    if (playerRefresh) options.applyPlayerPresentation?.(lastValidPresentation, requestId);
+    else options.applyPresentation(lastValidPresentation, requestId);
   };
 
   const start = (): void => {
     stop();
-    void refresh('poll-start', { showLoading: true });
+    const playerRoute = options.getActiveRoute() === 'player';
+    if (!playerRoute && options.getActiveRoute() !== 'guide') return;
+    void refresh('poll-start', { showLoading: !playerRoute, allowPlayerRoute: playerRoute });
     guidePollTimer = options.host.setInterval(() => {
-      void refresh('poll-interval');
+      const onPlayer = options.getActiveRoute() === 'player';
+      void refresh('poll-interval', { allowPlayerRoute: onPlayer });
     }, GUIDE_POLL_INTERVAL_MS) as number;
   };
 
   return {
     reconcile(previousRoute, nextRoute) {
-      if (previousRoute === 'guide' && nextRoute !== 'guide') {
+      const previousEligible = previousRoute === 'guide' || previousRoute === 'player';
+      const nextEligible = nextRoute === 'guide' || nextRoute === 'player';
+      if (previousEligible && !nextEligible) {
         stop();
-      } else if (nextRoute === 'guide' && previousRoute !== 'guide') {
+      } else if (nextEligible && previousRoute !== nextRoute) {
         start();
       }
     },
@@ -103,5 +125,6 @@ export function createGuidePresentationPolling(
     stop,
     refresh,
     getGeneration: () => guidePresentationRequestId,
+    getLastValidPresentation: () => lastValidPresentation,
   };
 }

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import type { ChannelRuntimeRendererState } from '../../renderer/channelRuntimeState.js';
-import { createRendererSafePlayerSnapshot, createPlayerOverlayState } from '../../renderer/overlays.js';
+import { createPlayerOverlayState, openOsd, openPlaybackOptions } from '../../renderer/overlays.js';
+import { createEmptyPlayerSnapshot } from '../../renderer/playerOverlayPresentation.js';
 import { setEpgPresentationState, type EpgPresentationSource } from '../../renderer/epg.js';
 import { renderRouteDom, renderWorkflowDom } from '../../renderer/routeDom.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
@@ -12,6 +13,23 @@ import { renderShellDom, type ShellDomBindings } from '../../renderer/shell/shel
 import { beginFullscreenRequest, rejectFullscreenRequest } from '../../renderer/shell/shellState.js';
 
 const GUIDE_BASE = Date.UTC(2026, 4, 12, 20, 0, 0);
+function createRendererSafePlayerSnapshot() {
+  return {
+    ...createEmptyPlayerSnapshot(),
+    requestId: 'route-dom-player',
+    status: 'playing' as const,
+    playing: true,
+    media: { id: 'route-dom-media', title: 'The Midnight Archive', subtitle: 'Signal Lost', durationMs: 3_600_000 },
+    durationMs: 3_600_000,
+    positionMs: 720_000,
+    selectedAudioTrackId: 'audio-main',
+    tracks: [
+      { id: 'audio-main', kind: 'audio' as const, label: 'Main', selected: true, available: true },
+      { id: 'audio-alt', kind: 'audio' as const, label: 'Alt', selected: false, available: true },
+      { id: 'sub-one', kind: 'subtitle' as const, label: 'English', selected: false, available: true },
+    ],
+  };
+}
 const GUIDE_PRESENTATION: EpgPresentationSource = {
   channels: [{
     id: 'channel-liminal-one', number: '101', name: 'Liminal One', programs: [{
@@ -394,6 +412,13 @@ test('route DOM renders player OSD fields and playback option rows', () => {
     dom.overlayAudioOptionsElement = new ElementDouble() as unknown as HTMLElement;
     dom.overlaySubtitleOptionsElement = new ElementDouble() as unknown as HTMLElement;
     dom.overlayPlaybackSummaryElement = new ElementDouble() as unknown as HTMLElement;
+    dom.overlayMiniGuideErrorElement = new ElementDouble() as unknown as HTMLElement;
+    dom.overlayMiniGuideElement = new ElementDouble() as unknown as HTMLElement;
+    dom.overlayPlayerErrorElement = new ElementDouble() as unknown as HTMLElement;
+    dom.overlayPlayerRetryButton = new ElementDouble('button') as unknown as HTMLButtonElement;
+    dom.overlayPlayerRetryButton.dataset.overlayAction = 'retryPlayer';
+    dom.overlayActionButtons = [dom.overlayPlayerRetryButton];
+    dom.overlayPlayerGuideButton = new ElementDouble('button') as unknown as HTMLButtonElement;
 
     const snapshot = {
       ...createRendererSafePlayerSnapshot(),
@@ -424,11 +449,24 @@ test('route DOM renders player OSD fields and playback option rows', () => {
       },
     };
 
+    const presentation = {
+      channels: [{
+        id: 'channel-one', number: '101', name: 'Channel One',
+        currentProgram: { id: 'program-one', title: 'Runtime program', startsAtMs: 0, endsAtMs: 2_000 },
+        nextProgram: { id: 'program-two', title: 'Runtime next', startsAtMs: 2_000, endsAtMs: 3_000 },
+      }],
+      currentChannelId: 'channel-one', playerSnapshot: snapshot, nowMs: 1_000,
+    };
+    const osd = openOsd(createPlayerOverlayState(presentation), snapshot);
+    const audioOptions = openPlaybackOptions(osd, snapshot, 'audio');
     renderWorkflowDom(
       createWorkflowState('player'),
-      createPlayerOverlayState(),
+      audioOptions,
       snapshot,
       dom,
+      undefined,
+      null,
+      presentation,
     );
 
     const osdText = [
@@ -449,36 +487,85 @@ test('route DOM renders player OSD fields and playback option rows', () => {
 
     assert.match(osdText, /PLAYING/u);
     assert.match(osdText, /The Midnight Archive/u);
-    assert.match(osdText, /Episode 4 - Signal Lost/u);
-    assert.match(osdText, /Audio: Main stereo/u);
+    assert.match(osdText, /Signal Lost/u);
+    assert.match(osdText, /Audio: Main/u);
     assert.match(osdText, /Subs: Off/u);
     assert.match(osdText, /12:00 \/ 60:00/u);
-    assert.match(osdText, /Next on 101: After Hours Cinema/u);
-    assert.match(optionsText, /Direct Play/u);
-    assert.match(optionsText, /AAC/u);
-    assert.match(optionsText, /External/u);
+    assert.match(osdText, /Runtime next/u);
+    assert.match(optionsText, /Audio tracks/u);
 
     const audioRows = (dom.overlayAudioOptionsElement as unknown as ElementDouble).children;
     const subtitleRows = (dom.overlaySubtitleOptionsElement as unknown as ElementDouble).children;
     const audioMain = audioRows.find((row) => row.dataset.trackId === 'audio-main');
     const audioUnavailable = audioRows.find((row) => row.dataset.trackId === 'audio-unavailable');
-    const subtitleEnglish = subtitleRows.find((row) => row.dataset.trackId === 'subtitle-english');
-    const subtitleUnavailable = subtitleRows.find((row) => row.dataset.trackId === 'subtitle-unavailable');
 
     assert.equal(audioMain?.tagName, 'BUTTON');
     assert.equal(audioMain?.type, 'button');
     assert.equal(audioMain?.dataset.focusId, 'overlay-audio-track-audio-main');
     assert.equal(audioMain?.disabled, false);
-    assert.equal(audioMain?.getAttribute('aria-disabled'), 'false');
-    assert.equal(audioUnavailable?.tagName, 'BUTTON');
-    assert.equal(audioUnavailable?.disabled, true);
-    assert.equal(audioUnavailable?.getAttribute('aria-disabled'), 'true');
-    assert.equal(Object.hasOwn(audioUnavailable?.dataset ?? {}, 'focusId'), false);
-    assert.equal(subtitleEnglish?.tagName, 'BUTTON');
-    assert.equal(subtitleEnglish?.dataset.focusId, 'overlay-subtitle-track-subtitle-english');
-    assert.equal(subtitleUnavailable?.tagName, 'BUTTON');
-    assert.equal(subtitleUnavailable?.disabled, true);
-    assert.equal(subtitleUnavailable?.getAttribute('aria-disabled'), 'true');
+    assert.equal(audioMain?.getAttribute('aria-busy'), 'false');
+    assert.equal(audioMain?.getAttribute('aria-disabled'), null);
+    assert.equal(audioMain?.dataset.overlayBusyFocusCustody, undefined);
+    assert.equal(audioUnavailable, undefined);
+    assert.equal(subtitleRows.length, 0);
+
+    renderWorkflowDom(
+      createWorkflowState('player'),
+      { ...audioOptions, pendingTrackFocusId: 'overlay-audio-track-audio-main' },
+      snapshot,
+      dom,
+      undefined,
+      null,
+      presentation,
+    );
+    const busyAudioMain = (dom.overlayAudioOptionsElement as unknown as ElementDouble).children
+      .find((row) => row.dataset.trackId === 'audio-main');
+    assert.equal(busyAudioMain?.disabled, false);
+    assert.equal(busyAudioMain?.getAttribute('aria-disabled'), 'true');
+    assert.equal(busyAudioMain?.getAttribute('aria-busy'), 'true');
+    assert.equal(busyAudioMain?.dataset.overlayBusyFocusCustody, 'true');
+
+    const errorSnapshot = {
+      ...snapshot, status: 'error' as const, playing: false,
+      lastError: { code: 'FAILED', category: 'engine-failure' as const, message: 'Original failure.', recoverable: true, retryable: true },
+    };
+    renderWorkflowDom(
+      createWorkflowState('player'),
+      { ...createPlayerOverlayState(presentation), retryPending: true, retryError: 'Retry failed safely.' },
+      errorSnapshot,
+      dom,
+      undefined,
+      null,
+      { ...presentation, playerSnapshot: errorSnapshot },
+    );
+    assert.equal(dom.overlayPlayerErrorElement.textContent, 'Retry failed safely.');
+    assert.equal(dom.overlayPlayerRetryButton.disabled, false);
+    assert.equal(dom.overlayPlayerRetryButton.getAttribute('aria-disabled'), 'true');
+    assert.equal(dom.overlayPlayerRetryButton.getAttribute('aria-busy'), 'true');
+    assert.equal(dom.overlayPlayerRetryButton.dataset.overlayBusyFocusCustody, 'true');
+    assert.equal(dom.overlayPlayerGuideButton.hidden, false);
+
+    renderWorkflowDom(
+      createWorkflowState('player'),
+      {
+        ...createPlayerOverlayState(presentation),
+        activeOverlayId: 'miniGuide',
+        miniGuideError: 'Mini failed safely.',
+        pendingTuneChannelId: 'channel-one',
+      },
+      snapshot,
+      dom,
+      undefined,
+      null,
+      presentation,
+    );
+    assert.equal(dom.overlayMiniGuideErrorElement.textContent, 'Mini failed safely.');
+    const busyMini = (dom.overlayMiniGuideElement as unknown as ElementDouble).children
+      .find((row) => row.dataset.overlayChannelId === 'channel-one');
+    assert.equal(busyMini?.disabled, false);
+    assert.equal(busyMini?.getAttribute('aria-disabled'), 'true');
+    assert.equal(busyMini?.getAttribute('aria-busy'), 'true');
+    assert.equal(busyMini?.dataset.overlayBusyFocusCustody, 'true');
   } finally {
     restoreDocument(originalDocument);
   }
@@ -784,6 +871,24 @@ test('static product route visible text avoids internal implementation-status te
 
   assert.doesNotMatch(readVisibleTextFromMarkup(root.innerHTML), PRODUCT_ROUTE_INTERNAL_COPY_PATTERN);
   assert.doesNotMatch(root.innerHTML, /data-channel-setup-fixture-status/u);
+});
+
+test('static player DOM keeps native presentation beside the route-owned overlay stack', () => {
+  const root = { innerHTML: '', querySelector: () => null };
+  const documentDouble = {
+    querySelector: (selector: string) => selector === '[data-static-screen-root]' ? root : null,
+  };
+
+  mountStaticRendererDom(documentDouble as unknown as Document);
+
+  const presentationStart = root.innerHTML.indexOf('data-player-presentation-surface');
+  const playerStart = root.innerHTML.indexOf('id="screen-player"');
+  const overlayStart = root.innerHTML.indexOf('data-overlay-stack');
+  assert.ok(presentationStart >= 0 && playerStart > presentationStart && overlayStart > playerStart);
+  assert.match(
+    root.innerHTML.slice(presentationStart, overlayStart),
+    /<\/div>\s*<section id="screen-player"[^>]*>\s*<div class="overlay-stack"/u,
+  );
 });
 
 const PRODUCT_ROUTE_INTERNAL_COPY_PATTERN =

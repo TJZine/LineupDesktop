@@ -17,7 +17,6 @@ import {
 } from './workflow.js';
 import type { ChannelSetupLiveSelectionViewModel } from './channelSetup/viewModel.js';
 import { renderChannelSetupDom } from './channelSetup/dom.js';
-import { DEFAULT_PLAYER_OVERLAY_PRESENTATION } from './overlayViewModels.js';
 import { renderSettingsDom } from './settingsSetupDom.js';
 import { renderEpgGuideDom } from './epg/guideDom.js';
 
@@ -66,7 +65,7 @@ export function renderWorkflowDom(
   dom: RendererDomBindings,
   channelRuntime?: ChannelRuntimeRendererState,
   liveSelection: ChannelSetupLiveSelectionViewModel | null = null,
-  overlayPresentation: PlayerOverlayPresentationSource = DEFAULT_PLAYER_OVERLAY_PRESENTATION,
+  overlayPresentation?: PlayerOverlayPresentationSource,
   activeSettingsCategory: SettingsSectionId = 'appearance',
   activeSetupStage: string = 'account',
 ): void {
@@ -97,8 +96,14 @@ export function renderWorkflowDom(
 
   renderChannelList(view, dom);
   renderEpgGuideDom(view, dom, workflowState.settingsDraft);
+  const presentation = overlayPresentation ?? {
+    channels: [],
+    currentChannelId: null,
+    playerSnapshot,
+    nowMs: Date.now(),
+  };
   renderPlayerOverlaysDom(overlayState, dom, view.route, {
-    ...overlayPresentation,
+    ...presentation,
     playerSnapshot,
   }, workflowState.settingsDraft.previewBadgesEnabled);
   renderSettingsDom(view, dom, activeSettingsCategory);
@@ -174,24 +179,29 @@ function renderPlayerOverlaysDom(
   document.documentElement.dataset.activeOverlay = isPlayerRoute ? (view.activeOverlayId ?? '') : '';
 
   for (const element of dom.overlayElements) {
-    const overlayId = element.dataset.overlay;
-    const isVisible =
-      isPlayerRoute &&
-      (overlayId === 'playerOsd' ||
-        overlayId === 'nowPlaying' ||
-        overlayId === 'miniGuide' ||
-        overlayId === 'channelNumber' ||
-        overlayId === 'channelBadge' ||
-        overlayId === 'playbackOptions')
-        ? view.visibleOverlays[overlayId]
-        : false;
+    const overlayId = element.dataset.overlay as keyof typeof view.visibleOverlays | undefined;
+    const isVisible = isPlayerRoute && overlayId !== undefined && view.visibleOverlays[overlayId] === true;
     element.hidden = !isVisible;
     element.setAttribute('aria-hidden', String(!isVisible));
     element.dataset.overlayActive = String(isPlayerRoute && overlayId === view.activeOverlayId);
   }
 
   for (const button of dom.overlayActionButtons) {
-    button.disabled = !isPlayerRoute;
+    const action = button.dataset.overlayAction;
+    button.disabled = !isPlayerRoute ||
+      (action === 'openAudioOptions' && !view.playerOsd.audioEligible) ||
+      (action === 'openSubtitleOptions' && !view.playerOsd.subtitleEligible) ||
+      (action === 'retryPlayer' && !view.retryVisible);
+    button.hidden = (action === 'retryPlayer' && !view.retryVisible) ||
+      (action === 'openAudioOptions' && !view.playerOsd.audioEligible) ||
+      (action === 'openSubtitleOptions' && !view.playerOsd.subtitleEligible);
+  }
+  if (dom.overlayPlayerRetryButton) {
+    projectBusyFocusCustody(dom.overlayPlayerRetryButton, view.retryBusy);
+  }
+  if (dom.overlayPlayerGuideButton) {
+    dom.overlayPlayerGuideButton.hidden = !view.guideVisible;
+    dom.overlayPlayerGuideButton.disabled = !isPlayerRoute || !view.guideVisible;
   }
 
   if (dom.overlayStackElement) {
@@ -201,29 +211,26 @@ function renderPlayerOverlaysDom(
     dom.overlayStackElement.dataset.overlayStack = isPlayerRoute ? view.stack.join(',') : '';
   }
   if (dom.overlayNowPlayingTitleElement) {
-    dom.overlayNowPlayingTitleElement.textContent = view.nowPlaying.title;
+    dom.overlayNowPlayingTitleElement.textContent = view.nowPlaying.title ?? '';
   }
   if (dom.overlayNowPlayingSubtitleElement) {
-    dom.overlayNowPlayingSubtitleElement.textContent = view.nowPlaying.subtitle;
+    dom.overlayNowPlayingSubtitleElement.textContent = view.nowPlaying.subtitle ?? '';
   }
   if (dom.overlayNowPlayingChannelElement) {
-    dom.overlayNowPlayingChannelElement.textContent = `${view.nowPlaying.channelNumber} ${view.nowPlaying.channelName}`;
+    dom.overlayNowPlayingChannelElement.textContent = view.nowPlaying.channelLabel ?? '';
   }
   if (dom.overlayNowPlayingStatusElement) {
     dom.overlayNowPlayingStatusElement.textContent = [
       view.nowPlaying.statusLabel,
       `${view.nowPlaying.positionLabel} / ${view.nowPlaying.durationLabel}`,
-      previewBadgesEnabled ? view.nowPlaying.badges.join(' / ') : '',
-      view.nowPlaying.playbackSummary,
-      view.nowPlaying.upNextText,
-      view.nowPlaying.description,
-    ].join(' - ');
+      view.nowPlaying.upNextText ?? '',
+    ].filter(Boolean).join(' - ');
   }
   if (dom.overlayNowPlayingDescriptionElement) {
-    dom.overlayNowPlayingDescriptionElement.textContent = view.nowPlaying.description;
+    dom.overlayNowPlayingDescriptionElement.textContent = '';
   }
   if (dom.overlayNowPlayingSummaryElement) {
-    dom.overlayNowPlayingSummaryElement.textContent = view.nowPlaying.playbackSummary;
+    dom.overlayNowPlayingSummaryElement.textContent = '';
   }
   if (dom.overlayNowPlayingPositionElement) {
     dom.overlayNowPlayingPositionElement.textContent = view.nowPlaying.positionLabel;
@@ -232,16 +239,11 @@ function renderPlayerOverlaysDom(
     dom.overlayNowPlayingDurationElement.textContent = view.nowPlaying.durationLabel;
   }
   if (dom.overlayNowPlayingUpNextElement) {
-    dom.overlayNowPlayingUpNextElement.textContent = view.nowPlaying.upNextText;
+    dom.overlayNowPlayingUpNextElement.textContent = view.nowPlaying.upNextText ?? '';
   }
   if (dom.overlayNowPlayingBadgesElement) {
     dom.overlayNowPlayingBadgesElement.replaceChildren(
-      ...(previewBadgesEnabled ? view.nowPlaying.badges : []).map((badge) => {
-        const span = document.createElement('span');
-        span.className = 'now-playing__badge';
-        span.textContent = badge;
-        return span;
-      }),
+      ...(previewBadgesEnabled ? [] : []),
     );
   }
   if (dom.overlayProgressElement) {
@@ -254,9 +256,13 @@ function renderPlayerOverlaysDom(
   if (dom.overlayMiniGuideElement) {
     dom.overlayMiniGuideElement.replaceChildren(
       ...view.miniGuideChannels.map((channel) => {
-        const item = document.createElement('article');
+        const item = document.createElement('button');
+        item.type = 'button';
         item.className = 'mini-guide__item';
         item.dataset.selectedChannel = String(channel.selected);
+        item.dataset.overlayChannelId = channel.id;
+        item.dataset.focusId = `overlay-mini-channel-${encodeURIComponent(channel.id)}`;
+        projectBusyFocusCustody(item, channel.busy);
         const number = document.createElement('strong');
         number.className = 'mini-guide__channel-number';
         number.textContent = channel.number;
@@ -269,96 +275,86 @@ function renderPlayerOverlaysDom(
         name.textContent = channel.name;
         const title = document.createElement('p');
         title.className = 'mini-guide__current-title';
-        title.textContent = `${channel.nowStartLabel} ${channel.currentTitle}`;
+        title.textContent = channel.currentProgram?.title ?? '';
         const next = document.createElement('p');
         next.className = 'mini-guide__next-title';
-        next.textContent = `Next: ${channel.nextTitle}`;
+        next.textContent = channel.nextProgram === undefined ? '' : `Next: ${channel.nextProgram.title}`;
         const progress = document.createElement('i');
         progress.className = 'mini-guide__progress';
-        progress.style.setProperty('--mini-guide-progress', `${channel.nowProgressPercent}%`);
+        progress.style.setProperty('--mini-guide-progress', `${channel.progressPercent ?? 0}%`);
         copy.append(name, title, next, progress);
         item.append(number, logo, copy);
         return item;
       }),
     );
   }
+  if (dom.overlayMiniGuideErrorElement) dom.overlayMiniGuideErrorElement.textContent = view.miniGuideError ?? '';
   if (dom.overlayChannelNumberElement) {
     dom.overlayChannelNumberElement.textContent = view.channelNumberDisplay;
     const container = dom.overlayChannelNumberElement.parentElement;
     if (container) {
-      container.dataset.invalid = String(view.channelNumberInvalid);
+      container.dataset.invalid = String(view.channelNumberStatus === 'error');
     }
   }
   if (dom.overlayChannelBadgeNumberElement) {
-    dom.overlayChannelBadgeNumberElement.textContent = view.channelBadge.number;
+    dom.overlayChannelBadgeNumberElement.textContent = view.currentChannel?.number ?? '';
   }
   if (dom.overlayChannelBadgeNameElement) {
-    dom.overlayChannelBadgeNameElement.textContent = view.channelBadge.name;
+    dom.overlayChannelBadgeNameElement.textContent = view.currentChannel?.name ?? '';
   }
   if (dom.overlayChannelBadgeProgramElement) {
-    dom.overlayChannelBadgeProgramElement.textContent = view.channelBadge.currentTitle;
+    dom.overlayChannelBadgeProgramElement.textContent = view.currentChannel?.currentProgram?.title ?? '';
   }
   if (dom.overlayAudioLabelElement) {
-    dom.overlayAudioLabelElement.textContent = view.playerOsd.audioLabel;
+    dom.overlayAudioLabelElement.textContent = view.playerOsd.audioLabel ?? '';
   }
   if (dom.overlaySubtitleLabelElement) {
-    dom.overlaySubtitleLabelElement.textContent = view.playerOsd.subtitleLabel;
-  }
-  if (dom.overlayVolumeLabelElement) {
-    dom.overlayVolumeLabelElement.textContent = view.playbackOptions.muted
-      ? 'Muted'
-      : `${view.playbackOptions.volumePercent}%`;
-  }
-  if (dom.overlayRateLabelElement) {
-    dom.overlayRateLabelElement.textContent = view.playbackOptions.playbackRateLabel;
+    dom.overlaySubtitleLabelElement.textContent = view.playerOsd.subtitleLabel ?? '';
   }
   if (dom.overlayPlaybackSummaryElement) {
-    dom.overlayPlaybackSummaryElement.textContent = [
-      view.playerOsd.statusLabel,
-      view.playerOsd.timecode,
-      view.playerOsd.endsAtText,
-      view.playerOsd.upNextText,
-      view.playbackOptions.playbackSummary,
-    ].join(' - ');
+    dom.overlayPlaybackSummaryElement.textContent = view.playbackOptions?.family === 'audio' ? 'Audio tracks' : 'Subtitles';
   }
   if (dom.osdStatusElement) {
     dom.osdStatusElement.textContent = view.playerOsd.statusLabel;
     dom.osdStatusElement.setAttribute('aria-label', view.playerOsd.statusLabel);
   }
   if (dom.osdTitleElement) {
-    dom.osdTitleElement.textContent = view.playerOsd.title;
+    dom.osdTitleElement.textContent = view.playerOsd.title ?? '';
   }
   if (dom.osdSubtitleElement) {
-    dom.osdSubtitleElement.textContent = view.playerOsd.subtitle;
+    dom.osdSubtitleElement.textContent = view.playerOsd.subtitle ?? '';
   }
   if (dom.osdAudioElement) {
-    dom.osdAudioElement.textContent = `Audio: ${view.playerOsd.audioLabel}`;
+    dom.osdAudioElement.textContent = view.playerOsd.audioLabel === undefined ? '' : `Audio: ${view.playerOsd.audioLabel}`;
   }
   if (dom.osdSubtitlesElement) {
-    dom.osdSubtitlesElement.textContent = `Subs: ${view.playerOsd.subtitleLabel}`;
+    dom.osdSubtitlesElement.textContent = view.playerOsd.subtitleLabel === undefined ? '' : `Subs: ${view.playerOsd.subtitleLabel}`;
   }
   if (dom.osdUpNextElement) {
-    dom.osdUpNextElement.textContent = view.playerOsd.upNextText;
+    dom.osdUpNextElement.textContent = view.nowPlaying.upNextText ?? '';
   }
   if (dom.osdTimecodeElement) {
     dom.osdTimecodeElement.textContent = view.playerOsd.timecode;
   }
   if (dom.osdEndsAtElement) {
-    dom.osdEndsAtElement.textContent = view.playerOsd.endsAtText;
+    dom.osdEndsAtElement.textContent = '';
   }
   if (dom.osdBufferTextElement) {
-    dom.osdBufferTextElement.textContent = view.playerOsd.bufferText;
+    dom.osdBufferTextElement.textContent = overlayPresentation.playerSnapshot.status === 'buffering' ? 'Buffering' : '';
   }
   dom.osdBufferBarElement?.style.setProperty('--osd-buffer', `${view.playerOsd.bufferedPercent}%`);
   dom.osdPlayedBarElement?.style.setProperty('--osd-played', `${view.playerOsd.playedPercent}%`);
-  renderPlaybackOptionRows(dom.overlayAudioOptionsElement, view.playbackOptions.audioTracks, 'overlay-audio-track-');
-  renderPlaybackOptionRows(dom.overlaySubtitleOptionsElement, view.playbackOptions.subtitleTracks, 'overlay-subtitle-track-');
+  renderPlaybackOptionRows(dom.overlayAudioOptionsElement, view.playbackOptions?.family === 'audio' ? view.playbackOptions.tracks : []);
+  renderPlaybackOptionRows(dom.overlaySubtitleOptionsElement, view.playbackOptions?.family === 'subtitle' ? view.playbackOptions.tracks : []);
+  if (dom.overlayChannelNumberMessageElement) dom.overlayChannelNumberMessageElement.textContent = view.channelNumberMessage ?? '';
+  if (dom.overlayOptionsErrorElement) dom.overlayOptionsErrorElement.textContent = view.playbackOptions?.error ?? '';
+  if (dom.overlayTransitionLabelElement) dom.overlayTransitionLabelElement.textContent = view.transitionLabel === null ? '' : `Channel ${view.transitionLabel}`;
+  if (dom.overlayPlayerErrorElement) dom.overlayPlayerErrorElement.textContent = view.errorMessage ?? '';
 }
 
 function renderPlaybackOptionRows(
   host: HTMLElement | null,
   tracks: readonly PlaybackOptionTrackViewModel[],
-  focusIdPrefix: string,
 ): void {
   if (!host) {
     return;
@@ -368,23 +364,20 @@ function renderPlaybackOptionRows(
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'playback-options__row';
-      row.dataset.trackId = track.id;
+      row.dataset.trackId = track.trackId ?? 'subtitles-off';
       row.dataset.selected = String(track.selected);
-      row.dataset.available = String(track.available);
-      row.disabled = !track.available;
-      row.setAttribute('aria-disabled', String(!track.available));
-      if (track.available) {
-        row.dataset.focusId = `${focusIdPrefix}${track.id}`;
-      }
+      row.dataset.available = 'true';
+      row.dataset.focusId = track.focusId;
+      projectBusyFocusCustody(row, track.busy);
       const label = document.createElement('strong');
       label.textContent = track.label;
       const meta = document.createElement('span');
-      meta.textContent = track.meta;
+      meta.textContent = track.meta ?? '';
       const state = document.createElement('em');
-      state.textContent = track.stateLabel;
+      state.textContent = track.selected ? 'Selected' : '';
       row.append(label, meta, state);
 
-      if (track.selected && focusIdPrefix === 'overlay-audio-track-') {
+      if (track.selected) {
         const eq = document.createElement('div');
         eq.className = 'playback-options__equalizer';
         for (let i = 0; i < 4; i++) {
@@ -397,4 +390,15 @@ function renderPlaybackOptionRows(
       return row;
     }),
   );
+}
+
+function projectBusyFocusCustody(element: HTMLButtonElement, busy: boolean): void {
+  element.setAttribute('aria-busy', String(busy));
+  if (busy) {
+    element.setAttribute('aria-disabled', 'true');
+    element.dataset.overlayBusyFocusCustody = 'true';
+    return;
+  }
+  element.removeAttribute('aria-disabled');
+  delete element.dataset.overlayBusyFocusCustody;
 }

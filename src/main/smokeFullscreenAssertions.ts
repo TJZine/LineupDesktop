@@ -33,14 +33,11 @@ export async function assertFullscreenContinuity(
           const element = document.querySelector(selector);
           return element instanceof HTMLElement ? Number.parseInt(getComputedStyle(element).zIndex, 10) || 0 : null;
         };
-        const playerOsdButton = document.querySelector('[data-focus-id="player-osd"]');
         if (document.documentElement.dataset.activeRoute !== 'player') failures.push('fullscreen route continuity');
-        const activePlayerControl = document.activeElement instanceof HTMLButtonElement
-          && document.activeElement.dataset.focusId?.startsWith('player-') === true
-          && document.activeElement.tabIndex === 0;
-        if (!(playerOsdButton instanceof HTMLButtonElement) || !activePlayerControl) {
-          failures.push('fullscreen focus continuity');
-        }
+        const presentation = document.querySelector('[data-player-presentation-surface]');
+        if (!(presentation instanceof HTMLElement) || presentation.tabIndex !== -1) failures.push('fullscreen native presentation continuity');
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && active.closest('[hidden], [inert], [aria-hidden="true"]') !== null) failures.push('fullscreen hidden focus');
         const presentationZ = z('[data-player-presentation-surface]');
         const screenZ = z('[data-screen="player"]');
         const overlayZ = z('[data-overlay-stack]');

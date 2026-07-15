@@ -7,6 +7,11 @@ export type FocusDirection = 'up' | 'down' | 'left' | 'right';
 export type DesktopInputButton =
   | FocusDirection
   | 'ok'
+  | 'space'
+  | 'info'
+  | 'pageUp'
+  | 'pageDown'
+  | `digit${0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`
   | 'back'
   | 'guide'
   | 'settings'

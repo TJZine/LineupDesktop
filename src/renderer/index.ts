@@ -2,7 +2,7 @@ import type { ShellStatusEvent } from '../contracts/shell.js';
 import { queryRendererDom, type PlexRuntimeActionId } from './domBindings.js';
 import { focusRendererTarget, renderRendererFocus, syncRendererFocusTargets } from './focusDom.js';
 import { FocusRegistry, type AppRouteId, type FocusState } from './navigation.js';
-import { createPlayerOverlayState, createPlayerOverlayView, type PlayerOverlayActionId } from './overlays.js';
+import { createPlayerOverlayState, type PlayerOverlayActionId } from './overlays.js';
 import { renderRouteDom, renderWorkflowDom } from './routeDom.js';
 import { mountStaticRendererDom } from './staticDom.js';
 import { applySupportBundleExportResult } from './supportBundleExport.js';
@@ -14,7 +14,8 @@ import { dispatchCustomChannelAction } from './customChannels/actionDispatch.js'
 import { renderCustomChannelWorkspace } from './customChannels/dom.js';
 import { readPlexOnboardingState, renderPlexRuntimeDom } from './plexRuntimeDom.js';
 import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowEpgAction, applyWorkflowEpgDirection, applyWorkflowSettingsAction, applyWorkflowSettingsValues, createWorkflowState, getRouteWorkflowView, selectWorkflowEpgProgram, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
-import { createRendererPresentationFixtures } from './presentationFixtures.js';
+import { createEmptyPlayerSnapshot, createPlayerOverlayPresentation } from './playerOverlayPresentation.js';
+import { createPlayerOverlayController } from './playerOverlayController.js';
 import { recordRendererBridgeFailure } from './rendererBridgeFailures.js';
 import { findEpgProgramCell, setEpgPresentationState, setEpgTuneError, updateEpgState } from './epg.js';
 import { registerRendererActions, type GuideActionId, type GuideProgramActionTarget } from './rendererActionRegistration.js';
@@ -23,7 +24,6 @@ import { createGuidePresentationPolling } from './guidePresentationPolling.js';
 import { dispatchPlexRuntimeAction } from './plexRuntimeActionDispatch.js';
 import { initializeProfilePinModal, openProfilePinModal, isProfilePinModalActive, closeProfilePinModal } from './profilePinModal.js';
 import type { SettingsSectionId } from './settingsSetup.js';
-import { applyOverlayAction as dispatchOverlayAction, selectAudioTrack as dispatchSelectAudioTrack, selectSubtitleTrack as dispatchSelectSubtitleTrack, type PlayerOverlayActionContext } from './playerOverlayActions.js';
 import { queryShellDom, renderShellDom } from './shell/shellDom.js';
 import { createRendererShellState, type RendererShellState } from './shell/shellState.js';
 import { createShellController } from './shell/shellController.js';
@@ -46,10 +46,9 @@ const fullscreenTransport = createFullscreenTransportCoordinator({
     dom.fullscreenButton?.setAttribute('aria-pressed', String(enabled));
   },
 });
-const presentationFixtures = createRendererPresentationFixtures();
 let workflowState = createWorkflowState('player');
-let overlayState = createPlayerOverlayState(presentationFixtures.overlays);
-let playerSnapshot = presentationFixtures.playerSnapshot;
+let overlayState = createPlayerOverlayState();
+let playerSnapshot = createEmptyPlayerSnapshot();
 let activeSettingsCategory: SettingsSectionId = 'appearance', activeSetupStage = 'account';
 let pendingGuideFocusId: string | null = null;
 const focusRegistry = new FocusRegistry(); let focusState: FocusState;
@@ -63,16 +62,6 @@ const settingsRuntime = createSettingsRuntime({
     if (!state.loading) renderApp();
   },
 });
-const overlayActionContext: PlayerOverlayActionContext = {
-  getOverlayState: () => overlayState,
-  setOverlayState: (state) => { overlayState = state; },
-  getPlayerSnapshot: () => playerSnapshot,
-  getFocusState: () => focusState,
-  setFocusState: (state) => { focusState = state; },
-  getFocusRegistry: () => focusRegistry,
-  getPresentationFixtures: () => presentationFixtures,
-  renderApp,
-};
 const plexController = createPlexRuntimeController({
   bridge: window.lineupDesktop.plex,
   onStateChanged: () => renderApp(),
@@ -122,6 +111,23 @@ initializeProfilePinModal({
 
 syncRendererFocusTargets(focusRegistry, dom);
 focusState = focusRegistry.createInitialState(workflowState.routeState.activeRoute);
+let guidePresentationPolling: ReturnType<typeof createGuidePresentationPolling>;
+const playerOverlayController = createPlayerOverlayController({
+  player: window.lineupDesktop.player,
+  host: window,
+  getState: () => overlayState,
+  setState: (state) => { overlayState = state; },
+  getPresentation: getPlayerOverlayPresentation,
+  render: renderApp,
+  focus: (focusId) => {
+    if (focusId === null) { focusState = { activeRoute: 'player', activeId: null }; dom.playerPresentationElement?.focus(); return; }
+    restoreFocusTarget(focusId);
+  },
+  openGuide: () => activateRoute('guide'),
+  refreshChannelStatus: () => channelController.loadStatus(),
+  refreshGuidePresentation: () => guidePresentationPolling.refresh('player-tune-success', { showLoading: false, allowPlayerRoute: true }),
+  recordDiagnostic: (operation, message) => recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'player.dispatch', message, { operation, route: workflowState.routeState.activeRoute }),
+});
 const shellController = createShellController({
   shell: window.lineupDesktop.shell,
   windowBridge: fullscreenTransport,
@@ -148,19 +154,12 @@ const navigationLifecycle = createNavigationLifecycle({
   onFocusChanged: updateActiveFromFocus,
   scrollFocusedIntoView: scrollFocusedSetupControlIntoView,
   handleGuideDirection,
+  handlePlayerInput: (input) => playerOverlayController.handleInput(input),
   activateRoute,
   isProfileModalActive: isProfilePinModalActive,
   closeProfileModal: () => closeProfilePinModal(),
   handleChannelSetupBack,
-  handlePlayerOverlayBack: () => {
-    const activeOverlay = createPlayerOverlayView(overlayState, {
-      ...presentationFixtures.overlays,
-      playerSnapshot,
-    }).activeOverlayId;
-    if (activeOverlay === null) return false;
-    dispatchOverlayAction('closeTopOverlay', overlayActionContext);
-    return true;
-  },
+  handlePlayerOverlayBack: playerOverlayController.closeTop,
   dismissInlineError: shellController.dismissFullscreenError,
   requestFullscreen: (acceptedFocusId) => shellController.requestFullscreen(!fullscreenEnabled, acceptedFocusId),
   invalidateFullscreenRequest: shellController.invalidateFullscreenRequest,
@@ -181,9 +180,11 @@ const playerBridgeSubscription = subscribePlayerBridge({
   setSnapshot: (snapshot) => {
     playerSnapshot = snapshot;
   },
+  onSnapshot: playerOverlayController.reconcileSnapshot,
+  onEvent: playerOverlayController.handlePlayerEvent,
   render: renderApp,
 });
-const guidePresentationPolling = createGuidePresentationPolling({
+guidePresentationPolling = createGuidePresentationPolling({
   guide: window.lineupDesktop.guide,
   host: window,
   getActiveRoute: () => workflowState.routeState.activeRoute,
@@ -211,6 +212,16 @@ const guidePresentationPolling = createGuidePresentationPolling({
     renderApp();
     restorePendingGuideFocus();
   },
+  applyPlayerPresentation: (normalizedGuidePresentation) => {
+    workflowState = { ...workflowState, guidePresentation: normalizedGuidePresentation };
+    renderApp();
+  },
+  handlePlayerFailure: (source, message) => recordRendererBridgeFailure(
+    window.lineupDesktop.diagnostics.recordRendererEvent,
+    'guide.getPresentation',
+    message,
+    { route: 'player', source },
+  ),
   handleFailure: handleGuidePresentationFailure,
 });
 const guideTuneController = createGuideTuneController({
@@ -237,6 +248,7 @@ attachNavigationInputRuntime(navigationLifecycle, {
     playerBridgeSubscription.unsubscribe();
     guidePresentationPolling.stop();
     guideTuneController.stop();
+    playerOverlayController.dispose();
     shellController.cleanup();
     settingsRuntime.cleanup();
     cleanupPlexRuntime('beforeunload');
@@ -291,8 +303,9 @@ registerRendererActions(dom, document, {
   openPlexMetadata: (ratingKey) => { void setupComposition.runtime.loadPreviewMetadata(ratingKey); },
   focusElement: focusRendererElement,
   toggleFullscreen: () => { void shellController.requestFullscreen(!fullscreenEnabled, focusState.activeId ?? 'player-fullscreen'); },
-  selectAudioTrack: (trackId) => { void dispatchSelectAudioTrack(trackId, overlayActionContext); },
-  selectSubtitleTrack: (trackId) => { void dispatchSelectSubtitleTrack(trackId, overlayActionContext); },
+  selectAudioTrack: (trackId, focusId) => { void playerOverlayController.selectTrack('audio', trackId, focusId); },
+  selectSubtitleTrack: (trackId, focusId) => { void playerOverlayController.selectTrack('subtitle', trackId, focusId); },
+  tuneOverlayChannel: (channelId) => { playerOverlayController.activateMiniGuideChannel(channelId); },
 });
 
 document.documentElement.dataset.activeRoute = workflowState.routeState.activeRoute;
@@ -303,10 +316,8 @@ void plexController.loadSnapshot().then(() => {
   if (plexController.getState().snapshot?.auth.state === 'signed-in') void plexController.getHomeUsers();
 });
 void channelController.loadStatus();
+guidePresentationPolling.start();
 void customChannelController.loadSnapshot();
-if (workflowState.routeState.activeRoute === 'guide') {
-  guidePresentationPolling.start();
-}
 
 function renderStatus(event: ShellStatusEvent): void {
   if (dom.statusElement) {
@@ -316,6 +327,7 @@ function renderStatus(event: ShellStatusEvent): void {
 
 function activateRoute(route: AppRouteId): void {
   const previousRoute = workflowState.routeState.activeRoute;
+  if (previousRoute === 'player' && route !== 'player') playerOverlayController.routeLeave();
   if (previousRoute === 'channelSetup' && route !== 'channelSetup') {
     plexController.invalidateOnboardingOperations();
   }
@@ -344,6 +356,7 @@ async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
   }
   workflowState = nextWorkflowState;
   if (previousRoute !== nextRoute) {
+    if (previousRoute === 'player' && nextRoute !== 'player') playerOverlayController.routeLeave();
     cleanupPlexRuntimeForRouteChange(previousRoute, nextRoute);
     if (previousRoute === 'guide' && nextRoute !== 'guide') guideTuneController.stop();
     guidePresentationPolling.reconcile(previousRoute, nextRoute);
@@ -448,7 +461,19 @@ function acceptGuideTune(_target: GuideTuneTarget): void {
 }
 
 function applyOverlayAction(action: PlayerOverlayActionId): void {
-  dispatchOverlayAction(action, overlayActionContext);
+  switch (action) {
+    case 'openOsd': playerOverlayController.requestOsd(); return;
+    case 'openNowPlaying': playerOverlayController.requestNowPlaying(); return;
+    case 'openMiniGuide': playerOverlayController.requestMiniGuide(); return;
+    case 'openAudioOptions': playerOverlayController.openOptions('audio'); return;
+    case 'openSubtitleOptions': playerOverlayController.openOptions('subtitle'); return;
+    case 'retryPlayer': playerOverlayController.retry(); return;
+    case 'miniGuidePrevious': playerOverlayController.handleInput('up'); return;
+    case 'miniGuideNext': playerOverlayController.handleInput('down'); return;
+    case 'miniGuidePagePrevious': playerOverlayController.handleInput('pageUp'); return;
+    case 'miniGuidePageNext': playerOverlayController.handleInput('pageDown'); return;
+    case 'closeTopOverlay': playerOverlayController.closeTop();
+  }
 }
 
 async function exportSupportBundle(): Promise<void> {
@@ -633,7 +658,7 @@ function renderApp(): void {
     dom,
     channelController.getState(),
     liveSelection,
-    presentationFixtures.overlays,
+    getPlayerOverlayPresentation(),
     activeSettingsCategory,
     activeSetupStage,
   );
@@ -659,6 +684,14 @@ function renderApp(): void {
   renderRendererFocus(focusState, dom);
   updateGuideTunePendingDom(guideTuneController.getPendingTarget());
   scrollFocusedSetupControlIntoView();
+}
+
+function getPlayerOverlayPresentation() {
+  return createPlayerOverlayPresentation({
+    playerSnapshot,
+    channelSummary: channelController.getState().summary,
+    guidePresentation: workflowState.guidePresentation,
+  });
 }
 async function selectPlexHomeUser(homeUserId: string): Promise<void> {
   await plexController.switchHomeUser(homeUserId);

@@ -72,6 +72,7 @@ export interface RendererDomBindings {
   plexMetadataElement: HTMLElement | null;
   overlayElements: HTMLElement[];
   overlayStackElement: HTMLElement | null;
+  playerPresentationElement?: HTMLElement | null;
   overlayNowPlayingTitleElement: HTMLElement | null;
   overlayNowPlayingSubtitleElement: HTMLElement | null;
   overlayNowPlayingChannelElement: HTMLElement | null;
@@ -84,6 +85,7 @@ export interface RendererDomBindings {
   overlayNowPlayingUpNextElement: HTMLElement | null;
   overlayProgressElement: HTMLElement | null;
   overlayMiniGuideElement: HTMLElement | null;
+  overlayMiniGuideErrorElement?: HTMLElement | null;
   overlayChannelNumberElement: HTMLElement | null;
   overlayChannelBadgeNumberElement: HTMLElement | null;
   overlayChannelBadgeNameElement: HTMLElement | null;
@@ -95,6 +97,12 @@ export interface RendererDomBindings {
   overlayPlaybackSummaryElement: HTMLElement | null;
   overlayAudioOptionsElement: HTMLElement | null;
   overlaySubtitleOptionsElement: HTMLElement | null;
+  overlayChannelNumberMessageElement?: HTMLElement | null;
+  overlayOptionsErrorElement?: HTMLElement | null;
+  overlayTransitionLabelElement?: HTMLElement | null;
+  overlayPlayerErrorElement?: HTMLElement | null;
+  overlayPlayerRetryButton?: HTMLButtonElement | null;
+  overlayPlayerGuideButton?: HTMLButtonElement | null;
   osdStatusElement: HTMLElement | null;
   osdTitleElement: HTMLElement | null;
   osdSubtitleElement: HTMLElement | null;
@@ -189,6 +197,7 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     plexMetadataElement: documentRef.querySelector<HTMLElement>('[data-plex-metadata]'),
     overlayElements: Array.from(documentRef.querySelectorAll<HTMLElement>('[data-overlay]')),
     overlayStackElement: documentRef.querySelector<HTMLElement>('[data-overlay-stack]'),
+    playerPresentationElement: documentRef.querySelector<HTMLElement>('[data-player-presentation-surface]'),
     overlayNowPlayingTitleElement: documentRef.querySelector<HTMLElement>(
       '[data-overlay-now-playing-title]',
     ),
@@ -221,6 +230,7 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     ),
     overlayProgressElement: documentRef.querySelector<HTMLElement>('[data-overlay-progress]'),
     overlayMiniGuideElement: documentRef.querySelector<HTMLElement>('[data-overlay-mini-guide]'),
+    overlayMiniGuideErrorElement: documentRef.querySelector<HTMLElement>('[data-overlay-mini-guide-error]'),
     overlayChannelNumberElement: documentRef.querySelector<HTMLElement>(
       '[data-overlay-channel-number-value]',
     ),
@@ -250,6 +260,12 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     overlaySubtitleOptionsElement: documentRef.querySelector<HTMLElement>(
       '[data-overlay-subtitle-options]',
     ),
+    overlayChannelNumberMessageElement: documentRef.querySelector<HTMLElement>('[data-overlay-channel-number-message]'),
+    overlayOptionsErrorElement: documentRef.querySelector<HTMLElement>('[data-overlay-options-error]'),
+    overlayTransitionLabelElement: documentRef.querySelector<HTMLElement>('[data-overlay-transition-label]'),
+    overlayPlayerErrorElement: documentRef.querySelector<HTMLElement>('[data-overlay-player-error]'),
+    overlayPlayerRetryButton: documentRef.querySelector<HTMLButtonElement>('[data-overlay-action="retryPlayer"]'),
+    overlayPlayerGuideButton: documentRef.querySelector<HTMLButtonElement>('[data-focus-id="overlay-player-guide"]'),
     osdStatusElement: documentRef.querySelector<HTMLElement>('[data-osd-status]'),
     osdTitleElement: documentRef.querySelector<HTMLElement>('[data-osd-title]'),
     osdSubtitleElement: documentRef.querySelector<HTMLElement>('[data-osd-subtitle]'),
@@ -398,28 +414,16 @@ export function readEpgActionId(value: string | undefined): EpgActionId | null {
 
 export function readOverlayActionId(value: string | undefined): PlayerOverlayActionId | null {
   switch (value) {
-    case 'toggleOsd':
+    case 'openOsd':
+    case 'openNowPlaying':
     case 'openMiniGuide':
-    case 'previousMiniGuideChannel':
-    case 'nextMiniGuideChannel':
-    case 'togglePlaybackOptions':
-    case 'cycleAudioTrack':
-    case 'cycleSubtitleTrack':
-    case 'toggleMute':
-    case 'volumeDown':
-    case 'volumeUp':
-    case 'channelDigit0':
-    case 'channelDigit1':
-    case 'channelDigit2':
-    case 'channelDigit3':
-    case 'channelDigit4':
-    case 'channelDigit5':
-    case 'channelDigit6':
-    case 'channelDigit7':
-    case 'channelDigit8':
-    case 'channelDigit9':
-    case 'commitChannelNumber':
-    case 'clearChannelNumber':
+    case 'openAudioOptions':
+    case 'openSubtitleOptions':
+    case 'retryPlayer':
+    case 'miniGuidePrevious':
+    case 'miniGuideNext':
+    case 'miniGuidePagePrevious':
+    case 'miniGuidePageNext':
     case 'closeTopOverlay':
       return value;
     default:

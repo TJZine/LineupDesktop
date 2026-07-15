@@ -17,6 +17,13 @@ const PACKAGE_ONE_GUIDE_SMOKE_ASSERTIONS_SOURCE = GUIDE_SMOKE_ASSERTIONS_SOURCE.
       }`,
   `      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));`,
+).replace(
+  `      if (!(offRouteOverlayAction instanceof HTMLButtonElement) || !offRouteOverlayAction.disabled) {
+        failures.push('off-route overlay action disabled');
+      }`,
+  `      if (offRouteOverlayAction instanceof HTMLButtonElement && !offRouteOverlayAction.disabled) {
+        failures.push('off-route overlay action enabled');
+      }`,
 );
 
 export interface ShellContainmentCounters {
@@ -52,7 +59,7 @@ export async function runSmokeAssertions(
       const screenStack = document.querySelector('[data-static-screens-mounted]');
       const styledPlayerScreen = document.querySelector('[data-screen="player"]');
       const playerSurface = document.querySelector('.player-surface');
-      const playerFocusButton = document.querySelector('[data-focus-id="player-fullscreen"]');
+      const playerFocusButton = document.querySelector('[data-focus-id="overlay-player-retry"]');
       const stylesheetTexts = [];
       for (const sheet of Array.from(document.styleSheets)) {
         try {
@@ -453,41 +460,17 @@ export async function runSmokeAssertions(
       }
       const playerScreen = document.querySelector('[data-screen="player"]');
       const playerPresentation = document.querySelector('[data-player-presentation-surface]');
-      const osdOverlay = document.querySelector('[data-overlay="playerOsd"]');
-      const nowPlayingTitle = document.querySelector('[data-overlay-now-playing-title]')?.textContent ?? '';
-      const miniGuideButton = document.querySelector('[data-overlay-action="openMiniGuide"]');
-      const playerOsdButton = document.querySelector('[data-focus-id="player-osd"]');
-      if (!(playerOsdButton instanceof HTMLButtonElement)) {
-        failures.push('player controls trigger');
-      } else {
-        playerOsdButton.focus(); playerOsdButton.click();
-      }
-      if (!(miniGuideButton instanceof HTMLButtonElement)) {
-        failures.push('mini guide action');
-      } else {
-        miniGuideButton.click();
-      }
-      const miniGuideOverlay = document.querySelector('[data-overlay="miniGuide"]');
-      const miniGuideText = document.querySelector('[data-overlay-mini-guide]')?.textContent ?? '';
-      if (!(miniGuideOverlay instanceof HTMLElement) || miniGuideOverlay.hidden) failures.push('mini guide visible');
-      assertTopElementAtCenter(miniGuideOverlay, 'mini guide z-order');
-      if (miniGuideText.trim().length < 12 || /undefined|null|NaN/i.test(miniGuideText)) {
-        failures.push('mini guide data ' + miniGuideText);
-      }
-
-      const channelNumberButton = document.querySelector('[data-overlay-action="channelDigit4"]');
-      if (!(channelNumberButton instanceof HTMLButtonElement)) {
-        failures.push('channel number action');
-      } else {
-        channelNumberButton.click();
-      }
-      const channelNumberOverlay = document.querySelector('[data-overlay="channelNumber"]');
-      const channelNumberValue = document.querySelector('[data-overlay-channel-number-value]')?.textContent ?? '';
       if (document.documentElement.dataset.activeRoute !== 'player') failures.push('player route activation');
       if (!(playerScreen instanceof HTMLElement) || playerScreen.hidden) failures.push('player screen visible');
-      if (!(osdOverlay instanceof HTMLElement) || osdOverlay.hidden) failures.push('OSD visible');
-      if (!(playerPresentation instanceof HTMLElement)) failures.push('player presentation surface');
+      if (!(playerPresentation instanceof HTMLElement) || playerPresentation.tabIndex !== -1) failures.push('player native presentation surface');
       if (!(overlayStack instanceof HTMLElement) || overlayStack.hidden) failures.push('player overlay stack visible');
+      if (document.querySelector('.player-quick-actions') !== null) failures.push('obsolete player quick actions');
+      if (document.querySelector('[data-overlay-action^="channelDigit"], [data-overlay-action="commitChannelNumber"], [data-overlay-action="clearChannelNumber"]') !== null) failures.push('obsolete channel number proxies');
+      for (const required of ['playerOsd', 'nowPlaying', 'miniGuide', 'channelNumber', 'channelBadge', 'playbackOptions', 'transition', 'playerLoading', 'playerError']) {
+        if (!(document.querySelector('[data-overlay="' + required + '"]') instanceof HTMLElement)) failures.push('player semantic owner ' + required);
+      }
+      const reachableCopy = overlayStack instanceof HTMLElement ? overlayStack.textContent ?? '' : '';
+      if (/The Midnight Archive|Liminal One|renderer-presentation-player/u.test(reachableCopy)) failures.push('production presentation fixture copy');
       if (
         playerPresentation instanceof HTMLElement &&
         playerScreen instanceof HTMLElement &&
@@ -500,42 +483,6 @@ export async function runSmokeAssertions(
           failures.push('rd15 z-order ' + JSON.stringify({ presentationZ, screenZ, overlayZ }));
         }
       }
-      if (nowPlayingTitle.trim().length === 0 || /undefined|null|NaN/i.test(nowPlayingTitle)) {
-        failures.push('now playing title ' + nowPlayingTitle);
-      }
-      if (!(channelNumberOverlay instanceof HTMLElement) || channelNumberOverlay.hidden) {
-        failures.push('channel number visible');
-      }
-      assertTopElementAtCenter(channelNumberOverlay, 'channel number z-order');
-      if (channelNumberValue !== '4__') failures.push('channel number value ' + channelNumberValue);
-
-      const closeOverlayButton = document.querySelector('[data-overlay-action="closeTopOverlay"]');
-      if (!(closeOverlayButton instanceof HTMLButtonElement)) {
-        failures.push('close overlay action');
-      } else {
-        closeOverlayButton.click();
-        closeOverlayButton.click();
-        closeOverlayButton.click();
-      }
-      const activePlayerControl = document.activeElement instanceof HTMLButtonElement
-        && document.activeElement.dataset.focusId?.startsWith('player-') === true && document.activeElement.tabIndex === 0;
-      if (!(playerOsdButton instanceof HTMLButtonElement) || !activePlayerControl) {
-        failures.push(
-          'overlay focus fallback ' +
-            JSON.stringify({
-              activeFocus:
-                document.activeElement instanceof HTMLElement
-                  ? document.activeElement.dataset.focusId ?? ''
-                  : '',
-              playerOsdTabIndex:
-                playerOsdButton instanceof HTMLButtonElement ? playerOsdButton.tabIndex : null,
-              activeTabIndex:
-                document.activeElement instanceof HTMLElement ? document.activeElement.tabIndex : null,
-            }),
-        );
-      }
-
-      window.open('https://example.com');
       navigator.permissions?.query?.({ name: 'geolocation' }).catch(() => undefined);
 
       return { failures };
@@ -550,6 +497,11 @@ export async function runSmokeAssertions(
       result.failures.push('fullscreen continuity ' + message);
     }
   }
+
+  await window.webContents.executeJavaScript(`
+    window.open('https://example.com');
+    true;
+  `, true);
 
   await window.webContents.executeJavaScript(`
     location.assign('https://example.com/disallowed-navigation');

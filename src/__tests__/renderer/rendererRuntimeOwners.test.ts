@@ -3,9 +3,13 @@ import assert from 'node:assert/strict';
 
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import type { PlayerEvent, PlayerSnapshot } from '../../contracts/player.js';
+import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import { DEFAULT_EPG_PRESENTATION_SOURCE, type EpgPresentationSource } from '../../renderer/epg.js';
-import { createRendererPresentationFixtures } from '../../renderer/presentationFixtures.js';
+import { renderRendererFocus, syncRendererFocusTargets } from '../../renderer/focusDom.js';
+import { createFullscreenTransportCoordinator } from '../../renderer/fullscreenTransport.js';
+import { createEmptyPlayerSnapshot } from '../../renderer/playerOverlayPresentation.js';
 import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
+import { FocusRegistry, type FocusState } from '../../renderer/navigation.js';
 import { dispatchPlexRuntimeAction } from '../../renderer/plexRuntimeActionDispatch.js';
 import { subscribePlayerBridge } from '../../renderer/playerBridgeSubscription.js';
 import type { PlexRuntimeController } from '../../renderer/plexRuntimeActions.js';
@@ -13,8 +17,8 @@ import { createShellController } from '../../renderer/shell/shellController.js';
 import { createRendererShellState, type RendererShellState } from '../../renderer/shell/shellState.js';
 
 test('player bridge subscription owns event projection and unsubscribe cleanup', async () => {
-  const fixtures = createRendererPresentationFixtures();
-  let snapshot = fixtures.playerSnapshot;
+  const initialSnapshot = { ...createEmptyPlayerSnapshot(), requestId: 'playback-1', status: 'playing' as const, playing: true };
+  let snapshot: PlayerSnapshot = initialSnapshot;
   let renderCount = 0;
   let emitPlayerEvent = (_event: PlayerEvent): void => {
     throw new Error('player event listener was not registered');
@@ -33,7 +37,7 @@ test('player bridge subscription owns event projection and unsubscribe cleanup',
         return {
           ok: true,
           value: {
-            ...fixtures.playerSnapshot,
+            ...initialSnapshot,
             positionMs: 42,
           },
         };
@@ -64,13 +68,52 @@ test('player bridge subscription owns event projection and unsubscribe cleanup',
   assert.equal(snapshot.positionMs, 42);
   assert.equal(renderCount, 1);
 
-  emitPlayerEvent({ event: 'time.updated', requestId: 'time-update', positionMs: 90, durationMs: 120 });
+  emitPlayerEvent({ event: 'time.updated', requestId: 'playback-1', positionMs: 90, durationMs: 120 });
   assert.equal(snapshot.positionMs, 90);
   assert.equal(snapshot.durationMs, 120);
   assert.equal(renderCount, 2);
 
   subscription.unsubscribe();
   assert.equal(unsubscribed, true);
+});
+
+test('player bridge filters request-scoped events, keeps settlement separate, and rejects late init/unsubscribe', async () => {
+  const initial = { ...createEmptyPlayerSnapshot(), requestId: 'current', status: 'playing' as const, playing: true };
+  let snapshot: PlayerSnapshot = initial;
+  let emit = (_event: PlayerEvent): void => undefined;
+  const init = createDeferred<Awaited<ReturnType<LineupDesktopPreloadApi['player']['getSnapshot']>>>();
+  const observedEvents: PlayerEvent[] = [];
+  let renders = 0;
+  const subscription = subscribePlayerBridge({
+    player: {
+      onEvent(listener) { emit = listener; return () => undefined; },
+      getSnapshot: () => init.promise,
+    } as LineupDesktopPreloadApi['player'],
+    diagnostics: {
+      recordRendererEvent: async () => ({ ok: true, value: undefined }),
+    } as unknown as LineupDesktopPreloadApi['diagnostics'],
+    getSnapshot: () => snapshot,
+    setSnapshot: (next) => { snapshot = next; },
+    onEvent: (event) => { observedEvents.push(event); },
+    render: () => { renders += 1; },
+  });
+
+  const pendingInit = subscription.initializeSnapshot();
+  emit({ event: 'time.updated', requestId: 'stale', positionMs: 99, durationMs: 100 });
+  assert.equal(snapshot.positionMs, 0);
+  emit({ event: 'quality.changed', requestId: 'current', quality: { mode: 'direct-play', sourceDynamicRange: 'sdr', outputDynamicRangeStatus: 'sdr' } });
+  assert.equal(snapshot.quality.mode, 'direct-play');
+  emit({ event: 'command.settled', requestId: 'command-1', command: 'pause', ok: true });
+  assert.equal(observedEvents.at(-1)?.event, 'command.settled');
+  assert.equal(renders, 1);
+
+  emit({ event: 'state.changed', requestId: 'new', snapshot: { ...initial, requestId: 'new', status: 'paused', playing: false } });
+  init.resolve({ ok: true, requestId: 'init', value: { ...initial, status: 'idle', requestId: null } });
+  await pendingInit;
+  assert.equal(snapshot.status, 'paused');
+  subscription.unsubscribe();
+  emit({ event: 'state.changed', requestId: 'late', snapshot: { ...initial, requestId: 'late' } });
+  assert.equal(snapshot.requestId, 'new');
 });
 
 test('guide presentation polling ignores stale and stopped refreshes', async () => {
@@ -126,6 +169,53 @@ test('guide presentation polling ignores stale and stopped refreshes', async () 
   activeRoute = 'player';
   await polling.refresh('off-route');
   assert.equal(requests.length, 3);
+});
+
+test('guide presentation polling schedules Player and Guide with route-owned windows and cleanup', async () => {
+  let activeRoute: 'player' | 'guide' | 'settings' = 'player';
+  const intervalCallbacks: Array<() => void> = [];
+  let clearCount = 0;
+  let loadingCount = 0;
+  let playerApplyCount = 0;
+  const windows: number[] = [];
+  const nowMs = 1_778_619_999_999;
+  const polling = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async (request: { startTimeMs: number; durationMs: number }) => {
+        windows.push(request.startTimeMs);
+        return { ok: true, requestId: `guide-${windows.length}`, value: DEFAULT_EPG_PRESENTATION_SOURCE };
+      },
+    } as unknown as LineupDesktopPreloadApi['guide'],
+    host: {
+      setInterval: (callback: TimerHandler) => { intervalCallbacks.push(callback as () => void); return 7; },
+      clearInterval: () => { clearCount += 1; },
+    } as unknown as Window,
+    getActiveRoute: () => activeRoute,
+    getWindowStartMs: () => 1_700_000_000_000,
+    getNowMs: () => nowMs,
+    setLoading: () => { loadingCount += 1; },
+    applyPresentation: () => undefined,
+    applyPlayerPresentation: () => { playerApplyCount += 1; },
+    handleFailure: () => undefined,
+  });
+
+  polling.start();
+  await Promise.resolve();
+  assert.equal(windows[0], Math.floor(nowMs / 1_800_000) * 1_800_000);
+  assert.equal(loadingCount, 0);
+  assert.equal(playerApplyCount, 1);
+  intervalCallbacks[0]?.();
+  await Promise.resolve();
+  assert.equal(windows.length, 2);
+
+  activeRoute = 'guide';
+  polling.reconcile('player', 'guide');
+  await Promise.resolve();
+  assert.equal(windows.at(-1), 1_700_000_000_000);
+  assert.equal(loadingCount, 1);
+  activeRoute = 'settings';
+  polling.reconcile('guide', 'settings');
+  assert.equal(clearCount, 2);
 });
 
 test('shell controller rejects stale capabilities and exposes recoverable safe startup failure', async () => {
@@ -186,7 +276,7 @@ test('shell controller rejects stale capabilities and exposes recoverable safe s
   assert.equal(focused.at(-1), 'shell-error-retry');
 });
 
-test('shell controller preserves fullscreen focus and owns 5000/200/1500 toast timing', async () => {
+test('shell controller forwards fullscreen focus intent and owns 5000/200/1500 toast timing', async () => {
   let state = createRendererShellState();
   state = { ...state, bootstrap: 'ready' };
   let now = 2000;
@@ -221,8 +311,8 @@ test('shell controller preserves fullscreen focus and owns 5000/200/1500 toast t
     nowMs: () => now,
   });
 
-  await controller.requestFullscreen(true, 'player-osd');
-  assert.equal(focused.at(-1), 'player-osd');
+  await controller.requestFullscreen(true, 'overlay-osd-audio');
+  assert.equal(focused.at(-1), 'overlay-osd-audio');
   assert.equal(state.toast?.message, 'Entered fullscreen');
   assert.deepEqual([...timers.values()].map((timer) => timer.delay), [5000]);
   const visibleTimer = [...timers.entries()][0];
@@ -244,6 +334,72 @@ test('shell controller preserves fullscreen focus and owns 5000/200/1500 toast t
   await controller.requestFullscreen(false, 'player-fullscreen');
   assert.deepEqual([...timers.values()].map((timer) => timer.delay), [5000]);
   assert.notEqual([...timers.keys()][0], oppositeTransitionTimerId);
+});
+
+test('fullscreen transport preserves a live visible overlay focus target through entry and exit', async () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const owner = { hidden: false, ariaHidden: 'false', dataset: { overlay: 'playerOsd' } };
+  const control = new FullscreenOverlayFocusElement('overlay-osd-audio', owner);
+  const documentDouble = {
+    activeElement: null as FullscreenOverlayFocusElement | null,
+    querySelectorAll: () => [control],
+  };
+  Object.defineProperty(globalThis, 'document', { value: documentDouble, configurable: true });
+  try {
+    const dom = createFullscreenFocusDom(control);
+    const registry = new FocusRegistry();
+    syncRendererFocusTargets(registry, dom);
+    let focusState: FocusState = { activeRoute: 'player', activeId: null };
+    const restoreFocus = (focusId: string): void => {
+      syncRendererFocusTargets(registry, dom);
+      focusState = registry.focusTarget(focusState, focusId).state;
+      renderRendererFocus(focusState, dom);
+    };
+    restoreFocus(control.dataset.focusId ?? '');
+    const acceptedFocusId = focusState.activeId;
+    assert.equal(acceptedFocusId, 'overlay-osd-audio');
+    assert.equal(owner.hidden, false);
+    assert.equal(owner.ariaHidden, 'false');
+    assert.equal(control.closest('[data-overlay]'), owner);
+    assert.equal(documentDouble.activeElement, control);
+
+    const reconciled: boolean[] = [];
+    const transport = createFullscreenTransportCoordinator({
+      bridge: {
+        setFullscreen: async (desired) => {
+          documentDouble.activeElement = null;
+          control.tabIndex = -1;
+          return { ok: true, requestId: `fullscreen-${String(desired)}`, value: { enabled: desired } };
+        },
+      },
+      reconcile: (enabled) => { reconciled.push(enabled); },
+    });
+    let shellState: RendererShellState = { ...createRendererShellState(), bootstrap: 'ready' };
+    const controller = createShellController({
+      shell: { getCapabilities: async () => { throw new Error('unused'); }, onStatusChanged: () => () => undefined },
+      windowBridge: transport,
+      host: { setTimeout: () => 1, clearTimeout: () => undefined },
+      getState: () => shellState,
+      setState: (next) => { shellState = next; },
+      render: () => undefined,
+      applyCapabilities: () => undefined,
+      restoreFocus,
+    });
+
+    await controller.requestFullscreen(true, acceptedFocusId ?? '');
+    assert.equal(focusState.activeId, 'overlay-osd-audio');
+    assert.equal(documentDouble.activeElement, control);
+    assert.equal(control.tabIndex, 0);
+    await controller.requestFullscreen(false, acceptedFocusId ?? '');
+    assert.equal(focusState.activeId, 'overlay-osd-audio');
+    assert.equal(documentDouble.activeElement, control);
+    assert.equal(control.tabIndex, 0);
+    assert.deepEqual(reconciled, [true, false]);
+    assert.equal(control.focusCount, 3);
+  } finally {
+    if (originalDocument === undefined) Reflect.deleteProperty(globalThis, 'document');
+    else Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
+  }
 });
 
 test('shell fullscreen mutex survives UI invalidation until transport settlement', async () => {
@@ -364,6 +520,60 @@ function createNoopIntervalHost(): Window {
     setInterval: () => 1,
     clearInterval: () => undefined,
   } as unknown as Window;
+}
+
+class FullscreenOverlayFocusElement {
+  tabIndex = -1;
+  disabled = false;
+  focusCount = 0;
+  className = '';
+  readonly dataset: Record<string, string>;
+  readonly classList = {
+    toggle: (name: string, enabled: boolean): void => {
+      const names = new Set(this.className.split(' ').filter(Boolean));
+      if (enabled) names.add(name);
+      else names.delete(name);
+      this.className = [...names].join(' ');
+    },
+  };
+
+  constructor(
+    focusId: string,
+    private readonly owner: { hidden: boolean; ariaHidden: string; dataset: { overlay: string } },
+  ) {
+    this.dataset = { focusId };
+  }
+
+  closest(selector: string): object | null {
+    if (selector === '.profile-pin-modal') return null;
+    if (selector === '[data-screen]') return { dataset: { screen: 'player' } };
+    if (selector === '[data-overlay]') return this.owner;
+    if (selector.includes('[hidden]')) return this.owner.hidden || this.owner.ariaHidden === 'true' ? {} : null;
+    return null;
+  }
+
+  getAttribute(name: string): string | null {
+    return name === 'aria-disabled' ? 'false' : null;
+  }
+
+  focus(): void {
+    this.focusCount += 1;
+    (Reflect.get(globalThis, 'document') as { activeElement: FullscreenOverlayFocusElement | null }).activeElement = this;
+  }
+}
+
+function createFullscreenFocusDom(control: FullscreenOverlayFocusElement): RendererDomBindings {
+  return {
+    fullscreenButton: null,
+    routeActionButtons: [],
+    epgActionButtons: [],
+    settingsActionButtons: [],
+    setupActionButtons: [],
+    plexActionButtons: [],
+    channelCommitButtons: [],
+    focusableElements: [control as unknown as HTMLElement],
+    overlayActionButtons: [control as unknown as HTMLButtonElement],
+  } as unknown as RendererDomBindings;
 }
 
 function createPlexControllerStub(calls: string[]): PlexRuntimeController {

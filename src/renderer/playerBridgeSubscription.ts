@@ -1,4 +1,4 @@
-import type { PlayerSnapshot } from '../contracts/player.js';
+import type { PlayerEvent, PlayerSnapshot } from '../contracts/player.js';
 import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
 import {
   recordRendererBridgeFailure,
@@ -10,6 +10,8 @@ export interface PlayerBridgeSubscriptionOptions {
   diagnostics: LineupDesktopPreloadApi['diagnostics'];
   getSnapshot(): PlayerSnapshot;
   setSnapshot(snapshot: PlayerSnapshot): void;
+  onSnapshot?(snapshot: PlayerSnapshot, authoritative: boolean, explicitTrackList?: boolean): void;
+  onEvent?(event: PlayerEvent): void;
   render(): void;
 }
 
@@ -21,83 +23,93 @@ export interface PlayerBridgeSubscription {
 export function subscribePlayerBridge(
   options: PlayerBridgeSubscriptionOptions,
 ): PlayerBridgeSubscription {
-  const unsubscribe = options.player.onEvent((event) => {
+  let active = true;
+  let projectionGeneration = 0;
+  const project = (snapshot: PlayerSnapshot, authoritative: boolean, explicitTrackList = false): void => {
+    if (!active) return;
+    projectionGeneration += 1;
+    options.setSnapshot(snapshot);
+    options.onSnapshot?.(snapshot, authoritative, explicitTrackList);
+    options.render();
+  };
+
+  const unsubscribeBridge = options.player.onEvent((event) => {
+    if (!active) return;
+    options.onEvent?.(event);
     const snapshot = options.getSnapshot();
     if (event.event === 'state.changed') {
-      options.setSnapshot(event.snapshot);
-    } else if (event.event === 'time.updated') {
-      options.setSnapshot({
-        ...snapshot,
-        positionMs: event.positionMs,
-        durationMs: event.durationMs,
-      });
-    } else if (event.event === 'buffer.updated') {
-      options.setSnapshot({
-        ...snapshot,
-        bufferedRanges: event.bufferedRanges,
-      });
-    } else if (event.event === 'media.loaded') {
-      options.setSnapshot({
-        ...snapshot,
-        status: 'ready',
-        media: event.media,
-        durationMs: event.durationMs,
-      });
-    } else if (event.event === 'tracks.changed') {
-      options.setSnapshot({
-        ...snapshot,
-        tracks: event.tracks,
-      });
-    } else if (event.event === 'track.selection.changed') {
-      options.setSnapshot({
-        ...snapshot,
-        selectedAudioTrackId: event.audioTrackId,
-        selectedSubtitleTrackId: event.subtitleTrackId,
-        selectedVideoTrackId: event.videoTrackId,
-      });
-    } else if (event.event === 'ended') {
-      options.setSnapshot({
-        ...snapshot,
-        status: 'ended',
-        playing: false,
-      });
-    } else if (event.event === 'error') {
-      options.setSnapshot({
-        ...snapshot,
-        status: 'error',
-        playing: false,
-        lastError: event.error,
-      });
+      project(event.snapshot, true);
+      return;
     }
-    options.render();
+    if (event.event === 'command.settled' || event.event === 'warning' || event.event === 'error') {
+      return;
+    }
+    if (event.requestId !== snapshot.requestId) return;
+    switch (event.event) {
+      case 'time.updated':
+        project({ ...snapshot, positionMs: event.positionMs, durationMs: event.durationMs }, false);
+        return;
+      case 'buffer.updated':
+        project({ ...snapshot, bufferedRanges: event.bufferedRanges }, false);
+        return;
+      case 'media.loaded':
+        project({ ...snapshot, media: event.media, durationMs: event.durationMs }, false);
+        return;
+      case 'tracks.changed':
+        project({ ...snapshot, tracks: event.tracks }, false, true);
+        return;
+      case 'track.selection.changed':
+        project({
+          ...snapshot,
+          selectedAudioTrackId: event.audioTrackId,
+          selectedSubtitleTrackId: event.subtitleTrackId,
+          selectedVideoTrackId: event.videoTrackId,
+        }, false);
+        return;
+      case 'quality.changed':
+        project({ ...snapshot, quality: event.quality }, false);
+        return;
+      case 'ended':
+        project({ ...snapshot, status: 'ended', playing: false }, false);
+        return;
+      default: {
+        const exhaustive: never = event;
+        return exhaustive;
+      }
+    }
   });
 
   return {
-    initializeSnapshot: () => initializePlayerSnapshot(options),
-    unsubscribe,
+    async initializeSnapshot(): Promise<void> {
+      const startGeneration = projectionGeneration;
+      try {
+        const result = await options.player.getSnapshot();
+        if (!active || projectionGeneration !== startGeneration) return;
+        if (result.ok) {
+          project(result.value, true);
+          return;
+        }
+        recordRendererBridgeFailure(
+          options.diagnostics.recordRendererEvent,
+          'player.getSnapshot',
+          result.error.message,
+          {},
+        );
+      } catch (error: unknown) {
+        if (!active || projectionGeneration !== startGeneration) return;
+        recordRendererBridgeFailure(
+          options.diagnostics.recordRendererEvent,
+          'player.getSnapshot',
+          summarizeRendererBridgeError(error),
+          {},
+        );
+      }
+    },
+    unsubscribe(): void {
+      if (!active) return;
+      active = false;
+      projectionGeneration += 1;
+      unsubscribeBridge();
+    },
   };
-}
-
-async function initializePlayerSnapshot(options: PlayerBridgeSubscriptionOptions): Promise<void> {
-  try {
-    const result = await options.player.getSnapshot();
-    if (result.ok) {
-      options.setSnapshot(result.value);
-      options.render();
-      return;
-    }
-    recordRendererBridgeFailure(
-      options.diagnostics.recordRendererEvent,
-      'player.getSnapshot',
-      result.error.message,
-      {},
-    );
-  } catch (error: unknown) {
-    recordRendererBridgeFailure(
-      options.diagnostics.recordRendererEvent,
-      'player.getSnapshot',
-      summarizeRendererBridgeError(error),
-      {},
-    );
-  }
 }

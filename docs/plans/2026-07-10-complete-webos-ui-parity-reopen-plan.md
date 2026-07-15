@@ -3,12 +3,14 @@
 **Plan Status:** active
 **Task family:** feature/design
 **Tier:** Tier 3
-**Current execution unit:** Package 6 — Runtime player and overlay state machine
-is next and unstarted. Package 5 — Scheduler-backed Guide parity is closed with
-full verification, exact-viewport evidence, and clean read-only adversarial
-re-review. The source-proven pre–Package 5 remediation and the 2026-07-15
-suggestion-reviewed correction remain closed. Packages 0–4 remain closed at
-their corrected checkpoints; RD-27 remains blocked until Packages 6–8 close.
+**Current execution unit:** Package 7 — Player overlay visual surfaces planning
+and review is next and unstarted. Package 6 — Runtime player and overlay state
+machine is implemented, controller-verified, and independently clean-reviewed.
+Package 5 — Scheduler-backed Guide parity remains closed with full verification,
+exact-viewport evidence, and clean read-only adversarial re-review. The
+source-proven pre–Package 5 remediation and the 2026-07-15 suggestion-reviewed
+correction remain closed. Packages 0–4 remain closed at their corrected
+checkpoints; RD-27 remains blocked until Packages 7–8 close.
 
 ## Goal
 
@@ -91,9 +93,29 @@ reachable proxy Guide buttons and make rendered program/state controls own
 pointer/OK behavior. The main-owned smoke assertion is proof code only: update
 its stale six-proxy-button assertion to inspect the dynamic ready or authorized
 empty/error Guide controls; it must not change product main/runtime behavior.
-Packages 6–7 must be promoted to the same exact-file
-standard before they become current. Package 8 changes evidence and tracked
-memory unless it routes a defect back to its owning package.
+Package 6 may change only `src/renderer/navigation.ts`,
+`src/renderer/desktopInput.ts`, `src/renderer/shell/navigationLifecycle.ts`,
+`src/renderer/overlays.ts`, `src/renderer/overlayViewModels.ts`,
+`src/renderer/overlayViewModelHelpers.ts`,
+`src/renderer/presentationFixtures.ts` (delete),
+`src/renderer/playerOverlayPresentation.ts` (new),
+`src/renderer/playerOverlayController.ts` (new),
+`src/renderer/playerOverlayActions.ts` (retire),
+`src/renderer/playerBridgeSubscription.ts`,
+`src/renderer/guidePresentationPolling.ts`, `src/renderer/staticDom.ts`,
+`src/renderer/domBindings.ts`, `src/renderer/routeDom.ts`,
+`src/renderer/focusDom.ts`, `src/renderer/rendererActionRegistration.ts`,
+`src/renderer/workflow.ts`, `src/renderer/index.ts` for composition wiring only,
+and `src/renderer/styles/player-overlays.css` for behavior-essential visibility,
+focus, reduced-motion, and forced-colors rules only. Proof-only smoke changes
+are limited to `src/main/smokeAssertions.ts` and
+`src/main/smokeFullscreenAssertions.ts`; they must replace stale fixture/quick-
+action assertions and cannot change main/runtime behavior. Tests are limited to
+the Package 6 files named below. Local execution/evidence artifacts stay under
+the ignored `docs/runs/complete-webos-ui-parity-reopen/` bundle. Package 7 must
+be promoted to the same exact-file standard before it becomes current. Package
+8 changes evidence and tracked memory unless it routes a defect back to its
+owning package.
 
 The closed 2026-07-15 correction was the reviewed source-proven exception to
 the Package 5 file boundary. Its exact production and workflow checkpoints are
@@ -336,16 +358,279 @@ Package 5 closeout:
 
 **Role:** `worker` only.
 
-Remove production fixture presentation. Derive safe channel/program/overlay
-state from existing player plus Guide/channel runtime state. Idle shows the
-native presentation surface with no default route card or overlay stack. Enforce
-the reviewed precedence/actions for OSD, now playing, mini guide, options, badge,
-number input, transition/loading/error, fullscreen, tune, and Back. Real events
-own transients and cleanup; modal owners contain and restore focus.
+**Architecture boundary:** renderer-only. Existing
+`window.lineupDesktop.player`, `window.lineupDesktop.guide`, and
+`window.lineupDesktop.channelSetup` APIs are sufficient. No new contract, IPC,
+preload, main, native/helper, persistence, protocol, dependency, or player-
+command surface is approved. Stop and replan if implementation cannot be
+completed through those safe bridges.
+
+Delete the production dependency on `presentationFixtures.ts`; keep test data in
+tests. `playerOverlayPresentation.ts` becomes the pure translation boundary from
+the latest safe player snapshot, channel-status summary, and scheduler-backed
+Guide presentation into honest player/overlay view models. It must omit missing
+data instead of inventing channels, tracks, programs, descriptions, badges, or
+artwork. `overlays.ts` remains the deterministic state/precedence reducer.
+`playerOverlayController.ts` owns timers, bridge effects, async generations,
+route/snapshot reconciliation, focus-return intents, and cleanup; retire the
+module-global timeout/effect ownership in `playerOverlayActions.ts`.
+`playerBridgeSubscription.ts` owns event projection and unsubscribe cleanup.
+Only `state.changed` authoritatively replaces the snapshot or creates terminal
+Player error UI. `time.updated`, `buffer.updated`, `media.loaded`,
+`tracks.changed`, `track.selection.changed`, `quality.changed`, and `ended`
+apply only when their non-null request id equals the current snapshot request.
+`command.settled` is instead correlated to the controller-issued pending command
+request/generation, never snapshot-request filtered; a matching failure delegates
+to the command's frozen failure owner (options inline for track selection,
+diagnostic-only for Space), while a matching success does not fabricate snapshot
+state. `warning`, null-request `error`, and unmatched request-scoped
+`error` are sanitized diagnostics only. A matching request-scoped `error` may
+fail its pending command inline but cannot create terminal Player error without
+`state.changed`. Late initial `getSnapshot()` applies only if the subscription
+is still active and no newer event/snapshot generation has won; post-unsubscribe
+callbacks and all stale events are inert.
+
+`guidePresentationPolling.ts` shares its existing scheduler presentation across
+Guide and Player; Player refresh failure retains the last valid presentation or
+omits schedule-dependent overlays and must not take over the route with Guide
+loading/error UI.
+
+The Player route has no default card, quick-action dashboard, or visible default
+overlay. Baseline Player-status presentation is exhaustive:
+
+| `PlayerStatus` | Presentation without an active manual transition |
+| --- | --- |
+| `idle` | native presentation only; normal overlays closed |
+| `loading` | generic semantic loading owner |
+| `ready` | native presentation only |
+| `buffering` | generic semantic loading owner |
+| `playing` | native presentation; eligible requested overlays may open |
+| `paused` | native presentation; eligible requested overlays may open |
+| `seeking` | an already-open OSD may remain; otherwise generic loading |
+| `stalled` | generic semantic loading owner |
+| `ended` | native presentation only; normal overlays closed |
+| `error` | safe terminal Player error; normal overlays closed |
+| `destroyed` | safe unavailable Player error; normal overlays closed and no Retry |
+
+Retry is rendered only for `status === 'error'`,
+`snapshot.lastError.retryable === true`, and a renderer-safe current or last
+tune channel id. Guide is rendered only when real Guide/channel state can open
+it. A later authoritative non-error `state.changed` closes the error owner and
+projects that status. Validation failure, track membership failure, bridge
+reject/throw, `command.settled` failure, warning, or standalone error event does
+not enter terminal Player error.
+
+Freeze these input/state rules:
+
+- With no active overlay and status `ready`, `playing`, or `paused`,
+  Down or OK requests OSD; pointer activation of the native presentation invokes
+  that same action. Space dispatches play/pause from the current snapshot without
+  inventing a toggle contract. Audio is eligible only when at least one available
+  audio track differs from the selected id. Subtitles are eligible when an
+  available subtitle exists or a subtitle is selected; its options always include
+  Off, which is the only eligible row when disabling a selected-but-no-longer-
+  listed subtitle. With zero eligible controls, the OSD request is consumed but
+  refuses open, remains focusless/native, and starts no timer. With exactly one,
+  it opens and focuses that control; with two, horizontal focus connects them.
+  It auto-hides after 3,000 ms while playing and remains while paused/seeking.
+  Loading, buffering, stalled, idle, error, destroyed, ended, route leave, or a
+  higher owner closes it. Back closes an open OSD; with refused/closed OSD Back
+  follows normal route behavior. Pointer and keyboard obey the identical zero/
+  one/two-control eligibility and timer rules.
+- Space uses status as the intent selector and `snapshot.playing` only as a
+  consistency gate: `playing` plus `playing === true` dispatches existing
+  `player.pause`; `ready` or `paused` plus `playing === false` dispatches
+  existing `player.play`. Inconsistent pairs and `idle`, `loading`, `buffering`,
+  `seeking`, `stalled`, `ended`, `error`, or `destroyed` consume/ignore Space and
+  dispatch nothing. Only one Space command generation may be pending; duplicates
+  are ignored. Matching `command.settled` success ends it, while rejected
+  dispatch, matching settled failure, throw, or an inconsistent authoritative
+  update records a sanitized renderer diagnostic and shows no overlay/inline
+  failure. Only a later authoritative terminal `state.changed` owns Player error
+  UI. Route leave, superseding playback request id, and dispose invalidate the
+  pending Space generation; late result/events cannot mutate Player UI.
+- `i` opens persistent, focusless now-playing only when real current-program
+  data exists. Shell blocking owners and playback options refuse Info. Otherwise
+  Info closes/replaces a lower mini-guide, OSD, or number owner rather than
+  suspending it; Back closes now-playing to native presentation and does not
+  restore the replaced owner. This is an evidenced Desktop divergence from
+  upstream, which refuses Info while any modal is open; Package 8 must record it
+  in durable divergence memory. Channel badge is a passive derived companion to
+  visible OSD or now-playing when a real current channel exists; it has no timer
+  or focus and is hidden by Guide or transition.
+- Up opens mini-guide only with real channels. It renders exactly five circular
+  rows centered on selection; Up/Down moves one, PageUp/PageDown jumps five,
+  Right opens full Guide, OK tunes, and Back closes. Its 8,000 ms inactivity
+  timer resets on movement/page and is cleared on every exit/cleanup.
+- Digit input accepts at most three digits from the real channel catalog. It
+  commits after 2,000 ms inactivity or immediately at three digits. Exact match
+  tunes; invalid input remains as a safe error for 2,000 ms; completed input
+  hides after 650 ms. There are no production digit, Tune, or Clear proxy
+  buttons.
+- Every tune invoker arms transition immediately and delays its visible channel-
+  specific spinner/prefix for 175 ms. Same-target duplicate activation is
+  ignored. A different target supersedes the current tune generation, moves the
+  pending target, rearms both delay and presentation, and makes the older result
+  inert. Bridge rejection/throw ends only that current transition generation;
+  bridge success alone is not playback-ready. After arm, authoritative
+  `state.changed` `loading`, `buffering`, `seeking`, or `stalled` retains the
+  transition; `idle`, `ready`, `playing`, `paused`, or `ended` ends it to the
+  baseline row above; `error` or `destroyed` ends it to terminal error. Route
+  leave/rearm/cleanup also ends it. Upstream
+  `src/modules/ui/channel-transition/ChannelTransitionCoordinator.ts` at the
+  pinned `4bdb0e1b3370e7893a582ec80226557727832d0b` (unchanged in the scoped
+  freshness read at `a1a7ea7dcb1cfc8aee7cfcf88cf5a1dac718bf30`) has only the
+  175 ms show timer and no maximum fallback. Desktop deliberately adds `ready`,
+  pre-visible `idle`, and `destroyed` terminals to prevent stranded activity
+  and adds no arbitrary timeout while an authoritative load-like status remains
+  active.
+- Mini-guide tune keeps the guide visible with only the target row busy. On
+  current-generation bridge success it closes mini-guide and lets transition
+  own progress; failure keeps mini-guide open with safe inline error and exact
+  row focus. Movement remains available; OK on a different row supersedes and
+  moves busy state, while OK on the same row is ignored. Number commit is
+  focusless and locks further digits while pending; success shows completed
+  number state for 650 ms before exposing any still-active transition, while
+  failure shows safe invalid/failure state for 2,000 ms then returns native.
+  Error Retry keeps the error owner and exact Retry focus busy while pending;
+  bridge success or an authoritative load-like `state.changed` closes it in
+  favor of transition, bridge failure keeps it focused with safe error, and a
+  terminal authoritative state ends transition back at Player error.
+- Current-generation tune bridge success triggers both existing reconciliation
+  owners with no Guide loading takeover: guarded
+  `channelRuntimeController.loadStatus()` through
+  `window.lineupDesktop.channelSetup.getStatus()` and guarded
+  `guidePresentationPolling.refresh('player-tune-success', { showLoading: false
+  })` through `window.lineupDesktop.guide.getPresentation()`. The controller
+  rechecks the tune generation immediately before invoking each existing refresh
+  callback; the existing status and presentation owners retain their own latest-
+  request/route apply policy. A same-generation refresh failure records only its
+  existing sanitized/last-valid-data policy. A rejected, thrown, superseded,
+  route-stale, or disposed tune result never starts reconciliation or directly
+  publishes channel/Guide data. This adds no new owner, bridge, or public API.
+- Playback options contain only real available audio tracks and subtitle Off
+  plus real available subtitle tracks. Selection validates current snapshot
+  request/membership, is single-flight, and exposes a busy row. Validation/
+  membership failure, IPC reject/throw, rejected dispatch, or matching
+  `command.settled` failure keeps options open with safe inline error and exact
+  row focus. Matching `command.settled` success is the accepted completion
+  signal; dispatch `accepted === false` is handled locally as failure. A same-
+  playback-request `track.selection.changed` or non-terminal `state.changed`
+  updates the view but does not invalidate or complete the pending command,
+  regardless of arriving before settlement. Only playback request-id
+  replacement, target membership loss, options/route cleanup, or authoritative
+  terminal status invalidates it. Membership loss keeps options with safe inline
+  error and the first current row when that family remains eligible; otherwise
+  it closes through the return chain. On accepted completion or Back, recompute
+  OSD eligibility: restore the exact invoking control if present, otherwise the
+  remaining audio/subtitle control, otherwise close OSD and programmatically
+  focus the native Player presentation surface (`tabindex="-1"`, not a roving or
+  tab-stop control). This is the exact fallback when subtitle Off removes the
+  subtitle OSD control. An authoritative `state.changed` to `error`/`destroyed`
+  instead closes options and OSD and shows Player error, with no invoker
+  restoration. Remove fixture volume/mute/cycle, sleep-timer, and fabricated
+  track controls.
+- Precedence is shell blocking/inline errors and exit confirmation, terminal
+  Player error, playback options, now-playing, mini-guide, OSD, number entry,
+  transition, generic loading, then native surface. Only one modal owner is
+  active. Options alone suspends its invoking OSD for exact return; now-playing
+  replaces lower owners; other higher owners close lower owners. Back closes the
+  top owner before route navigation and restores the exact valid invoker when
+  that owner defines one, otherwise the deterministic Player fallback. Hidden
+  owners are inert and absent from focus graphs.
+- Guide/Settings shortcuts close Player owners, clear timers, invalidate async
+  generations, and preserve the existing route-return contract. Fullscreen uses
+  the existing coordinator only and never replaces the native presentation or
+  invents window/player state.
+
+`navigationLifecycle.ts` arbitrates Player first refusal before generic route
+navigation. `desktopInput.ts`/`navigation.ts` add only renderer-local Info,
+digits, and page-button vocabulary. `staticDom.ts`, `domBindings.ts`,
+`routeDom.ts`, `focusDom.ts`, and `rendererActionRegistration.ts` expose only
+the semantic owners, delegated actions, roving focus graphs, and pointer/OK
+equivalence described above. Package 6 may add only behavior-essential CSS; all
+upstream hierarchy, density, spacing, typography, motion polish, and final
+visual parity remain Package 7.
+
+File-shape dispositions are frozen: the approximately 749-line
+`src/renderer/index.ts` remains a named composition root and may receive wiring
+only, so its diff requires fresh architecture/YAGNI review; the approximately
+717-line overlay stylesheet remains the cohesive overlay-state stylesheet and
+receives no Package 7 visual work; `workflow.ts` retains route/presentation
+projection but receives no overlay state machine; the new pure presentation and
+effectful controller files split distinct current responsibilities rather than
+forwarding. No touched owner may cross 800 lines without stop/replan.
+
+Worker eligibility is `worker` only. Low-cost worker roles are ineligible
+because this slice coordinates the named composition root, multiple timer and
+async generations, renderer bridge events, route arbitration, and focus
+restoration. After implementation and controller verification, request a fresh
+independent `reviewer`; include explicit architecture/YAGNI review of
+`index.ts`, failure/stale/cleanup review, and Package 7 boundary review.
+
+No upstream source is planned to be copied or adapted: the inspected upstream
+overlay families are reference-only, so the import ledger remains unchanged.
+If a worker copies/adapts source, stop, record the exact upstream commit/path and
+Desktop destination in the import ledger, and re-review scope. The ignored
+execution packet is
+`docs/runs/complete-webos-ui-parity-reopen/package-6-execution-packet.md`.
 
 Focused tests:
 
-`node --import tsx --test src/__tests__/renderer/overlays.test.ts src/__tests__/renderer/desktopInput.test.ts src/__tests__/renderer/focusDom.test.ts src/__tests__/renderer/rendererRuntimeOwners.test.ts src/__tests__/renderer/routeDom.test.ts src/__tests__/renderer/workflow.test.ts`
+`node --import tsx --test src/__tests__/renderer/overlays.test.ts src/__tests__/renderer/playerOverlayPresentation.test.ts src/__tests__/renderer/playerOverlayController.test.ts src/__tests__/renderer/desktopInput.test.ts src/__tests__/renderer/navigationLifecycle.test.ts src/__tests__/renderer/focusDom.test.ts src/__tests__/renderer/rendererActionRegistration.test.ts src/__tests__/renderer/rendererRuntimeOwners.test.ts src/__tests__/renderer/routeDom.test.ts src/__tests__/renderer/workflow.test.ts`
+
+The focused proof must cover all eleven `PlayerStatus` baseline and active-
+transition branches; ready/idle/destroyed transition termination; zero/one/two-
+control OSD and subtitle-Off eligibility; Info refusal/replacement divergence;
+each mini-guide/number/Retry tune pending, same-target, different-target,
+accepted, rejected, thrown, authoritative-error, and stale generation; options
+validation/membership/IPC/settled/authoritative-terminal splits; current-request
+incremental events before/after matching track settlement, playback request-id
+replacement, membership loss, subtitle-Off invoker removal and native-surface
+fallback; every Space status/playing pair, intent, duplicate, failure, route/
+request/dispose invalidation; tune-success dual refresh, refresh failure, and
+stale/failed tune-result no-refresh guards; command-generation settlement; diagnostic-
+only warning/null-request error; late initialization/post-unsubscribe inertness; every
+precedence edge; exact timer boundaries with fake clocks; route/dispose cleanup;
+all focus-entry/return paths; keyboard/gamepad-like/pointer equivalence; and
+Guide/Settings/fullscreen continuity. Then run the repository commands below,
+including `npm run build:electron`, followed by sanitized semantic captures at
+`1280x720` and `1920x1080` for idle, loading, transition, error/retry, OSD,
+now-playing, mini-guide, number-valid/invalid, and playback-options behavior.
+These captures prove reachability, visibility, semantics, and focus only;
+Package 7 owns visual-parity approval and recapture. Exact transient states may
+be reached only through an ignored harness/test-only injection at existing
+renderer-safe public seams; no production fixture/injection seam is allowed,
+and the two main smoke files remain assertion-only.
+
+Package 6 closeout:
+
+- The configured `worker` implemented the bounded renderer behavior and proof
+  surface. Production presentation fixtures and module-global overlay effect
+  ownership are retired in favor of the pure presentation boundary and the
+  effectful controller, while the existing renderer-safe player, Guide, and
+  channel-setup bridges remain the only runtime seams.
+- The configured independent `reviewer` raised material timer, event-bubbling,
+  terminal-action, pending-command, transition, error-projection, polling, and
+  proof findings. The worker corrected them inside the approved Package 6
+  boundary, and targeted read-only re-review found no remaining blocker,
+  including no architecture/YAGNI or Package 7 boundary finding.
+- Controller-observed verification passes the frozen focused suite at 118/118
+  and full `npm run verify` at 820/820 source-and-contract tests plus 135/135
+  harness-and-doc tests. Fresh Electron smoke, typecheck, architecture, lint,
+  maintainability, documentation, redaction, and diff checks also pass.
+- The regenerated ignored sanitized proof manifest records 20/20 semantic
+  captures and 240/240 assertions across exact CSS viewports `1280x720` and
+  `1920x1080`. Final observed line counts are 782 for the composition-only
+  `src/renderer/index.ts`, 664 for
+  `src/renderer/playerOverlayController.ts`, and 735 for the cohesive
+  `src/renderer/styles/player-overlays.css`; all remain below the 800-line
+  stop/replan threshold.
+- Package 6 adds no contract, IPC, preload, main runtime, native/helper,
+  persistence, protocol, dependency, or process-boundary widening. Upstream
+  remained reference-only, so the import ledger remains unchanged. Package 7
+  still owns visual hierarchy, density, spacing, typography, motion polish,
+  visual-parity approval, and fresh parity captures.
 
 ### Package 7 — Player overlay visual surfaces
 
@@ -369,7 +654,8 @@ Recapture every required state at both viewports and player/overlay states in
 fullscreen. Complete the interaction matrix with no unknown cells, scan the
 local proof bundle for private material, run all final gates, obtain integrated
 independent review, and correct roadmap/current-state/renderer/security/proof/
-parity/divergence/import-ledger docs. Archive this plan and unblock a fresh RD-27
+parity/divergence/import-ledger docs, including the Package 6 Info replacement
+divergence. Archive this plan and unblock a fresh RD-27
 plan only after observed proof is complete.
 
 ## Verification Commands
@@ -450,13 +736,14 @@ package uses a fresh `reviewer` when its review gate is met.
 
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
-TASK: Execute Package 6 — Runtime player and overlay state machine
+TASK: Plan and review Package 7 — Player overlay visual surfaces
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md
-BLOCKERS: none for Package 6; RD-27 remains blocked pending Packages 6–8.
-MESSAGE: Load the active plan, run the bounded freshness audit, then execute only
-Package 6 through the Tier 3 quality loop. Preserve the Packages 0–5 and closed
-pre–Package 5 remediation baseline. Promote Package 6 to the exact-file standard,
-give the worker exact invariants, proof, and stop conditions, and pause after
-clean verification and independent review.
+BLOCKERS: Package 7 implementation is blocked on a fresh exact-file plan and
+clean independent plan review; RD-27 remains blocked pending Packages 7–8.
+MESSAGE: Load the active plan and current Package 6 checkpoint, run the bounded
+Desktop/upstream freshness and architecture-health audit, then route Package 7
+through the configured planner and a fresh read-only reviewer. Promote only
+Package 7 to exact files, supported visual behavior, proof, and stop conditions;
+do not implement until that refreshed scope receives clean plan review.

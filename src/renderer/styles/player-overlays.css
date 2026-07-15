@@ -30,6 +30,24 @@
   display: none;
 }
 
+.player-loading,
+.player-error,
+.channel-transition {
+  pointer-events: none;
+}
+
+.player-error button {
+  pointer-events: auto;
+}
+
+[data-overlay="nowPlaying"],
+[data-overlay="channelNumber"],
+[data-overlay="channelBadge"],
+[data-overlay="transition"],
+[data-overlay="playerLoading"] {
+  outline: none;
+}
+
 .player-overlay button {
   min-height: 38px;
   padding: 0 var(--space-5);

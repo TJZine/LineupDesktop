@@ -205,7 +205,7 @@ test('support bundle status sanitizes display names and shows redaction outcomes
   assert.equal(JSON.stringify(unsafe).includes('C:\\Users'), false);
 });
 
-test('workflow product route uses injected presentation fixtures', () => {
+test('workflow product route uses injected renderer-safe presentation state', () => {
   const presentation: EpgPresentationSource = {
     channels: [
       {

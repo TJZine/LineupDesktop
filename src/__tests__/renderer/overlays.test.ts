@@ -1,340 +1,159 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 
-import { containsPlexForbiddenRendererField } from '../../contracts/plex.js';
-import { hasPlayerForbiddenPrivilegedField } from '../../contracts/player.js';
+import type { PlayerSnapshot } from '../../contracts/player.js';
 import {
-  applyPlayerOverlayAction,
-  createRendererSafePlayerSnapshot,
+  appendChannelDigit,
+  closeTopOverlay,
   createPlayerOverlayState,
-  createPlayerOverlayView,
-  getDefaultOverlayPresentationChannels,
-  PLAYER_OVERLAY_IDLE_FOCUS_ID,
-  resolvePlayerOverlayFocusId,
+  moveMiniGuide,
+  openMiniGuide,
+  openNowPlaying,
+  openOsd,
+  openPlaybackOptions,
+  reconcileSnapshotState,
 } from '../../renderer/overlays.js';
+import { createPlayerOverlayView } from '../../renderer/overlayViewModels.js';
+import { createEmptyPlayerSnapshot, type PlayerOverlayPresentationSource } from '../../renderer/playerOverlayPresentation.js';
 
-test('overlay state starts with a video-black player and no default overlays', () => {
-  const state = createPlayerOverlayState();
-  const view = createPlayerOverlayView(state);
+test('Player starts native, focusless, and without fixture presentation', () => {
+  const presentation = source(snapshot('idle'), []);
+  const view = createPlayerOverlayView(createPlayerOverlayState(presentation), presentation);
 
-  assert.deepEqual(view.stack, []);
-  assert.equal(view.visibleOverlays.playerOsd, false);
-  assert.equal(view.visibleOverlays.nowPlaying, false);
-  assert.equal(view.visibleOverlays.channelBadge, false);
+  assert.equal(view.baseline, 'native');
   assert.equal(view.activeOverlayId, null);
   assert.equal(view.activeFocusId, null);
-  assert.equal(view.nowPlaying.title, 'The Midnight Archive');
-  assert.equal(view.nowPlaying.progressPercent, 20);
-  assert.equal(view.playerOsd.statusLabel, 'PLAYING');
-  assert.equal(view.playerOsd.timecode, '12:00 / 60:00');
-  assert.match(view.playerOsd.upNextText, /After Hours Cinema/u);
-  assert.deepEqual(view.nowPlaying.badges, ['TV-14', '1080p', 'Direct Play']);
+  assert.deepEqual(view.stack, []);
+  assert.equal(view.nowPlaying.title, undefined);
+  assert.equal(view.currentChannel, null);
 });
 
-test('overlay stack keeps mini guide focused above passive badge overlays', () => {
-  const state = applyPlayerOverlayAction(createPlayerOverlayState(), 'openMiniGuide');
-  const view = createPlayerOverlayView(state);
-
-  assert.equal(view.visibleOverlays.miniGuide, true);
-  assert.equal(view.visibleOverlays.channelBadge, true);
-  assert.equal(view.activeOverlayId, 'miniGuide');
-  assert.equal(view.activeFocusId, 'overlay-mini-next');
-
-  const closed = applyPlayerOverlayAction(state, 'closeTopOverlay');
-  const closedView = createPlayerOverlayView(closed);
-  assert.equal(closedView.visibleOverlays.miniGuide, false);
-  assert.equal(closedView.activeOverlayId, null);
+test('status projection exhaustively maps loading, native, seeking retention, and terminal errors', () => {
+  const loading = ['loading', 'buffering', 'stalled'] as const;
+  const native = ['idle', 'ready', 'playing', 'paused', 'ended'] as const;
+  for (const status of loading) {
+    assert.equal(createPlayerOverlayView(createPlayerOverlayState(), source(snapshot(status))).baseline, 'loading');
+  }
+  for (const status of native) {
+    assert.equal(createPlayerOverlayView(createPlayerOverlayState(), source(snapshot(status))).baseline, 'native');
+  }
+  assert.equal(createPlayerOverlayView(createPlayerOverlayState(), source(snapshot('seeking'))).baseline, 'loading');
+  const retained = { ...createPlayerOverlayState(), activeOverlayId: 'playerOsd' as const };
+  assert.equal(createPlayerOverlayView(retained, source(snapshot('seeking'))).baseline, 'native');
+  for (const status of ['error', 'destroyed'] as const) {
+    const view = createPlayerOverlayView(createPlayerOverlayState(), source(snapshot(status)));
+    assert.equal(view.baseline, 'error');
+    assert.equal(view.visibleOverlays.playerError, true);
+  }
 });
 
-test('mini guide channel selection updates the selected channel and badge summary', () => {
-  const next = applyPlayerOverlayAction(createPlayerOverlayState(), 'nextMiniGuideChannel');
-  const view = createPlayerOverlayView(next);
+test('OSD refuses zero controls and focuses the one/two eligible controls', () => {
+  const base = createPlayerOverlayState();
+  assert.equal(openOsd(base, snapshot('playing')).activeOverlayId, null);
 
-  assert.equal(view.selectedMiniGuideChannel.number, '204');
-  assert.equal(view.channelBadge.name, 'Liminal One');
-  assert.equal(view.selectedMiniGuideChannel.nowStartLabel, '8:00 PM');
-  assert.equal(view.selectedMiniGuideChannel.nowProgressPercent, 50);
-  assert.equal(view.selectedMiniGuideChannel.buildStrategy, 'movies');
-  assert.deepEqual(
-    view.miniGuideChannels.map((channel) => [channel.number, channel.selected]),
-    [
-      ['101', false],
-      ['204', true],
-      ['310', false],
-      ['411', false],
-      ['512', false],
-    ],
-  );
+  const audio = snapshot('playing', [track('a1', 'audio', true), track('a2', 'audio')]);
+  const audioState = openOsd(base, audio);
+  assert.equal(createPlayerOverlayView(audioState, source(audio)).activeFocusId, 'overlay-osd-audio');
 
-  const previous = applyPlayerOverlayAction(next, 'previousMiniGuideChannel');
-  assert.equal(createPlayerOverlayView(previous).selectedMiniGuideChannel.number, '101');
+  const subtitle = snapshot('paused', [track('s1', 'subtitle')]);
+  const subtitleState = openOsd(base, subtitle);
+  assert.equal(createPlayerOverlayView(subtitleState, source(subtitle)).activeFocusId, 'overlay-osd-subtitles');
+
+  const both = snapshot('ready', [track('a1', 'audio', true), track('a2', 'audio'), track('s1', 'subtitle')]);
+  assert.equal(createPlayerOverlayView(openOsd(base, both), source(both)).activeFocusId, 'overlay-osd-audio');
 });
 
-test('mini guide focus does not change now-playing or OSD current channel', () => {
-  const initialView = createPlayerOverlayView(createPlayerOverlayState());
-  const next = applyPlayerOverlayAction(createPlayerOverlayState(), 'nextMiniGuideChannel');
-  const view = createPlayerOverlayView(next);
-
-  assert.equal(view.selectedMiniGuideChannel.number, '204');
-  assert.equal(view.nowPlaying.channelNumber, initialView.nowPlaying.channelNumber);
-  assert.equal(view.nowPlaying.channelName, initialView.nowPlaying.channelName);
-  assert.equal(view.nowPlaying.title, initialView.nowPlaying.title);
-  assert.equal(view.nowPlaying.upNextText, initialView.nowPlaying.upNextText);
-  assert.equal(view.playerOsd.upNextText, initialView.playerOsd.upNextText);
-  assert.equal(view.channelBadge.number, initialView.channelBadge.number);
+test('Info requires a real current program, replaces lower owners, and refuses over options', () => {
+  const presentation = source(snapshot('playing'), channels());
+  const mini = openMiniGuide(createPlayerOverlayState(presentation), presentation);
+  assert.equal(openNowPlaying(mini, true, false).activeOverlayId, 'nowPlaying');
+  assert.equal(openNowPlaying(mini, false, false), mini);
+  const options = { ...mini, activeOverlayId: 'playbackOptions' as const };
+  assert.equal(openNowPlaying(options, true, false), options);
 });
 
-test('channel number buffer accepts digits, expires stale input, and tunes matches', () => {
-  const initial = createPlayerOverlayState();
-  const one = applyPlayerOverlayAction(initial, 'channelDigit2', 1_000);
-  const two = applyPlayerOverlayAction(one, 'channelDigit0', 1_500);
-  const three = applyPlayerOverlayAction(two, 'channelDigit4', 2_000);
-  const view = createPlayerOverlayView(three);
+test('mini-guide projects exactly five circular rows and page movement wraps', () => {
+  const presentation = source(snapshot('playing'), channels(6));
+  const opened = openMiniGuide(createPlayerOverlayState(presentation), presentation);
+  const paged = moveMiniGuide(opened, presentation, 5);
+  const view = createPlayerOverlayView(paged, presentation);
+  assert.equal(view.miniGuideChannels.length, 5);
+  assert.equal(view.miniGuideChannels.filter((channel) => channel.selected).length, 1);
+  assert.equal(paged.miniGuideSelectedChannelId, 'channel-6');
+});
 
-  assert.equal(view.visibleOverlays.channelNumber, true);
-  assert.equal(view.channelNumberBuffer, '204');
-  assert.equal(view.channelNumberDisplay, '204');
+test('number entry is real-catalog-only state with no placeholder channel', () => {
+  const state = appendChannelDigit(appendChannelDigit(createPlayerOverlayState(), '1'), '2');
+  const view = createPlayerOverlayView(state, source(snapshot('playing'), []));
+  assert.equal(view.channelNumberDisplay, '12_');
   assert.equal(view.activeOverlayId, 'channelNumber');
-
-  const tuned = applyPlayerOverlayAction(three, 'commitChannelNumber', 2_100);
-  const tunedView = createPlayerOverlayView(tuned);
-  assert.equal(tunedView.selectedMiniGuideChannel.number, '204');
-  assert.equal(tunedView.nowPlaying.channelNumber, '204');
-  assert.equal(tunedView.channelBadge.name, 'The Vault');
-  assert.equal(tunedView.channelNumberBuffer, '');
-  assert.equal(tunedView.visibleOverlays.channelNumber, false);
-
-  const stale = applyPlayerOverlayAction(two, 'channelDigit1', 4_500);
-  assert.equal(createPlayerOverlayView(stale).channelNumberBuffer, '1');
+  assert.equal(view.currentChannel, null);
+  assert.deepEqual(view.miniGuideChannels, []);
 });
 
-test('playback options cycle renderer-local track and volume state', () => {
-  const initial = createPlayerOverlayState();
-  const options = applyPlayerOverlayAction(initial, 'togglePlaybackOptions');
-  const audio = applyPlayerOverlayAction(options, 'cycleAudioTrack');
-  const subtitle = applyPlayerOverlayAction(audio, 'cycleSubtitleTrack');
-  const louder = applyPlayerOverlayAction(subtitle, 'volumeUp');
-  const muted = applyPlayerOverlayAction(louder, 'toggleMute');
-  const snapshot = {
-    ...createRendererSafePlayerSnapshot(),
-    volume: louder.volume,
-    muted: muted.muted,
-    selectedAudioTrackId: audio.selectedAudioTrackId,
-    selectedSubtitleTrackId: subtitle.selectedSubtitleTrackId,
-    tracks: [
-      {
-        id: 'audio-main',
-        kind: 'audio',
-        label: 'Main stereo',
-        language: 'en',
-        codec: 'aac',
-        deliveryType: 'embedded',
-        selected: audio.selectedAudioTrackId === 'audio-main',
-        available: true,
-      },
-      {
-        id: 'audio-commentary',
-        kind: 'audio',
-        label: 'Commentary',
-        language: 'en',
-        codec: 'aac',
-        deliveryType: 'embedded',
-        selected: audio.selectedAudioTrackId === 'audio-commentary',
-        available: true,
-      },
-      {
-        id: 'audio-described',
-        kind: 'audio',
-        label: 'Descriptive audio',
-        language: 'en',
-        codec: 'aac',
-        deliveryType: 'embedded',
-        selected: false,
-        available: false,
-      },
-      {
-        id: 'subtitle-english',
-        kind: 'subtitle',
-        label: 'English',
-        language: 'en',
-        format: 'srt',
-        deliveryType: 'sidecar',
-        selected: subtitle.selectedSubtitleTrackId === 'subtitle-english',
-        available: true,
-      },
-      {
-        id: 'subtitle-sdh',
-        kind: 'subtitle',
-        label: 'English SDH',
-        language: 'en',
-        format: 'srt',
-        deliveryType: 'burned-in',
-        selected: subtitle.selectedSubtitleTrackId === 'subtitle-sdh',
-        available: true,
-      },
-    ],
-    quality: {
-      mode: 'direct-play',
-      sourceDynamicRange: 'sdr',
-      outputDynamicRangeStatus: 'sdr',
-      videoCodec: 'h264',
-      audioCodec: 'aac',
-    },
-  } as const;
-  const view = createPlayerOverlayView(muted, {
-    channels: getDefaultOverlayPresentationChannels(),
-    playerSnapshot: snapshot,
-  });
+test('playback options expose only available real tracks and subtitle Off', () => {
+  const player = snapshot('playing', [
+    track('audio-main', 'audio', true),
+    track('audio-alt', 'audio'),
+    { ...track('audio-gone', 'audio'), available: false },
+    track('sub-one', 'subtitle'),
+  ]);
+  const osd = openOsd(createPlayerOverlayState(), player);
+  const audio = openPlaybackOptions(osd, player, 'audio');
+  const audioView = createPlayerOverlayView(audio, source(player)).playbackOptions;
+  assert.deepEqual(audioView?.tracks.map((item) => item.trackId), ['audio-main', 'audio-alt']);
 
-  assert.equal(view.visibleOverlays.playbackOptions, true);
-  assert.equal(view.activeOverlayId, 'playbackOptions');
-  assert.equal(view.playbackOptions.selectedAudioLabel, 'Commentary');
-  assert.equal(view.playbackOptions.selectedSubtitleLabel, 'English');
-  assert.equal(view.playbackOptions.volumePercent, 82);
-  assert.equal(view.playbackOptions.muted, true);
-  assert.equal(view.playbackOptions.audioTracks.some((track) => !track.available), true);
-  assert.equal(view.playbackOptions.subtitleTracks.some((track) => track.meta === 'Burn-in'), true);
-  assert.match(view.playbackOptions.playbackSummary, /Direct Play/u);
+  const subtitle = openPlaybackOptions(osd, player, 'subtitle');
+  assert.deepEqual(
+    createPlayerOverlayView(subtitle, source(player)).playbackOptions?.tracks.map((item) => item.trackId),
+    [null, 'sub-one'],
+  );
+  assert.equal(closeTopOverlay(subtitle).activeOverlayId, 'playerOsd');
 });
 
-test('playback options normalize unknown track ids to the first option when cycling', () => {
-  const initial = {
-    ...createPlayerOverlayState(),
-    selectedAudioTrackId: 'unknown-audio-track',
-    selectedSubtitleTrackId: 'unknown-subtitle-track',
+test('authoritative terminal snapshots close normal overlays without inventing errors', () => {
+  const opened = { ...createPlayerOverlayState(), activeOverlayId: 'miniGuide' as const };
+  assert.equal(reconcileSnapshotState(opened, snapshot('error')).activeOverlayId, null);
+  assert.equal(reconcileSnapshotState(opened, snapshot('destroyed')).activeOverlayId, null);
+  assert.equal(reconcileSnapshotState(opened, snapshot('paused')).activeOverlayId, 'miniGuide');
+});
+
+function source(
+  playerSnapshot: PlayerSnapshot,
+  channelList = channels(),
+): PlayerOverlayPresentationSource {
+  return { channels: channelList, currentChannelId: channelList[0]?.id ?? null, playerSnapshot, nowMs: 1_000 };
+}
+
+function snapshot(
+  status: PlayerSnapshot['status'],
+  tracks: PlayerSnapshot['tracks'] = [],
+): PlayerSnapshot {
+  return {
+    ...createEmptyPlayerSnapshot(),
+    requestId: status === 'idle' ? null : 'playback-1',
+    status,
+    playing: status === 'playing',
+    tracks,
+    selectedAudioTrackId: tracks.find((item) => item.kind === 'audio' && item.selected)?.id ?? null,
+    selectedSubtitleTrackId: tracks.find((item) => item.kind === 'subtitle' && item.selected)?.id ?? null,
+    lastError: status === 'error' ? {
+      code: 'PLAYBACK_FAILED', category: 'engine-failure', message: 'Playback failed.', recoverable: true, retryable: true,
+    } : null,
   };
+}
 
-  const audio = applyPlayerOverlayAction(initial, 'cycleAudioTrack');
-  const subtitle = applyPlayerOverlayAction(audio, 'cycleSubtitleTrack');
-  const snapshot = {
-    ...createRendererSafePlayerSnapshot(),
-    selectedAudioTrackId: subtitle.selectedAudioTrackId,
-    selectedSubtitleTrackId: subtitle.selectedSubtitleTrackId,
-  };
-  const view = createPlayerOverlayView(subtitle, {
-    channels: getDefaultOverlayPresentationChannels(),
-    playerSnapshot: snapshot,
-  });
+function track(id: string, kind: 'audio' | 'subtitle', selected = false) {
+  return { id, kind, label: id, selected, available: true } as const;
+}
 
-  assert.equal(subtitle.selectedAudioTrackId, 'audio-main');
-  assert.equal(subtitle.selectedSubtitleTrackId, null);
-  assert.equal(view.playbackOptions.selectedAudioLabel, 'Main stereo');
-  assert.equal(view.playbackOptions.selectedSubtitleLabel, 'Off');
-});
-
-test('primary playback options action opens options above the visible OSD', () => {
-  const options = applyPlayerOverlayAction(createPlayerOverlayState(), 'togglePlaybackOptions');
-  const view = createPlayerOverlayView(options);
-
-  assert.equal(view.visibleOverlays.playerOsd, true);
-  assert.equal(view.visibleOverlays.playbackOptions, true);
-  assert.equal(view.activeOverlayId, 'playbackOptions');
-  assert.equal(view.activeFocusId, 'overlay-audio-track-audio-main');
-  assert.equal(resolvePlayerOverlayFocusId(view), 'overlay-audio-track-audio-main');
-});
-
-test('idle overlay focus falls back to the transient player controls trigger', () => {
-  const passiveOnly = applyPlayerOverlayAction(createPlayerOverlayState(), 'closeTopOverlay');
-  const view = createPlayerOverlayView(passiveOnly);
-
-  assert.deepEqual(view.stack, []);
-  assert.equal(view.visibleOverlays.channelBadge, false);
-  assert.equal(view.visibleOverlays.nowPlaying, false);
-  assert.equal(view.visibleOverlays.playerOsd, false);
-  assert.equal(view.activeOverlayId, null);
-  assert.equal(view.activeFocusId, null);
-  assert.equal(resolvePlayerOverlayFocusId(view), PLAYER_OVERLAY_IDLE_FOCUS_ID);
-});
-
-test('overlay view can summarize a renderer-safe player snapshot', () => {
-  const snapshot = {
-    ...createRendererSafePlayerSnapshot(),
-    status: 'paused',
-    playing: false,
-    positionMs: 30_000,
-    durationMs: 60_000,
-    media: {
-      id: 'snapshot-media',
-      title: 'Snapshot Title',
-      subtitle: 'Snapshot Subtitle',
-      durationMs: 60_000,
-      container: 'preview',
-    },
-  } as const;
-  const view = createPlayerOverlayView(createPlayerOverlayState(), {
-    channels: getDefaultOverlayPresentationChannels(),
-    playerSnapshot: snapshot,
-  });
-
-  assert.equal(view.nowPlaying.title, 'Snapshot Title');
-  assert.equal(view.nowPlaying.subtitle, 'Snapshot Subtitle');
-  assert.equal(view.nowPlaying.statusLabel, 'Paused');
-  assert.equal(view.nowPlaying.positionLabel, '0:30');
-  assert.equal(view.nowPlaying.durationLabel, '1:00');
-  assert.equal(view.nowPlaying.progressPercent, 50);
-});
-
-test('overlay view clamps now-playing progress to the visible media duration', () => {
-  const baseSnapshot = createRendererSafePlayerSnapshot();
-  const negativePositionView = createPlayerOverlayView(createPlayerOverlayState(), {
-    channels: getDefaultOverlayPresentationChannels(),
-    playerSnapshot: {
-    ...baseSnapshot,
-    positionMs: -30_000,
-    durationMs: 60_000,
-    media: {
-      id: 'clamped-media',
-      title: 'Clamped Media',
-      durationMs: 60_000,
-    },
-    },
-  });
-
-  assert.equal(negativePositionView.nowPlaying.positionLabel, '0:00');
-  assert.equal(negativePositionView.nowPlaying.durationLabel, '1:00');
-  assert.equal(negativePositionView.nowPlaying.progressPercent, 0);
-
-  const beyondDurationView = createPlayerOverlayView(createPlayerOverlayState(), {
-    channels: getDefaultOverlayPresentationChannels(),
-    playerSnapshot: {
-    ...baseSnapshot,
-    positionMs: 90_000,
-    durationMs: 60_000,
-    media: {
-      id: 'clamped-media',
-      title: 'Clamped Media',
-      durationMs: 60_000,
-    },
-    },
-  });
-
-  assert.equal(beyondDurationView.nowPlaying.positionLabel, '1:00');
-  assert.equal(beyondDurationView.nowPlaying.durationLabel, '1:00');
-  assert.equal(beyondDurationView.nowPlaying.progressPercent, 100);
-});
-
-test('overlay presentation view models avoid privileged renderer fields', () => {
-  const view = createPlayerOverlayView(createPlayerOverlayState());
-
-  assert.equal(containsPlexForbiddenRendererField(getDefaultOverlayPresentationChannels()), false);
-  assert.equal(containsPlexForbiddenRendererField(view), false);
-  assert.equal(hasPlayerForbiddenPrivilegedField(view), false);
-});
-
-test('overlay state and view normalize empty channel presentations to a safe placeholder', () => {
-  const presentation = {
-    channels: [],
-    playerSnapshot: createRendererSafePlayerSnapshot(),
-  };
-
-  const state = createPlayerOverlayState(presentation);
-  const view = createPlayerOverlayView(state, presentation);
-  const next = applyPlayerOverlayAction(state, 'nextMiniGuideChannel', 0, presentation);
-
-  assert.equal(state.currentChannelId, 'channel-unavailable');
-  assert.equal(state.miniGuideSelectedChannelId, 'channel-unavailable');
-  assert.equal(view.channelBadge.name, 'Unavailable');
-  assert.equal(view.selectedMiniGuideChannel.currentTitle, 'Program details unavailable');
-  assert.equal(view.miniGuideChannels.length, 1);
-  assert.equal(next.miniGuideSelectedChannelId, 'channel-unavailable');
-});
+function channels(count = 2) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `channel-${index + 1}`,
+    number: String(index + 1),
+    name: `Channel ${index + 1}`,
+    currentProgram: { id: `program-${index + 1}`, title: `Program ${index + 1}`, startsAtMs: 0, endsAtMs: 2_000 },
+    nextProgram: { id: `next-${index + 1}`, title: `Next ${index + 1}`, startsAtMs: 2_000, endsAtMs: 3_000 },
+    progressPercent: 50,
+  }));
+}

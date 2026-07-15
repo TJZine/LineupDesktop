@@ -5,7 +5,10 @@ import { FocusRegistry, type FocusState } from '../../renderer/navigation.js';
 import { createNavigationLifecycle, type NavigationLifecycleOptions } from '../../renderer/shell/navigationLifecycle.js';
 import { createRendererShellState } from '../../renderer/shell/shellState.js';
 
-function createHarness(handleGuideDirection: NavigationLifecycleOptions['handleGuideDirection']) {
+function createHarness(
+  handleGuideDirection: NavigationLifecycleOptions['handleGuideDirection'],
+  handlePlayerInput?: NavigationLifecycleOptions['handlePlayerInput'],
+) {
   const registry = new FocusRegistry();
   registry.register({ id: 'player-guide', route: 'player', order: 0 });
   registry.register({ id: 'player-settings', route: 'player', order: 1 });
@@ -26,6 +29,7 @@ function createHarness(handleGuideDirection: NavigationLifecycleOptions['handleG
     onFocusChanged: () => undefined,
     scrollFocusedIntoView: () => undefined,
     handleGuideDirection,
+    handlePlayerInput,
     activateRoute: (nextRoute) => { route = nextRoute as 'player' | 'guide'; },
     isProfileModalActive: () => false,
     closeProfileModal: () => undefined,
@@ -102,4 +106,16 @@ test('cleanup makes later Guide input inert', async () => {
   harness.lifecycle.cleanup();
   await harness.lifecycle.handleInput('left');
   assert.equal(calls, 0);
+});
+
+test('Player first refusal runs before generic focus, OK, Back, and route shortcuts', async () => {
+  const inputs: string[] = [];
+  const harness = createHarness(() => false, (input) => { inputs.push(input); return true; });
+  harness.setRoute('player');
+  harness.setFocus({ activeRoute: 'player', activeId: null });
+  for (const input of ['up', 'ok', 'back', 'info', 'digit4', 'space'] as const) {
+    await harness.lifecycle.handleInput(input);
+  }
+  assert.deepEqual(inputs, ['up', 'ok', 'back', 'info', 'digit4', 'space']);
+  assert.equal(harness.getRoute(), 'player');
 });

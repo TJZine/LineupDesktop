@@ -22,6 +22,7 @@ export interface NavigationLifecycleOptions {
   onFocusChanged(focusId: string | null): void;
   scrollFocusedIntoView(): void;
   handleGuideDirection?(direction: 'up' | 'down' | 'left' | 'right'): boolean;
+  handlePlayerInput?(input: DesktopInputButton): boolean;
   activateRoute(route: AppRouteId): void;
   isProfileModalActive(): boolean;
   closeProfileModal(): void;
@@ -122,7 +123,12 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
   const cancelExit = (): void => {
     options.setShellState(closeExitConfirm(options.getShellState()));
     options.render();
-    focusTarget(exitInvoker ?? 'player-fullscreen');
+    if (exitInvoker === null) {
+      options.setFocusState({ activeRoute: 'player', activeId: null });
+      options.dom.playerPresentationElement?.focus();
+    } else {
+      focusTarget(exitInvoker);
+    }
     exitInvoker = null;
   };
 
@@ -156,6 +162,10 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
         if (input === 'back') cancelExit();
         else if (input === 'up' || input === 'down' || input === 'left' || input === 'right') moveFocus(input);
         else if (input === 'ok') clickFocusedRendererElement(options.getFocusState(), options.dom);
+        return;
+      }
+
+      if (options.getRoute() === 'player' && options.handlePlayerInput?.(input) === true) {
         return;
       }
 

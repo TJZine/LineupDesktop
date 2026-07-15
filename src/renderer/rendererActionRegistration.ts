@@ -43,8 +43,9 @@ export interface RendererActionHandlers {
   openPlexMetadata(ratingKey: string): void;
   focusElement(element: HTMLElement): void;
   toggleFullscreen(): void;
-  selectAudioTrack(trackId: string): void;
-  selectSubtitleTrack(trackId: string | null): void;
+  selectAudioTrack(trackId: string, focusId: string): void;
+  selectSubtitleTrack(trackId: string | null, focusId: string): void;
+  tuneOverlayChannel?(channelId: string): void;
   applySettingsCategory?(category: string): void;
   applySetupStage?(stage: string): void;
   applyStagedSetupAction?(action: StagedSetupFlowActionId): void;
@@ -74,7 +75,7 @@ export function registerRendererActions(
   for (const button of dom.routeActionButtons) {
     button.addEventListener('click', () => {
       const action = readRouteActionId(button.dataset.routeAction);
-      if (action !== null) handlers.applyRouteAction(action);
+      if (action !== null && isEligibleDelegatedAction(button)) handlers.applyRouteAction(action);
     });
   }
   const settingsScreen = documentRef.getElementById('screen-settings');
@@ -159,11 +160,16 @@ export function registerRendererActions(
     }
   });
   for (const button of dom.overlayActionButtons) {
+    if (button === dom.playerPresentationElement) continue;
     button.addEventListener('click', () => {
       const action = readOverlayActionId(button.dataset.overlayAction);
-      if (action !== null) handlers.applyOverlayAction(action);
+      if (action !== null && isEligibleDelegatedAction(button)) handlers.applyOverlayAction(action);
     });
   }
+  dom.playerPresentationElement?.addEventListener('click', (event) => {
+    if (event.target instanceof HTMLElement && event.target.closest('[data-overlay]') !== null) return;
+    handlers.applyOverlayAction('openOsd');
+  });
   for (const button of dom.plexActionButtons) {
     button.addEventListener('click', () => {
       const action = readPlexRuntimeActionId(button.dataset.plexAction);
@@ -208,16 +214,24 @@ export function registerRendererActions(
   dom.overlayAudioOptionsElement?.addEventListener('click', (event) => {
     if (!(event.target instanceof HTMLElement)) return;
     const button = event.target.closest<HTMLButtonElement>('.playback-options__row');
-    if (button && button.dataset.trackId) {
-      handlers.selectAudioTrack(button.dataset.trackId);
+    if (button && button.dataset.trackId && isEligibleDelegatedAction(button)) {
+      handlers.selectAudioTrack(button.dataset.trackId, button.dataset.focusId ?? '');
     }
   });
   dom.overlaySubtitleOptionsElement?.addEventListener('click', (event) => {
     if (!(event.target instanceof HTMLElement)) return;
     const button = event.target.closest<HTMLButtonElement>('.playback-options__row');
-    if (button) {
+    if (button && isEligibleDelegatedAction(button)) {
       const trackId = button.dataset.trackId;
-      handlers.selectSubtitleTrack(trackId === 'subtitles-off' || !trackId ? null : trackId);
+      handlers.selectSubtitleTrack(trackId === 'subtitles-off' || !trackId ? null : trackId, button.dataset.focusId ?? '');
+    }
+  });
+  dom.overlayMiniGuideElement?.addEventListener('click', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    const button = event.target.closest<HTMLButtonElement>('[data-overlay-channel-id]');
+    if (button !== null && isEligibleDelegatedAction(button)) {
+      const channelId = button.dataset.overlayChannelId;
+      if (channelId !== undefined) handlers.tuneOverlayChannel?.(channelId);
     }
   });
 }
