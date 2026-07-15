@@ -1,9 +1,7 @@
 import type { ChannelSetupSummary } from '../../contracts/channel.js';
 import type { ChannelRuntimeRendererState } from '../channelRuntimeState.js';
 import type {
-  ChannelSetupActionId,
   ChannelSetupDraftState,
-  ChannelSetupStepViewModel,
   ChannelSetupSummaryViewModel,
 } from '../settingsSetup.js';
 
@@ -20,26 +18,6 @@ export interface ChannelSetupCommitAvailabilityViewModel {
   confirmReplace: boolean;
 }
 
-export type ChannelSetupFlowStageId = 'library' | 'strategy' | 'review' | 'result';
-
-export interface ChannelSetupFlowStageViewModel {
-  id: ChannelSetupFlowStageId;
-  label: string;
-  detail: string;
-  state: 'complete' | 'current' | 'pending' | 'blocked';
-}
-
-export interface ChannelSetupStrategyOptionViewModel {
-  id: string;
-  label: string;
-  detail: string;
-  value: string;
-  selected: boolean;
-  disabled: boolean;
-  actionId: ChannelSetupActionId;
-  focusId: string;
-}
-
 export interface ChannelSetupReviewRowViewModel {
   label: string;
   value: string;
@@ -53,11 +31,7 @@ export interface ChannelSetupResultViewModel {
 }
 
 export interface ChannelSetupFlowViewModel {
-  stageLabel: string;
-  statusText: string;
-  detailText: string;
   buildMode: ChannelSetupDraftState['buildMode'];
-  stages: readonly ChannelSetupFlowStageViewModel[];
   library: {
     title: string;
     detail: string;
@@ -65,7 +39,6 @@ export interface ChannelSetupFlowViewModel {
     selected: boolean;
     countLabel: string;
   };
-  strategyOptions: readonly ChannelSetupStrategyOptionViewModel[];
   reviewRows: readonly ChannelSetupReviewRowViewModel[];
   result: ChannelSetupResultViewModel;
 }
@@ -102,19 +75,6 @@ export function createLiveChannelSetupSummary(
     totalBlockCount: selectedLibraryItemCount,
     readyForPreview: false,
   };
-}
-
-export function createLiveChannelSetupSteps(
-  _state: ChannelSetupDraftState,
-  persistedSummary: ChannelRuntimeRendererState['summary'],
-  liveSelection: ChannelSetupLiveSelectionViewModel | null,
-): readonly ChannelSetupStepViewModel[] {
-  return createChannelSetupFlow(persistedSummary, undefined, liveSelection).stages.map((stage) => ({
-    id: stage.id === 'library' ? 'source' : stage.id === 'strategy' ? 'channels' : 'review',
-    label: stage.label,
-    detail: stage.detail,
-    state: stage.state === 'complete' ? 'complete' : stage.state === 'pending' ? 'pending' : 'current',
-  }));
 }
 
 export function createLiveChannelSetupMessages(
@@ -166,56 +126,11 @@ export function createChannelSetupFlow(
   const pending = channelRuntime?.pending === true;
   const errorText = channelRuntime?.errorText ?? null;
   const confirmReplace = channelRuntime?.confirmReplace === true;
-  const stageLabel = pending ? 'Step 3 of 3' : hasLibrary ? 'Step 3 of 3' : 'Step 1 of 3';
-  const statusText = pending
-    ? channelRuntime?.commitMode === 'replace' ? 'Replacing saved channels...' : 'Creating channels...'
-    : errorText ?? (hasLibrary ? 'Review changes before building.' : 'Select the library to include.');
-  const detailText = hasLibrary
-    ? 'Lineup Desktop will build channels from the selected libraries using the chosen build mode.'
-    : 'Choose one or more movie or show libraries after Plex sign-in, profile, and server selection.';
   const result = createResult(persistedSummary, pending, errorText);
 
   return {
-    stageLabel,
-    statusText,
-    detailText,
     buildMode,
-    stages: [
-      {
-        id: 'library',
-        label: 'Choose library',
-        detail: hasLibrary
-          ? `Selected ${libraryTypeLabel(liveSelection.sourceType).toLowerCase()}: ${liveSelection.sourceName}.`
-          : 'Select movie or show libraries from this setup screen.',
-        state: hasLibrary ? 'complete' : 'current',
-      },
-      {
-        id: 'strategy',
-        label: 'Configure channels',
-        detail: hasLibrary
-          ? 'Choose Append, Replace, or the Desktop custom-channel extension.'
-          : 'Strategy controls unlock after a library is selected.',
-        state: hasLibrary ? 'complete' : 'pending',
-      },
-      {
-        id: 'review',
-        label: 'Review changes',
-        detail: hasLibrary
-          ? hasPersistedChannels
-            ? 'Append to saved channels or choose replacement review.'
-            : 'Create the first saved channel lineup from this library.'
-          : 'Review is blocked until a library is selected.',
-        state: errorText !== null ? 'blocked' : hasLibrary ? 'current' : 'pending',
-      },
-      {
-        id: 'result',
-        label: 'Build result',
-        detail: result.detail,
-        state: pending ? 'current' : errorText !== null || hasPersistedChannels ? 'complete' : 'pending',
-      },
-    ],
     library: createLibraryPanel(liveSelection),
-    strategyOptions: createStrategyOptions(hasLibrary, hasPersistedChannels, buildMode),
     reviewRows: createReviewRows(persistedSummary, liveSelection, confirmReplace, buildMode),
     result,
   };
@@ -240,35 +155,6 @@ function createLibraryPanel(
     selected: true,
     countLabel: formatLibraryCount(liveSelection),
   };
-}
-
-function createStrategyOptions(
-  hasLibrary: boolean,
-  hasPersistedChannels: boolean,
-  buildMode: ChannelSetupDraftState['buildMode'],
-): readonly ChannelSetupStrategyOptionViewModel[] {
-  return [
-    {
-      id: 'build-mode-append',
-      actionId: 'selectAppendBuildMode',
-      focusId: 'channel-strategy-build-append',
-      label: 'Append',
-      detail: 'Add the selected library as a new channel while keeping saved channels.',
-      value: buildMode === 'append' ? 'Selected' : 'Available',
-      selected: buildMode === 'append',
-      disabled: !hasLibrary,
-    },
-    {
-      id: 'build-mode-replace',
-      actionId: 'selectReplaceBuildMode',
-      focusId: 'channel-strategy-build-replace',
-      label: 'Replace',
-      detail: 'Review replacing saved channels; confirmation is separate before overwrite.',
-      value: hasPersistedChannels ? (buildMode === 'replace' ? 'Selected' : 'Available') : 'Needs saved channels',
-      selected: buildMode === 'replace',
-      disabled: !hasLibrary || !hasPersistedChannels,
-    },
-  ];
 }
 
 function createReviewRows(

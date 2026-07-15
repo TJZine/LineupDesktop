@@ -253,7 +253,7 @@ const STATIC_SCREEN_MARKUP = `
     <main class="setup-workflow" data-setup-workspace hidden>
       <section class="setup-owner" data-staged-owner="library" aria-labelledby="setup-library-title">
         <header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step">Step 1 of 3</span><div class="setup-owner__intro"><h3 id="setup-library-title">Choose libraries</h3><p>Choose the movie and show libraries that should become channels.</p></div></header>
-        <div class="setup-status" data-setup-library-status data-channel-setup-status role="status"></div>
+        <div class="setup-status" data-setup-library-status role="status"></div>
         <div class="setup-owner__body"><div class="setup-library-toolbar"><button type="button" data-setup-flow-action="librarySelectAll" data-focus-id="setup-select-all">Select All</button><button type="button" data-setup-flow-action="libraryClearAll" data-focus-id="setup-clear-all">Clear All</button></div><p class="setup-limit-message" data-setup-limit-message hidden>Up to 24 libraries can be selected.</p><div class="setup-library-list" data-plex-sections></div><div class="setup-library-empty" data-setup-library-empty hidden><p>No movie or show libraries are available.</p><button type="button" data-setup-flow-action="libraryRetry" data-focus-id="setup-library-retry">Retry</button></div></div>
         <footer class="setup-owner__actions"><span data-channel-setup-source>No libraries selected</span><button type="button" data-setup-flow-action="libraryNext" data-focus-id="setup-next">Next</button><button type="button" data-setup-flow-action="setupBack" data-focus-id="setup-back">Back</button></footer>
       </section>
@@ -282,7 +282,6 @@ const STATIC_SCREEN_MARKUP = `
       </section>
       <section class="setup-modal" data-staged-owner="custom-delete-confirm" role="dialog" aria-modal="true" aria-labelledby="custom-delete-title" hidden><div class="setup-modal__dialog"><h2 id="custom-delete-title">Delete custom channel?</h2><p>The saved channel will be removed from this lineup.</p><p data-custom-delete-error role="alert"></p><button type="button" data-setup-flow-action="customDeleteCancel" data-focus-id="custom-delete-cancel">Cancel channel deletion</button><button type="button" data-custom-channel-action="confirmDeleteChannel" data-focus-id="custom-delete-confirm">Delete custom channel</button></div></section>
       <input data-plex-search-query hidden aria-hidden="true" tabindex="-1" />
-      <div data-channel-review-steps hidden></div><div data-channel-strategy-options hidden></div>
     </main>
     <div class="profile-pin-modal" id="profile-pin-modal" role="dialog" aria-modal="true" aria-labelledby="profile-pin-modal-title" aria-hidden="true" hidden>
         <div class="profile-pin-modal__dialog">

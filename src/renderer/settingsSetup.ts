@@ -41,30 +41,8 @@ export interface SettingsSectionViewModel {
   items: readonly SettingsItemViewModel[];
 }
 
-export interface ChannelDraftViewModel {
-  id: string;
-  number: string;
-  name: string;
-  enabled: boolean;
-  blockCount: number;
-  category: string;
-  reviewStatus: 'active' | 'disabled';
-}
-
 export interface ChannelSetupDraftState {
-  activeStepId: ChannelSetupStepId;
-  sourceName: string;
-  channels: readonly ChannelDraftViewModel[];
   buildMode: 'append' | 'replace';
-}
-
-export type ChannelSetupStepId = 'source' | 'channels' | 'review';
-
-export interface ChannelSetupStepViewModel {
-  id: ChannelSetupStepId;
-  label: string;
-  detail: string;
-  state: 'complete' | 'current' | 'pending';
 }
 
 export interface ChannelSetupSummaryViewModel {
@@ -74,9 +52,6 @@ export interface ChannelSetupSummaryViewModel {
   totalBlockCount: number;
   readyForPreview: boolean;
 }
-
-const SETUP_STEP_ORDER: readonly ChannelSetupStepId[] = ['source', 'channels', 'review'];
-const DEFAULT_CHANNELS = [] as const satisfies readonly ChannelDraftViewModel[];
 
 export function createSettingsDraftState(): SettingsDraftState {
   return {
@@ -102,9 +77,6 @@ export function applyPersistedSettingsValues(
 
 export function createChannelSetupDraftState(): ChannelSetupDraftState {
   return {
-    activeStepId: 'channels',
-    sourceName: '',
-    channels: DEFAULT_CHANNELS,
     buildMode: 'append',
   };
 }
@@ -314,105 +286,4 @@ function isFiniteNonNegativeNumber(value: unknown): value is number {
 function isPrintableAscii(value: string): boolean {
   const codePoint = value.charCodeAt(0);
   return codePoint >= 0x20 && codePoint < 0x7f;
-}
-
-export function createChannelSetupSteps(
-  state: ChannelSetupDraftState,
-  persistedStatus?: { channelCount: number } | null,
-): readonly ChannelSetupStepViewModel[] {
-  const activeIndex = SETUP_STEP_ORDER.indexOf(state.activeStepId);
-  return SETUP_STEP_ORDER.map((stepId, index) => ({
-    id: stepId,
-    label: setupStepLabel(stepId),
-    detail: setupStepDetail(stepId, state, persistedStatus),
-    state: index < activeIndex ? 'complete' : index === activeIndex ? 'current' : 'pending',
-  }));
-}
-
-export function summarizeChannelSetupDraft(
-  state: ChannelSetupDraftState,
-): ChannelSetupSummaryViewModel {
-  const enabledChannels = state.channels.filter((channel) => channel.enabled);
-  const totalBlockCount = enabledChannels.reduce((sum, channel) => sum + channel.blockCount, 0);
-  return {
-    sourceName: state.sourceName,
-    enabledChannelCount: enabledChannels.length,
-    totalChannelCount: state.channels.length,
-    totalBlockCount,
-    readyForPreview: enabledChannels.length > 0 && totalBlockCount > 0,
-  };
-}
-
-export function validateChannelSetupDraft(
-  state: ChannelSetupDraftState,
-  persistedStatus?: { channelCount: number } | null,
-): readonly string[] {
-  if (persistedStatus !== undefined && persistedStatus !== null) {
-    return persistedStatus.channelCount > 0
-      ? ['Saved channels are ready for recovery.']
-      : ['Choose a movie or show library section before saving channels.'];
-  }
-  const failures: string[] = [];
-  const summary = summarizeChannelSetupDraft(state);
-  if (state.sourceName.trim().length === 0) {
-    failures.push('Choose a library source.');
-  }
-  if (summary.enabledChannelCount === 0) {
-    failures.push('Enable at least one preview channel.');
-  }
-  if (summary.totalBlockCount === 0) {
-    failures.push('Add at least one programming block.');
-  }
-  return failures;
-}
-
-function setupStepLabel(stepId: ChannelSetupStepId): string {
-  switch (stepId) {
-    case 'source':
-      return 'Choose library';
-    case 'channels':
-      return 'Arrange channels';
-    case 'review':
-      return 'Review lineup';
-  }
-}
-
-function setupStepDetail(
-  stepId: ChannelSetupStepId,
-  state: ChannelSetupDraftState,
-  persistedStatus?: { channelCount: number } | null,
-): string {
-  if (persistedStatus !== undefined) {
-    if (persistedStatus === null) {
-      switch (stepId) {
-        case 'source':
-          return 'Persisted channel status is not loaded yet.';
-        case 'channels':
-          return 'Saved channel counts are unavailable until recovery status loads.';
-        case 'review':
-          return 'Saved channel review is disabled until persisted status is available.';
-      }
-    }
-    switch (stepId) {
-      case 'source':
-        return 'Use the selected Plex profile, server, and library from this setup screen.';
-      case 'channels':
-        return `${persistedStatus.channelCount} saved channels are available for recovery.`;
-      case 'review':
-        return persistedStatus.channelCount > 0
-          ? 'Saved channels can be replaced or appended from the selected library.'
-          : 'Select a movie or show library section before saving channels.';
-    }
-  }
-  const summary = summarizeChannelSetupDraft(state);
-  switch (stepId) {
-    case 'source':
-      return `${summary.sourceName} is selected for this setup preview.`;
-    case 'channels':
-      return `${summary.enabledChannelCount} of ${summary.totalChannelCount} preview channels are enabled.`;
-    case 'review':
-      return summary.readyForPreview
-        ? `${summary.totalBlockCount} programming blocks are ready for preview.`
-        : 'Enable a preview channel before previewing the lineup.';
-  }
 }

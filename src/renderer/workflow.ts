@@ -22,10 +22,8 @@ import {
   createChannelSetupDraftState,
   createSettingsDraftState,
   createSettingsSections,
-  type ChannelDraftViewModel,
   type ChannelSetupActionId,
   type ChannelSetupDraftState,
-  type ChannelSetupStepViewModel,
   type ChannelSetupSummaryViewModel,
   type SettingsActionId,
   type SettingsDraftState,
@@ -36,7 +34,6 @@ import {
   createChannelSetupCommitAvailability,
   createChannelSetupFlow,
   createLiveChannelSetupMessages,
-  createLiveChannelSetupSteps,
   createLiveChannelSetupSummary,
   type ChannelSetupFlowViewModel,
   type ChannelSetupCommitAvailabilityViewModel,
@@ -101,9 +98,7 @@ export interface RouteWorkflowViewModel {
   channels: readonly ChannelSummaryViewModel[];
   guide: EpgGuideViewModel;
   settings: SettingsSummaryViewModel;
-  channelDrafts: readonly ChannelDraftViewModel[];
   channelSetupSummary: ChannelSetupSummaryViewModel;
-  setupSteps: readonly ChannelSetupStepViewModel[];
   setupValidationMessages: readonly string[];
   channelSetupCommitAvailability: ChannelSetupCommitAvailabilityViewModel;
   channelSetupFlow: ChannelSetupFlowViewModel;
@@ -309,9 +304,7 @@ export function getRouteWorkflowView(
       recoveryDetail: formatRecoveryDetail(persistedSummary),
       sections: createSettingsSections(state.settingsDraft, persistedSummary),
     },
-    channelDrafts: [],
     channelSetupSummary: createLiveChannelSetupSummary(persistedSummary, selectedLibraryItemCount, liveSelection),
-    setupSteps: createLiveChannelSetupSteps(state.channelSetupDraft, persistedSummary, liveSelection),
     setupValidationMessages: createLiveChannelSetupMessages(channelRuntime, persistedSummary, liveSelection),
     channelSetupCommitAvailability: createChannelSetupCommitAvailability(
       channelRuntime,

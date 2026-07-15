@@ -42,13 +42,10 @@ export interface RendererDomBindings {
   channelSetupSourceElement: HTMLElement | null;
   channelSetupEnabledElement: HTMLElement | null;
   channelSetupBlocksElement: HTMLElement | null;
-  setupStepsElement: HTMLElement | null;
   channelDraftListElement: HTMLElement | null;
-  channelSetupStrategyElement: HTMLElement | null;
   channelSetupReviewElement: HTMLElement | null;
   setupValidationElement: HTMLElement | null;
   channelSetupResultElement: HTMLElement | null;
-  channelSetupStatusElement: HTMLElement | null;
   customChannelPanelElement?: HTMLElement | null;
   customChannelActionButtons?: HTMLButtonElement[];
   customChannelStatusElement?: HTMLElement | null;
@@ -158,13 +155,10 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     channelSetupBlocksElement: documentRef.querySelector<HTMLElement>(
       '[data-channel-setup-blocks]',
     ),
-    setupStepsElement: documentRef.querySelector<HTMLElement>('[data-channel-review-steps]'),
     channelDraftListElement: documentRef.querySelector<HTMLElement>('[data-channel-review-list]'),
-    channelSetupStrategyElement: documentRef.querySelector<HTMLElement>('[data-channel-strategy-options]'),
     channelSetupReviewElement: documentRef.querySelector<HTMLElement>('[data-channel-review-impact]'),
     setupValidationElement: documentRef.querySelector<HTMLElement>('[data-channel-review-validation]'),
     channelSetupResultElement: documentRef.querySelector<HTMLElement>('[data-channel-setup-result]'),
-    channelSetupStatusElement: documentRef.querySelector<HTMLElement>('[data-channel-setup-status]'),
     customChannelPanelElement: documentRef.querySelector<HTMLElement>('[data-custom-channel-panel]'),
     customChannelActionButtons: Array.from(
       documentRef.querySelectorAll<HTMLButtonElement>('[data-custom-channel-action]'),

@@ -297,7 +297,6 @@ export async function runSmokeAssertions(
         setupSectionCount: document.querySelectorAll('[data-setup-section]').length,
         plexActionCount: plexActionButtons.length,
         channelCommitActionCount: channelCommitButtons.length,
-        hasChannelReviewSteps: document.querySelector('[data-channel-review-steps]') instanceof HTMLElement,
         hasChannelReviewList: document.querySelector('[data-channel-review-list]') instanceof HTMLElement,
         hasChannelReviewValidation: document.querySelector('[data-channel-review-validation]') instanceof HTMLElement,
       };
@@ -325,7 +324,6 @@ export async function runSmokeAssertions(
         && currentSetupTargets.setupSectionCount >= 5
         && currentSetupTargets.plexActionCount >= 8
         && currentSetupTargets.channelCommitActionCount === 3
-        && currentSetupTargets.hasChannelReviewSteps
         && currentSetupTargets.hasChannelReviewList
         && currentSetupTargets.hasChannelReviewValidation
         && setupText.includes('Plex setup')

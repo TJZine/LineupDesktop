@@ -473,22 +473,18 @@ test('route DOM renders channel setup review without privileged data', () => {
   });
 
   try {
-    const setupSteps = new ElementDouble();
     const channelList = new ElementDouble();
     const validation = new ElementDouble();
-    const status = new ElementDouble();
     const dom = createOverlayDomBindings({
       overlayStack: new ElementDouble(),
       overlays: [],
       overlayActions: [],
     });
-    dom.setupStepsElement = setupSteps as unknown as HTMLElement;
     dom.channelDraftListElement = channelList as unknown as HTMLElement;
     dom.setupValidationElement = validation as unknown as HTMLElement;
     dom.channelSetupSourceElement = new ElementDouble() as unknown as HTMLElement;
     dom.channelSetupEnabledElement = new ElementDouble() as unknown as HTMLElement;
     dom.channelSetupBlocksElement = new ElementDouble() as unknown as HTMLElement;
-    dom.channelSetupStatusElement = status as unknown as HTMLElement;
 
     renderWorkflowDom(
       createWorkflowState('channelSetup'),
@@ -497,10 +493,7 @@ test('route DOM renders channel setup review without privileged data', () => {
       dom,
     );
 
-    const renderedText = [status, setupSteps, channelList, validation].map(collectText).join(' ');
-    assert.match(renderedText, /Step 1 of 3/u);
-    assert.match(renderedText, /Choose library/u);
-    assert.match(renderedText, /Select movie or show libraries from this setup screen/u);
+    const renderedText = [channelList, validation].map(collectText).join(' ');
     assert.match(renderedText, /Choose a movie or show library section before saving channels/u);
     assert.doesNotMatch(renderedText, /Demo Library|The Vault|Weekend Queue|Liminal One/u);
     assert.doesNotMatch(renderedText, /serverUri|token|https?:|raw payload/u);
@@ -593,13 +586,10 @@ test('route DOM renders selected Plex library and strategy controls through prod
   });
 
   try {
-    const status = new ElementDouble();
     const source = new ElementDouble();
     const enabled = new ElementDouble();
     const blocks = new ElementDouble();
-    const setupSteps = new ElementDouble();
     const sourceList = new ElementDouble();
-    const strategy = new ElementDouble();
     const review = new ElementDouble();
     const validation = new ElementDouble();
     const appendButton = new ElementDouble();
@@ -611,13 +601,10 @@ test('route DOM renders selected Plex library and strategy controls through prod
       overlays: [],
       overlayActions: [],
     });
-    dom.channelSetupStatusElement = status as unknown as HTMLElement;
     dom.channelSetupSourceElement = source as unknown as HTMLElement;
     dom.channelSetupEnabledElement = enabled as unknown as HTMLElement;
     dom.channelSetupBlocksElement = blocks as unknown as HTMLElement;
-    dom.setupStepsElement = setupSteps as unknown as HTMLElement;
     dom.channelDraftListElement = sourceList as unknown as HTMLElement;
-    dom.channelSetupStrategyElement = strategy as unknown as HTMLElement;
     dom.channelSetupReviewElement = review as unknown as HTMLElement;
     dom.setupValidationElement = validation as unknown as HTMLElement;
     dom.channelCommitButtons = [appendButton, replaceButton] as unknown as HTMLButtonElement[];
@@ -635,22 +622,15 @@ test('route DOM renders selected Plex library and strategy controls through prod
       liveSelection(),
     );
 
-    const renderedText = [status, source, enabled, blocks, setupSteps, sourceList, review, validation]
+    const renderedText = [source, enabled, blocks, sourceList, review, validation]
       .map(collectText)
       .join(' ');
-    const replaceMode = strategy.children.find((child) => child.dataset.strategyOption === 'build-mode-replace');
 
-    assert.match(renderedText, /Step 3 of 3/u);
     assert.match(renderedText, /Selected Movies/u);
-    assert.match(renderedText, /Configure channels/u);
     assert.match(renderedText, /Movie library source selected for channel creation/u);
     assert.match(renderedText, /2 known movies/u);
     assert.match(renderedText, /Replace saved lineup/u);
     assert.match(renderedText, /Review the strategy, then append it to saved channels or replace the lineup/u);
-    assert.equal(replaceMode?.dataset.setupAction, 'selectReplaceBuildMode');
-    assert.equal(replaceMode?.dataset.focusId, 'channel-strategy-build-replace');
-    assert.equal(replaceMode?.disabled, false);
-    assert.equal(replaceMode?.getAttribute('aria-pressed'), 'true');
     assert.equal(appendButton.textContent, 'Build appended channel');
     assert.equal(replaceButton.textContent, 'Review replace mode');
   } finally {
@@ -703,10 +683,8 @@ test('reachable product route text avoids internal implementation-status terms',
       dom.channelSetupSourceElement = new ElementDouble() as unknown as HTMLElement;
       dom.channelSetupEnabledElement = new ElementDouble() as unknown as HTMLElement;
       dom.channelSetupBlocksElement = new ElementDouble() as unknown as HTMLElement;
-      dom.setupStepsElement = new ElementDouble() as unknown as HTMLElement;
       dom.channelDraftListElement = new ElementDouble() as unknown as HTMLElement;
       dom.setupValidationElement = new ElementDouble() as unknown as HTMLElement;
-      dom.channelSetupStatusElement = new ElementDouble() as unknown as HTMLElement;
       dom.overlayPlaybackSummaryElement = new ElementDouble() as unknown as HTMLElement;
       dom.overlayAudioOptionsElement = new ElementDouble() as unknown as HTMLElement;
       dom.overlaySubtitleOptionsElement = new ElementDouble() as unknown as HTMLElement;
@@ -724,10 +702,8 @@ test('reachable product route text avoids internal implementation-status terms',
         dom.channelSetupSourceElement,
         dom.channelSetupEnabledElement,
         dom.channelSetupBlocksElement,
-        dom.setupStepsElement,
         dom.channelDraftListElement,
         dom.setupValidationElement,
-        dom.channelSetupStatusElement,
       ].map((element) => collectText(element as unknown as ElementDouble)).join(' ');
       renderedRouteText.push({
         route,
@@ -750,10 +726,8 @@ test('reachable product route text avoids internal implementation-status terms',
           dom.channelSetupSourceElement,
           dom.channelSetupEnabledElement,
           dom.channelSetupBlocksElement,
-          dom.setupStepsElement,
           dom.channelDraftListElement,
           dom.setupValidationElement,
-          dom.channelSetupStatusElement,
           dom.overlayPlaybackSummaryElement,
           dom.overlayAudioOptionsElement,
           dom.overlaySubtitleOptionsElement,
@@ -785,7 +759,6 @@ test('static product route visible text avoids internal implementation-status te
   mountStaticRendererDom(documentDouble as unknown as Document);
 
   assert.doesNotMatch(readVisibleTextFromMarkup(root.innerHTML), PRODUCT_ROUTE_INTERNAL_COPY_PATTERN);
-  assert.match(root.innerHTML, /data-channel-setup-status/u);
   assert.doesNotMatch(root.innerHTML, /data-channel-setup-fixture-status/u);
 });
 
@@ -894,13 +867,10 @@ function createOverlayDomBindings({
     channelSetupSourceElement: null,
     channelSetupEnabledElement: null,
     channelSetupBlocksElement: null,
-    setupStepsElement: null,
     channelDraftListElement: null,
-    channelSetupStrategyElement: null,
     channelSetupReviewElement: null,
     setupValidationElement: null,
     channelSetupResultElement: null,
-    channelSetupStatusElement: null,
     plexPanelElement: null,
     plexActionButtons: [],
     plexStatusElement: null,

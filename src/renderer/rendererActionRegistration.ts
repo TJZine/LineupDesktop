@@ -106,12 +106,6 @@ export function registerRendererActions(
       if (action !== null) handlers.applyChannelSetupAction(action);
     });
   }
-  dom.channelSetupStrategyElement?.addEventListener('click', (event) => {
-    if (!(event.target instanceof HTMLElement)) return;
-    const button = event.target.closest<HTMLButtonElement>('[data-setup-action]');
-    const action = readChannelSetupActionId(button?.dataset.setupAction);
-    if (action !== null) handlers.applyChannelSetupAction(action);
-  });
   for (const button of dom.channelCommitButtons) {
     button.addEventListener('click', () => {
       const action = readChannelCommitActionId(button.dataset.channelCommitAction);

@@ -36,7 +36,7 @@ test('workflow state starts on the player route with injected presentation conte
 
   assert.deepEqual(state.routeState, { activeRoute: 'player', previousRoute: null });
   assert.equal(state.settingsDraft.launchMode, 'windowed');
-  assert.equal(state.channelSetupDraft.activeStepId, 'channels');
+  assert.equal(state.channelSetupDraft.buildMode, 'append');
   assert.equal(view.route, 'player');
   assert.equal(view.title, 'Player');
   assert.equal(view.currentProgram.channelName, 'Liminal One');
@@ -320,23 +320,18 @@ test('channel setup route is driven by live status and selected library only', (
   const view = getRouteWorkflowView(append);
   const viewText = JSON.stringify({
     settings: view.settings,
-    channelDrafts: view.channelDrafts,
     channelSetupSummary: view.channelSetupSummary,
-    setupSteps: view.setupSteps,
     setupValidationMessages: view.setupValidationMessages,
   });
 
   assert.deepEqual(append.routeState, initial.routeState);
   assert.equal(append.channelSetupDraft.buildMode, 'append');
   assert.equal('sourceMode' in append.channelSetupDraft, false);
-  assert.equal(view.channelDrafts.length, 0);
   assert.equal(view.channelSetupSummary.sourceName, 'Persisted channel status unavailable');
   assert.equal(view.channelSetupSummary.enabledChannelCount, 0);
   assert.equal(view.channelSetupSummary.totalChannelCount, 0);
   assert.equal(view.channelSetupSummary.totalBlockCount, 0);
   assert.equal(view.channelSetupSummary.readyForPreview, false);
-  assert.equal(view.channelSetupFlow.stages.find((step) => step.id === 'library')?.state, 'current');
-  assert.equal(view.channelSetupFlow.stages.find((step) => step.id === 'review')?.state, 'pending');
   assert.deepEqual(view.setupValidationMessages, [
     'Choose a movie or show library section before saving channels. Selecting an individual media item only opens metadata preview.',
   ]);
@@ -366,18 +361,9 @@ test('channel setup view uses selected Plex library as the channel creation sour
     replace: true,
     confirmReplace: false,
   });
-  assert.match(view.setupSteps.map((step) => step.detail).join(' '), /Selected movie library: Selected Movies/u);
-  assert.deepEqual(view.channelSetupFlow.stages.map((stage) => stage.label), [
-    'Choose library',
-    'Configure channels',
-    'Review changes',
-    'Build result',
-  ]);
   assert.equal(view.channelSetupFlow.library.marker, 'MOV');
   assert.equal(view.channelSetupFlow.reviewRows[0]?.value, 'Selected Movies');
   assert.equal(view.channelSetupFlow.reviewRows.find((row) => row.label === 'Build mode')?.value, 'Append to saved lineup');
-  assert.equal(view.channelSetupFlow.strategyOptions.find((option) => option.id === 'build-mode-append')?.selected, true);
-  assert.equal(view.channelSetupFlow.strategyOptions.find((option) => option.id === 'build-mode-replace')?.disabled, false);
   assert.deepEqual(view.setupValidationMessages, [
     'Selected library is ready. Review the strategy, then append it to saved channels or replace the lineup.',
   ]);
@@ -404,7 +390,6 @@ test('channel setup local strategy actions update review state without persisten
   assert.equal('sourceMode' in append.channelSetupDraft, false);
   assert.equal(replaceView.channelSetupFlow.buildMode, 'replace');
   assert.equal(replaceView.channelSetupFlow.reviewRows.find((row) => row.label === 'Build mode')?.value, 'Replace saved lineup');
-  assert.equal(replaceView.channelSetupFlow.strategyOptions.find((option) => option.id === 'build-mode-replace')?.selected, true);
   assert.equal(appendView.channelSetupFlow.buildMode, 'append');
   assert.equal(appendView.channelSetupFlow.reviewRows.find((row) => row.label === 'Build mode')?.value, 'Append to saved lineup');
 });
@@ -631,14 +616,11 @@ test('channel setup route does not use draft setup fallback after status failure
   const view = getRouteWorkflowView(createWorkflowState('channelSetup'), failedRuntime);
   const viewText = JSON.stringify({
     settings: view.settings,
-    channelDrafts: view.channelDrafts,
     channelSetupSummary: view.channelSetupSummary,
-    setupSteps: view.setupSteps,
     setupValidationMessages: view.setupValidationMessages,
   });
 
   assert.equal(view.settings.setupState, 'Channel setup status could not be loaded.');
-  assert.equal(view.channelDrafts.length, 0);
   assert.deepEqual(view.channelSetupSummary, {
     sourceName: 'Persisted channel status unavailable',
     enabledChannelCount: 0,
