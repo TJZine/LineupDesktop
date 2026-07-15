@@ -157,6 +157,28 @@ test('focus sync excludes controls inside inactive hidden setup sections', () =>
   }
 });
 
+test('focus sync registers and removes dynamic Guide program identities', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const guideCell = new FocusElementDouble('guide-program-channel--program', false, 'guide');
+  let queryElements = [guideCell];
+  Object.defineProperty(globalThis, 'document', {
+    value: { querySelectorAll: () => queryElements, activeElement: null },
+    configurable: true,
+  });
+  try {
+    const registry = new FocusRegistry();
+    const dom = createFocusDomBindings([]);
+    syncRendererFocusTargets(registry, dom);
+    assert.equal(registry.createInitialState('guide').activeId, 'guide-program-channel--program');
+    queryElements = [];
+    syncRendererFocusTargets(registry, dom);
+    assert.equal(registry.createInitialState('guide').activeId, null);
+  } finally {
+    if (originalDocument === undefined) Reflect.deleteProperty(globalThis, 'document');
+    else Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
+  }
+});
+
 test('channel setup initial focus starts on onboarding controls with no global route rail', () => {
   const registry = new FocusRegistry();
   const requestPin = new FocusElementDouble('btn-auth-request', false, undefined, 'requestPin');

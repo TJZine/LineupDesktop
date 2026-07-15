@@ -7,8 +7,12 @@ import {
   applyEpgAction,
   createEpgGuideView,
   createEpgState,
-  DEFAULT_EPG_PRESENTATION_SOURCE,
+  EMPTY_EPG_PRESENTATION_SOURCE,
   ensureRendererReadyGuidePresentation,
+  moveEpgSelection,
+  selectEpgProgram,
+  type EpgDirection,
+  type EpgDirectionResult,
   type EpgActionId,
   type EpgGuideViewModel,
   type EpgPresentationSource,
@@ -132,12 +136,6 @@ const ROUTE_ACTIONS = {
   ],
   guide: [
     {
-      id: 'resumePlayer',
-      label: 'Watch now',
-      targetRoute: 'player',
-      statusText: 'Player focused on the highlighted program.',
-    },
-    {
       id: 'openChannelSetup',
       label: 'Set up Plex',
       targetRoute: 'channelSetup',
@@ -208,7 +206,7 @@ const ROUTE_COPY = {
 
 export function createWorkflowState(
   initialRoute: AppRouteId = 'player',
-  guidePresentation: EpgPresentationSource = DEFAULT_EPG_PRESENTATION_SOURCE,
+  guidePresentation: EpgPresentationSource = EMPTY_EPG_PRESENTATION_SOURCE,
 ): WorkflowState {
   return {
     routeState: {
@@ -386,10 +384,14 @@ function guidePlaceholderPrimaryText(
       return route === 'player'
         ? 'Current program details appear once guide data is ready.'
         : 'Schedule rows are preparing for the selected lineup.';
-    case 'empty':
+    case 'empty-channels':
       return route === 'player'
         ? 'Current program details appear after channels are added.'
         : 'Add channels from setup to populate this guide.';
+    case 'empty-programs':
+      return route === 'player'
+        ? 'Current program details are unavailable for this guide window.'
+        : 'Refresh the schedule or adjust your channel lineup.';
     case 'error':
       return route === 'player'
         ? 'Current program details are temporarily unavailable.'
@@ -461,6 +463,26 @@ export function applyWorkflowEpgAction(
     ...state,
     epg: applyEpgAction(state.epg, actionId, state.guidePresentation),
   };
+}
+
+export function applyWorkflowEpgDirection(
+  state: WorkflowState,
+  direction: EpgDirection,
+): { workflowState: WorkflowState; result: EpgDirectionResult } {
+  const result = moveEpgSelection(state.epg, direction, state.guidePresentation);
+  return {
+    workflowState: result.state === state.epg ? state : { ...state, epg: result.state },
+    result,
+  };
+}
+
+export function selectWorkflowEpgProgram(
+  state: WorkflowState,
+  channelId: string,
+  programId: string,
+): WorkflowState {
+  const epg = selectEpgProgram(state.epg, channelId, programId, state.guidePresentation);
+  return epg === state.epg ? state : { ...state, epg };
 }
 
 export function findRouteAction(

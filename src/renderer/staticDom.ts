@@ -142,29 +142,12 @@ const STATIC_SCREEN_MARKUP = `
       <h2 id="screen-guide-title">Guide</h2>
       <p data-workflow-primary="guide">Tonight at a glance.</p>
       <p data-workflow-secondary="guide">Use directional controls to move through time windows, channels, and programs.</p>
-      <div class="guide-controls" aria-label="Guide shell controls">
-        <button type="button" data-epg-action="previousWindow" data-focus-id="guide-window-previous">Earlier</button>
-        <button type="button" data-epg-action="nextWindow" data-focus-id="guide-window-next">Later</button>
-        <button type="button" data-epg-action="previousChannel" data-focus-id="guide-channel-previous">Channel up</button>
-        <button type="button" data-epg-action="nextChannel" data-focus-id="guide-channel-next">Channel down</button>
-        <button type="button" data-epg-action="previousProgram" data-focus-id="guide-program-previous">Previous show</button>
-        <button type="button" data-epg-action="nextProgram" data-focus-id="guide-program-next">Next show</button>
-      </div>
       <section class="guide-detail" aria-label="Selected guide program">
         <p data-epg-detail-channel></p>
         <h3 data-epg-detail-title></h3>
         <p data-epg-detail-time></p>
       </section>
-      <div class="screen-shell-state" data-shell-state="empty">
-        <span>Empty state</span>
-        <strong>No saved channels are loaded for this local setup state.</strong>
-      </div>
       <div class="epg-grid" data-epg-grid aria-label="Guide schedule grid"></div>
-      <div class="workflow-actions" data-workflow-actions="guide">
-        <button type="button" data-route-action="resumePlayer" data-focus-id="guide-watch">Watch now</button>
-        <button type="button" data-route-action="openChannelSetup" data-focus-id="guide-setup">Edit lineup</button>
-      </div>
-      <aside class="setup-reminder" data-setup-reminder="guide" aria-label="Channel setup reminder" hidden><span>Add channels to fill the Guide.</span><button type="button" data-route-action="openChannelSetup">Set up channels</button></aside>
     </div>
   </section>
   <section id="screen-settings" class="screen" data-screen="settings" data-style-surface="screen" aria-labelledby="screen-settings-title" hidden>

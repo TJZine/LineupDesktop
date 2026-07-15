@@ -26,6 +26,9 @@ export interface RendererActionHandlers {
   applyChannelSetupAction(action: NonNullable<ReturnType<typeof readChannelSetupActionId>>): void;
   applyChannelCommitAction(action: NonNullable<ReturnType<typeof readChannelCommitActionId>>): void;
   applyEpgAction(action: NonNullable<ReturnType<typeof readEpgActionId>>): void;
+  applyGuideAction?(action: GuideActionId): void;
+  focusGuideProgramFromPointer?(target: GuideProgramActionTarget): boolean;
+  activateGuideProgram?(target: GuideProgramActionTarget): void;
   applyOverlayAction(action: NonNullable<ReturnType<typeof readOverlayActionId>>): void;
   applyPlexRuntimeAction(action: NonNullable<ReturnType<typeof readPlexRuntimeActionId>>): void;
   applyCustomChannelAction?(action: NonNullable<ReturnType<typeof readCustomChannelActionId>>, detail?: string): void;
@@ -45,6 +48,16 @@ export interface RendererActionHandlers {
   applySettingsCategory?(category: string): void;
   applySetupStage?(stage: string): void;
   applyStagedSetupAction?(action: StagedSetupFlowActionId): void;
+}
+
+export type GuideActionId = 'back' | 'setup' | 'refresh' | 'retry';
+
+export interface GuideProgramActionTarget {
+  channelId: string;
+  programId: string;
+  focusId: string;
+  presentationGeneration: number;
+  element: HTMLButtonElement;
 }
 
 export function registerRendererActions(
@@ -118,6 +131,33 @@ export function registerRendererActions(
       if (action !== null) handlers.applyEpgAction(action);
     });
   }
+  const guideScreen = documentRef.getElementById('screen-guide');
+  let pointerFocusOnlyId: string | null = null;
+  guideScreen?.addEventListener('pointerdown', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    const target = readGuideProgramTarget(event.target);
+    pointerFocusOnlyId = target !== null && handlers.focusGuideProgramFromPointer?.(target) === true
+      ? target.focusId
+      : null;
+  });
+  guideScreen?.addEventListener('click', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    const target = readGuideProgramTarget(event.target);
+    if (target !== null) {
+      if (pointerFocusOnlyId === target.focusId) {
+        pointerFocusOnlyId = null;
+        return;
+      }
+      pointerFocusOnlyId = null;
+      handlers.activateGuideProgram?.(target);
+      return;
+    }
+    const stateAction = event.target.closest<HTMLButtonElement>('[data-guide-action]');
+    const action = readGuideAction(stateAction?.dataset.guideAction);
+    if (stateAction !== null && action !== null && isEligibleDelegatedAction(stateAction)) {
+      handlers.applyGuideAction?.(action);
+    }
+  });
   for (const button of dom.overlayActionButtons) {
     button.addEventListener('click', () => {
       const action = readOverlayActionId(button.dataset.overlayAction);
@@ -180,6 +220,34 @@ export function registerRendererActions(
       handlers.selectSubtitleTrack(trackId === 'subtitles-off' || !trackId ? null : trackId);
     }
   });
+}
+
+function readGuideProgramTarget(target: HTMLElement): GuideProgramActionTarget | null {
+  const program = target.closest<HTMLButtonElement>('[data-guide-program-action]');
+  if (program === null || !isEligibleDelegatedAction(program)) return null;
+  const generation = Number(program.dataset.guideGeneration);
+  const channelId = program.dataset.guideChannelId;
+  const programId = program.dataset.guideProgramId;
+  const focusId = program.dataset.focusId;
+  return channelId !== undefined
+    && programId !== undefined
+    && focusId !== undefined
+    && Number.isSafeInteger(generation)
+    && generation >= 0
+    ? { channelId, programId, focusId, presentationGeneration: generation, element: program }
+    : null;
+}
+
+function readGuideAction(value: string | undefined): GuideActionId | null {
+  switch (value) {
+    case 'back':
+    case 'setup':
+    case 'refresh':
+    case 'retry':
+      return value;
+    default:
+      return null;
+  }
 }
 
 function isActiveStagedAction(button: HTMLButtonElement): boolean {

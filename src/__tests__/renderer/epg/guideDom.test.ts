@@ -189,6 +189,8 @@ test('guideCellDom builds valid DOM elements', () => {
     startsAtMs: 1500,
     endsAtMs: 2500,
     channelId: 'channel-1',
+    focusId: 'guide-program-channel-1--prog-1',
+    presentationGeneration: 4,
     columnStart: 1,
     columnSpan: 1,
     isSelected: true,
@@ -204,8 +206,13 @@ test('guideCellDom builds valid DOM elements', () => {
 
   const cell = guideCellDom(program, windowStart, windowEnd, trackWidth) as any;
 
-  assert.equal(cell.tagName, 'ARTICLE');
+  assert.equal(cell.tagName, 'BUTTON');
   assert.equal(cell.classList.contains('epg-grid__program'), true);
+  assert.equal(cell.dataset.focusId, 'guide-program-channel-1--prog-1');
+  assert.equal(cell.dataset.guideChannelId, 'channel-1');
+  assert.equal(cell.dataset.guideProgramId, 'prog-1');
+  assert.equal(cell.dataset.guideGeneration, '4');
+  assert.equal(cell.getAttribute('role'), 'gridcell');
   assert.equal(cell.dataset.selectedProgram, 'true');
   assert.equal(cell.dataset.temporalState, 'current');
   assert.equal(cell.style.position, 'absolute');

@@ -4,12 +4,36 @@ import assert from 'node:assert/strict';
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import type { ChannelRuntimeRendererState } from '../../renderer/channelRuntimeState.js';
 import { createRendererSafePlayerSnapshot, createPlayerOverlayState } from '../../renderer/overlays.js';
-import { setEpgPresentationState } from '../../renderer/epg.js';
+import { setEpgPresentationState, type EpgPresentationSource } from '../../renderer/epg.js';
 import { renderRouteDom, renderWorkflowDom } from '../../renderer/routeDom.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
-import { applyWorkflowChannelSetupAction, createWorkflowState } from '../../renderer/workflow.js';
+import { applyWorkflowChannelSetupAction, createWorkflowState as createWorkflowStateCore } from '../../renderer/workflow.js';
 import { renderShellDom, type ShellDomBindings } from '../../renderer/shell/shellDom.js';
 import { beginFullscreenRequest, rejectFullscreenRequest } from '../../renderer/shell/shellState.js';
+
+const GUIDE_BASE = Date.UTC(2026, 4, 12, 20, 0, 0);
+const GUIDE_PRESENTATION: EpgPresentationSource = {
+  channels: [{
+    id: 'channel-liminal-one', number: '101', name: 'Liminal One', programs: [{
+      id: 'liminal-archive', title: 'The Midnight Archive', subtitle: 'Signal Lost',
+      description: 'Archive description.', showTitle: 'The Midnight Archive', episodeLabel: 'S2 E4',
+      rating: 'TV-14', quality: ['HD'], genres: ['Drama'],
+      startsAtMs: GUIDE_BASE, endsAtMs: GUIDE_BASE + 60 * 60 * 1000,
+    }],
+  }],
+  nowWatching: {
+    title: 'The Midnight Archive', subtitle: 'Signal Lost', channelId: 'channel-liminal-one',
+    startsAtMs: GUIDE_BASE, endsAtMs: GUIDE_BASE + 60 * 60 * 1000,
+  },
+  nowMs: GUIDE_BASE + 30 * 60 * 1000,
+};
+
+function createWorkflowState(
+  route: Parameters<typeof createWorkflowStateCore>[0] = 'player',
+  guidePresentation: EpgPresentationSource = GUIDE_PRESENTATION,
+) {
+  return createWorkflowStateCore(route, guidePresentation);
+}
 
 class ElementDouble {
   hidden = false;
@@ -307,7 +331,7 @@ test('route DOM renders guide states and focused program details', () => {
     assert.match(renderedText, /The Midnight Archive/u);
     assert.match(renderedText, /S2 E4/u);
 
-    for (const state of ['loading', 'empty', 'error'] as const) {
+    for (const state of ['loading', 'empty-channels', 'empty-programs', 'error'] as const) {
       const stateGrid = new ElementDouble();
       const stateTitle = new ElementDouble();
       const currentProgram = new ElementDouble();
@@ -327,11 +351,11 @@ test('route DOM renders guide states and focused program details', () => {
       );
 
       const stateText = collectText(stateGrid);
-      assert.match(stateText, state === 'loading' ? /Loading guide/u : state === 'empty' ? /No channels available/u : /Guide unavailable/u);
+      assert.match(stateText, state === 'loading' ? /Loading guide/u : state === 'empty-channels' ? /No channels available/u : state === 'empty-programs' ? /No programs in this window/u : /Guide unavailable/u);
       assert.doesNotMatch(stateText, /Signal Warmup|After Hours Cinema|Pilot Block|Roundtable/u);
-      assert.match(stateTitle.textContent, state === 'loading' ? /Loading guide/u : state === 'empty' ? /No channels available/u : /Guide unavailable/u);
-      assert.equal(currentProgram.textContent, state === 'loading' ? 'Loading guide' : state === 'empty' ? 'No channels available' : 'Guide unavailable');
-      assert.match(currentWindow.textContent, state === 'loading' ? /Schedule rows are preparing/u : state === 'empty' ? /Add channels from setup/u : /could not be shown/u);
+      assert.match(stateTitle.textContent, state === 'loading' ? /Loading guide/u : state === 'empty-channels' ? /No channels available/u : state === 'empty-programs' ? /No programs in this window/u : /Guide unavailable/u);
+      assert.equal(currentProgram.textContent, state === 'loading' ? 'Loading guide' : state === 'empty-channels' ? 'No channels available' : state === 'empty-programs' ? 'No programs in this window' : 'Guide unavailable');
+      assert.match(currentWindow.textContent, state === 'loading' ? /Schedule rows are preparing/u : state === 'empty-channels' ? /Add channels from setup/u : state === 'empty-programs' ? /Refresh the schedule/u : /could not be shown/u);
     }
   } finally {
     restoreDocument(originalDocument);

@@ -15,6 +15,8 @@ export type EpgActionId =
   | 'previousProgram'
   | 'nextProgram';
 
+export type EpgDirection = 'up' | 'down' | 'left' | 'right';
+
 export interface EpgProgramViewModel {
   id: string;
   title: string;
@@ -36,11 +38,20 @@ export interface EpgChannelViewModel {
   programs: readonly EpgProgramViewModel[];
 }
 
+export type EpgPresentationState =
+  | 'ready'
+  | 'loading'
+  | 'empty-channels'
+  | 'empty-programs'
+  | 'error';
+
 export interface EpgState {
   windowStartMs: number;
   selectedChannelId: string;
   selectedProgramId: string;
   presentationState: EpgPresentationState;
+  presentationGeneration: number;
+  tuneError: string | null;
 }
 
 export interface EpgTimeSlotViewModel {
@@ -49,8 +60,13 @@ export interface EpgTimeSlotViewModel {
   label: string;
 }
 
+export type EpgProgramTemporalState = 'past' | 'current' | 'upcoming';
+export type EpgProgramWidthTier = 'wide' | 'medium' | 'narrow';
+
 export interface EpgProgramCellViewModel extends EpgProgramViewModel {
   channelId: string;
+  focusId: string;
+  presentationGeneration: number;
   columnStart: number;
   columnSpan: number;
   isSelected: boolean;
@@ -70,6 +86,8 @@ export interface EpgChannelRowViewModel {
 
 export interface EpgGuideViewModel {
   presentationState: EpgPresentationState;
+  presentationGeneration: number;
+  tuneError: string | null;
   nowMs: number;
   windowStartMs: number;
   windowEndMs: number;
@@ -80,16 +98,6 @@ export interface EpgGuideViewModel {
   infoPanel: EpgInfoPanelViewModel | null;
   state: EpgPresentationStateViewModel;
 }
-
-export const EPG_SLOT_DURATION_MS = 30 * 60 * 1000;
-export const EPG_VISIBLE_SLOT_COUNT = 6;
-export const EPG_WINDOW_DURATION_MS = EPG_SLOT_DURATION_MS * EPG_VISIBLE_SLOT_COUNT;
-export const EPG_DEMO_BASE_TIME_MS = Date.UTC(2026, 4, 12, 20, 0, 0);
-
-export type EpgProgramTemporalState = 'past' | 'current' | 'upcoming';
-export type EpgProgramWidthTier = 'wide' | 'medium' | 'narrow';
-
-export type EpgPresentationState = 'ready' | 'loading' | 'empty' | 'error';
 
 export interface EpgPresentationSource {
   channels: readonly EpgChannelViewModel[];
@@ -110,96 +118,30 @@ export interface EpgCurrentProgramViewModel {
   endsAtMs: number;
 }
 
-export const DEFAULT_EPG_PRESENTATION_SOURCE = {
-  channels: [
-  {
-    id: 'channel-liminal-one',
-    number: '101',
-    name: 'Liminal One',
-    programs: [
-      createProgram('liminal-cold-open', 'Signal Warmup', 'Cold open block', -30, 30, {
-        showTitle: 'Lineup Live',
-        episodeLabel: 'S1 E1',
-        description: 'A short warmup block before the main channel run begins.',
-        genres: ['Variety', 'Short'],
-        rating: 'TV-PG',
-        quality: ['HD', 'AAC'],
-      }),
-      createProgram('liminal-archive', 'The Midnight Archive', 'Signal Lost', 30, 90, {
-        showTitle: 'The Midnight Archive',
-        episodeLabel: 'S2 E4',
-        description: 'A late-night archive episode with restored metadata, show title, rating, and guide details.',
-        genres: ['Mystery', 'Drama', 'Archive'],
-        rating: 'TV-14',
-        quality: ['1080p', 'HDR', '5.1'],
-      }),
-      createProgram('liminal-after-hours', 'After Hours Cinema', 'Restored feature', 90, 180, {
-        showTitle: 'After Hours Cinema',
-        episodeLabel: 'Feature',
-        description: 'A feature-length block that demonstrates wide guide cells and upcoming program presentation.',
-        genres: ['Cinema', 'Restored'],
-        rating: 'PG',
-        quality: ['4K', 'Direct'],
-      }),
-      createProgram('liminal-signoff', 'Analog Signoff', 'Overnight loop', 180, 240, {
-        showTitle: 'Analog Signoff',
-        episodeLabel: 'Loop',
-        description: 'A quiet overnight loop used by the UI to show late-window cells.',
-        genres: ['Ambient'],
-        rating: 'TV-G',
-        quality: ['HD'],
-      }),
-    ],
-  },
-  {
-    id: 'channel-vault',
-    number: '204',
-    name: 'The Vault',
-    programs: [
-      createProgram('vault-feature', 'Restored Feature', 'Studio print', 0, 90),
-      createProgram('vault-notes', 'Director Notes', 'Production stories', 90, 120),
-      createProgram('vault-double-feature', 'Double Feature', 'Late set', 120, 210),
-    ],
-  },
-  {
-    id: 'channel-weekend',
-    number: '310',
-    name: 'Weekend Queue With A Long Channel Name',
-    programs: [
-      createProgram('weekend-pilot', 'Pilot Block', 'First episodes', 0, 30),
-      createProgram('weekend-marathon', 'Comfort Marathon', 'Season stretch', 30, 150),
-      createProgram('weekend-wrap', 'Queue Wrap', 'Next picks', 150, 210),
-    ],
-  },
-  {
-    id: 'channel-studio',
-    number: '420',
-    name: 'Studio Desk',
-    programs: [
-      createProgram('studio-briefing', 'Lineup Briefing', 'Tonight lookahead', 0, 60),
-      createProgram('studio-roundtable', 'Roundtable', 'Programming notes', 60, 120),
-      createProgram('studio-spotlight', 'Creator Spotlight', 'Featured interview', 120, 180),
-    ],
-  },
-] as const satisfies readonly EpgChannelViewModel[],
-  nowWatching: {
-    title: 'The Midnight Archive',
-    subtitle: 'Episode 4 - Signal Lost',
-    channelId: 'channel-liminal-one',
-    startsAtMs: EPG_DEMO_BASE_TIME_MS + EPG_SLOT_DURATION_MS,
-    endsAtMs: EPG_DEMO_BASE_TIME_MS + EPG_SLOT_DURATION_MS * 3,
-  },
-  nowMs: EPG_DEMO_BASE_TIME_MS + EPG_SLOT_DURATION_MS * 2,
-} as const satisfies EpgPresentationSource;
+export interface EpgDirectionResult {
+  state: EpgState;
+  handled: boolean;
+  windowChanged: boolean;
+}
+
+export const EPG_SLOT_DURATION_MS = 30 * 60 * 1000;
+export const EPG_VISIBLE_SLOT_COUNT = 6;
+export const EPG_WINDOW_DURATION_MS = EPG_SLOT_DURATION_MS * EPG_VISIBLE_SLOT_COUNT;
+
+/** An honest startup value. Product Guide rows arrive only from the scheduler bridge. */
+export const EMPTY_EPG_PRESENTATION_SOURCE: EpgPresentationSource = {
+  channels: [],
+  nowWatching: null,
+};
+
+/** Retained until the Package 6 fixture bundle is removed; it contains no schedule fixture. */
+export const DEFAULT_EPG_PRESENTATION_SOURCE = EMPTY_EPG_PRESENTATION_SOURCE;
 
 export function ensureRendererReadyGuidePresentation(
   presentation: EpgPresentationSource,
-  fallbackWindowStartMs = EPG_DEMO_BASE_TIME_MS,
+  fallbackWindowStartMs = snapWindowStartMs(Date.now()),
 ): EpgPresentationSourceWithNowWatching {
-  const presentationNowMs = presentation.nowMs;
-  const nowMs = typeof presentationNowMs === 'number' && Number.isFinite(presentationNowMs) && presentationNowMs >= 0
-    ? presentationNowMs
-    : Date.now();
+  const nowMs = isValidTime(presentation.nowMs) ? presentation.nowMs : Date.now();
   if (presentation.nowWatching !== null) {
     return { ...presentation, nowMs, nowWatching: presentation.nowWatching };
   }
@@ -227,41 +169,40 @@ export function ensureRendererReadyGuidePresentation(
 }
 
 export function createEpgState(
-  presentation: EpgPresentationSource = DEFAULT_EPG_PRESENTATION_SOURCE,
+  presentation: EpgPresentationSource = EMPTY_EPG_PRESENTATION_SOURCE,
+  presentationGeneration = 0,
 ): EpgState {
   const initialSelection = deriveInitialEpgSelection(presentation);
   return {
     ...initialSelection,
-    presentationState: initialSelection.selectedProgramId.length > 0 ? 'ready' : 'empty',
+    presentationState: classifyPresentation(presentation, initialSelection.windowStartMs),
+    presentationGeneration,
+    tuneError: null,
   };
 }
 
 export function getDefaultEpgPresentationChannels(): readonly EpgChannelViewModel[] {
-  return DEFAULT_EPG_PRESENTATION_SOURCE.channels;
+  return EMPTY_EPG_PRESENTATION_SOURCE.channels;
+}
+
+export function createGuideProgramFocusId(channelId: string, programId: string): string {
+  return `guide-program-${encodeURIComponent(channelId)}--${encodeURIComponent(programId)}`;
+}
+
+export function isEpgProgramPlayable(program: Pick<EpgProgramViewModel, 'startsAtMs' | 'endsAtMs'>, nowMs: number): boolean {
+  return program.startsAtMs <= nowMs && nowMs < program.endsAtMs;
 }
 
 export function applyEpgAction(
   state: EpgState,
   actionId: EpgActionId,
-  presentation: EpgPresentationSource = DEFAULT_EPG_PRESENTATION_SOURCE,
+  presentation: EpgPresentationSource,
 ): EpgState {
   switch (actionId) {
     case 'previousWindow':
-      return normalizeEpgSelection({
-        ...state,
-        windowStartMs: Math.max(
-          minWindowStartMs(presentation),
-          state.windowStartMs - EPG_SLOT_DURATION_MS,
-        ),
-      }, presentation);
+      return moveWindow(state, -1, presentation);
     case 'nextWindow':
-      return normalizeEpgSelection({
-        ...state,
-        windowStartMs: Math.min(
-          maxWindowStartMs(presentation),
-          state.windowStartMs + EPG_SLOT_DURATION_MS,
-        ),
-      }, presentation);
+      return moveWindow(state, 1, presentation);
     case 'previousChannel':
       return selectChannelByOffset(state, -1, presentation);
     case 'nextChannel':
@@ -273,63 +214,129 @@ export function applyEpgAction(
   }
 }
 
-export function setEpgPresentationState(state: EpgState, presentationState: EpgPresentationState): EpgState {
-  return { ...state, presentationState };
+export function moveEpgSelection(
+  state: EpgState,
+  direction: EpgDirection,
+  presentation: EpgPresentationSource,
+): EpgDirectionResult {
+  if (state.presentationState !== 'ready') {
+    return { state, handled: false, windowChanged: false };
+  }
+  if (direction === 'left' || direction === 'right') {
+    const offset = direction === 'left' ? -1 : 1;
+    const adjacent = selectProgramByOffset(state, offset, presentation);
+    if (adjacent.selectedProgramId !== state.selectedProgramId) {
+      return { state: adjacent, handled: true, windowChanged: false };
+    }
+    const shifted = moveWindowIntent(state, offset);
+    return {
+      state: shifted,
+      handled: true,
+      windowChanged: shifted.windowStartMs !== state.windowStartMs,
+    };
+  }
+
+  const moved = selectNearestProgramOnAdjacentChannel(
+    state,
+    direction === 'up' ? -1 : 1,
+    presentation,
+  );
+  return {
+    state: moved,
+    handled: true,
+    windowChanged: false,
+  };
+}
+
+export function setEpgPresentationState(
+  state: EpgState,
+  presentationState: EpgPresentationState,
+  presentationGeneration = state.presentationGeneration,
+): EpgState {
+  return {
+    ...state,
+    presentationState,
+    presentationGeneration,
+    tuneError: presentationState === 'ready' ? state.tuneError : null,
+  };
+}
+
+export function setEpgTuneError(state: EpgState, tuneError: string | null): EpgState {
+  return state.presentationState === 'ready' ? { ...state, tuneError } : state;
+}
+
+export function selectEpgProgram(
+  state: EpgState,
+  channelId: string,
+  programId: string,
+  presentation: EpgPresentationSource,
+): EpgState {
+  if (state.presentationState !== 'ready') return state;
+  const channel = findChannel(channelId, presentation);
+  const program = channel === undefined
+    ? undefined
+    : visibleProgramsForChannel(channel, state.windowStartMs).find((candidate) => candidate.id === programId);
+  return program === undefined ? state : {
+    ...state,
+    selectedChannelId: channelId,
+    selectedProgramId: programId,
+    tuneError: null,
+  };
 }
 
 export function createEpgGuideView(
   state: EpgState,
-  presentation: EpgPresentationSource = DEFAULT_EPG_PRESENTATION_SOURCE,
+  presentation: EpgPresentationSource,
 ): EpgGuideViewModel {
   const presentationForRender = ensureRendererReadyGuidePresentation(presentation, state.windowStartMs);
   const normalizedState = normalizeEpgSelection(state, presentation);
   const windowEndMs = normalizedState.windowStartMs + EPG_WINDOW_DURATION_MS;
   const slots = Array.from({ length: EPG_VISIBLE_SLOT_COUNT }, (_, index) => {
     const startsAtMs = normalizedState.windowStartMs + index * EPG_SLOT_DURATION_MS;
-    return {
-      startsAtMs,
-      endsAtMs: startsAtMs + EPG_SLOT_DURATION_MS,
-      label: formatEpgTime(startsAtMs),
-    };
+    return { startsAtMs, endsAtMs: startsAtMs + EPG_SLOT_DURATION_MS, label: formatEpgTime(startsAtMs) };
   });
-
-  const showRows = normalizedState.presentationState === 'ready';
-  const rows = showRows ? presentation.channels.map((channel) => ({
-    id: channel.id,
-    number: channel.number,
-    name: channel.name,
-    isSelected: channel.id === normalizedState.selectedChannelId,
-    programs: channel.programs
-      .filter((program) => isProgramVisible(program, normalizedState.windowStartMs, windowEndMs))
-      .map((program) => createProgramCell(
+  const rows = normalizedState.presentationState === 'ready'
+    ? presentation.channels.map((channel) => ({
+      id: channel.id,
+      number: channel.number,
+      name: channel.name,
+      isSelected: channel.id === normalizedState.selectedChannelId,
+      programs: visibleProgramsForChannel(channel, normalizedState.windowStartMs).map((program) => createProgramCell(
         program,
         channel.id,
         normalizedState,
         windowEndMs,
         presentationForRender.nowMs,
       )),
-  })) : [];
-
-  const selectedProgram = rows
-    .flatMap((row) => row.programs)
-    .find((program) => program.isSelected);
-
-  if (normalizedState.presentationState === 'ready' && selectedProgram === undefined) {
-    throw new Error('EPG selection normalization did not produce a visible program');
-  }
+    }))
+    : [];
+  const selectedProgram = rows.flatMap((row) => row.programs).find((program) => program.isSelected) ?? null;
 
   return {
     presentationState: normalizedState.presentationState,
+    presentationGeneration: normalizedState.presentationGeneration,
+    tuneError: normalizedState.tuneError,
     nowMs: presentationForRender.nowMs,
     windowStartMs: normalizedState.windowStartMs,
     windowEndMs,
     slots,
     rows,
-    selectedProgram: selectedProgram ?? null,
+    selectedProgram,
     shell: createEpgShellView(presentation.channels, presentationForRender.nowWatching),
-    infoPanel: selectedProgram === undefined ? null : createInfoPanelView(selectedProgram),
+    infoPanel: selectedProgram === null ? null : createInfoPanelView(selectedProgram),
     state: createEpgPresentationStates()[normalizedState.presentationState],
   };
+}
+
+export function findEpgProgramCell(
+  state: EpgState,
+  presentation: EpgPresentationSource,
+  channelId: string,
+  programId: string,
+): EpgProgramCellViewModel | null {
+  return createEpgGuideView(state, presentation).rows
+    .find((row) => row.id === channelId)?.programs
+    .find((program) => program.id === programId) ?? null;
 }
 
 export function calculateProgramSpan(
@@ -337,18 +344,12 @@ export function calculateProgramSpan(
   windowStartMs: number,
   windowEndMs: number,
 ): { columnStart: number; columnSpan: number } | null {
-  if (!isProgramVisible(program, windowStartMs, windowEndMs)) {
-    return null;
-  }
-
+  if (!isProgramVisible(program, windowStartMs, windowEndMs)) return null;
   const clippedStartMs = Math.max(program.startsAtMs, windowStartMs);
   const clippedEndMs = Math.min(program.endsAtMs, windowEndMs);
   const columnStart = Math.floor((clippedStartMs - windowStartMs) / EPG_SLOT_DURATION_MS) + 1;
   const columnEnd = Math.ceil((clippedEndMs - windowStartMs) / EPG_SLOT_DURATION_MS) + 1;
-  return {
-    columnStart,
-    columnSpan: Math.max(1, columnEnd - columnStart),
-  };
+  return { columnStart, columnSpan: Math.max(1, columnEnd - columnStart) };
 }
 
 export function formatEpgTimeWindow(startsAtMs: number, endsAtMs: number): string {
@@ -360,31 +361,32 @@ export function formatEpgTime(valueMs: number): string {
   const hour24 = date.getUTCHours();
   const hour = hour24 % 12 === 0 ? 12 : hour24 % 12;
   const minute = String(date.getUTCMinutes()).padStart(2, '0');
-  const period = hour24 < 12 ? 'AM' : 'PM';
-  return `${hour}:${minute} ${period}`;
+  return `${hour}:${minute} ${hour24 < 12 ? 'AM' : 'PM'}`;
 }
 
-function createProgram(
-  id: string,
-  title: string,
-  subtitle: string,
-  startOffsetMinutes: number,
-  endOffsetMinutes: number,
-  options: Partial<Pick<EpgProgramViewModel, 'description' | 'showTitle' | 'episodeLabel' | 'rating' | 'quality' | 'genres'>> = {},
-): EpgProgramViewModel {
-  return {
-    id,
-    title,
-    subtitle,
-    description: options.description ?? `${title} is scheduled in this renderer-safe guide state.`,
-    showTitle: options.showTitle ?? title,
-    episodeLabel: options.episodeLabel ?? 'Program',
-    rating: options.rating ?? 'TV-PG',
-    quality: options.quality ?? ['HD', 'Stereo'],
-    genres: options.genres ?? ['Lineup'],
-    startsAtMs: EPG_DEMO_BASE_TIME_MS + startOffsetMinutes * 60 * 1000,
-    endsAtMs: EPG_DEMO_BASE_TIME_MS + endOffsetMinutes * 60 * 1000,
-  };
+export function updateEpgState(
+  state: EpgState,
+  presentation: EpgPresentationSource,
+  presentationGeneration = state.presentationGeneration + 1,
+): EpgState {
+  const initial = deriveInitialEpgSelection(presentation);
+  const presentationState = classifyPresentation(presentation, state.windowStartMs);
+  if (presentationState !== 'ready') {
+    return {
+      windowStartMs: initial.windowStartMs,
+      selectedChannelId: '',
+      selectedProgramId: '',
+      presentationState,
+      presentationGeneration,
+      tuneError: null,
+    };
+  }
+  return normalizeEpgSelection({
+    ...state,
+    presentationState: 'ready',
+    presentationGeneration,
+    tuneError: null,
+  }, presentation);
 }
 
 function createProgramCell(
@@ -392,334 +394,198 @@ function createProgramCell(
   channelId: string,
   state: EpgState,
   windowEndMs: number,
-  referenceNowMs: number,
+  nowMs: number,
 ): EpgProgramCellViewModel {
   const span = calculateProgramSpan(program, state.windowStartMs, windowEndMs);
-  if (span === null) {
-    throw new Error(`Visible EPG program ${program.id} did not produce a span`);
-  }
-
+  if (span === null) throw new Error(`Visible EPG program ${program.id} did not produce a span`);
   return {
     ...program,
     channelId,
+    focusId: createGuideProgramFocusId(channelId, program.id),
+    presentationGeneration: state.presentationGeneration,
     columnStart: span.columnStart,
     columnSpan: span.columnSpan,
     isSelected: channelId === state.selectedChannelId && program.id === state.selectedProgramId,
-    temporalState: getProgramTemporalState(program, referenceNowMs),
-    progressPercent: getProgramProgressPercent(program, referenceNowMs),
+    temporalState: getProgramTemporalState(program, nowMs),
+    progressPercent: getProgramProgressPercent(program, nowMs),
     widthTier: getProgramWidthTier(span.columnSpan),
     timeLabel: formatEpgTimeWindow(program.startsAtMs, program.endsAtMs),
   };
 }
 
-function getProgramTemporalState(
-  program: EpgProgramViewModel,
-  referenceNowMs: number,
-): EpgProgramTemporalState {
-  if (program.endsAtMs <= referenceNowMs) {
-    return 'past';
-  }
-  if (program.startsAtMs <= referenceNowMs && program.endsAtMs > referenceNowMs) {
-    return 'current';
-  }
-  return 'upcoming';
+function getProgramTemporalState(program: EpgProgramViewModel, nowMs: number): EpgProgramTemporalState {
+  if (program.endsAtMs <= nowMs) return 'past';
+  return isEpgProgramPlayable(program, nowMs) ? 'current' : 'upcoming';
 }
 
-function getProgramProgressPercent(
-  program: EpgProgramViewModel,
-  referenceNowMs: number,
-): number {
-  if (getProgramTemporalState(program, referenceNowMs) !== 'current') {
-    return 0;
-  }
-  const durationMs = Math.max(1, program.endsAtMs - program.startsAtMs);
-  return Math.round(((referenceNowMs - program.startsAtMs) / durationMs) * 100);
+function getProgramProgressPercent(program: EpgProgramViewModel, nowMs: number): number {
+  if (!isEpgProgramPlayable(program, nowMs)) return 0;
+  return Math.round(((nowMs - program.startsAtMs) / Math.max(1, program.endsAtMs - program.startsAtMs)) * 100);
 }
 
 function getProgramWidthTier(columnSpan: number): EpgProgramWidthTier {
-  if (columnSpan >= 3) {
-    return 'wide';
-  }
-  return columnSpan === 2 ? 'medium' : 'narrow';
+  return columnSpan >= 3 ? 'wide' : columnSpan === 2 ? 'medium' : 'narrow';
+}
+
+function classifyPresentation(presentation: EpgPresentationSource, windowStartMs: number): EpgPresentationState {
+  if (presentation.channels.length === 0) return 'empty-channels';
+  return presentation.channels.some((channel) => visibleProgramsForChannel(channel, windowStartMs).length > 0)
+    ? 'ready'
+    : 'empty-programs';
 }
 
 function normalizeEpgSelection(state: EpgState, presentation: EpgPresentationSource): EpgState {
+  if (state.presentationState !== 'ready') return state;
   const windowStartMs = clampWindowStartMs(state.windowStartMs, presentation);
-  const channel = findChannel(state.selectedChannelId, presentation) ?? presentation.channels[0];
+  const selectedChannel = findChannel(state.selectedChannelId, presentation);
+  const channel = selectedChannel !== undefined && visibleProgramsForChannel(selectedChannel, windowStartMs).length > 0
+    ? selectedChannel
+    : presentation.channels.find((candidate) => visibleProgramsForChannel(candidate, windowStartMs).length > 0);
   if (channel === undefined) {
-    return {
-      windowStartMs,
-      selectedChannelId: '',
-      selectedProgramId: '',
-      presentationState: state.presentationState,
-    };
+    return { ...state, windowStartMs, selectedChannelId: '', selectedProgramId: '', presentationState: 'empty-programs' };
   }
   const visiblePrograms = visibleProgramsForChannel(channel, windowStartMs);
-  const selectedProgram = visiblePrograms.find((program) => program.id === state.selectedProgramId);
-  const fallbackProgram = selectedProgram ?? visiblePrograms[0] ?? channel.programs[0];
+  const selectedProgram = visiblePrograms.find((program) => program.id === state.selectedProgramId) ?? visiblePrograms[0];
   return {
+    ...state,
     windowStartMs,
     selectedChannelId: channel.id,
-    selectedProgramId: fallbackProgram?.id ?? '',
-    presentationState: state.presentationState,
+    selectedProgramId: selectedProgram?.id ?? '',
   };
 }
 
-function selectChannelByOffset(
+function moveWindow(state: EpgState, offset: number, presentation: EpgPresentationSource): EpgState {
+  return normalizeEpgSelection({
+    ...state,
+    windowStartMs: clampWindowStartMs(state.windowStartMs + offset * EPG_SLOT_DURATION_MS, presentation),
+    tuneError: null,
+  }, presentation);
+}
+
+function moveWindowIntent(state: EpgState, offset: number): EpgState {
+  return {
+    ...state,
+    windowStartMs: state.windowStartMs + offset * EPG_SLOT_DURATION_MS,
+    tuneError: null,
+  };
+}
+
+function selectChannelByOffset(state: EpgState, offset: number, presentation: EpgPresentationSource): EpgState {
+  return selectNearestProgramOnAdjacentChannel(state, offset, presentation);
+}
+
+function selectNearestProgramOnAdjacentChannel(
   state: EpgState,
   offset: number,
   presentation: EpgPresentationSource,
 ): EpgState {
-  const currentIndex = Math.max(
-    0,
-    presentation.channels.findIndex((channel) => channel.id === state.selectedChannelId),
+  const visibleChannels = presentation.channels.filter(
+    (channel) => visibleProgramsForChannel(channel, state.windowStartMs).length > 0,
   );
-  const nextIndex = clamp(currentIndex + offset, 0, presentation.channels.length - 1);
-  const nextChannel = presentation.channels[nextIndex];
-  if (nextChannel === undefined) {
-    return state;
-  }
-  return normalizeEpgSelection({
+  const currentIndex = visibleChannels.findIndex((channel) => channel.id === state.selectedChannelId);
+  const nextChannel = visibleChannels[clamp((currentIndex < 0 ? 0 : currentIndex) + offset, 0, visibleChannels.length - 1)];
+  if (nextChannel === undefined) return state;
+  const currentProgram = findChannel(state.selectedChannelId, presentation)?.programs.find(
+    (program) => program.id === state.selectedProgramId,
+  );
+  const candidates = visibleProgramsForChannel(nextChannel, state.windowStartMs);
+  const selected = currentProgram === undefined ? candidates[0] : [...candidates].sort((left, right) => {
+    const overlapDifference = overlapMs(right, currentProgram) - overlapMs(left, currentProgram);
+    if (overlapDifference !== 0) return overlapDifference;
+    return centerDistanceMs(left, currentProgram) - centerDistanceMs(right, currentProgram);
+  })[0];
+  return selected === undefined ? state : {
     ...state,
     selectedChannelId: nextChannel.id,
-  }, presentation);
+    selectedProgramId: selected.id,
+    tuneError: null,
+  };
 }
 
-function selectProgramByOffset(
-  state: EpgState,
-  offset: number,
-  presentation: EpgPresentationSource,
-): EpgState {
-  const channel = findChannel(state.selectedChannelId, presentation) ?? presentation.channels[0];
-  if (channel === undefined) {
-    return state;
-  }
-  const visiblePrograms = visibleProgramsForChannel(channel, state.windowStartMs);
-  const currentIndex = Math.max(
-    0,
-    visiblePrograms.findIndex((program) => program.id === state.selectedProgramId),
-  );
-  const nextIndex = clamp(currentIndex + offset, 0, visiblePrograms.length - 1);
-  const fallbackProgramId = visiblePrograms[nextIndex]?.id ?? channel.programs[0]?.id ?? '';
-  return normalizeEpgSelection({
-    ...state,
-    selectedChannelId: channel.id,
-    selectedProgramId: fallbackProgramId,
-  }, presentation);
+function selectProgramByOffset(state: EpgState, offset: number, presentation: EpgPresentationSource): EpgState {
+  const channel = findChannel(state.selectedChannelId, presentation);
+  if (channel === undefined) return state;
+  const programs = visibleProgramsForChannel(channel, state.windowStartMs);
+  const currentIndex = programs.findIndex((program) => program.id === state.selectedProgramId);
+  const next = programs[clamp((currentIndex < 0 ? 0 : currentIndex) + offset, 0, programs.length - 1)];
+  return next === undefined ? state : { ...state, selectedProgramId: next.id, tuneError: null };
 }
 
-function visibleProgramsForChannel(
-  channel: EpgChannelViewModel,
-  windowStartMs: number,
-): readonly EpgProgramViewModel[] {
-  return channel.programs.filter((program) =>
-    isProgramVisible(program, windowStartMs, windowStartMs + EPG_WINDOW_DURATION_MS),
-  );
+function visibleProgramsForChannel(channel: EpgChannelViewModel, windowStartMs: number): readonly EpgProgramViewModel[] {
+  const windowEndMs = windowStartMs + EPG_WINDOW_DURATION_MS;
+  return channel.programs.filter((program) => isProgramVisible(program, windowStartMs, windowEndMs));
 }
 
-function isProgramVisible(
-  program: EpgProgramViewModel,
-  windowStartMs: number,
-  windowEndMs: number,
-): boolean {
+function isProgramVisible(program: EpgProgramViewModel, windowStartMs: number, windowEndMs: number): boolean {
   return program.startsAtMs < windowEndMs && program.endsAtMs > windowStartMs;
-}
-
-function findChannel(
-  channelId: string,
-  presentation: EpgPresentationSource,
-): EpgChannelViewModel | undefined {
-  return presentation.channels.find((channel) => channel.id === channelId);
 }
 
 function deriveInitialEpgSelection(
   presentation: EpgPresentationSource,
 ): Pick<EpgState, 'windowStartMs' | 'selectedChannelId' | 'selectedProgramId'> {
-  const normalizedPresentation = ensureRendererReadyGuidePresentation(presentation);
-  const firstProgram = listPresentationPrograms(presentation)[0];
-  const preferredChannel =
-    findChannel(normalizedPresentation.nowWatching.channelId, presentation) ??
-    firstProgram?.channel ??
-    presentation.channels[0];
-  const anchorMsCandidates = [
-    normalizedPresentation.nowWatching.startsAtMs,
-    firstProgram?.program.startsAtMs,
-    EPG_DEMO_BASE_TIME_MS,
-  ];
-
-  for (const anchorMs of anchorMsCandidates) {
-    if (anchorMs === undefined) {
-      continue;
-    }
-    const windowStartMs = clampWindowStartMs(snapWindowStartMs(anchorMs), presentation);
-    const selectedProgram = pickInitialProgramSelection(presentation, preferredChannel, windowStartMs);
-    if (selectedProgram !== null) {
-      return {
-        windowStartMs,
-        selectedChannelId: selectedProgram.channel.id,
-        selectedProgramId: selectedProgram.program.id,
-      };
-    }
+  const normalized = ensureRendererReadyGuidePresentation(presentation);
+  const firstEntry = listPresentationPrograms(presentation)[0];
+  const anchorMs = presentation.nowWatching?.startsAtMs ?? firstEntry?.program.startsAtMs ?? normalized.nowMs;
+  const windowStartMs = clampWindowStartMs(snapWindowStartMs(anchorMs), presentation);
+  const preferredChannel = findChannel(presentation.nowWatching?.channelId ?? '', presentation);
+  const channels = preferredChannel === undefined
+    ? presentation.channels
+    : [preferredChannel, ...presentation.channels.filter((channel) => channel.id !== preferredChannel.id)];
+  for (const channel of channels) {
+    const programs = visibleProgramsForChannel(channel, windowStartMs);
+    const program = programs.find((candidate) => presentation.nowWatching !== null
+      && candidate.startsAtMs === presentation.nowWatching.startsAtMs
+      && candidate.endsAtMs === presentation.nowWatching.endsAtMs) ?? programs[0];
+    if (program !== undefined) return { windowStartMs, selectedChannelId: channel.id, selectedProgramId: program.id };
   }
-
-  return {
-    windowStartMs: EPG_DEMO_BASE_TIME_MS,
-    selectedChannelId: firstProgram?.channel.id ?? '',
-    selectedProgramId: firstProgram?.program.id ?? '',
-  };
+  return { windowStartMs, selectedChannelId: '', selectedProgramId: '' };
 }
 
-function pickInitialProgramSelection(
-  presentation: EpgPresentationSource,
-  preferredChannel: EpgChannelViewModel | undefined,
-  windowStartMs: number,
-): { channel: EpgChannelViewModel; program: EpgProgramViewModel } | null {
-  const normalizedPresentation = ensureRendererReadyGuidePresentation(presentation);
-  const preferredProgram = preferredChannel === undefined
-    ? undefined
-    : pickVisibleProgramForChannel(preferredChannel, windowStartMs, normalizedPresentation.nowWatching);
-  if (preferredProgram !== undefined && preferredChannel !== undefined) {
-    return { channel: preferredChannel, program: preferredProgram };
-  }
-  return findFirstVisibleProgram(presentation, windowStartMs);
+function findChannel(channelId: string, presentation: EpgPresentationSource): EpgChannelViewModel | undefined {
+  return presentation.channels.find((channel) => channel.id === channelId);
 }
 
-function pickVisibleProgramForChannel(
-  channel: EpgChannelViewModel,
-  windowStartMs: number,
-  nowWatching: EpgCurrentProgramViewModel | null,
-): EpgProgramViewModel | undefined {
-  const visiblePrograms = visibleProgramsForChannel(channel, windowStartMs);
-  if (nowWatching === null) {
-    return visiblePrograms[0];
-  }
-  return visiblePrograms.find((program) => programsMatchNowWatching(program, nowWatching))
-    ?? visiblePrograms[0];
+function listPresentationPrograms(presentation: EpgPresentationSource): readonly { channel: EpgChannelViewModel; program: EpgProgramViewModel }[] {
+  return presentation.channels.flatMap((channel) => channel.programs.map((program) => ({ channel, program })));
 }
 
-function programsMatchNowWatching(
-  program: EpgProgramViewModel,
-  nowWatching: EpgCurrentProgramViewModel | null,
-): boolean {
-  if (nowWatching === null) {
-    return false;
-  }
-  return program.startsAtMs === nowWatching.startsAtMs &&
-    program.endsAtMs === nowWatching.endsAtMs;
-}
-
-function findFirstVisibleProgram(
-  presentation: EpgPresentationSource,
-  windowStartMs: number,
-): { channel: EpgChannelViewModel; program: EpgProgramViewModel } | null {
-  for (const channel of presentation.channels) {
-    const program = visibleProgramsForChannel(channel, windowStartMs)[0];
-    if (program !== undefined) {
-      return { channel, program };
-    }
-  }
-  return null;
-}
-
-function listPresentationPrograms(
-  presentation: EpgPresentationSource,
-): readonly { channel: EpgChannelViewModel; program: EpgProgramViewModel }[] {
-  return presentation.channels.flatMap((channel) =>
-    channel.programs.map((program) => ({ channel, program })),
+function minWindowStartMs(presentation: EpgPresentationSource): number {
+  const firstStartMs = listPresentationPrograms(presentation).reduce<number | null>(
+    (minimum, entry) => minimum === null || entry.program.startsAtMs < minimum ? entry.program.startsAtMs : minimum,
+    null,
   );
+  return snapWindowStartMs(firstStartMs ?? presentation.nowMs ?? Date.now());
+}
+
+function maxWindowStartMs(presentation: EpgPresentationSource): number {
+  const lastEndMs = listPresentationPrograms(presentation).reduce<number | null>(
+    (maximum, entry) => maximum === null || entry.program.endsAtMs > maximum ? entry.program.endsAtMs : maximum,
+    null,
+  );
+  const minimum = minWindowStartMs(presentation);
+  return lastEndMs === null ? minimum : Math.max(minimum, snapWindowStartMs(lastEndMs - EPG_WINDOW_DURATION_MS));
+}
+
+function clampWindowStartMs(windowStartMs: number, presentation: EpgPresentationSource): number {
+  return clamp(windowStartMs, minWindowStartMs(presentation), maxWindowStartMs(presentation));
+}
+
+function overlapMs(left: EpgProgramViewModel, right: EpgProgramViewModel): number {
+  return Math.max(0, Math.min(left.endsAtMs, right.endsAtMs) - Math.max(left.startsAtMs, right.startsAtMs));
+}
+
+function centerDistanceMs(left: EpgProgramViewModel, right: EpgProgramViewModel): number {
+  return Math.abs((left.startsAtMs + left.endsAtMs) - (right.startsAtMs + right.endsAtMs));
 }
 
 function snapWindowStartMs(valueMs: number): number {
   return Math.floor(valueMs / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS;
 }
 
-function clampWindowStartMs(
-  windowStartMs: number,
-  presentation: EpgPresentationSource,
-): number {
-  return clamp(windowStartMs, minWindowStartMs(presentation), maxWindowStartMs(presentation));
+function isValidTime(value: number | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
-function minWindowStartMs(presentation: EpgPresentationSource): number {
-  const earliestProgramStartMs = listPresentationPrograms(presentation)
-    .reduce<number | null>((minStartMs, entry) => (
-      minStartMs === null || entry.program.startsAtMs < minStartMs
-        ? entry.program.startsAtMs
-        : minStartMs
-    ), null);
-  return earliestProgramStartMs === null
-    ? EPG_DEMO_BASE_TIME_MS
-    : snapWindowStartMs(earliestProgramStartMs);
-}
-
-function maxWindowStartMs(presentation: EpgPresentationSource): number {
-  const lastProgramEndMs = listPresentationPrograms(presentation)
-    .reduce<number | null>((maxEndMs, entry) => (
-      maxEndMs === null || entry.program.endsAtMs > maxEndMs
-        ? entry.program.endsAtMs
-        : maxEndMs
-    ), null);
-  const minWindowStart = minWindowStartMs(presentation);
-  if (lastProgramEndMs === null) {
-    return minWindowStart;
-  }
-  return Math.max(
-    minWindowStart,
-    snapWindowStartMs(lastProgramEndMs - EPG_WINDOW_DURATION_MS),
-  );
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-export function updateEpgState(
-  state: EpgState,
-  presentation: EpgPresentationSource,
-): EpgState {
-  const normalizedPresentation = ensureRendererReadyGuidePresentation(presentation, state.windowStartMs);
-  if (!presentation.channels || presentation.channels.length === 0) {
-    return {
-      windowStartMs: state.windowStartMs,
-      selectedChannelId: '',
-      selectedProgramId: '',
-      presentationState: 'empty',
-    };
-  }
-
-  let selectedChannelId = state.selectedChannelId;
-  let channel = presentation.channels.find((c) => c.id === selectedChannelId);
-  if (!channel) {
-    const derived = deriveInitialEpgSelection(normalizedPresentation);
-    return {
-      ...derived,
-      presentationState: derived.selectedProgramId.length > 0 ? 'ready' : 'empty',
-    };
-  }
-
-  const windowStartMs = clampWindowStartMs(state.windowStartMs, presentation);
-  let selectedProgramId = state.selectedProgramId;
-  const visiblePrograms = visibleProgramsForChannel(channel, windowStartMs);
-  const programExists = visiblePrograms.some((p) => p.id === selectedProgramId);
-
-  if (!programExists) {
-    const fallbackProgram = pickVisibleProgramForChannel(channel, windowStartMs, normalizedPresentation.nowWatching);
-    selectedProgramId = fallbackProgram?.id ?? channel.programs[0]?.id ?? '';
-  }
-
-  if (selectedProgramId === '') {
-    return {
-      windowStartMs,
-      selectedChannelId: '',
-      selectedProgramId: '',
-      presentationState: 'empty',
-    };
-  }
-
-  return normalizeEpgSelection({
-    windowStartMs,
-    selectedChannelId,
-    selectedProgramId,
-    presentationState: 'ready',
-  }, presentation);
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
 }

@@ -17,7 +17,7 @@ import {
   applyWorkflowSettingsAction,
   applyWorkflowSettingsValues,
   applyWorkflowSupportBundleExportStatus,
-  createWorkflowState,
+  createWorkflowState as createWorkflowStateCore,
   findRouteAction,
   getRouteWorkflowView,
 } from '../../renderer/workflow.js';
@@ -29,6 +29,44 @@ import {
 import { setEpgPresentationState, type EpgPresentationSource } from '../../renderer/epg.js';
 import { createStagedSetupController, dispatchStagedSetupAction, handleStagedSetupBack } from '../../renderer/setup/stagedSetupController.js';
 import { createCustomChannelController } from '../../renderer/customChannels/controller.js';
+
+const GUIDE_BASE = Date.UTC(2026, 4, 12, 20, 0, 0);
+const TEST_GUIDE_PRESENTATION: EpgPresentationSource = {
+  channels: [
+    {
+      id: 'channel-liminal-one', number: '101', name: 'Liminal One', programs: [
+        {
+          id: 'liminal-archive', title: 'The Midnight Archive', subtitle: 'Signal Lost',
+          description: 'Archive description.', showTitle: 'The Midnight Archive', episodeLabel: 'S2 E4',
+          rating: 'TV-14', quality: ['HD'], genres: ['Drama'],
+          startsAtMs: GUIDE_BASE, endsAtMs: GUIDE_BASE + 4 * 30 * 60 * 1000,
+        },
+      ],
+    },
+    {
+      id: 'channel-vault', number: '204', name: 'The Vault', programs: [
+        {
+          id: 'vault-feature', title: 'Restored Feature', subtitle: 'Studio print',
+          description: 'Feature description.', showTitle: 'Restored Feature', episodeLabel: 'Feature',
+          rating: 'PG', quality: ['HD'], genres: ['Cinema'],
+          startsAtMs: GUIDE_BASE, endsAtMs: GUIDE_BASE + 8 * 30 * 60 * 1000,
+        },
+      ],
+    },
+  ],
+  nowWatching: {
+    title: 'The Midnight Archive', subtitle: 'Signal Lost', channelId: 'channel-liminal-one',
+    startsAtMs: GUIDE_BASE, endsAtMs: GUIDE_BASE + 4 * 30 * 60 * 1000,
+  },
+  nowMs: GUIDE_BASE + 30 * 60 * 1000,
+};
+
+function createWorkflowState(
+  route: Parameters<typeof createWorkflowStateCore>[0] = 'player',
+  guidePresentation: EpgPresentationSource = TEST_GUIDE_PRESENTATION,
+) {
+  return createWorkflowStateCore(route, guidePresentation);
+}
 
 test('workflow state starts on the player route with injected presentation context', () => {
   const state = createWorkflowState();

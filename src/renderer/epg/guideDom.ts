@@ -91,13 +91,22 @@ export function guideCellDom(
   const pos = guideCellPosition(program.startsAtMs, program.endsAtMs, windowStartMs, windowEndMs, trackWidth);
   const pres = guidePresentation(pos.width, program.temporalState, program.isSelected);
 
-  const cell = document.createElement('article');
+  const cell = document.createElement('button');
+  cell.type = 'button';
   cell.className = 'epg-grid__program';
+  cell.dataset.guideProgramAction = 'activate';
+  cell.dataset.focusId = program.focusId;
+  cell.dataset.guideChannelId = program.channelId;
+  cell.dataset.guideProgramId = program.id;
+  cell.dataset.guideGeneration = String(program.presentationGeneration);
   cell.dataset.selectedProgram = String(program.isSelected);
   cell.dataset.temporalState = program.temporalState;
   cell.dataset.widthTier = pres.widthTier;
   cell.dataset.clippedStart = String(pos.isClippedStart);
   cell.dataset.clippedEnd = String(pos.isClippedEnd);
+  cell.setAttribute('role', 'gridcell');
+  cell.setAttribute('aria-selected', String(program.isSelected));
+  cell.setAttribute('aria-label', `${program.title}, ${program.timeLabel}`);
 
   cell.style.position = 'absolute';
   cell.style.left = `${toTrackPercent(pos.left, trackWidth)}%`;
@@ -240,6 +249,17 @@ export function renderEpgGuideDom(
   const stateDetail = document.createElement('span');
   stateDetail.textContent = view.guide.state.detail;
   stateElement.append(stateLabel, stateDetail);
+  const stateActions = document.createElement('div');
+  stateActions.className = 'epg-state-actions';
+  for (const action of stateActionsFor(view.guide.presentationState)) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.guideAction = action.id;
+    button.dataset.focusId = `guide-state-${action.id}`;
+    button.textContent = action.label;
+    stateActions.append(button);
+  }
+  stateElement.append(stateActions);
 
   const header = document.createElement('div');
   header.className = 'epg-time-header';
@@ -282,6 +302,7 @@ export function renderEpgGuideDom(
   const rows = view.guide.rows.map((row) => {
     const rowElement = document.createElement('section');
     rowElement.className = 'epg-grid__row';
+    rowElement.setAttribute('role', 'row');
     rowElement.dataset.selectedChannel = String(row.isSelected);
     const channel = document.createElement('div');
     channel.className = 'epg-grid__channel';
@@ -319,9 +340,40 @@ export function renderEpgGuideDom(
 
   shell.append(classicHeader, nowWatching, stateElement);
   if (view.guide.presentationState === 'ready') {
+    stateElement.hidden = true;
+    stateElement.setAttribute('aria-hidden', 'true');
+    if (view.guide.tuneError !== null) {
+      const actionError = document.createElement('p');
+      actionError.className = 'epg-action-error';
+      actionError.dataset.guideTuneError = '';
+      actionError.setAttribute('role', 'status');
+      actionError.textContent = view.guide.tuneError;
+      shell.append(actionError);
+    }
     shell.append(header, ...rows);
   }
   dom.epgGridElement.replaceChildren(shell);
+}
+
+function stateActionsFor(
+  state: RouteWorkflowViewModel['guide']['presentationState'],
+): readonly { id: 'back' | 'setup' | 'refresh' | 'retry'; label: string }[] {
+  switch (state) {
+    case 'loading':
+      return [{ id: 'back', label: 'Back' }];
+    case 'empty-channels':
+      return [{ id: 'setup', label: 'Set up channels' }, { id: 'back', label: 'Back' }];
+    case 'empty-programs':
+      return [
+        { id: 'refresh', label: 'Refresh' },
+        { id: 'setup', label: 'Edit lineup' },
+        { id: 'back', label: 'Back' },
+      ];
+    case 'error':
+      return [{ id: 'retry', label: 'Retry' }, { id: 'back', label: 'Back' }];
+    case 'ready':
+      return [];
+  }
 }
 
 function toTrackPercent(value: number, trackWidth: number): number {

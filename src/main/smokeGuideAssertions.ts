@@ -2,7 +2,13 @@ export const GUIDE_SMOKE_ASSERTIONS_SOURCE = String.raw`
       const readGuideSmokeState = () => {
         const guideScreen = document.querySelector('[data-screen="guide"]');
         const guideGrid = document.querySelector('[data-epg-grid]');
-        const guideActions = Array.from(document.querySelectorAll('[data-epg-action]'));
+        const legacyGuideActions = Array.from(document.querySelectorAll('[data-epg-action]'));
+        const guideProgramActions = Array.from(guideGrid?.querySelectorAll('[data-guide-program-action]') ?? []);
+        const guideStateActions = Array.from(guideGrid?.querySelectorAll('[data-guide-action]') ?? []);
+        const guidePresentationState = guideGrid?.querySelector('[data-epg-state]')?.dataset.epgState ?? '';
+        const selectedGuideProgram = guideProgramActions.find(
+          (element) => element.dataset.selectedProgram === 'true',
+        );
         const overlayStack = document.querySelector('[data-overlay-stack]');
         const offRouteOverlayAction = document.querySelector('[data-overlay-action="openMiniGuide"]');
         const detailChannel = document.querySelector('[data-epg-detail-channel]')?.textContent ?? '';
@@ -15,16 +21,56 @@ export const GUIDE_SMOKE_ASSERTIONS_SOURCE = String.raw`
           normalizedGuideText.includes('Schedule rows are preparing') ||
           normalizedGuideText.includes('Guide ready') ||
           normalizedGuideText.includes('No channels available') ||
+          normalizedGuideText.includes('No programs in this window') ||
           normalizedGuideText.includes('Guide unavailable');
         const guideShowsScheduleDetails =
           guideGridText.trim().length >= 12 &&
           detailTitle.trim().length > 0 &&
           detailChannel.trim().length > 0 &&
           detailTime.trim().length > 0;
+        const guideProgramControlsAreSafe =
+          guideProgramActions.length > 0 &&
+          guideProgramActions.every((element) =>
+            element instanceof HTMLButtonElement &&
+            typeof element.dataset.focusId === 'string' &&
+            element.dataset.focusId.startsWith('guide-program-') &&
+            typeof element.dataset.guideChannelId === 'string' &&
+            element.dataset.guideChannelId.length > 0 &&
+            typeof element.dataset.guideProgramId === 'string' &&
+            element.dataset.guideProgramId.length > 0 &&
+            /^\d+$/.test(element.dataset.guideGeneration ?? '')
+          ) &&
+          selectedGuideProgram instanceof HTMLButtonElement &&
+          selectedGuideProgram.textContent?.includes(detailTitle.trim()) === true;
+        const authorizedStateActions = {
+          loading: ['back'],
+          'empty-channels': ['setup', 'back'],
+          'empty-programs': ['refresh', 'setup', 'back'],
+          error: ['retry', 'back'],
+        }[guidePresentationState];
+        const guideStateActionsMatch =
+          authorizedStateActions !== undefined &&
+          guideProgramActions.length === 0 &&
+          guideStateActions.length === authorizedStateActions.length &&
+          guideStateActions.every(
+            (element, index) =>
+              element instanceof HTMLButtonElement &&
+              element.dataset.guideAction === authorizedStateActions[index] &&
+              element.dataset.focusId === 'guide-state-' + authorizedStateActions[index],
+          );
+        const guideStateSemanticsValid = guidePresentationState === 'ready'
+          ? guideShowsScheduleDetails && guideProgramControlsAreSafe && guideStateActions.length === 0
+          : guideStateActionsMatch;
         return {
           guideScreen,
           guideGrid,
-          guideActions,
+          legacyGuideActions,
+          guideProgramActions,
+          guideStateActions,
+          guidePresentationState,
+          guideProgramControlsAreSafe,
+          guideStateActionsMatch,
+          guideStateSemanticsValid,
           overlayStack,
           offRouteOverlayAction,
           detailChannel,
@@ -65,9 +111,7 @@ export const GUIDE_SMOKE_ASSERTIONS_SOURCE = String.raw`
       let guideState = readGuideSmokeState();
       while (
         performance.now() < guideDeadlineMs &&
-        !guideState.guideShowsScheduleDetails &&
-        !(expectedEmptyGuideState && guideState.normalizedGuideText.includes('No channels available')) &&
-        !(runtimeIndicatesUnavailable && guideState.normalizedGuideText.includes('Guide unavailable'))
+        !guideState.guideStateSemanticsValid
       ) {
         await new Promise((resolve) => setTimeout(resolve, 50));
         guideState = readGuideSmokeState();
@@ -75,7 +119,13 @@ export const GUIDE_SMOKE_ASSERTIONS_SOURCE = String.raw`
       const {
         guideScreen,
         guideGrid,
-        guideActions,
+        legacyGuideActions,
+        guideProgramActions,
+        guideStateActions,
+        guidePresentationState,
+        guideProgramControlsAreSafe,
+        guideStateActionsMatch,
+        guideStateSemanticsValid,
         overlayStack,
         offRouteOverlayAction,
         detailChannel,
@@ -87,8 +137,12 @@ export const GUIDE_SMOKE_ASSERTIONS_SOURCE = String.raw`
         guideShowsScheduleDetails,
       } = guideState;
       const guideShowsAuthorizedSafeState =
-        (expectedEmptyGuideState && normalizedGuideText.includes('No channels available')) ||
-        (runtimeIndicatesUnavailable && normalizedGuideText.includes('Guide unavailable'));
+        guideStateActionsMatch && (
+          guidePresentationState === 'loading' ||
+          (expectedEmptyGuideState && guidePresentationState === 'empty-channels') ||
+          guidePresentationState === 'empty-programs' ||
+          (runtimeIndicatesUnavailable && guidePresentationState === 'error')
+        );
       const guideShowsMeaningfulDetails =
         (guideShowsScheduleDetails || guideShowsAuthorizedSafeState) &&
         !/undefined|null|NaN/i.test(normalizedGuideText);
@@ -114,6 +168,10 @@ export const GUIDE_SMOKE_ASSERTIONS_SOURCE = String.raw`
               guideShowsPlaceholderState,
               guideShowsScheduleDetails,
               guideShowsMeaningfulDetails,
+              guidePresentationState,
+              guideProgramControlsAreSafe,
+              guideStateActionsMatch,
+              guideStateSemanticsValid,
               expectedEmptyGuideState,
               runtimeIndicatesUnavailable,
             }),
@@ -122,5 +180,18 @@ export const GUIDE_SMOKE_ASSERTIONS_SOURCE = String.raw`
       if (!guideShowsAuthorizedSafeState && !guideShowsScheduleDetails) {
         failures.push('guide grid content ' + JSON.stringify({ guideGridText }));
       }
-      if (guideActions.length !== 6) failures.push('guide actions ' + guideActions.length);
+      if (!guideStateSemanticsValid) {
+        failures.push(
+          'guide action semantics ' +
+            JSON.stringify({
+              guidePresentationState,
+              legacyGuideActionCount: legacyGuideActions.length,
+              guideProgramActionCount: guideProgramActions.length,
+              guideStateActions: guideStateActions.map((element) => element.dataset.guideAction ?? ''),
+              guideProgramControlsAreSafe,
+              guideStateActionsMatch,
+            }),
+        );
+      }
+      if (legacyGuideActions.length !== 0) failures.push('legacy guide actions ' + legacyGuideActions.length);
 `;

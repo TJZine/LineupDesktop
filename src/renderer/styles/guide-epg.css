@@ -1,7 +1,21 @@
 /* Guide shell */
 .screen[data-screen="guide"] .screen__content {
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
   width: 100%;
   max-width: none;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.screen[data-screen="guide"] .screen__content > .screen-shell-state,
+.screen[data-screen="guide"] .screen__content > .screen__kicker,
+.screen[data-screen="guide"] .screen__content > h2,
+.screen[data-screen="guide"] .screen__content > [data-workflow-primary="guide"],
+.screen[data-screen="guide"] .screen__content > [data-workflow-secondary="guide"] {
+  display: none;
 }
 
 .epg-shell {
@@ -149,8 +163,34 @@
   border-color: rgba(255, 176, 90, 0.5);
 }
 
-.epg-state-panel[data-epg-state="empty"] {
+.epg-state-panel[data-epg-state="empty-channels"],
+.epg-state-panel[data-epg-state="empty-programs"] {
   border-color: rgba(255, 255, 255, 0.2);
+}
+
+.epg-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.epg-state-actions button {
+  min-height: 42px;
+  padding: 0 var(--space-5);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.epg-action-error {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid rgba(255, 176, 90, 0.5);
+  border-radius: var(--radius-control);
+  background: rgba(255, 176, 90, 0.12);
+  color: var(--color-text);
 }
 
 .epg-time-header,
@@ -198,6 +238,11 @@
   color: var(--color-text-secondary);
   border-left: 1px solid rgba(255, 255, 255, 0.2);
   box-sizing: border-box;
+  appearance: none;
+  text-align: left;
+  font: inherit;
+  color: var(--color-text);
+  cursor: pointer;
 }
 
 .epg-time-slot:first-child {
@@ -247,7 +292,7 @@
 }
 
 .epg-grid__row[data-selected-channel="true"] .epg-grid__channel strong {
-  color: var(--color-inverse-text);
+  color: var(--color-text);
 }
 
 .epg-grid__programs {
@@ -256,19 +301,22 @@
   height: var(--guide-row-height);
 }
 
-.epg-grid__program {
+.screen[data-screen="guide"] .epg-grid__program {
   position: absolute;
   top: 4px;
   bottom: 4px;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  min-height: 0;
   gap: var(--space-1);
   padding: var(--space-2) var(--space-4);
   overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: 4px;
   background: var(--color-surface-raised);
+  color: var(--color-text);
+  margin-top: 0;
   box-sizing: border-box;
 }
 
@@ -389,7 +437,7 @@
   font-size: 13px;
 }
 
-.epg-grid__program[data-selected-program="true"] {
+.screen[data-screen="guide"] .epg-grid__program[data-selected-program="true"] {
   border-color: var(--color-focus);
   background: var(--color-inverse-bg);
   color: var(--color-inverse-text);
@@ -485,18 +533,6 @@
 .guide-detail p {
   color: var(--color-text-muted);
   font-size: 14px;
-}
-
-.guide-controls {
-  margin-top: var(--space-1);
-  flex-wrap: wrap;
-}
-
-.guide-controls button {
-  min-height: 36px;
-  padding: 0 var(--space-5);
-  background: var(--color-surface-raised);
-  color: var(--color-text);
 }
 
 .workflow-actions button {

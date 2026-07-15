@@ -57,6 +57,8 @@ class TestElement {
       if (selector.includes('data-custom-channel-action') && current.dataset.customChannelAction !== undefined) {
         return current;
       }
+      if (selector.includes('data-guide-program-action') && current.dataset.guideProgramAction !== undefined) return current;
+      if (selector.includes('data-guide-action') && current.dataset.guideAction !== undefined) return current;
       if (selector === '[data-staged-owner]' && current.dataset.stagedOwner !== undefined) {
         return current;
       }
@@ -93,6 +95,70 @@ class TestElement {
     return this.attributes.get(name) ?? null;
   }
 }
+
+test('renderer action registration delegates dynamic Guide state and program controls', () => {
+  withTestHTMLElement(() => {
+    const documentRef = new TestDocument();
+    const guide = new TestElement();
+    guide.id = 'screen-guide';
+    const cell = new TestElement();
+    cell.dataset.guideProgramAction = 'activate';
+    cell.dataset.guideChannelId = 'channel';
+    cell.dataset.guideProgramId = 'program';
+    cell.dataset.guideGeneration = '7';
+    cell.dataset.focusId = 'guide-program-channel--program';
+    const retry = new TestElement();
+    retry.dataset.guideAction = 'retry';
+    const back = new TestElement();
+    back.dataset.guideAction = 'back';
+    guide.append(cell);
+    guide.append(retry);
+    guide.append(back);
+    documentRef.append(guide);
+    const actions: string[] = [];
+    const programs: string[] = [];
+    let programFocused = false;
+    registerRendererActions(emptyRendererDomBindings(), documentRef as unknown as Document, {
+      activateRoute: () => undefined,
+      applyRouteAction: () => undefined,
+      applySettingsAction: () => undefined,
+      applyChannelSetupAction: () => undefined,
+      applyChannelCommitAction: () => undefined,
+      applyEpgAction: () => undefined,
+      applyGuideAction: (action) => actions.push(action),
+      focusGuideProgramFromPointer: () => {
+        if (programFocused) return false;
+        programFocused = true;
+        return true;
+      },
+      activateGuideProgram: (target) => programs.push(`${target.channelId}:${target.programId}:${String(target.presentationGeneration)}`),
+      applyOverlayAction: () => undefined,
+      applyPlexRuntimeAction: () => undefined,
+      setPlexHomeUserPin: () => undefined,
+      setPlexSearchQuery: () => undefined,
+      selectPlexHomeUser: () => undefined,
+      selectPlexServer: () => undefined,
+      selectPlexSection: () => undefined,
+      openPlexMetadata: () => undefined,
+      focusElement: () => undefined,
+      toggleFullscreen: () => undefined,
+      selectAudioTrack: () => undefined,
+      selectSubtitleTrack: () => undefined,
+    });
+    cell.dispatchEvent(new TestDomEvent('pointerdown', true));
+    cell.click();
+    assert.deepEqual(programs, []);
+    cell.dispatchEvent(new TestDomEvent('pointerdown', true));
+    cell.click();
+    retry.click();
+    back.click();
+    assert.deepEqual(programs, ['channel:program:7']);
+    assert.deepEqual(actions, ['retry', 'back']);
+    retry.setAttribute('aria-disabled', 'true');
+    retry.click();
+    assert.deepEqual(actions, ['retry', 'back']);
+  });
+});
 
 class TestDocument extends TestElement {
   getElementById(id: string): TestElement | null {

@@ -13,9 +13,12 @@ export interface GuidePresentationPollingOptions {
   host: Window;
   getActiveRoute(): AppRouteId;
   getWindowStartMs(): number;
-  setLoading(): void;
-  applyPresentation(presentation: ReturnType<typeof ensureRendererReadyGuidePresentation>): void;
-  handleFailure(source: string, message: string): void;
+  setLoading(generation: number): void;
+  applyPresentation(
+    presentation: ReturnType<typeof ensureRendererReadyGuidePresentation>,
+    generation: number,
+  ): void;
+  handleFailure(source: string, message: string, generation: number): void;
 }
 
 export interface GuidePresentationPollingController {
@@ -23,6 +26,7 @@ export interface GuidePresentationPollingController {
   start(): void;
   stop(): void;
   refresh(source: string, options?: GuidePresentationRefreshOptions): Promise<void>;
+  getGeneration(): number;
 }
 
 export interface GuidePresentationRefreshOptions {
@@ -53,7 +57,7 @@ export function createGuidePresentationPolling(
     }
     const windowStartMs = options.getWindowStartMs();
     if (refreshOptions.showLoading === true) {
-      options.setLoading();
+      options.setLoading(requestId);
     }
 
     let result: Awaited<ReturnType<typeof options.guide.getPresentation>>;
@@ -64,7 +68,7 @@ export function createGuidePresentationPolling(
       });
     } catch (error: unknown) {
       if (requestId === guidePresentationRequestId && options.getActiveRoute() === 'guide') {
-        options.handleFailure(source, summarizeRendererBridgeError(error));
+        options.handleFailure(source, summarizeRendererBridgeError(error), requestId);
       }
       return;
     }
@@ -73,10 +77,10 @@ export function createGuidePresentationPolling(
       return;
     }
     if (!result.ok) {
-      options.handleFailure(source, result.error.message);
+      options.handleFailure(source, result.error.message, requestId);
       return;
     }
-    options.applyPresentation(ensureRendererReadyGuidePresentation(result.value, windowStartMs));
+    options.applyPresentation(ensureRendererReadyGuidePresentation(result.value, windowStartMs), requestId);
   };
 
   const start = (): void => {
@@ -98,5 +102,6 @@ export function createGuidePresentationPolling(
     start,
     stop,
     refresh,
+    getGeneration: () => guidePresentationRequestId,
   };
 }

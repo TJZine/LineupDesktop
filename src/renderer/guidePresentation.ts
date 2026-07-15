@@ -84,10 +84,15 @@ export function createEpgPresentationStates(): Readonly<Record<EpgPresentationSt
       label: 'Loading guide',
       detail: 'Schedule rows are preparing for the selected lineup.',
     },
-    empty: {
-      state: 'empty',
+    'empty-channels': {
+      state: 'empty-channels',
       label: 'No channels available',
       detail: 'Add channels from setup to populate this guide.',
+    },
+    'empty-programs': {
+      state: 'empty-programs',
+      label: 'No programs in this window',
+      detail: 'Refresh the schedule or adjust your channel lineup.',
     },
     error: {
       state: 'error',

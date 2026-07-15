@@ -13,11 +13,11 @@ import { createCustomChannelController, type CustomChannelActionId } from './cus
 import { dispatchCustomChannelAction } from './customChannels/actionDispatch.js';
 import { renderCustomChannelWorkspace } from './customChannels/dom.js';
 import { readPlexOnboardingState, renderPlexRuntimeDom } from './plexRuntimeDom.js';
-import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowEpgAction, applyWorkflowSettingsAction, applyWorkflowSettingsValues, createWorkflowState, getRouteWorkflowView, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
+import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowEpgAction, applyWorkflowEpgDirection, applyWorkflowSettingsAction, applyWorkflowSettingsValues, createWorkflowState, getRouteWorkflowView, selectWorkflowEpgProgram, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
 import { createRendererPresentationFixtures } from './presentationFixtures.js';
-import { recordRendererBridgeFailure, summarizeRendererBridgeError } from './rendererBridgeFailures.js';
-import { setEpgPresentationState, updateEpgState } from './epg.js';
-import { registerRendererActions } from './rendererActionRegistration.js';
+import { recordRendererBridgeFailure } from './rendererBridgeFailures.js';
+import { findEpgProgramCell, setEpgPresentationState, setEpgTuneError, updateEpgState } from './epg.js';
+import { registerRendererActions, type GuideActionId, type GuideProgramActionTarget } from './rendererActionRegistration.js';
 import { subscribePlayerBridge } from './playerBridgeSubscription.js';
 import { createGuidePresentationPolling } from './guidePresentationPolling.js';
 import { dispatchPlexRuntimeAction } from './plexRuntimeActionDispatch.js';
@@ -34,6 +34,7 @@ import { renderStagedSetupDom } from './setup/stagedSetupDom.js';
 import { cleanupSetupRouteLifecycle, clearSetupSourceLifecycle, createSetupComposition } from './setup/setupComposition.js';
 import { createSettingsRuntime } from './settings/settingsRuntime.js';
 import { createFullscreenTransportCoordinator } from './fullscreenTransport.js';
+import { createGuideTuneController, type GuideTuneTarget } from './guideTuneController.js';
 mountStaticRendererDom();
 const dom = queryRendererDom();
 const shellDom = queryShellDom();
@@ -46,10 +47,11 @@ const fullscreenTransport = createFullscreenTransportCoordinator({
   },
 });
 const presentationFixtures = createRendererPresentationFixtures();
-let workflowState = createWorkflowState('player', presentationFixtures.guide);
+let workflowState = createWorkflowState('player');
 let overlayState = createPlayerOverlayState(presentationFixtures.overlays);
 let playerSnapshot = presentationFixtures.playerSnapshot;
 let activeSettingsCategory: SettingsSectionId = 'appearance', activeSetupStage = 'account';
+let pendingGuideFocusId: string | null = null;
 const focusRegistry = new FocusRegistry(); let focusState: FocusState;
 const settingsRuntime = createSettingsRuntime({
   settings: window.lineupDesktop.settings, windowBridge: fullscreenTransport,
@@ -103,7 +105,7 @@ onboardingFlow = createPlexOnboardingFlow({
     activeSetupStage = stage;
     if (stage === 'library') {
       const returnRoute = workflowState.lastActionRoute === 'guide' || workflowState.lastActionRoute === 'settings' ? workflowState.lastActionRoute : 'player';
-      void setupComposition.enter(returnRoute, returnRoute === 'guide' ? 'guide-setup' : returnRoute === 'settings' ? 'settings-setup' : 'player-settings');
+      void setupComposition.enter(returnRoute, returnRoute === 'guide' ? 'guide-state-setup' : returnRoute === 'settings' ? 'settings-setup' : 'player-settings');
     }
   }, render: renderApp,
 });
@@ -145,6 +147,7 @@ const navigationLifecycle = createNavigationLifecycle({
   dom,
   onFocusChanged: updateActiveFromFocus,
   scrollFocusedIntoView: scrollFocusedSetupControlIntoView,
+  handleGuideDirection,
   activateRoute,
   isProfileModalActive: isProfilePinModalActive,
   closeProfileModal: () => closeProfilePinModal(),
@@ -185,22 +188,45 @@ const guidePresentationPolling = createGuidePresentationPolling({
   host: window,
   getActiveRoute: () => workflowState.routeState.activeRoute,
   getWindowStartMs: () => workflowState.epg.windowStartMs,
-  setLoading: () => {
+  setLoading: (generation) => {
+    guideTuneController?.stop();
+    retainGuideProgramFocusIntent();
     workflowState = {
       ...workflowState,
-      epg: setEpgPresentationState(workflowState.epg, 'loading'),
+      epg: setEpgPresentationState(workflowState.epg, 'loading', generation),
     };
     renderApp();
   },
-  applyPresentation: (normalizedGuidePresentation) => {
+  applyPresentation: (normalizedGuidePresentation, generation) => {
+    guideTuneController?.stop();
+    const restoreProgramFocus = retainGuideProgramFocusIntent();
     workflowState = {
       ...workflowState,
       guidePresentation: normalizedGuidePresentation,
-      epg: updateEpgState(workflowState.epg, normalizedGuidePresentation),
+      epg: updateEpgState(workflowState.epg, normalizedGuidePresentation, generation),
     };
+    if (restoreProgramFocus) {
+      pendingGuideFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId ?? null;
+    }
     renderApp();
+    restorePendingGuideFocus();
   },
   handleFailure: handleGuidePresentationFailure,
+});
+const guideTuneController = createGuideTuneController({
+  player: window.lineupDesktop.player,
+  getActiveRoute: () => workflowState.routeState.activeRoute,
+  getPresentationGeneration: () => workflowState.epg.presentationGeneration,
+  getNowMs: () => getRouteWorkflowView(workflowState).guide.nowMs,
+  findProgram: (channelId, programId) => findEpgProgramCell(
+    workflowState.epg,
+    workflowState.guidePresentation,
+    channelId,
+    programId,
+  ),
+  onPendingChanged: () => renderApp(),
+  onAccepted: acceptGuideTune,
+  onFailure: handleGuideTuneFailure,
 });
 void playerBridgeSubscription.initializeSnapshot();
 attachNavigationInputRuntime(navigationLifecycle, {
@@ -210,6 +236,7 @@ attachNavigationInputRuntime(navigationLifecycle, {
     unsubscribeShellStatus();
     playerBridgeSubscription.unsubscribe();
     guidePresentationPolling.stop();
+    guideTuneController.stop();
     shellController.cleanup();
     settingsRuntime.cleanup();
     cleanupPlexRuntime('beforeunload');
@@ -232,6 +259,9 @@ registerRendererActions(dom, document, {
     void applyStagedSetupAction('buildConfirm');
   },
   applyEpgAction,
+  applyGuideAction,
+  focusGuideProgramFromPointer,
+  activateGuideProgram,
   applyOverlayAction,
   applyPlexRuntimeAction: (action) => { void applyPlexRuntimeAction(action); },
   applyCustomChannelAction: (action, detail) => { void applyCustomChannelAction(action, detail); },
@@ -292,17 +322,21 @@ function activateRoute(route: AppRouteId): void {
   workflowState = activateWorkflowRoute(workflowState, route);
   navigationLifecycle?.routeChanged(previousRoute, workflowState.routeState.activeRoute);
   cleanupPlexRuntimeForRouteChange(previousRoute, workflowState.routeState.activeRoute);
+  if (previousRoute === 'guide' && workflowState.routeState.activeRoute !== 'guide') {
+    guideTuneController.stop();
+    pendingGuideFocusId = null;
+  }
   guidePresentationPolling.reconcile(previousRoute, workflowState.routeState.activeRoute);
   focusState = focusRegistry.focusRoute(focusState, route).state;
   renderApp();
 }
 
 async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
-  const previousRoute = workflowState.routeState.activeRoute;
-  if (action === 'resumePlayer' && previousRoute === 'guide') {
-    await tuneGuideSelectedChannel();
+  if (action === 'openGuide') {
+    await navigationLifecycle.handleInput('guide');
     return;
   }
+  const previousRoute = workflowState.routeState.activeRoute;
   const nextWorkflowState = applyWorkflowAction(workflowState, action);
   const nextRoute = nextWorkflowState.routeState.activeRoute;
   if (previousRoute === 'channelSetup' && nextRoute !== 'channelSetup') {
@@ -311,6 +345,7 @@ async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
   workflowState = nextWorkflowState;
   if (previousRoute !== nextRoute) {
     cleanupPlexRuntimeForRouteChange(previousRoute, nextRoute);
+    if (previousRoute === 'guide' && nextRoute !== 'guide') guideTuneController.stop();
     guidePresentationPolling.reconcile(previousRoute, nextRoute);
     focusState = focusRegistry.focusRoute(focusState, nextRoute).state;
   }
@@ -329,8 +364,9 @@ function applySettingsAction(action: SettingsActionId): void {
 
 function closeStagedSetup(): void {
   const state = stagedSetupController.getState();
+  if (state.returnRoute === 'guide') pendingGuideFocusId = state.returnFocusId;
   activateRoute(state.returnRoute);
-  restoreFocusTarget(state.returnFocusId);
+  if (state.returnRoute !== 'guide') restoreFocusTarget(state.returnFocusId);
 }
 
 function applyEpgAction(action: EpgActionId): void {
@@ -340,6 +376,75 @@ function applyEpgAction(action: EpgActionId): void {
   if (workflowState.epg.windowStartMs !== previousWindowStartMs) {
     void guidePresentationPolling.refresh('epg-window-change', { showLoading: true });
   }
+}
+
+function handleGuideDirection(direction: 'up' | 'down' | 'left' | 'right'): boolean {
+  if (workflowState.routeState.activeRoute !== 'guide' || !focusState.activeId?.startsWith('guide-program-')) {
+    return false;
+  }
+  const movement = applyWorkflowEpgDirection(workflowState, direction);
+  if (!movement.result.handled) return false;
+  workflowState = movement.workflowState;
+  renderApp();
+  if (movement.result.windowChanged) {
+    void guidePresentationPolling.refresh('epg-window-change', { showLoading: true });
+  } else {
+    const selectedFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId;
+    if (selectedFocusId !== undefined) restoreFocusTarget(selectedFocusId);
+  }
+  return true;
+}
+
+function applyGuideAction(action: GuideActionId): void {
+  switch (action) {
+    case 'back':
+      void navigationLifecycle.handleInput('back');
+      return;
+    case 'setup':
+      void applyRouteAction('openChannelSetup');
+      return;
+    case 'refresh':
+    case 'retry':
+      void guidePresentationPolling.refresh(`guide-${action}`, { showLoading: true });
+  }
+}
+
+function activateGuideProgram(target: GuideProgramActionTarget): void {
+  if (focusState.activeId !== target.focusId) {
+    focusRendererElement(target.element);
+    return;
+  }
+  void guideTuneController.activate(target);
+}
+
+function focusGuideProgramFromPointer(target: GuideProgramActionTarget): boolean {
+  if (focusState.activeId === target.focusId) return false;
+  focusRendererElement(target.element);
+  return true;
+}
+
+function updateGuideTunePendingDom(target: GuideTuneTarget | null): void {
+  for (const cell of Array.from(document.querySelectorAll<HTMLButtonElement>('[data-guide-program-action]'))) {
+    const pending = target !== null && cell.dataset.focusId === target.focusId;
+    if (pending) {
+      cell.setAttribute('aria-busy', 'true');
+      cell.setAttribute('aria-disabled', 'true');
+    } else {
+      cell.removeAttribute('aria-busy');
+      cell.removeAttribute('aria-disabled');
+    }
+  }
+}
+
+function acceptGuideTune(_target: GuideTuneTarget): void {
+  if (workflowState.routeState.activeRoute !== 'guide') return;
+  const previousRoute = workflowState.routeState.activeRoute;
+  workflowState = activateWorkflowRoute(workflowState, 'player');
+  navigationLifecycle.routeChanged(previousRoute, 'player');
+  guidePresentationPolling.reconcile(previousRoute, 'player');
+  guideTuneController.stop();
+  focusState = { activeRoute: 'player', activeId: null };
+  renderApp();
 }
 
 function applyOverlayAction(action: PlayerOverlayActionId): void {
@@ -402,49 +507,11 @@ async function applyCustomChannelAction(
   });
 }
 
-async function tuneGuideSelectedChannel(): Promise<void> {
-  const guideChannelId = workflowState.epg.selectedChannelId;
-  if (guideChannelId.length === 0) {
-    workflowState = {
-      ...workflowState,
-      epg: setEpgPresentationState(workflowState.epg, 'error'),
-    };
-    renderApp();
-    return;
-  }
-
-  let result: Awaited<ReturnType<typeof window.lineupDesktop.player.tuneChannel>>;
-  try {
-    result = await window.lineupDesktop.player.tuneChannel({ channelId: guideChannelId });
-  } catch (error: unknown) {
-    handleGuideTuneFailure(guideChannelId, summarizeRendererBridgeError(error));
-    return;
-  }
-  if (result.ok) {
-    const previousRoute = workflowState.routeState.activeRoute;
-    const nextWorkflowState = applyWorkflowAction(workflowState, 'resumePlayer');
-    const nextRoute = nextWorkflowState.routeState.activeRoute;
-    if (previousRoute === 'channelSetup' && nextRoute !== 'channelSetup') {
-      plexController.invalidateOnboardingOperations();
-    }
-    workflowState = nextWorkflowState;
-    cleanupPlexRuntimeForRouteChange(previousRoute, nextRoute);
-    guidePresentationPolling.reconcile(previousRoute, nextRoute);
-    if (nextRoute === 'guide') {
-      return;
-    }
-    focusState = focusRegistry.focusRoute(focusState, nextRoute).state;
-    renderApp();
-    return;
-  }
-
-  handleGuideTuneFailure(guideChannelId, result.error.message);
-}
-
-function handleGuidePresentationFailure(source: string, message: string): void {
+function handleGuidePresentationFailure(source: string, message: string, generation: number): void {
+  guideTuneController.stop();
   workflowState = {
     ...workflowState,
-    epg: setEpgPresentationState(workflowState.epg, 'error'),
+    epg: setEpgPresentationState(workflowState.epg, 'error', generation),
   };
   renderApp();
   recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'guide.getPresentation', message, {
@@ -453,14 +520,15 @@ function handleGuidePresentationFailure(source: string, message: string): void {
   });
 }
 
-function handleGuideTuneFailure(channelId: string, message: string): void {
+function handleGuideTuneFailure(target: GuideTuneTarget, message: string): void {
   workflowState = {
     ...workflowState,
-    epg: setEpgPresentationState(workflowState.epg, 'error'),
+    epg: setEpgTuneError(workflowState.epg, message),
   };
   renderApp();
+  restoreFocusTarget(target.focusId);
   recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'player.tuneChannel', message, {
-    channelId,
+    channelId: target.channelId,
     route: 'guide',
   });
 }
@@ -589,6 +657,7 @@ function renderApp(): void {
     focusState = focusRegistry.focusTarget(focusState, focusState.activeId).state;
   }
   renderRendererFocus(focusState, dom);
+  updateGuideTunePendingDom(guideTuneController.getPendingTarget());
   scrollFocusedSetupControlIntoView();
 }
 async function selectPlexHomeUser(homeUserId: string): Promise<void> {
@@ -604,6 +673,25 @@ function restoreFocusTarget(focusId: string): void {
   renderRendererFocus(focusState, dom);
 }
 
+function restorePendingGuideFocus(): void {
+  if (pendingGuideFocusId === null || workflowState.routeState.activeRoute !== 'guide') return;
+  const focusId = pendingGuideFocusId;
+  if (document.querySelector(`[data-focus-id="${CSS.escape(focusId)}"]`) === null) return;
+  pendingGuideFocusId = null;
+  restoreFocusTarget(focusId);
+}
+
+function retainGuideProgramFocusIntent(): boolean {
+  const focusId = pendingGuideFocusId?.startsWith('guide-program-') === true
+    ? pendingGuideFocusId
+    : focusState.activeId?.startsWith('guide-program-') === true
+      ? focusState.activeId
+      : null;
+  if (focusId === null) return false;
+  pendingGuideFocusId = focusId;
+  return true;
+}
+
 function focusRendererElement(element: HTMLElement): void {
   const focusId = element.dataset.focusId;
   if (focusId !== undefined) {
@@ -614,6 +702,19 @@ function focusRendererElement(element: HTMLElement): void {
 }
 
 function updateActiveFromFocus(focusId: string | null): void {
+  if (focusId?.startsWith('guide-program-') === true) {
+    const cell = document.querySelector<HTMLElement>(`[data-focus-id="${CSS.escape(focusId)}"]`);
+    const channelId = cell?.dataset.guideChannelId;
+    const programId = cell?.dataset.guideProgramId;
+    if (channelId !== undefined && programId !== undefined) {
+      const next = selectWorkflowEpgProgram(workflowState, channelId, programId);
+      if (next !== workflowState) {
+        workflowState = next;
+        renderApp();
+      }
+    }
+    return;
+  }
   if (focusId === 'settings-category-appearance' && activeSettingsCategory !== 'appearance') {
     activeSettingsCategory = 'appearance';
     renderApp();

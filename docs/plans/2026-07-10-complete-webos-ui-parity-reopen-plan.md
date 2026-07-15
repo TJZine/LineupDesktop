@@ -3,11 +3,12 @@
 **Plan Status:** active
 **Task family:** feature/design
 **Tier:** Tier 3
-**Current execution unit:** Package 5 — Scheduler-backed Guide parity is next
-and unstarted. The source-proven pre–Package 5 remediation and the 2026-07-15
-suggestion-reviewed correction are closed with full verification and read-only
-adversarial review. Packages 0–4 remain closed at their corrected checkpoints;
-RD-27 remains blocked until Packages 5–8 close.
+**Current execution unit:** Package 6 — Runtime player and overlay state machine
+is next and unstarted. Package 5 — Scheduler-backed Guide parity is closed with
+full verification, exact-viewport evidence, and clean read-only adversarial
+re-review. The source-proven pre–Package 5 remediation and the 2026-07-15
+suggestion-reviewed correction remain closed. Packages 0–4 remain closed at
+their corrected checkpoints; RD-27 remains blocked until Packages 6–8 close.
 
 ## Goal
 
@@ -73,15 +74,26 @@ Required skills are `lineup-desktop-feature-quality-loop`,
 ## Files In Scope
 
 Package 5 may change only `src/renderer/epg.ts`,
+`src/main/smokeGuideAssertions.ts`,
 `src/renderer/guidePresentation.ts`,
 `src/renderer/guidePresentationPolling.ts`,
+`src/renderer/guideTuneController.ts`,
 `src/renderer/epg/guideDom.ts`, `src/renderer/focusDom.ts`,
 `src/renderer/routeDom.ts`, `src/renderer/workflow.ts`,
+`src/renderer/staticDom.ts`, `src/renderer/rendererActionRegistration.ts`,
+`src/renderer/shell/navigationLifecycle.ts`,
 `src/renderer/index.ts` for composition wiring only,
-`src/renderer/styles/guide-epg.css`, and the six focused tests named in its
-package. Packages 6–7 must be promoted to the same exact-file standard before
-they become current. Package 8 changes evidence and tracked memory unless it
-routes a defect back to its owning package.
+`src/renderer/styles/guide-epg.css`, the Package 5 tests named below, and
+ignored Package 5 plan/evidence artifacts under
+`docs/runs/complete-webos-ui-parity-reopen/`. The added static-markup and
+delegated-action owners are the source-proven correction needed to remove the
+reachable proxy Guide buttons and make rendered program/state controls own
+pointer/OK behavior. The main-owned smoke assertion is proof code only: update
+its stale six-proxy-button assertion to inspect the dynamic ready or authorized
+empty/error Guide controls; it must not change product main/runtime behavior.
+Packages 6–7 must be promoted to the same exact-file
+standard before they become current. Package 8 changes evidence and tracked
+memory unless it routes a defect back to its owning package.
 
 The closed 2026-07-15 correction was the reviewed source-proven exception to
 the Package 5 file boundary. Its exact production and workflow checkpoints are
@@ -195,17 +207,41 @@ blocker.
 
 ### Package 5 — Scheduler-backed Guide parity
 
-**Role:** `worker` only.
+**Role:** `worker` only. `worker_sol_low` and `worker_luna` are ineligible
+because this unit changes a named composition root and coordinates dynamic
+focus, stale async state, and tune failure behavior across renderer owners.
 
-Use existing Guide presentation and persisted channels. Prove loading, ready,
-actionable no-channel, no-program, failure, stale result, refresh, time window,
-current marker, clipped cells, detail, tune/back, channel/program navigation,
-focus restoration, and cleanup at both target sizes. No production fixture
-fallback and no new scheduler/channel/main/preload contract is approved.
+Use existing Guide presentation and persisted channels. The reviewed-ready
+execution packet is
+`docs/runs/complete-webos-ui-parity-reopen/package-5-execution-packet.md`.
+It supersedes only the contradicted Guide rows in the ignored Package 0
+focus/interaction matrix until Package 5 regenerates those rows and proof.
+
+The frozen behavior is: loading has Back; zero channels has Setup and Back;
+channels with no visible programs has Refresh, Setup, and Back; failure has
+Retry and Back; ready renders the actual visible cells as the focus graph and
+focused detail owner. Every cell is focusable and navigable, but only a cell
+whose program contains the presentation `nowMs` is playable. OK/pointer on a
+current cell tunes its channel through the existing channel-only bridge;
+past/future activation remains focused detail and dispatches no tune. Tune
+failure remains in ready Guide with sanitized inline failure and exact cell
+focus; it must not replace the whole schedule with the Guide-load error state.
+Back returns to Player and restores the recorded Player invoker when it still
+exists (`player-guide` only when that button invoked Guide); accepted tune
+returns to an unfocused Player. Loading/empty/error owners never register or
+name program-cell focus. PageUp/PageDown remain unmapped and ignored.
+
+Remove production use and ownership of deterministic Guide fixtures, retire the
+reachable proxy Guide navigation/Watch controls, distinguish no-channel from
+no-program state, keep stale request rejection/poll cleanup, and prove loading,
+ready, both empty states, failure/retry, refresh, time-window refresh, current
+marker, clipped cells, detail, current-only tune/back, dynamic channel/program
+navigation, invoker-aware focus restoration, and cleanup at both target sizes.
+No new scheduler/channel/main/preload contract is approved.
 
 Focused tests:
 
-`node --import tsx --test src/__tests__/main/guideRuntime.test.ts src/__tests__/renderer/epg.test.ts src/__tests__/renderer/epgStateUpdate.test.ts src/__tests__/renderer/epg/guideDom.test.ts src/__tests__/renderer/focusDom.test.ts src/__tests__/renderer/workflow.test.ts`
+`node --import tsx --test src/__tests__/main/guideRuntime.test.ts src/__tests__/renderer/epg.test.ts src/__tests__/renderer/epgStateUpdate.test.ts src/__tests__/renderer/epg/guideDom.test.ts src/__tests__/renderer/focusDom.test.ts src/__tests__/renderer/workflow.test.ts src/__tests__/renderer/rendererRuntimeOwners.test.ts src/__tests__/renderer/guideTuneController.test.ts src/__tests__/renderer/rendererActionRegistration.test.ts src/__tests__/renderer/routeDom.test.ts src/__tests__/renderer/navigationLifecycle.test.ts`
 
 Architecture dispositions:
 
@@ -216,18 +252,85 @@ Architecture dispositions:
   cohesive growth.** The changed behavior shares the same selection, time-window,
   and projection invariants; adding another production owner would split one
   state machine. Retire product use of deterministic defaults where Package 5
-  reaches it, but keep test data local rather than creating a fixture service.
+  reaches it, and move deterministic schedules to test-local data rather than
+  creating a production fixture service.
 - **Owner:** `src/renderer/styles/guide-epg.css`. **Existing responsibility:**
   Guide shell, state panels, time grid, channel/program cells, detail, focus,
   density, and viewport treatment. **New behavior:** upstream-shaped runtime
   states and both target viewport layouts. **Decision: cohesive growth.** The
   selectors share the Guide layout variables and one screen lifecycle; no
   independent component family or consumer justifies another stylesheet.
+- **Owner:** `src/renderer/guidePresentationPolling.ts`. **Existing
+  responsibility:** route-gated Guide presentation refresh, interval ownership,
+  stale result rejection, and cleanup. **New behavior:** explicit loading/retry/
+  refresh generations for the corrected Guide states. **Decision: cohesive
+  growth.** Presentation polling remains one async lifecycle and does not absorb
+  player tune custody.
+- **Owner:** `src/renderer/guideTuneController.ts`. **Existing responsibility:**
+  new focused renderer-safe Guide tune lifecycle owner extracted from the
+  current tune policy embedded in `index.ts`. **New behavior:** validate a
+  current cell, suppress duplicate tune, invalidate stale completion on Guide
+  close/unload, preserve ready state on sanitized failure, and report accepted
+  success through injected callbacks. **Decision: extraction required.** Tune
+  request custody is a distinct present async lifecycle; leaving it in the
+  named composition root would violate the composition-only invariant, while
+  merging it into presentation polling would couple different bridge
+  operations and failure states. Its public seam is proved by
+  `guideTuneController.test.ts`.
+- **Owner:** `src/renderer/shell/navigationLifecycle.ts`. **Existing
+  responsibility:** renderer keyboard/gamepad dispatch, generic focus movement,
+  route focus memory, Back, and cleanup. **New behavior:** while Guide is active,
+  give an injected Guide directional handler first refusal before generic focus
+  movement. **Decision: cohesive growth.** This owner already arbitrates input;
+  it must expose the blocked edge direction without learning schedule/window
+  policy. `epg.ts` decides adjacent-cell versus window intent, `index.ts` wires
+  the callback, and `navigationLifecycle.test.ts` proves Guide interception plus
+  unchanged generic fallback.
+- **Owner:** `src/main/smokeGuideAssertions.ts`. **Existing responsibility:**
+  production-build Electron smoke assertions for safe reachable Guide content.
+  **New behavior:** replace the obsolete exact-six `[data-epg-action]` proxy
+  count with semantic proof of the dynamic program controls or the authorized
+  loading/empty/error action set. **Decision: cohesive proof update.** This file
+  remains assertion source only and adds no product main-process behavior or
+  renderer privilege.
 
 `index.ts` remains composition wiring only and requires a fresh `reviewer`
 architecture/YAGNI pass if touched. Stop if another production file, a new
 renderer-safe contract, or a new scheduler/channel/main/preload behavior is
 required.
+
+Package 5 closeout:
+
+- The configured `worker` (`.codex/agents/worker.toml`, `gpt-5.6-sol`, medium
+  reasoning) implemented the bounded source and proof surface. No dependency,
+  contract, IPC, persistence, native/helper, packaging, or fixture fallback was
+  added.
+- Guide presentation now comes from the existing scheduler-backed runtime and
+  exposes distinct loading, no-channel, no-program, failure, and ready states.
+  Dynamic program cells own schedule-aware focus and pointer behavior; only the
+  current half-open program interval may tune through the existing channel-only
+  bridge.
+- Tune duplicate suppression, stale completion rejection, pending-state
+  projection, inline sanitized failure, accepted unfocused Player return,
+  invoker-aware Back restoration, polling cleanup, and exact one-slot window
+  intent are covered at their owning seams.
+- The configured fresh `reviewer` (`.codex/agents/reviewer.toml`,
+  `gpt-5.6-sol`, high reasoning) accepted two implementation findings: bounded
+  schedule responses incorrectly clamped window-edge intent, and presentation
+  replacement could separate program focus from normalized selection. The
+  worker corrected both in the existing EPG/composition owners; targeted
+  re-review found no remaining blocker and reconfirmed `index.ts` as acceptable
+  composition-only coordination.
+- The exact 11-file focused suite passes 109/109. Typecheck, architecture/lint/
+  maintainability, redaction, documentation, full repository verification, and
+  diff checks pass. Electron smoke passed on immediate rerun after an observed
+  unrelated fullscreen-state timing race; Package 5 does not change the
+  fullscreen owner.
+- The ignored sanitized proof bundle contains 12/12 semantic captures for six
+  Guide states at exact CSS viewports `1280x720` and `1920x1080`, including
+  reduced-motion and forced-colors checks, with no semantic failure. Package 5
+  changes no copied or adapted upstream source, so the import ledger remains
+  unchanged.
 
 ### Package 6 — Runtime player and overlay state machine
 
@@ -347,13 +450,13 @@ package uses a fresh `reviewer` when its review gate is met.
 
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
-TASK: Execute Package 5 — Scheduler-backed Guide parity
+TASK: Execute Package 6 — Runtime player and overlay state machine
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md
-BLOCKERS: none for Package 5; RD-27 remains blocked pending Packages 5–8.
+BLOCKERS: none for Package 6; RD-27 remains blocked pending Packages 6–8.
 MESSAGE: Load the active plan, run the bounded freshness audit, then execute only
-Package 5 through the Tier 3 quality loop. Preserve the Packages 0–4 and closed
-pre–Package 5 remediation baseline. Give the worker exact files, invariants,
-proof, and stop conditions; pause after clean verification and independent
-review.
+Package 6 through the Tier 3 quality loop. Preserve the Packages 0–5 and closed
+pre–Package 5 remediation baseline. Promote Package 6 to the exact-file standard,
+give the worker exact invariants, proof, and stop conditions, and pause after
+clean verification and independent review.

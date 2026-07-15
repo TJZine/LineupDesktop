@@ -216,6 +216,12 @@ function focusElementOrder(focusId: string, index: number): number {
   if (focusId.startsWith('custom-draft-')) {
     return 190 + index / 1000;
   }
+  if (focusId.startsWith('guide-program-')) {
+    return 20 + index / 1000;
+  }
+  if (focusId.startsWith('guide-state-')) {
+    return 10 + index / 1000;
+  }
   return 220 + index;
 }
 
@@ -333,6 +339,8 @@ function isDynamicFocusId(focusId: string | undefined): focusId is string {
       || focusId.startsWith('custom-channel-')
       || focusId.startsWith('custom-media-')
       || focusId.startsWith('custom-draft-')
+      || focusId.startsWith('guide-program-')
+      || focusId.startsWith('guide-state-')
     )
   );
 }
