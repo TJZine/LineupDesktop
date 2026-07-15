@@ -19,6 +19,7 @@ let activePinHomeUser: PlexHomeUserSummary | null = null;
 let enteredPin = '';
 let context: ProfilePinModalContext | null = null;
 let isSubmitting = false;
+let submissionGeneration = 0;
 let keydownListener: ((event: KeyboardEvent) => void) | null = null;
 let invokingFocusId: string | null = null;
 let lastActivatedFocusId = 'btn-profile-pin-5';
@@ -49,6 +50,7 @@ export function getActivePinHomeUser(): PlexHomeUserSummary | null {
 
 export function openProfilePinModal(user: PlexHomeUserSummary): void {
   if (!context) return;
+  submissionGeneration += 1;
   activePinHomeUser = user;
   invokingFocusId = context.getFocusState().activeId;
   enteredPin = '';
@@ -146,20 +148,26 @@ function handleNumpadInput(value: string, focusId?: string): void {
 
 async function submitProfilePin(): Promise<void> {
   if (!activePinHomeUser || !context || isSubmitting) return;
+  const generation = submissionGeneration;
+  const submissionContext = context;
   isSubmitting = true;
   const numpadButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-numpad]'));
   for (const button of numpadButtons) {
     button.disabled = true;
   }
 
-  const controller = context.getPlexController();
+  const controller = submissionContext.getPlexController();
   controller.setHomeUserPin(enteredPin);
   const userId = activePinHomeUser.id;
   try {
     await controller.switchHomeUser(userId);
   } finally {
-    isSubmitting = false;
+    if (generation === submissionGeneration && context === submissionContext) {
+      isSubmitting = false;
+    }
   }
+
+  if (generation !== submissionGeneration || context !== submissionContext) return;
 
   const plexState = controller.getState();
   if (plexState.errorText !== null) {
@@ -173,17 +181,21 @@ async function submitProfilePin(): Promise<void> {
     }
     enteredPin = '';
     updatePinSlotsDisplay();
-    const focusRegistry = context.getFocusRegistry();
-    context.setFocusState(focusRegistry.focusTarget(context.getFocusState(), lastActivatedFocusId).state);
-    context.renderApp();
+    const focusRegistry = submissionContext.getFocusRegistry();
+    submissionContext.setFocusState(
+      focusRegistry.focusTarget(submissionContext.getFocusState(), lastActivatedFocusId).state,
+    );
+    submissionContext.renderApp();
   } else {
     closeProfilePinModal({ refocus: false, invalidate: false });
-    context.onProfileSelected?.();
+    submissionContext.onProfileSelected?.();
   }
 }
 
 export function closeProfilePinModal(options?: { refocus?: boolean; invalidate?: boolean }): void {
   if (!context) return;
+  submissionGeneration += 1;
+  isSubmitting = false;
 
   if (options?.invalidate !== false && activePinHomeUser !== null) {
     context.getPlexController().invalidateProfileSwitch();

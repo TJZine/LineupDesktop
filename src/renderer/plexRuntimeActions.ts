@@ -18,7 +18,6 @@ import {
   markPlexRendererOperationPending,
   selectPlexRendererItem,
   updatePlexRendererInputs,
-  dismissPlexRendererPinError,
   type PlexRendererOperation,
   type PlexRuntimeRendererState,
 } from './plexRuntimeState.js';
@@ -39,7 +38,7 @@ export interface PlexRuntimeController {
   clearSelectedSection: () => void;
   clearSelectedServer: () => void;
   clearPinSubflow: () => Promise<void>;
-  dismissPinError: () => void;
+  dismissPinError: () => Promise<void>;
   invalidateProfileSwitch: () => void;
   invalidateOnboardingOperations: (clearError?: boolean) => void;
   handleBack: () => Promise<boolean>;
@@ -222,12 +221,8 @@ export function createPlexRuntimeController({
         });
       }
     },
-    dismissPinError(): void {
-      ++operationEpoch;
-      pendingOperationEpochs.clear();
-      clearPollTimer();
-      activePinId = null;
-      commit(dismissPlexRendererPinError(state));
+    async dismissPinError(): Promise<void> {
+      await controller.clearPinSubflow();
     },
     invalidateProfileSwitch(): void {
       commitLocalClear({
@@ -244,7 +239,7 @@ export function createPlexRuntimeController({
     async handleBack(): Promise<boolean> {
       const authState = state.snapshot?.auth.state ?? 'signed-out';
       if (state.errorText !== null && (authState === 'signed-out' || authState === 'pin-pending')) {
-        controller.dismissPinError();
+        await controller.dismissPinError();
         return true;
       }
       if (state.lastMetadata !== null || (state.snapshot?.library.metadata ?? null) !== null || state.selectedItemRatingKey !== null) {

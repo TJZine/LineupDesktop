@@ -305,7 +305,7 @@ test('auth-error dismissal is renderer-local and invalidates late PIN completion
 
   const request = controller.requestPin();
   assert.equal(controller.getState().pending.requestPin, true);
-  controller.dismissPinError();
+  await controller.dismissPinError();
   assert.equal(controller.getState().pending.requestPin, false);
   assert.equal(controller.getState().errorText, null);
   assert.equal(controller.getState().snapshot, null);
@@ -315,6 +315,31 @@ test('auth-error dismissal is renderer-local and invalidates late PIN completion
   await request;
   assert.equal(controller.getState().snapshot, null);
   assert.equal(cancelCalls, 0);
+});
+
+test('auth-error Back dismissal cancels an active PIN through the local-first clear path', async () => {
+  const cancelled: number[] = [];
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      requestPin: async () => success({ pin: pinSummary(), snapshot: snapshotPinPending() }),
+      pollPin: async () => failure('PLEX_AUTH_INVALID', 'safe PIN failure'),
+      cancelPin: async ({ pinId }) => {
+        cancelled.push(pinId);
+        return success({ pinId, snapshot: snapshotSignedOut() });
+      },
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+
+  await controller.requestPin();
+  await controller.pollPin();
+  assert.notEqual(controller.getState().errorText, null);
+
+  assert.equal(await controller.handleBack(), true);
+  assert.deepEqual(cancelled, [42]);
+  assert.equal(controller.getState().snapshot?.auth.pin, null);
+  assert.equal(controller.getState().errorText, null);
 });
 
 test('auth-waiting cancel is local-first, idempotent, and clean across bridge failures', async () => {
@@ -1398,8 +1423,8 @@ test('pending onboarding rows and actions expose disabled and busy state togethe
       pending: {
         ...pendingMap(false),
         requestPin: true,
-        switchHomeUser: true,
-        selectServer: true,
+        getHomeUsers: true,
+        restoreSelectedServer: true,
       },
     }, dom, 'server');
 
@@ -1421,7 +1446,9 @@ test('pending onboarding rows and actions expose disabled and busy state togethe
       snapshot: snapshotServersReady(),
       selectedServerId: 'server-1',
     }, dom, 'server');
-    for (const button of [setupButton, switchButton]) {
+    const resolvedProfileButton = firstChild(dom.plexHomeUsersElement);
+    const resolvedServerButton = firstChild(dom.plexServersElement);
+    for (const button of [requestButton, resolvedProfileButton, resolvedServerButton, setupButton, switchButton]) {
       assert.equal(button.disabled, false);
       assert.equal(button.getAttribute('aria-disabled'), 'false');
       assert.equal(button.getAttribute('aria-busy'), 'false');

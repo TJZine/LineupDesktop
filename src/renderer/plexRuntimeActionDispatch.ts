@@ -25,7 +25,7 @@ export async function dispatchPlexRuntimeAction(
       await controller.cancelPin();
       return;
     case 'dismissPinError':
-      controller.dismissPinError();
+      await controller.dismissPinError();
       return;
     case 'getHomeUsers':
       await controller.getHomeUsers();

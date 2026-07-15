@@ -112,12 +112,15 @@ test('Profile PIN Modal Suite', async (t) => {
     let switchedUserId = '';
     let hasError = false;
     let invalidationCount = 0;
+    let profileSelectedCount = 0;
+    let switchHomeUserImplementation = async (_userId: string): Promise<void> => undefined;
 
     const mockController = {
       setHomeUserPin: (pin: string) => { homeUserPinSet = pin; },
       switchHomeUser: async (userId: string) => {
         switchHomeUserCalled = true;
         switchedUserId = userId;
+        await switchHomeUserImplementation(userId);
       },
       getState: () => ({
         errorText: hasError ? 'Incorrect PIN' : null,
@@ -147,6 +150,9 @@ test('Profile PIN Modal Suite', async (t) => {
       renderApp: () => {
         renderAppCalled = true;
         modalTargetsRegistered = modalEl.hidden === false;
+      },
+      onProfileSelected: () => {
+        profileSelectedCount += 1;
       },
     };
 
@@ -222,6 +228,36 @@ test('Profile PIN Modal Suite', async (t) => {
       assert.equal(modalEl.hidden, true);
     });
 
+    await t.test('closing and reopening invalidates a stale profile switch completion', async () => {
+      let resolveSwitch!: () => void;
+      switchHomeUserImplementation = () => new Promise<void>((resolve) => {
+        resolveSwitch = resolve;
+      });
+      focusState = { activeId: 'btn-profile-profile-1', activeRoute: 'channelSetup' };
+      openProfilePinModal({ id: 'user-stale', title: 'Stale User', admin: false, protected: true });
+      const keydown = windowListeners['keydown']?.[0];
+      assert.ok(keydown);
+      for (const key of ['1', '2', '3', '4']) {
+        keydown({ key, preventDefault: () => {}, stopPropagation: () => {} } as KeyboardEvent);
+      }
+      await Promise.resolve();
+
+      closeProfilePinModal();
+      openProfilePinModal({ id: 'user-current', title: 'Current User', admin: false, protected: true });
+      const selectedBeforeResolve = profileSelectedCount;
+      resolveSwitch();
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+
+      assert.equal(isProfilePinModalActive(), true);
+      assert.equal(nameEl.textContent, 'Current User');
+      assert.equal(focusState.activeId, 'btn-profile-pin-5');
+      assert.equal(profileSelectedCount, selectedBeforeResolve);
+      assert.equal(errorEl.hidden, true);
+      assert.equal(numpadButtons.every((button) => button.disabled === false), true);
+      closeProfilePinModal();
+      switchHomeUserImplementation = async () => undefined;
+    });
+
     await t.test('openProfilePinModal handling error path', async () => {
       hasError = true;
       focusState = { activeId: 'btn-profile-profile-2', activeRoute: 'channelSetup' };
@@ -247,10 +283,11 @@ test('Profile PIN Modal Suite', async (t) => {
     });
 
     await t.test('closeProfilePinModal should unmount keydown listeners', () => {
+      const invalidationsBeforeClose = invalidationCount;
       closeProfilePinModal();
       assert.equal(isProfilePinModalActive(), false);
       assert.equal(windowListeners['keydown']?.length ?? 0, 0);
-      assert.equal(invalidationCount, 1);
+      assert.equal(invalidationCount, invalidationsBeforeClose + 1);
       assert.equal(hasError, false);
       assert.equal(focusState.activeId, 'btn-profile-profile-2');
     });

@@ -95,14 +95,18 @@ export function renderPlexRuntimeDom(
   setText(dom.plexServerStateElement, formatSelectedServerState(snapshot?.servers.items ?? [], state.selectedServerId, snapshot?.servers.status ?? 'idle'));
   setText(dom.plexLibraryStateElement, snapshot === null ? 'Not loaded' : `${formatStatus(snapshot.library.status)} / ${snapshot.library.sections.length} libraries`);
 
+  const profilePending = state.pending.getHomeUsers || state.pending.switchHomeUser;
+  const serverPending = state.pending.restoreSelectedServer
+    || state.pending.refreshServers
+    || state.pending.selectServer;
   renderPin(snapshot?.auth.pin ?? null, dom);
-  renderHomeUsers(snapshot?.auth.homeUsers ?? [], dom, state.pending.switchHomeUser);
+  renderHomeUsers(snapshot?.auth.homeUsers ?? [], dom, profilePending);
   renderServers(
     snapshot?.servers.items ?? [],
     state.selectedServerId,
     snapshot?.servers.status ?? 'idle',
     dom,
-    state.pending.selectServer,
+    serverPending,
   );
   renderSections(snapshot?.library.sections ?? [], state.selectedSectionId, snapshot?.library.status ?? 'idle', dom, setupSelectedSectionIds);
   renderItems(
@@ -131,9 +135,6 @@ export function renderPlexRuntimeDom(
       button.setAttribute('aria-busy', String(state.pending[button.dataset.plexAction as keyof typeof state.pending] === true));
     }
   }
-  const serverPending = state.pending.restoreSelectedServer
-    || state.pending.refreshServers
-    || state.pending.selectServer;
   const setupButton = supportsOnboardingDom ? document.querySelector<HTMLButtonElement>('[data-focus-id="btn-server-setup"]') : null;
   if (setupButton) projectPendingControl(setupButton, serverPending || state.selectedServerId === null, serverPending);
   for (const switchButton of supportsOnboardingDom ? Array.from(document.querySelectorAll<HTMLButtonElement>('[data-focus-id="btn-server-switch-profile"]')) : []) {
