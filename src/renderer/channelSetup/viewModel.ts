@@ -120,8 +120,6 @@ export function createChannelSetupFlow(
   liveSelection: ChannelSetupLiveSelectionViewModel | null,
   state?: ChannelSetupDraftState,
 ): ChannelSetupFlowViewModel {
-  const hasLibrary = liveSelection !== null;
-  const hasPersistedChannels = (persistedSummary?.channelCount ?? 0) > 0;
   const buildMode = state?.buildMode ?? 'append';
   const pending = channelRuntime?.pending === true;
   const errorText = channelRuntime?.errorText ?? null;

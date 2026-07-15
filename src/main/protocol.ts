@@ -62,7 +62,7 @@ export async function serveRendererFile(urlText: string, rendererRoot: string): 
 function isNodeErrorWithCode(error: unknown, code: string): boolean {
   return error instanceof Error
     && 'code' in error
-    && (error as NodeJS.ErrnoException).code === code;
+    && (error as { code?: unknown }).code === code;
 }
 
 function textResponse(text: string, status: number): Response {
