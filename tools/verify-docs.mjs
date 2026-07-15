@@ -409,8 +409,10 @@ function parseTomlSections(content) {
   return sections;
 }
 
+const FRONTMATTER_PATTERN = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---(?:[ \t]*\r?\n|$)/u;
+
 function parseFrontmatter(content) {
-  const match = content.match(/^---\s*\n([\s\S]*?)\n---(?:\s*\n|$)/u);
+  const match = content.match(FRONTMATTER_PATTERN);
   if (!match) return {};
   const result = {};
   const lines = match[1].split(/\r?\n/u);
@@ -432,7 +434,7 @@ function parseFrontmatter(content) {
 }
 
 function stripFrontmatter(content) {
-  return content.replace(/^---\s*\n[\s\S]*?\n---(?:\s*\n|$)/u, '');
+  return content.replace(FRONTMATTER_PATTERN, '');
 }
 
 function normalizeMarkdownBody(content) {

@@ -238,6 +238,16 @@ test('skills require matching names and descriptions', () => {
   assert(errors.some((error) => error.includes('non-empty frontmatter description')));
 });
 
+test('skill frontmatter supports Windows CRLF checkouts', () => {
+  const root = makeFixture();
+  for (const skill of TEST_REQUIRED_SKILLS) {
+    const skillPath = path.join(root, '.agents/skills', skill, 'SKILL.md');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    fs.writeFileSync(skillPath, content.replace(/\n/gu, '\r\n'));
+  }
+  assert.deepEqual(verifyDocs(root), []);
+});
+
 test('launcher wrappers must match their canonical routers', () => {
   const root = makeFixture();
   const skill = 'lineup-desktop-feature-review';
@@ -333,6 +343,12 @@ function makeFixture() {
     const rolePath = path.join(root, '.codex', configFile);
     fs.mkdirSync(path.dirname(rolePath), { recursive: true });
     fs.writeFileSync(rolePath, roleToml(['explorer', 'explorer_fallback', 'reviewer', 'docs_researcher', 'monitor', 'monitor_fallback'].includes(role)));
+  }
+
+  for (const { launcher } of Object.values(TEST_LAUNCHER_WRAPPERS)) {
+    const launcherPath = path.join(root, 'docs/agentic/session-prompts', launcher);
+    fs.mkdirSync(path.dirname(launcherPath), { recursive: true });
+    fs.writeFileSync(launcherPath, `# ${launcher}\n`);
   }
 
   for (const skill of TEST_REQUIRED_SKILLS) {
