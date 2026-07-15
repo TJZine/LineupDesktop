@@ -192,7 +192,7 @@ function isActiveStagedAction(button: HTMLButtonElement): boolean {
   return button.closest<HTMLElement>('[data-staged-owner]')?.dataset.ownerActive === 'true';
 }
 
-export function isEligibleDelegatedAction(element: HTMLElement): boolean {
+function isEligibleDelegatedAction(element: HTMLElement): boolean {
   if ((element as HTMLButtonElement).disabled || element.getAttribute('aria-disabled') === 'true') return false;
   return element.closest('[hidden],[inert],[aria-hidden="true"]') === null;
 }

@@ -61,25 +61,33 @@ export function createSetupRuntimeCoordinator(input: {
       loadedServerId = serverId;
       const eligible = plex.snapshot?.library.sections.some((section) => section.type === 'movie' || section.type === 'show') === true;
       commit({ library: eligible ? 'ready' : 'empty' });
+    }).catch(() => {
+      if (currentGeneration !== generation || currentIntent !== libraryIntent || state.serverId !== serverId) return;
+      loadedServerId = null;
+      commit({ library: 'error' });
     });
-    libraryLoadTail = operation.catch(() => undefined);
+    libraryLoadTail = operation;
     return operation;
   };
   const loadItems = (sectionId: string): Promise<void> => {
     const currentGeneration = generation;
     const currentIntent = ++previewIntent;
+    const currentServerId = state.serverId;
     ++metadataIntent;
     commit({ preview: 'loading', previewSectionId: sectionId, previewRatingKey: null });
     const operation = itemLoadTail.then(async () => {
-      if (currentGeneration !== generation || currentIntent !== previewIntent || state.previewSectionId !== sectionId) return;
+      if (currentGeneration !== generation || currentIntent !== previewIntent || state.previewSectionId !== sectionId || state.serverId !== currentServerId) return;
       await input.listLibraryItems(sectionId);
-      if (currentGeneration !== generation || currentIntent !== previewIntent || state.previewSectionId !== sectionId) return;
+      if (currentGeneration !== generation || currentIntent !== previewIntent || state.previewSectionId !== sectionId || state.serverId !== currentServerId) return;
       const plex = input.getPlexState();
       if (plex.errorText !== null) commit({ preview: 'items-error' });
       else if (plex.selectedSectionId !== sectionId || plex.snapshot?.library.selectedSectionId !== sectionId) commit({ preview: 'items-error' });
       else commit({ preview: plex.snapshot.library.items.length === 0 ? 'empty' : 'ready' });
+    }).catch(() => {
+      if (currentGeneration !== generation || currentIntent !== previewIntent || state.previewSectionId !== sectionId || state.serverId !== currentServerId) return;
+      commit({ preview: 'items-error' });
     });
-    itemLoadTail = operation.catch(() => undefined);
+    itemLoadTail = operation;
     return operation;
   };
   return {
@@ -109,20 +117,25 @@ export function createSetupRuntimeCoordinator(input: {
     async loadPreviewMetadata(ratingKey) {
       const currentGeneration = generation;
       const currentIntent = ++metadataIntent;
+      const currentServerId = state.serverId;
+      const currentSectionId = state.previewSectionId;
       commit({ preview: 'loading', previewRatingKey: ratingKey });
       const operation = metadataLoadTail.then(async () => {
-        if (currentGeneration !== generation || currentIntent !== metadataIntent || state.previewRatingKey !== ratingKey) return;
+        if (currentGeneration !== generation || currentIntent !== metadataIntent || state.previewRatingKey !== ratingKey || state.serverId !== currentServerId || state.previewSectionId !== currentSectionId) return;
         await input.getMetadata(ratingKey);
-        if (currentGeneration !== generation || currentIntent !== metadataIntent || state.previewRatingKey !== ratingKey) return;
+        if (currentGeneration !== generation || currentIntent !== metadataIntent || state.previewRatingKey !== ratingKey || state.serverId !== currentServerId || state.previewSectionId !== currentSectionId) return;
         commit({ preview: input.getPlexState().errorText === null ? 'ready' : 'metadata-error' });
+      }).catch(() => {
+        if (currentGeneration !== generation || currentIntent !== metadataIntent || state.previewRatingKey !== ratingKey || state.serverId !== currentServerId || state.previewSectionId !== currentSectionId) return;
+        commit({ preview: 'metadata-error' });
       });
-      metadataLoadTail = operation.catch(() => undefined);
+      metadataLoadTail = operation;
       await operation;
     },
     collapsePreview() {
       ++previewIntent;
       ++metadataIntent;
-      commit({ previewRatingKey: null });
+      commit({ preview: 'collapsed', previewRatingKey: null });
     },
     invalidate() {
       ++generation;

@@ -362,10 +362,21 @@ test('shell splash and loading reserve both exact production brand assets', () =
   mountStaticRendererDom({
     querySelector: (selector: string) => selector === '[data-static-screen-root]' ? root : null,
   } as unknown as Document);
-  assert.equal(root.innerHTML.match(/src="\.\/assets\/lineup-logo-mark\.png"/gu)?.length, 2);
-  assert.equal(root.innerHTML.match(/src="\.\/assets\/lineup-wordmark\.png"/gu)?.length, 2);
+  for (const surface of ['splash', 'loading'] as const) {
+    const markup = shellSurfaceMarkup(root.innerHTML, surface);
+    assert.equal(markup.match(/src="\.\/assets\/lineup-logo-mark\.png"/gu)?.length, 1, surface);
+    assert.equal(markup.match(/src="\.\/assets\/lineup-wordmark\.png"/gu)?.length, 1, surface);
+  }
   assert.doesNotMatch(root.innerHTML, /shell-brand-mark|LINE<span>U<\/span>P/u);
 });
+
+function shellSurfaceMarkup(markup: string, surface: string): string {
+  const marker = `data-shell-surface="${surface}"`;
+  const start = markup.indexOf(marker);
+  assert.notEqual(start, -1, `missing shell surface ${surface}`);
+  const next = markup.indexOf('data-shell-surface="', start + marker.length);
+  return markup.slice(start, next === -1 ? markup.length : next);
+}
 
 interface Deferred<TValue> {
   promise: Promise<TValue>;

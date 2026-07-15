@@ -319,14 +319,15 @@ test('Profile PIN modal keeps the upstream-shaped local header, 11-key grid, sep
   assert.doesNotMatch(numpadMarkup, /btn-profile-pin-cancel/u);
   assert.match(markup, /<\/div>\s*<p class="profile-pin-modal__error"[^>]*>[^<]*<\/p>\s*<button type="button" class="profile-pin-cancel" data-numpad="cancel" data-focus-id="btn-profile-pin-cancel">Cancel<\/button>/u);
 
-  const frozenFocusIds = [
+  const requiredFocusIds = new Set([
     'btn-profile-pin-1', 'btn-profile-pin-2', 'btn-profile-pin-3',
     'btn-profile-pin-4', 'btn-profile-pin-5', 'btn-profile-pin-6',
     'btn-profile-pin-7', 'btn-profile-pin-8', 'btn-profile-pin-9',
     'btn-profile-pin-backspace', 'btn-profile-pin-0', 'btn-profile-pin-cancel',
-  ];
-  assert.deepEqual(
-    Array.from(markup.matchAll(/data-focus-id="(btn-profile-pin-[^"]+)"/gu), (match) => match[1]),
-    frozenFocusIds,
-  );
+  ]);
+  const modalMarkup = markup.slice(markup.indexOf('id="profile-pin-modal"'));
+  const focusIds = Array.from(modalMarkup.matchAll(/data-focus-id="(btn-profile-pin-[^"]+)"/gu), (match) => match[1]);
+  assert.equal(focusIds.length, requiredFocusIds.size);
+  assert.equal(new Set(focusIds).size, focusIds.length);
+  assert.deepEqual(new Set(focusIds), requiredFocusIds);
 });

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
-import { isEligibleDelegatedAction, registerRendererActions } from '../../renderer/rendererActionRegistration.js';
+import { registerRendererActions } from '../../renderer/rendererActionRegistration.js';
 import { clickFocusedRendererElement } from '../../renderer/focusDom.js';
 
 type TestEventListener = (event: TestDomEvent) => void;
@@ -339,7 +339,6 @@ test('delegated staged and Plex actions reject hidden inert and aria-hidden ance
     flow.click(); section.click();
     assert.deepEqual(flowActions, ['previewNext']);
     assert.deepEqual(sections, ['movies']);
-    assert.equal(isEligibleDelegatedAction(flow as unknown as HTMLElement), false);
   });
 });
 

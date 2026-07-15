@@ -77,6 +77,7 @@ export function resolveSetupPreviewCursor(
   selectedSectionIds: readonly string[],
   currentCursor: string | null,
 ): string | null {
+  if (selectedSectionIds.length === 0) return null;
   if (currentCursor !== null && selectedSectionIds.includes(currentCursor)) return currentCursor;
-  return selectedSectionIds[0] ?? currentCursor;
+  return selectedSectionIds[0] ?? null;
 }

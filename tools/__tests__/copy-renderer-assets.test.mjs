@@ -22,9 +22,15 @@ test('renderer asset copy preserves recursive files and exact binary hashes', ()
 
     copyRendererAssets(source, target);
 
-    for (const relativePath of ['lineup-logo-mark.png', path.join('nested', 'proof.bin')]) {
-      const sourceHash = sha256(path.join(source, 'assets', relativePath));
-      const targetHash = sha256(path.join(target, 'assets', relativePath));
+    for (const relativePath of [
+      'index.html',
+      'styles.css',
+      path.join('styles', 'base.css'),
+      path.join('assets', 'lineup-logo-mark.png'),
+      path.join('assets', 'nested', 'proof.bin'),
+    ]) {
+      const sourceHash = sha256(path.join(source, relativePath));
+      const targetHash = sha256(path.join(target, relativePath));
       assert.equal(targetHash, sourceHash, relativePath);
     }
   } finally {

@@ -231,6 +231,69 @@ test('custom channel controller ignores stale media requests after source change
   assert.equal(controller.getState().draft.content.length, 0);
 });
 
+test('blank and cancelled drafts clear invalidated media and metadata busy state', async () => {
+  const bridge = createBridge();
+  const pendingMedia = deferred<Awaited<ReturnType<typeof bridge.listMedia>>>();
+  bridge.listMedia = () => pendingMedia.promise;
+  const controller = createCustomChannelController({ bridge, onStateChanged: () => undefined });
+
+  const media = controller.browseSource('library-1');
+  assert.equal(controller.getState().mediaPending, true);
+  controller.startBlankDraft();
+  assert.equal(controller.getState().mediaPending, false);
+  pendingMedia.resolve(customChannelSuccess('stale-media', {
+    items: [], offset: 0, limit: 24, total: 0, hasMore: false,
+  }));
+  await media;
+  assert.equal(controller.getState().mediaPending, false);
+
+  await controller.browseSource('library-1');
+  const pendingMetadata = deferred<Awaited<ReturnType<typeof bridge.getMediaMetadata>>>();
+  bridge.getMediaMetadata = () => pendingMetadata.promise;
+  const metadata = controller.applyAction('openMetadata', 'rating-1');
+  assert.equal(controller.getState().metadataPending, true);
+  controller.cancelDraft();
+  assert.equal(controller.getState().metadataPending, false);
+  pendingMetadata.resolve(customChannelSuccess('stale-metadata', {
+    ratingKey: 'rating-1',
+    type: 'movie',
+    title: 'Stale',
+    subtitle: '',
+    summary: '',
+    year: 2026,
+    durationMs: 1,
+    genres: [],
+    availability: 'available',
+  }));
+  await metadata;
+  assert.equal(controller.getState().metadataPending, false);
+});
+
+test('custom move actions restore focus to the persistent duplicate control', async () => {
+  const bridge = createBridge();
+  const controller = createCustomChannelController({ bridge, onStateChanged: () => undefined });
+  await controller.loadSnapshot();
+  const restored: string[] = [];
+  await dispatchCustomChannelAction({
+    action: 'moveChannelDown',
+    detail: 'channel-1',
+    selectedSourceId: null,
+    controller,
+    refreshChannels: () => undefined,
+    refreshGuide: () => undefined,
+    render: () => undefined,
+    flow: {
+      openEditor: () => undefined,
+      closeEditor: () => undefined,
+      openDelete: () => undefined,
+      closeDelete: () => undefined,
+      restoreDeleteFocus: () => undefined,
+      restoreListFocus: (focusId) => restored.push(focusId),
+    },
+  });
+  assert.deepEqual(restored, ['custom-channel-duplicate-channel-1']);
+});
+
 test('custom channel controller maps rejected bridge work to safe local errors', async () => {
   const bridge = createBridge();
   bridge.listMedia = async () => {

@@ -39,9 +39,12 @@ test('setup owner grid reserves a status row only for the library owner', () => 
     querySelector: (selector: string) => selector === '[data-static-screen-root]' ? root : null,
   } as unknown as Document);
 
-  assert.match(root.innerHTML, /data-staged-owner="library"[^]*setup-owner__header[^]*setup-status[^]*setup-owner__body[^]*setup-owner__actions/u);
-  assert.match(root.innerHTML, /data-staged-owner="progress"[^>]*>\s*<header class="setup-owner__header"[^]*<div class="setup-owner__body setup-operation-state"[^]*<footer class="setup-owner__actions"/u);
-  assert.match(root.innerHTML, /data-staged-owner="result"[^>]*>\s*<header class="setup-owner__header"[^]*<div class="setup-owner__body setup-operation-state"[^]*<footer class="setup-owner__actions"/u);
+  const library = setupOwnerMarkup(root.innerHTML, 'library');
+  const progress = setupOwnerMarkup(root.innerHTML, 'progress');
+  const result = setupOwnerMarkup(root.innerHTML, 'result');
+  assertOwnerStructure(library, { status: true, bodyClass: 'setup-owner__body' });
+  assertOwnerStructure(progress, { status: false, bodyClass: 'setup-owner__body setup-operation-state' });
+  assertOwnerStructure(result, { status: false, bodyClass: 'setup-owner__body setup-operation-state' });
 });
 
 test('setup markup keeps primary Channel Setup titles with step and content below', () => {
@@ -49,10 +52,32 @@ test('setup markup keeps primary Channel Setup titles with step and content belo
   mountStaticRendererDom({
     querySelector: (selector: string) => selector === '[data-static-screen-root]' ? root : null,
   } as unknown as Document);
-  assert.match(root.innerHTML, /class="setup-owner__title">Channel Setup<\/h2><span class="setup-owner__step">Step 1 of 3<\/span><div class="setup-owner__intro">/u);
-  assert.match(root.innerHTML, /class="setup-owner__title">Channel Setup<\/h2><span class="setup-owner__step">Step 2 of 3<\/span><div class="setup-owner__intro">/u);
-  assert.match(root.innerHTML, /class="setup-owner__title">Channel Setup<\/h2><span class="setup-owner__step">Step 3 of 3<\/span><div class="setup-owner__intro">/u);
+  for (const [owner, step] of [['library', 'Step 1 of 3'], ['preview', 'Step 2 of 3'], ['build', 'Step 3 of 3']] as const) {
+    const ownerMarkup = setupOwnerMarkup(root.innerHTML, owner);
+    assert.match(ownerMarkup, /<h2 class="setup-owner__title">Channel Setup<\/h2>/u);
+    assert.match(ownerMarkup, new RegExp(`<span class="setup-owner__step">${step}<\\/span>`, 'u'));
+    assert.match(ownerMarkup, /<div class="setup-owner__intro">/u);
+  }
 });
+
+function setupOwnerMarkup(markup: string, owner: string): string {
+  const marker = `data-staged-owner="${owner}"`;
+  const start = markup.indexOf(marker);
+  assert.notEqual(start, -1, `missing setup owner ${owner}`);
+  const next = markup.indexOf('data-staged-owner="', start + marker.length);
+  return markup.slice(start, next === -1 ? markup.length : next);
+}
+
+function assertOwnerStructure(
+  markup: string,
+  expected: { status: boolean; bodyClass: string },
+): void {
+  const headerIndex = markup.indexOf('class="setup-owner__header"');
+  const bodyIndex = markup.indexOf(`class="${expected.bodyClass}"`);
+  const footerIndex = markup.indexOf('class="setup-owner__actions"');
+  assert.ok(headerIndex >= 0 && bodyIndex > headerIndex && footerIndex > bodyIndex);
+  assert.equal(markup.includes('class="setup-status"'), expected.status);
+}
 
 test('library owner keeps the scoped list hook used by focused row contrast', () => {
   const root = { innerHTML: '', querySelector: () => null };

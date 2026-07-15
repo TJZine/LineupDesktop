@@ -7,7 +7,10 @@ import type {
 } from './workflow.js';
 import type { PlayerOverlayActionId } from './overlays.js';
 import { CUSTOM_CHANNEL_ACTIONS, type CustomChannelActionId } from './customChannels/controller.js';
-import type { StagedSetupFlowActionId } from './setup/stagedSetupController.js';
+import {
+  STAGED_SETUP_FLOW_ACTIONS,
+  type StagedSetupFlowActionId,
+} from './setup/stagedSetupController.js';
 
 export interface RendererDomBindings {
   statusElement: HTMLElement | null;
@@ -344,33 +347,9 @@ export function readCustomChannelActionId(value: string | undefined): CustomChan
 }
 
 export function readStagedSetupFlowActionId(value: string | undefined): StagedSetupFlowActionId | null {
-  switch (value) {
-    case 'librarySelectAll':
-    case 'libraryClearAll':
-    case 'libraryRetry':
-    case 'libraryNext':
-    case 'previewRetry':
-    case 'previewToggle':
-    case 'previewNext':
-    case 'selectBuildCategory':
-    case 'toggleReplaceConfirm':
-    case 'buildConfirm':
-    case 'buildBack':
-    case 'progressCancel':
-    case 'resultDone':
-    case 'resultWatch':
-    case 'recoveryRetry':
-    case 'setupBack':
-    case 'openSetupCustom':
-    case 'customNew':
-    case 'customCancel':
-    case 'customDeleteCancel':
-    case 'customDone':
-    case 'customBack':
-      return value;
-    default:
-      return null;
-  }
+  return typeof value === 'string' && STAGED_SETUP_FLOW_ACTIONS.includes(value as StagedSetupFlowActionId)
+    ? value as StagedSetupFlowActionId
+    : null;
 }
 
 export function readSettingsActionId(value: string | undefined): SettingsActionId | null {

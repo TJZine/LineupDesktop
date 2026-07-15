@@ -64,7 +64,7 @@ function coordinateFlow(input: CustomChannelActionDispatchInput, beforeIndex: nu
     const next = channels[Math.min(Math.max(beforeIndex, 0), Math.max(channels.length - 1, 0))];
     input.flow?.closeDelete(next ? `custom-channel-duplicate-${next.id}` : 'custom-channel-new');
   } else if (detail !== undefined && ['toggleChannelVisibility', 'moveChannelUp', 'moveChannelDown'].includes(input.action)) {
-    const prefix = input.action === 'toggleChannelVisibility' ? 'hide' : input.action === 'moveChannelUp' ? 'up' : 'down';
+    const prefix = input.action === 'toggleChannelVisibility' ? 'hide' : 'duplicate';
     input.flow?.restoreListFocus(`custom-channel-${prefix}-${detail}`);
   }
 }

@@ -17,12 +17,15 @@ export type StagedSetupOwnerId =
   | 'library' | 'preview' | 'build' | 'progress' | 'result' | 'recovery-error'
   | 'setup-custom' | 'custom-list' | 'custom-edit' | 'custom-delete-confirm';
 
-export type StagedSetupFlowActionId =
-  | 'librarySelectAll' | 'libraryClearAll' | 'libraryRetry' | 'libraryNext'
-  | 'previewToggle' | 'previewRetry' | 'previewNext' | 'selectBuildCategory'
-  | 'toggleReplaceConfirm' | 'buildConfirm' | 'buildBack' | 'progressCancel'
-  | 'resultDone' | 'resultWatch' | 'recoveryRetry' | 'setupBack' | 'openSetupCustom'
-  | 'customNew' | 'customCancel' | 'customDeleteCancel' | 'customDone' | 'customBack';
+export const STAGED_SETUP_FLOW_ACTIONS = [
+  'librarySelectAll', 'libraryClearAll', 'libraryRetry', 'libraryNext',
+  'previewToggle', 'previewRetry', 'previewNext', 'selectBuildCategory',
+  'toggleReplaceConfirm', 'buildConfirm', 'buildBack', 'progressCancel',
+  'resultDone', 'resultWatch', 'recoveryRetry', 'setupBack', 'openSetupCustom',
+  'customNew', 'customCancel', 'customDeleteCancel', 'customDone', 'customBack',
+] as const;
+
+export type StagedSetupFlowActionId = (typeof STAGED_SETUP_FLOW_ACTIONS)[number];
 
 export interface SetupRecoveryState {
   originStep: 'library' | 'build';

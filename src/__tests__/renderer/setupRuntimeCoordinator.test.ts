@@ -9,6 +9,7 @@ import type { PlexRuntimeController } from '../../renderer/plexRuntimeActions.js
 import {
   SETUP_LIBRARY_LIMIT,
   normalizeSetupLibrarySelection,
+  resolveSetupPreviewCursor,
   selectAllSetupLibraries,
   toggleSetupLibrarySelection,
 } from '../../renderer/setup/setupLibrarySelection.js';
@@ -26,6 +27,9 @@ test('setup library selection is ordered, deduplicated, eligible-only, and cappe
   assert.equal(blocked.limitReached, true);
   const removed = toggleSetupLibrarySelection(all.selectedSectionIds, 'library-2', sections);
   assert.equal(removed.selectedSectionIds.includes('library-2'), false);
+  assert.equal(resolveSetupPreviewCursor([], 'library-2'), null);
+  assert.equal(resolveSetupPreviewCursor(['library-2'], 'library-2'), 'library-2');
+  assert.equal(resolveSetupPreviewCursor(['library-3'], 'library-2'), 'library-3');
 });
 
 test('source-change and route cleanup lifecycle owners invalidate only through setup composition', () => {
@@ -219,6 +223,64 @@ test('setup preview metadata failure is reachable and retry repeats metadata onl
   await coordinator.retryPreview();
   assert.equal(coordinator.getState().preview, 'ready');
   assert.deepEqual(calls, ['items:movies', 'metadata:safe-item', 'metadata:safe-item']);
+});
+
+test('setup coordinator maps rejected library, item, and metadata work to terminal states', async () => {
+  const state = plexState('server-1', [section('movies', 'movie')], null, 'movies', ['safe-item']);
+  const library = createSetupRuntimeCoordinator({
+    getPlexState: () => state,
+    listLibrarySections: async () => { throw new Error('library rejected'); },
+    listLibraryItems: async () => undefined,
+    getMetadata: async () => undefined,
+    onStateChanged: () => undefined,
+  });
+  await library.enterLibrary('server-1', state);
+  assert.equal(library.getState().library, 'error');
+
+  const items = createSetupRuntimeCoordinator({
+    getPlexState: () => state,
+    listLibrarySections: async () => undefined,
+    listLibraryItems: async () => { throw new Error('items rejected'); },
+    getMetadata: async () => undefined,
+    onStateChanged: () => undefined,
+  });
+  await items.enterLibrary('server-1', state);
+  await items.loadPreview('movies');
+  assert.equal(items.getState().preview, 'items-error');
+
+  const metadata = createSetupRuntimeCoordinator({
+    getPlexState: () => state,
+    listLibrarySections: async () => undefined,
+    listLibraryItems: async () => undefined,
+    getMetadata: async () => { throw new Error('metadata rejected'); },
+    onStateChanged: () => undefined,
+  });
+  await metadata.enterLibrary('server-1', state);
+  await metadata.loadPreview('movies');
+  await metadata.loadPreviewMetadata('safe-item');
+  assert.equal(metadata.getState().preview, 'metadata-error');
+  metadata.collapsePreview();
+  assert.equal(metadata.getState().preview, 'collapsed');
+  assert.equal(metadata.getState().previewRatingKey, null);
+});
+
+test('setup coordinator ignores a rejected operation after invalidation', async () => {
+  const state = plexState('server-1', [], null);
+  let rejectLoad!: (error: Error) => void;
+  const pending = new Promise<void>((_resolve, reject) => { rejectLoad = reject; });
+  const coordinator = createSetupRuntimeCoordinator({
+    getPlexState: () => state,
+    listLibrarySections: () => pending,
+    listLibraryItems: async () => undefined,
+    getMetadata: async () => undefined,
+    onStateChanged: () => undefined,
+  });
+  const load = coordinator.enterLibrary('server-1', state);
+  await Promise.resolve();
+  coordinator.invalidate();
+  rejectLoad(new Error('stale rejection'));
+  await load;
+  assert.equal(coordinator.getState().library, 'idle');
 });
 
 test('setup preview serializes metadata requests and performs the latest rating-key load', async () => {
