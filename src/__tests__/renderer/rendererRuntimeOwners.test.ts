@@ -232,16 +232,61 @@ test('shell controller preserves fullscreen focus and owns 5000/200/1500 toast t
   assert.equal(state.toast?.message, 'Entered fullscreen');
   assert.deepEqual([...timers.values()].map((timer) => timer.delay), [5000]);
   const visibleTimer = [...timers.entries()][0];
+  if (visibleTimer) timers.delete(visibleTimer[0]);
   visibleTimer?.[1].callback();
   assert.equal(state.toast?.phase, 'fading');
-  assert.deepEqual([...timers.values()].map((timer) => timer.delay), [5000, 200]);
+  assert.deepEqual([...timers.values()].map((timer) => timer.delay), [200]);
 
   now = 2500;
   await controller.requestFullscreen(false, 'player-fullscreen');
-  assert.equal(state.toast?.message, 'Entered fullscreen');
+  assert.equal(state.toast?.message, 'Exited fullscreen');
+  assert.deepEqual([...timers.values()].map((timer) => timer.delay), [5000]);
+  const oppositeTransitionTimerId = [...timers.keys()][0];
+  now = 3000;
+  await controller.requestFullscreen(false, 'player-fullscreen');
+  assert.deepEqual([...timers.values()].map((timer) => timer.delay), [5000]);
+  assert.equal([...timers.keys()][0], oppositeTransitionTimerId);
   now = 4000;
-  await controller.requestFullscreen(true, 'player-fullscreen');
-  assert.equal(state.toast?.message, 'Entered fullscreen');
+  await controller.requestFullscreen(false, 'player-fullscreen');
+  assert.deepEqual([...timers.values()].map((timer) => timer.delay), [5000]);
+  assert.notEqual([...timers.keys()][0], oppositeTransitionTimerId);
+});
+
+test('fullscreen transport stays serialized across UI invalidation and reconciles a valid late result', async () => {
+  const first = createDeferred<Awaited<ReturnType<LineupDesktopPreloadApi['window']['setFullscreen']>>>();
+  let state: RendererShellState = { ...createRendererShellState(), bootstrap: 'ready' };
+  const applied: boolean[] = [];
+  let calls = 0;
+  const controller = createShellController({
+    shell: { getCapabilities: async () => { throw new Error('unused'); }, onStatusChanged: () => () => undefined },
+    windowBridge: {
+      setFullscreen: async (desired) => {
+        calls += 1;
+        if (calls === 1) return first.promise;
+        return { ok: true, requestId: `fullscreen-${calls}`, value: { enabled: desired } };
+      },
+    },
+    host: { setTimeout: () => 1, clearTimeout: () => undefined },
+    getState: () => state,
+    setState: (next) => { state = next; },
+    render: () => undefined,
+    applyCapabilities: () => undefined,
+    applyFullscreen: (enabled) => applied.push(enabled),
+    restoreFocus: () => undefined,
+  });
+
+  const pending = controller.requestFullscreen(true, 'player-fullscreen');
+  controller.invalidateFullscreenRequest();
+  await controller.requestFullscreen(false, 'player-fullscreen');
+  assert.equal(calls, 1);
+  first.resolve({ ok: true, requestId: 'fullscreen-1', value: { enabled: true } });
+  await pending;
+  assert.deepEqual(applied, [true]);
+  assert.equal(state.fullscreenPending, false);
+
+  await controller.requestFullscreen(false, 'player-fullscreen');
+  assert.equal(calls, 2);
+  assert.deepEqual(applied, [true, false]);
 });
 
 test('fullscreen retry keeps inline owner pending and restores retry focus after rejection', async () => {

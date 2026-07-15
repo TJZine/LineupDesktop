@@ -102,6 +102,7 @@ export function registerRendererFocusTargets(
     focusRegistry.register({
       id: focusId,
       route: route ?? 'player',
+      scope: route === null ? 'global' : 'route',
       order: shellFocusOrder(focusId) ?? focusElementOrder(focusId, index),
       neighbors,
     });
@@ -312,7 +313,7 @@ function readCurrentFocusableElements(dom: RendererDomBindings): HTMLElement[] {
 }
 
 function isElementHiddenFromFocus(element: HTMLElement): boolean {
-  return element.closest('[hidden], [aria-hidden="true"]') !== null
+  return element.closest('[hidden], [inert], [aria-hidden="true"]') !== null
     || (element as HTMLButtonElement).disabled === true
     || readAriaDisabled(element);
 }

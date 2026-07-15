@@ -102,6 +102,13 @@ test('navigation lifecycle preserves shortcuts, route focus memory, exit restore
   await lifecycle.handleInput('back');
   assert.equal(shell.exitConfirmOpen, true);
   assert.equal(focus.activeId, 'exit-confirm-cancel');
+  for (const direction of ['up', 'down', 'left', 'right'] as const) {
+    await lifecycle.handleInput(direction);
+    assert.ok(
+      focus.activeId === 'exit-confirm-cancel' || focus.activeId === 'exit-confirm-exit',
+      `${direction} escaped the exit confirmation`,
+    );
+  }
   lifecycle.cancelExit();
   assert.equal(focus.activeId, 'player-fullscreen');
   await lifecycle.handleInput('back');

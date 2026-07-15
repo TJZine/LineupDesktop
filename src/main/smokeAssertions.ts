@@ -479,19 +479,26 @@ export async function runSmokeAssertions(
     throw new Error(`Electron smoke failed: ${result.failures.join(', ')}`);
   }
   await window.loadURL(LINEUP_SHELL_URL);
-  await window.webContents.executeJavaScript(`
+  const rendererReady = await window.webContents.executeJavaScript(`
     new Promise((resolve) => {
       const deadline = performance.now() + 3000;
       const poll = () => {
-        if (document.documentElement.dataset.shellBoot === 'ready' || performance.now() >= deadline) {
+        if (document.documentElement.dataset.shellBoot === 'ready') {
           resolve(true);
+          return;
+        }
+        if (performance.now() >= deadline) {
+          resolve(false);
           return;
         }
         setTimeout(poll, 20);
       };
       poll();
     });
-  `);
+  `) as boolean;
+  if (!rendererReady) {
+    throw new Error('Electron smoke failed: renderer boot readiness timeout');
+  }
   await assertRendererCloseLifecycle(window, result.failures);
   if (result.failures.length > 0) {
     throw new Error(`Electron smoke failed: ${result.failures.join(', ')}`);

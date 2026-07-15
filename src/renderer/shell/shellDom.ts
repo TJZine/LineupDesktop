@@ -41,12 +41,14 @@ const SHELL_SURFACE_MARKUP = `
       </div>
     </div>
   </section>
-  <section class="shell-inline-error" data-shell-surface="inline-error" role="region" aria-label="Nonblocking error" hidden aria-hidden="true">
-    <h3>Could not change fullscreen</h3>
-    <p data-shell-inline-error-message>Try the fullscreen action again.</p>
-    <div class="shell-action-row">
-      <button type="button" data-shell-action="dismiss-inline-error" data-focus-id="shell-inline-dismiss" aria-label="Dismiss error">Dismiss</button>
-      <button type="button" data-shell-action="retry-fullscreen" data-focus-id="shell-inline-retry" aria-label="Retry action">Try again</button>
+  <section class="shell-inline-error" data-shell-surface="inline-error" role="alertdialog" aria-modal="true" aria-labelledby="shell-inline-error-title" aria-describedby="shell-inline-error-description" hidden aria-hidden="true">
+    <div class="shell-inline-error__panel">
+      <h3 id="shell-inline-error-title">Could not change fullscreen</h3>
+      <p id="shell-inline-error-description" data-shell-inline-error-message>Try the fullscreen action again.</p>
+      <div class="shell-action-row">
+        <button type="button" data-shell-action="dismiss-inline-error" data-focus-id="shell-inline-dismiss" aria-label="Dismiss error">Dismiss</button>
+        <button type="button" data-shell-action="retry-fullscreen" data-focus-id="shell-inline-retry" aria-label="Retry action">Try again</button>
+      </div>
     </div>
   </section>
   <div class="shell-toast" data-shell-surface="toast" role="status" aria-live="polite" aria-atomic="true" hidden aria-hidden="true">

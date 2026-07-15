@@ -51,6 +51,7 @@ export function createShellController(options: ShellControllerOptions): ShellCon
   let retryPending = false;
   let fullscreenPending = false;
   let lastToastAtMs = Number.NEGATIVE_INFINITY;
+  let lastToastEnabled: boolean | null = null;
   let toastFadeTimer: number | null = null;
   let toastHideTimer: number | null = null;
   let cleanedUp = false;
@@ -87,8 +88,9 @@ export function createShellController(options: ShellControllerOptions): ShellCon
 
   const showFullscreenToast = (enabled: boolean): void => {
     const shownAtMs = nowMs();
-    if (shownAtMs - lastToastAtMs < TOAST_DUPLICATE_THROTTLE_MS) return;
+    if (lastToastEnabled === enabled && shownAtMs - lastToastAtMs < TOAST_DUPLICATE_THROTTLE_MS) return;
     lastToastAtMs = shownAtMs;
+    lastToastEnabled = enabled;
     clearToastTimers();
     update(showShellToast(options.getState(), enabled ? 'Entered fullscreen' : 'Exited fullscreen'));
     toastFadeTimer = options.host.setTimeout(() => {
@@ -113,10 +115,10 @@ export function createShellController(options: ShellControllerOptions): ShellCon
     update(beginFullscreenRequest(options.getState(), preserveInlineError));
     try {
       const result = await options.windowBridge.setFullscreen(desired);
-      if (cleanedUp || generation !== fullscreenGeneration) return;
-      fullscreenPending = false;
+      if (cleanedUp) return;
       if (isValidFullscreenResult(result, desired)) {
         options.applyFullscreen(result.value.enabled);
+        if (generation !== fullscreenGeneration) return;
         update(resolveFullscreenRequest(options.getState()));
         options.restoreFocus(acceptedFocusId);
         showFullscreenToast(result.value.enabled);
@@ -124,9 +126,10 @@ export function createShellController(options: ShellControllerOptions): ShellCon
       }
     } catch {
       // Normalize bridge rejection to the same renderer-safe inline state.
+    } finally {
+      fullscreenPending = false;
     }
     if (cleanedUp || generation !== fullscreenGeneration) return;
-    fullscreenPending = false;
     update(rejectFullscreenRequest(options.getState(), desired));
     options.restoreFocus(failureFocusId);
   };
@@ -150,13 +153,11 @@ export function createShellController(options: ShellControllerOptions): ShellCon
     },
     dismissFullscreenError: () => {
       fullscreenGeneration += 1;
-      fullscreenPending = false;
       update(dismissFullscreenError(options.getState()));
       options.restoreFocus('player-fullscreen');
     },
     invalidateFullscreenRequest: () => {
       fullscreenGeneration += 1;
-      fullscreenPending = false;
       if (options.getState().fullscreenPending || options.getState().inlineError !== null) {
         update(dismissFullscreenError(resolveFullscreenRequest(options.getState())));
       }
@@ -166,7 +167,6 @@ export function createShellController(options: ShellControllerOptions): ShellCon
       capabilitiesGeneration += 1;
       fullscreenGeneration += 1;
       retryPending = false;
-      fullscreenPending = false;
       clearToastTimers();
     },
   };

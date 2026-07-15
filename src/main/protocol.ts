@@ -31,7 +31,12 @@ export async function serveRendererFile(urlText: string, rendererRoot: string): 
   }
 
   if (resolution.isIndex) {
-    const html = await fs.readFile(resolution.filePath, 'utf8');
+    let html: string;
+    try {
+      html = await fs.readFile(resolution.filePath, 'utf8');
+    } catch (error) {
+      return textResponse('Unable to load renderer.', isNodeErrorWithCode(error, 'ENOENT') ? 404 : 500);
+    }
     if (!html.includes(`content="${LINEUP_CSP}"`)) {
       return textResponse('Content Security Policy missing.', 500);
     }
@@ -52,6 +57,12 @@ export async function serveRendererFile(urlText: string, rendererRoot: string): 
       'content-type': resolution.contentType,
     },
   });
+}
+
+function isNodeErrorWithCode(error: unknown, code: string): boolean {
+  return error instanceof Error
+    && 'code' in error
+    && (error as NodeJS.ErrnoException).code === code;
 }
 
 function textResponse(text: string, status: number): Response {

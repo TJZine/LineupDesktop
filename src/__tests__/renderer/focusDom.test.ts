@@ -48,7 +48,10 @@ class FocusElementDouble {
       }
       return { dataset: { screen: this.dataset.routeButton ?? 'channelSetup' } };
     }
-    assert.ok(selector === '[hidden], [aria-hidden="true"]' || selector === '[hidden],[inert],[aria-hidden="true"]');
+    assert.ok(new Set([
+      '[hidden], [inert], [aria-hidden="true"]',
+      '[hidden],[inert],[aria-hidden="true"]',
+    ]).has(selector));
     return this.hiddenFromRoute ? {} : null;
   }
 
@@ -210,6 +213,39 @@ test('shell focus owners register only while visible and follow the refrozen gra
   assert.equal(registry.move(initial, 'down').state.activeId, 'shell-error-exit');
   assert.equal(registry.move(initial, 'left').state.activeId, 'shell-error-retry');
   assert.equal(registry.focusTarget(initial, 'player-fullscreen').state.activeId, 'shell-error-retry');
+});
+
+test('route-less shell focus owners remain available from non-player routes', () => {
+  const registry = new FocusRegistry();
+  const dismiss = new FocusElementDouble('shell-inline-dismiss');
+  const retry = new FocusElementDouble('shell-inline-retry');
+  const dom = createFocusDomBindings([dismiss, retry]);
+
+  syncRendererFocusTargets(registry, dom);
+
+  for (const route of ['guide', 'settings', 'channelSetup'] as const) {
+    const initial = registry.createInitialState(route);
+    assert.equal(registry.focusTarget(initial, 'shell-inline-dismiss').state.activeId, 'shell-inline-dismiss');
+    assert.equal(registry.focusTarget(initial, 'shell-inline-retry').state.activeId, 'shell-inline-retry');
+  }
+});
+
+test('focus sync excludes controls inside inert ancestors', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const inertControl = new FocusElementDouble('shell-inline-retry', true);
+  const documentWithFocusableQuery = {
+    querySelectorAll: () => [inertControl],
+    activeElement: null,
+  };
+  Object.defineProperty(globalThis, 'document', { value: documentWithFocusableQuery, configurable: true });
+  try {
+    const dom = createFocusDomBindings([]);
+    syncRendererFocusTargets(new FocusRegistry(), dom);
+    assert.deepEqual(dom.focusableElements, []);
+  } finally {
+    if (originalDocument === undefined) Reflect.deleteProperty(globalThis, 'document');
+    else Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
+  }
 });
 
 test('channel setup focus moves from selected library to commit before optional preview', () => {

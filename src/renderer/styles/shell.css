@@ -171,17 +171,22 @@
 
 .shell-inline-error {
   position: absolute;
-  right: 4vw;
-  bottom: 5vh;
+  inset: 0;
   z-index: var(--z-overlay);
+  display: grid;
+  place-items: center;
+  padding: 4vw;
+  background: rgb(0 0 0 / 0.62);
+}
+.shell-inline-error__panel {
   width: min(560px, 92vw);
   padding: 20px;
   border: 1px solid #843038;
   border-radius: 12px;
   background: rgb(51 28 34 / 0.96);
 }
-.shell-inline-error h3 { margin: 0; color: #ff626b; }
-.shell-inline-error p { margin: 10px 0 18px; color: rgb(255 255 255 / 0.72); }
+.shell-inline-error__panel h3 { margin: 0; color: #ff626b; }
+.shell-inline-error__panel p { margin: 10px 0 18px; color: rgb(255 255 255 / 0.72); }
 
 .shell-toast {
   position: absolute;
