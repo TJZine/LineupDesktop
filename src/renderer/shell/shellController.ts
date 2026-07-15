@@ -30,7 +30,6 @@ export interface ShellControllerOptions {
   setState(state: RendererShellState): void;
   render(): void;
   applyCapabilities(capabilities: ShellCapabilities): void;
-  applyFullscreen(enabled: boolean): void;
   restoreFocus(focusId: string): void;
   nowMs?: () => number;
 }
@@ -117,7 +116,6 @@ export function createShellController(options: ShellControllerOptions): ShellCon
       const result = await options.windowBridge.setFullscreen(desired);
       if (cleanedUp) return;
       if (isValidFullscreenResult(result, desired)) {
-        options.applyFullscreen(result.value.enabled);
         if (generation !== fullscreenGeneration) return;
         update(resolveFullscreenRequest(options.getState()));
         options.restoreFocus(acceptedFocusId);

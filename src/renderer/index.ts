@@ -33,10 +33,18 @@ import { handleStagedSetupBack } from './setup/stagedSetupController.js';
 import { renderStagedSetupDom } from './setup/stagedSetupDom.js';
 import { cleanupSetupRouteLifecycle, clearSetupSourceLifecycle, createSetupComposition } from './setup/setupComposition.js';
 import { createSettingsRuntime } from './settings/settingsRuntime.js';
+import { createFullscreenTransportCoordinator } from './fullscreenTransport.js';
 mountStaticRendererDom();
 const dom = queryRendererDom();
 const shellDom = queryShellDom();
 let fullscreenEnabled = false, shellState: RendererShellState = createRendererShellState();
+const fullscreenTransport = createFullscreenTransportCoordinator({
+  bridge: window.lineupDesktop.window,
+  reconcile: (enabled) => {
+    fullscreenEnabled = enabled;
+    dom.fullscreenButton?.setAttribute('aria-pressed', String(enabled));
+  },
+});
 const presentationFixtures = createRendererPresentationFixtures();
 let workflowState = createWorkflowState('player', presentationFixtures.guide);
 let overlayState = createPlayerOverlayState(presentationFixtures.overlays);
@@ -44,16 +52,13 @@ let playerSnapshot = presentationFixtures.playerSnapshot;
 let activeSettingsCategory: SettingsSectionId = 'appearance', activeSetupStage = 'account';
 const focusRegistry = new FocusRegistry(); let focusState: FocusState;
 const settingsRuntime = createSettingsRuntime({
-  settings: window.lineupDesktop.settings, windowBridge: window.lineupDesktop.window,
+  settings: window.lineupDesktop.settings, windowBridge: fullscreenTransport,
   onStateChanged: (state) => {
     workflowState = applyWorkflowSettingsValues(workflowState, state.values);
     document.documentElement.dataset.settingsSaving = String(state.saving); document.documentElement.dataset.settingsErrorCode = state.errorCode ?? '';
     const errorElement = document.querySelector<HTMLElement>('[data-settings-error]');
     if (errorElement) { errorElement.textContent = state.errorMessage ?? ''; errorElement.hidden = state.errorMessage === null; }
     if (!state.loading) renderApp();
-  },
-  applyFullscreen: (enabled) => {
-    fullscreenEnabled = enabled; dom.fullscreenButton?.setAttribute('aria-pressed', String(enabled));
   },
 });
 const overlayActionContext: PlayerOverlayActionContext = {
@@ -63,10 +68,7 @@ const overlayActionContext: PlayerOverlayActionContext = {
   getFocusState: () => focusState,
   setFocusState: (state) => { focusState = state; },
   getFocusRegistry: () => focusRegistry,
-  getDom: () => dom,
   getPresentationFixtures: () => presentationFixtures,
-  getFullscreenEnabled: () => fullscreenEnabled,
-  setFullscreenEnabled: (val) => { fullscreenEnabled = val; },
   renderApp,
 };
 const plexController = createPlexRuntimeController({
@@ -120,7 +122,7 @@ syncRendererFocusTargets(focusRegistry, dom);
 focusState = focusRegistry.createInitialState(workflowState.routeState.activeRoute);
 const shellController = createShellController({
   shell: window.lineupDesktop.shell,
-  windowBridge: window.lineupDesktop.window,
+  windowBridge: fullscreenTransport,
   host: window,
   getState: () => shellState,
   setState: (state) => { shellState = state; },
@@ -129,10 +131,6 @@ const shellController = createShellController({
     document.documentElement.dataset.shellMode = capabilities.shellMode;
     focusState = { activeRoute: workflowState.routeState.activeRoute, activeId: null };
     if (dom.capabilitiesElement) dom.capabilitiesElement.textContent = `${capabilities.appName} ${capabilities.appVersion} ${capabilities.shellMode}`;
-  },
-  applyFullscreen: (enabled) => {
-    fullscreenEnabled = enabled;
-    dom.fullscreenButton?.setAttribute('aria-pressed', String(enabled));
   },
   restoreFocus: restoreFocusTarget,
 });

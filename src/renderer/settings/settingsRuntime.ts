@@ -42,7 +42,6 @@ export interface SettingsRuntimeOptions {
   settings: LineupDesktopPreloadApi['settings'];
   windowBridge: LineupDesktopPreloadApi['window'];
   onStateChanged(state: SettingsRuntimeState): void;
-  applyFullscreen(enabled: boolean): void;
 }
 
 export interface SettingsRuntimeController {
@@ -132,9 +131,6 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
       }
       const resultingLaunchMode = result.value.enabled ? 'fullscreen' : 'windowed';
       nativeLaunchMode = resultingLaunchMode;
-      if (pendingDesired === null || pendingDesired.launchMode === resultingLaunchMode) {
-        options.applyFullscreen(result.value.enabled);
-      }
       if (result.value.enabled !== enabled) {
         setError('operation-failed');
         return 'failed';

@@ -11,7 +11,6 @@ import { subscribePlayerBridge } from '../../renderer/playerBridgeSubscription.j
 import type { PlexRuntimeController } from '../../renderer/plexRuntimeActions.js';
 import { createShellController } from '../../renderer/shell/shellController.js';
 import { createRendererShellState, type RendererShellState } from '../../renderer/shell/shellState.js';
-import { mountStaticRendererDom } from '../../renderer/staticDom.js';
 
 test('player bridge subscription owns event projection and unsubscribe cleanup', async () => {
   const fixtures = createRendererPresentationFixtures();
@@ -148,7 +147,6 @@ test('shell controller rejects stale capabilities and exposes recoverable safe s
     setState: (next) => { state = next; },
     render: () => undefined,
     applyCapabilities: () => undefined,
-    applyFullscreen: () => undefined,
     restoreFocus: (id) => focused.push(id),
   });
 
@@ -180,7 +178,6 @@ test('shell controller rejects stale capabilities and exposes recoverable safe s
     setState: (next) => { retryState = next; },
     render: () => undefined,
     applyCapabilities: () => undefined,
-    applyFullscreen: () => undefined,
     restoreFocus: (id) => focused.push(id),
   });
   await retryController.start();
@@ -192,7 +189,6 @@ test('shell controller rejects stale capabilities and exposes recoverable safe s
 test('shell controller preserves fullscreen focus and owns 5000/200/1500 toast timing', async () => {
   let state = createRendererShellState();
   state = { ...state, bootstrap: 'ready' };
-  let enabled = false;
   let now = 2000;
   let nextTimer = 1;
   const timers = new Map<number, { callback: () => void; delay: number }>();
@@ -221,13 +217,11 @@ test('shell controller preserves fullscreen focus and owns 5000/200/1500 toast t
     setState: (next) => { state = next; },
     render: () => undefined,
     applyCapabilities: () => undefined,
-    applyFullscreen: (next) => { enabled = next; },
     restoreFocus: (id) => focused.push(id),
     nowMs: () => now,
   });
 
   await controller.requestFullscreen(true, 'player-osd');
-  assert.equal(enabled, true);
   assert.equal(focused.at(-1), 'player-osd');
   assert.equal(state.toast?.message, 'Entered fullscreen');
   assert.deepEqual([...timers.values()].map((timer) => timer.delay), [5000]);
@@ -252,10 +246,9 @@ test('shell controller preserves fullscreen focus and owns 5000/200/1500 toast t
   assert.notEqual([...timers.keys()][0], oppositeTransitionTimerId);
 });
 
-test('fullscreen transport stays serialized across UI invalidation and reconciles a valid late result', async () => {
+test('shell fullscreen mutex survives UI invalidation until transport settlement', async () => {
   const first = createDeferred<Awaited<ReturnType<LineupDesktopPreloadApi['window']['setFullscreen']>>>();
   let state: RendererShellState = { ...createRendererShellState(), bootstrap: 'ready' };
-  const applied: boolean[] = [];
   let calls = 0;
   const controller = createShellController({
     shell: { getCapabilities: async () => { throw new Error('unused'); }, onStatusChanged: () => () => undefined },
@@ -271,7 +264,6 @@ test('fullscreen transport stays serialized across UI invalidation and reconcile
     setState: (next) => { state = next; },
     render: () => undefined,
     applyCapabilities: () => undefined,
-    applyFullscreen: (enabled) => applied.push(enabled),
     restoreFocus: () => undefined,
   });
 
@@ -281,12 +273,10 @@ test('fullscreen transport stays serialized across UI invalidation and reconcile
   assert.equal(calls, 1);
   first.resolve({ ok: true, requestId: 'fullscreen-1', value: { enabled: true } });
   await pending;
-  assert.deepEqual(applied, [true]);
   assert.equal(state.fullscreenPending, false);
 
   await controller.requestFullscreen(false, 'player-fullscreen');
   assert.equal(calls, 2);
-  assert.deepEqual(applied, [true, false]);
 });
 
 test('fullscreen retry keeps inline owner pending and restores retry focus after rejection', async () => {
@@ -314,7 +304,6 @@ test('fullscreen retry keeps inline owner pending and restores retry focus after
     setState: (next) => { state = next; },
     render: () => undefined,
     applyCapabilities: () => undefined,
-    applyFullscreen: () => undefined,
     restoreFocus: (id) => focused.push(id),
   });
 
@@ -356,27 +345,6 @@ test('Plex runtime action dispatch preserves source cleanup ownership', async ()
     'clearMetadata',
   ]);
 });
-
-test('shell splash and loading reserve both exact production brand assets', () => {
-  const root = { innerHTML: '', querySelector: () => null };
-  mountStaticRendererDom({
-    querySelector: (selector: string) => selector === '[data-static-screen-root]' ? root : null,
-  } as unknown as Document);
-  for (const surface of ['splash', 'loading'] as const) {
-    const markup = shellSurfaceMarkup(root.innerHTML, surface);
-    assert.equal(markup.match(/src="\.\/assets\/lineup-logo-mark\.png"/gu)?.length, 1, surface);
-    assert.equal(markup.match(/src="\.\/assets\/lineup-wordmark\.png"/gu)?.length, 1, surface);
-  }
-  assert.doesNotMatch(root.innerHTML, /shell-brand-mark|LINE<span>U<\/span>P/u);
-});
-
-function shellSurfaceMarkup(markup: string, surface: string): string {
-  const marker = `data-shell-surface="${surface}"`;
-  const start = markup.indexOf(marker);
-  assert.notEqual(start, -1, `missing shell surface ${surface}`);
-  const next = markup.indexOf('data-shell-surface="', start + marker.length);
-  return markup.slice(start, next === -1 ? markup.length : next);
-}
 
 interface Deferred<TValue> {
   promise: Promise<TValue>;

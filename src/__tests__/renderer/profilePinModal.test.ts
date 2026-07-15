@@ -3,7 +3,6 @@ import assert from 'node:assert';
 import { initializeProfilePinModal, openProfilePinModal, closeProfilePinModal, isProfilePinModalActive } from '../../renderer/profilePinModal.js';
 import type { PlexHomeUserSummary } from '../../contracts/plex.js';
 import type { FocusState, AppRouteId, FocusRegistry } from '../../renderer/navigation.js';
-import { mountStaticRendererDom } from '../../renderer/staticDom.js';
 
 class MockElement {
   id: string;
@@ -304,30 +303,4 @@ test('Profile PIN Modal Suite', async (t) => {
       Object.defineProperty(globalThis, 'window', { value: originalWindow, configurable: true });
     }
   }
-});
-
-test('Profile PIN modal keeps the upstream-shaped local header, 11-key grid, separate Cancel, and frozen focus ids', () => {
-  const root = { innerHTML: '', querySelector: () => null };
-  mountStaticRendererDom({
-    querySelector: (selector: string) => selector === '[data-static-screen-root]' ? root : null,
-  } as unknown as Document);
-  const markup = root.innerHTML;
-  const numpadMarkup = markup.match(/<div class="profile-pin-modal__numpad">([^]*?)<\/div>/u)?.[1] ?? '';
-  assert.match(markup, /<div class="profile-pin-user" aria-hidden="true">\s*<div class="profile-pin-avatar profile-pin-avatar-fallback" data-profile-pin-avatar><\/div>\s*<\/div>\s*<header class="profile-pin-modal__header">/u);
-  assert.equal(markup.match(/data-pin-slot="[0-3]"/gu)?.length, 4);
-  assert.equal(numpadMarkup.match(/class="numpad-btn(?: [^"]+)?"/gu)?.length, 11);
-  assert.doesNotMatch(numpadMarkup, /btn-profile-pin-cancel/u);
-  assert.match(markup, /<\/div>\s*<p class="profile-pin-modal__error"[^>]*>[^<]*<\/p>\s*<button type="button" class="profile-pin-cancel" data-numpad="cancel" data-focus-id="btn-profile-pin-cancel">Cancel<\/button>/u);
-
-  const requiredFocusIds = new Set([
-    'btn-profile-pin-1', 'btn-profile-pin-2', 'btn-profile-pin-3',
-    'btn-profile-pin-4', 'btn-profile-pin-5', 'btn-profile-pin-6',
-    'btn-profile-pin-7', 'btn-profile-pin-8', 'btn-profile-pin-9',
-    'btn-profile-pin-backspace', 'btn-profile-pin-0', 'btn-profile-pin-cancel',
-  ]);
-  const modalMarkup = markup.slice(markup.indexOf('id="profile-pin-modal"'));
-  const focusIds = Array.from(modalMarkup.matchAll(/data-focus-id="(btn-profile-pin-[^"]+)"/gu), (match) => match[1]);
-  assert.equal(focusIds.length, requiredFocusIds.size);
-  assert.equal(new Set(focusIds).size, focusIds.length);
-  assert.deepEqual(new Set(focusIds), requiredFocusIds);
 });

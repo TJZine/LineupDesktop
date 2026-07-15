@@ -20,7 +20,6 @@ test('settings runtime loads before presentation, applies launch intent, and per
     },
     windowBridge: windowBridge(fullscreen),
     onStateChanged: (state) => states.push(state),
-    applyFullscreen: () => undefined,
   });
   await runtime.initialize();
   assert.deepEqual(fullscreen, [true]);
@@ -38,7 +37,6 @@ test('settings runtime serializes a user launch change behind pending startup fu
   const windowedCorrection = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['window']['setFullscreen']>>>();
   const correctionCalled = deferred<void>();
   const fullscreenCalls: boolean[] = [];
-  const applied: boolean[] = [];
   const replacements: Array<{
     requestId: string;
     expectedRevision: number;
@@ -70,7 +68,6 @@ test('settings runtime serializes a user launch change behind pending startup fu
       },
     },
     onStateChanged: () => undefined,
-    applyFullscreen: (enabled) => applied.push(enabled),
   });
 
   const initializing = runtime.initialize();
@@ -85,13 +82,11 @@ test('settings runtime serializes a user launch change behind pending startup fu
   startupFullscreen.resolve({ ok: true, requestId: 'window-startup', value: { enabled: true } });
   await correctionCalled.promise;
   assert.deepEqual(fullscreenCalls, [true, false]);
-  assert.deepEqual(applied, []);
 
   windowedCorrection.resolve({ ok: true, requestId: 'window-user', value: { enabled: false } });
   await Promise.all([initializing, userAction]);
 
   assert.equal(maximumActiveIntents, 1);
-  assert.deepEqual(applied, [false]);
   assert.deepEqual(replacements, [{
     requestId: 'settings-replace-1',
     expectedRevision: 3,
@@ -119,7 +114,7 @@ test('settings runtime coalesces latest desired values and rebases once after re
         return desktopSettingsSuccess(input.requestId, { schemaVersion: 1, revision: 9, status: 'ready', values: input.values });
       },
     },
-    windowBridge: windowBridge([]), onStateChanged: () => undefined, applyFullscreen: () => undefined,
+    windowBridge: windowBridge([]), onStateChanged: () => undefined,
   });
   await runtime.initialize();
   const compact = runtime.applyAction('cycleGuideDensity');
@@ -147,7 +142,6 @@ test('settings runtime keeps newer whole-snapshot intent behind pending fullscre
       ? fullscreen.promise
       : { ok: true, requestId: 'window-off', value: { enabled: false } } },
     onStateChanged: () => undefined,
-    applyFullscreen: () => undefined,
   });
   await runtime.initialize();
   const launch = runtime.applyAction('cycleLaunchMode');
@@ -169,7 +163,7 @@ test('settings runtime rolls optimistic values and fullscreen intent back on sav
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(2)),
       replace: async (input) => desktopSettingsFailure(input.requestId, 'operation-failed'),
     },
-    windowBridge: windowBridge(fullscreen), onStateChanged: () => undefined, applyFullscreen: () => undefined,
+    windowBridge: windowBridge(fullscreen), onStateChanged: () => undefined,
   });
   await runtime.initialize();
   await runtime.applyAction('cycleLaunchMode');
@@ -183,7 +177,7 @@ test('settings runtime cleanup invalidates late responses without rendering', as
   const states: SettingsRuntimeState[] = [];
   const runtime = createSettingsRuntime({
     settings: { getSnapshot: async () => pending.promise, replace: async (input) => desktopSettingsFailure(input.requestId, 'operation-failed') },
-    windowBridge: windowBridge([]), onStateChanged: (state) => states.push(state), applyFullscreen: () => undefined,
+    windowBridge: windowBridge([]), onStateChanged: (state) => states.push(state),
   });
   const initializing = runtime.initialize();
   runtime.cleanup();
@@ -193,9 +187,8 @@ test('settings runtime cleanup invalidates late responses without rendering', as
   assert.equal(runtime.getState().snapshot, null);
 });
 
-test('settings runtime cleanup invalidates a late fullscreen intent before native apply or persistence', async () => {
+test('settings runtime cleanup invalidates a late fullscreen consumer continuation before persistence', async () => {
   const pendingFullscreen = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['window']['setFullscreen']>>>();
-  const applied: boolean[] = [];
   const states: SettingsRuntimeState[] = [];
   let fullscreenCalls = 0;
   let replacements = 0;
@@ -213,7 +206,6 @@ test('settings runtime cleanup invalidates a late fullscreen intent before nativ
         : pendingFullscreen.promise,
     },
     onStateChanged: (state) => states.push(state),
-    applyFullscreen: (enabled) => applied.push(enabled),
   });
   await runtime.initialize();
   const action = runtime.applyAction('cycleLaunchMode');
@@ -221,7 +213,6 @@ test('settings runtime cleanup invalidates a late fullscreen intent before nativ
   runtime.cleanup();
   pendingFullscreen.resolve({ ok: true, requestId: 'window-late', value: { enabled: true } });
   await action;
-  assert.deepEqual(applied, [false]);
   assert.equal(replacements, 0);
   assert.equal(states.length, stateCountAtCleanup);
 });
@@ -256,7 +247,6 @@ test('settings runtime serializes rapid launch intents and persists only the lat
       },
     },
     onStateChanged: () => undefined,
-    applyFullscreen: () => undefined,
   });
   await runtime.initialize();
   initialized = true;
@@ -290,7 +280,6 @@ test('settings runtime treats a successful but mismatched fullscreen result as a
         : { ok: true, requestId: 'window-initial', value: { enabled } },
     },
     onStateChanged: () => undefined,
-    applyFullscreen: () => undefined,
   });
   await runtime.initialize();
   initialized = true;
@@ -315,7 +304,6 @@ test('settings runtime preserves newer nonlaunch intent after an older replace f
     },
     windowBridge: windowBridge([]),
     onStateChanged: () => undefined,
-    applyFullscreen: () => undefined,
   });
   await runtime.initialize();
   const density = runtime.applyAction('cycleGuideDensity');
@@ -341,7 +329,6 @@ test('settings runtime stops after one failed conflict rebase and restores accep
     },
     windowBridge: windowBridge([]),
     onStateChanged: () => undefined,
-    applyFullscreen: () => undefined,
   });
   await runtime.initialize();
   await runtime.applyAction('cycleGuideDensity');
