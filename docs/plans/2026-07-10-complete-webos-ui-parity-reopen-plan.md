@@ -3,10 +3,11 @@
 **Plan Status:** active
 **Task family:** feature/design
 **Tier:** Tier 3
-**Current execution unit:** A source-proven pre–Package 5 remediation gate is
-active. Packages 0–4 remain closed except for the review-adjudicated defects
-listed in that gate. Package 5 remains next and unstarted; RD-27 remains blocked
-until the remediation gate and Packages 5–8 close.
+**Current execution unit:** The source-proven pre–Package 5 remediation is
+implemented and fully verified; its fresh read-only adversarial review remains
+the active gate. Packages 0–4 otherwise remain closed. Package 5 remains next
+and unstarted; RD-27 remains blocked until this review gate and Packages 5–8
+close.
 
 ## Goal
 
@@ -134,6 +135,24 @@ this gate removes failure modes inside those state machines rather than adding
 new responsibilities or extracting forwarding layers. Run focused owner tests,
 `npm run verify:docs`, and the full source closeout gates, then obtain a fresh
 read-only adversarial review before returning the current unit to Package 5.
+
+Implementation checkpoints:
+
+- `fd35af8` aligns workflow authority, role mapping, architectural truth, and
+  review dispositions.
+- `1c83d6d` hardens shell lifecycle, protocol failure mapping, fullscreen
+  serialization, global focus, toast timing, and modal error behavior.
+- `c4b7b89` hardens Plex busy, dismissal, and profile-PIN generation ownership.
+- `21ca2d8` stabilizes setup/custom-channel async state, focus, action
+  vocabulary, semantic tests, and renderer asset-copy proof.
+- `544d9a5` removes the obsolete parallel setup-stage projection so the staged
+  workflow is the sole presentation and lifecycle owner.
+- `76bd98d` closes the repository-wide lint findings exposed by the final gate.
+
+Focused owner tests, typecheck, build, Electron smoke, documentation checks,
+and the repository-wide `npm run verify` gate pass at this checkpoint. The
+remaining action is the required fresh `reviewer` pass and adjudication of every
+finding before Package 5 becomes current.
 
 ### Package 5 — Scheduler-backed Guide parity
 
@@ -289,12 +308,13 @@ package uses a fresh `reviewer` when its review gate is met.
 
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
-TASK: Execute Package 5 — Scheduler-backed Guide parity
+TASK: Complete the pre–Package 5 fresh adversarial review gate
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md
-BLOCKERS: none for Package 5; RD-27 remains blocked pending Packages 5–8.
-MESSAGE: Load the active plan, run the bounded freshness audit, then execute only
-Package 5 through the Tier 3 quality loop. Preserve the Packages 0–4 baseline.
-Give the worker exact files, invariants, proof, and stop
-conditions; pause after clean verification and independent review.
+BLOCKERS: Package 5 is blocked only on the fresh remediation reviewer and any
+accepted follow-up; RD-27 remains blocked pending Packages 5–8.
+MESSAGE: Load the active plan and review the integrated remediation range from
+`2004f72` through the current checkpoint. Adjudicate every finding, apply and
+verify accepted fixes, then return the current unit to Package 5 only after a
+clean read-only re-review when material changes require one.

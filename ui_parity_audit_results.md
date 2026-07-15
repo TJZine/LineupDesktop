@@ -6,7 +6,7 @@ Desktop-baseline captures live only in the ignored Package 0 bundle. RD-27 is
 blocked until the plan's screen, runtime, focus, persistence, setup, Guide,
 Player, overlay, and integrated proof packages close with clean review.
 
-Updated: 2026-06-12
+Updated: 2026-07-10
 
 Target reference: the pinned upstream checkout
 
