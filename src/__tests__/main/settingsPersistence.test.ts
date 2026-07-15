@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -11,8 +11,8 @@ import {
   type DesktopSettingsFileSystem,
 } from '../../main/persistence/desktopSettingsStore.js';
 
-test('settings persistence returns defaults for missing/corrupt and does not rewrite reads', async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-settings-'));
+test('settings persistence returns defaults for missing/corrupt and does not rewrite reads', async (context) => {
+  const directory = await createSettingsWorkspace(context);
   const file = path.join(directory, 'settings.json');
   const store = new DesktopSettingsStore({ settingsFilePath: file });
   assert.deepEqual(await store.loadSnapshot(), {
@@ -23,8 +23,8 @@ test('settings persistence returns defaults for missing/corrupt and does not rew
   assert.equal(await fs.readFile(file, 'utf8'), '{bad');
 });
 
-test('settings persistence classifies representative malformed records as corrupt without rewriting bytes', async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-settings-'));
+test('settings persistence classifies representative malformed records as corrupt without rewriting bytes', async (context) => {
+  const directory = await createSettingsWorkspace(context);
   const file = path.join(directory, 'settings.json');
   const malformed = [
     '[]',
@@ -58,8 +58,8 @@ test('settings persistence maps non-missing read failures to storage unavailable
   await assert.rejects(() => store.loadSnapshot(), hasCode('storage-unavailable'));
 });
 
-test('settings persistence repairs corrupt revision zero with exact atomic record and 0600 mode', async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-settings-'));
+test('settings persistence repairs corrupt revision zero with exact atomic record and 0600 mode', async (context) => {
+  const directory = await createSettingsWorkspace(context);
   const file = path.join(directory, 'settings.json');
   await fs.writeFile(file, '{bad');
   const store = new DesktopSettingsStore({ settingsFilePath: file, processId: 7 });
@@ -72,8 +72,8 @@ test('settings persistence repairs corrupt revision zero with exact atomic recor
   assert.equal((await fs.stat(file)).mode & 0o777, 0o600);
 });
 
-test('settings persistence rejects unsupported versions and stale revisions without rewriting', async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-settings-'));
+test('settings persistence rejects unsupported versions and stale revisions without rewriting', async (context) => {
+  const directory = await createSettingsWorkspace(context);
   const file = path.join(directory, 'settings.json');
   const unsupported = '{"schemaVersion":2,"revision":8,"values":{}}\n';
   await fs.writeFile(file, unsupported);
@@ -86,8 +86,8 @@ test('settings persistence rejects unsupported versions and stale revisions with
   await assert.rejects(() => store.replace(2, { ...DEFAULT_DESKTOP_SETTINGS_VALUES }), hasCode('revision-conflict'));
 });
 
-test('settings persistence serializes replacements and preserves authoritative bytes on rename failure', async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-settings-'));
+test('settings persistence serializes replacements and preserves authoritative bytes on rename failure', async (context) => {
+  const directory = await createSettingsWorkspace(context);
   const file = path.join(directory, 'settings.json');
   const baseStore = new DesktopSettingsStore({ settingsFilePath: file });
   await baseStore.replace(0, { ...DEFAULT_DESKTOP_SETTINGS_VALUES });
@@ -109,8 +109,8 @@ test('settings persistence serializes replacements and preserves authoritative b
   assert.equal((await second).revision, 3);
 });
 
-test('settings persistence cleans a partially created temp file when write rejects', async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-settings-'));
+test('settings persistence cleans a partially created temp file when write rejects', async (context) => {
+  const directory = await createSettingsWorkspace(context);
   const file = path.join(directory, 'settings.json');
   const baseStore = new DesktopSettingsStore({ settingsFilePath: file });
   await baseStore.replace(0, { ...DEFAULT_DESKTOP_SETTINGS_VALUES });
@@ -139,8 +139,8 @@ test('settings persistence cleans a partially created temp file when write rejec
   assert.deepEqual(await fs.readdir(directory), ['settings.json']);
 });
 
-test('settings persistence keeps cleanup failure secondary to a partial-write failure', async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-settings-'));
+test('settings persistence keeps cleanup failure secondary to a partial-write failure', async (context) => {
+  const directory = await createSettingsWorkspace(context);
   const file = path.join(directory, 'settings.json');
   const baseStore = new DesktopSettingsStore({ settingsFilePath: file });
   await baseStore.replace(0, { ...DEFAULT_DESKTOP_SETTINGS_VALUES });
@@ -162,9 +162,9 @@ test('settings persistence keeps cleanup failure secondary to a partial-write fa
   assert.equal(await fs.readFile(file, 'utf8'), oldBytes);
 });
 
-test('settings persistence preserves authoritative bytes across mkdir, write, and chmod failures', async () => {
+test('settings persistence preserves authoritative bytes across mkdir, write, and chmod failures', async (context) => {
   for (const stage of ['mkdir', 'writeFile', 'chmod'] as const) {
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), `lineup-settings-${stage}-`));
+    const directory = await createSettingsWorkspace(context, `lineup-settings-${stage}-`);
     const file = path.join(directory, 'settings.json');
     const baseStore = new DesktopSettingsStore({ settingsFilePath: file });
     await baseStore.replace(0, { ...DEFAULT_DESKTOP_SETTINGS_VALUES });
@@ -182,6 +182,17 @@ test('settings persistence preserves authoritative bytes across mkdir, write, an
     assert.equal(await fs.readFile(file, 'utf8'), oldBytes);
   }
 });
+
+async function createSettingsWorkspace(
+  context: TestContext,
+  prefix = 'lineup-settings-',
+): Promise<string> {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+  context.after(async () => {
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+  return directory;
+}
 
 function hasCode(code: DesktopSettingsStoreError['code']) {
   return (error: unknown): boolean => error instanceof DesktopSettingsStoreError && error.code === code &&

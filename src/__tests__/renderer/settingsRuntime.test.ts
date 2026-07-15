@@ -102,14 +102,16 @@ test('settings runtime serializes a user launch change behind pending startup fu
 });
 
 test('settings runtime coalesces latest desired values and rebases once after revision conflict', async () => {
-  const first = deferred<ReturnType<typeof desktopSettingsSuccess<ReturnType<typeof snapshot>>>>();
-  const inputs: Array<{ requestId: string; expectedRevision: number; values: typeof DEFAULT_DESKTOP_SETTINGS_VALUES }> = [];
+  type SettingsReplaceInput = Parameters<LineupDesktopPreloadApi['settings']['replace']>[0];
+  type SettingsReplaceResult = Awaited<ReturnType<LineupDesktopPreloadApi['settings']['replace']>>;
+  const first = deferred<SettingsReplaceResult>();
+  const inputs: SettingsReplaceInput[] = [];
   let gets = 0;
   const runtime = createSettingsRuntime({
     settings: {
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, gets++ === 0 ? snapshot(1) : snapshot(8)),
       replace: async (input) => {
-        inputs.push(input as never);
+        inputs.push(input);
         if (inputs.length === 1) return first.promise;
         return desktopSettingsSuccess(input.requestId, { schemaVersion: 1, revision: 9, status: 'ready', values: input.values });
       },
@@ -119,12 +121,63 @@ test('settings runtime coalesces latest desired values and rebases once after re
   await runtime.initialize();
   const compact = runtime.applyAction('cycleGuideDensity');
   const hidden = runtime.applyAction('togglePreviewBadges');
-  first.resolve(desktopSettingsFailure('settings-replace-1', 'revision-conflict') as never);
+  first.resolve(desktopSettingsFailure('settings-replace-1', 'revision-conflict'));
   await Promise.all([compact, hidden]);
   assert.equal(inputs.length, 2);
   assert.equal(inputs[1]?.expectedRevision, 8);
   assert.equal(inputs[1]?.values.guideDensity, 'compact');
   assert.equal(inputs[1]?.values.previewBadgesEnabled, false);
+});
+
+test('settings runtime synchronizes a rebased launch mode before retrying persistence', async () => {
+  type SettingsReplaceInput = Parameters<LineupDesktopPreloadApi['settings']['replace']>[0];
+  type SettingsReplaceResult = Awaited<ReturnType<LineupDesktopPreloadApi['settings']['replace']>>;
+  type FullscreenResult = Awaited<ReturnType<LineupDesktopPreloadApi['window']['setFullscreen']>>;
+  const firstReplace = deferred<SettingsReplaceResult>();
+  const fullscreenRetry = deferred<FullscreenResult>();
+  const fullscreenRetryCalled = deferred<void>();
+  const inputs: SettingsReplaceInput[] = [];
+  const fullscreenCalls: boolean[] = [];
+  let gets = 0;
+  const runtime = createSettingsRuntime({
+    settings: {
+      getSnapshot: async ({ requestId }) => desktopSettingsSuccess(
+        requestId,
+        gets++ === 0 ? snapshot(1) : snapshot(8),
+      ),
+      replace: async (input) => {
+        inputs.push(input);
+        if (inputs.length === 1) return firstReplace.promise;
+        return desktopSettingsSuccess(input.requestId, snapshot(9, input.values));
+      },
+    },
+    windowBridge: {
+      setFullscreen: async (enabled) => {
+        fullscreenCalls.push(enabled);
+        if (!enabled) return { ok: true, requestId: 'window-initial', value: { enabled } };
+        fullscreenRetryCalled.resolve();
+        return fullscreenRetry.promise;
+      },
+    },
+    onStateChanged: () => undefined,
+  });
+
+  await runtime.initialize();
+  const density = runtime.applyAction('cycleGuideDensity');
+  const launch = runtime.applyAction('cycleLaunchMode');
+  firstReplace.resolve(desktopSettingsFailure('settings-replace-1', 'revision-conflict'));
+  await fullscreenRetryCalled.promise;
+
+  assert.deepEqual(fullscreenCalls, [false, true]);
+  assert.equal(inputs.length, 1);
+
+  fullscreenRetry.resolve({ ok: true, requestId: 'window-rebase', value: { enabled: true } });
+  await Promise.all([density, launch]);
+
+  assert.equal(inputs.length, 2);
+  assert.equal(inputs[1]?.expectedRevision, 8);
+  assert.equal(inputs[1]?.values.launchMode, 'fullscreen');
+  assert.equal(inputs[1]?.values.guideDensity, 'compact');
 });
 
 test('settings runtime keeps newer whole-snapshot intent behind pending fullscreen', async () => {

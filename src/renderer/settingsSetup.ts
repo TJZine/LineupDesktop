@@ -14,9 +14,6 @@ import type { DesktopSettingsValues } from '../contracts/settings.js';
 export type SettingsSectionId = 'appearance' | 'guide' | 'recovery';
 
 export interface SettingsDraftState extends DesktopSettingsValues {
-  guideDensity: 'comfortable' | 'compact';
-  previewBadgesEnabled: boolean;
-  setupReminderEnabled: boolean;
   supportBundleExport: SupportBundleExportStatusViewModel;
 }
 

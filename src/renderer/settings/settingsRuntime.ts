@@ -160,9 +160,52 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
     }
   };
 
+  const synchronizeDesiredLaunchMode = async (
+    desired: DesktopSettingsValues,
+    operationGeneration: number,
+  ): Promise<'success' | 'failed' | 'stale'> => {
+    if (nativeLaunchMode === desired.launchMode) return 'success';
+    fullscreenIntentInFlight = true;
+    publish();
+    const result = await applyFullscreenIntent(
+      desired.launchMode === 'fullscreen',
+      operationGeneration,
+    );
+    fullscreenIntentInFlight = false;
+    return result;
+  };
+
   const runMutationDrain = async (): Promise<void> => {
     const operationGeneration = generation;
     let preserveOperationFailure = false;
+
+    const recoverFromLaunchModeFailure = async (
+      desired: DesktopSettingsValues,
+      desiredRequiresPersistence: boolean,
+    ): Promise<boolean> => {
+      const supersedingDesired = readPendingDesired();
+      if (supersedingDesired !== null && supersedingDesired.launchMode !== desired.launchMode) {
+        return true;
+      }
+      preserveOperationFailure = true;
+      const acceptedLaunchMode = lastAccepted?.values.launchMode ?? 'windowed';
+      const latest = supersedingDesired ?? desired;
+      const latestRequiresPersistence = supersedingDesired === null
+        ? desiredRequiresPersistence
+        : pendingDesiredRequiresPersistence;
+      const corrected = { ...latest, launchMode: acceptedLaunchMode };
+      visibleValues = corrected;
+      pendingDesired = lastAccepted !== null && settingsEqual(corrected, lastAccepted.values)
+        ? null
+        : corrected;
+      pendingDesiredRequiresPersistence = pendingDesired !== null && latestRequiresPersistence;
+      if (nativeLaunchMode !== acceptedLaunchMode) {
+        const restored = await synchronizeDesiredLaunchMode(corrected, operationGeneration);
+        if (restored === 'stale') return false;
+      }
+      return pendingDesired !== null;
+    };
+
     while (active && operationGeneration === generation && pendingDesired !== null) {
       let desired = { ...pendingDesired };
       let desiredRequiresPersistence = pendingDesiredRequiresPersistence;
@@ -170,42 +213,10 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
       pendingDesiredRequiresPersistence = false;
 
       if (nativeLaunchMode !== desired.launchMode) {
-        fullscreenIntentInFlight = true;
-        publish();
-        const fullscreenResult = await applyFullscreenIntent(
-          desired.launchMode === 'fullscreen',
-          operationGeneration,
-        );
-        fullscreenIntentInFlight = false;
+        const fullscreenResult = await synchronizeDesiredLaunchMode(desired, operationGeneration);
         if (fullscreenResult === 'stale') return;
         if (fullscreenResult === 'failed') {
-          const supersedingDesired = readPendingDesired();
-          if (supersedingDesired !== null && supersedingDesired.launchMode !== desired.launchMode) {
-            continue;
-          }
-          preserveOperationFailure = true;
-          const acceptedLaunchMode = lastAccepted?.values.launchMode ?? 'windowed';
-          const latest = supersedingDesired ?? desired;
-          const latestRequiresPersistence = supersedingDesired === null
-            ? desiredRequiresPersistence
-            : pendingDesiredRequiresPersistence;
-          const corrected = { ...latest, launchMode: acceptedLaunchMode };
-          visibleValues = corrected;
-          pendingDesired = lastAccepted !== null && settingsEqual(corrected, lastAccepted.values)
-            ? null
-            : corrected;
-          pendingDesiredRequiresPersistence = pendingDesired !== null && latestRequiresPersistence;
-          if (nativeLaunchMode !== acceptedLaunchMode) {
-            fullscreenIntentInFlight = true;
-            publish();
-            const restored = await applyFullscreenIntent(
-              acceptedLaunchMode === 'fullscreen',
-              operationGeneration,
-            );
-            fullscreenIntentInFlight = false;
-            if (restored === 'stale') return;
-          }
-          if (pendingDesired === null) return;
+          if (!(await recoverFromLaunchModeFailure(desired, desiredRequiresPersistence))) return;
           continue;
         }
       }
@@ -231,6 +242,18 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
           desired = { ...(pendingDesired ?? desired) };
           pendingDesired = null;
           pendingDesiredRequiresPersistence = false;
+          if (nativeLaunchMode !== desired.launchMode) {
+            const rebasedFullscreenResult = await synchronizeDesiredLaunchMode(
+              desired,
+              operationGeneration,
+            );
+            if (rebasedFullscreenResult === 'stale') return;
+            if (rebasedFullscreenResult === 'failed') {
+              if (!(await recoverFromLaunchModeFailure(desired, true))) return;
+              continue;
+            }
+          }
+          if (pendingDesired !== null) continue;
           replacementInFlight = true;
           publish();
           result = await invokeReplace(operationGeneration, refreshed.value.revision, desired);

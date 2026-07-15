@@ -33,7 +33,12 @@ test('static channel setup markup preserves onboarding and hosts the isolated Pa
   mountStaticRendererDom(documentDouble as unknown as Document);
 
   const channelSetupMarkup = readStaticChannelSetupMarkup(root.innerHTML);
+  const boundedMarkup = readStaticChannelSetupMarkup(
+    `${root.innerHTML}<section data-after-channel-setup></section>`,
+  );
 
+  assert.match(channelSetupMarkup, /^<section id="screen-channel-setup"/u);
+  assert.doesNotMatch(boundedMarkup, /data-after-channel-setup/u);
   assert.match(channelSetupMarkup, /data-plex-runtime-panel/u);
   for (const stateId of ['auth-link-code', 'auth-waiting', 'auth-error', 'profile-select', 'server-select', 'server-error']) {
     assert.match(channelSetupMarkup, new RegExp(`data-onboarding-owner="${stateId}"`, 'u'));
@@ -1901,8 +1906,17 @@ function childAt(element: HTMLElement | null, index: number): ElementDouble {
 }
 
 function readStaticChannelSetupMarkup(markup: string): string {
-  const start = markup.indexOf('id="screen-channel-setup"');
+  const id = markup.indexOf('id="screen-channel-setup"');
+  assert.notEqual(id, -1);
+  const start = markup.lastIndexOf('<section', id);
   assert.notEqual(start, -1);
-  const end = markup.indexOf('</section>\n</section>`', start);
-  return end === -1 ? markup.slice(start) : markup.slice(start, end);
+  const sectionTags = /<section\b[^>]*>|<\/section\s*>/giu;
+  sectionTags.lastIndex = start;
+  let depth = 0;
+  let match: RegExpExecArray | null;
+  while ((match = sectionTags.exec(markup)) !== null) {
+    depth += match[0].startsWith('</') ? -1 : 1;
+    if (depth === 0) return markup.slice(start, sectionTags.lastIndex);
+  }
+  assert.fail('channel setup section is missing its closing boundary');
 }
