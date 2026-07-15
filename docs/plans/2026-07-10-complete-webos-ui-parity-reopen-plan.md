@@ -3,8 +3,10 @@
 **Plan Status:** active
 **Task family:** feature/design
 **Tier:** Tier 3
-**Current execution unit:** Package 5 is next and unstarted. Packages 0–4 are
-closed and frozen. RD-27 remains blocked until Packages 5–8 close.
+**Current execution unit:** A source-proven pre–Package 5 remediation gate is
+active. Packages 0–4 remain closed except for the review-adjudicated defects
+listed in that gate. Package 5 remains next and unstarted; RD-27 remains blocked
+until the remediation gate and Packages 5–8 close.
 
 ## Goal
 
@@ -111,6 +113,27 @@ routes a defect back to its owning package.
 
 Execute strictly in order. One controller integrates and verifies each package;
 pause after each package for independent review and adjudication.
+
+### Pre–Package 5 — Review-adjudicated baseline remediation
+
+**Role:** controller-local implementation followed by a fresh `reviewer`.
+
+The 2026-07-14 suggestion adjudication proved narrow contradictions in completed
+shell, onboarding, setup, workflow, and verification owners. Correct those
+defects before Package 5 without reopening product scope: harden protocol and
+smoke failure behavior; serialize fullscreen reconciliation; make shell focus
+and modal semantics consistent; prevent stale PIN/setup/custom-channel async
+state; align Plex busy projection; consolidate staged action vocabulary; and
+strengthen public-seam asset/markup proof. Workflow/authority corrections remain
+a separate commit from production changes.
+
+No new dependency, contract, IPC method, persistence schema, Plex transport,
+native/helper behavior, copied upstream source, or Package 5 Guide behavior is
+approved. Existing large owners retain their current cohesive responsibilities;
+this gate removes failure modes inside those state machines rather than adding
+new responsibilities or extracting forwarding layers. Run focused owner tests,
+`npm run verify:docs`, and the full source closeout gates, then obtain a fresh
+read-only adversarial review before returning the current unit to Package 5.
 
 ### Package 5 — Scheduler-backed Guide parity
 
@@ -258,8 +281,9 @@ when closeout cannot proceed.
 3. `feat(renderer): complete webos overlay presentation parity`
 4. `docs: close complete webos ui parity proof`
 
-Exact model and reasoning-effort settings come only from the selected
-`.codex/agents/<role>.toml`. The controller uses
+Exact model and reasoning-effort settings come only from the selected role's
+`config_file` mapping in `.codex/config.toml` and its corresponding
+`.codex/<config_file>` TOML. The controller uses
 `lineup-desktop-feature-quality-loop`; Packages 5–8 default to `worker`; each
 package uses a fresh `reviewer` when its review gate is met.
 

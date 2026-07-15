@@ -63,6 +63,13 @@ test('role wiring and concurrency limits are checked', () => {
   assert(errors.some((error) => error.includes('Role worker must reference agents/worker.toml')));
 });
 
+test('role documentation must resolve config_file mappings instead of synthesizing paths', () => {
+  const root = makeFixture();
+  const workflowPath = path.join(root, 'docs/AGENTIC_DEV_WORKFLOW.md');
+  fs.writeFileSync(workflowPath, '# Workflow\nUse `.codex/agents/<role>.toml`.\n');
+  assert(verifyDocs(root).some((error) => error.includes('config_file mappings')));
+});
+
 test('read-only roles must remain sandboxed', () => {
   const root = makeFixture();
   const reviewerPath = path.join(root, '.codex/agents/reviewer.toml');

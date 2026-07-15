@@ -2,14 +2,15 @@
 
 > **UI parity reopen (2026-07-10):** The running renderer contradicts the
 > archived 2026-06-12 parity closeout. The active Tier 3
-> `docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md` is now the
-> authority before RD-27. Static route/status chrome, fixture-backed Player,
-> simultaneous default overlays, empty Guide, session-only Settings, long-form
-> setup remain blockers. Blank fullscreen was historically observed, but fresh
+> `docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md` is the active
+> execution plan before RD-27; this document remains current architecture and
+> blocker authority. Static route/status chrome, fixture-backed Player,
+> simultaneous default overlays, and empty Guide remain blockers. Main-owned
+> Settings persistence and the shortened setup flow are complete. Blank
+> fullscreen was historically observed, but fresh
 > Package 0 exact-size production Electron `ArrowDown`, then `Enter` attempts at
 > both viewports reached Guide with `nav-guide` focused and fullscreen false; it
 > remains a regression target, not a currently reproduced blocker.
-
 > Established 2026-05-07. This is the canonical current-state architecture
 > document for Lineup Desktop.
 
@@ -435,11 +436,12 @@ older plan remains historical evidence for the bounded token, overlay,
 onboarding, Settings, Guide, and setup changes it attempted; it is not current
 parity authority.
 
-Current truth is the observed blocker list above and the active plan's Package
-0 baseline/reference matrices. Main/preload continue to own Plex, persistence,
-playback, diagnostics, and IPC custody. Package 0 imports no production source
-and does not change provenance classification, so the import ledger is
-unchanged.
+This document records current architecture and blocker truth. The active plan's
+Package 0 baseline/reference matrices are execution evidence maintained by that
+plan; they do not supersede this authority. Main/preload continue to own Plex,
+persistence, playback, diagnostics, and IPC custody. Package 0 imports no
+production source and does not change provenance classification, so the import
+ledger is unchanged.
 
 ## Not Yet Implemented
 

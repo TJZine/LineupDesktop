@@ -125,11 +125,26 @@ export function verifyDocs(root = repoRoot) {
   checkForbiddenArtifacts(root, errors);
   checkIgnorePolicy(root, errors);
   checkRoleConfiguration(root, errors);
+  checkRoleDocumentation(root, errors);
   checkSkillMetadata(root, errors);
   checkPackageScripts(root, errors);
   checkActivePlans(root, errors);
   checkMarkdownLinks(root, errors);
   return errors;
+}
+
+function checkRoleDocumentation(root, errors) {
+  for (const relativePath of [
+    '.agents/skills/bounded-worker-execution/SKILL.md',
+    '.agents/skills/model-selection/SKILL.md',
+    'docs/AGENTIC_DEV_WORKFLOW.md',
+  ]) {
+    const filePath = path.join(root, relativePath);
+    if (!fs.existsSync(filePath)) continue;
+    if (readText(filePath).includes('.codex/agents/<role>.toml')) {
+      errors.push(`${relativePath}: role config paths must come from .codex/config.toml config_file mappings`);
+    }
+  }
 }
 
 function checkRequiredFiles(root, errors) {

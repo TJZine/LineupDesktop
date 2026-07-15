@@ -35,8 +35,9 @@ decide test depth mid-task.
 
 ## Delegation Record
 
-Before dispatch, record the selected role and its `.codex/agents/<role>.toml`
-path in the worker packet. At closeout, report that role, config path, `model`,
-and `model_reasoning_effort` read from the TOML. Treat the worker's
-`CONFIGURED ROLE` opening line as a visibility aid, not independent proof of
-the model selection.
+Before dispatch, resolve the selected role in `.codex/config.toml`, record its
+exact `config_file` value and corresponding `.codex/<config_file>` path in the
+worker packet, and read that mapped TOML. At closeout, report the role, mapped
+config path, `model`, and `model_reasoning_effort` read from that TOML. Treat
+the worker's `CONFIGURED ROLE` opening line as a visibility aid, not independent
+proof of the model selection.
