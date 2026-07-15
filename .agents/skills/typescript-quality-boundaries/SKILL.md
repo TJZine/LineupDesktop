@@ -5,8 +5,15 @@ description: Use for Lineup Desktop TypeScript production code, Electron process
 
 # TypeScript Quality Boundaries
 
-Use this only from the Lineup Desktop repo. Read `AGENTS.md`, the matching
-architecture document, and only the boundary skills required by the change.
+Use this only from the Lineup Desktop repo.
+
+Read:
+
+1. `AGENTS.md`
+2. `docs/AGENTIC_DEV_WORKFLOW.md`
+3. `docs/architecture/CURRENT_STATE.md`
+4. the tracked architecture owner for the affected boundary
+5. only the additional boundary skills required by the change
 
 - Keep `unknown` at external boundaries and narrow it once at the owning seam.
   Do not use `any`, double assertions, non-null assertions, or broad option bags

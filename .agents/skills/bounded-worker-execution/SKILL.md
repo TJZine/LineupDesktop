@@ -11,8 +11,9 @@ Read:
 
 1. `AGENTS.md`
 2. `docs/AGENTIC_DEV_WORKFLOW.md`
-3. `docs/agentic/session-prompts/feature-quality-loop.md`
-4. the approved plan or run bundle
+3. the approved plan or run bundle
+4. `docs/agentic/session-prompts/feature-quality-loop.md` when the approved plan
+   is Tier 3
 
 Delegate only after the plan names:
 

@@ -24,11 +24,11 @@ Plan the expensive decisions, not every local helper:
 - verification classification, commands, and expected outcomes
 - acceptance criteria, rollback notes, and stop/replan triggers
 
-Select a lower-cost worker only for a controller-approved unit whose files,
-owner, invariants, verification, and stop conditions are frozen. The controller
-integrates the result and reruns verification. Prefer `worker_sol_low` when the
-unit needs codebase judgment and `worker_luna` only when it is repeatable and
-cheap to verify; otherwise use `worker`.
+Worker eligibility and review routing are governed by
+`docs/AGENTIC_DEV_WORKFLOW.md#multi-agent-usage` and
+`docs/agentic/plan-authoring-standard.md#worker-and-review-routing`. Plans still
+freeze the selected unit's files, owner, invariants, verification, and stop
+conditions before delegation.
 
 See AGENTS.md and docs/AGENTIC_DEV_WORKFLOW.md for lifecycle and archival
 policy, including `docs/plans/` archival guidance. For Tier 3 work, route

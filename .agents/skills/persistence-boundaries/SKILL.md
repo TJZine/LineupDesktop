@@ -11,8 +11,8 @@ Read:
 
 1. `AGENTS.md`
 2. `docs/AGENTIC_DEV_WORKFLOW.md`
-3. `docs/architecture/security-and-secret-flow.md`
-4. `docs/architecture/CURRENT_STATE.md`
+3. `docs/architecture/CURRENT_STATE.md`
+4. `docs/architecture/security-and-secret-flow.md`
 
 Keep persistence owned by the correct privileged layer:
 

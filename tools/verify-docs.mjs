@@ -102,12 +102,39 @@ export const ACTIVE_PLAN_HEADINGS = [
   '## Replan Triggers',
 ];
 
+export const ACTIVE_PLAN_VERIFICATION_MARKERS = [
+  'new regression/contract test required',
+  'existing coverage sufficient',
+  'broader integration/manual proof required',
+  'no new automated test needed',
+];
+
 export const LAUNCHER_WRAPPERS = {
-  'lineup-desktop-feature-implement': 'feature-implement.md',
-  'lineup-desktop-feature-plan': 'feature-plan.md',
-  'lineup-desktop-feature-quality-loop': 'feature-quality-loop.md',
-  'lineup-desktop-feature-review': 'feature-review.md',
-  'lineup-desktop-workflow-harness-review': 'workflow-harness-review.md',
+  'lineup-desktop-feature-implement': {
+    title: 'Lineup Desktop Feature Implement',
+    launcher: 'feature-implement.md',
+    terminalInvariant: 'Keep repo-specific policy in tracked repo docs, not in this skill wrapper.',
+  },
+  'lineup-desktop-feature-plan': {
+    title: 'Lineup Desktop Feature Plan',
+    launcher: 'feature-plan.md',
+    terminalInvariant: 'Keep repo-specific policy in tracked repo docs, not in this skill wrapper.',
+  },
+  'lineup-desktop-feature-quality-loop': {
+    title: 'Lineup Desktop Feature Quality Loop',
+    launcher: 'feature-quality-loop.md',
+    terminalInvariant: 'Keep controller state in `update_plan` and keep write/review roles separated.',
+  },
+  'lineup-desktop-feature-review': {
+    title: 'Lineup Desktop Feature Review',
+    launcher: 'feature-review.md',
+    terminalInvariant: 'Keep this review read-only unless the parent session explicitly starts a separate implementation pass.',
+  },
+  'lineup-desktop-workflow-harness-review': {
+    title: 'Lineup Desktop Workflow Harness Review',
+    launcher: 'workflow-harness-review.md',
+    terminalInvariant: 'Keep this review read-only.',
+  },
 };
 
 const READ_ONLY_ROLES = new Set([
@@ -248,21 +275,23 @@ function checkSkillMetadata(root, errors) {
     }
   }
 
-  for (const [skill, launcher] of Object.entries(LAUNCHER_WRAPPERS)) {
+  for (const [skill, wrapper] of Object.entries(LAUNCHER_WRAPPERS)) {
     const skillPath = path.join(skillsRoot, skill, 'SKILL.md');
     if (!fs.existsSync(skillPath)) continue;
     const content = readText(skillPath);
     for (const requiredTarget of [
       '../../../AGENTS.md',
       '../../../docs/AGENTIC_DEV_WORKFLOW.md',
-      `../../../docs/agentic/session-prompts/${launcher}`,
+      `../../../docs/agentic/session-prompts/${wrapper.launcher}`,
     ]) {
       if (!content.includes(`](${requiredTarget})`)) {
         errors.push(`Launcher wrapper ${skill} must route to ${requiredTarget}`);
       }
     }
-    if (!content.includes('follow the tracked launcher exactly')) {
-      errors.push(`Launcher wrapper ${skill} must remain a thin tracked-launcher router`);
+    const actualBody = normalizeMarkdownBody(stripFrontmatter(content));
+    const expectedBody = normalizeMarkdownBody(renderLauncherWrapperBody(wrapper));
+    if (actualBody !== expectedBody) {
+      errors.push(`Launcher wrapper ${skill} must match its canonical tracked-launcher router`);
     }
   }
 }
@@ -298,19 +327,28 @@ function checkActivePlans(root, errors) {
     if (!/^\*\*Plan Status:\*\*\s*active\s*$/imu.test(content)) continue;
 
     const firstH2 = content.search(/^##\s+/mu);
-    const status = content.search(/^\*\*Plan Status:\*\*\s*active\s*$/imu);
-    if (firstH2 >= 0 && status > firstH2) {
-      errors.push(`${relativePath}: active status must appear before the first ## heading`);
+    const preamble = firstH2 < 0 ? content : content.slice(0, firstH2);
+    if (countExactLines(preamble, '**Plan Status:** active') !== 1) {
+      errors.push(`${relativePath}: active status must appear exactly once before the first ## heading`);
     }
-    if (!/^\*\*Task family:\*\*\s*\S+/imu.test(content)) {
-      errors.push(`${relativePath}: active plan is missing Task family metadata`);
+    if (countExactLines(preamble, '**Task family:** feature/design') !== 1) {
+      errors.push(`${relativePath}: Task family must be exactly feature/design before the first ## heading`);
     }
-    if (!/^\*\*Tier:\*\*\s*Tier [123]\s*$/imu.test(content)) {
-      errors.push(`${relativePath}: active plan is missing valid Tier metadata`);
+    if (countMatchingLines(preamble, /^\*\*Tier:\*\*\s*Tier [123]$/u) !== 1) {
+      errors.push(`${relativePath}: valid Tier metadata must appear exactly once before the first ## heading`);
     }
     for (const heading of ACTIVE_PLAN_HEADINGS) {
       if (!hasExactHeading(content, heading)) {
         errors.push(`${relativePath}: active plan is missing ${heading}`);
+      }
+    }
+    const verificationSection = readH2Section(content, '## Verification Commands');
+    if (verificationSection !== null) {
+      const markers = verificationSection.split(/\r?\n/u)
+        .map(readVerificationMarker)
+        .filter((marker) => marker !== null);
+      if (markers.length !== 1) {
+        errors.push(`${relativePath}: ## Verification Commands must contain exactly one verification classification marker`);
       }
     }
   }
@@ -391,6 +429,58 @@ function parseFrontmatter(content) {
     result[field[1]] = unquote(value);
   }
   return result;
+}
+
+function stripFrontmatter(content) {
+  return content.replace(/^---\s*\n[\s\S]*?\n---(?:\s*\n|$)/u, '');
+}
+
+function normalizeMarkdownBody(content) {
+  return content.replace(/\s+/gu, ' ').trim();
+}
+
+function renderLauncherWrapperBody(wrapper) {
+  return [
+    `# ${wrapper.title}`,
+    '',
+    'Use this only from the Lineup Desktop repo.',
+    '',
+    'Read these files in order:',
+    '',
+    '1. [`AGENTS.md`](../../../AGENTS.md)',
+    '2. [`docs/AGENTIC_DEV_WORKFLOW.md`](../../../docs/AGENTIC_DEV_WORKFLOW.md)',
+    `3. [\`docs/agentic/session-prompts/${wrapper.launcher}\`](../../../docs/agentic/session-prompts/${wrapper.launcher})`,
+    '',
+    `Then follow the tracked launcher exactly. ${wrapper.terminalInvariant}`,
+    '',
+  ].join('\n');
+}
+
+function countExactLines(content, expected) {
+  return content.split(/\r?\n/u).filter((line) => line.trim() === expected).length;
+}
+
+function countMatchingLines(content, pattern) {
+  return content.split(/\r?\n/u).filter((line) => pattern.test(line.trim())).length;
+}
+
+function readH2Section(content, heading) {
+  const lines = content.split(/\r?\n/u);
+  const start = lines.findIndex((line) => line.trim() === heading);
+  if (start < 0) return null;
+  const section = [];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (/^##\s+/u.test(lines[index].trim())) break;
+    section.push(lines[index]);
+  }
+  return section.join('\n');
+}
+
+function readVerificationMarker(line) {
+  const normalized = line.trim()
+    .replace(/^-\s+/u, '')
+    .replace(/^\*\*Verification classification:\*\*\s*/u, '');
+  return ACTIVE_PLAN_VERIFICATION_MARKERS.includes(normalized) ? normalized : null;
 }
 
 function markdownTargets(content) {

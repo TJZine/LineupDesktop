@@ -5,8 +5,15 @@ description: Use when changing Lineup Desktop node:test coverage, fixtures, Elec
 
 # TypeScript Test Design
 
-Use this only from the Lineup Desktop repo. Read `AGENTS.md`, the test guidance,
-and the boundary skill for the production surface under test.
+Use this only from the Lineup Desktop repo.
+
+Read:
+
+1. `AGENTS.md`
+2. `docs/AGENTIC_DEV_WORKFLOW.md`
+3. `docs/development/testing.md`
+4. the tracked architecture owner and boundary skill for the production surface
+   under test
 
 - Add a regression test for a demonstrated defect. For a refactor, test the
   behavior or contract that must remain invariant.

@@ -18,10 +18,13 @@ npm run verify
 
 ## Current Scope
 
-The repo currently verifies scaffold contracts, control-plane documents,
-redaction rules, first-pass Electron boundary linting, and the minimal secure
-Electron shell frame. Future Plex, native playback, persistence/secrets, and
-packaging work must expand this guide before implementation begins.
+The repo currently verifies the production Electron shell and process
+boundaries, renderer-safe contracts, main-owned persistence and Plex owners,
+channel/scheduler/player behavior, renderer workflows, control-plane documents,
+redaction rules, packaging harnesses, and secure Electron smoke behavior. Native
+playback, persistence/secrets, packaging, and release work must still expand the
+proof surface before implementation whenever the existing commands cannot prove
+the changed platform behavior.
 
 `npm run build:electron` emits the Electron main, preload, renderer, and shared
 contract JavaScript into `dist/` and copies the renderer HTML/CSS assets.

@@ -12,7 +12,8 @@ Read:
 1. `AGENTS.md`
 2. `docs/AGENTIC_DEV_WORKFLOW.md`
 3. `docs/architecture/CURRENT_STATE.md`
-4. the task-specific architecture doc named by the plan
+4. `docs/architecture/file-shape-guardrails.md`
+5. the task-specific architecture doc named by the plan
 
 Keep one owner per runtime concern:
 
@@ -35,18 +36,6 @@ proof, and stop/replan triggers. Stop if implementation would add compatibility
 barrels, old upstream path shims, broad utility owners, or privileged renderer
 access not approved by the plan.
 
-Decide file shape from present responsibilities, not a target line count:
-
-- Keep behavior together when it shares the owner's invariants, state,
-  lifecycle, and reason to change.
-- Extract when the change introduces a distinct current policy, lifecycle,
-  trust boundary, or consumer and the extracted module owns meaningful logic.
-- Do not extract for line count, test convenience, speculative reuse, or a
-  preferred pattern. Reject forwarding wrappers and one-method "services."
-- Keep composition roots to wiring and lifecycle coordination; move domain
-  policy to its real owner.
-- For a touched owner over 500 lines, record `Owner`, `Existing responsibility`,
-  `New behavior`, `Decision: cohesive growth | extract`, and evidence.
-- For a file over 800 lines, a named hotspot, or a composition root, require a
-  fresh `reviewer` architecture review. Size triggers review, never an
-  automatic split or failure.
+Apply the tracked file-shape guardrails when production source shape changes.
+This skill owns boundary routing and task-local stop conditions; the architecture
+document owns thresholds, hotspot lists, dispositions, and extraction policy.

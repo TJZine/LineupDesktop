@@ -13,7 +13,8 @@ context; keep small or tightly coupled work local.
 
 - Keep the controller responsible for decisions, integration, verification,
   review adjudication, and closeout.
-- Keep `max_threads = 6` and `max_depth = 1`; do not create nested agent trees.
+- Resolve concurrency limits and role mappings from `.codex/config.toml`; do not
+  create nested agent trees.
 - Give each agent one bounded output, exact scope, invariants, evidence needs,
   and stop conditions. Writers must have disjoint files and owners.
 - Reuse a worker when retained task context helps the next unit and the scope
@@ -21,8 +22,9 @@ context; keep small or tightly coupled work local.
   prior assumptions could bias the result.
 - Use read-only sidecars for discovery and documentation. Delegate writes only
   after the plan freezes architecture and verification.
-- Use `worker` by default, `worker_sol_low` for bounded code-aware work, and
-  `worker_luna` for exact repeatable work. Stop lower-cost workers on ambiguity.
+- Resolve worker eligibility from `docs/agentic/skill-strategy.md#role-policy`
+  and the runbook's multi-agent policy, then read the selected role's exact
+  `config_file` mapping from `.codex/config.toml`. Stop workers on ambiguity.
 - Require a fresh `reviewer` after the integrated diff when risk, novelty,
   blast radius, weak evidence, composition roots, or named hotspots warrant it.
   Add another pass only after a material finding or review-surface change.
