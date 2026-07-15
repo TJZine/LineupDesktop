@@ -102,7 +102,7 @@ Skip: do not invent latency badges without measured latency. A decorative latenc
 
 WebOS settings use a full-screen overlay with left category rail, animated entry, profile switch row, and cardless detail pane in `pinned upstream checkout src/modules/ui/settings/SettingsScreen.ts:107` and `pinned upstream checkout src/modules/ui/settings/styles.core.css:1`. Desktop settings are a flat screen route with summary cards, generated sections, and shell controls in `src/renderer/staticDom.ts:151` and `src/renderer/styles/workflow-screens.css:135`.
 
-WebOS channel setup is a multi-step setup shell with dedicated presenters and setup styling in `pinned upstream checkout src/modules/ui/channel-setup/ChannelSetupScreen.ts:64`. Desktop channel setup now combines Plex onboarding, library browse, build review, and metadata preview in one long page in `src/renderer/staticDom.ts:180` and `src/renderer/styles/plex-onboarding.css:24`.
+WebOS channel setup is a multi-step setup shell with dedicated presenters and setup styling in `pinned upstream checkout src/modules/ui/channel-setup/ChannelSetupScreen.ts:64`. Desktop channel setup is composed from the channel-setup section in `src/renderer/staticDom.ts:204` and the primary workflow styling in `src/renderer/styles/setup-workflow.css:27`; the focused `plex-onboarding` split styles remain relevant only to the auth, profile, and server onboarding surfaces.
 
 Recommendation: bring settings to WebOS rail parity earlier than channel setup. Channel setup should wait until product setup behavior is stable enough to avoid redesigning the flow twice.
 

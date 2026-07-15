@@ -4,10 +4,10 @@
 **Task family:** feature/design
 **Tier:** Tier 3
 **Current execution unit:** Package 5 — Scheduler-backed Guide parity is next
-and unstarted. The source-proven pre–Package 5 remediation is closed with full
-verification, adjudicated fresh review, and a clean targeted re-review.
-Packages 0–4 otherwise remain closed; RD-27 remains blocked until Packages 5–8
-close.
+and unstarted. The source-proven pre–Package 5 remediation and the 2026-07-15
+suggestion-reviewed correction are closed with full verification and read-only
+adversarial review. Packages 0–4 remain closed at their corrected checkpoints;
+RD-27 remains blocked until Packages 5–8 close.
 
 ## Goal
 
@@ -83,6 +83,10 @@ package. Packages 6–7 must be promoted to the same exact-file standard before
 they become current. Package 8 changes evidence and tracked memory unless it
 routes a defect back to its owning package.
 
+The closed 2026-07-15 correction was the reviewed source-proven exception to
+the Package 5 file boundary. Its exact production and workflow checkpoints are
+recorded below; it does not widen Package 5 scope.
+
 ## Files Out Of Scope
 
 - native/helper, packaging, signing, updater, installer, and release files
@@ -90,7 +94,8 @@ routes a defect back to its owning package.
 - credential/channel persistence and token-bearing Plex transport
 - new scheduler, channel, Plex, player, or media contracts unless a reviewed
   replan proves an existing renderer-safe seam is insufficient
-- unrelated renderer CSS or completed Packages 0–4 owners
+- unrelated renderer CSS or completed Packages 0–4 owners outside the recorded
+  source-proven correction checkpoints
 - tracked captures, logs, account/server/library/media names, private paths,
   URLs, headers, tokens, handles, or playback descriptors
 
@@ -107,6 +112,10 @@ routes a defect back to its owning package.
 - Package 4 completed main-owned schema-1 settings persistence, total guarded
   IPC/preload behavior, real renderer consumers, relaunch/failure proof, full
   verification, and clean independent review in commit `106412a`.
+- The 2026-07-15 suggestion-reviewed correction synchronized fullscreen state
+  before conflict-rebased Settings persistence, hardened public-seam and
+  cleanup tests, and corrected workflow/provenance truth in commits `a2f6bb3`
+  and `6115366` plus the adjacent parity-doc checkpoint.
 - Detailed operational evidence remains in the ignored run bundle and repository
   history. It is consulted only when a current contradiction needs provenance.
 
@@ -159,6 +168,30 @@ Focused owner tests, typecheck, architecture/lint/maintainability, build,
 Electron smoke, documentation and redaction checks, and the repository-wide
 `npm run verify` gate pass at closeout. The targeted read-only re-review of
 `7d64ee1..5636cba` was clean with no material or actionable findings.
+
+### Post–Package 4 — 2026-07-15 suggestion-reviewed correction
+
+**Role:** controller-local implementation followed by read-only feature and
+workflow-harness review.
+
+The accepted review findings proved a narrow launch-mode conflict-rebase defect,
+test cleanup/public-contract weaknesses, stale skill-policy duplication, weak
+verifier self-proof, and provenance/parity vocabulary drift. Commit `a2f6bb3`
+synchronizes the rebased native launch mode before retrying Settings persistence
+and hardens the focused Settings/Plex tests. Commit `6115366` aligns project
+skills with tracked authority while preserving unique boundary checklists,
+strengthens structural launcher and active-plan validation, gives verifier tests
+an independent canon, and teaches CodeRabbit to distinguish launcher wrappers
+from substantive project boundary/workflow skills. The adjacent parity-doc
+checkpoint separates reference-only RD20-M09 from copied/adapted RD20-M12 and
+uses the declared blocked/evidence/blocker vocabularies.
+
+No dependency, contract, IPC method, persistence schema, Plex transport,
+native/helper behavior, copied source, or Package 5 Guide behavior changed.
+Focused owner tests, typecheck, harness/docs verification, redaction, diff
+checks, and the repository-wide `npm run verify` gate passed before commit
+closeout. Read-only feature and workflow-harness review found no remaining
+blocker.
 
 ### Package 5 — Scheduler-backed Guide parity
 
