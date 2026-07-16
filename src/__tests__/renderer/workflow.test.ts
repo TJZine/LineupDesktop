@@ -77,6 +77,7 @@ test('workflow state starts on the player route with injected presentation conte
   assert.equal(state.channelSetupDraft.buildMode, 'append');
   assert.equal(view.route, 'player');
   assert.equal(view.title, 'Player');
+  assert.ok(view.currentProgram);
   assert.equal(view.currentProgram.channelName, 'Liminal One');
   assert.equal(view.currentProgram.title, 'The Midnight Archive');
   assert.equal(view.guide.selectedProgram?.title, 'The Midnight Archive');
@@ -240,6 +241,7 @@ test('workflow product route uses injected renderer-safe presentation state', ()
   };
   const view = getRouteWorkflowView(createWorkflowState('player', presentation));
 
+  assert.ok(view.currentProgram);
   assert.equal(view.currentProgram.title, 'Injected Now Watching');
   assert.equal(view.channels[0]?.name, 'Injected Channel');
   assert.equal(view.guide.selectedProgram?.title, 'Injected Program');
@@ -257,10 +259,12 @@ test('workflow route summaries fall back to guide-state placeholders until the g
     epg: setEpgPresentationState(createWorkflowState('player').epg, 'error'),
   });
 
+  assert.ok(guideView.currentProgram);
   assert.equal(guideView.channels.length, 0);
   assert.equal(guideView.currentProgram.title, 'Loading guide');
   assert.equal(guideView.currentProgram.startsAtMs, null);
   assert.equal(guideView.primaryText, 'Schedule rows are preparing for the selected lineup.');
+  assert.ok(playerView.currentProgram);
   assert.equal(playerView.channels.length, 0);
   assert.equal(playerView.currentProgram.title, 'Guide unavailable');
   assert.equal(playerView.currentProgram.endsAtMs, null);
@@ -276,6 +280,19 @@ test('workflow route summaries fall back to guide-state placeholders until the g
     }),
     /The Midnight Archive|4 channels are available|is cued on Liminal One/u,
   );
+});
+
+test('ready workflow does not fabricate current-program metadata without now-watching data', () => {
+  const state = createWorkflowState('player', {
+    ...TEST_GUIDE_PRESENTATION,
+    nowWatching: null,
+  });
+  const view = getRouteWorkflowView(state);
+
+  assert.equal(view.guide.presentationState, 'ready');
+  assert.equal(view.guide.shell.nowWatching, null);
+  assert.equal(view.currentProgram, null);
+  assert.equal(view.primaryText, 'Current program details are unavailable.');
 });
 
 test('settings surface uses persisted channel setup status when available', () => {

@@ -103,8 +103,7 @@ export function createGuideTuneController(options: GuideTuneControllerOptions): 
   function isCurrent(generation: number, target: GuideTuneTarget): boolean {
     return generation === requestGeneration
       && pendingTarget?.focusId === target.focusId
-      && options.getActiveRoute() === 'guide'
-      && options.getPresentationGeneration() === target.presentationGeneration;
+      && options.getActiveRoute() === 'guide';
   }
 
   function clearStalePending(generation: number, target: GuideTuneTarget): void {

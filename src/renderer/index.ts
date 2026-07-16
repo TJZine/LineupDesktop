@@ -190,7 +190,6 @@ guidePresentationPolling = createGuidePresentationPolling({
   getActiveRoute: () => workflowState.routeState.activeRoute,
   getWindowStartMs: () => workflowState.epg.windowStartMs,
   setLoading: (generation) => {
-    guideTuneController?.stop();
     retainGuideProgramFocusIntent();
     workflowState = {
       ...workflowState,
@@ -199,7 +198,6 @@ guidePresentationPolling = createGuidePresentationPolling({
     renderApp();
   },
   applyPresentation: (normalizedGuidePresentation, generation) => {
-    guideTuneController?.stop();
     const restoreProgramFocus = retainGuideProgramFocusIntent();
     workflowState = {
       ...workflowState,
@@ -533,7 +531,6 @@ async function applyCustomChannelAction(
 }
 
 function handleGuidePresentationFailure(source: string, message: string, generation: number): void {
-  guideTuneController.stop();
   workflowState = {
     ...workflowState,
     epg: setEpgPresentationState(workflowState.epg, 'error', generation),

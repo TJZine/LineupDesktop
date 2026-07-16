@@ -49,6 +49,32 @@ test('current Guide activation dispatches exactly one tune while pending', async
   assert.deepEqual(accepted, [target.focusId]);
 });
 
+test('dispatched tune keeps custody when the Guide presentation is replaced', async () => {
+  const request = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['player']['tuneChannel']>>>();
+  const accepted: GuideTuneTarget[] = [];
+  let generation = 4;
+  let currentCell: EpgProgramCellViewModel | null = cell();
+  const controller = createGuideTuneController({
+    player: { tuneChannel: async () => request.promise },
+    getActiveRoute: () => 'guide',
+    getPresentationGeneration: () => generation,
+    getNowMs: () => NOW,
+    findProgram: () => currentCell,
+    onPendingChanged: () => undefined,
+    onAccepted: (value) => accepted.push(value),
+    onFailure: () => assert.fail('failure callback was not expected'),
+  });
+
+  const pending = controller.activate(target);
+  generation = 5;
+  currentCell = null;
+  request.resolve({ ok: true, value: undefined as never, requestId: 'tune-after-refresh' });
+
+  assert.equal(await pending, true);
+  assert.deepEqual(accepted, [target]);
+  assert.equal(controller.getPendingTarget(), null);
+});
+
 test('pending tune snapshot survives repeat projection and clears on stop', async () => {
   const request = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['player']['tuneChannel']>>>();
   let projected: GuideTuneTarget | null = null;

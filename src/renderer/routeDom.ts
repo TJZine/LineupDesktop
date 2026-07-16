@@ -71,17 +71,19 @@ export function renderWorkflowDom(
   setText(`[data-workflow-secondary="${view.route}"]`, view.secondaryText);
 
   if (dom.currentChannelElement) {
-    dom.currentChannelElement.textContent = view.currentProgram.channelName;
+    dom.currentChannelElement.textContent = view.currentProgram?.channelName ?? '';
   }
   if (dom.currentProgramElement) {
-    dom.currentProgramElement.textContent = [
+    dom.currentProgramElement.textContent = view.currentProgram === null ? '' : [
       view.currentProgram.title,
       view.currentProgram.subtitle,
     ].filter((value) => value.length > 0).join(' - ');
   }
   if (dom.currentWindowElement) {
     dom.currentWindowElement.textContent =
-      view.currentProgram.startsAtMs === null || view.currentProgram.endsAtMs === null
+      view.currentProgram === null
+        ? ''
+        : view.currentProgram.startsAtMs === null || view.currentProgram.endsAtMs === null
         ? view.guide.state.detail
         : formatEpgTimeWindow(
           view.currentProgram.startsAtMs,

@@ -116,25 +116,28 @@ test('player bridge filters request-scoped events, keeps settlement separate, an
   assert.equal(snapshot.requestId, 'new');
 });
 
-test('guide presentation polling ignores stale and stopped refreshes', async () => {
+test('guide presentation polling serializes refreshes and settles coalesced work on stop', async () => {
   const requests: Array<Deferred<{ ok: true; value: EpgPresentationSource }>> = [];
   const applied: EpgPresentationSource[] = [];
+  const requestedWindows: number[] = [];
   let loadingCount = 0;
   let failureCount = 0;
   let activeRoute: 'player' | 'guide' = 'guide';
+  let windowStartMs = 1_778_619_600_000;
 
   const polling = createGuidePresentationPolling({
     guide: {
-      getPresentation: async () => {
-        const request = createDeferred<{ ok: true; value: EpgPresentationSource }>();
-        requests.push(request);
-        const result = await request.promise;
+      getPresentation: async (request: { startTimeMs: number; durationMs: number }) => {
+        requestedWindows.push(request.startTimeMs);
+        const pendingRequest = createDeferred<{ ok: true; value: EpgPresentationSource }>();
+        requests.push(pendingRequest);
+        const result = await pendingRequest.promise;
         return { ...result, requestId: `guide-${requests.length}` };
       },
     } as unknown as LineupDesktopPreloadApi['guide'],
     host: createNoopIntervalHost(),
     getActiveRoute: () => activeRoute,
-    getWindowStartMs: () => 1778619600000,
+    getWindowStartMs: () => windowStartMs,
     setLoading: () => {
       loadingCount += 1;
     },
@@ -147,28 +150,86 @@ test('guide presentation polling ignores stale and stopped refreshes', async () 
   });
 
   const first = polling.refresh('first', { showLoading: true });
+  windowStartMs += 1_800_000;
   const second = polling.refresh('second');
-  assert.equal(requests.length, 2);
+  windowStartMs += 1_800_000;
+  const latest = polling.refresh('latest');
+  assert.equal(second, latest);
+  assert.equal(requests.length, 1);
   assert.equal(loadingCount, 1);
-
-  requests[1]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
-  await second;
-  assert.equal(applied.length, 1);
 
   requests[0]?.resolve({ ok: true, value: { channels: [], nowWatching: null } });
   await first;
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requestedWindows, [1_778_619_600_000, 1_778_623_200_000]);
+  assert.equal(applied.length, 0);
+
+  requests[1]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
+  await Promise.all([second, latest]);
   assert.equal(applied.length, 1);
 
-  const stopped = polling.refresh('stopped');
+  const stoppedActive = polling.refresh('stopped-active');
+  const stoppedTrailing = polling.refresh('stopped-trailing');
+  assert.equal(requests.length, 3);
   polling.stop();
+  await Promise.all([stoppedActive, stoppedTrailing]);
   requests[2]?.resolve({ ok: true, value: { channels: [], nowWatching: null } });
-  await stopped;
+  await Promise.resolve();
   assert.equal(applied.length, 1);
   assert.equal(failureCount, 0);
 
   activeRoute = 'player';
   await polling.refresh('off-route');
   assert.equal(requests.length, 3);
+});
+
+test('guide presentation polling bounds slow interval work to one trailing refresh', async () => {
+  const requests: Array<Deferred<{ ok: true; value: EpgPresentationSource }>> = [];
+  const intervalCallbacks: Array<() => void> = [];
+  let applied = 0;
+  const polling = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async () => {
+        const request = createDeferred<{ ok: true; value: EpgPresentationSource }>();
+        requests.push(request);
+        const result = await request.promise;
+        return { ...result, requestId: `slow-guide-${requests.length}` };
+      },
+    } as unknown as LineupDesktopPreloadApi['guide'],
+    host: {
+      setInterval: (callback: TimerHandler) => { intervalCallbacks.push(callback as () => void); return 11; },
+      clearInterval: () => undefined,
+    } as unknown as Window,
+    getActiveRoute: () => 'guide',
+    getWindowStartMs: () => 1_778_619_600_000,
+    setLoading: () => undefined,
+    applyPresentation: () => { applied += 1; },
+    handleFailure: () => assert.fail('failure callback was not expected'),
+  });
+
+  polling.start();
+  intervalCallbacks[0]?.();
+  intervalCallbacks[0]?.();
+  intervalCallbacks[0]?.();
+  assert.equal(requests.length, 1);
+
+  requests[0]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(requests.length, 2);
+  assert.equal(applied, 0);
+
+  polling.stop();
+  polling.start();
+  assert.equal(requests.length, 2);
+  requests[1]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(requests.length, 3);
+  polling.stop();
+  requests[2]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
+  await Promise.resolve();
+  assert.equal(applied, 0);
 });
 
 test('guide presentation polling schedules Player and Guide with route-owned windows and cleanup', async () => {

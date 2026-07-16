@@ -3,7 +3,7 @@ import type { AppRouteId } from './navigation.js';
 import {
   EPG_SLOT_DURATION_MS,
   EPG_WINDOW_DURATION_MS,
-  ensureRendererReadyGuidePresentation,
+  normalizeEpgPresentation,
 } from './epg.js';
 import { summarizeRendererBridgeError } from './rendererBridgeFailures.js';
 
@@ -17,12 +17,12 @@ export interface GuidePresentationPollingOptions {
   getNowMs?(): number;
   setLoading(generation: number): void;
   applyPresentation(
-    presentation: ReturnType<typeof ensureRendererReadyGuidePresentation>,
+    presentation: ReturnType<typeof normalizeEpgPresentation>,
     generation: number,
   ): void;
   handleFailure(source: string, message: string, generation: number): void;
   applyPlayerPresentation?(
-    presentation: ReturnType<typeof ensureRendererReadyGuidePresentation>,
+    presentation: ReturnType<typeof normalizeEpgPresentation>,
     generation: number,
   ): void;
   handlePlayerFailure?(source: string, message: string, generation: number): void;
@@ -34,7 +34,7 @@ export interface GuidePresentationPollingController {
   stop(): void;
   refresh(source: string, options?: GuidePresentationRefreshOptions): Promise<void>;
   getGeneration(): number;
-  getLastValidPresentation(): ReturnType<typeof ensureRendererReadyGuidePresentation> | null;
+  getLastValidPresentation(): ReturnType<typeof normalizeEpgPresentation> | null;
 }
 
 export interface GuidePresentationRefreshOptions {
@@ -42,12 +42,48 @@ export interface GuidePresentationRefreshOptions {
   allowPlayerRoute?: boolean;
 }
 
+interface GuidePresentationRefreshIntent {
+  source: string;
+  generation: number;
+  playerRefresh: boolean;
+  windowStartMs: number;
+  readonly promise: Promise<void>;
+  settle(): void;
+}
+
+function createRefreshIntent(
+  source: string,
+  generation: number,
+  playerRefresh: boolean,
+  windowStartMs: number,
+): GuidePresentationRefreshIntent {
+  let settled = false;
+  let resolvePromise: () => void = () => undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    source,
+    generation,
+    playerRefresh,
+    windowStartMs,
+    promise,
+    settle: () => {
+      if (settled) return;
+      settled = true;
+      resolvePromise();
+    },
+  };
+}
+
 export function createGuidePresentationPolling(
   options: GuidePresentationPollingOptions,
 ): GuidePresentationPollingController {
   let guidePollTimer: number | null = null;
   let guidePresentationRequestId = 0;
-  let lastValidPresentation: ReturnType<typeof ensureRendererReadyGuidePresentation> | null = null;
+  let lastValidPresentation: ReturnType<typeof normalizeEpgPresentation> | null = null;
+  let activeRefresh: GuidePresentationRefreshIntent | null = null;
+  let trailingRefresh: GuidePresentationRefreshIntent | null = null;
 
   const stop = (): void => {
     if (guidePollTimer !== null) {
@@ -55,49 +91,96 @@ export function createGuidePresentationPolling(
       guidePollTimer = null;
     }
     guidePresentationRequestId += 1;
+    const stoppedActive = activeRefresh;
+    const stoppedTrailing = trailingRefresh;
+    trailingRefresh = null;
+    stoppedActive?.settle();
+    stoppedTrailing?.settle();
   };
 
-  const refresh = async (
+  const refresh = (
     source: string,
     refreshOptions: GuidePresentationRefreshOptions = {},
   ): Promise<void> => {
-    const requestId = ++guidePresentationRequestId;
     const playerRefresh = options.getActiveRoute() === 'player' && refreshOptions.allowPlayerRoute === true;
     if (options.getActiveRoute() !== 'guide' && !playerRefresh) {
-      return;
+      return Promise.resolve();
     }
     const windowStartMs = playerRefresh
       ? Math.floor((options.getNowMs?.() ?? Date.now()) / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS
       : options.getWindowStartMs();
+    const requestId = ++guidePresentationRequestId;
     if (refreshOptions.showLoading === true) {
       options.setLoading(requestId);
     }
 
-    let result: Awaited<ReturnType<typeof options.guide.getPresentation>>;
-    try {
-      result = await options.guide.getPresentation({
-        startTimeMs: windowStartMs,
-        durationMs: EPG_WINDOW_DURATION_MS,
-      });
-    } catch (error: unknown) {
-      if (requestId === guidePresentationRequestId) {
-        if (playerRefresh) options.handlePlayerFailure?.(source, summarizeRendererBridgeError(error), requestId);
-        else if (options.getActiveRoute() === 'guide') options.handleFailure(source, summarizeRendererBridgeError(error), requestId);
-      }
-      return;
+    if (activeRefresh === null) {
+      const intent = createRefreshIntent(source, requestId, playerRefresh, windowStartMs);
+      startRefresh(intent);
+      return intent.promise;
     }
 
-    if (requestId !== guidePresentationRequestId || (!playerRefresh && options.getActiveRoute() !== 'guide')) {
-      return;
+    if (trailingRefresh === null) {
+      trailingRefresh = createRefreshIntent(source, requestId, playerRefresh, windowStartMs);
+    } else {
+      trailingRefresh.source = source;
+      trailingRefresh.generation = requestId;
+      trailingRefresh.playerRefresh = playerRefresh;
+      trailingRefresh.windowStartMs = windowStartMs;
     }
-    if (!result.ok) {
-      if (playerRefresh) options.handlePlayerFailure?.(source, result.error.message, requestId);
-      else options.handleFailure(source, result.error.message, requestId);
-      return;
+    return trailingRefresh.promise;
+  };
+
+  const startRefresh = (intent: GuidePresentationRefreshIntent): void => {
+    activeRefresh = intent;
+    void executeRefresh(intent).catch(() => undefined);
+  };
+
+  const executeRefresh = async (intent: GuidePresentationRefreshIntent): Promise<void> => {
+    try {
+      let result: Awaited<ReturnType<typeof options.guide.getPresentation>>;
+      try {
+        result = await options.guide.getPresentation({
+          startTimeMs: intent.windowStartMs,
+          durationMs: EPG_WINDOW_DURATION_MS,
+        });
+      } catch (error: unknown) {
+        if (isCurrent(intent)) {
+          if (intent.playerRefresh) {
+            options.handlePlayerFailure?.(intent.source, summarizeRendererBridgeError(error), intent.generation);
+          } else {
+            options.handleFailure(intent.source, summarizeRendererBridgeError(error), intent.generation);
+          }
+        }
+        return;
+      }
+
+      if (isCurrent(intent)) {
+        if (!result.ok) {
+          if (intent.playerRefresh) options.handlePlayerFailure?.(intent.source, result.error.message, intent.generation);
+          else options.handleFailure(intent.source, result.error.message, intent.generation);
+        } else {
+          lastValidPresentation = normalizeEpgPresentation(result.value);
+          if (intent.playerRefresh) options.applyPlayerPresentation?.(lastValidPresentation, intent.generation);
+          else options.applyPresentation(lastValidPresentation, intent.generation);
+        }
+      }
+    } finally {
+      completeRefresh(intent);
     }
-    lastValidPresentation = ensureRendererReadyGuidePresentation(result.value, windowStartMs);
-    if (playerRefresh) options.applyPlayerPresentation?.(lastValidPresentation, requestId);
-    else options.applyPresentation(lastValidPresentation, requestId);
+  };
+
+  const isCurrent = (intent: GuidePresentationRefreshIntent): boolean => intent === activeRefresh
+    && intent.generation === guidePresentationRequestId
+    && options.getActiveRoute() === (intent.playerRefresh ? 'player' : 'guide');
+
+  const completeRefresh = (intent: GuidePresentationRefreshIntent): void => {
+    intent.settle();
+    if (activeRefresh !== intent) return;
+    activeRefresh = null;
+    const next = trailingRefresh;
+    trailingRefresh = null;
+    if (next !== null) startRefresh(next);
   };
 
   const start = (): void => {
