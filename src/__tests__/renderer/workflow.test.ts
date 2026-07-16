@@ -80,7 +80,7 @@ test('workflow state starts on the player route with injected presentation conte
   assert.equal(view.currentProgram.channelName, 'Liminal One');
   assert.equal(view.currentProgram.title, 'The Midnight Archive');
   assert.equal(view.guide.selectedProgram?.title, 'The Midnight Archive');
-  assert.equal(view.actions.map((action) => action.id).join(','), 'openGuide,openSettings');
+  assert.equal(view.actions.map((action) => action.id).join(','), 'openChannelSetup,openGuide,openSettings');
 });
 
 test('route actions move between existing route ids and carry status text', () => {
@@ -116,6 +116,15 @@ test('settings channel setup action uses settings-specific status text', () => {
   assert.equal(setup.lastActionId, 'openChannelSetup');
   assert.equal(setup.lastActionRoute, 'settings');
   assert.equal(getRouteWorkflowView(setup).statusText, 'Plex onboarding opened from settings.');
+});
+
+test('player channel setup fallback opens the setup route', () => {
+  const setup = applyWorkflowAction(createWorkflowState('player'), 'openChannelSetup');
+
+  assert.deepEqual(setup.routeState, { activeRoute: 'channelSetup', previousRoute: 'player' });
+  assert.equal(setup.lastActionId, 'openChannelSetup');
+  assert.equal(setup.lastActionRoute, 'player');
+  assert.equal(getRouteWorkflowView(setup).statusText, 'Channel setup opened from the player.');
 });
 
 test('settings player action uses settings-specific status text', () => {

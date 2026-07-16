@@ -6,6 +6,7 @@ import {
   markChannelCommitPending,
   markChannelRuntimeBlocked,
   markChannelRuntimePending,
+  rejectChannelStatusRequest,
   type ChannelRuntimeRendererState,
 } from './channelRuntimeState.js';
 import type { ChannelSetupCommitMode } from '../contracts/channel.js';
@@ -39,11 +40,11 @@ export function createChannelRuntimeController(input: {
     pendingKind = 'status';
     state = markChannelRuntimePending(state);
     input.onStateChanged();
-    const result = await input.bridge.getStatus();
+    const result = await input.bridge.getStatus().catch(() => null);
     if (operationId !== statusSequence) {
       return;
     }
-    state = applyChannelStatusResult(state, result);
+    state = result === null ? rejectChannelStatusRequest(state) : applyChannelStatusResult(state, result);
     pendingKind = null;
     staleCommitNeedsStatusRefresh = false;
     input.onStateChanged();

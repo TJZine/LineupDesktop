@@ -35,6 +35,7 @@ import { cleanupSetupRouteLifecycle, clearSetupSourceLifecycle, createSetupCompo
 import { createSettingsRuntime } from './settings/settingsRuntime.js';
 import { createFullscreenTransportCoordinator } from './fullscreenTransport.js';
 import { createGuideTuneController, type GuideTuneTarget } from './guideTuneController.js';
+import { createRendererRoutingCoordinator } from './startupRouting.js';
 mountStaticRendererDom();
 const dom = queryRendererDom();
 const shellDom = queryShellDom();
@@ -97,6 +98,15 @@ onboardingFlow = createPlexOnboardingFlow({
       void setupComposition.enter(returnRoute, returnRoute === 'guide' ? 'guide-state-setup' : returnRoute === 'settings' ? 'settings-setup' : 'player-settings');
     }
   }, render: renderApp,
+});
+const routingCoordinator = createRendererRoutingCoordinator({
+  getPlexSnapshot: () => plexController.getState().snapshot, getChannelState: channelController.getState,
+  activateRoute, showPlayer: renderApp,
+  setSetupStage: (stage) => { activeSetupStage = stage; },
+  setSettingsCategory: (category) => { activeSettingsCategory = category; },
+  loadProfiles: () => { void plexController.getHomeUsers(); }, enterServerSelection: () => { void onboardingFlow.advanceToServerSelection(); },
+  enterLibrary: (returnRoute, returnFocusId, enteredFromServer) =>
+    setupComposition.enter(returnRoute, returnFocusId, enteredFromServer),
 });
 initializeProfilePinModal({
   getPlexController: () => plexController,
@@ -309,15 +319,21 @@ registerRendererActions(dom, document, {
 });
 
 document.documentElement.dataset.activeRoute = workflowState.routeState.activeRoute;
-void settingsRuntime.initialize().then(() => shellController.start()).finally(() => {
-  document.documentElement.dataset.shellBoot = 'ready';
-});
-void plexController.loadSnapshot().then(() => {
-  if (plexController.getState().snapshot?.auth.state === 'signed-in') void plexController.getHomeUsers();
-});
-void channelController.loadStatus();
+void initializeRenderer().finally(() => { document.documentElement.dataset.shellBoot = 'ready'; });
 guidePresentationPolling.start();
 void customChannelController.loadSnapshot();
+
+async function initializeRenderer(): Promise<void> {
+  await Promise.allSettled([settingsRuntime.initialize(), plexController.loadSnapshot(), channelController.loadStatus()]);
+  await applyStartupTarget();
+  await shellController.start();
+  focusState = focusRegistry.focusRoute(focusState, workflowState.routeState.activeRoute).state;
+  renderApp();
+}
+
+async function applyStartupTarget(): Promise<void> {
+  await routingCoordinator.routeStartup();
+}
 
 function renderStatus(event: ShellStatusEvent): void {
   if (dom.statusElement) {
@@ -348,6 +364,8 @@ async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
     await navigationLifecycle.handleInput('guide');
     return;
   }
+  if (action === 'openChannelSetup' && workflowState.routeState.activeRoute === 'player' &&
+      await routingCoordinator.openPlayerSetupReminder()) return;
   const previousRoute = workflowState.routeState.activeRoute;
   const nextWorkflowState = applyWorkflowAction(workflowState, action);
   const nextRoute = nextWorkflowState.routeState.activeRoute;

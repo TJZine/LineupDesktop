@@ -9,7 +9,7 @@ const STATIC_SCREEN_MARKUP = `
   </div>
   <section id="screen-player" class="screen screen--active screen--player" data-screen="player" data-style-surface="screen" aria-label="Player">
       ${PLAYER_OVERLAY_MARKUP}
-      <aside class="setup-reminder" data-setup-reminder="player" aria-label="Channel setup reminder" hidden><span>No channels are ready yet.</span><button type="button" data-route-action="openChannelSetup">Set up channels</button></aside>
+      <aside class="setup-reminder" data-setup-reminder="player" aria-label="Channel setup reminder" hidden><span>No channels are ready yet.</span><button type="button" data-route-action="openChannelSetup" data-focus-id="player-setup-reminder">Set up channels</button></aside>
   </section>
   <section id="screen-guide" class="screen" data-screen="guide" data-style-surface="screen" aria-labelledby="screen-guide-title" hidden>
     <div class="screen__content">

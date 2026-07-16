@@ -220,6 +220,44 @@ test('direct route actions guard hidden inert native-disabled and aria-disabled 
   });
 });
 
+test('player setup reminder supports pointer and focused activation with eligibility guards', () => {
+  withTestHTMLElement(() => {
+    const documentRef = new TestDocument();
+    const player = new TestElement();
+    const reminder = new TestElement();
+    const button = new TestElement();
+    button.dataset.routeAction = 'openChannelSetup';
+    button.dataset.focusId = 'player-setup-reminder';
+    reminder.append(button);
+    player.append(reminder);
+    documentRef.append(player);
+    const calls: string[] = [];
+    const dom = emptyRendererDomBindings();
+    dom.routeActionButtons = [button as unknown as HTMLButtonElement];
+    dom.focusableElements = [button as unknown as HTMLElement];
+    registerRendererActions(dom, documentRef as unknown as Document, createActionHandlers(calls));
+
+    button.click();
+    clickFocusedRendererElement(
+      { activeRoute: 'player', activeId: 'player-setup-reminder' },
+      dom,
+    );
+    button.disabled = true;
+    button.click();
+    button.disabled = false;
+    button.setAttribute('aria-disabled', 'true');
+    button.click();
+    button.setAttribute('aria-disabled', 'false');
+    reminder.setAttribute('hidden', '');
+    button.click();
+    reminder.attributes.delete('hidden');
+    player.setAttribute('inert', '');
+    button.click();
+
+    assert.deepEqual(calls, ['route:openChannelSetup', 'route:openChannelSetup']);
+  });
+});
+
 test('renderer action registration delegates dynamic Guide state and program controls', () => {
   withTestHTMLElement(() => {
     const documentRef = new TestDocument();

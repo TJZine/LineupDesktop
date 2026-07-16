@@ -121,6 +121,7 @@ export interface WorkflowState {
 
 const ROUTE_ACTIONS = {
   player: [
+    { id: 'openChannelSetup', label: 'Set up channels', targetRoute: 'channelSetup', statusText: 'Channel setup opened from the player.' },
     {
       id: 'openGuide',
       label: 'Open guide',
@@ -158,7 +159,6 @@ const ROUTE_ACTIONS = {
   ],
   channelSetup: [],
 } as const satisfies Record<AppRouteId, readonly RouteActionViewModel[]>;
-
 const ROUTE_COPY = {
   player: {
     title: 'Player',

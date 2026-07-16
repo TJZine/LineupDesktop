@@ -53,6 +53,33 @@ export async function runSmokeAssertions(
         Function('return 1')();
         failures.push('csp unsafe eval');
       } catch {}
+      const initialSetupScreen = document.querySelector('[data-screen="channelSetup"]');
+      const initialAuthOwner = document.querySelector('[data-onboarding-owner="auth-link-code"]');
+      const initialPlayerScreen = document.querySelector('[data-screen="player"]');
+      const initialPlayerPresentation = document.querySelector('[data-player-presentation-surface]');
+      if (document.documentElement.dataset.activeRoute !== 'channelSetup') failures.push('isolated startup route');
+      if (!(initialSetupScreen instanceof HTMLElement) || initialSetupScreen.hidden) failures.push('isolated setup visible');
+      if (!(initialAuthOwner instanceof HTMLElement) || initialAuthOwner.hidden) failures.push('isolated auth link code visible');
+      if (!(initialPlayerScreen instanceof HTMLElement) || !initialPlayerScreen.hidden) failures.push('isolated player hidden');
+      if (!(initialPlayerPresentation instanceof HTMLElement) || !initialPlayerPresentation.hidden) failures.push('isolated presentation hidden');
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const recoveryCategory = document.querySelector('[data-focus-id="settings-category-recovery"]');
+      if (document.documentElement.dataset.activeRoute !== 'settings') failures.push('isolated settings navigation');
+      if (!(recoveryCategory instanceof HTMLButtonElement)) failures.push('settings recovery category');
+      else recoveryCategory.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const settingsPlayer = document.querySelector('[data-focus-id="settings-player"]');
+      if (!(recoveryCategory instanceof HTMLButtonElement) || !recoveryCategory.classList.contains('is-active')) {
+        failures.push('settings recovery category active');
+      }
+      if (!(settingsPlayer instanceof HTMLButtonElement) || settingsPlayer.dataset.routeAction !== 'resumePlayer') {
+        failures.push('settings resume player action');
+      } else settingsPlayer.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      if (document.documentElement.dataset.activeRoute !== 'player') failures.push('isolated player activation');
+
       const rootStyle = getComputedStyle(document.documentElement);
       const appShell = document.querySelector('[data-style-surface="app-shell"]');
       const screenRoot = document.querySelector('[data-static-screen-root]');
@@ -545,6 +572,20 @@ export async function runSmokeAssertions(
   `) as boolean;
   if (!rendererReady) {
     throw new Error('Electron smoke failed: renderer boot readiness timeout');
+  }
+  const closeRouteReady = await window.webContents.executeJavaScript(`
+    (async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const settingsPlayer = document.querySelector('[data-focus-id="settings-player"]');
+      if (!(settingsPlayer instanceof HTMLButtonElement)) return false;
+      settingsPlayer.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return document.documentElement.dataset.activeRoute === 'player';
+    })();
+  `) as boolean;
+  if (!closeRouteReady) {
+    throw new Error('Electron smoke failed: close lifecycle Player precondition');
   }
   await assertRendererCloseLifecycle(window, result.failures);
   if (result.failures.length > 0) {

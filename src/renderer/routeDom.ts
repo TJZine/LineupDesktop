@@ -15,6 +15,7 @@ import type { ChannelSetupLiveSelectionViewModel } from './channelSetup/viewMode
 import { renderChannelSetupDom } from './channelSetup/dom.js';
 import { renderSettingsDom } from './settingsSetupDom.js';
 import { renderEpgGuideDom } from './epg/guideDom.js';
+import { isConfirmedEmptyChannelState } from './startupRouting.js';
 
 
 export function renderRouteDom(
@@ -104,12 +105,12 @@ export function renderWorkflowDom(
   renderSettingsDom(view, dom, activeSettingsCategory);
   renderChannelSetupDom(view, dom, liveSelection, activeSetupStage);
   renderRouteActionButtons(view, dom);
-  renderSetupReminders(view, workflowState.settingsDraft.setupReminderEnabled);
+  renderSetupReminders(channelRuntime, workflowState.settingsDraft.setupReminderEnabled);
 }
 
-function renderSetupReminders(view: RouteWorkflowViewModel, enabled: boolean): void {
+function renderSetupReminders(channelRuntime: ChannelRuntimeRendererState | undefined, enabled: boolean): void {
   if (typeof document.querySelectorAll !== 'function') return;
-  const visible = enabled && view.settings.channelCount === 0;
+  const visible = enabled && channelRuntime !== undefined && isConfirmedEmptyChannelState(channelRuntime);
   for (const reminder of Array.from(document.querySelectorAll<HTMLElement>('[data-setup-reminder]'))) {
     reminder.hidden = !visible;
     reminder.setAttribute('aria-hidden', String(!visible));

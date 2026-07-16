@@ -42,6 +42,37 @@ test('channel runtime controller ignores direct duplicate commits while one is p
   assert.deepEqual(states, ['Saving channels', 'Recovered']);
 });
 
+test('channel runtime controller settles rejected status reads with safe retryable state', async () => {
+  let attempts = 0;
+  const controller = createChannelRuntimeController({
+    bridge: {
+      getStatus: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('private raw detail');
+        return channelSetupSuccess('status-retry', summary([]));
+      },
+      commit: async () => channelSetupSuccess('commit', summary([])),
+    } as LineupDesktopPreloadApi['channelSetup'],
+    onStateChanged: () => undefined,
+  });
+
+  await controller.loadStatus();
+  assert.deepEqual(controller.getState(), {
+    summary: null,
+    pending: false,
+    statusText: 'Channel status unavailable',
+    errorText: 'Channel setup status could not be loaded.',
+    commitMode: 'append',
+    confirmReplace: false,
+  });
+  assert.doesNotMatch(JSON.stringify(controller.getState()), /private raw detail/u);
+
+  await controller.loadStatus();
+  assert.equal(attempts, 2);
+  assert.equal(controller.getState().summary?.status, 'not-configured');
+  assert.equal(controller.getState().errorText, null);
+});
+
 function summary(
   channels: ReadonlyArray<{ id: string; number: number; name: string; itemCount: number }>,
 ): ChannelSetupSummary {

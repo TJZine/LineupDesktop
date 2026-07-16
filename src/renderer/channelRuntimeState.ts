@@ -97,6 +97,19 @@ export function applyChannelStatusResult(
   };
 }
 
+export function rejectChannelStatusRequest(
+  state: ChannelRuntimeRendererState,
+): ChannelRuntimeRendererState {
+  return {
+    ...state,
+    summary: null,
+    pending: false,
+    statusText: 'Channel status unavailable',
+    errorText: 'Channel setup status could not be loaded.',
+    confirmReplace: false,
+  };
+}
+
 export function formatChannelSetupStatus(summary: ChannelSetupSummary | null): string {
   if (summary === null) {
     return 'Channel setup status not loaded';
