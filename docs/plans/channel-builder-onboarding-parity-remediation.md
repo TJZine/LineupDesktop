@@ -218,12 +218,19 @@ the only terminal source for renderer state.
   `reachedMaxChannels`, and `channelNumberCapacityExhausted`; number exhaustion
   is true only when an unmatched selected candidate cannot receive a free valid
   channel number.
-- Actor/studio `separate` creates eligible sources independently. `combined`
-  groups the same actor/studio across all available selected-library sources
-  and creates one mixed source even when only one media family or one selected
-  source contributes; it never requires both movie and show input. Combined +
-  per-library scope uses sequential mixing, while cross-library scope uses
-  interleaving, matching the upstream planner.
+- For per-library actor/studio scope, `separate` creates eligible sources
+  independently and `combined` groups the same actor/studio across all
+  available selected-library sources into one mixed source, even when only one
+  media family or one selected source contributes; it never requires both
+  movie and show input. Cross-library actor/studio scope always groups matching
+  sources regardless of the separate/combined toggle, matching upstream; the
+  toggle therefore does not split a cross-library result. Per-library combined
+  mixing is sequential, while cross-library mixing is interleaved.
+- Cross-library actor/director minimum eligibility is applied after aggregating
+  matching movie counts across all selected libraries. Individual libraries
+  below the threshold can jointly qualify the grouped person channel; show
+  contributions still retain their distinct-series eligibility rule. Tests
+  must cover aggregate qualification for both actors and directors.
 - Preview returns estimates and warnings without mutation. Existing-setup
   reruns additionally require review containing created/removed/unchanged
   counts and bounded safe-name samples. Preview/review results are keyed to the
