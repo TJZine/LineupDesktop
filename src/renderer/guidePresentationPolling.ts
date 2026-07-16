@@ -45,6 +45,8 @@ export interface GuidePresentationRefreshOptions {
 interface GuidePresentationRefreshIntent {
   source: string;
   generation: number;
+  lifecycleGeneration: number;
+  advanceGenerationOnStart: boolean;
   playerRefresh: boolean;
   windowStartMs: number;
   readonly promise: Promise<void>;
@@ -54,6 +56,8 @@ interface GuidePresentationRefreshIntent {
 function createRefreshIntent(
   source: string,
   generation: number,
+  lifecycleGeneration: number,
+  advanceGenerationOnStart: boolean,
   playerRefresh: boolean,
   windowStartMs: number,
 ): GuidePresentationRefreshIntent {
@@ -65,6 +69,8 @@ function createRefreshIntent(
   return {
     source,
     generation,
+    lifecycleGeneration,
+    advanceGenerationOnStart,
     playerRefresh,
     windowStartMs,
     promise,
@@ -80,7 +86,8 @@ export function createGuidePresentationPolling(
   options: GuidePresentationPollingOptions,
 ): GuidePresentationPollingController {
   let guidePollTimer: number | null = null;
-  let guidePresentationRequestId = 0;
+  let guidePresentationGeneration = 0;
+  let guidePresentationLifecycleGeneration = 0;
   let lastValidPresentation: ReturnType<typeof normalizeEpgPresentation> | null = null;
   let activeRefresh: GuidePresentationRefreshIntent | null = null;
   let trailingRefresh: GuidePresentationRefreshIntent | null = null;
@@ -90,7 +97,8 @@ export function createGuidePresentationPolling(
       options.host.clearInterval(guidePollTimer);
       guidePollTimer = null;
     }
-    guidePresentationRequestId += 1;
+    guidePresentationLifecycleGeneration += 1;
+    guidePresentationGeneration += 1;
     const stoppedActive = activeRefresh;
     const stoppedTrailing = trailingRefresh;
     trailingRefresh = null;
@@ -109,29 +117,59 @@ export function createGuidePresentationPolling(
     const windowStartMs = playerRefresh
       ? Math.floor((options.getNowMs?.() ?? Date.now()) / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS
       : options.getWindowStartMs();
-    const requestId = ++guidePresentationRequestId;
-    if (refreshOptions.showLoading === true) {
-      options.setLoading(requestId);
-    }
+    const latestIntent = trailingRefresh ?? activeRefresh;
+    const coalescedInterval = source === 'poll-interval'
+      && latestIntent !== null
+      && latestIntent.lifecycleGeneration === guidePresentationLifecycleGeneration
+      && latestIntent.playerRefresh === playerRefresh
+      && latestIntent.windowStartMs === windowStartMs;
+    const generation = coalescedInterval
+      ? guidePresentationGeneration
+      : ++guidePresentationGeneration;
+    if (!coalescedInterval) guidePresentationLifecycleGeneration += 1;
+    if (refreshOptions.showLoading === true) options.setLoading(generation);
 
     if (activeRefresh === null) {
-      const intent = createRefreshIntent(source, requestId, playerRefresh, windowStartMs);
+      const intent = createRefreshIntent(
+        source,
+        generation,
+        guidePresentationLifecycleGeneration,
+        false,
+        playerRefresh,
+        windowStartMs,
+      );
       startRefresh(intent);
       return intent.promise;
     }
 
     if (trailingRefresh === null) {
-      trailingRefresh = createRefreshIntent(source, requestId, playerRefresh, windowStartMs);
+      trailingRefresh = createRefreshIntent(
+        source,
+        generation,
+        guidePresentationLifecycleGeneration,
+        coalescedInterval,
+        playerRefresh,
+        windowStartMs,
+      );
     } else {
       trailingRefresh.source = source;
-      trailingRefresh.generation = requestId;
       trailingRefresh.playerRefresh = playerRefresh;
       trailingRefresh.windowStartMs = windowStartMs;
+      if (!coalescedInterval) {
+        trailingRefresh.generation = generation;
+        trailingRefresh.lifecycleGeneration = guidePresentationLifecycleGeneration;
+        trailingRefresh.advanceGenerationOnStart = false;
+      }
     }
     return trailingRefresh.promise;
   };
 
   const startRefresh = (intent: GuidePresentationRefreshIntent): void => {
+    if (intent.advanceGenerationOnStart) {
+      intent.generation = ++guidePresentationGeneration;
+      intent.lifecycleGeneration = guidePresentationLifecycleGeneration;
+      intent.advanceGenerationOnStart = false;
+    }
     activeRefresh = intent;
     void executeRefresh(intent).catch(() => undefined);
   };
@@ -171,7 +209,7 @@ export function createGuidePresentationPolling(
   };
 
   const isCurrent = (intent: GuidePresentationRefreshIntent): boolean => intent === activeRefresh
-    && intent.generation === guidePresentationRequestId
+    && intent.lifecycleGeneration === guidePresentationLifecycleGeneration
     && options.getActiveRoute() === (intent.playerRefresh ? 'player' : 'guide');
 
   const completeRefresh = (intent: GuidePresentationRefreshIntent): void => {
@@ -207,7 +245,7 @@ export function createGuidePresentationPolling(
     start,
     stop,
     refresh,
-    getGeneration: () => guidePresentationRequestId,
+    getGeneration: () => guidePresentationGeneration,
     getLastValidPresentation: () => lastValidPresentation,
   };
 }

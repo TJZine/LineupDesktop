@@ -183,10 +183,10 @@ test('guide presentation polling serializes refreshes and settles coalesced work
   assert.equal(requests.length, 3);
 });
 
-test('guide presentation polling bounds slow interval work to one trailing refresh', async () => {
+test('guide presentation polling applies sustained slow responses while bounding interval work', async () => {
   const requests: Array<Deferred<{ ok: true; value: EpgPresentationSource }>> = [];
   const intervalCallbacks: Array<() => void> = [];
-  let applied = 0;
+  const appliedGenerations: number[] = [];
   const polling = createGuidePresentationPolling({
     guide: {
       getPresentation: async () => {
@@ -203,7 +203,7 @@ test('guide presentation polling bounds slow interval work to one trailing refre
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => 1_778_619_600_000,
     setLoading: () => undefined,
-    applyPresentation: () => { applied += 1; },
+    applyPresentation: (_presentation, generation) => { appliedGenerations.push(generation); },
     handleFailure: () => assert.fail('failure callback was not expected'),
   });
 
@@ -217,19 +217,38 @@ test('guide presentation polling bounds slow interval work to one trailing refre
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(requests.length, 2);
-  assert.equal(applied, 0);
+  assert.equal(appliedGenerations.length, 1);
 
-  polling.stop();
-  polling.start();
+  intervalCallbacks[0]?.();
+  intervalCallbacks[0]?.();
   assert.equal(requests.length, 2);
   requests[1]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(requests.length, 3);
-  polling.stop();
+  assert.equal(appliedGenerations.length, 2);
+  assert.ok((appliedGenerations[1] ?? 0) > (appliedGenerations[0] ?? 0));
+
+  intervalCallbacks[0]?.();
+  assert.equal(requests.length, 3);
   requests[2]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
   await Promise.resolve();
-  assert.equal(applied, 0);
+  await Promise.resolve();
+  assert.equal(requests.length, 4);
+  assert.equal(appliedGenerations.length, 3);
+  assert.ok((appliedGenerations[2] ?? 0) > (appliedGenerations[1] ?? 0));
+
+  polling.stop();
+  polling.start();
+  assert.equal(requests.length, 4);
+  requests[3]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(requests.length, 5);
+  polling.stop();
+  requests[4]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
+  await Promise.resolve();
+  assert.equal(appliedGenerations.length, 3);
 });
 
 test('guide presentation polling schedules Player and Guide with route-owned windows and cleanup', async () => {
