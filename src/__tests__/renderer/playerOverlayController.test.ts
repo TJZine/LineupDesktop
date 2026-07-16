@@ -33,6 +33,35 @@ test('OSD, mini-guide, and number timers use exact frozen boundaries and clean u
   assert.equal(harness.state().activeOverlayId, null);
 });
 
+test('OSD requests preserve higher overlay owners, including pending playback options', async () => {
+  const nowPlaying = createHarness(playingSnapshot());
+  nowPlaying.controller.requestNowPlaying();
+  const nowPlayingState = nowPlaying.state();
+  nowPlaying.controller.requestOsd();
+  assert.deepEqual(nowPlaying.state(), nowPlayingState);
+
+  const miniGuide = createHarness(playingSnapshot());
+  miniGuide.controller.requestMiniGuide();
+  const miniGuideState = miniGuide.state();
+  miniGuide.controller.requestOsd();
+  assert.deepEqual(miniGuide.state(), miniGuideState);
+
+  const options = createHarness(playingSnapshot());
+  options.controller.requestOsd();
+  options.controller.openOptions('audio');
+  const optionsState = options.state();
+  options.controller.requestOsd();
+  assert.deepEqual(options.state(), optionsState);
+
+  const pendingOptions = createHarness(playingSnapshot());
+  pendingOptions.controller.requestOsd();
+  pendingOptions.controller.openOptions('audio');
+  await pendingOptions.controller.selectTrack('audio', 'audio-alt', 'overlay-audio-track-audio-alt');
+  const pendingOptionsState = pendingOptions.state();
+  pendingOptions.controller.requestOsd();
+  assert.deepEqual(pendingOptions.state(), pendingOptionsState);
+});
+
 test('Space selects play/pause, suppresses duplicates, and settles by command request', async () => {
   const dispatches: string[] = [];
   const harness = createHarness(playingSnapshot(), {

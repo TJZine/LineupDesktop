@@ -635,6 +635,39 @@ test('route DOM renders player OSD fields and playback option rows', () => {
     assert.equal(busyMini?.getAttribute('aria-busy'), 'true');
     assert.equal(busyMini?.getAttribute('aria-current'), 'true');
     assert.equal(busyMini?.dataset.overlayBusyFocusCustody, 'true');
+
+    for (const count of [1, 2, 4]) {
+      const shortChannels = Array.from({ length: count }, (_, index) => ({
+        id: `short-${index + 1}`,
+        number: String(index + 1),
+        name: `Short ${index + 1}`,
+        currentProgram: { id: `short-program-${index + 1}`, title: `Short program ${index + 1}`, startsAtMs: 0, endsAtMs: 2_000 },
+      }));
+      const selectedId = shortChannels.at(-1)?.id ?? null;
+      const shortPresentation = {
+        ...presentation,
+        channels: shortChannels,
+        currentChannelId: selectedId,
+      };
+      renderWorkflowDom(
+        createWorkflowState('player'),
+        {
+          ...createPlayerOverlayState(shortPresentation),
+          activeOverlayId: 'miniGuide',
+          miniGuideSelectedChannelId: selectedId,
+        },
+        snapshot,
+        dom,
+        undefined,
+        null,
+        shortPresentation,
+      );
+      const rows: readonly ElementDouble[] = (dom.overlayMiniGuideElement as unknown as ElementDouble).children;
+      const focusIds = rows.map((row) => row.dataset.focusId);
+      assert.equal(rows.length, count, `${String(count)} rendered channel rows`);
+      assert.equal(new Set(focusIds).size, count, `${String(count)} unique focus ids`);
+      assert.equal(rows.filter((row) => row.getAttribute('aria-current') === 'true').length, 1, `${String(count)} current rows`);
+    }
   } finally {
     restoreDocument(originalDocument);
   }
