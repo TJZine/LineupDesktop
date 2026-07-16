@@ -1,5 +1,12 @@
 # Renderer Architecture
 
+UI parity is reopened before RD-27 under
+`docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md`. Current route
+rail/status chrome, fixture presentation, default overlay stack, Guide shell,
+session Settings, and long setup composition are observed blockers, not the
+target renderer architecture. Historical completed units below describe their
+bounded implementation history only.
+
 This document owns the detailed renderer shell breakdown referenced by
 [`CURRENT_STATE.md`](./CURRENT_STATE.md). Keep the current-state table concise;
 record renderer module ownership and completed renderer architecture units here.

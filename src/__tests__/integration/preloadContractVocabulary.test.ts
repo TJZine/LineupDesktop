@@ -37,6 +37,8 @@ import {
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
+  LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
+  LINEUP_SETTINGS_REPLACE_CHANNEL,
   LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
   LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL,
   LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL,
@@ -100,6 +102,10 @@ const guideBridgeSourceUrl = new URL('../../preload/guideBridge.cts', import.met
 const guideBridgeSourceText = readFileSync(guideBridgeSourceUrl, 'utf8');
 const playerBridgeSourceUrl = new URL('../../preload/playerBridge.cts', import.meta.url);
 const playerBridgeSourceText = readFileSync(playerBridgeSourceUrl, 'utf8');
+const settingsGuardSourceUrl = new URL('../../preload/settingsBridgeGuards.cts', import.meta.url);
+const settingsGuardSourceText = readFileSync(settingsGuardSourceUrl, 'utf8');
+const settingsBridgeSourceUrl = new URL('../../preload/settingsBridge.cts', import.meta.url);
+const settingsBridgeSourceText = readFileSync(settingsBridgeSourceUrl, 'utf8');
 const preloadBundleToolSourceText = readFileSync(
   new URL('../../../tools/bundle-preload.mjs', import.meta.url),
   'utf8',
@@ -328,6 +334,39 @@ function evaluatePlayerBridgeModule(): Record<string, unknown> {
   return moduleObject.exports as Record<string, unknown>;
 }
 
+function evaluateSettingsGuardModule(): Record<string, unknown> {
+  const exportsObject = {};
+  const moduleObject = { exports: exportsObject };
+  const compiled = ts.transpileModule(settingsGuardSourceText, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    fileName: 'src/preload/settingsBridgeGuards.cts',
+  }).outputText;
+  new Function('require', 'exports', 'module', compiled)(
+    (moduleName: string) => assert.fail(`unexpected settings guard require ${moduleName}`),
+    exportsObject,
+    moduleObject,
+  );
+  return moduleObject.exports as Record<string, unknown>;
+}
+
+function evaluateSettingsBridgeModule(guards: Record<string, unknown>): Record<string, unknown> {
+  const exportsObject = {};
+  const moduleObject = { exports: exportsObject };
+  const compiled = ts.transpileModule(settingsBridgeSourceText, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    fileName: 'src/preload/settingsBridge.cts',
+  }).outputText;
+  new Function('require', 'exports', 'module', compiled)(
+    (moduleName: string) => {
+      if (moduleName === './settingsBridgeGuards.cjs') return guards;
+      return assert.fail(`unexpected settings bridge require ${moduleName}`);
+    },
+    exportsObject,
+    moduleObject,
+  );
+  return moduleObject.exports as Record<string, unknown>;
+}
+
 function createPreloadHarness(
   invoke: (
     channel: string,
@@ -350,6 +389,7 @@ function createPreloadHarness(
   const customChannelBridgeExports = evaluateCustomChannelBridgeModule(customChannelGuardExports);
   const guideBridgeExports = evaluateGuideBridgeModule();
   const playerBridgeExports = evaluatePlayerBridgeModule();
+  const settingsBridgeExports = evaluateSettingsBridgeModule(evaluateSettingsGuardModule());
   const compiled = ts.transpileModule(preloadSourceText, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -378,6 +418,9 @@ function createPreloadHarness(
     }
     if (moduleName === './playerBridge.cjs') {
       return playerBridgeExports;
+    }
+    if (moduleName === './settingsBridge.cjs') {
+      return settingsBridgeExports;
     }
     assert.equal(moduleName, 'electron');
     return {
@@ -544,6 +587,8 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
+  LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
+  LINEUP_SETTINGS_REPLACE_CHANNEL,
 } as const;
 
 const APPROVED_IPC_CHANNELS_BY_METHOD = {
@@ -1067,6 +1112,17 @@ function isInvokePlayerSnapshotChannelParameter(node: ts.Identifier): boolean {
     ) {
       return true;
     }
+    current = current.parent;
+  }
+  return false;
+}
+
+function isInvokeSettingsChannelParameter(node: ts.Identifier): boolean {
+  if (node.text !== 'channel') return false;
+  let current: ts.Node | undefined = node;
+  while (current !== undefined && !ts.isSourceFile(current)) {
+    if (ts.isVariableDeclaration(current) && ts.isIdentifier(current.name) &&
+      current.name.text === 'invokeSettings') return true;
     current = current.parent;
   }
   return false;
@@ -2143,6 +2199,57 @@ test('preload channel constants match approved IPC contract exports', () => {
   }
 });
 
+test('preload settings bridge exposes two total guarded methods with exact request-id behavior', async () => {
+  const bridgeExports = evaluateSettingsBridgeModule(evaluateSettingsGuardModule());
+  const createBridge = bridgeExports.createSettingsBridge as (
+    invoke: (channel: string, input: unknown) => Promise<unknown>,
+    channels: { getSnapshot: string; replace: string },
+  ) => Record<string, (input: unknown) => Promise<unknown>>;
+  const calls: Array<{ channel: string; input: unknown }> = [];
+  const bridge = createBridge(async (channel, input) => {
+    calls.push({ channel, input });
+    const requestId = (input as { requestId: string }).requestId;
+    return {
+      ok: true,
+      requestId,
+      value: {
+        schemaVersion: 1,
+        revision: channel === LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL ? 2 : 3,
+        status: 'ready',
+        values: {
+          launchMode: 'windowed', guideDensity: 'comfortable',
+          previewBadgesEnabled: true, setupReminderEnabled: true,
+        },
+      },
+    };
+  }, { getSnapshot: LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, replace: LINEUP_SETTINGS_REPLACE_CHANNEL });
+  assert.deepEqual(Object.keys(bridge).sort(), ['getSnapshot', 'replace']);
+  assert.equal((await bridge.getSnapshot?.({ requestId: 'settings-get-1' }) as { ok: boolean }).ok, true);
+  const invalid = await bridge.replace?.({ requestId: 'bad id' }) as { ok: boolean; requestId: string; error: { code: string } };
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.requestId, 'settings-invalid-request');
+  assert.equal(invalid.error.code, 'validation-failed');
+  assert.equal(calls.length, 1);
+});
+
+test('preload settings bridge maps invoke rejection and mismatched results without rejecting', async () => {
+  const createBridge = evaluateSettingsBridgeModule(evaluateSettingsGuardModule()).createSettingsBridge as (
+    invoke: (channel: string, input: unknown) => Promise<unknown>,
+    channels: { getSnapshot: string; replace: string },
+  ) => Record<string, (input: unknown) => Promise<unknown>>;
+  const channels = { getSnapshot: LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, replace: LINEUP_SETTINGS_REPLACE_CHANNEL };
+  const rejected = createBridge(async () => { throw new Error('raw invoke detail'); }, channels);
+  const rejection = await rejected.getSnapshot?.({ requestId: 'settings-get-2' }) as { error: { code: string; message: string } };
+  assert.equal(rejection.error.code, 'operation-failed');
+  assert.doesNotMatch(rejection.error.message, /raw|invoke/u);
+  const mismatched = createBridge(async () => ({ ok: false, requestId: 'settings-other', error: {
+    code: 'operation-failed', message: 'Desktop settings operation failed.',
+  } }), channels);
+  const mismatch = await mismatched.getSnapshot?.({ requestId: 'settings-get-3' }) as { requestId: string; error: { code: string } };
+  assert.equal(mismatch.requestId, 'settings-get-3');
+  assert.equal(mismatch.error.code, 'validation-failed');
+});
+
 test('preload bridge guard rejects Electron value imports while allowing type imports', () => {
   const typeOnlySource = ts.createSourceFile(
     'fixture.cts',
@@ -2376,6 +2483,12 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
         return;
       }
 
+      if (isInvokeSettingsChannelParameter(channelExpression)) {
+        observedCalls.push(`${methodName}:invokeSettings.channel`);
+        ts.forEachChild(node, visit);
+        return;
+      }
+
       const approvedChannels =
         APPROVED_IPC_CHANNELS_BY_METHOD[
           methodName as keyof typeof APPROVED_IPC_CHANNELS_BY_METHOD
@@ -2405,6 +2518,7 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
     'invoke:invokeGuide.channel',
     'invoke:invokePlayerSnapshot.channel',
     'invoke:invokePlex.channel',
+    'invoke:invokeSettings.channel',
     'on:LINEUP_PLAYER_EVENT_CHANNEL',
     'on:LINEUP_SHELL_STATUS_CHANGED_CHANNEL',
     'removeListener:LINEUP_PLAYER_EVENT_CHANNEL',

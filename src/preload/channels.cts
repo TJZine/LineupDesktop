@@ -40,3 +40,5 @@ export const LINEUP_CUSTOM_CHANNEL_DUPLICATE_DRAFT_CHANNEL =
 export const LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL = 'lineup:customChannels:reorderChannels';
 export const LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL =
   'lineup:customChannels:setChannelVisibility';
+export const LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL = 'lineup:settings:getSnapshot';
+export const LINEUP_SETTINGS_REPLACE_CHANNEL = 'lineup:settings:replace';

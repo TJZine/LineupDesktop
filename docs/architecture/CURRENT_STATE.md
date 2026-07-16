@@ -1,5 +1,16 @@
 # Current Architecture State
 
+> **UI parity reopen (2026-07-10):** The running renderer contradicts the
+> archived 2026-06-12 parity closeout. The active Tier 3
+> `docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md` is the active
+> execution plan before RD-27; this document remains current architecture and
+> blocker authority. Static route/status chrome, fixture-backed Player,
+> simultaneous default overlays, and empty Guide remain blockers. Main-owned
+> Settings persistence and the shortened setup flow are complete. Blank
+> fullscreen was historically observed, but fresh
+> Package 0 exact-size production Electron `ArrowDown`, then `Enter` attempts at
+> both viewports reached Guide with `nav-guide` focused and fullscreen false; it
+> remains a regression target, not a currently reproduced blocker.
 > Established 2026-05-07. This is the canonical current-state architecture
 > document for Lineup Desktop.
 
@@ -13,8 +24,9 @@ CSS/theme style surfaces, the RD-22A upstream-shaped fixture/injected app body,
 docs, workflow, contract, harness scaffolding, main-owned Plex
 auth/discovery/library domain seams, RD-22B live Plex onboarding/library runtime
 wiring, and RD-25/RD-26 playback code implementation. Code implementation and
-review are complete for RD-25/RD-26, but Windows/manual product proof is
-deferred to RD-27 and remains pending. There is no installer
+review are complete for RD-25/RD-26, but the active Complete WebOS UI Parity
+Reopen must close before the still-pending RD-27 Windows/manual product proof.
+There is no installer
 implementation, public release/signing pipeline, production native-helper media
 binary redistribution, or Windows-observed production playback closeout proof
 yet. Historical paragraphs below preserve the sequence of earlier RD slices;
@@ -133,8 +145,8 @@ keeps preload single-file-compatible while hardening the preload bridge
 source-shape/parity harness for channel constants, the single `lineupDesktop`
 exposure, and approved `ipcRenderer` method/channel use; and leaves the
 remaining large player, Plex, channel, contract, policy, and native-helper
-owners in `docs/architecture/file-shape-guardrails.md` with reviewed deferral or
-leave-alone triggers. ARCH-01 does not add RD-14 product behavior, native
+owners under the cohesion policy in `docs/architecture/file-shape-guardrails.md`.
+ARCH-01 does not add RD-14 product behavior, native
 video/fullscreen behavior, live Plex transport, production native-helper
 playback, packaging/signing/update behavior, app-path or `safeStorage` runtime
 wiring, new preload/renderer APIs, dependencies, or copied/adapted upstream
@@ -328,7 +340,8 @@ and does not fabricate direct edit drafts from saved-channel summaries. Direct
 in-place edit of persisted channels remains deferred until a reviewed
 main/preload edit-draft API returns full content with `expectedRevision`.
 RD-25 code implementation is complete and reviewed; Windows/manual product proof
-remains pending and is deferred to RD-27. The production native playback MVP
+remains pending after the active Complete WebOS UI Parity Reopen closes and then
+routes to RD-27. The production native playback MVP
 replaces the fake playback bootstrap with a production-shaped, main/helper-owned
 native playback path for live Plex-backed scheduled media. A main-only
 privileged load context propagates the private playback descriptor to the helper
@@ -337,7 +350,8 @@ with the main process via an NDJSON protocol over stdin/stdout. Live Plex stream
 resolution, media detail, and PMS session ports are composed and wired.
 Renderer player UI state binds dynamically to safe player IPC events.
 RD-26 code implementation is complete and reviewed; Windows/manual product proof
-remains pending and is deferred to RD-27. It implements runtime media options
+remains pending after the active Complete WebOS UI Parity Reopen closes and then
+routes to RD-27. It implements runtime media options
 and playback quality over the production native playback path. The C# native
 helper is extended to manage audio and subtitle track states and video
 parameters via libmpv. Main process validation gates renderer selection requests
@@ -354,8 +368,8 @@ dispatch into focused owners. The renderer remains unprivileged, preload still
 exposes only the reviewed `window.lineupDesktop` bridge, main keeps privileged
 Plex/player/persistence custody, and no new product feature, dependency,
 package, renderer privilege, compatibility shim, or behavior change was added.
-The watch-list owners that remain over 500 lines stay in
-`docs/architecture/file-shape-guardrails.md` with reviewed deferral triggers.
+The watch-list owners that remain over 500 lines are reported by
+`npm run verify:maintainability` and use reviewed architecture dispositions.
 
 ## Product Invariants
 
@@ -380,7 +394,7 @@ The watch-list owners that remain over 500 lines stay in
 | Import provenance | `docs/architecture/import-ledger.md` | Current copied/adapted upstream source ledger; RD-20 retained-test path corrections reviewed current; RD-22A Unit 3 upstream UI/CSS/copy/test provenance recorded at upstream HEAD `613b1c516c7c9e37f9c18ea3e92c474013472b11` |
 | Original Lineup compatibility | `docs/architecture/original-lineup-reference-compatibility-matrix.md` and `docs/architecture/original-lineup-divergence-register.md` | RD-20 tracked source-audit/provenance artifacts for copied/adapted coverage, reference-only behavior, proof context, and accepted Desktop divergences |
 | Product parity and MVP roadmap | `docs/product/lineup-product-parity-matrix.md`, `docs/development/windows-ui-proof-plan.md`, and `docs/roadmap/desktop-port-roadmap.md` | RD-21 product-parity artifact, Windows proof rules, revised MVP completion sequence, RD-22A fixture/body parity closeout, and RD-22B live Plex onboarding/library closeout; Future Platform Review is deferred behind RD-22 through RD-28 |
-| File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size guardrails, temporary oversized-file allowlist rationale, decomposition/revisit triggers, and Tier 3 file-shape verification |
+| File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size evidence, cohesion-based dispositions, fresh hotspot review triggers, and Tier 3 file-shape verification |
 | Electron main shell | `src/main/index.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with smoke-only assertion ownership split out of the startup/composition entrypoint, plus RD-14 Unit 2 main-owned BrowserWindow/fullscreen/display/restore controller and Unit 3 foreground app-command controller while `src/main/index.ts` remains composition and IPC wiring |
 | Preload bridge | `src/preload/index.cts`, `src/preload/channels.cts`, `src/preload/channelBridgeGuards.cts`, and `src/preload/diagnosticsBridgeGuards.cts` | Narrow shell/window/player/diagnostics/Plex/channel bridge with runtime payload guards; RD-22B exposes only validated `window.lineupDesktop.plex` operations for snapshot, PIN, Plex Home, server restore/discovery/selection, library sections/items/search, and metadata while rejecting malformed or privileged Plex results locally. ARCH-02 keeps the sandbox-compatible entrypoint as the only `contextBridge`/`ipcRenderer` value owner, while channel constants and diagnostics guard families live in focused preload modules. The integration seam reads preload source text plus renderer-safe contracts to parity-test guard vocabulary, channel constants, the single `lineupDesktop` exposure, and approved `ipcRenderer` method/channel pairs without importing or executing preload |
 | Renderer shell | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md), `src/renderer/index.ts`, `src/renderer/rendererActionRegistration.ts`, `src/renderer/playerBridgeSubscription.ts`, `src/renderer/guidePresentationPolling.ts`, and `src/renderer/plexRuntimeActionDispatch.ts` | RD-13/ARCH-01 unprivileged app shell with route, workflow, EPG, overlay, focus, and style surfaces; RD-14 focused desktop input and DOM cursor owners; RD-15 fake-backed UI-over-player-surface composition for overlays, guide/EPG, settings, channel setup, z-order, fullscreen bridge continuity, and deterministic renderer focus; RD-22A fixture/injected upstream-shaped app body parity; RD-22B live Plex onboarding/library binding; and ARCH-02 renderer runtime composition where `index.ts` wires owners while action registration, player bridge subscription, guide polling freshness, and Plex action dispatch stay in renderer-safe focused modules |
@@ -413,22 +427,21 @@ The watch-list owners that remain over 500 lines stay in
 | Redaction verifier | `tools/verify-redaction.mjs` | Active RD-17-aware scanner for secret-shaped values, raw auth/header material, privileged diagnostic fields, raw filesystem paths, process data, native handles, and raw IPC frames |
 | RD-17 diagnostics smoke | `tools/rd17-diagnostics-smoke.mjs` | Windows-only ignored-evidence proof for diagnostics crash recovery and support-bundle redaction closeout |
 
-## UI Parity Closeout
+## UI Parity Closeout (Reopened; prior closeout superseded)
 
-The 2026-06-12 UI parity implementation plan is complete and archived locally
-after durable closeout updates. The reachable Desktop UI now carries the current
-WebOS-informed visual posture for global tokens/density, route chrome, overlays,
-auth/profile/server presentation, settings rail, guide/EPG time-math, and staged
-setup composition. The closeout preserves Desktop ownership boundaries: renderer
-changes remain visual/focus/presentation-only, main/preload keep Plex,
-persistence, playback, diagnostics, and IPC custody, and no public guide
-contract `nowMs` field or new dependency was added. Final review fixes made the
-EPG track responsive, kept live guide timing on a renderer-local clock fallback,
-allowed non-PIN global key handling through the profile PIN modal, and refreshed
-smoke assertions for the staged setup shell. Copied/adapted upstream Lineup
-material remains covered by the existing UI parity/import-ledger posture; this
-review-fix closeout added no new upstream source slice requiring a new ledger
-row.
+The 2026-06-12 UI parity implementation plan was marked complete and archived,
+but that conclusion is superseded by the active 2026-07-10 reopen plan because
+the running renderer and missing exact visual/focus proof contradict it. The
+older plan remains historical evidence for the bounded token, overlay,
+onboarding, Settings, Guide, and setup changes it attempted; it is not current
+parity authority.
+
+This document records current architecture and blocker truth. The active plan's
+Package 0 baseline/reference matrices are execution evidence maintained by that
+plan; they do not supersede this authority. Main/preload continue to own Plex,
+persistence, playback, diagnostics, and IPC custody. Package 0 imports no
+production source and does not change provenance classification, so the import
+ledger is unchanged.
 
 ## Not Yet Implemented
 
@@ -463,7 +476,8 @@ playback resolver for deterministic proof. In production mode, player IPC uses
 the production native host factory when a Windows helper binary is available and
 otherwise fails closed with renderer-safe unsupported-capability results.
 RD-25/RD-26 code is complete and reviewed, while Windows/manual product proof
-remains deferred to RD-27. Fullscreen requests map to the existing
+must wait for the active Complete WebOS UI Parity Reopen to close before RD-27.
+Fullscreen requests map to the existing
 `window.enterFullscreen` and `window.exitFullscreen` renderer intents.
 RD-17 also exposes `window.lineupDesktop.diagnostics.recordRendererEvent()`,
 `window.lineupDesktop.diagnostics.getSummary()`, and

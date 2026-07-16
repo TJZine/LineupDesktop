@@ -39,8 +39,13 @@ scope.
   moves to the local ignored archive.
 - For Tier 3, identify the first bounded execution unit and whether any
   parallelism is allowed.
-- Run the Planner Self-Check from the plan standard before calling the plan
-  implementation-ready.
+- For every bounded execution unit, record `IMPLEMENTER_ROLE_ELIGIBILITY`.
+  Default to `worker`; include `worker_sol_low` only for a frozen unit needing
+  repository comprehension but no design judgment, and `worker_luna` only for
+  exact, repeatable, cheap-to-verify work. Both require direct verification and
+  explicit stop/escalation conditions.
+- Confirm the plan is decision-complete under the plan standard before calling
+  the current unit implementation-ready.
 
 ## Output Requirements
 
@@ -54,6 +59,7 @@ scope.
   scope.
 - Include a `NEXT_SESSION_HANDOFF` routing the plan to
   `lineup-desktop-feature-review`.
-- Include model guidance only when the user asks for it or the plan is Tier 3.
+- Record role eligibility for delegated Tier 3 units; exact model and effort
+  settings remain in the role TOMLs.
 - Use the exact handoff shape in
   [`docs/AGENTIC_DEV_WORKFLOW.md#session-handoffs`](../../AGENTIC_DEV_WORKFLOW.md#session-handoffs).

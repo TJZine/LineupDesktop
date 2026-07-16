@@ -1,5 +1,11 @@
 # Windows UI Proof Plan
 
+RD-27 execution under this proof plan is blocked by the active
+`docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md`. Package 0 owns
+exact WebOS reference/Desktop baseline captures and the frozen interaction
+contract; Packages 1–8 must close with review before Windows operational proof
+can begin. The prior UI-parity closeout is superseded.
+
 ## Purpose
 
 This document defines the RD-21 proof shell for Windows UI, Windows package,

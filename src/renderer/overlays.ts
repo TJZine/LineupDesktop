@@ -67,7 +67,7 @@ export function createPlayerOverlayState(
   const normalizedPresentation = normalizePlayerOverlayPresentation(presentation);
   const firstChannel = normalizedPresentation.channels[0];
   return {
-    stack: ['channelBadge', 'nowPlaying', 'playerOsd'],
+    stack: [],
     currentChannelId: firstChannel.id,
     miniGuideSelectedChannelId: firstChannel.id,
     channelNumberBuffer: '',

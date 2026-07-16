@@ -2,8 +2,22 @@ import type { BrowserWindow } from 'electron';
 
 import { LINEUP_SHELL_URL } from '../contracts/shell.js';
 import { LINEUP_CSP } from './protocol.js';
-import { assertFullscreenContinuity } from './smokeFullscreenAssertions.js';
+import {
+  assertFullscreenContinuity,
+  assertRendererCloseLifecycle,
+} from './smokeFullscreenAssertions.js';
 import { GUIDE_SMOKE_ASSERTIONS_SOURCE } from './smokeGuideAssertions.js';
+
+const PACKAGE_ONE_GUIDE_SMOKE_ASSERTIONS_SOURCE = GUIDE_SMOKE_ASSERTIONS_SOURCE.replace(
+  `      const guideButton = document.querySelector('[data-route-button="guide"]');
+      if (!(guideButton instanceof HTMLButtonElement)) {
+        failures.push('guide route button');
+      } else {
+        guideButton.click();
+      }`,
+  `      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));`,
+);
 
 export interface ShellContainmentCounters {
   navigationDenied: number;
@@ -34,12 +48,11 @@ export async function runSmokeAssertions(
       } catch {}
       const rootStyle = getComputedStyle(document.documentElement);
       const appShell = document.querySelector('[data-style-surface="app-shell"]');
-      const routeRail = document.querySelector('[data-style-surface="route-rail"]');
       const screenRoot = document.querySelector('[data-static-screen-root]');
       const screenStack = document.querySelector('[data-static-screens-mounted]');
       const styledPlayerScreen = document.querySelector('[data-screen="player"]');
       const playerSurface = document.querySelector('.player-surface');
-      const playerRouteButton = document.querySelector('[data-route-button="player"]');
+      const playerFocusButton = document.querySelector('[data-focus-id="player-fullscreen"]');
       const stylesheetTexts = [];
       for (const sheet of Array.from(document.styleSheets)) {
         try {
@@ -58,12 +71,12 @@ export async function runSmokeAssertions(
       if (!(appShell instanceof HTMLElement) || getComputedStyle(appShell).display !== 'grid') {
         failures.push('app shell style loaded');
       }
-      if (!(routeRail instanceof HTMLElement) || getComputedStyle(routeRail).gridArea !== 'rail') {
-        failures.push('route rail style loaded');
+      if (document.querySelector('.app-shell__topbar, [data-style-surface="route-rail"], [data-focus-id^="nav-"]')) {
+        failures.push('removed shell chrome present');
       }
       if (
         !(styledPlayerScreen instanceof HTMLElement) ||
-        getComputedStyle(styledPlayerScreen).borderRadius !== '8px'
+        getComputedStyle(styledPlayerScreen).borderRadius !== '0px'
       ) {
         failures.push('screen style loaded');
       }
@@ -91,15 +104,15 @@ export async function runSmokeAssertions(
           );
         }
       }
-      if (!(playerRouteButton instanceof HTMLButtonElement)) {
+      if (!(playerFocusButton instanceof HTMLButtonElement)) {
         failures.push('focus style target');
       } else {
-        playerRouteButton.classList.add('is-focused');
-        const focusStyle = getComputedStyle(playerRouteButton);
+        playerFocusButton.classList.add('is-focused');
+        const focusStyle = getComputedStyle(playerFocusButton);
         if (focusStyle.outlineStyle !== 'solid' || focusStyle.outlineWidth !== '3px') {
           failures.push('focus style loaded');
         }
-        playerRouteButton.classList.remove('is-focused');
+        playerFocusButton.classList.remove('is-focused');
       }
       if (!stylesheetText.includes('@media (prefers-reduced-motion: reduce)')) {
         failures.push('reduced motion style policy');
@@ -248,14 +261,107 @@ export async function runSmokeAssertions(
           );
         }
       };
-      ${GUIDE_SMOKE_ASSERTIONS_SOURCE}
+      ${PACKAGE_ONE_GUIDE_SMOKE_ASSERTIONS_SOURCE}
 
-      const settingsButton = document.querySelector('[data-route-button="settings"]');
-      if (!(settingsButton instanceof HTMLButtonElement)) {
-        failures.push('settings route button');
-      } else {
-        settingsButton.click();
+      const semanticStructureFailures = [];
+      const follows = (before, after) => (before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+      for (const surfaceName of ['splash', 'loading']) {
+        const surface = document.querySelector('[data-shell-surface="' + surfaceName + '"]');
+        if (!(surface instanceof HTMLElement)) {
+          semanticStructureFailures.push(surfaceName + ' shell surface missing');
+          continue;
+        }
+        const markImages = surface.querySelectorAll('img[src="./assets/lineup-logo-mark.png"]');
+        const wordmarkImages = surface.querySelectorAll('img[src="./assets/lineup-wordmark.png"]');
+        if (markImages.length !== 1 || wordmarkImages.length !== 1) {
+          semanticStructureFailures.push(surfaceName + ' brand assets not owner-local and unique');
+        }
       }
+
+      const setupOwnerExpectations = [
+        ['library', 'Step 1 of 3', true],
+        ['preview', 'Step 2 of 3', false],
+        ['build', 'Step 3 of 3', false],
+        ['progress', 'Step 3 of 3', false],
+        ['result', 'Step 3 of 3', false],
+      ];
+      for (const [ownerName, expectedStep, expectsStatus] of setupOwnerExpectations) {
+        const owner = document.querySelector('[data-staged-owner="' + ownerName + '"]');
+        if (!(owner instanceof HTMLElement)) {
+          semanticStructureFailures.push(ownerName + ' setup owner missing');
+          continue;
+        }
+        const header = owner.querySelector(':scope > .setup-owner__header');
+        const body = owner.querySelector(':scope > .setup-owner__body');
+        const footer = owner.querySelector(':scope > .setup-owner__actions');
+        const title = header?.querySelector(':scope > .setup-owner__title');
+        const step = header?.querySelector(':scope > .setup-owner__step');
+        const status = owner.querySelector(':scope > .setup-status');
+        if (!(header instanceof HTMLElement) || !(body instanceof HTMLElement) || !(footer instanceof HTMLElement)
+          || !follows(header, body) || !follows(body, footer)) {
+          semanticStructureFailures.push(ownerName + ' setup owner hierarchy');
+        }
+        if (title?.textContent?.trim() !== 'Channel Setup' || step?.textContent?.trim() !== expectedStep) {
+          semanticStructureFailures.push(ownerName + ' setup owner title or step');
+        }
+        if ((status instanceof HTMLElement) !== expectsStatus) {
+          semanticStructureFailures.push(ownerName + ' setup owner status scope');
+        }
+        const labelledBy = owner.getAttribute('aria-labelledby');
+        const label = labelledBy === null ? null : document.getElementById(labelledBy);
+        if (!(label instanceof HTMLElement) || !owner.contains(label)) {
+          semanticStructureFailures.push(ownerName + ' setup owner label reference');
+        }
+      }
+      const libraryOwner = document.querySelector('[data-staged-owner="library"]');
+      if (!(libraryOwner instanceof HTMLElement)
+        || !(libraryOwner.querySelector(':scope .setup-owner__body > .setup-library-list[data-plex-sections]') instanceof HTMLElement)) {
+        semanticStructureFailures.push('library list owner scope');
+      }
+
+      const pinModal = document.querySelector('#profile-pin-modal');
+      if (!(pinModal instanceof HTMLElement)) {
+        semanticStructureFailures.push('profile PIN modal missing');
+      } else {
+        const pinAvatar = pinModal.querySelector(':scope .profile-pin-user [data-profile-pin-avatar]');
+        const pinHeader = pinModal.querySelector(':scope .profile-pin-modal__header');
+        const pinSlots = pinModal.querySelectorAll(':scope [data-pin-slot]');
+        const pinNumpad = pinModal.querySelector(':scope .profile-pin-modal__numpad');
+        const pinButtons = pinNumpad?.querySelectorAll(':scope > button.numpad-btn[data-numpad]') ?? [];
+        const pinCancel = pinModal.querySelector(':scope > .profile-pin-modal__dialog > .profile-pin-cancel[data-numpad="cancel"]');
+        const focusIds = Array.from(
+          pinModal.querySelectorAll('[data-focus-id^="btn-profile-pin-"]'),
+          (element) => element.getAttribute('data-focus-id'),
+        );
+        const expectedFocusIds = new Set([
+          'btn-profile-pin-1', 'btn-profile-pin-2', 'btn-profile-pin-3',
+          'btn-profile-pin-4', 'btn-profile-pin-5', 'btn-profile-pin-6',
+          'btn-profile-pin-7', 'btn-profile-pin-8', 'btn-profile-pin-9',
+          'btn-profile-pin-backspace', 'btn-profile-pin-0', 'btn-profile-pin-cancel',
+        ]);
+        if (!(pinAvatar instanceof HTMLElement) || !(pinHeader instanceof HTMLElement) || !follows(pinAvatar, pinHeader)) {
+          semanticStructureFailures.push('profile PIN local header hierarchy');
+        }
+        if (pinSlots.length !== 4 || pinButtons.length !== 11
+          || !(pinCancel instanceof HTMLButtonElement) || pinNumpad?.contains(pinCancel)) {
+          semanticStructureFailures.push('profile PIN controls scope');
+        }
+        if (focusIds.length !== expectedFocusIds.size || new Set(focusIds).size !== focusIds.length
+          || focusIds.some((focusId) => focusId === null || !expectedFocusIds.has(focusId))) {
+          semanticStructureFailures.push('profile PIN focus ids');
+        }
+        const labelledBy = pinModal.getAttribute('aria-labelledby');
+        const label = labelledBy === null ? null : document.getElementById(labelledBy);
+        if (!(label instanceof HTMLElement) || !pinModal.contains(label)) {
+          semanticStructureFailures.push('profile PIN label reference');
+        }
+      }
+      if (semanticStructureFailures.length > 0) {
+        failures.push('semantic owner structure ' + semanticStructureFailures.join(', '));
+      }
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
       const settingsScreen = document.querySelector('[data-screen="settings"]');
       const settingsSections = document.querySelector('[data-settings-sections]')?.textContent ?? '';
       if (document.documentElement.dataset.activeRoute !== 'settings') failures.push('settings route activation');
@@ -264,9 +370,9 @@ export async function runSmokeAssertions(
         failures.push('settings desktop copy');
       }
 
-      const setupButton = document.querySelector('[data-route-button="channelSetup"]');
+      const setupButton = document.querySelector('[data-focus-id="settings-open-channel-setup"]');
       if (!(setupButton instanceof HTMLButtonElement)) {
-        failures.push('channel setup route button');
+        failures.push('channel setup pointer action');
       } else {
         setupButton.click();
       }
@@ -288,12 +394,15 @@ export async function runSmokeAssertions(
         setupSectionCount: document.querySelectorAll('[data-setup-section]').length,
         plexActionCount: plexActionButtons.length,
         channelCommitActionCount: channelCommitButtons.length,
-        hasChannelReviewSteps: document.querySelector('[data-channel-review-steps]') instanceof HTMLElement,
         hasChannelReviewList: document.querySelector('[data-channel-review-list]') instanceof HTMLElement,
         hasChannelReviewValidation: document.querySelector('[data-channel-review-validation]') instanceof HTMLElement,
       };
       const setupText = setupScreen instanceof HTMLElement ? setupScreen.textContent ?? '' : '';
       const setupOverflow = setupScreen instanceof HTMLElement ? getComputedStyle(setupScreen).overflowY : '';
+      const onboardingHost = document.querySelector('[data-onboarding-host]');
+      const onboardingReady = onboardingHost instanceof HTMLElement
+        && !onboardingHost.hidden && setupText.includes('Sign in to Plex')
+        && document.querySelector('[data-focus-id="btn-auth-request"]') instanceof HTMLButtonElement;
       const obsoleteSetupSelectors = Array.from(
         setupScreen instanceof HTMLElement
           ? setupScreen.querySelectorAll('[data-setup-steps], [data-channel-draft-list], [data-setup-validation]')
@@ -304,29 +413,27 @@ export async function runSmokeAssertions(
           text: (element.textContent ?? '').replace(/\\s+/g, ' ').trim().slice(0, 120),
         } : null,
       );
-      if (
-        !currentSetupTargets.hasPlexRuntimePanel ||
-        !currentSetupTargets.hasChannelSetupCommit ||
-        !currentSetupTargets.hasSetupRail ||
-        !currentSetupTargets.hasSetupDetailPane ||
-        currentSetupTargets.setupStageCount < 5 ||
-        currentSetupTargets.setupSectionCount < 5 ||
-        currentSetupTargets.plexActionCount < 8 ||
-        currentSetupTargets.channelCommitActionCount !== 3 ||
-        !currentSetupTargets.hasChannelReviewSteps ||
-        !currentSetupTargets.hasChannelReviewList ||
-        !currentSetupTargets.hasChannelReviewValidation ||
-        !setupText.includes('Plex setup') ||
-        !setupText.includes('Get link code') ||
-        !setupText.includes('Open libraries') ||
-        !setupText.includes('Build channels') ||
-        setupOverflow !== 'auto' ||
-        obsoleteSetupSelectors.length > 0
-      ) {
+      const stagedSetupReady = currentSetupTargets.hasPlexRuntimePanel
+        && currentSetupTargets.hasChannelSetupCommit
+        && currentSetupTargets.hasSetupRail
+        && currentSetupTargets.hasSetupDetailPane
+        && currentSetupTargets.setupStageCount >= 5
+        && currentSetupTargets.setupSectionCount >= 5
+        && currentSetupTargets.plexActionCount >= 8
+        && currentSetupTargets.channelCommitActionCount === 3
+        && currentSetupTargets.hasChannelReviewList
+        && currentSetupTargets.hasChannelReviewValidation
+        && setupText.includes('Plex setup')
+        && setupText.includes('Get link code')
+        && setupText.includes('Open libraries')
+        && setupText.includes('Build channels')
+        && setupOverflow === 'auto';
+      if ((!onboardingReady && !stagedSetupReady) || obsoleteSetupSelectors.length > 0) {
         failures.push(
           'channel setup plex flow content ' +
             JSON.stringify({
               ...currentSetupTargets,
+              onboardingReady,
               hasPlexSetup: setupText.includes('Plex setup'),
               hasLinkCode: setupText.includes('Get link code'),
               hasOpenLibraries: setupText.includes('Open libraries'),
@@ -336,18 +443,25 @@ export async function runSmokeAssertions(
             }),
         );
       }
-
-      const playerButton = document.querySelector('[data-route-button="player"]');
-      if (!(playerButton instanceof HTMLButtonElement)) {
-        failures.push('player route button');
-      } else {
-        playerButton.click();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      if (document.documentElement.dataset.activeRoute !== 'player') {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
       }
       const playerScreen = document.querySelector('[data-screen="player"]');
       const playerPresentation = document.querySelector('[data-player-presentation-surface]');
       const osdOverlay = document.querySelector('[data-overlay="playerOsd"]');
       const nowPlayingTitle = document.querySelector('[data-overlay-now-playing-title]')?.textContent ?? '';
       const miniGuideButton = document.querySelector('[data-overlay-action="openMiniGuide"]');
+      const playerOsdButton = document.querySelector('[data-focus-id="player-osd"]');
+      if (!(playerOsdButton instanceof HTMLButtonElement)) {
+        failures.push('player controls trigger');
+      } else {
+        playerOsdButton.focus(); playerOsdButton.click();
+      }
       if (!(miniGuideButton instanceof HTMLButtonElement)) {
         failures.push('mini guide action');
       } else {
@@ -396,7 +510,6 @@ export async function runSmokeAssertions(
       if (channelNumberValue !== '4__') failures.push('channel number value ' + channelNumberValue);
 
       const closeOverlayButton = document.querySelector('[data-overlay-action="closeTopOverlay"]');
-      const playerOsdButton = document.querySelector('[data-focus-id="player-osd"]');
       if (!(closeOverlayButton instanceof HTMLButtonElement)) {
         failures.push('close overlay action');
       } else {
@@ -404,11 +517,9 @@ export async function runSmokeAssertions(
         closeOverlayButton.click();
         closeOverlayButton.click();
       }
-      if (
-        !(playerOsdButton instanceof HTMLButtonElement) ||
-        document.activeElement !== playerOsdButton ||
-        playerOsdButton.tabIndex !== 0
-      ) {
+      const activePlayerControl = document.activeElement instanceof HTMLButtonElement
+        && document.activeElement.dataset.focusId?.startsWith('player-') === true && document.activeElement.tabIndex === 0;
+      if (!(playerOsdButton instanceof HTMLButtonElement) || !activePlayerControl) {
         failures.push(
           'overlay focus fallback ' +
             JSON.stringify({
@@ -418,6 +529,8 @@ export async function runSmokeAssertions(
                   : '',
               playerOsdTabIndex:
                 playerOsdButton instanceof HTMLButtonElement ? playerOsdButton.tabIndex : null,
+              activeTabIndex:
+                document.activeElement instanceof HTMLElement ? document.activeElement.tabIndex : null,
             }),
         );
       }
@@ -457,6 +570,31 @@ export async function runSmokeAssertions(
     result.failures.push('navigation containment');
   }
 
+  if (result.failures.length > 0) {
+    throw new Error(`Electron smoke failed: ${result.failures.join(', ')}`);
+  }
+  await window.loadURL(LINEUP_SHELL_URL);
+  const rendererReady = await window.webContents.executeJavaScript(`
+    new Promise((resolve) => {
+      const deadline = performance.now() + 3000;
+      const poll = () => {
+        if (document.documentElement.dataset.shellBoot === 'ready') {
+          resolve(true);
+          return;
+        }
+        if (performance.now() >= deadline) {
+          resolve(false);
+          return;
+        }
+        setTimeout(poll, 20);
+      };
+      poll();
+    });
+  `) as boolean;
+  if (!rendererReady) {
+    throw new Error('Electron smoke failed: renderer boot readiness timeout');
+  }
+  await assertRendererCloseLifecycle(window, result.failures);
   if (result.failures.length > 0) {
     throw new Error(`Electron smoke failed: ${result.failures.join(', ')}`);
   }

@@ -27,9 +27,6 @@ export function renderChannelSetupDom(
     }
   }
 
-  if (dom.channelSetupStatusElement) {
-    dom.channelSetupStatusElement.textContent = view.channelSetupFlow.stageLabel;
-  }
   if (dom.channelSetupSourceElement) {
     dom.channelSetupSourceElement.textContent = view.channelSetupSummary.sourceName;
   }
@@ -43,47 +40,8 @@ export function renderChannelSetupDom(
         ? 'No selected source'
         : `${String(view.channelSetupSummary.totalBlockCount)} library items`;
   }
-  if (dom.setupStepsElement) {
-    dom.setupStepsElement.replaceChildren(
-      ...view.channelSetupFlow.stages.map((stage) => {
-        const item = document.createElement('li');
-        item.dataset.stepState = stage.state;
-        const label = document.createElement('strong');
-        label.textContent = stage.label;
-        const detail = document.createElement('span');
-        detail.textContent = stage.detail;
-        item.append(label, detail);
-        return item;
-      }),
-    );
-  }
   if (dom.channelDraftListElement) {
     dom.channelDraftListElement.replaceChildren(renderLibrarySource(view));
-  }
-  if (dom.channelSetupStrategyElement) {
-    dom.channelSetupStrategyElement.replaceChildren(
-      ...view.channelSetupFlow.strategyOptions.map((option) => {
-        const item = document.createElement('button');
-        item.type = 'button';
-        item.className = `setup-toggle${option.selected ? ' selected' : ''}`;
-        item.dataset.strategyOption = option.id;
-        item.dataset.setupAction = option.actionId;
-        item.dataset.focusId = option.focusId;
-        item.disabled = option.disabled;
-        item.setAttribute('aria-pressed', String(option.selected));
-        const label = document.createElement('span');
-        label.className = 'setup-toggle-label';
-        label.textContent = option.label;
-        const meta = document.createElement('span');
-        meta.className = 'setup-toggle-meta';
-        meta.textContent = option.detail;
-        const value = document.createElement('span');
-        value.className = 'setup-toggle-state';
-        value.textContent = option.value;
-        item.append(label, meta, value);
-        return item;
-      }),
-    );
   }
   if (dom.channelSetupReviewElement) {
     dom.channelSetupReviewElement.replaceChildren(

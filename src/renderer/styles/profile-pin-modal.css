@@ -1,13 +1,12 @@
 /* Profile PIN entry modal */
 .profile-pin-modal {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 1000;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  background: rgba(10, 12, 18, 0.85);
-  backdrop-filter: blur(16px);
+  background: rgba(0, 0, 0, 0.65);
 }
 
 .profile-pin-modal[hidden] {
@@ -18,21 +17,22 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-6);
-  width: min(440px, 90vw);
-  padding: var(--space-8);
-  border: 1px solid rgba(200, 160, 100, 0.2);
-  border-radius: var(--radius-panel);
-  background: radial-gradient(circle at 50% 0%, rgba(200, 160, 100, 0.08), transparent 70%), #12151f;
-  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  gap: 16px;
+  width: 100%;
+  max-width: 520px;
+  padding: 24px 24px 32px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 0;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.92), rgba(10, 12, 16, 0.88) 60%, rgba(16, 18, 24, 0.82));
   text-align: center;
-  animation: modalSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: modalSlideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes modalSlideUp {
   from {
-    opacity: 0;
-    transform: translateY(24px);
+    opacity: 0.8;
+    transform: translateY(100%);
   }
   to {
     opacity: 1;
@@ -43,6 +43,33 @@
 .profile-pin-modal__header {
   display: grid;
   gap: var(--space-2);
+}
+
+.profile-pin-user {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.profile-pin-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
+  border: 2px solid rgba(200, 160, 100, 0.3);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--plex-onboarding-text);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.profile-pin-avatar-fallback {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .profile-pin-modal__header h3 {
@@ -62,7 +89,7 @@
 
 .profile-pin-modal__slots {
   display: flex;
-  gap: var(--space-4);
+  gap: 16px;
   justify-content: center;
   margin: var(--space-2) 0;
 }
@@ -71,18 +98,20 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 52px;
-  border-bottom: 3px solid rgba(255, 255, 255, 0.12);
-  font-size: 26px;
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(200, 160, 100, 0.45);
+  border-radius: 50%;
+  font-size: 0;
   line-height: 1;
   color: var(--plex-onboarding-accent);
   transition: all 0.15s ease;
 }
 
 .profile-pin-modal__slot.filled {
-  border-bottom-color: var(--plex-onboarding-accent);
-  text-shadow: 0 0 10px rgba(200, 160, 100, 0.6);
+  border-color: var(--plex-onboarding-accent);
+  background: var(--plex-onboarding-accent);
+  box-shadow: 0 0 10px rgba(200, 160, 100, 0.3);
 }
 
 .profile-pin-modal__error {
@@ -105,22 +134,25 @@
 
 .profile-pin-modal__numpad {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-3);
-  width: 100%;
+  grid-template-columns: repeat(3, 72px);
+  grid-auto-rows: 72px;
+  gap: 12px;
+  justify-content: center;
+  width: auto;
   margin-top: var(--space-2);
 }
 
 .numpad-btn {
-  min-height: 54px;
+  width: 72px;
+  height: 72px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: var(--radius-control);
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
   color: var(--plex-onboarding-text);
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -147,15 +179,43 @@
   color: var(--plex-onboarding-text-muted);
 }
 
-.numpad-btn--cancel {
-  font-size: 15px;
-  color: rgb(248, 113, 113);
+.profile-pin-cancel {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 8px 24px;
+  border: 1px solid rgba(200, 160, 100, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--plex-onboarding-text-muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
 }
 
-.numpad-btn--cancel:focus-visible,
-.numpad-btn--cancel.is-focused {
-  border-color: rgb(239, 68, 68);
+.profile-pin-cancel:focus-visible,
+.profile-pin-cancel.is-focused {
+  background: var(--plex-onboarding-focus-bg, rgba(255, 255, 255, 0.16));
+  border-color: rgba(200, 160, 100, 0.45);
   box-shadow:
-    0 0 0 1px rgba(239, 68, 68, 0.4),
-    0 8px 24px rgba(239, 68, 68, 0.12);
+    0 0 0 1px rgba(200, 160, 100, 0.24),
+    0 8px 24px rgba(200, 160, 100, 0.16);
+}
+
+.profile-pin-cancel::after {
+  position: absolute;
+  inset: -4px;
+  border: 3px solid transparent;
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+}
+
+.profile-pin-cancel:focus-visible::after,
+.profile-pin-cancel.is-focused::after {
+  border-color: rgba(200, 160, 100, 0.72);
 }

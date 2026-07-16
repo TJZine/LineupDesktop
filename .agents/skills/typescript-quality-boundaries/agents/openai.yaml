@@ -1,0 +1,4 @@
+interface:
+  display_name: "TypeScript Quality Boundaries"
+  short_description: "Keep Desktop TypeScript changes cohesive, typed, and minimal"
+  default_prompt: "Apply Lineup Desktop TypeScript production-code quality boundaries to this change."

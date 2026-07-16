@@ -1,5 +1,6 @@
 import type { RendererDomBindings } from '../domBindings.js';
 import type { RouteWorkflowViewModel } from '../workflow.js';
+import type { DesktopSettingsValues } from '../../contracts/settings.js';
 import {
   formatEpgTimeWindow,
   type EpgProgramCellViewModel,
@@ -85,6 +86,7 @@ export function guideCellDom(
   windowStartMs: number,
   windowEndMs: number,
   trackWidth: number = GUIDE_TRACK_UNITS,
+  previewBadgesEnabled = true,
 ): HTMLElement {
   const pos = guideCellPosition(program.startsAtMs, program.endsAtMs, windowStartMs, windowEndMs, trackWidth);
   const pres = guidePresentation(pos.width, program.temporalState, program.isSelected);
@@ -112,7 +114,7 @@ export function guideCellDom(
     meta.append(liveBadge);
   }
 
-  if (program.episodeLabel && program.episodeLabel.trim()) {
+  if (previewBadgesEnabled && program.episodeLabel && program.episodeLabel.trim()) {
     const epBadge = document.createElement('span');
     epBadge.className = 'epg-badge epg-badge--episode';
     epBadge.textContent = program.episodeLabel.trim();
@@ -140,7 +142,14 @@ export function guideCellDom(
   return cell;
 }
 
-export function renderEpgGuideDom(view: RouteWorkflowViewModel, dom: RendererDomBindings): void {
+export function renderEpgGuideDom(
+  view: RouteWorkflowViewModel,
+  dom: RendererDomBindings,
+  settings: Pick<DesktopSettingsValues, 'guideDensity' | 'previewBadgesEnabled'> = {
+    guideDensity: 'comfortable',
+    previewBadgesEnabled: true,
+  },
+): void {
   const selectedRow = view.guide.selectedProgram === null
     ? undefined
     : view.guide.rows.find((row) => row.id === view.guide.selectedProgram?.channelId);
@@ -156,7 +165,7 @@ export function renderEpgGuideDom(view: RouteWorkflowViewModel, dom: RendererDom
       view.guide.infoPanel.eyebrow,
       view.guide.infoPanel.subtitle,
       view.guide.infoPanel.timeLabel,
-      view.guide.infoPanel.badges.join(' / '),
+      settings.previewBadgesEnabled ? view.guide.infoPanel.badges.join(' / ') : '',
       view.guide.infoPanel.genres,
       view.guide.infoPanel.description,
     ].filter(Boolean).join(' - ');
@@ -171,6 +180,8 @@ export function renderEpgGuideDom(view: RouteWorkflowViewModel, dom: RendererDom
   const shell = document.createElement('section');
   shell.className = 'epg-shell';
   shell.dataset.epgLayout = view.guide.shell.layoutMode;
+  shell.dataset.guideDensity = settings.guideDensity;
+  dom.epgGridElement.dataset.guideDensity = settings.guideDensity;
 
   const classicHeader = document.createElement('header');
   classicHeader.className = 'epg-classic-header';
@@ -285,7 +296,13 @@ export function renderEpgGuideDom(view: RouteWorkflowViewModel, dom: RendererDom
     programs.className = 'epg-grid__programs';
 
     for (const program of row.programs) {
-      const cell = guideCellDom(program, windowStartMs, windowEndMs, trackWidth);
+      const cell = guideCellDom(
+        program,
+        windowStartMs,
+        windowEndMs,
+        trackWidth,
+        settings.previewBadgesEnabled,
+      );
       programs.append(cell);
     }
 

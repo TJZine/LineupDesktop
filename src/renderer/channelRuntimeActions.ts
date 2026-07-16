@@ -19,8 +19,10 @@ export interface ChannelRuntimeController {
     mode: ChannelSetupCommitMode;
     sectionIds: readonly string[];
     confirmReplace?: boolean;
-  }): Promise<void>;
+  }): Promise<ChannelRuntimeActionOutcome>;
 }
+
+export type ChannelRuntimeActionOutcome = 'succeeded' | 'failed' | 'skipped' | 'stale';
 
 export function createChannelRuntimeController(input: {
   bridge: LineupDesktopPreloadApi['channelSetup'];
@@ -77,7 +79,7 @@ export function createChannelRuntimeController(input: {
     },
     commit: async (commitInput) => {
       if (state.pending) {
-        return;
+        return 'skipped';
       }
       const operationId = ++actionSequence;
       pendingKind = 'commit';
@@ -88,12 +90,13 @@ export function createChannelRuntimeController(input: {
         if (staleCommitNeedsStatusRefresh) {
           await loadStatusInternal();
         }
-        return;
+        return 'stale';
       }
       state = applyChannelStatusResult(state, result);
       pendingKind = null;
       staleCommitNeedsStatusRefresh = false;
       input.onStateChanged();
+      return result.ok ? 'succeeded' : 'failed';
     },
   };
 }

@@ -8,50 +8,116 @@ import {
   renderSections,
   renderServers,
 } from './plexRuntimeRows.js';
+import { createPlexLinkQr } from './onboarding/plexLinkQr.js';
+
+export type PlexOnboardingStateId =
+  | 'auth-link-code'
+  | 'auth-waiting'
+  | 'auth-error'
+  | 'profile-select'
+  | 'profile-pin'
+  | 'server-select'
+  | 'server-error';
+
+const SETUP_STAGES = new Set(['library', 'preview', 'build', 'custom']);
+
+export function readPlexOnboardingState(
+  state: PlexRuntimeRendererState,
+  activeSetupStage = 'account',
+  profilePinActive = false,
+): PlexOnboardingStateId | null {
+  if (profilePinActive) return 'profile-pin';
+  if (SETUP_STAGES.has(activeSetupStage)) return null;
+  const authState = state.snapshot?.auth.state ?? 'signed-out';
+  if (authState !== 'signed-in') {
+    if (state.errorText !== null) return 'auth-error';
+    return (state.snapshot?.auth.pin ?? null) === null ? 'auth-link-code' : 'auth-waiting';
+  }
+  if (activeSetupStage === 'server') {
+    return state.errorText === null ? 'server-select' : 'server-error';
+  }
+  return 'profile-select';
+}
 
 export function renderPlexRuntimeDom(
   state: PlexRuntimeRendererState,
   dom: RendererDomBindings,
+  activeSetupStage = 'account',
+  profilePinActive = false,
+  setupSelectedSectionIds: readonly string[] = [],
+  previewBadgesEnabled = true,
 ): void {
   if (!dom.plexPanelElement) {
     return;
   }
 
   const snapshot = state.snapshot;
+  const onboardingState = readPlexOnboardingState(state, activeSetupStage, profilePinActive);
+  const supportsOnboardingDom = document.documentElement !== undefined
+    && typeof document.querySelectorAll === 'function'
+    && typeof document.querySelector === 'function';
+  if (supportsOnboardingDom) document.documentElement.dataset.onboardingState = onboardingState ?? 'setup';
+  for (const owner of supportsOnboardingDom ? Array.from(document.querySelectorAll<HTMLElement>('[data-onboarding-owner]')) : []) {
+    const visible = owner.dataset.onboardingOwner === onboardingState
+      || (onboardingState === 'profile-pin' && owner.dataset.onboardingOwner === 'profile-select');
+    owner.hidden = !visible;
+    owner.inert = !visible || onboardingState === 'profile-pin';
+    owner.setAttribute('aria-hidden', String(!visible || onboardingState === 'profile-pin'));
+  }
+  const host = supportsOnboardingDom ? document.querySelector<HTMLElement>('[data-onboarding-host]') : null;
+  if (host) {
+    host.hidden = onboardingState === null;
+    host.inert = onboardingState === null;
+    host.setAttribute('aria-hidden', String(onboardingState === null));
+  }
+  const setupWorkspace = supportsOnboardingDom ? document.querySelector<HTMLElement>('[data-setup-workspace]') : null;
+  if (setupWorkspace) {
+    setupWorkspace.hidden = onboardingState !== null;
+    setupWorkspace.inert = onboardingState !== null;
+    setupWorkspace.setAttribute('aria-hidden', String(onboardingState !== null));
+  }
+
+  if (supportsOnboardingDom) ensureStaticLinkQrs();
+  const activeOwner = onboardingState === null || onboardingState === 'profile-pin'
+    ? null
+    : supportsOnboardingDom ? document.querySelector<HTMLElement>(`[data-onboarding-owner="${onboardingState}"]`) : null;
+  setText(
+    activeOwner?.querySelector<HTMLElement>('[data-onboarding-status]') ?? null,
+    onboardingState === null ? '' : onboardingStatus(state, onboardingState),
+  );
+  const activeError = activeOwner?.querySelector<HTMLElement>('[data-onboarding-error]') ?? null;
+  setText(activeError, state.errorText ?? '');
+  activeError?.toggleAttribute('hidden', state.errorText === null);
   setText(dom.plexStatusElement, state.statusText);
   setText(dom.plexErrorElement, state.errorText ?? '');
   dom.plexErrorElement?.toggleAttribute('hidden', state.errorText === null);
-  setText(
-    dom.plexAccountStateElement,
-    formatAccountState(snapshot),
-  );
-  setText(
-    dom.plexServerStateElement,
-    formatSelectedServerState(
-      snapshot?.servers.items ?? [],
-      state.selectedServerId,
-      snapshot?.servers.status ?? 'idle',
-    ),
-  );
-  setText(
-    dom.plexLibraryStateElement,
-    snapshot === null
-      ? 'Not loaded'
-      : `${formatStatus(snapshot.library.status)} / ${snapshot.library.sections.length} libraries`,
-  );
+  setText(dom.plexAccountStateElement, formatAccountState(snapshot));
+  setText(dom.plexServerStateElement, formatSelectedServerState(snapshot?.servers.items ?? [], state.selectedServerId, snapshot?.servers.status ?? 'idle'));
+  setText(dom.plexLibraryStateElement, snapshot === null ? 'Not loaded' : `${formatStatus(snapshot.library.status)} / ${snapshot.library.sections.length} libraries`);
 
+  const profilePending = state.pending.getHomeUsers || state.pending.switchHomeUser;
+  const serverPending = state.pending.restoreSelectedServer
+    || state.pending.refreshServers
+    || state.pending.selectServer;
   renderPin(snapshot?.auth.pin ?? null, dom);
-  renderHomeUsers(snapshot?.auth.homeUsers ?? [], dom);
-  renderServers(snapshot?.servers.items ?? [], state.selectedServerId, snapshot?.servers.status ?? 'idle', dom);
-  renderSections(snapshot?.library.sections ?? [], state.selectedSectionId, snapshot?.library.status ?? 'idle', dom);
+  renderHomeUsers(snapshot?.auth.homeUsers ?? [], dom, profilePending);
+  renderServers(
+    snapshot?.servers.items ?? [],
+    state.selectedServerId,
+    snapshot?.servers.status ?? 'idle',
+    dom,
+    serverPending,
+  );
+  renderSections(snapshot?.library.sections ?? [], state.selectedSectionId, snapshot?.library.status ?? 'idle', dom, setupSelectedSectionIds);
   renderItems(
     snapshot?.library.search?.items ?? snapshot?.library.items ?? [],
     state.selectedItemRatingKey,
     snapshot?.library.status ?? 'idle',
     snapshot?.library.search?.query ?? null,
     dom,
+    previewBadgesEnabled,
   );
-  renderMetadata(state.lastMetadata ?? snapshot?.library.metadata ?? null, dom);
+  renderMetadata(state.lastMetadata ?? snapshot?.library.metadata ?? null, dom, previewBadgesEnabled);
 
   if (dom.plexHomeUserPinInput && dom.plexHomeUserPinInput.value !== state.homeUserPin) {
     dom.plexHomeUserPinInput.value = state.homeUserPin;
@@ -62,8 +128,24 @@ export function renderPlexRuntimeDom(
 
   const anyPending = Object.values(state.pending).some(Boolean);
   for (const button of dom.plexActionButtons) {
-    button.disabled = shouldDisableAction(button.dataset.plexAction, state, anyPending);
+    const disabled = shouldDisableAction(button.dataset.plexAction, state, anyPending);
+    button.disabled = disabled;
+    if (typeof button.setAttribute === 'function') {
+      button.setAttribute('aria-disabled', String(disabled));
+      button.setAttribute('aria-busy', String(state.pending[button.dataset.plexAction as keyof typeof state.pending] === true));
+    }
   }
+  const setupButton = supportsOnboardingDom ? document.querySelector<HTMLButtonElement>('[data-focus-id="btn-server-setup"]') : null;
+  if (setupButton) projectPendingControl(setupButton, serverPending || state.selectedServerId === null, serverPending);
+  for (const switchButton of supportsOnboardingDom ? Array.from(document.querySelectorAll<HTMLButtonElement>('[data-focus-id="btn-server-switch-profile"]')) : []) {
+    projectPendingControl(switchButton, serverPending, serverPending);
+  }
+}
+
+function projectPendingControl(button: HTMLButtonElement, disabled: boolean, busy: boolean): void {
+  button.disabled = disabled;
+  button.setAttribute('aria-disabled', String(disabled));
+  button.setAttribute('aria-busy', String(busy));
 }
 
 export function readPlexServerId(element: HTMLElement): string | null {
@@ -92,62 +174,59 @@ function renderPin(
   dom.plexPinElement.replaceChildren();
   if (pin === null) {
     const idle = document.createElement('p');
-    idle.className = 'plex-runtime__pin-idle';
-    idle.textContent = 'Start Plex sign-in to request a link code.';
+    idle.textContent = 'Plex sign-in is ready.';
     dom.plexPinElement.append(idle);
     return;
   }
-
-  const container = document.createElement('div');
-  container.className = 'plex-runtime__pin-container';
-
-  // Left side: QR Code placeholder card
-  const qrCard = document.createElement('div');
-  qrCard.className = 'plex-runtime__qr-card';
-
-  const qrBox = document.createElement('div');
-  qrBox.className = 'plex-runtime__qr-box';
-  for (let i = 0; i < 9; i++) {
-    const cell = document.createElement('div');
-    cell.className = 'plex-runtime__qr-cell';
-    qrBox.append(cell);
-  }
-
-  const qrLabel = document.createElement('span');
-  qrLabel.className = 'plex-runtime__qr-label';
-  qrLabel.textContent = 'Scan to link';
-
-  qrCard.append(qrBox, qrLabel);
-
-  // Right side: Character-separated PIN boxes
-  const pinDetails = document.createElement('div');
-  pinDetails.className = 'plex-runtime__pin-details';
-
   const pinBoxes = document.createElement('div');
-  pinBoxes.className = 'plex-runtime__pin-boxes';
+  pinBoxes.className = 'auth-code__characters';
 
   const chars = pin.code.split('');
   for (const char of chars) {
     const box = document.createElement('span');
-    box.className = 'plex-runtime__pin-char';
+    box.className = 'auth-code__character';
     box.textContent = char;
     pinBoxes.append(box);
   }
 
-  const instruction = document.createElement('p');
-  instruction.className = 'plex-runtime__pin-instruction';
-  instruction.innerHTML = 'Visit <strong class="plex-accent-text">plex.tv/link</strong> on your phone or computer and enter the code above.';
-
   const expiry = document.createElement('span');
-  expiry.className = 'plex-runtime__pin-expiry';
+  expiry.className = 'auth-code__expiry';
   const remainingSecs = Math.max(0, Math.round((pin.expiresAtMs - Date.now()) / 1000));
   expiry.textContent = pin.claimed
     ? 'Code claimed. Checking account status...'
     : `Code expires in ${remainingSecs}s (at ${formatTime(pin.expiresAtMs)}).`;
 
-  pinDetails.append(pinBoxes, instruction, expiry);
-  container.append(qrCard, pinDetails);
-  dom.plexPinElement.append(container);
+  dom.plexPinElement.append(pinBoxes, expiry);
+}
+
+function ensureStaticLinkQrs(): void {
+  if (typeof document.createElementNS !== 'function') return;
+  for (const host of Array.from(document.querySelectorAll<HTMLElement>('[data-plex-link-qr]'))) {
+    if (host.childElementCount === 0) host.append(createPlexLinkQr(document));
+  }
+}
+
+function onboardingStatus(state: PlexRuntimeRendererState, owner: PlexOnboardingStateId): string {
+  switch (owner) {
+    case 'auth-link-code':
+      return state.pending.requestPin ? 'Requesting a sign-in code…' : 'Ready to request a sign-in code.';
+    case 'auth-waiting':
+      return 'Waiting for sign-in…';
+    case 'auth-error':
+      return '';
+    case 'profile-select': {
+      const count = state.snapshot?.auth.homeUsers.length ?? 0;
+      return state.pending.getHomeUsers ? 'Loading profiles…' : count === 0 ? 'No profiles are available.' : 'Choose a profile.';
+    }
+    case 'server-select': {
+      const count = state.snapshot?.servers.items.length ?? 0;
+      return state.pending.refreshServers ? 'Looking for servers…' : count === 0 ? 'No servers found.' : 'Choose a server.';
+    }
+    case 'server-error':
+      return '';
+    case 'profile-pin':
+      return '';
+  }
 }
 
 function shouldDisableAction(
@@ -159,6 +238,8 @@ function shouldDisableAction(
     case 'pollPin':
     case 'cancelPin':
       return anyPending || state.snapshot?.auth.pin === null || state.snapshot?.auth.pin === undefined;
+    case 'dismissPinError':
+      return false;
     case 'listLibraryItems':
       return anyPending || state.selectedServerId === null || state.selectedSectionId === null;
     case 'searchLibrary':

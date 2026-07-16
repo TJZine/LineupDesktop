@@ -28,12 +28,21 @@ improving fresh-chat reliability.
 
 Use the smallest role set that keeps work reliable:
 
-- `explorer`: read-only evidence and impact discovery
+- `explorer`: read-only evidence and impact discovery; use
+  `explorer_fallback` only when the primary role is unavailable or constrained
 - `docs_researcher`: read-only official documentation checks
 - `planner`: durable plans and handoff artifacts
-- `worker`: one bounded implementation unit
+- `worker`: normal bounded implementation units
+- `worker_sol_low`: frozen units that still need repository comprehension but
+  no architecture or verification judgment
+- `worker_luna`: explicitly eligible, exact, bounded, cheap-to-verify units
 - `reviewer`: read-only adversarial review
-- `monitor`: waits, polling, and status checks
+- `monitor`: waits, polling, and status checks; use `monitor_fallback` only when
+  the primary role is unavailable or constrained
+
+`.codex/agents/*.toml` is the sole authority for exact model, reasoning effort,
+sandbox, and fallback configuration. Do not duplicate those values here or in
+plans and prompts.
 
 Desktop does not define a dedicated maintenance-worker role yet. If this repo
 later needs a maintenance backlog, add that role in a separate reviewed
@@ -71,6 +80,7 @@ Reusable Lineup workflow and boundary skills adapted for Desktop:
 - `closeout-verification`
 - `debugging-remediation`
 - `execution-plan-authoring`
+- `large-task-orchestration`
 - `model-selection`
 - `parallel-sidecars`
 - `persistence-boundaries`
@@ -79,6 +89,8 @@ Reusable Lineup workflow and boundary skills adapted for Desktop:
 - `review-adjudication`
 - `review-request`
 - `ui-composition-patterns`
+- `typescript-quality-boundaries`
+- `typescript-test-design`
 - `verification-strategy`
 
 ## Legacy Skill Adaptation Audit
@@ -94,7 +106,7 @@ maintenance-program mechanics stay behind.
 | verification strategy | `verification-strategy`, `docs/AGENTIC_DEV_WORKFLOW.md#verification-routing`, and active-plan verification classification; use focused contract, architecture, redaction, smoke, or manual proof instead of defaulting every change to brittle tests. |
 | closeout verification | `closeout-verification`, `docs/AGENTIC_DEV_WORKFLOW.md#review-before-closeout`, and the feature-quality-loop closeout phase; completion claims require observed evidence. |
 | review request and adjudication | `review-request`, `review-adjudication`, `lineup-desktop-feature-review`, and `lineup-desktop-workflow-harness-review`; reviewers stay read-only and the owning session adjudicates findings. |
-| bounded workers and sidecars | `bounded-worker-execution`, `parallel-sidecars`, `.codex/agents/*.toml`, and `feature-quality-loop.md`; delegate only bounded, disjoint units after plan/review gates. |
+| bounded workers and sidecars | `bounded-worker-execution`, `parallel-sidecars`, `large-task-orchestration`, `.codex/agents/*.toml`, and `feature-quality-loop.md`; delegate only bounded, disjoint units after plan/review gates. |
 | architecture boundaries | `architecture-boundaries`, `docs/AGENTIC_DEV_WORKFLOW.md#desktop-feature-quality-guardrails`, `docs/architecture/CURRENT_STATE.md`, and task-specific architecture docs; Electron main, preload, renderer, helper, Plex, scheduler, and packaging owners must stay narrow. |
 | persistence, Plex, UI, and playback boundaries | `persistence-boundaries`, `plex-integration-boundaries`, `ui-composition-patterns`, `docs/architecture/security-and-secret-flow.md`, `docs/architecture/playback-architecture.md`, `docs/architecture/import-ledger.md`, current-state docs, and active plans. |
 | debugging and model guidance | `debugging-remediation`, `model-selection`, the feature/design workflow, current architecture docs, and official docs checks. |

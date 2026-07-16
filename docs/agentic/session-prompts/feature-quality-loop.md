@@ -55,16 +55,15 @@ are complete or explicitly blocked.
   instruction makes that delegated task obsolete.
 - `scope-load`: confirm Tier 3 routing, load authority docs, identify the exact
   target, initialize `update_plan`, and create or refresh a gitignored local run
-  bundle when repeated handoff context is likely. Start the Architecture Health
-  preflight by identifying current owner hotspots and the file-shape guardrail
-  surface before plan authoring.
+  bundle when repeated handoff context is likely. Start architecture preflight
+  by identifying current owner hotspots and the file-shape guardrail surface
+  before plan authoring.
 - `plan`: route plan authoring through a tracked `planner` pass using
   `lineup-desktop-feature-plan`. The controller may resolve controller-only
   routing decisions, but it must not replace the planner for Tier 3 plan
-  authoring. The tracked plan must include an `## Architecture Health` section
-  with file-shape evidence, maintainability verification, and decomposition,
-  avoidance, or temporary allowlist decisions for files governed by
-  `docs/architecture/file-shape-guardrails.md`.
+  authoring. The tracked plan's `## Architecture And Invariants` section must
+  include file-shape evidence, maintainability verification, and cohesion-based
+  dispositions for current-unit files governed by the file-shape guardrails.
 - `plan-review`: use a fresh read-only `reviewer` pass. Do not implement while
   material plan findings remain.
 - `plan-revise`: route findings back to planning. Require a clean final review
@@ -75,9 +74,12 @@ are complete or explicitly blocked.
   units require explicit disjoint owners, files, and verification. For MVP
   product slices, prefer bounded vertical units that make the intended user
   journey testable over layer-only units that leave fake app routes in place.
-- `implement`: use a tracked `worker` pass for the approved execution unit. If
-  the work is small enough for controller-local editing, downgrade the task out
-  of this Tier 3 loop before editing. Do not preserve fake/scaffold UI in a
+- `implement`: use a tracked `worker` pass for the approved execution unit by
+  default. Use `worker_sol_low` when it needs bounded codebase comprehension but
+  no design judgment. Use `worker_luna` only when it is exact, repeatable, and
+  cheap to verify. Either lower-cost role requires explicit plan eligibility and
+  stop/escalation rules. If the work is small enough for controller-local editing, downgrade
+  the task out of this Tier 3 loop before editing. Do not preserve fake/scaffold UI in a
   reachable product route once the approved unit owns the real workflow; move
   remaining fake behavior to tests, smoke fixtures, or explicit dev-only
   harnesses.

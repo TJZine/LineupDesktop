@@ -2,11 +2,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-4);
-  width: 148px;
-  min-height: 178px;
-  padding: var(--space-5);
-  border-radius: var(--radius-panel);
+  gap: 10px;
+  width: 140px;
+  min-height: 174px;
+  padding: 16px 12px 14px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.035);
   color: var(--plex-onboarding-text);
   text-align: center;
@@ -14,19 +14,19 @@
 
 .profile-row:focus-visible,
 .profile-row.is-focused {
-  transform: scale(1.03);
+  transform: scale(1.04);
 }
 
 .profile-avatar {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 86px;
-  height: 86px;
+  width: 100px;
+  height: 100px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.14);
   color: var(--plex-onboarding-text);
-  font-size: 30px;
+  font-size: 36px;
   font-weight: 800;
 }
 
@@ -34,7 +34,8 @@
   max-width: 100%;
   overflow: hidden;
   color: var(--plex-onboarding-text);
-  font-size: 16px;
+  font-size: 18px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -80,8 +81,9 @@
   justify-content: space-between;
   gap: var(--space-5);
   width: 100%;
-  padding: var(--space-5) var(--space-6);
-  border-radius: var(--radius-control);
+  min-height: 74px;
+  padding: 14px 16px;
+  border-radius: var(--radius-compact);
 }
 
 .server-row.active,
@@ -152,7 +154,7 @@
 
 @media (max-width: 880px) {
   .profile-row {
-    width: min(100%, 148px);
+    width: min(100%, 140px);
   }
 
   .server-row,

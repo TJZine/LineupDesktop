@@ -58,6 +58,11 @@ Recommended project skill entrypoints:
 Each skill should load `AGENTS.md`, `docs/AGENTIC_DEV_WORKFLOW.md`, and the
 matching launcher in this directory, then follow the tracked launcher exactly.
 
+Run feature implementation through `worker` by default. Use `worker_sol_low`
+only for a frozen unit needing repository comprehension but no design judgment,
+and `worker_luna` only for exact, repeatable, cheap-to-verify work. Both require
+explicit plan eligibility, direct verification, and stop/escalation rules.
+
 ## Handoff Format
 
 When another session is expected, launchers should emit the

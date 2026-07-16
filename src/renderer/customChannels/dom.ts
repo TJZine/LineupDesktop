@@ -18,6 +18,7 @@ export function renderCustomChannelWorkspace(
   renderMediaPicker(state, dom.customChannelMediaElement);
   renderDraft(state, dom.customChannelDraftElement);
   syncInputs(state, dom);
+  syncStaticControls(state);
 }
 
 function renderChannelList(state: CustomChannelRendererState, host: HTMLElement): void {
@@ -53,15 +54,25 @@ function renderChannelRow(
 
   const actions = document.createElement('div');
   actions.className = 'custom-channel-row__actions';
-  actions.append(
-    actionButton('Duplicate', 'duplicateChannel', channel.id, `custom-channel-duplicate-${channel.id}`),
-    actionButton(channel.hidden ? 'Show' : 'Hide', 'toggleChannelVisibility', channel.id, `custom-channel-hide-${channel.id}`),
-    actionButton('Up', 'moveChannelUp', channel.id, `custom-channel-up-${channel.id}`, index === 0),
-    actionButton('Down', 'moveChannelDown', channel.id, `custom-channel-down-${channel.id}`, index === (state.snapshot?.channels.length ?? 1) - 1),
-    state.deleteConfirmationChannelId === channel.id
-      ? actionButton('Confirm delete', 'confirmDeleteChannel', channel.id, `custom-channel-confirm-delete-${channel.id}`)
-      : actionButton('Delete', 'requestDeleteChannel', channel.id, `custom-channel-delete-${channel.id}`),
-  );
+  const duplicate = actionButton('Duplicate', 'duplicateChannel', channel.id, `custom-channel-duplicate-${channel.id}`, state.pending);
+  duplicate.setAttribute('aria-label', `Duplicate ${channel.name}`);
+  setBusy(duplicate, state.pendingAction === 'duplicate' && state.pendingChannelId === channel.id);
+  const visibility = actionButton(channel.hidden ? 'Show' : 'Hide', 'toggleChannelVisibility', channel.id, `custom-channel-hide-${channel.id}`, state.pending);
+  visibility.setAttribute('aria-label', `${channel.hidden ? 'Show' : 'Hide'} ${channel.name}`);
+  actions.append(duplicate, visibility);
+  if (index > 0) {
+    const up = actionButton('Up', 'moveChannelUp', channel.id, `custom-channel-up-${channel.id}`, state.pending);
+    up.setAttribute('aria-label', `Move ${channel.name} up`);
+    actions.append(up);
+  }
+  if (index < (state.snapshot?.channels.length ?? 1) - 1) {
+    const down = actionButton('Down', 'moveChannelDown', channel.id, `custom-channel-down-${channel.id}`, state.pending);
+    down.setAttribute('aria-label', `Move ${channel.name} down`);
+    actions.append(down);
+  }
+  const remove = actionButton('Delete', 'requestDeleteChannel', channel.id, `custom-channel-delete-${channel.id}`, state.pending);
+  remove.setAttribute('aria-label', `Delete ${channel.name}`);
+  actions.append(remove);
 
   row.append(number, copy, actions);
   return row;
@@ -229,7 +240,29 @@ function actionButton(
   button.dataset.customChannelDetail = detail;
   button.dataset.focusId = focusId;
   button.disabled = disabled;
+  button.setAttribute('aria-disabled', String(disabled));
   return button;
+}
+
+function syncStaticControls(state: CustomChannelRendererState): void {
+  if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
+  for (const focusId of ['custom-channel-new', 'setup-done', 'setup-back', 'custom-channel-back']) {
+    const button = document.querySelector<HTMLButtonElement>(`[data-staged-owner="custom-list"] [data-focus-id="${focusId}"]`);
+    if (!button || button.hidden) continue;
+    button.disabled = state.pending;
+    button.setAttribute('aria-disabled', String(state.pending));
+    button.setAttribute('aria-busy', String(state.pending));
+  }
+  const save = document.querySelector<HTMLButtonElement>('[data-focus-id="custom-channel-save"]');
+  if (save) {
+    save.disabled = state.pending;
+    save.setAttribute('aria-disabled', String(state.pending));
+    setBusy(save, state.pendingAction === 'save');
+  }
+}
+
+function setBusy(button: HTMLButtonElement, busy: boolean): void {
+  button.setAttribute('aria-busy', String(busy));
 }
 
 function emptyText(text: string): HTMLElement {

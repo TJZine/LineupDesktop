@@ -26,7 +26,8 @@ launcher, project skill, role, or control-plane behavior.
   forcing irrelevant sections.
 - Verifiers fail on missing required docs, broken links, baggage files, and
   redaction leaks.
-- Verifiers fail when required workflow anchors or project skills drift.
+- Verifiers fail when role wiring, active-plan structure, or launcher-wrapper
+  routing drifts.
 - Launcher docs require review before closeout.
 - Verification scripts are real checks, not placeholders.
 

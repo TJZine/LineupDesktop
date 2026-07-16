@@ -4,25 +4,7 @@
   }
 
   .app-shell {
-    grid-template:
-      "topbar" auto
-      "rail" auto
-      "screens" 1fr / 1fr;
-    padding: 16px;
-  }
-
-  .app-shell__topbar {
-    align-items: start;
-    flex-direction: column;
-  }
-
-  .shell-status {
-    justify-items: start;
-    text-align: left;
-  }
-
-  .route-rail {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template: "screens" minmax(0, 1fr) / minmax(0, 1fr);
   }
 
   .screen {

@@ -13,17 +13,10 @@ Read:
 2. `docs/AGENTIC_DEV_WORKFLOW.md`
 3. the active plan or handoff, if one exists
 
-Use the smallest capable role/model:
-
-- `planner` for Tier 3 plans and durable handoffs.
-- `reviewer` for adversarial plan, implementation, workflow, security, and
-  boundary review.
-- `worker` for approved bounded implementation units.
-- `docs_researcher` for official framework/API documentation checks.
-- `explorer` for read-only repo evidence.
-- `monitor` for waits and polling.
-
-Recommend higher reasoning for Electron IPC/security, native playback,
-storage/secrets, packaging/release, broad imports, or workflow harness changes.
-Do not add model guidance to routine handoffs unless the user asks or the plan
-is high risk.
+Choose the smallest capable role permitted by the active plan and task risk.
+Use the canonical role policy in
+[`docs/agentic/skill-strategy.md`](../../../docs/agentic/skill-strategy.md), then
+resolve the selected role's exact `config_file` mapping from `.codex/config.toml`.
+The mapped TOML is the sole authority for model, reasoning effort, sandbox, and
+fallback configuration. Do not duplicate those values in this skill, plans,
+prompts, or workflow docs.

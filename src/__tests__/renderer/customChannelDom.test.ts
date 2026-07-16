@@ -54,6 +54,10 @@ test('custom channel DOM renders safe channel media and draft controls', () => {
     assert.equal(list.children.length, 1);
     assert.equal(media.children.length, 1);
     assert.equal(draft.children.length, 3);
+    const rowActions = list.children[0]?.children.at(-1);
+    assert.deepEqual(rowActions?.children.map((button) => button.dataset.customChannelAction), [
+      'duplicateChannel', 'toggleChannelVisibility', 'requestDeleteChannel',
+    ]);
 
     const mediaCard = media.children[0];
     const mediaActions = mediaCard?.children.at(-1);
@@ -74,7 +78,7 @@ test('custom channel DOM renders safe channel media and draft controls', () => {
   }
 });
 
-test('custom channel DOM marks already added media and delete confirmation state', () => {
+test('custom channel DOM marks already added media and keeps deletion as a list-level request', () => {
   const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   Object.defineProperty(globalThis, 'document', {
     configurable: true,
@@ -102,9 +106,9 @@ test('custom channel DOM marks already added media and delete confirmation state
     assert.equal(addButton?.attributes.get('aria-pressed'), 'true');
 
     const channelActions = list.children[0]?.children.at(-1);
-    const confirmButton = channelActions?.children.at(-1);
-    assert.equal(confirmButton?.dataset.customChannelAction, 'confirmDeleteChannel');
-    assert.equal(confirmButton?.textContent, 'Confirm delete');
+    const deleteButton = channelActions?.children.at(-1);
+    assert.equal(deleteButton?.dataset.customChannelAction, 'requestDeleteChannel');
+    assert.equal(deleteButton?.textContent, 'Delete');
   } finally {
     Object.defineProperty(globalThis, 'document', {
       configurable: true,
@@ -219,5 +223,7 @@ function createState(): CustomChannelRendererState {
     mediaTypeFilter: 'all',
     deleteConfirmationChannelId: null,
     lastSavedChannelId: null,
+    pendingAction: null,
+    pendingChannelId: null,
   };
 }

@@ -38,6 +38,9 @@ export interface PlexRuntimeController {
   clearSelectedSection: () => void;
   clearSelectedServer: () => void;
   clearPinSubflow: () => Promise<void>;
+  dismissPinError: () => Promise<void>;
+  invalidateProfileSwitch: () => void;
+  invalidateOnboardingOperations: (clearError?: boolean) => void;
   handleBack: () => Promise<boolean>;
   loadSnapshot: () => Promise<void>;
   requestPin: () => Promise<void>;
@@ -94,6 +97,9 @@ export function createPlexRuntimeController({
     applySuccess: (value: TValue) => PlexRuntimeSnapshot | null,
     statusText: string,
   ): Promise<PlexIpcResult<TValue> | null> => {
+    if (pendingOperationEpochs.has(operation) || state.pending[operation]) {
+      return null;
+    }
     const epoch = ++operationEpoch;
     const previousStatusText = state.statusText;
     pendingOperationEpochs.set(operation, epoch);
@@ -139,9 +145,7 @@ export function createPlexRuntimeController({
       commit(markPlexRendererOperationPending(state, operation, false));
     }
   };
-
   const isOperationEpochCurrent = (epoch: number): boolean => epoch === operationEpoch;
-
   const clearPollTimer = (): void => {
     if (pollTimer !== null) {
       scheduler.clearTimeout(pollTimer);
@@ -206,7 +210,10 @@ export function createPlexRuntimeController({
       pendingOperationEpochs.clear();
       clearPollTimer();
       activePinId = null;
-      commit(clearPlexRendererPending(clearPlexRendererPinSubflow(state)));
+      commit({
+        ...clearPlexRendererPending(clearPlexRendererPinSubflow(state, 'Ready to request a Plex sign-in code')),
+        errorText: null,
+      });
       if (pinId !== null && Number.isFinite(pinId) && pinId > 0) {
         await bridge.cancelPin({ pinId }).catch((error: unknown) => {
           recordPlexRendererIpcRejection(recordRendererEvent, 'cancelPin', error);
@@ -214,7 +221,27 @@ export function createPlexRuntimeController({
         });
       }
     },
+    async dismissPinError(): Promise<void> {
+      await controller.clearPinSubflow();
+    },
+    invalidateProfileSwitch(): void {
+      commitLocalClear({
+        ...updatePlexRendererInputs(state, { homeUserPin: '' }),
+        errorText: null,
+      });
+    },
+    invalidateOnboardingOperations(clearError = false): void {
+      ++operationEpoch;
+      pendingOperationEpochs.clear();
+      clearPollTimer();
+      commit({ ...clearPlexRendererPending(state), errorText: clearError ? null : state.errorText });
+    },
     async handleBack(): Promise<boolean> {
+      const authState = state.snapshot?.auth.state ?? 'signed-out';
+      if (state.errorText !== null && (authState === 'signed-out' || authState === 'pin-pending')) {
+        await controller.dismissPinError();
+        return true;
+      }
       if (state.lastMetadata !== null || (state.snapshot?.library.metadata ?? null) !== null || state.selectedItemRatingKey !== null) {
         controller.clearMetadata();
         return true;
@@ -278,21 +305,12 @@ export function createPlexRuntimeController({
       );
       if (result?.ok && result.value.pin.claimed === false) {
         schedulePoll();
+      } else if (result?.ok && result.value.pin.claimed) {
+        await controller.getHomeUsers();
       }
     },
     async cancelPin(): Promise<void> {
-      clearPollTimer();
-      const pinId = activePinId ?? state.snapshot?.auth.pin?.id ?? null;
-      if (pinId === null || !Number.isFinite(pinId) || pinId <= 0) {
-        return;
-      }
-      activePinId = null;
-      await run(
-        'cancelPin',
-        () => bridge.cancelPin({ pinId }),
-        (value) => value.snapshot,
-        'PIN cancelled',
-      );
+      await controller.clearPinSubflow();
     },
     async getHomeUsers(): Promise<void> {
       await run('getHomeUsers', bridge.getHomeUsers, (value) => value.snapshot, 'Profiles loaded');

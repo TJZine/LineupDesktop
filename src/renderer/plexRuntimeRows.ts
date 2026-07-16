@@ -6,13 +6,26 @@ import type {
 } from '../contracts/plex.js';
 import type { RendererDomBindings } from './domBindings.js';
 
-export function renderHomeUsers(users: readonly PlexHomeUserSummary[], dom: RendererDomBindings): void {
-  renderButtonList(dom.plexHomeUsersElement, users, 'No additional Plex Home profiles loaded.', (user) => {
+export function renderHomeUsers(
+  users: readonly PlexHomeUserSummary[],
+  dom: RendererDomBindings,
+  pending = false,
+): void {
+  let profileIndex = 0;
+  let mainAssigned = false;
+  renderButtonList(dom.plexHomeUsersElement, users, 'No Plex Home profiles are available.', (user) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'profile-row';
     button.dataset.plexHomeUserId = user.id;
-    button.dataset.focusId = createPlexFocusId('plex-dyn-home', user.id);
+    profileIndex += 1;
+    button.dataset.focusId = !user.protected && !mainAssigned
+      ? 'btn-profile-main'
+      : `btn-profile-profile-${profileIndex}`;
+    mainAssigned ||= !user.protected;
+    setAttributeSafe(button, 'role', 'option');
+    setAttributeSafe(button, 'aria-selected', 'false');
+    setPendingState(button, pending);
     const avatar = document.createElement('span');
     avatar.className = 'profile-avatar profile-avatar-fallback';
     avatar.textContent = user.title.trim().slice(0, 1).toUpperCase() || '?';
@@ -34,14 +47,20 @@ export function renderServers(
   selectedServerId: string | null,
   status: string,
   dom: RendererDomBindings,
+  pending = false,
 ): void {
+  let serverIndex = 0;
   renderButtonList(dom.plexServersElement, servers, formatServerEmptyText(status), (server) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `server-row${server.serverId === selectedServerId ? ' active' : ''}`;
     button.dataset.plexServerId = server.serverId;
-    button.dataset.focusId = createPlexFocusId('plex-dyn-server', server.serverId);
+    serverIndex += 1;
+    button.dataset.focusId = `btn-server-select-server-${serverIndex}`;
     button.dataset.selected = String(server.serverId === selectedServerId);
+    setAttributeSafe(button, 'role', 'option');
+    setAttributeSafe(button, 'aria-selected', String(server.serverId === selectedServerId));
+    setPendingState(button, pending);
 
     const main = document.createElement('span');
     main.className = 'server-main';
@@ -78,6 +97,12 @@ export function renderServers(
   });
 }
 
+function setPendingState(button: HTMLButtonElement, pending: boolean): void {
+  button.disabled = pending;
+  setAttributeSafe(button, 'aria-disabled', String(pending));
+  setAttributeSafe(button, 'aria-busy', String(pending));
+}
+
 function formatServerStatusLabel(status: string): string {
   switch (status) {
     case 'ok':
@@ -101,14 +126,18 @@ export function renderSections(
   selectedSectionId: string | null,
   status: string,
   dom: RendererDomBindings,
+  setupSelectedSectionIds: readonly string[] = [],
 ): void {
   renderButtonList(dom.plexSectionsElement, sections, formatLibraryEmptyText(status), (section) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `setup-toggle library-toggle${section.id === selectedSectionId ? ' selected' : ''}`;
+    const selected = setupSelectedSectionIds.includes(section.id);
+    const previewing = section.id === selectedSectionId;
+    button.className = `setup-toggle library-toggle${selected ? ' selected' : ''}${previewing ? ' previewing' : ''}`;
     button.dataset.plexSectionId = section.id;
     button.dataset.focusId = createPlexFocusId('plex-dyn-section', section.id);
-    button.dataset.selected = String(section.id === selectedSectionId);
+    button.dataset.selected = String(selected);
+    button.setAttribute('aria-pressed', String(selected));
     const marker = document.createElement('span');
     marker.className = 'setup-toggle-icon';
     marker.dataset.libraryMarker = section.type.slice(0, 1).toUpperCase();
@@ -120,7 +149,7 @@ export function renderSections(
     meta.textContent = `${formatLibraryType(section.type)} / ${formatContentCount(section.contentCount)}`;
     const state = document.createElement('span');
     state.className = 'setup-toggle-state';
-    state.textContent = section.id === selectedSectionId ? 'Selected' : 'Open';
+    state.textContent = selected ? (previewing ? 'Selected · Previewing' : 'Selected') : 'Not selected';
     button.append(marker, label, meta, state);
     return button;
   });
@@ -132,6 +161,7 @@ export function renderItems(
   status: string,
   searchQuery: string | null,
   dom: RendererDomBindings,
+  previewBadgesEnabled = true,
 ): void {
   renderButtonList(dom.plexItemsElement, items, formatItemsEmptyText(status, searchQuery), (item) => {
     const button = document.createElement('button');
@@ -145,7 +175,8 @@ export function renderItems(
     label.textContent = item.title;
     const meta = document.createElement('span');
     meta.className = 'setup-toggle-meta';
-    meta.textContent = `${formatMediaType(item.type)} / ${formatYear(item.year)}`;
+    meta.textContent = previewBadgesEnabled ? `${formatMediaType(item.type)} / ${formatYear(item.year)}` : '';
+    meta.hidden = !previewBadgesEnabled;
     const state = document.createElement('span');
     state.className = 'setup-toggle-state';
     state.textContent = item.ratingKey === selectedItemRatingKey ? 'Previewing' : 'Preview';
@@ -154,7 +185,11 @@ export function renderItems(
   });
 }
 
-export function renderMetadata(item: PlexMediaItemSummary | null, dom: RendererDomBindings): void {
+export function renderMetadata(
+  item: PlexMediaItemSummary | null,
+  dom: RendererDomBindings,
+  previewBadgesEnabled = true,
+): void {
   if (!dom.plexMetadataElement) {
     return;
   }
@@ -168,12 +203,13 @@ export function renderMetadata(item: PlexMediaItemSummary | null, dom: RendererD
   const title = document.createElement('strong');
   title.textContent = item.title;
   const details = document.createElement('p');
-  details.textContent = [
+  details.textContent = previewBadgesEnabled ? [
     formatMediaType(item.type),
     formatYear(item.year),
     formatDuration(item.durationMs),
     item.contentRating ?? null,
-  ].filter((value): value is string => value !== null).join(' / ');
+  ].filter((value): value is string => value !== null).join(' / ') : '';
+  details.hidden = !previewBadgesEnabled;
   const summary = document.createElement('p');
   summary.textContent = item.summary;
   dom.plexMetadataElement.append(title, details, summary);
@@ -333,4 +369,8 @@ function hashFocusValue(value: string): string {
 
 function assertUnreachable(_value: never): string {
   return 'Unknown';
+}
+
+function setAttributeSafe(element: HTMLElement, name: string, value: string): void {
+  if (typeof element.setAttribute === 'function') element.setAttribute(name, value);
 }

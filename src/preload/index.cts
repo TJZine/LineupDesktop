@@ -17,6 +17,7 @@ import {
   createPlayerSnapshotBridge,
   type PlayerSnapshotBridgeInvoke,
 } from './playerBridge.cjs';
+import { createSettingsBridge, type SettingsBridgeInvoke } from './settingsBridge.cjs';
 import {
   LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
@@ -53,6 +54,7 @@ import {
   LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL,
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
+  LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, LINEUP_SETTINGS_REPLACE_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
 } from './channels.cjs';
 import {
@@ -112,12 +114,6 @@ import type {
 
 const { contextBridge, ipcRenderer } = require('electron') as typeof Electron;
 
-/**
- * Sandboxed preload exposes only the typed bridge: main events are
- * runtime-guarded before callbacks, invoke results are typed envelopes expected
- * from authorized handlers, and privileged objects/secrets are not
- * intentionally forwarded.
- */
 const PLEX_REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,120}$/u;
 const PLEX_DEFAULT_PAGE_SIZE = 100;
 const PLEX_MAX_PAGE_SIZE = 5000;
@@ -1553,6 +1549,7 @@ const playerSnapshotBridge = createPlayerSnapshotBridge(
     isPlayerError,
   },
 );
+const invokeSettings: SettingsBridgeInvoke = (channel, input) => ipcRenderer.invoke(channel, input);
 
 const lineupDesktop: LineupDesktopPreloadApi = {
   shell: {
@@ -1595,6 +1592,9 @@ const lineupDesktop: LineupDesktopPreloadApi = {
       ) as Promise<ShellIpcResult<WindowFullscreenState>>;
     },
   },
+  settings: createSettingsBridge(invokeSettings, {
+    getSnapshot: LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, replace: LINEUP_SETTINGS_REPLACE_CHANNEL,
+  }),
   player: {
     dispatch: (envelope) => {
       if (!isPlayerRendererIntentEnvelope(envelope)) {

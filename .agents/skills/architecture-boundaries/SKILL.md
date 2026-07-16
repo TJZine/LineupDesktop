@@ -12,7 +12,8 @@ Read:
 1. `AGENTS.md`
 2. `docs/AGENTIC_DEV_WORKFLOW.md`
 3. `docs/architecture/CURRENT_STATE.md`
-4. the task-specific architecture doc named by the plan
+4. `docs/architecture/file-shape-guardrails.md`
+5. the task-specific architecture doc named by the plan
 
 Keep one owner per runtime concern:
 
@@ -34,3 +35,7 @@ Before editing, name the seam, files in scope, files out of scope, verification
 proof, and stop/replan triggers. Stop if implementation would add compatibility
 barrels, old upstream path shims, broad utility owners, or privileged renderer
 access not approved by the plan.
+
+Apply the tracked file-shape guardrails when production source shape changes.
+This skill owns boundary routing and task-local stop conditions; the architecture
+document owns thresholds, hotspot lists, dispositions, and extraction policy.

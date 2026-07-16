@@ -15,8 +15,15 @@ export async function assertFullscreenContinuity(
   try {
     await ensureVisibleForFullscreen(window);
     const fullscreenOn = await setRendererFullscreenAndWait(window, true);
-    if (!isExpectedFullscreenResult(fullscreenOn.result, true) || !fullscreenOn.observed) {
-      failures.push('fullscreen on ' + JSON.stringify(fullscreenOn.result));
+    if (
+      !isExpectedFullscreenResult(fullscreenOn.result, true)
+      || (!fullscreenOn.observed && window.isFullScreenable() && window.isFocused())
+    ) {
+      failures.push('fullscreen on ' + JSON.stringify({
+        result: fullscreenOn.result,
+        observed: fullscreenOn.observed,
+        window: getFullscreenDiagnostics(window),
+      }));
       return;
     }
     const fullscreenResult = await window.webContents.executeJavaScript(`
@@ -28,11 +35,10 @@ export async function assertFullscreenContinuity(
         };
         const playerOsdButton = document.querySelector('[data-focus-id="player-osd"]');
         if (document.documentElement.dataset.activeRoute !== 'player') failures.push('fullscreen route continuity');
-        if (
-          !(playerOsdButton instanceof HTMLButtonElement) ||
-          document.activeElement !== playerOsdButton ||
-          playerOsdButton.tabIndex !== 0
-        ) {
+        const activePlayerControl = document.activeElement instanceof HTMLButtonElement
+          && document.activeElement.dataset.focusId?.startsWith('player-') === true
+          && document.activeElement.tabIndex === 0;
+        if (!(playerOsdButton instanceof HTMLButtonElement) || !activePlayerControl) {
           failures.push('fullscreen focus continuity');
         }
         const presentationZ = z('[data-player-presentation-surface]');
@@ -64,6 +70,63 @@ export async function assertFullscreenContinuity(
     if (isFullscreenState(window, true) && !(await waitForFullscreenState(window, false))) {
       failures.push('fullscreen leave BrowserWindow state');
     }
+  }
+}
+
+export async function assertRendererCloseLifecycle(
+  window: BrowserWindow,
+  failures: string[],
+): Promise<void> {
+  const observed = {
+    browserWindowClosed: false,
+    windowAllClosed: false,
+    beforeQuit: false,
+    willQuit: false,
+  };
+  const waitForLifecycle = new Promise<void>((resolve) => {
+    const check = (): void => {
+      if (Object.values(observed).every(Boolean)) resolve();
+    };
+    window.once('closed', () => { observed.browserWindowClosed = true; check(); });
+    app.once('window-all-closed', () => { observed.windowAllClosed = true; check(); });
+    app.once('before-quit', () => { observed.beforeQuit = true; check(); });
+    app.once('will-quit', () => { observed.willQuit = true; check(); });
+  });
+  const timeout = new Promise<void>((resolve) => { setTimeout(resolve, 5000); });
+
+  let rendererResult: unknown = null;
+  try {
+    rendererResult = await window.webContents.executeJavaScript(`
+      (async () => {
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          window.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape', bubbles: true, cancelable: true
+          }));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          const candidate = document.querySelector('[data-shell-action="confirm-exit"]');
+          if (candidate instanceof HTMLButtonElement && !candidate.closest('[hidden]')) break;
+        }
+        const confirm = document.querySelector('[data-shell-action="confirm-exit"]');
+        if (!(confirm instanceof HTMLButtonElement) || confirm.closest('[hidden]')) {
+          return {
+            invoked: false,
+            route: document.documentElement.dataset.activeRoute,
+            activeFocus: document.activeElement instanceof HTMLElement
+              ? document.activeElement.dataset.focusId ?? null : null,
+            overlay: document.documentElement.dataset.activeOverlay,
+          };
+        }
+        confirm.click();
+        return { invoked: true };
+      })();
+    `);
+  } catch {
+    // BrowserWindow destruction may reject evaluation after the synchronous close.
+  }
+
+  await Promise.race([waitForLifecycle, timeout]);
+  if (!Object.values(observed).every(Boolean)) {
+    failures.push('renderer close lifecycle ' + JSON.stringify({ observed, rendererResult }));
   }
 }
 

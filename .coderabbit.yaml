@@ -30,7 +30,7 @@ reviews:
         Review these as the Desktop agent-control plane. Flag contradictions, stale links, local-only leakage, mismatch with tools/verify-docs.mjs, and guidance that would encourage low-quality implementation.
     - path: ".agents/skills/**/*.md"
       instructions: |
-        Review project skills as thin wrappers over tracked launchers or architecture docs. Flag duplicated policy, stale paths, and missing read order.
+        Distinguish the two project-skill forms in docs/agentic/skill-strategy.md. Launcher wrappers named lineup-desktop-* should stay thin tracked-launcher routers, with at most their canonical allowlisted terminal invariant. Same-name workflow and boundary adaptations may retain concise trigger routing, owner-boundary rules, stop conditions, and task-local TypeScript/test/architecture checklists that are not fully owned elsewhere. Do not request link-only rewrites or removal of unique operational guidance merely because a tracked authority exists. Flag missing authoritative read order, contradictions, stale paths, and duplicated volatile/global policy such as role matrices, exact model/config values, numeric limits, verification routing, file-shape thresholds, or hotspot lists.
     - path: ".codex/**"
       instructions: |
         Review Codex role config for role clarity, read-only boundaries, and over-broad delegation. Flag obsolete role names or roles that encourage speculative implementation.

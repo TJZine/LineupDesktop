@@ -1,8 +1,12 @@
 # Feature Implement Launcher
 
 Use this launcher to implement an approved Lineup Desktop feature/design plan.
-Tier 2 uses the tracked `worker` role. Tier 3 uses the same implementer inside
-the feature-quality loop with the active run bundle as task context.
+Tier 2 uses the tracked `worker` role by default. `worker_sol_low` is allowed
+only for a frozen unit needing repository comprehension but no design judgment;
+`worker_luna` is allowed only for exact, repeatable, cheap-to-verify work. Both
+need direct verification and stop/escalation rules. Tier 3 uses the
+same eligible implementer inside the feature-quality loop with the active run
+bundle as task context.
 
 ## Read Order
 
@@ -21,6 +25,9 @@ the feature-quality loop with the active run bundle as task context.
 - Keep implementation inside the approved files, owner, and seam.
 - Execute one bounded unit at a time unless the plan explicitly authorizes
   parallel work.
+- If a lower-cost worker unit reveals ambiguity, plan contradiction, required
+  scope expansion, unexpected cross-boundary coupling, or verification failure
+  needing diagnosis, stop and escalate instead of improvising.
 - Stop and replan if Electron IPC/security, native playback, storage/secrets,
   packaging, release gates, or import scope changes beyond the plan.
 - Do not copy upstream Lineup code without updating

@@ -47,6 +47,9 @@ import { registerPlexComposition, type PlexCompositionRegistration } from './ple
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
 import { registerShellAppCommandController } from './window/shellAppCommandController.js';
 import { createShellWindowController } from './window/shellWindowController.js';
+import { resolveDesktopSettingsFilePath } from './persistence/appDataPaths.js';
+import { DesktopSettingsStore } from './persistence/desktopSettingsStore.js';
+import { registerSettingsIpcHandlers, type SettingsIpcTeardown } from './settings/settingsIpc.js';
 
 registerLineupProtocolScheme();
 
@@ -67,6 +70,7 @@ const shellWindowController = createShellWindowController({
 });
 let teardownPlayerIpc: PlayerIpcTeardown | null = null;
 let teardownDiagnosticsIpc: DiagnosticsIpcTeardown | null = null;
+let teardownSettingsIpc: SettingsIpcTeardown | null = null;
 let plexComposition: PlexCompositionRegistration | null = null;
 let channelComposition: ChannelCompositionRegistration | null = null;
 let playbackRuntime: PlexPlaybackRuntime | null = null;
@@ -87,6 +91,13 @@ app.whenReady()
     registerLineupProtocolHandler(rendererRoot);
     configurePermissionContainment();
     registerShellIpcHandlers();
+    teardownSettingsIpc = registerSettingsIpcHandlers({
+      store: new DesktopSettingsStore({
+        settingsFilePath: resolveDesktopSettingsFilePath(app),
+      }),
+      isAuthorizedEvent,
+      ipcMain,
+    });
     teardownDiagnosticsIpc = registerDiagnosticsIpcHandlers({
       eventStore: diagnosticEventStore,
       shellMode,
@@ -218,6 +229,8 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', (event) => {
   publishShellStatus('closing');
+  teardownSettingsIpc?.();
+  teardownSettingsIpc = null;
   const teardown = teardownPlayerIpc;
   if (playerIpcQuitTeardownComplete || teardown === null) {
     const localPlaybackRuntime = playbackRuntime;

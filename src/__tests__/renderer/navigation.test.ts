@@ -6,7 +6,12 @@ import {
   createRouteState,
   mapDesktopKeyEvent,
   setRoute,
+  type AppRouteId,
+  type FocusState,
 } from '../../renderer/navigation.js';
+import { createNavigationLifecycle } from '../../renderer/shell/navigationLifecycle.js';
+import { createRendererShellState, rejectFullscreenRequest } from '../../renderer/shell/shellState.js';
+import type { RendererDomBindings } from '../../renderer/domBindings.js';
 
 test('renderer route state records the previous route without changing unchanged routes', () => {
   const initial = createRouteState();
@@ -44,64 +49,77 @@ test('focus registry keeps focus scoped to the active route', () => {
   assert.equal(guideMove.state.activeId, 'guide-nav');
 });
 
-test('focus registry keeps primary route targets reachable from any active route', () => {
+test('focus registry remembers route-owned targets without global nav targets', () => {
   const registry = new FocusRegistry();
-  registry.register({ id: 'nav-player', route: 'player', order: 0, scope: 'global' });
-  registry.register({ id: 'nav-guide', route: 'guide', order: 1, scope: 'global' });
-  registry.register({ id: 'nav-settings', route: 'settings', order: 2, scope: 'global' });
-  registry.register({
-    id: 'nav-channel-setup',
-    route: 'channelSetup',
-    order: 3,
-    scope: 'global',
-  });
-  registry.register({
-    id: 'player-fullscreen',
-    route: 'player',
-    order: 100,
-    neighbors: { left: 'nav-player' },
-  });
+  registry.register({ id: 'player-fullscreen', route: 'player', order: 0 });
+  registry.register({ id: 'guide-window-next', route: 'guide', order: 0 });
+  registry.register({ id: 'settings-cat-playback', route: 'settings', order: 0 });
 
   const initial = registry.createInitialState('player');
-  assert.deepEqual(initial, { activeRoute: 'player', activeId: 'nav-player' });
-
-  const guide = registry.move(initial, 'down');
-  assert.equal(guide.changed, true);
-  assert.deepEqual(guide.state, { activeRoute: 'player', activeId: 'nav-guide' });
-
-  const settings = registry.move(guide.state, 'down');
-  assert.equal(settings.changed, true);
-  assert.deepEqual(settings.state, { activeRoute: 'player', activeId: 'nav-settings' });
-
-  const channelSetup = registry.move(settings.state, 'down');
-  assert.equal(channelSetup.changed, true);
-  assert.deepEqual(channelSetup.state, {
-    activeRoute: 'player',
-    activeId: 'nav-channel-setup',
+  assert.deepEqual(initial, { activeRoute: 'player', activeId: 'player-fullscreen' });
+  assert.deepEqual(registry.focusRoute(initial, 'guide').state, {
+    activeRoute: 'guide',
+    activeId: 'guide-window-next',
   });
-
-  const focusedGuideRoute = registry.focusRoute(channelSetup.state, 'guide');
-  assert.equal(focusedGuideRoute.changed, true);
-  assert.deepEqual(focusedGuideRoute.state, { activeRoute: 'guide', activeId: 'nav-guide' });
 });
 
-test('focus registry accepts browser focus on global primary route targets', () => {
-  const registry = new FocusRegistry();
-  registry.register({ id: 'nav-player', route: 'player', order: 0, scope: 'global' });
-  registry.register({ id: 'nav-guide', route: 'guide', order: 1, scope: 'global' });
-  registry.register({ id: 'player-fullscreen', route: 'player', order: 100 });
+test('navigation lifecycle preserves shortcuts, route focus memory, exit restore, and inline-error precedence', async () => {
+  let route: AppRouteId = 'player';
+  let focus: FocusState = { activeRoute: route, activeId: 'player-fullscreen' };
+  let shell = createRendererShellState();
+  shell = { ...shell, bootstrap: 'ready' };
+  let closed = 0;
+  const lifecycle = createNavigationLifecycle({
+    getRoute: () => route,
+    getFocusState: () => focus,
+    setFocusState: (state) => { focus = state; },
+    getShellState: () => shell,
+    setShellState: (state) => { shell = state; },
+    render: () => undefined,
+    focusRegistry: createLifecycleFocusRegistry(),
+    dom: createLifecycleDomBindings(),
+    onFocusChanged: () => undefined,
+    scrollFocusedIntoView: () => undefined,
+    activateRoute: (nextRoute) => { route = nextRoute; },
+    isProfileModalActive: () => false,
+    closeProfileModal: () => undefined,
+    handleChannelSetupBack: async () => false,
+    handlePlayerOverlayBack: () => false,
+    dismissInlineError: () => { shell = { ...shell, inlineError: null }; focus = { ...focus, activeId: 'player-fullscreen' }; },
+    requestFullscreen: async () => undefined,
+    invalidateFullscreenRequest: () => undefined,
+    closeWindow: () => { closed += 1; },
+  });
 
-  const initial = registry.createInitialState('player');
-  const tabbedToGuide = registry.focusTarget(initial, 'nav-guide');
-  assert.equal(tabbedToGuide.changed, true);
-  assert.deepEqual(tabbedToGuide.state, { activeRoute: 'player', activeId: 'nav-guide' });
+  await lifecycle.handleInput('guide');
+  assert.equal(route, 'guide');
+  focus = { activeRoute: 'guide', activeId: 'guide-window-next' };
+  await lifecycle.handleInput('settings');
+  await lifecycle.handleInput('guide');
+  assert.equal(focus.activeId, 'guide-window-next');
+  await lifecycle.handleInput('back');
+  assert.equal(route, 'player');
+  await lifecycle.handleInput('back');
+  assert.equal(shell.exitConfirmOpen, true);
+  assert.equal(focus.activeId, 'exit-confirm-cancel');
+  for (const direction of ['up', 'down', 'left', 'right'] as const) {
+    await lifecycle.handleInput(direction);
+    assert.ok(
+      focus.activeId === 'exit-confirm-cancel' || focus.activeId === 'exit-confirm-exit',
+      `${direction} escaped the exit confirmation`,
+    );
+  }
+  lifecycle.cancelExit();
+  assert.equal(focus.activeId, 'player-fullscreen');
+  await lifecycle.handleInput('back');
+  lifecycle.confirmExit();
+  lifecycle.confirmExit();
+  assert.equal(closed, 1);
 
-  const hiddenPlayerControl = registry.focusTarget(
-    { activeRoute: 'guide', activeId: 'nav-guide' },
-    'player-fullscreen',
-  );
-  assert.equal(hiddenPlayerControl.changed, false);
-  assert.deepEqual(hiddenPlayerControl.state, { activeRoute: 'guide', activeId: 'nav-guide' });
+  shell = rejectFullscreenRequest({ ...shell, exitConfirmOpen: false }, true);
+  await lifecycle.handleInput('back');
+  assert.equal(shell.inlineError, null);
+  assert.equal(focus.activeId, 'player-fullscreen');
 });
 
 test('desktop key mapping normalizes keyboard and remote-like input', () => {
@@ -114,3 +132,35 @@ test('desktop key mapping normalizes keyboard and remote-like input', () => {
   assert.equal(mapDesktopKeyEvent({ key: 'Unidentified', code: 'BrowserBack' }), 'back');
   assert.equal(mapDesktopKeyEvent({ key: 'Unidentified' }), null);
 });
+
+function createLifecycleFocusRegistry(): FocusRegistry {
+  const registry = new FocusRegistry();
+  registry.register({ id: 'player-fullscreen', route: 'player', order: 0 });
+  registry.register({ id: 'guide-first', route: 'guide', order: 0 });
+  registry.register({ id: 'guide-window-next', route: 'guide', order: 1 });
+  registry.register({ id: 'settings-first', route: 'settings', order: 0 });
+  registry.register({ id: 'exit-confirm-cancel', route: 'player', order: -2 });
+  registry.register({ id: 'exit-confirm-exit', route: 'player', order: -1 });
+  return registry;
+}
+
+function createLifecycleDomBindings(): RendererDomBindings {
+  return {
+    fullscreenButton: null,
+    routeButtons: [],
+    routeActionButtons: [],
+    settingsActionButtons: [],
+    setupActionButtons: [],
+    channelCommitButtons: [],
+    epgActionButtons: [],
+    overlayActionButtons: [],
+    plexActionButtons: [],
+    focusableElements: [],
+    plexPanelElement: null,
+    plexHomeUsersElement: null,
+    plexServersElement: null,
+    plexSectionsElement: null,
+    plexItemsElement: null,
+    customChannelPanelElement: null,
+  } as unknown as RendererDomBindings;
+}

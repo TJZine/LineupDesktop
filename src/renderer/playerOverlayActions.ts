@@ -1,5 +1,4 @@
 import type { PlayerSnapshot } from '../contracts/player.js';
-import type { RendererDomBindings } from './domBindings.js';
 import type { FocusRegistry, FocusState } from './navigation.js';
 import {
   applyPlayerOverlayAction,
@@ -21,10 +20,7 @@ export interface PlayerOverlayActionContext {
   getFocusState(): FocusState;
   setFocusState(state: FocusState): void;
   getFocusRegistry(): FocusRegistry;
-  getDom(): RendererDomBindings;
   getPresentationFixtures(): RendererPresentationFixtures;
-  getFullscreenEnabled(): boolean;
-  setFullscreenEnabled(val: boolean): void;
   renderApp(): void;
 }
 
@@ -89,16 +85,6 @@ function recordPlayerDispatchFailure(operation: string, requestId: string, error
     summarizeRendererBridgeError(error),
     { operation, requestId },
   );
-}
-
-export async function toggleFullscreen(context: PlayerOverlayActionContext): Promise<void> {
-  const dom = context.getDom();
-  const fullscreenEnabled = context.getFullscreenEnabled();
-  const result = await window.lineupDesktop.window.setFullscreen(!fullscreenEnabled);
-  if (result.ok) {
-    context.setFullscreenEnabled(result.value.enabled);
-    dom.fullscreenButton?.setAttribute('aria-pressed', String(result.value.enabled));
-  }
 }
 
 export function applyOverlayAction(
