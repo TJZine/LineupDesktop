@@ -4,15 +4,13 @@ This is the durable checklist for the Windows-first Lineup Desktop port. It
 turns the GPT Pro handoff report and the accepted repo-genesis decisions into an
 ordered path for future plans.
 
-UI parity is reopened by
-[`2026-07-10-complete-webos-ui-parity-reopen-plan.md`](../plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md)
-as the mandatory Tier 3 gate between RD-26 and RD-27. Package 6 production
-correction is complete and reviewed under the platform-proof exception;
-Packages 7–8 renderer implementation may continue. RD-27 remains blocked until
-those packages close, and RD-27 itself cannot close without the mandatory fresh
-three-row `Package 6 operator-assisted fullscreen focus audit` on Windows.
-Earlier UI-parity completion language below is retained only as superseded
-historical closeout evidence.
+The Complete WebOS UI Parity Reopen closed Packages 0–8 on 2026-07-16 with
+renderer parity implementation and local automated verification complete. Its
+integrated proof contains 138 exact screenshots, 8 reduced-motion rows, 12
+forced-colors rows, and 3 local fullscreen rows. RD-27 is now the next Tier 3
+planning target, but cannot close without the mandatory fresh three-row
+`Package 6 operator-assisted fullscreen focus audit` on Windows. Local Package
+7 fullscreen evidence substitutes for none of those Windows rows.
 
 This is not an implementation plan for any single slice. Each serious in-flight
 slice still needs its own active tracked plan under
@@ -229,13 +227,13 @@ durable completion summary.
   the post-commit refresh hook fails. Direct persisted-channel edit is
   intentionally deferred behind a future reviewed edit-draft API with
   `expectedRevision`.
-- [ ] UI Parity closeout reopened on 2026-07-10 because the running app
-  contradicts the prior closeout and required visual proof is absent. The
-  superseded 2026-06-12 plan reported that Units 1 through 6 brought the
-  reachable Desktop body, overlays, auth/profile/server surfaces, settings
-  rail, responsive guide/EPG time-math, and staged setup composition into a
-  WebOS-informed visual posture. That historical report does not override the
-  active exact-capture, runtime-truth, focus, interaction, or review gates.
+- [x] Complete WebOS UI Parity Reopen Packages 0–8 closed on 2026-07-16 with
+  runtime-truth, focus, interaction, responsive, accessibility-mode, local
+  fullscreen, and exact-capture proof. The integrated local result is 138
+  screenshots split 69/69 across `1280x720` and `1920x1080`, plus 8
+  reduced-motion, 12 forced-colors, and 3 local fullscreen rows. Package 6
+  remains an explicit platform nonclaim: its three operator-assisted
+  fullscreen focus rows must be run afresh on Windows in RD-27.
 
 The GPT Pro report was written against the original Lineup app shape. This repo
 is a separate Desktop repo with no production runtime yet, so the first local
@@ -295,14 +293,13 @@ When a slice owns channel setup, the reachable channel setup route or surface
 must replace or isolate fake setup summaries and controls in the product path
 before closeout.
 
-The prior claim that the upstream-shaped app-body parity foundation was
-complete is superseded by the active Complete WebOS UI Parity Reopen plan.
-RD-22B did wire live Plex onboarding and library behavior, but the reachable
-static route rail/status chrome, long setup form, empty Guide shell,
-fixture-backed Player, default overlay stack, and session-only Settings prove
-that wiring did not close visual or interaction parity. RD-22A through RD-26
-remain historical runtime foundations; Packages 1–8 of the active reopen plan
-own the bounded UI correction and proof before RD-27.
+The prior app-body parity claim was superseded and corrected by the Complete
+WebOS UI Parity Reopen. Packages 0–8 replaced the reachable scaffold posture
+with runtime-backed onboarding/setup, persisted Settings, scheduler-backed
+Guide, runtime Player/overlay ownership, and exact local proof. RD-22A through
+RD-26 remain the runtime foundations; RD-27 now owns Windows product observation
+and the Package 6 operator-assisted fullscreen focus audit, not missing local
+renderer implementation.
 
 ## Upstream UI Parity Distribution
 
@@ -318,8 +315,8 @@ live integration blockers delay the complete Desktop skeleton.
 | Runtime-backed Guide/EPG, current-channel state, OSD, now-playing info, mini guide, channel badge, and player/route chrome | RD-24 | Wire persisted-channel scheduler/runtime data into the RD-22A guide/player shells and finish any guide/player parity that depends on real schedule state, channel switching, virtualization, current-program state, or runtime error behavior. |
 | Production playback controls and playback-state presentation over native video | RD-25 | Preserve the upstream playback interaction feel where it fits Desktop native-helper boundaries; renderer stays free of raw playback descriptors, URLs, headers, and native handles. |
 | Subtitle/audio/HDR option UI and playback-quality controls | RD-26 | Import or adapt upstream media-option presentation and interaction patterns only after runtime media-option behavior is real and renderer-safe. |
-| Complete WebOS-informed screen, runtime-truth, focus, input, overlay, persistence, and exact visual parity | Complete WebOS UI Parity Reopen active plan | Close Packages 0–8 with exact reference/baseline/target evidence and per-package adversarial review. This is a literal prerequisite to RD-27, not RD-27 work. |
-| Full MVP Windows behavior proof | RD-27 | Only after the active UI-parity reopen plan closes, run redaction-safe Windows operational proof across the real upstream-adapted UI surfaces. |
+| Complete WebOS-informed screen, runtime-truth, focus, input, overlay, persistence, and exact visual parity | Complete WebOS UI Parity Reopen, closed 2026-07-16 | Packages 0–8 are implemented and locally verified with exact integrated evidence; Package 6 remains a documented Windows platform-proof nonclaim. |
+| Full MVP Windows behavior proof | RD-27 | Run redaction-safe Windows operational proof across the real upstream-adapted UI surfaces, including the mandatory fresh three-row Package 6 audit. |
 
 Each owning slice must record copied or adapted upstream UI source, CSS, copy,
 assets, or tests in the import ledger before or with the import. Exact DOM or
@@ -327,9 +324,10 @@ router sharing is not required when upstream browser/webOS assumptions conflict
 with Desktop boundaries, but visible divergence must have a reviewed Desktop
 security, process, accessibility, or platform rationale.
 
-The Complete WebOS UI Parity Reopen plan must close after RD-26 and before
-RD-27. RD-27 may then verify integration across these surfaces, but it must not
-backfill missing UI import/adaptation or visual/focus proof.
+The Complete WebOS UI Parity Reopen closed after RD-26 and before RD-27. RD-27
+may now verify integration across these surfaces, but it must route any newly
+observed implementation defect back to the smallest owning slice rather than
+silently backfill it as soak work.
 Each owning slice must close its own parity gate before the next runtime slice
 treats that surface as complete.
 
@@ -371,10 +369,10 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-26 are code complete at their recorded scope. The active UI
-parity plan continues through Packages 7–8 while Package 6's operator-assisted
-fullscreen platform proof is bound to RD-27 Windows execution. RD-27 remains
-blocked until the active Tier 3 parity plan closes. RD-21 superseded the former RD-21
+RD-01 through RD-26 are code complete at their recorded scope, and Complete
+WebOS UI Parity Reopen Packages 0–8 are locally complete and verified. Package
+6's operator-assisted fullscreen platform proof remains bound to fresh RD-27
+Windows execution. RD-21 superseded the former RD-21
 Future Platform Review route and deferred platform expansion until after
 product-parity/MVP completion. Do not import additional original Lineup product
 code or broaden live Plex/native playback runtime behavior until a reviewed
@@ -385,9 +383,9 @@ authorizes a bounded change.
 
 ### RD-00 Repo Genesis And Control Plane
 
-Status: code complete and reviewed; product-complete parity classification is
-blocked first on the active Complete WebOS UI Parity Reopen and then on
-redaction-safe Windows runtime proof in RD-27.
+Status: code complete and reviewed; renderer parity is locally complete and
+product-complete classification remains blocked on redaction-safe Windows
+runtime proof in RD-27.
 
 Depends on:
 
@@ -848,9 +846,9 @@ Observed closeout:
 
 ### RD-11 Scheduler, Channel, And Content Domain Import
 
-Status: code complete and reviewed; product-complete parity classification is
-blocked first on the active Complete WebOS UI Parity Reopen and then on
-redaction-safe Windows runtime proof in RD-27.
+Status: code complete and reviewed; renderer parity is locally complete and
+product-complete classification remains blocked on redaction-safe Windows
+runtime proof in RD-27.
 
 Depends on:
 
@@ -1706,8 +1704,8 @@ Stop and replan if:
 
 ### RD-25 Production Native Playback MVP
 
-Status: code complete and reviewed; the active Complete WebOS UI Parity Reopen
-is the literal predecessor to pending RD-27 Windows/manual product proof.
+Status: code complete and reviewed; renderer parity is locally complete and
+RD-27 owns pending Windows/manual product proof.
 
 Depends on:
 
@@ -1729,7 +1727,7 @@ Objective:
 
 Platform proof label:
 
-- `Complete WebOS UI Parity Reopen, then RD-27 Windows proof` for production
+- `RD-27 Windows proof required` for production
   native playback, switching, stop, fullscreen, crash recovery, cleanup, and
   redaction.
 
@@ -1760,13 +1758,13 @@ Stop and replan if:
 
 ### RD-26 Runtime Media Options And Playback Quality
 
-Status: code complete and reviewed; the active Complete WebOS UI Parity Reopen
-is the literal predecessor to pending RD-27 Windows/manual product proof.
+Status: code complete and reviewed; renderer parity is locally complete and
+RD-27 owns pending Windows/manual product proof.
 
 Depends on:
 
-- RD-25 code complete and reviewed; UI parity reopen closes before its pending
-  Windows/manual product proof may enter RD-27.
+- RD-25 code complete and reviewed; local renderer parity complete; pending
+  Windows/manual product proof belongs to RD-27.
 - RD-16 subtitle, audio, and HDR policy/resolver hardening complete.
 
 Objective:
@@ -1777,14 +1775,15 @@ Objective:
 
 Platform proof label:
 
-- `Complete WebOS UI Parity Reopen, then RD-27 Windows proof` for runtime media
+- `RD-27 Windows proof required` for runtime media
   option selection, fallback behavior, and video/UI composition.
 
 Exit gates:
 
 - Runtime subtitle/audio/HDR code is covered by fixtures and policy tests for
   the MVP sample matrix named by the reviewed plan; UI parity closes through
-  the active reopen plan before Windows/manual product proof may route to RD-27.
+  the completed local parity proof before Windows/manual product proof routes to
+  RD-27.
 - Subtitle, audio, and HDR option UI has reviewed upstream parity evidence for
   menu structure, selected/off/default/forced states, fallback/error states,
   focus/back behavior, and renderer-safe track identifiers.
@@ -1802,15 +1801,15 @@ Stop and replan if:
 
 ### RD-27 Windows MVP UI Proof And Operational Soak
 
-Status: not started.
+Status: ready for a fresh Tier 3 plan; not started.
 
 Depends on:
 
 - RD-22A through RD-26 code complete and reviewed, including RD-22B live Plex
   wiring; Windows/manual playback product proof pending in this RD-27 slice.
-- Complete WebOS UI Parity Reopen Packages 0–8 complete, verified, and cleanly
-  reviewed under
-  `docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md`.
+- Complete WebOS UI Parity Reopen Packages 0–8 complete and locally verified;
+  its full plan body is archived locally and durable closeout truth is reflected
+  in the architecture, parity, Windows-proof, and roadmap docs.
 - `docs/development/windows-ui-proof-plan.md` current.
 
 Objective:

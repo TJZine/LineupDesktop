@@ -112,6 +112,17 @@ output. Production native-helper playback, live Plex transport composition,
 real Electron app-path or `safeStorage` wiring, packaging, and
 Windows-specific proof surfaces remain future replanning triggers.
 
+## UI Parity Closeout Boundary
+
+Packages 5–8 completed scheduler-backed Guide presentation, runtime Player and
+overlay state, overlay presentation parity, and integrated local proof without
+widening renderer privilege or secret custody. They added no IPC/preload method,
+persistence schema or owner, native-helper behavior, raw playback descriptor,
+token-bearing URL/header, raw Plex payload, filesystem path, or native handle to
+renderer-facing state. Package 8 evidence is ignored and indexed only by
+sanitized metadata, hashes, and counts. Windows operational proof remains an
+RD-27 gate and does not change these trust boundaries.
+
 ## Release Gates
 
 Before public distribution, this repo must verify:

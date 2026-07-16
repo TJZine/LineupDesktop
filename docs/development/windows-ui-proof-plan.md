@@ -1,12 +1,11 @@
 # Windows UI Proof Plan
 
-RD-27 execution under this proof plan remains blocked by the active
-`docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md`. Package 6
-production correction is implemented and reviewed under the platform-proof
-exception, so Packages 7–8 renderer implementation may continue. RD-27 cannot
-close without the fresh mandatory three-row Windows `Package 6
-operator-assisted fullscreen focus audit`; Mac diagnostics substitute for none
-of its rows. The prior UI-parity closeout is superseded.
+Packages 0–8 renderer parity implementation and local automated verification
+are complete. RD-27 is the next Tier 3 planning target, but it cannot close
+without the fresh mandatory three-row Windows `Package 6 operator-assisted
+fullscreen focus audit`; Mac diagnostics and Package 7 local fullscreen proof
+substitute for none of its rows. Windows-required matrix rows remain blocked
+until observed Windows proof.
 
 ## Purpose
 
@@ -51,7 +50,7 @@ gate passes.
 | Proof surface | Allowed tracked summary | Notes |
 | --- | --- | --- |
 | Automated docs/redaction verification | Command name, exit status, and sanitized failure summary if any | Required for tracked proof-plan or matrix edits. |
-| Electron smoke or renderer route proof | Route/screen area, status, and sanitized behavior summary | Fake-backed UI remains fake-backed and cannot prove live product parity. |
+| Electron smoke or renderer route proof | Route/screen area, status, and sanitized behavior summary | Local renderer proof establishes its named seam only and cannot replace Windows operational or production-native-video proof. |
 | Windows package proof | Package identity, command names, status, verifier status, and blocker summary | Internal unpacked package proof does not prove public release readiness. |
 | Windows UI observation | Platform family, scenario id, display count, route area, pass/fail/blocked status | No screenshots or private visible content in tracked docs. |
 | Native presentation or playback harness | Harness name, scenario area, status, and sanitized capability limits | Dev-only harness proof cannot prove production native playback. |
