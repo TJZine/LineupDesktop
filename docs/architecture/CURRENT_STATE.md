@@ -1,16 +1,14 @@
 # Current Architecture State
 
-> **UI parity reopen (2026-07-10):** The running renderer contradicts the
-> archived 2026-06-12 parity closeout. The active Tier 3
-> `docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md` is the active
-> execution plan before RD-27; this document remains current architecture and
-> blocker authority. Static route/status chrome, fixture-backed Player,
-> simultaneous default overlays, and empty Guide remain blockers. Main-owned
-> Settings persistence and the shortened setup flow are complete. Blank
-> fullscreen was historically observed, but fresh
-> Package 0 exact-size production Electron `ArrowDown`, then `Enter` attempts at
-> both viewports reached Guide with `nav-guide` focused and fullscreen false; it
-> remains a regression target, not a currently reproduced blocker.
+> **UI parity reopen (2026-07-10):** Packages 0–6 production correction work is
+> implemented and reviewed under the active Tier 3
+> `docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md`; Packages 7–8
+> renderer parity work remains. Package 6 operator-assisted fullscreen platform
+> proof is not complete and is a mandatory three-row RD-27 Windows audit. Mac
+> diagnostics completed row one, while the stable-window row-two physical click
+> reached an external Computer Use AX/ScreenCaptureKit targeting limit after the
+> one reviewed focusability refresh; this is not evidence of product behavior.
+> No completed 29-row Mac acceptance manifest exists.
 > Established 2026-05-07. This is the canonical current-state architecture
 > document for Lineup Desktop.
 
@@ -19,13 +17,15 @@
 Lineup Desktop is a new Windows-first Electron repository. It currently has a
 secure Electron shell frame, the RD-13 renderer app shell/navigation, workflow,
 settings/channel setup, RD-23/RD-24 runtime-backed channel setup, guide, and
-channel surfaces complete for the current code state, fake-backed overlay, and
-CSS/theme style surfaces, the RD-22A upstream-shaped fixture/injected app body,
+channel surfaces complete for the current code state, Package 6 runtime-backed
+player/overlay behavior and corrected focus/accessibility ownership, remaining
+Package 7 visual-polish work, the RD-22A upstream-shaped fixture/injected app body,
 docs, workflow, contract, harness scaffolding, main-owned Plex
 auth/discovery/library domain seams, RD-22B live Plex onboarding/library runtime
 wiring, and RD-25/RD-26 playback code implementation. Code implementation and
-review are complete for RD-25/RD-26, but the active Complete WebOS UI Parity
-Reopen must close before the still-pending RD-27 Windows/manual product proof.
+review are complete for RD-25/RD-26. Packages 7–8 may continue under the active
+reopen while the still-pending Package 6 and broader Windows/manual product
+proof remain binding RD-27 gates.
 There is no installer
 implementation, public release/signing pipeline, production native-helper media
 binary redistribution, or Windows-observed production playback closeout proof
@@ -327,6 +327,13 @@ behavior, or public readiness claims.
 
 RD-23 is complete. It implements live channel setup and runtime persistence, turning the live Plex library browsing into persisted Desktop channels. It integrates the channel domain, main-owned channel persistence store, and narrow preload channel setup bridge. The renderer setup route is adapted to support live selection, strategy config (shuffling, block schedules), replace/confirm replace logic, and settings state recovery. Preload validation and selection hardening prevent stale data access.
 RD-24 is complete. It integrates scheduler-backed guide data and the channel runtime. Persisted channel configurations feed the schedule DayRollover and EPG calculations. Player route, overlays, now-playing, mini-guide, and channel badge are wired to real scheduler state. The app handles manual channel switches, scheduling ticks, and program transitions cleanly.
+Package 6 runtime player and overlay correction is implemented and reviewed.
+Production overlay ancestry, busy focus custody, direct-action eligibility, and
+single-owner native presentation are corrected with focused automated coverage.
+Operator-assisted fullscreen platform completion remains pending: RD-27 must
+run the named three-row Windows audit afresh. The Mac stable-window physical-
+click failure is an external proof-tool limitation and does not establish a
+product focus or fullscreen defect.
 Custom Channels Core is complete as a 2026-06-12 feature package on top of
 RD-23/RD-24. It adds renderer-safe custom-channel contracts, main-owned custom
 channel mutation runtime, safe Plex media picker/artwork projection, named

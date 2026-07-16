@@ -6,10 +6,13 @@ ordered path for future plans.
 
 UI parity is reopened by
 [`2026-07-10-complete-webos-ui-parity-reopen-plan.md`](../plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md)
-as the mandatory Tier 3 gate between RD-26 and RD-27. RD-27 is blocked until
-all packages, exact visual/focus proof, verification, and adversarial reviews
-in that plan close cleanly. Earlier UI-parity completion language below is
-retained only as superseded historical closeout evidence.
+as the mandatory Tier 3 gate between RD-26 and RD-27. Package 6 production
+correction is complete and reviewed under the platform-proof exception;
+Packages 7–8 renderer implementation may continue. RD-27 remains blocked until
+those packages close, and RD-27 itself cannot close without the mandatory fresh
+three-row `Package 6 operator-assisted fullscreen focus audit` on Windows.
+Earlier UI-parity completion language below is retained only as superseded
+historical closeout evidence.
 
 This is not an implementation plan for any single slice. Each serious in-flight
 slice still needs its own active tracked plan under
@@ -368,9 +371,10 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-26 are code complete at their recorded scope, but UI parity is
-reopened and blocks RD-27 Windows MVP UI Proof And Operational Soak until the
-active Tier 3 parity plan closes. RD-21 superseded the former RD-21
+RD-01 through RD-26 are code complete at their recorded scope. The active UI
+parity plan continues through Packages 7–8 while Package 6's operator-assisted
+fullscreen platform proof is bound to RD-27 Windows execution. RD-27 remains
+blocked until the active Tier 3 parity plan closes. RD-21 superseded the former RD-21
 Future Platform Review route and deferred platform expansion until after
 product-parity/MVP completion. Do not import additional original Lineup product
 code or broaden live Plex/native playback runtime behavior until a reviewed
@@ -1814,6 +1818,9 @@ Objective:
 - Run the redaction-safe Windows proof matrix for the real MVP: navigation,
   focus, keyboard/remote-like input, player overlays, fullscreen, multi-monitor,
   UI over video, sleep/wake, long playback, diagnostics export, and recovery.
+- Run the non-optional `Package 6 operator-assisted fullscreen focus audit`
+  afresh for all three named rows; Mac diagnostic evidence substitutes for none
+  of them.
 
 Platform proof label:
 
@@ -1828,6 +1835,16 @@ Exit gates:
   adapted MVP UI surface owned by RD-22A through RD-26: onboarding, channel
   setup, Settings, Guide/EPG, OSD, now-playing info, mini-guide, player chrome,
   playback controls, and media options.
+- The Package 6 audit emits a fresh three-pass Windows manifest covering:
+  `player-osd` / `overlay-osd-audio` / `playerOsd`;
+  `player-mini-guide` / `overlay-mini-channel-sample-channel-1` / `miniGuide`;
+  and `player-options` / `overlay-subtitle-track-off` / `playbackOptions`.
+  Each row starts visible but natively inactive with exact production focus,
+  observes readiness, receives exactly one real operator titlebar click, proves
+  the native transition after readiness and before confirmation without
+  semantic focus change, observes actual fullscreen enter/leave with native and
+  semantic continuity, restores bounds/content bounds/CSS viewport/DPR exactly,
+  cleans up, and emits only token-free redacted evidence.
 - Any missing upstream parity is routed back to the owning RD slice or a
   reviewed narrow follow-up, not closed as RD-27 soak work.
 - Blockers are classified against the parity matrix taxonomy and routed to the

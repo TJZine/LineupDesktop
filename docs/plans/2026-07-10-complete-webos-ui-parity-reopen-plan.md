@@ -3,9 +3,18 @@
 **Plan Status:** active
 **Task family:** feature/design
 **Tier:** Tier 3
-**Current execution unit:** Package 7 — Player overlay visual surfaces planning
-and review is next and unstarted. Package 6 — Runtime player and overlay state
-machine is implemented, controller-verified, and independently clean-reviewed.
+**Current execution unit:** Package 6 production correction implementation,
+focused coverage, harness calibration, implementation review, and the reviewed
+platform-proof exception are complete. Mac diagnostics proved row one end to
+end; row two reached its exact pre-input state but the stable-window Computer
+Use click failed through the external AX/ScreenCaptureKit proof tool, including
+after the single reviewed focusability refresh reached its hard stop. Row three
+did not receive a Mac acceptance run. All three physical-click rows are a
+fresh, mandatory RD-27 Windows manual audit; no completed 29-row Mac manifest
+or platform-complete claim exists. Packages 7–8 renderer implementation may
+continue while retaining that binding Windows-proof nonclaim. Package 7 still
+requires a post-correction baseline/provenance refresh and fresh plan review;
+its 2026-07-15 execution packet is stale and is not implementation authority.
 Package 5 — Scheduler-backed Guide parity remains closed with full verification,
 exact-viewport evidence, and clean read-only adversarial re-review. The
 source-proven pre–Package 5 remediation and the 2026-07-15 suggestion-reviewed
@@ -111,9 +120,23 @@ focus, reduced-motion, and forced-colors rules only. Proof-only smoke changes
 are limited to `src/main/smokeAssertions.ts` and
 `src/main/smokeFullscreenAssertions.ts`; they must replace stale fixture/quick-
 action assertions and cannot change main/runtime behavior. Tests are limited to
-the Package 6 files named below. Local execution/evidence artifacts stay under
-the ignored `docs/runs/complete-webos-ui-parity-reopen/` bundle. Package 7 must
-be promoted to the same exact-file standard before it becomes current. Package
+the Package 6 files named below. The focused Package 6 focus-custody correction
+may change only `src/renderer/staticDom.ts`, `src/renderer/routeDom.ts`,
+`src/renderer/focusDom.ts`, `src/renderer/rendererActionRegistration.ts`, and
+the four corresponding focused renderer tests named in its correction section.
+Its local packet and refreshed semantic/fullscreen proof remain ignored under
+`docs/runs/complete-webos-ui-parity-reopen/`. Local execution/evidence
+artifacts stay under that ignored bundle. Package 7 may
+change only `src/renderer/staticDom.ts`, `src/renderer/routeDom.ts`, new
+`src/renderer/playerOverlayDom.ts`, `src/renderer/styles.css`,
+`src/renderer/styles/player-overlays.css`, new
+`src/renderer/styles/player-overlay-information.css`, new
+`src/renderer/styles/player-overlay-menus.css`,
+`src/renderer/styles/shell.css`,
+`src/renderer/styles/responsive-accessibility.css`,
+`docs/architecture/import-ledger.md`, and the five focused renderer tests named
+in the Package 7 section below. Local Package 7 execution/capture evidence stays
+under the ignored `docs/runs/complete-webos-ui-parity-reopen/` bundle. Package
 8 changes evidence and tracked memory unless it routes a defect back to its
 owning package.
 
@@ -357,6 +380,10 @@ Package 5 closeout:
 ### Package 6 — Runtime player and overlay state machine
 
 **Role:** `worker` only.
+
+**Status:** production implementation and focused correction are complete and
+reviewed under the Package 6 platform-proof exception. Operator-assisted
+fullscreen platform proof remains the mandatory three-row RD-27 Windows audit.
 
 **Architecture boundary:** renderer-only. Existing
 `window.lineupDesktop.player`, `window.lineupDesktop.guide`, and
@@ -632,19 +659,1118 @@ Package 6 closeout:
   still owns visual hierarchy, density, spacing, typography, motion polish,
   visual-parity approval, and fresh parity captures.
 
+### Package 6 correction — Player overlay focus reachability and busy custody
+
+**Status:** correction plan review, implementation, focused coverage,
+ignored-harness calibration, and production implementation review are clean.
+The Mac physical-click limitation is closed as external proof-tool evidence,
+not a product defect; all three acceptance rows remain mandatory in RD-27 on
+Windows. **Role:** `worker` only. Low-cost workers are
+ineligible because the unit corrects production DOM ancestry, focus
+registration, pointer/OK activation, accessibility state, and actual fullscreen
+proof as one invariant.
+No parallel implementation is allowed across these coupled owners.
+
+**Contradiction and frozen boundary:** post-closeout Package 7 plan review
+proved that `[data-overlay-stack]` is a sibling before
+`[data-screen="player"]`, not a descendant. Therefore
+`readClosestRouteId()` returns `null` for terminal Guide and dynamic mini-guide/
+option controls; the production registry cannot establish the Player-route
+focus custody claimed by Package 6. Busy Retry, mini-guide, and option rows are
+also native HTML `disabled`, while `isElementHiddenFromFocus()` rejects both
+native disabled and `aria-disabled`, so none can retain exact busy focus.
+The appended ignored adjudication accepts this as a Package 6 blocker.
+
+Correct only the reachability/custody seam. Move the complete overlay stack,
+unchanged in internal hierarchy, out of the native presentation element and
+into `#screen-player`. Keep `[data-player-presentation-surface]` and its
+`.player-surface` as the existing sibling native click target. This is the
+smallest semantically correct ownership repair: every overlay focus target now
+inherits the Player route's `hidden`, `inert`, and `aria-hidden` lifecycle, and
+the existing route lookup works without a route-less overlay exception.
+
+The stacking and pointer consequences are frozen. `#screen-player` remains the
+positioned full-screen route layer; its absolute overlay stack therefore keeps
+the same inset and overlay z-index above the native presentation. The Player
+screen's `pointer-events: none` continues to pass unused pixels through to the
+native presentation, while the existing `.player-overlay { pointer-events:
+auto; }` and `.player-error button { pointer-events: auto; }` rules keep visible
+overlay controls interactive. Because overlay controls and the native
+presentation become siblings, overlay clicks can no longer bubble into the
+native `openOsd` listener. That structural repair does not change the real query
+shape: `playerPresentationElement` still carries `data-overlay-action="openOsd"`
+and therefore remains present in `overlayActionButtons` as well as the dedicated
+presentation binding. Do not change `domBindings.ts` or remove that semantic
+attribute. `registerRendererActions()` must explicitly exclude the exact
+`playerPresentationElement` identity from its generic overlay-action loop; the
+dedicated presentation listener is the single owner of native-surface
+`openOsd` activation and retains its existing `[data-overlay]` descendant guard
+as defense in depth. No CSS change is approved unless actual mounted proof
+contradicts one of these existing rules; such a contradiction requires replan
+rather than a speculative style edit.
+
+Busy custody is opt-in and activation-guarded, not a global focus-policy
+change. Retry, the pending mini-guide row, and the pending playback-option row
+must remain native-enabled (`disabled === false`) while busy, expose both
+`aria-disabled="true"` and `aria-busy="true"`, and carry one explicit
+overlay-only `data-overlay-busy-focus-custody="true"` marker. Nonbusy rows
+expose false ARIA state, omit that marker, and have normal activation.
+`focusDom.ts` may treat an otherwise visible `aria-disabled` element as
+focusable only when that exact marker and
+`aria-busy="true"` are both present; native disabled controls and every other
+`aria-disabled` control remain excluded. This forbids a broad onboarding,
+Settings, Guide, or shell policy change.
+
+Busy focus does not mean busy activation. `clickFocusedRendererElement()`
+continues to reject `aria-disabled`; delegated mini-guide and option pointer
+handlers continue to use `isEligibleDelegatedAction()`; and the direct overlay-
+action listener must use that same eligibility guard before dispatch so busy
+Retry cannot run by pointer, synthetic click, Enter, or OK. Every direct route-
+action listener must also apply `isEligibleDelegatedAction()` before dispatch;
+this includes terminal Guide and preserves all currently eligible route actions
+while suppressing synthetic activation of hidden, inert, native-disabled, or
+ARIA-disabled route controls. The general
+focusable-element pass skips elements carrying `data-overlay-action`, and the
+dedicated overlay-action pass registers each once at its existing order after
+those controls gain real Player ancestry. Terminal Guide
+registers through its existing route-action path; dynamic mini-guide/options
+register through the normal current-focusable-element path. No new route id,
+focus id, action id, public helper, compatibility path, or controller callback
+is approved.
+
+Exact production files:
+
+- `src/renderer/staticDom.ts`: move only the existing overlay-stack subtree
+  under `#screen-player`; keep native presentation and overlay contents intact.
+- `src/renderer/routeDom.ts`: project native-enabled, ARIA-disabled/busy,
+  explicitly marked custody for busy Retry/mini/options and clear it outside
+  those exact pending states.
+- `src/renderer/focusDom.ts`: admit only the explicit visible busy-custody
+  target, retain every other hidden/inert/disabled exclusion, and prevent
+  duplicate overlay-action registration after route ancestry is repaired.
+- `src/renderer/rendererActionRegistration.ts`: apply the existing delegated
+  eligibility predicate to direct overlay-action and route-action clicks;
+  exclude the exact presentation identity from the generic overlay-action loop
+  so its dedicated listener is the sole native `openOsd` owner.
+
+Exact tests:
+
+- `src/__tests__/renderer/routeDom.test.ts`
+- `src/__tests__/renderer/focusDom.test.ts`
+- `src/__tests__/renderer/rendererActionRegistration.test.ts`
+- `src/__tests__/renderer/rendererRuntimeOwners.test.ts`
+
+The focused command is:
+
+`node --import tsx --test src/__tests__/renderer/routeDom.test.ts src/__tests__/renderer/focusDom.test.ts src/__tests__/renderer/rendererActionRegistration.test.ts src/__tests__/renderer/rendererRuntimeOwners.test.ts`
+
+Public-seam regression proof must cover: overlay-stack Player ancestry and
+native-presentation sibling custody; `readClosestRouteId()` resolving `player`
+for terminal Guide, selected mini rows, and option rows; registry acceptance,
+exact DOM focus, and removal when the owner becomes hidden/inert; Retry, mini,
+and options busy focus remaining exact with native `disabled === false`,
+`aria-disabled="true"`, and `aria-busy="true"`; pointer, synthetic click,
+Enter/OK suppression while busy; re-enabled activation after settlement; no
+double dispatch/registration; and unchanged bare-native click behavior. The
+action-registration regression must use the production query shape with the
+same presentation element present in both `overlayActionButtons` and
+`playerPresentationElement`: one bare presentation click dispatches exactly one
+`openOsd`, while clicks within overlay owners dispatch none through the
+presentation listener. It must also prove eligible terminal Guide dispatches
+exactly once and hidden, inert, native-disabled, and ARIA-disabled terminal
+Guide synthetic clicks dispatch zero. Node tests use real ancestor
+relationships and the production registry/action seams, not arbitrary accepted
+focus strings or private-state probes.
+
+Refresh the ignored Package 6 target through the actual browser DOM. The target
+must call `mountStaticRendererDom()`, `queryRendererDom()`, production route/
+workflow rendering, `syncRendererFocusTargets()`, `focusRendererTarget()`, and
+`renderRendererFocus()`; manual `.is-focused` or `tabindex` injection is
+forbidden. Capture the existing ten sanitized states plus Retry pending,
+mini-guide busy, and option busy at exact CSS viewports `1280x720` and
+`1920x1080`, DPR 1: 26/26 screenshots and a refreshed contact sheet. Every row
+asserts the overlay stack is inside the visible Player screen and outside the
+native presentation, correct route ancestry, exact owner/focus or focusless
+state, hidden/inert-owner exclusion, and no private material. Busy rows also
+assert the exact ARIA/native-enabled custody and guarded activation state.
+
+Observed proof-environment evidence is explicit. While the Mac session was
+locked, Computer Use could not unlock it and a fresh visible `BrowserWindow`
+remained unfocused, so `enter-full-screen` never fired. After the user unlocked
+the session, the first row acquired foreground from a controller title-bar
+click and passed; a later row automatically acquired foreground after the
+prior proof child exited and passed without a controller click. All exercised
+fullscreen event/state, focus, DPR, and restoration assertions otherwise
+passed. That unlocked run is still not acceptance proof: a focus transition
+cannot by itself attribute foreground acquisition to the required operator
+action. The same run also reached contact-sheet generation and failed because
+ImageMagick could not resolve a default font; an explicit
+`/System/Library/Fonts/Helvetica.ttc` made the same montage succeed.
+
+Run the three semantic-only actual `BrowserWindow` fullscreen rows for OSD,
+mini-guide, and playback options in bounded
+`operator-assisted-foreground` activation mode. The user leaves the unlocked
+desktop session available; Codex/Computer Use does not request, receive, store,
+or enter the user's unlock credential. Each row uses one fresh framed child
+window and one fresh, cryptographically random, row-scoped acknowledgement
+token. The child mounts the state, establishes exact DOM focus through the
+production registry path, calls `showInactive()`, and fails unless the window
+is visible but both `BrowserWindow.isFocused()` and `document.hasFocus()` are
+false while the exact overlay element remains active. It then emits exactly one
+control frame containing the unique row, unique window title, one-time token,
+and the single 30,000 ms activation deadline. The token is terminal control
+state only: it must never appear in a manifest, result JSON, filename, contact
+sheet, or error payload.
+
+The parent command must run in the existing controller PTY and fail before row
+1 unless `process.stdin.isTTY === true` and stdin is readable, open, and not
+destroyed. The sole external acknowledgement source is that parent TTY stdin.
+Environment variables, argv, files, result files, clipboard state, sockets,
+Electron IPC, child stdout/stderr, and any alternate pipe or channel may not
+supply an acknowledgement. The sole allowed internal transport is the
+parent-to-current-child private stdin pipe. One line-delimited reader owns the
+same parent stdin through all three rows; the parent must not pause, replace,
+destroy, or close it between children. Each fresh fullscreen child receives a
+new private stdin pipe belonging only to that row. The parent keeps the child
+pipe open through acknowledgement and successful row completion/child exit;
+only then may it close or release that pipe. Parent TTY closure before all
+three rows complete, or child stdin closure before its row completes, fails the
+whole command.
+
+Tokens are 32 cryptographically random bytes encoded as exactly 43 unpadded
+base64url characters matching `[A-Za-z0-9_-]{43}`. Whitespace, padding, line
+breaks, and control characters are forbidden. The child emits one newline-
+terminated control frame with this exact grammar:
+
+`PACKAGE6_OPERATOR_ACK_REQUIRED {"row":"<1-based>/3","state":"<expected-state>","title":"<exact-window-title>","token":"<43-char-base64url>","deadlineMs":30000}`
+
+The JSON object contains those five keys in that order and no others. Child
+stderr may be fragmented or interleaved with unrelated diagnostics, so the
+parent owns per-child line framing. It validates the exact current row,
+expected state, exact title, token encoding, deadline, and one-prompt state
+before accepting the frame. A noncurrent, duplicate, malformed, or token-
+bearing unrelated frame fails without emitting a prompt. Unrelated complete stderr lines remain
+ordinary relayed diagnostics and fragments remain buffered until newline;
+neither can emit or arm the operator prompt. After validation, the parent
+serializes the same canonical grammar as exactly one newline-terminated prompt
+to its own stderr. It calls the broker clock only after `writePrompt()` returns
+successfully and records that value as `promptEmittedAtMs`; the 30,000 ms row
+deadline is exactly `promptEmittedAtMs + 30_000`. Only then does the current-row
+canonical parent prompt arm TTY token input, so prompt content and deadline are
+independent of child chunk boundaries and unrelated stderr.
+
+The executable operator order is exact. First, after reading the canonical
+prompt, the controller sends the exact token plus one newline through the
+parent TTY; it does not click yet. The broker validates and consumes that row's
+one acknowledgement capability, then forwards exactly one newline-terminated
+child acknowledgement line through the current private stdin pipe:
+
+`PACKAGE6_OPERATOR_ACK {"token":"<43-char-base64url>","promptEmittedAtMs":<integer-ms>}`
+
+The object contains exactly those two keys in that order. No raw token line,
+duplicate acknowledgement, or parent-emitted copy of the child control frame
+is authorized. The child validates the exact token and broker timestamp while
+window/document focus remain false and the exact overlay target remains active,
+then emits exactly one token-free newline-terminated readiness frame:
+
+`PACKAGE6_OPERATOR_CLICK_READY {"row":"<1-based>/3","state":"<expected-state>","title":"<exact-window-title>","promptEmittedAtMs":<integer-ms>,"deadlineRemainingMs":<positive-integer-ms>}`
+
+The parent validates the current row, exact state, exact title, original prompt timestamp,
+positive remaining time derived from the original deadline, and one-ready-only
+state. It forwards that canonical frame exactly once to controller stderr.
+Malformed, duplicate, noncurrent, late, or pre-ack readiness fails. No other
+parent-emitted child control line is authorized at this stage. Only after the
+controller observes the canonical `CLICK_READY` frame does it use Computer Use
+exactly once to click that proof window's title-bar container.
+
+After the Computer Use tool call returns, the controller sends exactly one
+token-free newline-terminated confirmation through the parent TTY:
+
+`PACKAGE6_OPERATOR_CLICK_CONFIRMED {"row":"<1-based>/3","state":"<expected-state>","title":"<exact-window-title>","attestation":"computer-use-titlebar-click-returned"}`
+
+The broker validates current row, exact state, exact title, exact attestation label,
+ready-observed state, and one-confirmation-only state; records
+`controllerClickConfirmedAtMs` at receipt; and forwards the same canonical line
+exactly once to the current child. The child validates current row/state/title
+and the remaining schema. This readiness and
+confirmation exchange is the only second parent-to-child control line after
+the token-bearing acknowledgement; no duplicate or alternate control line is
+authorized.
+
+The row requires the `CLICK_READY` observation, exactly one controller click
+confirmation, and the first post-ready false-to-true transition of the complete
+accepted foreground-focus condition inside the original prompt-based deadline:
+`BrowserWindow.isFocused() === true`, `document.hasFocus() === true`, and the
+unchanged exact active overlay element. Automatic focus before readiness fails.
+Focus after readiness without controller confirmation is recorded but cannot
+pass. Confirmation before readiness, wrong-row or wrong-state confirmation,
+wrong-state or duplicate ready,
+duplicate/second confirmation, missing confirmation, confirmation without an
+accepted transition, wrong/missing/replayed/already-consumed/out-of-row token,
+carry-over input, or deadline expiry fails token-free. The parent never
+broadcasts or queues a control line for a later row. It keeps the child pipe
+open through successful row completion/child exit, then disarms and releases
+the row before creating the next child. Only the ready-plus-confirmed post-ready
+transition may record pre-entry bounds, content bounds, CSS viewport, and DPR
+and request fullscreen. A second assist, content click, DOM focus injection,
+`app.focus()`/`window.focus()`, AppleScript, or synthetic activation is
+forbidden. Each row
+still requires the actual
+`enter-full-screen` event plus
+`isFullScreen() === true` within 5,000 ms, exact owner/route ancestry/DOM focus
+and window/document focus while fullscreen, the actual `leave-full-screen`
+event plus `isFullScreen() === false` within 5,000 ms, exact focus continuity,
+and exact restoration of window bounds, content bounds, CSS viewport, and DPR.
+No second operator assist is permitted before, during, or after fullscreen.
+
+The three manifest rows retain `activationMode:
+"operator-assisted-foreground"` and record the row/window title,
+`controllerAcknowledgementAccepted: true`, `clickReadyObserved: true`, and
+`controllerClickConfirmed: true` (never the raw token), activation elapsed
+milliseconds from prompt emission through the ready/confirmation/focus
+conjunction, the initial-unfocused-to-accepted-focus transition, and pre-entry/
+during/post-exit window/document focus results. Each row also records a token-
+free tool-call attestation object with label
+`computer-use-titlebar-click-returned` and the broker-recorded
+`controllerClickConfirmedAtMs` timestamp. The exact-one-click claim is explicit
+operator/controller attestation backed by that Computer Use tool call; the
+automated claim is limited to protocol ordering, focus transition, fullscreen
+events/state, continuity, and restoration. Locked session, unavailable
+operator foregrounding, wrong/missing/replayed/out-of-row acknowledgement,
+automatic focus before readiness, focus without controller confirmation,
+confirmation before readiness, duplicate/wrong-row/wrong-state/second
+confirmation, duplicate/wrong-state readiness, second assist, stdin closure, activation timeout,
+unsupported fullscreen, missing
+event, wrong fullscreen state, focus loss, restoration mismatch, manual focus
+injection, cleanup failure, or retained window fails the row and command; none
+may be converted to pass, skip, or deferred. The refreshed manifest remains 29
+result rows: 26 screenshots and three fullscreen semantic rows. This is
+Mac/local operator-assisted foreground activation with explicit controller
+acknowledgement and automated renderer/fullscreen assertions only; RD-27
+retains Windows/native operational proof.
+
+Contact-sheet generation must preflight the exact Mac system font
+`/System/Library/Fonts/Helvetica.ttc`, fail if it is absent or unreadable, and
+pass that exact path to ImageMagick's `montage` invocation with `-font`. No
+default-font lookup or substitute font is allowed. Preserve the existing fixed
+file order, thumbnail, tile, geometry, output path, timeout, stderr capture,
+exit-code check, 26-capture requirement, manifest write-after-contact-sheet
+ordering, and generated-output cleanup.
+
+This acknowledgement/font subunit may change only the ignored
+`docs/runs/complete-webos-ui-parity-reopen/capture-package-6.mjs` and regenerate
+the ignored Package 6 captures, manifest, and contact sheet. The ignored
+correction packet may record verification/review results. All tracked product
+and test files, the Package 6 browser target, main smoke assertions, CSS,
+Package 7 artifacts, contracts, dependencies, and public/process boundaries are
+frozen. Preserve sequential row execution, the existing screenshot/fullscreen
+semantic assertions and deadlines, stderr propagation without token-bearing
+error echo, per-child result/temp cleanup, listener/window cleanup, Vite
+teardown, manifest row/count checks, private-material scan posture, and the rule
+that no partial or failed proof becomes an acceptance artifact. Any required
+change outside this exact ignored seam is a stop/replan trigger.
+
+Failure cleanup is ordered and observable. On any activation timeout, broker
+failure, protocol failure, fullscreen timeout, or parent exception, the parent
+first disarms TTY input and prevents further result acceptance, then terminates
+the current child. It awaits observed child `exit` and `close` before deleting
+that row's temp result, any partial output, or shared generated output and
+before completing Vite teardown. A bounded terminate-to-kill escalation may be
+used, but timeout rejection alone may never start deletion while a child can
+still write. Failure to observe child close is itself a token-free command
+failure and preserves the evidence path for adjudication; it cannot be reported
+as clean cleanup.
+
+Before live capture, the same ignored harness must expose one exclusive,
+bounded broker self-test mode:
+
+`node docs/runs/complete-webos-ui-parity-reopen/capture-package-6.mjs --self-test-ack-broker`
+
+The flag branches before output cleanup, Vite, Electron, font preflight,
+screenshots, fullscreen, manifest, contact-sheet, or result-file work. It uses
+a deterministic fake clock and in-memory current-child endpoints, has a 10,000
+ms whole-process timeout with no real waits, and runs exactly 23 named cases:
+one positive `broker-framing-fragmentation` case plus rejection of
+`wrong-token`, `missing-token`, `replayed-token`, `out-of-row-token`,
+`duplicate-token`, `buffered-no-current-row-input`,
+`automatic-focus-before-click-ready`, `focus-after-ready-without-confirmation`,
+`confirmation-without-focus`, `click-before-ack`, `missing-click-ready`,
+`duplicate-click-ready`, `wrong-state-click-ready`,
+`confirmation-before-ready`, `wrong-row-confirmation`,
+`wrong-state-confirmation`, `second-click-confirmation`, `parent-stdin-close`,
+`child-stdin-close-before-row-completion`, `activation-deadline-expiry`,
+`late-writer-after-failure`, and `token-leakage`.
+
+The positive case fragments the valid child control frame and TTY token line
+across multiple chunks, surrounds the control frame with unrelated complete
+and fragmented child stderr, proves only the exact current canonical prompt
+arms input, forwards the reassembled token exactly once to the current fake
+child as the canonical acknowledgement JSON line, proves the prompt timestamp
+is sampled only after prompt write completion, accepts exactly one canonical
+`CLICK_READY`, accepts exactly one controller `CLICK_CONFIRMED`, and gates the
+post-ready focus transition on confirmation. It keeps the simulated parent TTY
+and child pipe open through row completion, disarms the row, and accepts a
+fresh next-row token without carry-over. Every rejection case fails closed with
+its stable case id and cannot advance fullscreen. It separately proves pre-
+ready focus, post-ready focus without confirmation, confirmation without focus,
+missing/duplicate/wrong-state ready, early/wrong-row/wrong-state/second
+confirmation, and pre-ack click.
+Closure cases distinguish the all-three-row
+parent TTY lifecycle from the current-row child-pipe lifecycle. The late-writer
+case makes a failed child attempt a result write after timeout and proves the
+parent kills and observes both exit/close before deleting temp or output state,
+so the late writer cannot recreate an acceptance artifact.
+
+The public self-test orchestrator must run broker-positive and fault cases in
+bounded internal subprocesses and capture each process's complete stdout and
+stderr plus artifact payloads. It may use the private exclusive flag
+`--self-test-ack-broker-child=<case-id>` only from the public self-test mode;
+that private flag is mutually exclusive with live mode and cannot create Vite,
+Electron, font, capture, fullscreen, manifest, contact-sheet, or live result
+work. The `token-leakage` case uses a sentinel token and permits its raw value
+exactly once across captured process stdout/stderr and artifact payloads: in
+the authorized canonical parent prompt. The controller's TTY input and the
+private parent-to-child acknowledgement transport necessarily carry the token
+ephemerally, but neither may echo, log, persist, or enter the captured-output/
+artifact surface. The intercepted child control frame is private broker input
+and is never relayed into captured stdout/stderr or artifacts. Broker errors,
+rejection details, fake results, and artifact payloads must otherwise remain
+token-free. The mode snapshots any pre-existing real Package
+6 manifest and contact sheet by existence, byte hash, and metadata and proves
+them unchanged. It uses
+a unique temporary sandbox for fake result paths, proves no manifest, contact
+sheet, screenshot, fullscreen result, partial result, or other acceptance
+artifact was created, and removes the sandbox in `finally`.
+
+Success exits zero and emits exactly one token-free stdout line with empty
+stderr:
+
+`Package 6 acknowledgement broker self-test: 23/23 passed`
+
+Any missing case, unexpected result, timeout, forbidden token occurrence,
+artifact mutation/creation, or cleanup failure exits nonzero with token-free
+diagnostics. The live capture command is not authorized until this exact self-
+test passes; the self-test cannot replace the 29-row live proof.
+
+An unavailable session or acknowledgement transport does not authorize
+production/test edits or a weaker proof. Rerun the complete command so all
+three fullscreen rows use fresh row-scoped tokens and the same recorded
+activation mode. If an acknowledged, title-bar-foregrounded window satisfies
+all focus predicates but an enter/leave event, fullscreen state,
+focus-continuity, or restoration assertion still fails, preserve the failure
+and return to controller/reviewer adjudication; do not substitute a screenshot
+or simulated fullscreen state.
+
+**Reviewed single-PID fullscreen proof correction:** keep all 26 screenshot
+captures unchanged, but run the three fullscreen rows in one Electron child,
+one stdin/stderr session, and one `BrowserWindow`. The child calls
+`app.whenReady()` once and processes OSD, mini-guide, then options in frozen
+order. After a successful row it removes row-local listeners, marks and
+disposes the row gate, hides the window, calls macOS `app.hide()`, and has at
+most 2,000 ms to observe `app.isHidden()`, invisible/unfocused window state.
+For the next row it loads the new URL while hidden, sets the exact unique title,
+calls `app.show()` followed by `window.showInactive()`, settles for the existing
+50 ms, and fails before ACK unless the app, window, and document are all
+unfocused while the exact production overlay target retains focus custody.
+No programmatic focus, content click, second assist, or synthetic activation is
+allowed. Failure to re-establish this prompt state is a stop/replan trigger.
+
+The broker owns the ordered three row/state/title identities and the same child
+pipe for the whole session; no new protocol frame is added. A next-row exact
+`ACK_REQUIRED` is accepted only after the prior row reached `click-confirmed`;
+its receipt atomically archives the prior metadata and arms the next expected
+identity. Any early, duplicate, stale, or out-of-order identity fails closed.
+The parent clears the current activation timer immediately after it validates
+and forwards an on-time `CLICK_CONFIRMED`; the child retains the original
+prompt-derived 30,000 ms deadline through accepted focus/readiness. Each
+`enter-full-screen` and `leave-full-screen` event keeps its existing 5,000 ms
+bound, for 10,000 ms total per row. The one-child session has an exact 165,000
+ms lifecycle bound. The child retains results in memory and writes one
+three-row JSON array only after row three, final hide/window destruction proof,
+then quits. Parent acceptance requires exit zero plus observed close and exact
+index-for-index result/metadata validation; no partial row may reach the
+manifest.
+
+Keep exactly the existing 23 self-test names and success line. Adapt
+`broker-framing-fragmentation` to prove two-row rollover through the same fake
+child/pipe and fresh tokens; map cross-row replay/order coverage through
+`replayed-token`, `out-of-row-token`, `duplicate-click-ready`, and
+`second-click-confirmation`; make the parent/child closure, activation deadline,
+late-writer, and token-leakage cases session-scoped. Each remains an independent
+subprocess so one failure cannot mask another. Multi-PID retry, client reset,
+registry refresh, display name, bundle id, and full app-path variants are
+rejected by observed evidence. This replan received clean independent plan
+review on 2026-07-15.
+
+The first live single-PID attempt passed row one but hit its explicit replan
+trigger before row-two ACK: the native app/window were unfocused while the
+reused `WebContents` still reported `document.hasFocus() === true`. Therefore
+retain the one Electron PID, pipe, broker, ordered identities, protocol,
+deadlines, cleanup ordering, and one final result array, but create a fresh
+`BrowserWindow`/`WebContents` for each fullscreen row. Do not use
+`app.hide()`, `app.show()`, `app.focus()`, or reuse prior content. Each row must
+begin with zero Electron windows; create/load the existing hidden framed proof
+window, set its exact title, call `showInactive()` once, and require it is the
+sole visible window while app/window/document remain unfocused, nonfullscreen,
+DPR 1, and exact overlay semantics pass before ACK. After restored fullscreen
+proof, remove row-owned listeners, destroy the window, prove both window and
+WebContents destruction and zero remaining windows, then mark/dispose the gate
+and append the in-memory row. Only then may the next window/prompt exist. A
+failure performs the same bounded fullscreen exit and destruction proof, never
+appends or writes the session result, and exits the single child nonzero. After
+row three require three results and zero windows before the one array write and
+`app.quit()`. No broker/self-test name or frame changes are required. This
+narrow live-evidence replan received clean independent plan review on
+2026-07-15.
+
+A second live attempt proved the fresh row-two `WebContents` correctly reports
+document/window focus false, but the no-window Electron app remains active.
+The final clean reviewed lifecycle therefore combines both proven halves.
+Before row one and after every destroyed row, require zero windows, call
+`app.hide()` once, and within 2,000 ms prove hidden, inactive app state with no
+focused or retained window. Create/load the fresh next-row window while hidden;
+pre-show focus/semantics/DPR/geometry must pass, then call `app.show()` once
+(which does not automatically focus on macOS) and `showInactive()` once. Before
+ACK require the app is shown but inactive and every existing fresh-window
+predicate passes. Accepted post-click foreground must additionally prove the
+app became active only after readiness/confirmation. After fullscreen,
+destruction and the same hide/inactive reset precede gate completion, disposal,
+and row append. Final output is authorized only from three rows, zero windows,
+and hidden/inactive app state. The whole-session watchdog is exactly 173,000 ms
+to add four bounded reset allowances; row activation and fullscreen event
+deadlines remain unchanged. This final combined lifecycle received clean
+independent plan review on 2026-07-15.
+
+A third live attempt reached row-two ACK with every fresh-window predicate
+passing, but Computer Use returned `AXError.noValue` when the native
+`BrowserWindow` identity changed. The final AX-compatible clean reviewed
+lifecycle therefore supersedes per-row window replacement: retain one
+BrowserWindow/WebContents identity for the session and set proof-only
+`focusOnNavigation: false`. Initial and post-row reset uses `window.hide()` then
+`app.hide()` and the existing 2,000 ms hidden/inactive conjunction, including
+document focus false and sole retained live identities. Hidden navigation must
+preserve that false document focus; then one `app.show()` plus one
+`showInactive()` exposes the same AX window inactive before ACK. Post-row facts
+prove the same window/WebContents are retained and inactive. Only after row
+three are session listeners removed and the window/WebContents destroyed once;
+exact final cleanup facts prove zero windows and hidden/inactive app before
+guard release, result write, and quit. Parent validation requires both exact
+row cleanup and final cleanup schemas. The 173,000 ms session bound, row/event
+deadlines, protocol, clicks, and 23 self-test names remain unchanged. This
+superseding lifecycle received clean independent plan review on 2026-07-15.
+
+The unlocked token-safe diagnostic then proved the remaining contradiction is
+semantic, not behavioral: on macOS the retained WebContents remains the
+window's first responder and reports `document.hasFocus() === true` while
+`app.isActive()`, `window.isFocused()`, and `BrowserWindow.getFocusedWindow()`
+all prove native inactivity. Electron documents WebContents focus on macOS as
+first-responder state that is not cleared by switching native windows. The
+evidence-calibrated final plan therefore requires retained document/semantic
+focus as renderer custody and removes it from native-foreground preconditions.
+Operator foregrounding is proved exclusively by the first post-ready
+BrowserWindow focus transition, inactive-to-active app/window state, exact
+focused native window, controller-confirmation ordering, and the one physical
+titlebar click. Exact manifest vocabulary is
+`native-app-window-transition-with-retained-first-responder`; new semantic
+checks and cleanup facts distinguish native activation from retained renderer
+custody. Early native app/window activation, native focus without confirmation,
+or confirmation without native focus still fail closed. No synthetic blur or
+focus, extra view/window/process, click, frame, or tracked edit is authorized.
+This final calibration received clean independent plan review on 2026-07-15.
+
+The next unlocked live run failed closed before row-one acknowledgement and
+proved one final row-indexed distinction. A freshly created hidden WebContents
+has the exact semantic active target but does not report document focus before
+its first genuine native activation. After row one receives the accepted
+operator titlebar click, the retained WebContents keeps first-responder custody
+through the inactive resets for rows two and three. The final row-indexed proof
+contract therefore requires row one to use
+`semantic-active-target-without-first-responder` with document focus false,
+while rows two and three use `retained-first-responder` with document focus
+true. All rows require exact semantic focus before native activation and
+document plus semantic focus after native activation. Native foreground proof
+remains exclusively the ordered post-ready BrowserWindow focus event, active
+app/window state, exact focused native window, controller confirmation, and one
+physical titlebar click. The exact foreground evidence mode is
+`native-app-window-transition-with-semantic-focus-custody`.
+
+Each fullscreen row must emit exact `preNativeDocumentCustody` evidence with
+`mode`, `expectedDocumentFocused`, `observedDocumentFocused`,
+`semanticFocusAccepted`, and `activeElementFocusId`; row one uses false/false
+and rows two and three true/true. Exact `postNativeDocumentCustody` evidence
+uses mode `first-responder-active`, document and semantic focus true, and the
+expected active focus id. Native transition evidence remains a separate exact
+false-to-true app/window/focused-native-window tuple. Successful row cleanup
+must prove hidden/inactive app and window, no focused native window,
+`documentCustodyMode: retained-first-responder`, document and semantic focus
+true, one retained BrowserWindow, and retained BrowserWindow/WebContents
+identities. Hidden, prompt, and pre-ready checks derive the document expectation
+from the frozen proof row rather than observation. After readiness document
+focus is diagnostic until native acceptance, which requires it true. Existing
+Fullscreen semantic assertions remain discrete and auditable: acknowledgement,
+click-ready, confirmation, `pre-native-semantic-focus-custody`,
+`pre-native-document-custody-mode-exact`, post-ready native transition,
+operator native foreground, `post-native-first-responder-custody`,
+`operator-focus-target-stable`, `overlay-owner-exact`, `player-route-exact`,
+pre-entry/fullscreen/post-exit native focus, restoration, DPR, and geometry.
+Owner and route checks cover prompt, pre-fullscreen, fullscreen, and post-exit
+samples rather than relying only on a composite focus boolean. Existing 23
+broker cases must model the first row without document focus and the next
+row with retained document focus without changing protocol, deadlines, click
+count, process/window identities, or cleanup ordering. The existing
+deterministic row-evidence/validator case must also reject both
+inverted row-index states: row one may not claim retained-first-responder or
+observed document focus true, and rows two or three may not claim the fresh
+semantic-only mode or observed document focus false. This negative coverage
+must remain within the exact 23 named cases.
+
+Synthetic focus/blur,
+another input, click, frame, view, window, process, or tracked product edit
+remains prohibited. This row-indexed contract supersedes the prior all-rows
+retained-first-responder manifest contract.
+
+The integrated controller then completed row one's acknowledgement, physical
+click, native transition, confirmation, fullscreen cycle, and restoration, and
+failed closed only during the post-row hide reset. That diagnostic proves the
+cleanup phase is distinct from the next row's post-navigation custody: hiding
+the app/window clears the current document's focus while preserving the exact
+semantic active target. Every successful row cleanup must therefore require
+document focus false and mode
+`semantic-active-target-without-first-responder`. Only after that cleanup is
+accepted may the same hidden retained WebContents navigate; the existing
+row-indexed post-navigation contract remains row one false and rows two and
+three true. A navigation-induced false-to-true document transition while the
+app/window remain inactive is renderer custody only and cannot satisfy native
+foreground proof.
+
+Exact `cleanupFacts` now contain only `appHidden`, `appInactive`,
+`windowHidden`, `windowInactive`, `focusedNativeWindowAbsent`, `fullscreen`,
+`documentCustodyMode`, `documentFocused`, `semanticFocusAccepted`,
+`activeElementFocusId`, `retainedWindowCount`, `browserWindowRetained`, and
+`webContentsRetained`. Values must prove native inactivity, fullscreen false,
+semantic-only custody, document focus false, the expected focus id, one
+retained window, and unchanged BrowserWindow/WebContents. The exact cleanup
+assertion vocabulary is
+`post-row-semantic-custody-without-first-responder`. The existing 23-case
+multi-row scenario must model native document focus true, post-hide document
+focus false with exact semantics, next hidden navigation to the indexed
+document state, and a new native transition for the next row. No deadline,
+protocol, identity, click, process, or product scope changes.
+
+Computer Use then proved a separate stable-window AX limitation: after the
+reviewed hide/show cycle it can read the exact unchanged row-two window, but a
+normal app-local coordinate click fails because macOS no longer exposes an AX
+focused-window value. Element-targeted variants either clear renderer focus or
+fail ScreenCaptureKit validation and are rejected. The final bounded diagnostic
+uses Electron's macOS/Windows `setFocusable` API, whose macOS contract does not
+remove focus, to re-register the already inactive visible window without
+foregrounding it. Row one uses no refresh. Rows two and three perform exactly
+one focusable true-to-false-to-true sequence: disable while hidden/inactive,
+show the nonfocusable window with `showInactive()`, then restore focusability
+before acknowledgement. Every phase must preserve app/window inactivity,
+absence of a focused native window, row-indexed document and semantic custody,
+window/WebContents identity, title, DPR, and geometry. Any native activation or
+custody drift fails before a token is emitted.
+
+Each fullscreen row records exact `axFocusabilityRefresh` evidence with ordered
+keys `mode`, `applied`, `disabledWhileHiddenInactive`,
+`shownInactiveWhileNonfocusable`, `focusableBeforePrompt`,
+`nativeInactivityPreserved`, `semanticCustodyPreserved`, and
+`windowIdentityPreserved`. Row one uses mode `initial-window-no-refresh`,
+`applied: false`, null disabled/shown facts, and true focusable,
+native-inactivity, semantic, and identity facts. Rows two and three use mode
+`stable-window-visible-reregistration`, `applied: true`, and all six boolean
+proof facts true. Exact assertion vocabulary is
+`ax-initial-window-focusable-before-ready` for row one and
+`ax-focusability-disabled-while-hidden-inactive`,
+`ax-window-shown-inactive-while-nonfocusable`,
+`ax-focusability-restored-before-ready`,
+`ax-refresh-preserved-native-inactivity`,
+`ax-refresh-preserved-semantic-custody`, and
+`ax-refresh-preserved-window-identity` for rows two and three. This supersedes
+the prior 13-key cleanup schema: successful `cleanupFacts` now contain exactly
+14 ordered keys `appHidden`, `appInactive`, `windowHidden`, `windowInactive`,
+`windowFocusable`, `focusedNativeWindowAbsent`, `fullscreen`,
+`documentCustodyMode`, `documentFocused`, `semanticFocusAccepted`,
+`activeElementFocusId`, `retainedWindowCount`, `browserWindowRetained`, and
+`webContentsRetained`; `windowFocusable` is true. Failure cleanup restores
+focusability before the existing hide/reset/destruction sequence. Protocol,
+deadlines, the single app-local titlebar click, native transition ordering,
+fullscreen proof, and all product scope remain frozen. Failure of the one
+refresh to restore the ordinary Computer Use click is a stop trigger; no
+second toggle or targeting workaround is authorized.
+
+The existing deterministic multi-row/validator self-test case must accept row
+one's exact no-refresh record and row two's single false-to-true refresh record,
+and reject wrong mode, wrong `applied`, invalid row-one nullability, false or
+missing preservation facts, and missing `windowFocusable`, without adding or
+removing any of the exact 23 case names.
+
+#### Reviewed Package 6 platform-proof exception
+
+The user authorized closing the Package 6 production correction on its verified
+code and bounded diagnostic evidence, deferring all three operator-assisted
+fullscreen rows to a fresh mandatory RD-27 Windows manual audit, and continuing
+Packages 7–8. The exception is independently reviewed and implemented in the
+durable status mapping and token-free ignored artifact. It does **not** claim a
+completed 29-row Mac acceptance manifest.
+
+No further Package 6 product change is authorized. Exception closeout may
+update only this plan, `docs/roadmap/desktop-port-roadmap.md`,
+`docs/architecture/CURRENT_STATE.md`,
+`docs/product/lineup-product-parity-matrix.md`, and
+`docs/development/windows-ui-proof-plan.md`, plus the ignored correction packet
+and a token-free ignored
+`package-6-mac-physical-click-exception.json`. The divergence register and
+import ledger remain unchanged because this is an external proof-tool limit,
+not a product divergence or copied/adapted source change.
+
+Closeout may claim the production overlay ancestry, busy focus custody,
+direct-action eligibility, and single-owner native-presentation correction is
+implemented; focused correction coverage passed 44/44; the previously observed
+full verification passed 823 source/contract tests and 135 harness/docs tests;
+production implementation review was clean; current documentation verification
+is green; and Mac row one completed acknowledgement, one app-local physical
+titlebar click, ordered native app/window focus, confirmation, exact semantic
+custody, actual fullscreen enter/leave, focus/geometry/DPR/restoration, and
+cleanup. It may state row two repeatedly reached its exact inactive semantic
+state before the external Computer Use click failed with AX or ScreenCaptureKit
+errors, the one reviewed focusability refresh reached its hard stop, row three
+was deferred without a Mac acceptance run, and no partial acceptance artifact
+or retained proof process/window remains.
+
+Closeout must not claim 29/29 rows passed, three Mac click rows passed, completed
+Mac fullscreen acceptance, a production focus/fullscreen defect inferred from
+AX errors, existing Windows operational proof, or optional deferred rows. A
+failed or partial `package-6-target-manifest.json` remains absent rather than
+being represented as acceptance evidence.
+
+The durable documentation mapping is exact. In `CURRENT_STATE.md`, the current
+top-level state and renderer-owner summary must say the Package 6 production
+correction is implemented and reviewed while operator-assisted Windows
+fullscreen proof remains pending; it must identify the Mac error as an external
+proof-tool limit, not product behavior. In `desktop-port-roadmap.md`, the active
+reopen gate and RD-27 section must allow Packages 7–8 renderer implementation to
+finish under this reviewed exception while adding a non-optional `Package 6
+operator-assisted fullscreen focus audit`; RD-27 cannot close without its fresh
+three-pass Windows manifest. In the `Player route, now-playing, OSD, mini-guide,
+and channel badge` parity-matrix row, classification/evidence must remain short
+of platform completion and the platform label must say `implemented and
+automated locally; Windows operator-assisted proof pending`. In
+`windows-ui-proof-plan.md`, the prerequisite/current-gate text and Windows proof
+matrix must add the exact fresh three-row protocol as a blocking RD-27 gate. In
+this active plan, Package 7 unblock and Package 8 closeout must retain the same
+pending-platform-proof nonclaim through archive.
+
+The ignored exception JSON is exact and contains no tokens, prompts, raw logs,
+PIDs, paths, AX objects, screenshots, or private account/media data:
+
+```json
+{
+  "status": "deferred-to-rd-27-windows",
+  "reason": "mac-computer-use-stable-window-physical-click-targeting-unavailable",
+  "requiredPhysicalClickRows": 3,
+  "completedAcceptanceManifest": false,
+  "diagnosticRows": {
+    "player-osd": "full-live-sequence-observed",
+    "player-mini-guide": "pre-input-state-observed-external-click-unavailable",
+    "player-options": "deferred-without-acceptance-run"
+  },
+  "partialAcceptanceArtifactsRetained": false,
+  "retainedProofProcesses": false,
+  "nextMandatoryGate": "rd-27-windows-manual-physical-click-audit"
+}
+```
+
+Before Package 7 is unblocked, rerun the four focused correction tests, the
+exact ignored 23-case broker self-test, typecheck, architecture,
+maintainability, redaction, Electron build and smoke, docs verification, full
+verification, and `git diff --check`. The known-failing live Mac capture is
+removed from closeout rather than rerun as ritual. Require fresh independent
+review of the production/test diff, calibrated claims, exception redaction,
+binding RD-27 placement, Package 7 behavior/visual freeze, exact scope, and
+architecture/YAGNI.
+
+Before the exception JSON may assert either cleanup boolean, validate its exact
+schema and values, scan it plus the ignored run bundle for acknowledgement-token
+shapes and private material, prove `package-6-target-manifest.json`,
+`package-6-contact-sheet.png`, the target-capture directory, and temporary
+fullscreen result files are absent, and prove no Package 6 capture/Electron
+process remains. These checks are part of closeout evidence and reviewer scope,
+not prose-only assurances.
+
+If HEAD remains the current unpushed local `2eda503` Package 6 checkpoint and
+verification/review are clean, amend it with only the approved production/test
+correction. Commit the tracked exception and RD-27 memory separately as
+`docs(roadmap): defer fullscreen click audit to rd-27`; ignored evidence is
+never staged. Otherwise use a separate conventional correction commit.
+
+Package 7 unblocks only after both commits and all gates/review are clean. Its
+baseline, line counts, ancestry, busy-custody behavior, and upstream provenance
+must then be refreshed from the new HEAD and independently reviewed. Package 7
+remains presentation-only and may not compensate for deferred platform proof.
+
+RD-27 must run all three rows afresh on Windows: `player-osd` focused at
+`overlay-osd-audio` under `playerOsd`; `player-mini-guide` focused at
+`overlay-mini-channel-sample-channel-1` under `miniGuide`; and `player-options`
+focused at `overlay-subtitle-track-off` under `playbackOptions`. Each row starts
+visible but natively inactive with exact production focus registration, observes
+readiness, receives exactly one real operator titlebar click, proves the native
+transition occurs after readiness and before confirmation without semantic
+focus change, observes actual fullscreen enter/leave with native and semantic
+focus continuity, restores bounds/content bounds/CSS viewport/DPR exactly,
+cleans up, and emits only token-free redacted evidence. RD-27 requires a fresh
+three-pass manifest; the Mac diagnostic row substitutes for none of them and no
+further deferral is allowed without another explicit reviewed replan.
+
+Package 8 may close only as: renderer parity implementation and local automated
+verification complete; Package 6 operator-assisted fullscreen platform proof
+remains a binding RD-27 Windows gate. It may not claim complete platform parity
+or a complete Package 6 29-row proof.
+
+**Architecture/YAGNI:** current production line counts are `staticDom.ts` 298,
+`routeDom.ts` 404, `focusDom.ts` 481, and
+`rendererActionRegistration.ts` 289. Each correction shares its existing DOM,
+focus, or action responsibility and should remain below 500 lines. Crossing 500
+requires a compact cohesion disposition and fresh architecture review;
+crossing 800, touching `index.ts`, `playerOverlayController.ts`, overlays/view
+models, or CSS is a stop/replan trigger. Package 6 controller/timers/state,
+Package 7 visual ownership, and all contracts/process/public boundaries remain
+frozen.
+
+The reviewed user-authorized exception supersedes the prior live-capture
+closeout requirement. After exception-document implementation, run the focused
+command, `npm run typecheck`, `npm run verify:architecture`,
+`npm run verify:maintainability`, `npm run verify:redaction`,
+`npm run build:electron`, `npm run smoke:electron`, the exact ignored Package 6
+acknowledgement-broker self-test command, `npm run verify:docs`, `npm run
+verify`, and `git diff --check`. Do not rerun the known-failing Mac live capture
+as a completion gate. Require the fresh independent exception/implementation
+review defined above.
+
+The reviewed planning artifact is
+`docs/runs/complete-webos-ui-parity-reopen/package-6-focus-custody-correction-packet.md`.
+Package 6 correction closeout is recorded under the exception after exact
+tracked/ignored implementation, named non-live verification, and calibrated
+review. Commit handling remains controller-owned; this status does not claim a
+commit, push, complete Mac acceptance manifest, or completed Windows proof.
+
 ### Package 7 — Player overlay visual surfaces
 
-**Role:** `worker` only.
+**Role:** `worker` only. `worker_sol_low` and `worker_luna` are ineligible
+because the unit restructures the reachable overlay DOM/CSS ownership while
+preserving a reviewed cross-owner focus/accessibility contract and requires
+visual judgment at two exact viewports. No parallel implementation is allowed
+because the DOM and stylesheet slices share selectors and proof states.
 
-After Package 6 freezes behavior, move distinct overlay families to focused
-DOM/CSS/view-model owners where they own meaningful behavior. Adapt upstream
-hierarchy/density for supported OSD, now playing, mini guide, options, badge,
-number entry, and transition states. Omit unsupported controls explicitly; do
-not synthesize artwork or actions.
+**Post-exception baseline:** Package 7 planning and renderer implementation may
+proceed without claiming Package 6 platform completion. First run a fresh
+configured planner pass that records the new Desktop HEAD/status/line counts,
+proves the overlay stack's
+Player-screen ancestry and the three busy-custody outcomes through the
+production focus path, refreshes this section and the ignored Package 7 packet,
+and obtains a new independent plan review. The 2026-07-15 Package 7 packet is
+stale until that refresh.
+
+**Pre-correction freshness and architecture audit:** Desktop was clean at
+`2eda503f480485bede59bec65d7effc279f712fc` before the accepted focus-custody
+contradiction and is not the Package 7 implementation baseline. Upstream
+`/Users/tristan/Software/Lineup` is on `code-health` at
+`a1a7ea7dcb1cfc8aee7cfcf88cf5a1dac718bf30`; its unrelated dirty files are
+preserved. The scoped `player-osd`, `now-playing-info`, `mini-guide`,
+`channel-badge`, `channel-number-overlay`, `channel-transition`,
+`playback-options`, and overlay-primitives paths are clean and have no delta
+from pinned comparison `4bdb0e1b3370e7893a582ec80226557727832d0b` to current
+HEAD. The exact upstream presentation inputs are:
+`src/modules/ui/player-osd/PlayerOsdOverlay.ts`,
+`src/modules/ui/player-osd/styles.surface.css`,
+`src/modules/ui/player-osd/styles.content.css`,
+`src/modules/ui/player-osd/styles.actions.css`,
+`src/modules/ui/player-osd/styles.meta-progress.css`,
+`src/modules/ui/player-osd/styles.motion.css`,
+`src/modules/ui/player-osd/styles.theme.css`,
+`src/modules/ui/now-playing-info/NowPlayingInfoOverlay.ts`,
+`src/modules/ui/now-playing-info/styles.core.css`,
+`src/modules/ui/now-playing-info/styles.content.css`,
+`src/modules/ui/now-playing-info/styles.motion.css`,
+`src/modules/ui/now-playing-info/styles.theme.css`,
+`src/modules/ui/mini-guide/MiniGuideOverlay.ts`,
+`src/modules/ui/mini-guide/styles.core.css`,
+`src/modules/ui/mini-guide/styles.motion.css`,
+`src/modules/ui/mini-guide/styles.theme.css`,
+`src/modules/ui/channel-badge/ChannelBadgeOverlay.ts`,
+`src/modules/ui/channel-badge/styles.css`,
+`src/modules/ui/channel-number-overlay/ChannelNumberOverlay.ts`,
+`src/modules/ui/channel-number-overlay/styles.css`,
+`src/modules/ui/channel-transition/ChannelTransitionOverlay.ts`,
+`src/modules/ui/channel-transition/styles.css`,
+`src/modules/ui/playback-options/PlaybackOptionsModal.ts`,
+`src/modules/ui/playback-options/styles.core.css`,
+`src/modules/ui/playback-options/styles.motion.css`,
+`src/modules/ui/playback-options/styles.theme.css`,
+`src/modules/ui/common/OverlayPrimitives.ts`, and
+`src/modules/ui/types/overlay-primitives.ts`. Codanna's recent index returned
+no useful overlay symbols or semantic
+matches, so exact ownership and freshness used the required direct-read/`rg`
+fallback. `npm run verify:maintainability` reports the relevant attention
+owners as `src/renderer/index.ts` 782 lines,
+`src/renderer/playerOverlayController.ts` 664 lines, and
+`src/renderer/styles/player-overlays.css` 735 lines. Package 7 touches only the
+stylesheet attention owner; `index.ts` and the controller remain frozen.
+
+**Architecture boundary:** renderer presentation only. Package 6 behavior,
+state precedence, timers, bridge effects, schedule projection, focus-return
+intents, and public/process boundaries are immutable. No change is approved to
+`overlays.ts`, `overlayViewModels.ts`, `playerOverlayPresentation.ts`,
+`playerOverlayController.ts`, `playerBridgeSubscription.ts`,
+`guidePresentationPolling.ts`, `focusDom.ts`, input/navigation/action owners,
+contracts, IPC, preload, main runtime, native/helper, persistence, protocol,
+dependencies, assets, or `index.ts`. Existing view models already carry all
+honest channel, program, progress, status, track, error, and focus data needed
+for presentation; missing artwork/metadata stays absent.
+
+Extract the current overlay markup and rendering from `staticDom.ts` and
+`routeDom.ts` into new `playerOverlayDom.ts`. That owner contains the complete
+static overlay hierarchy, dynamic mini-guide and option-row DOM projection,
+visibility/ARIA projection, and visual-only text formatting; `staticDom.ts`
+mounts its markup inside the Player screen, as established by the Package 6
+correction, and `routeDom.ts` delegates overlay rendering while retaining
+route/workflow projection. The extraction must preserve the Player-screen
+ancestor, native-presentation sibling, and busy-custody attributes exactly.
+This is a present semantic DOM responsibility, not a forwarding wrapper.
+Existing `domBindings.ts` selectors remain sufficient and unchanged.
+
+Split the cohesive but 735-line `styles/player-overlays.css` by actual family:
+it retains overlay-stack/native-surface, shared status/HUD, channel badge,
+number entry, transition, loading, and terminal-error presentation; new
+`player-overlay-information.css` owns OSD and now-playing; new
+`player-overlay-menus.css` owns mini-guide and playback-options. `styles.css`
+imports all three directly; no import-only compatibility stylesheet or old-path
+shim is permitted. Move `.player-presentation .player-surface` from
+`styles/shell.css` into `player-overlays.css`, and delete every obsolete
+`.player-quick-actions` rule from `styles/shell.css`; retain all unrelated shell
+layout, bootstrap, error, toast, exit, and responsive behavior. Move the
+overlay-specific forced-color selectors for `.player-surface`,
+`.now-playing-overlay`, `.mini-guide`, `.playback-options`, and
+`.channel-number-overlay` out of
+`styles/responsive-accessibility.css`: `.player-surface` and
+`.channel-number-overlay` move to `player-overlays.css`,
+`.now-playing-overlay` moves to `player-overlay-information.css`, and
+`.mini-guide` plus `.playback-options` move to
+`player-overlay-menus.css`; retain its global token mapping,
+body/button/focus rules, and all non-overlay responsive/accessibility
+selectors. Keep every selector in one owner. The
+ignored capture command performs a fail-closed source ownership audit: the
+native-surface selector occurs only in `player-overlays.css`, all
+`.player-quick-actions` selectors are absent, and each named overlay family and
+forced-color selector occurs only in its assigned owner. Each touched/new
+production owner must finish below 500 lines; crossing 500 requires a compact
+cohesion disposition and fresh architecture review, and crossing 800 is a
+stop/replan trigger. `index.ts` receives no diff.
+
+Adapt the unchanged upstream hierarchy and density, using Desktop-owned markup,
+local tokens, and safe view models:
+
+- OSD is a full-width bottom gradient/scrim with safe-margin information and
+  right-aligned real Audio/Subtitle pill actions, a tabular metadata strip, and
+  edge-to-edge played/buffered progress. It never renders Sleep, volume, mute,
+  playback-rate, quality, fake track, or disabled proxy controls.
+- Now-playing is a broad lower-left information shelf with title, optional
+  subtitle/channel, progress/time, and up-next only. Omit poster, backdrop,
+  clear-logo, badge, description, cast, actor, and summary placeholders because
+  no renderer-safe runtime data exists; do not draw synthetic artwork.
+- Mini-guide is the top-edge five-row shelf. Each row presents real number,
+  channel name, current title/progress, optional next title, exact selected/busy
+  state, and the existing input hint. Remove branding/icon placeholders.
+- Playback options is a right-edge modal rail for exactly one invoking family,
+  with real rows only, selected/busy/error treatment, subtitle Off when
+  supplied by the frozen view model, and no duplicate inactive section or
+  fabricated quality controls.
+- Badge is a passive compact top-right current-channel companion; number entry
+  is a compact top-right `CH` panel with editing/completed/error treatment;
+  transition is a compact top-left status panel with a CSS-only spinner and
+  safe channel label. Generic loading is a centered semantic status treatment;
+  terminal error is a readable centered alert with only eligible Retry/Guide
+  actions. Idle/ready/playing/paused/ended native baseline remains black and
+  overlay-free.
+
+Use overlay-scoped CSS custom properties for safe margins, scrim alphas, rail
+width, information-shelf width/height, row density, progress thickness, and
+focus treatment; do not change global base tokens. At `1280x720`, all five
+mini-guide rows, the OSD metadata/actions, the full terminal panel, and the
+active option rail must fit without clipping or document scroll. At
+`1920x1080`, safe margins and clamped typography/panel dimensions may expand
+without turning compact HUD surfaces into cards. `prefers-reduced-motion:
+reduce` removes slide/entry/equalizer/spinner animation and leaves every state
+visible; `forced-colors: active` supplies Canvas/CanvasText/Highlight borders,
+focus, selected/busy/error, and progress differentiation without relying on
+alpha, gradients, or color alone.
+
+Preserve existing focus ids and delegated action attributes exactly. Add only
+presentation semantics: active option rows expose `aria-pressed`, selected
+mini-guide rows expose `aria-current`, and busy Retry/mini/options targets retain
+the Package 6 native-enabled, `aria-disabled`, `aria-busy`, explicit busy-focus-
+custody contract. The options rail is the single active dialog family, hidden
+sections/owners are inert, and loading/transition/error/status messages retain
+their live-region roles.
+Keyboard, gamepad-like, pointer, Back, timer, tune, option selection, and
+fullscreen behavior must remain byte-for-behavior equivalent to Package 6.
+
+The ignored Package 7 capture harness must render these 22 distinct sanitized
+Package 6 states at device scale factor 1 and exact CSS viewports `1280x720` and
+`1920x1080` (44/44 screenshots): (1) native idle; (2) generic loading; (3)
+buffering; (4) delayed transition; (5) retryable terminal error; (6) Retry
+pending; (7) Retry inline failure; (8) destroyed/unavailable terminal error;
+(9) playing OSD with two controls; (10) paused OSD with one control; (11)
+now-playing with badge; (12) normal mini-guide; (13) mini-guide busy; (14)
+mini-guide inline failure; (15) number editing; (16) number pending; (17) number
+completed; (18) number invalid; (19) audio options selected; (20) subtitle
+options with Off; (21) option busy; and (22) option inline failure. The ignored
+target entry reaches them only by constructing renderer-safe
+`PlayerOverlayPresentationSource`/`PlayerOverlayState` inputs and invoking the
+production mount/render seams; it adds no production injection seam.
+
+Freeze the distinct owner/eligibility/focus expectations. States 1–4 and 15–18
+are focusless; number pending is locked but remains the channel-number owner.
+State 5 is `playerError` with enabled Retry and Guide and exact
+`overlay-player-retry` focus. State 6 keeps `playerError`, Retry visible,
+native-enabled but `aria-disabled="true"` and `aria-busy="true"`, with Package
+6 Retry focus custody unchanged and activation guarded; Guide remains eligible
+but inactive. State 7 re-enables and refocuses Retry and
+shows only the sanitized Retry failure. State 8 omits Retry and focuses the
+eligible Guide action. State 9 focuses `overlay-osd-audio`, state 10 focuses its
+only eligible OSD control, and both alone permit the passive badge. State 11 is
+focusless with the badge. States 12 and 14 focus the selected mini row; state 13
+keeps the pending selected row as the busy focus-custody target. States 19–22
+have only the invoking options family: selected/Off states focus the frozen
+view-model row, the busy row is native-enabled but
+`aria-disabled`/`aria-busy` and activation-guarded while retaining Package 6
+focus custody, and the inline-failure row is re-enabled/focused. If the current
+Package 6 DOM cannot reach any of those frozen outcomes, stop and route the
+contradiction to Package 6 instead of changing behavior in Package 7.
+
+Each screenshot row asserts exact dimensions, one active semantic/modal owner,
+companion-badge rules, the expectation above, no clipping/overflow,
+hidden-owner inertness, no unsupported controls/placeholders/private material,
+and stable raster output. The controller and reviewer visually inspect the
+44-capture contact sheet and representative full-size captures against the
+existing sanitized upstream reference bundle; pixel equality is not the
+acceptance criterion.
+
+Media-query proof uses Chromium DevTools Protocol through the ignored Electron
+capture process: attach `webContents.debugger`, send
+`Emulation.setEmulatedMedia` with one feature, wait two animation frames, run
+computed semantic assertions, then send an empty `features` array and detach in
+`finally`. Each row records the relevant computed values and an explicit
+pass/fail disposition. Any attach/emulation/reset failure fails the command.
+Reduced-motion is eight additional semantic-only runs, not screenshots:
+delayed transition, normal mini-guide, number invalid, and audio-options
+selected at both viewports. Each run must match `prefers-reduced-motion:
+reduce`, retain the visible final owner, report no running subtree Web
+Animations, report no nonzero animation/transition duration on the animated
+owner/descendants, and report `none` or an identity matrix for the visible
+owner's final transform.
+
+Forced-colors is twelve additional semantic-only runs, not screenshots:
+playing OSD, normal mini-guide, mini-guide busy, number invalid, Retry failure,
+and option busy at both viewports. The ignored harness creates and removes
+capture-only probes for `Canvas`, `CanvasText`, `Highlight`, `HighlightText`,
+and `GrayText`, compares computed values rather than literal RGB strings, and
+requires `forced-colors: active`. It proves Canvas/CanvasText surface/text,
+Highlight/HighlightText exact focus and selected treatment, GrayText/current-
+color busy treatment, Highlight/current-color error boundary, and distinct
+played/buffered/track progress. Any transparent, indistinguishable, missing, or
+color-only required state fails. The manifest therefore contains 44 screenshot
+rows plus 20 media-semantic rows.
+
+Actual fullscreen proof is three further semantic-only rows. For OSD, mini-
+guide, and options, a fresh ignored target page mounts a renderer-safe state
+(playing/two-control OSD, normal mini-guide, or subtitle-Off options), calls the
+production `FocusRegistry`, `syncRendererFocusTargets`,
+`focusRendererTarget`, and `renderRendererFocus` path, and first proves exact
+DOM focus `overlay-osd-audio`, the encoded selected sample-channel focus id, or
+`overlay-subtitle-track-off`. The mini-guide fixture uses selected channel id
+`sample/channel`, making its exact encoded focus id
+`overlay-mini-channel-sample%2Fchannel`. The Electron parent shows/focuses a
+fresh BrowserWindow, records pre-entry bounds/CSS viewport/DPR, rejects
+immediately when `isFullScreenable()` is false, calls `setFullScreen(true)`,
+and requires the `enter-full-screen` event plus `isFullScreen() === true`
+within 5,000 ms.
+It records actual fullscreen bounds/CSS viewport/DPR without asserting a fixed
+fullscreen size, reruns owner/focus/visibility/z-order/native-non-tab-stop/
+hidden-owner assertions, calls `setFullScreen(false)`, and requires the
+`leave-full-screen` event plus false state within 5,000 ms before rerunning the
+same assertions and requiring restored window bounds, content bounds, CSS
+viewport, and DPR to equal their recorded pre-entry values. A rejected command,
+missing event, timeout, unsupported fullscreen, focus loss, owner change, hidden focus,
+z-order failure, dimension-read failure, or cleanup/reset failure fails closed.
+Each owner uses a new window; `finally` leaves fullscreen if necessary, resets
+media emulation, detaches the debugger, removes listeners, destroys the window,
+and verifies no retained window. The complete manifest has 67 result rows: 44
+screenshots, 20 media-semantic runs, and three fullscreen runs.
+
+This is local Electron renderer/fullscreen continuity proof only. It supplements
+`npm run smoke:electron`; it does not exercise the production bridge/native
+video and cannot replace or claim RD-27 Windows proof. Package 7's platform-
+proof label is `Mac/local automated proof sufficient; Windows operational proof
+deferred to RD-27` because this unit changes renderer DOM/CSS only.
 
 Focused tests:
 
 `node --import tsx --test src/__tests__/renderer/overlays.test.ts src/__tests__/renderer/routeDom.test.ts src/__tests__/renderer/focusDom.test.ts src/__tests__/renderer/rendererActionRegistration.test.ts src/__tests__/renderer/rendererRuntimeOwners.test.ts`
+
+Update the five tests only where required to prove stable public DOM/focus
+outcomes: exact semantic owner hierarchy; unsupported placeholder/control
+absence; one active option family; selected/busy/error ARIA projection; dynamic
+row focus ids; pointer/OK equivalence; hidden-owner exclusion; and exact
+fullscreen focus continuity. Do not restate CSS declarations or private helper
+order in tests. The ignored proof command is
+`node docs/runs/complete-webos-ui-parity-reopen/capture-package-7.mjs`; it must
+produce 44 captures, 20 media-semantic results, three fullscreen results, the
+contact sheet, and the 67-row `package-7-target-manifest.json` under the ignored
+run bundle.
+
+This unit materially adapts current upstream overlay hierarchy/density/motion
+patterns even though no verbatim source, tests, or assets are planned. Add a
+new exact Package 7 row to `docs/architecture/import-ledger.md` using pinned
+`4bdb0e1b3370e7893a582ec80226557727832d0b`, observed-current
+`a1a7ea7dcb1cfc8aee7cfcf88cf5a1dac718bf30`, and every exact upstream TS/CSS
+path enumerated in the freshness paragraph above. The exact Desktop
+destinations are `src/renderer/playerOverlayDom.ts`,
+`src/renderer/staticDom.ts`, `src/renderer/routeDom.ts`,
+`src/renderer/styles.css`, `src/renderer/styles/player-overlays.css`,
+`src/renderer/styles/player-overlay-information.css`,
+`src/renderer/styles/player-overlay-menus.css`,
+`src/renderer/styles/shell.css`, and
+`src/renderer/styles/responsive-accessibility.css`. The row must also name
+Apache-2.0 provenance, omitted runtime/artwork/control/theme behavior, the five
+focused tests, 67-row proof, no copied tests/assets, and the revisit trigger.
+Do not rewrite the historical RD-24 row or leave path selection to the worker.
+If implementation copies an asset or source outside that recorded slice, stop
+and re-review scope.
+
+After implementation, run the focused command, `npm run typecheck`,
+`npm run verify:architecture`, `npm run verify:maintainability`,
+`npm run verify:redaction`, `npm run build:electron`,
+`npm run smoke:electron`, the ignored capture command, `npm run verify:docs`,
+`npm run verify`, and `git diff --check`. Require a fresh independent
+implementation `reviewer` for visual fidelity, responsive/accessibility proof,
+import-ledger accuracy, Package 6 behavior preservation, owner cohesion, and
+YAGNI. Stop/replan for any unlisted file, view-model/state/behavior change,
+global-token or asset change, public/process-boundary change, dependency, fake
+artwork/action, unreachable or unsanitizable state, scoped upstream change,
+or proof failure that cannot be corrected inside this presentation seam.
+
+The pre-correction packet is
+`docs/runs/complete-webos-ui-parity-reopen/package-7-execution-packet.md`; it
+must be refreshed after the corrected Package 6 checkpoint. That refresh must
+also add the previously omitted upstream
+`src/modules/ui/common/OverlayPrimitives.ts` beside
+`src/modules/ui/types/overlay-primitives.ts` in its freshness/provenance lists
+and in the exact planned Package 7 import-ledger row. Both primitive paths are
+present and unchanged between the pinned and observed-current upstream hashes.
+Package 7 remains blocked only on that refreshed exact plan receiving clean
+independent plan review, not on the deferred RD-27 Windows audit.
 
 ### Package 8 — Integrated proof and closeout
 
@@ -655,8 +1781,11 @@ fullscreen. Complete the interaction matrix with no unknown cells, scan the
 local proof bundle for private material, run all final gates, obtain integrated
 independent review, and correct roadmap/current-state/renderer/security/proof/
 parity/divergence/import-ledger docs, including the Package 6 Info replacement
-divergence. Archive this plan and unblock a fresh RD-27
-plan only after observed proof is complete.
+divergence. Archive this plan and unblock a fresh RD-27 plan after renderer
+parity and local automated verification close. Package 8 must state that
+Package 6 operator-assisted fullscreen platform proof remains a binding RD-27
+Windows gate; it cannot claim complete platform parity or a complete Package 6
+29-row proof.
 
 ## Verification Commands
 
@@ -724,7 +1853,10 @@ when closeout cannot proceed.
 ## Commit Checkpoints
 
 1. `feat(renderer): complete scheduler-backed guide parity`
-2. `feat(renderer): bind player overlays to runtime state`
+2. `feat(renderer): bind player overlays to runtime state` — amend the local,
+   unpushed checkpoint with the focus-custody correction only after clean review
+   and current proof; otherwise use controller-adjudicated separate correction
+   commit without rewriting shared history.
 3. `feat(renderer): complete webos overlay presentation parity`
 4. `docs: close complete webos ui parity proof`
 
@@ -736,14 +1868,16 @@ package uses a fresh `reviewer` when its review gate is met.
 
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
-TASK: Plan and review Package 7 — Player overlay visual surfaces
+TASK: Refresh, review, and execute Package 7 under the Package 6 proof exception
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md
-BLOCKERS: Package 7 implementation is blocked on a fresh exact-file plan and
-clean independent plan review; RD-27 remains blocked pending Packages 7–8.
-MESSAGE: Load the active plan and current Package 6 checkpoint, run the bounded
-Desktop/upstream freshness and architecture-health audit, then route Package 7
-through the configured planner and a fresh read-only reviewer. Promote only
-Package 7 to exact files, supported visual behavior, proof, and stop conditions;
-do not implement until that refreshed scope receives clean plan review.
+ARTIFACT: docs/runs/complete-webos-ui-parity-reopen/package-6-focus-custody-correction-packet.md
+BLOCKERS: Package 7 requires a fresh corrected-HEAD baseline/provenance refresh
+and clean independent plan review. The deferred RD-27 Windows audit does not
+block renderer implementation.
+MESSAGE: Preserve the corrected Package 6 focus/accessibility contract and the
+pending-platform-proof nonclaim. Refresh the Package 7 plan and ignored packet
+before implementation. Do not rerun the known-failing Mac capture or claim a
+completed Package 6 29-row manifest; Package 8 must retain the binding RD-27
+Windows audit.
