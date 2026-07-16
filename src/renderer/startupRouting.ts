@@ -2,6 +2,7 @@ import type { PlexRuntimeSnapshot } from '../contracts/plex.js';
 import type { AppRouteId } from './navigation.js';
 import type { ChannelRuntimeRendererState } from './channelRuntimeState.js';
 import type { SettingsSectionId } from './settingsSetup.js';
+import { hasPlexAuthenticationFailure } from './setup/setupEntryLifecycle.js';
 
 export type RendererStartupTarget =
   | { route: 'player' }
@@ -9,6 +10,40 @@ export type RendererStartupTarget =
   | { route: 'channelSetup'; stage: 'account' | 'profile' | 'server' | 'library' };
 
 export type ChannelStartupClassification = 'confirmed-empty' | 'configured' | 'recovery';
+
+export async function initializeRendererStartup(input: {
+  loadInitialState(): Promise<unknown>;
+  routeStartup(): Promise<void>;
+  startShell(): Promise<void>;
+  isShellReady(): boolean;
+}): Promise<'ready' | 'error'> {
+  try {
+    await input.loadInitialState();
+  } catch {
+    return 'error';
+  }
+
+  let routeWork: Promise<void>;
+  try {
+    routeWork = input.routeStartup();
+  } catch {
+    return 'error';
+  }
+  const routeOutcome = routeWork.then(
+    () => true,
+    () => false,
+  );
+  let shellReady: boolean;
+  try {
+    await input.startShell();
+    shellReady = input.isShellReady();
+  } catch {
+    return 'error';
+  }
+  if (!shellReady) return 'error';
+  const routeSucceeded = await routeOutcome;
+  return routeSucceeded ? 'ready' : 'error';
+}
 
 export function classifyChannelStartupState(state: ChannelRuntimeRendererState): ChannelStartupClassification {
   if (isConfirmedEmptyChannelState(state)) return 'confirmed-empty';
@@ -27,7 +62,7 @@ export function resolveRendererStartupTarget(
   plexSnapshot: PlexRuntimeSnapshot | null,
   channelState: ChannelRuntimeRendererState,
 ): RendererStartupTarget {
-  if (plexSnapshot?.auth.state !== 'signed-in' || hasAuthenticationFailure(plexSnapshot)) {
+  if (plexSnapshot?.auth.state !== 'signed-in' || hasPlexAuthenticationFailure(plexSnapshot)) {
     return { route: 'channelSetup', stage: 'account' };
   }
   if (plexSnapshot.auth.profile === null) return { route: 'channelSetup', stage: 'profile' };
@@ -43,11 +78,8 @@ export function createRendererRoutingCoordinator(input: {
   getChannelState(): ChannelRuntimeRendererState;
   activateRoute(route: AppRouteId): void;
   showPlayer(): void;
-  setSetupStage(stage: 'account' | 'profile' | 'server' | 'library'): void;
   setSettingsCategory(category: SettingsSectionId): void;
-  loadProfiles(): void;
-  enterServerSelection(): void;
-  enterLibrary(returnRoute: 'player', returnFocusId: string, enteredFromServer: boolean): Promise<void>;
+  enterSetup(returnRoute: 'player', returnFocusId: string, enteredFromServer: boolean): Promise<void>;
 }) {
   const routeTo = async (target: RendererStartupTarget, enteredFromServer: boolean): Promise<void> => {
     if (target.route === 'player') { input.showPlayer(); return; }
@@ -57,19 +89,12 @@ export function createRendererRoutingCoordinator(input: {
       return;
     }
 
-    input.setSetupStage(target.stage);
-    input.activateRoute('channelSetup');
-    if (target.stage === 'server') input.enterServerSelection();
-    else if (target.stage === 'library') {
-      await input.enterLibrary('player', 'player-setup-reminder', enteredFromServer);
-    }
+    await input.enterSetup('player', 'player-setup-reminder', enteredFromServer);
   };
 
   return {
     async routeStartup(): Promise<void> {
       const target = resolveRendererStartupTarget(input.getPlexSnapshot(), input.getChannelState());
-      const needsProfiles = target.route !== 'channelSetup' || target.stage !== 'account';
-      if (input.getPlexSnapshot()?.auth.state === 'signed-in' && needsProfiles) input.loadProfiles();
       await routeTo(target, true);
     },
     async openPlayerSetupReminder(): Promise<boolean> {
@@ -97,12 +122,4 @@ function hasUsablePersistedChannels(state: ChannelRuntimeRendererState): boolean
   return current !== undefined && current.number === summary.currentChannelNumber
     && current.name === summary.currentChannelName
     && summary.channels.every((channel, index) => channel.number === summary.channelNumbers[index]);
-}
-
-function hasAuthenticationFailure(snapshot: PlexRuntimeSnapshot | null): boolean {
-  switch (snapshot?.lastError?.code) {
-    case 'PLEX_AUTH_REQUIRED': case 'PLEX_AUTH_INVALID': case 'PLEX_UNAUTHORIZED':
-    case 'PLEX_PIN_EXPIRED': case 'PLEX_PIN_TIMEOUT': return true;
-    default: return false;
-  }
 }

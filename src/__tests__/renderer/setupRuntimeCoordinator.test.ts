@@ -160,6 +160,10 @@ test('setup composition entry generation prevents an invalidated continuation fr
     closeSetup: () => undefined,
     tuneChannel: async () => false,
     clearDependentActionState: () => undefined,
+    setSetupStage: () => undefined,
+    activateSetupRoute: () => undefined,
+    loadProfiles: () => undefined,
+    enterServerSelection: () => undefined,
   });
 
   const stale = composition.enter('settings', 'settings-setup');
@@ -173,6 +177,50 @@ test('setup composition entry generation prevents an invalidated continuation fr
   second.resolve();
   await latest;
   assert.equal(composition.controller.getState().focusIntent, 'plex-dyn-section-latest');
+});
+
+test('server-origin Back invalidates a pending library entry before showing server onboarding', async () => {
+  const pendingLibraries = deferred<void>();
+  let state = plexState('server-1', [], null);
+  const events: string[] = [];
+  const plexController = {
+    getState: () => state,
+    listLibrarySections: async () => {
+      await pendingLibraries.promise;
+      state = plexState('server-1', [section('stale-library', 'movie')], null);
+    },
+    listLibraryItems: async () => undefined,
+    getMetadata: async () => undefined,
+    setSelectedSection: () => undefined,
+  } as unknown as PlexRuntimeController;
+  const composition = createSetupComposition({
+    plexController,
+    channelController: {} as Parameters<typeof createSetupComposition>[0]['channelController'],
+    customController: {} as Parameters<typeof createSetupComposition>[0]['customController'],
+    render: () => undefined,
+    returnToServer: () => events.push('stage:server'),
+    closeSetup: () => events.push('close'),
+    tuneChannel: async () => false,
+    clearDependentActionState: () => undefined,
+    setSetupStage: () => events.push('stage:library'),
+    activateSetupRoute: () => events.push('route:channelSetup'),
+    loadProfiles: () => undefined,
+    enterServerSelection: () => undefined,
+  });
+
+  const entry = composition.enter('player', 'player-setup-reminder', true);
+  await Promise.resolve();
+  assert.equal(composition.runtime.getState().library, 'loading');
+  await composition.apply('setupBack');
+  assert.equal(composition.runtime.getState().library, 'idle');
+  assert.equal(composition.controller.getState().focusIntent, 'setup-select-all');
+  assert.equal(events.at(-1), 'stage:server');
+
+  pendingLibraries.resolve();
+  await entry;
+  assert.equal(composition.controller.getState().owner, 'library');
+  assert.equal(composition.controller.getState().focusIntent, 'setup-select-all');
+  assert.equal(events.includes('close'), false);
 });
 
 test('setup preview coalesces queued cursor changes so the latest cursor performs a real load', async () => {
@@ -330,8 +378,8 @@ function plexState(serverId: string, sections: readonly PlexLibrarySectionSummar
   return {
     ...createPlexRuntimeRendererState(), selectedServerId: serverId, selectedSectionId, errorText,
     snapshot: {
-      auth: { state: 'signed-in', pin: null, profile: null, homeUsers: [], credentialStatus: 'present' },
-      servers: { status: 'ready', selected: null, items: [], lastSelection: null },
+      auth: { state: 'signed-in', pin: null, profile: { accountId: 'account' }, homeUsers: [], credentialStatus: 'present' },
+      servers: { status: 'ready', selected: { serverId, name: 'Server', owned: true, connectionCount: 1, hasLocalConnection: true, hasRemoteConnection: false, hasRelayConnection: false, selected: true }, items: [], lastSelection: null },
       library: { status: 'ready', sections, selectedSectionId, items: ratingKeys.map((ratingKey) => ({ ratingKey, type: 'movie', title: ratingKey, sortTitle: ratingKey, summary: '', year: 2026, durationMs: 1, addedAtMs: 0, updatedAtMs: 0 })), search: null, metadata: null },
       lastError: null,
       updatedAtMs: 0,

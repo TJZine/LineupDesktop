@@ -258,6 +258,49 @@ test('player setup reminder supports pointer and focused activation with eligibi
   });
 });
 
+test('Settings and Guide setup entry controls support pointer and focused activation', () => {
+  withTestHTMLElement(() => {
+    const documentRef = new TestDocument();
+    const settings = new TestElement();
+    settings.id = 'screen-settings';
+    const settingsSetup = new TestElement();
+    settingsSetup.dataset.routeAction = 'openChannelSetup';
+    settingsSetup.dataset.focusId = 'settings-open-channel-setup';
+    settings.append(settingsSetup);
+    const guide = new TestElement();
+    guide.id = 'screen-guide';
+    const guideSetup = new TestElement();
+    guideSetup.dataset.guideAction = 'setup';
+    guideSetup.dataset.focusId = 'guide-state-setup';
+    guide.append(guideSetup);
+    documentRef.append(settings);
+    documentRef.append(guide);
+
+    const actions: string[] = [];
+    const dom = emptyRendererDomBindings();
+    dom.routeActionButtons = [settingsSetup as unknown as HTMLButtonElement];
+    dom.focusableElements = [
+      settingsSetup as unknown as HTMLElement,
+      guideSetup as unknown as HTMLElement,
+    ];
+    const handlers = createActionHandlers(actions);
+    handlers.applyGuideAction = (action) => actions.push(`guide:${action}`);
+    registerRendererActions(dom, documentRef as unknown as Document, handlers);
+
+    settingsSetup.click();
+    clickFocusedRendererElement({ activeRoute: 'settings', activeId: 'settings-open-channel-setup' }, dom);
+    guideSetup.click();
+    clickFocusedRendererElement({ activeRoute: 'guide', activeId: 'guide-state-setup' }, dom);
+
+    assert.deepEqual(actions, [
+      'route:openChannelSetup',
+      'route:openChannelSetup',
+      'guide:setup',
+      'guide:setup',
+    ]);
+  });
+});
+
 test('renderer action registration delegates dynamic Guide state and program controls', () => {
   withTestHTMLElement(() => {
     const documentRef = new TestDocument();

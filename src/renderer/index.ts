@@ -35,7 +35,8 @@ import { cleanupSetupRouteLifecycle, clearSetupSourceLifecycle, createSetupCompo
 import { createSettingsRuntime } from './settings/settingsRuntime.js';
 import { createFullscreenTransportCoordinator } from './fullscreenTransport.js';
 import { createGuideTuneController, type GuideTuneTarget } from './guideTuneController.js';
-import { createRendererRoutingCoordinator } from './startupRouting.js';
+import { createRendererRoutingCoordinator, initializeRendererStartup } from './startupRouting.js';
+import { applySetupOnboardingBack, getSetupEntryReturnFocusId, restoreSetupEntryDestination } from './setup/setupEntryLifecycle.js';
 mountStaticRendererDom();
 const dom = queryRendererDom();
 const shellDom = queryShellDom();
@@ -85,6 +86,10 @@ const setupComposition = createSetupComposition({
   closeSetup: closeStagedSetup,
   tuneChannel: async (channelId) => (await window.lineupDesktop.player.tuneChannel({ channelId })).ok,
   clearDependentActionState: clearDependentChannelActionState,
+  setSetupStage: (stage) => { activeSetupStage = stage; },
+  activateSetupRoute: () => activateRoute('channelSetup'),
+  loadProfiles: () => { void plexController.getHomeUsers(); },
+  enterServerSelection: () => { void onboardingFlow.advanceToServerSelection(); },
 });
 const stagedSetupController = setupComposition.controller;
 const applyStagedSetupAction = setupComposition.apply;
@@ -94,18 +99,20 @@ onboardingFlow = createPlexOnboardingFlow({
   setStage: (stage) => {
     activeSetupStage = stage;
     if (stage === 'library') {
-      const returnRoute = workflowState.lastActionRoute === 'guide' || workflowState.lastActionRoute === 'settings' ? workflowState.lastActionRoute : 'player';
-      void setupComposition.enter(returnRoute, returnRoute === 'guide' ? 'guide-state-setup' : returnRoute === 'settings' ? 'settings-setup' : 'player-settings');
+      const returnState = setupComposition.controller.getState();
+      void setupComposition.enter(
+        returnState.returnRoute,
+        getSetupEntryReturnFocusId(returnState.returnRoute, returnState.returnFocusId),
+        returnState.enteredFromServer,
+      );
     }
   }, render: renderApp,
 });
 const routingCoordinator = createRendererRoutingCoordinator({
   getPlexSnapshot: () => plexController.getState().snapshot, getChannelState: channelController.getState,
   activateRoute, showPlayer: renderApp,
-  setSetupStage: (stage) => { activeSetupStage = stage; },
   setSettingsCategory: (category) => { activeSettingsCategory = category; },
-  loadProfiles: () => { void plexController.getHomeUsers(); }, enterServerSelection: () => { void onboardingFlow.advanceToServerSelection(); },
-  enterLibrary: (returnRoute, returnFocusId, enteredFromServer) =>
+  enterSetup: (returnRoute, returnFocusId, enteredFromServer) =>
     setupComposition.enter(returnRoute, returnFocusId, enteredFromServer),
 });
 initializeProfilePinModal({
@@ -319,16 +326,28 @@ registerRendererActions(dom, document, {
 });
 
 document.documentElement.dataset.activeRoute = workflowState.routeState.activeRoute;
-void initializeRenderer().finally(() => { document.documentElement.dataset.shellBoot = 'ready'; });
+void initializeRenderer().then(
+  (outcome) => { document.documentElement.dataset.shellBoot = outcome; },
+  () => { document.documentElement.dataset.shellBoot = 'error'; },
+);
 guidePresentationPolling.start();
 void customChannelController.loadSnapshot();
 
-async function initializeRenderer(): Promise<void> {
-  await Promise.allSettled([settingsRuntime.initialize(), plexController.loadSnapshot(), channelController.loadStatus()]);
-  await applyStartupTarget();
-  await shellController.start();
+async function initializeRenderer(): Promise<'ready' | 'error'> {
+  const outcome = await initializeRendererStartup({
+    loadInitialState: () => Promise.allSettled([
+      settingsRuntime.initialize(),
+      plexController.loadSnapshot(),
+      channelController.loadStatus(),
+    ]),
+    routeStartup: applyStartupTarget,
+    startShell: () => shellController.start(),
+    isShellReady: () => shellState.bootstrap === 'ready',
+  });
+  if (outcome === 'error') return outcome;
   focusState = focusRegistry.focusRoute(focusState, workflowState.routeState.activeRoute).state;
   renderApp();
+  return 'ready';
 }
 
 async function applyStartupTarget(): Promise<void> {
@@ -364,8 +383,18 @@ async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
     await navigationLifecycle.handleInput('guide');
     return;
   }
-  if (action === 'openChannelSetup' && workflowState.routeState.activeRoute === 'player' &&
-      await routingCoordinator.openPlayerSetupReminder()) return;
+  if (action === 'openChannelSetup') {
+    const originRoute = workflowState.routeState.activeRoute;
+    if (originRoute === 'player' && await routingCoordinator.openPlayerSetupReminder()) return;
+    if (originRoute === 'guide' || originRoute === 'settings') {
+      await setupComposition.enter(
+        originRoute,
+        getSetupEntryReturnFocusId(originRoute, focusState.activeId),
+        false,
+      );
+      return;
+    }
+  }
   const previousRoute = workflowState.routeState.activeRoute;
   const nextWorkflowState = applyWorkflowAction(workflowState, action);
   const nextRoute = nextWorkflowState.routeState.activeRoute;
@@ -395,9 +424,15 @@ function applySettingsAction(action: SettingsActionId): void {
 
 function closeStagedSetup(): void {
   const state = stagedSetupController.getState();
-  if (state.returnRoute === 'guide') pendingGuideFocusId = state.returnFocusId;
-  activateRoute(state.returnRoute);
-  if (state.returnRoute !== 'guide') restoreFocusTarget(state.returnFocusId);
+  restoreSetupEntryDestination({
+    returnRoute: state.returnRoute,
+    returnFocusId: state.returnFocusId,
+    beforeActivate: state.returnRoute === 'guide'
+      ? () => { pendingGuideFocusId = state.returnFocusId; }
+      : undefined,
+    activateRoute,
+    restoreFocus: restoreFocusTarget,
+  });
 }
 
 function applyEpgAction(action: EpgActionId): void {
@@ -599,18 +634,23 @@ async function handleChannelSetupBack(): Promise<boolean> {
       dispatch: applyStagedSetupAction,
     });
   }
-  if (onboardingState === 'auth-link-code' || onboardingState === 'profile-select') return true;
-  if (onboardingState === 'server-select' || onboardingState === 'server-error') {
-    onboardingFlow.returnToProfileSelection();
-    return true;
-  }
+  if (await applySetupOnboardingBack({
+    owner: onboardingState,
+    enteredFromServer: stagedSetupController.getState().enteredFromServer,
+    close: closeStagedSetup,
+    contain: () => undefined,
+    returnToProfile: onboardingFlow.returnToProfileSelection,
+    returnToAuthLink: async () => {
+      await plexController.returnToAuthLink();
+      onboardingFlow.setFocusIntent('btn-auth-request');
+      renderApp();
+      scrollFocusedSetupControlIntoView();
+    },
+  })) return true;
   if (customChannelController.handleBack()) {
     renderApp();
     scrollFocusedSetupControlIntoView();
     return true;
-  }
-  if (onboardingState === 'auth-waiting' || onboardingState === 'auth-error') {
-    onboardingFlow.setFocusIntent('btn-auth-request');
   }
   if (await handlePlexBack()) {
     renderApp();

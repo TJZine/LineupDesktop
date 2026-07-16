@@ -8,6 +8,7 @@ import {
   type StagedSetupFlowActionId,
 } from './stagedSetupController.js';
 import { createSetupRuntimeCoordinator } from './setupRuntimeCoordinator.js';
+import { createSetupEntryLifecycle } from './setupEntryLifecycle.js';
 
 export function createSetupComposition(input: {
   plexController: PlexRuntimeController;
@@ -18,8 +19,11 @@ export function createSetupComposition(input: {
   closeSetup(): void;
   tuneChannel(channelId: string): Promise<boolean>;
   clearDependentActionState(): void;
+  setSetupStage(stage: 'account' | 'profile' | 'server' | 'library'): void;
+  activateSetupRoute(): void;
+  loadProfiles(): void;
+  enterServerSelection(): void;
 }) {
-  let entryGeneration = 0;
   const controller = createStagedSetupController({ onStateChanged: input.render });
   const runtime = createSetupRuntimeCoordinator({
     getPlexState: input.plexController.getState,
@@ -28,13 +32,30 @@ export function createSetupComposition(input: {
     getMetadata: input.plexController.getMetadata,
     onStateChanged: input.render,
   });
+  const entry = createSetupEntryLifecycle({
+    controller,
+    runtime,
+    getPlexState: input.plexController.getState,
+    setSetupStage: input.setSetupStage,
+    activateSetupRoute: input.activateSetupRoute,
+    loadProfiles: input.loadProfiles,
+    enterServerSelection: input.enterServerSelection,
+  });
+  const invalidate = (keepOwner = false): void => {
+    entry.invalidate();
+    runtime.invalidate();
+    controller.invalidateAsync({ keepOwner });
+  };
   const dispatch = createStagedSetupActionDispatcher({
     controller,
     runtime,
     channelController: input.channelController,
     plexController: input.plexController,
     customController: input.customController,
-    returnToServer: input.returnToServer,
+    returnToServer: () => {
+      invalidate();
+      input.returnToServer();
+    },
     closeSetup: input.closeSetup,
     tuneChannel: input.tuneChannel,
   });
@@ -42,22 +63,8 @@ export function createSetupComposition(input: {
     controller,
     runtime,
     dispatch,
-    async enter(returnRoute: Exclude<AppRouteId, 'channelSetup'>, returnFocusId: string, enteredFromServer = true) {
-      const currentEntry = ++entryGeneration;
-      controller.enter(returnRoute, returnFocusId, enteredFromServer);
-      controller.showOwner('library', 'setup-back');
-      await runtime.enterLibrary(input.plexController.getState().selectedServerId, input.plexController.getState());
-      if (currentEntry !== entryGeneration) return;
-      const plex = input.plexController.getState();
-      if (runtime.getState().library === 'error') {
-        controller.showRecovery(plex.errorText ?? 'Libraries could not be loaded.', {
-          originStep: 'library', operation: 'listLibraries', invokerFocusId: 'setup-library-retry',
-        });
-      } else {
-        const focus = controller.normalizeSelection(plex.snapshot?.library.sections ?? []);
-        if (runtime.getState().library === 'empty') controller.showOwner('library', 'setup-library-retry');
-        else controller.showOwner('library', focus);
-      }
+    enter(returnRoute: Exclude<AppRouteId, 'channelSetup'>, returnFocusId: string, enteredFromServer = true) {
+      return entry.enter({ originRoute: returnRoute, returnFocusId, enteredFromServer });
     },
     async selectSection(sectionId: string) {
       const sections = input.plexController.getState().snapshot?.library.sections ?? [];
@@ -68,7 +75,7 @@ export function createSetupComposition(input: {
     },
     setBuildMode(mode: 'append' | 'replace') { controller.setBuildMode(mode); },
     apply(action: StagedSetupFlowActionId) { return dispatch(action); },
-    invalidate(keepOwner = false) { ++entryGeneration; runtime.invalidate(); controller.invalidateAsync({ keepOwner }); },
+    invalidate,
   };
 }
 
