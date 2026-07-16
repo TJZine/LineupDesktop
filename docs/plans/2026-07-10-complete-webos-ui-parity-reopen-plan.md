@@ -3,23 +3,21 @@
 **Plan Status:** active
 **Task family:** feature/design
 **Tier:** Tier 3
-**Current execution unit:** Package 6 production correction implementation,
-focused coverage, harness calibration, implementation review, and the reviewed
-platform-proof exception are complete. Mac diagnostics proved row one end to
-end; row two reached its exact pre-input state but the stable-window Computer
-Use click failed through the external AX/ScreenCaptureKit proof tool, including
-after the single reviewed focusability refresh reached its hard stop. Row three
-did not receive a Mac acceptance run. All three physical-click rows are a
-fresh, mandatory RD-27 Windows manual audit; no completed 29-row Mac manifest
-or platform-complete claim exists. Packages 7–8 renderer implementation may
-continue while retaining that binding Windows-proof nonclaim. Package 7 still
-requires a post-correction baseline/provenance refresh and fresh plan review;
-its 2026-07-15 execution packet is stale and is not implementation authority.
-Package 5 — Scheduler-backed Guide parity remains closed with full verification,
+**Current execution unit:** Package 8 — Integrated proof and closeout. Package
+7 renderer implementation, exact-viewport/media/fullscreen proof, review
+remediation, fresh independent re-review, and final verification are complete.
+Package 6 production correction, focused coverage, harness calibration,
+implementation review, and the reviewed platform-proof exception remain
+complete. Its three physical-click rows are still a fresh, mandatory RD-27
+Windows manual audit; no completed 29-row Mac manifest or platform-complete
+claim exists. Package 8 may close renderer parity and local automated proof
+only while retaining that binding Windows-proof nonclaim. Package 5 —
+Scheduler-backed Guide parity remains closed with full verification,
 exact-viewport evidence, and clean read-only adversarial re-review. The
 source-proven pre–Package 5 remediation and the 2026-07-15 suggestion-reviewed
 correction remain closed. Packages 0–4 remain closed at their corrected
-checkpoints; RD-27 remains blocked until Packages 7–8 close.
+checkpoints; RD-27 remains blocked until Package 8 closes and a fresh RD-27
+plan owns the deferred Windows audit.
 
 ## Goal
 
@@ -1463,18 +1461,27 @@ preserving a reviewed cross-owner focus/accessibility contract and requires
 visual judgment at two exact viewports. No parallel implementation is allowed
 because the DOM and stylesheet slices share selectors and proof states.
 
-**Post-exception baseline:** Package 7 planning and renderer implementation may
-proceed without claiming Package 6 platform completion. First run a fresh
-configured planner pass that records the new Desktop HEAD/status/line counts,
-proves the overlay stack's
-Player-screen ancestry and the three busy-custody outcomes through the
-production focus path, refreshes this section and the ignored Package 7 packet,
-and obtains a new independent plan review. The 2026-07-15 Package 7 packet is
-stale until that refresh.
+**Post-exception baseline:** Package 7 planning may proceed without claiming
+Package 6 platform completion; implementation remains blocked until this
+refreshed section and ignored packet receive clean independent plan review.
+Before these authorized planning edits, Desktop was clean on `initial-build` at
+`26a1bbcc092cdb97acb8dd1d9dfe266978f6f581` (`73fb795` is the amended Package
+6 production correction and `26a1bbc` is the separate reviewed exception/RD-27
+memory checkpoint). The only current tracked diff is this active-plan refresh;
+the refreshed execution packet remains ignored. Fresh direct source reads prove
+`[data-overlay-stack]` is
+inside `#screen-player` and outside/beside
+`[data-player-presentation-surface]`. The exact four-file public-seam correction
+suite passes 44/44 and proves terminal Guide, selected mini-guide rows, and
+playback-option rows resolve Player-route ancestry; Retry, the pending selected
+mini-guide row, and the pending option row remain native-enabled while exposing
+`aria-disabled="true"`, `aria-busy="true"`, and exact busy-focus-custody;
+production focus registration preserves their exact focus while pointer,
+synthetic click, Enter, and OK activation remain guarded. The same suite proves
+native presentation and generic overlay action registration have one dispatch
+owner. This is the immutable behavior/accessibility baseline for Package 7.
 
-**Pre-correction freshness and architecture audit:** Desktop was clean at
-`2eda503f480485bede59bec65d7effc279f712fc` before the accepted focus-custody
-contradiction and is not the Package 7 implementation baseline. Upstream
+**Freshness and architecture audit:** Upstream
 `/Users/tristan/Software/Lineup` is on `code-health` at
 `a1a7ea7dcb1cfc8aee7cfcf88cf5a1dac718bf30`; its unrelated dirty files are
 preserved. The scoped `player-osd`, `now-playing-info`, `mini-guide`,
@@ -1510,13 +1517,17 @@ HEAD. The exact upstream presentation inputs are:
 `src/modules/ui/playback-options/styles.theme.css`,
 `src/modules/ui/common/OverlayPrimitives.ts`, and
 `src/modules/ui/types/overlay-primitives.ts`. Codanna's recent index returned
-no useful overlay symbols or semantic
-matches, so exact ownership and freshness used the required direct-read/`rg`
-fallback. `npm run verify:maintainability` reports the relevant attention
-owners as `src/renderer/index.ts` 782 lines,
-`src/renderer/playerOverlayController.ts` 664 lines, and
-`src/renderer/styles/player-overlays.css` 735 lines. Package 7 touches only the
-stylesheet attention owner; `index.ts` and the controller remain frozen.
+no useful overlay symbols or semantic matches, so exact ownership and freshness
+used the required direct-read/`rg` fallback. Fresh blob comparison proves every
+enumerated scoped path is present, clean, and unchanged between the pinned and
+observed-current hashes. Fresh Desktop line counts are `staticDom.ts` 298,
+`routeDom.ts` 404, `focusDom.ts` 481, `rendererActionRegistration.ts` 289,
+`index.ts` 782, `playerOverlayController.ts` 664, and
+`styles/player-overlays.css` 735. `npm run verify:maintainability` independently
+reports the same three relevant attention owners: `index.ts` 782, controller
+664, and overlay stylesheet 735. Package 7 touches only the stylesheet
+attention owner; `index.ts`, the controller, `focusDom.ts`, and action owners
+remain frozen.
 
 **Architecture boundary:** renderer presentation only. Package 6 behavior,
 state precedence, timers, bridge effects, schedule projection, focus-return
@@ -1745,6 +1756,9 @@ destinations are `src/renderer/playerOverlayDom.ts`,
 `src/renderer/styles/responsive-accessibility.css`. The row must also name
 Apache-2.0 provenance, omitted runtime/artwork/control/theme behavior, the five
 focused tests, 67-row proof, no copied tests/assets, and the revisit trigger.
+Both upstream primitive sources—`src/modules/ui/common/OverlayPrimitives.ts`
+and `src/modules/ui/types/overlay-primitives.ts`—are mandatory row inputs; the
+worker may not collapse them into a wildcard or omit either one.
 Do not rewrite the historical RD-24 row or leave path selection to the worker.
 If implementation copies an asset or source outside that recorded slice, stop
 and re-review scope.
@@ -1761,16 +1775,33 @@ global-token or asset change, public/process-boundary change, dependency, fake
 artwork/action, unreachable or unsanitizable state, scoped upstream change,
 or proof failure that cannot be corrected inside this presentation seam.
 
-The pre-correction packet is
+The refreshed reviewed-target packet is
 `docs/runs/complete-webos-ui-parity-reopen/package-7-execution-packet.md`; it
-must be refreshed after the corrected Package 6 checkpoint. That refresh must
-also add the previously omitted upstream
-`src/modules/ui/common/OverlayPrimitives.ts` beside
-`src/modules/ui/types/overlay-primitives.ts` in its freshness/provenance lists
-and in the exact planned Package 7 import-ledger row. Both primitive paths are
-present and unchanged between the pinned and observed-current upstream hashes.
-Package 7 remains blocked only on that refreshed exact plan receiving clean
-independent plan review, not on the deferred RD-27 Windows audit.
+includes the corrected-HEAD baseline and both primitive paths in freshness,
+provenance, and exact import-ledger planning. At planning handoff, Package 7 was
+blocked only on that refreshed exact plan receiving clean independent plan
+review, not on the deferred RD-27 Windows audit; that plan review passed before
+implementation began.
+
+**Closeout result (2026-07-15):** the reviewed worker implementation extracted
+the complete Player overlay markup/projection into `playerOverlayDom.ts`, split
+the former stylesheet hotspot into shared, information, and menu owners, and
+adapted the exact 28-source upstream slice into the nine planned Desktop
+destinations without changing Package 6 behavior, state, focus, action, timer,
+bridge, input, or public/process ownership. The five-file focused suite passed
+52/52; typecheck, architecture/lint, maintainability, redaction, build, Electron
+smoke, docs, full verification, and `git diff --check` passed. Full verification
+reported 823/823 source-contract tests and 135/135 harness/docs tests. The
+ignored proof passed 44/44 exact-viewport screenshots, 8/8 reduced-motion rows,
+12/12 forced-colors rows, and 3/3 actual BrowserWindow fullscreen rows (67/67),
+with matching raster dimensions/hashes and no retained process or temporary
+profile. Independent implementation review found focused/busy contrast and a
+forced-colors owner-surface proof gap; both were corrected inside the approved
+CSS/proof seam, the complete bundle was regenerated, and targeted independent
+re-review found both resolved with no material regression. This local Mac
+automated proof supplements Electron smoke only and does not replace or claim
+the binding RD-27 Windows physical-click/fullscreen audit. Package 8 is
+unblocked.
 
 ### Package 8 — Integrated proof and closeout
 
@@ -1867,17 +1898,21 @@ Exact model and reasoning-effort settings come only from the selected role's
 package uses a fresh `reviewer` when its review gate is met.
 
 NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
-TASK: Refresh, review, and execute Package 7 under the Package 6 proof exception
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
+TASK: Review refreshed Package 7 under the Package 6 proof exception
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md
-ARTIFACT: docs/runs/complete-webos-ui-parity-reopen/package-6-focus-custody-correction-packet.md
-BLOCKERS: Package 7 requires a fresh corrected-HEAD baseline/provenance refresh
-and clean independent plan review. The deferred RD-27 Windows audit does not
-block renderer implementation.
-MESSAGE: Preserve the corrected Package 6 focus/accessibility contract and the
-pending-platform-proof nonclaim. Refresh the Package 7 plan and ignored packet
-before implementation. Do not rerun the known-failing Mac capture or claim a
-completed Package 6 29-row manifest; Package 8 must retain the binding RD-27
-Windows audit.
+ARTIFACT: docs/runs/complete-webos-ui-parity-reopen/package-7-execution-packet.md
+FILES:
+- docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md
+- docs/runs/complete-webos-ui-parity-reopen/package-7-execution-packet.md
+BLOCKERS: Package 7's corrected-HEAD baseline/provenance refresh is complete;
+clean independent plan review is still required. The deferred RD-27 Windows
+audit does not block renderer implementation.
+MESSAGE: Review only the refreshed Package 7 section and ignored execution
+packet against corrected HEAD 26a1bbc. Prioritize exact presentation-only scope,
+Package 6 ancestry/native-enabled busy-custody preservation, both upstream
+overlay primitive paths, 67-row proof, import-ledger specificity, worker-only
+eligibility, and the binding RD-27 Windows nonclaim. Return findings first and
+do not edit files.

@@ -1,5 +1,6 @@
 import { mountShellDom } from './shell/shellDom.js';
 import { createLineupBrandGlyph } from './onboarding/lineupBrandGlyph.js';
+import { PLAYER_OVERLAY_MARKUP } from './playerOverlayDom.js';
 
 const STATIC_SCREEN_MARKUP = `
 <section class="screen-stack" aria-live="polite" data-static-screens-mounted>
@@ -7,104 +8,7 @@ const STATIC_SCREEN_MARKUP = `
     <div class="player-surface" aria-hidden="true"></div>
   </div>
   <section id="screen-player" class="screen screen--active screen--player" data-screen="player" data-style-surface="screen" aria-label="Player">
-      <div class="overlay-stack" data-overlay-stack>
-        <section class="player-overlay channel-badge" data-overlay="channelBadge" aria-label="Channel badge">
-          <strong data-overlay-channel-badge-number></strong>
-          <div>
-            <span data-overlay-channel-badge-name></span>
-            <p data-overlay-channel-badge-program></p>
-          </div>
-        </section>
-        <section class="player-overlay now-playing-overlay" data-overlay="nowPlaying" aria-label="Now playing">
-          <div class="now-playing__backdrop" aria-hidden="true"></div>
-          <div class="now-playing__content-wrapper">
-            <div class="now-playing__poster" aria-hidden="true">
-              <div class="now-playing__poster-placeholder"></div>
-            </div>
-            <div class="now-playing__details">
-              <div class="now-playing__logo-zone">
-                <div class="now-playing__clear-logo-placeholder"></div>
-                <h3 data-overlay-now-playing-title class="now-playing__title"></h3>
-              </div>
-              <p data-overlay-now-playing-subtitle class="now-playing__subtitle"></p>
-              <div class="now-playing__badges-row" data-overlay-now-playing-badges></div>
-              <div class="now-playing__meta-row">
-                <span data-overlay-now-playing-channel class="now-playing__channel"></span>
-                <span data-overlay-now-playing-summary class="now-playing__summary"></span>
-              </div>
-              <p data-overlay-now-playing-description class="now-playing__description"></p>
-              <div class="now-playing__progress-section">
-                <div class="overlay-progress" data-overlay-progress role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
-                <div class="now-playing__time-row">
-                  <span data-overlay-now-playing-position class="now-playing__position"></span>
-                  <span data-overlay-now-playing-duration class="now-playing__duration"></span>
-                </div>
-              </div>
-              <p data-overlay-now-playing-up-next class="now-playing__up-next"></p>
-            </div>
-          </div>
-        </section>
-        <section class="player-overlay osd-overlay" data-overlay="playerOsd" aria-label="Player controls">
-          <div class="player-osd__content">
-            <div class="player-osd__status" data-osd-status role="status"></div>
-            <div class="player-osd__title" data-osd-title></div>
-            <div class="player-osd__subtitle" data-osd-subtitle></div>
-            <div class="player-osd__pills">
-              <span data-osd-audio></span>
-              <span data-osd-subtitles></span>
-            </div>
-            <div class="player-osd__up-next" data-osd-up-next></div>
-          </div>
-          <div class="player-osd__actions">
-            <button type="button" data-overlay-action="openAudioOptions" data-focus-id="overlay-osd-audio">Audio</button>
-            <button type="button" data-overlay-action="openSubtitleOptions" data-focus-id="overlay-osd-subtitles">Subtitles</button>
-          </div>
-          <div class="player-osd__meta">
-            <span data-osd-timecode></span>
-            <span data-osd-ends-at></span>
-            <span data-osd-buffer-text></span>
-          </div>
-          <div class="player-osd__bar" aria-hidden="true">
-            <span class="player-osd__bar-buffer" data-osd-buffer-bar></span>
-            <span class="player-osd__bar-played" data-osd-played-bar></span>
-          </div>
-        </section>
-        <section class="player-overlay mini-guide" data-overlay="miniGuide" aria-label="Mini guide" hidden>
-          <p class="mini-guide__error" data-overlay-mini-guide-error role="status"></p>
-          <div class="mini-guide__list" data-overlay-mini-guide></div>
-          <footer class="mini-guide__footer">
-            <span>Use Up/Down to select, Enter to tune.</span>
-          </footer>
-        </section>
-        <section class="player-overlay channel-number-overlay" data-overlay="channelNumber" aria-label="Channel number" hidden>
-          <span data-overlay-channel-number-value>---</span>
-          <span data-overlay-channel-number-message role="status"></span>
-        </section>
-        <section class="player-overlay playback-options" data-overlay="playbackOptions" aria-label="Playback options" hidden>
-          <header class="playback-options__header">
-            <p>Playback options</p>
-            <strong data-overlay-playback-summary></strong>
-          </header>
-          <p data-overlay-options-error role="status"></p>
-          <dl class="playback-options__summary-list">
-            <div><dt>Audio</dt><dd data-overlay-audio-label></dd></div>
-            <div><dt>Subtitles</dt><dd data-overlay-subtitle-label></dd></div>
-          </dl>
-          <div class="playback-options__lists">
-            <section class="playback-options__section">
-              <h4>Audio tracks</h4>
-              <div data-overlay-audio-options></div>
-            </section>
-            <section class="playback-options__section">
-              <h4>Subtitle tracks</h4>
-              <div data-overlay-subtitle-options></div>
-            </section>
-          </div>
-        </section>
-        <section class="player-overlay channel-transition" data-overlay="transition" aria-label="Changing channel" role="status" hidden><span data-overlay-transition-label></span></section>
-        <section class="player-overlay player-loading" data-overlay="playerLoading" aria-label="Loading player" role="status" hidden>Loading…</section>
-        <section class="player-overlay player-error" data-overlay="playerError" aria-label="Player error" role="alert" hidden><p data-overlay-player-error></p><button type="button" data-overlay-action="retryPlayer" data-focus-id="overlay-player-retry">Retry</button><button type="button" data-route-action="openGuide" data-focus-id="overlay-player-guide">Guide</button></section>
-      </div>
+      ${PLAYER_OVERLAY_MARKUP}
       <aside class="setup-reminder" data-setup-reminder="player" aria-label="Channel setup reminder" hidden><span>No channels are ready yet.</span><button type="button" data-route-action="openChannelSetup">Set up channels</button></aside>
   </section>
   <section id="screen-guide" class="screen" data-screen="guide" data-style-surface="screen" aria-labelledby="screen-guide-title" hidden>

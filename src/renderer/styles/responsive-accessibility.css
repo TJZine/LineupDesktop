@@ -50,17 +50,12 @@
     --color-focus-border-strong: Highlight;
   }
 
-  body,
-  .player-surface {
+  body {
     background: Canvas;
   }
 
   button,
   .screen,
-  .now-playing-overlay,
-  .mini-guide,
-  .playback-options,
-  .channel-number-overlay,
   .program-summary div,
   .settings-summary div,
   .setup-summary div,

@@ -504,10 +504,17 @@ test('route DOM renders player OSD fields and playback option rows', () => {
     assert.equal(audioMain?.dataset.focusId, 'overlay-audio-track-audio-main');
     assert.equal(audioMain?.disabled, false);
     assert.equal(audioMain?.getAttribute('aria-busy'), 'false');
+    assert.equal(audioMain?.getAttribute('aria-pressed'), 'true');
     assert.equal(audioMain?.getAttribute('aria-disabled'), null);
     assert.equal(audioMain?.dataset.overlayBusyFocusCustody, undefined);
     assert.equal(audioUnavailable, undefined);
     assert.equal(subtitleRows.length, 0);
+    assert.equal((dom.overlayAudioOptionsElement as unknown as ElementDouble).hidden, false);
+    assert.equal((dom.overlayAudioOptionsElement as unknown as { inert: boolean }).inert, false);
+    assert.equal((dom.overlayAudioOptionsElement as unknown as ElementDouble).getAttribute('aria-hidden'), 'false');
+    assert.equal((dom.overlaySubtitleOptionsElement as unknown as ElementDouble).hidden, true);
+    assert.equal((dom.overlaySubtitleOptionsElement as unknown as { inert: boolean }).inert, true);
+    assert.equal((dom.overlaySubtitleOptionsElement as unknown as ElementDouble).getAttribute('aria-hidden'), 'true');
 
     renderWorkflowDom(
       createWorkflowState('player'),
@@ -565,6 +572,7 @@ test('route DOM renders player OSD fields and playback option rows', () => {
     assert.equal(busyMini?.disabled, false);
     assert.equal(busyMini?.getAttribute('aria-disabled'), 'true');
     assert.equal(busyMini?.getAttribute('aria-busy'), 'true');
+    assert.equal(busyMini?.getAttribute('aria-current'), 'true');
     assert.equal(busyMini?.dataset.overlayBusyFocusCustody, 'true');
   } finally {
     restoreDocument(originalDocument);
@@ -889,6 +897,14 @@ test('static player DOM keeps native presentation beside the route-owned overlay
     root.innerHTML.slice(presentationStart, overlayStart),
     /<\/div>\s*<section id="screen-player"[^>]*>\s*<div class="overlay-stack"/u,
   );
+  assert.match(root.innerHTML, /data-overlay="playbackOptions"[^>]*role="dialog"[^>]*aria-modal="true"/u);
+  assert.match(root.innerHTML, /class="channel-number-overlay__label">CH</u);
+  assert.match(root.innerHTML, /data-overlay-player-loading-label/u);
+  assert.doesNotMatch(
+    root.innerHTML,
+    /poster-placeholder|clear-logo-placeholder|icon-placeholder|player-quick-actions|Sleep|Volume|Playback rate|Quality/u,
+  );
+  assert.equal((root.innerHTML.match(/class="playback-options__section"/gu) ?? []).length, 1);
 });
 
 const PRODUCT_ROUTE_INTERNAL_COPY_PATTERN =
