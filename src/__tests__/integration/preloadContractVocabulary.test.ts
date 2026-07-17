@@ -45,7 +45,7 @@ import {
   PLAYER_RENDERER_INTENTS,
 } from '../../contracts/ipc.js';
 import {
-  CHANNEL_SETUP_ERROR_CODES,
+  CHANNEL_SETUP_RUNTIME_ERROR_CODES,
   CHANNEL_SETUP_COMMIT_MODES,
   CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS,
   CHANNEL_SETUP_OPERATIONS,
@@ -197,6 +197,15 @@ function evaluateChannelGuardModule(): Record<string, unknown> {
   evaluateGuards(requireGuard, exportsObject, moduleObject);
   return moduleObject.exports as Record<string, unknown>;
 }
+
+// P2 installs the privileged main workflow first. Until P3 exposes its narrow
+// bridge, the preload must remain exactly on the legacy status/commit subset.
+const P2_LEGACY_PRELOAD_SETUP_OPERATIONS = CHANNEL_SETUP_OPERATIONS.filter(
+  (operation) => operation === 'getStatus' || operation === 'commit',
+);
+const P2_LEGACY_PRELOAD_SETUP_COMMIT_MODES = CHANNEL_SETUP_COMMIT_MODES.filter(
+  (mode) => mode === 'append' || mode === 'replace',
+);
 
 function evaluateDiagnosticsGuardModule(): Record<string, unknown> {
   const exportsObject = {};
@@ -1290,13 +1299,13 @@ test('preload guard vocabulary matches contract vocabulary', () => {
     ...CHANNEL_SETUP_STATUS_VALUES,
   ]);
   assert.deepEqual(readChannelGuardStringArrayConst('CHANNEL_SETUP_ERROR_CODES'), [
-    ...CHANNEL_SETUP_ERROR_CODES,
+    ...CHANNEL_SETUP_RUNTIME_ERROR_CODES,
   ]);
   assert.deepEqual(readChannelGuardStringArrayConst('CHANNEL_SETUP_OPERATIONS'), [
-    ...CHANNEL_SETUP_OPERATIONS,
+    ...P2_LEGACY_PRELOAD_SETUP_OPERATIONS,
   ]);
   assert.deepEqual(readChannelGuardStringArrayConst('CHANNEL_SETUP_COMMIT_MODES'), [
-    ...CHANNEL_SETUP_COMMIT_MODES,
+    ...P2_LEGACY_PRELOAD_SETUP_COMMIT_MODES,
   ]);
   assert.deepEqual(
     readChannelGuardStringArrayConst('CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS'),

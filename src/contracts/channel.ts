@@ -5,6 +5,17 @@ export const CHANNEL_SETUP_STATUS_VALUES = [
   'recovery-failed',
 ] as const;
 
+/** Legacy status/commit bridge vocabulary retained until the P3 bridge lands. */
+export const CHANNEL_SETUP_RUNTIME_ERROR_CODES = [
+  'CHANNEL_UNAUTHORIZED',
+  'CHANNEL_VALIDATION_FAILED',
+  'CHANNEL_REPLACE_CONFIRMATION_REQUIRED',
+  'CHANNEL_PLEX_REQUIRED',
+  'CHANNEL_STORAGE_UNAVAILABLE',
+  'CHANNEL_STORAGE_CORRUPT',
+  'CHANNEL_UNKNOWN',
+] as const;
+
 export const CHANNEL_SETUP_ERROR_CODES = [
   'CHANNEL_UNAUTHORIZED',
   'CHANNEL_VALIDATION_FAILED',
@@ -89,13 +100,7 @@ export const CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS = [
 
 export type ChannelSetupStatusValue = (typeof CHANNEL_SETUP_STATUS_VALUES)[number];
 export type ChannelSetupWorkflowErrorCode = (typeof CHANNEL_SETUP_ERROR_CODES)[number];
-export type ChannelSetupErrorCode = Exclude<ChannelSetupWorkflowErrorCode,
-  | 'CHANNEL_STORAGE_UNSUPPORTED_VERSION'
-  | 'CHANNEL_BUILD_ACTIVE'
-  | 'CHANNEL_BUILD_ID_REUSED'
-  | 'CHANNEL_BUILD_ID_CAPACITY'
-  | 'CHANNEL_BUILD_CANCELED'
-  | 'CHANNEL_BUILD_TOO_LATE'>;
+export type ChannelSetupErrorCode = (typeof CHANNEL_SETUP_RUNTIME_ERROR_CODES)[number];
 export type ChannelSetupOperation = (typeof CHANNEL_SETUP_OPERATIONS)[number];
 export type ChannelSetupCommitMode = (typeof CHANNEL_SETUP_COMMIT_MODES)[number];
 export type ChannelSetupStrategyKey = (typeof CHANNEL_SETUP_STRATEGY_KEYS)[number];

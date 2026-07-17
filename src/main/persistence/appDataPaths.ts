@@ -3,6 +3,7 @@ import path from 'node:path';
 export const DESKTOP_PERSISTENCE_DIRECTORY = 'persistence';
 export const DESKTOP_PERSISTENCE_FILE_NAME = 'lineup-desktop-persistence.json';
 export const DESKTOP_CHANNEL_PERSISTENCE_FILE_NAME = 'lineup-desktop-channels.json';
+export const DESKTOP_CHANNEL_SETUP_RECORD_FILE_NAME = 'lineup-desktop-channel-setup.json';
 export const DESKTOP_SETTINGS_FILE_NAME = 'lineup-desktop-settings.json';
 
 export interface ElectronAppPathProvider {
@@ -14,6 +15,7 @@ export interface DesktopAppDataPaths {
   persistenceDirectory: string;
   persistenceFilePath: string;
   channelPersistenceFilePath?: string;
+  channelSetupRecordFilePath?: string;
 }
 
 export function resolveDesktopAppDataPaths(app: ElectronAppPathProvider): DesktopAppDataPaths {
@@ -27,6 +29,10 @@ export function resolveDesktopAppDataPaths(app: ElectronAppPathProvider): Deskto
     channelPersistenceFilePath: path.join(
       persistenceDirectory,
       DESKTOP_CHANNEL_PERSISTENCE_FILE_NAME,
+    ),
+    channelSetupRecordFilePath: path.join(
+      persistenceDirectory,
+      DESKTOP_CHANNEL_SETUP_RECORD_FILE_NAME,
     ),
   };
 }
