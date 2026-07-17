@@ -5,6 +5,7 @@ import { containsPlexForbiddenRendererField } from '../../contracts/plex.js';
 import {
   channelSetupFailure,
   channelSetupSuccess,
+  type ChannelSetupBuildResult,
   type ChannelSetupIpcResult,
   type ChannelSetupSummary,
 } from '../../contracts/channel.js';
@@ -36,6 +37,23 @@ function legacyChannelBridge(
 ): LineupDesktopPreloadApi['channelSetup'] {
   const unused = async (): Promise<never> => { throw new Error('builder bridge is not used by this legacy workflow test'); };
   return { ...bridge, getRecord: unused, preview: unused, review: unused, build: unused, cancelBuild: unused };
+}
+
+function stagedBuilderStub(): Parameters<typeof dispatchStagedSetupAction>[0]['builder'] {
+  return {
+    getState: () => ({ phase: 'review-ready', draft: { buildMode: 'append' }, safeError: null }) as ReturnType<Parameters<typeof dispatchStagedSetupAction>[0]['builder']['getState']>,
+    initialize: async () => undefined,
+    setLibraries: async () => undefined,
+    apply: () => undefined,
+    requestPreview: async () => undefined,
+    requestReview: async () => true,
+    build: async () => null,
+    cancelBuild: async () => undefined,
+    handlePriorityDirection: () => false,
+    dismissTransient: () => false,
+    invalidate: () => undefined,
+    dispose: () => undefined,
+  };
 }
 
 const GUIDE_BASE = Date.UTC(2026, 4, 12, 20, 0, 0);
@@ -772,6 +790,7 @@ test('library Retry inspects failure and restores retained, first eligible, or e
   const dispatch = () => dispatchStagedSetupAction({
     action: controller.getState().owner === 'recovery-error' ? 'recoveryRetry' : 'libraryRetry', controller, runtime,
     channelController: {} as Parameters<typeof dispatchStagedSetupAction>[0]['channelController'],
+    builder: stagedBuilderStub(),
     sections, getSections: () => sections, getCurrentPlexError: () => plexError,
     previewCursor: null, getPreviewRatingKey: () => null, sectionsServerId: () => 'server-1',
     setPreviewCursor: () => undefined, closePreviewMetadata: () => undefined, returnToServer: () => undefined,
@@ -842,6 +861,7 @@ test('library Retry continuations cannot reopen an invalidated or newer setup ow
   const dispatch = (action: 'libraryRetry' | 'recoveryRetry') => dispatchStagedSetupAction({
     action, controller, runtime,
     channelController: {} as Parameters<typeof dispatchStagedSetupAction>[0]['channelController'],
+    builder: stagedBuilderStub(),
     sections: [], getSections: () => [], getCurrentPlexError: () => null,
     previewCursor: null, getPreviewRatingKey: () => null, sectionsServerId: () => 'server-1',
     setPreviewCursor: () => undefined, closePreviewMetadata: () => undefined, returnToServer: () => undefined,
@@ -879,6 +899,7 @@ test('result Watch ignores invalidation during tune before closing or restoring 
       action: 'resultWatch', controller,
       runtime: {} as Parameters<typeof dispatchStagedSetupAction>[0]['runtime'],
       channelController: {} as Parameters<typeof dispatchStagedSetupAction>[0]['channelController'], sections: [],
+      builder: stagedBuilderStub(),
       previewCursor: null, setPreviewCursor: () => undefined, closePreviewMetadata: () => undefined,
       returnToServer: () => undefined, closeSetup: () => { closeCalls++; }, tuneChannel: async () => pendingTune.promise,
       startBlankCustomDraft: () => undefined, cancelCustomDraft: () => undefined,
@@ -906,6 +927,7 @@ test('build recovery ignores invalidation during status load before restoring or
     } as unknown as Parameters<typeof dispatchStagedSetupAction>[0]['channelController'];
     const action = dispatchStagedSetupAction({
       action: 'recoveryRetry', controller, channelController,
+      builder: stagedBuilderStub(),
       runtime: {} as Parameters<typeof dispatchStagedSetupAction>[0]['runtime'], sections: [], previewCursor: null,
       setPreviewCursor: () => undefined, closePreviewMetadata: () => undefined, returnToServer: () => undefined,
       closeSetup: () => undefined, tuneChannel: async () => false, startBlankCustomDraft: () => undefined,
@@ -936,6 +958,7 @@ test('expanding preview loads the current cursor before requesting its first liv
   await dispatchStagedSetupAction({
     action: 'previewToggle', controller, runtime,
     channelController: {} as Parameters<typeof dispatchStagedSetupAction>[0]['channelController'], sections: [],
+    builder: stagedBuilderStub(),
     previewCursor: 'movies', getPreviewRatingKey: () => liveKey,
     setPreviewCursor: () => undefined, closePreviewMetadata: () => undefined, returnToServer: () => undefined,
     closeSetup: () => undefined, tuneChannel: async () => false, startBlankCustomDraft: () => undefined,
@@ -944,19 +967,13 @@ test('expanding preview loads the current cursor before requesting its first liv
   assert.deepEqual(calls, ['items:movies', 'metadata:rating-live']);
 });
 
-test('cancelled progress blocks repeat Build while its channel commit remains pending', async () => {
-  const pendingCommit = deferred<ChannelSetupIpcResult<ChannelSetupSummary>>();
-  let commitCalls = 0;
-  const committedSectionIds: string[][] = [];
+test('accepted cancellation keeps progress active and blocks a repeat Build until the builder terminal result', async () => {
+  const terminal = deferred<ChannelSetupBuildResult>();
+  let buildCalls = 0;
+  let cancelCalls = 0;
+  let builderPhase: 'review-ready' | 'progress' | 'result' = 'review-ready';
   const channelController = createChannelRuntimeController({
-    bridge: legacyChannelBridge({
-      getStatus: async () => channelSetupSuccess('status-after-cancel', configuredChannelRuntimeState().summary as ChannelSetupSummary),
-      commit: async (request) => {
-        commitCalls++;
-        committedSectionIds.push([...request.sectionIds]);
-        return pendingCommit.promise;
-      },
-    }),
+    bridge: legacyChannelBridge({ getStatus: async () => channelSetupSuccess('status-after-cancel', configuredChannelRuntimeState().summary as ChannelSetupSummary), commit: async () => { throw new Error('legacy commit must not run'); } }),
     onStateChanged: () => undefined,
   });
   const controller = createStagedSetupController({ onStateChanged: () => undefined });
@@ -967,10 +984,17 @@ test('cancelled progress blocks repeat Build while its channel commit remains pe
   controller.toggleLibrary('movies', sections);
   controller.toggleLibrary('shows', sections);
   controller.showOwner('build', 'setup-confirm');
+  const builder = {
+    ...stagedBuilderStub(),
+    getState: () => ({ phase: builderPhase, draft: { buildMode: 'append' }, safeError: null }) as ReturnType<Parameters<typeof dispatchStagedSetupAction>[0]['builder']['getState']>,
+    build: async () => { buildCalls += 1; builderPhase = 'progress'; const result = await terminal.promise; builderPhase = 'result'; return result; },
+    cancelBuild: async () => { cancelCalls += 1; },
+  } as Parameters<typeof dispatchStagedSetupAction>[0]['builder'];
   const dispatch = (action: Parameters<typeof dispatchStagedSetupAction>[0]['action']) => dispatchStagedSetupAction({
     action,
     controller,
     channelController,
+    builder,
     runtime: {} as Parameters<typeof dispatchStagedSetupAction>[0]['runtime'],
     sections,
     previewCursor: 'movies',
@@ -987,20 +1011,61 @@ test('cancelled progress blocks repeat Build while its channel commit remains pe
 
   const firstBuild = dispatch('buildConfirm');
   assert.equal(controller.getState().owner, 'progress');
-  assert.equal(channelController.getState().pending, true);
   await dispatch('progressCancel');
-  assert.equal(controller.getState().owner, 'build');
-  assert.equal(channelController.getState().pending, true);
+  assert.equal(controller.getState().owner, 'progress');
+  assert.equal(cancelCalls, 1);
 
   await dispatch('buildConfirm');
-  assert.equal(commitCalls, 1);
-  assert.deepEqual(committedSectionIds, [['movies', 'shows']]);
-  assert.equal(controller.getState().owner, 'build');
+  assert.equal(buildCalls, 1);
+  assert.equal(controller.getState().owner, 'progress');
 
-  pendingCommit.resolve(channelSetupSuccess('stale-commit', configuredChannelRuntimeState().summary as ChannelSetupSummary));
+  terminal.resolve({ kind: 'canceled', buildId: 'build-1', counts: { plannedGeneratedCount: 0, createdCount: 0, updatedCount: 0, preservedCount: 0, removedCount: 0, skippedCount: 0, reachedMaxChannels: false, channelNumberCapacityExhausted: false, errorCount: 0 }, warnings: [] });
   await firstBuild;
+  assert.equal(controller.getState().owner, 'result');
+});
+
+test('library preview and build review owners become visible synchronously before bridge work settles', async () => {
+  const sections = [{ id: 'movies', title: 'Movies', type: 'movie' as const, contentCount: 1, lastScannedAtMs: 0 }];
+  const controller = createStagedSetupController({ onStateChanged: () => undefined }); controller.toggleLibrary('movies', sections);
+  const previewPending = deferred<void>(); const reviewPending = deferred<boolean>();
+  const builder = { ...stagedBuilderStub(), setLibraries: async () => previewPending.promise, requestReview: async () => reviewPending.promise } as Parameters<typeof dispatchStagedSetupAction>[0]['builder'];
+  const base = { controller, builder, channelController: {} as Parameters<typeof dispatchStagedSetupAction>[0]['channelController'], runtime: {} as Parameters<typeof dispatchStagedSetupAction>[0]['runtime'], sections, previewCursor: null, setPreviewCursor: () => undefined, closePreviewMetadata: () => undefined, returnToServer: () => undefined, closeSetup: () => undefined, tuneChannel: async () => false, startBlankCustomDraft: () => undefined, cancelCustomDraft: () => undefined, cancelCustomDeleteConfirmation: () => undefined };
+  const preview = dispatchStagedSetupAction({ ...base, action: 'libraryNext' });
+  assert.equal(controller.getState().owner, 'preview');
+  assert.equal(controller.getState().focusIntent, 'builder-category-content-sources');
+  previewPending.resolve(); await preview;
+  const review = dispatchStagedSetupAction({ ...base, action: 'previewNext' });
   assert.equal(controller.getState().owner, 'build');
-  assert.equal(channelController.getState().pending, false);
+  reviewPending.resolve(true); await review;
+});
+
+test('committed build uses builder mode and actual before/after summaries to expose Watch built channel', async () => {
+  const before = configuredChannelRuntimeState().summary!;
+  const added = { id: 'channel-two', number: 102, name: 'Channel Two', sourceLibraryId: 'movies', sourceLibraryName: 'Movies', itemCount: 6 };
+  const after: ChannelSetupSummary = { ...before, channelCount: 2, channels: [...before.channels, added], channelNumbers: [101, 102], updatedAtMs: 456 };
+  let current = before; let loadCalls = 0; let tuned: string | null = null; let closed = false;
+  const channelController = { getState: () => ({ summary: current, errorText: null }), loadStatus: async () => { loadCalls += 1; current = after; } } as unknown as Parameters<typeof dispatchStagedSetupAction>[0]['channelController'];
+  const builder = { ...stagedBuilderStub(), getState: () => ({ phase: 'review-ready', draft: { buildMode: 'merge' }, safeError: null }) as ReturnType<Parameters<typeof dispatchStagedSetupAction>[0]['builder']['getState']>, build: async () => ({ kind: 'committed', buildId: 'build-result', counts: { plannedGeneratedCount: 1, createdCount: 1, updatedCount: 0, preservedCount: 1, removedCount: 0, skippedCount: 0, reachedMaxChannels: false, channelNumberCapacityExhausted: false, errorCount: 0 }, warnings: [], guideRefresh: { kind: 'completed' } }) } as Parameters<typeof dispatchStagedSetupAction>[0]['builder'];
+  const controller = createStagedSetupController({ onStateChanged: () => undefined });
+  const sections = [{ id: 'movies', title: 'Movies', type: 'movie' as const, contentCount: 1, lastScannedAtMs: 0 }]; controller.toggleLibrary('movies', sections); controller.setBuildMode('replace'); controller.showOwner('build', 'setup-confirm');
+  const base = { controller, builder, channelController, runtime: {} as Parameters<typeof dispatchStagedSetupAction>[0]['runtime'], sections, previewCursor: null, setPreviewCursor: () => undefined, closePreviewMetadata: () => undefined, returnToServer: () => undefined, closeSetup: () => { closed = true; }, tuneChannel: async (id: string) => { tuned = id; return true; }, startBlankCustomDraft: () => undefined, cancelCustomDraft: () => undefined, cancelCustomDeleteConfirmation: () => undefined };
+  await dispatchStagedSetupAction({ ...base, action: 'buildConfirm' });
+  assert.equal(loadCalls, 1);
+  assert.equal(controller.getState().owner, 'result');
+  assert.equal(controller.getState().resultWatchChannelId, 'channel-two');
+  await dispatchStagedSetupAction({ ...base, action: 'resultWatch' });
+  assert.equal(tuned, 'channel-two'); assert.equal(closed, true);
+});
+
+test('canceled terminal result never exposes an unchanged channel as built in append merge or replace mode', async () => {
+  for (const mode of ['append', 'merge', 'replace'] as const) {
+    const controller = createStagedSetupController({ onStateChanged: () => undefined });
+    const sections = [{ id: 'movies', title: 'Movies', type: 'movie' as const, contentCount: 1, lastScannedAtMs: 0 }]; controller.toggleLibrary('movies', sections); controller.showOwner('build', 'setup-confirm');
+    const channelController = { getState: () => ({ summary: configuredChannelRuntimeState().summary, errorText: null }), loadStatus: async () => undefined } as unknown as Parameters<typeof dispatchStagedSetupAction>[0]['channelController'];
+    const builder = { ...stagedBuilderStub(), getState: () => ({ phase: 'review-ready', draft: { buildMode: mode }, safeError: null }) as ReturnType<Parameters<typeof dispatchStagedSetupAction>[0]['builder']['getState']>, build: async () => ({ kind: 'canceled', buildId: `canceled-${mode}`, counts: { plannedGeneratedCount: 0, createdCount: 0, updatedCount: 0, preservedCount: 1, removedCount: 0, skippedCount: 0, reachedMaxChannels: false, channelNumberCapacityExhausted: false, errorCount: 0 }, warnings: [] }) } as Parameters<typeof dispatchStagedSetupAction>[0]['builder'];
+    await dispatchStagedSetupAction({ action: 'buildConfirm', controller, builder, channelController, runtime: {} as Parameters<typeof dispatchStagedSetupAction>[0]['runtime'], sections, previewCursor: null, setPreviewCursor: () => undefined, closePreviewMetadata: () => undefined, returnToServer: () => undefined, closeSetup: () => undefined, tuneChannel: async () => false, startBlankCustomDraft: () => undefined, cancelCustomDraft: () => undefined, cancelCustomDeleteConfirmation: () => undefined });
+    assert.equal(controller.getState().owner, 'result'); assert.equal(controller.getState().resultWatchChannelId, null, mode);
+  }
 });
 
 test('staged custom editor and delete modal restore exact list invokers', () => {
@@ -1032,6 +1097,7 @@ test('visible delete cancel clears custom substate before the next editor Back',
     controller,
     runtime: {} as Parameters<typeof dispatchStagedSetupAction>[0]['runtime'],
     channelController: {} as ReturnType<typeof createChannelRuntimeController>,
+    builder: stagedBuilderStub(),
     sections: [],
     previewCursor: null,
     getPreviewRatingKey: () => null,
@@ -1049,6 +1115,7 @@ test('visible delete cancel clears custom substate before the next editor Back',
   controller.openCustomEditor('custom-channel-new');
   await handleStagedSetupBack({
     controller,
+    builder: stagedBuilderStub(),
     customController,
     plexController: {} as Parameters<typeof handleStagedSetupBack>[0]['plexController'],
     dispatch: async (action) => {

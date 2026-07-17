@@ -80,7 +80,7 @@ const customChannelController = createCustomChannelController({
 let onboardingFlow: ReturnType<typeof createPlexOnboardingFlow>;
 const setupComposition = createSetupComposition({
   plexController,
-  channelController, customController: customChannelController,
+  channelController, channelSetupBridge: window.lineupDesktop.channelSetup, customController: customChannelController,
   render: renderApp,
   returnToServer: () => { void onboardingFlow.changeStage('server'); },
   closeSetup: closeStagedSetup,
@@ -171,6 +171,7 @@ const navigationLifecycle = createNavigationLifecycle({
   onFocusChanged: updateActiveFromFocus,
   scrollFocusedIntoView: scrollFocusedSetupControlIntoView,
   handleGuideDirection,
+  handleChannelSetupDirection: (direction) => setupComposition.handleBuilderDirection(direction),
   handlePlayerInput: (input) => playerOverlayController.handleInput(input),
   activateRoute,
   isProfileModalActive: isProfilePinModalActive,
@@ -282,6 +283,7 @@ registerRendererActions(dom, document, {
   },
   applySetupStage: (stage) => { void onboardingFlow.changeStage(stage); },
   applyStagedSetupAction: (action) => { void applyStagedSetupAction(action); },
+  applyChannelBuilderAction: (action, detail) => setupComposition.applyBuilder(action, detail),
   applyChannelSetupAction: (action) => setupComposition.setBuildMode(action === 'selectReplaceBuildMode' ? 'replace' : 'append'),
   applyChannelCommitAction: (action) => {
     stagedSetupController.setBuildMode(action === 'append' ? 'append' : 'replace');
@@ -629,6 +631,7 @@ async function handleChannelSetupBack(): Promise<boolean> {
   if (onboardingState === null) {
     return handleStagedSetupBack({
       controller: stagedSetupController,
+      builder: setupComposition.builder,
       customController: customChannelController,
       plexController,
       dispatch: applyStagedSetupAction,
@@ -724,6 +727,7 @@ function renderApp(): void {
   renderCustomChannelWorkspace(customChannelController.getState(), dom);
   renderStagedSetupDom({
     state: stagedSetupController.getState(),
+    builderState: setupComposition.builder.getState(),
     runtimeState: setupComposition.runtime.getState(),
     view: getRouteWorkflowView(workflowState, channelController.getState(), liveSelection),
     plexState,

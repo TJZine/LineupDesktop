@@ -8,13 +8,15 @@ import { createRendererShellState } from '../../renderer/shell/shellState.js';
 function createHarness(
   handleGuideDirection: NavigationLifecycleOptions['handleGuideDirection'],
   handlePlayerInput?: NavigationLifecycleOptions['handlePlayerInput'],
+  handleChannelSetupDirection?: NavigationLifecycleOptions['handleChannelSetupDirection'],
 ) {
   const registry = new FocusRegistry();
   registry.register({ id: 'player-guide', route: 'player', order: 0 });
   registry.register({ id: 'player-settings', route: 'player', order: 1 });
   registry.register({ id: 'guide-program-one--current', route: 'guide', order: 0 });
   registry.register({ id: 'guide-program-one--next', route: 'guide', order: 1 });
-  let route: 'player' | 'guide' = 'guide';
+  registry.register({ id: 'builder-priority-directors', route: 'channelSetup', order: 0 });
+  let route: 'player' | 'guide' | 'channelSetup' = 'guide';
   let focus: FocusState = { activeRoute: 'guide', activeId: 'guide-program-one--current' };
   const dom = { focusableElements: [] } as unknown as RendererDomBindings;
   const lifecycle = createNavigationLifecycle({
@@ -30,7 +32,8 @@ function createHarness(
     scrollFocusedIntoView: () => undefined,
     handleGuideDirection,
     handlePlayerInput,
-    activateRoute: (nextRoute) => { route = nextRoute as 'player' | 'guide'; },
+    handleChannelSetupDirection,
+    activateRoute: (nextRoute) => { route = nextRoute as 'player' | 'guide' | 'channelSetup'; },
     isProfileModalActive: () => false,
     closeProfileModal: () => undefined,
     handleChannelSetupBack: async () => false,
@@ -45,7 +48,7 @@ function createHarness(
     getFocus: () => focus,
     setFocus: (state: FocusState) => { focus = state; },
     getRoute: () => route,
-    setRoute: (nextRoute: 'player' | 'guide') => { route = nextRoute; },
+    setRoute: (nextRoute: 'player' | 'guide' | 'channelSetup') => { route = nextRoute; },
     unregister: (focusId: string) => registry.unregister(focusId),
   };
 }
@@ -60,6 +63,15 @@ test('Guide directional first refusal runs before generic focus movement', async
   const fallback = createHarness(() => false);
   await fallback.lifecycle.handleInput('right');
   assert.equal(fallback.getFocus().activeId, 'guide-program-one--next');
+});
+
+test('grabbed Guide Order rows intercept setup Up and Down before generic focus movement', async () => {
+  const directions: string[] = [];
+  const harness = createHarness(() => false, undefined, (direction) => { directions.push(direction); return true; });
+  harness.setRoute('channelSetup'); harness.setFocus({ activeRoute: 'channelSetup', activeId: 'builder-priority-directors' });
+  await harness.lifecycle.handleInput('up'); await harness.lifecycle.handleInput('down');
+  assert.deepEqual(directions, ['up', 'down']);
+  assert.equal(harness.getFocus().activeId, 'builder-priority-directors');
 });
 
 test('Guide Back restores the exact reachable Player invoker', async () => {

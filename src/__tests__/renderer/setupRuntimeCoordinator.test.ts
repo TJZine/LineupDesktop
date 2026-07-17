@@ -154,6 +154,7 @@ test('setup composition entry generation prevents an invalidated continuation fr
   const composition = createSetupComposition({
     plexController,
     channelController: {} as Parameters<typeof createSetupComposition>[0]['channelController'],
+    channelSetupBridge: { getRecord: async () => ({ ok: true, requestId: 'record', value: { status: 'missing' } }) } as unknown as Parameters<typeof createSetupComposition>[0]['channelSetupBridge'],
     customController: {} as Parameters<typeof createSetupComposition>[0]['customController'],
     render: () => undefined,
     returnToServer: () => undefined,
@@ -196,6 +197,7 @@ test('server-origin Back invalidates a pending library entry before showing serv
   const composition = createSetupComposition({
     plexController,
     channelController: {} as Parameters<typeof createSetupComposition>[0]['channelController'],
+    channelSetupBridge: { getRecord: async () => ({ ok: true, requestId: 'record', value: { status: 'missing' } }) } as unknown as Parameters<typeof createSetupComposition>[0]['channelSetupBridge'],
     customController: {} as Parameters<typeof createSetupComposition>[0]['customController'],
     render: () => undefined,
     returnToServer: () => events.push('stage:server'),

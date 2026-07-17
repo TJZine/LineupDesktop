@@ -53,6 +53,7 @@ class TestElement {
         return current;
       }
       if (selector.includes('data-setup-flow-action') && current.dataset.setupFlowAction !== undefined) return current;
+      if (selector.includes('data-builder-action') && current.dataset.builderAction !== undefined) return current;
       if (selector.includes('data-plex-section-id') && current.dataset.plexSectionId !== undefined) return current;
       if (selector.includes('data-custom-channel-action') && current.dataset.customChannelAction !== undefined) {
         return current;
@@ -809,5 +810,27 @@ test('renderer action registration delegates settings category clicks', () => {
     playbackCatBtn.dispatchEvent(new TestDomEvent('click', true));
 
     assert.equal(appliedCategory, 'playback');
+  });
+});
+
+test('renderer action registration delegates validated channel-builder actions only inside setup custody', () => {
+  withTestHTMLElement(() => {
+    const documentRef = new TestDocument();
+    const setupScreen = new TestElement(); setupScreen.id = 'screen-channel-setup'; documentRef.append(setupScreen);
+    const owner = new TestElement(); owner.dataset.stagedOwner = 'preview'; owner.dataset.ownerActive = 'true'; setupScreen.append(owner);
+    const builderButton = new TestElement(); builderButton.dataset.builderAction = 'toggleStrategy'; builderButton.dataset.builderDetail = 'genres'; owner.append(builderButton);
+    const invalidButton = new TestElement(); invalidButton.dataset.builderAction = 'commit'; owner.append(invalidButton);
+    const outsideButton = new TestElement(); outsideButton.dataset.builderAction = 'toggleStrategy'; documentRef.append(outsideButton);
+    const calls: string[] = [];
+    registerRendererActions(emptyRendererDomBindings(), documentRef as unknown as Document, {
+      ...createActionHandlers([]),
+      applyChannelBuilderAction: (action, detail) => calls.push(`${action}:${detail ?? ''}`),
+    });
+
+    builderButton.dispatchEvent(new TestDomEvent('click', true));
+    invalidButton.dispatchEvent(new TestDomEvent('click', true));
+    outsideButton.dispatchEvent(new TestDomEvent('click', true));
+
+    assert.deepEqual(calls, ['toggleStrategy:genres']);
   });
 });

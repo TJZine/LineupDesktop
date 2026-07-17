@@ -9,10 +9,13 @@ import {
 } from './stagedSetupController.js';
 import { createSetupRuntimeCoordinator } from './setupRuntimeCoordinator.js';
 import { createSetupEntryLifecycle } from './setupEntryLifecycle.js';
+import { createChannelBuilderController, type ChannelBuilderAction } from './channelBuilderController.js';
+import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 
 export function createSetupComposition(input: {
   plexController: PlexRuntimeController;
   channelController: ChannelRuntimeController;
+  channelSetupBridge: LineupDesktopPreloadApi['channelSetup'];
   customController: CustomChannelController;
   render(): void;
   returnToServer(): void;
@@ -25,6 +28,7 @@ export function createSetupComposition(input: {
   enterServerSelection(): void;
 }) {
   const controller = createStagedSetupController({ onStateChanged: input.render });
+  const builder = createChannelBuilderController({ bridge: input.channelSetupBridge, onStateChanged: input.render });
   const runtime = createSetupRuntimeCoordinator({
     getPlexState: input.plexController.getState,
     listLibrarySections: input.plexController.listLibrarySections,
@@ -44,12 +48,14 @@ export function createSetupComposition(input: {
   const invalidate = (keepOwner = false): void => {
     entry.invalidate();
     runtime.invalidate();
+    builder.invalidate();
     controller.invalidateAsync({ keepOwner });
   };
   const dispatch = createStagedSetupActionDispatcher({
     controller,
     runtime,
     channelController: input.channelController,
+    builder,
     plexController: input.plexController,
     customController: input.customController,
     returnToServer: () => {
@@ -61,9 +67,11 @@ export function createSetupComposition(input: {
   });
   return {
     controller,
+    builder,
     runtime,
     dispatch,
     enter(returnRoute: Exclude<AppRouteId, 'channelSetup'>, returnFocusId: string, enteredFromServer = true) {
+      void builder.initialize();
       return entry.enter({ originRoute: returnRoute, returnFocusId, enteredFromServer });
     },
     async selectSection(sectionId: string) {
@@ -74,6 +82,13 @@ export function createSetupComposition(input: {
       await runtime.loadPreview(sectionId);
     },
     setBuildMode(mode: 'append' | 'replace') { controller.setBuildMode(mode); },
+    applyBuilder(action: ChannelBuilderAction, detail?: string) {
+      builder.apply(action, detail);
+      const focusIntent = builder.getState().focusIntent; const owner = controller.getState().owner;
+      if (focusIntent !== null && (owner === 'preview' || owner === 'build')) controller.showOwner(owner, focusIntent);
+    },
+    handleBuilderDirection(direction: 'up' | 'down' | 'left' | 'right') { return direction === 'up' || direction === 'down' ? builder.handlePriorityDirection(direction) : false; },
+    dismissBuilderTransient() { return builder.dismissTransient(); },
     apply(action: StagedSetupFlowActionId) { return dispatch(action); },
     invalidate,
   };

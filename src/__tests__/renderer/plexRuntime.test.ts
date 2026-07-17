@@ -70,7 +70,11 @@ test('static channel setup markup preserves onboarding and hosts the isolated Pa
   }
   assert.match(channelSetupMarkup, /data-setup-flow-action="libraryNext"/u);
   assert.match(channelSetupMarkup, /data-setup-flow-action="buildConfirm"/u);
-  assert.match(channelSetupMarkup, /data-focus-id="setup-category-build"/u);
+  assert.match(channelSetupMarkup, /data-builder-categories/u);
+  assert.match(channelSetupMarkup, /data-builder-detail/u);
+  assert.match(channelSetupMarkup, /data-builder-action="confirmReplace"/u);
+  assert.match(channelSetupMarkup, /replace removes all existing channels, including custom channels/u);
+  assert.match(channelSetupMarkup, /role="progressbar"/u);
   assert.match(channelSetupMarkup, /data-custom-channel-panel/u);
   assert.match(channelSetupMarkup, /data-custom-channel-action="browseSource"/u);
   assert.match(channelSetupMarkup, /data-custom-channel-action="saveDraft"/u);

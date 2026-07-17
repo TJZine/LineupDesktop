@@ -12,6 +12,7 @@ import {
   type RendererDomBindings,
 } from './domBindings.js';
 import type { StagedSetupFlowActionId } from './setup/stagedSetupController.js';
+import { readChannelBuilderAction, type ChannelBuilderAction } from './setup/channelBuilderController.js';
 import {
   readPlexHomeUserId,
   readPlexRatingKey,
@@ -49,6 +50,7 @@ export interface RendererActionHandlers {
   applySettingsCategory?(category: string): void;
   applySetupStage?(stage: string): void;
   applyStagedSetupAction?(action: StagedSetupFlowActionId): void;
+  applyChannelBuilderAction?(action: ChannelBuilderAction, detail?: string): void;
 }
 
 export type GuideActionId = 'back' | 'setup' | 'refresh' | 'retry';
@@ -96,6 +98,12 @@ export function registerRendererActions(
   const setupScreen = documentRef.getElementById('screen-channel-setup');
   setupScreen?.addEventListener('click', (event) => {
     if (!(event.target instanceof HTMLElement)) return;
+    const builderButton = event.target.closest<HTMLButtonElement>('[data-builder-action]');
+    const builderAction = readChannelBuilderAction(builderButton?.dataset.builderAction);
+    if (builderAction !== null && builderButton !== null && isEligibleDelegatedAction(builderButton) && isActiveStagedAction(builderButton)) {
+      handlers.applyChannelBuilderAction?.(builderAction, builderButton.dataset.builderDetail);
+      return;
+    }
     const customButton = event.target.closest<HTMLButtonElement>('[data-custom-channel-action]');
     const customAction = readCustomChannelActionId(customButton?.dataset.customChannelAction);
     if (customAction !== null && customButton !== null && isEligibleDelegatedAction(customButton) && isActiveStagedAction(customButton)) {
