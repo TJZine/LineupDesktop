@@ -1,8 +1,16 @@
 import type { PlayerRendererIntentEnvelope, RendererIntentEnvelope } from './ipc.js';
 import type {
+  ChannelSetupBuildProgress,
+  ChannelSetupBuildResult,
+  ChannelSetupCancelResult,
   ChannelSetupCommitMode,
+  ChannelSetupConfigDraft,
   ChannelSetupIpcResult,
+  ChannelSetupPreview,
+  ChannelSetupRecordSummary,
+  ChannelSetupReview,
   ChannelSetupSummary,
+  ChannelSetupWorkflowIpcResult,
 } from './channel.js';
 import type {
   DiagnosticsExportSupportBundleResult,
@@ -187,6 +195,14 @@ export interface LineupDesktopPreloadApi {
       sectionIds: readonly string[];
       confirmReplace?: boolean;
     }) => Promise<ChannelSetupIpcResult<ChannelSetupSummary>>;
+    getRecord: () => Promise<ChannelSetupWorkflowIpcResult<ChannelSetupRecordSummary>>;
+    preview: (input: ChannelSetupConfigDraft) => Promise<ChannelSetupWorkflowIpcResult<ChannelSetupPreview>>;
+    review: (input: ChannelSetupConfigDraft) => Promise<ChannelSetupWorkflowIpcResult<ChannelSetupReview>>;
+    build: (
+      input: { buildId: string; config: ChannelSetupConfigDraft; confirmReplace: boolean },
+      onProgress: (progress: ChannelSetupBuildProgress) => void,
+    ) => Promise<ChannelSetupWorkflowIpcResult<ChannelSetupBuildResult>>;
+    cancelBuild: (input: { buildId: string }) => Promise<ChannelSetupWorkflowIpcResult<ChannelSetupCancelResult>>;
   };
   customChannels: {
     getSnapshot: () => Promise<CustomChannelIpcResult<CustomChannelSnapshot>>;

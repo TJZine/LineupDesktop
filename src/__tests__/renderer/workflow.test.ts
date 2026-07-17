@@ -22,6 +22,7 @@ import {
   getRouteWorkflowView,
 } from '../../renderer/workflow.js';
 import { createChannelRuntimeController } from '../../renderer/channelRuntimeActions.js';
+import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import {
   sanitizeChannelRuntimeError,
   type ChannelRuntimeRendererState,
@@ -29,6 +30,13 @@ import {
 import { setEpgPresentationState, type EpgPresentationSource } from '../../renderer/epg.js';
 import { createStagedSetupController, dispatchStagedSetupAction, handleStagedSetupBack } from '../../renderer/setup/stagedSetupController.js';
 import { createCustomChannelController } from '../../renderer/customChannels/controller.js';
+
+function legacyChannelBridge(
+  bridge: Pick<LineupDesktopPreloadApi['channelSetup'], 'getStatus' | 'commit'>,
+): LineupDesktopPreloadApi['channelSetup'] {
+  const unused = async (): Promise<never> => { throw new Error('builder bridge is not used by this legacy workflow test'); };
+  return { ...bridge, getRecord: unused, preview: unused, review: unused, build: unused, cancelBuild: unused };
+}
 
 const GUIDE_BASE = Date.UTC(2026, 4, 12, 20, 0, 0);
 const TEST_GUIDE_PRESENTATION: EpgPresentationSource = {
@@ -577,14 +585,14 @@ test('channel setup action state clears without discarding pending status recove
   const statusResults = [pendingStatus, pendingRefresh];
   let renderCount = 0;
   const controller = createChannelRuntimeController({
-    bridge: {
+    bridge: legacyChannelBridge({
       getStatus: async () => {
         const next = statusResults.shift();
         assert.ok(next);
         return next.promise;
       },
       commit: async () => pendingCommit.promise,
-    },
+    }),
     onStateChanged: () => {
       renderCount += 1;
     },
@@ -941,14 +949,14 @@ test('cancelled progress blocks repeat Build while its channel commit remains pe
   let commitCalls = 0;
   const committedSectionIds: string[][] = [];
   const channelController = createChannelRuntimeController({
-    bridge: {
+    bridge: legacyChannelBridge({
       getStatus: async () => channelSetupSuccess('status-after-cancel', configuredChannelRuntimeState().summary as ChannelSetupSummary),
       commit: async (request) => {
         commitCalls++;
         committedSectionIds.push([...request.sectionIds]);
         return pendingCommit.promise;
       },
-    },
+    }),
     onStateChanged: () => undefined,
   });
   const controller = createStagedSetupController({ onStateChanged: () => undefined });
