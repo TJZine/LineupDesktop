@@ -2,10 +2,12 @@
 
 **Current gate:** Packages 0–8 renderer parity implementation and local
 automated verification are complete; RD-27 is the next Tier 3 planning target.
-Every Windows-required row remains blocked until observed Windows proof, and
-Package 6's mandatory fresh three-row operator-assisted fullscreen audit remains
-an RD-27 gate. No UI row may advance to platform-complete by substituting Mac
-diagnostics or local automated proof for that audit.
+No Windows-required row is platform-complete. Rows retain their `blocked` or
+`harness/dev-only proof` classification until the observed Windows proof owned
+by RD-27 or RD-28 is complete, and Package 6's mandatory fresh three-row
+operator-assisted fullscreen audit remains an RD-27 gate. No UI row may advance
+to platform-complete by substituting Mac diagnostics or local automated proof
+for that audit.
 
 ## Purpose
 
@@ -159,9 +161,9 @@ Lineup product parity evidence.
 ## Seeded Parity Rows
 
 These rows cover the minimum RD-21 parity areas. Packages 0–8 now supply the
-current renderer implementation and local automated evidence. Rows remain
-blocked only where their claim still requires Windows product, native playback,
-packaging, or operational-soak proof owned by RD-27 or RD-28.
+current renderer implementation and local automated evidence. Rows are
+classified `blocked` only where their claim still requires Windows product,
+native playback, packaging, or operational-soak proof owned by RD-27 or RD-28.
 
 | Feature/workflow | Original Lineup source or UI evidence | Desktop evidence path | Classification | Evidence level | Platform proof label | Current Desktop owner | Required next roadmap slice | Blocker type | Confidence/freshness date | Replan trigger |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

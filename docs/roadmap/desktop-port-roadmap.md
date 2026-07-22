@@ -1839,7 +1839,7 @@ Exit gates:
   `player-mini-guide` / `overlay-mini-channel-sample-channel-1` / `miniGuide`;
   and `player-options` / `overlay-subtitle-track-off` / `playbackOptions`.
   Each row starts visible but natively inactive with exact production focus,
-  observes readiness, receives exactly one real operator titlebar click, proves
+  observes readiness, receives exactly one real operator title bar click, proves
   the native transition after readiness and before confirmation without
   semantic focus change, observes actual fullscreen enter/leave with native and
   semantic continuity, restores bounds/content bounds/CSS viewport/DPR exactly,

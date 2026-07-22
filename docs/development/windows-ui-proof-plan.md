@@ -113,7 +113,7 @@ redacted summaries for these areas before making claims:
 | Settings/channel persistence | Runtime restart/recovery proves settings and channels persist through reviewed persistence IPC and main-owned storage. |
 | Guide/EPG from persisted channels | Guide data reflects persisted channels and scheduler runtime composition, not fake data. |
 | Player overlays and route UI | Now-playing, OSD, mini-guide, channel badge, route transitions, and focus behavior are observed on Windows. |
-| Package 6 operator-assisted fullscreen focus audit | Fresh OSD, mini-guide, and options rows each receive exactly one real operator titlebar click and prove ordered native/semantic focus, fullscreen, restoration, and cleanup under the blocking protocol below. |
+| Package 6 operator-assisted fullscreen focus audit | Fresh OSD, mini-guide, and options rows each receive exactly one real operator title bar click and prove ordered native/semantic focus, fullscreen, restoration, and cleanup under the blocking protocol below. |
 | Production playback | Direct play, direct stream, transcode, switching, stop, fullscreen, and crash recovery are proven through the production playback owner. |
 | Subtitles/audio/HDR | Runtime track selection and HDR behavior are proven beyond fixture or policy tests. |
 | Diagnostics/support bundle | UI export path and completed bundle scanner prove redaction without tracking raw bundle contents. |
@@ -133,7 +133,7 @@ rows below:
 | `player-options` | `overlay-subtitle-track-off` | `playbackOptions` |
 
 Each row starts visible but natively inactive with exact production focus
-registration, observes readiness, receives exactly one real operator titlebar
+registration, observes readiness, receives exactly one real operator title bar
 click, and proves the native transition occurs after readiness and before
 confirmation without semantic focus change. It then observes actual fullscreen
 enter/leave with native and semantic focus continuity, restores window bounds,
