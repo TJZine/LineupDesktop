@@ -8,6 +8,8 @@ import {
 import { summarizeRendererBridgeError } from './rendererBridgeFailures.js';
 
 const GUIDE_POLL_INTERVAL_MS = 15_000;
+const GUIDE_REQUEST_TIMEOUT_MS = 30_000;
+const GUIDE_REQUEST_TIMEOUT_MESSAGE = 'Guide refresh timed out. Try again.';
 
 export interface GuidePresentationPollingOptions {
   guide: LineupDesktopPreloadApi['guide'];
@@ -49,6 +51,7 @@ interface GuidePresentationRefreshIntent {
   advanceGenerationOnStart: boolean;
   playerRefresh: boolean;
   windowStartMs: number;
+  readonly abortController: AbortController;
   readonly promise: Promise<void>;
   settle(): void;
 }
@@ -73,6 +76,7 @@ function createRefreshIntent(
     advanceGenerationOnStart,
     playerRefresh,
     windowStartMs,
+    abortController: new AbortController(),
     promise,
     settle: () => {
       if (settled) return;
@@ -101,7 +105,14 @@ export function createGuidePresentationPolling(
     guidePresentationGeneration += 1;
     const stoppedActive = activeRefresh;
     const stoppedTrailing = trailingRefresh;
+    activeRefresh = null;
     trailingRefresh = null;
+    stoppedActive?.abortController.abort(
+      createGuideRefreshError('Guide refresh stopped.', 'AbortError'),
+    );
+    stoppedTrailing?.abortController.abort(
+      createGuideRefreshError('Guide refresh stopped.', 'AbortError'),
+    );
     stoppedActive?.settle();
     stoppedTrailing?.settle();
   };
@@ -178,16 +189,23 @@ export function createGuidePresentationPolling(
     try {
       let result: Awaited<ReturnType<typeof options.guide.getPresentation>>;
       try {
-        result = await options.guide.getPresentation({
-          startTimeMs: intent.windowStartMs,
-          durationMs: EPG_WINDOW_DURATION_MS,
-        });
+        result = await waitForGuidePresentation(
+          options.guide.getPresentation({
+            startTimeMs: intent.windowStartMs,
+            durationMs: EPG_WINDOW_DURATION_MS,
+          }),
+          intent.abortController,
+          options.host,
+        );
       } catch (error: unknown) {
         if (isCurrent(intent)) {
+          const message = isGuideRefreshTimeout(error)
+            ? GUIDE_REQUEST_TIMEOUT_MESSAGE
+            : summarizeRendererBridgeError(error);
           if (intent.playerRefresh) {
-            options.handlePlayerFailure?.(intent.source, summarizeRendererBridgeError(error), intent.generation);
+            options.handlePlayerFailure?.(intent.source, message, intent.generation);
           } else {
-            options.handleFailure(intent.source, summarizeRendererBridgeError(error), intent.generation);
+            options.handleFailure(intent.source, message, intent.generation);
           }
         }
         return;
@@ -248,4 +266,60 @@ export function createGuidePresentationPolling(
     getGeneration: () => guidePresentationGeneration,
     getLastValidPresentation: () => lastValidPresentation,
   };
+}
+
+function waitForGuidePresentation<T>(
+  request: Promise<T>,
+  abortController: AbortController,
+  host: Window,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const { signal } = abortController;
+    let settled = false;
+    let timeoutId: number | null = null;
+
+    const cleanup = (): void => {
+      if (timeoutId !== null) host.clearTimeout(timeoutId);
+      signal.removeEventListener('abort', handleAbort);
+    };
+    const settle = (action: () => void): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      action();
+    };
+    const handleAbort = (): void => {
+      settle(() => reject(readGuideRefreshAbortReason(signal)));
+    };
+
+    if (signal.aborted) {
+      handleAbort();
+      return;
+    }
+
+    signal.addEventListener('abort', handleAbort, { once: true });
+    timeoutId = host.setTimeout(() => {
+      abortController.abort(createGuideRefreshError(GUIDE_REQUEST_TIMEOUT_MESSAGE, 'TimeoutError'));
+    }, GUIDE_REQUEST_TIMEOUT_MS);
+    void request.then(
+      (value) => settle(() => resolve(value)),
+      (error: unknown) => settle(() => reject(error)),
+    );
+  });
+}
+
+function readGuideRefreshAbortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : createGuideRefreshError('Guide refresh aborted.', 'AbortError');
+}
+
+function createGuideRefreshError(message: string, name: 'AbortError' | 'TimeoutError'): Error {
+  const error = new Error(message);
+  error.name = name;
+  return error;
+}
+
+function isGuideRefreshTimeout(error: unknown): boolean {
+  return error instanceof Error && error.name === 'TimeoutError';
 }

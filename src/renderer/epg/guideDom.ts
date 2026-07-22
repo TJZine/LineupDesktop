@@ -283,7 +283,11 @@ export function renderEpgGuideDom(
 
   const header = document.createElement('div');
   header.className = 'epg-time-header';
-  header.append(document.createElement('span'));
+  header.setAttribute('role', 'row');
+  const channelHeader = document.createElement('span');
+  channelHeader.setAttribute('role', 'columnheader');
+  channelHeader.setAttribute('aria-label', 'Channel');
+  header.append(channelHeader);
 
   const slotTrack = document.createElement('div');
   slotTrack.className = 'epg-time-header-slots';
@@ -292,6 +296,7 @@ export function renderEpgGuideDom(
   view.guide.slots.forEach((slot, index) => {
     const label = document.createElement('span');
     label.className = 'epg-time-slot';
+    label.setAttribute('role', 'columnheader');
     label.style.position = 'absolute';
     label.style.left = `${toTrackPercent(index * slotWidth, trackWidth)}%`;
     label.style.width = `${toTrackPercent(slotWidth, trackWidth)}%`;
@@ -326,6 +331,7 @@ export function renderEpgGuideDom(
     rowElement.dataset.selectedChannel = String(row.isSelected);
     const channel = document.createElement('div');
     channel.className = 'epg-grid__channel';
+    channel.setAttribute('role', 'rowheader');
     const number = document.createElement('strong');
     number.textContent = row.number;
     const name = document.createElement('span');

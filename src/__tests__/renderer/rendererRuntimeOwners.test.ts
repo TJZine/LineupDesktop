@@ -199,6 +199,8 @@ test('guide presentation polling applies sustained slow responses while bounding
     host: {
       setInterval: (callback: TimerHandler) => { intervalCallbacks.push(callback as () => void); return 11; },
       clearInterval: () => undefined,
+      setTimeout: () => 12,
+      clearTimeout: () => undefined,
     } as unknown as Window,
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => 1_778_619_600_000,
@@ -214,8 +216,7 @@ test('guide presentation polling applies sustained slow responses while bounding
   assert.equal(requests.length, 1);
 
   requests[0]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
-  await Promise.resolve();
-  await Promise.resolve();
+  await settleAsyncWork();
   assert.equal(requests.length, 2);
   assert.equal(appliedGenerations.length, 1);
 
@@ -223,8 +224,7 @@ test('guide presentation polling applies sustained slow responses while bounding
   intervalCallbacks[0]?.();
   assert.equal(requests.length, 2);
   requests[1]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
-  await Promise.resolve();
-  await Promise.resolve();
+  await settleAsyncWork();
   assert.equal(requests.length, 3);
   assert.equal(appliedGenerations.length, 2);
   assert.ok((appliedGenerations[1] ?? 0) > (appliedGenerations[0] ?? 0));
@@ -232,23 +232,74 @@ test('guide presentation polling applies sustained slow responses while bounding
   intervalCallbacks[0]?.();
   assert.equal(requests.length, 3);
   requests[2]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
-  await Promise.resolve();
-  await Promise.resolve();
+  await settleAsyncWork();
   assert.equal(requests.length, 4);
   assert.equal(appliedGenerations.length, 3);
   assert.ok((appliedGenerations[2] ?? 0) > (appliedGenerations[1] ?? 0));
 
   polling.stop();
   polling.start();
-  assert.equal(requests.length, 4);
-  requests[3]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
-  await Promise.resolve();
-  await Promise.resolve();
   assert.equal(requests.length, 5);
-  polling.stop();
-  requests[4]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
-  await Promise.resolve();
+  requests[3]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
+  await settleAsyncWork();
   assert.equal(appliedGenerations.length, 3);
+  requests[4]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
+  await settleAsyncWork();
+  assert.equal(appliedGenerations.length, 4);
+  polling.stop();
+});
+
+test('guide presentation polling times out hung work, starts trailing work, and ignores late results', async () => {
+  const requests: Array<Deferred<{ ok: true; value: EpgPresentationSource }>> = [];
+  const timeoutCallbacks: Array<() => void> = [];
+  const clearedTimeouts: number[] = [];
+  const failureMessages: string[] = [];
+  let applied = 0;
+  const polling = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async () => {
+        const request = createDeferred<{ ok: true; value: EpgPresentationSource }>();
+        requests.push(request);
+        const result = await request.promise;
+        return { ...result, requestId: `timed-guide-${requests.length}` };
+      },
+    } as unknown as LineupDesktopPreloadApi['guide'],
+    host: {
+      setInterval: () => 1,
+      clearInterval: () => undefined,
+      setTimeout: (callback: TimerHandler) => {
+        timeoutCallbacks.push(callback as () => void);
+        return timeoutCallbacks.length;
+      },
+      clearTimeout: (timeoutId: number) => { clearedTimeouts.push(timeoutId); },
+    } as unknown as Window,
+    getActiveRoute: () => 'guide',
+    getWindowStartMs: () => 1_778_619_600_000,
+    setLoading: () => undefined,
+    applyPresentation: () => { applied += 1; },
+    handleFailure: (_source, message) => { failureMessages.push(message); },
+  });
+
+  const first = polling.refresh('manual');
+  const trailing = polling.refresh('poll-interval');
+  assert.equal(requests.length, 1);
+  assert.equal(timeoutCallbacks.length, 1);
+
+  timeoutCallbacks[0]?.();
+  await first;
+  assert.deepEqual(failureMessages, ['Guide refresh timed out. Try again.']);
+  assert.deepEqual(clearedTimeouts, [1]);
+  assert.equal(requests.length, 2);
+
+  requests[0]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
+  await Promise.resolve();
+  assert.equal(applied, 0);
+
+  requests[1]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
+  await trailing;
+  assert.equal(applied, 1);
+  assert.deepEqual(clearedTimeouts, [1, 2]);
+  polling.stop();
 });
 
 test('guide presentation polling schedules Player and Guide with route-owned windows and cleanup', async () => {
@@ -269,6 +320,8 @@ test('guide presentation polling schedules Player and Guide with route-owned win
     host: {
       setInterval: (callback: TimerHandler) => { intervalCallbacks.push(callback as () => void); return 7; },
       clearInterval: () => { clearCount += 1; },
+      setTimeout: () => 8,
+      clearTimeout: () => undefined,
     } as unknown as Window,
     getActiveRoute: () => activeRoute,
     getWindowStartMs: () => 1_700_000_000_000,
@@ -280,17 +333,17 @@ test('guide presentation polling schedules Player and Guide with route-owned win
   });
 
   polling.start();
-  await Promise.resolve();
+  await settleAsyncWork();
   assert.equal(windows[0], Math.floor(nowMs / 1_800_000) * 1_800_000);
   assert.equal(loadingCount, 0);
   assert.equal(playerApplyCount, 1);
   intervalCallbacks[0]?.();
-  await Promise.resolve();
+  await settleAsyncWork();
   assert.equal(windows.length, 2);
 
   activeRoute = 'guide';
   polling.reconcile('player', 'guide');
-  await Promise.resolve();
+  await settleAsyncWork();
   assert.equal(windows.at(-1), 1_700_000_000_000);
   assert.equal(loadingCount, 1);
   activeRoute = 'settings';
@@ -595,10 +648,16 @@ function createDeferred<TValue>(): Deferred<TValue> {
   return { promise, resolve };
 }
 
+function settleAsyncWork(): Promise<void> {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+}
+
 function createNoopIntervalHost(): Window {
   return {
     setInterval: () => 1,
     clearInterval: () => undefined,
+    setTimeout: () => 2,
+    clearTimeout: () => undefined,
   } as unknown as Window;
 }
 

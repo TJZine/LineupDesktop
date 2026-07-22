@@ -350,9 +350,15 @@ test('route DOM renders guide states and focused program details', () => {
     assert.match(renderedText, /S2 E4/u);
     assert.equal(grid.getAttribute('role'), 'grid');
     const readyRows = findElementsByRole(grid, 'row');
-    assert.equal(readyRows.length, 1);
-    const readyRow = readyRows[0];
+    assert.equal(readyRows.length, 2);
+    const headerRow = readyRows[0];
+    assert.ok(headerRow);
+    const columnHeaders = findElementsByRole(headerRow, 'columnheader');
+    assert.ok(columnHeaders.length > 1);
+    assert.equal(columnHeaders[0]?.getAttribute('aria-label'), 'Channel');
+    const readyRow = readyRows[1];
     assert.ok(readyRow);
+    assert.equal(findElementsByRole(readyRow, 'rowheader').length, 1);
     assert.equal(findElementsByRole(readyRow, 'gridcell').length, 1);
 
     for (const state of ['loading', 'empty-channels', 'empty-programs', 'error'] as const) {
