@@ -9,6 +9,7 @@
     "build:electron": "node tools/clean-electron-build.mjs && tsc -p tsconfig.electron.json && node tools/bundle-preload.mjs && node tools/copy-renderer-assets.mjs",
     "lint": "eslint .",
     "smoke:electron": "npm run build:electron && node tools/smoke-electron.mjs",
+    "proof:channel-builder": "npm run build:electron && node tools/prove-channel-builder.mjs --out docs/runs/channel-builder-onboarding-parity/local",
     "typecheck": "tsc --noEmit",
     "pretest": "npm run build:electron",
     "test": "npm run test:contracts && npm run test:harness-docs",

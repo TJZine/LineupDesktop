@@ -65,8 +65,6 @@ export function renderStagedSetupDom(input: {
   const previewToggle = doc.querySelector<HTMLButtonElement>('[data-focus-id="setup-preview-toggle"]');
   previewToggle?.setAttribute('aria-expanded', String(input.state.previewExpanded));
   setText(doc.querySelector('[data-setup-preview-status]'), previewStatus(input.runtimeState.preview));
-  const previewRetry = doc.querySelector<HTMLButtonElement>('[data-focus-id="setup-preview-retry"]');
-  if (previewRetry) previewRetry.hidden = input.runtimeState.preview !== 'items-error' && input.runtimeState.preview !== 'metadata-error';
   for (const item of Array.from(doc.querySelectorAll<HTMLButtonElement>('[data-plex-items] [data-focus-id]'))) {
     item.disabled = true;
     item.setAttribute('aria-disabled', 'true');

@@ -372,7 +372,7 @@ function stateActionsFor(
     case 'error':
       return [{ id: 'retry', label: 'Retry' }, { id: 'back', label: 'Back' }];
     case 'ready':
-      return [];
+      return [{ id: 'setup', label: 'Edit lineup' }];
   }
 }
 
