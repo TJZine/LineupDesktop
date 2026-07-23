@@ -12,6 +12,7 @@ import {
   formatEpgTimeWindow,
   isEpgProgramPlayable,
   moveEpgSelection,
+  normalizeEpgPresentation,
   setEpgPresentationState,
   updateEpgState,
   type EpgPresentationSource,
@@ -78,7 +79,32 @@ test('EPG projects scheduler rows, stable cell ids, slots, clipping, and details
   assert.equal(view.rows[0]?.programs[0]?.temporalState, 'current');
   assert.equal(view.rows[0]?.programs[1]?.temporalState, 'upcoming');
   assert.equal(view.rows[0]?.programs[0]?.columnStart, 1);
-  assert.equal(formatEpgTimeWindow(BASE, BASE + EPG_SLOT_DURATION_MS), '8:00 PM - 8:30 PM');
+  assert.match(formatEpgTimeWindow(BASE, BASE + EPG_SLOT_DURATION_MS), /^\d{1,2}:\d{2} [AP]M - \d{1,2}:\d{2} [AP]M$/u);
+});
+
+test('EPG time labels follow local time across a non-UTC DST transition', () => {
+  const processValue: unknown = Reflect.get(globalThis, 'process');
+  assert.equal(isTestProcess(processValue), true);
+  if (!isTestProcess(processValue)) return;
+  const previousTimezone = processValue.env.TZ;
+  try {
+    processValue.env.TZ = 'America/New_York';
+    const beforeSpringForward = Date.UTC(2024, 2, 10, 6, 30);
+    const afterSpringForward = Date.UTC(2024, 2, 10, 7, 30);
+    assert.equal(formatEpgTimeWindow(beforeSpringForward, afterSpringForward), '1:30 AM - 3:30 AM');
+  } finally {
+    if (previousTimezone === undefined) delete processValue.env.TZ;
+    else processValue.env.TZ = previousTimezone;
+  }
+});
+
+test('EPG normalization preserves an honest missing now-watching value', () => {
+  const source = { ...presentation(), nowWatching: null, nowMs: undefined };
+  const before = Date.now();
+  const normalized = normalizeEpgPresentation(source);
+  const after = Date.now();
+  assert.equal(normalized.nowWatching, null);
+  assert.ok(normalized.nowMs >= before && normalized.nowMs <= after);
 });
 
 test('program span excludes programs outside the active window', () => {
@@ -189,3 +215,9 @@ test('Guide state and projected cells stay renderer-safe', () => {
   assert.equal(containsPlexForbiddenRendererField(source), false);
   assert.equal(containsPlexForbiddenRendererField(createEpgGuideView(createEpgState(source), source)), false);
 });
+
+function isTestProcess(value: unknown): value is { env: Record<string, string | undefined> } {
+  if (typeof value !== 'object' || value === null) return false;
+  const env: unknown = Reflect.get(value, 'env');
+  return typeof env === 'object' && env !== null;
+}

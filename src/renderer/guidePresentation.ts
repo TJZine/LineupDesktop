@@ -18,8 +18,8 @@ export interface EpgShellViewModel {
   brandLabel: string;
   layoutMode: 'classic';
   focusHint: string;
-  nowWatching: ProgramSummaryViewModel;
-  nowWatchingChannelLabel: string;
+  nowWatching: ProgramSummaryViewModel | null;
+  nowWatchingChannelLabel: string | null;
 }
 
 export interface EpgInfoPanelViewModel {
@@ -40,23 +40,28 @@ export interface EpgPresentationStateViewModel {
 
 export function createEpgShellView(
   channels: readonly EpgChannelViewModel[],
-  nowWatching: EpgCurrentProgramViewModel,
+  nowWatching: EpgCurrentProgramViewModel | null,
 ): EpgShellViewModel {
-  const channelNumber = selectedChannelNumber(channels, nowWatching.channelId);
-  const channelName = selectedChannelName(channels, nowWatching.channelId);
-  return {
+  const shared = {
     brandLabel: 'LINEUP',
-    layoutMode: 'classic',
+    layoutMode: 'classic' as const,
     focusHint: 'OK Select · LEFT/RIGHT Navigate · BACK Close',
+  };
+  if (nowWatching === null) {
+    return { ...shared, nowWatching: null, nowWatchingChannelLabel: null };
+  }
+  const channel = channels.find((candidate) => candidate.id === nowWatching.channelId);
+  return {
+    ...shared,
     nowWatching: {
       title: nowWatching.title,
       subtitle: nowWatching.subtitle,
-      channelNumber,
-      channelName,
+      channelNumber: channel?.number ?? '',
+      channelName: channel?.name ?? '',
       startsAtMs: nowWatching.startsAtMs,
       endsAtMs: nowWatching.endsAtMs,
     },
-    nowWatchingChannelLabel: `${channelNumber} - ${channelName}`,
+    nowWatchingChannelLabel: channel === undefined ? null : `${channel.number} - ${channel.name}`,
   };
 }
 
@@ -100,12 +105,4 @@ export function createEpgPresentationStates(): Readonly<Record<EpgPresentationSt
       detail: 'The guide could not be shown. Try again from the route controls.',
     },
   };
-}
-
-function selectedChannelNumber(channels: readonly EpgChannelViewModel[], channelId: string): string {
-  return channels.find((channel) => channel.id === channelId)?.number ?? '';
-}
-
-function selectedChannelName(channels: readonly EpgChannelViewModel[], channelId: string): string {
-  return channels.find((channel) => channel.id === channelId)?.name ?? '';
 }

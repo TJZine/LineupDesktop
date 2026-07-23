@@ -348,6 +348,18 @@ test('route DOM renders guide states and focused program details', () => {
     assert.match(renderedText, /Guide ready/u);
     assert.match(renderedText, /The Midnight Archive/u);
     assert.match(renderedText, /S2 E4/u);
+    assert.equal(grid.getAttribute('role'), 'grid');
+    const readyRows = findElementsByRole(grid, 'row');
+    assert.equal(readyRows.length, 2);
+    const headerRow = readyRows[0];
+    assert.ok(headerRow);
+    const columnHeaders = findElementsByRole(headerRow, 'columnheader');
+    assert.ok(columnHeaders.length > 1);
+    assert.equal(columnHeaders[0]?.getAttribute('aria-label'), 'Channel');
+    const readyRow = readyRows[1];
+    assert.ok(readyRow);
+    assert.equal(findElementsByRole(readyRow, 'rowheader').length, 1);
+    assert.equal(findElementsByRole(readyRow, 'gridcell').length, 1);
 
     for (const state of ['loading', 'empty-channels', 'empty-programs', 'error'] as const) {
       const stateGrid = new ElementDouble();
@@ -369,12 +381,67 @@ test('route DOM renders guide states and focused program details', () => {
       );
 
       const stateText = collectText(stateGrid);
+      assert.equal(stateGrid.getAttribute('role'), null);
       assert.match(stateText, state === 'loading' ? /Loading guide/u : state === 'empty-channels' ? /No channels available/u : state === 'empty-programs' ? /No programs in this window/u : /Guide unavailable/u);
       assert.doesNotMatch(stateText, /Signal Warmup|After Hours Cinema|Pilot Block|Roundtable/u);
       assert.match(stateTitle.textContent, state === 'loading' ? /Loading guide/u : state === 'empty-channels' ? /No channels available/u : state === 'empty-programs' ? /No programs in this window/u : /Guide unavailable/u);
       assert.equal(currentProgram.textContent, state === 'loading' ? 'Loading guide' : state === 'empty-channels' ? 'No channels available' : state === 'empty-programs' ? 'No programs in this window' : 'Guide unavailable');
       assert.match(currentWindow.textContent, state === 'loading' ? /Schedule rows are preparing/u : state === 'empty-channels' ? /Add channels from setup/u : state === 'empty-programs' ? /Refresh the schedule/u : /could not be shown/u);
     }
+  } finally {
+    restoreDocument(originalDocument);
+  }
+});
+
+test('route DOM suppresses now-playing chrome and summary when ready data has no now-watching value', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    createElement: (tagName: string) => new ElementDouble(tagName),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const grid = new ElementDouble();
+    const currentChannel = new ElementDouble();
+    const currentProgram = new ElementDouble();
+    const currentWindow = new ElementDouble();
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.epgGridElement = grid as unknown as HTMLElement;
+    dom.currentChannelElement = currentChannel as unknown as HTMLElement;
+    dom.currentProgramElement = currentProgram as unknown as HTMLElement;
+    dom.currentWindowElement = currentWindow as unknown as HTMLElement;
+
+    const missingNowWatching = createWorkflowState('guide', { ...GUIDE_PRESENTATION, nowWatching: null });
+    renderWorkflowDom(
+      missingNowWatching,
+      createPlayerOverlayState(),
+      createRendererSafePlayerSnapshot(),
+      dom,
+    );
+
+    assert.equal(grid.getAttribute('role'), 'grid');
+    assert.doesNotMatch(collectText(grid), /NOW PLAYING/u);
+    assert.equal(currentChannel.textContent, '');
+    assert.equal(currentProgram.textContent, '');
+    assert.equal(currentWindow.textContent, '');
+
+    renderWorkflowDom(
+      { ...missingNowWatching, epg: setEpgPresentationState(missingNowWatching.epg, 'loading') },
+      createPlayerOverlayState(),
+      createRendererSafePlayerSnapshot(),
+      dom,
+    );
+    assert.equal(grid.getAttribute('role'), null);
+    assert.doesNotMatch(collectText(grid), /NOW PLAYING/u);
   } finally {
     restoreDocument(originalDocument);
   }
@@ -574,6 +641,39 @@ test('route DOM renders player OSD fields and playback option rows', () => {
     assert.equal(busyMini?.getAttribute('aria-busy'), 'true');
     assert.equal(busyMini?.getAttribute('aria-current'), 'true');
     assert.equal(busyMini?.dataset.overlayBusyFocusCustody, 'true');
+
+    for (const count of [1, 2, 4]) {
+      const shortChannels = Array.from({ length: count }, (_, index) => ({
+        id: `short-${index + 1}`,
+        number: String(index + 1),
+        name: `Short ${index + 1}`,
+        currentProgram: { id: `short-program-${index + 1}`, title: `Short program ${index + 1}`, startsAtMs: 0, endsAtMs: 2_000 },
+      }));
+      const selectedId = shortChannels.at(-1)?.id ?? null;
+      const shortPresentation = {
+        ...presentation,
+        channels: shortChannels,
+        currentChannelId: selectedId,
+      };
+      renderWorkflowDom(
+        createWorkflowState('player'),
+        {
+          ...createPlayerOverlayState(shortPresentation),
+          activeOverlayId: 'miniGuide',
+          miniGuideSelectedChannelId: selectedId,
+        },
+        snapshot,
+        dom,
+        undefined,
+        null,
+        shortPresentation,
+      );
+      const rows: readonly ElementDouble[] = (dom.overlayMiniGuideElement as unknown as ElementDouble).children;
+      const focusIds = rows.map((row) => row.dataset.focusId);
+      assert.equal(rows.length, count, `${String(count)} rendered channel rows`);
+      assert.equal(new Set(focusIds).size, count, `${String(count)} unique focus ids`);
+      assert.equal(rows.filter((row) => row.getAttribute('aria-current') === 'true').length, 1, `${String(count)} current rows`);
+    }
   } finally {
     restoreDocument(originalDocument);
   }
@@ -993,6 +1093,13 @@ function readVisibleTextFromMarkup(markup: string): string {
 
 function collectText(element: ElementDouble): string {
   return [element.textContent, ...element.children.map(collectText)].join(' ');
+}
+
+function findElementsByRole(element: ElementDouble, role: string): ElementDouble[] {
+  return [
+    ...(element.getAttribute('role') === role ? [element] : []),
+    ...element.children.flatMap((child) => findElementsByRole(child, role)),
+  ];
 }
 
 function restoreDocument(originalDocument: Document | undefined): void {

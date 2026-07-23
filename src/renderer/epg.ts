@@ -105,9 +105,8 @@ export interface EpgPresentationSource {
   nowMs?: number;
 }
 
-export interface EpgPresentationSourceWithNowWatching extends Omit<EpgPresentationSource, 'nowMs' | 'nowWatching'> {
+export interface NormalizedEpgPresentationSource extends Omit<EpgPresentationSource, 'nowMs'> {
   readonly nowMs: number;
-  readonly nowWatching: EpgCurrentProgramViewModel;
 }
 
 export interface EpgCurrentProgramViewModel {
@@ -137,35 +136,11 @@ export const EMPTY_EPG_PRESENTATION_SOURCE: EpgPresentationSource = {
 /** Retained until the Package 6 fixture bundle is removed; it contains no schedule fixture. */
 export const DEFAULT_EPG_PRESENTATION_SOURCE = EMPTY_EPG_PRESENTATION_SOURCE;
 
-export function ensureRendererReadyGuidePresentation(
+export function normalizeEpgPresentation(
   presentation: EpgPresentationSource,
-  fallbackWindowStartMs = snapWindowStartMs(Date.now()),
-): EpgPresentationSourceWithNowWatching {
+): NormalizedEpgPresentationSource {
   const nowMs = isValidTime(presentation.nowMs) ? presentation.nowMs : Date.now();
-  if (presentation.nowWatching !== null) {
-    return { ...presentation, nowMs, nowWatching: presentation.nowWatching };
-  }
-  const fallbackChannel = presentation.channels[0];
-  const fallbackProgram = fallbackChannel?.programs[0];
-  return {
-    ...presentation,
-    nowMs,
-    nowWatching: fallbackProgram === undefined
-      ? {
-        title: '',
-        subtitle: '',
-        channelId: fallbackChannel?.id ?? '',
-        startsAtMs: fallbackWindowStartMs,
-        endsAtMs: fallbackWindowStartMs,
-      }
-      : {
-        title: fallbackProgram.title,
-        subtitle: fallbackProgram.subtitle,
-        channelId: fallbackChannel?.id ?? '',
-        startsAtMs: fallbackProgram.startsAtMs,
-        endsAtMs: fallbackProgram.endsAtMs,
-      },
-  };
+  return { ...presentation, nowMs };
 }
 
 export function createEpgState(
@@ -288,7 +263,7 @@ export function createEpgGuideView(
   state: EpgState,
   presentation: EpgPresentationSource,
 ): EpgGuideViewModel {
-  const presentationForRender = ensureRendererReadyGuidePresentation(presentation, state.windowStartMs);
+  const presentationForRender = normalizeEpgPresentation(presentation);
   const normalizedState = normalizeEpgSelection(state, presentation);
   const windowEndMs = normalizedState.windowStartMs + EPG_WINDOW_DURATION_MS;
   const slots = Array.from({ length: EPG_VISIBLE_SLOT_COUNT }, (_, index) => {
@@ -358,9 +333,9 @@ export function formatEpgTimeWindow(startsAtMs: number, endsAtMs: number): strin
 
 export function formatEpgTime(valueMs: number): string {
   const date = new Date(valueMs);
-  const hour24 = date.getUTCHours();
+  const hour24 = date.getHours();
   const hour = hour24 % 12 === 0 ? 12 : hour24 % 12;
-  const minute = String(date.getUTCMinutes()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
   return `${hour}:${minute} ${hour24 < 12 ? 'AM' : 'PM'}`;
 }
 
@@ -523,7 +498,7 @@ function isProgramVisible(program: EpgProgramViewModel, windowStartMs: number, w
 function deriveInitialEpgSelection(
   presentation: EpgPresentationSource,
 ): Pick<EpgState, 'windowStartMs' | 'selectedChannelId' | 'selectedProgramId'> {
-  const normalized = ensureRendererReadyGuidePresentation(presentation);
+  const normalized = normalizeEpgPresentation(presentation);
   const firstEntry = listPresentationPrograms(presentation)[0];
   const anchorMs = presentation.nowWatching?.startsAtMs ?? firstEntry?.program.startsAtMs ?? normalized.nowMs;
   const windowStartMs = clampWindowStartMs(snapWindowStartMs(anchorMs), presentation);

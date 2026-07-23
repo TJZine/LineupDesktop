@@ -82,6 +82,22 @@ test('mini-guide projects exactly five circular rows and page movement wraps', (
   assert.equal(paged.miniGuideSelectedChannelId, 'channel-6');
 });
 
+test('mini-guide projects each short-catalog channel once with one selected row', () => {
+  for (const count of [1, 2, 4]) {
+    const presentation = source(snapshot('playing'), channels(count));
+    const selectedId = presentation.channels.at(-1)?.id ?? null;
+    const state = {
+      ...openMiniGuide(createPlayerOverlayState(presentation), presentation),
+      miniGuideSelectedChannelId: selectedId,
+    };
+    const rows = createPlayerOverlayView(state, presentation).miniGuideChannels;
+
+    assert.equal(rows.length, count, `${String(count)} channel rows`);
+    assert.equal(new Set(rows.map((channel) => channel.id)).size, count, `${String(count)} unique channel ids`);
+    assert.equal(rows.filter((channel) => channel.selected).length, 1, `${String(count)} selected rows`);
+  }
+});
+
 test('number entry is real-catalog-only state with no placeholder channel', () => {
   const state = appendChannelDigit(appendChannelDigit(createPlayerOverlayState(), '1'), '2');
   const view = createPlayerOverlayView(state, source(snapshot('playing'), []));

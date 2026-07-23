@@ -8,7 +8,6 @@ import {
   createEpgGuideView,
   createEpgState,
   EMPTY_EPG_PRESENTATION_SOURCE,
-  ensureRendererReadyGuidePresentation,
   moveEpgSelection,
   selectEpgProgram,
   type EpgDirection,
@@ -98,7 +97,7 @@ export interface RouteWorkflowViewModel {
   tone: WorkflowStatusTone;
   primaryText: string;
   secondaryText: string;
-  currentProgram: ProgramSummaryViewModel;
+  currentProgram: ProgramSummaryViewModel | null;
   channels: readonly ChannelSummaryViewModel[];
   guide: EpgGuideViewModel;
   settings: SettingsSummaryViewModel;
@@ -319,17 +318,18 @@ export function getRouteWorkflowView(
   };
 }
 
-function createCurrentProgramSummary(presentation: EpgPresentationSource): ProgramSummaryViewModel {
-  const normalizedPresentation = ensureRendererReadyGuidePresentation(presentation);
+function createCurrentProgramSummary(presentation: EpgPresentationSource): ProgramSummaryViewModel | null {
+  const nowWatching = presentation.nowWatching;
+  if (nowWatching === null) return null;
   const channel = presentation.channels.find(
-    (candidate) => candidate.id === normalizedPresentation.nowWatching.channelId,
+    (candidate) => candidate.id === nowWatching.channelId,
   );
   return {
-    title: normalizedPresentation.nowWatching.title,
-    subtitle: normalizedPresentation.nowWatching.subtitle,
-    channelName: channel?.name ?? 'Channel',
-    startsAtMs: normalizedPresentation.nowWatching.startsAtMs,
-    endsAtMs: normalizedPresentation.nowWatching.endsAtMs,
+    title: nowWatching.title,
+    subtitle: nowWatching.subtitle,
+    channelName: channel?.name ?? '',
+    startsAtMs: nowWatching.startsAtMs,
+    endsAtMs: nowWatching.endsAtMs,
   };
 }
 
@@ -359,12 +359,16 @@ function createPrimaryText(
   route: AppRouteId,
   defaultPrimaryText: string,
   guide: EpgGuideViewModel,
-  currentProgram: ProgramSummaryViewModel,
+  currentProgram: ProgramSummaryViewModel | null,
   _channels: readonly ChannelSummaryViewModel[],
 ): string {
   if (route === 'player') {
     return guide.presentationState === 'ready'
-      ? `${currentProgram.title} is cued on ${currentProgram.channelName}.`
+      ? currentProgram === null
+        ? 'Current program details are unavailable.'
+        : currentProgram.channelName.length === 0
+          ? `${currentProgram.title} is currently playing.`
+          : `${currentProgram.title} is cued on ${currentProgram.channelName}.`
       : guidePlaceholderPrimaryText(guide.presentationState, 'player');
   }
   if (route === 'guide') {

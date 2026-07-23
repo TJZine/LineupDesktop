@@ -257,11 +257,13 @@ function fiveCircularRows(
   channels: readonly OverlayChannelViewModel[],
   selectedId: string | null,
 ): readonly OverlayChannelViewModel[] {
-  if (channels.length === 0) return [];
-  const center = Math.max(0, channels.findIndex((channel) => channel.id === selectedId));
+  const uniqueChannels = channels.filter((channel, index) =>
+    channels.findIndex((candidate) => candidate.id === channel.id) === index);
+  if (uniqueChannels.length < 5) return uniqueChannels;
+  const center = Math.max(0, uniqueChannels.findIndex((channel) => channel.id === selectedId));
   return [-2, -1, 0, 1, 2].map((offset) => {
-    const index = (center + offset + channels.length * 2) % channels.length;
-    return channels[index] as OverlayChannelViewModel;
+    const index = (center + offset + uniqueChannels.length * 2) % uniqueChannels.length;
+    return uniqueChannels[index] as OverlayChannelViewModel;
   });
 }
 

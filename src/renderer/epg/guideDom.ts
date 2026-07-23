@@ -184,6 +184,12 @@ export function renderEpgGuideDom(
     return;
   }
 
+  if (view.guide.presentationState === 'ready') {
+    dom.epgGridElement.setAttribute('role', 'grid');
+  } else {
+    dom.epgGridElement.removeAttribute('role');
+  }
+
   const trackWidth = GUIDE_TRACK_UNITS;
 
   const shell = document.createElement('section');
@@ -201,15 +207,21 @@ export function renderEpgGuideDom(
   brand.textContent = view.guide.shell.brandLabel;
   headerBrand.append(brand);
 
-  const nowPlaying = document.createElement('div');
-  nowPlaying.className = 'epg-classic-now-playing';
-  const nowLabel = document.createElement('span');
-  nowLabel.className = 'epg-classic-now-playing-label';
-  nowLabel.textContent = 'NOW PLAYING';
-  const nowPlayingChannel = document.createElement('span');
-  nowPlayingChannel.className = 'epg-classic-now-playing-channel';
-  nowPlayingChannel.textContent = view.guide.shell.nowWatchingChannelLabel;
-  nowPlaying.append(nowLabel, nowPlayingChannel);
+  const shellNowWatching = view.guide.shell.nowWatching;
+  const nowPlaying = shellNowWatching === null ? null : document.createElement('div');
+  if (nowPlaying !== null) {
+    nowPlaying.className = 'epg-classic-now-playing';
+    const nowLabel = document.createElement('span');
+    nowLabel.className = 'epg-classic-now-playing-label';
+    nowLabel.textContent = 'NOW PLAYING';
+    nowPlaying.append(nowLabel);
+    if (view.guide.shell.nowWatchingChannelLabel !== null) {
+      const nowPlayingChannel = document.createElement('span');
+      nowPlayingChannel.className = 'epg-classic-now-playing-channel';
+      nowPlayingChannel.textContent = view.guide.shell.nowWatchingChannelLabel;
+      nowPlaying.append(nowPlayingChannel);
+    }
+  }
 
   const focusHint = document.createElement('div');
   focusHint.className = 'epg-classic-header-actions';
@@ -219,27 +231,35 @@ export function renderEpgGuideDom(
     focusHint.append(action);
   }
 
-  classicHeader.append(headerBrand, nowPlaying, focusHint);
+  classicHeader.append(headerBrand);
+  if (nowPlaying !== null) classicHeader.append(nowPlaying);
+  classicHeader.append(focusHint);
 
-  const nowWatching = document.createElement('div');
-  nowWatching.className = 'epg-now-watching-banner';
-  nowWatching.setAttribute('aria-live', 'polite');
-  const nowBannerLabel = document.createElement('span');
-  nowBannerLabel.className = 'epg-now-watching-live';
-  nowBannerLabel.textContent = 'NOW PLAYING';
-  const nowChannel = document.createElement('strong');
-  nowChannel.className = 'epg-now-watching-channel';
-  nowChannel.textContent = view.guide.shell.nowWatchingChannelLabel;
-  const nowProgram = document.createElement('span');
-  nowProgram.className = 'epg-now-watching-program';
-  nowProgram.textContent = view.guide.shell.nowWatching.title;
-  const nowTime = document.createElement('span');
-  nowTime.className = 'epg-now-watching-time';
-  nowTime.textContent = formatEpgTimeWindow(
-    view.guide.shell.nowWatching.startsAtMs,
-    view.guide.shell.nowWatching.endsAtMs,
-  );
-  nowWatching.append(nowBannerLabel, nowChannel, nowProgram, nowTime);
+  const nowWatching = shellNowWatching === null ? null : document.createElement('div');
+  if (nowWatching !== null && shellNowWatching !== null) {
+    nowWatching.className = 'epg-now-watching-banner';
+    nowWatching.setAttribute('aria-live', 'polite');
+    const nowBannerLabel = document.createElement('span');
+    nowBannerLabel.className = 'epg-now-watching-live';
+    nowBannerLabel.textContent = 'NOW PLAYING';
+    nowWatching.append(nowBannerLabel);
+    if (view.guide.shell.nowWatchingChannelLabel !== null) {
+      const nowChannel = document.createElement('strong');
+      nowChannel.className = 'epg-now-watching-channel';
+      nowChannel.textContent = view.guide.shell.nowWatchingChannelLabel;
+      nowWatching.append(nowChannel);
+    }
+    const nowProgram = document.createElement('span');
+    nowProgram.className = 'epg-now-watching-program';
+    nowProgram.textContent = shellNowWatching.title;
+    const nowTime = document.createElement('span');
+    nowTime.className = 'epg-now-watching-time';
+    nowTime.textContent = formatEpgTimeWindow(
+      shellNowWatching.startsAtMs,
+      shellNowWatching.endsAtMs,
+    );
+    nowWatching.append(nowProgram, nowTime);
+  }
 
   const stateElement = document.createElement('article');
   stateElement.className = 'epg-state-panel';
@@ -263,7 +283,11 @@ export function renderEpgGuideDom(
 
   const header = document.createElement('div');
   header.className = 'epg-time-header';
-  header.append(document.createElement('span'));
+  header.setAttribute('role', 'row');
+  const channelHeader = document.createElement('span');
+  channelHeader.setAttribute('role', 'columnheader');
+  channelHeader.setAttribute('aria-label', 'Channel');
+  header.append(channelHeader);
 
   const slotTrack = document.createElement('div');
   slotTrack.className = 'epg-time-header-slots';
@@ -272,6 +296,7 @@ export function renderEpgGuideDom(
   view.guide.slots.forEach((slot, index) => {
     const label = document.createElement('span');
     label.className = 'epg-time-slot';
+    label.setAttribute('role', 'columnheader');
     label.style.position = 'absolute';
     label.style.left = `${toTrackPercent(index * slotWidth, trackWidth)}%`;
     label.style.width = `${toTrackPercent(slotWidth, trackWidth)}%`;
@@ -306,6 +331,7 @@ export function renderEpgGuideDom(
     rowElement.dataset.selectedChannel = String(row.isSelected);
     const channel = document.createElement('div');
     channel.className = 'epg-grid__channel';
+    channel.setAttribute('role', 'rowheader');
     const number = document.createElement('strong');
     number.textContent = row.number;
     const name = document.createElement('span');
@@ -338,7 +364,9 @@ export function renderEpgGuideDom(
     return rowElement;
   });
 
-  shell.append(classicHeader, nowWatching, stateElement);
+  shell.append(classicHeader);
+  if (nowWatching !== null) shell.append(nowWatching);
+  shell.append(stateElement);
   if (view.guide.presentationState === 'ready') {
     stateElement.hidden = true;
     stateElement.setAttribute('aria-hidden', 'true');

@@ -33,6 +33,35 @@ test('OSD, mini-guide, and number timers use exact frozen boundaries and clean u
   assert.equal(harness.state().activeOverlayId, null);
 });
 
+test('OSD requests preserve higher overlay owners, including pending playback options', async () => {
+  const nowPlaying = createHarness(playingSnapshot());
+  nowPlaying.controller.requestNowPlaying();
+  const nowPlayingState = nowPlaying.state();
+  nowPlaying.controller.requestOsd();
+  assert.deepEqual(nowPlaying.state(), nowPlayingState);
+
+  const miniGuide = createHarness(playingSnapshot());
+  miniGuide.controller.requestMiniGuide();
+  const miniGuideState = miniGuide.state();
+  miniGuide.controller.requestOsd();
+  assert.deepEqual(miniGuide.state(), miniGuideState);
+
+  const options = createHarness(playingSnapshot());
+  options.controller.requestOsd();
+  options.controller.openOptions('audio');
+  const optionsState = options.state();
+  options.controller.requestOsd();
+  assert.deepEqual(options.state(), optionsState);
+
+  const pendingOptions = createHarness(playingSnapshot());
+  pendingOptions.controller.requestOsd();
+  pendingOptions.controller.openOptions('audio');
+  await pendingOptions.controller.selectTrack('audio', 'audio-alt', 'overlay-audio-track-audio-alt');
+  const pendingOptionsState = pendingOptions.state();
+  pendingOptions.controller.requestOsd();
+  assert.deepEqual(pendingOptions.state(), pendingOptionsState);
+});
+
 test('Space selects play/pause, suppresses duplicates, and settles by command request', async () => {
   const dispatches: string[] = [];
   const harness = createHarness(playingSnapshot(), {
@@ -53,6 +82,31 @@ test('Space selects play/pause, suppresses duplicates, and settles by command re
   harness.controller.handlePlayerEvent({ event: 'command.settled', requestId: 'renderer-pause-2', command: 'pause', ok: true });
   harness.controller.handleInput('space');
   assert.equal(dispatches.at(-1), 'player.play');
+});
+
+test('late rejected Space dispatch cannot clear a newer pending command after route invalidation', async () => {
+  const first = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['player']['dispatch']>>>();
+  const requestIds: string[] = [];
+  const harness = createHarness(playingSnapshot(), {
+    dispatch: async (envelope) => {
+      requestIds.push(envelope.requestId);
+      return requestIds.length === 1 ? first.promise : accepted(envelope.requestId);
+    },
+  });
+
+  harness.controller.handleInput('space');
+  harness.controller.routeLeave();
+  harness.controller.handleInput('space');
+  first.reject(new Error('late private failure'));
+  await flushPromiseQueue();
+
+  harness.controller.handleInput('space');
+  assert.equal(requestIds.length, 2);
+  harness.controller.handlePlayerEvent({
+    event: 'command.settled', requestId: requestIds[1] ?? '', command: 'pause', ok: true,
+  });
+  harness.controller.handleInput('space');
+  assert.equal(requestIds.length, 3);
 });
 
 test('different tune target supersedes stale completion and only current success reconciles', async () => {
@@ -98,6 +152,37 @@ test('track selection waits for matching settlement and keeps exact focus on loc
   assert.equal(harness.state().activeOverlayId, 'playbackOptions');
   assert.equal(harness.state().playbackOptionsFocusId, 'overlay-audio-track-audio-alt');
   assert.equal(harness.state().playbackOptionsError, 'Safe failure.');
+});
+
+test('late rejected track dispatch cannot fail a newer pending selection after route invalidation', async () => {
+  const first = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['player']['dispatch']>>>();
+  const requestIds: string[] = [];
+  const harness = createHarness(playingSnapshot(), {
+    dispatch: async (envelope) => {
+      requestIds.push(envelope.requestId);
+      return requestIds.length === 1 ? first.promise : accepted(envelope.requestId);
+    },
+  });
+
+  harness.controller.requestOsd();
+  harness.controller.openOptions('audio');
+  const staleSelection = harness.controller.selectTrack('audio', 'audio-alt', 'overlay-audio-track-audio-alt');
+  harness.controller.routeLeave();
+  harness.controller.requestOsd();
+  harness.controller.openOptions('audio');
+  await harness.controller.selectTrack('audio', 'audio-alt', 'overlay-audio-track-audio-alt');
+
+  first.reject(new Error('late private failure'));
+  await staleSelection;
+  assert.equal(harness.state().pendingTrackFocusId, 'overlay-audio-track-audio-alt');
+  assert.equal(harness.state().playbackOptionsError, null);
+  await harness.controller.selectTrack('audio', 'audio-alt', 'overlay-audio-track-audio-alt');
+  assert.equal(requestIds.length, 2);
+
+  harness.controller.handlePlayerEvent({
+    event: 'command.settled', requestId: requestIds[1] ?? '', command: 'track.audio.select', ok: true,
+  });
+  assert.equal(harness.state().pendingTrackFocusId, null);
 });
 
 test('authoritative terminal state and route/dispose invalidate overlays and late work', async () => {
@@ -563,10 +648,11 @@ function safeError() {
   return { code: 'SAFE_FAILURE', category: 'track-failure' as const, message: 'Safe failure.', recoverable: true, retryable: true };
 }
 
-interface Deferred<T> { promise: Promise<T>; resolve(value: T): void }
+interface Deferred<T> { promise: Promise<T>; resolve(value: T): void; reject(reason?: unknown): void }
 function deferred<T>(): Deferred<T> {
   let resolve!: (value: T) => void;
-  return { promise: new Promise<T>((done) => { resolve = done; }), resolve };
+  let reject!: (reason?: unknown) => void;
+  return { promise: new Promise<T>((done, fail) => { resolve = done; reject = fail; }), resolve, reject };
 }
 
 async function flushPromiseQueue(): Promise<void> {

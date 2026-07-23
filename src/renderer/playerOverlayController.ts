@@ -287,9 +287,9 @@ export function createPlayerOverlayController(
     pendingCommand = { requestId, command, kind: 'space', snapshotRequestId: snapshot.requestId, focusId: null, trackId: null, family: null };
     void options.player.dispatch({ intent, requestId, payload: {} }).then((result) => {
       if (disposed || pendingCommand?.requestId !== requestId) return;
-      if (!result.ok || !result.value.accepted) failPendingCommand(result.ok ? 'Player command was not accepted.' : result.error.message);
+      if (!result.ok || !result.value.accepted) failPendingCommand(requestId, result.ok ? 'Player command was not accepted.' : result.error.message);
       else for (const event of result.value.events) if (event.event === 'command.settled') settleCommand(event);
-    }).catch(() => failPendingCommand('Player command failed.'));
+    }).catch(() => failPendingCommand(requestId, 'Player command failed.'));
     return true;
   };
 
@@ -316,12 +316,12 @@ export function createPlayerOverlayController(
       });
       if (disposed || pendingCommand?.requestId !== requestId) return;
       if (!result.ok || !result.value.accepted) {
-        failPendingCommand(result.ok ? 'Track selection was not accepted.' : result.error.message);
+        failPendingCommand(requestId, result.ok ? 'Track selection was not accepted.' : result.error.message);
       } else {
         for (const event of result.value.events) if (event.event === 'command.settled') settleCommand(event);
       }
     } catch {
-      failPendingCommand('Track selection failed.');
+      failPendingCommand(requestId, 'Track selection failed.');
     }
   };
 
@@ -423,7 +423,7 @@ export function createPlayerOverlayController(
   const settleCommand = (event: Extract<PlayerEvent, { event: 'command.settled' }>): void => {
     if (pendingCommand?.requestId !== event.requestId || pendingCommand.command !== event.command) return;
     if (!event.ok) {
-      failPendingCommand(event.error?.message ?? 'Player command failed.');
+      failPendingCommand(event.requestId, event.error?.message ?? 'Player command failed.');
       return;
     }
     const completed = pendingCommand;
@@ -431,9 +431,9 @@ export function createPlayerOverlayController(
     if (completed.kind === 'track') closeOptionsWithFallback(completed);
   };
 
-  const failPendingCommand = (message: string): void => {
+  const failPendingCommand = (requestId: string, message: string): void => {
+    if (disposed || pendingCommand?.requestId !== requestId) return;
     const pending = pendingCommand;
-    if (pending === null) return;
     pendingCommand = null;
     if (pending.kind === 'space') {
       options.recordDiagnostic('player.space', safeMessage(message, 'Player command failed.'));
@@ -524,7 +524,7 @@ export function createPlayerOverlayController(
       }
     }
     if (pendingCommand?.kind === 'space' && authoritative && isInconsistentPlaybackPair(snapshot)) {
-      failPendingCommand('Inconsistent player state ignored.');
+      failPendingCommand(pendingCommand.requestId, 'Inconsistent player state ignored.');
     }
     if (authoritative || snapshot.status === 'ended') update((state) => reconcileSnapshotState(state, snapshot));
     if (authoritative && previousAuthoritativeStatus !== 'playing' && snapshot.status === 'playing' &&
@@ -609,7 +609,7 @@ export function createPlayerOverlayController(
     handlePlayerEvent(event) {
       if (event.event === 'command.settled') settleCommand(event);
       else if (event.event === 'error' && event.requestId !== null && pendingCommand?.requestId === event.requestId) {
-        failPendingCommand(event.error.message);
+        failPendingCommand(event.requestId, event.error.message);
       } else if (event.event === 'warning' || event.event === 'error') {
         options.recordDiagnostic(
           `player.${event.event}`,

@@ -91,6 +91,8 @@ export function openOsd(
   snapshot: PlayerSnapshot,
 ): PlayerOverlayState {
   if (!['ready', 'playing', 'paused'].includes(snapshot.status)) return state;
+  if (state.activeOverlayId === 'playbackOptions' ||
+    state.activeOverlayId === 'nowPlaying' || state.activeOverlayId === 'miniGuide') return state;
   if (!isAudioControlEligible(snapshot) && !isSubtitleControlEligible(snapshot)) return closeActive(state);
   return { ...closeTransient(state), activeOverlayId: 'playerOsd' };
 }
