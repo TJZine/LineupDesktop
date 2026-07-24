@@ -39,5 +39,5 @@ jobs:
         run: npm run verify
 
       - name: Channel Builder performance
-        if: runner.os == 'Windows'
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
         run: npm run verify:channel-builder-performance

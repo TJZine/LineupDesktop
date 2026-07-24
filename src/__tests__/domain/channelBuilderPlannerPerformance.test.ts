@@ -80,22 +80,26 @@ function performanceFixture(): Parameters<typeof buildChannelSetupPlan>[0] {
   };
 }
 
-test('plans the deterministic 50,000-candidate fixture within the Windows reference cap', (t) => {
-  const input = performanceFixture();
-  const warm = buildChannelSetupPlan(input);
-  assert.equal(warm.candidateDrafts.length, 50_000);
-  const startedAt = globalThis.performance.now();
-  const measured = buildChannelSetupPlan(input);
-  const elapsedMs = globalThis.performance.now() - startedAt;
-  assert.equal(measured.planIdentity, warm.planIdentity);
-  assert.equal(measured.candidateDrafts.length, 50_000);
-  t.diagnostic(
-    `channel-builder planner invocation ${elapsedMs.toFixed(2)} ms on ${globalThis.process.platform}`,
-  );
-  if (globalThis.process.platform === 'win32') {
-    assert.ok(
-      elapsedMs <= 2_000,
-      `expected <= 2000 ms on Windows, observed ${elapsedMs.toFixed(2)} ms`,
+test(
+  'plans the deterministic 50,000-candidate fixture within the Windows reference cap',
+  { skip: globalThis.process.env.npm_lifecycle_event !== 'verify:channel-builder-performance' },
+  (t) => {
+    const input = performanceFixture();
+    const warm = buildChannelSetupPlan(input);
+    assert.equal(warm.candidateDrafts.length, 50_000);
+    const startedAt = globalThis.performance.now();
+    const measured = buildChannelSetupPlan(input);
+    const elapsedMs = globalThis.performance.now() - startedAt;
+    assert.equal(measured.planIdentity, warm.planIdentity);
+    assert.equal(measured.candidateDrafts.length, 50_000);
+    t.diagnostic(
+      `channel-builder planner invocation ${elapsedMs.toFixed(2)} ms on ${globalThis.process.platform}`,
     );
-  }
-});
+    if (globalThis.process.platform === 'win32') {
+      assert.ok(
+        elapsedMs <= 2_000,
+        `expected <= 2000 ms on Windows, observed ${elapsedMs.toFixed(2)} ms`,
+      );
+    }
+  },
+);
