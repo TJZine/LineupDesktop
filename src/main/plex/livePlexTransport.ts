@@ -69,6 +69,25 @@ export interface LivePlexGetPlaylistItemsRequest extends LivePlexLibraryRequest 
   playlistKey: string;
 }
 
+export interface LivePlexListCollectionsPageRequest extends LivePlexLibraryRequest {
+  sectionId: string;
+  offset: number;
+  limit: 100;
+}
+
+export interface LivePlexListServerPlaylistsPageRequest extends LivePlexLibraryRequest {
+  offset: number;
+  limit: 100;
+}
+
+export interface LivePlexListTagDirectoryPageRequest extends LivePlexLibraryRequest {
+  sectionId: string;
+  family: 'genre' | 'director' | 'year' | 'studio' | 'actor';
+  mediaType: 1 | 2 | 4;
+  offset: number;
+  limit: 100;
+}
+
 export interface LivePlexLibraryTransport {
   listLibrarySections(input: LivePlexLibraryRequest): Promise<PlexResponsePayload>;
   listLibraryItems(input: LivePlexListLibraryItemsRequest): Promise<PlexResponsePayload>;
@@ -85,12 +104,22 @@ export interface LivePlexLibraryTransport {
   }): Promise<void>;
 }
 
+export interface LivePlexChannelBuilderFacetTransport {
+  listCollectionsPage(input: LivePlexListCollectionsPageRequest): Promise<PlexResponsePayload>;
+  listServerPlaylistsPage(input: LivePlexListServerPlaylistsPageRequest): Promise<PlexResponsePayload>;
+  listTagDirectoryPage(input: LivePlexListTagDirectoryPageRequest): Promise<PlexResponsePayload>;
+}
+
 const DEFAULT_TIMEOUT_MS = 20_000;
 const PLEX_TV_ORIGIN = 'https://plex.tv';
 const PLEX_TOKEN_HEADER_NAME = ['X-Plex', 'Token'].join('-');
 
 export class LivePlexTransport
-  implements DesktopPlexAuthTransport, DesktopPlexDiscoveryTransport, LivePlexLibraryTransport
+  implements
+    DesktopPlexAuthTransport,
+    DesktopPlexDiscoveryTransport,
+    LivePlexLibraryTransport,
+    LivePlexChannelBuilderFacetTransport
 {
   private readonly authConfig: PlexAuthConfig | undefined;
   private readonly fetchImpl: typeof globalThis.fetch;
@@ -174,6 +203,40 @@ export class LivePlexTransport
     if (input.includeCollections === true) {
       url.searchParams.set('includeCollections', '1');
     }
+    return this.fetchPmsUrlPayload(url, input.token, input.signal ?? null);
+  }
+
+  async listCollectionsPage(
+    input: LivePlexListCollectionsPageRequest,
+  ): Promise<PlexResponsePayload> {
+    const url = new URL(
+      `/library/sections/${encodeURIComponent(input.sectionId)}/all`,
+      normalizeBaseUri(input.connection.uri),
+    );
+    url.searchParams.set('type', '18');
+    url.searchParams.set('includeGuids', '1');
+    url.searchParams.set('includeMeta', '1');
+    setContainerWindow(url, input.offset, input.limit);
+    return this.fetchPmsUrlPayload(url, input.token, input.signal ?? null);
+  }
+
+  async listServerPlaylistsPage(
+    input: LivePlexListServerPlaylistsPageRequest,
+  ): Promise<PlexResponsePayload> {
+    const url = new URL('/playlists', normalizeBaseUri(input.connection.uri));
+    setContainerWindow(url, input.offset, input.limit);
+    return this.fetchPmsUrlPayload(url, input.token, input.signal ?? null);
+  }
+
+  async listTagDirectoryPage(
+    input: LivePlexListTagDirectoryPageRequest,
+  ): Promise<PlexResponsePayload> {
+    const url = new URL(
+      `/library/sections/${encodeURIComponent(input.sectionId)}/${input.family}`,
+      normalizeBaseUri(input.connection.uri),
+    );
+    url.searchParams.set('type', String(input.mediaType));
+    setContainerWindow(url, input.offset, input.limit);
     return this.fetchPmsUrlPayload(url, input.token, input.signal ?? null);
   }
 
@@ -445,6 +508,11 @@ export class LivePlexTransport
       ...(token !== undefined ? { [PLEX_TOKEN_HEADER_NAME]: token } : {}),
     };
   }
+}
+
+function setContainerWindow(url: URL, offset: number, limit: number): void {
+  url.searchParams.set('X-Plex-Container-Start', String(offset));
+  url.searchParams.set('X-Plex-Container-Size', String(limit));
 }
 
 function throwForHttpStatus(status: number): void {

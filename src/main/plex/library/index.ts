@@ -4,6 +4,7 @@ export type {
   LibraryQueryOptions,
   PlexCollection,
   PlexLibraryRequestIntent,
+  PlexListingPage,
   PlexLibrarySection,
   PlexLibrarySectionType,
   PlexMediaFile,
@@ -39,9 +40,11 @@ export {
 } from './libraryDomain.js';
 export {
   extractDirectoryArray,
+  extractDirectoryPage,
   extractLibrarySectionDirectories,
   extractMediaContainer,
   extractMetadataArray,
+  extractMetadataPage,
   extractSearchHubMetadata,
   extractSearchHubs,
   mapLibraryType,
@@ -57,6 +60,7 @@ export {
   parseStream,
 } from './parsing/index.js';
 export {
+  loadLibrarySectionRecordsWithCounts,
   loadLibrarySectionsWithCounts,
 } from './librarySectionCountEnrichment.js';
 export {
