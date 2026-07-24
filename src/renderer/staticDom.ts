@@ -1,136 +1,15 @@
 import { mountShellDom } from './shell/shellDom.js';
 import { createLineupBrandGlyph } from './onboarding/lineupBrandGlyph.js';
+import { PLAYER_OVERLAY_MARKUP } from './playerOverlayDom.js';
 
 const STATIC_SCREEN_MARKUP = `
 <section class="screen-stack" aria-live="polite" data-static-screens-mounted>
-  <div class="player-presentation" data-player-presentation-surface aria-label="Player presentation surface">
+  <div class="player-presentation" data-player-presentation-surface data-overlay-action="openOsd" tabindex="-1" aria-label="Player presentation surface">
     <div class="player-surface" aria-hidden="true"></div>
-      <div class="overlay-stack" data-overlay-stack>
-        <section class="player-overlay channel-badge" data-overlay="channelBadge" aria-label="Channel badge">
-          <strong data-overlay-channel-badge-number></strong>
-          <div>
-            <span data-overlay-channel-badge-name></span>
-            <p data-overlay-channel-badge-program></p>
-          </div>
-        </section>
-        <section class="player-overlay now-playing-overlay" data-overlay="nowPlaying" aria-label="Now playing">
-          <div class="now-playing__backdrop" aria-hidden="true"></div>
-          <div class="now-playing__content-wrapper">
-            <div class="now-playing__poster" aria-hidden="true">
-              <div class="now-playing__poster-placeholder"></div>
-            </div>
-            <div class="now-playing__details">
-              <div class="now-playing__logo-zone">
-                <div class="now-playing__clear-logo-placeholder"></div>
-                <h3 data-overlay-now-playing-title class="now-playing__title"></h3>
-              </div>
-              <p data-overlay-now-playing-subtitle class="now-playing__subtitle"></p>
-              <div class="now-playing__badges-row" data-overlay-now-playing-badges></div >
-              <div class="now-playing__meta-row">
-                <span data-overlay-now-playing-channel class="now-playing__channel"></span>
-                <span data-overlay-now-playing-summary class="now-playing__summary"></span>
-              </div>
-              <p data-overlay-now-playing-description class="now-playing__description"></p>
-              <div class="now-playing__progress-section">
-                <div class="overlay-progress" data-overlay-progress role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
-                <div class="now-playing__time-row">
-                  <span data-overlay-now-playing-position class="now-playing__position"></span>
-                  <span data-overlay-now-playing-duration class="now-playing__duration"></span>
-                </div>
-              </div>
-              <p data-overlay-now-playing-up-next class="now-playing__up-next"></p>
-            </div>
-          </div>
-        </section>
-        <section class="player-overlay osd-overlay" data-overlay="playerOsd" aria-label="Player controls">
-          <div class="player-osd__content">
-            <div class="player-osd__status" data-osd-status role="status"></div>
-            <div class="player-osd__title" data-osd-title></div>
-            <div class="player-osd__subtitle" data-osd-subtitle></div>
-            <div class="player-osd__pills">
-              <span data-osd-audio></span>
-              <span data-osd-subtitles></span>
-            </div>
-            <div class="player-osd__up-next" data-osd-up-next></div>
-          </div>
-          <div class="player-osd__actions">
-            <button type="button" data-overlay-action="cycleAudioTrack" data-focus-id="overlay-audio-cycle">Audio</button>
-            <button type="button" data-overlay-action="cycleSubtitleTrack" data-focus-id="overlay-subtitle-cycle">Subtitles</button>
-            <button type="button" data-overlay-action="openMiniGuide" data-focus-id="overlay-mini-guide">Mini guide</button>
-            <button type="button" data-overlay-action="togglePlaybackOptions" data-focus-id="overlay-playback-options">Options</button>
-            <button type="button" data-overlay-action="closeTopOverlay" data-focus-id="overlay-close">Close</button>
-          </div>
-          <div class="player-osd__digit-entry" aria-label="Digit entry">
-            <button type="button" data-overlay-action="channelDigit1" data-focus-id="overlay-channel-1">1</button>
-            <button type="button" data-overlay-action="channelDigit0" data-focus-id="overlay-channel-0">0</button>
-            <button type="button" data-overlay-action="channelDigit4" data-focus-id="overlay-channel-4">4</button>
-          </div>
-          <div class="player-osd__meta">
-            <span data-osd-timecode></span>
-            <span data-osd-ends-at></span>
-            <span data-osd-buffer-text></span>
-          </div>
-          <div class="player-osd__bar" aria-hidden="true">
-            <span class="player-osd__bar-buffer" data-osd-buffer-bar></span>
-            <span class="player-osd__bar-played" data-osd-played-bar></span>
-          </div>
-        </section>
-        <section class="player-overlay mini-guide" data-overlay="miniGuide" aria-label="Mini guide" hidden>
-          <div class="mini-guide__controls">
-            <button type="button" data-overlay-action="previousMiniGuideChannel" data-focus-id="overlay-mini-previous">Channel up</button>
-            <button type="button" data-overlay-action="nextMiniGuideChannel" data-focus-id="overlay-mini-next">Channel down</button>
-          </div>
-          <div class="mini-guide__list" data-overlay-mini-guide></div>
-          <footer class="mini-guide__footer">
-            <span>Use Up/Down to select, Enter to tune.</span>
-          </footer>
-        </section>
-        <section class="player-overlay channel-number-overlay" data-overlay="channelNumber" aria-label="Channel number" hidden>
-          <span data-overlay-channel-number-value>---</span>
-          <div class="channel-number-overlay__controls">
-            <button type="button" data-overlay-action="commitChannelNumber" data-focus-id="overlay-channel-commit">Tune</button>
-            <button type="button" data-overlay-action="clearChannelNumber" data-focus-id="overlay-channel-clear">Clear</button>
-          </div>
-        </section>
-        <section class="player-overlay playback-options" data-overlay="playbackOptions" aria-label="Playback options" hidden>
-          <header class="playback-options__header">
-            <p>Playback options</p>
-            <strong data-overlay-playback-summary></strong>
-          </header>
-          <dl class="playback-options__summary-list">
-            <div><dt>Audio</dt><dd data-overlay-audio-label></dd></div>
-            <div><dt>Subtitles</dt><dd data-overlay-subtitle-label></dd></div>
-            <div><dt>Volume</dt><dd data-overlay-volume-label></dd></div>
-            <div><dt>Rate</dt><dd data-overlay-rate-label></dd></div>
-          </dl>
-          <div class="playback-options__lists">
-            <section class="playback-options__section">
-              <h4>Audio tracks</h4>
-              <div data-overlay-audio-options></div>
-            </section>
-            <section class="playback-options__section">
-              <h4>Subtitle tracks</h4>
-              <div data-overlay-subtitle-options></div>
-            </section>
-          </div>
-          <div class="playback-options__controls">
-            <button type="button" data-overlay-action="cycleAudioTrack" data-focus-id="overlay-audio-cycle">Audio</button>
-            <button type="button" data-overlay-action="cycleSubtitleTrack" data-focus-id="overlay-subtitle-cycle">Subtitles</button>
-            <button type="button" data-overlay-action="volumeDown" data-focus-id="overlay-volume-down">Volume -</button>
-            <button type="button" data-overlay-action="volumeUp" data-focus-id="overlay-volume-up">Volume +</button>
-            <button type="button" data-overlay-action="toggleMute" data-focus-id="overlay-mute">Mute</button>
-          </div>
-        </section>
-      </div>
   </div>
   <section id="screen-player" class="screen screen--active screen--player" data-screen="player" data-style-surface="screen" aria-label="Player">
-      <div class="player-quick-actions" aria-label="Player quick actions">
-        <button type="button" data-route-action="openGuide" data-focus-id="player-guide">Open guide</button>
-        <button type="button" data-route-action="openSettings" data-focus-id="player-settings">Settings</button>
-        <button type="button" data-overlay-action="toggleOsd" data-focus-id="player-osd">Player controls</button>
-        <button type="button" data-fullscreen-toggle data-focus-id="player-fullscreen" aria-pressed="false">Toggle fullscreen</button>
-      </div>
-      <aside class="setup-reminder" data-setup-reminder="player" aria-label="Channel setup reminder" hidden><span>No channels are ready yet.</span><button type="button" data-route-action="openChannelSetup">Set up channels</button></aside>
+      ${PLAYER_OVERLAY_MARKUP}
+      <aside class="setup-reminder" data-setup-reminder="player" aria-label="Channel setup reminder" hidden><span>No channels are ready yet.</span><button type="button" data-route-action="openChannelSetup" data-focus-id="player-setup-reminder">Set up channels</button></aside>
   </section>
   <section id="screen-guide" class="screen" data-screen="guide" data-style-surface="screen" aria-labelledby="screen-guide-title" hidden>
     <div class="screen__content">
@@ -142,29 +21,12 @@ const STATIC_SCREEN_MARKUP = `
       <h2 id="screen-guide-title">Guide</h2>
       <p data-workflow-primary="guide">Tonight at a glance.</p>
       <p data-workflow-secondary="guide">Use directional controls to move through time windows, channels, and programs.</p>
-      <div class="guide-controls" aria-label="Guide shell controls">
-        <button type="button" data-epg-action="previousWindow" data-focus-id="guide-window-previous">Earlier</button>
-        <button type="button" data-epg-action="nextWindow" data-focus-id="guide-window-next">Later</button>
-        <button type="button" data-epg-action="previousChannel" data-focus-id="guide-channel-previous">Channel up</button>
-        <button type="button" data-epg-action="nextChannel" data-focus-id="guide-channel-next">Channel down</button>
-        <button type="button" data-epg-action="previousProgram" data-focus-id="guide-program-previous">Previous show</button>
-        <button type="button" data-epg-action="nextProgram" data-focus-id="guide-program-next">Next show</button>
-      </div>
       <section class="guide-detail" aria-label="Selected guide program">
         <p data-epg-detail-channel></p>
         <h3 data-epg-detail-title></h3>
         <p data-epg-detail-time></p>
       </section>
-      <div class="screen-shell-state" data-shell-state="empty">
-        <span>Empty state</span>
-        <strong>No saved channels are loaded for this local setup state.</strong>
-      </div>
       <div class="epg-grid" data-epg-grid aria-label="Guide schedule grid"></div>
-      <div class="workflow-actions" data-workflow-actions="guide">
-        <button type="button" data-route-action="resumePlayer" data-focus-id="guide-watch">Watch now</button>
-        <button type="button" data-route-action="openChannelSetup" data-focus-id="guide-setup">Edit lineup</button>
-      </div>
-      <aside class="setup-reminder" data-setup-reminder="guide" aria-label="Channel setup reminder" hidden><span>Add channels to fill the Guide.</span><button type="button" data-route-action="openChannelSetup">Set up channels</button></aside>
     </div>
   </section>
   <section id="screen-settings" class="screen" data-screen="settings" data-style-surface="screen" aria-labelledby="screen-settings-title" hidden>
@@ -259,16 +121,16 @@ const STATIC_SCREEN_MARKUP = `
       </section>
       <section class="setup-owner" data-staged-owner="preview" aria-labelledby="setup-preview-title" hidden>
         <header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step">Step 2 of 3</span><div class="setup-owner__intro"><h3 id="setup-preview-title">Configure channels</h3><p>Choose how the selected libraries change your saved lineup.</p></div></header>
-        <div class="setup-owner__body"><div class="setup-strategy-split"><nav class="setup-strategy-rail" aria-label="Channel categories"><button type="button" class="selected" aria-pressed="true" data-setup-flow-action="selectBuildCategory" data-focus-id="setup-category-build"><strong>Build mode</strong><span>Append, replace, or customize</span></button></nav><section class="setup-strategy-detail"><h3>Build mode</h3><p>Choose one real Desktop build operation.</p><button type="button" data-setup-action="selectAppendBuildMode" data-focus-id="channel-strategy-build-append">Append</button><button type="button" data-setup-action="selectReplaceBuildMode" data-focus-id="channel-strategy-build-replace">Replace</button><button type="button" data-setup-flow-action="openSetupCustom" data-focus-id="channel-strategy-build-custom">Custom <small>Desktop extension</small></button></section></div><section class="setup-preview-strip"><button type="button" data-setup-flow-action="previewToggle" data-focus-id="setup-preview-toggle" aria-expanded="false">Library preview</button><div class="setup-preview-content" hidden><p data-setup-preview-status></p><div class="setup-preview-items" data-plex-items></div><div class="setup-preview-metadata" data-plex-metadata></div><button type="button" data-setup-flow-action="previewRetry" data-focus-id="setup-preview-retry" hidden>Retry preview</button></div></section></div>
+        <div class="setup-owner__body"><div class="setup-strategy-split"><nav class="setup-strategy-rail" aria-label="Channel builder categories" data-builder-categories></nav><section class="setup-strategy-detail" data-builder-detail aria-live="polite"></section></div><section class="setup-preview-strip" aria-labelledby="builder-preview-heading"><h3 id="builder-preview-heading">Plan preview</h3><p data-builder-preview-status role="status"></p><div class="builder-preview-counts" data-builder-preview-counts></div><button type="button" data-builder-action="retryPreview" data-focus-id="setup-preview-retry" hidden>Retry preview</button></section></div>
         <footer class="setup-owner__actions"><button type="button" data-setup-flow-action="previewNext" data-focus-id="setup-next">Next</button><button type="button" data-setup-flow-action="setupBack" data-focus-id="setup-back">Back</button></footer>
       </section>
       <section class="setup-owner" data-staged-owner="build" aria-labelledby="channel-setup-commit-title" hidden>
         <header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step">Step 3 of 3</span><div class="setup-owner__intro"><h3 id="channel-setup-commit-title">Review and build</h3><p>Review the planned lineup change before the atomic build starts.</p></div></header>
-        <div class="setup-owner__body setup-review-layout"><div class="setup-build-review"><div data-channel-review-list></div><div data-channel-review-impact></div><div data-channel-review-validation role="status"></div><button type="button" class="setup-replace-confirm" data-setup-flow-action="toggleReplaceConfirm" data-focus-id="setup-replace-confirm" aria-pressed="false" hidden>Confirm replacement of the saved lineup</button></div><aside class="setup-summary-card"><span>Saved lineup</span><strong data-channel-setup-enabled></strong><p><span data-channel-setup-blocks></span></p></aside></div>
+        <div class="setup-owner__body setup-review-layout"><div class="setup-build-review"><div data-builder-review-list></div><div data-builder-review-impact></div><div data-channel-review-validation role="status"></div><button type="button" data-builder-action="retryReview" data-focus-id="builder-review-retry" hidden>Retry review</button><button type="button" class="setup-replace-confirm" data-builder-action="confirmReplace" data-focus-id="builder-replace-confirm" aria-pressed="false" hidden>I understand: replace removes all existing channels, including custom channels</button></div><aside class="setup-summary-card"><span>Generated plan</span><strong data-builder-selected-count></strong><p data-builder-warning></p></aside></div>
         <footer class="setup-owner__actions"><button type="button" data-setup-flow-action="buildBack" data-focus-id="setup-back">Back</button><button type="button" data-setup-flow-action="buildConfirm" data-focus-id="setup-confirm">Build channels</button></footer>
       </section>
-      <section class="setup-owner" data-staged-owner="progress" aria-labelledby="setup-progress-title" hidden><header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step">Step 3 of 3</span><div class="setup-owner__intro"><h3 id="setup-progress-title">Building lineup</h3><p>The atomic channel operation is in progress.</p></div></header><div class="setup-owner__body setup-operation-state"><div class="setup-progress-bar" role="progressbar"><span></span></div><p>Applying selected libraries. This view can be closed without claiming to cancel the saved operation.</p></div><footer class="setup-owner__actions"><button type="button" data-setup-flow-action="progressCancel" data-focus-id="setup-progress-cancel">Cancel build view</button></footer></section>
-      <section class="setup-owner" data-staged-owner="result" aria-labelledby="setup-result-title" hidden><header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step">Step 3 of 3</span><div class="setup-owner__intro"><h3 id="setup-result-title">Lineup ready</h3><p>The saved channel summary has been refreshed.</p></div></header><div class="setup-owner__body setup-operation-state"><span class="setup-success-mark" aria-hidden="true">✓</span><p data-channel-setup-result></p></div><footer class="setup-owner__actions"><button type="button" data-setup-flow-action="resultDone" data-focus-id="setup-done">Done</button><button type="button" data-setup-flow-action="resultWatch" data-focus-id="setup-result-watch">Watch built channel</button></footer></section>
+      <section class="setup-owner" data-staged-owner="progress" aria-labelledby="setup-progress-title" hidden><header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step">Step 3 of 3</span><div class="setup-owner__intro"><h3 id="setup-progress-title">Building lineup</h3><p>Channels are prepared before one atomic apply.</p></div></header><div class="setup-owner__body setup-operation-state"><div class="setup-progress-bar" role="progressbar" aria-live="polite" data-builder-progress><span></span></div><p data-builder-progress-detail>Preparing channel plan…</p><p data-builder-cancel-status role="status"></p></div><footer class="setup-owner__actions"><button type="button" data-setup-flow-action="progressCancel" data-focus-id="setup-progress-cancel">Cancel build</button></footer></section>
+      <section class="setup-owner" data-staged-owner="result" aria-labelledby="setup-result-title" hidden><header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step">Step 3 of 3</span><div class="setup-owner__intro"><h3 id="setup-result-title" data-builder-result-title>Lineup ready</h3><p data-builder-result-intro>The saved channel summary has been refreshed.</p></div></header><div class="setup-owner__body setup-operation-state"><span class="setup-success-mark" aria-hidden="true">✓</span><p data-channel-setup-result></p></div><footer class="setup-owner__actions"><button type="button" data-setup-flow-action="resultDone" data-focus-id="setup-done">Done</button><button type="button" data-setup-flow-action="resultWatch" data-focus-id="setup-result-watch">Watch built channel</button></footer></section>
       <section class="setup-owner" data-staged-owner="recovery-error" aria-labelledby="setup-error-title" hidden><header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step" data-setup-recovery-step>Step 3 of 3</span><div class="setup-owner__intro"><h3 id="setup-error-title">Setup needs attention</h3><p>Retry the failed safe operation or return without changing the lineup.</p></div></header><div class="setup-owner__body setup-operation-state"><span class="setup-error-mark" aria-hidden="true">!</span><p data-setup-safe-error role="alert"></p></div><footer class="setup-owner__actions"><button type="button" data-setup-flow-action="recoveryRetry" data-focus-id="setup-error-retry">Retry</button><button type="button" data-setup-flow-action="setupBack" data-focus-id="setup-error-back">Back</button></footer></section>
       <section class="setup-owner custom-channel-workspace" data-staged-owner="custom-list" data-custom-channel-panel aria-labelledby="custom-channel-workspace-title" hidden>
         <header class="setup-owner__header"><h2 class="setup-owner__title">Channel Setup</h2><span class="setup-owner__step">Desktop extension</span><div class="setup-owner__intro"><h3 id="custom-channel-workspace-title">Custom channels</h3><p>Duplicate a saved channel or start with a blank channel.</p><span data-custom-channel-status></span></div></header>

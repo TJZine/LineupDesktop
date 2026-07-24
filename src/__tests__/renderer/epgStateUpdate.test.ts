@@ -1,89 +1,99 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
-
+import test from 'node:test';
 import {
+  EPG_SLOT_DURATION_MS,
+  createEpgGuideView,
   createEpgState,
+  createGuideProgramFocusId,
   updateEpgState,
-  DEFAULT_EPG_PRESENTATION_SOURCE,
   type EpgPresentationSource,
 } from '../../renderer/epg.js';
 
-test('updateEpgState retains current channel and program selection when valid', () => {
-  const initial = createEpgState();
-  const updated = updateEpgState(initial, DEFAULT_EPG_PRESENTATION_SOURCE);
+const BASE = Date.UTC(2026, 6, 15, 12, 0, 0);
+const source: EpgPresentationSource = {
+  channels: [{
+    id: 'one',
+    number: '1',
+    name: 'One',
+    programs: [{
+      id: 'program',
+      title: 'Program',
+      subtitle: '',
+      description: '',
+      showTitle: 'Program',
+      episodeLabel: '',
+      rating: '',
+      quality: [],
+      genres: [],
+      startsAtMs: BASE,
+      endsAtMs: BASE + EPG_SLOT_DURATION_MS,
+    }],
+  }],
+  nowWatching: {
+    channelId: 'one',
+    title: 'Program',
+    subtitle: '',
+    startsAtMs: BASE,
+    endsAtMs: BASE + EPG_SLOT_DURATION_MS,
+  },
+  nowMs: BASE,
+};
 
-  assert.equal(updated.selectedChannelId, initial.selectedChannelId);
-  assert.equal(updated.selectedProgramId, initial.selectedProgramId);
-  assert.equal(updated.windowStartMs, initial.windowStartMs);
+test('updateEpgState retains a valid selection and adopts the request generation', () => {
+  const initial = createEpgState(source, 2);
+  const updated = updateEpgState(initial, source, 3);
+  assert.equal(updated.selectedChannelId, 'one');
+  assert.equal(updated.selectedProgramId, 'program');
   assert.equal(updated.presentationState, 'ready');
+  assert.equal(updated.presentationGeneration, 3);
 });
 
-test('updateEpgState falls back to initial selection when selected channel is missing', () => {
-  const initial = createEpgState();
-  initial.selectedChannelId = 'non-existent-channel';
-
-  const updated = updateEpgState(initial, DEFAULT_EPG_PRESENTATION_SOURCE);
-
-  assert.notEqual(updated.selectedChannelId, 'non-existent-channel');
-  assert.equal(updated.selectedChannelId, 'channel-liminal-one');
-  assert.equal(updated.selectedProgramId, 'liminal-archive');
-  assert.equal(updated.presentationState, 'ready');
-});
-
-test('updateEpgState picks fallback program on same channel when selected program is missing', () => {
-  const initial = createEpgState();
-  initial.selectedProgramId = 'missing-program-id';
-
-  const updated = updateEpgState(initial, DEFAULT_EPG_PRESENTATION_SOURCE);
-
-  assert.equal(updated.selectedChannelId, 'channel-liminal-one');
-  assert.notEqual(updated.selectedProgramId, 'missing-program-id');
-  assert.equal(updated.selectedProgramId, 'liminal-archive');
-  assert.equal(updated.presentationState, 'ready');
-});
-
-test('updateEpgState clamps windowStartMs when it drifts out of new presentation bounds', () => {
-  const initial = createEpgState();
-  initial.windowStartMs = initial.windowStartMs + 12 * 60 * 60 * 1000; // 12 hours later
-
-  const updated = updateEpgState(initial, DEFAULT_EPG_PRESENTATION_SOURCE);
-
-  assert.equal(updated.windowStartMs, 1778619600000);
-});
-
-test('updateEpgState sets empty state when presentation contains no channels', () => {
-  const initial = createEpgState();
-  const emptyPresentation: EpgPresentationSource = {
-    channels: [],
-    nowWatching: null,
-    nowMs: DEFAULT_EPG_PRESENTATION_SOURCE.nowMs,
+test('updateEpgState replaces missing identities with the current visible schedule', () => {
+  const initial = {
+    ...createEpgState(source),
+    selectedChannelId: 'missing',
+    selectedProgramId: 'missing',
   };
-
-  const updated = updateEpgState(initial, emptyPresentation);
-
-  assert.equal(updated.selectedChannelId, '');
-  assert.equal(updated.selectedProgramId, '');
-  assert.equal(updated.presentationState, 'empty');
+  const updated = updateEpgState(initial, source);
+  assert.equal(updated.selectedChannelId, 'one');
+  assert.equal(updated.selectedProgramId, 'program');
 });
 
-test('updateEpgState sets empty state when channels contain no selectable programs', () => {
-  const initial = createEpgState();
-  const emptyProgramPresentation: EpgPresentationSource = {
+test('periodic replacement keeps the selected channel and focuses its deterministic surviving program', () => {
+  const selected = {
+    ...createEpgState(source),
+    selectedChannelId: 'two',
+    selectedProgramId: 'removed',
+  };
+  const replacement: EpgPresentationSource = {
+    ...source,
     channels: [
+      source.channels[0]!,
       {
-        id: initial.selectedChannelId,
-        number: '1',
-        name: 'Empty Channel',
-        programs: [],
+        id: 'two', number: '2', name: 'Two', programs: [{
+          ...source.channels[0]!.programs[0]!,
+          id: 'survivor', title: 'Survivor', showTitle: 'Survivor',
+        }],
       },
     ],
-    nowWatching: null,
-    nowMs: DEFAULT_EPG_PRESENTATION_SOURCE.nowMs,
   };
+  const updated = updateEpgState(selected, replacement, 9);
+  const view = createEpgGuideView(updated, replacement);
+  assert.equal(updated.selectedChannelId, 'two');
+  assert.equal(updated.selectedProgramId, 'survivor');
+  assert.equal(view.selectedProgram?.focusId, createGuideProgramFocusId('two', 'survivor'));
+});
 
-  const updated = updateEpgState(initial, emptyProgramPresentation);
-
-  assert.equal(updated.selectedChannelId, '');
-  assert.equal(updated.selectedProgramId, '');
-  assert.equal(updated.presentationState, 'empty');
+test('updateEpgState distinguishes no channels from channels without visible programs', () => {
+  const initial = createEpgState(source);
+  const noChannels = updateEpgState(initial, { channels: [], nowWatching: null, nowMs: BASE });
+  assert.equal(noChannels.presentationState, 'empty-channels');
+  assert.equal(noChannels.selectedChannelId, '');
+  const noPrograms = updateEpgState(initial, {
+    channels: [{ id: 'empty', number: '2', name: 'Empty', programs: [] }],
+    nowWatching: null,
+    nowMs: BASE,
+  });
+  assert.equal(noPrograms.presentationState, 'empty-programs');
+  assert.equal(noPrograms.selectedProgramId, '');
 });

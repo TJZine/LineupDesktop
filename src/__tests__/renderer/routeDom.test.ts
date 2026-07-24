@@ -3,13 +3,55 @@ import assert from 'node:assert/strict';
 
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import type { ChannelRuntimeRendererState } from '../../renderer/channelRuntimeState.js';
-import { createRendererSafePlayerSnapshot, createPlayerOverlayState } from '../../renderer/overlays.js';
-import { setEpgPresentationState } from '../../renderer/epg.js';
+import { createPlayerOverlayState, openOsd, openPlaybackOptions } from '../../renderer/overlays.js';
+import { createEmptyPlayerSnapshot } from '../../renderer/playerOverlayPresentation.js';
+import { setEpgPresentationState, type EpgPresentationSource } from '../../renderer/epg.js';
 import { renderRouteDom, renderWorkflowDom } from '../../renderer/routeDom.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
-import { applyWorkflowChannelSetupAction, createWorkflowState } from '../../renderer/workflow.js';
+import { applyWorkflowAction, applyWorkflowChannelSetupAction, createWorkflowState as createWorkflowStateCore } from '../../renderer/workflow.js';
 import { renderShellDom, type ShellDomBindings } from '../../renderer/shell/shellDom.js';
 import { beginFullscreenRequest, rejectFullscreenRequest } from '../../renderer/shell/shellState.js';
+
+const GUIDE_BASE = Date.UTC(2026, 4, 12, 20, 0, 0);
+function createRendererSafePlayerSnapshot() {
+  return {
+    ...createEmptyPlayerSnapshot(),
+    requestId: 'route-dom-player',
+    status: 'playing' as const,
+    playing: true,
+    media: { id: 'route-dom-media', title: 'The Midnight Archive', subtitle: 'Signal Lost', durationMs: 3_600_000 },
+    durationMs: 3_600_000,
+    positionMs: 720_000,
+    selectedAudioTrackId: 'audio-main',
+    tracks: [
+      { id: 'audio-main', kind: 'audio' as const, label: 'Main', selected: true, available: true },
+      { id: 'audio-alt', kind: 'audio' as const, label: 'Alt', selected: false, available: true },
+      { id: 'sub-one', kind: 'subtitle' as const, label: 'English', selected: false, available: true },
+    ],
+  };
+}
+const GUIDE_PRESENTATION: EpgPresentationSource = {
+  channels: [{
+    id: 'channel-liminal-one', number: '101', name: 'Liminal One', programs: [{
+      id: 'liminal-archive', title: 'The Midnight Archive', subtitle: 'Signal Lost',
+      description: 'Archive description.', showTitle: 'The Midnight Archive', episodeLabel: 'S2 E4',
+      rating: 'TV-14', quality: ['HD'], genres: ['Drama'],
+      startsAtMs: GUIDE_BASE, endsAtMs: GUIDE_BASE + 60 * 60 * 1000,
+    }],
+  }],
+  nowWatching: {
+    title: 'The Midnight Archive', subtitle: 'Signal Lost', channelId: 'channel-liminal-one',
+    startsAtMs: GUIDE_BASE, endsAtMs: GUIDE_BASE + 60 * 60 * 1000,
+  },
+  nowMs: GUIDE_BASE + 30 * 60 * 1000,
+};
+
+function createWorkflowState(
+  route: Parameters<typeof createWorkflowStateCore>[0] = 'player',
+  guidePresentation: EpgPresentationSource = GUIDE_PRESENTATION,
+) {
+  return createWorkflowStateCore(route, guidePresentation);
+}
 
 class ElementDouble {
   hidden = false;
@@ -306,8 +348,20 @@ test('route DOM renders guide states and focused program details', () => {
     assert.match(renderedText, /Guide ready/u);
     assert.match(renderedText, /The Midnight Archive/u);
     assert.match(renderedText, /S2 E4/u);
+    assert.equal(grid.getAttribute('role'), 'grid');
+    const readyRows = findElementsByRole(grid, 'row');
+    assert.equal(readyRows.length, 2);
+    const headerRow = readyRows[0];
+    assert.ok(headerRow);
+    const columnHeaders = findElementsByRole(headerRow, 'columnheader');
+    assert.ok(columnHeaders.length > 1);
+    assert.equal(columnHeaders[0]?.getAttribute('aria-label'), 'Channel');
+    const readyRow = readyRows[1];
+    assert.ok(readyRow);
+    assert.equal(findElementsByRole(readyRow, 'rowheader').length, 1);
+    assert.equal(findElementsByRole(readyRow, 'gridcell').length, 1);
 
-    for (const state of ['loading', 'empty', 'error'] as const) {
+    for (const state of ['loading', 'empty-channels', 'empty-programs', 'error'] as const) {
       const stateGrid = new ElementDouble();
       const stateTitle = new ElementDouble();
       const currentProgram = new ElementDouble();
@@ -327,12 +381,67 @@ test('route DOM renders guide states and focused program details', () => {
       );
 
       const stateText = collectText(stateGrid);
-      assert.match(stateText, state === 'loading' ? /Loading guide/u : state === 'empty' ? /No channels available/u : /Guide unavailable/u);
+      assert.equal(stateGrid.getAttribute('role'), null);
+      assert.match(stateText, state === 'loading' ? /Loading guide/u : state === 'empty-channels' ? /No channels available/u : state === 'empty-programs' ? /No programs in this window/u : /Guide unavailable/u);
       assert.doesNotMatch(stateText, /Signal Warmup|After Hours Cinema|Pilot Block|Roundtable/u);
-      assert.match(stateTitle.textContent, state === 'loading' ? /Loading guide/u : state === 'empty' ? /No channels available/u : /Guide unavailable/u);
-      assert.equal(currentProgram.textContent, state === 'loading' ? 'Loading guide' : state === 'empty' ? 'No channels available' : 'Guide unavailable');
-      assert.match(currentWindow.textContent, state === 'loading' ? /Schedule rows are preparing/u : state === 'empty' ? /Add channels from setup/u : /could not be shown/u);
+      assert.match(stateTitle.textContent, state === 'loading' ? /Loading guide/u : state === 'empty-channels' ? /No channels available/u : state === 'empty-programs' ? /No programs in this window/u : /Guide unavailable/u);
+      assert.equal(currentProgram.textContent, state === 'loading' ? 'Loading guide' : state === 'empty-channels' ? 'No channels available' : state === 'empty-programs' ? 'No programs in this window' : 'Guide unavailable');
+      assert.match(currentWindow.textContent, state === 'loading' ? /Schedule rows are preparing/u : state === 'empty-channels' ? /Add channels from setup/u : state === 'empty-programs' ? /Refresh the schedule/u : /could not be shown/u);
     }
+  } finally {
+    restoreDocument(originalDocument);
+  }
+});
+
+test('route DOM suppresses now-playing chrome and summary when ready data has no now-watching value', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    createElement: (tagName: string) => new ElementDouble(tagName),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const grid = new ElementDouble();
+    const currentChannel = new ElementDouble();
+    const currentProgram = new ElementDouble();
+    const currentWindow = new ElementDouble();
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.epgGridElement = grid as unknown as HTMLElement;
+    dom.currentChannelElement = currentChannel as unknown as HTMLElement;
+    dom.currentProgramElement = currentProgram as unknown as HTMLElement;
+    dom.currentWindowElement = currentWindow as unknown as HTMLElement;
+
+    const missingNowWatching = createWorkflowState('guide', { ...GUIDE_PRESENTATION, nowWatching: null });
+    renderWorkflowDom(
+      missingNowWatching,
+      createPlayerOverlayState(),
+      createRendererSafePlayerSnapshot(),
+      dom,
+    );
+
+    assert.equal(grid.getAttribute('role'), 'grid');
+    assert.doesNotMatch(collectText(grid), /NOW PLAYING/u);
+    assert.equal(currentChannel.textContent, '');
+    assert.equal(currentProgram.textContent, '');
+    assert.equal(currentWindow.textContent, '');
+
+    renderWorkflowDom(
+      { ...missingNowWatching, epg: setEpgPresentationState(missingNowWatching.epg, 'loading') },
+      createPlayerOverlayState(),
+      createRendererSafePlayerSnapshot(),
+      dom,
+    );
+    assert.equal(grid.getAttribute('role'), null);
+    assert.doesNotMatch(collectText(grid), /NOW PLAYING/u);
   } finally {
     restoreDocument(originalDocument);
   }
@@ -370,6 +479,13 @@ test('route DOM renders player OSD fields and playback option rows', () => {
     dom.overlayAudioOptionsElement = new ElementDouble() as unknown as HTMLElement;
     dom.overlaySubtitleOptionsElement = new ElementDouble() as unknown as HTMLElement;
     dom.overlayPlaybackSummaryElement = new ElementDouble() as unknown as HTMLElement;
+    dom.overlayMiniGuideErrorElement = new ElementDouble() as unknown as HTMLElement;
+    dom.overlayMiniGuideElement = new ElementDouble() as unknown as HTMLElement;
+    dom.overlayPlayerErrorElement = new ElementDouble() as unknown as HTMLElement;
+    dom.overlayPlayerRetryButton = new ElementDouble('button') as unknown as HTMLButtonElement;
+    dom.overlayPlayerRetryButton.dataset.overlayAction = 'retryPlayer';
+    dom.overlayActionButtons = [dom.overlayPlayerRetryButton];
+    dom.overlayPlayerGuideButton = new ElementDouble('button') as unknown as HTMLButtonElement;
 
     const snapshot = {
       ...createRendererSafePlayerSnapshot(),
@@ -400,11 +516,24 @@ test('route DOM renders player OSD fields and playback option rows', () => {
       },
     };
 
+    const presentation = {
+      channels: [{
+        id: 'channel-one', number: '101', name: 'Channel One',
+        currentProgram: { id: 'program-one', title: 'Runtime program', startsAtMs: 0, endsAtMs: 2_000 },
+        nextProgram: { id: 'program-two', title: 'Runtime next', startsAtMs: 2_000, endsAtMs: 3_000 },
+      }],
+      currentChannelId: 'channel-one', playerSnapshot: snapshot, nowMs: 1_000,
+    };
+    const osd = openOsd(createPlayerOverlayState(presentation), snapshot);
+    const audioOptions = openPlaybackOptions(osd, snapshot, 'audio');
     renderWorkflowDom(
       createWorkflowState('player'),
-      createPlayerOverlayState(),
+      audioOptions,
       snapshot,
       dom,
+      undefined,
+      null,
+      presentation,
     );
 
     const osdText = [
@@ -425,36 +554,126 @@ test('route DOM renders player OSD fields and playback option rows', () => {
 
     assert.match(osdText, /PLAYING/u);
     assert.match(osdText, /The Midnight Archive/u);
-    assert.match(osdText, /Episode 4 - Signal Lost/u);
-    assert.match(osdText, /Audio: Main stereo/u);
+    assert.match(osdText, /Signal Lost/u);
+    assert.match(osdText, /Audio: Main/u);
     assert.match(osdText, /Subs: Off/u);
     assert.match(osdText, /12:00 \/ 60:00/u);
-    assert.match(osdText, /Next on 101: After Hours Cinema/u);
-    assert.match(optionsText, /Direct Play/u);
-    assert.match(optionsText, /AAC/u);
-    assert.match(optionsText, /External/u);
+    assert.match(osdText, /Runtime next/u);
+    assert.match(optionsText, /Audio tracks/u);
 
     const audioRows = (dom.overlayAudioOptionsElement as unknown as ElementDouble).children;
     const subtitleRows = (dom.overlaySubtitleOptionsElement as unknown as ElementDouble).children;
     const audioMain = audioRows.find((row) => row.dataset.trackId === 'audio-main');
     const audioUnavailable = audioRows.find((row) => row.dataset.trackId === 'audio-unavailable');
-    const subtitleEnglish = subtitleRows.find((row) => row.dataset.trackId === 'subtitle-english');
-    const subtitleUnavailable = subtitleRows.find((row) => row.dataset.trackId === 'subtitle-unavailable');
 
     assert.equal(audioMain?.tagName, 'BUTTON');
     assert.equal(audioMain?.type, 'button');
     assert.equal(audioMain?.dataset.focusId, 'overlay-audio-track-audio-main');
     assert.equal(audioMain?.disabled, false);
-    assert.equal(audioMain?.getAttribute('aria-disabled'), 'false');
-    assert.equal(audioUnavailable?.tagName, 'BUTTON');
-    assert.equal(audioUnavailable?.disabled, true);
-    assert.equal(audioUnavailable?.getAttribute('aria-disabled'), 'true');
-    assert.equal(Object.hasOwn(audioUnavailable?.dataset ?? {}, 'focusId'), false);
-    assert.equal(subtitleEnglish?.tagName, 'BUTTON');
-    assert.equal(subtitleEnglish?.dataset.focusId, 'overlay-subtitle-track-subtitle-english');
-    assert.equal(subtitleUnavailable?.tagName, 'BUTTON');
-    assert.equal(subtitleUnavailable?.disabled, true);
-    assert.equal(subtitleUnavailable?.getAttribute('aria-disabled'), 'true');
+    assert.equal(audioMain?.getAttribute('aria-busy'), 'false');
+    assert.equal(audioMain?.getAttribute('aria-pressed'), 'true');
+    assert.equal(audioMain?.getAttribute('aria-disabled'), null);
+    assert.equal(audioMain?.dataset.overlayBusyFocusCustody, undefined);
+    assert.equal(audioUnavailable, undefined);
+    assert.equal(subtitleRows.length, 0);
+    assert.equal((dom.overlayAudioOptionsElement as unknown as ElementDouble).hidden, false);
+    assert.equal((dom.overlayAudioOptionsElement as unknown as { inert: boolean }).inert, false);
+    assert.equal((dom.overlayAudioOptionsElement as unknown as ElementDouble).getAttribute('aria-hidden'), 'false');
+    assert.equal((dom.overlaySubtitleOptionsElement as unknown as ElementDouble).hidden, true);
+    assert.equal((dom.overlaySubtitleOptionsElement as unknown as { inert: boolean }).inert, true);
+    assert.equal((dom.overlaySubtitleOptionsElement as unknown as ElementDouble).getAttribute('aria-hidden'), 'true');
+
+    renderWorkflowDom(
+      createWorkflowState('player'),
+      { ...audioOptions, pendingTrackFocusId: 'overlay-audio-track-audio-main' },
+      snapshot,
+      dom,
+      undefined,
+      null,
+      presentation,
+    );
+    const busyAudioMain = (dom.overlayAudioOptionsElement as unknown as ElementDouble).children
+      .find((row) => row.dataset.trackId === 'audio-main');
+    assert.equal(busyAudioMain?.disabled, false);
+    assert.equal(busyAudioMain?.getAttribute('aria-disabled'), 'true');
+    assert.equal(busyAudioMain?.getAttribute('aria-busy'), 'true');
+    assert.equal(busyAudioMain?.dataset.overlayBusyFocusCustody, 'true');
+
+    const errorSnapshot = {
+      ...snapshot, status: 'error' as const, playing: false,
+      lastError: { code: 'FAILED', category: 'engine-failure' as const, message: 'Original failure.', recoverable: true, retryable: true },
+    };
+    renderWorkflowDom(
+      createWorkflowState('player'),
+      { ...createPlayerOverlayState(presentation), retryPending: true, retryError: 'Retry failed safely.' },
+      errorSnapshot,
+      dom,
+      undefined,
+      null,
+      { ...presentation, playerSnapshot: errorSnapshot },
+    );
+    assert.equal(dom.overlayPlayerErrorElement.textContent, 'Retry failed safely.');
+    assert.equal(dom.overlayPlayerRetryButton.disabled, false);
+    assert.equal(dom.overlayPlayerRetryButton.getAttribute('aria-disabled'), 'true');
+    assert.equal(dom.overlayPlayerRetryButton.getAttribute('aria-busy'), 'true');
+    assert.equal(dom.overlayPlayerRetryButton.dataset.overlayBusyFocusCustody, 'true');
+    assert.equal(dom.overlayPlayerGuideButton.hidden, false);
+
+    renderWorkflowDom(
+      createWorkflowState('player'),
+      {
+        ...createPlayerOverlayState(presentation),
+        activeOverlayId: 'miniGuide',
+        miniGuideError: 'Mini failed safely.',
+        pendingTuneChannelId: 'channel-one',
+      },
+      snapshot,
+      dom,
+      undefined,
+      null,
+      presentation,
+    );
+    assert.equal(dom.overlayMiniGuideErrorElement.textContent, 'Mini failed safely.');
+    const busyMini = (dom.overlayMiniGuideElement as unknown as ElementDouble).children
+      .find((row) => row.dataset.overlayChannelId === 'channel-one');
+    assert.equal(busyMini?.disabled, false);
+    assert.equal(busyMini?.getAttribute('aria-disabled'), 'true');
+    assert.equal(busyMini?.getAttribute('aria-busy'), 'true');
+    assert.equal(busyMini?.getAttribute('aria-current'), 'true');
+    assert.equal(busyMini?.dataset.overlayBusyFocusCustody, 'true');
+
+    for (const count of [1, 2, 4]) {
+      const shortChannels = Array.from({ length: count }, (_, index) => ({
+        id: `short-${index + 1}`,
+        number: String(index + 1),
+        name: `Short ${index + 1}`,
+        currentProgram: { id: `short-program-${index + 1}`, title: `Short program ${index + 1}`, startsAtMs: 0, endsAtMs: 2_000 },
+      }));
+      const selectedId = shortChannels.at(-1)?.id ?? null;
+      const shortPresentation = {
+        ...presentation,
+        channels: shortChannels,
+        currentChannelId: selectedId,
+      };
+      renderWorkflowDom(
+        createWorkflowState('player'),
+        {
+          ...createPlayerOverlayState(shortPresentation),
+          activeOverlayId: 'miniGuide',
+          miniGuideSelectedChannelId: selectedId,
+        },
+        snapshot,
+        dom,
+        undefined,
+        null,
+        shortPresentation,
+      );
+      const rows: readonly ElementDouble[] = (dom.overlayMiniGuideElement as unknown as ElementDouble).children;
+      const focusIds = rows.map((row) => row.dataset.focusId);
+      assert.equal(rows.length, count, `${String(count)} rendered channel rows`);
+      assert.equal(new Set(focusIds).size, count, `${String(count)} unique focus ids`);
+      assert.equal(rows.filter((row) => row.getAttribute('aria-current') === 'true').length, 1, `${String(count)} current rows`);
+    }
   } finally {
     restoreDocument(originalDocument);
   }
@@ -762,6 +981,104 @@ test('static product route visible text avoids internal implementation-status te
   assert.doesNotMatch(root.innerHTML, /data-channel-setup-fixture-status/u);
 });
 
+test('static player DOM keeps native presentation beside the route-owned overlay stack', () => {
+  const root = { innerHTML: '', querySelector: () => null };
+  const documentDouble = {
+    querySelector: (selector: string) => selector === '[data-static-screen-root]' ? root : null,
+  };
+
+  mountStaticRendererDom(documentDouble as unknown as Document);
+
+  const presentationStart = root.innerHTML.indexOf('data-player-presentation-surface');
+  const playerStart = root.innerHTML.indexOf('id="screen-player"');
+  const overlayStart = root.innerHTML.indexOf('data-overlay-stack');
+  assert.ok(presentationStart >= 0 && playerStart > presentationStart && overlayStart > playerStart);
+  assert.match(
+    root.innerHTML.slice(presentationStart, overlayStart),
+    /<\/div>\s*<section id="screen-player"[^>]*>\s*<div class="overlay-stack"/u,
+  );
+  assert.match(root.innerHTML, /data-overlay="playbackOptions"[^>]*role="dialog"[^>]*aria-modal="true"/u);
+  assert.match(root.innerHTML, /class="channel-number-overlay__label">CH</u);
+  assert.match(root.innerHTML, /data-overlay-player-loading-label/u);
+  assert.doesNotMatch(
+    root.innerHTML,
+    /poster-placeholder|clear-logo-placeholder|icon-placeholder|player-quick-actions|Sleep|Volume|Playback rate|Quality/u,
+  );
+  assert.equal((root.innerHTML.match(/class="playback-options__section"/gu) ?? []).length, 1);
+  assert.match(
+    root.innerHTML,
+    /data-setup-reminder="player"[\s\S]*data-route-action="openChannelSetup"[\s\S]*data-focus-id="player-setup-reminder"/u,
+  );
+});
+
+test('player setup reminder is focusable for zero channels and hidden for a configured lineup', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const reminder = new ElementDouble();
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    querySelectorAll: (selector: string) => selector === '[data-setup-reminder]' ? [reminder] : [],
+  };
+  Object.defineProperty(globalThis, 'document', { value: documentDouble, configurable: true });
+
+  try {
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(), overlays: [], overlayActions: [],
+    });
+    const configured = configuredChannelRuntimeState();
+    if (configured.summary === null) throw new Error('Configured fixture requires a summary.');
+    renderWorkflowDom(
+      createWorkflowState('player'),
+      createPlayerOverlayState(),
+      createRendererSafePlayerSnapshot(),
+      dom,
+      {
+        ...configured,
+        summary: {
+          ...configured.summary,
+          status: 'not-configured', channelCount: 0, channels: [], channelNumbers: [],
+          currentChannelId: null, currentChannelNumber: null, currentChannelName: null,
+        },
+      },
+    );
+    assert.equal(reminder.hidden, false);
+    assert.equal(reminder.getAttribute('aria-hidden'), 'false');
+
+    renderWorkflowDom(
+      createWorkflowState('player'),
+      createPlayerOverlayState(),
+      createRendererSafePlayerSnapshot(),
+      dom,
+      configuredChannelRuntimeState(),
+    );
+    assert.equal(reminder.hidden, true);
+    assert.equal(reminder.getAttribute('aria-hidden'), 'true');
+
+    const recoveryStates: ChannelRuntimeRendererState[] = [
+      { ...configured, summary: null },
+      { ...configured, summary: null, errorText: 'Channel setup status could not be loaded.' },
+      {
+        ...configured,
+        summary: { ...configured.summary, channelCount: 2 },
+      },
+    ];
+    const resumedPlayer = applyWorkflowAction(createWorkflowState('settings'), 'resumePlayer');
+    for (const recoveryState of recoveryStates) {
+      renderWorkflowDom(
+        resumedPlayer,
+        createPlayerOverlayState(),
+        createRendererSafePlayerSnapshot(),
+        dom,
+        recoveryState,
+      );
+      assert.equal(reminder.hidden, true);
+      assert.equal(reminder.getAttribute('aria-hidden'), 'true');
+    }
+  } finally {
+    restoreDocument(originalDocument);
+  }
+});
+
 const PRODUCT_ROUTE_INTERNAL_COPY_PATTERN =
   /\bRD-\d+[A-Z]?\b|future RD|\bruntime\b|runtime wiring|scheduler wiring|later runtime pass|pending runtime|not implemented|implementation status|roadmap|\bfixture\b|\bfake\b|\bdebug\b|\bsmoke\b|\bproof\b|\bscaffold\b|\bdraft(?:\b|\s+(?:channel|programming|source|controls|setup))|not proven here|live Plex/iu;
 
@@ -776,6 +1093,13 @@ function readVisibleTextFromMarkup(markup: string): string {
 
 function collectText(element: ElementDouble): string {
   return [element.textContent, ...element.children.map(collectText)].join(' ');
+}
+
+function findElementsByRole(element: ElementDouble, role: string): ElementDouble[] {
+  return [
+    ...(element.getAttribute('role') === role ? [element] : []),
+    ...element.children.flatMap((child) => findElementsByRole(child, role)),
+  ];
 }
 
 function restoreDocument(originalDocument: Document | undefined): void {

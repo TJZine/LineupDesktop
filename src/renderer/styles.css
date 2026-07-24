@@ -1,6 +1,8 @@
 @import "./styles/base.css";
 @import "./styles/shell.css";
 @import "./styles/player-overlays.css";
+@import "./styles/player-overlay-information.css";
+@import "./styles/player-overlay-menus.css";
 @import "./styles/guide-epg.css";
 @import "./styles/workflow-screens.css";
 @import "./styles/settings.css";

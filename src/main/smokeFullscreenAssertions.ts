@@ -1,7 +1,27 @@
-import { app, type BrowserWindow } from 'electron';
+import electron, { type BrowserWindow } from 'electron';
+
+const { app } = electron;
 
 const FOCUS_TIMEOUT_MS = 1000;
 const FULLSCREEN_TRANSITION_TIMEOUT_MS = 5000;
+const FULLSCREEN_STATE_POLL_MS = 25;
+
+export interface FullscreenObservationWindow {
+  isDestroyed(): boolean;
+  isFullScreen(): boolean;
+  on(event: 'enter-full-screen' | 'leave-full-screen', listener: () => void): unknown;
+  off(event: 'enter-full-screen' | 'leave-full-screen', listener: () => void): unknown;
+}
+
+export interface FullscreenObservationScheduler<TimerHandle> {
+  setTimeout(callback: () => void, delayMs: number): TimerHandle;
+  clearTimeout(handle: TimerHandle): void;
+}
+
+const fullscreenObservationScheduler: FullscreenObservationScheduler<ReturnType<typeof globalThis.setTimeout>> = {
+  setTimeout: (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
+  clearTimeout: (handle) => globalThis.clearTimeout(handle),
+};
 
 interface FullscreenTransitionResult {
   result: unknown;
@@ -33,14 +53,11 @@ export async function assertFullscreenContinuity(
           const element = document.querySelector(selector);
           return element instanceof HTMLElement ? Number.parseInt(getComputedStyle(element).zIndex, 10) || 0 : null;
         };
-        const playerOsdButton = document.querySelector('[data-focus-id="player-osd"]');
         if (document.documentElement.dataset.activeRoute !== 'player') failures.push('fullscreen route continuity');
-        const activePlayerControl = document.activeElement instanceof HTMLButtonElement
-          && document.activeElement.dataset.focusId?.startsWith('player-') === true
-          && document.activeElement.tabIndex === 0;
-        if (!(playerOsdButton instanceof HTMLButtonElement) || !activePlayerControl) {
-          failures.push('fullscreen focus continuity');
-        }
+        const presentation = document.querySelector('[data-player-presentation-surface]');
+        if (!(presentation instanceof HTMLElement) || presentation.tabIndex !== -1) failures.push('fullscreen native presentation continuity');
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && active.closest('[hidden], [inert], [aria-hidden="true"]') !== null) failures.push('fullscreen hidden focus');
         const presentationZ = z('[data-player-presentation-surface]');
         const screenZ = z('[data-screen="player"]');
         const overlayZ = z('[data-overlay-stack]');
@@ -67,7 +84,7 @@ export async function assertFullscreenContinuity(
     } catch (error) {
       failures.push('fullscreen off ' + formatSmokeError(error));
     }
-    if (isFullscreenState(window, true) && !(await waitForFullscreenState(window, false))) {
+    if (isFullscreenState(window, true) && !(await waitForFullscreenState(window, false, fullscreenObservationScheduler))) {
       failures.push('fullscreen leave BrowserWindow state');
     }
   }
@@ -182,7 +199,7 @@ async function setRendererFullscreenAndWait(
   window: BrowserWindow,
   enabled: boolean,
 ): Promise<FullscreenTransitionResult> {
-  const transition = waitForFullscreenState(window, enabled);
+  const transition = waitForFullscreenState(window, enabled, fullscreenObservationScheduler);
   const result = await setRendererFullscreen(window, enabled);
   const observed = await transition;
   return { result, observed };
@@ -199,31 +216,56 @@ function isExpectedFullscreenResult(result: unknown, enabled: boolean): boolean 
   return envelope.ok === true && typeof value === 'object' && value?.enabled === enabled;
 }
 
-function waitForFullscreenState(window: BrowserWindow, enabled: boolean): Promise<boolean> {
+export function waitForFullscreenState<TimerHandle>(
+  window: FullscreenObservationWindow,
+  enabled: boolean,
+  scheduler: FullscreenObservationScheduler<TimerHandle>,
+): Promise<boolean> {
   if (window.isDestroyed() || isFullscreenState(window, enabled)) {
     return Promise.resolve(!window.isDestroyed());
   }
   return new Promise((resolve) => {
     let completed = false;
+    let eventObserved = false;
+    let stateObserved = false;
+    let pollTimer: TimerHandle | null = null;
+    let deadlineTimer: TimerHandle | null = null;
+    const eventName = enabled ? 'enter-full-screen' : 'leave-full-screen';
     const finish = (observed: boolean): void => {
       if (completed) return;
       completed = true;
-      globalThis.clearTimeout(timeout);
-      if (enabled) window.off('enter-full-screen', onTransition);
-      else window.off('leave-full-screen', onTransition);
+      if (pollTimer !== null) scheduler.clearTimeout(pollTimer);
+      if (deadlineTimer !== null) scheduler.clearTimeout(deadlineTimer);
+      pollTimer = null;
+      deadlineTimer = null;
+      window.off(eventName, onTransition);
       resolve(observed);
     };
-    const onTransition = (): void => finish(!window.isDestroyed() && isFullscreenState(window, enabled));
-    const timeout = setTimeout(
-      () => finish(!window.isDestroyed() && isFullscreenState(window, enabled)),
-      FULLSCREEN_TRANSITION_TIMEOUT_MS,
-    );
-    if (enabled) window.on('enter-full-screen', onTransition);
-    else window.on('leave-full-screen', onTransition);
+    const reconcile = (): void => {
+      if (window.isDestroyed()) { finish(false); return; }
+      stateObserved ||= isFullscreenState(window, enabled);
+      if (eventObserved && stateObserved) finish(true);
+    };
+    const poll = (): void => {
+      pollTimer = null;
+      reconcile();
+      if (!completed) pollTimer = scheduler.setTimeout(poll, FULLSCREEN_STATE_POLL_MS);
+    };
+    const onTransition = (): void => {
+      eventObserved = true;
+      reconcile();
+    };
+    window.on(eventName, onTransition);
+    deadlineTimer = scheduler.setTimeout(() => {
+      deadlineTimer = null;
+      reconcile();
+      if (!completed) finish(false);
+    }, FULLSCREEN_TRANSITION_TIMEOUT_MS);
+    pollTimer = scheduler.setTimeout(poll, FULLSCREEN_STATE_POLL_MS);
   });
 }
 
-function isFullscreenState(window: BrowserWindow, enabled: boolean): boolean {
+function isFullscreenState(window: Pick<FullscreenObservationWindow, 'isFullScreen'>, enabled: boolean): boolean {
   return window.isFullScreen() === enabled;
 }
 

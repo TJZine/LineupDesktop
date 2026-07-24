@@ -7,6 +7,9 @@ import {
   assertRendererCloseLifecycle,
 } from './smokeFullscreenAssertions.js';
 import { GUIDE_SMOKE_ASSERTIONS_SOURCE } from './smokeGuideAssertions.js';
+import { evaluateSetupSmokeProjection } from './smokeSetupAssertions.js';
+
+const SETUP_SMOKE_EVALUATOR_SOURCE = `(${evaluateSetupSmokeProjection.toString()})`;
 
 const PACKAGE_ONE_GUIDE_SMOKE_ASSERTIONS_SOURCE = GUIDE_SMOKE_ASSERTIONS_SOURCE.replace(
   `      const guideButton = document.querySelector('[data-route-button="guide"]');
@@ -17,6 +20,13 @@ const PACKAGE_ONE_GUIDE_SMOKE_ASSERTIONS_SOURCE = GUIDE_SMOKE_ASSERTIONS_SOURCE.
       }`,
   `      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));`,
+).replace(
+  `      if (!(offRouteOverlayAction instanceof HTMLButtonElement) || !offRouteOverlayAction.disabled) {
+        failures.push('off-route overlay action disabled');
+      }`,
+  `      if (offRouteOverlayAction instanceof HTMLButtonElement && !offRouteOverlayAction.disabled) {
+        failures.push('off-route overlay action enabled');
+      }`,
 );
 
 export interface ShellContainmentCounters {
@@ -46,13 +56,40 @@ export async function runSmokeAssertions(
         Function('return 1')();
         failures.push('csp unsafe eval');
       } catch {}
+      const initialSetupScreen = document.querySelector('[data-screen="channelSetup"]');
+      const initialAuthOwner = document.querySelector('[data-onboarding-owner="auth-link-code"]');
+      const initialPlayerScreen = document.querySelector('[data-screen="player"]');
+      const initialPlayerPresentation = document.querySelector('[data-player-presentation-surface]');
+      if (document.documentElement.dataset.activeRoute !== 'channelSetup') failures.push('isolated startup route');
+      if (!(initialSetupScreen instanceof HTMLElement) || initialSetupScreen.hidden) failures.push('isolated setup visible');
+      if (!(initialAuthOwner instanceof HTMLElement) || initialAuthOwner.hidden) failures.push('isolated auth link code visible');
+      if (!(initialPlayerScreen instanceof HTMLElement) || !initialPlayerScreen.hidden) failures.push('isolated player hidden');
+      if (!(initialPlayerPresentation instanceof HTMLElement) || !initialPlayerPresentation.hidden) failures.push('isolated presentation hidden');
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const recoveryCategory = document.querySelector('[data-focus-id="settings-category-recovery"]');
+      if (document.documentElement.dataset.activeRoute !== 'settings') failures.push('isolated settings navigation');
+      if (!(recoveryCategory instanceof HTMLButtonElement)) failures.push('settings recovery category');
+      else recoveryCategory.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const settingsPlayer = document.querySelector('[data-focus-id="settings-player"]');
+      if (!(recoveryCategory instanceof HTMLButtonElement) || !recoveryCategory.classList.contains('is-active')) {
+        failures.push('settings recovery category active');
+      }
+      if (!(settingsPlayer instanceof HTMLButtonElement) || settingsPlayer.dataset.routeAction !== 'resumePlayer') {
+        failures.push('settings resume player action');
+      } else settingsPlayer.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      if (document.documentElement.dataset.activeRoute !== 'player') failures.push('isolated player activation');
+
       const rootStyle = getComputedStyle(document.documentElement);
       const appShell = document.querySelector('[data-style-surface="app-shell"]');
       const screenRoot = document.querySelector('[data-static-screen-root]');
       const screenStack = document.querySelector('[data-static-screens-mounted]');
       const styledPlayerScreen = document.querySelector('[data-screen="player"]');
       const playerSurface = document.querySelector('.player-surface');
-      const playerFocusButton = document.querySelector('[data-focus-id="player-fullscreen"]');
+      const playerFocusButton = document.querySelector('[data-focus-id="overlay-player-retry"]');
       const stylesheetTexts = [];
       for (const sheet of Array.from(document.styleSheets)) {
         try {
@@ -381,67 +418,45 @@ export async function runSmokeAssertions(
         failures.push('channel setup route activation');
       }
       if (!(setupScreen instanceof HTMLElement) || setupScreen.hidden) failures.push('channel setup screen visible');
-      const plexRuntimePanel = document.querySelector('[data-plex-runtime-panel]');
-      const channelSetupCommit = document.querySelector('.channel-setup-commit');
-      const plexActionButtons = Array.from(document.querySelectorAll('[data-plex-action]'));
-      const channelCommitButtons = Array.from(document.querySelectorAll('[data-channel-commit-action]'));
-      const currentSetupTargets = {
-        hasPlexRuntimePanel: plexRuntimePanel instanceof HTMLElement,
-        hasChannelSetupCommit: channelSetupCommit instanceof HTMLElement,
-        hasSetupRail: document.querySelector('.setup-rail') instanceof HTMLElement,
-        hasSetupDetailPane: document.querySelector('.setup-detail-pane') instanceof HTMLElement,
-        setupStageCount: document.querySelectorAll('[data-setup-stage]').length,
-        setupSectionCount: document.querySelectorAll('[data-setup-section]').length,
-        plexActionCount: plexActionButtons.length,
-        channelCommitActionCount: channelCommitButtons.length,
-        hasChannelReviewList: document.querySelector('[data-channel-review-list]') instanceof HTMLElement,
-        hasChannelReviewValidation: document.querySelector('[data-channel-review-validation]') instanceof HTMLElement,
-      };
-      const setupText = setupScreen instanceof HTMLElement ? setupScreen.textContent ?? '' : '';
-      const setupOverflow = setupScreen instanceof HTMLElement ? getComputedStyle(setupScreen).overflowY : '';
       const onboardingHost = document.querySelector('[data-onboarding-host]');
-      const onboardingReady = onboardingHost instanceof HTMLElement
-        && !onboardingHost.hidden && setupText.includes('Sign in to Plex')
-        && document.querySelector('[data-focus-id="btn-auth-request"]') instanceof HTMLButtonElement;
-      const obsoleteSetupSelectors = Array.from(
-        setupScreen instanceof HTMLElement
-          ? setupScreen.querySelectorAll('[data-setup-steps], [data-channel-draft-list], [data-setup-validation]')
-          : [],
-        (element) => element instanceof HTMLElement ? {
-          tag: element.tagName.toLowerCase(),
-          dataset: { ...element.dataset },
-          text: (element.textContent ?? '').replace(/\\s+/g, ' ').trim().slice(0, 120),
-        } : null,
-      );
-      const stagedSetupReady = currentSetupTargets.hasPlexRuntimePanel
-        && currentSetupTargets.hasChannelSetupCommit
-        && currentSetupTargets.hasSetupRail
-        && currentSetupTargets.hasSetupDetailPane
-        && currentSetupTargets.setupStageCount >= 5
-        && currentSetupTargets.setupSectionCount >= 5
-        && currentSetupTargets.plexActionCount >= 8
-        && currentSetupTargets.channelCommitActionCount === 3
-        && currentSetupTargets.hasChannelReviewList
-        && currentSetupTargets.hasChannelReviewValidation
-        && setupText.includes('Plex setup')
-        && setupText.includes('Get link code')
-        && setupText.includes('Open libraries')
-        && setupText.includes('Build channels')
-        && setupOverflow === 'auto';
-      if ((!onboardingReady && !stagedSetupReady) || obsoleteSetupSelectors.length > 0) {
-        failures.push(
-          'channel setup plex flow content ' +
-            JSON.stringify({
-              ...currentSetupTargets,
-              onboardingReady,
-              hasPlexSetup: setupText.includes('Plex setup'),
-              hasLinkCode: setupText.includes('Get link code'),
-              hasOpenLibraries: setupText.includes('Open libraries'),
-              hasBuildChannels: setupText.includes('Build channels'),
-              setupOverflow,
-              obsoleteSetupSelectors,
-            }),
-        );
+      const authOwner = document.querySelector('[data-onboarding-owner="auth-link-code"]');
+      const setupWorkspace = document.querySelector('[data-setup-workspace]');
+      const smokeLibraryOwner = document.querySelector('[data-staged-owner="library"]');
+      const libraryStatusText = document.querySelector('[data-setup-library-status]')?.textContent ?? '';
+      const librarySections = smokeLibraryOwner?.querySelector('[data-plex-sections]') ?? null;
+      const libraryStatus = libraryStatusText.includes('Loading libraries') ? 'loading'
+        : libraryStatusText.includes('No eligible libraries') ? 'empty'
+        : libraryStatusText.includes('could not be loaded') ? 'error'
+        : librarySections?.querySelector('[data-plex-section-id]') instanceof HTMLElement ? 'ready'
+        : 'idle';
+      const setupProjection = {
+        obsoleteSelectorsPresent: setupScreen instanceof HTMLElement
+          && setupScreen.querySelector('.channel-setup-commit, .setup-rail, [data-setup-section], [data-setup-steps], [data-channel-draft-list], [data-setup-validation]') !== null,
+        auth: {
+          hostVisible: onboardingHost instanceof HTMLElement && !onboardingHost.hidden && !onboardingHost.inert,
+          owner: document.documentElement.dataset.onboardingState ?? null,
+          ownerVisible: authOwner instanceof HTMLElement && !authOwner.hidden && !authOwner.inert,
+          requestPinControlPresent: authOwner?.querySelector('[data-focus-id="btn-auth-request"]') instanceof HTMLButtonElement,
+        },
+        library: {
+          workspaceVisible: setupWorkspace instanceof HTMLElement && !setupWorkspace.hidden && !setupWorkspace.inert,
+          documentOwner: document.documentElement.dataset.setupOwner ?? null,
+          ownerVisible: smokeLibraryOwner instanceof HTMLElement && !smokeLibraryOwner.hidden && !smokeLibraryOwner.inert,
+          ownerActive: smokeLibraryOwner instanceof HTMLElement && smokeLibraryOwner.dataset.ownerActive === 'true',
+          status: libraryStatus,
+          sectionsPresent: librarySections instanceof HTMLElement,
+          selectAllPresent: smokeLibraryOwner?.querySelector('[data-focus-id="setup-select-all"]') instanceof HTMLButtonElement,
+          clearAllPresent: smokeLibraryOwner?.querySelector('[data-focus-id="setup-clear-all"]') instanceof HTMLButtonElement,
+          nextPresent: smokeLibraryOwner?.querySelector('[data-focus-id="setup-next"]') instanceof HTMLButtonElement,
+          backPresent: smokeLibraryOwner?.querySelector('[data-focus-id="setup-back"]') instanceof HTMLButtonElement,
+        },
+      };
+      const setupEvaluation = ${SETUP_SMOKE_EVALUATOR_SOURCE}(setupProjection);
+      if (!setupEvaluation.accepted) {
+        failures.push('channel setup plex flow content ' + JSON.stringify({
+          failures: setupEvaluation.failures,
+          projection: setupProjection,
+        }));
       }
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -453,41 +468,17 @@ export async function runSmokeAssertions(
       }
       const playerScreen = document.querySelector('[data-screen="player"]');
       const playerPresentation = document.querySelector('[data-player-presentation-surface]');
-      const osdOverlay = document.querySelector('[data-overlay="playerOsd"]');
-      const nowPlayingTitle = document.querySelector('[data-overlay-now-playing-title]')?.textContent ?? '';
-      const miniGuideButton = document.querySelector('[data-overlay-action="openMiniGuide"]');
-      const playerOsdButton = document.querySelector('[data-focus-id="player-osd"]');
-      if (!(playerOsdButton instanceof HTMLButtonElement)) {
-        failures.push('player controls trigger');
-      } else {
-        playerOsdButton.focus(); playerOsdButton.click();
-      }
-      if (!(miniGuideButton instanceof HTMLButtonElement)) {
-        failures.push('mini guide action');
-      } else {
-        miniGuideButton.click();
-      }
-      const miniGuideOverlay = document.querySelector('[data-overlay="miniGuide"]');
-      const miniGuideText = document.querySelector('[data-overlay-mini-guide]')?.textContent ?? '';
-      if (!(miniGuideOverlay instanceof HTMLElement) || miniGuideOverlay.hidden) failures.push('mini guide visible');
-      assertTopElementAtCenter(miniGuideOverlay, 'mini guide z-order');
-      if (miniGuideText.trim().length < 12 || /undefined|null|NaN/i.test(miniGuideText)) {
-        failures.push('mini guide data ' + miniGuideText);
-      }
-
-      const channelNumberButton = document.querySelector('[data-overlay-action="channelDigit4"]');
-      if (!(channelNumberButton instanceof HTMLButtonElement)) {
-        failures.push('channel number action');
-      } else {
-        channelNumberButton.click();
-      }
-      const channelNumberOverlay = document.querySelector('[data-overlay="channelNumber"]');
-      const channelNumberValue = document.querySelector('[data-overlay-channel-number-value]')?.textContent ?? '';
       if (document.documentElement.dataset.activeRoute !== 'player') failures.push('player route activation');
       if (!(playerScreen instanceof HTMLElement) || playerScreen.hidden) failures.push('player screen visible');
-      if (!(osdOverlay instanceof HTMLElement) || osdOverlay.hidden) failures.push('OSD visible');
-      if (!(playerPresentation instanceof HTMLElement)) failures.push('player presentation surface');
+      if (!(playerPresentation instanceof HTMLElement) || playerPresentation.tabIndex !== -1) failures.push('player native presentation surface');
       if (!(overlayStack instanceof HTMLElement) || overlayStack.hidden) failures.push('player overlay stack visible');
+      if (document.querySelector('.player-quick-actions') !== null) failures.push('obsolete player quick actions');
+      if (document.querySelector('[data-overlay-action^="channelDigit"], [data-overlay-action="commitChannelNumber"], [data-overlay-action="clearChannelNumber"]') !== null) failures.push('obsolete channel number proxies');
+      for (const required of ['playerOsd', 'nowPlaying', 'miniGuide', 'channelNumber', 'channelBadge', 'playbackOptions', 'transition', 'playerLoading', 'playerError']) {
+        if (!(document.querySelector('[data-overlay="' + required + '"]') instanceof HTMLElement)) failures.push('player semantic owner ' + required);
+      }
+      const reachableCopy = overlayStack instanceof HTMLElement ? overlayStack.textContent ?? '' : '';
+      if (/The Midnight Archive|Liminal One|renderer-presentation-player/u.test(reachableCopy)) failures.push('production presentation fixture copy');
       if (
         playerPresentation instanceof HTMLElement &&
         playerScreen instanceof HTMLElement &&
@@ -500,42 +491,6 @@ export async function runSmokeAssertions(
           failures.push('rd15 z-order ' + JSON.stringify({ presentationZ, screenZ, overlayZ }));
         }
       }
-      if (nowPlayingTitle.trim().length === 0 || /undefined|null|NaN/i.test(nowPlayingTitle)) {
-        failures.push('now playing title ' + nowPlayingTitle);
-      }
-      if (!(channelNumberOverlay instanceof HTMLElement) || channelNumberOverlay.hidden) {
-        failures.push('channel number visible');
-      }
-      assertTopElementAtCenter(channelNumberOverlay, 'channel number z-order');
-      if (channelNumberValue !== '4__') failures.push('channel number value ' + channelNumberValue);
-
-      const closeOverlayButton = document.querySelector('[data-overlay-action="closeTopOverlay"]');
-      if (!(closeOverlayButton instanceof HTMLButtonElement)) {
-        failures.push('close overlay action');
-      } else {
-        closeOverlayButton.click();
-        closeOverlayButton.click();
-        closeOverlayButton.click();
-      }
-      const activePlayerControl = document.activeElement instanceof HTMLButtonElement
-        && document.activeElement.dataset.focusId?.startsWith('player-') === true && document.activeElement.tabIndex === 0;
-      if (!(playerOsdButton instanceof HTMLButtonElement) || !activePlayerControl) {
-        failures.push(
-          'overlay focus fallback ' +
-            JSON.stringify({
-              activeFocus:
-                document.activeElement instanceof HTMLElement
-                  ? document.activeElement.dataset.focusId ?? ''
-                  : '',
-              playerOsdTabIndex:
-                playerOsdButton instanceof HTMLButtonElement ? playerOsdButton.tabIndex : null,
-              activeTabIndex:
-                document.activeElement instanceof HTMLElement ? document.activeElement.tabIndex : null,
-            }),
-        );
-      }
-
-      window.open('https://example.com');
       navigator.permissions?.query?.({ name: 'geolocation' }).catch(() => undefined);
 
       return { failures };
@@ -550,6 +505,11 @@ export async function runSmokeAssertions(
       result.failures.push('fullscreen continuity ' + message);
     }
   }
+
+  await window.webContents.executeJavaScript(`
+    window.open('https://example.com');
+    true;
+  `, true);
 
   await window.webContents.executeJavaScript(`
     location.assign('https://example.com/disallowed-navigation');
@@ -593,6 +553,20 @@ export async function runSmokeAssertions(
   `) as boolean;
   if (!rendererReady) {
     throw new Error('Electron smoke failed: renderer boot readiness timeout');
+  }
+  const closeRouteReady = await window.webContents.executeJavaScript(`
+    (async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const settingsPlayer = document.querySelector('[data-focus-id="settings-player"]');
+      if (!(settingsPlayer instanceof HTMLButtonElement)) return false;
+      settingsPlayer.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return document.documentElement.dataset.activeRoute === 'player';
+    })();
+  `) as boolean;
+  if (!closeRouteReady) {
+    throw new Error('Electron smoke failed: close lifecycle Player precondition');
   }
   await assertRendererCloseLifecycle(window, result.failures);
   if (result.failures.length > 0) {

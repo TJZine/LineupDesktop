@@ -81,14 +81,22 @@ export function mapDesktopKeyEvent(event: DesktopKeyEventLike): DesktopInputButt
     case 'ArrowRight':
       return 'right';
     case 'Enter':
-    case ' ':
       return 'ok';
+    case ' ':
+      return 'space';
     case 'Escape':
     case 'Backspace':
       return 'back';
     case 'g':
     case 'G':
       return 'guide';
+    case 'i':
+    case 'I':
+      return 'info';
+    case 'PageUp':
+      return 'pageUp';
+    case 'PageDown':
+      return 'pageDown';
     case ',':
     case 's':
     case 'S':
@@ -98,6 +106,10 @@ export function mapDesktopKeyEvent(event: DesktopKeyEventLike): DesktopInputButt
       return 'fullscreen';
     default:
       break;
+  }
+
+  if (/^[0-9]$/u.test(event.key)) {
+    return `digit${event.key}` as DesktopInputButton;
   }
 
   if (event.code === 'BrowserBack') {

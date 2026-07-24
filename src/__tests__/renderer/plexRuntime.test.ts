@@ -23,6 +23,7 @@ import { createPlexRuntimeRendererState, sanitizePlexRuntimeError } from '../../
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
 import { createPlexOnboardingFlow } from '../../renderer/onboarding/plexOnboardingFlow.js';
 import type { PlexRuntimeController } from '../../renderer/plexRuntimeActions.js';
+import { applySetupOnboardingBack } from '../../renderer/setup/setupEntryLifecycle.js';
 
 test('static channel setup markup preserves onboarding and hosts the isolated Package 3 staged owners', () => {
   const root = { innerHTML: '', querySelector: () => null };
@@ -69,7 +70,11 @@ test('static channel setup markup preserves onboarding and hosts the isolated Pa
   }
   assert.match(channelSetupMarkup, /data-setup-flow-action="libraryNext"/u);
   assert.match(channelSetupMarkup, /data-setup-flow-action="buildConfirm"/u);
-  assert.match(channelSetupMarkup, /data-focus-id="setup-category-build"/u);
+  assert.match(channelSetupMarkup, /data-builder-categories/u);
+  assert.match(channelSetupMarkup, /data-builder-detail/u);
+  assert.match(channelSetupMarkup, /data-builder-action="confirmReplace"/u);
+  assert.match(channelSetupMarkup, /replace removes all existing channels, including custom channels/u);
+  assert.match(channelSetupMarkup, /role="progressbar"/u);
   assert.match(channelSetupMarkup, /data-custom-channel-panel/u);
   assert.match(channelSetupMarkup, /data-custom-channel-action="browseSource"/u);
   assert.match(channelSetupMarkup, /data-custom-channel-action="saveDraft"/u);
@@ -291,6 +296,141 @@ test('Package 2 onboarding owner projection is exact and setup stages retire the
   assert.equal(readPlexOnboardingState(signedIn, 'server'), 'server-select');
   assert.equal(readPlexOnboardingState({ ...signedIn, errorText: 'Safe discovery failure' }, 'server'), 'server-error');
   assert.equal(readPlexOnboardingState(signedIn, 'library'), null);
+});
+
+test('signed-in authentication failure renders the safe auth-error owner at account stage', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const authOwner = new OnboardingOwnerDouble('auth-error');
+  const profileOwner = new OnboardingOwnerDouble('profile-select');
+  const host = new ElementDouble();
+  const workspace = new ElementDouble();
+  const owners = [authOwner, profileOwner];
+  const documentDouble = {
+    documentElement: { dataset: {} as Record<string, string> },
+    createElement: () => new ElementDouble(),
+    querySelectorAll: (selector: string) => selector === '[data-onboarding-owner]' ? owners : [],
+    querySelector: (selector: string) => {
+      if (selector === '[data-onboarding-host]') return host;
+      if (selector === '[data-setup-workspace]') return workspace;
+      if (selector === '[data-onboarding-owner="auth-error"]') return authOwner;
+      if (selector === '[data-onboarding-owner="profile-select"]') return profileOwner;
+      return null;
+    },
+  };
+  Object.defineProperty(globalThis, 'document', { value: documentDouble, configurable: true });
+
+  try {
+    const snapshot = {
+      ...snapshotSignedIn(),
+      lastError: {
+        code: 'PLEX_AUTH_INVALID' as const,
+        message: 'raw token serverUri should never render',
+        retryable: true,
+        recoverable: true,
+        operation: 'getSnapshot' as const,
+      },
+    };
+    const state = {
+      ...createPlexRuntimeRendererState(),
+      snapshot,
+      errorText: null,
+    };
+    assert.equal(readPlexOnboardingState(state, 'account'), 'auth-error');
+    renderPlexRuntimeDom(state, createPlexDomBindings(), 'account');
+    assert.equal(authOwner.hidden, false);
+    assert.equal(profileOwner.hidden, true);
+    assert.equal(authOwner.error.textContent, 'Plex sign-in needs attention. Try again.');
+    assert.doesNotMatch(authOwner.error.textContent, /token|serverUri|raw/u);
+
+    const normal = { ...state, snapshot: snapshotSignedIn() };
+    assert.equal(readPlexOnboardingState(normal, 'account'), 'profile-select');
+  } finally {
+    if (originalDocument === undefined) Reflect.deleteProperty(globalThis, 'document');
+    else Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
+  }
+});
+
+test('signed-in auth-failure rerun Back reaches auth-link before closing to origin', async () => {
+  const authFailure: PlexRuntimeSnapshot = {
+    ...snapshotWithSections(),
+    lastError: {
+      code: 'PLEX_AUTH_INVALID',
+      message: 'raw token serverUri should never render',
+      retryable: true,
+      recoverable: true,
+      operation: 'getSnapshot',
+    },
+  };
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({ getSnapshot: async () => success(authFailure) }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+  await controller.loadSnapshot();
+  const selectedServerId = controller.getState().selectedServerId;
+  const selectedSectionId = controller.getState().selectedSectionId;
+  let closeCalls = 0;
+  const back = () => {
+    const owner = readPlexOnboardingState(controller.getState(), 'account');
+    assert.notEqual(owner, null);
+    return applySetupOnboardingBack({
+      owner: owner!,
+      enteredFromServer: false,
+      close: () => { closeCalls += 1; },
+      contain: () => undefined,
+      returnToProfile: () => undefined,
+      returnToAuthLink: controller.returnToAuthLink,
+    });
+  };
+
+  assert.equal(readPlexOnboardingState(controller.getState(), 'account'), 'auth-error');
+  assert.equal(await back(), true);
+  assert.equal(readPlexOnboardingState(controller.getState(), 'account'), 'auth-link-code');
+  assert.equal(controller.getState().snapshot?.lastError, null);
+  assert.equal(controller.getState().errorText, null);
+  assert.equal(controller.getState().selectedServerId, selectedServerId);
+  assert.equal(controller.getState().selectedSectionId, selectedSectionId);
+  assert.equal(controller.getState().snapshot?.servers.selected?.serverId, selectedServerId);
+  assert.equal(controller.getState().snapshot?.library.selectedSectionId, selectedSectionId);
+  assert.equal(closeCalls, 0);
+  assert.equal(await back(), true);
+  assert.equal(closeCalls, 1);
+});
+
+test('signed-in auth-failure first-run Back reaches auth-link and contains the next Back', async () => {
+  const controller = createPlexRuntimeController({
+    bridge: createBridge({
+      getSnapshot: async () => success({
+        ...snapshotSignedIn(),
+        lastError: {
+          code: 'PLEX_UNAUTHORIZED',
+          message: 'safe authentication failure',
+          retryable: true,
+          recoverable: true,
+          operation: 'getSnapshot',
+        },
+      }),
+    }),
+    onStateChanged: () => undefined,
+    scheduler: inertScheduler(),
+  });
+  await controller.loadSnapshot();
+  let closeCalls = 0;
+  let containCalls = 0;
+  const back = () => applySetupOnboardingBack({
+    owner: readPlexOnboardingState(controller.getState(), 'account')!,
+    enteredFromServer: true,
+    close: () => { closeCalls += 1; },
+    contain: () => { containCalls += 1; },
+    returnToProfile: () => undefined,
+    returnToAuthLink: controller.returnToAuthLink,
+  });
+
+  assert.equal(await back(), true);
+  assert.equal(readPlexOnboardingState(controller.getState(), 'account'), 'auth-link-code');
+  assert.equal(await back(), true);
+  assert.equal(closeCalls, 0);
+  assert.equal(containCalls, 1);
 });
 
 test('auth-error dismissal is renderer-local and invalidates late PIN completion', async () => {
@@ -1512,6 +1652,22 @@ class ElementDouble {
 
   getAttribute(name: string): string | null {
     return this.attributes.get(name) ?? null;
+  }
+}
+
+class OnboardingOwnerDouble extends ElementDouble {
+  readonly status = new ElementDouble();
+  readonly error = new ElementDouble();
+
+  constructor(owner: string) {
+    super();
+    this.dataset.onboardingOwner = owner;
+  }
+
+  querySelector(selector: string): ElementDouble | null {
+    if (selector === '[data-onboarding-status]') return this.status;
+    if (selector === '[data-onboarding-error]') return this.error;
+    return null;
   }
 }
 

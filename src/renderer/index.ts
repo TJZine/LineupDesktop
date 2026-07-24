@@ -2,7 +2,7 @@ import type { ShellStatusEvent } from '../contracts/shell.js';
 import { queryRendererDom, type PlexRuntimeActionId } from './domBindings.js';
 import { focusRendererTarget, renderRendererFocus, syncRendererFocusTargets } from './focusDom.js';
 import { FocusRegistry, type AppRouteId, type FocusState } from './navigation.js';
-import { createPlayerOverlayState, createPlayerOverlayView, type PlayerOverlayActionId } from './overlays.js';
+import { createPlayerOverlayState, type PlayerOverlayActionId } from './overlays.js';
 import { renderRouteDom, renderWorkflowDom } from './routeDom.js';
 import { mountStaticRendererDom } from './staticDom.js';
 import { applySupportBundleExportResult } from './supportBundleExport.js';
@@ -13,17 +13,17 @@ import { createCustomChannelController, type CustomChannelActionId } from './cus
 import { dispatchCustomChannelAction } from './customChannels/actionDispatch.js';
 import { renderCustomChannelWorkspace } from './customChannels/dom.js';
 import { readPlexOnboardingState, renderPlexRuntimeDom } from './plexRuntimeDom.js';
-import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowEpgAction, applyWorkflowSettingsAction, applyWorkflowSettingsValues, createWorkflowState, getRouteWorkflowView, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
-import { createRendererPresentationFixtures } from './presentationFixtures.js';
-import { recordRendererBridgeFailure, summarizeRendererBridgeError } from './rendererBridgeFailures.js';
-import { setEpgPresentationState, updateEpgState } from './epg.js';
-import { registerRendererActions } from './rendererActionRegistration.js';
+import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowEpgAction, applyWorkflowEpgDirection, applyWorkflowSettingsAction, applyWorkflowSettingsValues, createWorkflowState, getRouteWorkflowView, selectWorkflowEpgProgram, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
+import { createEmptyPlayerSnapshot, createPlayerOverlayPresentation } from './playerOverlayPresentation.js';
+import { createPlayerOverlayController } from './playerOverlayController.js';
+import { recordRendererBridgeFailure } from './rendererBridgeFailures.js';
+import { findEpgProgramCell, setEpgPresentationState, setEpgTuneError, updateEpgState } from './epg.js';
+import { registerRendererActions, type GuideActionId, type GuideProgramActionTarget } from './rendererActionRegistration.js';
 import { subscribePlayerBridge } from './playerBridgeSubscription.js';
 import { createGuidePresentationPolling } from './guidePresentationPolling.js';
 import { dispatchPlexRuntimeAction } from './plexRuntimeActionDispatch.js';
 import { initializeProfilePinModal, openProfilePinModal, isProfilePinModalActive, closeProfilePinModal } from './profilePinModal.js';
 import type { SettingsSectionId } from './settingsSetup.js';
-import { applyOverlayAction as dispatchOverlayAction, selectAudioTrack as dispatchSelectAudioTrack, selectSubtitleTrack as dispatchSelectSubtitleTrack, type PlayerOverlayActionContext } from './playerOverlayActions.js';
 import { queryShellDom, renderShellDom } from './shell/shellDom.js';
 import { createRendererShellState, type RendererShellState } from './shell/shellState.js';
 import { createShellController } from './shell/shellController.js';
@@ -34,6 +34,9 @@ import { renderStagedSetupDom } from './setup/stagedSetupDom.js';
 import { cleanupSetupRouteLifecycle, clearSetupSourceLifecycle, createSetupComposition } from './setup/setupComposition.js';
 import { createSettingsRuntime } from './settings/settingsRuntime.js';
 import { createFullscreenTransportCoordinator } from './fullscreenTransport.js';
+import { createGuideTuneController, type GuideTuneTarget } from './guideTuneController.js';
+import { createRendererRoutingCoordinator, initializeRendererStartup } from './startupRouting.js';
+import { applySetupOnboardingBack, getSetupEntryReturnFocusId, restoreSetupEntryDestination } from './setup/setupEntryLifecycle.js';
 mountStaticRendererDom();
 const dom = queryRendererDom();
 const shellDom = queryShellDom();
@@ -45,11 +48,11 @@ const fullscreenTransport = createFullscreenTransportCoordinator({
     dom.fullscreenButton?.setAttribute('aria-pressed', String(enabled));
   },
 });
-const presentationFixtures = createRendererPresentationFixtures();
-let workflowState = createWorkflowState('player', presentationFixtures.guide);
-let overlayState = createPlayerOverlayState(presentationFixtures.overlays);
-let playerSnapshot = presentationFixtures.playerSnapshot;
+let workflowState = createWorkflowState('player');
+let overlayState = createPlayerOverlayState();
+let playerSnapshot = createEmptyPlayerSnapshot();
 let activeSettingsCategory: SettingsSectionId = 'appearance', activeSetupStage = 'account';
+let pendingGuideFocusId: string | null = null;
 const focusRegistry = new FocusRegistry(); let focusState: FocusState;
 const settingsRuntime = createSettingsRuntime({
   settings: window.lineupDesktop.settings, windowBridge: fullscreenTransport,
@@ -61,16 +64,6 @@ const settingsRuntime = createSettingsRuntime({
     if (!state.loading) renderApp();
   },
 });
-const overlayActionContext: PlayerOverlayActionContext = {
-  getOverlayState: () => overlayState,
-  setOverlayState: (state) => { overlayState = state; },
-  getPlayerSnapshot: () => playerSnapshot,
-  getFocusState: () => focusState,
-  setFocusState: (state) => { focusState = state; },
-  getFocusRegistry: () => focusRegistry,
-  getPresentationFixtures: () => presentationFixtures,
-  renderApp,
-};
 const plexController = createPlexRuntimeController({
   bridge: window.lineupDesktop.plex,
   onStateChanged: () => renderApp(),
@@ -87,12 +80,16 @@ const customChannelController = createCustomChannelController({
 let onboardingFlow: ReturnType<typeof createPlexOnboardingFlow>;
 const setupComposition = createSetupComposition({
   plexController,
-  channelController, customController: customChannelController,
+  channelController, channelSetupBridge: window.lineupDesktop.channelSetup, customController: customChannelController,
   render: renderApp,
   returnToServer: () => { void onboardingFlow.changeStage('server'); },
   closeSetup: closeStagedSetup,
   tuneChannel: async (channelId) => (await window.lineupDesktop.player.tuneChannel({ channelId })).ok,
   clearDependentActionState: clearDependentChannelActionState,
+  setSetupStage: (stage) => { activeSetupStage = stage; },
+  activateSetupRoute: () => activateRoute('channelSetup'),
+  loadProfiles: () => { void plexController.getHomeUsers(); },
+  enterServerSelection: () => { void onboardingFlow.advanceToServerSelection(); },
 });
 const stagedSetupController = setupComposition.controller;
 const applyStagedSetupAction = setupComposition.apply;
@@ -102,10 +99,21 @@ onboardingFlow = createPlexOnboardingFlow({
   setStage: (stage) => {
     activeSetupStage = stage;
     if (stage === 'library') {
-      const returnRoute = workflowState.lastActionRoute === 'guide' || workflowState.lastActionRoute === 'settings' ? workflowState.lastActionRoute : 'player';
-      void setupComposition.enter(returnRoute, returnRoute === 'guide' ? 'guide-setup' : returnRoute === 'settings' ? 'settings-setup' : 'player-settings');
+      const returnState = setupComposition.controller.getState();
+      void setupComposition.enter(
+        returnState.returnRoute,
+        getSetupEntryReturnFocusId(returnState.returnRoute, returnState.returnFocusId),
+        returnState.enteredFromServer,
+      );
     }
   }, render: renderApp,
+});
+const routingCoordinator = createRendererRoutingCoordinator({
+  getPlexSnapshot: () => plexController.getState().snapshot, getChannelState: channelController.getState,
+  activateRoute, showPlayer: renderApp,
+  setSettingsCategory: (category) => { activeSettingsCategory = category; },
+  enterSetup: (returnRoute, returnFocusId, enteredFromServer) =>
+    setupComposition.enter(returnRoute, returnFocusId, enteredFromServer),
 });
 initializeProfilePinModal({
   getPlexController: () => plexController,
@@ -120,6 +128,23 @@ initializeProfilePinModal({
 
 syncRendererFocusTargets(focusRegistry, dom);
 focusState = focusRegistry.createInitialState(workflowState.routeState.activeRoute);
+let guidePresentationPolling: ReturnType<typeof createGuidePresentationPolling>;
+const playerOverlayController = createPlayerOverlayController({
+  player: window.lineupDesktop.player,
+  host: window,
+  getState: () => overlayState,
+  setState: (state) => { overlayState = state; },
+  getPresentation: getPlayerOverlayPresentation,
+  render: renderApp,
+  focus: (focusId) => {
+    if (focusId === null) { focusState = { activeRoute: 'player', activeId: null }; dom.playerPresentationElement?.focus(); return; }
+    restoreFocusTarget(focusId);
+  },
+  openGuide: () => activateRoute('guide'),
+  refreshChannelStatus: () => channelController.loadStatus(),
+  refreshGuidePresentation: () => guidePresentationPolling.refresh('player-tune-success', { showLoading: false, allowPlayerRoute: true }),
+  recordDiagnostic: (operation, message) => recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'player.dispatch', message, { operation, route: workflowState.routeState.activeRoute }),
+});
 const shellController = createShellController({
   shell: window.lineupDesktop.shell,
   windowBridge: fullscreenTransport,
@@ -145,19 +170,14 @@ const navigationLifecycle = createNavigationLifecycle({
   dom,
   onFocusChanged: updateActiveFromFocus,
   scrollFocusedIntoView: scrollFocusedSetupControlIntoView,
+  handleGuideDirection,
+  handleChannelSetupDirection: (direction) => setupComposition.handleBuilderDirection(direction),
+  handlePlayerInput: (input) => playerOverlayController.handleInput(input),
   activateRoute,
   isProfileModalActive: isProfilePinModalActive,
   closeProfileModal: () => closeProfilePinModal(),
   handleChannelSetupBack,
-  handlePlayerOverlayBack: () => {
-    const activeOverlay = createPlayerOverlayView(overlayState, {
-      ...presentationFixtures.overlays,
-      playerSnapshot,
-    }).activeOverlayId;
-    if (activeOverlay === null) return false;
-    dispatchOverlayAction('closeTopOverlay', overlayActionContext);
-    return true;
-  },
+  handlePlayerOverlayBack: playerOverlayController.closeTop,
   dismissInlineError: shellController.dismissFullscreenError,
   requestFullscreen: (acceptedFocusId) => shellController.requestFullscreen(!fullscreenEnabled, acceptedFocusId),
   invalidateFullscreenRequest: shellController.invalidateFullscreenRequest,
@@ -178,29 +198,62 @@ const playerBridgeSubscription = subscribePlayerBridge({
   setSnapshot: (snapshot) => {
     playerSnapshot = snapshot;
   },
+  onSnapshot: playerOverlayController.reconcileSnapshot,
+  onEvent: playerOverlayController.handlePlayerEvent,
   render: renderApp,
 });
-const guidePresentationPolling = createGuidePresentationPolling({
+guidePresentationPolling = createGuidePresentationPolling({
   guide: window.lineupDesktop.guide,
   host: window,
   getActiveRoute: () => workflowState.routeState.activeRoute,
   getWindowStartMs: () => workflowState.epg.windowStartMs,
-  setLoading: () => {
+  setLoading: (generation) => {
+    retainGuideProgramFocusIntent();
     workflowState = {
       ...workflowState,
-      epg: setEpgPresentationState(workflowState.epg, 'loading'),
+      epg: setEpgPresentationState(workflowState.epg, 'loading', generation),
     };
     renderApp();
   },
-  applyPresentation: (normalizedGuidePresentation) => {
+  applyPresentation: (normalizedGuidePresentation, generation) => {
+    const restoreProgramFocus = retainGuideProgramFocusIntent();
     workflowState = {
       ...workflowState,
       guidePresentation: normalizedGuidePresentation,
-      epg: updateEpgState(workflowState.epg, normalizedGuidePresentation),
+      epg: updateEpgState(workflowState.epg, normalizedGuidePresentation, generation),
     };
+    if (restoreProgramFocus) {
+      pendingGuideFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId ?? null;
+    }
+    renderApp();
+    restorePendingGuideFocus();
+  },
+  applyPlayerPresentation: (normalizedGuidePresentation) => {
+    workflowState = { ...workflowState, guidePresentation: normalizedGuidePresentation };
     renderApp();
   },
+  handlePlayerFailure: (source, message) => recordRendererBridgeFailure(
+    window.lineupDesktop.diagnostics.recordRendererEvent,
+    'guide.getPresentation',
+    message,
+    { route: 'player', source },
+  ),
   handleFailure: handleGuidePresentationFailure,
+});
+const guideTuneController = createGuideTuneController({
+  player: window.lineupDesktop.player,
+  getActiveRoute: () => workflowState.routeState.activeRoute,
+  getPresentationGeneration: () => workflowState.epg.presentationGeneration,
+  getNowMs: () => getRouteWorkflowView(workflowState).guide.nowMs,
+  findProgram: (channelId, programId) => findEpgProgramCell(
+    workflowState.epg,
+    workflowState.guidePresentation,
+    channelId,
+    programId,
+  ),
+  onPendingChanged: () => renderApp(),
+  onAccepted: acceptGuideTune,
+  onFailure: handleGuideTuneFailure,
 });
 void playerBridgeSubscription.initializeSnapshot();
 attachNavigationInputRuntime(navigationLifecycle, {
@@ -210,6 +263,8 @@ attachNavigationInputRuntime(navigationLifecycle, {
     unsubscribeShellStatus();
     playerBridgeSubscription.unsubscribe();
     guidePresentationPolling.stop();
+    guideTuneController.stop();
+    playerOverlayController.dispose();
     shellController.cleanup();
     settingsRuntime.cleanup();
     cleanupPlexRuntime('beforeunload');
@@ -226,12 +281,16 @@ registerRendererActions(dom, document, {
   },
   applySetupStage: (stage) => { void onboardingFlow.changeStage(stage); },
   applyStagedSetupAction: (action) => { void applyStagedSetupAction(action); },
+  applyChannelBuilderAction: (action, detail) => setupComposition.applyBuilder(action, detail),
   applyChannelSetupAction: (action) => setupComposition.setBuildMode(action === 'selectReplaceBuildMode' ? 'replace' : 'append'),
   applyChannelCommitAction: (action) => {
     stagedSetupController.setBuildMode(action === 'append' ? 'append' : 'replace');
     void applyStagedSetupAction('buildConfirm');
   },
   applyEpgAction,
+  applyGuideAction,
+  focusGuideProgramFromPointer,
+  activateGuideProgram,
   applyOverlayAction,
   applyPlexRuntimeAction: (action) => { void applyPlexRuntimeAction(action); },
   applyCustomChannelAction: (action, detail) => { void applyCustomChannelAction(action, detail); },
@@ -261,21 +320,38 @@ registerRendererActions(dom, document, {
   openPlexMetadata: (ratingKey) => { void setupComposition.runtime.loadPreviewMetadata(ratingKey); },
   focusElement: focusRendererElement,
   toggleFullscreen: () => { void shellController.requestFullscreen(!fullscreenEnabled, focusState.activeId ?? 'player-fullscreen'); },
-  selectAudioTrack: (trackId) => { void dispatchSelectAudioTrack(trackId, overlayActionContext); },
-  selectSubtitleTrack: (trackId) => { void dispatchSelectSubtitleTrack(trackId, overlayActionContext); },
+  selectAudioTrack: (trackId, focusId) => { void playerOverlayController.selectTrack('audio', trackId, focusId); },
+  selectSubtitleTrack: (trackId, focusId) => { void playerOverlayController.selectTrack('subtitle', trackId, focusId); },
+  tuneOverlayChannel: (channelId) => { playerOverlayController.activateMiniGuideChannel(channelId); },
 });
 
 document.documentElement.dataset.activeRoute = workflowState.routeState.activeRoute;
-void settingsRuntime.initialize().then(() => shellController.start()).finally(() => {
-  document.documentElement.dataset.shellBoot = 'ready';
-});
-void plexController.loadSnapshot().then(() => {
-  if (plexController.getState().snapshot?.auth.state === 'signed-in') void plexController.getHomeUsers();
-});
-void channelController.loadStatus();
+void initializeRenderer().then(
+  (outcome) => { document.documentElement.dataset.shellBoot = outcome; },
+  () => { document.documentElement.dataset.shellBoot = 'error'; },
+);
+guidePresentationPolling.start();
 void customChannelController.loadSnapshot();
-if (workflowState.routeState.activeRoute === 'guide') {
-  guidePresentationPolling.start();
+
+async function initializeRenderer(): Promise<'ready' | 'error'> {
+  const outcome = await initializeRendererStartup({
+    loadInitialState: () => Promise.allSettled([
+      settingsRuntime.initialize(),
+      plexController.loadSnapshot(),
+      channelController.loadStatus(),
+    ]),
+    routeStartup: applyStartupTarget,
+    startShell: () => shellController.start(),
+    isShellReady: () => shellState.bootstrap === 'ready',
+  });
+  if (outcome === 'error') return outcome;
+  focusState = focusRegistry.focusRoute(focusState, workflowState.routeState.activeRoute).state;
+  renderApp();
+  return 'ready';
+}
+
+async function applyStartupTarget(): Promise<void> {
+  await routingCoordinator.routeStartup();
 }
 
 function renderStatus(event: ShellStatusEvent): void {
@@ -286,23 +362,40 @@ function renderStatus(event: ShellStatusEvent): void {
 
 function activateRoute(route: AppRouteId): void {
   const previousRoute = workflowState.routeState.activeRoute;
+  if (previousRoute === 'player' && route !== 'player') playerOverlayController.routeLeave();
   if (previousRoute === 'channelSetup' && route !== 'channelSetup') {
     plexController.invalidateOnboardingOperations();
   }
   workflowState = activateWorkflowRoute(workflowState, route);
   navigationLifecycle?.routeChanged(previousRoute, workflowState.routeState.activeRoute);
   cleanupPlexRuntimeForRouteChange(previousRoute, workflowState.routeState.activeRoute);
+  if (previousRoute === 'guide' && workflowState.routeState.activeRoute !== 'guide') {
+    guideTuneController.stop();
+    pendingGuideFocusId = null;
+  }
   guidePresentationPolling.reconcile(previousRoute, workflowState.routeState.activeRoute);
   focusState = focusRegistry.focusRoute(focusState, route).state;
   renderApp();
 }
 
 async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
-  const previousRoute = workflowState.routeState.activeRoute;
-  if (action === 'resumePlayer' && previousRoute === 'guide') {
-    await tuneGuideSelectedChannel();
+  if (action === 'openGuide') {
+    await navigationLifecycle.handleInput('guide');
     return;
   }
+  if (action === 'openChannelSetup') {
+    const originRoute = workflowState.routeState.activeRoute;
+    if (originRoute === 'player' && await routingCoordinator.openPlayerSetupReminder()) return;
+    if (originRoute === 'guide' || originRoute === 'settings') {
+      await setupComposition.enter(
+        originRoute,
+        getSetupEntryReturnFocusId(originRoute, focusState.activeId),
+        false,
+      );
+      return;
+    }
+  }
+  const previousRoute = workflowState.routeState.activeRoute;
   const nextWorkflowState = applyWorkflowAction(workflowState, action);
   const nextRoute = nextWorkflowState.routeState.activeRoute;
   if (previousRoute === 'channelSetup' && nextRoute !== 'channelSetup') {
@@ -310,7 +403,9 @@ async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
   }
   workflowState = nextWorkflowState;
   if (previousRoute !== nextRoute) {
+    if (previousRoute === 'player' && nextRoute !== 'player') playerOverlayController.routeLeave();
     cleanupPlexRuntimeForRouteChange(previousRoute, nextRoute);
+    if (previousRoute === 'guide' && nextRoute !== 'guide') guideTuneController.stop();
     guidePresentationPolling.reconcile(previousRoute, nextRoute);
     focusState = focusRegistry.focusRoute(focusState, nextRoute).state;
   }
@@ -329,8 +424,15 @@ function applySettingsAction(action: SettingsActionId): void {
 
 function closeStagedSetup(): void {
   const state = stagedSetupController.getState();
-  activateRoute(state.returnRoute);
-  restoreFocusTarget(state.returnFocusId);
+  restoreSetupEntryDestination({
+    returnRoute: state.returnRoute,
+    returnFocusId: state.returnFocusId,
+    beforeActivate: state.returnRoute === 'guide'
+      ? () => { pendingGuideFocusId = state.returnFocusId; }
+      : undefined,
+    activateRoute,
+    restoreFocus: restoreFocusTarget,
+  });
 }
 
 function applyEpgAction(action: EpgActionId): void {
@@ -342,8 +444,89 @@ function applyEpgAction(action: EpgActionId): void {
   }
 }
 
+function handleGuideDirection(direction: 'up' | 'down' | 'left' | 'right'): boolean {
+  if (workflowState.routeState.activeRoute !== 'guide' || !focusState.activeId?.startsWith('guide-program-')) {
+    return false;
+  }
+  const movement = applyWorkflowEpgDirection(workflowState, direction);
+  if (!movement.result.handled) return false;
+  workflowState = movement.workflowState;
+  renderApp();
+  if (movement.result.windowChanged) {
+    void guidePresentationPolling.refresh('epg-window-change', { showLoading: true });
+  } else {
+    const selectedFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId;
+    if (selectedFocusId !== undefined) restoreFocusTarget(selectedFocusId);
+  }
+  return true;
+}
+
+function applyGuideAction(action: GuideActionId): void {
+  switch (action) {
+    case 'back':
+      void navigationLifecycle.handleInput('back');
+      return;
+    case 'setup':
+      void applyRouteAction('openChannelSetup');
+      return;
+    case 'refresh':
+    case 'retry':
+      void guidePresentationPolling.refresh(`guide-${action}`, { showLoading: true });
+  }
+}
+
+function activateGuideProgram(target: GuideProgramActionTarget): void {
+  if (focusState.activeId !== target.focusId) {
+    focusRendererElement(target.element);
+    return;
+  }
+  void guideTuneController.activate(target);
+}
+
+function focusGuideProgramFromPointer(target: GuideProgramActionTarget): boolean {
+  if (focusState.activeId === target.focusId) return false;
+  focusRendererElement(target.element);
+  return true;
+}
+
+function updateGuideTunePendingDom(target: GuideTuneTarget | null): void {
+  for (const cell of Array.from(document.querySelectorAll<HTMLButtonElement>('[data-guide-program-action]'))) {
+    const pending = target !== null && cell.dataset.focusId === target.focusId;
+    if (pending) {
+      cell.setAttribute('aria-busy', 'true');
+      cell.setAttribute('aria-disabled', 'true');
+    } else {
+      cell.removeAttribute('aria-busy');
+      cell.removeAttribute('aria-disabled');
+    }
+  }
+}
+
+function acceptGuideTune(_target: GuideTuneTarget): void {
+  if (workflowState.routeState.activeRoute !== 'guide') return;
+  const previousRoute = workflowState.routeState.activeRoute;
+  workflowState = activateWorkflowRoute(workflowState, 'player');
+  navigationLifecycle.routeChanged(previousRoute, 'player');
+  guidePresentationPolling.reconcile(previousRoute, 'player');
+  guideTuneController.stop();
+  focusState = { activeRoute: 'player', activeId: null };
+  renderApp();
+}
+
 function applyOverlayAction(action: PlayerOverlayActionId): void {
-  dispatchOverlayAction(action, overlayActionContext);
+  switch (action) {
+    case 'openOsd': playerOverlayController.requestOsd(); return;
+    case 'openNowPlaying': playerOverlayController.requestNowPlaying(); return;
+    case 'openMiniGuide': playerOverlayController.requestMiniGuide(); return;
+    case 'openAudioOptions': playerOverlayController.openOptions('audio'); return;
+    case 'openSubtitleOptions': playerOverlayController.openOptions('subtitle'); return;
+    case 'retryPlayer': playerOverlayController.retry(); return;
+    case 'miniGuidePrevious': playerOverlayController.handleInput('up'); return;
+    case 'miniGuideNext': playerOverlayController.handleInput('down'); return;
+    case 'miniGuidePagePrevious': playerOverlayController.handleInput('pageUp'); return;
+    case 'miniGuidePageNext': playerOverlayController.handleInput('pageDown'); return;
+    case 'closeTopOverlay': playerOverlayController.closeTop();
+  }
 }
 
 async function exportSupportBundle(): Promise<void> {
@@ -402,49 +585,10 @@ async function applyCustomChannelAction(
   });
 }
 
-async function tuneGuideSelectedChannel(): Promise<void> {
-  const guideChannelId = workflowState.epg.selectedChannelId;
-  if (guideChannelId.length === 0) {
-    workflowState = {
-      ...workflowState,
-      epg: setEpgPresentationState(workflowState.epg, 'error'),
-    };
-    renderApp();
-    return;
-  }
-
-  let result: Awaited<ReturnType<typeof window.lineupDesktop.player.tuneChannel>>;
-  try {
-    result = await window.lineupDesktop.player.tuneChannel({ channelId: guideChannelId });
-  } catch (error: unknown) {
-    handleGuideTuneFailure(guideChannelId, summarizeRendererBridgeError(error));
-    return;
-  }
-  if (result.ok) {
-    const previousRoute = workflowState.routeState.activeRoute;
-    const nextWorkflowState = applyWorkflowAction(workflowState, 'resumePlayer');
-    const nextRoute = nextWorkflowState.routeState.activeRoute;
-    if (previousRoute === 'channelSetup' && nextRoute !== 'channelSetup') {
-      plexController.invalidateOnboardingOperations();
-    }
-    workflowState = nextWorkflowState;
-    cleanupPlexRuntimeForRouteChange(previousRoute, nextRoute);
-    guidePresentationPolling.reconcile(previousRoute, nextRoute);
-    if (nextRoute === 'guide') {
-      return;
-    }
-    focusState = focusRegistry.focusRoute(focusState, nextRoute).state;
-    renderApp();
-    return;
-  }
-
-  handleGuideTuneFailure(guideChannelId, result.error.message);
-}
-
-function handleGuidePresentationFailure(source: string, message: string): void {
+function handleGuidePresentationFailure(source: string, message: string, generation: number): void {
   workflowState = {
     ...workflowState,
-    epg: setEpgPresentationState(workflowState.epg, 'error'),
+    epg: setEpgPresentationState(workflowState.epg, 'error', generation),
   };
   renderApp();
   recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'guide.getPresentation', message, {
@@ -453,14 +597,15 @@ function handleGuidePresentationFailure(source: string, message: string): void {
   });
 }
 
-function handleGuideTuneFailure(channelId: string, message: string): void {
+function handleGuideTuneFailure(target: GuideTuneTarget, message: string): void {
   workflowState = {
     ...workflowState,
-    epg: setEpgPresentationState(workflowState.epg, 'error'),
+    epg: setEpgTuneError(workflowState.epg, message),
   };
   renderApp();
+  restoreFocusTarget(target.focusId);
   recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'player.tuneChannel', message, {
-    channelId,
+    channelId: target.channelId,
     route: 'guide',
   });
 }
@@ -483,23 +628,29 @@ async function handleChannelSetupBack(): Promise<boolean> {
   if (onboardingState === null) {
     return handleStagedSetupBack({
       controller: stagedSetupController,
+      builder: setupComposition.builder,
       customController: customChannelController,
       plexController,
       dispatch: applyStagedSetupAction,
     });
   }
-  if (onboardingState === 'auth-link-code' || onboardingState === 'profile-select') return true;
-  if (onboardingState === 'server-select' || onboardingState === 'server-error') {
-    onboardingFlow.returnToProfileSelection();
-    return true;
-  }
+  if (await applySetupOnboardingBack({
+    owner: onboardingState,
+    enteredFromServer: stagedSetupController.getState().enteredFromServer,
+    close: closeStagedSetup,
+    contain: () => undefined,
+    returnToProfile: onboardingFlow.returnToProfileSelection,
+    returnToAuthLink: async () => {
+      await plexController.returnToAuthLink();
+      onboardingFlow.setFocusIntent('btn-auth-request');
+      renderApp();
+      scrollFocusedSetupControlIntoView();
+    },
+  })) return true;
   if (customChannelController.handleBack()) {
     renderApp();
     scrollFocusedSetupControlIntoView();
     return true;
-  }
-  if (onboardingState === 'auth-waiting' || onboardingState === 'auth-error') {
-    onboardingFlow.setFocusIntent('btn-auth-request');
   }
   if (await handlePlexBack()) {
     renderApp();
@@ -565,7 +716,7 @@ function renderApp(): void {
     dom,
     channelController.getState(),
     liveSelection,
-    presentationFixtures.overlays,
+    getPlayerOverlayPresentation(),
     activeSettingsCategory,
     activeSetupStage,
   );
@@ -573,6 +724,7 @@ function renderApp(): void {
   renderCustomChannelWorkspace(customChannelController.getState(), dom);
   renderStagedSetupDom({
     state: stagedSetupController.getState(),
+    builderState: setupComposition.builder.getState(),
     runtimeState: setupComposition.runtime.getState(),
     view: getRouteWorkflowView(workflowState, channelController.getState(), liveSelection),
     plexState,
@@ -589,7 +741,16 @@ function renderApp(): void {
     focusState = focusRegistry.focusTarget(focusState, focusState.activeId).state;
   }
   renderRendererFocus(focusState, dom);
+  updateGuideTunePendingDom(guideTuneController.getPendingTarget());
   scrollFocusedSetupControlIntoView();
+}
+
+function getPlayerOverlayPresentation() {
+  return createPlayerOverlayPresentation({
+    playerSnapshot,
+    channelSummary: channelController.getState().summary,
+    guidePresentation: workflowState.guidePresentation,
+  });
 }
 async function selectPlexHomeUser(homeUserId: string): Promise<void> {
   await plexController.switchHomeUser(homeUserId);
@@ -604,6 +765,25 @@ function restoreFocusTarget(focusId: string): void {
   renderRendererFocus(focusState, dom);
 }
 
+function restorePendingGuideFocus(): void {
+  if (pendingGuideFocusId === null || workflowState.routeState.activeRoute !== 'guide') return;
+  const focusId = pendingGuideFocusId;
+  if (document.querySelector(`[data-focus-id="${CSS.escape(focusId)}"]`) === null) return;
+  pendingGuideFocusId = null;
+  restoreFocusTarget(focusId);
+}
+
+function retainGuideProgramFocusIntent(): boolean {
+  const focusId = pendingGuideFocusId?.startsWith('guide-program-') === true
+    ? pendingGuideFocusId
+    : focusState.activeId?.startsWith('guide-program-') === true
+      ? focusState.activeId
+      : null;
+  if (focusId === null) return false;
+  pendingGuideFocusId = focusId;
+  return true;
+}
+
 function focusRendererElement(element: HTMLElement): void {
   const focusId = element.dataset.focusId;
   if (focusId !== undefined) {
@@ -614,6 +794,19 @@ function focusRendererElement(element: HTMLElement): void {
 }
 
 function updateActiveFromFocus(focusId: string | null): void {
+  if (focusId?.startsWith('guide-program-') === true) {
+    const cell = document.querySelector<HTMLElement>(`[data-focus-id="${CSS.escape(focusId)}"]`);
+    const channelId = cell?.dataset.guideChannelId;
+    const programId = cell?.dataset.guideProgramId;
+    if (channelId !== undefined && programId !== undefined) {
+      const next = selectWorkflowEpgProgram(workflowState, channelId, programId);
+      if (next !== workflowState) {
+        workflowState = next;
+        renderApp();
+      }
+    }
+    return;
+  }
   if (focusId === 'settings-category-appearance' && activeSettingsCategory !== 'appearance') {
     activeSettingsCategory = 'appearance';
     renderApp();

@@ -1,10 +1,11 @@
 # Windows UI Proof Plan
 
-RD-27 execution under this proof plan is blocked by the active
-`docs/plans/2026-07-10-complete-webos-ui-parity-reopen-plan.md`. Package 0 owns
-exact WebOS reference/Desktop baseline captures and the frozen interaction
-contract; Packages 1–8 must close with review before Windows operational proof
-can begin. The prior UI-parity closeout is superseded.
+Packages 0–8 renderer parity implementation and local automated verification
+are complete. RD-27 is the next Tier 3 planning target, but it cannot close
+without the fresh mandatory three-row Windows `Package 6 operator-assisted
+fullscreen focus audit`; Mac diagnostics and Package 7 local fullscreen proof
+substitute for none of its rows. Windows-required matrix rows remain blocked
+until observed Windows proof.
 
 ## Purpose
 
@@ -49,7 +50,7 @@ gate passes.
 | Proof surface | Allowed tracked summary | Notes |
 | --- | --- | --- |
 | Automated docs/redaction verification | Command name, exit status, and sanitized failure summary if any | Required for tracked proof-plan or matrix edits. |
-| Electron smoke or renderer route proof | Route/screen area, status, and sanitized behavior summary | Fake-backed UI remains fake-backed and cannot prove live product parity. |
+| Electron smoke or renderer route proof | Route/screen area, status, and sanitized behavior summary | Local renderer proof establishes its named seam only and cannot replace Windows operational or production-native-video proof. |
 | Windows package proof | Package identity, command names, status, verifier status, and blocker summary | Internal unpacked package proof does not prove public release readiness. |
 | Windows UI observation | Platform family, scenario id, display count, route area, pass/fail/blocked status | No screenshots or private visible content in tracked docs. |
 | Native presentation or playback harness | Harness name, scenario area, status, and sanitized capability limits | Dev-only harness proof cannot prove production native playback. |
@@ -112,12 +113,33 @@ redacted summaries for these areas before making claims:
 | Settings/channel persistence | Runtime restart/recovery proves settings and channels persist through reviewed persistence IPC and main-owned storage. |
 | Guide/EPG from persisted channels | Guide data reflects persisted channels and scheduler runtime composition, not fake data. |
 | Player overlays and route UI | Now-playing, OSD, mini-guide, channel badge, route transitions, and focus behavior are observed on Windows. |
+| Package 6 operator-assisted fullscreen focus audit | Fresh OSD, mini-guide, and options rows each receive exactly one real operator title bar click and prove ordered native/semantic focus, fullscreen, restoration, and cleanup under the blocking protocol below. |
 | Production playback | Direct play, direct stream, transcode, switching, stop, fullscreen, and crash recovery are proven through the production playback owner. |
 | Subtitles/audio/HDR | Runtime track selection and HDR behavior are proven beyond fixture or policy tests. |
 | Diagnostics/support bundle | UI export path and completed bundle scanner prove redaction without tracking raw bundle contents. |
 | Package install/delete | Internal or public package flow is observed at the scope claimed, with installer/signing/update gaps classified separately. |
 | Sleep/wake and long playback | Reviewed Windows sleep/wake and soak scenarios prove recovery, cleanup, resource behavior, and redaction-safe evidence handling. |
 | Multi-monitor/fullscreen/UI over video | Display placement, fullscreen transitions, video composition, and overlays are observed on Windows for the claimed playback mode. |
+
+## Blocking Package 6 Three-Row Protocol
+
+RD-27 cannot close without a fresh three-pass Windows manifest for all three
+rows below:
+
+| State | Exact focus id | Exact owner |
+| --- | --- | --- |
+| `player-osd` | `overlay-osd-audio` | `playerOsd` |
+| `player-mini-guide` | `overlay-mini-channel-sample-channel-1` | `miniGuide` |
+| `player-options` | `overlay-subtitle-track-off` | `playbackOptions` |
+
+Each row starts visible but natively inactive with exact production focus
+registration, observes readiness, receives exactly one real operator title bar
+click, and proves the native transition occurs after readiness and before
+confirmation without semantic focus change. It then observes actual fullscreen
+enter/leave with native and semantic focus continuity, restores window bounds,
+content bounds, CSS viewport, and DPR exactly, cleans up, and emits only
+token-free redacted evidence. The Mac diagnostic row satisfies none of these
+Windows rows, and further deferral requires another explicit reviewed replan.
 
 ## Relationship To The Parity Matrix
 

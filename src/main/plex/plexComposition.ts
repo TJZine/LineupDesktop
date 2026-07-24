@@ -19,6 +19,7 @@ import { readOrCreateDesktopPlexClientIdentifier } from './desktopPlexClientIden
 import { DesktopPlexRuntime } from './desktopPlexRuntime.js';
 import { LivePlexTransport } from './livePlexTransport.js';
 import { registerPlexIpcHandlers, type PlexIpcTeardown } from './plexIpc.js';
+import { registerChannelSetupProofPlexComposition } from './channelSetupProofPlexComposition.js';
 
 export interface RegisterPlexCompositionOptions {
   app: Pick<App, 'getPath' | 'getVersion'>;
@@ -26,6 +27,7 @@ export interface RegisterPlexCompositionOptions {
   isAuthorizedEvent(event: IpcMainInvokeEvent): boolean;
   createRequestId(prefix: string): string;
   diagnosticEventStore?: DiagnosticEventStore;
+  channelSetupProofFixture?: boolean;
 }
 
 export interface PlexCompositionRegistration {
@@ -36,6 +38,13 @@ export interface PlexCompositionRegistration {
 export async function registerPlexComposition(
   options: RegisterPlexCompositionOptions,
 ): Promise<PlexCompositionRegistration> {
+  if (options.channelSetupProofFixture === true) {
+    return registerChannelSetupProofPlexComposition({
+      isAuthorizedEvent: options.isAuthorizedEvent,
+      createRequestId: options.createRequestId,
+      diagnosticEventStore: options.diagnosticEventStore,
+    });
+  }
   const paths = resolveDesktopAppDataPaths(options.app);
   const clientIdentifier = await readOrCreateDesktopPlexClientIdentifier(paths);
   const persistenceStore = new DesktopPersistenceStore({

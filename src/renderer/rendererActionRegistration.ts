@@ -12,6 +12,7 @@ import {
   type RendererDomBindings,
 } from './domBindings.js';
 import type { StagedSetupFlowActionId } from './setup/stagedSetupController.js';
+import { readChannelBuilderAction, type ChannelBuilderAction } from './setup/channelBuilderController.js';
 import {
   readPlexHomeUserId,
   readPlexRatingKey,
@@ -26,6 +27,9 @@ export interface RendererActionHandlers {
   applyChannelSetupAction(action: NonNullable<ReturnType<typeof readChannelSetupActionId>>): void;
   applyChannelCommitAction(action: NonNullable<ReturnType<typeof readChannelCommitActionId>>): void;
   applyEpgAction(action: NonNullable<ReturnType<typeof readEpgActionId>>): void;
+  applyGuideAction?(action: GuideActionId): void;
+  focusGuideProgramFromPointer?(target: GuideProgramActionTarget): boolean;
+  activateGuideProgram?(target: GuideProgramActionTarget): void;
   applyOverlayAction(action: NonNullable<ReturnType<typeof readOverlayActionId>>): void;
   applyPlexRuntimeAction(action: NonNullable<ReturnType<typeof readPlexRuntimeActionId>>): void;
   applyCustomChannelAction?(action: NonNullable<ReturnType<typeof readCustomChannelActionId>>, detail?: string): void;
@@ -40,11 +44,23 @@ export interface RendererActionHandlers {
   openPlexMetadata(ratingKey: string): void;
   focusElement(element: HTMLElement): void;
   toggleFullscreen(): void;
-  selectAudioTrack(trackId: string): void;
-  selectSubtitleTrack(trackId: string | null): void;
+  selectAudioTrack(trackId: string, focusId: string): void;
+  selectSubtitleTrack(trackId: string | null, focusId: string): void;
+  tuneOverlayChannel?(channelId: string): void;
   applySettingsCategory?(category: string): void;
   applySetupStage?(stage: string): void;
   applyStagedSetupAction?(action: StagedSetupFlowActionId): void;
+  applyChannelBuilderAction?(action: ChannelBuilderAction, detail?: string): void;
+}
+
+export type GuideActionId = 'back' | 'setup' | 'refresh' | 'retry';
+
+export interface GuideProgramActionTarget {
+  channelId: string;
+  programId: string;
+  focusId: string;
+  presentationGeneration: number;
+  element: HTMLButtonElement;
 }
 
 export function registerRendererActions(
@@ -61,7 +77,7 @@ export function registerRendererActions(
   for (const button of dom.routeActionButtons) {
     button.addEventListener('click', () => {
       const action = readRouteActionId(button.dataset.routeAction);
-      if (action !== null) handlers.applyRouteAction(action);
+      if (action !== null && isEligibleDelegatedAction(button)) handlers.applyRouteAction(action);
     });
   }
   const settingsScreen = documentRef.getElementById('screen-settings');
@@ -82,6 +98,12 @@ export function registerRendererActions(
   const setupScreen = documentRef.getElementById('screen-channel-setup');
   setupScreen?.addEventListener('click', (event) => {
     if (!(event.target instanceof HTMLElement)) return;
+    const builderButton = event.target.closest<HTMLButtonElement>('[data-builder-action]');
+    const builderAction = readChannelBuilderAction(builderButton?.dataset.builderAction);
+    if (builderAction !== null && builderButton !== null && isEligibleDelegatedAction(builderButton) && isActiveStagedAction(builderButton)) {
+      handlers.applyChannelBuilderAction?.(builderAction, builderButton.dataset.builderDetail);
+      return;
+    }
     const customButton = event.target.closest<HTMLButtonElement>('[data-custom-channel-action]');
     const customAction = readCustomChannelActionId(customButton?.dataset.customChannelAction);
     if (customAction !== null && customButton !== null && isEligibleDelegatedAction(customButton) && isActiveStagedAction(customButton)) {
@@ -118,12 +140,44 @@ export function registerRendererActions(
       if (action !== null) handlers.applyEpgAction(action);
     });
   }
+  const guideScreen = documentRef.getElementById('screen-guide');
+  let pointerFocusOnlyId: string | null = null;
+  guideScreen?.addEventListener('pointerdown', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    const target = readGuideProgramTarget(event.target);
+    pointerFocusOnlyId = target !== null && handlers.focusGuideProgramFromPointer?.(target) === true
+      ? target.focusId
+      : null;
+  });
+  guideScreen?.addEventListener('click', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    const target = readGuideProgramTarget(event.target);
+    if (target !== null) {
+      if (pointerFocusOnlyId === target.focusId) {
+        pointerFocusOnlyId = null;
+        return;
+      }
+      pointerFocusOnlyId = null;
+      handlers.activateGuideProgram?.(target);
+      return;
+    }
+    const stateAction = event.target.closest<HTMLButtonElement>('[data-guide-action]');
+    const action = readGuideAction(stateAction?.dataset.guideAction);
+    if (stateAction !== null && action !== null && isEligibleDelegatedAction(stateAction)) {
+      handlers.applyGuideAction?.(action);
+    }
+  });
   for (const button of dom.overlayActionButtons) {
+    if (button === dom.playerPresentationElement) continue;
     button.addEventListener('click', () => {
       const action = readOverlayActionId(button.dataset.overlayAction);
-      if (action !== null) handlers.applyOverlayAction(action);
+      if (action !== null && isEligibleDelegatedAction(button)) handlers.applyOverlayAction(action);
     });
   }
+  dom.playerPresentationElement?.addEventListener('click', (event) => {
+    if (event.target instanceof HTMLElement && event.target.closest('[data-overlay]') !== null) return;
+    handlers.applyOverlayAction('openOsd');
+  });
   for (const button of dom.plexActionButtons) {
     button.addEventListener('click', () => {
       const action = readPlexRuntimeActionId(button.dataset.plexAction);
@@ -168,18 +222,54 @@ export function registerRendererActions(
   dom.overlayAudioOptionsElement?.addEventListener('click', (event) => {
     if (!(event.target instanceof HTMLElement)) return;
     const button = event.target.closest<HTMLButtonElement>('.playback-options__row');
-    if (button && button.dataset.trackId) {
-      handlers.selectAudioTrack(button.dataset.trackId);
+    if (button && button.dataset.trackId && isEligibleDelegatedAction(button)) {
+      handlers.selectAudioTrack(button.dataset.trackId, button.dataset.focusId ?? '');
     }
   });
   dom.overlaySubtitleOptionsElement?.addEventListener('click', (event) => {
     if (!(event.target instanceof HTMLElement)) return;
     const button = event.target.closest<HTMLButtonElement>('.playback-options__row');
-    if (button) {
+    if (button && isEligibleDelegatedAction(button)) {
       const trackId = button.dataset.trackId;
-      handlers.selectSubtitleTrack(trackId === 'subtitles-off' || !trackId ? null : trackId);
+      handlers.selectSubtitleTrack(trackId === 'subtitles-off' || !trackId ? null : trackId, button.dataset.focusId ?? '');
     }
   });
+  dom.overlayMiniGuideElement?.addEventListener('click', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    const button = event.target.closest<HTMLButtonElement>('[data-overlay-channel-id]');
+    if (button !== null && isEligibleDelegatedAction(button)) {
+      const channelId = button.dataset.overlayChannelId;
+      if (channelId !== undefined) handlers.tuneOverlayChannel?.(channelId);
+    }
+  });
+}
+
+function readGuideProgramTarget(target: HTMLElement): GuideProgramActionTarget | null {
+  const program = target.closest<HTMLButtonElement>('[data-guide-program-action]');
+  if (program === null || !isEligibleDelegatedAction(program)) return null;
+  const generation = Number(program.dataset.guideGeneration);
+  const channelId = program.dataset.guideChannelId;
+  const programId = program.dataset.guideProgramId;
+  const focusId = program.dataset.focusId;
+  return channelId !== undefined
+    && programId !== undefined
+    && focusId !== undefined
+    && Number.isSafeInteger(generation)
+    && generation >= 0
+    ? { channelId, programId, focusId, presentationGeneration: generation, element: program }
+    : null;
+}
+
+function readGuideAction(value: string | undefined): GuideActionId | null {
+  switch (value) {
+    case 'back':
+    case 'setup':
+    case 'refresh':
+    case 'retry':
+      return value;
+    default:
+      return null;
+  }
 }
 
 function isActiveStagedAction(button: HTMLButtonElement): boolean {

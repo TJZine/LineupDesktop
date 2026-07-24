@@ -6,6 +6,7 @@ import {
   createDesktopGamepadSnapshot,
   createDesktopKeyboardInputListener,
   mapDesktopKeyboardEvent,
+  mapDesktopKeyEvent,
   shouldBypassDesktopInput,
   startDesktopGamepadRuntime,
   type DesktopGamepadLike,
@@ -126,6 +127,16 @@ test('fullscreen dispatch maps keyboard shortcut through the desktop input owner
   listener({ key: 'F' });
 
   assert.deepEqual(dispatched, ['fullscreen']);
+});
+
+test('Player keyboard vocabulary keeps OK and Space distinct and maps Info, pages, and digits', () => {
+  assert.equal(mapDesktopKeyEvent({ key: 'Enter' }), 'ok');
+  assert.equal(mapDesktopKeyEvent({ key: ' ' }), 'space');
+  assert.equal(mapDesktopKeyEvent({ key: 'i' }), 'info');
+  assert.equal(mapDesktopKeyEvent({ key: 'PageUp' }), 'pageUp');
+  assert.equal(mapDesktopKeyEvent({ key: 'PageDown' }), 'pageDown');
+  assert.equal(mapDesktopKeyEvent({ key: '0' }), 'digit0');
+  assert.equal(mapDesktopKeyEvent({ key: '9' }), 'digit9');
 });
 
 function elementLike(

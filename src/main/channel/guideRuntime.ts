@@ -16,6 +16,7 @@ import type {
 import type { ResolvedContentItem as ChannelContentItem } from '../../domain/channel/types.js';
 import type { ChannelConfig } from '../../domain/channel/types.js';
 import type { PlexLibraryMinimalAdapter } from './plexLibraryMinimalAdapter.js';
+import type { ChannelSetupGuideRefreshResult } from '../../contracts/channel.js';
 
 export class GuideRuntime {
   private readonly repository: ChannelRepository;
@@ -203,6 +204,45 @@ export class GuideRuntime {
       return;
     }
     await this.tuneChannel(currentChannel.id);
+  }
+
+  /**
+   * Post-setup refresh deliberately bypasses tuning: the setup commit already
+   * persisted the authoritative current pointer and must not cause a second
+   * write or emit a playback/tune side effect.
+   */
+  async refreshAfterChannelSetupCommit(signal?: AbortSignal): Promise<ChannelSetupGuideRefreshResult> {
+    try {
+      if (signal?.aborted) return { kind: 'interrupted', message: 'Guide refresh was interrupted.' };
+      this.contentResolver.clearCaches();
+      const loaded = await this.repository.loadNormalized();
+      if (signal?.aborted) return { kind: 'interrupted', message: 'Guide refresh was interrupted.' };
+      const visibleChannels = loaded?.data.channels.filter(isVisibleChannel) ?? [];
+      const channel = visibleChannels.find((candidate) => candidate.id === loaded?.data.currentChannelId)
+        ?? visibleChannels[0];
+      if (!channel) {
+        this.activeChannelScheduler.unloadChannel();
+        return { kind: 'completed' };
+      }
+      const channelItems = await this.contentResolver.resolveSource(channel.contentSource);
+      if (signal?.aborted) return { kind: 'interrupted', message: 'Guide refresh was interrupted.' };
+      if (channelItems.length === 0) {
+        this.activeChannelScheduler.unloadChannel();
+        return { kind: 'completed' };
+      }
+      this.activeChannelScheduler.loadChannel({
+        channelId: channel.id,
+        anchorTime: channel.startTimeAnchor,
+        content: channelItems.map(toSchedulerContentItem),
+        playbackMode: channel.playbackMode === 'random' ? 'shuffle' : channel.playbackMode,
+        shuffleSeed: channel.shuffleSeed ?? 0,
+        blockSize: channel.blockSize,
+      });
+      return { kind: 'completed' };
+    } catch (error) {
+      this.logger.error('GuideRuntime post-setup refresh failed.', { error: summarizeError(error) });
+      return { kind: 'failed', message: 'Channels were saved, but the Guide could not be refreshed.' };
+    }
   }
 
   private logContentResolutionFailure(operation: string, channel: ChannelConfig, error: unknown): void {

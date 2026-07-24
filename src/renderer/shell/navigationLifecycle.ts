@@ -21,6 +21,9 @@ export interface NavigationLifecycleOptions {
   dom: RendererDomBindings;
   onFocusChanged(focusId: string | null): void;
   scrollFocusedIntoView(): void;
+  handleGuideDirection?(direction: 'up' | 'down' | 'left' | 'right'): boolean;
+  handleChannelSetupDirection?(direction: 'up' | 'down' | 'left' | 'right'): boolean;
+  handlePlayerInput?(input: DesktopInputButton): boolean;
   activateRoute(route: AppRouteId): void;
   isProfileModalActive(): boolean;
   closeProfileModal(): void;
@@ -73,7 +76,7 @@ export function attachNavigationInputRuntime(
 }
 
 export function createNavigationLifecycle(options: NavigationLifecycleOptions): NavigationLifecycle {
-  const routeFocusMemory = new Map<AppRouteId, string>();
+  const routeFocusMemory = new Map<AppRouteId, string | null>();
   let exitInvoker: string | null = null;
   let cleanedUp = false;
   let closeInvoked = false;
@@ -96,17 +99,19 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
     options.scrollFocusedIntoView();
   };
 
-  const focusRoute = (route: AppRouteId, rememberedFocusId: string | null): void => {
+  const focusRoute = (route: AppRouteId, rememberedFocusId: string | null | undefined): void => {
     const state = options.getFocusState();
-    options.setFocusState(rememberedFocusId === null
+    options.setFocusState(rememberedFocusId === undefined
       ? options.focusRegistry.focusRoute(state, route).state
-      : options.focusRegistry.focusTarget({ ...state, activeRoute: route }, rememberedFocusId).state);
+      : rememberedFocusId === null
+        ? { activeRoute: route, activeId: null }
+        : options.focusRegistry.focusTarget({ ...state, activeRoute: route }, rememberedFocusId).state);
     options.render();
   };
 
   const rememberCurrentFocus = (): void => {
     const state = options.getFocusState();
-    if (state.activeId !== null) routeFocusMemory.set(state.activeRoute, state.activeId);
+    routeFocusMemory.set(state.activeRoute, state.activeId);
   };
 
   const openExit = (): void => {
@@ -119,7 +124,12 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
   const cancelExit = (): void => {
     options.setShellState(closeExitConfirm(options.getShellState()));
     options.render();
-    focusTarget(exitInvoker ?? 'player-fullscreen');
+    if (exitInvoker === null) {
+      options.setFocusState({ activeRoute: 'player', activeId: null });
+      options.dom.playerPresentationElement?.focus();
+    } else {
+      focusTarget(exitInvoker);
+    }
     exitInvoker = null;
   };
 
@@ -127,7 +137,7 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
     if (options.getRoute() === route) return;
     rememberCurrentFocus();
     options.activateRoute(route);
-    focusRoute(route, routeFocusMemory.get(route) ?? null);
+    focusRoute(route, routeFocusMemory.get(route));
   };
 
   return {
@@ -156,7 +166,13 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
         return;
       }
 
+      if (options.getRoute() === 'player' && options.handlePlayerInput?.(input) === true) {
+        return;
+      }
+
       if (input === 'up' || input === 'down' || input === 'left' || input === 'right') {
+        if (options.getRoute() === 'guide' && options.handleGuideDirection?.(input) === true) return;
+        if (options.getRoute() === 'channelSetup' && options.handleChannelSetupDirection?.(input) === true) return;
         moveFocus(input);
         return;
       }
@@ -206,7 +222,7 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
       if (previousRoute === nextRoute) return;
       options.invalidateFullscreenRequest();
       const current = options.getFocusState();
-      if (current.activeId !== null) routeFocusMemory.set(previousRoute, current.activeId);
+      routeFocusMemory.set(previousRoute, current.activeId);
     },
     cleanup(): void {
       cleanedUp = true;

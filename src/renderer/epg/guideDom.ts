@@ -91,13 +91,22 @@ export function guideCellDom(
   const pos = guideCellPosition(program.startsAtMs, program.endsAtMs, windowStartMs, windowEndMs, trackWidth);
   const pres = guidePresentation(pos.width, program.temporalState, program.isSelected);
 
-  const cell = document.createElement('article');
+  const cell = document.createElement('button');
+  cell.type = 'button';
   cell.className = 'epg-grid__program';
+  cell.dataset.guideProgramAction = 'activate';
+  cell.dataset.focusId = program.focusId;
+  cell.dataset.guideChannelId = program.channelId;
+  cell.dataset.guideProgramId = program.id;
+  cell.dataset.guideGeneration = String(program.presentationGeneration);
   cell.dataset.selectedProgram = String(program.isSelected);
   cell.dataset.temporalState = program.temporalState;
   cell.dataset.widthTier = pres.widthTier;
   cell.dataset.clippedStart = String(pos.isClippedStart);
   cell.dataset.clippedEnd = String(pos.isClippedEnd);
+  cell.setAttribute('role', 'gridcell');
+  cell.setAttribute('aria-selected', String(program.isSelected));
+  cell.setAttribute('aria-label', `${program.title}, ${program.timeLabel}`);
 
   cell.style.position = 'absolute';
   cell.style.left = `${toTrackPercent(pos.left, trackWidth)}%`;
@@ -175,6 +184,12 @@ export function renderEpgGuideDom(
     return;
   }
 
+  if (view.guide.presentationState === 'ready') {
+    dom.epgGridElement.setAttribute('role', 'grid');
+  } else {
+    dom.epgGridElement.removeAttribute('role');
+  }
+
   const trackWidth = GUIDE_TRACK_UNITS;
 
   const shell = document.createElement('section');
@@ -192,15 +207,21 @@ export function renderEpgGuideDom(
   brand.textContent = view.guide.shell.brandLabel;
   headerBrand.append(brand);
 
-  const nowPlaying = document.createElement('div');
-  nowPlaying.className = 'epg-classic-now-playing';
-  const nowLabel = document.createElement('span');
-  nowLabel.className = 'epg-classic-now-playing-label';
-  nowLabel.textContent = 'NOW PLAYING';
-  const nowPlayingChannel = document.createElement('span');
-  nowPlayingChannel.className = 'epg-classic-now-playing-channel';
-  nowPlayingChannel.textContent = view.guide.shell.nowWatchingChannelLabel;
-  nowPlaying.append(nowLabel, nowPlayingChannel);
+  const shellNowWatching = view.guide.shell.nowWatching;
+  const nowPlaying = shellNowWatching === null ? null : document.createElement('div');
+  if (nowPlaying !== null) {
+    nowPlaying.className = 'epg-classic-now-playing';
+    const nowLabel = document.createElement('span');
+    nowLabel.className = 'epg-classic-now-playing-label';
+    nowLabel.textContent = 'NOW PLAYING';
+    nowPlaying.append(nowLabel);
+    if (view.guide.shell.nowWatchingChannelLabel !== null) {
+      const nowPlayingChannel = document.createElement('span');
+      nowPlayingChannel.className = 'epg-classic-now-playing-channel';
+      nowPlayingChannel.textContent = view.guide.shell.nowWatchingChannelLabel;
+      nowPlaying.append(nowPlayingChannel);
+    }
+  }
 
   const focusHint = document.createElement('div');
   focusHint.className = 'epg-classic-header-actions';
@@ -210,27 +231,35 @@ export function renderEpgGuideDom(
     focusHint.append(action);
   }
 
-  classicHeader.append(headerBrand, nowPlaying, focusHint);
+  classicHeader.append(headerBrand);
+  if (nowPlaying !== null) classicHeader.append(nowPlaying);
+  classicHeader.append(focusHint);
 
-  const nowWatching = document.createElement('div');
-  nowWatching.className = 'epg-now-watching-banner';
-  nowWatching.setAttribute('aria-live', 'polite');
-  const nowBannerLabel = document.createElement('span');
-  nowBannerLabel.className = 'epg-now-watching-live';
-  nowBannerLabel.textContent = 'NOW PLAYING';
-  const nowChannel = document.createElement('strong');
-  nowChannel.className = 'epg-now-watching-channel';
-  nowChannel.textContent = view.guide.shell.nowWatchingChannelLabel;
-  const nowProgram = document.createElement('span');
-  nowProgram.className = 'epg-now-watching-program';
-  nowProgram.textContent = view.guide.shell.nowWatching.title;
-  const nowTime = document.createElement('span');
-  nowTime.className = 'epg-now-watching-time';
-  nowTime.textContent = formatEpgTimeWindow(
-    view.guide.shell.nowWatching.startsAtMs,
-    view.guide.shell.nowWatching.endsAtMs,
-  );
-  nowWatching.append(nowBannerLabel, nowChannel, nowProgram, nowTime);
+  const nowWatching = shellNowWatching === null ? null : document.createElement('div');
+  if (nowWatching !== null && shellNowWatching !== null) {
+    nowWatching.className = 'epg-now-watching-banner';
+    nowWatching.setAttribute('aria-live', 'polite');
+    const nowBannerLabel = document.createElement('span');
+    nowBannerLabel.className = 'epg-now-watching-live';
+    nowBannerLabel.textContent = 'NOW PLAYING';
+    nowWatching.append(nowBannerLabel);
+    if (view.guide.shell.nowWatchingChannelLabel !== null) {
+      const nowChannel = document.createElement('strong');
+      nowChannel.className = 'epg-now-watching-channel';
+      nowChannel.textContent = view.guide.shell.nowWatchingChannelLabel;
+      nowWatching.append(nowChannel);
+    }
+    const nowProgram = document.createElement('span');
+    nowProgram.className = 'epg-now-watching-program';
+    nowProgram.textContent = shellNowWatching.title;
+    const nowTime = document.createElement('span');
+    nowTime.className = 'epg-now-watching-time';
+    nowTime.textContent = formatEpgTimeWindow(
+      shellNowWatching.startsAtMs,
+      shellNowWatching.endsAtMs,
+    );
+    nowWatching.append(nowProgram, nowTime);
+  }
 
   const stateElement = document.createElement('article');
   stateElement.className = 'epg-state-panel';
@@ -240,10 +269,25 @@ export function renderEpgGuideDom(
   const stateDetail = document.createElement('span');
   stateDetail.textContent = view.guide.state.detail;
   stateElement.append(stateLabel, stateDetail);
+  const stateActions = document.createElement('div');
+  stateActions.className = 'epg-state-actions';
+  for (const action of stateActionsFor(view.guide.presentationState)) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.guideAction = action.id;
+    button.dataset.focusId = `guide-state-${action.id}`;
+    button.textContent = action.label;
+    stateActions.append(button);
+  }
+  stateElement.append(stateActions);
 
   const header = document.createElement('div');
   header.className = 'epg-time-header';
-  header.append(document.createElement('span'));
+  header.setAttribute('role', 'row');
+  const channelHeader = document.createElement('span');
+  channelHeader.setAttribute('role', 'columnheader');
+  channelHeader.setAttribute('aria-label', 'Channel');
+  header.append(channelHeader);
 
   const slotTrack = document.createElement('div');
   slotTrack.className = 'epg-time-header-slots';
@@ -252,6 +296,7 @@ export function renderEpgGuideDom(
   view.guide.slots.forEach((slot, index) => {
     const label = document.createElement('span');
     label.className = 'epg-time-slot';
+    label.setAttribute('role', 'columnheader');
     label.style.position = 'absolute';
     label.style.left = `${toTrackPercent(index * slotWidth, trackWidth)}%`;
     label.style.width = `${toTrackPercent(slotWidth, trackWidth)}%`;
@@ -282,9 +327,11 @@ export function renderEpgGuideDom(
   const rows = view.guide.rows.map((row) => {
     const rowElement = document.createElement('section');
     rowElement.className = 'epg-grid__row';
+    rowElement.setAttribute('role', 'row');
     rowElement.dataset.selectedChannel = String(row.isSelected);
     const channel = document.createElement('div');
     channel.className = 'epg-grid__channel';
+    channel.setAttribute('role', 'rowheader');
     const number = document.createElement('strong');
     number.textContent = row.number;
     const name = document.createElement('span');
@@ -317,11 +364,44 @@ export function renderEpgGuideDom(
     return rowElement;
   });
 
-  shell.append(classicHeader, nowWatching, stateElement);
+  shell.append(classicHeader);
+  if (nowWatching !== null) shell.append(nowWatching);
+  shell.append(stateElement);
   if (view.guide.presentationState === 'ready') {
+    stateElement.hidden = true;
+    stateElement.setAttribute('aria-hidden', 'true');
+    if (view.guide.tuneError !== null) {
+      const actionError = document.createElement('p');
+      actionError.className = 'epg-action-error';
+      actionError.dataset.guideTuneError = '';
+      actionError.setAttribute('role', 'status');
+      actionError.textContent = view.guide.tuneError;
+      shell.append(actionError);
+    }
     shell.append(header, ...rows);
   }
   dom.epgGridElement.replaceChildren(shell);
+}
+
+function stateActionsFor(
+  state: RouteWorkflowViewModel['guide']['presentationState'],
+): readonly { id: 'back' | 'setup' | 'refresh' | 'retry'; label: string }[] {
+  switch (state) {
+    case 'loading':
+      return [{ id: 'back', label: 'Back' }];
+    case 'empty-channels':
+      return [{ id: 'setup', label: 'Set up channels' }, { id: 'back', label: 'Back' }];
+    case 'empty-programs':
+      return [
+        { id: 'refresh', label: 'Refresh' },
+        { id: 'setup', label: 'Edit lineup' },
+        { id: 'back', label: 'Back' },
+      ];
+    case 'error':
+      return [{ id: 'retry', label: 'Retry' }, { id: 'back', label: 'Back' }];
+    case 'ready':
+      return [{ id: 'setup', label: 'Edit lineup' }];
+  }
 }
 
 function toTrackPercent(value: number, trackWidth: number): number {

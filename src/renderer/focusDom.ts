@@ -87,7 +87,7 @@ export function registerRendererFocusTargets(
   dom.focusableElements.forEach((element, index) => {
     const focusId = element.dataset.focusId;
     const route = readClosestRouteId(element);
-    if (focusId === undefined || registered.has(focusId)) {
+    if (focusId === undefined || registered.has(focusId) || element.dataset.overlayAction !== undefined) {
       return;
     }
     const shellNeighbors = getShellNeighbors(focusId);
@@ -216,6 +216,12 @@ function focusElementOrder(focusId: string, index: number): number {
   if (focusId.startsWith('custom-draft-')) {
     return 190 + index / 1000;
   }
+  if (focusId.startsWith('guide-program-')) {
+    return 20 + index / 1000;
+  }
+  if (focusId.startsWith('guide-state-')) {
+    return 10 + index / 1000;
+  }
   return 220 + index;
 }
 
@@ -315,11 +321,16 @@ function readCurrentFocusableElements(dom: RendererDomBindings): HTMLElement[] {
 function isElementHiddenFromFocus(element: HTMLElement): boolean {
   return element.closest('[hidden], [inert], [aria-hidden="true"]') !== null
     || (element as HTMLButtonElement).disabled === true
-    || readAriaDisabled(element);
+    || (readAriaDisabled(element) && !hasBusyFocusCustody(element));
 }
 
 function readAriaDisabled(element: HTMLElement): boolean {
   return typeof element.getAttribute === 'function' && element.getAttribute('aria-disabled') === 'true';
+}
+
+function hasBusyFocusCustody(element: HTMLElement): boolean {
+  return element.dataset.overlayBusyFocusCustody === 'true'
+    && element.getAttribute('aria-busy') === 'true';
 }
 
 function isDynamicFocusId(focusId: string | undefined): focusId is string {
@@ -333,6 +344,11 @@ function isDynamicFocusId(focusId: string | undefined): focusId is string {
       || focusId.startsWith('custom-channel-')
       || focusId.startsWith('custom-media-')
       || focusId.startsWith('custom-draft-')
+      || focusId.startsWith('guide-program-')
+      || focusId.startsWith('guide-state-')
+      || focusId.startsWith('overlay-mini-channel-')
+      || focusId.startsWith('overlay-audio-track-')
+      || focusId.startsWith('overlay-subtitle-track-')
     )
   );
 }

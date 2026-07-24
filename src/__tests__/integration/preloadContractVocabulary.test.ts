@@ -5,7 +5,13 @@ import ts from 'typescript';
 
 import {
   LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
+  LINEUP_CHANNEL_SETUP_BUILD_CHANNEL,
+  LINEUP_CHANNEL_SETUP_CANCEL_BUILD_CHANNEL,
+  LINEUP_CHANNEL_SETUP_GET_RECORD_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
+  LINEUP_CHANNEL_SETUP_PREVIEW_CHANNEL,
+  LINEUP_CHANNEL_SETUP_PROGRESS_CHANNEL,
+  LINEUP_CHANNEL_SETUP_REVIEW_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_DELETE_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_DUPLICATE_DRAFT_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL,
@@ -49,7 +55,9 @@ import {
   CHANNEL_SETUP_COMMIT_MODES,
   CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS,
   CHANNEL_SETUP_OPERATIONS,
+  CHANNEL_SETUP_PROGRESS_TASKS,
   CHANNEL_SETUP_STATUS_VALUES,
+  CHANNEL_SETUP_STRATEGY_KEYS,
 } from '../../contracts/channel.js';
 import {
   CUSTOM_CHANNEL_ERROR_CODES,
@@ -576,6 +584,12 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_PLEX_GET_METADATA_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
   LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
+  LINEUP_CHANNEL_SETUP_GET_RECORD_CHANNEL,
+  LINEUP_CHANNEL_SETUP_PREVIEW_CHANNEL,
+  LINEUP_CHANNEL_SETUP_REVIEW_CHANNEL,
+  LINEUP_CHANNEL_SETUP_BUILD_CHANNEL,
+  LINEUP_CHANNEL_SETUP_CANCEL_BUILD_CHANNEL,
+  LINEUP_CHANNEL_SETUP_PROGRESS_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL,
@@ -616,6 +630,11 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_PLEX_GET_METADATA_CHANNEL',
     'LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
     'LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_GET_RECORD_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_PREVIEW_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_REVIEW_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_BUILD_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_CANCEL_BUILD_CHANNEL',
     'LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL',
     'LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL',
     'LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL',
@@ -628,10 +647,11 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
     'LINEUP_PLAYER_TUNE_CHANNEL',
   ]),
-  on: new Set(['LINEUP_SHELL_STATUS_CHANGED_CHANNEL', 'LINEUP_PLAYER_EVENT_CHANNEL']),
+  on: new Set(['LINEUP_SHELL_STATUS_CHANGED_CHANNEL', 'LINEUP_PLAYER_EVENT_CHANNEL', 'LINEUP_CHANNEL_SETUP_PROGRESS_CHANNEL']),
   removeListener: new Set([
     'LINEUP_SHELL_STATUS_CHANGED_CHANNEL',
     'LINEUP_PLAYER_EVENT_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_PROGRESS_CHANNEL',
   ]),
 } as const;
 
@@ -1181,12 +1201,16 @@ function collectCreateChannelSetupBridgeChannelArguments(): string[] {
       ts.isIdentifier(node.expression) &&
       node.expression.text === 'createChannelSetupBridge'
     ) {
-      const [invokeExpression, channelsExpression] = node.arguments;
+      const [invokeExpression, eventsExpression, channelsExpression, requestIdExpression] = node.arguments;
       assert.ok(invokeExpression, 'createChannelSetupBridge must pass an invoke function');
       assert.ok(
         ts.isIdentifier(invokeExpression) && invokeExpression.text === 'invokeChannelSetup',
         'createChannelSetupBridge must receive the narrow channel setup invoke function',
       );
+      assert.ok(eventsExpression !== undefined && ts.isObjectLiteralExpression(unwrapExpression(eventsExpression)),
+        'createChannelSetupBridge must receive literal progress event custody');
+      assert.ok(requestIdExpression !== undefined && ts.isIdentifier(requestIdExpression) && requestIdExpression.text === 'createRequestId',
+        'createChannelSetupBridge must receive the preload request-id owner');
       const channelBindings = channelsExpression === undefined
         ? undefined
         : unwrapExpression(channelsExpression);
@@ -1298,6 +1322,8 @@ test('preload guard vocabulary matches contract vocabulary', () => {
   assert.deepEqual(readChannelGuardStringArrayConst('CHANNEL_SETUP_COMMIT_MODES'), [
     ...CHANNEL_SETUP_COMMIT_MODES,
   ]);
+  assert.deepEqual(readChannelGuardStringArrayConst('CHANNEL_SETUP_STRATEGY_KEYS'), [...CHANNEL_SETUP_STRATEGY_KEYS]);
+  assert.deepEqual(readChannelGuardStringArrayConst('CHANNEL_SETUP_PROGRESS_TASKS'), [...CHANNEL_SETUP_PROGRESS_TASKS]);
   assert.deepEqual(
     readChannelGuardStringArrayConst('CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS'),
     [...CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS],
@@ -2519,8 +2545,10 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
     'invoke:invokePlayerSnapshot.channel',
     'invoke:invokePlex.channel',
     'invoke:invokeSettings.channel',
+    'on:LINEUP_CHANNEL_SETUP_PROGRESS_CHANNEL',
     'on:LINEUP_PLAYER_EVENT_CHANNEL',
     'on:LINEUP_SHELL_STATUS_CHANGED_CHANNEL',
+    'removeListener:LINEUP_CHANNEL_SETUP_PROGRESS_CHANNEL',
     'removeListener:LINEUP_PLAYER_EVENT_CHANNEL',
     'removeListener:LINEUP_SHELL_STATUS_CHANGED_CHANNEL',
   ]);
@@ -2540,8 +2568,14 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
     'LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL',
   ]);
   assert.deepEqual(collectCreateChannelSetupBridgeChannelArguments().sort(), [
+    'LINEUP_CHANNEL_SETUP_BUILD_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_CANCEL_BUILD_CHANNEL',
     'LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_GET_RECORD_CHANNEL',
     'LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_PREVIEW_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_PROGRESS_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_REVIEW_CHANNEL',
   ]);
 
   function collectCreateCustomChannelBridgeChannelArguments(): string[] {
