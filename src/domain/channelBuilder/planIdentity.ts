@@ -145,12 +145,21 @@ export function sha256HexV1(value: string): string {
 class Sha256V1 {
   private readonly state = new Uint32Array(sha256Initial);
   private readonly buffer = new Uint8Array(64);
-  private readonly words = new Uint32Array(64);
+  private readonly words = new Uint32Array(16);
   private bufferLength = 0;
   private byteLength = 0;
 
   updateString(value: string): this {
     for (let index = 0; index < value.length; index += 1) {
+      if (
+        this.bufferLength === 0 &&
+        index + 64 <= value.length &&
+        this.processAsciiBlock(value, index)
+      ) {
+        this.byteLength += 64;
+        index += 63;
+        continue;
+      }
       const first = value.charCodeAt(index);
       if (first <= 0x7f) {
         this.buffer[this.bufferLength] = first;
@@ -246,24 +255,27 @@ class Sha256V1 {
           this.buffer[position + 3]!) >>>
         0;
     }
-    for (let index = 16; index < 64; index += 1) {
-      const previous15 = words[index - 15]!;
-      const previous2 = words[index - 2]!;
-      const sigma0 =
-        ((previous15 >>> 7) | (previous15 << 25)) ^
-        ((previous15 >>> 18) | (previous15 << 14)) ^
-        (previous15 >>> 3);
-      const sigma1 =
-        ((previous2 >>> 17) | (previous2 << 15)) ^
-        ((previous2 >>> 19) | (previous2 << 13)) ^
-        (previous2 >>> 10);
+    this.compressWords();
+  }
+
+  private processAsciiBlock(value: string, offset: number): boolean {
+    const words = this.words;
+    for (let index = 0; index < 16; index += 1) {
+      const position = offset + index * 4;
+      const first = value.charCodeAt(position);
+      const second = value.charCodeAt(position + 1);
+      const third = value.charCodeAt(position + 2);
+      const fourth = value.charCodeAt(position + 3);
+      if ((first | second | third | fourth) > 0x7f) return false;
       words[index] =
-        (words[index - 16]! +
-          sigma0 +
-          words[index - 7]! +
-          sigma1) >>>
-        0;
+        ((first << 24) | (second << 16) | (third << 8) | fourth) >>> 0;
     }
+    this.compressWords();
+    return true;
+  }
+
+  private compressWords(): void {
+    const words = this.words;
     let a = this.state[0]!;
     let b = this.state[1]!;
     let c = this.state[2]!;
@@ -272,14 +284,56 @@ class Sha256V1 {
     let f = this.state[5]!;
     let g = this.state[6]!;
     let h = this.state[7]!;
-    for (let index = 0; index < 64; index += 1) {
+    for (let index = 0; index < 16; index += 1) {
+      const word = words[index]!;
       const upper1 =
         ((e >>> 6) | (e << 26)) ^
         ((e >>> 11) | (e << 21)) ^
         ((e >>> 25) | (e << 7));
       const choice = (e & f) ^ (~e & g);
       const temporary1 =
-        (h + upper1 + choice + sha256Round[index]! + words[index]!) >>> 0;
+        (h + upper1 + choice + sha256Round[index]! + word) >>> 0;
+      const upper0 =
+        ((a >>> 2) | (a << 30)) ^
+        ((a >>> 13) | (a << 19)) ^
+        ((a >>> 22) | (a << 10));
+      const majority = (a & b) ^ (a & c) ^ (b & c);
+      const temporary2 = (upper0 + majority) >>> 0;
+      h = g;
+      g = f;
+      f = e;
+      e = (d + temporary1) >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (temporary1 + temporary2) >>> 0;
+    }
+    for (let index = 16; index < 64; index += 1) {
+      const wordIndex = index & 15;
+      const previous15 = words[(wordIndex + 1) & 15]!;
+      const previous2 = words[(wordIndex + 14) & 15]!;
+      const sigma0 =
+        ((previous15 >>> 7) | (previous15 << 25)) ^
+        ((previous15 >>> 18) | (previous15 << 14)) ^
+        (previous15 >>> 3);
+      const sigma1 =
+        ((previous2 >>> 17) | (previous2 << 15)) ^
+        ((previous2 >>> 19) | (previous2 << 13)) ^
+        (previous2 >>> 10);
+      const word =
+        (words[wordIndex]! +
+          sigma0 +
+          words[(wordIndex + 9) & 15]! +
+          sigma1) >>>
+        0;
+      words[wordIndex] = word;
+      const upper1 =
+        ((e >>> 6) | (e << 26)) ^
+        ((e >>> 11) | (e << 21)) ^
+        ((e >>> 25) | (e << 7));
+      const choice = (e & f) ^ (~e & g);
+      const temporary1 =
+        (h + upper1 + choice + sha256Round[index]! + word) >>> 0;
       const upper0 =
         ((a >>> 2) | (a << 30)) ^
         ((a >>> 13) | (a << 19)) ^
@@ -303,6 +357,111 @@ class Sha256V1 {
     this.state[5] = (this.state[5]! + f) >>> 0;
     this.state[6] = (this.state[6]! + g) >>> 0;
     this.state[7] = (this.state[7]! + h) >>> 0;
+  }
+}
+
+function updateCanonicalJsonV1(hasher: Sha256V1, value: unknown): void {
+  const chunks: string[] = [];
+  const shapeCache = new Map<string, readonly (readonly [string, string])[]>();
+  let bufferedUnits = 0;
+  const flush = (): void => {
+    if (chunks.length === 0) return;
+    hasher.updateString(chunks.join(''));
+    chunks.length = 0;
+    bufferedUnits = 0;
+  };
+  const write = (chunk: string): void => {
+    chunks.push(chunk);
+    bufferedUnits += chunk.length;
+    if (bufferedUnits >= 65_536) flush();
+  };
+  writeCanonicalValue(value, new Set(), shapeCache, write);
+  flush();
+}
+
+function writeCanonicalValue(
+  value: unknown,
+  seen: Set<object>,
+  shapeCache: Map<string, readonly (readonly [string, string])[]>,
+  write: (chunk: string) => void,
+): void {
+  if (value === null) {
+    write('null');
+    return;
+  }
+  if (typeof value === 'string') {
+    write(JSON.stringify(value.normalize('NFC')));
+    return;
+  }
+  if (typeof value === 'boolean') {
+    write(value ? 'true' : 'false');
+    return;
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new TypeError('Identity numbers must be finite.');
+    }
+    write(JSON.stringify(Object.is(value, -0) ? 0 : value));
+    return;
+  }
+  if (
+    typeof value === 'undefined' ||
+    typeof value === 'symbol' ||
+    typeof value === 'bigint' ||
+    typeof value === 'function'
+  ) {
+    throw new TypeError('Unsupported Identity V1 value.');
+  }
+  if (seen.has(value)) {
+    throw new TypeError('Identity V1 values cannot be cyclic.');
+  }
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      write('[');
+      for (let index = 0; index < value.length; index += 1) {
+        if (!Object.prototype.hasOwnProperty.call(value, index)) {
+          throw new TypeError('Identity V1 arrays cannot be sparse.');
+        }
+        if (index > 0) write(',');
+        writeCanonicalValue(value[index], seen, shapeCache, write);
+      }
+      write(']');
+      return;
+    }
+    if (!isPlainRecord(value)) {
+      throw new TypeError('Identity V1 objects must be plain records.');
+    }
+    const rawKeys = Object.keys(value);
+    const shapeKey = JSON.stringify(rawKeys);
+    let entries = shapeCache.get(shapeKey);
+    if (entries === undefined) {
+      const normalizedKeys = new Map<string, string>();
+      for (const rawKey of rawKeys) {
+        const normalizedKey = rawKey.normalize('NFC');
+        if (normalizedKeys.has(normalizedKey)) {
+          throw new TypeError(
+            'Identity V1 object keys collide after NFC normalization.',
+          );
+        }
+        normalizedKeys.set(normalizedKey, rawKey);
+      }
+      entries = [...normalizedKeys.entries()].sort(([left], [right]) =>
+        compareCodePoints(left, right),
+      );
+      shapeCache.set(shapeKey, entries);
+    }
+    write('{');
+    for (let index = 0; index < entries.length; index += 1) {
+      const [normalizedKey, rawKey] = entries[index]!;
+      if (index > 0) write(',');
+      write(JSON.stringify(normalizedKey));
+      write(':');
+      writeCanonicalValue(value[rawKey], seen, shapeCache, write);
+    }
+    write('}');
+  } finally {
+    seen.delete(value);
   }
 }
 
@@ -1075,7 +1234,12 @@ export function createCandidateIdentityPreimage(
 export function createCandidateIdentity(
   input: CandidateIdentityInput,
 ): ChannelBuilderCandidateIdentity {
-  return createCandidateIdentityTuple(input).identity;
+  const bytes = canonicalJsonV1(createCandidateIdentityPreimage(input));
+  return identityBytes(
+    'candidate-identity:',
+    'lineup-builder/candidate-identity/v1:',
+    bytes,
+  );
 }
 
 export type CandidateIdentityTuple = Readonly<{
@@ -1133,10 +1297,14 @@ export function createPlanIdentity(
   input: CanonicalJsonValue,
   output: CanonicalJsonValue,
 ): ChannelBuilderPlanIdentity {
-  return identity('plan-identity:', 'lineup-builder/plan-identity/v1:', {
+  const hasher = new Sha256V1().updateString(
+    'lineup-builder/plan-identity/v1:',
+  );
+  updateCanonicalJsonV1(hasher, {
     input,
     output,
   });
+  return `plan-identity:${hasher.digestHex()}`;
 }
 
 export function createDeterministicShuffleSeed(seed: string, value: string): number {

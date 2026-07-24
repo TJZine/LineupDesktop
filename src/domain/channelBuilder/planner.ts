@@ -13,6 +13,7 @@ import {
 import { normalizeChannelSetupConfig } from './config.js';
 import {
   createCandidateId,
+  createCandidateIdentity,
   createCandidateIdentityTuple,
   createPersistedStringV1,
   createPlanIdentity,
@@ -39,7 +40,7 @@ import {
 
 type DraftWithIdentityBytes = Readonly<{
   draft: ChannelBuilderCandidateDraft;
-  identityBytes: string;
+  identityBytes: string | null;
   meetsMinimumItems: boolean;
 }>;
 
@@ -85,6 +86,9 @@ function toDrafts(
   input: ChannelBuilderPlannerInput,
 ): readonly DraftWithIdentityBytes[] {
   const occurrences = new Map<string, number>();
+  const requiresIdentityBytes =
+    input.normalizedConfig.buildMode !== 'replace' &&
+    input.existingLineup.length > 0;
   return generated.map((candidate) => {
     if (
       !isValidChannelBuilderCandidateContentFilterPlan(
@@ -109,8 +113,11 @@ function toDrafts(
       playbackMode: candidate.playbackMode,
       blockSize: candidate.blockSize,
     };
-    const identityTuple = createCandidateIdentityTuple(identityInput);
-    const candidateIdentity = identityTuple.identity;
+    const identityTuple = requiresIdentityBytes
+      ? createCandidateIdentityTuple(identityInput)
+      : null;
+    const candidateIdentity =
+      identityTuple?.identity ?? createCandidateIdentity(identityInput);
     const occurrenceKey = `${candidate.strategy}\u0000${candidateIdentity}`;
     const occurrence = occurrences.get(occurrenceKey) ?? 0;
     occurrences.set(occurrenceKey, occurrence + 1);
@@ -141,7 +148,7 @@ function toDrafts(
     };
     return {
       draft,
-      identityBytes: identityTuple.bytes,
+      identityBytes: identityTuple?.bytes ?? null,
       meetsMinimumItems: candidate.meetsMinimumItems,
     };
   });
@@ -211,10 +218,15 @@ function buildMatches(
     const queue = candidatesByIdentity.get(tuple.identity);
     if (!queue) continue;
     const matchIndex = findByteEqualCandidateTupleIndex(
-      queue.map((candidate) => ({
-        identity: candidate.draft.candidateIdentity,
-        bytes: candidate.identityBytes,
-      })),
+      queue.map((candidate) => {
+        if (candidate.identityBytes === null) {
+          throw new Error('Candidate identity bytes invariant failed.');
+        }
+        return {
+          identity: candidate.draft.candidateIdentity,
+          bytes: candidate.identityBytes,
+        };
+      }),
       tuple,
     );
     if (matchIndex < 0) continue;
