@@ -5,23 +5,19 @@ import {
 } from './constants.js';
 import {
   convertFacetWarnings,
-  isValidChannelBuilderCandidateContentFilterPlan,
+  isValidChannelBuilderCandidateContentFilterPlanWithIdentityOperations,
   isValidChannelBuilderFacetSnapshot,
   sortAndDedupeChannelSetupWarnings,
   strategyWarning,
 } from './facets.js';
 import { normalizeChannelSetupConfig } from './config.js';
 import {
-  createCandidateId,
-  createCandidateIdentity,
-  createCandidateIdentityTuple,
-  createPersistedStringV1,
-  createPlanIdentity,
-  findByteEqualCandidateTupleIndex,
+  channelBuilderIdentityOperations,
+  type ChannelBuilderIdentityOperations,
   type CandidateIdentityTuple,
 } from './planIdentity.js';
 import {
-  buildStrategyCandidates,
+  buildStrategyCandidatesWithIdentityOperations,
   type GeneratedChannelBuilderCandidate,
 } from './strategyBuilders.js';
 import {
@@ -82,6 +78,7 @@ function validateInput(input: ChannelBuilderPlannerInput): void {
 }
 
 function toDrafts(
+  identityOperations: ChannelBuilderIdentityOperations,
   generated: readonly GeneratedChannelBuilderCandidate[],
   input: ChannelBuilderPlannerInput,
 ): readonly DraftWithIdentityBytes[] {
@@ -91,7 +88,8 @@ function toDrafts(
     input.existingLineup.length > 0;
   return generated.map((candidate) => {
     if (
-      !isValidChannelBuilderCandidateContentFilterPlan(
+      !isValidChannelBuilderCandidateContentFilterPlanWithIdentityOperations(
+        identityOperations,
         candidate.contentFilterPlan,
         input.facetSnapshot,
       )
@@ -114,14 +112,15 @@ function toDrafts(
       blockSize: candidate.blockSize,
     };
     const identityTuple = requiresIdentityBytes
-      ? createCandidateIdentityTuple(identityInput)
+      ? identityOperations.createCandidateIdentityTuple(identityInput)
       : null;
     const candidateIdentity =
-      identityTuple?.identity ?? createCandidateIdentity(identityInput);
+      identityTuple?.identity ??
+      identityOperations.createCandidateIdentity(identityInput);
     const occurrenceKey = `${candidate.strategy}\u0000${candidateIdentity}`;
     const occurrence = occurrences.get(occurrenceKey) ?? 0;
     occurrences.set(occurrenceKey, occurrence + 1);
-    const candidateId = createCandidateId({
+    const candidateId = identityOperations.createCandidateId({
       seed: input.seed,
       strategy: candidate.strategy,
       candidateIdentity,
@@ -155,6 +154,7 @@ function toDrafts(
 }
 
 function existingCandidateTuple(
+  identityOperations: ChannelBuilderIdentityOperations,
   entry: ChannelBuilderExistingLineupEntry,
   input: ChannelBuilderPlannerInput,
 ): CandidateIdentityTuple | null {
@@ -187,12 +187,13 @@ function existingCandidateTuple(
     playbackMode: entry.playbackMode,
     blockSize: entry.blockSize ?? null,
   };
-  const tuple = createCandidateIdentityTuple(identityInput);
+  const tuple = identityOperations.createCandidateIdentityTuple(identityInput);
   if (tuple.identity !== marker.candidateIdentity) return null;
   return tuple;
 }
 
 function buildMatches(
+  identityOperations: ChannelBuilderIdentityOperations,
   drafts: readonly DraftWithIdentityBytes[],
   input: ChannelBuilderPlannerInput,
 ): Readonly<{
@@ -213,11 +214,11 @@ function buildMatches(
     candidatesByIdentity.set(key, queue);
   }
   for (const existing of input.existingLineup) {
-    const tuple = existingCandidateTuple(existing, input);
+    const tuple = existingCandidateTuple(identityOperations, existing, input);
     if (tuple === null) continue;
     const queue = candidatesByIdentity.get(tuple.identity);
     if (!queue) continue;
-    const matchIndex = findByteEqualCandidateTupleIndex(
+    const matchIndex = identityOperations.findByteEqualCandidateTupleIndex(
       queue.map((candidate) => {
         if (candidate.identityBytes === null) {
           throw new Error('Candidate identity bytes invariant failed.');
@@ -295,11 +296,14 @@ function buildReviewDiff(
   };
 }
 
-function existingIdentityProjection(entry: ChannelBuilderExistingLineupEntry): unknown {
+function existingIdentityProjection(
+  identityOperations: ChannelBuilderIdentityOperations,
+  entry: ChannelBuilderExistingLineupEntry,
+): unknown {
   return {
-    id: createPersistedStringV1(entry.id),
+    id: identityOperations.createPersistedStringV1(entry.id),
     number: entry.number,
-    name: createPersistedStringV1(entry.name),
+    name: identityOperations.createPersistedStringV1(entry.name),
     sourceDisposition: entry.sourceDisposition,
     sourceReference: entry.sourceReference,
     playbackMode: entry.playbackMode,
@@ -319,7 +323,10 @@ function existingIdentityProjection(entry: ChannelBuilderExistingLineupEntry): u
   };
 }
 
-function outputIdentityProjection(output: Omit<ChannelBuilderPlannerOutput, 'planIdentity'>): unknown {
+function outputIdentityProjection(
+  identityOperations: ChannelBuilderIdentityOperations,
+  output: Omit<ChannelBuilderPlannerOutput, 'planIdentity'>,
+): unknown {
   return {
     ...output,
     candidateLedger: output.candidateLedger.map((entry) => ({
@@ -327,11 +334,13 @@ function outputIdentityProjection(output: Omit<ChannelBuilderPlannerOutput, 'pla
       retainedChannelId:
         entry.retainedChannelId === null
           ? null
-          : createPersistedStringV1(entry.retainedChannelId),
+          : identityOperations.createPersistedStringV1(entry.retainedChannelId),
     })),
     existingLedger: output.existingLedger.map((entry) => ({
       ...entry,
-      existingChannelId: createPersistedStringV1(entry.existingChannelId),
+      existingChannelId: identityOperations.createPersistedStringV1(
+        entry.existingChannelId,
+      ),
     })),
   };
 }
@@ -339,14 +348,27 @@ function outputIdentityProjection(output: Omit<ChannelBuilderPlannerOutput, 'pla
 export function buildChannelSetupPlan(
   input: ChannelBuilderPlannerInput,
 ): ChannelBuilderPlannerOutput {
+  return buildChannelSetupPlanWithIdentityOperations(
+    channelBuilderIdentityOperations,
+    input,
+  );
+}
+
+function buildChannelSetupPlanWithIdentityOperations(
+  identityOperations: ChannelBuilderIdentityOperations,
+  input: ChannelBuilderPlannerInput,
+): ChannelBuilderPlannerOutput {
   validateInput(input);
-  const generated = buildStrategyCandidates({
-    normalizedConfig: input.normalizedConfig,
-    facetSnapshot: input.facetSnapshot,
-    seed: input.seed,
-  });
-  const drafts = toDrafts(generated, input);
-  const matches = buildMatches(drafts, input);
+  const generated = buildStrategyCandidatesWithIdentityOperations(
+    identityOperations,
+    {
+      normalizedConfig: input.normalizedConfig,
+      facetSnapshot: input.facetSnapshot,
+      seed: input.seed,
+    },
+  );
+  const drafts = toDrafts(identityOperations, generated, input);
+  const matches = buildMatches(identityOperations, drafts, input);
   const requestedMaxChannels = input.normalizedConfig.maxChannels;
   const effectiveMaxChannels = Math.min(requestedMaxChannels, CHANNEL_BUILDER_MAX_CHANNELS);
   const occupiedNumbers = new Set(input.existingLineup.map((entry) => entry.number));
@@ -522,15 +544,24 @@ export function buildChannelSetupPlan(
       availableCreateSlots,
     },
   } satisfies Omit<ChannelBuilderPlannerOutput, 'planIdentity'>;
-  const planIdentity = createPlanIdentity(
+  const planIdentity = identityOperations.createPlanIdentity(
     {
       normalizedConfig: input.normalizedConfig,
       facetSnapshot: input.facetSnapshot,
-      existingLineup: input.existingLineup.map(existingIdentityProjection),
+      existingLineup: input.existingLineup.map((entry) =>
+        existingIdentityProjection(identityOperations, entry),
+      ),
       clock: input.clock,
       seed: input.seed,
     } as never,
-    outputIdentityProjection(outputWithoutIdentity) as never,
+    outputIdentityProjection(identityOperations, outputWithoutIdentity) as never,
   );
   return { planIdentity, ...outputWithoutIdentity };
+}
+
+export function createChannelSetupPlanner(
+  identityOperations: ChannelBuilderIdentityOperations,
+): (input: ChannelBuilderPlannerInput) => ChannelBuilderPlannerOutput {
+  return (input) =>
+    buildChannelSetupPlanWithIdentityOperations(identityOperations, input);
 }

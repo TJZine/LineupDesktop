@@ -7,10 +7,8 @@ import {
   CHANNEL_BUILDER_STRATEGY_KEYS,
 } from './constants.js';
 import {
-  canonicalJsonV1,
-  createContentFilterIdentity,
-  createDeterministicShuffleSeed,
-  createMixedSourceIdentity,
+  channelBuilderIdentityOperations,
+  type ChannelBuilderIdentityOperations,
 } from './planIdentity.js';
 import {
   projectChannelBuilderSafeDisplayString,
@@ -71,12 +69,13 @@ function facetLeaf(
 }
 
 function mixedReference(
+  identityOperations: ChannelBuilderIdentityOperations,
   mixMode: 'sequential' | 'interleave',
   sources: readonly ChannelBuilderSafeSourceReference[],
 ): ChannelBuilderSafeSourceReference {
   return {
     kind: 'mixed',
-    sourceIdentity: createMixedSourceIdentity(
+    sourceIdentity: identityOperations.createMixedSourceIdentity(
       mixMode,
       sources.map((source) => source.sourceIdentity),
     ),
@@ -163,11 +162,15 @@ function tagMeetsEligibility(
   return tag.itemCount === null || tag.itemCount >= minItems;
 }
 
-function seedTuple(values: readonly unknown[]): string {
-  return canonicalJsonV1(values);
+function seedTuple(
+  identityOperations: ChannelBuilderIdentityOperations,
+  values: readonly unknown[],
+): string {
+  return identityOperations.canonicalJsonV1(values);
 }
 
 function createCandidate(
+  identityOperations: ChannelBuilderIdentityOperations,
   input: CandidateInput,
   seed: string,
 ): GeneratedChannelBuilderCandidate {
@@ -177,7 +180,7 @@ function createCandidate(
     sourceReference: input.sourceReference,
     estimatedItemCount: input.estimatedItemCount,
     playbackMode: input.playbackMode,
-    shuffleSeed: createDeterministicShuffleSeed(seed, input.seedKey),
+    shuffleSeed: identityOperations.createDeterministicShuffleSeed(seed, input.seedKey),
     contentFilterPlan: input.contentFilterPlan,
     sortOrder: input.sortOrder,
     blockSize: input.blockSize,
@@ -225,6 +228,7 @@ function applySeriesOrdering(
 }
 
 function expandCandidates(
+  identityOperations: ChannelBuilderIdentityOperations,
   candidates: readonly GeneratedChannelBuilderCandidate[],
   config: NormalizedChannelSetupConfig,
   seriesFacetIds: ReadonlySet<string>,
@@ -247,11 +251,14 @@ function expandCandidates(
         expanded.push({
           ...candidate,
           displayName: safeName(`${candidate.displayName} (${replicaIndex + 1})`),
-          shuffleSeed: createDeterministicShuffleSeed(seed, seedTuple([
-            candidate.sourceReference.sourceIdentity,
-            'replica',
-            replicaIndex,
-          ])),
+          shuffleSeed: identityOperations.createDeterministicShuffleSeed(
+            seed,
+            seedTuple(identityOperations, [
+              candidate.sourceReference.sourceIdentity,
+              'replica',
+              replicaIndex,
+            ]),
+          ),
           lineupReplicaIndex: replicaIndex as 1 | 2 | 3,
         });
       }
@@ -278,22 +285,30 @@ function expandCandidates(
       ),
       playbackMode,
       blockSize,
-      shuffleSeed: createDeterministicShuffleSeed(seed, seedTuple([
-        candidate.sourceReference.sourceIdentity,
-        'variant',
-        playbackMode,
-      ])),
+      shuffleSeed: identityOperations.createDeterministicShuffleSeed(
+        seed,
+        seedTuple(identityOperations, [
+          candidate.sourceReference.sourceIdentity,
+          'variant',
+          playbackMode,
+        ]),
+      ),
       isPlaybackModeVariant: true,
     });
   }
   return withVariants;
 }
 
-export function buildStrategyCandidates(input: Readonly<{
+type BuildStrategyCandidatesInput = Readonly<{
   normalizedConfig: NormalizedChannelSetupConfig;
   facetSnapshot: ChannelBuilderFacetSnapshot;
   seed: string;
-}>): readonly GeneratedChannelBuilderCandidate[] {
+}>;
+
+export function buildStrategyCandidatesWithIdentityOperations(
+  identityOperations: ChannelBuilderIdentityOperations,
+  input: BuildStrategyCandidatesInput,
+): readonly GeneratedChannelBuilderCandidate[] {
   const { normalizedConfig: config, facetSnapshot: snapshot, seed } = input;
   const libraries = snapshot.libraries.slice(0, config.selectedLibraryIds.length);
   const libraryByFacetId = new Map(libraries.map((library) => [library.facetId, library]));
@@ -330,7 +345,7 @@ export function buildStrategyCandidates(input: Readonly<{
       ? buckets[candidate.strategy]
       : excludedBuckets[candidate.strategy];
     if (target.length >= CHANNEL_BUILDER_MAX_CANDIDATES) return;
-    target.push(createCandidate(candidate, seed));
+    target.push(createCandidate(identityOperations, candidate, seed));
   };
 
   if (config.strategyConfig.playlists.enabled) {
@@ -351,7 +366,11 @@ export function buildStrategyCandidates(input: Readonly<{
       push({
         strategy: 'playlists',
         displayName: playlist.title,
-        seedKey: seedTuple(['playlists', playlist.sourceIdentity, playlist.facetId]),
+        seedKey: seedTuple(identityOperations, [
+          'playlists',
+          playlist.sourceIdentity,
+          playlist.facetId,
+        ]),
         sourceReference: facetLeaf(playlist),
         estimatedItemCount: playlist.itemCount,
         playbackMode: 'shuffle',
@@ -389,7 +408,7 @@ export function buildStrategyCandidates(input: Readonly<{
         push({
           strategy: 'collections',
           displayName: collection.title,
-          seedKey: seedTuple([
+          seedKey: seedTuple(identityOperations, [
             'collections',
             library.sourceIdentity,
             collection.sourceIdentity,
@@ -415,7 +434,7 @@ export function buildStrategyCandidates(input: Readonly<{
         push({
           strategy: 'recentlyAdded',
           displayName: `${library.title} - Recently Added`,
-          seedKey: seedTuple([
+          seedKey: seedTuple(identityOperations, [
             'recentlyAdded',
             library.sourceIdentity,
             recentlyAdded.sourceIdentity,
@@ -521,13 +540,13 @@ export function buildStrategyCandidates(input: Readonly<{
         push({
           strategy,
           displayName: sorted[0]?.displayTitle ?? 'Untitled channel',
-          seedKey: seedTuple([
+          seedKey: seedTuple(identityOperations, [
             strategy,
             semanticGroupIdentity,
             sorted.map((tag) => tag.sourceIdentity),
             mixMode,
           ]),
-          sourceReference: mixedReference(mixMode, sources),
+          sourceReference: mixedReference(identityOperations, mixMode, sources),
           estimatedItemCount: count,
           playbackMode: 'shuffle',
           contentFilterPlan: { kind: 'none', contentFilterIdentity: null },
@@ -561,12 +580,12 @@ export function buildStrategyCandidates(input: Readonly<{
               : `${library.title} - ${tag.displayTitle}`,
           seedKey:
             tag.family === 'director'
-              ? seedTuple([
+              ? seedTuple(identityOperations, [
                   'directors',
                   library.sourceIdentity,
                   tag.contentFilterIdentity,
                 ])
-              : seedTuple([
+              : seedTuple(identityOperations, [
                   strategy,
                   library.sourceIdentity,
                   tag.sourceIdentity,
@@ -618,18 +637,19 @@ export function buildStrategyCandidates(input: Readonly<{
           { field: 'year' as const, operator: 'gte' as const, value: decade },
           { field: 'year' as const, operator: 'lt' as const, value: decade + 10 },
         ];
-        const contentFilterIdentity = createContentFilterIdentity({
-          profileBinding: snapshot.context.profileBinding,
-          serverBinding: snapshot.context.serverBinding,
-          filters,
-        });
+        const contentFilterIdentity =
+          identityOperations.createContentFilterIdentity({
+            profileBinding: snapshot.context.profileBinding,
+            serverBinding: snapshot.context.serverBinding,
+            filters,
+          });
         if (contentFilterIdentity === null) {
           throw new Error('Inline decade filter identity invariant failed.');
         }
         push({
           strategy: 'decades',
           displayName: `${library.title} - ${decade}s`,
-          seedKey: seedTuple([
+          seedKey: seedTuple(identityOperations, [
             'decades',
             library.sourceIdentity,
             decade,
@@ -663,9 +683,19 @@ export function buildStrategyCandidates(input: Readonly<{
     ...excludedBuckets[strategy],
   ]);
   return expandCandidates(
+    identityOperations,
     applySeriesOrdering(base, config, seriesFacetIds),
     config,
     seriesFacetIds,
     seed,
   ).slice(0, CHANNEL_BUILDER_MAX_CANDIDATES);
+}
+
+export function buildStrategyCandidates(
+  input: BuildStrategyCandidatesInput,
+): readonly GeneratedChannelBuilderCandidate[] {
+  return buildStrategyCandidatesWithIdentityOperations(
+    channelBuilderIdentityOperations,
+    input,
+  );
 }

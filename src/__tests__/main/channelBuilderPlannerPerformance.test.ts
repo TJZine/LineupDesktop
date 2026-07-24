@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  buildChannelSetupPlan,
   createDefaultChannelSetupConfig,
   createLibrarySetBinding,
   createProfileBinding,
@@ -9,8 +8,9 @@ import {
   createSourceIdentity,
   type ChannelBuilderFacetSnapshot,
 } from '../../domain/channelBuilder/index.js';
+import { buildProductionChannelSetupPlan } from '../../main/channel/channelBuilderProductionPlanner.js';
 
-function performanceFixture(): Parameters<typeof buildChannelSetupPlan>[0] {
+function performanceFixture(): Parameters<typeof buildProductionChannelSetupPlan>[0] {
   const configResult = createDefaultChannelSetupConfig({
     serverId: 'server-1',
     selectedLibraryIds: ['library-1'],
@@ -85,10 +85,14 @@ test(
   { skip: globalThis.process.env.npm_lifecycle_event !== 'verify:channel-builder-performance' },
   (t) => {
     const input = performanceFixture();
-    const warm = buildChannelSetupPlan(input);
+    const warm = buildProductionChannelSetupPlan(input);
+    assert.equal(
+      warm.planIdentity,
+      'plan-identity:23d450b5bc28c3afc9189d5fbaa0987d2009f0b8f7458b02e6f211ea59f4bd5b',
+    );
     assert.equal(warm.candidateDrafts.length, 50_000);
     const startedAt = globalThis.performance.now();
-    const measured = buildChannelSetupPlan(input);
+    const measured = buildProductionChannelSetupPlan(input);
     const elapsedMs = globalThis.performance.now() - startedAt;
     assert.equal(measured.planIdentity, warm.planIdentity);
     assert.equal(measured.candidateDrafts.length, 50_000);

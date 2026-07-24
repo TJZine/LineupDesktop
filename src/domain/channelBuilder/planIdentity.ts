@@ -38,6 +38,14 @@ const forbiddenFilterKeys = new Set<string>(CHANNEL_DOMAIN_FORBIDDEN_KEYS);
 // eslint-disable-next-line no-control-regex
 const identityInputPattern = /^[^\u0000-\u001f\u007f]{1,512}$/u;
 
+export type ChannelBuilderIncrementalSha256 = Readonly<{
+  updateUtf8(value: string): void;
+  digestHex(): string;
+}>;
+
+export type ChannelBuilderIncrementalSha256Factory =
+  () => ChannelBuilderIncrementalSha256;
+
 function compareCodePoints(left: string, right: string): number {
   let leftIndex = 0;
   let rightIndex = 0;
@@ -139,17 +147,19 @@ const sha256Round = [
 ] as const;
 
 export function sha256HexV1(value: string): string {
-  return new Sha256V1().updateString(value).digestHex();
+  return channelBuilderIdentityOperations.sha256HexV1(value);
 }
 
-class Sha256V1 {
+class Sha256V1 implements ChannelBuilderIncrementalSha256 {
   private readonly state = new Uint32Array(sha256Initial);
   private readonly buffer = new Uint8Array(64);
   private readonly words = new Uint32Array(16);
   private bufferLength = 0;
   private byteLength = 0;
+  private digested = false;
 
-  updateString(value: string): this {
+  updateUtf8(value: string): void {
+    if (this.digested) throw new TypeError('SHA-256 digest is already finalized.');
     for (let index = 0; index < value.length; index += 1) {
       if (
         this.bufferLength === 0 &&
@@ -205,10 +215,11 @@ class Sha256V1 {
         this.updateByte(0x80 | (codePoint & 0x3f));
       }
     }
-    return this;
   }
 
   digestHex(): string {
+    if (this.digested) throw new TypeError('SHA-256 digest is already finalized.');
+    this.digested = true;
     const bitLength = this.byteLength * 8;
     this.appendPaddingByte(0x80);
     while (this.bufferLength !== 56) this.appendPaddingByte(0);
@@ -360,13 +371,16 @@ class Sha256V1 {
   }
 }
 
-function updateCanonicalJsonV1(hasher: Sha256V1, value: unknown): void {
+function updateCanonicalJsonV1(
+  hasher: ChannelBuilderIncrementalSha256,
+  value: unknown,
+): void {
   const chunks: string[] = [];
   const shapeCache = new Map<string, readonly (readonly [string, string])[]>();
   let bufferedUnits = 0;
   const flush = (): void => {
     if (chunks.length === 0) return;
-    hasher.updateString(chunks.join(''));
+    hasher.updateUtf8(chunks.join(''));
     chunks.length = 0;
     bufferedUnits = 0;
   };
@@ -466,20 +480,23 @@ function writeCanonicalValue(
 }
 
 function identity<T extends string>(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
   prefix: string,
   domain: string,
   preimage: CanonicalJsonValue,
 ): T {
-  return identityBytes(prefix, domain, canonicalJsonV1(preimage));
+  return identityBytes(createSha256, prefix, domain, canonicalJsonV1(preimage));
 }
 
 function identityBytes<T extends string>(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
   prefix: string,
   domain: string,
   bytes: string,
 ): T {
-  const hasher = new Sha256V1().updateString(domain);
-  hasher.updateString(bytes);
+  const hasher = createSha256();
+  hasher.updateUtf8(domain);
+  hasher.updateUtf8(bytes);
   return `${prefix}${hasher.digestHex()}` as T;
 }
 
@@ -498,7 +515,15 @@ export function createPersistedStringV1(raw: string): PersistedStringV1 {
 }
 
 export function createProfileBinding(activeProfileId: string): ChannelBuilderProfileBinding {
+  return channelBuilderIdentityOperations.createProfileBinding(activeProfileId);
+}
+
+function createProfileBindingWithSha256(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
+  activeProfileId: string,
+): ChannelBuilderProfileBinding {
   return identity(
+    createSha256,
     'profile-binding:',
     'lineup-builder/profile-binding/v1:',
     { activeProfileId: normalizedIdentityInput(activeProfileId) },
@@ -506,7 +531,15 @@ export function createProfileBinding(activeProfileId: string): ChannelBuilderPro
 }
 
 export function createServerBinding(serverId: string): ChannelBuilderServerBinding {
+  return channelBuilderIdentityOperations.createServerBinding(serverId);
+}
+
+function createServerBindingWithSha256(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
+  serverId: string,
+): ChannelBuilderServerBinding {
   return identity(
+    createSha256,
     'server-binding:',
     'lineup-builder/server-binding/v1:',
     { serverId: normalizedIdentityInput(serverId) },
@@ -514,6 +547,13 @@ export function createServerBinding(serverId: string): ChannelBuilderServerBindi
 }
 
 export function createLibrarySetBinding(
+  libraries: readonly Readonly<{ libraryId: string; libraryUuid: string }>[],
+): ChannelBuilderLibrarySetBinding {
+  return channelBuilderIdentityOperations.createLibrarySetBinding(libraries);
+}
+
+function createLibrarySetBindingWithSha256(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
   libraries: readonly Readonly<{ libraryId: string; libraryUuid: string }>[],
 ): ChannelBuilderLibrarySetBinding {
   if (libraries.length < 1) throw new TypeError('Library binding requires a library.');
@@ -533,6 +573,7 @@ export function createLibrarySetBinding(
     return id !== 0 ? id : compareCodePoints(left.libraryUuid, right.libraryUuid);
   });
   return identity(
+    createSha256,
     'library-set-binding:',
     'lineup-builder/library-set-binding/v1:',
     { libraries: normalized },
@@ -551,6 +592,14 @@ type FacetFamily =
   | 'recently-added';
 
 export function createFacetIdentity(
+  family: FacetFamily,
+  preimage: Readonly<Record<string, CanonicalJsonValue>>,
+): ChannelBuilderFacetId {
+  return channelBuilderIdentityOperations.createFacetIdentity(family, preimage);
+}
+
+function createFacetIdentityWithSha256(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
   family: FacetFamily,
   preimage: Readonly<Record<string, CanonicalJsonValue>>,
 ): ChannelBuilderFacetId {
@@ -688,6 +737,7 @@ export function createFacetIdentity(
     };
   }
   return identity(
+    createSha256,
     `${family}:`,
     `lineup-builder/facet/${family}/v1:`,
     normalizedPreimage,
@@ -731,10 +781,18 @@ function canonicalLibraryFilter(
 type SourceTreeTraversal = { leafCount: number };
 
 export function createSourceIdentity(source: ChannelContentSource): ChannelBuilderSourceIdentity {
-  return createSourceIdentityAtDepth(source, 1, { leafCount: 0 });
+  return channelBuilderIdentityOperations.createSourceIdentity(source);
+}
+
+function createSourceIdentityWithSha256(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
+  source: ChannelContentSource,
+): ChannelBuilderSourceIdentity {
+  return createSourceIdentityAtDepth(createSha256, source, 1, { leafCount: 0 });
 }
 
 function createSourceIdentityAtDepth(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
   source: ChannelContentSource,
   depth: number,
   traversal: SourceTreeTraversal,
@@ -756,7 +814,7 @@ function createSourceIdentityAtDepth(
         throw new TypeError('Invalid source identity input.');
       }
       addSourceLeaves(traversal, 1);
-      return identity('source:', 'lineup-builder/source/library/v1:', {
+      return identity(createSha256, 'source:', 'lineup-builder/source/library/v1:', {
         type: 'library',
         libraryId: normalizedIdentityInput(source.libraryId),
         libraryType: source.libraryType,
@@ -772,7 +830,7 @@ function createSourceIdentityAtDepth(
         throw new TypeError('Invalid source identity input.');
       }
       addSourceLeaves(traversal, 1);
-      return identity('source:', 'lineup-builder/source/collection/v1:', {
+      return identity(createSha256, 'source:', 'lineup-builder/source/collection/v1:', {
         type: 'collection',
         collectionKey: normalizedIdentityInput(source.collectionKey),
       });
@@ -792,7 +850,7 @@ function createSourceIdentityAtDepth(
         throw new TypeError('Invalid show season filter.');
       }
       addSourceLeaves(traversal, 1);
-      return identity('source:', 'lineup-builder/source/show/v1:', {
+      return identity(createSha256, 'source:', 'lineup-builder/source/show/v1:', {
         type: 'show',
         showKey: normalizedIdentityInput(source.showKey),
         seasonFilter: seasons,
@@ -806,7 +864,7 @@ function createSourceIdentityAtDepth(
         throw new TypeError('Invalid source identity input.');
       }
       addSourceLeaves(traversal, 1);
-      return identity('source:', 'lineup-builder/source/playlist/v1:', {
+      return identity(createSha256, 'source:', 'lineup-builder/source/playlist/v1:', {
         type: 'playlist',
         playlistKey: normalizedIdentityInput(source.playlistKey),
       });
@@ -832,13 +890,18 @@ function createSourceIdentityAtDepth(
         ) {
           throw new TypeError('Invalid manual source.');
         }
-        return identity<string>('source:', 'lineup-builder/source/manual-item/v1:', {
-          ratingKey: normalizedIdentityInput(item.ratingKey),
-          title: item.title.normalize('NFC'),
-          durationMs: requirePositiveSafeInteger(item.durationMs),
-        });
+        return identity<string>(
+          createSha256,
+          'source:',
+          'lineup-builder/source/manual-item/v1:',
+          {
+            ratingKey: normalizedIdentityInput(item.ratingKey),
+            title: item.title.normalize('NFC'),
+            durationMs: requirePositiveSafeInteger(item.durationMs),
+          },
+        );
       });
-      return identity('source:', 'lineup-builder/source/manual/v1:', {
+      return identity(createSha256, 'source:', 'lineup-builder/source/manual/v1:', {
         type: 'manual',
         items,
       });
@@ -853,11 +916,11 @@ function createSourceIdentityAtDepth(
       ) {
         throw new TypeError('Invalid mixed source.');
       }
-      return identity('source:', 'lineup-builder/source/mixed/v1:', {
+      return identity(createSha256, 'source:', 'lineup-builder/source/mixed/v1:', {
         type: 'mixed',
         mixMode: source.mixMode,
         sources: source.sources.map((child) =>
-          createSourceIdentityAtDepth(child, depth + 1, traversal),
+          createSourceIdentityAtDepth(createSha256, child, depth + 1, traversal),
         ),
       });
     }
@@ -877,6 +940,14 @@ export function createMixedSourceIdentity(
   mixMode: 'sequential' | 'interleave',
   sources: readonly ChannelBuilderSourceIdentity[],
 ): ChannelBuilderSourceIdentity {
+  return channelBuilderIdentityOperations.createMixedSourceIdentity(mixMode, sources);
+}
+
+function createMixedSourceIdentityWithSha256(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
+  mixMode: 'sequential' | 'interleave',
+  sources: readonly ChannelBuilderSourceIdentity[],
+): ChannelBuilderSourceIdentity {
   if (
     !['sequential', 'interleave'].includes(mixMode) ||
     !Array.isArray(sources) ||
@@ -886,7 +957,7 @@ export function createMixedSourceIdentity(
   ) {
     throw new TypeError('Invalid mixed source identity input.');
   }
-  return identity('source:', 'lineup-builder/source/mixed/v1:', {
+  return identity(createSha256, 'source:', 'lineup-builder/source/mixed/v1:', {
     type: 'mixed',
     mixMode,
     sources,
@@ -982,6 +1053,18 @@ export function createTagSemanticGroupIdentity(input: Readonly<{
   family: 'genre' | 'director' | 'studio' | 'actor';
   tagValue: string;
 }>): ChannelBuilderTagSemanticGroupIdentity {
+  return channelBuilderIdentityOperations.createTagSemanticGroupIdentity(input);
+}
+
+function createTagSemanticGroupIdentityWithSha256(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
+  input: Readonly<{
+    profileBinding: ChannelBuilderProfileBinding;
+    serverBinding: ChannelBuilderServerBinding;
+    family: 'genre' | 'director' | 'studio' | 'actor';
+    tagValue: string;
+  }>,
+): ChannelBuilderTagSemanticGroupIdentity {
   if (
     !isPlainRecord(input) ||
     !hasExactOwnKeys(input, [
@@ -1000,6 +1083,7 @@ export function createTagSemanticGroupIdentity(input: Readonly<{
     .toLowerCase()
     .normalize('NFC');
   return identity<ChannelBuilderTagSemanticGroupIdentity>(
+    createSha256,
     'tag-group:',
     'lineup-builder/tag-group/v1:',
     {
@@ -1016,6 +1100,17 @@ export function createContentFilterIdentity(input: Readonly<{
   serverBinding: ChannelBuilderServerBinding;
   filters: readonly ContentFilter[] | null | undefined;
 }>): ChannelBuilderContentFilterIdentity | null {
+  return channelBuilderIdentityOperations.createContentFilterIdentity(input);
+}
+
+function createContentFilterIdentityWithSha256(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
+  input: Readonly<{
+    profileBinding: ChannelBuilderProfileBinding;
+    serverBinding: ChannelBuilderServerBinding;
+    filters: readonly ContentFilter[] | null | undefined;
+  }>,
+): ChannelBuilderContentFilterIdentity | null {
   if (
     !isPlainRecord(input) ||
     !hasExactOwnKeys(input, ['profileBinding', 'serverBinding', 'filters']) ||
@@ -1027,6 +1122,7 @@ export function createContentFilterIdentity(input: Readonly<{
   if (input.filters === null || input.filters === undefined) return null;
   if (input.filters.length === 0) return null;
   return identity<ChannelBuilderContentFilterIdentity>(
+    createSha256,
     'content-filters:',
     'lineup-builder/content-filters/v1:',
     {
@@ -1234,8 +1330,16 @@ export function createCandidateIdentityPreimage(
 export function createCandidateIdentity(
   input: CandidateIdentityInput,
 ): ChannelBuilderCandidateIdentity {
+  return channelBuilderIdentityOperations.createCandidateIdentity(input);
+}
+
+function createCandidateIdentityWithSha256(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
+  input: CandidateIdentityInput,
+): ChannelBuilderCandidateIdentity {
   const bytes = canonicalJsonV1(createCandidateIdentityPreimage(input));
   return identityBytes(
+    createSha256,
     'candidate-identity:',
     'lineup-builder/candidate-identity/v1:',
     bytes,
@@ -1250,11 +1354,17 @@ export type CandidateIdentityTuple = Readonly<{
 export function createCandidateIdentityTuple(
   input: CandidateIdentityInput,
 ): CandidateIdentityTuple {
+  return channelBuilderIdentityOperations.createCandidateIdentityTuple(input);
+}
+
+function createCandidateIdentityTupleWithSha256(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
+  input: CandidateIdentityInput,
+): CandidateIdentityTuple {
   const bytes = canonicalJsonV1(createCandidateIdentityPreimage(input));
-  const hasher = new Sha256V1().updateString(
-    'lineup-builder/candidate-identity/v1:',
-  );
-  hasher.updateString(bytes);
+  const hasher = createSha256();
+  hasher.updateUtf8('lineup-builder/candidate-identity/v1:');
+  hasher.updateUtf8(bytes);
   return {
     identity: `candidate-identity:${hasher.digestHex()}`,
     bytes,
@@ -1277,6 +1387,18 @@ export function createCandidateId(input: Readonly<{
   candidateIdentity: ChannelBuilderCandidateIdentity;
   occurrence: number;
 }>): ChannelBuilderCandidateId {
+  return channelBuilderIdentityOperations.createCandidateId(input);
+}
+
+function createCandidateIdWithSha256(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
+  input: Readonly<{
+    seed: string;
+    strategy: string;
+    candidateIdentity: ChannelBuilderCandidateIdentity;
+    occurrence: number;
+  }>,
+): ChannelBuilderCandidateId {
   if (!Number.isSafeInteger(input.occurrence) || input.occurrence < 0) {
     throw new TypeError('Invalid candidate occurrence.');
   }
@@ -1287,6 +1409,7 @@ export function createCandidateId(input: Readonly<{
     `"occurrence":${input.occurrence},"seed":${JSON.stringify(seed)},` +
     `"strategy":${JSON.stringify(strategy)}}`;
   return identityBytes(
+    createSha256,
     'candidate:',
     'lineup-builder/candidate-id/v1:',
     bytes,
@@ -1297,9 +1420,16 @@ export function createPlanIdentity(
   input: CanonicalJsonValue,
   output: CanonicalJsonValue,
 ): ChannelBuilderPlanIdentity {
-  const hasher = new Sha256V1().updateString(
-    'lineup-builder/plan-identity/v1:',
-  );
+  return channelBuilderIdentityOperations.createPlanIdentity(input, output);
+}
+
+function createPlanIdentityWithSha256(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
+  input: CanonicalJsonValue,
+  output: CanonicalJsonValue,
+): ChannelBuilderPlanIdentity {
+  const hasher = createSha256();
+  hasher.updateUtf8('lineup-builder/plan-identity/v1:');
   updateCanonicalJsonV1(hasher, {
     input,
     output,
@@ -1308,11 +1438,87 @@ export function createPlanIdentity(
 }
 
 export function createDeterministicShuffleSeed(seed: string, value: string): number {
+  return channelBuilderIdentityOperations.createDeterministicShuffleSeed(seed, value);
+}
+
+function createDeterministicShuffleSeedWithSha256(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
+  seed: string,
+  value: string,
+): number {
   const normalizedSeed = normalizedIdentityInput(seed);
   const normalizedValue = value.normalize('NFC');
-  const digest = sha256HexV1(
+  const hasher = createSha256();
+  hasher.updateUtf8(
     'lineup-builder/shuffle-seed/v1:' +
       `{"seed":${JSON.stringify(normalizedSeed)},"value":${JSON.stringify(normalizedValue)}}`,
   );
+  const digest = hasher.digestHex();
   return Number.parseInt(digest.slice(0, 8), 16) | 0;
 }
+
+export type ChannelBuilderIdentityOperations = Readonly<{
+  canonicalJsonV1: typeof canonicalJsonV1;
+  sha256HexV1: typeof sha256HexV1;
+  createPersistedStringV1: typeof createPersistedStringV1;
+  createProfileBinding: typeof createProfileBinding;
+  createServerBinding: typeof createServerBinding;
+  createLibrarySetBinding: typeof createLibrarySetBinding;
+  createFacetIdentity: typeof createFacetIdentity;
+  createSourceIdentity: typeof createSourceIdentity;
+  createMixedSourceIdentity: typeof createMixedSourceIdentity;
+  createTagSemanticGroupIdentity: typeof createTagSemanticGroupIdentity;
+  createContentFilterIdentity: typeof createContentFilterIdentity;
+  createCandidateIdentityPreimage: typeof createCandidateIdentityPreimage;
+  createCandidateIdentity: typeof createCandidateIdentity;
+  createCandidateIdentityTuple: typeof createCandidateIdentityTuple;
+  findByteEqualCandidateTupleIndex: typeof findByteEqualCandidateTupleIndex;
+  createCandidateId: typeof createCandidateId;
+  createPlanIdentity: typeof createPlanIdentity;
+  createDeterministicShuffleSeed: typeof createDeterministicShuffleSeed;
+}>;
+
+export function createChannelBuilderIdentityOperations(
+  createSha256: ChannelBuilderIncrementalSha256Factory,
+): ChannelBuilderIdentityOperations {
+  return Object.freeze({
+    canonicalJsonV1,
+    sha256HexV1(value: string): string {
+      const hasher = createSha256();
+      hasher.updateUtf8(value);
+      return hasher.digestHex();
+    },
+    createPersistedStringV1,
+    createProfileBinding: (activeProfileId) =>
+      createProfileBindingWithSha256(createSha256, activeProfileId),
+    createServerBinding: (serverId) =>
+      createServerBindingWithSha256(createSha256, serverId),
+    createLibrarySetBinding: (libraries) =>
+      createLibrarySetBindingWithSha256(createSha256, libraries),
+    createFacetIdentity: (family, preimage) =>
+      createFacetIdentityWithSha256(createSha256, family, preimage),
+    createSourceIdentity: (source) =>
+      createSourceIdentityWithSha256(createSha256, source),
+    createMixedSourceIdentity: (mixMode, sources) =>
+      createMixedSourceIdentityWithSha256(createSha256, mixMode, sources),
+    createTagSemanticGroupIdentity: (input) =>
+      createTagSemanticGroupIdentityWithSha256(createSha256, input),
+    createContentFilterIdentity: (input) =>
+      createContentFilterIdentityWithSha256(createSha256, input),
+    createCandidateIdentityPreimage,
+    createCandidateIdentity: (input) =>
+      createCandidateIdentityWithSha256(createSha256, input),
+    createCandidateIdentityTuple: (input) =>
+      createCandidateIdentityTupleWithSha256(createSha256, input),
+    findByteEqualCandidateTupleIndex,
+    createCandidateId: (input) =>
+      createCandidateIdWithSha256(createSha256, input),
+    createPlanIdentity: (input, output) =>
+      createPlanIdentityWithSha256(createSha256, input, output),
+    createDeterministicShuffleSeed: (seed, value) =>
+      createDeterministicShuffleSeedWithSha256(createSha256, seed, value),
+  });
+}
+
+export const channelBuilderIdentityOperations =
+  createChannelBuilderIdentityOperations(() => new Sha256V1());

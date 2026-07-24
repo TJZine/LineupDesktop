@@ -2,7 +2,10 @@ import {
   CHANNEL_BUILDER_FACET_WARNING_CODES,
   CHANNEL_BUILDER_MAX_CANDIDATES,
 } from './constants.js';
-import { createContentFilterIdentity } from './planIdentity.js';
+import {
+  channelBuilderIdentityOperations,
+  type ChannelBuilderIdentityOperations,
+} from './planIdentity.js';
 import type {
   ChannelBuilderCandidateContentFilterPlan,
   ChannelBuilderFacetSnapshot,
@@ -57,6 +60,18 @@ export function isValidChannelBuilderCandidateContentFilterPlan(
   plan: ChannelBuilderCandidateContentFilterPlan,
   snapshot: ChannelBuilderFacetSnapshot,
 ): boolean {
+  return isValidChannelBuilderCandidateContentFilterPlanWithIdentityOperations(
+    channelBuilderIdentityOperations,
+    plan,
+    snapshot,
+  );
+}
+
+export function isValidChannelBuilderCandidateContentFilterPlanWithIdentityOperations(
+  identityOperations: ChannelBuilderIdentityOperations,
+  plan: ChannelBuilderCandidateContentFilterPlan,
+  snapshot: ChannelBuilderFacetSnapshot,
+): boolean {
   if (
     plan === null ||
     typeof plan !== 'object' ||
@@ -106,7 +121,7 @@ export function isValidChannelBuilderCandidateContentFilterPlan(
   }
   try {
     return (
-      createContentFilterIdentity({
+      identityOperations.createContentFilterIdentity({
         profileBinding: snapshot.context.profileBinding,
         serverBinding: snapshot.context.serverBinding,
         filters: plan.filters,
