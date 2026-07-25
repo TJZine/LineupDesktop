@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs/promises';
 
 import {
   app,
@@ -39,17 +40,31 @@ import { registerPlayerIpcHandlers, type PlayerIpcTeardown } from './player/play
 import { createProductionNativeHostFactory } from './player/productionNativeHostFactory.js';
 import { DiagnosticEventStore } from './diagnostics/diagnosticEventStore.js';
 import { registerDiagnosticsIpcHandlers, type DiagnosticsIpcTeardown } from './diagnostics/supportBundleIpc.js';
-import { registerChannelComposition, type ChannelCompositionRegistration } from './channel/channelComposition.js';
+import {
+  createChannelComposition,
+  registerChannelCompositionIpc,
+  type ChannelCompositionRegistration,
+} from './channel/channelComposition.js';
 import { bootstrapPlaybackRuntime } from './player/playbackRuntimeBootstrap.js';
 import { wirePlexPlaybackCleanup } from './player/plexPlaybackCleanupWiring.js';
 import type { PlexPlaybackRuntime } from './player/plexPlaybackRuntime.js';
-import { registerPlexComposition, type PlexCompositionRegistration } from './plex/plexComposition.js';
+import {
+  createPlexComposition,
+  registerPlexCompositionIpc,
+  type PlexCompositionRegistration,
+} from './plex/plexComposition.js';
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
 import { registerShellAppCommandController } from './window/shellAppCommandController.js';
 import { createShellWindowController } from './window/shellWindowController.js';
 import { resolveDesktopSettingsFilePath } from './persistence/appDataPaths.js';
 import { DesktopSettingsStore } from './persistence/desktopSettingsStore.js';
 import { registerSettingsIpcHandlers, type SettingsIpcTeardown } from './settings/settingsIpc.js';
+import { SmokeBootstrapOwner } from './smokeBootstrapOwner.js';
+import { SingleInstanceOwner } from './singleInstanceOwner.js';
+import { ChannelPersistenceBootstrapOwner } from './persistence/channelPersistenceBootstrapOwner.js';
+import { ChannelPersistenceStartupOwner } from './persistence/channelPersistenceStartupOwner.js';
+import { DesktopChannelPersistenceStore } from './persistence/desktopChannelPersistenceStore.js';
+import { createChannelBuilderSmokeFixture } from './channel/channelBuilderSmokeFixture.js';
 
 registerLineupProtocolScheme();
 
@@ -57,17 +72,10 @@ const currentFile = fileURLToPath(import.meta.url);
 const appRoot = path.resolve(path.dirname(currentFile), '..');
 const rendererRoot = path.join(appRoot, 'renderer');
 const preloadPath = path.join(appRoot, 'preload', 'index.cjs');
-const shellMode = getShellMode();
-const smokeMode = shellMode === 'smoke';
+let shellMode: ShellMode = 'development';
 const diagnosticEventStore = new DiagnosticEventStore();
 
-const shellWindowController = createShellWindowController({
-  createBrowserWindow: (options) => new BrowserWindow(options),
-  screen,
-  preloadPath,
-  smokeMode,
-  publishShellStatus,
-});
+let shellWindowController: ReturnType<typeof createShellWindowController> | null = null;
 let teardownPlayerIpc: PlayerIpcTeardown | null = null;
 let teardownDiagnosticsIpc: DiagnosticsIpcTeardown | null = null;
 let teardownSettingsIpc: SettingsIpcTeardown | null = null;
@@ -77,6 +85,7 @@ let playbackRuntime: PlexPlaybackRuntime | null = null;
 let channelSchedulerProgramStartHandler: (() => void | Promise<void>) | null = null;
 let playerIpcQuitTeardownInProgress = false;
 let playerIpcQuitTeardownComplete = false;
+let singleInstanceOwner: SingleInstanceOwner | null = null;
 let containmentCounters: ShellContainmentCounters = {
   navigationDenied: 0,
   windowOpenDenied: 0,
@@ -86,8 +95,115 @@ let containmentCounters: ShellContainmentCounters = {
 
 app.commandLine.appendSwitch('disable-gpu');
 
-app.whenReady()
-  .then(async () => {
+void startApplication().catch(async (error: unknown) => {
+  const teardownChannel = channelComposition?.teardown ?? null;
+  channelComposition = null;
+  const teardownPlex = plexComposition?.teardown ?? null;
+  plexComposition = null;
+  await Promise.all([
+    teardownChannel?.() ?? Promise.resolve(),
+    teardownPlex?.() ?? Promise.resolve(),
+  ]).catch(() => undefined);
+  console.error(redactError(error));
+  app.exit(1);
+});
+
+async function startApplication(): Promise<void> {
+  const smokeBootstrap = new SmokeBootstrapOwner({
+    app,
+    argv: process.argv,
+    environment: process.env,
+    platform: process.platform,
+  }).validate();
+  if (smokeBootstrap.status === 'failed') {
+    throw new Error(smokeBootstrap.error.message);
+  }
+  shellMode =
+    smokeBootstrap.status === 'smoke'
+      ? 'smoke'
+      : process.env.NODE_ENV === 'production'
+        ? 'production'
+        : 'development';
+  const smokeMode = shellMode === 'smoke';
+  singleInstanceOwner = new SingleInstanceOwner({
+    app,
+    getWindow: () => shellWindowController?.getWindow() ?? null,
+  });
+  if (!singleInstanceOwner.acquire().primary) return;
+  registerApplicationLifecycleHandlers();
+
+  const smokeFixture =
+    smokeBootstrap.status === 'smoke'
+      ? createChannelBuilderSmokeFixture(smokeBootstrap.capability)
+      : null;
+  let persistence:
+    | Parameters<typeof createChannelComposition>[0]['persistence'];
+  let channelStartupStore: DesktopChannelPersistenceStore | null = null;
+  if (smokeFixture !== null) {
+    persistence = { kind: 'memory', storage: smokeFixture.storage };
+  } else {
+    const bootstrap = await new ChannelPersistenceBootstrapOwner({
+      app,
+      platform: process.platform,
+      fileSystem: {
+        realpath: (value) => fs.realpath(value),
+        lstat: (value) => fs.lstat(value),
+        mkdir: async (value, options) => {
+          await fs.mkdir(value, options);
+        },
+      },
+    }).bootstrap();
+    if (bootstrap.status !== 'ready') throw new Error(bootstrap.error.message);
+    channelStartupStore = new DesktopChannelPersistenceStore({
+      readyCapability: bootstrap.capability,
+    });
+    persistence = { kind: 'disk', readyCapability: bootstrap.capability };
+  }
+
+  const plexCreated = await createPlexComposition({
+    app,
+    diagnosticEventStore,
+  });
+  plexComposition = plexCreated;
+  if (channelStartupStore !== null) {
+    const startup = await new ChannelPersistenceStartupOwner({
+      store: channelStartupStore,
+      clock: { now: () => Date.now() },
+    }).loadAndRepair();
+    if (!startup.ok) throw new Error(startup.error.message);
+  }
+  await app.whenReady();
+  shellWindowController = createShellWindowController({
+    createBrowserWindow: (options) => new BrowserWindow(options),
+    screen,
+    preloadPath,
+    smokeMode,
+    publishShellStatus,
+  });
+  let onChannelTunedCallback: ((channelId: string) => void | Promise<void>) | null = null;
+  const channelCreated = createChannelComposition({
+    persistence,
+    plexRuntime: plexCreated.runtime,
+    channelBuilderContextSource: smokeFixture?.contextSource,
+    diagnosticEventStore,
+    onChannelTuned: (channelId) => {
+      if (onChannelTunedCallback) void onChannelTunedCallback(channelId);
+    },
+  });
+  channelComposition = channelCreated;
+  plexComposition = registerPlexCompositionIpc(plexCreated, {
+    shellMode,
+    isAuthorizedEvent,
+    createRequestId,
+    diagnosticEventStore,
+  });
+  channelComposition = registerChannelCompositionIpc(channelCreated, {
+    shellMode,
+    isAuthorizedEvent,
+    createRequestId,
+    diagnosticEventStore,
+  });
+
     registerLineupProtocolHandler(rendererRoot);
     configurePermissionContainment();
     registerShellIpcHandlers();
@@ -103,7 +219,7 @@ app.whenReady()
       shellMode,
       isAuthorizedEvent,
       createRequestId,
-      getShellWindow: () => shellWindowController.getWindow(),
+      getShellWindow: () => getShellWindowController().getWindow(),
       appVersion: app.getVersion(),
     });
     const originalNativeHostFactory = createProductionNativeHostFactory({
@@ -129,34 +245,10 @@ app.whenReady()
       diagnosticEventStore,
       nativeHostFactory: nativeHostFactory ?? undefined,
     });
-    plexComposition = await registerPlexComposition({
-      app,
-      shellMode,
-      isAuthorizedEvent,
-      createRequestId,
-      diagnosticEventStore,
-    });
-    if (plexComposition) {
-      wirePlexPlaybackCleanup({
-        plexRuntime: plexComposition.runtime,
-        getPlaybackRuntime: () => playbackRuntime,
-        reportDiagnostic: reportMainProcessDiagnostic,
-      });
-    }
-    let onChannelTunedCallback: ((channelId: string) => void | Promise<void>) | null = null;
-
-    channelComposition = registerChannelComposition({
-      app,
-      shellMode,
-      isAuthorizedEvent,
-      createRequestId,
+    wirePlexPlaybackCleanup({
       plexRuntime: plexComposition.runtime,
-      diagnosticEventStore,
-      onChannelTuned: (channelId) => {
-        if (onChannelTunedCallback) {
-          void onChannelTunedCallback(channelId);
-        }
-      },
+      getPlaybackRuntime: () => playbackRuntime,
+      reportDiagnostic: reportMainProcessDiagnostic,
     });
     const playbackRuntimeComposition = bootstrapPlaybackRuntime({
       shellMode,
@@ -203,7 +295,7 @@ app.whenReady()
       .catch((error) => {
         reportMainProcessDiagnostic('Guide runtime active channel initialization failed', error);
       });
-    const shellWindow = shellWindowController.createWindow();
+    const shellWindow = getShellWindowController().createWindow();
     registerShellAppCommandController(shellWindow, {
       reportDiagnostic: reportMainProcessDiagnostic,
     });
@@ -217,26 +309,59 @@ app.whenReady()
       await runSmokeAssertions(shellWindow, containmentCounters);
       app.exit(0);
     }
-  })
-  .catch((error: unknown) => {
-    console.error(redactError(error));
-    app.exit(1);
+}
+
+function registerApplicationLifecycleHandlers(): void {
+  app.on('window-all-closed', () => {
+    app.quit();
   });
 
-app.on('window-all-closed', () => {
-  app.quit();
-});
+  app.on('before-quit', (event) => {
+    singleInstanceOwner?.teardown();
+    singleInstanceOwner = null;
+    publishShellStatus('closing');
+    teardownSettingsIpc?.();
+    teardownSettingsIpc = null;
+    const teardown = teardownPlayerIpc;
+    if (playerIpcQuitTeardownComplete || teardown === null) {
+      const localPlaybackRuntime = playbackRuntime;
+      playbackRuntime = null;
+      const localChannelComposition = channelComposition;
+      channelComposition = null;
+      if (localChannelComposition !== null && channelSchedulerProgramStartHandler !== null) {
+        localChannelComposition.activeChannelScheduler.off(
+          'programStart',
+          channelSchedulerProgramStartHandler,
+        );
+        channelSchedulerProgramStartHandler = null;
+      }
+      const teardownPlex = plexComposition?.teardown ?? null;
+      plexComposition = null;
+      void Promise.all([
+        localPlaybackRuntime?.teardown() ?? Promise.resolve(),
+        teardownPlex?.() ?? Promise.resolve(),
+        localChannelComposition?.teardown() ?? Promise.resolve(),
+      ]).catch((error: unknown) => {
+        reportMainProcessDiagnostic('Runtime composition cleanup failed during quit', error);
+      });
+      return;
+    }
+    if (playerIpcQuitTeardownInProgress) {
+      event.preventDefault();
+      return;
+    }
 
-app.on('before-quit', (event) => {
-  publishShellStatus('closing');
-  teardownSettingsIpc?.();
-  teardownSettingsIpc = null;
-  const teardown = teardownPlayerIpc;
-  if (playerIpcQuitTeardownComplete || teardown === null) {
-    const localPlaybackRuntime = playbackRuntime;
-    playbackRuntime = null;
+    event.preventDefault();
+    teardownPlayerIpc = null;
+    teardownDiagnosticsIpc?.();
+    teardownDiagnosticsIpc = null;
+    const teardownPlex = plexComposition?.teardown ?? null;
+    plexComposition = null;
     const localChannelComposition = channelComposition;
     channelComposition = null;
+    playerIpcQuitTeardownInProgress = true;
+    const localPlaybackRuntime = playbackRuntime;
+    playbackRuntime = null;
     if (localChannelComposition !== null && channelSchedulerProgramStartHandler !== null) {
       localChannelComposition.activeChannelScheduler.off(
         'programStart',
@@ -244,55 +369,22 @@ app.on('before-quit', (event) => {
       );
       channelSchedulerProgramStartHandler = null;
     }
-    const teardownPlex = plexComposition?.teardown ?? null;
-    plexComposition = null;
-    void Promise.all([
-      localPlaybackRuntime?.teardown() ?? Promise.resolve(),
+    Promise.all([
+      teardown.teardown(),
       teardownPlex?.() ?? Promise.resolve(),
       localChannelComposition?.teardown() ?? Promise.resolve(),
-    ]).catch((error: unknown) => {
-      reportMainProcessDiagnostic('Runtime composition cleanup failed during quit', error);
-    });
-    return;
-  }
-  if (playerIpcQuitTeardownInProgress) {
-    event.preventDefault();
-    return;
-  }
-
-  event.preventDefault();
-  teardownPlayerIpc = null;
-  teardownDiagnosticsIpc?.();
-  teardownDiagnosticsIpc = null;
-  const teardownPlex = plexComposition?.teardown ?? null;
-  plexComposition = null;
-  const localChannelComposition = channelComposition;
-  channelComposition = null;
-  playerIpcQuitTeardownInProgress = true;
-  const localPlaybackRuntime = playbackRuntime;
-  playbackRuntime = null;
-  if (localChannelComposition !== null && channelSchedulerProgramStartHandler !== null) {
-    localChannelComposition.activeChannelScheduler.off(
-      'programStart',
-      channelSchedulerProgramStartHandler,
-    );
-    channelSchedulerProgramStartHandler = null;
-  }
-  Promise.all([
-    teardown.teardown(),
-    teardownPlex?.() ?? Promise.resolve(),
-    localChannelComposition?.teardown() ?? Promise.resolve(),
-    localPlaybackRuntime?.teardown() ?? Promise.resolve(),
-  ])
-    .catch((error: unknown) => {
-      reportMainProcessDiagnostic('Player IPC cleanup failed during quit', error);
-    })
-    .finally(() => {
-      playerIpcQuitTeardownComplete = true;
-      playerIpcQuitTeardownInProgress = false;
-      app.quit();
-    });
-});
+      localPlaybackRuntime?.teardown() ?? Promise.resolve(),
+    ])
+      .catch((error: unknown) => {
+        reportMainProcessDiagnostic('Player IPC cleanup failed during quit', error);
+      })
+      .finally(() => {
+        playerIpcQuitTeardownComplete = true;
+        playerIpcQuitTeardownInProgress = false;
+        app.quit();
+      });
+  });
+}
 
 function attachContainmentHandlers(window: BrowserWindow): void {
   window.webContents.setWindowOpenHandler(() => {
@@ -357,12 +449,12 @@ function registerShellIpcHandlers(): void {
     }
 
     const enabled = payload.intent === 'window.enterFullscreen';
-    return shellSuccess(payload.requestId, shellWindowController.setFullscreen(enabled));
+    return shellSuccess(payload.requestId, getShellWindowController().setFullscreen(enabled));
   });
 }
 
 function isAuthorizedEvent(event: IpcMainInvokeEvent): boolean {
-  const shellWindow = shellWindowController.getWindow();
+  const shellWindow = getShellWindowController().getWindow();
   if (shellWindow === null) {
     return false;
   }
@@ -405,7 +497,7 @@ function sendPlayerEvent(event: PlayerEvent): void {
 }
 
 function sendToShellWindow(channel: string, payload: unknown): void {
-  const window = shellWindowController.getWindow();
+  const window = getShellWindowController().getWindow();
   if (window === null || window.isDestroyed()) {
     return;
   }
@@ -422,14 +514,11 @@ function sendToShellWindow(channel: string, payload: unknown): void {
   }
 }
 
-function getShellMode(): ShellMode {
-  if (process.env.LINEUP_DESKTOP_SMOKE === '1') {
-    return 'smoke';
+function getShellWindowController(): NonNullable<typeof shellWindowController> {
+  if (shellWindowController === null) {
+    throw new Error('Shell window controller is unavailable.');
   }
-  if (process.env.NODE_ENV === 'production') {
-    return 'production';
-  }
-  return 'development';
+  return shellWindowController;
 }
 
 function getRequestId(payload: unknown): string {

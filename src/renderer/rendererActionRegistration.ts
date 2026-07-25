@@ -1,5 +1,4 @@
 import {
-  readChannelCommitActionId,
   readChannelSetupActionId,
   readCustomChannelActionId,
   readEpgActionId,
@@ -24,7 +23,6 @@ export interface RendererActionHandlers {
   applyRouteAction(action: NonNullable<ReturnType<typeof readRouteActionId>>): void;
   applySettingsAction(action: NonNullable<ReturnType<typeof readSettingsActionId>>): void;
   applyChannelSetupAction(action: NonNullable<ReturnType<typeof readChannelSetupActionId>>): void;
-  applyChannelCommitAction(action: NonNullable<ReturnType<typeof readChannelCommitActionId>>): void;
   applyEpgAction(action: NonNullable<ReturnType<typeof readEpgActionId>>): void;
   applyGuideAction?(action: GuideActionId): void;
   focusGuideProgramFromPointer?(target: GuideProgramActionTarget): boolean;
@@ -118,12 +116,6 @@ export function registerRendererActions(
     button.addEventListener('click', () => {
       const action = readChannelSetupActionId(button.dataset.setupAction);
       if (action !== null) handlers.applyChannelSetupAction(action);
-    });
-  }
-  for (const button of dom.channelCommitButtons) {
-    button.addEventListener('click', () => {
-      const action = readChannelCommitActionId(button.dataset.channelCommitAction);
-      if (action !== null) handlers.applyChannelCommitAction(action);
     });
   }
   for (const button of dom.epgActionButtons) {

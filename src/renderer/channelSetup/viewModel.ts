@@ -12,12 +12,6 @@ export interface ChannelSetupLiveSelectionViewModel {
   loadedItemCount: number;
 }
 
-export interface ChannelSetupCommitAvailabilityViewModel {
-  append: boolean;
-  replace: boolean;
-  confirmReplace: boolean;
-}
-
 export interface ChannelSetupReviewRowViewModel {
   label: string;
   value: string;
@@ -41,6 +35,45 @@ export interface ChannelSetupFlowViewModel {
   };
   reviewRows: readonly ChannelSetupReviewRowViewModel[];
   result: ChannelSetupResultViewModel;
+}
+
+export interface ChannelSetupProgressViewModel {
+  kind: 'idle' | 'review' | 'apply';
+  state: 'idle' | NonNullable<ChannelRuntimeRendererState['operation']>['state'];
+  phase: NonNullable<ChannelRuntimeRendererState['operation']>['phase'] | null;
+  progress: Readonly<{ completed: number; total: number | null }>;
+  pending: boolean;
+  statusText: string;
+  canCancel: boolean;
+}
+
+export function createChannelSetupProgress(
+  runtime: ChannelRuntimeRendererState | undefined,
+): ChannelSetupProgressViewModel {
+  const operation = runtime?.operation ?? null;
+  if (operation === null) {
+    return {
+      kind: 'idle',
+      state: 'idle',
+      phase: null,
+      progress: { completed: 0, total: null },
+      pending: runtime?.pending === true,
+      statusText: runtime?.statusText ?? 'Channel setup status not loaded',
+      canCancel: false,
+    };
+  }
+  const canCancel =
+    (operation.state === 'queued' || operation.state === 'running') &&
+    (operation.kind === 'review' || operation.phase === 'materialize');
+  return {
+    kind: operation.kind,
+    state: operation.state,
+    phase: operation.phase,
+    progress: operation.progress,
+    pending: runtime?.pending === true,
+    statusText: runtime?.statusText ?? 'Channel setup status not loaded',
+    canCancel,
+  };
 }
 
 const UNAVAILABLE_CHANNEL_SETUP_SUMMARY = {
@@ -83,7 +116,7 @@ export function createLiveChannelSetupMessages(
   liveSelection: ChannelSetupLiveSelectionViewModel | null,
 ): readonly string[] {
   if (channelRuntime?.pending) {
-    return [channelRuntime.commitMode === 'replace' ? 'Replacing saved channels...' : 'Creating channels...'];
+    return [channelRuntime.statusText];
   }
   if (channelRuntime?.errorText !== null && channelRuntime?.errorText !== undefined) {
     return [channelRuntime.errorText];
@@ -99,21 +132,6 @@ export function createLiveChannelSetupMessages(
   return ['Choose a movie or show library section before saving channels. Selecting an individual media item only opens metadata preview.'];
 }
 
-export function createChannelSetupCommitAvailability(
-  channelRuntime: ChannelRuntimeRendererState | undefined,
-  persistedSummary: ChannelRuntimeRendererState['summary'],
-  liveSelection: ChannelSetupLiveSelectionViewModel | null,
-): ChannelSetupCommitAvailabilityViewModel {
-  const statusLoaded = persistedSummary !== null;
-  const canAct = channelRuntime !== undefined && statusLoaded && !channelRuntime.pending && liveSelection !== null;
-  const hasPersistedChannels = (persistedSummary?.channelCount ?? 0) > 0;
-  return {
-    append: canAct,
-    replace: canAct && hasPersistedChannels,
-    confirmReplace: canAct && hasPersistedChannels && channelRuntime.confirmReplace,
-  };
-}
-
 export function createChannelSetupFlow(
   persistedSummary: ChannelSetupSummary | null,
   channelRuntime: ChannelRuntimeRendererState | undefined,
@@ -123,13 +141,12 @@ export function createChannelSetupFlow(
   const buildMode = state?.buildMode ?? 'append';
   const pending = channelRuntime?.pending === true;
   const errorText = channelRuntime?.errorText ?? null;
-  const confirmReplace = channelRuntime?.confirmReplace === true;
   const result = createResult(persistedSummary, pending, errorText);
 
   return {
     buildMode,
     library: createLibraryPanel(liveSelection),
-    reviewRows: createReviewRows(persistedSummary, liveSelection, confirmReplace, buildMode),
+    reviewRows: createReviewRows(persistedSummary, liveSelection, buildMode),
     result,
   };
 }
@@ -158,7 +175,6 @@ function createLibraryPanel(
 function createReviewRows(
   persistedSummary: ChannelSetupSummary | null,
   liveSelection: ChannelSetupLiveSelectionViewModel | null,
-  confirmReplace: boolean,
   buildMode: ChannelSetupDraftState['buildMode'],
 ): readonly ChannelSetupReviewRowViewModel[] {
   const savedCount = persistedSummary?.channelCount ?? 0;
@@ -182,7 +198,7 @@ function createReviewRows(
     },
     {
       label: 'Replacement',
-      value: confirmReplace ? 'Confirmation required' : savedCount > 0 ? 'Available after review' : 'Not available on first run',
+      value: buildMode === 'replace' && savedCount > 0 ? 'Required during apply' : 'Not required',
       detail: savedCount > 0
         ? 'Replacement keeps a separate confirm step before saved channels are overwritten.'
         : 'Create channels first; replacement appears after persisted recovery.',

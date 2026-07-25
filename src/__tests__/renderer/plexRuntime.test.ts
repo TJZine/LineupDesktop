@@ -1556,7 +1556,6 @@ function createPlexDomBindings(overrides: Partial<RendererDomBindings> = {}): Re
     routeActionButtons: [],
     settingsActionButtons: [],
     setupActionButtons: [],
-    channelCommitButtons: [],
     epgActionButtons: [],
     overlayActionButtons: [],
     screens: [],

@@ -9,6 +9,10 @@ import { applySupportBundleExportResult } from './supportBundleExport.js';
 import { createPlexRuntimeController } from './plexRuntimeActions.js';
 import { resolveChannelSetupLiveSelection } from './channelSetup/liveSelection.js';
 import { createChannelRuntimeController } from './channelRuntimeActions.js';
+import {
+  projectChannelBuildCancellation as projectChannelBuildCancellationState,
+  type ChannelRuntimeRendererState,
+} from './channelRuntimeState.js';
 import { createCustomChannelController, type CustomChannelActionId } from './customChannels/controller.js';
 import { dispatchCustomChannelAction } from './customChannels/actionDispatch.js';
 import { renderCustomChannelWorkspace } from './customChannels/dom.js';
@@ -264,10 +268,6 @@ registerRendererActions(dom, document, {
   applySetupStage: (stage) => { void onboardingFlow.changeStage(stage); },
   applyStagedSetupAction: (action) => { void applyStagedSetupAction(action); },
   applyChannelSetupAction: (action) => setupComposition.setBuildMode(action === 'selectReplaceBuildMode' ? 'replace' : 'append'),
-  applyChannelCommitAction: (action) => {
-    stagedSetupController.setBuildMode(action === 'append' ? 'append' : 'replace');
-    void applyStagedSetupAction('buildConfirm');
-  },
   applyEpgAction,
   applyGuideAction,
   focusGuideProgramFromPointer,
@@ -670,6 +670,7 @@ function renderApp(): void {
     channelState: channelController.getState(),
     dom,
   });
+  projectChannelBuildCancellation(channelController.getState());
   renderShellDom(shellState, shellDom, dom.screens);
   syncRendererFocusTargets(focusRegistry, dom);
   if (workflowState.routeState.activeRoute === 'channelSetup') {
@@ -681,6 +682,23 @@ function renderApp(): void {
   renderRendererFocus(focusState, dom);
   updateGuideTunePendingDom(guideTuneController.getPendingTarget());
   scrollFocusedSetupControlIntoView();
+}
+
+function projectChannelBuildCancellation(state: ChannelRuntimeRendererState): void {
+  const cancel = document.querySelector<HTMLButtonElement>(
+    '[data-focus-id="setup-progress-cancel"]',
+  );
+  const projection = projectChannelBuildCancellationState(state);
+  if (cancel !== null) {
+    cancel.hidden = !projection.visible;
+    cancel.disabled = !projection.enabled;
+    cancel.setAttribute('aria-disabled', String(!projection.enabled));
+    cancel.textContent = projection.label;
+  }
+  const status = document.querySelector<HTMLElement>(
+    '[data-channel-operation-status]',
+  );
+  if (status !== null) status.textContent = state.statusText;
 }
 
 function getPlayerOverlayPresentation() {

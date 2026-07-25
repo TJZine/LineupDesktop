@@ -8,9 +8,10 @@ test('presentation joins persisted channels to scheduler programs and omits miss
     playerSnapshot: createEmptyPlayerSnapshot(),
     nowMs: 150,
     channelSummary: {
-      status: 'configured', channelCount: 2, currentChannelId: 'one', currentChannelNumber: 1,
+      status: 'configured', lineupRevision: 1, channelCount: 2, currentChannelId: 'one', currentChannelNumber: 1,
       currentChannelName: 'One', channelNumbers: [1, 2], updatedAtMs: 1,
       recovery: { loaded: true, repaired: false },
+      builder: { completion: 'unknown', normalizedConfig: null, completedAtMs: null },
       channels: [
         { id: 'one', number: 1, name: 'One', sourceLibraryId: null, sourceLibraryName: null, itemCount: 1 },
         { id: 'two', number: 2, name: 'Two', sourceLibraryId: null, sourceLibraryName: null, itemCount: 0 },

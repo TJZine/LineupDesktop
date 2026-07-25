@@ -4,8 +4,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import ts from 'typescript';
 
 import {
-  LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
+  LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
+  LINEUP_CHANNEL_SETUP_GET_OPERATION_CHANNEL,
+  LINEUP_CHANNEL_SETUP_START_APPLY_CHANNEL,
+  LINEUP_CHANNEL_SETUP_START_REVIEW_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_DELETE_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_DUPLICATE_DRAFT_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL,
@@ -46,7 +49,7 @@ import {
 } from '../../contracts/ipc.js';
 import {
   CHANNEL_SETUP_ERROR_CODES,
-  CHANNEL_SETUP_COMMIT_MODES,
+  CHANNEL_SETUP_BUILD_MODES,
   CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS,
   CHANNEL_SETUP_OPERATIONS,
   CHANNEL_SETUP_STATUS_VALUES,
@@ -191,7 +194,27 @@ function evaluateChannelGuardModule(): Record<string, unknown> {
     fileName: 'src/preload/channelBridgeGuards.cts',
   }).outputText;
   const requireGuard = (moduleName: string) => {
-    assert.fail(`unexpected channel bridge guard require ${moduleName}`);
+    if (moduleName === '../contracts/channel.js') {
+      return {
+        CHANNEL_SETUP_ERROR_CODES,
+        CHANNEL_SETUP_OPERATIONS,
+        CHANNEL_SETUP_STATUS_VALUES,
+      };
+    }
+    if (moduleName === '../domain/channelBuilder/config.js') {
+      return {
+        normalizeChannelSetupConfig: () => {
+          throw new Error('Channel config normalization is not exercised by this harness.');
+        },
+      };
+    }
+    if (moduleName === '../domain/channelBuilder/types.js') {
+      return {
+        containsChannelBuilderCredentialMarker: (raw: string) =>
+          /(^|[^A-Za-z0-9_])(?:bearer|token|authorization|headers?)(?=$|[^A-Za-z0-9_])/iu.test(raw),
+      };
+    }
+    return assert.fail(`unexpected channel bridge guard require ${moduleName}`);
   };
   const evaluateGuards = new Function('require', 'exports', 'module', compiled);
   evaluateGuards(requireGuard, exportsObject, moduleObject);
@@ -575,7 +598,10 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL,
   LINEUP_PLEX_GET_METADATA_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
-  LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
+  LINEUP_CHANNEL_SETUP_START_REVIEW_CHANNEL,
+  LINEUP_CHANNEL_SETUP_START_APPLY_CHANNEL,
+  LINEUP_CHANNEL_SETUP_GET_OPERATION_CHANNEL,
+  LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL,
@@ -615,7 +641,10 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL',
     'LINEUP_PLEX_GET_METADATA_CHANNEL',
     'LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
-    'LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_START_REVIEW_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_START_APPLY_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_GET_OPERATION_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL',
     'LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL',
     'LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL',
     'LINEUP_CUSTOM_CHANNEL_GET_MEDIA_METADATA_CHANNEL',
@@ -641,12 +670,6 @@ function readPreloadStringArrayConst(name: string): string[] {
   const declaration = findPreloadVariableDeclaration(name);
   assert.ok(declaration?.initializer, `expected ${name} in preload entrypoint`);
   return readStringArrayInitializer(preloadSourceFile, name, declaration.initializer);
-}
-
-function readChannelGuardStringArrayConst(name: string): string[] {
-  const declaration = findVariableDeclaration(channelGuardSourceFile, name);
-  assert.ok(declaration?.initializer, `expected ${name} in channel bridge guards`);
-  return readStringArrayInitializer(channelGuardSourceFile, name, declaration.initializer);
 }
 
 function readCustomChannelGuardStringArrayConst(name: string): string[] {
@@ -1286,22 +1309,11 @@ test('preload guard vocabulary matches contract vocabulary', () => {
   assert.deepEqual(readPreloadStringArrayConst('PLEX_RUNTIME_ERROR_CODES'), [
     ...PLEX_RUNTIME_ERROR_CODES,
   ]);
-  assert.deepEqual(readChannelGuardStringArrayConst('CHANNEL_SETUP_STATUS_VALUES'), [
-    ...CHANNEL_SETUP_STATUS_VALUES,
-  ]);
-  assert.deepEqual(readChannelGuardStringArrayConst('CHANNEL_SETUP_ERROR_CODES'), [
-    ...CHANNEL_SETUP_ERROR_CODES,
-  ]);
-  assert.deepEqual(readChannelGuardStringArrayConst('CHANNEL_SETUP_OPERATIONS'), [
-    ...CHANNEL_SETUP_OPERATIONS,
-  ]);
-  assert.deepEqual(readChannelGuardStringArrayConst('CHANNEL_SETUP_COMMIT_MODES'), [
-    ...CHANNEL_SETUP_COMMIT_MODES,
-  ]);
-  assert.deepEqual(
-    readChannelGuardStringArrayConst('CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS'),
-    [...CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS],
-  );
+  assert.match(channelGuardSourceText, /CHANNEL_SETUP_STATUS_VALUES/u);
+  assert.match(channelGuardSourceText, /CHANNEL_SETUP_ERROR_CODES/u);
+  assert.match(channelGuardSourceText, /CHANNEL_SETUP_OPERATIONS/u);
+  assert.deepEqual([...CHANNEL_SETUP_BUILD_MODES], ['append', 'replace', 'merge']);
+  assert.ok(CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS.length > 0);
   assert.deepEqual(readCustomChannelGuardStringArrayConst('CUSTOM_CHANNEL_OPERATIONS'), [
     ...CUSTOM_CHANNEL_OPERATIONS,
   ]);
@@ -1853,7 +1865,8 @@ test('preload channel setup bridge validates status results before returning the
       ok: true,
       requestId: request.requestId,
       value: {
-        status: 'configured',
+        status: 'not-configured',
+        lineupRevision: 1,
         channelCount: 1,
         currentChannelId: 'channel-one',
         currentChannelNumber: 101,
@@ -1868,6 +1881,7 @@ test('preload channel setup bridge validates status results before returning the
           itemCount: 12,
         }],
         updatedAtMs: 123,
+        builder: { completion: 'unknown', normalizedConfig: null, completedAtMs: null },
         recovery: { loaded: true, repaired: false },
       },
     });
@@ -2040,69 +2054,109 @@ test('preload channel setup bridge validates status results before returning the
   );
   assert.doesNotMatch(JSON.stringify(rejectedStatusResult), /raw token|serverUri/u);
 
-  const commitHarness = createPreloadHarness((channel, request, input) => {
-    assert.equal(channel, LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL);
-    assert.ok(isPlexInvokeRequest(request));
-    assert.deepEqual(Object.keys(request).sort(), ['payload', 'requestId']);
-    assert.equal(Object.hasOwn(request, 'ok'), false);
-    assert.deepEqual(request.payload, { mode: 'append', sectionIds: ['movies'] });
-    return input({
-      ok: true,
-      requestId: request.requestId,
-      value: {
-        status: 'configured',
-        channelCount: 1,
-        currentChannelId: 'channel-one',
-        currentChannelNumber: 1,
-        currentChannelName: 'Movies',
-        channelNumbers: [1],
-        channels: [{
-          id: 'channel-one',
-          number: 1,
-          name: 'Movies',
-          sourceLibraryId: 'movies',
-          sourceLibraryName: 'Movies',
-          itemCount: 2,
-        }],
-        updatedAtMs: 123,
-        recovery: { loaded: true, repaired: false },
-      },
-    });
-  });
-
-  const commitResult = await commitHarness.api.channelSetup.commit({
-    mode: 'append',
-    sectionIds: ['movies'],
-  });
-
-  assert.equal((commitResult as { ok: boolean }).ok, true);
 });
 
-test('preload channel setup bridge rejects malformed commit inputs without IPC', async () => {
-  const harness = createPreloadHarness(() => {
-    assert.fail('invalid channel setup commit input must not invoke IPC');
-  });
-
-  for (const input of [
-    undefined,
-    { mode: 'append', sectionIds: null },
-    { mode: 'append', sectionIds: ['movies', 'bad id!'] },
-  ]) {
-    const result = await harness.api.channelSetup.commit(input);
-    assert.equal((result as { ok: boolean }).ok, false);
-    assert.match((result as { requestId: string }).requestId, /^channel-setup-commit-/u);
-    assert.equal(
-      (result as { error: { code: string } }).error.code,
-      'CHANNEL_VALIDATION_FAILED',
-    );
-    assert.equal(
-      (result as { error: { operation: string } }).error.operation,
-      'commit',
-    );
-    assert.doesNotMatch(JSON.stringify(result), /rawPayload|token|serverUri|https?:/u);
+test('preload channel operation guard accepts only the exhaustive phase and result cross-product', () => {
+  const guard = evaluateChannelGuardModule().isChannelSetupOperationResult as (
+    value: unknown,
+    requestId: string,
+  ) => boolean;
+  const requestId = 'operation-contract';
+  const reviewId = `channel-builder-review-${'a'.repeat(32)}`;
+  const applyId = `channel-builder-apply-${'b'.repeat(32)}`;
+  const base = {
+    startedAtMs: 1,
+    updatedAtMs: 2,
+    result: null,
+    error: null,
+  };
+  const valid = [
+    { ...base, operationId: reviewId, kind: 'review', state: 'queued', phase: 'discover-facets', progress: { completed: 0, total: null } },
+    { ...base, operationId: reviewId, kind: 'review', state: 'running', phase: 'discover-facets', progress: { completed: 4, total: null } },
+    { ...base, operationId: reviewId, kind: 'review', state: 'canceling', phase: 'plan', progress: { completed: 1, total: 1 } },
+    {
+      ...base,
+      operationId: reviewId,
+      kind: 'review',
+      state: 'review-ready',
+      phase: 'review-ready',
+      progress: { completed: 1, total: 1 },
+      result: {
+        kind: 'review',
+        planId: `channel-builder-plan-${'c'.repeat(32)}`,
+        contextEpoch: 1,
+        lineupRevision: 2,
+        status: 'ready',
+        diff: {
+          summary: { created: 1, removed: 0, unchanged: 0 },
+          samples: { created: ['Movies'], removed: [], unchanged: [] },
+        },
+        warnings: [],
+        reachedCap: false,
+      },
+    },
+    { ...base, operationId: applyId, kind: 'apply', state: 'queued', phase: 'materialize', progress: { completed: 0, total: 2 } },
+    { ...base, operationId: applyId, kind: 'apply', state: 'running', phase: 'materialize', progress: { completed: 1, total: 2 } },
+    { ...base, operationId: applyId, kind: 'apply', state: 'running', phase: 'persist', progress: { completed: 0, total: 1 } },
+    { ...base, operationId: applyId, kind: 'apply', state: 'running', phase: 'refresh-guide', progress: { completed: 1, total: 1 } },
+    {
+      ...base,
+      operationId: applyId,
+      kind: 'apply',
+      state: 'succeeded',
+      phase: 'done',
+      progress: { completed: 1, total: 1 },
+      result: {
+        kind: 'apply',
+        commit: 'committed',
+        summary: {
+          created: 1,
+          removed: 0,
+          unchanged: 0,
+          skipped: 0,
+          finalChannelCount: 1,
+          reachedMaxChannels: false,
+          watchChannelId: 'channel-one',
+          byStrategy: Object.fromEntries([
+            'collections', 'playlists', 'genres', 'directors', 'decades',
+            'recentlyAdded', 'studios', 'actors',
+          ].map((key) => [key, { created: key === 'collections' ? 1 : 0, skipped: 0 }])),
+          warnings: [],
+        },
+        guideRefresh: 'completed',
+      },
+    },
+    { ...base, operationId: reviewId, kind: 'review', state: 'canceled', phase: 'done', progress: { completed: 1, total: 1 }, result: { kind: 'canceled' } },
+    {
+      ...base,
+      operationId: applyId,
+      kind: 'apply',
+      state: 'failed',
+      phase: 'done',
+      progress: { completed: 1, total: 1 },
+      error: {
+        code: 'CHANNEL_UNKNOWN',
+        message: 'Channel setup could not complete the request.',
+        retryable: true,
+        recoverable: true,
+        operation: 'startApply',
+      },
+    },
+  ];
+  for (const operation of valid) {
+    assert.equal(guard({ ok: true, requestId, value: { operation } }, requestId), true);
   }
-
-  assert.equal(harness.calls.length, 0);
+  const invalid = [
+    { ...valid[0], operationId: applyId },
+    { ...valid[0], progress: { completed: 0, total: 1 } },
+    { ...valid[4], state: 'canceling', phase: 'persist', progress: { completed: 0, total: 1 } },
+    { ...valid[1], phase: 'materialize', progress: { completed: 0, total: 1 } },
+    { ...valid[9], progress: { completed: 0, total: 1 } },
+    { ...valid[3], result: { ...(valid[3] as { result: object }).result, extra: true } },
+  ];
+  for (const operation of invalid) {
+    assert.equal(guard({ ok: true, requestId, value: { operation } }, requestId), false);
+  }
 });
 
 test('preload diagnostics guards validate count map keys and values', () => {
@@ -2540,8 +2594,11 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
     'LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL',
   ]);
   assert.deepEqual(collectCreateChannelSetupBridgeChannelArguments().sort(), [
-    'LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_GET_OPERATION_CHANNEL',
     'LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_START_APPLY_CHANNEL',
+    'LINEUP_CHANNEL_SETUP_START_REVIEW_CHANNEL',
   ]);
 
   function collectCreateCustomChannelBridgeChannelArguments(): string[] {

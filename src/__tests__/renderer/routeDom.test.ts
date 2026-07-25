@@ -721,77 +721,6 @@ test('route DOM renders channel setup review without privileged data', () => {
   }
 });
 
-test('route DOM keeps channel commit controls gated by status, selection, and confirmation', () => {
-  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
-  const documentDouble = {
-    documentElement: { dataset: {} },
-    querySelector: () => null,
-  };
-  Object.defineProperty(globalThis, 'document', {
-    value: documentDouble,
-    configurable: true,
-  });
-
-  try {
-    const appendButton = new ElementDouble();
-    appendButton.dataset.channelCommitAction = 'append';
-    const replaceButton = new ElementDouble();
-    replaceButton.dataset.channelCommitAction = 'replace';
-    const confirmButton = new ElementDouble();
-    confirmButton.dataset.channelCommitAction = 'confirmReplace';
-    const dom = createOverlayDomBindings({
-      overlayStack: new ElementDouble(),
-      overlays: [],
-      overlayActions: [],
-    });
-    dom.channelCommitButtons = [appendButton, replaceButton, confirmButton] as unknown as HTMLButtonElement[];
-
-    renderWorkflowDom(
-      createWorkflowState('channelSetup'),
-      createPlayerOverlayState(),
-      createRendererSafePlayerSnapshot(),
-      dom,
-      configuredChannelRuntimeState(),
-      null,
-    );
-    assert.equal(appendButton.disabled, true);
-    assert.equal(replaceButton.disabled, true);
-    assert.equal(confirmButton.disabled, true);
-
-    renderWorkflowDom(
-      createWorkflowState('channelSetup'),
-      createPlayerOverlayState(),
-      createRendererSafePlayerSnapshot(),
-      dom,
-      configuredChannelRuntimeState(),
-      liveSelection(),
-    );
-    assert.equal(appendButton.disabled, false);
-    assert.equal(replaceButton.disabled, false);
-    assert.equal(confirmButton.disabled, true);
-
-    renderWorkflowDom(
-      createWorkflowState('channelSetup'),
-      createPlayerOverlayState(),
-      createRendererSafePlayerSnapshot(),
-      dom,
-      {
-        ...configuredChannelRuntimeState(),
-        statusText: 'Channel status unavailable',
-        errorText: 'Replacing saved channels requires confirmation.',
-        commitMode: 'replace',
-        confirmReplace: true,
-      },
-      liveSelection(),
-    );
-    assert.equal(appendButton.disabled, false);
-    assert.equal(replaceButton.disabled, false);
-    assert.equal(confirmButton.disabled, false);
-  } finally {
-    restoreDocument(originalDocument);
-  }
-});
-
 test('route DOM renders selected Plex library and strategy controls through product setup bindings', () => {
   const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   const documentDouble = {
@@ -811,10 +740,6 @@ test('route DOM renders selected Plex library and strategy controls through prod
     const sourceList = new ElementDouble();
     const review = new ElementDouble();
     const validation = new ElementDouble();
-    const appendButton = new ElementDouble();
-    appendButton.dataset.channelCommitAction = 'append';
-    const replaceButton = new ElementDouble();
-    replaceButton.dataset.channelCommitAction = 'replace';
     const dom = createOverlayDomBindings({
       overlayStack: new ElementDouble(),
       overlays: [],
@@ -826,7 +751,6 @@ test('route DOM renders selected Plex library and strategy controls through prod
     dom.channelDraftListElement = sourceList as unknown as HTMLElement;
     dom.channelSetupReviewElement = review as unknown as HTMLElement;
     dom.setupValidationElement = validation as unknown as HTMLElement;
-    dom.channelCommitButtons = [appendButton, replaceButton] as unknown as HTMLButtonElement[];
 
     const replaceWorkflow = applyWorkflowChannelSetupAction(
       createWorkflowState('channelSetup'),
@@ -850,8 +774,6 @@ test('route DOM renders selected Plex library and strategy controls through prod
     assert.match(renderedText, /2 known movies/u);
     assert.match(renderedText, /Replace saved lineup/u);
     assert.match(renderedText, /Review the strategy, then append it to saved channels or replace the lineup/u);
-    assert.equal(appendButton.textContent, 'Build appended channel');
-    assert.equal(replaceButton.textContent, 'Review replace mode');
   } finally {
     restoreDocument(originalDocument);
   }
@@ -1046,10 +968,10 @@ function configuredChannelRuntimeState(): ChannelRuntimeRendererState {
     pending: false,
     statusText: 'Recovered',
     errorText: null,
-    commitMode: 'append',
-    confirmReplace: false,
+    operation: null,
     summary: {
       status: 'configured',
+      lineupRevision: 1,
       channelCount: 1,
       currentChannelId: 'channel-one',
       currentChannelNumber: 101,
@@ -1067,6 +989,7 @@ function configuredChannelRuntimeState(): ChannelRuntimeRendererState {
       ],
       updatedAtMs: 1,
       recovery: { loaded: true, repaired: false },
+      builder: { completion: 'unknown', normalizedConfig: null, completedAtMs: null },
     },
   };
 }
@@ -1099,7 +1022,6 @@ function createOverlayDomBindings({
     routeActionButtons: [],
     settingsActionButtons: [],
     setupActionButtons: [],
-    channelCommitButtons: [],
     epgActionButtons: [],
     overlayActionButtons: overlayActions as unknown as HTMLButtonElement[],
     screens: [],

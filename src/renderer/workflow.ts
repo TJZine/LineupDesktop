@@ -34,12 +34,12 @@ import {
   type SupportBundleExportStatusViewModel,
 } from './settingsSetup.js';
 import {
-  createChannelSetupCommitAvailability,
   createChannelSetupFlow,
+  createChannelSetupProgress,
   createLiveChannelSetupMessages,
   createLiveChannelSetupSummary,
   type ChannelSetupFlowViewModel,
-  type ChannelSetupCommitAvailabilityViewModel,
+  type ChannelSetupProgressViewModel,
   type ChannelSetupLiveSelectionViewModel,
 } from './channelSetup/viewModel.js';
 import type { DesktopSettingsValues } from '../contracts/settings.js';
@@ -103,8 +103,8 @@ export interface RouteWorkflowViewModel {
   settings: SettingsSummaryViewModel;
   channelSetupSummary: ChannelSetupSummaryViewModel;
   setupValidationMessages: readonly string[];
-  channelSetupCommitAvailability: ChannelSetupCommitAvailabilityViewModel;
   channelSetupFlow: ChannelSetupFlowViewModel;
+  channelSetupProgress: ChannelSetupProgressViewModel;
   actions: readonly RouteActionViewModel[];
 }
 
@@ -303,17 +303,13 @@ export function getRouteWorkflowView(
     },
     channelSetupSummary: createLiveChannelSetupSummary(persistedSummary, selectedLibraryItemCount, liveSelection),
     setupValidationMessages: createLiveChannelSetupMessages(channelRuntime, persistedSummary, liveSelection),
-    channelSetupCommitAvailability: createChannelSetupCommitAvailability(
-      channelRuntime,
-      persistedSummary,
-      liveSelection,
-    ),
     channelSetupFlow: createChannelSetupFlow(
       persistedSummary,
       channelRuntime,
       liveSelection,
       state.channelSetupDraft,
     ),
+    channelSetupProgress: createChannelSetupProgress(channelRuntime),
     actions: ROUTE_ACTIONS[route],
   };
 }

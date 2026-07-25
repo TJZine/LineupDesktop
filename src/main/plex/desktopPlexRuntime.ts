@@ -1,13 +1,33 @@
 import type { PlexCancelPinValue, PlexGetHomeUsersValue, PlexGetMetadataValue, PlexIpcResult, PlexListLibraryItemsValue, PlexListLibrarySectionsValue, PlexPollPinValue, PlexRefreshServersValue, PlexRequestPinValue, PlexRestoreSelectedServerValue, PlexRuntimeError, PlexRuntimeOperation, PlexRuntimeSnapshot, PlexSearchLibraryValue, PlexSelectServerValue, PlexServerSelectionSummary, PlexSwitchHomeUserValue } from '../../contracts/plex.js';
 import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.js';
+import {
+  createLibrarySetBinding,
+  createProfileBinding,
+  createServerBinding,
+} from '../../domain/channelBuilder/index.js';
 import type { DesktopPlexAuthService } from './auth/index.js';
 import type { DesktopPlexCredentialStore } from './auth/desktopPlexCredentialStore.js';
 import type { DesktopPlexServerDiscovery } from './discovery/index.js';
 import type { PlexConnection } from './discovery/types.js';
-import { isSafeLibraryFilter, isSafeSearchLimit, isSafeSearchTypes, normalizeLibraryPagination, type PlexMediaType } from './library/index.js';
+import { clearTimeout } from 'node:timers';
+import {
+  createChannelBuilderFacetSession,
+  invalidateChannelBuilderFacetSession,
+  ChannelBuilderFacetTransportUnavailableError,
+  type ChannelBuilderFacetAccessInput,
+  type ChannelBuilderFacetSession,
+} from './desktopPlexChannelBuilderFacetSource.js';
+import {
+  DesktopPlexContextNotifications,
+  type DesktopPlexBuilderContextListener,
+  type DesktopPlexBuilderContextResult,
+  type DesktopPlexBuilderContextUnsubscribe,
+  type DesktopPlexBuilderLibraryPair,
+} from './desktopPlexContextNotifications.js';
+import { isSafeLibraryFilter, isSafeSearchLimit, isSafeSearchTypes, normalizeLibraryPagination, type PlexLibrarySection, type PlexMediaType } from './library/index.js';
 import { applyFailureSnapshot, applyServerSelectionSnapshot, authRequiredError, cloneRuntimeSnapshot, createInitialSnapshot, failureResult, isOptionalShortString, mapCredentialStatus, recordRuntimeDiagnostic, storageError, stripPinSecretFields, success, validatePositiveInteger, validationError } from './desktopPlexRuntimeSupport.js';
 import { DesktopPlexLibraryOperationExecutor } from './desktopPlexLibraryOperationExecutor.js';
-import { LivePlexTransportError, type LivePlexLibraryTransport } from './livePlexTransport.js';
+import { LivePlexTransportError, type LivePlexChannelBuilderFacetTransport, type LivePlexLibraryTransport } from './livePlexTransport.js';
 import { PlexRuntimeOperationOwner, type PlexRuntimeSnapshotCommit } from './plexRuntimeOperationOwner.js';
 
 export interface DesktopPlexRuntimeOptions {
@@ -15,6 +35,7 @@ export interface DesktopPlexRuntimeOptions {
   credentialStore: Pick<DesktopPlexCredentialStore, 'readDefaultAccountCredentialSecret'>;
   serverDiscovery: DesktopPlexServerDiscovery;
   libraryTransport: LivePlexLibraryTransport;
+  channelBuilderFacetTransport?: LivePlexChannelBuilderFacetTransport;
   diagnosticEventStore?: DiagnosticEventStore;
   nowMs?: () => number;
 }
@@ -30,17 +51,21 @@ export class DesktopPlexRuntime {
   private readonly credentialStore: DesktopPlexRuntimeOptions['credentialStore'];
   private readonly serverDiscovery: DesktopPlexServerDiscovery;
   private readonly libraryTransport: LivePlexLibraryTransport;
+  private readonly channelBuilderFacetTransport: LivePlexChannelBuilderFacetTransport | null;
   private readonly libraryOperations: DesktopPlexLibraryOperationExecutor;
+  private readonly builderContextNotifications = new DesktopPlexContextNotifications();
   private readonly operationOwner: PlexRuntimeOperationOwner;
   private readonly diagnosticEventStore?: DiagnosticEventStore;
   private readonly nowMs: () => number;
   private snapshot: PlexRuntimeSnapshot;
+  private authoritativeLibraryPairs: readonly DesktopPlexBuilderLibraryPair[] | null = null;
 
   constructor(options: DesktopPlexRuntimeOptions) {
     this.authService = options.authService;
     this.credentialStore = options.credentialStore;
     this.serverDiscovery = options.serverDiscovery;
     this.libraryTransport = options.libraryTransport;
+    this.channelBuilderFacetTransport = options.channelBuilderFacetTransport ?? null;
     this.libraryOperations = new DesktopPlexLibraryOperationExecutor(options.libraryTransport);
     this.diagnosticEventStore = options.diagnosticEventStore;
     this.nowMs = options.nowMs ?? Date.now;
@@ -58,6 +83,72 @@ export class DesktopPlexRuntime {
   }
   getLibraryTransport(): LivePlexLibraryTransport {
     return this.libraryTransport;
+  }
+  getBuilderContextForMain(): DesktopPlexBuilderContextResult {
+    return this.builderContextNotifications.get();
+  }
+  subscribeBuilderContextForMain(
+    listener: DesktopPlexBuilderContextListener,
+  ): DesktopPlexBuilderContextUnsubscribe {
+    return this.builderContextNotifications.subscribe(listener);
+  }
+  async withChannelBuilderFacetSession<T>(
+    input: ChannelBuilderFacetAccessInput,
+    run: (session: ChannelBuilderFacetSession) => Promise<T>,
+  ): Promise<T> {
+    if (this.channelBuilderFacetTransport === null) {
+      throw new ChannelBuilderFacetTransportUnavailableError();
+    }
+    const context = this.requireCurrentBuilderContext(input);
+    const token = this.authService.getActiveTokenForMain();
+    if (token === null) {
+      throw new LivePlexTransportError(
+        'auth-required',
+        'Channel Builder facet discovery requires Plex authentication',
+      );
+    }
+    const connection = this.requireSelectedConnection('listLibraryItems');
+    const controller = new AbortController();
+    const abortFromCaller = () => controller.abort(input.signal.reason);
+    input.signal.addEventListener('abort', abortFromCaller, { once: true });
+    if (input.signal.aborted) abortFromCaller();
+    const deadlineDelayMs = Math.max(0, input.deadlineAtMs - this.nowMs());
+    const deadline = setTimeout(() => controller.abort(), deadlineDelayMs);
+    const unsubscribe = this.subscribeBuilderContextForMain((event) => {
+      if (event.kind === 'changed' && !matchesBuilderContext(event.result, input)) {
+        controller.abort(CHANNEL_BUILDER_CONTEXT_CHANGED);
+      }
+    });
+    const baseSession = createChannelBuilderFacetSession(
+      {
+        facetTransport: this.channelBuilderFacetTransport,
+        itemTransport: this.libraryTransport,
+      },
+      {
+        connection,
+        token,
+        libraries: projectFacetLibraries(this.snapshot.library.sections, context.libraryPairs),
+      },
+    );
+    const session = bindSessionSignal(baseSession, controller.signal);
+    try {
+      const result = await run(session);
+      if (controller.signal.reason === CHANNEL_BUILDER_CONTEXT_CHANGED) {
+        throw channelBuilderContextChangedError();
+      }
+      this.requireCurrentBuilderContext(input);
+      return result;
+    } catch (error) {
+      if (controller.signal.reason === CHANNEL_BUILDER_CONTEXT_CHANGED) {
+        throw channelBuilderContextChangedError();
+      }
+      throw error;
+    } finally {
+      invalidateChannelBuilderFacetSession(baseSession);
+      unsubscribe();
+      clearTimeout(deadline);
+      input.signal.removeEventListener('abort', abortFromCaller);
+    }
   }
   getSelectedConnectionForMain(): PlexConnection | null {
     return this.serverDiscovery.getSelectedConnectionForMain();
@@ -200,6 +291,7 @@ export class DesktopPlexRuntime {
         lastError: null,
         updatedAtMs: this.nowMs(),
       }));
+      this.clearAndPublishBuilderContext();
       return { profile: result.activeProfile, snapshot: this.cloneSnapshot() };
     });
   }
@@ -208,12 +300,15 @@ export class DesktopPlexRuntime {
     return this.operationOwner.run(requestId, 'restoreSelectedServer', async ({ signal, commit }) => {
       const token = await this.requireActiveToken(signal, commit, 'restoreSelectedServer');
       const profileId = this.requireActiveProfileId('restoreSelectedServer');
+      const previousServerId =
+        this.serverDiscovery.getSelectedServerSummary()?.serverId ?? null;
       this.setServerStatus('loading', commit);
       const selection = await this.serverDiscovery.restoreSelectedServer({ token, profileId, signal });
       if (selection.kind === 'selected') {
         this.operationOwner.abortExcept('restoreSelectedServer');
       }
       this.applyServerSelection(selection, commit);
+      this.clearBuilderContextIfServerChanged(previousServerId);
       return { selection, snapshot: this.cloneSnapshot() };
     });
   }
@@ -221,6 +316,8 @@ export class DesktopPlexRuntime {
   async refreshServers(requestId: string): Promise<PlexIpcResult<PlexRefreshServersValue>> {
     return this.operationOwner.run(requestId, 'refreshServers', async ({ signal, commit }) => {
       const token = await this.requireActiveToken(signal, commit, 'refreshServers');
+      const previousServerId =
+        this.serverDiscovery.getSelectedServerSummary()?.serverId ?? null;
       this.setServerStatus('loading', commit);
       const servers = await this.serverDiscovery.refreshServers({ token, signal });
       commit((snapshot) => ({
@@ -234,6 +331,7 @@ export class DesktopPlexRuntime {
         lastError: null,
         updatedAtMs: this.nowMs(),
       }));
+      this.clearBuilderContextIfServerChanged(previousServerId);
       return { servers, snapshot: this.cloneSnapshot() };
     });
   }
@@ -249,6 +347,8 @@ export class DesktopPlexRuntime {
     return this.operationOwner.run(requestId, 'selectServer', async ({ signal, commit }) => {
       const token = await this.requireActiveToken(signal, commit, 'selectServer');
       const profileId = this.requireActiveProfileId('selectServer');
+      const previousServerId =
+        this.serverDiscovery.getSelectedServerSummary()?.serverId ?? null;
       this.setServerStatus('loading', commit);
       const selection = await this.serverDiscovery.selectServer(normalizedServerId, {
         source: 'manual',
@@ -260,6 +360,7 @@ export class DesktopPlexRuntime {
         this.operationOwner.abortExcept('selectServer');
       }
       this.applyServerSelection(selection, commit);
+      this.clearBuilderContextIfServerChanged(previousServerId);
       return { selection, snapshot: this.cloneSnapshot() };
     });
   }
@@ -269,18 +370,28 @@ export class DesktopPlexRuntime {
       const token = await this.requireActiveToken(signal, commit, 'listLibrarySections');
       const connection = this.requireSelectedConnection('listLibrarySections');
       this.setLibraryStatus('loading', commit);
-      const sections = await this.libraryOperations.listSections({
-        connection,
-        token,
-        signal,
-      });
+      this.clearAndPublishBuilderContext();
+      let result: Awaited<ReturnType<DesktopPlexLibraryOperationExecutor['listSectionsForMain']>>;
+      try {
+        result = await this.libraryOperations.listSectionsForMain({
+          connection,
+          token,
+          signal,
+        });
+      } catch (error) {
+        this.clearAndPublishBuilderContext();
+        throw error;
+      }
       commit((snapshot) => ({
         ...snapshot,
-        library: { ...snapshot.library, status: 'ready', sections },
+        library: { ...snapshot.library, status: 'ready', sections: result.sections },
         lastError: null,
         updatedAtMs: this.nowMs(),
       }));
-      return { sections, snapshot: this.cloneSnapshot() };
+      this.authoritativeLibraryPairs =
+        result.libraryPairs.length === 0 ? null : result.libraryPairs;
+      this.publishBuilderContext();
+      return { sections: result.sections, snapshot: this.cloneSnapshot() };
     });
   }
 
@@ -485,6 +596,64 @@ export class DesktopPlexRuntime {
     return profileId;
   }
 
+  private requireCurrentBuilderContext(
+    input: ChannelBuilderFacetAccessInput,
+  ): Readonly<{ libraryPairs: readonly DesktopPlexBuilderLibraryPair[] }> {
+    const result = this.getBuilderContextForMain();
+    if (!matchesBuilderContext(result, input) || result === null || !result.ok) {
+      throw channelBuilderContextChangedError();
+    }
+    return { libraryPairs: result.snapshot.libraryPairs };
+  }
+
+  private clearAndPublishBuilderContext(): void {
+    this.authoritativeLibraryPairs = null;
+    this.publishBuilderContext();
+  }
+
+  private clearBuilderContextIfServerChanged(previousServerId: string | null): void {
+    const selectedServerId =
+      this.serverDiscovery.getSelectedServerSummary()?.serverId ?? null;
+    if (selectedServerId !== previousServerId) {
+      this.clearAndPublishBuilderContext();
+    }
+  }
+
+  private publishBuilderContext(): void {
+    const activeProfileId = this.authService.getActiveUserId()?.trim() ?? '';
+    if (activeProfileId.length === 0) {
+      this.builderContextNotifications.publish({
+        ok: false,
+        error: { code: 'profile-unavailable' },
+      });
+      return;
+    }
+    const selectedServerId =
+      this.serverDiscovery.getSelectedServerSummary()?.serverId.trim() ?? '';
+    if (selectedServerId.length === 0) {
+      this.builderContextNotifications.publish({
+        ok: false,
+        error: { code: 'server-unavailable' },
+      });
+      return;
+    }
+    if (this.authoritativeLibraryPairs === null) {
+      this.builderContextNotifications.publish({
+        ok: false,
+        error: { code: 'libraries-unavailable' },
+      });
+      return;
+    }
+    this.builderContextNotifications.publish({
+      ok: true,
+      snapshot: {
+        activeProfileId,
+        selectedServerId,
+        libraryPairs: this.authoritativeLibraryPairs,
+      },
+    });
+  }
+
   private setServerStatus(
     status: PlexRuntimeSnapshot['servers']['status'],
     commit: PlexRuntimeSnapshotCommit,
@@ -548,4 +717,80 @@ export class DesktopPlexRuntime {
   private cloneSnapshot(): PlexRuntimeSnapshot {
     return cloneRuntimeSnapshot(this.snapshot);
   }
+}
+
+const CHANNEL_BUILDER_CONTEXT_CHANGED = Symbol('channel-builder-context-changed');
+
+function channelBuilderContextChangedError(): Error & { code: 'CHANNEL_CONTEXT_CHANGED' } {
+  return Object.assign(new Error('Channel Builder context changed.'), {
+    code: 'CHANNEL_CONTEXT_CHANGED' as const,
+  });
+}
+
+function matchesBuilderContext(
+  result: DesktopPlexBuilderContextResult,
+  input: ChannelBuilderFacetAccessInput,
+): boolean {
+  if (result === null || !result.ok) return false;
+  const pairsById = new Map(
+    result.snapshot.libraryPairs.map((pair) => [pair.libraryId, pair] as const),
+  );
+  const selectedPairs: DesktopPlexBuilderLibraryPair[] = [];
+  for (const libraryId of input.selectedLibraryIds) {
+    const pair = pairsById.get(libraryId);
+    if (pair === undefined) return false;
+    selectedPairs.push(pair);
+  }
+  try {
+    return (
+      createProfileBinding(result.snapshot.activeProfileId) ===
+        input.expectedContext.profileBinding &&
+      createServerBinding(result.snapshot.selectedServerId) ===
+        input.expectedContext.serverBinding &&
+      createLibrarySetBinding(selectedPairs) === input.expectedContext.librarySetBinding
+    );
+  } catch {
+    return false;
+  }
+}
+
+function projectFacetLibraries(
+  sections: readonly PlexRuntimeSnapshot['library']['sections'][number][],
+  pairs: readonly DesktopPlexBuilderLibraryPair[],
+): readonly PlexLibrarySection[] {
+  const pairById = new Map(pairs.map((pair) => [pair.libraryId, pair] as const));
+  return sections.map((section) => {
+    const pair = pairById.get(section.id);
+    if (pair === undefined) throw channelBuilderContextChangedError();
+    return {
+      id: section.id,
+      uuid: pair.libraryUuid,
+      title: section.title,
+      type: section.type,
+      agent: '',
+      scanner: '',
+      contentCount: section.contentCount,
+      ...(section.episodeCount === undefined ? {} : { episodeCount: section.episodeCount }),
+      lastScannedAt: new Date(section.lastScannedAtMs),
+      art: null,
+      thumb: null,
+    };
+  });
+}
+
+function bindSessionSignal(
+  session: ChannelBuilderFacetSession,
+  signal: AbortSignal,
+): ChannelBuilderFacetSession {
+  return {
+    libraries: session.libraries,
+    listCollectionsPage: (request) =>
+      session.listCollectionsPage({ ...request, signal }),
+    listServerPlaylistsPage: (request) =>
+      session.listServerPlaylistsPage({ ...request, signal }),
+    listTagDirectoryPage: (request) =>
+      session.listTagDirectoryPage({ ...request, signal }),
+    listLibraryItemsPage: (request) =>
+      session.listLibraryItemsPage({ ...request, signal }),
+  };
 }

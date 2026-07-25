@@ -8,6 +8,9 @@ import { ChannelPersistenceSaveQueue } from '../../domain/channel/channelPersist
 import {
   CorruptChannelPersistenceDataError,
   ChannelPersistenceStore,
+  type ChannelAggregate,
+  type ChannelAggregateMutationRequest,
+  type ChannelAggregateMutationResult,
   type ChannelPersistenceStoragePort,
 } from '../../domain/channel/channelPersistenceStore.js';
 import { ChannelRepository } from '../../domain/channel/channelRepository.js';
@@ -89,6 +92,42 @@ class MemoryChannelStorage implements ChannelPersistenceStoragePort {
   public async writeCurrentChannelId(channelId: string | null): Promise<void> {
     this.currentChannelId = channelId;
   }
+
+  public async readChannelAggregate(): Promise<ChannelAggregate> {
+    const decoded =
+      this.storedChannelData === null ? null : decodeStoredChannelData(this.storedChannelData);
+    return {
+      storedChannelData:
+        decoded !== null &&
+        decoded.channels !== undefined &&
+        decoded.channelOrder !== undefined &&
+        decoded.currentChannelId !== undefined &&
+        decoded.savedAt !== undefined
+          ? decoded as StoredChannelData
+          : null,
+      currentChannelId: this.currentChannelId,
+      lineupRevision: 0,
+      channelBuilderState: null,
+    };
+  }
+
+  public async mutateChannelAggregate(
+    request: ChannelAggregateMutationRequest,
+  ): Promise<ChannelAggregateMutationResult> {
+    const current = await this.readChannelAggregate();
+    if (
+      request.kind === 'builder-lineup' &&
+      request.expectedLineupRevision !== current.lineupRevision
+    ) {
+      return { status: 'conflict', actualLineupRevision: current.lineupRevision };
+    }
+    if (request.onCommitBarrier() === 'cancel') return { status: 'canceled' };
+    const aggregate = request.mutate(current);
+    this.storedChannelData =
+      aggregate.storedChannelData === null ? null : encodeStoredChannelData(aggregate.storedChannelData);
+    this.currentChannelId = aggregate.currentChannelId;
+    return { status: 'committed', aggregate };
+  }
 }
 
 test('channel persistence codec decodes only stored channel data shape', () => {
@@ -111,15 +150,15 @@ test('channel persistence codec decodes only stored channel data shape', () => {
   assert.equal(decodeStoredChannelData(JSON.stringify({ channels: [], channelOrder: [], savedAt: Infinity })), null);
 });
 
-test('channel persistence store cleans empty records and reports malformed records as corrupt', async () => {
+test('channel persistence store reports malformed records without read-triggered repair', async () => {
   const storage = new MemoryChannelStorage();
   const store = new ChannelPersistenceStore(storage);
 
   storage.storedChannelData = '';
   storage.currentChannelId = 'stale-current';
   assert.equal(await store.readStoredChannelData(), null);
-  assert.equal(storage.clearCount, 1);
-  assert.equal(storage.currentChannelId, null);
+  assert.equal(storage.clearCount, 0);
+  assert.equal(storage.currentChannelId, 'stale-current');
 
   storage.storedChannelData = '{bad-json';
   storage.currentChannelId = 'stale-current';
@@ -127,16 +166,16 @@ test('channel persistence store cleans empty records and reports malformed recor
     () => store.readStoredChannelData(),
     CorruptChannelPersistenceDataError,
   );
-  assert.equal(storage.clearCount, 2);
-  assert.equal(storage.currentChannelId, null);
+  assert.equal(storage.clearCount, 0);
+  assert.equal(storage.currentChannelId, 'stale-current');
 
   storage.currentChannelId = '  channel-1  ';
   assert.equal(await store.readCurrentChannelId(), 'channel-1');
-  assert.equal(storage.currentChannelId, 'channel-1');
+  assert.equal(storage.currentChannelId, '  channel-1  ');
 
   storage.currentChannelId = '   ';
   assert.equal(await store.readCurrentChannelId(), null);
-  assert.equal(storage.currentChannelId, null);
+  assert.equal(storage.currentChannelId, '   ');
 });
 
 test('channel persistence repository normalizes malformed persisted channel state', async () => {
@@ -281,7 +320,7 @@ test('channel persistence repository preserves hidden channel visibility and rep
   assert.deepEqual(auditChannelDomainValueForForbiddenFields(loaded.data), []);
 });
 
-test('channel persistence coordinator repairs invalid separate current-channel pointers', async () => {
+test('channel persistence coordinator normalizes invalid current pointers without writing on load', async () => {
   const storage = new MemoryChannelStorage();
   const clock = new FakeClock(9_500);
   const coordinator = new ChannelPersistenceCoordinator({
@@ -305,10 +344,10 @@ test('channel persistence coordinator repairs invalid separate current-channel p
 
   assert.ok(loaded);
   assert.equal(loaded.currentChannelId, 'alpha');
-  assert.equal(storage.currentChannelId, 'alpha');
+  assert.equal(storage.currentChannelId, 'missing');
 });
 
-test('channel persistence coordinator persists savedAt fallback repair on load', async () => {
+test('channel persistence coordinator normalizes savedAt without writing on load', async () => {
   const storage = new MemoryChannelStorage();
   const clock = new FakeClock(9_750);
   const coordinator = new ChannelPersistenceCoordinator({
@@ -332,7 +371,7 @@ test('channel persistence coordinator persists savedAt fallback repair on load',
   assert.equal(loaded.savedAt, 9_750);
   const persisted = decodeStoredChannelData(assertPresent(storage.storedChannelData));
   assert.ok(persisted);
-  assert.equal(persisted.savedAt, 9_750);
+  assert.equal(persisted.savedAt, undefined);
 });
 
 test('channel persistence queue debounces flushes and rejects pending saves on dispose', async () => {

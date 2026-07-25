@@ -1,12 +1,24 @@
-import type { App, IpcMainInvokeEvent } from 'electron';
+import type { IpcMainInvokeEvent } from 'electron';
+import { randomBytes } from 'node:crypto';
 
 import { redactDiagnosticText } from '../../contracts/diagnostics.js';
 import type { ShellMode } from '../../contracts/shell.js';
 import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.js';
-import { resolveDesktopAppDataPaths } from '../persistence/appDataPaths.js';
 import { DesktopChannelPersistenceStore } from '../persistence/desktopChannelPersistenceStore.js';
+import type { ChannelPersistenceReadyCapability } from '../persistence/channelPersistenceBootstrapOwner.js';
+import type { ChannelPersistenceStoragePort } from '../../domain/channel/channelPersistenceStore.js';
 import { registerChannelIpcHandlers, type ChannelIpcTeardown } from './channelIpc.js';
 import { ChannelRuntime } from './channelRuntime.js';
+import { ChannelPersistenceStore } from '../../domain/channel/channelPersistenceStore.js';
+import {
+  ChannelBuilderContextEpochOwner,
+  type ChannelBuilderPlexContextSource,
+} from './channelBuilderContextEpochOwner.js';
+import { ChannelBuilderOperationOwner } from './channelBuilderOperationOwner.js';
+import { ChannelBuilderPlanningWorker } from './channelBuilderPlanningWorker.js';
+import { ChannelBuilderRuntime } from './channelBuilderRuntime.js';
+import { ChannelLineupMutationCoordinator } from './channelLineupMutationCoordinator.js';
+import { DesktopPlexChannelBuilderFacetSource } from '../plex/desktopPlexChannelBuilderFacetSource.js';
 import { registerCustomChannelIpcHandlers, type CustomChannelIpcTeardown } from './customChannelIpc.js';
 import { CustomChannelMediaPicker } from './customChannelMediaPicker.js';
 import { CustomChannelRuntime } from './customChannelRuntime.js';
@@ -15,49 +27,102 @@ import { PlexLibraryMinimalAdapter } from './plexLibraryMinimalAdapter.js';
 import { ChannelScheduler } from '../../domain/scheduler/channelScheduler.js';
 import { GuideRuntime } from './guideRuntime.js';
 import type { ChannelClock, ChannelLogger } from '../../domain/channel/interfaces.js';
+import { ChannelPublicReferenceOwner } from './channelPublicReferenceOwner.js';
 
-export interface RegisterChannelCompositionOptions {
-  app: Pick<App, 'getPath'>;
+export interface CreateChannelCompositionOptions {
+  persistence:
+    | Readonly<{
+        kind: 'disk';
+        readyCapability: ChannelPersistenceReadyCapability;
+      }>
+    | Readonly<{
+        kind: 'memory';
+        storage: ChannelPersistenceStoragePort;
+      }>;
+  plexRuntime: DesktopPlexRuntime;
+  onChannelTuned?: (channelId: string) => void | Promise<void>;
+  diagnosticEventStore?: DiagnosticEventStore;
+  channelBuilderContextSource?: ChannelBuilderPlexContextSource;
+}
+
+export interface RegisterChannelCompositionIpcOptions {
   shellMode: ShellMode;
   isAuthorizedEvent(event: IpcMainInvokeEvent): boolean;
   createRequestId(prefix: string): string;
-  plexRuntime: DesktopPlexRuntime;
-  onChannelTuned?: (channelId: string) => void | Promise<void>;
   diagnosticEventStore?: DiagnosticEventStore;
 }
 
 export type ChannelCompositionTeardown = () => Promise<void>;
 
-export interface ChannelCompositionRegistration {
+export interface ChannelComposition {
+  runtime: ChannelRuntime;
   guideRuntime: GuideRuntime;
   activeChannelScheduler: ChannelScheduler;
   teardown: ChannelCompositionTeardown;
 }
 
-export function registerChannelComposition(
-  options: RegisterChannelCompositionOptions,
-): ChannelCompositionRegistration {
-  const paths = resolveDesktopAppDataPaths(options.app);
-  const channelPersistenceFilePath = paths.channelPersistenceFilePath;
-  if (channelPersistenceFilePath === undefined) {
-    throw new Error('Channel persistence path was not resolved.');
-  }
+export interface ChannelCompositionRegistration extends ChannelComposition {}
+
+type ChannelCompositionState = {
+  customChannelRuntime: CustomChannelRuntime;
+  customChannelMediaPicker: CustomChannelMediaPicker;
+  channelIpcTeardown: ChannelIpcTeardown | null;
+  customIpcTeardown: CustomChannelIpcTeardown | null;
+  teardownPromise: Promise<void> | null;
+  publicReferenceOwner: ChannelPublicReferenceOwner;
+};
+
+const compositionStates = new WeakMap<ChannelComposition, ChannelCompositionState>();
+
+export function createChannelComposition(
+  options: CreateChannelCompositionOptions,
+): ChannelComposition {
   const clock: ChannelClock = { now: () => Date.now() };
-  const sharedChannelStore = new DesktopChannelPersistenceStore({
-    persistenceFilePath: channelPersistenceFilePath,
-  });
-  const runtime = new ChannelRuntime({
-    storage: sharedChannelStore,
-    plexRuntime: options.plexRuntime,
-    clock,
-  });
+  const sharedChannelStore =
+    options.persistence.kind === 'disk'
+      ? new DesktopChannelPersistenceStore({
+          readyCapability: options.persistence.readyCapability,
+        })
+      : options.persistence.storage;
+  const persistenceStore = new ChannelPersistenceStore(sharedChannelStore);
   const plexLibraryAdapter = new PlexLibraryMinimalAdapter(options.plexRuntime);
   const customChannelMediaPicker = new CustomChannelMediaPicker({
     plexRuntime: options.plexRuntime,
   });
   const activeChannelScheduler = new ChannelScheduler({ clock });
   const guideLogger = createGuideRuntimeLogger(options.diagnosticEventStore);
-  const guideRuntime = new GuideRuntime({
+  let guideRuntime: GuideRuntime | null = null;
+  const contextOwner = new ChannelBuilderContextEpochOwner(
+    options.channelBuilderContextSource ?? options.plexRuntime,
+  );
+  const planningWorker = new ChannelBuilderPlanningWorker();
+  const operationOwner = new ChannelBuilderOperationOwner({
+    randomHex128: () => randomBytes(16).toString('hex'),
+    releasePlan: (planId) => contextOwner.release(planId),
+  });
+  const mutationCoordinator = new ChannelLineupMutationCoordinator(persistenceStore);
+  const publicReferenceOwner = new ChannelPublicReferenceOwner();
+  const builderRuntime = new ChannelBuilderRuntime({
+    store: persistenceStore,
+    contextOwner,
+    facetSource: new DesktopPlexChannelBuilderFacetSource(contextOwner),
+    planningWorker,
+    operationOwner,
+    mutationCoordinator,
+    refreshGuide: async () => {
+      if (guideRuntime === null) throw new Error('Guide runtime is unavailable.');
+      await guideRuntime.refreshActiveChannelSelection();
+    },
+    randomHex128: () => randomBytes(16).toString('hex'),
+  });
+  const runtime = new ChannelRuntime({
+    storage: sharedChannelStore,
+    builderRuntime,
+    publicReferenceOwner,
+    clock,
+    logger: guideLogger,
+  });
+  guideRuntime = new GuideRuntime({
     repository: runtime.getRepository(),
     plexLibraryAdapter,
     activeChannelScheduler,
@@ -67,6 +132,7 @@ export function registerChannelComposition(
   });
   const customChannelRuntime = new CustomChannelRuntime({
     storage: sharedChannelStore,
+    mutationCoordinator,
     clock,
     logger: guideLogger,
     onChannelsChanged: async () => {
@@ -74,19 +140,50 @@ export function registerChannelComposition(
     },
   });
 
-  const teardownIpc: ChannelIpcTeardown = registerChannelIpcHandlers({
+  const state: ChannelCompositionState = {
+    customChannelRuntime,
+    customChannelMediaPicker,
+    channelIpcTeardown: null,
+    customIpcTeardown: null,
+    teardownPromise: null,
+    publicReferenceOwner,
+  };
+  const composition: ChannelComposition = {
     runtime,
     guideRuntime,
-    isAuthorizedEvent: options.isAuthorizedEvent,
-    createRequestId: options.createRequestId,
-  });
-  const teardownCustomChannelIpc: CustomChannelIpcTeardown = registerCustomChannelIpcHandlers({
-    runtime: customChannelRuntime,
-    mediaPicker: customChannelMediaPicker,
-    isAuthorizedEvent: options.isAuthorizedEvent,
-    createRequestId: options.createRequestId,
-  });
+    activeChannelScheduler,
+    teardown: () => teardownChannelComposition(runtime, state),
+  };
+  compositionStates.set(composition, state);
+  return composition;
+}
 
+export function registerChannelCompositionIpc(
+  composition: ChannelComposition,
+  options: RegisterChannelCompositionIpcOptions,
+): ChannelCompositionRegistration {
+  const state = compositionStates.get(composition);
+  if (
+    state === undefined ||
+    state.channelIpcTeardown !== null ||
+    state.customIpcTeardown !== null ||
+    state.teardownPromise !== null
+  ) {
+    throw new Error('Channel composition IPC is already registered or closed.');
+  }
+  state.channelIpcTeardown = registerChannelIpcHandlers({
+    runtime: composition.runtime,
+    guideRuntime: composition.guideRuntime,
+    publicReferenceOwner: state.publicReferenceOwner,
+    isAuthorizedEvent: options.isAuthorizedEvent,
+    createRequestId: options.createRequestId,
+  });
+  state.customIpcTeardown = registerCustomChannelIpcHandlers({
+    runtime: state.customChannelRuntime,
+    mediaPicker: state.customChannelMediaPicker,
+    isAuthorizedEvent: options.isAuthorizedEvent,
+    createRequestId: options.createRequestId,
+  });
   options.diagnosticEventStore?.record({
     surface: 'main',
     category: 'lifecycle',
@@ -101,13 +198,20 @@ export function registerChannelComposition(
   });
 
   return {
-    guideRuntime,
-    activeChannelScheduler,
-    teardown: async () => {
-      await teardownCustomChannelIpc();
-      await teardownIpc();
-    },
+    ...composition,
   };
+}
+
+function teardownChannelComposition(
+  runtime: ChannelRuntime,
+  state: ChannelCompositionState,
+): Promise<void> {
+  state.teardownPromise ??= (async () => {
+    await state.customIpcTeardown?.();
+    await state.channelIpcTeardown?.();
+    runtime.shutdown();
+  })();
+  return state.teardownPromise;
 }
 
 function createGuideRuntimeLogger(

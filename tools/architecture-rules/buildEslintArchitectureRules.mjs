@@ -19,15 +19,13 @@ const BOUNDARY_MESSAGES = Object.freeze({
 
 export const architectureRuleMessages = BOUNDARY_MESSAGES;
 
-const nodeBuiltinImportPatterns = Array.from(new Set(
-  [
-    'node:*',
-    ...builtinModules.flatMap((moduleName) => [
-      moduleName,
-      `node:${moduleName}`,
-    ]),
-  ],
+const bareNodeBuiltinImports = Array.from(new Set(
+  builtinModules
+    .map((moduleName) => moduleName.replace(/^node:/u, ''))
+    .filter((moduleName) => moduleName.length > 0),
 )).sort();
+
+const nodeBuiltinImportPatterns = ['node:*'];
 
 /**
  * Transforms data-owned architecture rules into ESLint flat-config
@@ -55,19 +53,25 @@ function buildBoundaryRule(boundary, message) {
     ...boundary.forbiddenImportPatterns,
     ...(boundary.forbidNodeBuiltins ? nodeBuiltinImportPatterns : []),
   ];
+  const forbiddenExactImports = boundary.forbidNodeBuiltins ? bareNodeBuiltinImports : [];
   const rules = {};
 
-  if (forbiddenImportPatterns.length > 0) {
+  if (forbiddenImportPatterns.length > 0 || forbiddenExactImports.length > 0) {
+    const restriction = {};
+    if (forbiddenImportPatterns.length > 0) {
+      restriction.patterns = [
+        {
+          group: forbiddenImportPatterns,
+          message,
+        },
+      ];
+    }
+    if (forbiddenExactImports.length > 0) {
+      restriction.paths = forbiddenExactImports.map((name) => ({ name, message }));
+    }
     rules['no-restricted-imports'] = [
       'error',
-      {
-        patterns: [
-          {
-            group: forbiddenImportPatterns,
-            message,
-          },
-        ],
-      },
+      restriction,
     ];
   }
 
@@ -95,7 +99,10 @@ function buildBoundaryRule(boundary, message) {
     });
   }
 
-  const dynamicImportRegexes = buildDynamicImportRegexes(boundary);
+  const dynamicImportRegexes = buildDynamicImportRegexes({
+    ...boundary,
+    forbiddenExactImports,
+  });
   restrictedSyntax.push(
     ...dynamicImportRegexes.map((regex) => ({
         selector: `ImportExpression[source.value=/${regex}/]`,
@@ -118,12 +125,17 @@ function buildTestOwnerRule(owner) {
     return null;
   }
 
+  const nodeRestrictions =
+    'allowedNodeBuiltins' in owner
+      ? nodeBuiltinRestrictionsExcept(owner.allowedNodeBuiltins)
+      : { patterns: [], exactImports: [] };
   const forbiddenImportPatterns = [
     ...(owner.forbiddenImportPatterns ?? []),
-    ...('allowedNodeBuiltins' in owner ? nodeBuiltinImportPatternsExcept(owner.allowedNodeBuiltins) : []),
+    ...nodeRestrictions.patterns,
   ];
-  const forbiddenExactImports =
-    'allowedNodeBuiltins' in owner && !forbiddenImportPatterns.includes('**/domain') ? ['domain'] : [];
+  const forbiddenExactImports = nodeRestrictions.exactImports.filter(
+    (name) => !(owner.forbiddenImportPatterns ?? []).includes(`**/${name}`),
+  );
   const forbiddenDynamicImportPatterns = [
     ...forbiddenImportPatterns,
     ...(forbiddenImportPatterns.includes('**/domain') ? [] : forbiddenExactImports),
@@ -248,25 +260,35 @@ function buildRestrictedImportEntry({
   };
 }
 
-function nodeBuiltinImportPatternsExcept(allowed = []) {
+function nodeBuiltinRestrictionsExcept(allowed = []) {
   const allowedSet = new Set(allowed);
-  return nodeBuiltinImportPatterns.filter((pattern) =>
-    pattern !== 'node:*' && pattern !== 'domain' && !allowedSet.has(pattern),
+  const exactImports = bareNodeBuiltinImports.filter(
+    (name) => !allowedSet.has(name) && !allowedSet.has(`node:${name}`),
   );
+  const patterns = bareNodeBuiltinImports
+    .map((name) => `node:${name}`)
+    .filter((name) => !allowedSet.has(name));
+  return { patterns, exactImports };
 }
 
 function buildDynamicImportRegexes(boundary) {
   const regexes = [];
 
   if (boundary.forbidNodeBuiltins) {
-    const builtins = nodeBuiltinImportPatterns
-      .filter((pattern) => pattern !== 'node:*' && !pattern.startsWith('node:'))
+    const builtins = bareNodeBuiltinImports
       .map(escapeSelectorRegexLiteral);
     regexes.push(`^(?:node:.*|${builtins.join('|')})$`);
   }
 
+  if (!boundary.forbidNodeBuiltins) {
+    for (const exactImport of boundary.forbiddenExactImports ?? []) {
+      regexes.push(`^${escapeSelectorRegexLiteral(exactImport)}$`);
+    }
+  }
+
   for (const pattern of boundary.forbiddenImportPatterns) {
     if (pattern === 'node:*') {
+      if (boundary.forbidNodeBuiltins) continue;
       regexes.push('^node:');
       continue;
     }

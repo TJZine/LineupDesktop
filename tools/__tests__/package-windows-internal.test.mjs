@@ -222,7 +222,25 @@ test('packageWindowsInternal stages the reviewed layout with a fake Windows runt
   assert.equal(fs.existsSync(path.join(packageRoot, 'electron.exe')), false);
   assert.equal(fs.existsSync(path.join(packageRoot, 'resources/default_app.asar')), false);
   assert.equal(fs.existsSync(path.join(packageRoot, 'resources/app/dist/main/index.js')), true);
+  assert.equal(
+    fs.existsSync(
+      path.join(
+        packageRoot,
+        'resources/app/dist/main/channel/channelBuilderPlanningWorkerEntry.js',
+      ),
+    ),
+    true,
+  );
   assert.equal(fs.existsSync(path.join(packageRoot, 'resources/app/dist/renderer/index.html')), true);
+  const rendererChannelBuilderRoot = path.join(
+    packageRoot,
+    'resources/app/dist/renderer/domain/channelBuilder',
+  );
+  assert.equal(fs.existsSync(path.join(rendererChannelBuilderRoot, 'config.js')), true);
+  assert.equal(fs.existsSync(path.join(rendererChannelBuilderRoot, 'constants.js')), true);
+  assert.equal(fs.existsSync(path.join(rendererChannelBuilderRoot, 'config.js.map')), false);
+  assert.equal(fs.existsSync(path.join(rendererChannelBuilderRoot, 'index.js')), false);
+  assert.equal(fs.existsSync(path.join(rendererChannelBuilderRoot, 'planner.js')), false);
   assert.equal(fs.existsSync(path.join(packageRoot, NATIVE_HELPER_BLOCKED_RELATIVE_PATH)), true);
   assert.equal(fs.existsSync(path.join(packageRoot, MEDIA_BINARIES_BLOCKED_RELATIVE_PATH)), true);
   assert.equal(fs.existsSync(path.join(packageRoot, PROVENANCE_RELATIVE_PATH)), true);
@@ -651,11 +669,25 @@ function makeFixtureRepo(t) {
     fs.writeFileSync(path.join(root, 'tools', tool), `// ${tool}\n`);
   }
   fs.mkdirSync(path.join(root, 'dist/main'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'dist/main/channel'), { recursive: true });
   fs.mkdirSync(path.join(root, 'dist/renderer/styles'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'dist/renderer/domain/channelBuilder'), { recursive: true });
   fs.writeFileSync(path.join(root, 'dist/main/index.js'), 'console.log("main");\n');
+  fs.writeFileSync(
+    path.join(root, 'dist/main/channel/channelBuilderPlanningWorkerEntry.js'),
+    'console.log("worker");\n',
+  );
   fs.writeFileSync(path.join(root, 'dist/renderer/index.html'), '<!doctype html>\n');
   fs.writeFileSync(path.join(root, 'dist/renderer/styles.css'), '@import "./styles/base.css";\n');
   fs.writeFileSync(path.join(root, 'dist/renderer/styles/base.css'), ':root { color: white; }\n');
+  fs.writeFileSync(
+    path.join(root, 'dist/renderer/domain/channelBuilder/config.js'),
+    'export const config = true;\n',
+  );
+  fs.writeFileSync(
+    path.join(root, 'dist/renderer/domain/channelBuilder/constants.js'),
+    'export const constants = true;\n',
+  );
 
   return root;
 }

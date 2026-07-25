@@ -1,7 +1,10 @@
 import type { PlayerRendererIntentEnvelope, RendererIntentEnvelope } from './ipc.js';
 import type {
-  ChannelSetupCommitMode,
+  ChannelSetupAcceptedOperation,
+  ChannelSetupCancelResult,
+  ChannelSetupConfig,
   ChannelSetupIpcResult,
+  ChannelSetupOperationResult,
   ChannelSetupSummary,
 } from './channel.js';
 import type {
@@ -182,11 +185,18 @@ export interface LineupDesktopPreloadApi {
   };
   channelSetup: {
     getStatus: () => Promise<ChannelSetupIpcResult<ChannelSetupSummary>>;
-    commit: (input: {
-      mode: ChannelSetupCommitMode;
-      sectionIds: readonly string[];
-      confirmReplace?: boolean;
-    }) => Promise<ChannelSetupIpcResult<ChannelSetupSummary>>;
+    startReview: (
+      input: { config: ChannelSetupConfig },
+    ) => Promise<ChannelSetupIpcResult<ChannelSetupAcceptedOperation>>;
+    startApply: (
+      input: { planId: string; confirmReplace: boolean },
+    ) => Promise<ChannelSetupIpcResult<ChannelSetupAcceptedOperation>>;
+    getOperation: (
+      input: { operationId: string },
+    ) => Promise<ChannelSetupIpcResult<ChannelSetupOperationResult>>;
+    cancel: (
+      input: { operationId: string },
+    ) => Promise<ChannelSetupIpcResult<ChannelSetupCancelResult>>;
   };
   customChannels: {
     getSnapshot: () => Promise<CustomChannelIpcResult<CustomChannelSnapshot>>;

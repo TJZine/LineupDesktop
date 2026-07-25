@@ -2,15 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtemp, rm } from 'node:fs/promises';
+import fs from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import process from 'node:process';
 import type { IpcMainInvokeEvent } from 'electron';
 
 import { LINEUP_CUSTOM_CHANNEL_SAVE_DRAFT_CHANNEL } from '../../contracts/ipc.js';
 import {
-  registerChannelComposition,
+  createChannelComposition,
+  registerChannelCompositionIpc,
   sanitizeChannelDiagnosticDetail,
 } from '../../main/channel/channelComposition.js';
+import { ChannelPersistenceBootstrapOwner } from '../../main/persistence/channelPersistenceBootstrapOwner.js';
 
 type Handler = (event: IpcMainInvokeEvent, payload?: unknown) => unknown;
 
@@ -71,16 +75,9 @@ test('channel composition injects a clock into the active channel scheduler', as
   const restoreElectron = replaceElectronIpcMain(new FakeIpcMain());
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'lineup-channel-composition-'));
   try {
-    const registration = registerChannelComposition({
-      app: {
-        getPath: (name) => {
-          assert.equal(name, 'userData');
-          return userDataDirectory;
-        },
-      },
-      shellMode: 'smoke',
-      isAuthorizedEvent: () => true,
-      createRequestId: (prefix) => `${prefix}-test`,
+    const readyCapability = await bootstrapChannelPersistence(userDataDirectory);
+    const composition = createChannelComposition({
+      persistence: { kind: 'disk', readyCapability },
       plexRuntime: {
         getSnapshot: (requestId: string) => ({
           ok: true,
@@ -92,7 +89,15 @@ test('channel composition injects a clock into the active channel scheduler', as
           requestId: 'channel-composition-test',
           value: { sectionId: '1', offset: 0, limit: 0, items: [], snapshot: { updatedAtMs: 1 } },
         }),
+        getBuilderContextForMain: () => null,
+        subscribeBuilderContextForMain: () => () => undefined,
+        withChannelBuilderFacetSession: async () => assert.fail('unexpected builder session'),
       } as never,
+    });
+    const registration = registerChannelCompositionIpc(composition, {
+      shellMode: 'smoke',
+      isAuthorizedEvent: () => true,
+      createRequestId: (prefix: string) => `${prefix}-test`,
     });
 
     registration.activeChannelScheduler.loadChannel({
@@ -131,16 +136,9 @@ test('channel composition refreshes active scheduler after custom channel save',
   const restoreElectron = replaceElectronIpcMain(fakeIpcMain);
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'lineup-custom-channel-composition-'));
   try {
-    const registration = registerChannelComposition({
-      app: {
-        getPath: (name) => {
-          assert.equal(name, 'userData');
-          return userDataDirectory;
-        },
-      },
-      shellMode: 'smoke',
-      isAuthorizedEvent: () => true,
-      createRequestId: (prefix) => `${prefix}-test`,
+    const readyCapability = await bootstrapChannelPersistence(userDataDirectory);
+    const composition = createChannelComposition({
+      persistence: { kind: 'disk', readyCapability },
       plexRuntime: {
         getSnapshot: (requestId: string) => ({
           ok: true,
@@ -152,7 +150,15 @@ test('channel composition refreshes active scheduler after custom channel save',
           requestId: 'channel-composition-test',
           value: { sectionId: '1', offset: 0, limit: 0, items: [], snapshot: { updatedAtMs: 1 } },
         }),
+        getBuilderContextForMain: () => null,
+        subscribeBuilderContextForMain: () => () => undefined,
+        withChannelBuilderFacetSession: async () => assert.fail('unexpected builder session'),
       } as never,
+    });
+    const registration = registerChannelCompositionIpc(composition, {
+      shellMode: 'smoke',
+      isAuthorizedEvent: () => true,
+      createRequestId: (prefix: string) => `${prefix}-test`,
     });
     const saveHandler = fakeIpcMain.handlers.get(LINEUP_CUSTOM_CHANNEL_SAVE_DRAFT_CHANNEL);
     assert.ok(saveHandler);
@@ -187,6 +193,23 @@ test('channel composition refreshes active scheduler after custom channel save',
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });
+
+async function bootstrapChannelPersistence(userDataDirectory: string) {
+  const result = await new ChannelPersistenceBootstrapOwner({
+    app: { getPath: () => userDataDirectory },
+    platform: process.platform,
+    fileSystem: {
+      realpath: (value) => fs.realpath(value),
+      lstat: (value) => fs.lstat(value),
+      mkdir: async (value, options) => {
+        await fs.mkdir(value, options);
+      },
+    },
+  }).bootstrap();
+  assert.equal(result.status, 'ready');
+  if (result.status !== 'ready') throw new Error('channel bootstrap failed');
+  return result.capability;
+}
 
 function replaceElectronIpcMain(ipcMain: FakeIpcMain): () => void {
   const require = createRequire(import.meta.url);

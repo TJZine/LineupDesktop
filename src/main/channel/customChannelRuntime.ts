@@ -21,8 +21,14 @@ import {
   type ChannelLogger,
   type StoredChannelData,
 } from '../../domain/channel/index.js';
-import { ChannelPersistenceStore, type ChannelPersistenceStoragePort } from '../../domain/channel/channelPersistenceStore.js';
+import {
+  ChannelPersistenceStore,
+  type ChannelAggregate,
+  type ChannelPersistenceStoragePort,
+} from '../../domain/channel/channelPersistenceStore.js';
 import { ChannelRepository } from '../../domain/channel/channelRepository.js';
+import { cloneOwnEnumerableStringRecordWithNullPrototype } from '../../domain/channel/channelDomainClone.js';
+import type { ChannelBuilderChannelProvenanceV1 } from '../../domain/channelBuilder/types.js';
 import {
   findNextAvailableNumber,
   orderChannels,
@@ -30,6 +36,7 @@ import {
 } from './customChannelMutationMapper.js';
 import { recordCustomChannelDiagnostic } from './customChannelDiagnostics.js';
 import type { CustomChannelRefreshReason, CustomChannelSchedulerRefreshHook } from './customChannelSchedulerRefresh.js';
+import { ChannelLineupMutationCoordinator } from './channelLineupMutationCoordinator.js';
 
 export interface CustomChannelRuntimeOptions {
   storage: ChannelPersistenceStoragePort;
@@ -37,6 +44,7 @@ export interface CustomChannelRuntimeOptions {
   logger?: Pick<ChannelLogger, 'warn'>;
   generateId?: () => string;
   onChannelsChanged?: CustomChannelSchedulerRefreshHook;
+  mutationCoordinator?: ChannelLineupMutationCoordinator;
 }
 
 export class CustomChannelRuntime {
@@ -45,17 +53,20 @@ export class CustomChannelRuntime {
   private readonly authoring: ChannelAuthoringService;
   private readonly logger?: Pick<ChannelLogger, 'warn'>;
   private readonly onChannelsChanged?: CustomChannelSchedulerRefreshHook;
-  private mutationQueue: Promise<void> = Promise.resolve();
+  private readonly mutationCoordinator: ChannelLineupMutationCoordinator;
 
   public constructor(options: CustomChannelRuntimeOptions) {
     this.clock = options.clock ?? { now: () => Date.now() };
     this.logger = options.logger;
     this.onChannelsChanged = options.onChannelsChanged;
+    const store = new ChannelPersistenceStore(options.storage);
     this.repository = new ChannelRepository({
-      store: new ChannelPersistenceStore(options.storage),
+      store,
       clock: this.clock,
       logger: options.logger,
     });
+    this.mutationCoordinator =
+      options.mutationCoordinator ?? new ChannelLineupMutationCoordinator(store);
     this.authoring = new ChannelAuthoringService({
       generateId: options.generateId ?? (() => `channel-${this.clock.now()}-${Math.random().toString(36).slice(2)}`),
       now: () => this.clock.now(),
@@ -93,47 +104,66 @@ export class CustomChannelRuntime {
     draft: CustomChannelDraftInput,
   ): Promise<CustomChannelIpcResult<CustomChannelMutationResult>> {
     return this.enqueueMutation(requestId, 'saveDraft', async () => {
-      const loaded = await this.repository.loadNormalized();
-      const state = stateFromLoaded(loaded?.data);
-      const validation = this.validateDraftAgainstChannels(draft, state.channels);
-      if (!validation.valid) {
-        return customChannelFailure(requestId, validationError('saveDraft'));
-      }
-      const build = buildCustomChannelCreateInput(draft, state.channels);
-      if (!build.ok) {
-        return customChannelFailure(requestId, validationError('saveDraft'));
-      }
-      const existingIndex = draft.id === undefined
-        ? -1
-        : state.channels.findIndex((channel) => channel.id === draft.id);
-      if (draft.id !== undefined && existingIndex < 0) {
-        return customChannelFailure(requestId, notFoundError('saveDraft'));
-      }
-      if (existingIndex >= 0 && !hasExpectedRevision(draft, state.channels[existingIndex])) {
-        return customChannelFailure(requestId, conflictError('saveDraft'));
-      }
-
-      const savedAt = this.clock.now();
-      const changedChannel = existingIndex >= 0
-        ? this.updateExistingChannel(state.channels, existingIndex, build.input)
-        : this.createNewChannel(state.channels, build.input);
-      changedChannel.itemCount = estimateItemCount(changedChannel);
-      changedChannel.totalDurationMs = estimateDurationMs(changedChannel);
-      changedChannel.lastContentRefresh = savedAt;
-
-      const currentChannelId = existingIndex >= 0 &&
-        state.currentChannelId === changedChannel.id &&
-        changedChannel.hidden === true
-        ? chooseAdjacentVisibleChannelId(state.channels, existingIndex, changedChannel.id)
-        : keepVisibleCurrentOrFirst(state.currentChannelId, state.channels);
-      const snapshot = await this.saveState({
-        channels: state.channels,
-        channelOrder: ensureOrderForChannels(state.channelOrder, state.channels),
-        currentChannelId,
-        savedAt,
+      const outcome: {
+        rejection: CustomChannelIpcResult<CustomChannelMutationResult> | null;
+        changedChannelId: string | null;
+      } = { rejection: null, changedChannelId: null };
+      const mutation = await this.mutationCoordinator.mutateCustomLineup({
+        mutate: (current) => {
+          const state = stateFromLoaded(current.storedChannelData ?? undefined);
+          const validation = this.validateDraftAgainstChannels(draft, state.channels);
+          if (!validation.valid) {
+            outcome.rejection = customChannelFailure(requestId, validationError('saveDraft'));
+            return current as typeof current;
+          }
+          const build = buildCustomChannelCreateInput(draft, state.channels);
+          if (!build.ok) {
+            outcome.rejection = customChannelFailure(requestId, validationError('saveDraft'));
+            return current as typeof current;
+          }
+          const existingIndex = draft.id === undefined
+            ? -1
+            : state.channels.findIndex((channel) => channel.id === draft.id);
+          if (draft.id !== undefined && existingIndex < 0) {
+            outcome.rejection = customChannelFailure(requestId, notFoundError('saveDraft'));
+            return current as typeof current;
+          }
+          if (existingIndex >= 0 && !hasExpectedRevision(draft, state.channels[existingIndex]!)) {
+            outcome.rejection = customChannelFailure(requestId, conflictError('saveDraft'));
+            return current as typeof current;
+          }
+          const savedAt = this.clock.now();
+          const changedChannel = existingIndex >= 0
+            ? this.updateExistingChannel(state.channels, existingIndex, build.input)
+            : this.createNewChannel(state.channels, build.input);
+          changedChannel.itemCount = estimateItemCount(changedChannel);
+          changedChannel.totalDurationMs = estimateDurationMs(changedChannel);
+          changedChannel.lastContentRefresh = savedAt;
+          const currentChannelId = existingIndex >= 0 &&
+            state.currentChannelId === changedChannel.id &&
+            changedChannel.hidden === true
+            ? chooseAdjacentVisibleChannelId(state.channels, existingIndex, changedChannel.id)
+            : keepVisibleCurrentOrFirst(state.currentChannelId, state.channels);
+          outcome.changedChannelId = changedChannel.id;
+          return aggregateWithCustomState(current, {
+            channels: state.channels,
+            channelOrder: ensureOrderForChannels(state.channelOrder, state.channels),
+            currentChannelId,
+            savedAt,
+          }, existingIndex >= 0 ? [changedChannel.id] : []);
+        },
+        shouldCommit: () => outcome.rejection === null,
       });
-      await this.refresh('saveDraft', 'save', changedChannel.id);
-      return customChannelSuccess(requestId, mutationResult(snapshot, changedChannel.id));
+      if (outcome.rejection !== null) return outcome.rejection;
+      if (mutation.status !== 'committed' || outcome.changedChannelId === null) {
+        throw new Error('Custom channel save did not commit.');
+      }
+      const snapshot = snapshotFromAggregate(mutation.aggregate, this.clock.now());
+      await this.refresh('saveDraft', 'save', outcome.changedChannelId);
+      return customChannelSuccess(
+        requestId,
+        mutationResult(snapshot, outcome.changedChannelId),
+      );
     });
   }
 
@@ -143,21 +173,38 @@ export class CustomChannelRuntime {
   ): Promise<CustomChannelIpcResult<CustomChannelMutationResult>> {
     return this.enqueueMutation(requestId, 'deleteChannel', async () => {
       if (payload.confirm !== true) return customChannelFailure(requestId, validationError('deleteChannel'));
-      const state = stateFromLoaded((await this.repository.loadNormalized())?.data);
-      const deletedIndex = state.channels.findIndex((channel) => channel.id === payload.channelId);
-      if (deletedIndex < 0) {
-        return customChannelFailure(requestId, notFoundError('deleteChannel'));
-      }
-      const nextChannels = state.channels.filter((channel) => channel.id !== payload.channelId);
-      const savedAt = this.clock.now();
-      const snapshot = await this.saveState({
-        channels: nextChannels,
-        channelOrder: state.channelOrder.filter((id) => id !== payload.channelId),
-        currentChannelId: state.currentChannelId === payload.channelId
-          ? chooseAdjacentVisibleChannelId(state.channels, deletedIndex, payload.channelId)
-          : keepVisibleCurrentOrFirst(state.currentChannelId, nextChannels),
-        savedAt,
+      let rejected = false;
+      const mutation = await this.mutationCoordinator.mutateCustomLineup({
+        mutate: (current) => {
+          const state = stateFromLoaded(current.storedChannelData ?? undefined);
+          const deletedIndex = state.channels.findIndex(
+            (channel) => channel.id === payload.channelId,
+          );
+          if (deletedIndex < 0) {
+            rejected = true;
+            return current as typeof current;
+          }
+          const nextChannels = state.channels.filter(
+            (channel) => channel.id !== payload.channelId,
+          );
+          return aggregateWithCustomState(current, {
+            channels: nextChannels,
+            channelOrder: state.channelOrder.filter((id) => id !== payload.channelId),
+            currentChannelId: state.currentChannelId === payload.channelId
+              ? chooseAdjacentVisibleChannelId(
+                  state.channels,
+                  deletedIndex,
+                  payload.channelId,
+                )
+              : keepVisibleCurrentOrFirst(state.currentChannelId, nextChannels),
+            savedAt: this.clock.now(),
+          }, [payload.channelId]);
+        },
+        shouldCommit: () => !rejected,
       });
+      if (rejected) return customChannelFailure(requestId, notFoundError('deleteChannel'));
+      if (mutation.status !== 'committed') throw new Error('Custom channel delete did not commit.');
+      const snapshot = snapshotFromAggregate(mutation.aggregate, this.clock.now());
       await this.refresh('deleteChannel', 'delete', payload.channelId);
       return customChannelSuccess(requestId, mutationResult(snapshot, payload.channelId));
     });
@@ -188,17 +235,29 @@ export class CustomChannelRuntime {
     channelIds: readonly string[],
   ): Promise<CustomChannelIpcResult<CustomChannelMutationResult>> {
     return this.enqueueMutation(requestId, 'reorderChannels', async () => {
-      const state = stateFromLoaded((await this.repository.loadNormalized())?.data);
-      if (!isCompleteChannelOrder(channelIds, state.channels)) {
-        return customChannelFailure(requestId, validationError('reorderChannels'));
-      }
-      const savedAt = this.clock.now();
-      const snapshot = await this.saveState({
-        channels: state.channels,
-        channelOrder: [...channelIds],
-        currentChannelId: keepVisibleCurrentOrFirst(state.currentChannelId, state.channels),
-        savedAt,
+      let rejected = false;
+      const mutation = await this.mutationCoordinator.mutateCustomLineup({
+        mutate: (current) => {
+          const state = stateFromLoaded(current.storedChannelData ?? undefined);
+          if (!isCompleteChannelOrder(channelIds, state.channels)) {
+            rejected = true;
+            return current as typeof current;
+          }
+          return aggregateWithCustomState(current, {
+            channels: state.channels,
+            channelOrder: [...channelIds],
+            currentChannelId: keepVisibleCurrentOrFirst(
+              state.currentChannelId,
+              state.channels,
+            ),
+            savedAt: this.clock.now(),
+          }, []);
+        },
+        shouldCommit: () => !rejected,
       });
+      if (rejected) return customChannelFailure(requestId, validationError('reorderChannels'));
+      if (mutation.status !== 'committed') throw new Error('Custom channel reorder did not commit.');
+      const snapshot = snapshotFromAggregate(mutation.aggregate, this.clock.now());
       await this.refresh('reorderChannels', 'reorder', null);
       return customChannelSuccess(requestId, mutationResult(snapshot, null));
     });
@@ -212,20 +271,48 @@ export class CustomChannelRuntime {
       if (typeof payload.hidden !== 'boolean') {
         return customChannelFailure(requestId, validationError('setChannelVisibility'));
       }
-      const state = stateFromLoaded((await this.repository.loadNormalized())?.data);
-      const channel = state.channels.find((candidate) => candidate.id === payload.channelId);
-      if (channel === undefined) return customChannelFailure(requestId, notFoundError('setChannelVisibility'));
-      channel.hidden = payload.hidden;
-      channel.updatedAt = this.clock.now();
-      const channelIndex = state.channels.findIndex((candidate) => candidate.id === payload.channelId);
-      const snapshot = await this.saveState({
-        channels: state.channels,
-        channelOrder: state.channelOrder,
-        currentChannelId: state.currentChannelId === payload.channelId && payload.hidden
-          ? chooseAdjacentVisibleChannelId(state.channels, channelIndex, payload.channelId)
-          : keepVisibleCurrentOrFirst(state.currentChannelId, state.channels),
-        savedAt: this.clock.now(),
+      let rejected = false;
+      const mutation = await this.mutationCoordinator.mutateCustomLineup({
+        mutate: (current) => {
+          const state = stateFromLoaded(current.storedChannelData ?? undefined);
+          const channel = state.channels.find(
+            (candidate) => candidate.id === payload.channelId,
+          );
+          if (channel === undefined) {
+            rejected = true;
+            return current as typeof current;
+          }
+          channel.hidden = payload.hidden;
+          channel.updatedAt = this.clock.now();
+          const channelIndex = state.channels.findIndex(
+            (candidate) => candidate.id === payload.channelId,
+          );
+          return aggregateWithCustomState(current, {
+            channels: state.channels,
+            channelOrder: state.channelOrder,
+            currentChannelId:
+              state.currentChannelId === payload.channelId && payload.hidden
+                ? chooseAdjacentVisibleChannelId(
+                    state.channels,
+                    channelIndex,
+                    payload.channelId,
+                  )
+                : keepVisibleCurrentOrFirst(
+                    state.currentChannelId,
+                    state.channels,
+                  ),
+            savedAt: this.clock.now(),
+          }, []);
+        },
+        shouldCommit: () => !rejected,
       });
+      if (rejected) {
+        return customChannelFailure(requestId, notFoundError('setChannelVisibility'));
+      }
+      if (mutation.status !== 'committed') {
+        throw new Error('Custom channel visibility did not commit.');
+      }
+      const snapshot = snapshotFromAggregate(mutation.aggregate, this.clock.now());
       await this.refresh('setChannelVisibility', 'visibility', payload.channelId);
       return customChannelSuccess(requestId, mutationResult(snapshot, payload.channelId));
     });
@@ -262,9 +349,9 @@ export class CustomChannelRuntime {
     operation: CustomChannelOperation,
     run: () => Promise<CustomChannelIpcResult<TValue>>,
   ): Promise<CustomChannelIpcResult<TValue>> {
-    const queued = this.mutationQueue.catch(() => undefined).then(run);
-    this.mutationQueue = queued.then(() => undefined, () => undefined);
-    const result = await queued.catch((error: unknown) => this.failure<TValue>(requestId, operation, error));
+    const result = await run().catch(
+      (error: unknown) => this.failure<TValue>(requestId, operation, error),
+    );
     recordCustomChannelDiagnostic(this.logger, {
       operation,
       status: result.ok ? 'succeeded' : 'failed',
@@ -285,17 +372,6 @@ export class CustomChannelRuntime {
     });
   }
 
-  private async saveState(data: StoredChannelData): Promise<CustomChannelSnapshot> {
-    await this.repository.saveStoredChannelData(data);
-    await this.repository.saveCurrentChannelId(data.currentChannelId);
-    return summarizeCustomChannelSnapshot({
-      data,
-      repaired: false,
-      updatedAtMs: data.savedAt,
-      storage: 'ready',
-    });
-  }
-
   private async refresh(operation: CustomChannelOperation, reason: CustomChannelRefreshReason, changedChannelId: string | null): Promise<void> {
     try { await this.onChannelsChanged?.({ operation, reason, changedChannelId }); }
     catch { this.logger?.warn('Custom channel refresh failed after committed mutation.', { operation, reason, changedChannelId }); }
@@ -310,6 +386,53 @@ export class CustomChannelRuntime {
     recordCustomChannelDiagnostic(this.logger, { operation, status: 'failed', errorCode: runtimeError.code });
     return customChannelFailure(requestId, runtimeError);
   }
+}
+
+function aggregateWithCustomState(
+  current: Readonly<ChannelAggregate>,
+  data: StoredChannelData,
+  clearProvenanceIds: readonly string[],
+): ChannelAggregate {
+  const builder = current.channelBuilderState;
+  return {
+    ...current,
+    storedChannelData: data,
+    currentChannelId: data.currentChannelId,
+    channelBuilderState:
+      builder === null
+        ? null
+        : {
+            ...builder,
+            channelProvenance: cloneProvenanceWithout(
+              builder.channelProvenance,
+              clearProvenanceIds,
+            ),
+          },
+  };
+}
+
+function cloneProvenanceWithout(
+  provenance: Readonly<Record<string, ChannelBuilderChannelProvenanceV1>>,
+  removedIds: readonly string[],
+): Record<string, ChannelBuilderChannelProvenanceV1> {
+  const cloned = cloneOwnEnumerableStringRecordWithNullPrototype(
+    provenance,
+    (marker) => ({ ...marker }),
+  );
+  for (const channelId of removedIds) delete cloned[channelId];
+  return cloned;
+}
+
+function snapshotFromAggregate(
+  aggregate: Readonly<ChannelAggregate>,
+  updatedAtMs: number,
+): CustomChannelSnapshot {
+  return summarizeCustomChannelSnapshot({
+    data: aggregate.storedChannelData,
+    repaired: false,
+    updatedAtMs,
+    storage: 'ready',
+  });
 }
 
 function stateFromLoaded(data: StoredChannelData | undefined): StoredChannelData {

@@ -346,31 +346,6 @@ test('overlay busy-focus custody preserves exact focus without granting activati
   }
 });
 
-test('channel setup focus moves from selected library to commit before optional preview', () => {
-  const registry = new FocusRegistry();
-  const listSections = new FocusElementDouble('plex-list-sections', false, undefined, 'listLibrarySections');
-  const section = new FocusElementDouble('plex-dyn-section-movies');
-  const append = new FocusElementDouble('channel-append');
-  const replace = new FocusElementDouble('channel-replace');
-  const previewItem = new FocusElementDouble('plex-dyn-item-rating-1');
-  const clearMetadata = new FocusElementDouble('plex-clear-metadata', false, undefined, 'clearMetadata');
-  const dom = createFocusDomBindings([listSections, section, append, replace, previewItem, clearMetadata]);
-  dom.plexActionButtons = [listSections, clearMetadata] as unknown as HTMLButtonElement[];
-  dom.channelCommitButtons = [append, replace] as unknown as HTMLButtonElement[];
-  dom.plexSectionsElement = { querySelectorAll: () => [section] } as unknown as HTMLElement;
-  dom.plexItemsElement = { querySelectorAll: () => [previewItem] } as unknown as HTMLElement;
-
-  syncRendererFocusTargets(registry, dom);
-
-  const selectedSection = registry.focusTarget(
-    registry.createInitialState('channelSetup'),
-    'plex-dyn-section-movies',
-  ).state;
-  assert.equal(registry.move(selectedSection, 'down').state.activeId, 'channel-append');
-  assert.equal(registry.move({ activeRoute: 'channelSetup', activeId: 'channel-replace' }, 'down').state.activeId, 'plex-clear-metadata');
-  assert.equal(registry.move({ activeRoute: 'channelSetup', activeId: 'plex-clear-metadata' }, 'down').state.activeId, 'plex-dyn-item-rating-1');
-});
-
 test('Package 3 fixed setup owners use the refrozen linear focus graphs', () => {
   assert.deepEqual(getStagedSetupNeighbors('setup-preview-toggle', null), {
     up: 'channel-strategy-build-custom', down: 'setup-next', left: 'setup-category-build', right: 'setup-preview-toggle',
@@ -463,7 +438,6 @@ function createFocusDomBindings(focusableElements: FocusElementDouble[]): Render
     routeActionButtons: [],
     settingsActionButtons: [],
     setupActionButtons: [],
-    channelCommitButtons: [],
     epgActionButtons: [],
     overlayActionButtons: [],
     screens: [],

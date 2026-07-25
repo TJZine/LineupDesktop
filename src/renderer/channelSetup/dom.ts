@@ -78,25 +78,6 @@ export function renderChannelSetupDom(
     dom.channelSetupResultElement.dataset.resultTone = view.channelSetupFlow.result.tone;
     dom.channelSetupResultElement.replaceChildren(renderResult(view));
   }
-  for (const button of dom.channelCommitButtons) {
-    const action = button.dataset.channelCommitAction;
-    button.disabled = channelCommitDisabled(action, view);
-    switch (action) {
-      case 'append':
-        button.textContent = view.channelSetupFlow.buildMode === 'append'
-          ? 'Build append mode'
-          : 'Build appended channel';
-        break;
-      case 'replace':
-        button.textContent = view.channelSetupFlow.buildMode === 'replace'
-          ? 'Review replace mode'
-          : 'Choose replace mode';
-        break;
-      case 'confirmReplace':
-        button.textContent = 'Confirm & Replace';
-        break;
-    }
-  }
 }
 
 function renderLibrarySource(view: RouteWorkflowViewModel): HTMLElement {
@@ -125,20 +106,4 @@ function renderResult(view: RouteWorkflowViewModel): HTMLElement {
   detail.textContent = view.channelSetupFlow.result.detail;
   item.append(title, detail);
   return item;
-}
-
-function channelCommitDisabled(
-  action: string | undefined,
-  view: RouteWorkflowViewModel,
-): boolean {
-  switch (action) {
-    case 'append':
-      return !view.channelSetupCommitAvailability.append;
-    case 'replace':
-      return !view.channelSetupCommitAvailability.replace;
-    case 'confirmReplace':
-      return !view.channelSetupCommitAvailability.confirmReplace;
-    default:
-      return true;
-  }
 }

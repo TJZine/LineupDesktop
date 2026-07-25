@@ -22,7 +22,29 @@ export function copyRendererAssets(sourceDirectory, targetDirectory) {
   });
 }
 
+export function copyRendererChannelBuilderRuntime(
+  compiledChannelBuilderDirectory,
+  targetRendererDirectory,
+) {
+  const targetDirectory = path.join(
+    targetRendererDirectory,
+    'domain',
+    'channelBuilder',
+  );
+  fs.mkdirSync(targetDirectory, { recursive: true });
+  for (const fileName of ['config.js', 'constants.js']) {
+    fs.copyFileSync(
+      path.join(compiledChannelBuilderDirectory, fileName),
+      path.join(targetDirectory, fileName),
+    );
+  }
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   copyRendererAssets(sourceRoot, targetRoot);
+  copyRendererChannelBuilderRuntime(
+    path.join(repoRoot, 'dist', 'domain', 'channelBuilder'),
+    targetRoot,
+  );
   console.log('Renderer assets copied.');
 }

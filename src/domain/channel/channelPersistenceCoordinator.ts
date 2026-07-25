@@ -51,13 +51,7 @@ export class ChannelPersistenceCoordinator implements ChannelPersistencePort {
 
   public async load(): Promise<StoredChannelData | null> {
     const loaded = await this.loadNormalized();
-    if (loaded === null) {
-      return null;
-    }
-    if (loaded.didMutate) {
-      await this.repository.saveStoredChannelData(loaded.data);
-    }
-    return loaded.data;
+    return loaded?.data ?? null;
   }
 
   public loadNormalized(): Promise<LoadedChannelState> {

@@ -5,7 +5,11 @@ import {
   containsCustomChannelForbiddenRendererField,
   type CustomChannelDraftInput,
 } from '../../contracts/customChannels.js';
-import type { ChannelPersistenceStoragePort } from '../../domain/channel/channelPersistenceStore.js';
+import type {
+  ChannelAggregate,
+  ChannelAggregateMutationRequest,
+  ChannelPersistenceStoragePort,
+} from '../../domain/channel/channelPersistenceStore.js';
 import type { ChannelConfig, StoredChannelData } from '../../domain/channel/index.js';
 import { encodeStoredChannelData } from '../../domain/channel/storedChannelDataCodec.js';
 import { CustomChannelRuntime } from '../../main/channel/customChannelRuntime.js';
@@ -113,6 +117,73 @@ test('custom channel runtime edits existing channels and rejects stale drafts', 
   ]);
   assert.equal(edited.ok ? edited.value.snapshot.currentChannelId : null, 'next');
   assert.equal(containsCustomChannelForbiddenRendererField(edited), false);
+});
+
+test('custom mutations preserve builder metadata and clear only modified provenance identities', async () => {
+  let aggregate = {
+    storedChannelData: storedData({
+      channels: [channel('existing', 10), channel('other', 11)],
+      channelOrder: ['existing', 'other'],
+      currentChannelId: 'existing',
+      savedAt: 10,
+    }),
+    currentChannelId: 'existing',
+    lineupRevision: 7,
+    channelBuilderState: {
+      schemaVersion: 1,
+      normalizedConfig: { sentinel: 'config' },
+      completedAtMs: 900,
+      profileBinding: 'profile',
+      serverBinding: 'server',
+      librarySetBinding: 'libraries',
+      channelProvenance: {
+        existing: { marker: 'existing' },
+        other: { marker: 'other' },
+      },
+    },
+  } as unknown as ChannelAggregate;
+  const storage = {
+    ...createMemoryStorage(null),
+    readChannelAggregate: async () => aggregate,
+    mutateChannelAggregate: async (request: ChannelAggregateMutationRequest) => {
+      const next = request.mutate(aggregate);
+      if (request.onCommitBarrier() === 'cancel') return { status: 'canceled' as const };
+      aggregate = { ...next, lineupRevision: aggregate.lineupRevision + 1 };
+      return { status: 'committed' as const, aggregate };
+    },
+  };
+  const runtime = new CustomChannelRuntime({
+    storage,
+    clock: { now: () => 2_000 },
+    generateId: createIdGenerator('unused'),
+  });
+
+  const edited = await runtime.saveDraft('custom-edit-provenance', {
+    ...draft({ id: 'existing', name: 'Edited Movies' }),
+    expectedRevision: 'updatedAt:1000',
+  });
+  assert.equal(edited.ok, true);
+  assert.equal(aggregate.lineupRevision, 8);
+  assert.equal(aggregate.channelBuilderState?.completedAtMs, 900);
+  assert.equal(
+    Object.hasOwn(aggregate.channelBuilderState?.channelProvenance ?? {}, 'existing'),
+    false,
+  );
+  assert.equal(
+    Object.hasOwn(aggregate.channelBuilderState?.channelProvenance ?? {}, 'other'),
+    true,
+  );
+
+  const deleted = await runtime.deleteChannel('custom-delete-provenance', {
+    channelId: 'other',
+    confirm: true,
+  });
+  assert.equal(deleted.ok, true);
+  assert.equal(aggregate.lineupRevision, 9);
+  assert.equal(
+    Object.hasOwn(aggregate.channelBuilderState?.channelProvenance ?? {}, 'other'),
+    false,
+  );
 });
 
 test('custom channel runtime serializes concurrent saves against latest state', async () => {
@@ -251,6 +322,10 @@ test('custom channel runtime maps write and refresh failures to safe results', a
   const diagnostics: unknown[] = [];
   const writeFailed = new CustomChannelRuntime({
     storage: {
+      ...createMemoryStorage(null),
+      mutateChannelAggregate: async () => {
+        throw new Error('EACCES /Users/private/channels.json token=secret');
+      },
       readStoredChannelData: async () => null,
       writeStoredChannelData: async () => {
         throw new Error('EACCES /Users/private/channels.json token=secret');
@@ -290,6 +365,7 @@ test('custom channel runtime maps write and refresh failures to safe results', a
 test('custom channel runtime reports storage failures without leaking details', async () => {
   const runtime = new CustomChannelRuntime({
     storage: {
+      ...createMemoryStorage(null),
       readStoredChannelData: async () => {
         throw new Error('EACCES /Users/private/channels.json token=secret');
       },
@@ -329,6 +405,7 @@ function draft(overrides: Partial<CustomChannelDraftInput> = {}): CustomChannelD
 function createMemoryStorage(initial: StoredChannelData | null): ChannelPersistenceStoragePort {
   let data = initial === null ? null : encodeStoredChannelData(initial);
   let currentChannelId = initial?.currentChannelId ?? null;
+  let revision = 0;
   return {
     readStoredChannelData: async () => data,
     writeStoredChannelData: async (encoded) => {
@@ -342,6 +419,28 @@ function createMemoryStorage(initial: StoredChannelData | null): ChannelPersiste
     readCurrentChannelId: async () => currentChannelId,
     writeCurrentChannelId: async (channelId) => {
       currentChannelId = channelId;
+    },
+    readChannelAggregate: async () => ({
+      storedChannelData: data === null ? null : JSON.parse(data) as StoredChannelData,
+      currentChannelId,
+      lineupRevision: revision,
+      channelBuilderState: null,
+    }),
+    mutateChannelAggregate: async (request) => {
+      if (request.kind === 'builder-lineup' && request.expectedLineupRevision !== revision) {
+        return { status: 'conflict', actualLineupRevision: revision };
+      }
+      if (request.onCommitBarrier() === 'cancel') return { status: 'canceled' };
+      const next = request.mutate({
+        storedChannelData: data === null ? null : JSON.parse(data) as StoredChannelData,
+        currentChannelId,
+        lineupRevision: revision,
+        channelBuilderState: null,
+      });
+      data = next.storedChannelData === null ? null : encodeStoredChannelData(next.storedChannelData);
+      currentChannelId = next.currentChannelId;
+      revision = next.lineupRevision;
+      return { status: 'committed', aggregate: next };
     },
   };
 }
