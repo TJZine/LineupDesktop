@@ -14,6 +14,7 @@ import {
 import {
   createStagedSetupController,
   dispatchStagedSetupAction,
+  handleStagedSetupBack,
 } from '../../renderer/setup/stagedSetupController.js';
 
 test('workflow starts on player and routes to Guide through renderer-local state', () => {
@@ -138,13 +139,11 @@ test('staged setup submits the visible build mode and only confirms an actual re
       ...createChannelRuntimeRendererState(),
       summary: null,
     }),
-    reviewAndApply: async (input: {
-      config: { buildMode: string };
-      confirmReplace: boolean;
-    }) => {
+    startReview: async () => 'succeeded',
+    applyReviewed: async (confirmReplace: boolean) => {
       submissions.push({
-        buildMode: input.config.buildMode,
-        confirmReplace: input.confirmReplace,
+        buildMode: controller.getState().buildMode,
+        confirmReplace,
       });
       return 'succeeded';
     },
@@ -152,9 +151,26 @@ test('staged setup submits the visible build mode and only confirms an actual re
   const sections = [{ id: 'library', type: 'movie' }];
   const controller = createStagedSetupController({ onStateChanged: () => undefined });
   controller.toggleLibrary('library', sections as never);
+  assert.equal(controller.prepareBuilderConfig({
+    serverId: 'server',
+    selectedLibraryIds: ['library'],
+  }, {
+    completion: 'unknown',
+    normalizedConfig: null,
+    completedAtMs: null,
+  }), true);
+  await dispatchStagedSetupAction({
+    action: 'configModeMerge',
+    controller,
+    channelController,
+  } as never);
+  assert.equal(controller.getState().builderConfig?.config.buildMode, 'merge');
+  assert.equal(controller.getState().focusIntent, 'channel-strategy-build-merge');
   controller.showOwner('build', 'setup-confirm');
-  const dispatch = async () => dispatchStagedSetupAction({
-    action: 'buildConfirm',
+  const dispatch = async (
+    action: Parameters<typeof dispatchStagedSetupAction>[0]['action'] = 'buildConfirm',
+  ) => dispatchStagedSetupAction({
+    action,
     controller,
     channelController,
     sections,
@@ -178,16 +194,53 @@ test('staged setup submits the visible build mode and only confirms an actual re
     confirmReplace: false,
   });
 
-  controller.showOwner('build', 'setup-replace-confirm');
+  controller.showOwner('build', 'setup-confirm-replace');
   controller.setBuildMode('replace');
   await dispatch();
   assert.equal(submissions.length, 1);
-  controller.toggleReplacementConfirmation();
-  await dispatch();
+  await dispatch('openReplaceConfirm');
+  assert.equal(controller.getState().owner, 'replace-confirm');
+  assert.equal(controller.getState().focusIntent, 'setup-replace-cancel');
+  await handleStagedSetupBack({
+    controller,
+    dispatch,
+  } as never);
+  assert.equal(controller.getState().owner, 'build');
+  assert.equal(controller.getState().focusIntent, 'setup-confirm-replace');
+  await dispatch('openReplaceConfirm');
+  await dispatch('confirmReplace');
   assert.deepEqual(submissions[1], {
     buildMode: 'replace',
     confirmReplace: true,
   });
+});
+
+test('skipped or stale apply restores the reviewed build owner instead of stranding progress', async () => {
+  for (const outcome of ['skipped', 'stale'] as const) {
+    const controller = createStagedSetupController({ onStateChanged: () => undefined });
+    controller.toggleLibrary('library', [{ id: 'library', type: 'movie' }] as never);
+    assert.equal(controller.prepareBuilderConfig({
+      serverId: 'server',
+      selectedLibraryIds: ['library'],
+    }, {
+      completion: 'unknown',
+      normalizedConfig: null,
+      completedAtMs: null,
+    }), true);
+    controller.setBuildMode('append');
+    controller.showOwner('build', 'setup-confirm');
+    await dispatchStagedSetupAction({
+      action: 'buildConfirm',
+      controller,
+      channelController: {
+        getState: () => ({ ...createChannelRuntimeRendererState(), summary: null }),
+        applyReviewed: async () => outcome,
+      },
+      sections: [{ id: 'library', type: 'movie' }],
+    } as never);
+    assert.equal(controller.getState().owner, 'build', outcome);
+    assert.equal(controller.getState().focusIntent, 'setup-confirm', outcome);
+  }
 });
 
 function configuredSummary(): ChannelSetupSummary {

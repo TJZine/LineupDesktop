@@ -20,10 +20,8 @@ export interface ChannelRuntimeController {
   markBlocked(message: string): void;
   clearActionState(): void;
   cancelActive(): Promise<'accepted' | 'unavailable' | 'failed' | 'skipped'>;
-  reviewAndApply(input: {
-    config: NormalizedChannelSetupConfig;
-    confirmReplace: boolean;
-  }): Promise<ChannelRuntimeActionOutcome>;
+  startReview(config: NormalizedChannelSetupConfig): Promise<ChannelRuntimeActionOutcome>;
+  applyReviewed(confirmReplace: boolean): Promise<ChannelRuntimeActionOutcome>;
 }
 
 export type ChannelRuntimeActionOutcome =
@@ -76,6 +74,12 @@ export function createChannelRuntimeController(input: {
       }
       current = result.value.operation;
     }
+    publish({
+      ...state,
+      pending: false,
+      statusText: 'Channel setup failed',
+      errorText: 'Channel setup operation timed out. Try again.',
+    });
     return null;
   };
   const cancelOperation = async (
@@ -115,6 +119,7 @@ export function createChannelRuntimeController(input: {
         return 'accepted';
       }
       if (operation.state === 'review-ready') {
+        if (!state.pending) return 'skipped';
         cancellationRequested = true;
         publish({ ...state, statusText: 'Canceling…' });
         return 'accepted';
@@ -129,7 +134,7 @@ export function createChannelRuntimeController(input: {
       cancellationRequested = true;
       return cancelOperation(operation);
     },
-    reviewAndApply: async ({ config, confirmReplace }) => {
+    startReview: async (config) => {
       if (state.pending) return 'skipped';
       cancellationRequested = false;
       const sequence = ++actionSequence;
@@ -151,15 +156,26 @@ export function createChannelRuntimeController(input: {
       const reviewed = await poll(review.value.operation, sequence);
       if (reviewed === null) return sequence === actionSequence ? 'failed' : 'stale';
       if (reviewed.state === 'canceled') return 'canceled';
+      if (reviewed.state !== 'review-ready') return 'failed';
+      return reviewed.result.status === 'blocked' || reviewed.result.planId === null
+        ? 'skipped'
+        : 'succeeded';
+    },
+    applyReviewed: async (confirmReplace) => {
+      const reviewed = state.operation;
       if (
+        state.pending ||
+        reviewed?.kind !== 'review' ||
         reviewed.state !== 'review-ready' ||
-        reviewed.result.status === 'blocked' ||
-        reviewed.result.planId === null
-      ) return 'failed';
+        reviewed.result.planId === null ||
+        reviewed.result.status === 'blocked'
+      ) return 'skipped';
+      cancellationRequested = false;
+      const sequence = ++actionSequence;
       publish({
         ...state,
         pending: true,
-        statusText: cancellationRequested ? 'Canceling…' : 'Preparing channel build',
+        statusText: 'Preparing channel build',
       });
       const apply = await input.bridge.startApply({
         planId: reviewed.result.planId,

@@ -12,6 +12,14 @@ export function getStagedSetupNeighbors(
     const editorIds = visibleOwnerIds(documentRef, '[data-staged-owner="custom-edit"]');
     if (editorIds.includes(focusId)) return linear(focusId, editorIds);
   }
+  if (owner === 'replace-confirm') {
+    const modalIds = visibleOwnerIds(documentRef, '[data-staged-owner="replace-confirm"]');
+    if (modalIds.includes(focusId)) return linear(focusId, modalIds);
+  }
+  if (owner === 'preview' && (focusId.startsWith('builder-') || focusId.startsWith('channel-strategy-build-'))) {
+    const configIds = visibleOwnerIds(documentRef, '[data-channel-builder-config]');
+    if (configIds.includes(focusId)) return linear(focusId, configIds);
+  }
   const present = (id: string, fallback: string): string => enabled.includes(id) ? id : fallback;
   if (focusId === 'setup-select-all') return { up: focusId, down: firstSection(enabled, 'setup-next'), left: focusId, right: present('setup-clear-all', focusId) };
   if (focusId === 'setup-clear-all') return { up: focusId, down: firstSection(enabled, 'setup-next'), left: present('setup-select-all', focusId), right: focusId };
@@ -31,12 +39,13 @@ export function getStagedSetupNeighbors(
   }
   if (focusId === 'setup-preview-toggle') return { up: 'channel-strategy-build-custom', down: present('setup-preview-retry', 'setup-next'), left: 'setup-category-build', right: focusId };
   if (focusId === 'setup-preview-retry') return vertical(focusId, 'setup-preview-toggle', 'setup-next');
-  if (focusId === 'setup-replace-confirm') return vertical(focusId, focusId, 'setup-back');
+  if (focusId === 'setup-replace-cancel') return vertical(focusId, 'setup-replace-confirm');
+  if (focusId === 'setup-replace-confirm') return vertical(focusId, 'setup-replace-cancel');
   if (focusId === 'setup-next') return vertical(focusId, owner === 'preview' ? present('setup-preview-retry', 'setup-preview-toggle') : lastSection(enabled, 'setup-select-all'), 'setup-back');
   if (focusId === 'setup-back') return owner === 'build'
-    ? vertical(focusId, present('setup-replace-confirm', focusId), 'setup-confirm')
+    ? vertical(focusId, focusId, present('setup-confirm', 'setup-confirm-replace'))
     : vertical(focusId, owner === 'library' && enabled.includes('setup-library-retry') ? 'setup-library-retry' : 'setup-next');
-  if (focusId === 'setup-confirm') return vertical(focusId, 'setup-back', focusId);
+  if (focusId === 'setup-confirm' || focusId === 'setup-confirm-replace') return vertical(focusId, 'setup-back', focusId);
   if (focusId === 'setup-progress-cancel') return allSelf(focusId);
   if (focusId === 'setup-done') return vertical(focusId, focusId, present('setup-result-watch', focusId));
   if (focusId === 'setup-result-watch') return vertical(focusId, 'setup-done');

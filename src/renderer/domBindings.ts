@@ -353,7 +353,11 @@ export function readCustomChannelActionId(value: string | undefined): CustomChan
 }
 
 export function readStagedSetupFlowActionId(value: string | undefined): StagedSetupFlowActionId | null {
-  return typeof value === 'string' && STAGED_SETUP_FLOW_ACTIONS.includes(value as StagedSetupFlowActionId)
+  if (typeof value !== 'string') return null;
+  if (STAGED_SETUP_FLOW_ACTIONS.includes(value as (typeof STAGED_SETUP_FLOW_ACTIONS)[number])) {
+    return value as StagedSetupFlowActionId;
+  }
+  return /^(?:strategyToggle|strategyPriorityDown|strategyPriorityUp|strategyScope):(?:collections|playlists|genres|directors|decades|recentlyAdded|studios|actors)$/u.test(value)
     ? value as StagedSetupFlowActionId
     : null;
 }

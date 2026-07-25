@@ -1,4 +1,13 @@
-import type { ChannelSetupSummary } from '../../contracts/channel.js';
+import type {
+  ChannelSetupOperation,
+  ChannelSetupSummary,
+  ChannelSetupWarning,
+} from '../../contracts/channel.js';
+import {
+  CHANNEL_BUILDER_MIXED_SCOPE_STRATEGIES,
+  CHANNEL_BUILDER_STRATEGY_KEYS,
+} from '../../domain/channelBuilder/constants.js';
+import type { NormalizedChannelSetupConfig } from '../../domain/channelBuilder/types.js';
 import type { ChannelRuntimeRendererState } from '../channelRuntimeState.js';
 import type {
   ChannelSetupDraftState,
@@ -45,6 +54,84 @@ export interface ChannelSetupProgressViewModel {
   pending: boolean;
   statusText: string;
   canCancel: boolean;
+}
+
+export interface ChannelBuilderReviewViewModel {
+  status: 'unavailable' | 'ready' | 'slow' | 'blocked';
+  counts: Readonly<{ created: number; removed: number; unchanged: number }>;
+  samples: Readonly<{ created: readonly string[]; removed: readonly string[]; unchanged: readonly string[] }>;
+  warnings: readonly string[];
+  reachedCap: boolean;
+  canApply: boolean;
+}
+
+export function createChannelBuilderReview(
+  operation: ChannelSetupOperation | null,
+): ChannelBuilderReviewViewModel {
+  if (operation?.kind !== 'review' || operation.state !== 'review-ready') {
+    return {
+      status: 'unavailable',
+      counts: { created: 0, removed: 0, unchanged: 0 },
+      samples: { created: [], removed: [], unchanged: [] },
+      warnings: [],
+      reachedCap: false,
+      canApply: false,
+    };
+  }
+  return {
+    status: operation.result.status,
+    counts: operation.result.diff.summary,
+    samples: operation.result.diff.samples,
+    warnings: operation.result.warnings.map(formatBuilderWarning),
+    reachedCap: operation.result.reachedCap,
+    canApply: operation.result.planId !== null && operation.result.status !== 'blocked',
+  };
+}
+
+export function createChannelBuilderConfigRows(
+  config: NormalizedChannelSetupConfig,
+): readonly Readonly<{
+  key: string;
+  label: string;
+  enabled: boolean;
+  priority: number;
+  scope: 'per-library' | 'cross-library';
+  scopeEditable: boolean;
+}>[] {
+  const mixedScope = new Set<string>(CHANNEL_BUILDER_MIXED_SCOPE_STRATEGIES);
+  return CHANNEL_BUILDER_STRATEGY_KEYS.map((key) => ({
+    key,
+    label: strategyLabel(key),
+    enabled: config.strategyConfig[key].enabled,
+    priority: config.strategyConfig[key].priority,
+    scope: config.strategyConfig[key].scope,
+    scopeEditable: mixedScope.has(key),
+  }));
+}
+
+function formatBuilderWarning(warning: ChannelSetupWarning): string {
+  const count = warning.affectedCount === null ? '' : ` (${String(warning.affectedCount)})`;
+  switch (warning.code) {
+    case 'FACET_UNAVAILABLE': return `Some channel sources are unavailable${count}.`;
+    case 'FACET_PARTIAL_FAILURE': return `Some channel sources could not be fully loaded${count}.`;
+    case 'FACET_DISCOVERY_TIMEOUT': return `Channel source discovery timed out${count}.`;
+    case 'FACET_EMPTY': return `Some channel sources contained no eligible items${count}.`;
+    case 'FACET_CAP_REACHED': return `Channel source discovery reached its safety limit${count}.`;
+    case 'FACET_MALFORMED_ENTRIES_OMITTED': return `Invalid channel source entries were omitted${count}.`;
+    case 'TV_PEOPLE_METADATA_INCOMPLETE': return `Some TV cast or director metadata is incomplete${count}.`;
+    case 'EXISTING_SOURCE_UNMATCHABLE':
+      return 'Some existing channels can be retained but cannot be matched or updated by Channel Builder.';
+    case 'MIN_ITEMS_SKIPPED': return `Channels below the minimum item count were skipped${count}.`;
+    case 'MAX_CHANNELS_REACHED': return `The configured maximum channel count was reached${count}.`;
+    case 'PLAN_EMPTY': return 'No eligible channels were found for this configuration.';
+    case 'MATERIALIZATION_SKIPPED': return `Channels unavailable during preparation were skipped${count}.`;
+    case 'GUIDE_REFRESH_FAILED': return 'Channels were saved, but Guide refresh did not complete.';
+  }
+}
+
+function strategyLabel(key: (typeof CHANNEL_BUILDER_STRATEGY_KEYS)[number]): string {
+  if (key === 'recentlyAdded') return 'Recently added';
+  return `${key.charAt(0).toUpperCase()}${key.slice(1)}`;
 }
 
 export function createChannelSetupProgress(

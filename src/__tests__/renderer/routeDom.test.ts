@@ -683,7 +683,7 @@ test('route DOM renders player OSD fields and playback option rows', () => {
   }
 });
 
-test('route DOM renders channel setup review without privileged data', () => {
+test('route workflow DOM leaves staged builder review policy to channelSetup/dom', () => {
   const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   const documentDouble = {
     documentElement: { dataset: {} },
@@ -717,7 +717,7 @@ test('route DOM renders channel setup review without privileged data', () => {
     );
 
     const renderedText = [channelList, validation].map(collectText).join(' ');
-    assert.match(renderedText, /Choose a movie or show library section before saving channels/u);
+    assert.equal(renderedText.trim(), '');
     assert.doesNotMatch(renderedText, /Demo Library|The Vault|Weekend Queue|Liminal One/u);
     assert.doesNotMatch(renderedText, /serverUri|token|https?:|raw payload/u);
   } finally {
@@ -725,7 +725,7 @@ test('route DOM renders channel setup review without privileged data', () => {
   }
 });
 
-test('route DOM renders selected Plex library and strategy controls through product setup bindings', () => {
+test('route workflow DOM projects selected-library summary without overwriting staged builder policy', () => {
   const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   const documentDouble = {
     documentElement: { dataset: {} },
@@ -774,10 +774,9 @@ test('route DOM renders selected Plex library and strategy controls through prod
       .join(' ');
 
     assert.match(renderedText, /Selected Movies/u);
-    assert.match(renderedText, /Movie library source selected for channel creation/u);
-    assert.match(renderedText, /2 known movies/u);
-    assert.match(renderedText, /Replace saved lineup/u);
-    assert.match(renderedText, /Review the strategy, then append it to saved channels or replace the lineup/u);
+    assert.match(renderedText, /1 of 1/u);
+    assert.match(renderedText, /2 library items/u);
+    assert.equal([sourceList, review, validation].map(collectText).join(' ').trim(), '');
   } finally {
     restoreDocument(originalDocument);
   }
@@ -905,6 +904,9 @@ test('static product route visible text avoids internal implementation-status te
 
   assert.doesNotMatch(readVisibleTextFromMarkup(root.innerHTML), PRODUCT_ROUTE_INTERNAL_COPY_PATTERN);
   assert.doesNotMatch(root.innerHTML, /data-channel-setup-fixture-status/u);
+  assert.match(root.innerHTML, /data-staged-owner="replace-confirm" role="dialog" aria-modal="true"/u);
+  assert.match(root.innerHTML, /data-setup-flow-action="cancelReplaceConfirm" data-focus-id="setup-replace-cancel"/u);
+  assert.match(root.innerHTML, /data-setup-flow-action="confirmReplace" data-focus-id="setup-replace-confirm"/u);
 });
 
 test('static player DOM keeps native presentation beside the route-owned overlay stack', () => {

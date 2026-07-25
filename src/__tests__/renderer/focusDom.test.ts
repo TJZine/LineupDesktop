@@ -381,10 +381,15 @@ test('Package 3 active setup owners expose exact DOM-backed retry and build edge
   const append = activeOwnerDocument('build', ['setup-back', 'setup-confirm']);
   assert.equal(getStagedSetupNeighbors('setup-back', append)?.down, 'setup-confirm');
   assert.equal(getStagedSetupNeighbors('setup-confirm', append)?.up, 'setup-back');
-  const replace = activeOwnerDocument('build', ['setup-replace-confirm', 'setup-back', 'setup-confirm']);
-  assert.equal(getStagedSetupNeighbors('setup-replace-confirm', replace)?.down, 'setup-back');
-  assert.equal(getStagedSetupNeighbors('setup-back', replace)?.up, 'setup-replace-confirm');
-  assert.equal(getStagedSetupNeighbors('setup-back', replace)?.down, 'setup-confirm');
+  const replace = activeOwnerDocument('build', ['setup-back', 'setup-confirm-replace']);
+  assert.equal(getStagedSetupNeighbors('setup-back', replace)?.down, 'setup-confirm-replace');
+  assert.equal(getStagedSetupNeighbors('setup-confirm-replace', replace)?.up, 'setup-back');
+
+  const replaceModal = activeOwnerDocument('replace-confirm', [
+    'setup-replace-cancel', 'setup-replace-confirm',
+  ]);
+  assert.equal(getStagedSetupNeighbors('setup-replace-cancel', replaceModal)?.down, 'setup-replace-confirm');
+  assert.equal(getStagedSetupNeighbors('setup-replace-confirm', replaceModal)?.up, 'setup-replace-cancel');
 
   const selectedReplace = activeOwnerDocument('preview', [
     'setup-category-build', 'channel-strategy-build-append', 'channel-strategy-build-replace', 'channel-strategy-build-custom',

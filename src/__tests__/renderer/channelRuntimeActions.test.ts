@@ -63,7 +63,7 @@ test('channel build cancel remains reachable across pending IPC handoffs', () =>
   );
 });
 
-test('channel runtime controller executes review then apply and reloads status', async () => {
+test('channel runtime controller keeps review and apply as explicit real operations', async () => {
   const calls: string[] = [];
   const configResult = createChannelBuilderConfigState({
     serverId: 'server',
@@ -132,13 +132,9 @@ test('channel runtime controller executes review then apply and reloads status',
     onStateChanged: () => undefined,
   });
 
-  assert.equal(
-    await controller.reviewAndApply({
-      config: readChannelBuilderConfigRequest(configResult.state),
-      confirmReplace: true,
-    }),
-    'succeeded',
-  );
+  assert.equal(await controller.startReview(readChannelBuilderConfigRequest(configResult.state)), 'succeeded');
+  assert.equal(controller.getState().operation?.state, 'review-ready');
+  assert.equal(await controller.applyReviewed(true), 'succeeded');
   assert.deepEqual(calls, ['startReview', 'startApply', 'getStatus']);
   assert.equal(controller.getState().summary?.lineupRevision, 1);
   assert.equal(await controller.cancelActive(), 'skipped');
@@ -213,10 +209,7 @@ test('channel runtime cancellation publishes accepted canceling state and skips 
   });
   assert.equal(configResult.ok, true);
   if (!configResult.ok) return;
-  const pending = controller.reviewAndApply({
-    config: readChannelBuilderConfigRequest(configResult.state),
-    confirmReplace: false,
-  });
+  const pending = controller.startReview(readChannelBuilderConfigRequest(configResult.state));
   await waitFor(() => controller.getState().operation?.state === 'running');
   assert.equal(await controller.cancelActive(), 'accepted');
   assert.equal(controller.getState().operation?.state, 'canceling');
@@ -227,7 +220,7 @@ test('channel runtime cancellation publishes accepted canceling state and skips 
   assert.equal(controller.getState().operation?.state, 'canceled');
 });
 
-test('channel runtime carries a cancel request across the review-ready to apply handoff', async () => {
+test('channel runtime carries a cancel request across the explicit apply IPC handoff', async () => {
   const reviewOperationId = `channel-builder-review-${'e'.repeat(32)}`;
   const applyOperationId = `channel-builder-apply-${'f'.repeat(32)}`;
   const planId = `channel-builder-plan-${'a'.repeat(32)}`;
@@ -326,10 +319,11 @@ test('channel runtime carries a cancel request across the review-ready to apply 
   assert.equal(configResult.ok, true);
   if (!configResult.ok) return;
 
-  const pending = controller.reviewAndApply({
-    config: readChannelBuilderConfigRequest(configResult.state),
-    confirmReplace: false,
-  });
+  assert.equal(
+    await controller.startReview(readChannelBuilderConfigRequest(configResult.state)),
+    'succeeded',
+  );
+  const pending = controller.applyReviewed(false);
   await waitFor(() => applyRequested);
   assert.equal(controller.getState().operation?.state, 'review-ready');
   assert.equal(await controller.cancelActive(), 'accepted');

@@ -108,8 +108,7 @@ export function projectChannelBuildCancellation(
   const isCanceling =
     operation?.state === 'canceling' || state.statusText === 'Canceling…';
   const isHandoffPending =
-    state.pending &&
-    (operation === null || operation.state === 'review-ready');
+    state.pending && (operation === null || operation.state === 'review-ready');
   const isPreCommitOperation =
     operation !== null &&
     operation.state !== 'review-ready' &&

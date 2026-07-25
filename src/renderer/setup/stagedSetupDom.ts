@@ -6,6 +6,7 @@ import type { ChannelRuntimeRendererState } from '../channelRuntimeState.js';
 import type { SetupRuntimeState } from './setupRuntimeCoordinator.js';
 import type { StagedSetupOwnerId, StagedSetupState } from './stagedSetupController.js';
 import { eligibleSetupLibraries } from './setupLibrarySelection.js';
+import { renderChannelBuilderDom } from '../channelSetup/dom.js';
 
 export function renderStagedSetupDom(input: {
   state: StagedSetupState;
@@ -22,7 +23,9 @@ export function renderStagedSetupDom(input: {
   doc.documentElement.dataset.setupOwner = input.state.owner;
   for (const owner of Array.from(doc.querySelectorAll<HTMLElement>('[data-staged-owner]'))) {
     const active = owner.dataset.stagedOwner === ownerId;
-    const background = input.state.owner === 'custom-delete-confirm' && owner.dataset.stagedOwner === 'custom-list';
+    const background =
+      (input.state.owner === 'custom-delete-confirm' && owner.dataset.stagedOwner === 'custom-list')
+      || (input.state.owner === 'replace-confirm' && owner.dataset.stagedOwner === 'build');
     owner.hidden = !active && !background;
     owner.inert = !active;
     owner.setAttribute('aria-hidden', String(!active));
@@ -50,6 +53,12 @@ export function renderStagedSetupDom(input: {
     row.setAttribute('aria-disabled', String(row.disabled));
   }
   setText(input.dom.channelSetupSourceElement, selected.length === 0 ? 'No libraries selected' : `${String(selected.length)} ${selected.length === 1 ? 'library' : 'libraries'} selected`);
+  renderChannelBuilderDom({
+    state: input.state,
+    channelState: input.channelState,
+    progress: input.view.channelSetupProgress,
+    documentRef: doc,
+  });
 
   const append = doc.querySelector<HTMLButtonElement>('[data-focus-id="channel-strategy-build-append"]');
   const replace = doc.querySelector<HTMLButtonElement>('[data-focus-id="channel-strategy-build-replace"]');
@@ -68,16 +77,6 @@ export function renderStagedSetupDom(input: {
     item.setAttribute('aria-disabled', 'true');
   }
 
-  const replaceConfirm = doc.querySelector<HTMLButtonElement>('[data-focus-id="setup-replace-confirm"]');
-  if (replaceConfirm) {
-    replaceConfirm.hidden = input.state.buildMode !== 'replace';
-    replaceConfirm.setAttribute('aria-pressed', String(input.state.replacementConfirmed));
-    replaceConfirm.classList.toggle('selected', input.state.replacementConfirmed);
-  }
-  const buildPending = input.channelState.pending;
-  setButton(doc, 'setup-confirm', selected.length === 0 || buildPending || (input.state.buildMode === 'replace' && !input.state.replacementConfirmed), buildPending, 'build');
-  renderReview(input, selected.map((section) => section.title), doc);
-
   const watch = doc.querySelector<HTMLButtonElement>('[data-focus-id="setup-result-watch"]');
   if (watch) {
     const available = input.state.resultWatchChannelId !== null;
@@ -91,25 +90,6 @@ export function renderStagedSetupDom(input: {
   if (deleteConfirm) { deleteConfirm.dataset.customChannelDetail = input.state.deleteChannelId ?? ''; setPending(deleteConfirm, input.customState.pendingAction === 'delete'); }
   const setupCustom = input.state.owner === 'setup-custom';
   toggleFooter(doc, 'setup-done', !setupCustom); toggleFooter(doc, 'setup-back', !setupCustom); toggleFooter(doc, 'custom-channel-back', setupCustom);
-}
-
-function renderReview(input: Parameters<typeof renderStagedSetupDom>[0], titles: readonly string[], doc: Document): void {
-  const saved = input.channelState.summary?.channelCount ?? 0;
-  const planned = input.state.buildMode === 'append' ? saved + titles.length : titles.length;
-  const rows = [
-    ['Selected libraries', titles.length === 0 ? 'None' : titles.join(', ')],
-    ['Saved lineup', `${String(saved)} channels`],
-    ['Build mode', input.state.buildMode === 'replace' ? 'Replace saved lineup' : 'Append to saved lineup'],
-    ['Planned channel count', `${String(planned)} channels after build (planned)`],
-  ];
-  const host = doc.querySelector<HTMLElement>('[data-staged-owner="build"] [data-channel-review-list]');
-  host?.replaceChildren(...rows.map(([label, value]) => {
-    const row = doc.createElement('div'); row.className = 'setup-review-row';
-    const strong = doc.createElement('strong'); strong.textContent = label;
-    const span = doc.createElement('span'); span.textContent = value;
-    row.append(strong, span); return row;
-  }));
-  setText(doc.querySelector('[data-staged-owner="build"] [data-channel-review-impact]'), input.state.buildMode === 'replace' ? 'The saved lineup will be replaced only after confirmation.' : 'Saved channels will be kept and selected libraries appended.');
 }
 
 function mapOwnerElement(owner: StagedSetupOwnerId): string { return owner === 'setup-custom' ? 'custom-list' : owner; }
