@@ -6,7 +6,11 @@ import type { ChannelRuntimeRendererState } from '../../renderer/channelRuntimeS
 import { createPlayerOverlayState, openOsd, openPlaybackOptions } from '../../renderer/overlays.js';
 import { createEmptyPlayerSnapshot } from '../../renderer/playerOverlayPresentation.js';
 import { setEpgPresentationState, type EpgPresentationSource } from '../../renderer/epg.js';
-import { renderRouteDom, renderWorkflowDom } from '../../renderer/routeDom.js';
+import {
+  renderChannelSetupResult,
+  renderRouteDom,
+  renderWorkflowDom,
+} from '../../renderer/routeDom.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
 import { applyWorkflowChannelSetupAction, createWorkflowState as createWorkflowStateCore } from '../../renderer/workflow.js';
 import { renderShellDom, type ShellDomBindings } from '../../renderer/shell/shellDom.js';
@@ -777,6 +781,92 @@ test('route workflow DOM projects selected-library summary without overwriting s
     assert.match(renderedText, /1 of 1/u);
     assert.match(renderedText, /2 library items/u);
     assert.equal([sourceList, review, validation].map(collectText).join(' ').trim(), '');
+  } finally {
+    restoreDocument(originalDocument);
+  }
+});
+
+test('route workflow DOM renders committed counts, warnings, and terminal cancellation', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const selectors = new Map<string, ElementDouble>([
+    ['[data-setup-result-title]', new ElementDouble()],
+    ['[data-setup-result-intro]', new ElementDouble()],
+    ['[data-setup-result-mark]', new ElementDouble()],
+    ['[data-channel-setup-result-detail]', new ElementDouble()],
+  ]);
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: (selector: string) => selectors.get(selector) ?? null,
+    createElement: (tagName: string) => new ElementDouble(tagName),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+  try {
+    const result = new ElementDouble();
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.channelSetupResultElement = result as unknown as HTMLElement;
+    const renderResult = (
+      setupResult: Parameters<typeof renderChannelSetupResult>[1],
+    ) => renderChannelSetupResult(dom, setupResult);
+    renderResult({
+      kind: 'committed',
+      summary: {
+        created: 2,
+        removed: 1,
+        unchanged: 3,
+        skipped: 4,
+        finalChannelCount: 5,
+        reachedMaxChannels: false,
+        watchChannelId: 'watch',
+        byStrategy: {
+          genres: { created: 2, skipped: 4 },
+        },
+        warnings: [
+          {
+            code: 'MIN_ITEMS_SKIPPED',
+            phase: 'planning',
+            strategy: 'genres',
+            affectedCount: 4,
+          },
+          {
+            code: 'GUIDE_REFRESH_FAILED',
+            phase: 'refresh',
+            strategy: null,
+            affectedCount: null,
+          },
+          {
+            code: 'EXISTING_SOURCE_UNMATCHABLE',
+            phase: 'planning',
+            strategy: null,
+            affectedCount: 1,
+          },
+        ],
+      } as never,
+    });
+    assert.match(result.textContent, /2 created, 1 removed, 3 unchanged, and 4 skipped/u);
+    assert.match(collectText(selectors.get('[data-channel-setup-result-detail]')!), /Genres: 2 created, 4 skipped/u);
+    assert.match(
+      collectText(selectors.get('[data-channel-setup-result-detail]')!),
+      /Channels below the minimum item count were skipped \(4\)\./u,
+    );
+    assert.match(
+      collectText(selectors.get('[data-channel-setup-result-detail]')!),
+      /Channels were saved, but Guide refresh did not complete\. Open Guide and retry refresh\./u,
+    );
+    assert.match(
+      collectText(selectors.get('[data-channel-setup-result-detail]')!),
+      /Some existing channels can be retained but cannot be matched or updated by Channel Builder\./u,
+    );
+
+    renderResult({ kind: 'canceled' });
+    assert.equal(selectors.get('[data-setup-result-title]')?.textContent, 'Build canceled');
+    assert.match(result.textContent, /stopped before the atomic save completed/u);
   } finally {
     restoreDocument(originalDocument);
   }

@@ -19,6 +19,7 @@ export interface ChannelRuntimeController {
   loadStatus(): Promise<void>;
   markBlocked(message: string): void;
   clearActionState(): void;
+  shutdown(): Promise<void>;
   cancelActive(): Promise<'accepted' | 'unavailable' | 'failed' | 'skipped'>;
   startReview(config: NormalizedChannelSetupConfig): Promise<ChannelRuntimeActionOutcome>;
   applyReviewed(confirmReplace: boolean): Promise<ChannelRuntimeActionOutcome>;
@@ -38,10 +39,11 @@ export function createChannelRuntimeController(input: {
   let state = createChannelRuntimeRendererState();
   let actionSequence = 0;
   let cancellationRequested = false;
+  let shutdownRequested = false;
 
   const publish = (next: ChannelRuntimeRendererState): void => {
     state = next;
-    input.onStateChanged();
+    if (!shutdownRequested) input.onStateChanged();
   };
   const loadStatus = async (): Promise<void> => {
     publish(markChannelRuntimePending(state));
@@ -108,7 +110,26 @@ export function createChannelRuntimeController(input: {
     },
     clearActionState: () => {
       actionSequence += 1;
-      publish(clearChannelRuntimeActionState(state));
+      cancellationRequested = false;
+      publish({ ...clearChannelRuntimeActionState(state), operation: null });
+    },
+    shutdown: async () => {
+      if (shutdownRequested) return;
+      shutdownRequested = true;
+      cancellationRequested = true;
+      actionSequence += 1;
+      const operation = state.operation;
+      if (
+        operation === null ||
+        operation.state === 'review-ready' ||
+        operation.state === 'succeeded' ||
+        operation.state === 'failed' ||
+        operation.state === 'canceled' ||
+        operation.state === 'canceling' ||
+        operation.phase === 'persist' ||
+        operation.phase === 'refresh-guide'
+      ) return;
+      await input.bridge.cancel({ operationId: operation.operationId }).catch(() => undefined);
     },
     cancelActive: async () => {
       const operation = state.operation;

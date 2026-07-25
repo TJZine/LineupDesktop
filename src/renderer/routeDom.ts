@@ -12,6 +12,8 @@ import {
   type WorkflowState,
 } from './workflow.js';
 import type { ChannelSetupLiveSelectionViewModel } from './channelSetup/viewModel.js';
+import type { SetupResultState } from './setup/stagedSetupController.js';
+import type { ChannelSetupWarning } from '../contracts/channel.js';
 import { renderChannelSetupDom } from './channelSetup/dom.js';
 import { renderSettingsDom } from './settingsSetupDom.js';
 import { renderEpgGuideDom } from './epg/guideDom.js';
@@ -107,6 +109,83 @@ export function renderWorkflowDom(
   renderChannelSetupDom(view, dom, liveSelection, activeSetupStage);
   renderRouteActionButtons(view, dom);
   renderSetupReminders(view, workflowState.settingsDraft.setupReminderEnabled);
+}
+
+export function renderChannelSetupResult(
+  dom: RendererDomBindings,
+  result: SetupResultState | null,
+): void {
+  if (result === null) return;
+  const canceled = result.kind === 'canceled';
+  setText('[data-setup-result-title]', canceled ? 'Build canceled' : 'Lineup ready');
+  setText(
+    '[data-setup-result-intro]',
+    canceled
+      ? 'No channel changes were saved.'
+      : 'The saved channel summary has been refreshed.',
+  );
+  setText('[data-setup-result-mark]', canceled ? '×' : '✓');
+  if (canceled) {
+    if (dom.channelSetupResultElement) {
+      dom.channelSetupResultElement.textContent =
+        'Channel Builder stopped before the atomic save completed.';
+    }
+    document.querySelector('[data-channel-setup-result-detail]')?.replaceChildren();
+    return;
+  }
+  const summary = result.summary;
+  if (dom.channelSetupResultElement) {
+    dom.channelSetupResultElement.textContent =
+      `${String(summary.created)} created, ${String(summary.removed)} removed, `
+      + `${String(summary.unchanged)} unchanged, and ${String(summary.skipped)} skipped. `
+      + `${String(summary.finalChannelCount)} channels are saved.`;
+  }
+  const detail = document.querySelector<HTMLElement>(
+    '[data-channel-setup-result-detail]',
+  );
+  detail?.replaceChildren(
+    ...Object.entries(summary.byStrategy)
+      .filter(([, counts]) => counts.created > 0 || counts.skipped > 0)
+      .map(([strategy, counts]) => {
+        const row = document.createElement('p');
+        row.textContent =
+          `${formatStrategy(strategy)}: ${String(counts.created)} created, `
+          + `${String(counts.skipped)} skipped.`;
+        return row;
+      }),
+    ...summary.warnings.map((warning) => {
+      const row = document.createElement('p');
+      row.textContent = formatResultWarning(warning);
+      return row;
+    }),
+  );
+}
+
+function formatResultWarning(warning: ChannelSetupWarning): string {
+  const count = warning.affectedCount === null ? '' : ` (${String(warning.affectedCount)})`;
+  switch (warning.code) {
+    case 'FACET_UNAVAILABLE': return `Some channel sources were unavailable${count}.`;
+    case 'FACET_PARTIAL_FAILURE': return `Some channel sources could not be fully loaded${count}.`;
+    case 'FACET_DISCOVERY_TIMEOUT': return `Channel source discovery timed out${count}.`;
+    case 'FACET_EMPTY': return `Some channel sources contained no eligible items${count}.`;
+    case 'FACET_CAP_REACHED': return `Channel source discovery reached its safety limit${count}.`;
+    case 'FACET_MALFORMED_ENTRIES_OMITTED': return `Invalid channel source entries were omitted${count}.`;
+    case 'TV_PEOPLE_METADATA_INCOMPLETE': return `Some TV cast or director metadata was incomplete${count}.`;
+    case 'EXISTING_SOURCE_UNMATCHABLE':
+      return 'Some existing channels can be retained but cannot be matched or updated by Channel Builder.';
+    case 'MIN_ITEMS_SKIPPED': return `Channels below the minimum item count were skipped${count}.`;
+    case 'MAX_CHANNELS_REACHED': return `The configured maximum channel count was reached${count}.`;
+    case 'PLAN_EMPTY': return 'No eligible channels were found for this configuration.';
+    case 'MATERIALIZATION_SKIPPED': return `Channels unavailable during preparation were skipped${count}.`;
+    case 'GUIDE_REFRESH_FAILED':
+      return 'Channels were saved, but Guide refresh did not complete. Open Guide and retry refresh.';
+  }
+}
+
+function formatStrategy(strategy: string): string {
+  return strategy === 'recentlyAdded'
+    ? 'Recently added'
+    : `${strategy.charAt(0).toUpperCase()}${strategy.slice(1)}`;
 }
 
 function renderSetupReminders(view: RouteWorkflowViewModel, enabled: boolean): void {

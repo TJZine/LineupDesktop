@@ -16,6 +16,7 @@ import {
   dispatchStagedSetupAction,
   handleStagedSetupBack,
 } from '../../renderer/setup/stagedSetupController.js';
+import type { ChannelSetupApplySummary } from '../../contracts/channel.js';
 
 test('workflow starts on player and routes to Guide through renderer-local state', () => {
   const initial = createWorkflowState();
@@ -243,6 +244,112 @@ test('skipped or stale apply restores the reviewed build owner instead of strand
   }
 });
 
+test('terminal cancellation renders a result without treating Back as cancellation', async () => {
+  const controller = createStagedSetupController({ onStateChanged: () => undefined });
+  controller.toggleLibrary('library', [{ id: 'library', type: 'movie' }] as never);
+  assert.equal(controller.prepareBuilderConfig({
+    serverId: 'server',
+    selectedLibraryIds: ['library'],
+  }, {
+    completion: 'unknown',
+    normalizedConfig: null,
+    completedAtMs: null,
+  }), true);
+  await dispatchStagedSetupAction({
+    action: 'previewNext',
+    controller,
+    channelController: {
+      getState: () => createChannelRuntimeRendererState(),
+      startReview: async () => 'canceled',
+    },
+    sections: [{ id: 'library', type: 'movie' }],
+    sectionsServerId: () => 'server',
+  } as never);
+  assert.equal(controller.getState().owner, 'result');
+  assert.deepEqual(controller.getState().result, { kind: 'canceled' });
+  assert.equal(controller.getState().resultWatchChannelId, null);
+});
+
+test('committed result retains counts and uses only the apply summary Watch target', () => {
+  const controller = createStagedSetupController({ onStateChanged: () => undefined });
+  controller.showOwner('build', 'setup-confirm');
+  const generation = controller.beginCommit();
+  const summary = applySummary();
+  assert.equal(
+    controller.completeCommit(generation, summary),
+    true,
+  );
+  assert.equal(controller.getState().resultWatchChannelId, 'summary-watch');
+  assert.deepEqual(controller.getState().result, { kind: 'committed', summary });
+});
+
+test('successful apply remains committed when its status refresh fails afterward', async () => {
+  const controller = createStagedSetupController({ onStateChanged: () => undefined });
+  controller.toggleLibrary('library', [{ id: 'library', type: 'movie' }] as never);
+  assert.equal(controller.prepareBuilderConfig({
+    serverId: 'server',
+    selectedLibraryIds: ['library'],
+  }, {
+    completion: 'unknown',
+    normalizedConfig: null,
+    completedAtMs: null,
+  }), true);
+  controller.setBuildMode('append');
+  controller.showOwner('build', 'setup-confirm');
+  const summary = applySummary();
+  await dispatchStagedSetupAction({
+    action: 'buildConfirm',
+    controller,
+    channelController: {
+      getState: () => ({
+        ...createChannelRuntimeRendererState(),
+        summary: channelSummary([{ id: 'snapshot-disagrees', number: 1 }]),
+        operation: {
+          operationId: `channel-builder-apply-${'8'.repeat(32)}`,
+          kind: 'apply',
+          state: 'succeeded',
+          phase: 'done',
+          progress: { completed: 1, total: 1 },
+          startedAtMs: 1,
+          updatedAtMs: 2,
+          result: {
+            kind: 'apply',
+            commit: 'committed',
+            summary,
+            guideRefresh: 'completed',
+          },
+          error: null,
+        },
+        errorText: 'Channel setup status is not authorized.',
+      }),
+      applyReviewed: async () => 'succeeded',
+    },
+    sections: [{ id: 'library', type: 'movie' }],
+  } as never);
+  assert.equal(controller.getState().owner, 'result');
+  assert.equal(controller.getState().resultWatchChannelId, 'summary-watch');
+  assert.deepEqual(controller.getState().result, { kind: 'committed', summary });
+});
+
+test('build recovery retries by returning to preserved review configuration', async () => {
+  const controller = createStagedSetupController({ onStateChanged: () => undefined });
+  controller.showRecovery('Safe failure.', {
+    originStep: 'build',
+    operation: 'refreshStatus',
+    invokerFocusId: 'setup-confirm',
+  });
+  let cleared = 0;
+  await dispatchStagedSetupAction({
+    action: 'recoveryRetry',
+    controller,
+    channelController: {
+      clearActionState: () => { cleared += 1; },
+    },
+  } as never);
+  assert.equal(cleared, 1);
+  assert.equal(controller.getState().owner, 'preview');
+});
+
 function configuredSummary(): ChannelSetupSummary {
   return {
     status: 'configured',
@@ -263,5 +370,51 @@ function configuredSummary(): ChannelSetupSummary {
     builder: { completion: 'unknown', normalizedConfig: null, completedAtMs: null },
     updatedAtMs: 1,
     recovery: { loaded: true, repaired: false },
+  };
+}
+
+function channelSummary(
+  channels: readonly Readonly<{ id: string; number: number }>[],
+): ChannelSetupSummary {
+  return {
+    ...configuredSummary(),
+    channelCount: channels.length,
+    channelNumbers: channels.map(({ number }) => number),
+    channels: channels.map(({ id, number }) => ({
+      id,
+      number,
+      name: id,
+      sourceLibraryId: 'movies',
+      sourceLibraryName: 'Movies',
+      itemCount: 1,
+    })),
+  };
+}
+
+function applySummary(): ChannelSetupApplySummary {
+  return {
+    created: 2,
+    removed: 0,
+    unchanged: 1,
+    skipped: 1,
+    finalChannelCount: 3,
+    reachedMaxChannels: false,
+    watchChannelId: 'summary-watch',
+    byStrategy: {
+      collections: { created: 0, skipped: 0 },
+      playlists: { created: 0, skipped: 0 },
+      genres: { created: 2, skipped: 1 },
+      directors: { created: 0, skipped: 0 },
+      decades: { created: 0, skipped: 0 },
+      recentlyAdded: { created: 0, skipped: 0 },
+      studios: { created: 0, skipped: 0 },
+      actors: { created: 0, skipped: 0 },
+    },
+    warnings: [{
+      code: 'MIN_ITEMS_SKIPPED',
+      phase: 'planning',
+      strategy: 'genres',
+      affectedCount: 1,
+    }],
   };
 }

@@ -54,7 +54,13 @@ export function createSetupComposition(input: {
           originStep: 'library', operation: 'listLibraries', invokerFocusId: 'setup-library-retry',
         });
       } else {
-        const focus = controller.normalizeSelection(plex.snapshot?.library.sections ?? []);
+        const focus = controller.restorePersistedConfig(
+          plex.selectedServerId ?? '',
+          plex.snapshot?.library.sections ?? [],
+          input.channelController.getState().summary?.builder ?? {
+            completion: 'unknown', normalizedConfig: null, completedAtMs: null,
+          },
+        );
         if (runtime.getState().library === 'empty') controller.showOwner('library', 'setup-library-retry');
         else controller.showOwner('library', focus);
       }

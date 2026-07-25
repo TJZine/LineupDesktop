@@ -15,6 +15,10 @@ import {
 } from '../../renderer/setup/setupLibrarySelection.js';
 import type { PlexLibrarySectionSummary } from '../../contracts/plex.js';
 import { deferred } from '../helpers/deferred.js';
+import {
+  applyChannelBuilderConfigAction,
+  createChannelBuilderConfigState,
+} from '../../renderer/channelSetup/builderConfigState.js';
 
 test('setup library selection is ordered, deduplicated, eligible-only, and capped at 24', () => {
   const sections = Array.from({ length: 26 }, (_, index) => section(`library-${String(index + 1)}`, index === 25 ? 'artist' : index % 2 ? 'show' : 'movie'));
@@ -153,7 +157,9 @@ test('setup composition entry generation prevents an invalidated continuation fr
   } as unknown as PlexRuntimeController;
   const composition = createSetupComposition({
     plexController,
-    channelController: {} as Parameters<typeof createSetupComposition>[0]['channelController'],
+    channelController: {
+      getState: () => ({ summary: null }),
+    } as Parameters<typeof createSetupComposition>[0]['channelController'],
     customController: {} as Parameters<typeof createSetupComposition>[0]['customController'],
     render: () => undefined,
     returnToServer: () => undefined,
@@ -173,6 +179,48 @@ test('setup composition entry generation prevents an invalidated continuation fr
   second.resolve();
   await latest;
   assert.equal(composition.controller.getState().focusIntent, 'plex-dyn-section-latest');
+});
+
+test('setup entry restores persisted builder libraries and configuration after restart', () => {
+  const controller = createSetupComposition({
+    plexController: {} as PlexRuntimeController,
+    channelController: {} as Parameters<typeof createSetupComposition>[0]['channelController'],
+    customController: {} as Parameters<typeof createSetupComposition>[0]['customController'],
+    render: () => undefined,
+    returnToServer: () => undefined,
+    closeSetup: () => undefined,
+    tuneChannel: async () => false,
+    clearDependentActionState: () => undefined,
+  }).controller;
+  const created = createChannelBuilderConfigState({
+    serverId: 'server-1',
+    selectedLibraryIds: ['shows', 'movies'],
+  });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+  const merged = applyChannelBuilderConfigAction(created.state, 'configModeMerge');
+  assert.equal(merged.ok, true);
+  if (!merged.ok) return;
+  const sections = [section('movies', 'movie'), section('shows', 'show')];
+
+  controller.enter('settings', 'settings-setup', false);
+  assert.equal(controller.restorePersistedConfig('server-1', sections, {
+    completion: 'complete',
+    normalizedConfig: merged.state.config,
+    completedAtMs: 10,
+  }), 'plex-dyn-section-movies');
+  assert.deepEqual(controller.getState().selectedSectionIds, ['movies', 'shows']);
+  assert.equal(controller.getState().builderConfig?.config.buildMode, 'merge');
+
+  controller.enter('settings', 'settings-setup', false);
+  controller.restorePersistedConfig('server-2', sections, {
+    completion: 'complete',
+    normalizedConfig: merged.state.config,
+    completedAtMs: 10,
+  });
+  assert.deepEqual(controller.getState().selectedSectionIds, []);
+  assert.equal(controller.getState().builderConfig, null);
+  assert.equal(controller.getState().buildMode, 'append');
 });
 
 test('setup preview coalesces queued cursor changes so the latest cursor performs a real load', async () => {

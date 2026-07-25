@@ -53,6 +53,16 @@ export async function runSmokeAssertions(
         failures.push('status event');
       }
       if (csp !== expectedCsp) failures.push('csp meta');
+      if (document.documentElement.dataset.activeRoute === 'channelSetup') {
+        const firstRunSetup = document.querySelector('[data-screen="channelSetup"]');
+        if (!(firstRunSetup instanceof HTMLElement) || firstRunSetup.hidden) {
+          failures.push('first-run channel setup route');
+        }
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
       try {
         Function('return 1')();
         failures.push('csp unsafe eval');
@@ -478,6 +488,15 @@ export async function runSmokeAssertions(
   if (!rendererReady) {
     throw new Error('Electron smoke failed: renderer boot readiness timeout');
   }
+  await window.webContents.executeJavaScript(`
+    (async () => {
+      if (document.documentElement.dataset.activeRoute !== 'channelSetup') return;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    })();
+  `);
   await assertRendererCloseLifecycle(window, result.failures);
   if (result.failures.length > 0) {
     throw new Error(`Electron smoke failed: ${result.failures.join(', ')}`);

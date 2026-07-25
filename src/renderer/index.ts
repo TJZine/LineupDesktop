@@ -3,7 +3,11 @@ import { queryRendererDom, type PlexRuntimeActionId } from './domBindings.js';
 import { focusRendererTarget, renderRendererFocus, syncRendererFocusTargets } from './focusDom.js';
 import { FocusRegistry, type AppRouteId, type FocusState } from './navigation.js';
 import { createPlayerOverlayState, type PlayerOverlayActionId } from './overlays.js';
-import { renderRouteDom, renderWorkflowDom } from './routeDom.js';
+import {
+  renderChannelSetupResult,
+  renderRouteDom,
+  renderWorkflowDom,
+} from './routeDom.js';
 import { mountStaticRendererDom } from './staticDom.js';
 import { applySupportBundleExportResult } from './supportBundleExport.js';
 import { createPlexRuntimeController } from './plexRuntimeActions.js';
@@ -32,7 +36,11 @@ import { queryShellDom, renderShellDom } from './shell/shellDom.js';
 import { createRendererShellState, type RendererShellState } from './shell/shellState.js';
 import { createShellController } from './shell/shellController.js';
 import { attachNavigationInputRuntime, createNavigationLifecycle } from './shell/navigationLifecycle.js';
-import { createPlexOnboardingFlow } from './onboarding/plexOnboardingFlow.js';
+import {
+  createPlexOnboardingFlow,
+  resolveChannelSetupEntryStage,
+  resolveInitialChannelSetupStage,
+} from './onboarding/plexOnboardingFlow.js';
 import { handleStagedSetupBack } from './setup/stagedSetupController.js';
 import { renderStagedSetupDom } from './setup/stagedSetupDom.js';
 import { cleanupSetupRouteLifecycle, clearSetupSourceLifecycle, createSetupComposition } from './setup/setupComposition.js';
@@ -253,6 +261,7 @@ attachNavigationInputRuntime(navigationLifecycle, {
     playerOverlayController.dispose();
     shellController.cleanup();
     settingsRuntime.cleanup();
+    void channelController.shutdown();
     cleanupPlexRuntime('beforeunload');
   },
 });
@@ -310,10 +319,21 @@ document.documentElement.dataset.activeRoute = workflowState.routeState.activeRo
 void settingsRuntime.initialize().then(() => shellController.start()).finally(() => {
   document.documentElement.dataset.shellBoot = 'ready';
 });
-void plexController.loadSnapshot().then(() => {
-  if (plexController.getState().snapshot?.auth.state === 'signed-in') void plexController.getHomeUsers();
+const initialPlexLoad = plexController.loadSnapshot().then(async () => {
+  if (plexController.getState().snapshot?.auth.state === 'signed-in') {
+    await plexController.getHomeUsers();
+  }
 });
-void channelController.loadStatus();
+const initialChannelLoad = channelController.loadStatus();
+void Promise.allSettled([initialPlexLoad, initialChannelLoad]).then(() => {
+  if (workflowState.routeState.activeRoute !== 'player') return;
+  const stage = resolveInitialChannelSetupStage(
+    plexController.getState(),
+    channelController.getState().summary,
+  );
+  if (stage === null) return;
+  activateRoute('channelSetup');
+});
 guidePresentationPolling.start();
 void customChannelController.loadSnapshot();
 
@@ -339,6 +359,9 @@ function activateRoute(route: AppRouteId): void {
   guidePresentationPolling.reconcile(previousRoute, workflowState.routeState.activeRoute);
   focusState = focusRegistry.focusRoute(focusState, route).state;
   renderApp();
+  if (previousRoute !== route && route === 'channelSetup') {
+    void onboardingFlow.changeStage(resolveChannelSetupEntryStage(plexController.getState()));
+  }
 }
 
 async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
@@ -361,6 +384,9 @@ async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
     focusState = focusRegistry.focusRoute(focusState, nextRoute).state;
   }
   renderApp();
+  if (previousRoute !== nextRoute && nextRoute === 'channelSetup') {
+    void onboardingFlow.changeStage(resolveChannelSetupEntryStage(plexController.getState()));
+  }
 }
 
 function applySettingsAction(action: SettingsActionId): void {
@@ -670,6 +696,7 @@ function renderApp(): void {
     channelState: channelController.getState(),
     dom,
   });
+  renderChannelSetupResult(dom, stagedSetupController.getState().result);
   projectChannelBuildCancellation(channelController.getState());
   renderShellDom(shellState, shellDom, dom.screens);
   syncRendererFocusTargets(focusRegistry, dom);

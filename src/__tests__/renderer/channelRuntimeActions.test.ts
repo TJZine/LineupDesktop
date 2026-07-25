@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { channelSetupSuccess, type ChannelSetupSummary } from '../../contracts/channel.js';
+import {
+  channelSetupFailure,
+  channelSetupSuccess,
+  type ChannelSetupSummary,
+} from '../../contracts/channel.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import { createChannelRuntimeController } from '../../renderer/channelRuntimeActions.js';
 import { projectChannelBuildCancellation } from '../../renderer/channelRuntimeState.js';
@@ -138,6 +142,96 @@ test('channel runtime controller keeps review and apply as explicit real operati
   assert.deepEqual(calls, ['startReview', 'startApply', 'getStatus']);
   assert.equal(controller.getState().summary?.lineupRevision, 1);
   assert.equal(await controller.cancelActive(), 'skipped');
+});
+
+test('channel runtime retains authoritative apply success when status refresh fails', async () => {
+  const config = createChannelBuilderConfigState({
+    serverId: 'server',
+    selectedLibraryIds: ['library'],
+  });
+  assert.equal(config.ok, true);
+  if (!config.ok) return;
+  const bridge = {
+    startReview: async () => channelSetupSuccess('review', {
+      accepted: true,
+      operation: {
+        operationId: `review-${'1'.repeat(32)}`,
+        kind: 'review',
+        state: 'review-ready',
+        phase: 'review-ready',
+        progress: { completed: 1, total: 1 },
+        startedAtMs: 1,
+        updatedAtMs: 2,
+        result: {
+          kind: 'review',
+          planId: `plan-${'2'.repeat(32)}`,
+          contextEpoch: 0,
+          lineupRevision: 0,
+          status: 'ready',
+          diff: {
+            summary: { created: 1, removed: 0, unchanged: 0 },
+            samples: { created: ['Channel'], removed: [], unchanged: [] },
+          },
+          warnings: [],
+          reachedCap: false,
+        },
+        error: null,
+      },
+    } as never),
+    startApply: async () => channelSetupSuccess('apply', {
+      accepted: true,
+      operation: {
+        operationId: `apply-${'3'.repeat(32)}`,
+        kind: 'apply',
+        state: 'succeeded',
+        phase: 'done',
+        progress: { completed: 1, total: 1 },
+        startedAtMs: 3,
+        updatedAtMs: 4,
+        result: {
+          kind: 'apply',
+          commit: 'committed',
+          summary: {
+            created: 1,
+            removed: 0,
+            unchanged: 0,
+            skipped: 0,
+            finalChannelCount: 1,
+            reachedMaxChannels: false,
+            watchChannelId: 'summary-watch',
+            byStrategy: {},
+            warnings: [],
+          },
+          guideRefresh: 'completed',
+        },
+        error: null,
+      },
+    } as never),
+    getStatus: async () => channelSetupFailure('status', {
+      code: 'CHANNEL_STORAGE_UNAVAILABLE',
+      message: 'Persisted channel storage is unavailable.',
+      retryable: true,
+      recoverable: true,
+      operation: 'getStatus',
+    }),
+    getOperation: async () => assert.fail('terminal operations must not poll'),
+    cancel: async () => assert.fail('unexpected cancel'),
+  } as unknown as LineupDesktopPreloadApi['channelSetup'];
+  const controller = createChannelRuntimeController({
+    bridge,
+    onStateChanged: () => undefined,
+  });
+
+  assert.equal(
+    await controller.startReview(readChannelBuilderConfigRequest(config.state)),
+    'succeeded',
+  );
+  assert.equal(await controller.applyReviewed(false), 'succeeded');
+  assert.equal(controller.getState().operation?.state, 'succeeded');
+  assert.equal(
+    controller.getState().errorText,
+    'Persisted channel storage is unavailable.',
+  );
 });
 
 test('channel runtime cancellation publishes accepted canceling state and skips commit-started phases', async () => {
@@ -331,6 +425,60 @@ test('channel runtime carries a cancel request across the explicit apply IPC han
 
   assert.equal(await pending, 'canceled');
   assert.deepEqual(canceledOperationIds, [applyOperationId]);
+});
+
+test('channel runtime shutdown is idempotent and cancels only pre-persist work', async () => {
+  const canceled: string[] = [];
+  const operationId = `channel-builder-review-${'9'.repeat(32)}`;
+  const bridge = {
+    startReview: async () => channelSetupSuccess('review', {
+      accepted: true,
+      operation: {
+        operationId,
+        kind: 'review',
+        state: 'running',
+        phase: 'plan',
+        startedAtMs: 1,
+        updatedAtMs: 2,
+        progress: { completed: 0, total: 1 },
+        result: null,
+        error: null,
+      },
+    }),
+    getOperation: async () => new Promise(() => undefined),
+    cancel: async ({ operationId: requestedId }: { operationId: string }) => {
+      canceled.push(requestedId);
+      return channelSetupSuccess('cancel', {
+        accepted: true,
+        reason: null,
+        operation: {
+          operationId,
+          kind: 'review',
+          state: 'canceling',
+          phase: 'plan',
+          startedAtMs: 1,
+          updatedAtMs: 3,
+          progress: { completed: 0, total: 1 },
+          result: null,
+          error: null,
+        },
+      });
+    },
+  } as unknown as LineupDesktopPreloadApi['channelSetup'];
+  const controller = createChannelRuntimeController({
+    bridge,
+    onStateChanged: () => undefined,
+  });
+  const config = createChannelBuilderConfigState({
+    serverId: 'server',
+    selectedLibraryIds: ['library'],
+  });
+  assert.equal(config.ok, true);
+  if (!config.ok) return;
+  void controller.startReview(readChannelBuilderConfigRequest(config.state));
+  await waitFor(() => controller.getState().operation?.state === 'running');
+  await Promise.all([controller.shutdown(), controller.shutdown()]);
+  assert.deepEqual(canceled, [operationId]);
 });
 
 function summary(): ChannelSetupSummary {

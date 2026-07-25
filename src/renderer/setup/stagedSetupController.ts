@@ -1,5 +1,5 @@
 import type { PlexLibrarySectionSummary } from '../../contracts/plex.js';
-import type { ChannelSetupBuildMode, ChannelSetupSummary } from '../../contracts/channel.js';
+import type { ChannelSetupApplySummary, ChannelSetupBuildMode, ChannelSetupSummary } from '../../contracts/channel.js';
 import type { AppRouteId, FocusRegistry, FocusState } from '../navigation.js';
 import type { ChannelRuntimeController } from '../channelRuntimeActions.js';
 import type { CustomChannelController } from '../customChannels/controller.js';
@@ -49,6 +49,10 @@ export interface SetupRecoveryState {
   invokerFocusId: string;
 }
 
+export type SetupResultState =
+  | Readonly<{ kind: 'committed'; summary: ChannelSetupApplySummary }>
+  | Readonly<{ kind: 'canceled' }>;
+
 export interface StagedSetupState {
   owner: StagedSetupOwnerId;
   buildMode: ChannelSetupBuildMode;
@@ -64,6 +68,7 @@ export interface StagedSetupState {
   deleteInvokerFocusId: string | null;
   deleteChannelId: string | null;
   resultWatchChannelId: string | null;
+  result: SetupResultState | null;
   safeError: string | null;
   recovery: SetupRecoveryState | null;
   customParentOwner: 'setup-custom' | 'custom-list';
@@ -79,6 +84,11 @@ export interface StagedSetupController {
   setBuildMode(mode: ChannelSetupBuildMode): void;
   applyBuilderConfigAction(action: ChannelBuilderConfigActionId): boolean;
   prepareBuilderConfig(context: { serverId: string; selectedLibraryIds: readonly string[] }, restored: ChannelSetupSummary['builder']): boolean;
+  restorePersistedConfig(
+    serverId: string,
+    sections: readonly PlexLibrarySectionSummary[],
+    restored: ChannelSetupSummary['builder'],
+  ): string;
   normalizeSelection(sections: readonly PlexLibrarySectionSummary[]): string;
   toggleLibrary(sectionId: string, sections: readonly PlexLibrarySectionSummary[]): void;
   selectAllLibraries(sections: readonly PlexLibrarySectionSummary[], cursor: string | null): string | null;
@@ -88,7 +98,11 @@ export interface StagedSetupController {
   closeReplaceConfirmation(): void;
   confirmReplacement(): void;
   beginCommit(): number;
-  completeCommit(generation: number, mode: ChannelSetupBuildMode, before: ChannelSetupSummary | null, after: ChannelSetupSummary | null): boolean;
+  completeCommit(
+    generation: number,
+    summary: ChannelSetupApplySummary,
+  ): boolean;
+  cancelCommit(generation: number): boolean;
   failCommit(generation: number, message: string): boolean;
   openCustomEditor(invokerFocusId: string): void;
   closeCustomEditor(savedChannelId?: string | null): void;
@@ -189,7 +203,7 @@ export async function dispatchStagedSetupAction(input: DispatchInput): Promise<v
       const generation = input.controller.beginCommit();
       const outcome = await input.channelController.startReview(readChannelBuilderConfigRequest(prepared));
       if (outcome === 'canceled') {
-        input.controller.showOwner('preview', 'setup-next');
+        input.controller.cancelCommit(generation);
         return;
       }
       if (outcome === 'stale') return;
@@ -238,10 +252,8 @@ export async function dispatchStagedSetupAction(input: DispatchInput): Promise<v
         }
       }
       else {
-        await input.channelController.loadStatus();
-        if (input.controller.getState() !== state) return;
-        if (input.channelController.getState().errorText === null) input.controller.showOwner('build', state.buildMode === 'replace' ? 'setup-replace-confirm' : 'setup-confirm');
-        else input.controller.showRecovery(input.channelController.getState().errorText ?? 'Channel setup could not continue.', state.recovery ?? buildRecovery());
+        input.channelController.clearActionState();
+        input.controller.showOwner('preview', modeFocus(state.buildMode));
       }
       return;
     case 'setupBack': handleSetupBack(input, state); return;
@@ -355,6 +367,38 @@ export function createStagedSetupController(input: { onStateChanged(): void }): 
       });
       return true;
     },
+    restorePersistedConfig(serverId, sections, restored) {
+      const restoredIds = restored.completion === 'complete'
+        && restored.normalizedConfig.serverId === serverId
+        ? normalizeSetupLibrarySelection(restored.normalizedConfig.selectedLibraryIds, sections)
+        : [];
+      const focusSectionId = restoredIds[0]
+        ?? sections.find((section) => section.type === 'movie' || section.type === 'show')?.id;
+      const focusIntent = focusSectionId === undefined
+        ? 'setup-select-all'
+        : sectionFocus(focusSectionId);
+      let builderConfig: ChannelBuilderConfigState | null = null;
+      let buildMode: ChannelSetupBuildMode = 'append';
+      if (restored.completion === 'complete' && restoredIds.length > 0) {
+        const prepared = recontextualizeChannelBuilderConfigState(
+          { config: restored.normalizedConfig },
+          { serverId, selectedLibraryIds: restoredIds },
+        );
+        if (prepared.ok) {
+          builderConfig = prepared.state;
+          buildMode = prepared.state.config.buildMode;
+        }
+      }
+      set({
+        selectedSectionIds: restoredIds,
+        selectionLimitReached: false,
+        builderConfig,
+        buildMode,
+        replacementConfirmed: false,
+        focusIntent,
+      });
+      return focusIntent;
+    },
     normalizeSelection(sections) {
       const selectedSectionIds = normalizeSetupLibrarySelection(state.selectedSectionIds, sections);
       const firstEligibleId = sections.find((section) => section.type === 'movie' || section.type === 'show')?.id;
@@ -381,10 +425,28 @@ export function createStagedSetupController(input: { onStateChanged(): void }): 
     openReplaceConfirmation(invokerFocusId) { set({ owner: 'replace-confirm', replaceInvokerFocusId: invokerFocusId, focusIntent: 'setup-replace-cancel' }); },
     closeReplaceConfirmation() { set({ owner: 'build', replaceInvokerFocusId: null, replacementConfirmed: false, focusIntent: state.replaceInvokerFocusId ?? 'setup-confirm-replace' }); },
     confirmReplacement() { set({ owner: 'build', replaceInvokerFocusId: null, replacementConfirmed: true, focusIntent: 'setup-confirm-replace' }); },
-    beginCommit() { const commitGeneration = state.commitGeneration + 1; set({ owner: 'progress', commitGeneration, focusIntent: 'setup-progress-cancel', safeError: null }); return commitGeneration; },
-    completeCommit(generation, mode, before, after) {
+    beginCommit() { const commitGeneration = state.commitGeneration + 1; set({ owner: 'progress', commitGeneration, focusIntent: 'setup-progress-cancel', safeError: null, result: null }); return commitGeneration; },
+    completeCommit(generation, summary) {
       if (generation !== state.commitGeneration || state.owner !== 'progress') return false;
-      set({ owner: 'result', focusIntent: 'setup-done', resultWatchChannelId: chooseWatchChannelId(mode, before, after), replacementConfirmed: false }); return true;
+      set({
+        owner: 'result',
+        focusIntent: 'setup-done',
+        resultWatchChannelId: summary.watchChannelId,
+        result: { kind: 'committed', summary },
+        replacementConfirmed: false,
+      });
+      return true;
+    },
+    cancelCommit(generation) {
+      if (generation !== state.commitGeneration || state.owner !== 'progress') return false;
+      set({
+        owner: 'result',
+        focusIntent: 'setup-done',
+        resultWatchChannelId: null,
+        result: { kind: 'canceled' },
+        replacementConfirmed: false,
+      });
+      return true;
     },
     failCommit(generation, message) {
       if (generation !== state.commitGeneration || state.owner !== 'progress') return false;
@@ -395,7 +457,7 @@ export function createStagedSetupController(input: { onStateChanged(): void }): 
     openDeleteConfirmation(channelId, invokerFocusId) { set({ owner: 'custom-delete-confirm', customParentOwner: state.owner === 'setup-custom' ? 'setup-custom' : 'custom-list', deleteChannelId: channelId, deleteInvokerFocusId: invokerFocusId, focusIntent: 'custom-delete-cancel' }); },
     closeDeleteConfirmation(restoreFocusId) { set({ owner: state.customParentOwner, deleteChannelId: null, deleteInvokerFocusId: null, focusIntent: restoreFocusId ?? state.deleteInvokerFocusId ?? 'custom-channel-new' }); },
     showRecovery(message, recovery) { set({ owner: 'recovery-error', safeError: safeRendererText(message), recovery, focusIntent: 'setup-error-retry' }); },
-    invalidateAsync(options = {}) { set({ ...(options.keepOwner ? {} : { owner: 'library' as const }), ...(options.keepSelection ? {} : { selectedSectionIds: [] }), commitGeneration: state.commitGeneration + 1, replacementConfirmed: false, resultWatchChannelId: null, safeError: null, focusIntent: options.keepOwner ? state.focusIntent : 'setup-select-all' }); },
+    invalidateAsync(options = {}) { set({ ...(options.keepOwner ? {} : { owner: 'library' as const }), ...(options.keepSelection ? {} : { selectedSectionIds: [] }), commitGeneration: state.commitGeneration + 1, replacementConfirmed: false, resultWatchChannelId: null, result: null, safeError: null, focusIntent: options.keepOwner ? state.focusIntent : 'setup-select-all' }); },
     applyFocusIntent(registry, focusState) {
       if (state.focusIntent === null) return focusState;
       const next = registry.focusTarget(focusState, state.focusIntent).state;
@@ -407,15 +469,12 @@ export function createStagedSetupController(input: { onStateChanged(): void }): 
 
 async function commitCurrentSetup(input: DispatchInput): Promise<void> {
   const state = input.controller.getState();
-  const before = input.channelController.getState().summary;
   const generation = input.controller.beginCommit();
   const outcome = await input.channelController.applyReviewed(
     state.buildMode === 'replace' && state.replacementConfirmed,
   );
   if (outcome === 'canceled') {
-    input.controller.showOwner('build', state.buildMode === 'replace'
-      ? 'setup-replace-confirm'
-      : 'setup-confirm');
+    input.controller.cancelCommit(generation);
     return;
   }
   if (outcome === 'skipped' || outcome === 'stale') {
@@ -425,8 +484,15 @@ async function commitCurrentSetup(input: DispatchInput): Promise<void> {
     return;
   }
   const runtime = input.channelController.getState();
-  if (outcome === 'failed' || runtime.errorText !== null) input.controller.failCommit(generation, runtime.errorText ?? 'Channel setup could not continue. Try again.');
-  else input.controller.completeCommit(generation, state.buildMode, before, runtime.summary);
+  const operation = runtime.operation;
+  if (outcome === 'succeeded' && operation?.kind === 'apply' && operation.state === 'succeeded') {
+    input.controller.completeCommit(generation, operation.result.summary);
+    return;
+  }
+  input.controller.failCommit(
+    generation,
+    runtime.errorText ?? 'Channel setup could not continue. Try again.',
+  );
 }
 
 function handleSetupBack(input: DispatchInput, state: StagedSetupState): void {
@@ -439,7 +505,7 @@ function handleSetupBack(input: DispatchInput, state: StagedSetupState): void {
 }
 
 function createInitialState(): StagedSetupState {
-  return { owner: 'library', buildMode: 'append', replacementConfirmed: false, previewExpanded: false, selectedSectionIds: [], selectionLimitReached: false, focusIntent: 'setup-select-all', returnRoute: 'player', returnFocusId: 'player-settings', enteredFromServer: true, editorInvokerFocusId: null, deleteInvokerFocusId: null, deleteChannelId: null, resultWatchChannelId: null, safeError: null, recovery: null, customParentOwner: 'setup-custom', commitGeneration: 0, builderConfig: null, replaceInvokerFocusId: null };
+  return { owner: 'library', buildMode: 'append', replacementConfirmed: false, previewExpanded: false, selectedSectionIds: [], selectionLimitReached: false, focusIntent: 'setup-select-all', returnRoute: 'player', returnFocusId: 'player-settings', enteredFromServer: true, editorInvokerFocusId: null, deleteInvokerFocusId: null, deleteChannelId: null, resultWatchChannelId: null, result: null, safeError: null, recovery: null, customParentOwner: 'setup-custom', commitGeneration: 0, builderConfig: null, replaceInvokerFocusId: null };
 }
 
 function isBuilderConfigAction(action: StagedSetupFlowActionId): action is ChannelBuilderConfigActionId {
@@ -450,10 +516,6 @@ function buildRecovery(): SetupRecoveryState { return { originStep: 'build', ope
 function libraryRecovery(): SetupRecoveryState { return { originStep: 'library', operation: 'listLibraries', invokerFocusId: 'setup-library-retry' }; }
 function modeFocus(mode: ChannelSetupBuildMode): string { return `channel-strategy-build-${mode}`; }
 function sectionFocus(id: string): string { return `plex-dyn-section-${id}`; }
-function chooseWatchChannelId(mode: ChannelSetupBuildMode, before: ChannelSetupSummary | null, after: ChannelSetupSummary | null): string | null {
-  const beforeIds = new Set(before?.channels.map((channel) => channel.id) ?? []);
-  return (after?.channels ?? []).filter((channel) => mode === 'replace' || !beforeIds.has(channel.id)).slice().sort((a, b) => a.number - b.number || a.id.localeCompare(b.id))[0]?.id ?? null;
-}
 function safeRendererText(message: string): string {
   const normalized = Array.from(message, (c) => ((c.codePointAt(0) ?? 0) < 32 ? ' ' : c)).join('').replace(/\s+/gu, ' ').trim();
   return normalized.length === 0 || /https?:|file:|token|credential|header|\/Users\/|[A-Za-z]:\\/iu.test(normalized) ? 'Channel setup could not continue. Try again.' : normalized.slice(0, 180);

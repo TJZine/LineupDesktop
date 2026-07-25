@@ -1,5 +1,29 @@
 import type { PlexRuntimeController } from '../plexRuntimeActions.js';
+import type { PlexRuntimeRendererState } from '../plexRuntimeState.js';
 import type { AppRouteId, FocusRegistry, FocusState } from '../navigation.js';
+import type { ChannelSetupSummary } from '../../contracts/channel.js';
+
+export type InitialChannelSetupStage = 'account' | 'server' | 'library';
+
+export function resolveChannelSetupEntryStage(
+  plexState: PlexRuntimeRendererState,
+): InitialChannelSetupStage {
+  if (plexState.snapshot?.auth.state !== 'signed-in') return 'account';
+  if (plexState.snapshot.auth.profile === null) return 'account';
+  return plexState.selectedServerId === null ? 'server' : 'library';
+}
+
+export function resolveInitialChannelSetupStage(
+  plexState: PlexRuntimeRendererState,
+  channelSummary: ChannelSetupSummary | null,
+): InitialChannelSetupStage | null {
+  if (
+    channelSummary === null ||
+    channelSummary.status !== 'not-configured' ||
+    channelSummary.channelCount !== 0
+  ) return null;
+  return resolveChannelSetupEntryStage(plexState);
+}
 
 export interface PlexOnboardingFlow {
   rememberProfileFocus(focusId: string | null): void;

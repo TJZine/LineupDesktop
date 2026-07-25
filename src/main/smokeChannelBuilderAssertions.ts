@@ -38,6 +38,25 @@ export const CHANNEL_BUILDER_FLOW_ASSERTIONS_SOURCE = String.raw`
         if (document.querySelector('[data-channel-commit-action]') !== null) {
           failures.push('legacy channel commit selector');
         }
+        const resultOwner = document.querySelector('[data-staged-owner="result"]');
+        if (
+          !(resultOwner instanceof HTMLElement)
+          || !(resultOwner.querySelector('[data-setup-result-title]') instanceof HTMLElement)
+          || !(resultOwner.querySelector('[data-channel-setup-result]') instanceof HTMLElement)
+          || !(resultOwner.querySelector('[data-channel-setup-result-detail]') instanceof HTMLElement)
+          || !(resultOwner.querySelector('[data-setup-flow-action="resultDone"]') instanceof HTMLButtonElement)
+          || !(resultOwner.querySelector('[data-setup-flow-action="resultWatch"]') instanceof HTMLButtonElement)
+        ) {
+          failures.push('channel setup result recovery surface');
+        }
+        const recoveryOwner = document.querySelector('[data-staged-owner="recovery-error"]');
+        if (
+          !(recoveryOwner instanceof HTMLElement)
+          || !(recoveryOwner.querySelector('[data-setup-safe-error][role="alert"]') instanceof HTMLElement)
+          || !(recoveryOwner.querySelector('[data-setup-flow-action="recoveryRetry"]') instanceof HTMLButtonElement)
+        ) {
+          failures.push('channel setup safe recovery surface');
+        }
         const buildConfirm = document.querySelector('[data-setup-flow-action="buildConfirm"]');
         if (buildConfirm instanceof HTMLButtonElement && !buildConfirm.disabled) {
           buildConfirm.click();

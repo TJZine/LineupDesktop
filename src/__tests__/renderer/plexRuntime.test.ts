@@ -21,7 +21,11 @@ import { createPlexRuntimeController } from '../../renderer/plexRuntimeActions.j
 import { readPlexOnboardingState, renderPlexRuntimeDom } from '../../renderer/plexRuntimeDom.js';
 import { createPlexRuntimeRendererState, sanitizePlexRuntimeError } from '../../renderer/plexRuntimeState.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
-import { createPlexOnboardingFlow } from '../../renderer/onboarding/plexOnboardingFlow.js';
+import {
+  createPlexOnboardingFlow,
+  resolveChannelSetupEntryStage,
+  resolveInitialChannelSetupStage,
+} from '../../renderer/onboarding/plexOnboardingFlow.js';
 import type { PlexRuntimeController } from '../../renderer/plexRuntimeActions.js';
 
 test('static channel setup markup preserves onboarding and hosts the isolated Package 3 staged owners', () => {
@@ -134,6 +138,72 @@ test('channel setup live selection ignores stale library item and search state',
 
   assert.equal(searchSelection?.loadedItemCount, 0);
 });
+
+test('first-run routing enters only the required onboarding or builder stage', () => {
+  const summary = firstRunChannelSummary('not-configured', 0);
+  const signedOut = createPlexRuntimeRendererState();
+  assert.equal(resolveInitialChannelSetupStage(signedOut, summary), 'account');
+  assert.equal(resolveChannelSetupEntryStage(signedOut), 'account');
+
+  const signedIn = {
+    ...signedOut,
+    snapshot: {
+      ...snapshotSignedIn(),
+      auth: { ...snapshotSignedIn().auth, profile: null },
+    },
+  };
+  assert.equal(resolveInitialChannelSetupStage(signedIn, summary), 'account');
+  const withProfile = {
+    ...signedIn,
+    snapshot: {
+      ...signedIn.snapshot,
+      auth: { ...signedIn.snapshot.auth, profile: profile() },
+    },
+  };
+  assert.equal(resolveInitialChannelSetupStage(withProfile, summary), 'server');
+  assert.equal(resolveChannelSetupEntryStage(withProfile), 'server');
+  assert.equal(
+    resolveInitialChannelSetupStage(
+      { ...withProfile, selectedServerId: 'server-1' },
+      summary,
+    ),
+    'library',
+  );
+  assert.equal(
+    resolveChannelSetupEntryStage({ ...withProfile, selectedServerId: 'server-1' }),
+    'library',
+  );
+  assert.equal(
+    resolveInitialChannelSetupStage(
+      { ...withProfile, selectedServerId: 'server-1' },
+      firstRunChannelSummary('configured', 1),
+    ),
+    null,
+  );
+});
+
+function firstRunChannelSummary(
+  status: 'not-configured' | 'configured',
+  channelCount: number,
+): NonNullable<Parameters<typeof resolveInitialChannelSetupStage>[1]> {
+  return {
+    status,
+    lineupRevision: 1,
+    channelCount,
+    currentChannelId: null,
+    currentChannelNumber: null,
+    currentChannelName: null,
+    channelNumbers: [],
+    channels: [],
+    builder: {
+      completion: 'unknown',
+      normalizedConfig: null,
+      completedAtMs: null,
+    },
+    updatedAtMs: 1,
+    recovery: { loaded: true, repaired: false },
+  };
+}
 
 test('static channel setup uses the full-screen Package 3 workflow without the retired setup frame', () => {
   const root = { innerHTML: '', querySelector: () => null };
