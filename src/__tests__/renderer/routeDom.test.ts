@@ -348,6 +348,10 @@ test('route DOM renders guide states and focused program details', () => {
     assert.match(renderedText, /Guide ready/u);
     assert.match(renderedText, /The Midnight Archive/u);
     assert.match(renderedText, /S2 E4/u);
+    assert.match(collectVisibleText(grid), /Edit lineup/u);
+    const editLineupActions = findElementsByDataset(grid, 'guideAction', 'setup');
+    assert.equal(editLineupActions.length, 1);
+    assert.equal(editLineupActions[0]?.dataset.focusId, 'guide-state-setup');
     assert.equal(grid.getAttribute('role'), 'grid');
     const readyRows = findElementsByRole(grid, 'row');
     assert.equal(readyRows.length, 2);
@@ -943,6 +947,22 @@ function readVisibleTextFromMarkup(markup: string): string {
 
 function collectText(element: ElementDouble): string {
   return [element.textContent, ...element.children.map(collectText)].join(' ');
+}
+
+function collectVisibleText(element: ElementDouble): string {
+  if (element.hidden || element.getAttribute('aria-hidden') === 'true') return '';
+  return [element.textContent, ...element.children.map(collectVisibleText)].join(' ');
+}
+
+function findElementsByDataset(
+  element: ElementDouble,
+  key: string,
+  value: string,
+): ElementDouble[] {
+  return [
+    ...(element.dataset[key] === value ? [element] : []),
+    ...element.children.flatMap((child) => findElementsByDataset(child, key, value)),
+  ];
 }
 
 function findElementsByRole(element: ElementDouble, role: string): ElementDouble[] {

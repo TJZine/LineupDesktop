@@ -279,7 +279,9 @@ export function renderEpgGuideDom(
     button.textContent = action.label;
     stateActions.append(button);
   }
-  stateElement.append(stateActions);
+  if (view.guide.presentationState !== 'ready') {
+    stateElement.append(stateActions);
+  }
 
   const header = document.createElement('div');
   header.className = 'epg-time-header';
@@ -370,6 +372,7 @@ export function renderEpgGuideDom(
   if (view.guide.presentationState === 'ready') {
     stateElement.hidden = true;
     stateElement.setAttribute('aria-hidden', 'true');
+    shell.append(stateActions);
     if (view.guide.tuneError !== null) {
       const actionError = document.createElement('p');
       actionError.className = 'epg-action-error';
@@ -400,7 +403,7 @@ function stateActionsFor(
     case 'error':
       return [{ id: 'retry', label: 'Retry' }, { id: 'back', label: 'Back' }];
     case 'ready':
-      return [];
+      return [{ id: 'setup', label: 'Edit lineup' }];
   }
 }
 
