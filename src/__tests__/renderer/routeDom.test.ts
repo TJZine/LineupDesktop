@@ -8,7 +8,7 @@ import { createEmptyPlayerSnapshot } from '../../renderer/playerOverlayPresentat
 import { setEpgPresentationState, type EpgPresentationSource } from '../../renderer/epg.js';
 import { renderRouteDom, renderWorkflowDom } from '../../renderer/routeDom.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
-import { applyWorkflowChannelSetupAction, createWorkflowState as createWorkflowStateCore } from '../../renderer/workflow.js';
+import { applyWorkflowAction, applyWorkflowChannelSetupAction, createWorkflowState as createWorkflowStateCore } from '../../renderer/workflow.js';
 import { renderShellDom, type ShellDomBindings } from '../../renderer/shell/shellDom.js';
 import { beginFullscreenRequest, rejectFullscreenRequest } from '../../renderer/shell/shellState.js';
 
@@ -1005,6 +1005,78 @@ test('static player DOM keeps native presentation beside the route-owned overlay
     /poster-placeholder|clear-logo-placeholder|icon-placeholder|player-quick-actions|Sleep|Volume|Playback rate|Quality/u,
   );
   assert.equal((root.innerHTML.match(/class="playback-options__section"/gu) ?? []).length, 1);
+  assert.match(
+    root.innerHTML,
+    /data-setup-reminder="player"[\s\S]*data-route-action="openChannelSetup"[\s\S]*data-focus-id="player-setup-reminder"/u,
+  );
+});
+
+test('player setup reminder is focusable for zero channels and hidden for a configured lineup', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const reminder = new ElementDouble();
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    querySelectorAll: (selector: string) => selector === '[data-setup-reminder]' ? [reminder] : [],
+  };
+  Object.defineProperty(globalThis, 'document', { value: documentDouble, configurable: true });
+
+  try {
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(), overlays: [], overlayActions: [],
+    });
+    const configured = configuredChannelRuntimeState();
+    if (configured.summary === null) throw new Error('Configured fixture requires a summary.');
+    renderWorkflowDom(
+      createWorkflowState('player'),
+      createPlayerOverlayState(),
+      createRendererSafePlayerSnapshot(),
+      dom,
+      {
+        ...configured,
+        summary: {
+          ...configured.summary,
+          status: 'not-configured', channelCount: 0, channels: [], channelNumbers: [],
+          currentChannelId: null, currentChannelNumber: null, currentChannelName: null,
+        },
+      },
+    );
+    assert.equal(reminder.hidden, false);
+    assert.equal(reminder.getAttribute('aria-hidden'), 'false');
+
+    renderWorkflowDom(
+      createWorkflowState('player'),
+      createPlayerOverlayState(),
+      createRendererSafePlayerSnapshot(),
+      dom,
+      configuredChannelRuntimeState(),
+    );
+    assert.equal(reminder.hidden, true);
+    assert.equal(reminder.getAttribute('aria-hidden'), 'true');
+
+    const recoveryStates: ChannelRuntimeRendererState[] = [
+      { ...configured, summary: null },
+      { ...configured, summary: null, errorText: 'Channel setup status could not be loaded.' },
+      {
+        ...configured,
+        summary: { ...configured.summary, channelCount: 2 },
+      },
+    ];
+    const resumedPlayer = applyWorkflowAction(createWorkflowState('settings'), 'resumePlayer');
+    for (const recoveryState of recoveryStates) {
+      renderWorkflowDom(
+        resumedPlayer,
+        createPlayerOverlayState(),
+        createRendererSafePlayerSnapshot(),
+        dom,
+        recoveryState,
+      );
+      assert.equal(reminder.hidden, true);
+      assert.equal(reminder.getAttribute('aria-hidden'), 'true');
+    }
+  } finally {
+    restoreDocument(originalDocument);
+  }
 });
 
 const PRODUCT_ROUTE_INTERNAL_COPY_PATTERN =

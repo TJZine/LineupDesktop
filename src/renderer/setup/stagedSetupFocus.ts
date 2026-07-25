@@ -13,6 +13,19 @@ export function getStagedSetupNeighbors(
     if (editorIds.includes(focusId)) return linear(focusId, editorIds);
   }
   const present = (id: string, fallback: string): string => enabled.includes(id) ? id : fallback;
+  if (focusId.startsWith('builder-scope-option-')) {
+    const options = enabled.filter((id) => id.startsWith('builder-scope-option-'));
+    return linear(focusId, options);
+  }
+  if (focusId.startsWith('builder-option-')) {
+    const prefix = focusId.replace(/-[^-]+$/u, '-');
+    const options = enabled.filter((id) => id.startsWith(prefix));
+    return linear(focusId, options);
+  }
+  if (focusId.startsWith('builder-')) {
+    const builderIds = enabled.filter((id) => id.startsWith('builder-') || id === 'channel-strategy-build-custom' || id === 'setup-next' || id === 'setup-back');
+    return linear(focusId, builderIds);
+  }
   if (focusId === 'setup-select-all') return { up: focusId, down: firstSection(enabled, 'setup-next'), left: focusId, right: present('setup-clear-all', focusId) };
   if (focusId === 'setup-clear-all') return { up: focusId, down: firstSection(enabled, 'setup-next'), left: present('setup-select-all', focusId), right: focusId };
   if (focusId.startsWith('plex-dyn-section-')) {

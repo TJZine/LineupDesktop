@@ -15,6 +15,10 @@ import { PlexLibraryMinimalAdapter } from './plexLibraryMinimalAdapter.js';
 import { ChannelScheduler } from '../../domain/scheduler/channelScheduler.js';
 import { GuideRuntime } from './guideRuntime.js';
 import type { ChannelClock, ChannelLogger } from '../../domain/channel/interfaces.js';
+import { DesktopChannelSetupRecordStore } from '../persistence/desktopChannelSetupRecordStore.js';
+import { DesktopPlexSetupFacetSource } from './setup/desktopPlexSetupFacetSource.js';
+import { DesktopChannelSetupRuntime } from './setup/desktopChannelSetupRuntime.js';
+import { registerChannelSetupIpcHandlers } from './channelSetupIpc.js';
 
 export interface RegisterChannelCompositionOptions {
   app: Pick<App, 'getPath'>;
@@ -39,8 +43,12 @@ export function registerChannelComposition(
 ): ChannelCompositionRegistration {
   const paths = resolveDesktopAppDataPaths(options.app);
   const channelPersistenceFilePath = paths.channelPersistenceFilePath;
+  const channelSetupRecordFilePath = paths.channelSetupRecordFilePath;
   if (channelPersistenceFilePath === undefined) {
     throw new Error('Channel persistence path was not resolved.');
+  }
+  if (channelSetupRecordFilePath === undefined) {
+    throw new Error('Channel setup record path was not resolved.');
   }
   const clock: ChannelClock = { now: () => Date.now() };
   const sharedChannelStore = new DesktopChannelPersistenceStore({
@@ -73,6 +81,14 @@ export function registerChannelComposition(
       await guideRuntime.refreshActiveChannelSelection();
     },
   });
+  const channelSetupRuntime = new DesktopChannelSetupRuntime({
+    repository: runtime.getRepository(),
+    facetSource: new DesktopPlexSetupFacetSource(options.plexRuntime),
+    recordStore: new DesktopChannelSetupRecordStore({ persistenceFilePath: channelSetupRecordFilePath }),
+    guideRuntime,
+    plexRuntime: options.plexRuntime,
+    nowMs: clock.now,
+  });
 
   const teardownIpc: ChannelIpcTeardown = registerChannelIpcHandlers({
     runtime,
@@ -83,6 +99,11 @@ export function registerChannelComposition(
   const teardownCustomChannelIpc: CustomChannelIpcTeardown = registerCustomChannelIpcHandlers({
     runtime: customChannelRuntime,
     mediaPicker: customChannelMediaPicker,
+    isAuthorizedEvent: options.isAuthorizedEvent,
+    createRequestId: options.createRequestId,
+  });
+  const teardownChannelSetupIpc = registerChannelSetupIpcHandlers({
+    runtime: channelSetupRuntime,
     isAuthorizedEvent: options.isAuthorizedEvent,
     createRequestId: options.createRequestId,
   });
@@ -104,6 +125,7 @@ export function registerChannelComposition(
     guideRuntime,
     activeChannelScheduler,
     teardown: async () => {
+      await teardownChannelSetupIpc();
       await teardownCustomChannelIpc();
       await teardownIpc();
     },

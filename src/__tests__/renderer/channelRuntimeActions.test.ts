@@ -10,18 +10,25 @@ import { deferred } from '../helpers/deferred.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import { createChannelRuntimeController } from '../../renderer/channelRuntimeActions.js';
 
+function legacyChannelBridge(
+  bridge: Pick<LineupDesktopPreloadApi['channelSetup'], 'getStatus' | 'commit'>,
+): LineupDesktopPreloadApi['channelSetup'] {
+  const unused = async (): Promise<never> => { throw new Error('builder bridge is not used by this legacy controller test'); };
+  return { ...bridge, getRecord: unused, preview: unused, review: unused, build: unused, cancelBuild: unused };
+}
+
 test('channel runtime controller ignores direct duplicate commits while one is pending', async () => {
   const pendingCommit = deferred<ChannelSetupIpcResult<ChannelSetupSummary>>();
   const commitCalls: unknown[] = [];
   const states: string[] = [];
   const controller = createChannelRuntimeController({
-    bridge: {
+    bridge: legacyChannelBridge({
       getStatus: async () => channelSetupSuccess('status', summary([])),
       commit: async (input) => {
         commitCalls.push(input);
         return pendingCommit.promise;
       },
-    } as LineupDesktopPreloadApi['channelSetup'],
+    }),
     onStateChanged: () => {
       states.push(controller.getState().statusText);
     },
@@ -40,6 +47,37 @@ test('channel runtime controller ignores direct duplicate commits while one is p
   assert.equal(firstOutcome, 'succeeded');
   assert.equal(secondOutcome, 'skipped');
   assert.deepEqual(states, ['Saving channels', 'Recovered']);
+});
+
+test('channel runtime controller settles rejected status reads with safe retryable state', async () => {
+  let attempts = 0;
+  const controller = createChannelRuntimeController({
+    bridge: legacyChannelBridge({
+      getStatus: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('private raw detail');
+        return channelSetupSuccess('status-retry', summary([]));
+      },
+      commit: async () => channelSetupSuccess('commit', summary([])),
+    }),
+    onStateChanged: () => undefined,
+  });
+
+  await controller.loadStatus();
+  assert.deepEqual(controller.getState(), {
+    summary: null,
+    pending: false,
+    statusText: 'Channel status unavailable',
+    errorText: 'Channel setup status could not be loaded.',
+    commitMode: 'append',
+    confirmReplace: false,
+  });
+  assert.doesNotMatch(JSON.stringify(controller.getState()), /private raw detail/u);
+
+  await controller.loadStatus();
+  assert.equal(attempts, 2);
+  assert.equal(controller.getState().summary?.status, 'not-configured');
+  assert.equal(controller.getState().errorText, null);
 });
 
 function summary(

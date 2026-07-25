@@ -88,6 +88,14 @@ export interface LivePlexListTagDirectoryPageRequest extends LivePlexLibraryRequ
   limit: 100;
 }
 
+export type LivePlexTagDirectoryFamily = 'genre' | 'director' | 'year' | 'actor' | 'studio';
+
+export interface LivePlexListTagDirectoryRequest extends LivePlexLibraryRequest {
+  sectionId: string;
+  family: LivePlexTagDirectoryFamily;
+  type: number;
+}
+
 export interface LivePlexLibraryTransport {
   listLibrarySections(input: LivePlexLibraryRequest): Promise<PlexResponsePayload>;
   listLibraryItems(input: LivePlexListLibraryItemsRequest): Promise<PlexResponsePayload>;
@@ -110,6 +118,11 @@ export interface LivePlexChannelBuilderFacetTransport {
   listTagDirectoryPage(input: LivePlexListTagDirectoryPageRequest): Promise<PlexResponsePayload>;
 }
 
+export interface LivePlexChannelSetupTransport extends LivePlexLibraryTransport {
+  listVideoPlaylists(input: LivePlexLibraryRequest): Promise<PlexResponsePayload>;
+  listLibraryTagDirectory(input: LivePlexListTagDirectoryRequest): Promise<PlexResponsePayload>;
+}
+
 const DEFAULT_TIMEOUT_MS = 20_000;
 const PLEX_TV_ORIGIN = 'https://plex.tv';
 const PLEX_TOKEN_HEADER_NAME = ['X-Plex', 'Token'].join('-');
@@ -119,7 +132,8 @@ export class LivePlexTransport
     DesktopPlexAuthTransport,
     DesktopPlexDiscoveryTransport,
     LivePlexLibraryTransport,
-    LivePlexChannelBuilderFacetTransport
+    LivePlexChannelBuilderFacetTransport,
+    LivePlexChannelSetupTransport
 {
   private readonly authConfig: PlexAuthConfig | undefined;
   private readonly fetchImpl: typeof globalThis.fetch;
@@ -287,6 +301,21 @@ export class LivePlexTransport
       input.token,
       input.signal ?? null,
     );
+  }
+
+  async listVideoPlaylists(input: LivePlexLibraryRequest): Promise<PlexResponsePayload> {
+    const url = new URL('/playlists', normalizeBaseUri(input.connection.uri));
+    url.searchParams.set('playlistType', 'video');
+    return this.fetchPmsUrlPayload(url, input.token, input.signal ?? null);
+  }
+
+  async listLibraryTagDirectory(input: LivePlexListTagDirectoryRequest): Promise<PlexResponsePayload> {
+    const url = new URL(
+      `/library/sections/${encodeURIComponent(input.sectionId)}/${input.family}`,
+      normalizeBaseUri(input.connection.uri),
+    );
+    url.searchParams.set('type', String(input.type));
+    return this.fetchPmsUrlPayload(url, input.token, input.signal ?? null);
   }
 
   async stopTranscodeSession(input: {

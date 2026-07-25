@@ -53,6 +53,7 @@ class TestElement {
         return current;
       }
       if (selector.includes('data-setup-flow-action') && current.dataset.setupFlowAction !== undefined) return current;
+      if (selector.includes('data-builder-action') && current.dataset.builderAction !== undefined) return current;
       if (selector.includes('data-plex-section-id') && current.dataset.plexSectionId !== undefined) return current;
       if (selector.includes('data-custom-channel-action') && current.dataset.customChannelAction !== undefined) {
         return current;
@@ -217,6 +218,87 @@ test('direct route actions guard hidden inert native-disabled and aria-disabled 
     player.setAttribute('hidden', '');
     guide.click();
     assert.deepEqual(calls, ['route:openGuide']);
+  });
+});
+
+test('player setup reminder supports pointer and focused activation with eligibility guards', () => {
+  withTestHTMLElement(() => {
+    const documentRef = new TestDocument();
+    const player = new TestElement();
+    const reminder = new TestElement();
+    const button = new TestElement();
+    button.dataset.routeAction = 'openChannelSetup';
+    button.dataset.focusId = 'player-setup-reminder';
+    reminder.append(button);
+    player.append(reminder);
+    documentRef.append(player);
+    const calls: string[] = [];
+    const dom = emptyRendererDomBindings();
+    dom.routeActionButtons = [button as unknown as HTMLButtonElement];
+    dom.focusableElements = [button as unknown as HTMLElement];
+    registerRendererActions(dom, documentRef as unknown as Document, createActionHandlers(calls));
+
+    button.click();
+    clickFocusedRendererElement(
+      { activeRoute: 'player', activeId: 'player-setup-reminder' },
+      dom,
+    );
+    button.disabled = true;
+    button.click();
+    button.disabled = false;
+    button.setAttribute('aria-disabled', 'true');
+    button.click();
+    button.setAttribute('aria-disabled', 'false');
+    reminder.setAttribute('hidden', '');
+    button.click();
+    reminder.attributes.delete('hidden');
+    player.setAttribute('inert', '');
+    button.click();
+
+    assert.deepEqual(calls, ['route:openChannelSetup', 'route:openChannelSetup']);
+  });
+});
+
+test('Settings and Guide setup entry controls support pointer and focused activation', () => {
+  withTestHTMLElement(() => {
+    const documentRef = new TestDocument();
+    const settings = new TestElement();
+    settings.id = 'screen-settings';
+    const settingsSetup = new TestElement();
+    settingsSetup.dataset.routeAction = 'openChannelSetup';
+    settingsSetup.dataset.focusId = 'settings-open-channel-setup';
+    settings.append(settingsSetup);
+    const guide = new TestElement();
+    guide.id = 'screen-guide';
+    const guideSetup = new TestElement();
+    guideSetup.dataset.guideAction = 'setup';
+    guideSetup.dataset.focusId = 'guide-state-setup';
+    guide.append(guideSetup);
+    documentRef.append(settings);
+    documentRef.append(guide);
+
+    const actions: string[] = [];
+    const dom = emptyRendererDomBindings();
+    dom.routeActionButtons = [settingsSetup as unknown as HTMLButtonElement];
+    dom.focusableElements = [
+      settingsSetup as unknown as HTMLElement,
+      guideSetup as unknown as HTMLElement,
+    ];
+    const handlers = createActionHandlers(actions);
+    handlers.applyGuideAction = (action) => actions.push(`guide:${action}`);
+    registerRendererActions(dom, documentRef as unknown as Document, handlers);
+
+    settingsSetup.click();
+    clickFocusedRendererElement({ activeRoute: 'settings', activeId: 'settings-open-channel-setup' }, dom);
+    guideSetup.click();
+    clickFocusedRendererElement({ activeRoute: 'guide', activeId: 'guide-state-setup' }, dom);
+
+    assert.deepEqual(actions, [
+      'route:openChannelSetup',
+      'route:openChannelSetup',
+      'guide:setup',
+      'guide:setup',
+    ]);
   });
 });
 
@@ -728,5 +810,27 @@ test('renderer action registration delegates settings category clicks', () => {
     playbackCatBtn.dispatchEvent(new TestDomEvent('click', true));
 
     assert.equal(appliedCategory, 'playback');
+  });
+});
+
+test('renderer action registration delegates validated channel-builder actions only inside setup custody', () => {
+  withTestHTMLElement(() => {
+    const documentRef = new TestDocument();
+    const setupScreen = new TestElement(); setupScreen.id = 'screen-channel-setup'; documentRef.append(setupScreen);
+    const owner = new TestElement(); owner.dataset.stagedOwner = 'preview'; owner.dataset.ownerActive = 'true'; setupScreen.append(owner);
+    const builderButton = new TestElement(); builderButton.dataset.builderAction = 'toggleStrategy'; builderButton.dataset.builderDetail = 'genres'; owner.append(builderButton);
+    const invalidButton = new TestElement(); invalidButton.dataset.builderAction = 'commit'; owner.append(invalidButton);
+    const outsideButton = new TestElement(); outsideButton.dataset.builderAction = 'toggleStrategy'; documentRef.append(outsideButton);
+    const calls: string[] = [];
+    registerRendererActions(emptyRendererDomBindings(), documentRef as unknown as Document, {
+      ...createActionHandlers([]),
+      applyChannelBuilderAction: (action, detail) => calls.push(`${action}:${detail ?? ''}`),
+    });
+
+    builderButton.dispatchEvent(new TestDomEvent('click', true));
+    invalidButton.dispatchEvent(new TestDomEvent('click', true));
+    outsideButton.dispatchEvent(new TestDomEvent('click', true));
+
+    assert.deepEqual(calls, ['toggleStrategy:genres']);
   });
 });

@@ -45,6 +45,7 @@ import { wirePlexPlaybackCleanup } from './player/plexPlaybackCleanupWiring.js';
 import type { PlexPlaybackRuntime } from './player/plexPlaybackRuntime.js';
 import { registerPlexComposition, type PlexCompositionRegistration } from './plex/plexComposition.js';
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
+import { runChannelSetupProofAssertions } from './channelSetupProofAssertions.js';
 import { registerShellAppCommandController } from './window/shellAppCommandController.js';
 import { createShellWindowController } from './window/shellWindowController.js';
 import { resolveDesktopSettingsFilePath } from './persistence/appDataPaths.js';
@@ -135,6 +136,7 @@ app.whenReady()
       isAuthorizedEvent,
       createRequestId,
       diagnosticEventStore,
+      channelSetupProofFixture: process.env.LINEUP_CHANNEL_SETUP_PROOF === '1',
     });
     if (plexComposition) {
       wirePlexPlaybackCleanup({
@@ -214,7 +216,16 @@ app.whenReady()
     }
     publishShellStatus('ready');
     if (smokeMode) {
-      await runSmokeAssertions(shellWindow, containmentCounters);
+      const proofOutput = process.env.LINEUP_CHANNEL_SETUP_PROOF_OUTPUT;
+      if (process.env.LINEUP_CHANNEL_SETUP_PROOF === '1' && proofOutput !== undefined) {
+        await runChannelSetupProofAssertions(
+          shellWindow,
+          proofOutput,
+          process.env.LINEUP_CHANNEL_SETUP_PROOF_PHASE === 'relaunch' ? 'relaunch' : 'first-run',
+        );
+      } else {
+        await runSmokeAssertions(shellWindow, containmentCounters);
+      }
       app.exit(0);
     }
   })

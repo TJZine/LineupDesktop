@@ -123,6 +123,24 @@ export const LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL =
 export const LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL =
   'lineup:channelSetup:commit' as const;
 
+export const LINEUP_CHANNEL_SETUP_GET_RECORD_CHANNEL =
+  'lineup:channelSetup:getRecord' as const;
+
+export const LINEUP_CHANNEL_SETUP_PREVIEW_CHANNEL =
+  'lineup:channelSetup:preview' as const;
+
+export const LINEUP_CHANNEL_SETUP_REVIEW_CHANNEL =
+  'lineup:channelSetup:review' as const;
+
+export const LINEUP_CHANNEL_SETUP_BUILD_CHANNEL =
+  'lineup:channelSetup:build' as const;
+
+export const LINEUP_CHANNEL_SETUP_CANCEL_BUILD_CHANNEL =
+  'lineup:channelSetup:cancelBuild' as const;
+
+export const LINEUP_CHANNEL_SETUP_PROGRESS_CHANNEL =
+  'lineup:channelSetup:progress' as const;
+
 export const LINEUP_GUIDE_GET_PRESENTATION_CHANNEL =
   'lineup:guide:getPresentation' as const;
 

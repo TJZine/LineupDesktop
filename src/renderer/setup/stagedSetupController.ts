@@ -5,6 +5,7 @@ import type { ChannelRuntimeController } from '../channelRuntimeActions.js';
 import type { CustomChannelController } from '../customChannels/controller.js';
 import type { PlexRuntimeController } from '../plexRuntimeActions.js';
 import type { SetupRuntimeCoordinator } from './setupRuntimeCoordinator.js';
+import type { ChannelBuilderController } from './channelBuilderController.js';
 import {
   clearSetupLibrarySelection,
   normalizeSetupLibrarySelection,
@@ -67,7 +68,7 @@ export interface StagedSetupController {
   toggleReplacementConfirmation(): void;
   beginCommit(): number;
   cancelCommitView(): void;
-  completeCommit(generation: number, mode: ChannelSetupCommitMode, before: ChannelSetupSummary | null, after: ChannelSetupSummary | null): boolean;
+  completeCommit(generation: number, mode: ChannelSetupCommitMode, before: ChannelSetupSummary | null, after: ChannelSetupSummary | null, canceled?: boolean): boolean;
   failCommit(generation: number, message: string): boolean;
   openCustomEditor(invokerFocusId: string): void;
   closeCustomEditor(savedChannelId?: string | null): void;
@@ -82,6 +83,7 @@ interface DispatchInput {
   action: StagedSetupFlowActionId;
   controller: StagedSetupController;
   runtime: SetupRuntimeCoordinator;
+  builder: ChannelBuilderController;
   channelController: ChannelRuntimeController;
   sections: readonly PlexLibrarySectionSummary[];
   getSections?(): readonly PlexLibrarySectionSummary[];
@@ -119,9 +121,13 @@ export async function dispatchStagedSetupAction(input: DispatchInput): Promise<v
       }
       return;
     case 'libraryNext':
-      if (state.selectedSectionIds.length > 0) input.controller.showOwner('preview', 'setup-category-build');
+      if (state.selectedSectionIds.length > 0) {
+        const preview = input.builder.setLibraries(state.selectedSectionIds);
+        input.controller.showOwner('preview', 'builder-category-content-sources');
+        await preview;
+      }
       return;
-    case 'selectBuildCategory': input.controller.showOwner('preview', modeFocus(state.buildMode)); return;
+    case 'selectBuildCategory': input.controller.showOwner('preview', 'builder-category-content-sources'); return;
     case 'previewToggle':
       input.controller.togglePreview();
       if (state.previewExpanded) { input.runtime.collapsePreview(); input.closePreviewMetadata(); }
@@ -137,15 +143,20 @@ export async function dispatchStagedSetupAction(input: DispatchInput): Promise<v
       }
       return;
     case 'previewRetry': await input.runtime.retryPreview(); return;
-    case 'previewNext': input.controller.showOwner('build', state.buildMode === 'replace' ? 'setup-replace-confirm' : 'setup-confirm'); return;
-    case 'buildBack': input.controller.showOwner('preview', modeFocus(state.buildMode)); return;
-    case 'toggleReplaceConfirm': input.controller.toggleReplacementConfirmation(); return;
+    case 'previewNext':
+      {
+        const review = input.builder.requestReview();
+        input.controller.showOwner('build', 'setup-confirm');
+        if (await review) input.controller.showOwner('build', input.builder.getState().draft.buildMode === 'replace' ? 'builder-replace-confirm' : 'setup-confirm');
+      }
+      return;
+    case 'buildBack': input.controller.showOwner('preview', `builder-category-${input.builder.getState().activeCategory}`); return;
+    case 'toggleReplaceConfirm': input.builder.apply('confirmReplace'); return;
     case 'buildConfirm':
-      if (input.channelController.getState().pending || state.selectedSectionIds.length === 0) return;
-      if (state.buildMode === 'replace' && !state.replacementConfirmed) return;
+      if (state.selectedSectionIds.length === 0 || input.builder.getState().phase !== 'review-ready') return;
       await commitCurrentSetup(input);
       return;
-    case 'progressCancel': input.controller.cancelCommitView(); input.channelController.clearActionState(); return;
+    case 'progressCancel': await input.builder.cancelBuild(); return;
     case 'resultDone': case 'customDone': input.closeSetup(); return;
     case 'resultWatch': {
       if (state.resultWatchChannelId === null) { input.controller.showOwner('result', 'setup-result-watch'); return; }
@@ -166,10 +177,8 @@ export async function dispatchStagedSetupAction(input: DispatchInput): Promise<v
         }
       }
       else {
-        await input.channelController.loadStatus();
-        if (input.controller.getState() !== state) return;
-        if (input.channelController.getState().errorText === null) input.controller.showOwner('build', state.buildMode === 'replace' ? 'setup-replace-confirm' : 'setup-confirm');
-        else input.controller.showRecovery(input.channelController.getState().errorText ?? 'Channel setup could not continue.', state.recovery ?? buildRecovery());
+        if (await input.builder.requestReview()) input.controller.showOwner('build', input.builder.getState().draft.buildMode === 'replace' ? 'builder-replace-confirm' : 'setup-confirm');
+        else input.controller.showRecovery(input.builder.getState().safeError ?? 'Channel setup could not continue.', state.recovery ?? buildRecovery());
       }
       return;
     case 'setupBack': handleSetupBack(input, state); return;
@@ -185,6 +194,7 @@ export function createStagedSetupActionDispatcher(input: {
   controller: StagedSetupController;
   runtime: SetupRuntimeCoordinator;
   channelController: ChannelRuntimeController;
+  builder: ChannelBuilderController;
   plexController: PlexRuntimeController;
   customController: CustomChannelController;
   returnToServer(): void;
@@ -194,7 +204,7 @@ export function createStagedSetupActionDispatcher(input: {
   return async (action) => {
     const plex = input.plexController.getState();
     await dispatchStagedSetupAction({
-      action, controller: input.controller, runtime: input.runtime, channelController: input.channelController,
+      action, controller: input.controller, runtime: input.runtime, channelController: input.channelController, builder: input.builder,
       sections: plex.snapshot?.library.sections ?? [], previewCursor: plex.selectedSectionId,
       getSections: () => input.plexController.getState().snapshot?.library.sections ?? [],
       getCurrentPlexError: () => input.plexController.getState().errorText,
@@ -217,8 +227,13 @@ export function createStagedSetupActionDispatcher(input: {
 
 export async function handleStagedSetupBack(input: {
   controller: StagedSetupController; customController: CustomChannelController;
+  builder: ChannelBuilderController;
   plexController: PlexRuntimeController; dispatch(action: StagedSetupFlowActionId): Promise<void>;
 }): Promise<boolean> {
+  if (input.builder.dismissTransient()) {
+    input.controller.showOwner(input.controller.getState().owner, input.builder.getState().focusIntent ?? input.controller.getState().focusIntent ?? 'setup-back');
+    return true;
+  }
   const state = input.controller.getState();
   if (state.owner === 'custom-delete-confirm') { await input.dispatch('customDeleteCancel'); return true; }
   if (state.owner === 'progress') return true;
@@ -270,9 +285,9 @@ export function createStagedSetupController(input: { onStateChanged(): void }): 
     toggleReplacementConfirmation() { set({ replacementConfirmed: !state.replacementConfirmed, focusIntent: 'setup-replace-confirm' }); },
     beginCommit() { const commitGeneration = state.commitGeneration + 1; set({ owner: 'progress', commitGeneration, focusIntent: 'setup-progress-cancel', safeError: null }); return commitGeneration; },
     cancelCommitView() { set({ owner: 'build', commitGeneration: state.commitGeneration + 1, focusIntent: 'setup-confirm', safeError: null }); },
-    completeCommit(generation, mode, before, after) {
+    completeCommit(generation, mode, before, after, canceled = false) {
       if (generation !== state.commitGeneration || state.owner !== 'progress') return false;
-      set({ owner: 'result', focusIntent: 'setup-done', resultWatchChannelId: chooseWatchChannelId(mode, before, after), replacementConfirmed: false }); return true;
+      set({ owner: 'result', focusIntent: 'setup-done', resultWatchChannelId: canceled ? null : chooseWatchChannelId(mode, before, after), replacementConfirmed: false }); return true;
     },
     failCommit(generation, message) {
       if (generation !== state.commitGeneration || state.owner !== 'progress') return false;
@@ -294,21 +309,27 @@ export function createStagedSetupController(input: { onStateChanged(): void }): 
 }
 
 async function commitCurrentSetup(input: DispatchInput): Promise<void> {
-  const state = input.controller.getState();
   const before = input.channelController.getState().summary;
+  const mode = input.builder.getState().draft.buildMode;
   const generation = input.controller.beginCommit();
-  const outcome = await input.channelController.commit({ mode: state.buildMode, sectionIds: [...state.selectedSectionIds], ...(state.buildMode === 'replace' ? { confirmReplace: true } : {}) });
-  if (outcome === 'skipped' || outcome === 'stale') return;
-  const runtime = input.channelController.getState();
-  if (outcome === 'failed' || runtime.errorText !== null) input.controller.failCommit(generation, runtime.errorText ?? 'Channel setup could not continue. Try again.');
-  else input.controller.completeCommit(generation, state.buildMode, before, runtime.summary);
+  const result = await input.builder.build(input.channelController.getState().summary?.channelCount ?? 0);
+  if (input.controller.getState().commitGeneration !== generation) return;
+  if (result === null || result.kind === 'failed') {
+    input.controller.failCommit(generation, input.builder.getState().safeError ?? 'Channel setup could not continue. Try again.');
+    return;
+  }
+  if (result.kind === 'canceled') { input.controller.completeCommit(generation, mode, before, before, true); return; }
+  await input.channelController.loadStatus();
+  if (input.controller.getState().commitGeneration !== generation) return;
+  const afterState = input.channelController.getState();
+  input.controller.completeCommit(generation, mode, before, afterState.errorText === null ? afterState.summary : null);
 }
 
 function handleSetupBack(input: DispatchInput, state: StagedSetupState): void {
   if (state.owner === 'library') { if (state.enteredFromServer) input.returnToServer(); else input.closeSetup(); return; }
   if (state.owner === 'preview') { input.controller.showOwner('library', state.selectedSectionIds[0] ? sectionFocus(state.selectedSectionIds[0]) : 'setup-select-all'); return; }
-  if (state.owner === 'build') { input.controller.showOwner('preview', modeFocus(state.buildMode)); return; }
-  if (state.owner === 'recovery-error') { if (state.recovery?.originStep === 'library') { if (state.enteredFromServer) input.returnToServer(); else input.closeSetup(); } else input.controller.showOwner('preview', modeFocus(state.buildMode)); return; }
+  if (state.owner === 'build') { input.controller.showOwner('preview', `builder-category-${input.builder.getState().activeCategory}`); return; }
+  if (state.owner === 'recovery-error') { if (state.recovery?.originStep === 'library') { if (state.enteredFromServer) input.returnToServer(); else input.closeSetup(); } else input.controller.showOwner('preview', `builder-category-${input.builder.getState().activeCategory}`); return; }
   if (state.owner === 'setup-custom' || state.owner === 'custom-list') { input.controller.showOwner('preview', 'channel-strategy-build-custom'); return; }
   if (state.owner === 'result') input.closeSetup();
 }

@@ -7,7 +7,7 @@ import type { PlexConnection } from './discovery/types.js';
 import { isSafeLibraryFilter, isSafeSearchLimit, isSafeSearchTypes, normalizeLibraryPagination, type PlexMediaType } from './library/index.js';
 import { applyFailureSnapshot, applyServerSelectionSnapshot, authRequiredError, cloneRuntimeSnapshot, createInitialSnapshot, failureResult, isOptionalShortString, mapCredentialStatus, recordRuntimeDiagnostic, storageError, stripPinSecretFields, success, validatePositiveInteger, validationError } from './desktopPlexRuntimeSupport.js';
 import { DesktopPlexLibraryOperationExecutor } from './desktopPlexLibraryOperationExecutor.js';
-import { LivePlexTransportError, type LivePlexLibraryTransport } from './livePlexTransport.js';
+import { LivePlexTransportError, type LivePlexChannelSetupTransport, type LivePlexLibraryTransport } from './livePlexTransport.js';
 import { PlexRuntimeOperationOwner, type PlexRuntimeSnapshotCommit } from './plexRuntimeOperationOwner.js';
 
 export interface DesktopPlexRuntimeOptions {
@@ -25,6 +25,12 @@ export interface ActivePlexLibraryContext {
   transport: LivePlexLibraryTransport;
 }
 
+export interface ActiveChannelSetupContext extends ActivePlexLibraryContext {
+  profileId: string;
+  serverId: string;
+  transport: LivePlexChannelSetupTransport;
+}
+
 export class DesktopPlexRuntime {
   private readonly authService: DesktopPlexAuthService;
   private readonly credentialStore: DesktopPlexRuntimeOptions['credentialStore'];
@@ -34,6 +40,7 @@ export class DesktopPlexRuntime {
   private readonly operationOwner: PlexRuntimeOperationOwner;
   private readonly diagnosticEventStore?: DiagnosticEventStore;
   private readonly nowMs: () => number;
+  private readonly channelSetupContextListeners = new Set<() => void>();
   private snapshot: PlexRuntimeSnapshot;
 
   constructor(options: DesktopPlexRuntimeOptions) {
@@ -83,6 +90,31 @@ export class DesktopPlexRuntime {
       token,
       transport: this.libraryTransport,
     });
+  }
+  subscribeChannelSetupContextInvalidation(listener: () => void): () => void {
+    this.channelSetupContextListeners.add(listener);
+    return () => { this.channelSetupContextListeners.delete(listener); };
+  }
+  async withActiveChannelSetupContext<T>(
+    run: (context: ActiveChannelSetupContext) => Promise<T>,
+  ): Promise<T> {
+    const profileId = this.requireActiveProfileId('listLibraryItems');
+    const token = this.authService.getActiveTokenForMain();
+    if (token === null) throw authRequiredError('listLibraryItems');
+    const connection = this.requireSelectedConnection('listLibraryItems');
+    const serverId = this.serverDiscovery.getSelectedServerSummary()?.serverId?.trim() ?? '';
+    if (serverId.length === 0) {
+      throw new LivePlexTransportError('server-unreachable', 'Channel setup requires a selected Plex server');
+    }
+    if (!isChannelSetupTransport(this.libraryTransport)) {
+      throw new LivePlexTransportError('server-error', 'Plex channel setup facets are unavailable');
+    }
+    const contextIdentity = this.getChannelSetupContextIdentity();
+    const result = await run({ profileId, serverId, connection, token, transport: this.libraryTransport });
+    if (contextIdentity !== this.getChannelSetupContextIdentity()) {
+      throw new LivePlexTransportError('aborted', 'Channel setup context changed');
+    }
+    return result;
   }
   getSnapshot(requestId: string): PlexIpcResult<PlexRuntimeSnapshot> {
     return success(requestId, this.cloneSnapshot());
@@ -175,6 +207,7 @@ export class DesktopPlexRuntime {
         signal,
       });
       this.operationOwner.abortExcept('switchHomeUser');
+      this.notifyChannelSetupContextInvalidated();
       this.serverDiscovery.resetDiscoveryContext();
       commit((snapshot) => ({
         ...snapshot,
@@ -206,35 +239,45 @@ export class DesktopPlexRuntime {
 
   async restoreSelectedServer(requestId: string): Promise<PlexIpcResult<PlexRestoreSelectedServerValue>> {
     return this.operationOwner.run(requestId, 'restoreSelectedServer', async ({ signal, commit }) => {
-      const token = await this.requireActiveToken(signal, commit, 'restoreSelectedServer');
-      const profileId = this.requireActiveProfileId('restoreSelectedServer');
-      this.setServerStatus('loading', commit);
-      const selection = await this.serverDiscovery.restoreSelectedServer({ token, profileId, signal });
-      if (selection.kind === 'selected') {
-        this.operationOwner.abortExcept('restoreSelectedServer');
+      const previousContext = this.getChannelSetupContextIdentity();
+      try {
+        const token = await this.requireActiveToken(signal, commit, 'restoreSelectedServer');
+        const profileId = this.requireActiveProfileId('restoreSelectedServer');
+        this.setServerStatus('loading', commit);
+        const selection = await this.serverDiscovery.restoreSelectedServer({ token, profileId, signal });
+        if (selection.kind === 'selected') {
+          this.operationOwner.abortExcept('restoreSelectedServer');
+        }
+        this.applyServerSelection(selection, commit);
+        return { selection, snapshot: this.cloneSnapshot() };
+      } finally {
+        this.notifyChannelSetupContextIfChanged(previousContext);
       }
-      this.applyServerSelection(selection, commit);
-      return { selection, snapshot: this.cloneSnapshot() };
     });
   }
 
   async refreshServers(requestId: string): Promise<PlexIpcResult<PlexRefreshServersValue>> {
     return this.operationOwner.run(requestId, 'refreshServers', async ({ signal, commit }) => {
-      const token = await this.requireActiveToken(signal, commit, 'refreshServers');
-      this.setServerStatus('loading', commit);
-      const servers = await this.serverDiscovery.refreshServers({ token, signal });
-      commit((snapshot) => ({
-        ...snapshot,
-        servers: {
-          ...snapshot.servers,
-          status: 'ready',
-          selected: this.serverDiscovery.getSelectedServerSummary(),
-          items: servers,
-        },
-        lastError: null,
-        updatedAtMs: this.nowMs(),
-      }));
-      return { servers, snapshot: this.cloneSnapshot() };
+      const previousContext = this.getChannelSetupContextIdentity();
+      try {
+        const token = await this.requireActiveToken(signal, commit, 'refreshServers');
+        this.setServerStatus('loading', commit);
+        const servers = await this.serverDiscovery.refreshServers({ token, signal });
+        commit((snapshot) => ({
+          ...snapshot,
+          servers: {
+            ...snapshot.servers,
+            status: 'ready',
+            selected: this.serverDiscovery.getSelectedServerSummary(),
+            items: servers,
+          },
+          lastError: null,
+          updatedAtMs: this.nowMs(),
+        }));
+        return { servers, snapshot: this.cloneSnapshot() };
+      } finally {
+        this.notifyChannelSetupContextIfChanged(previousContext);
+      }
     });
   }
 
@@ -247,20 +290,25 @@ export class DesktopPlexRuntime {
       return this.fail(requestId, validationError('selectServer'));
     }
     return this.operationOwner.run(requestId, 'selectServer', async ({ signal, commit }) => {
-      const token = await this.requireActiveToken(signal, commit, 'selectServer');
-      const profileId = this.requireActiveProfileId('selectServer');
-      this.setServerStatus('loading', commit);
-      const selection = await this.serverDiscovery.selectServer(normalizedServerId, {
-        source: 'manual',
-        token,
-        profileId,
-        signal,
-      });
-      if (selection.kind === 'selected') {
-        this.operationOwner.abortExcept('selectServer');
+      const previousContext = this.getChannelSetupContextIdentity();
+      try {
+        const token = await this.requireActiveToken(signal, commit, 'selectServer');
+        const profileId = this.requireActiveProfileId('selectServer');
+        this.setServerStatus('loading', commit);
+        const selection = await this.serverDiscovery.selectServer(normalizedServerId, {
+          source: 'manual',
+          token,
+          profileId,
+          signal,
+        });
+        if (selection.kind === 'selected') {
+          this.operationOwner.abortExcept('selectServer');
+        }
+        this.applyServerSelection(selection, commit);
+        return { selection, snapshot: this.cloneSnapshot() };
+      } finally {
+        this.notifyChannelSetupContextIfChanged(previousContext);
       }
-      this.applyServerSelection(selection, commit);
-      return { selection, snapshot: this.cloneSnapshot() };
     });
   }
 
@@ -419,7 +467,26 @@ export class DesktopPlexRuntime {
   }
 
   async shutdown(): Promise<void> {
+    this.notifyChannelSetupContextInvalidated();
+    this.channelSetupContextListeners.clear();
     this.operationOwner.shutdown();
+  }
+
+  private notifyChannelSetupContextInvalidated(): void {
+    for (const listener of this.channelSetupContextListeners) listener();
+  }
+
+  private notifyChannelSetupContextIfChanged(previousContext: string): void {
+    if (previousContext !== this.getChannelSetupContextIdentity()) {
+      this.notifyChannelSetupContextInvalidated();
+    }
+  }
+
+  private getChannelSetupContextIdentity(): string {
+    const profileId = this.authService.getActiveUserId()?.trim() ?? '';
+    const serverId = this.serverDiscovery.getSelectedServerSummary()?.serverId?.trim() ?? '';
+    const connection = this.serverDiscovery.getSelectedConnectionForMain();
+    return `${profileId}\0${serverId}\0${connection?.uri ?? ''}`;
   }
 
   private async ensureAccountToken(
@@ -548,4 +615,9 @@ export class DesktopPlexRuntime {
   private cloneSnapshot(): PlexRuntimeSnapshot {
     return cloneRuntimeSnapshot(this.snapshot);
   }
+}
+
+function isChannelSetupTransport(transport: LivePlexLibraryTransport): transport is LivePlexChannelSetupTransport {
+  const candidate = transport as Partial<LivePlexChannelSetupTransport>;
+  return typeof candidate.listVideoPlaylists === 'function' && typeof candidate.listLibraryTagDirectory === 'function';
 }

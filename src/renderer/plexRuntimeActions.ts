@@ -9,6 +9,7 @@ import {
   clearPlexRendererItems,
   clearPlexRendererMetadata,
   clearPlexRendererForCleanup,
+  clearPlexRendererAuthenticationForLink,
   clearPlexRendererPinSubflow,
   clearPlexRendererPending,
   clearPlexRendererSearch,
@@ -39,6 +40,7 @@ export interface PlexRuntimeController {
   clearSelectedServer: () => void;
   clearPinSubflow: () => Promise<void>;
   dismissPinError: () => Promise<void>;
+  returnToAuthLink: () => Promise<void>;
   invalidateProfileSwitch: () => void;
   invalidateOnboardingOperations: (clearError?: boolean) => void;
   handleBack: () => Promise<boolean>;
@@ -223,6 +225,20 @@ export function createPlexRuntimeController({
     },
     async dismissPinError(): Promise<void> {
       await controller.clearPinSubflow();
+    },
+    async returnToAuthLink(): Promise<void> {
+      const pinId = activePinId ?? state.snapshot?.auth.pin?.id ?? null;
+      ++operationEpoch;
+      pendingOperationEpochs.clear();
+      clearPollTimer();
+      activePinId = null;
+      commit(clearPlexRendererAuthenticationForLink(state));
+      if (pinId !== null && Number.isFinite(pinId) && pinId > 0) {
+        await bridge.cancelPin({ pinId }).catch((error: unknown) => {
+          recordPlexRendererIpcRejection(recordRendererEvent, 'cancelPin', error);
+          return null;
+        });
+      }
     },
     invalidateProfileSwitch(): void {
       commitLocalClear({
