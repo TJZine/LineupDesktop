@@ -17,7 +17,11 @@ validation. It has no public release pipeline yet.
 RD-18 Unit 1 completed the internal Windows x64 package layout on 2026-05-13.
 The reviewed tooling stages only
 `out/rd-18-windows-internal/lineup-desktop-0.0.0-win32-x64/` and keeps generated
-output ignored/local.
+output ignored/local. The package command itself owns a clean
+`npm run build:electron` and must complete that bounded build successfully
+before it inspects `dist` or replaces an existing internal package. Provenance
+records this as the `package-time-clean-build` strategy; callers do not provide
+freshness through a separate wrapper or pre-package ritual.
 
 Observed Windows x64 closeout proof:
 
