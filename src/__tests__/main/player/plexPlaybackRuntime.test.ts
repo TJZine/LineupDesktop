@@ -67,13 +67,16 @@ class FakeChannelPort implements PlexPlaybackRuntimeChannelPort {
     load: loadPayload,
     pmsSession: { id: 'pms-1', requestId: 'request-1' },
   };
+  candidatePromise: Promise<PlexPlaybackRuntimeCandidate> | null = null;
+  onResolvePlaybackCandidate: (() => void) | null = null;
   readonly selections: PlexPlaybackScheduleSelection[] = [];
 
   async resolvePlaybackCandidate(
     nextSelection: PlexPlaybackScheduleSelection,
   ): Promise<PlexPlaybackRuntimeCandidate> {
     this.selections.push(nextSelection);
-    return this.candidate;
+    this.onResolvePlaybackCandidate?.();
+    return this.candidatePromise ?? this.candidate;
   }
 }
 
@@ -81,11 +84,15 @@ class FakePlayerPort implements PlexPlaybackRuntimePlayerPort {
   readonly commands: PlayerCommand[] = [];
   readonly cleanupRequestIds: Array<string | null> = [];
   dispatchResult: PlexPlaybackRuntimePlayerDispatchResult = { ok: true };
+  stopDispatchPromise: Promise<PlexPlaybackRuntimePlayerDispatchResult> | null = null;
   dispatchFailure: Error | null = null;
   cleanupFailure: Error | null = null;
 
   async dispatch(command: PlayerCommand): Promise<PlexPlaybackRuntimePlayerDispatchResult> {
     this.commands.push(command);
+    if (command.command === 'stop' && this.stopDispatchPromise !== null) {
+      return this.stopDispatchPromise;
+    }
     if (this.dispatchFailure !== null) {
       throw this.dispatchFailure;
     }
@@ -180,6 +187,28 @@ function assertRendererSafePlayerEvents(events: readonly PlayerEvent[]): void {
   for (const event of events) {
     assert.equal(isRendererSafePlayerEvent(event), true, `runtime emitted unsafe ${event.event} event`);
   }
+}
+
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve(value: T): void;
+  reject(error: unknown): void;
+} {
+  let resolvePromise = (_value: T): void => {
+    throw new Error('Deferred promise was not initialized.');
+  };
+  let rejectPromise = (_error: unknown): void => {
+    throw new Error('Deferred promise was not initialized.');
+  };
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+  return {
+    promise,
+    resolve: resolvePromise,
+    reject: rejectPromise,
+  };
 }
 
 test('RD-12 plex playback runtime starts current scheduled media through fakeable ports', async () => {
@@ -334,6 +363,82 @@ test('RD-12 plex playback runtime cleans the previous PMS session before switchi
   );
   assertNoForbiddenKeys(result);
   assertRendererSafePlayerEvents(result.events);
+});
+
+test('plex playback runtime stop cleanup cannot release a replacement session', async () => {
+  const { runtime, channel, player, pms } = createRuntime();
+  await runtime.startCurrentPlayback('startup');
+  const stopDispatch = createDeferred<PlexPlaybackRuntimePlayerDispatchResult>();
+  player.stopDispatchPromise = stopDispatch.promise;
+
+  const stopping = runtime.stop();
+  assert.equal(runtime.getActiveRequestId(), null);
+
+  channel.candidate = {
+    requestId: 'request-2',
+    load: {
+      ...loadPayload,
+      media: { ...loadPayload.media, id: 'media-2', title: 'Episode 2' },
+    },
+    pmsSession: { id: 'pms-2', requestId: 'request-2' },
+  };
+  const replacement = await runtime.startCurrentPlayback('manual-switch');
+
+  stopDispatch.resolve({ ok: true });
+  await stopping;
+
+  assert.equal(replacement.accepted, true);
+  assert.equal(runtime.getActiveRequestId(), 'request-2');
+  assert.deepEqual(
+    pms.releases.map((release) => ({
+      sessionId: release.session.id,
+      reason: release.reason,
+    })),
+    [{ sessionId: 'pms-1', reason: 'stop' }],
+  );
+  assert.deepEqual(player.cleanupRequestIds, ['request-1']);
+
+  await runtime.cleanup({ reason: 'teardown' });
+  assert.deepEqual(
+    pms.releases.map((release) => release.session.id),
+    ['pms-1', 'pms-2'],
+  );
+});
+
+test('plex playback runtime suppresses a superseded candidate resolution failure', async () => {
+  const { runtime, channel, pms, emitted } = createRuntime();
+  const candidateResolution = createDeferred<PlexPlaybackRuntimeCandidate>();
+  const candidateResolutionStarted = createDeferred<void>();
+  channel.candidatePromise = candidateResolution.promise;
+  channel.onResolvePlaybackCandidate = () => candidateResolutionStarted.resolve();
+  const staleStart = runtime.startCurrentPlayback('startup');
+  await candidateResolutionStarted.promise;
+
+  channel.candidatePromise = null;
+  channel.onResolvePlaybackCandidate = null;
+  channel.candidate = {
+    requestId: 'request-2',
+    load: {
+      ...loadPayload,
+      media: { ...loadPayload.media, id: 'media-2', title: 'Episode 2' },
+    },
+    pmsSession: { id: 'pms-2', requestId: 'request-2' },
+  };
+  const replacement = await runtime.startCurrentPlayback('manual-switch');
+  candidateResolution.reject(new Error('stale candidate failure'));
+  const staleResult = await staleStart;
+
+  assert.equal(replacement.accepted, true);
+  assert.equal(runtime.getActiveRequestId(), 'request-2');
+  assert.equal(staleResult.accepted, false);
+  assert.equal(staleResult.events.some((event) => event.event === 'error'), false);
+  assert.equal(emitted.some((event) => event.event === 'error'), false);
+
+  await runtime.cleanup({ reason: 'teardown' });
+  assert.deepEqual(
+    pms.releases.map((release) => release.session.id),
+    ['pms-2'],
+  );
 });
 
 test('RD-12 plex playback runtime quarantines stale player events by epoch', async () => {

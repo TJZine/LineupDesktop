@@ -194,6 +194,9 @@ export class PlexPlaybackRuntime {
     try {
       candidate = await this.#channel.resolvePlaybackCandidate(selection);
     } catch (error) {
+      if (!this.#isCurrentEpoch(epoch)) {
+        return this.#staleStartResult(epoch, null, events, 'candidate failure arrived after cleanup');
+      }
       events.push(this.#candidateResolutionError(error));
       this.#emit(events);
       return { accepted: false, epoch, requestId: null, events };
@@ -205,6 +208,9 @@ export class PlexPlaybackRuntime {
       if (rejectedSession !== null) {
         events.push(...(await this.#cleanupCoordinator.releaseUnsafeCandidateSession(rejectedSession)));
       }
+      if (!this.#isCurrentEpoch(epoch)) {
+        return this.#staleStartResult(epoch, null, events, 'candidate rejection settled after cleanup');
+      }
       events.push(createRuntimeBoundaryError(undefined, 'channel playback candidate was not renderer-safe'));
       this.#emit(events);
       return { accepted: false, epoch, requestId: null, events };
@@ -212,6 +218,9 @@ export class PlexPlaybackRuntime {
     const requestId = candidate.requestId ?? this.#createRequestId('plex-playback');
     if (!isPmsSessionForRequest(candidate.pmsSession ?? null, requestId)) {
       events.push(...(await this.#cleanupCoordinator.releaseRejectedSession(candidate.pmsSession ?? null, requestId)));
+      if (!this.#isCurrentEpoch(epoch)) {
+        return this.#staleStartResult(epoch, requestId, events, 'candidate rejection settled after cleanup');
+      }
       events.push(createRuntimeBoundaryError(requestId, 'pms session request id did not match playback request'));
       this.#emit(events);
       return { accepted: false, epoch, requestId, events };
@@ -220,6 +229,9 @@ export class PlexPlaybackRuntime {
       const validation = validatePrivilegedPlaybackDescriptor(candidate.privatePlayback, requestId);
       if (!validation.ok) {
         events.push(...(await this.#cleanupCoordinator.releaseRejectedSession(candidate.pmsSession ?? null, requestId)));
+        if (!this.#isCurrentEpoch(epoch)) {
+          return this.#staleStartResult(epoch, requestId, events, 'candidate rejection settled after cleanup');
+        }
         events.push({
           event: 'error',
           requestId,
@@ -282,7 +294,9 @@ export class PlexPlaybackRuntime {
     return events;
   }
   async stop(): Promise<readonly PlayerEvent[]> {
+    this.#nextEpoch();
     const active = this.#active;
+    this.#active = null;
     if (active !== null) {
       try {
         await this.#player.dispatch({
@@ -294,7 +308,9 @@ export class PlexPlaybackRuntime {
         // Stop is best-effort; scoped cleanup below owns renderer-safe failure reporting.
       }
     }
-    return this.cleanup({ reason: 'stop' });
+    const events = await this.#cleanupCoordinator.cleanupActive(active, 'stop');
+    this.#emit(events);
+    return events;
   }
   async teardown(): Promise<readonly PlayerEvent[]> {
     return this.cleanup({ reason: 'teardown' });
