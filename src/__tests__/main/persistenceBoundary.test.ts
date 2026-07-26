@@ -125,6 +125,15 @@ class DeferredFirstDecryptCodec extends FakeSecureStringCodec {
   }
 }
 
+class FailingReencryptCodec extends FakeSecureStringCodec {
+  async encryptString(value: string): Promise<Buffer> {
+    if (this.encryptions === 1) {
+      throw new Error('Injected credential re-encryption failure.');
+    }
+    return super.encryptString(value);
+  }
+}
+
 test('desktop persistence store encrypts credentials and returns renderer-safe snapshots', async () => {
   const temporaryDirectory = await createTemporaryDirectory();
   const codec = new FakeSecureStringCodec();
@@ -548,6 +557,87 @@ test('desktop persistence store reencrypts credentials when secure storage reque
   if (readResult.status === 'present') {
     assert.equal(readResult.shouldReencrypt, true);
   }
+});
+
+test('desktop persistence store keeps decrypted credentials available when reencrypt encryption fails', async () => {
+  const temporaryDirectory = await createTemporaryDirectory();
+  const codec = new FailingReencryptCodec();
+  const persistenceFilePath = path.join(temporaryDirectory, 'persistence.json');
+  const store = new DesktopPersistenceStore({
+    persistenceFilePath,
+    secureStringCodec: codec,
+    nowMs: () => 2_000,
+  });
+  await store.savePlexCredential({
+    accountId: 'account-1',
+    secretValue: 'rd09-secret-value',
+  });
+  const persistedBeforeRead = await fs.readFile(persistenceFilePath, 'utf8');
+  codec.shouldReencrypt = true;
+
+  const readResult = await store.readPlexCredentialSecret('account-1');
+
+  assert.equal(readResult.status, 'present');
+  if (readResult.status === 'present') {
+    assert.equal(readResult.secretValue, 'rd09-secret-value');
+    assert.equal(readResult.shouldReencrypt, true);
+    assert.deepEqual(readResult.diagnostics.at(-1), {
+      component: 'desktop-persistence-store',
+      operation: 'reencrypt-plex-credential',
+      status: 'unavailable',
+      reason: 'credential re-encryption failed; retry required',
+      credentialId: 'plex-account:account-1',
+      accountId: 'account-1',
+    });
+    assert.equal(containsPersistenceForbiddenRendererField(readResult.diagnostics), false);
+    assert.equal(JSON.stringify(readResult.diagnostics).includes('rd09-secret-value'), false);
+  }
+  assert.equal(await fs.readFile(persistenceFilePath, 'utf8'), persistedBeforeRead);
+  assert.equal(persistedBeforeRead.includes('rd09-secret-value'), false);
+});
+
+test('desktop persistence store keeps decrypted credentials available when reencrypt persistence fails', async (t) => {
+  const temporaryDirectory = await createTemporaryDirectory();
+  const codec = new FakeSecureStringCodec();
+  const persistenceFilePath = path.join(temporaryDirectory, 'persistence.json');
+  const store = new DesktopPersistenceStore({
+    persistenceFilePath,
+    secureStringCodec: codec,
+    nowMs: () => 2_500,
+  });
+  await store.savePlexCredential({
+    accountId: 'account-1',
+    secretValue: 'rd09-secret-value',
+  });
+  const persistedBeforeRead = await fs.readFile(persistenceFilePath, 'utf8');
+  codec.shouldReencrypt = true;
+  t.mock.method(fs, 'rename', async () => {
+    const error = new Error('Injected persistence permission failure.');
+    Object.assign(error, { code: 'EACCES' });
+    throw error;
+  });
+
+  const readResult = await store.readPlexCredentialSecret('account-1');
+
+  assert.equal(readResult.status, 'present');
+  if (readResult.status === 'present') {
+    assert.equal(readResult.secretValue, 'rd09-secret-value');
+    assert.equal(readResult.shouldReencrypt, true);
+    assert.deepEqual(readResult.diagnostics.at(-1), {
+      component: 'desktop-persistence-store',
+      operation: 'reencrypt-plex-credential',
+      status: 'unavailable',
+      reason: 'credential re-encryption failed; retry required',
+      credentialId: 'plex-account:account-1',
+      accountId: 'account-1',
+    });
+    assert.equal(containsPersistenceForbiddenRendererField(readResult.diagnostics), false);
+    assert.equal(JSON.stringify(readResult.diagnostics).includes('rd09-secret-value'), false);
+  }
+  assert.equal(await fs.readFile(persistenceFilePath, 'utf8'), persistedBeforeRead);
+  assert.equal(persistedBeforeRead.includes('rd09-secret-value'), false);
+  const temporaryFiles = (await fs.readdir(temporaryDirectory)).filter((file) => file.endsWith('.tmp'));
+  assert.deepEqual(temporaryFiles, []);
 });
 
 test('desktop persistence store preserves concurrent selected-server changes during reencrypt', async () => {
