@@ -18,6 +18,7 @@ import {
   ChannelBuilderRuntime,
   type ChannelBuilderRuntimeOptions,
 } from '../../main/channel/channelBuilderRuntime.js';
+import { deferred } from '../helpers/deferred.js';
 
 test('operation owner enforces one active operation and idempotent cancel lifecycle', () => {
   const ids = idSource();
@@ -374,6 +375,113 @@ test('builder runtime applies an append plan through the aggregate barrier and r
   assert.equal(committed.value?.currentChannelId, 'concurrent-channel');
   assert.equal(refreshCalls, 1);
   runtime.shutdown();
+});
+
+test('builder apply bounds a never-settling post-commit guide refresh and releases the next review', async () => {
+  const refresh = deferred<void>();
+  let disposeCalls = 0;
+  const releasedPlanIds: string[] = [];
+  const operationOwner = new ChannelBuilderOperationOwner({
+    randomHex128: idSource(),
+  });
+  const base = readyAppendBody();
+  const body: ChannelBuilderReviewedPlanBody = {
+    ...base,
+    materializationIndex: {
+      ...base.materializationIndex,
+      dispose: () => {
+        disposeCalls += 1;
+      },
+    },
+  };
+  operationOwner.retainPlan(body);
+  const runtime = new ChannelBuilderRuntime({
+    store: {
+      readChannelAggregate: async () => ({
+        storedChannelData: null,
+        currentChannelId: null,
+        lineupRevision: 0,
+        channelBuilderState: null,
+      }),
+    },
+    contextOwner: {
+      capture: () => ({
+        context: body.context,
+        selectedLibraryPairs: [{ libraryId: 'library', libraryUuid: 'uuid' }],
+      }),
+      assertCurrent: () => undefined,
+      retain: () => undefined,
+      release: (planId: string) => releasedPlanIds.push(planId),
+      shutdown: () => undefined,
+    },
+    facetSource: {},
+    planningWorker: { shutdown: () => undefined },
+    operationOwner,
+    mutationCoordinator: {
+      mutateBuilderLineup: async (input: {
+        onCommitBarrier(): 'proceed' | 'cancel';
+        mutate(current: Readonly<ChannelAggregate>): ChannelAggregate;
+      }) => {
+        assert.equal(input.onCommitBarrier(), 'proceed');
+        const aggregate = input.mutate({
+          storedChannelData: null,
+          currentChannelId: null,
+          lineupRevision: 0,
+          channelBuilderState: null,
+        });
+        return { status: 'committed', aggregate };
+      },
+    },
+    refreshGuide: async () => refresh.promise,
+    guideRefreshDeadlineMs: 0,
+    randomHex128: () => 'b'.repeat(32),
+    nowMs: () => 100,
+  } as unknown as ChannelBuilderRuntimeOptions);
+
+  const accepted = runtime.startApply('apply-never-refreshes', {
+    planId: body.planId,
+    confirmReplace: false,
+  });
+  assert.equal(accepted.ok, true);
+  if (!accepted.ok) return;
+  const operationId = accepted.value.operation.operationId;
+  await waitFor(() => operationOwner.get(operationId)?.state === 'succeeded');
+
+  const terminal = operationOwner.get(operationId);
+  assert.equal(terminal?.state, 'succeeded');
+  if (terminal?.state !== 'succeeded') return;
+  assert.equal(terminal.result.commit, 'committed');
+  assert.equal(terminal.result.guideRefresh, 'failed');
+  assert.equal(
+    terminal.result.summary.warnings.some(
+      (warning) =>
+        warning.code === 'GUIDE_REFRESH_FAILED' && warning.phase === 'refresh',
+    ),
+    true,
+  );
+  assert.equal(operationOwner.hasActiveOperation(), false);
+  assert.equal(disposeCalls, 1);
+  assert.deepEqual(releasedPlanIds, [body.planId]);
+  assert.equal(
+    (runtime as unknown as { activeApplyByPlan: Map<string, string> })
+      .activeApplyByPlan.size,
+    0,
+  );
+
+  const nextReview = runtime.startReview(
+    'review-after-refresh-timeout',
+    body.normalizedConfig,
+  );
+  assert.equal(nextReview.ok, true);
+  if (nextReview.ok) {
+    await waitFor(
+      () =>
+        operationOwner.get(nextReview.value.operation.operationId)?.state ===
+        'failed',
+    );
+  }
+  runtime.shutdown();
+  assert.equal(disposeCalls, 1);
 });
 
 test('review projection cannot inherit provenance for hostile channel ids', async () => {

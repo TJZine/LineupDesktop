@@ -31,6 +31,7 @@ import type { ChannelBuilderPlanningWorker } from './channelBuilderPlanningWorke
 import type { ChannelLineupMutationCoordinator } from './channelLineupMutationCoordinator.js';
 
 const REVIEW_DEADLINE_MS = 20_000;
+const GUIDE_REFRESH_DEADLINE_MS = 30_000;
 
 export type ChannelBuilderRuntimeOptions = Readonly<{
   store: ChannelPersistenceStore;
@@ -42,6 +43,7 @@ export type ChannelBuilderRuntimeOptions = Readonly<{
   refreshGuide(): Promise<void>;
   randomHex128(): string;
   nowMs?: () => number;
+  guideRefreshDeadlineMs?: number;
 }>;
 
 export class ChannelBuilderRuntime {
@@ -54,6 +56,7 @@ export class ChannelBuilderRuntime {
   private readonly refreshGuide: () => Promise<void>;
   private readonly randomHex128: () => string;
   private readonly nowMs: () => number;
+  private readonly guideRefreshDeadlineMs: number;
   private readonly activeApplyByPlan = new Map<string, string>();
 
   constructor(options: ChannelBuilderRuntimeOptions) {
@@ -66,6 +69,8 @@ export class ChannelBuilderRuntime {
     this.refreshGuide = options.refreshGuide;
     this.randomHex128 = options.randomHex128;
     this.nowMs = options.nowMs ?? Date.now;
+    this.guideRefreshDeadlineMs =
+      options.guideRefreshDeadlineMs ?? GUIDE_REFRESH_DEADLINE_MS;
   }
 
   startReview(
@@ -446,9 +451,12 @@ export class ChannelBuilderRuntime {
         total: 1,
       });
       let guideRefresh: 'completed' | 'failed' = 'completed';
-      try {
-        await this.refreshGuide();
-      } catch {
+      if (
+        !(await refreshGuideWithinDeadline(
+          this.refreshGuide,
+          this.guideRefreshDeadlineMs,
+        ))
+      ) {
         guideRefresh = 'failed';
       }
       this.operationOwner.markRunning(operationId, 'refresh-guide', {
@@ -477,6 +485,28 @@ export class ChannelBuilderRuntime {
       body.normalizedConfig.selectedLibraryIds,
     );
     this.contextOwner.assertCurrent(body.context, selected.selectedLibraryPairs);
+  }
+}
+
+async function refreshGuideWithinDeadline(
+  refreshGuide: () => Promise<void>,
+  deadlineMs: number,
+): Promise<boolean> {
+  let timeout: ReturnType<typeof globalThis.setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      Promise.resolve()
+        .then(refreshGuide)
+        .then(
+          () => true,
+          () => false,
+        ),
+      new Promise<boolean>((resolve) => {
+        timeout = globalThis.setTimeout(() => resolve(false), deadlineMs);
+      }),
+    ]);
+  } finally {
+    if (timeout !== null) globalThis.clearTimeout(timeout);
   }
 }
 

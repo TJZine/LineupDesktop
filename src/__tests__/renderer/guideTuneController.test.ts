@@ -75,7 +75,7 @@ test('dispatched tune keeps custody when the Guide presentation is replaced', as
   assert.equal(controller.getPendingTarget(), null);
 });
 
-test('pending tune snapshot survives repeat projection and clears on stop', async () => {
+test('pending never-settling tune clears and releases activation on stop', async () => {
   const request = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['player']['tuneChannel']>>>();
   let projected: GuideTuneTarget | null = null;
   let controller: ReturnType<typeof createGuideTuneController>;
@@ -96,8 +96,7 @@ test('pending tune snapshot survives repeat projection and clears on stop', asyn
   controller.stop();
   assert.equal(projected, null);
   assert.equal(controller.getPendingTarget(), null);
-  request.resolve({ ok: true, value: undefined as never, requestId: 'late-tune' });
-  await pending;
+  assert.equal(await pending, true);
   assert.equal(projected, null);
 });
 
@@ -141,4 +140,36 @@ test('safe failure stays current while stop invalidates late completion', async 
   assert.deepEqual(failures, []);
   assert.equal(await controller.activate(target), true);
   assert.deepEqual(failures, ['Unable to tune.']);
+});
+
+test('never-settling tune times out safely and permits the next Guide activation', async () => {
+  const never = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['player']['tuneChannel']>>>();
+  const failures: string[] = [];
+  const accepted: string[] = [];
+  let calls = 0;
+  const controller = createGuideTuneController({
+    player: {
+      tuneChannel: async () => {
+        calls += 1;
+        return calls === 1
+          ? never.promise
+          : { ok: true, value: undefined as never, requestId: 'tune-after-timeout' };
+      },
+    },
+    getActiveRoute: () => 'guide',
+    getPresentationGeneration: () => 4,
+    getNowMs: () => NOW,
+    findProgram: () => cell(),
+    onPendingChanged: () => undefined,
+    onAccepted: (value) => accepted.push(value.focusId),
+    onFailure: (_value, message) => failures.push(message),
+    requestTimeoutMs: 0,
+  });
+
+  assert.equal(await controller.activate(target), true);
+  assert.equal(controller.isPending(), false);
+  assert.deepEqual(failures, ['Channel tune timed out.']);
+  assert.equal(await controller.activate(target), true);
+  assert.deepEqual(accepted, [target.focusId]);
+  assert.equal(calls, 2);
 });
