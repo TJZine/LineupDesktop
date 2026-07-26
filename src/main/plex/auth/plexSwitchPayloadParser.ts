@@ -104,12 +104,12 @@ function readTokenFromXmlNode(node: Element | null | undefined): string | null {
 function parseSwitchTokenText(payload: string): string | null {
   for (const key of SWITCH_TOKEN_KEYS) {
     const escapedKey = escapeRegExp(key);
-    const attrMatch = payload.match(
-      new RegExp(`${escapedKey}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, 'i'),
-    );
-    const attrValue = decodeXmlEntities(attrMatch?.[2] ?? '').trim();
-    if (attrValue) {
-      return attrValue;
+    const attrRegex = new RegExp(`${escapedKey}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, 'gi');
+    for (const attrMatch of payload.matchAll(attrRegex)) {
+      const attrValue = decodeXmlEntities(attrMatch[2] ?? '').trim();
+      if (attrValue) {
+        return attrValue;
+      }
     }
 
     const nodeMatch = payload.match(new RegExp(`<${escapedKey}>([^<]+)</${escapedKey}>`, 'i'));

@@ -34,12 +34,33 @@ test('native helper tears down mpv before reinitializing and applies mapped publ
   assert.match(source, /currentPlaybackSetup\s*=\s*msg\.setup/u);
   assert.match(
     source,
-    /trackState\?\.RefreshTrackMappings\(\);\s*ApplySelectedTracks\(currentPlaybackSetup\?\.selectedTrackIds\);/su,
+    /trackState\?\.RefreshTrackMappings\(\);\s*if \(!ApplySelectedTracks\(currentPlaybackSetup\?\.selectedTrackIds\)\)/su,
   );
   assert.match(source, /SetSelectedPublicTrack\("aid", selection\.audio\)/u);
   assert.match(source, /SetSelectedPublicTrack\("sid", selection\.subtitle\)/u);
   assert.match(source, /SetSelectedPublicTrack\("vid", selection\.video\)/u);
   assert.match(source, /trackState\?\.GetMpvTrackId\(publicTrackId\)/u);
+});
+
+test('native helper gates FILE_LOADED on checked initial track selection results', async () => {
+  const source = await readFile(programPath, 'utf8');
+
+  assert.match(
+    source,
+    /if \(!ApplySelectedTracks\(currentPlaybackSetup\?\.selectedTrackIds\)\)\s*\{\s*WriteCommandFailureEvent\(currentRequestId\);\s*continue;\s*\}[\s\S]*?\["type"\]\s*=\s*"media\.loaded"/u,
+  );
+  assert.match(
+    source,
+    /bool applied = SetSelectedPublicTrack\("aid", selection\.audio\);\s*applied &= SetSelectedPublicTrack\("sid", selection\.subtitle\);\s*applied &= SetSelectedPublicTrack\("vid", selection\.video\);\s*return applied;/u,
+  );
+  assert.match(
+    source,
+    /return MpvCommandExecutor\.SetPropertyString\(mpvContext, property, mpvTrackId\) >= 0;/u,
+  );
+  assert.match(
+    source,
+    /private static void WriteCommandFailureEvent[\s\S]*?\["code"\]\s*=\s*"PLAYER_HELPER_COMMAND_FAILED"[\s\S]*?\["category"\]\s*=\s*"helper-failure"/u,
+  );
 });
 
 test('native helper preserves replacement load request id after teardown', async () => {

@@ -268,6 +268,16 @@ test('plex auth XML fallbacks allow spaced attributes and decode XML entities', 
       }),
       { authToken: `${placeholderAuthValue}&value` },
     );
+
+    assert.deepEqual(
+      parseSwitchResponsePayload({
+        kind: 'text',
+        data:
+          `<MediaContainer authToken = ""><User authToken = "${placeholderAuthValue}" />` +
+          '</MediaContainer>',
+      }),
+      { authToken: placeholderAuthValue },
+    );
   } finally {
     Object.defineProperty(globalThis, 'DOMParser', {
       configurable: true,

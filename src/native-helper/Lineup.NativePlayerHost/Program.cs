@@ -545,7 +545,11 @@ namespace Lineup.NativePlayerHost
                 else if (ev.event_id == MpvEventFileLoaded)
                 {
                     trackState?.RefreshTrackMappings();
-                    ApplySelectedTracks(currentPlaybackSetup?.selectedTrackIds);
+                    if (!ApplySelectedTracks(currentPlaybackSetup?.selectedTrackIds))
+                    {
+                        WriteCommandFailureEvent(currentRequestId);
+                        continue;
+                    }
 
                     // Emit tracks.changed event
                     WriteOutputEvent(new Dictionary<string, object?>
@@ -816,30 +820,48 @@ namespace Lineup.NativePlayerHost
             });
         }
 
-        private static void ApplySelectedTracks(TrackSelection? selection)
+        private static bool ApplySelectedTracks(TrackSelection? selection)
         {
             if (selection == null)
             {
-                return;
+                return true;
             }
 
-            SetSelectedPublicTrack("aid", selection.audio);
-            SetSelectedPublicTrack("sid", selection.subtitle);
-            SetSelectedPublicTrack("vid", selection.video);
+            bool applied = SetSelectedPublicTrack("aid", selection.audio);
+            applied &= SetSelectedPublicTrack("sid", selection.subtitle);
+            applied &= SetSelectedPublicTrack("vid", selection.video);
+            return applied;
         }
 
-        private static void SetSelectedPublicTrack(string property, string? publicTrackId)
+        private static bool SetSelectedPublicTrack(string property, string? publicTrackId)
         {
             if (string.IsNullOrWhiteSpace(publicTrackId))
             {
-                return;
+                return true;
             }
             string? mpvTrackId = trackState?.GetMpvTrackId(publicTrackId);
             if (string.IsNullOrWhiteSpace(mpvTrackId))
             {
-                return;
+                return true;
             }
-            MpvCommandExecutor.SetPropertyString(mpvContext, property, mpvTrackId);
+            return MpvCommandExecutor.SetPropertyString(mpvContext, property, mpvTrackId) >= 0;
+        }
+
+        private static void WriteCommandFailureEvent(string? requestId)
+        {
+            WriteOutputEvent(new Dictionary<string, object?>
+            {
+                ["type"] = "error",
+                ["requestId"] = requestId,
+                ["error"] = new Dictionary<string, object?>
+                {
+                    ["code"] = "PLAYER_HELPER_COMMAND_FAILED",
+                    ["message"] = "Native player command failed.",
+                    ["category"] = "helper-failure",
+                    ["recoverable"] = true,
+                    ["retryable"] = true
+                }
+            });
         }
 
         private static int SetOption(IntPtr mpv, string name, string value)
