@@ -82,6 +82,13 @@ class PlayerBridgeRequestTimeoutError extends Error {
   }
 }
 
+class PlayerBridgeRequestCanceledError extends Error {
+  constructor() {
+    super('Player bridge request was canceled.');
+    this.name = 'PlayerBridgeRequestCanceledError';
+  }
+}
+
 export function createPlayerOverlayController(
   options: PlayerOverlayControllerOptions,
 ): PlayerOverlayController {
@@ -89,6 +96,15 @@ export function createPlayerOverlayController(
   let sequence = 0;
   let tuneGeneration = 0;
   let pendingCommand: PendingCommand | null = null;
+  let pendingCommandTimer: number | null = null;
+  let bridgeRequestSequence = 0;
+  const activeBridgeRequests = new Map<
+    number,
+    Readonly<{
+      ownerKey: string;
+      reject(error: Error): void;
+    }>
+  >();
   let osdTimer: number | null = null;
   let miniGuideTimer: number | null = null;
   let numberTimer: number | null = null;
@@ -118,29 +134,76 @@ export function createPlayerOverlayController(
     transitionTimer = clearTimer(transitionTimer);
   };
 
-  const withBridgeRequestTimeout = <T>(request: Promise<T>): Promise<T> =>
+  const withBridgeRequestTimeout = <T>(
+    ownerKey: string,
+    request: Promise<T>,
+  ): Promise<T> =>
     new Promise<T>((resolve, reject) => {
+      const bridgeRequestId = ++bridgeRequestSequence;
       let settled = false;
       const timeout = options.host.setTimeout(() => {
         if (settled) return;
         settled = true;
+        activeBridgeRequests.delete(bridgeRequestId);
         reject(new PlayerBridgeRequestTimeoutError());
       }, PLAYER_BRIDGE_REQUEST_TIMEOUT_MS);
+      const settle = (): boolean => {
+        if (settled) return false;
+        settled = true;
+        options.host.clearTimeout(timeout);
+        activeBridgeRequests.delete(bridgeRequestId);
+        return true;
+      };
+      activeBridgeRequests.set(bridgeRequestId, {
+        ownerKey,
+        reject: (error) => {
+          if (!settle()) return;
+          reject(error);
+        },
+      });
       request.then(
         (value) => {
-          if (settled) return;
-          settled = true;
-          options.host.clearTimeout(timeout);
+          if (!settle()) return;
           resolve(value);
         },
         (error: unknown) => {
-          if (settled) return;
-          settled = true;
-          options.host.clearTimeout(timeout);
+          if (!settle()) return;
           reject(error);
         },
       );
     });
+
+  const cancelBridgeRequests = (ownerKey?: string): void => {
+    for (const request of [...activeBridgeRequests.values()]) {
+      if (ownerKey !== undefined && request.ownerKey !== ownerKey) continue;
+      request.reject(new PlayerBridgeRequestCanceledError());
+    }
+  };
+
+  const releasePendingCommand = (): PendingCommand | null => {
+    const released = pendingCommand;
+    pendingCommand = null;
+    pendingCommandTimer = clearTimer(pendingCommandTimer);
+    if (released !== null) {
+      cancelBridgeRequests(`command:${released.requestId}`);
+    }
+    return released;
+  };
+
+  const armPendingCommandTimer = (requestId: string): void => {
+    pendingCommandTimer = clearTimer(pendingCommandTimer);
+    pendingCommandTimer = options.host.setTimeout(() => {
+      pendingCommandTimer = null;
+      const pending = pendingCommand;
+      if (pending?.requestId !== requestId) return;
+      failPendingCommand(
+        requestId,
+        pending.kind === 'track'
+          ? 'Track selection timed out.'
+          : 'Player command timed out.',
+      );
+    }, PLAYER_BRIDGE_REQUEST_TIMEOUT_MS);
+  };
 
   const focusActive = (): void => {
     const state = options.getState();
@@ -317,7 +380,9 @@ export function createPlayerOverlayController(
     if (intent === null || command === null) return true;
     const requestId = `renderer-${command}-${++sequence}`;
     pendingCommand = { requestId, command, kind: 'space', snapshotRequestId: snapshot.requestId, focusId: null, trackId: null, family: null };
+    armPendingCommandTimer(requestId);
     void withBridgeRequestTimeout(
+      `command:${requestId}`,
       options.player.dispatch({ intent, requestId, payload: {} }),
     ).then((result) => {
       if (disposed || pendingCommand?.requestId !== requestId) return;
@@ -346,9 +411,11 @@ export function createPlayerOverlayController(
     const requestId = `renderer-select-${family}-${++sequence}`;
     const command = family === 'audio' ? 'track.audio.select' : 'track.subtitle.select';
     pendingCommand = { requestId, command, kind: 'track', snapshotRequestId: snapshot.requestId, focusId, trackId, family };
+    armPendingCommandTimer(requestId);
     update((state) => ({ ...state, pendingTrackFocusId: focusId, playbackOptionsError: null }));
     try {
       const result = await withBridgeRequestTimeout(
+        `command:${requestId}`,
         options.player.dispatch({
           intent: family === 'audio' ? 'player.selectAudio' : 'player.selectSubtitle',
           requestId,
@@ -379,6 +446,7 @@ export function createPlayerOverlayController(
     const state = options.getState();
     if (state.pendingTuneChannelId === channelId || state.transitionChannelId === channelId) return;
     const generation = ++tuneGeneration;
+    cancelBridgeRequests('tune');
     if (invoker === 'miniGuide') miniGuideTimer = clearTimer(miniGuideTimer);
     transitionTimer = clearTimer(transitionTimer);
     if (invoker === 'number') numberTimer = clearTimer(numberTimer);
@@ -400,6 +468,7 @@ export function createPlayerOverlayController(
     }, TRANSITION_DELAY_MS);
     try {
       const result = await withBridgeRequestTimeout(
+        'tune',
         options.player.tuneChannel({ channelId }),
       );
       if (disposed || generation !== tuneGeneration) return;
@@ -483,15 +552,15 @@ export function createPlayerOverlayController(
       failPendingCommand(event.requestId, event.error?.message ?? 'Player command failed.');
       return;
     }
-    const completed = pendingCommand;
-    pendingCommand = null;
+    const completed = releasePendingCommand();
+    if (completed === null) return;
     if (completed.kind === 'track') closeOptionsWithFallback(completed);
   };
 
   const failPendingCommand = (requestId: string, message: string): void => {
     if (disposed || pendingCommand?.requestId !== requestId) return;
-    const pending = pendingCommand;
-    pendingCommand = null;
+    const pending = releasePendingCommand();
+    if (pending === null) return;
     if (pending.kind === 'space') {
       options.recordDiagnostic('player.space', safeMessage(message, 'Player command failed.'));
       return;
@@ -546,30 +615,36 @@ export function createPlayerOverlayController(
     const previousRequest = lastSnapshotRequestId;
     lastSnapshotRequestId = snapshot.requestId;
     if (pendingCommand !== null && previousRequest !== snapshot.requestId) {
-      const invalidated = pendingCommand;
-      pendingCommand = null;
-      if (invalidated.kind === 'track') closeOptionsWithFallback(invalidated, false);
+      const invalidated = releasePendingCommand();
+      if (invalidated?.kind === 'track') closeOptionsWithFallback(invalidated, false);
     }
     const ambiguousAuthoritativeLoad = authoritative && !explicitTrackList &&
       ['loading', 'buffering', 'stalled', 'seeking'].includes(snapshot.status);
     if (pendingCommand?.kind === 'track' && !ambiguousAuthoritativeLoad &&
       !trackMembership(snapshot, pendingCommand.family, pendingCommand.trackId)) {
-      const invalidated = pendingCommand;
-      pendingCommand = null;
-      const familyEligible = invalidated.family === 'audio'
-        ? isAudioControlEligible(snapshot)
-        : invalidated.family === 'subtitle' && isSubtitleControlEligible(snapshot);
-      if (familyEligible) {
-        setOptionsFailure(firstOptionFocus(snapshot, invalidated.family), 'Track is no longer available.');
-      } else {
-        closeOptionsWithFallback(invalidated);
+      const invalidated = releasePendingCommand();
+      if (invalidated !== null) {
+        const familyEligible = invalidated.family === 'audio'
+          ? isAudioControlEligible(snapshot)
+          : invalidated.family === 'subtitle' && isSubtitleControlEligible(snapshot);
+        if (familyEligible) {
+          setOptionsFailure(firstOptionFocus(snapshot, invalidated.family), 'Track is no longer available.');
+        } else {
+          closeOptionsWithFallback(invalidated);
+        }
+        if (invalidated.focusId !== null) {
+          options.recordDiagnostic(
+            'player.track.membership',
+            'Pending track was removed.',
+          );
+        }
       }
-      if (invalidated.focusId !== null) options.recordDiagnostic('player.track.membership', 'Pending track was removed.');
     }
     if (authoritative && (snapshot.status === 'error' || snapshot.status === 'destroyed')) {
       clearOverlayTimers();
-      pendingCommand = null;
+      releasePendingCommand();
       ++tuneGeneration;
+      cancelBridgeRequests('tune');
       update((state) => reconcileSnapshotState(state, snapshot));
       focusActive();
       return;
@@ -592,7 +667,7 @@ export function createPlayerOverlayController(
     const state = options.getState();
     if (state.activeOverlayId === null) return false;
     const wasOptions = state.activeOverlayId === 'playbackOptions';
-    if (pendingCommand?.kind === 'track') pendingCommand = null;
+    if (pendingCommand?.kind === 'track') releasePendingCommand();
     if (state.activeOverlayId === 'miniGuide') miniGuideTimer = clearTimer(miniGuideTimer);
     if (state.activeOverlayId === 'playerOsd') osdTimer = clearTimer(osdTimer);
     if (state.activeOverlayId === 'channelNumber') numberTimer = clearTimer(numberTimer);
@@ -606,7 +681,8 @@ export function createPlayerOverlayController(
   const routeLeave = (): void => {
     clearOverlayTimers();
     ++tuneGeneration;
-    pendingCommand = null;
+    releasePendingCommand();
+    cancelBridgeRequests();
     options.setState(closeAllPlayerOverlays(options.getState()));
     options.render();
   };

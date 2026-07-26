@@ -156,6 +156,79 @@ test('bridge request timeouts clear tune and command ownership through normal fa
   assert.equal(tune.state().miniGuideError, 'Channel tune timed out.');
 });
 
+test('accepted commands retain a settlement deadline and release it on matching settlement', async () => {
+  let unresolvedDispatches = 0;
+  const unresolved = createHarness(playingSnapshot(), {
+    dispatch: async (envelope) => {
+      unresolvedDispatches += 1;
+      return accepted(envelope.requestId);
+    },
+  });
+  unresolved.controller.handleInput('space');
+  await flushPromiseQueue();
+  unresolved.timers.advance(29_999);
+  assert.deepEqual(unresolved.diagnostics, []);
+  unresolved.timers.advance(1);
+  await flushPromiseQueue();
+  assert.deepEqual(unresolved.diagnostics, ['Player command timed out.']);
+  unresolved.controller.handleInput('space');
+  assert.equal(unresolvedDispatches, 2);
+
+  let settledDispatches = 0;
+  const settled = createHarness(playingSnapshot(), {
+    dispatch: async (envelope) => {
+      settledDispatches += 1;
+      return accepted(envelope.requestId);
+    },
+  });
+  settled.controller.handleInput('space');
+  await flushPromiseQueue();
+  settled.controller.handlePlayerEvent({
+    event: 'command.settled',
+    requestId: 'renderer-pause-1',
+    command: 'pause',
+    ok: true,
+  });
+  settled.timers.advance(30_000);
+  assert.deepEqual(settled.diagnostics, []);
+  settled.controller.handleInput('space');
+  assert.equal(settledDispatches, 2);
+
+  const track = createHarness(playingSnapshot());
+  track.controller.requestOsd();
+  track.controller.openOptions('audio');
+  await track.controller.selectTrack(
+    'audio',
+    'audio-alt',
+    'overlay-audio-track-audio-alt',
+  );
+  track.timers.advance(30_000);
+  assert.equal(track.state().pendingTrackFocusId, null);
+  assert.equal(track.state().playbackOptionsError, 'Track selection timed out.');
+});
+
+test('route leave and dispose cancel owned bridge deadlines without late failures', async () => {
+  const never = new Promise<never>(() => undefined);
+  const routeLeave = createHarness(playingSnapshot(), {
+    dispatch: async () => never,
+  });
+  routeLeave.controller.handleInput('space');
+  routeLeave.controller.routeLeave();
+  await flushPromiseQueue();
+  routeLeave.timers.advance(30_000);
+  assert.deepEqual(routeLeave.diagnostics, []);
+
+  const dispose = createHarness(playingSnapshot(), {
+    dispatch: async () => never,
+  });
+  dispose.controller.handleInput('space');
+  dispose.controller.dispose();
+  await flushPromiseQueue();
+  dispose.timers.advance(30_000);
+  assert.deepEqual(dispose.diagnostics, []);
+  assert.equal(dispose.controller.handleInput('space'), false);
+});
+
 test('different tune target supersedes stale completion and only current success reconciles', async () => {
   const tunes: Array<Deferred<{ ok: true; value: never; requestId: string }>> = [];
   let statusRefresh = 0;
