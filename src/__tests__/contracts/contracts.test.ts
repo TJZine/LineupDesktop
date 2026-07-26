@@ -93,7 +93,7 @@ import {
   type DiagnosticRecord,
   type DiagnosticsError,
   type DiagnosticsResult,
-  type RedactionScanReport,
+  type PassedRedactionScanReport,
   type SupportBundleExportFailure,
   type SupportBundleExportResult,
 } from '../../contracts/diagnostics.js';
@@ -301,9 +301,9 @@ test('diagnostics result and support bundle contracts remain renderer-safe', () 
     cancelled: true,
     error: { ...error, code: 'DIAGNOSTICS_EXPORT_CANCELLED' },
   };
-  const report: RedactionScanReport = {
+  const report: PassedRedactionScanReport = {
     redactionVersion: DIAGNOSTIC_REDACTION_VERSION,
-    scannedFileCount: 4,
+    scannedFileCount: 2,
     scannedByteCount: 512,
     findingCount: 0,
     findingsByLabel: {},
@@ -317,7 +317,7 @@ test('diagnostics result and support bundle contracts remain renderer-safe', () 
     bundleId: 'bundle-1',
     bundleDirectoryName: 'lineup-desktop-support-bundle-1',
     createdAtMs: 1,
-    fileCount: 4,
+    fileCount: 2,
     byteCount: 512,
     includedFiles: ['manifest.json', 'diagnostics.ndjson'],
     redactionReport: report,

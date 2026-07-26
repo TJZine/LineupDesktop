@@ -61,6 +61,10 @@ export function isWindowsProofPlatform(platform = process.platform) {
   return platform === 'win32';
 }
 
+export function scanRd17EvidenceDirectory(root, options = {}) {
+  return scanSupportBundleDirectory(root, options);
+}
+
 export function parseSmokeArgs(argv = process.argv.slice(2)) {
   const outIndex = argv.indexOf('--out');
   if (outIndex < 0 || outIndex === argv.length - 1 || argv[outIndex + 1]?.startsWith('--')) {
@@ -166,7 +170,7 @@ async function runWindowsSmoke(outRoot) {
   const exporter = new SupportBundleExporter({
     eventStore: diagnostics,
     parentDirectoryProvider: () => supportParent,
-    redactionScanner: (bundleDirectory, options) => scanSupportBundleDirectory(bundleDirectory, options),
+    redactionScanner: (bundleDirectory, options) => scanRd17EvidenceDirectory(bundleDirectory, options),
     clock: () => CREATED_AT_MS,
     bundleIdGenerator: () => SUPPORT_BUNDLE_ID,
     appVersion: '0.0.0',
@@ -190,7 +194,7 @@ async function runWindowsSmoke(outRoot) {
   await fs.rm(supportParent, { recursive: true, force: true });
   await assertRequiredSupportBundleFiles(evidenceBundleDirectory);
 
-  const supportBundleReport = scanSupportBundleDirectory(evidenceBundleDirectory, {
+  const supportBundleReport = scanRd17EvidenceDirectory(evidenceBundleDirectory, {
     timestampMs: CREATED_AT_MS,
     truncatedRecordCount: exportResult.redactionReport.truncatedRecordCount,
     omittedFileCount: exportResult.redactionReport.omittedFileCount,
@@ -227,7 +231,7 @@ async function runWindowsSmoke(outRoot) {
 
   await writeJson(path.join(outRoot, 'manifest.json'), manifest);
   await writeJson(path.join(outRoot, 'summary.json'), summary);
-  const topLevelReport = scanSupportBundleDirectory(outRoot, {
+  const topLevelReport = scanRd17EvidenceDirectory(outRoot, {
     timestampMs: CREATED_AT_MS,
     truncatedRecordCount: supportBundleReport.truncatedRecordCount,
     omittedFileCount: supportBundleReport.omittedFileCount,

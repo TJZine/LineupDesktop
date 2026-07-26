@@ -189,6 +189,10 @@ export interface RedactionScanReport {
   timestampMs: number;
 }
 
+export type PassedRedactionScanReport = RedactionScanReport & {
+  status: 'passed';
+};
+
 export interface SupportBundleExportResult {
   status: 'succeeded';
   bundleId: string;
@@ -197,7 +201,7 @@ export interface SupportBundleExportResult {
   fileCount: number;
   byteCount: number;
   includedFiles: readonly string[];
-  redactionReport: RedactionScanReport;
+  redactionReport: PassedRedactionScanReport;
 }
 
 export interface SupportBundleExportFailure {
@@ -326,10 +330,10 @@ const DIAGNOSTIC_CREDENTIAL_SCHEME_PATTERN_REGEXP = new RegExp(
   'giu',
 );
 const DIAGNOSTIC_URL_PATTERN = /https?:\/\/[^\s"')]+/giu;
-const DIAGNOSTIC_RAW_FILESYSTEM_PATH_WITH_SPACES_PATTERN =
-  /(?:[A-Za-z]:\\[^\r\n"')]*?\.[A-Za-z0-9]{1,8}|\\\\[^\\\r\n"')]+\\[^\r\n"')]*?\.[A-Za-z0-9]{1,8}|\/[A-Za-z0-9._-]+\/[^\r\n"')]*?\.[A-Za-z0-9]{1,8})/gu;
 const DIAGNOSTIC_RAW_FILESYSTEM_PATH_PATTERN_SOURCE =
-  String.raw`(?<![A-Za-z0-9._~+/-])(?:[A-Za-z]:\\[^\s"'<>|?*),;]+|\\\\[^\\\s"'<>|?*),;]+\\[^\\\s"'<>|?*),;]+(?:\\[^\\\s"'<>|?*),;]+)*|\/[A-Za-z0-9._-]+(?:\/[^\s"'<>),;]*)*)`;
+  String.raw`(?<![A-Za-z0-9._~+/-])(?:[A-Za-z]:\\(?!\\)[^\r\n"'<>|?*),;]*[^\s\r\n"'<>|?*),;.!]|\\\\(?!\\)[^\r\n"'<>|?*),;]*[^\s\r\n"'<>|?*),;.!]|\/(?=[A-Za-z._-])[^\r\n"'<>|?*),;]*[^\s\r\n"'<>|?*),;.!])`;
+const DIAGNOSTIC_SERIALIZED_ABSOLUTE_PATH_PATTERN_SOURCE =
+  String.raw`(?:${DIAGNOSTIC_RAW_FILESYSTEM_PATH_PATTERN_SOURCE}|(?<![A-Za-z0-9._~+/-])(?:[A-Za-z]:\\\\[^\r\n"'<>|?*),;]*[^\s\r\n"'<>|?*),;.!]|\\\\\\\\[^\r\n"'<>|?*),;]*[^\s\r\n"'<>|?*),;.!]))`;
 const DIAGNOSTIC_RAW_FILESYSTEM_PATH_PATTERN = new RegExp(
   DIAGNOSTIC_RAW_FILESYSTEM_PATH_PATTERN_SOURCE,
   'gu',
@@ -386,7 +390,6 @@ export function redactDiagnosticText(value: string): string {
     .replace(DIAGNOSTIC_TOKEN_QUERY_PARAM_PATTERN, `$1${REDACTED_DIAGNOSTIC_VALUE}`)
     .replace(DIAGNOSTIC_CREDENTIAL_SCHEME_PATTERN_REGEXP, `$1 ${REDACTED_DIAGNOSTIC_VALUE}`)
     .replace(DIAGNOSTIC_URL_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
-    .replace(DIAGNOSTIC_RAW_FILESYSTEM_PATH_WITH_SPACES_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
     .replace(DIAGNOSTIC_RAW_FILESYSTEM_PATH_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
     .replace(DIAGNOSTIC_FREEFORM_PROCESS_NATIVE_IPC_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
     .replace(DIAGNOSTIC_FREEFORM_CREDENTIAL_VALUE_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
@@ -394,7 +397,7 @@ export function redactDiagnosticText(value: string): string {
 }
 
 export function containsDiagnosticAbsolutePath(value: string): boolean {
-  return new RegExp(DIAGNOSTIC_RAW_FILESYSTEM_PATH_PATTERN_SOURCE, 'u').test(value);
+  return new RegExp(DIAGNOSTIC_SERIALIZED_ABSOLUTE_PATH_PATTERN_SOURCE, 'u').test(value);
 }
 
 export function sanitizeDiagnosticOperation(value: string): {

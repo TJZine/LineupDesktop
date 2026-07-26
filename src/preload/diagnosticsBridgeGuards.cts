@@ -352,7 +352,9 @@ export function isDiagnosticsExportSupportBundleResult(
       value.includedFiles.every(isSafeBundleFileName) &&
       isRedactionScanReport(value.redactionReport) &&
       isPlainRecord(value.redactionReport) &&
-      value.redactionReport.status === 'passed'
+      value.redactionReport.status === 'passed' &&
+      value.fileCount === value.includedFiles.length &&
+      value.fileCount === value.redactionReport.scannedFileCount
     );
   }
   return (

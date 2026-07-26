@@ -16,6 +16,7 @@ import {
   parseSmokeArgs,
   resolveEvidenceDirectory,
   runBuild,
+  scanRd17EvidenceDirectory,
   waitForChildClose,
 } from '../rd17-diagnostics-smoke.mjs';
 
@@ -155,6 +156,26 @@ test('rd17 diagnostics smoke build is time and output bounded without exposing c
       error.message === 'Electron build timed out before RD-17 diagnostics smoke.'
     ),
   );
+});
+
+test('rd17 evidence scanning fails closed on arbitrary absolute paths', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd17-path-scan-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(
+    path.join(root, 'summary.json'),
+    JSON.stringify({
+      note: ['D:', '\\', 'Media Library', '\\', 'private'].join(''),
+    }),
+  );
+
+  const report = scanRd17EvidenceDirectory(root, {
+    timestampMs: 1,
+    truncatedRecordCount: 0,
+    omittedFileCount: 0,
+  });
+
+  assert.equal(report.status, 'failed');
+  assert.equal(report.findingsByLabel['raw-filesystem-path'], 1);
 });
 
 test('rd17 diagnostics smoke child close wait resolves when exit is already observed', async () => {

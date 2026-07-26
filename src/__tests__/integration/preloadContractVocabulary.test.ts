@@ -2246,7 +2246,14 @@ test('preload diagnostics export guard rejects contradictory redaction reports',
     createdAtMs: 1,
     fileCount: 6,
     byteCount: 512,
-    includedFiles: ['manifest.json'],
+    includedFiles: [
+      'manifest.json',
+      'diagnostics.ndjson',
+      'crash-recovery.json',
+      'player-snapshot.json',
+      'environment.json',
+      'redaction-report.json',
+    ],
     redactionReport: report,
   };
 
@@ -2271,6 +2278,17 @@ test('preload diagnostics export guard rejects contradictory redaction reports',
       findingCount: 2,
       findingsByLabel: { 'raw-filesystem-path': 1 },
       status: 'failed',
+    },
+  }), false);
+  assert.equal(guard({
+    ...success,
+    fileCount: 5,
+  }), false);
+  assert.equal(guard({
+    ...success,
+    redactionReport: {
+      ...report,
+      scannedFileCount: 5,
     },
   }), false);
 });

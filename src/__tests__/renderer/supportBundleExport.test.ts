@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   DIAGNOSTIC_REDACTION_VERSION,
   type DiagnosticsExportSupportBundleResult,
-  type RedactionScanReport,
+  type PassedRedactionScanReport,
 } from '../../contracts/diagnostics.js';
 import {
   activateWorkflowRoute,
@@ -126,7 +126,9 @@ function createDeferred<T>(): {
   };
 }
 
-function createReport(overrides: Partial<RedactionScanReport> = {}): RedactionScanReport {
+function createReport(
+  overrides: Partial<PassedRedactionScanReport> = {},
+): PassedRedactionScanReport {
   return {
     redactionVersion: DIAGNOSTIC_REDACTION_VERSION,
     scannedFileCount: 6,

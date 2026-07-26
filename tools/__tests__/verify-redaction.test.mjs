@@ -4,7 +4,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { scanFileContent, scanRepo } from '../verify-redaction.mjs';
+import {
+  scanFileContent,
+  scanRepo,
+  scanSupportBundleDirectory,
+} from '../verify-redaction.mjs';
 
 const scannerLabels = [
   'token-query-parameter',
@@ -223,6 +227,16 @@ test('scanFileContent reports raw filesystem paths process data native handles a
     scanFileContent(mediaPath),
     ['raw-filesystem-path'],
   );
+  for (const arbitraryPath of [
+    ['', 'etc', 'passwd'].join('/'),
+    ['', 'opt', 'Lineup Data', 'private-media-folder'].join('/'),
+    ['D:', '\\', 'Media Library', '\\', 'private'].join(''),
+    ['\\\\', 'media-host', '\\', 'Shared Library', '\\', 'private'].join(''),
+  ]) {
+    assert.deepEqual(scanFileContent(arbitraryPath), ['raw-filesystem-path']);
+  }
+  assert.deepEqual(scanFileContent('src/contracts/diagnostics.ts'), []);
+  assert.deepEqual(scanFileContent('1/2/3.14'), []);
   assert.deepEqual(scanFileContent(`${processKey}=12345`), ['raw-process-data']);
   assert.deepEqual(scanFileContent(`${processKey} 12345`), ['raw-process-data']);
   assert.deepEqual(scanFileContent(`${nativeHandleKey}=123456789`), ['native-handle']);
@@ -239,6 +253,26 @@ test('scanFileContent reports raw filesystem paths process data native handles a
   assert.deepEqual(scanFileContent(`${['credential'].join('')} 12345`), [
     'secret-field-value',
   ]);
+});
+
+test('support bundle scanning rejects absolute paths under arbitrary JSON keys', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-support-scan-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(
+    path.join(root, 'environment.json'),
+    JSON.stringify({
+      note: ['', 'opt', 'Lineup Data', 'private-media-folder'].join('/'),
+    }),
+  );
+
+  const report = scanSupportBundleDirectory(root, {
+    timestampMs: 1,
+    truncatedRecordCount: 0,
+    omittedFileCount: 0,
+  });
+
+  assert.equal(report.status, 'failed');
+  assert.equal(report.findingsByLabel['raw-filesystem-path'], 1);
 });
 
 test('scanFileContent reports oauth2 token path segments', () => {

@@ -136,6 +136,29 @@ test('diagnostic text sanitizers redact raw values before storage', () => {
   assert.equal(context.context?.count, 1);
 });
 
+test('diagnostic text redaction replaces whole extensionless absolute paths', () => {
+  const absolutePaths = [
+    ['', 'opt', 'Lineup Data', 'private-media-folder'].join('/'),
+    ['D:', '\\', 'Media Library', '\\', 'private'].join(''),
+    ['\\\\', 'media-host', '\\', 'Shared Library', '\\', 'private'].join(''),
+    ['', 'etc', 'passwd'].join('/'),
+  ];
+
+  for (const absolutePath of absolutePaths) {
+    assert.equal(
+      redactDiagnosticText(`Playback failed at ${absolutePath}.`),
+      'Playback failed at [redacted].',
+    );
+  }
+
+  for (const ordinaryText of [
+    'Inspect src/contracts/diagnostics.ts before retrying.',
+    'Progress is 1/2/3.14 complete.',
+  ]) {
+    assert.equal(redactDiagnosticText(ordinaryText), ordinaryText);
+  }
+});
+
 test('diagnostic request ids redact raw diagnostic material before storage', () => {
   const tokenKey = ['media', 'Token'].join('');
   const pathKey = ['file', 'Path'].join('');
