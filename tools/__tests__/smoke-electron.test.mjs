@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
-import { setImmediate as setNodeImmediate } from 'node:timers';
+import {
+  clearInterval as clearNodeInterval,
+  setImmediate as setNodeImmediate,
+  setInterval as setNodeInterval,
+} from 'node:timers';
 
 import {
   buildSmokeSpawnOptions,
@@ -59,32 +65,98 @@ test('smoke launcher preserves a successful child exit and cleans its temporary 
 });
 
 test('smoke launcher force-kills a non-exiting child, reports a fixed failure, and cleans up', { timeout: 1_000 }, async () => {
-  const child = new FakeSmokeChild();
+  const child = new FakeSmokeChild({ killResult: false, withRefedHandle: true });
   const failures = [];
   let smokeRoot;
 
+  try {
+    const result = await runElectronSmoke({
+      spawnChild: (_executable, args) => {
+        smokeRoot = smokeRootFromArgs(args);
+        return child;
+      },
+      deadlineMs: 30,
+      reapDeadlineMs: 5,
+      reportFailure: (message) => failures.push(message),
+    });
+
+    assert.equal(result, 1);
+    assert.deepEqual(child.killSignals, ['SIGKILL']);
+    assert.equal(child.unrefCount, 1);
+    assert.equal(child.handle?.hasRef(), false);
+    assert.equal(child.listenerCount('error'), 0);
+    assert.equal(child.listenerCount('exit'), 0);
+    assert.deepEqual(failures, ['Electron smoke exceeded its deadline.']);
+    assert.equal(await pathExists(smokeRoot), false);
+  } finally {
+    child.dispose();
+  }
+});
+
+test('smoke launcher safely reports bootstrap failure and removes its provisional root', { timeout: 1_000 }, async () => {
+  const failures = [];
+  const bootstrapRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'lineup-smoke-bootstrap-failure-'),
+  );
+
   const result = await runElectronSmoke({
-    spawnChild: (_executable, args) => {
-      smokeRoot = smokeRootFromArgs(args);
-      return child;
+    createBootstrap: (_platform, { onRootCreated }) => {
+      onRootCreated(bootstrapRoot);
+      throw new Error('untrusted bootstrap detail');
     },
-    deadlineMs: 1,
+    deadlineMs: 100,
+    reportFailure: (message) => failures.push(message),
+  });
+
+  assert.equal(result, 1);
+  assert.deepEqual(failures, ['Electron smoke setup failed.']);
+  assert.equal(await pathExists(bootstrapRoot), false);
+});
+
+test('smoke launcher bounds a hung bootstrap and removes its provisional root', { timeout: 1_000 }, async () => {
+  const failures = [];
+  const bootstrapRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'lineup-smoke-bootstrap-hang-'),
+  );
+
+  const result = await runElectronSmoke({
+    createBootstrap: (_platform, { onRootCreated }) => {
+      onRootCreated(bootstrapRoot);
+      return new Promise(() => {});
+    },
+    deadlineMs: 5,
     reapDeadlineMs: 5,
     reportFailure: (message) => failures.push(message),
   });
 
   assert.equal(result, 1);
-  assert.deepEqual(child.killSignals, ['SIGKILL']);
   assert.deepEqual(failures, ['Electron smoke exceeded its deadline.']);
-  assert.equal(await pathExists(smokeRoot), false);
+  assert.equal(await pathExists(bootstrapRoot), false);
 });
 
 class FakeSmokeChild extends EventEmitter {
   killSignals = [];
+  unrefCount = 0;
+
+  constructor({ killResult = true, withRefedHandle = false } = {}) {
+    super();
+    this.killResult = killResult;
+    this.handle = withRefedHandle ? setNodeInterval(() => {}, 60_000) : undefined;
+  }
 
   kill(signal) {
     this.killSignals.push(signal);
-    return true;
+    return this.killResult;
+  }
+
+  unref() {
+    this.unrefCount += 1;
+    this.handle?.unref();
+    return this;
+  }
+
+  dispose() {
+    if (this.handle !== undefined) clearNodeInterval(this.handle);
   }
 }
 
