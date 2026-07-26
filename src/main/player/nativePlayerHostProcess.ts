@@ -55,7 +55,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
   #lineBuffer = '';
   #lifecycleFailureListeners = new Set<(failure: NativePlayerHostLifecycleFailure) => void>();
   #eventListeners = new Set<(event: NativePlayerHostEvent) => void>();
-  #spawnCount = 0;
+  #recoveryPending = false;
   constructor(options: NativePlayerHostProcessOptions) {
     this.#spawnHostProcess = options.spawnHostProcess;
     this.#requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
@@ -173,17 +173,18 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     }
     try {
       const child = this.#spawnHostProcess();
+      const isRecovery = this.#recoveryPending;
       this.#child = child;
       this.#recordDiagnostic({
-        category: this.#spawnCount > 0 ? 'helper-restart' : 'lifecycle',
+        category: isRecovery ? 'helper-restart' : 'lifecycle',
         severity: 'info',
         status: 'succeeded',
         operation: 'helper.spawn',
-        message: this.#spawnCount > 0 ? 'Player helper replacement started.' : 'Player helper started.',
+        message: isRecovery ? 'Player helper replacement started.' : 'Player helper started.',
         result: 'success',
-        context: { restart: this.#spawnCount > 0 },
+        context: { restart: isRecovery },
       });
-      this.#spawnCount += 1;
+      this.#recoveryPending = false;
       child.stdout.on('data', (chunk: Buffer | string) => this.#handleStdoutChunk(child, chunk));
       child.stderr.on('data', (chunk: Buffer | string) => this.#handleStderrChunk(chunk));
       child.stdin.on('error', () => this.#handleChildStreamError(child));
@@ -193,6 +194,8 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
         if (this.#child === child) {
           const failure = safeNativeHostFailure('PLAYER_HELPER_SPAWN_FAILED', 'helper-failure', true, true);
           this.#child = null;
+          this.#lineBuffer = '';
+          this.#recoveryPending = true;
           this.#settleProcessFailure(failure);
         }
       });
@@ -200,12 +203,15 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
         if (this.#child === child) {
           const failure = safeNativeHostFailure('PLAYER_HELPER_EXITED', 'helper-failure', true, true);
           this.#child = null;
+          this.#lineBuffer = '';
+          this.#recoveryPending = true;
           this.#settleProcessFailure(failure);
         }
       });
       return { child };
     } catch {
       const error = safeNativeHostFailure('PLAYER_HELPER_SPAWN_FAILED', 'helper-failure', true, true);
+      this.#recoveryPending = true;
       this.#recordFailure(null, error, { operation: 'helper.spawn', status: 'failed' });
       return {
         error,
@@ -218,6 +224,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     }
     this.#child = null;
     this.#lineBuffer = '';
+    this.#recoveryPending = true;
     const failure = safeNativeHostFailure('PLAYER_HELPER_STREAM_FAILED', 'helper-failure', true, true);
     const requestId = this.#firstPendingRequestId();
     this.#settleProcessFailure(failure);
@@ -316,6 +323,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     const requestId = this.#firstPendingRequestId();
     this.#child = null;
     this.#lineBuffer = '';
+    this.#recoveryPending = true;
     this.#settleProcessFailure(error);
     this.#reapChild(child).catch(() => this.#recordCleanupFailure(requestId));
   }

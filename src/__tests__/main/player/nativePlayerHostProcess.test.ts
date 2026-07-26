@@ -312,6 +312,43 @@ test('native host process reports idle helper lifecycle failures to subscribers'
   unsubscribe();
 });
 
+test('native host process clears partial frames after child error and close before replacement', async () => {
+  for (const terminalEvent of ['error', 'close'] as const) {
+    const failedChild = new FakeHostChildProcess();
+    const replacementChild = new FakeHostChildProcess();
+    const children = [failedChild, replacementChild];
+    const diagnostics = new DiagnosticEventStore({
+      clock: () => 1_500,
+      idGenerator: () => `partial-frame-${terminalEvent}`,
+    });
+    const host = new NativePlayerHostProcess({
+      spawnHostProcess: () => {
+        const child = children.shift();
+        assert.ok(child, 'expected a fake child process');
+        return child;
+      },
+      requestTimeoutMs: 100,
+      diagnosticEventStore: diagnostics,
+    });
+
+    const failed = host.execute(loadCommand);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    failedChild.stdout.write('{"type":"result"');
+    failedChild.emit(terminalEvent, terminalEvent === 'error' ? new Error('private helper detail') : 1);
+    assert.equal((await failed).ok, false);
+
+    const replacementRequestId = `native-load-after-${terminalEvent}`;
+    const replacement = host.execute({ ...loadCommand, requestId: replacementRequestId });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    replacementChild.send({ type: 'result', requestId: replacementRequestId, ok: true, events: [] });
+
+    assert.equal((await replacement).ok, true);
+    assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 1);
+    assert.equal(diagnostics.getCrashRecoverySummary().helperRestartCount, 1);
+    assertTextAbsent(diagnostics.getRecords(), 'private helper detail');
+  }
+});
+
 test('native host process keeps active command close failures on the command result', async () => {
   const child = new FakeHostChildProcess();
   const lifecycleFailures: NativePlayerHostLifecycleFailure[] = [];
@@ -623,6 +660,7 @@ test('native host process cleanup reaps child and ignores late output', async ()
   await new Promise<void>((resolve) => setImmediate(resolve));
   secondChild.send({ type: 'result', requestId: 'native-load-2', ok: true, events: [] });
   assert.equal((await nextPending).ok, true);
+  assert.equal(diagnostics.getCrashRecoverySummary().helperRestartCount, 0);
   assert.deepEqual(secondChild.writes[0], {
     type: 'command',
     requestId: 'native-load-2',

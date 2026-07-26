@@ -111,7 +111,13 @@ export class DesktopPlayerAdapter {
     try {
       const hostResult = await this.#host.execute(command);
       if (hostResult.ok) {
-        for (const hostEvent of hostResult.events ?? []) {
+        const validatedBatch = this.#validateHostEventBatch(hostResult.events ?? []);
+        if ('error' in validatedBatch) {
+          events.push(...this.#emitBoundaryError(validatedBatch.error));
+          events.push(this.#failedCommandSettlement(command, validatedBatch.error));
+          return this.#result(true, command, events);
+        }
+        for (const hostEvent of validatedBatch.events) {
           events.push(...this.handleHostEvent(hostEvent));
         }
         events.push(...this.#applySuccessfulCommandMutation(command));
@@ -124,15 +130,9 @@ export class DesktopPlayerAdapter {
         return this.#result(true, command, events);
       }
       const error = hostFailureToError(command.requestId, hostResult.error);
-      this.#recordHelperDiagnostic(command.requestId, 'host.command', 'failed', error.code);
+      this.#recordDiagnostic('playback', command.requestId, 'host.command', 'failed', error.code);
       events.push(...this.#recordError(error));
-      events.push({
-        event: 'command.settled',
-        requestId: command.requestId,
-        command: command.command,
-        ok: false,
-        error,
-      });
+      events.push(this.#failedCommandSettlement(command, error));
       return this.#result(true, command, events);
     } catch {
       const error = createPlayerError({
@@ -147,15 +147,9 @@ export class DesktopPlayerAdapter {
           reason: 'helper command rejected',
         },
       });
-      this.#recordHelperDiagnostic(command.requestId, 'host.command', 'failed', 'PLAYER_HELPER_COMMAND_FAILED');
+      this.#recordDiagnostic('playback', command.requestId, 'host.command', 'failed', 'PLAYER_HELPER_COMMAND_FAILED');
       events.push(...this.#recordError(error));
-      events.push({
-        event: 'command.settled',
-        requestId: command.requestId,
-        command: command.command,
-        ok: false,
-        error,
-      });
+      events.push(this.#failedCommandSettlement(command, error));
       return this.#result(true, command, events);
     } finally {
       this.#requestCustody.settle(command.requestId);
@@ -205,7 +199,13 @@ export class DesktopPlayerAdapter {
     try {
       const hostResult = await this.#host.execute(command, context);
       if (hostResult.ok) {
-        for (const hostEvent of hostResult.events ?? []) {
+        const validatedBatch = this.#validateHostEventBatch(hostResult.events ?? []);
+        if ('error' in validatedBatch) {
+          events.push(...this.#emitBoundaryError(validatedBatch.error));
+          events.push(this.#failedCommandSettlement(command, validatedBatch.error));
+          return this.#result(true, command, events);
+        }
+        for (const hostEvent of validatedBatch.events) {
           events.push(...this.handleHostEvent(hostEvent));
         }
         events.push(...this.#applySuccessfulCommandMutation(command));
@@ -218,15 +218,9 @@ export class DesktopPlayerAdapter {
         return this.#result(true, command, events);
       }
       const error = hostFailureToError(command.requestId, hostResult.error);
-      this.#recordHelperDiagnostic(command.requestId, 'host.command', 'failed', error.code);
+      this.#recordDiagnostic('playback', command.requestId, 'host.command', 'failed', error.code);
       events.push(...this.#recordError(error));
-      events.push({
-        event: 'command.settled',
-        requestId: command.requestId,
-        command: command.command,
-        ok: false,
-        error,
-      });
+      events.push(this.#failedCommandSettlement(command, error));
       return this.#result(true, command, events);
     } catch {
       const error = createPlayerError({
@@ -241,15 +235,9 @@ export class DesktopPlayerAdapter {
           reason: 'helper command rejected',
         },
       });
-      this.#recordHelperDiagnostic(command.requestId, 'host.command', 'failed', 'PLAYER_HELPER_COMMAND_FAILED');
+      this.#recordDiagnostic('playback', command.requestId, 'host.command', 'failed', 'PLAYER_HELPER_COMMAND_FAILED');
       events.push(...this.#recordError(error));
-      events.push({
-        event: 'command.settled',
-        requestId: command.requestId,
-        command: command.command,
-        ok: false,
-        error,
-      });
+      events.push(this.#failedCommandSettlement(command, error));
       return this.#result(true, command, events);
     } finally {
       this.#requestCustody.settle(command.requestId);
@@ -382,7 +370,7 @@ export class DesktopPlayerAdapter {
   }
   handleHelperCrash(requestId: PlayerRequestId | null = this.#snapshot.requestId): readonly PlayerEvent[] {
     this.#requestCustody.clear();
-    this.#recordHelperDiagnostic(requestId ?? null, 'helper.lifecycle', 'failed', 'PLAYER_HELPER_CRASHED');
+    this.#recordDiagnostic('helper-crash', requestId ?? null, 'helper.lifecycle', 'failed', 'PLAYER_HELPER_CRASHED');
     return this.#recordError(
       createPlayerError({
         code: 'PLAYER_HELPER_CRASHED',
@@ -401,7 +389,7 @@ export class DesktopPlayerAdapter {
   handleHostLifecycleFailure(failure: NativePlayerHostLifecycleFailure): readonly PlayerEvent[] {
     const requestId = failure.requestId ?? this.#snapshot.requestId;
     this.#requestCustody.clear();
-    this.#recordHelperDiagnostic(failure.requestId, 'helper.lifecycle', 'failed', failure.error.code);
+    this.#recordDiagnostic('helper-crash', failure.requestId, 'helper.lifecycle', 'failed', failure.error.code);
     return this.#recordError(hostLifecycleFailureToError(requestId, failure.error));
   }
   async cleanup(): Promise<DesktopPlayerAdapterDispatchResult> {
@@ -496,6 +484,28 @@ export class DesktopPlayerAdapter {
     }
     return [];
   }
+  #validateHostEventBatch(
+    events: readonly NativePlayerHostEvent[],
+  ): { events: readonly NativePlayerHostEvent[] } | { error: PlayerError } {
+    const validatedEvents: NativePlayerHostEvent[] = [];
+    for (const event of events) {
+      const validation = validateHostEvent(event);
+      if ('error' in validation) {
+        return { error: sanitizePlayerError(validation.error, 'PLAYER_VALIDATION_FAILED') };
+      }
+      validatedEvents.push(validation.event);
+    }
+    return { events: validatedEvents };
+  }
+  #failedCommandSettlement(command: PlayerCommand, error: PlayerError): PlayerEvent {
+    return {
+      event: 'command.settled',
+      requestId: command.requestId,
+      command: command.command,
+      ok: false,
+      error,
+    };
+  }
   #result(
     accepted: boolean,
     command: PlayerCommand | null,
@@ -527,7 +537,8 @@ export class DesktopPlayerAdapter {
       },
     ];
   }
-  #recordHelperDiagnostic(
+  #recordDiagnostic(
+    category: 'helper-crash' | 'playback',
     requestId: PlayerRequestId | null,
     operation: string,
     status: 'failed' | 'observed',
@@ -535,7 +546,7 @@ export class DesktopPlayerAdapter {
   ): void {
     this.#diagnosticEventStore?.record({
       surface: 'desktop-player-adapter',
-      category: 'helper-crash',
+      category,
       severity: status === 'failed' ? 'error' : 'warning',
       status,
       operation,

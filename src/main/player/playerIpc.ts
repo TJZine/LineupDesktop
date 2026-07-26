@@ -351,9 +351,12 @@ function getElectronIpcMain(): PlayerIpcMain {
 }
 
 class InertNativePlayerHost implements NativePlayerHostPort {
+  #activePlaybackRequestId: PlayerRequestId | null = null;
+
   async execute(command: PlayerCommand): Promise<NativePlayerHostCommandResult> {
     switch (command.command) {
       case 'load': {
+        this.#activePlaybackRequestId = command.requestId;
         const events: NativePlayerHostEvent[] = [
           {
             type: 'media.loaded',
@@ -377,7 +380,7 @@ class InertNativePlayerHost implements NativePlayerHostPort {
           events: [
             {
               type: 'playback.state',
-              requestId: command.requestId,
+              requestId: this.#activePlaybackRequestId ?? command.requestId,
               status: 'playing',
               playing: true,
             },
@@ -389,21 +392,24 @@ class InertNativePlayerHost implements NativePlayerHostPort {
           events: [
             {
               type: 'playback.state',
-              requestId: command.requestId,
+              requestId: this.#activePlaybackRequestId ?? command.requestId,
               status: 'paused',
               playing: false,
             },
           ],
         };
       case 'stop':
-        return { ok: true, events: [{ type: 'ended', requestId: command.requestId }] };
+        return {
+          ok: true,
+          events: [{ type: 'ended', requestId: this.#activePlaybackRequestId ?? command.requestId }],
+        };
       case 'seek.absolute':
         return {
           ok: true,
           events: [
             {
               type: 'time.updated',
-              requestId: command.requestId,
+              requestId: this.#activePlaybackRequestId ?? command.requestId,
               positionMs: command.payload.positionMs,
               durationMs: null,
             },
@@ -419,6 +425,7 @@ class InertNativePlayerHost implements NativePlayerHostPort {
   }
 
   async cleanup(_requestId: PlayerRequestId | null): Promise<void> {
+    this.#activePlaybackRequestId = null;
     return undefined;
   }
 }

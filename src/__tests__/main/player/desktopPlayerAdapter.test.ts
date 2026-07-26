@@ -716,6 +716,61 @@ test('desktop player adapter rejects invalid host events before mutation', async
   assertNoForbiddenKeys(after);
 });
 
+test('desktop player adapter rejects a malformed returned event batch atomically', async () => {
+  for (const dispatchKind of ['renderer', 'runtime'] as const) {
+    const host = new FakeNativePlayerHost();
+    const adapter = new DesktopPlayerAdapter(host);
+    await adapter.dispatchRendererIntent(loadEnvelope(`request-${dispatchKind}-load`));
+    const before = adapter.getSnapshot();
+    host.executeResult = {
+      ok: true,
+      events: [
+        {
+          type: 'time.updated',
+          requestId: before.requestId,
+          positionMs: 42_000,
+          durationMs: 120_000,
+        },
+        {
+          type: 'time.updated',
+          requestId: before.requestId,
+          positionMs: -1,
+          durationMs: 120_000,
+        },
+      ] as unknown as NativePlayerHostEvent[],
+    };
+
+    const result =
+      dispatchKind === 'renderer'
+        ? await adapter.dispatchRendererIntent({
+            intent: 'player.setVolume',
+            requestId: `request-${dispatchKind}-volume`,
+            payload: { volume: 0.25 },
+          })
+        : await adapter.dispatchRuntimeCommand({
+            command: 'volume.set',
+            requestId: `request-${dispatchKind}-volume`,
+            payload: { volume: 0.25 },
+          });
+
+    assert.equal(result.accepted, true);
+    assert.deepEqual(result.snapshot, before);
+    assert.deepEqual(adapter.getSnapshot(), before);
+    assert.equal(result.events.filter((event) => event.event === 'error').length, 1);
+    assert.equal(result.events.filter((event) => event.event === 'time.updated').length, 0);
+    assert.equal(
+      result.events.filter((event) => event.event === 'command.settled' && !event.ok).length,
+      1,
+    );
+    assert.equal(
+      result.events.some((event) => event.event === 'command.settled' && event.ok),
+      false,
+    );
+    assertErrorEvent(result.events, 'validation-failure');
+    assertNoForbiddenKeys(result);
+  }
+});
+
 test('desktop player adapter excludes forbidden fields from host events and errors', async () => {
   const host = new FakeNativePlayerHost();
   const adapter = new DesktopPlayerAdapter(host);
@@ -784,7 +839,8 @@ test('desktop player adapter normalizes host failure strings before renderer exp
     }),
     true,
   );
-  assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 1);
+  assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 0);
+  assert.equal(diagnostics.getRecords().some((record) => record.category === 'playback'), true);
   assertTextAbsent(diagnostics.getRecords(), 'RAW_NATIVE_HANDLE');
 });
 
@@ -818,7 +874,8 @@ test('desktop player adapter shared diagnostics summary counts one helper crash 
 
   assertErrorEvent(result.events, 'helper-failure');
   assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 1);
-  assert.equal(diagnostics.getCrashRecoverySummary().events.filter((event) => event.category === 'helper-crash').length, 2);
+  assert.equal(diagnostics.getCrashRecoverySummary().events.filter((event) => event.category === 'helper-crash').length, 1);
+  assert.equal(diagnostics.getRecords().filter((event) => event.category === 'playback').length, 1);
   assertTextAbsent(diagnostics.getRecords(), 'raw helper close detail');
 });
 
