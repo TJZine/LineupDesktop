@@ -149,21 +149,29 @@ test('diagnostic text redaction replaces whole extensionless absolute paths', ()
   for (const absolutePath of absolutePaths) {
     assert.equal(
       redactDiagnosticText(`Playback failed at ${absolutePath}. Retry from the library.`),
-      'Playback failed at [redacted]. Retry from the library.',
+      'Playback failed at [redacted]',
     );
   }
 
   assert.equal(
     redactDiagnosticText('Playback failed at /private/media, retry from the library.'),
-    'Playback failed at [redacted], retry from the library.',
+    'Playback failed at [redacted]',
   );
   assert.equal(
     redactDiagnosticText('Playback failed at D:\\Media\\private; retry from the library.'),
-    'Playback failed at [redacted]; retry from the library.',
+    'Playback failed at [redacted]',
   );
   assert.equal(
     redactDiagnosticText('Playback failed at /Médiathèque, 2026/private.'),
-    'Playback failed at [redacted].',
+    'Playback failed at [redacted]',
+  );
+  assert.equal(
+    redactDiagnosticText('Playback failed at /Médiathèque, private archive.'),
+    'Playback failed at [redacted]',
+  );
+  assert.equal(
+    redactDiagnosticText('Playback failed at "/private/media", retry from the library.'),
+    'Playback failed at "[redacted]", retry from the library.',
   );
 
   for (const ordinaryText of [

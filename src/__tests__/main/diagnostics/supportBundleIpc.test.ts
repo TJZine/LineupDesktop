@@ -29,14 +29,19 @@ test('diagnostics export removes whole extensionless absolute paths before the f
     ['D:', '/', 'Media', '/', 'private.mkv'].join(''),
     ['\\\\', 'media-host', '\\', 'Shared Library', '\\', 'private'].join(''),
   ];
-  for (const absolutePath of absolutePaths) {
+  const unsafeMessages = [
+    ...absolutePaths.map((absolutePath) => `Leak ${absolutePath}. Retry from the library.`),
+    'Leak /Médiathèque, private archive.',
+    'Leak D:\\Media\\private; private archive.',
+  ];
+  for (const message of unsafeMessages) {
     store.record({
       surface: 'main',
       category: 'support-bundle-export',
       severity: 'error',
       status: 'failed',
       operation: 'support-bundle.path-redaction',
-      message: `Leak ${absolutePath}. Retry from the library.`,
+      message,
     });
   }
   registerDiagnosticsIpcHandlers({
@@ -68,10 +73,10 @@ test('diagnostics export removes whole extensionless absolute paths before the f
     .filter(Boolean)
     .map((line) => JSON.parse(line) as { operation: string; message: string });
   const pathRecords = records.filter((candidate) => candidate.message.startsWith('Leak '));
-  assert.equal(pathRecords.length, absolutePaths.length);
+  assert.equal(pathRecords.length, unsafeMessages.length);
   assert.deepEqual(
     pathRecords.map((record) => record.message),
-    absolutePaths.map(() => 'Leak [redacted]. Retry from the library.'),
+    unsafeMessages.map(() => 'Leak [redacted]'),
   );
   for (const sensitiveFragment of [
     'private-media-folder',
@@ -80,6 +85,8 @@ test('diagnostics export removes whole extensionless absolute paths before the f
     'private.mkv',
     'Shared Library',
     'D:',
+    'private archive',
+    'Retry from the library',
   ]) {
     assert.equal(diagnostics.includes(sensitiveFragment), false);
   }
