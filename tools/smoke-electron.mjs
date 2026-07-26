@@ -3,12 +3,22 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {
+  clearTimeout as clearNodeTimeout,
+  setTimeout as setNodeTimeout,
+} from 'node:timers';
 import { fileURLToPath } from 'node:url';
 import electronPath from 'electron';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mainEntry = path.join(repoRoot, 'dist', 'main', 'index.js');
 const sentinelName = '.lineup-desktop-smoke-sentinel';
+const smokeDeadlineMs = 60_000;
+const childReapDeadlineMs = 5_000;
+const smokeSpawnFailureMessage = 'Electron smoke failed to start.';
+const smokeSignalFailureMessage = 'Electron smoke exited via a signal.';
+const smokeTimeoutFailureMessage = 'Electron smoke exceeded its deadline.';
+const smokeCleanupFailureMessage = 'Electron smoke cleanup failed.';
 
 export async function createSmokeBootstrap(platform = process.platform) {
   const temporaryDirectory = await fs.realpath(os.tmpdir());
@@ -70,7 +80,12 @@ export function buildSmokeSpawnOptions(bootstrap) {
   };
 }
 
-export async function runElectronSmoke() {
+export async function runElectronSmoke({
+  spawnChild = spawn,
+  deadlineMs = smokeDeadlineMs,
+  reapDeadlineMs = childReapDeadlineMs,
+  reportFailure = (message) => console.error(message),
+} = {}) {
   const bootstrap = await createSmokeBootstrap();
   const { args, options } = buildSmokeSpawnOptions(bootstrap);
   let cleaned = false;
@@ -79,7 +94,19 @@ export async function runElectronSmoke() {
     cleaned = true;
     await fs.rm(bootstrap.canonicalRoot, { recursive: true, force: true });
   };
-  const child = spawn(electronPath, args, options);
+  let child;
+  try {
+    child = spawnChild(electronPath, args, options);
+  } catch {
+    try {
+      await cleanup();
+    } catch {
+      reportFailure(smokeCleanupFailureMessage);
+      return 1;
+    }
+    reportFailure(smokeSpawnFailureMessage);
+    return 1;
+  }
   const signals = ['SIGINT', 'SIGTERM'];
   const handlers = new Map();
   for (const signal of signals) {
@@ -93,20 +120,50 @@ export async function runElectronSmoke() {
     for (const [signal, handler] of handlers) process.off(signal, handler);
   };
   return new Promise((resolve) => {
-    child.once('error', async () => {
+    let settled = false;
+    let deadlineExpired = false;
+    let reapTimer;
+    const deadlineTimer = setNodeTimeout(() => {
+      deadlineExpired = true;
+      reapTimer = setNodeTimeout(() => {
+        void settle(1, smokeTimeoutFailureMessage);
+      }, reapDeadlineMs);
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        void settle(1, smokeTimeoutFailureMessage);
+      }
+    }, deadlineMs);
+    const settle = async (code, failureMessage) => {
+      if (settled) return;
+      settled = true;
+      clearNodeTimeout(deadlineTimer);
+      if (reapTimer !== undefined) clearNodeTimeout(reapTimer);
       removeHandlers();
-      await cleanup();
-      resolve(1);
+      let result = code;
+      let message = failureMessage;
+      try {
+        await cleanup();
+      } catch {
+        result = 1;
+        message = smokeCleanupFailureMessage;
+      }
+      if (message) reportFailure(message);
+      resolve(result);
+    };
+    child.once('error', () => {
+      void settle(1, smokeSpawnFailureMessage);
     });
-    child.once('exit', async (code, signal) => {
-      removeHandlers();
-      await cleanup();
-      if (signal) {
-        console.error(`Electron smoke exited via ${signal}.`);
-        resolve(1);
+    child.once('exit', (code, signal) => {
+      if (deadlineExpired) {
+        void settle(1, smokeTimeoutFailureMessage);
         return;
       }
-      resolve(code ?? 1);
+      if (signal) {
+        void settle(1, smokeSignalFailureMessage);
+        return;
+      }
+      void settle(code ?? 1);
     });
   });
 }
