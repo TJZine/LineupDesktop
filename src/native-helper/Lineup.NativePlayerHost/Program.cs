@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -16,9 +17,10 @@ namespace Lineup.NativePlayerHost
         private const int MpvEventFileLoaded = 8;
         private const int MpvEventPropertyChange = 22;
 
-        private const int MpvFormatFlag = 1;
-        private const int MpvFormatString = 2;
-        private const int MpvFormatDouble = 8;
+        private const int MpvFormatString = 1;
+        private const int MpvFormatFlag = 3;
+        private const int MpvFormatInt64 = 4;
+        private const int MpvFormatDouble = 5;
 
         private const int GlColorBufferBit = 0x00004000;
         private const int SwpShowWindow = 0x0040;
@@ -258,15 +260,9 @@ namespace Lineup.NativePlayerHost
                     InitializeMpv(msg);
                     CacheLoadedMedia(msg);
 
-                    // Configure headers
-                    if (msg.credentialHeader != null && !string.IsNullOrEmpty(msg.credentialHeader.name) && !string.IsNullOrEmpty(msg.credentialHeader.value))
-                    {
-                        SetOption(mpvContext, "http-header-fields", $"{msg.credentialHeader.name}: {msg.credentialHeader.value}");
-                    }
-
                     // Load media
                     int loadResult = Command(mpvContext, "loadfile", msg.playbackUrl, "replace");
-                    if (loadResult == 0)
+                    if (loadResult >= 0)
                     {
                         // Generate loading event
                         WriteOutputEvent(new Dictionary<string, object?>
@@ -286,18 +282,15 @@ namespace Lineup.NativePlayerHost
                 }
                 else if (msg.command == "play")
                 {
-                    SetPropertyBool(mpvContext, "pause", false);
-                    WriteResult(msg.requestId!, true, null, null);
+                    WriteCommandResult(msg.requestId!, SetPropertyBool(mpvContext, "pause", false));
                 }
                 else if (msg.command == "pause")
                 {
-                    SetPropertyBool(mpvContext, "pause", true);
-                    WriteResult(msg.requestId!, true, null, null);
+                    WriteCommandResult(msg.requestId!, SetPropertyBool(mpvContext, "pause", true));
                 }
                 else if (msg.command == "stop")
                 {
-                    Command(mpvContext, "stop");
-                    WriteResult(msg.requestId!, true, null, null);
+                    WriteCommandResult(msg.requestId!, Command(mpvContext, "stop"));
                 }
                 else if (msg.command == "seek.absolute")
                 {
@@ -306,8 +299,9 @@ namespace Lineup.NativePlayerHost
                     {
                         positionSeconds = val.GetDouble() / 1000.0;
                     }
-                    Command(mpvContext, "seek", positionSeconds.ToString("F3"), "absolute");
-                    WriteResult(msg.requestId!, true, null, null);
+                    WriteCommandResult(
+                        msg.requestId!,
+                        Command(mpvContext, "seek", positionSeconds.ToString("F3", CultureInfo.InvariantCulture), "absolute"));
                 }
                 else if (msg.command == "seek.relative")
                 {
@@ -316,8 +310,9 @@ namespace Lineup.NativePlayerHost
                     {
                         deltaSeconds = val.GetDouble() / 1000.0;
                     }
-                    Command(mpvContext, "seek", deltaSeconds.ToString("F3"), "relative");
-                    WriteResult(msg.requestId!, true, null, null);
+                    WriteCommandResult(
+                        msg.requestId!,
+                        Command(mpvContext, "seek", deltaSeconds.ToString("F3", CultureInfo.InvariantCulture), "relative"));
                 }
                 else if (msg.command == "volume.set")
                 {
@@ -326,8 +321,7 @@ namespace Lineup.NativePlayerHost
                     {
                         volume = val.GetDouble() * 100.0;
                     }
-                    SetPropertyDouble(mpvContext, "volume", volume);
-                    WriteResult(msg.requestId!, true, null, null);
+                    WriteCommandResult(msg.requestId!, SetPropertyDouble(mpvContext, "volume", volume));
                 }
                 else if (msg.command == "mute.set")
                 {
@@ -336,8 +330,7 @@ namespace Lineup.NativePlayerHost
                     {
                         muted = val.GetBoolean();
                     }
-                    SetPropertyBool(mpvContext, "mute", muted);
-                    WriteResult(msg.requestId!, true, null, null);
+                    WriteCommandResult(msg.requestId!, SetPropertyBool(mpvContext, "mute", muted));
                 }
                 else if (msg.command == "track.audio.select")
                 {
@@ -353,7 +346,7 @@ namespace Lineup.NativePlayerHost
                             return;
                         }
                         int res = MpvCommandExecutor.SetPropertyString(mpvContext, "aid", mpvTrackId);
-                        if (res == 0)
+                        if (res >= 0)
                         {
                             WriteResult(msg.requestId!, true, null, null);
                         }
@@ -375,7 +368,7 @@ namespace Lineup.NativePlayerHost
                         if (val.ValueKind == JsonValueKind.Null)
                         {
                             int res = MpvCommandExecutor.SetPropertyString(mpvContext, "sid", "no");
-                            if (res == 0)
+                            if (res >= 0)
                             {
                                 WriteResult(msg.requestId!, true, null, null);
                             }
@@ -394,7 +387,7 @@ namespace Lineup.NativePlayerHost
                                 return;
                             }
                             int res = MpvCommandExecutor.SetPropertyString(mpvContext, "sid", mpvTrackId);
-                            if (res == 0)
+                            if (res >= 0)
                             {
                                 WriteResult(msg.requestId!, true, null, null);
                             }
@@ -418,9 +411,9 @@ namespace Lineup.NativePlayerHost
                     WriteResult(msg.requestId!, false, "PLAYER_HELPER_UNSUPPORTED_COMMAND", $"Command {msg.command} is not supported.");
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                WriteResult(msg.requestId!, false, "PLAYER_HELPER_COMMAND_EXCEPTION", ex.Message);
+                WriteResult(msg.requestId!, false, "PLAYER_HELPER_COMMAND_FAILED", "Native player command failed.");
             }
         }
 
@@ -439,25 +432,36 @@ namespace Lineup.NativePlayerHost
                 mpvContext = NativeMethods.mpv_create();
                 if (mpvContext == IntPtr.Zero)
                 {
-                    throw new InvalidOperationException("Failed to create libmpv context.");
+                    throw new InvalidOperationException("Native player initialization failed.");
                 }
 
-                SetOption(mpvContext, "terminal", "no");
-                SetOption(mpvContext, "msg-level", "all=no");
-                SetOption(mpvContext, "vo", "libmpv");
-                SetOption(mpvContext, "osc", "no");
+                EnsureOptionSet(mpvContext, "terminal", "no");
+                EnsureOptionSet(mpvContext, "msg-level", "all=no");
+                EnsureOptionSet(mpvContext, "vo", "libmpv");
+                EnsureOptionSet(mpvContext, "osc", "no");
+                if (msg.credentialHeader != null &&
+                    !string.IsNullOrEmpty(msg.credentialHeader.name) &&
+                    !string.IsNullOrEmpty(msg.credentialHeader.value))
+                {
+                    EnsureOptionSet(
+                        mpvContext,
+                        "http-header-fields",
+                        $"{msg.credentialHeader.name}: {msg.credentialHeader.value}");
+                }
 
                 int initResult = NativeMethods.mpv_initialize(mpvContext);
-                if (initResult != 0)
+                if (initResult < 0)
                 {
-                    throw new InvalidOperationException($"Failed to initialize libmpv: {initResult}");
+                    TeardownMpvContext();
+                    throw new InvalidOperationException("Native player initialization failed.");
                 }
 
                 // Create topmost presentation window
                 renderSurface = RenderSurface.TryCreate();
                 if (renderSurface == null)
                 {
-                    throw new InvalidOperationException("Failed to create presentation render window.");
+                    TeardownMpvContext();
+                    throw new InvalidOperationException("Native player initialization failed.");
                 }
 
                 // Create OpenGL Render Context
@@ -483,10 +487,26 @@ namespace Lineup.NativePlayerHost
                 Marshal.FreeHGlobal(initParamsPtr);
                 Marshal.FreeHGlobal(apiType);
 
-                if (contextResult != 0 || renderContext == IntPtr.Zero)
+                if (contextResult < 0 || renderContext == IntPtr.Zero)
                 {
-                    throw new InvalidOperationException($"Failed to create libmpv render context: {contextResult}");
+                    TeardownMpvContext();
+                    throw new InvalidOperationException("Native player initialization failed.");
                 }
+
+                trackState = new MpvTrackState(mpvContext, msg.setup);
+                qualityState = new MpvPlaybackQualityState(mpvContext, msg.setup?.playbackMode ?? "unknown");
+                currentPlaybackSetup = msg.setup;
+
+                ObserveProperty(mpvContext, 1, "time-pos", MpvFormatDouble);
+                ObserveProperty(mpvContext, 2, "duration", MpvFormatDouble);
+                ObserveProperty(mpvContext, 3, "pause", MpvFormatFlag);
+                ObserveProperty(mpvContext, 4, "core-idle", MpvFormatFlag);
+                ObserveProperty(mpvContext, 5, "aid", MpvFormatString);
+                ObserveProperty(mpvContext, 6, "sid", MpvFormatString);
+                ObserveProperty(mpvContext, 7, "vid", MpvFormatString);
+                ObserveProperty(mpvContext, 8, "video-params", MpvFormatString);
+                ObserveProperty(mpvContext, 9, "video-codec", MpvFormatString);
+                ObserveProperty(mpvContext, 10, "audio-codec", MpvFormatString);
 
                 // Start rendering thread
                 renderThreadRunning = true;
@@ -496,22 +516,6 @@ namespace Lineup.NativePlayerHost
                     Name = "LineupRenderLoop"
                 };
                 renderThread.Start();
-
-                trackState = new MpvTrackState(mpvContext, msg.setup);
-                qualityState = new MpvPlaybackQualityState(mpvContext, msg.setup?.playbackMode ?? "unknown");
-                currentPlaybackSetup = msg.setup;
-
-                // Observe properties
-                NativeMethods.mpv_observe_property(mpvContext, 1, "time-pos", MpvFormatDouble);
-                NativeMethods.mpv_observe_property(mpvContext, 2, "duration", MpvFormatDouble);
-                NativeMethods.mpv_observe_property(mpvContext, 3, "pause", MpvFormatFlag);
-                NativeMethods.mpv_observe_property(mpvContext, 4, "core-idle", MpvFormatFlag);
-                NativeMethods.mpv_observe_property(mpvContext, 5, "aid", MpvFormatString);
-                NativeMethods.mpv_observe_property(mpvContext, 6, "sid", MpvFormatString);
-                NativeMethods.mpv_observe_property(mpvContext, 7, "vid", MpvFormatString);
-                NativeMethods.mpv_observe_property(mpvContext, 8, "video-params", MpvFormatString);
-                NativeMethods.mpv_observe_property(mpvContext, 9, "video-codec", MpvFormatString);
-                NativeMethods.mpv_observe_property(mpvContext, 10, "audio-codec", MpvFormatString);
 
                 // Start Event Poll Loop
                 eventThread = new Thread(EventPollLoop)
@@ -838,19 +842,66 @@ namespace Lineup.NativePlayerHost
             MpvCommandExecutor.SetPropertyString(mpvContext, property, mpvTrackId);
         }
 
-        private static void SetOption(IntPtr mpv, string name, string value)
+        private static int SetOption(IntPtr mpv, string name, string value)
         {
-            NativeMethods.mpv_set_option_string(mpv, name, value);
+            return NativeMethods.mpv_set_option_string(mpv, name, value);
         }
 
-        private static void SetPropertyBool(IntPtr mpv, string name, bool value)
+        private static void EnsureOptionSet(IntPtr mpv, string name, string value)
         {
-            SetOption(mpv, name, value ? "yes" : "no");
+            if (SetOption(mpv, name, value) < 0)
+            {
+                TeardownMpvContext();
+                throw new InvalidOperationException("Native player initialization failed.");
+            }
         }
 
-        private static void SetPropertyDouble(IntPtr mpv, string name, double value)
+        private static void ObserveProperty(IntPtr mpv, ulong replyUserdata, string name, int format)
         {
-            SetOption(mpv, name, value.ToString("F3"));
+            if (NativeMethods.mpv_observe_property(mpv, replyUserdata, name, format) < 0)
+            {
+                TeardownMpvContext();
+                throw new InvalidOperationException("Native player initialization failed.");
+            }
+        }
+
+        private static int SetPropertyBool(IntPtr mpv, string name, bool value)
+        {
+            IntPtr data = Marshal.AllocHGlobal(sizeof(int));
+            try
+            {
+                Marshal.WriteInt32(data, value ? 1 : 0);
+                return NativeMethods.mpv_set_property(mpv, name, MpvFormatFlag, data);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(data);
+            }
+        }
+
+        private static int SetPropertyDouble(IntPtr mpv, string name, double value)
+        {
+            IntPtr data = Marshal.AllocHGlobal(Marshal.SizeOf<double>());
+            try
+            {
+                Marshal.StructureToPtr(value, data, false);
+                return NativeMethods.mpv_set_property(mpv, name, MpvFormatDouble, data);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(data);
+            }
+        }
+
+        private static void WriteCommandResult(string requestId, int nativeResult)
+        {
+            if (nativeResult >= 0)
+            {
+                WriteResult(requestId, true, null, null);
+                return;
+            }
+
+            WriteResult(requestId, false, "PLAYER_HELPER_COMMAND_FAILED", "Native player command failed.");
         }
 
         private static int Command(IntPtr mpv, params string[] command)
@@ -1125,6 +1176,9 @@ namespace Lineup.NativePlayerHost
 
             [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
             public static extern int mpv_set_property_string(IntPtr context, string name, string value);
+
+            [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+            public static extern int mpv_set_property(IntPtr context, string name, int format, IntPtr data);
 
             [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
             public static extern IntPtr mpv_get_property_string(IntPtr context, string name);
