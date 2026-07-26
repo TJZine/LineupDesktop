@@ -236,6 +236,46 @@ test('plex home and switch parsers accept JSON and XML payload shapes', () => {
   }
 });
 
+test('plex auth XML fallbacks allow spaced attributes and decode XML entities', () => {
+  const originalDomParser = globalThis.DOMParser;
+  const encodedAuthValue = `${placeholderAuthValue.replaceAll('-', '&#x2D;')}&amp;value`;
+  Object.defineProperty(globalThis, 'DOMParser', {
+    configurable: true,
+    value: undefined,
+  });
+
+  try {
+    assert.deepEqual(
+      parseHomeUsersPayload({
+        kind: 'text',
+        data:
+          '<MediaContainer><User id = "managed&#x2D;1" title = "Kids &amp; Family" ' +
+          'thumb = "/profiles/kids&#47;family" admin = "false" protected = "true" /></MediaContainer>',
+      }),
+      [{
+        id: 'managed-1',
+        title: 'Kids & Family',
+        thumb: '/profiles/kids/family',
+        admin: false,
+        protected: true,
+      }],
+    );
+
+    assert.deepEqual(
+      parseSwitchResponsePayload({
+        kind: 'text',
+        data: `<MediaContainer><User authToken = "${encodedAuthValue}" /></MediaContainer>`,
+      }),
+      { authToken: `${placeholderAuthValue}&value` },
+    );
+  } finally {
+    Object.defineProperty(globalThis, 'DOMParser', {
+      configurable: true,
+      value: originalDomParser,
+    });
+  }
+});
+
 test('plex home switch parser handles self-referential arrays without recursing forever', () => {
   const payload: unknown[] = [];
   payload.push(payload);

@@ -1,5 +1,6 @@
 import { PlexAuthError } from './plexAuthError.js';
 import type { PlexHomeUser } from './types.js';
+import { decodeXmlEntities } from './plexXmlFallback.js';
 
 const HOME_USER_CONTAINER_KEYS = new Set([
   'user',
@@ -138,13 +139,13 @@ function parseHomeUsersXmlFallback(payload: string): PlexHomeUser[] {
 
 function parseXmlAttributeString(raw: string): Record<string, unknown> {
   const attrs: Record<string, unknown> = {};
-  const attrRegex = /([:\w-]+)=["']([^"']*)["']/g;
+  const attrRegex = /([:\w-]+)\s*=\s*(["'])([\s\S]*?)\2/g;
   let match: RegExpExecArray | null;
 
   while ((match = attrRegex.exec(raw)) !== null) {
     const key = match[1];
     if (key) {
-      attrs[key] = match[2] ?? '';
+      attrs[key] = decodeXmlEntities(match[3] ?? '');
     }
   }
 
