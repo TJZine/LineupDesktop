@@ -16,7 +16,7 @@ import {
   ChannelBuilderFacetTransportUnavailableError,
   type ChannelBuilderFacetAccessInput,
   type ChannelBuilderFacetSession,
-} from './desktopPlexChannelBuilderFacetSource.js';
+} from './channelBuilderFacetSession.js';
 import {
   DesktopPlexContextNotifications,
   type DesktopPlexBuilderContextListener,

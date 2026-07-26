@@ -63,8 +63,8 @@ export class DesktopPlexLibraryOperationExecutor {
       shouldRethrowCountError: (error) => error instanceof StaleRuntimeMutationError,
     });
     const libraryPairs = records.map((record) => ({
-      libraryId: record.id,
-      libraryUuid: record.uuid,
+      libraryId: record.id.trim(),
+      libraryUuid: record.uuid.trim(),
     }));
     validateLibraryPairs(libraryPairs);
     libraryPairs.sort((left, right) =>
@@ -176,16 +176,13 @@ function validateLibraryPairs(
   pairs: readonly Readonly<{ libraryId: string; libraryUuid: string }>[],
 ): void {
   const ids = new Set<string>();
-  const exactPairs = new Set<string>();
   for (const pair of pairs) {
-    if (pair.libraryId.trim().length === 0 || pair.libraryUuid.trim().length === 0) {
+    if (pair.libraryId.length === 0 || pair.libraryUuid.length === 0) {
       throw new PlexLibraryError('parse-error', 'Plex library identity was invalid');
     }
-    const exactPair = `${pair.libraryId}\u0000${pair.libraryUuid}`;
-    if (ids.has(pair.libraryId) || exactPairs.has(exactPair)) {
+    if (ids.has(pair.libraryId)) {
       throw new PlexLibraryError('parse-error', 'Plex library identity was duplicated');
     }
     ids.add(pair.libraryId);
-    exactPairs.add(exactPair);
   }
 }

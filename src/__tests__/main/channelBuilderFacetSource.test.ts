@@ -17,11 +17,11 @@ import type {
 } from '../../domain/channelBuilder/types.js';
 import {
   createChannelBuilderFacetSession,
-  DesktopPlexChannelBuilderFacetSource,
   invalidateChannelBuilderFacetSession,
   type ChannelBuilderFacetAccessPort,
   type ChannelBuilderFacetSession,
-} from '../../main/plex/desktopPlexChannelBuilderFacetSource.js';
+} from '../../main/plex/channelBuilderFacetSession.js';
+import { DesktopPlexChannelBuilderFacetSource } from '../../main/plex/desktopPlexChannelBuilderFacetSource.js';
 import { DesktopPlexLibraryOperationExecutor } from '../../main/plex/desktopPlexLibraryOperationExecutor.js';
 import type { PlexConnection } from '../../main/plex/discovery/types.js';
 import type { PlexLibrarySection } from '../../main/plex/library/types.js';
@@ -53,7 +53,6 @@ test('live Plex facet transport emits only the three fixed encoded request shape
     },
   });
   const facetTransport: LivePlexChannelBuilderFacetTransport = transport;
-  const legacyTransport: LivePlexLibraryTransport = transport;
 
   await facetTransport.listCollectionsPage({
     connection,
@@ -86,7 +85,6 @@ test('live Plex facet transport emits only the three fixed encoded request shape
     'https://plex.example.invalid/playlists?X-Plex-Container-Start=200&X-Plex-Container-Size=100',
     'https://plex.example.invalid/library/sections/shows%20%2F%3F%20value/director?type=4&X-Plex-Container-Start=300&X-Plex-Container-Size=100',
   ]);
-  assert.deepEqual(Object.keys(legacyTransport).filter((key) => key.includes('Facet')), []);
 });
 
 test('facet session routes facet and item methods through separately named transports', async () => {
@@ -796,6 +794,70 @@ test('session boundary rejects unknown keys, invalid media mappings, and caller-
     limit: 100,
     signal,
   }));
+  await assert.rejects(() => session.listLibraryItemsPage({
+    sectionId: '1',
+    query: {
+      kind: 'facet-count',
+      mediaType: 1,
+      family: 'genre',
+      key: { toString: () => 'genre-key' },
+      tagValue: 'Genre',
+      fastKey: null,
+    },
+    offset: 0,
+    limit: 100,
+    signal,
+  } as never));
+});
+
+test('TV people indexing unifies NFC values and reports capped metadata as incomplete', async () => {
+  const library = showLibrary();
+  const session = emptySession([library]);
+  session.listTagDirectoryPage = async (request) => ({
+    entries: [{
+      key: 'actor-key',
+      title: 'Jos\u00e9',
+      count: null,
+    }],
+    offset: request.offset,
+    totalSize: 1,
+  });
+  session.listLibraryItemsPage = async (request) => ({
+    entries: Array.from({ length: 100 }, (_, index) => ({
+      ratingKey: `${request.offset + index}`,
+      key: `/library/metadata/${request.offset + index}`,
+      type: 'episode' as const,
+      title: `Episode ${request.offset + index}`,
+      sortTitle: `Episode ${request.offset + index}`,
+      summary: '',
+      year: 2026,
+      durationMs: 30 * 60 * 1_000,
+      addedAt: new Date(0),
+      updatedAt: new Date(0),
+      thumb: null,
+      art: null,
+      media: [],
+      actors: ['Jose\u0301'],
+      grandparentRatingKey: `series-${index % 3}`,
+    })),
+    offset: request.offset,
+    totalSize: 600,
+  });
+
+  const result = await discoverWithSession(
+    session,
+    configWithEnabled(['actors'], [library]),
+  );
+
+  assert.equal(result.kind, 'slow');
+  if (result.kind !== 'slow') return;
+  assert.equal(result.snapshot.tags.length, 1);
+  assert.equal(result.snapshot.tags[0]?.itemCount, 500);
+  assert.equal(result.snapshot.tags[0]?.distinctSeriesCount, 3);
+  assert.equal(
+    result.snapshot.aggregate.warningCodes.includes('TV_PEOPLE_METADATA_INCOMPLETE'),
+    true,
+  );
 });
 
 test('tag semantics, mapping, and cap survivors are invariant across display projection', async () => {

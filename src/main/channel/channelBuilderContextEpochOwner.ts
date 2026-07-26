@@ -8,7 +8,7 @@ import type {
   ChannelBuilderFacetAccessInput,
   ChannelBuilderFacetAccessPort,
   ChannelBuilderFacetSession,
-} from '../plex/desktopPlexChannelBuilderFacetSource.js';
+} from '../plex/channelBuilderFacetSession.js';
 import type {
   DesktopPlexBuilderContextEvent,
   DesktopPlexBuilderContextListener,

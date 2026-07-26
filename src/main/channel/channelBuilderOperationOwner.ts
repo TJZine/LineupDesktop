@@ -13,7 +13,7 @@ import type {
   ChannelSetupReviewDiff,
   ChannelSetupWarning,
 } from '../../domain/channelBuilder/types.js';
-import type { ChannelBuilderFacetMaterializationIndex } from '../plex/desktopPlexChannelBuilderFacetSource.js';
+import type { ChannelBuilderFacetMaterializationIndex } from '../plex/channelBuilderFacetMaterialization.js';
 
 const RETENTION_MS = 10 * 60 * 1_000;
 const TERMINAL_LIMIT = 16;

@@ -5,7 +5,7 @@ import { ChannelBuilderContextEpochOwner } from '../../main/channel/channelBuild
 import type {
   ChannelBuilderFacetAccessInput,
   ChannelBuilderFacetSession,
-} from '../../main/plex/desktopPlexChannelBuilderFacetSource.js';
+} from '../../main/plex/channelBuilderFacetSession.js';
 import {
   DesktopPlexContextNotifications,
   type DesktopPlexBuilderContextListener,

@@ -8,7 +8,7 @@ import type { StoredChannelData } from '../../domain/channel/types.js';
 import type {
   ChannelBuilderFacetAccessInput,
   ChannelBuilderFacetSession,
-} from '../plex/desktopPlexChannelBuilderFacetSource.js';
+} from '../plex/channelBuilderFacetSession.js';
 import type {
   DesktopPlexBuilderContextListener,
   DesktopPlexBuilderContextResult,
