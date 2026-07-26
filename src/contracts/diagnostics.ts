@@ -439,9 +439,8 @@ function findDiagnosticAbsolutePathEnd(value: string, pathStart: number): number
   let end = pathStart;
   while (end < value.length && value[end] !== '\r' && value[end] !== '\n' && value[end] !== '"') {
     if (
-      /[.!?]/u.test(value[end] ?? '') &&
-      /\s/u.test(value[end + 1] ?? '') &&
-      value.slice(end + 1).search(/\S/u) !== -1
+      isDiagnosticSentenceBoundary(value, end) ||
+      isDiagnosticProseSeparator(value, end)
     ) {
       return end;
     }
@@ -457,6 +456,28 @@ function findDiagnosticAbsolutePathEnd(value: string, pathStart: number): number
     end -= 1;
   }
   return end;
+}
+
+function isDiagnosticSentenceBoundary(value: string, index: number): boolean {
+  return (
+    /[.!?]/u.test(value[index] ?? '') &&
+    /\s/u.test(value[index + 1] ?? '') &&
+    value.slice(index + 1).search(/\S/u) !== -1
+  );
+}
+
+function isDiagnosticProseSeparator(value: string, index: number): boolean {
+  if (!/[,;]/u.test(value[index] ?? '') || !/\s/u.test(value[index + 1] ?? '')) {
+    return false;
+  }
+  const proseTail = value
+    .slice(index + 1)
+    .split(/[\r\n".!?]/u, 1)[0]
+    ?.trim() ?? '';
+  return (
+    !/[\\/]/u.test(proseTail) &&
+    /^\p{Ll}[\p{L}\p{N}'’-]*(?:\s+\p{L}[\p{L}\p{N}'’-]*)+/u.test(proseTail)
+  );
 }
 
 function isDiagnosticPathStartBoundary(value: string | undefined): boolean {

@@ -103,6 +103,10 @@ const repositoryFilesystemPathPattern = new RegExp(
   String.raw`(?<![?&\w-])(?:"(?:${rawFilesystemPathKeyPattern})"|'(?:${rawFilesystemPathKeyPattern})'|(?:${rawFilesystemPathKeyPattern}))\s*(?:=|:\s*)\s*${repositoryFilesystemPathValuePattern}|(?<![\w-])(?:${diagnosticMessageKeyPattern})\s*(?:=|:\s*)\s*${repositoryUnkeyedFilesystemPathPattern}|(?:^|[\r\n])\s*${repositoryUnkeyedFilesystemPathPattern}`,
   'u',
 );
+const repositorySerializedFilesystemPathPattern = new RegExp(
+  String.raw`"(?:${rawFilesystemPathKeyPattern})"\s*:\s*"(?:\\.|[^"\\])*"`,
+  'gu',
+);
 const forbiddenPatterns = [
   {
     label: 'token-query-parameter',
@@ -243,6 +247,12 @@ function isAbsoluteFilesystemPathStartBoundary(value) {
 }
 
 function containsRepositoryAbsoluteFilesystemPath(content) {
+  repositorySerializedFilesystemPathPattern.lastIndex = 0;
+  for (const match of content.matchAll(repositorySerializedFilesystemPathPattern)) {
+    if (containsAbsoluteFilesystemPath(match[0])) {
+      return true;
+    }
+  }
   repositoryFilesystemPathPattern.lastIndex = 0;
   const candidate = repositoryFilesystemPathPattern.exec(content)?.[0];
   return candidate !== undefined && containsAbsoluteFilesystemPath(candidate);

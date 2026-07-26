@@ -372,6 +372,14 @@ test('scanRepo applies shared absolute-path recognition to filesystem fields', (
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-desktop-path-scan-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.writeFileSync(
+    path.join(root, 'safe.ts'),
+    [
+      'const source = "src/contracts/diagnostics.ts";',
+      'const progress = "1/2/3.14";',
+      'const pathPolicyPattern = /^[/]private/u;',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
     path.join(root, 'safe.json'),
     JSON.stringify({
       filePath: 'src/contracts/diagnostics.ts',
@@ -379,13 +387,20 @@ test('scanRepo applies shared absolute-path recognition to filesystem fields', (
     }),
   );
   fs.writeFileSync(
-    path.join(root, 'leak.json'),
+    path.join(root, 'unix-leak.json'),
     JSON.stringify({
-      filePath: ['', 'Users', 'Médiathèque, 2026; (Director\'s Archive)', 'private-media-folder'].join('/'),
+      filePath: ['', 'Médiathèque, 2026', 'private'].join('/'),
+    }),
+  );
+  fs.writeFileSync(
+    path.join(root, 'windows-leak.json'),
+    JSON.stringify({
+      filePath: ['D:', '/', 'Media', '/', 'private.mkv'].join(''),
     }),
   );
 
   assert.deepEqual(scanRepo(root), [
-    { file: 'leak.json', reason: 'raw-filesystem-path' },
+    { file: 'unix-leak.json', reason: 'raw-filesystem-path' },
+    { file: 'windows-leak.json', reason: 'raw-filesystem-path' },
   ]);
 });
