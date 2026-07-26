@@ -139,6 +139,22 @@ test('Player keyboard vocabulary keeps OK and Space distinct and maps Info, page
   assert.equal(mapDesktopKeyEvent({ key: '9' }), 'digit9');
 });
 
+test('modified desktop shortcuts bypass navigation and preserve browser defaults', () => {
+  for (const event of [
+    { key: 'g', ctrlKey: true },
+    { key: 'f', metaKey: true },
+    { key: 'ArrowLeft', altKey: true },
+  ]) {
+    let prevented = false;
+    const listener = createDesktopKeyboardInputListener(() => {
+      assert.fail('modified shortcuts must not dispatch');
+    });
+    listener({ ...event, preventDefault: () => { prevented = true; } });
+    assert.equal(mapDesktopKeyEvent(event), null);
+    assert.equal(prevented, false);
+  }
+});
+
 function elementLike(
   tagName: string,
   attributes: Record<string, string> = {},

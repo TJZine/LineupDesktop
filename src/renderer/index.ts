@@ -171,7 +171,6 @@ const navigationLifecycle = createNavigationLifecycle({
   isProfileModalActive: isProfilePinModalActive,
   closeProfileModal: () => closeProfilePinModal(),
   handleChannelSetupBack,
-  handlePlayerOverlayBack: playerOverlayController.closeTop,
   dismissInlineError: shellController.dismissFullscreenError,
   requestFullscreen: (acceptedFocusId) => shellController.requestFullscreen(!fullscreenEnabled, acceptedFocusId),
   invalidateFullscreenRequest: shellController.invalidateFullscreenRequest,
@@ -475,11 +474,7 @@ function updateGuideTunePendingDom(target: GuideTuneTarget | null): void {
 
 function acceptGuideTune(_target: GuideTuneTarget): void {
   if (workflowState.routeState.activeRoute !== 'guide') return;
-  const previousRoute = workflowState.routeState.activeRoute;
-  workflowState = activateWorkflowRoute(workflowState, 'player');
-  navigationLifecycle.routeChanged(previousRoute, 'player');
-  guidePresentationPolling.reconcile(previousRoute, 'player');
-  guideTuneController.stop();
+  activateRoute('player');
   focusState = { activeRoute: 'player', activeId: null };
   renderApp();
 }

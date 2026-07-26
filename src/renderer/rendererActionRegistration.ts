@@ -127,6 +127,8 @@ export function registerRendererActions(
   const guideScreen = documentRef.getElementById('screen-guide');
   let pointerFocusOnlyId: string | null = null;
   guideScreen?.addEventListener('pointerdown', (event) => {
+    pointerFocusOnlyId = null;
+    if (event.button !== 0) return;
     if (!(event.target instanceof HTMLElement)) return;
     const target = readGuideProgramTarget(event.target);
     pointerFocusOnlyId = target !== null && handlers.focusGuideProgramFromPointer?.(target) === true
@@ -134,14 +136,12 @@ export function registerRendererActions(
       : null;
   });
   guideScreen?.addEventListener('click', (event) => {
+    const focusOnlyId = pointerFocusOnlyId;
+    pointerFocusOnlyId = null;
     if (!(event.target instanceof HTMLElement)) return;
     const target = readGuideProgramTarget(event.target);
     if (target !== null) {
-      if (pointerFocusOnlyId === target.focusId) {
-        pointerFocusOnlyId = null;
-        return;
-      }
-      pointerFocusOnlyId = null;
+      if (focusOnlyId === target.focusId) return;
       handlers.activateGuideProgram?.(target);
       return;
     }
@@ -206,16 +206,24 @@ export function registerRendererActions(
   dom.overlayAudioOptionsElement?.addEventListener('click', (event) => {
     if (!(event.target instanceof HTMLElement)) return;
     const button = event.target.closest<HTMLButtonElement>('.playback-options__row');
-    if (button && button.dataset.trackId && isEligibleDelegatedAction(button)) {
-      handlers.selectAudioTrack(button.dataset.trackId, button.dataset.focusId ?? '');
+    if (
+      button &&
+      button.dataset.trackId &&
+      button.dataset.focusId &&
+      isEligibleDelegatedAction(button)
+    ) {
+      handlers.selectAudioTrack(button.dataset.trackId, button.dataset.focusId);
     }
   });
   dom.overlaySubtitleOptionsElement?.addEventListener('click', (event) => {
     if (!(event.target instanceof HTMLElement)) return;
     const button = event.target.closest<HTMLButtonElement>('.playback-options__row');
-    if (button && isEligibleDelegatedAction(button)) {
+    if (button && button.dataset.focusId && isEligibleDelegatedAction(button)) {
       const trackId = button.dataset.trackId;
-      handlers.selectSubtitleTrack(trackId === 'subtitles-off' || !trackId ? null : trackId, button.dataset.focusId ?? '');
+      handlers.selectSubtitleTrack(
+        trackId === 'subtitles-off' || !trackId ? null : trackId,
+        button.dataset.focusId,
+      );
     }
   });
   dom.overlayMiniGuideElement?.addEventListener('click', (event) => {

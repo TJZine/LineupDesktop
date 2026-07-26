@@ -73,6 +73,14 @@ const NUMBER_COMMIT_MS = 2_000;
 const NUMBER_RESULT_MS = 2_000;
 const NUMBER_COMPLETE_MS = 650;
 const TRANSITION_DELAY_MS = 175;
+const PLAYER_BRIDGE_REQUEST_TIMEOUT_MS = 30_000;
+
+class PlayerBridgeRequestTimeoutError extends Error {
+  constructor() {
+    super('Player bridge request timed out.');
+    this.name = 'PlayerBridgeRequestTimeoutError';
+  }
+}
 
 export function createPlayerOverlayController(
   options: PlayerOverlayControllerOptions,
@@ -109,6 +117,30 @@ export function createPlayerOverlayController(
     clearTransientTimers();
     transitionTimer = clearTimer(transitionTimer);
   };
+
+  const withBridgeRequestTimeout = <T>(request: Promise<T>): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      let settled = false;
+      const timeout = options.host.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new PlayerBridgeRequestTimeoutError());
+      }, PLAYER_BRIDGE_REQUEST_TIMEOUT_MS);
+      request.then(
+        (value) => {
+          if (settled) return;
+          settled = true;
+          options.host.clearTimeout(timeout);
+          resolve(value);
+        },
+        (error: unknown) => {
+          if (settled) return;
+          settled = true;
+          options.host.clearTimeout(timeout);
+          reject(error);
+        },
+      );
+    });
 
   const focusActive = (): void => {
     const state = options.getState();
@@ -285,11 +317,18 @@ export function createPlayerOverlayController(
     if (intent === null || command === null) return true;
     const requestId = `renderer-${command}-${++sequence}`;
     pendingCommand = { requestId, command, kind: 'space', snapshotRequestId: snapshot.requestId, focusId: null, trackId: null, family: null };
-    void options.player.dispatch({ intent, requestId, payload: {} }).then((result) => {
+    void withBridgeRequestTimeout(
+      options.player.dispatch({ intent, requestId, payload: {} }),
+    ).then((result) => {
       if (disposed || pendingCommand?.requestId !== requestId) return;
       if (!result.ok || !result.value.accepted) failPendingCommand(requestId, result.ok ? 'Player command was not accepted.' : result.error.message);
       else for (const event of result.value.events) if (event.event === 'command.settled') settleCommand(event);
-    }).catch(() => failPendingCommand(requestId, 'Player command failed.'));
+    }).catch((error: unknown) => failPendingCommand(
+      requestId,
+      error instanceof PlayerBridgeRequestTimeoutError
+        ? 'Player command timed out.'
+        : 'Player command failed.',
+    ));
     return true;
   };
 
@@ -309,19 +348,26 @@ export function createPlayerOverlayController(
     pendingCommand = { requestId, command, kind: 'track', snapshotRequestId: snapshot.requestId, focusId, trackId, family };
     update((state) => ({ ...state, pendingTrackFocusId: focusId, playbackOptionsError: null }));
     try {
-      const result = await options.player.dispatch({
-        intent: family === 'audio' ? 'player.selectAudio' : 'player.selectSubtitle',
-        requestId,
-        payload: { trackId, snapshotRequestId: snapshot.requestId },
-      });
+      const result = await withBridgeRequestTimeout(
+        options.player.dispatch({
+          intent: family === 'audio' ? 'player.selectAudio' : 'player.selectSubtitle',
+          requestId,
+          payload: { trackId, snapshotRequestId: snapshot.requestId },
+        }),
+      );
       if (disposed || pendingCommand?.requestId !== requestId) return;
       if (!result.ok || !result.value.accepted) {
         failPendingCommand(requestId, result.ok ? 'Track selection was not accepted.' : result.error.message);
       } else {
         for (const event of result.value.events) if (event.event === 'command.settled') settleCommand(event);
       }
-    } catch {
-      failPendingCommand(requestId, 'Track selection failed.');
+    } catch (error) {
+      failPendingCommand(
+        requestId,
+        error instanceof PlayerBridgeRequestTimeoutError
+          ? 'Track selection timed out.'
+          : 'Track selection failed.',
+      );
     }
   };
 
@@ -333,6 +379,7 @@ export function createPlayerOverlayController(
     const state = options.getState();
     if (state.pendingTuneChannelId === channelId || state.transitionChannelId === channelId) return;
     const generation = ++tuneGeneration;
+    if (invoker === 'miniGuide') miniGuideTimer = clearTimer(miniGuideTimer);
     transitionTimer = clearTimer(transitionTimer);
     if (invoker === 'number') numberTimer = clearTimer(numberTimer);
     update((current) => ({
@@ -352,7 +399,9 @@ export function createPlayerOverlayController(
       if (generation === tuneGeneration && !disposed) update((current) => ({ ...current, transitionVisible: true }));
     }, TRANSITION_DELAY_MS);
     try {
-      const result = await options.player.tuneChannel({ channelId });
+      const result = await withBridgeRequestTimeout(
+        options.player.tuneChannel({ channelId }),
+      );
       if (disposed || generation !== tuneGeneration) return;
       if (!result.ok) {
         failTune(generation, invoker, result.error.message);
@@ -385,8 +434,16 @@ export function createPlayerOverlayController(
       if (generation !== tuneGeneration || disposed) return;
       await options.refreshGuidePresentation().catch(() => undefined);
       if (generation !== tuneGeneration || disposed) return;
-    } catch {
-      if (generation === tuneGeneration && !disposed) failTune(generation, invoker, 'Channel tune failed.');
+    } catch (error) {
+      if (generation === tuneGeneration && !disposed) {
+        failTune(
+          generation,
+          invoker,
+          error instanceof PlayerBridgeRequestTimeoutError
+            ? 'Channel tune timed out.'
+            : 'Channel tune failed.',
+        );
+      }
     }
   };
 

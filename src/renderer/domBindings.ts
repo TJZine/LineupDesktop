@@ -99,6 +99,7 @@ export interface RendererDomBindings {
   overlayChannelNumberMessageElement?: HTMLElement | null;
   overlayOptionsErrorElement?: HTMLElement | null;
   overlayTransitionLabelElement?: HTMLElement | null;
+  overlayPlayerLoadingLabelElement?: HTMLElement | null;
   overlayPlayerErrorElement?: HTMLElement | null;
   overlayPlayerRetryButton?: HTMLButtonElement | null;
   overlayPlayerGuideButton?: HTMLButtonElement | null;
@@ -259,6 +260,7 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     overlayChannelNumberMessageElement: documentRef.querySelector<HTMLElement>('[data-overlay-channel-number-message]'),
     overlayOptionsErrorElement: documentRef.querySelector<HTMLElement>('[data-overlay-options-error]'),
     overlayTransitionLabelElement: documentRef.querySelector<HTMLElement>('[data-overlay-transition-label]'),
+    overlayPlayerLoadingLabelElement: documentRef.querySelector<HTMLElement>('[data-overlay-player-loading-label]'),
     overlayPlayerErrorElement: documentRef.querySelector<HTMLElement>('[data-overlay-player-error]'),
     overlayPlayerRetryButton: documentRef.querySelector<HTMLButtonElement>('[data-overlay-action="retryPlayer"]'),
     overlayPlayerGuideButton: documentRef.querySelector<HTMLButtonElement>('[data-focus-id="overlay-player-guide"]'),

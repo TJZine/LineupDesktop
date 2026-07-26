@@ -27,7 +27,6 @@ export interface NavigationLifecycleOptions {
   isProfileModalActive(): boolean;
   closeProfileModal(): void;
   handleChannelSetupBack(): Promise<boolean>;
-  handlePlayerOverlayBack(): boolean;
   dismissInlineError(): void;
   requestFullscreen(acceptedFocusId: string): Promise<void>;
   invalidateFullscreenRequest(): void;
@@ -185,7 +184,6 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
         }
         if (options.getRoute() === 'channelSetup' && await options.handleChannelSetupBack()) return;
         if (options.getRoute() === 'player') {
-          if (options.handlePlayerOverlayBack()) return;
           openExit();
           return;
         }

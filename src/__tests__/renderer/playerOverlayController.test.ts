@@ -109,6 +109,53 @@ test('late rejected Space dispatch cannot clear a newer pending command after ro
   assert.equal(requestIds.length, 3);
 });
 
+test('bridge request timeouts clear tune and command ownership through normal failure paths', async () => {
+  const never = new Promise<never>(() => undefined);
+  let dispatchCount = 0;
+  const command = createHarness(playingSnapshot(), {
+    dispatch: async () => {
+      dispatchCount += 1;
+      return never;
+    },
+  });
+  command.controller.handleInput('space');
+  command.timers.advance(29_999);
+  await flushPromiseQueue();
+  assert.deepEqual(command.diagnostics, []);
+  command.timers.advance(1);
+  await flushPromiseQueue();
+  assert.deepEqual(command.diagnostics, ['Player command timed out.']);
+  command.controller.handleInput('space');
+  assert.equal(dispatchCount, 2);
+
+  const track = createHarness(playingSnapshot(), {
+    dispatch: async () => never,
+  });
+  track.controller.requestOsd();
+  track.controller.openOptions('audio');
+  const trackRequest = track.controller.selectTrack(
+    'audio',
+    'audio-alt',
+    'overlay-audio-track-audio-alt',
+  );
+  track.timers.advance(30_000);
+  await trackRequest;
+  assert.equal(track.state().pendingTrackFocusId, null);
+  assert.equal(track.state().playbackOptionsError, 'Track selection timed out.');
+  assert.equal(track.focus.at(-1), 'overlay-audio-track-audio-alt');
+
+  const tune = createHarness(playingSnapshot(), {
+    tuneChannel: async () => never,
+  });
+  tune.controller.requestMiniGuide();
+  const tuneRequest = tune.controller.tune('two', 'miniGuide');
+  tune.timers.advance(30_000);
+  await tuneRequest;
+  assert.equal(tune.state().pendingTuneChannelId, null);
+  assert.equal(tune.state().transitionChannelId, null);
+  assert.equal(tune.state().miniGuideError, 'Channel tune timed out.');
+});
+
 test('different tune target supersedes stale completion and only current success reconciles', async () => {
   const tunes: Array<Deferred<{ ok: true; value: never; requestId: string }>> = [];
   let statusRefresh = 0;
@@ -572,7 +619,7 @@ test('options contain Space, membership loss closes an ineligible family, and tu
     refreshChannelStatus: () => refresh.promise,
   });
   const tune = retryHarness.controller.tune('one', 'retry');
-  await Promise.resolve();
+  await flushPromiseQueue();
   assert.equal(retryHarness.state().retryTransitionActive, true);
   assert.equal(retryHarness.state().activeOverlayId, null);
   refresh.resolve();

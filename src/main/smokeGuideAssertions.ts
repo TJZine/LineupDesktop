@@ -89,10 +89,12 @@ export const GUIDE_SMOKE_ASSERTIONS_SOURCE = String.raw`
         guideButton.click();
       }
       let guideRuntimeResult;
+      const guideRequestStartMs = Date.now();
+      const guideRequestDurationMs = 30 * 60 * 1000;
       try {
         guideRuntimeResult = await bridge.guide.getPresentation({
-          startTimeMs: Date.now(),
-          durationMs: 30 * 60 * 1000,
+          startTimeMs: guideRequestStartMs,
+          durationMs: guideRequestDurationMs,
         });
       } catch (error) {
         guideRuntimeResult = {
@@ -106,6 +108,19 @@ export const GUIDE_SMOKE_ASSERTIONS_SOURCE = String.raw`
         guideRuntimeResult.ok &&
         Array.isArray(guideRuntimeResult.value?.channels) &&
         guideRuntimeResult.value.channels.length === 0;
+      const expectedEmptyProgramsState =
+        guideRuntimeResult.ok &&
+        Array.isArray(guideRuntimeResult.value?.channels) &&
+        guideRuntimeResult.value.channels.length > 0 &&
+        guideRuntimeResult.value.channels.every(
+          (channel) =>
+            Array.isArray(channel.programs) &&
+            channel.programs.every(
+              (program) =>
+                program.endsAtMs <= guideRequestStartMs ||
+                program.startsAtMs >= guideRequestStartMs + guideRequestDurationMs,
+            ),
+        );
       const runtimeIndicatesUnavailable = !guideRuntimeResult.ok;
       const guideDeadlineMs = performance.now() + 1500;
       let guideState = readGuideSmokeState();
@@ -140,7 +155,7 @@ export const GUIDE_SMOKE_ASSERTIONS_SOURCE = String.raw`
         guideStateActionsMatch && (
           guidePresentationState === 'loading' ||
           (expectedEmptyGuideState && guidePresentationState === 'empty-channels') ||
-          guidePresentationState === 'empty-programs' ||
+          (expectedEmptyProgramsState && guidePresentationState === 'empty-programs') ||
           (runtimeIndicatesUnavailable && guidePresentationState === 'error')
         );
       const guideShowsMeaningfulDetails =

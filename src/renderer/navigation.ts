@@ -20,6 +20,9 @@ export type DesktopInputButton =
 export interface DesktopKeyEventLike {
   key: string;
   code?: string;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  altKey?: boolean;
 }
 
 export { mapDesktopKeyEvent } from './desktopInput.js';

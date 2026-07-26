@@ -185,8 +185,10 @@ export function renderPlayerOverlaysDom(
   }
   setElementText(dom.overlayTransitionLabelElement, view.transitionLabel === null ? '' : `Channel ${view.transitionLabel}`);
   setElementText(dom.overlayPlayerErrorElement, view.errorMessage ?? '');
-  const loadingLabel = document.querySelector<HTMLElement>('[data-overlay-player-loading-label]');
-  if (loadingLabel) loadingLabel.textContent = loadingLabelFor(overlayPresentation.playerSnapshot);
+  setElementText(
+    dom.overlayPlayerLoadingLabelElement,
+    loadingLabelFor(overlayPresentation.playerSnapshot),
+  );
 }
 
 function setOsdContent(

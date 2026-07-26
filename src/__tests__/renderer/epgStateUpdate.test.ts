@@ -59,6 +59,20 @@ test('updateEpgState replaces missing identities with the current visible schedu
   assert.equal(updated.selectedProgramId, 'program');
 });
 
+test('non-ready refresh classification uses the returned initial window', () => {
+  const stale = {
+    ...createEpgState(source),
+    windowStartMs: BASE + 24 * 60 * 60 * 1_000,
+    presentationState: 'loading' as const,
+  };
+
+  const updated = updateEpgState(stale, source);
+
+  assert.equal(updated.presentationState, 'ready');
+  assert.equal(updated.windowStartMs, BASE);
+  assert.equal(updated.selectedProgramId, 'program');
+});
+
 test('periodic replacement keeps the selected channel and focuses its deterministic surviving program', () => {
   const selected = {
     ...createEpgState(source),

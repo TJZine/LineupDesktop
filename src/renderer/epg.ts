@@ -345,7 +345,7 @@ export function updateEpgState(
   presentationGeneration = state.presentationGeneration + 1,
 ): EpgState {
   const initial = deriveInitialEpgSelection(presentation);
-  const presentationState = classifyPresentation(presentation, state.windowStartMs);
+  const presentationState = classifyPresentation(presentation, initial.windowStartMs);
   if (presentationState !== 'ready') {
     return {
       windowStartMs: initial.windowStartMs,
