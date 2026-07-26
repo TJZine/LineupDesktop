@@ -22,7 +22,6 @@ export interface RendererDomBindings {
   routeActionButtons: HTMLButtonElement[];
   settingsActionButtons: HTMLButtonElement[];
   setupActionButtons: HTMLButtonElement[];
-  channelCommitButtons: HTMLButtonElement[];
   epgActionButtons: HTMLButtonElement[];
   overlayActionButtons: HTMLButtonElement[];
   screens: HTMLElement[];
@@ -100,6 +99,7 @@ export interface RendererDomBindings {
   overlayChannelNumberMessageElement?: HTMLElement | null;
   overlayOptionsErrorElement?: HTMLElement | null;
   overlayTransitionLabelElement?: HTMLElement | null;
+  overlayPlayerLoadingLabelElement?: HTMLElement | null;
   overlayPlayerErrorElement?: HTMLElement | null;
   overlayPlayerRetryButton?: HTMLButtonElement | null;
   overlayPlayerGuideButton?: HTMLButtonElement | null;
@@ -134,9 +134,6 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     ),
     setupActionButtons: Array.from(
       documentRef.querySelectorAll<HTMLButtonElement>('[data-setup-action]'),
-    ),
-    channelCommitButtons: Array.from(
-      documentRef.querySelectorAll<HTMLButtonElement>('[data-channel-commit-action]'),
     ),
     epgActionButtons: Array.from(documentRef.querySelectorAll<HTMLButtonElement>('[data-epg-action]')),
     overlayActionButtons: Array.from(
@@ -263,6 +260,7 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     overlayChannelNumberMessageElement: documentRef.querySelector<HTMLElement>('[data-overlay-channel-number-message]'),
     overlayOptionsErrorElement: documentRef.querySelector<HTMLElement>('[data-overlay-options-error]'),
     overlayTransitionLabelElement: documentRef.querySelector<HTMLElement>('[data-overlay-transition-label]'),
+    overlayPlayerLoadingLabelElement: documentRef.querySelector<HTMLElement>('[data-overlay-player-loading-label]'),
     overlayPlayerErrorElement: documentRef.querySelector<HTMLElement>('[data-overlay-player-error]'),
     overlayPlayerRetryButton: documentRef.querySelector<HTMLButtonElement>('[data-overlay-action="retryPlayer"]'),
     overlayPlayerGuideButton: documentRef.querySelector<HTMLButtonElement>('[data-focus-id="overlay-player-guide"]'),
@@ -357,7 +355,11 @@ export function readCustomChannelActionId(value: string | undefined): CustomChan
 }
 
 export function readStagedSetupFlowActionId(value: string | undefined): StagedSetupFlowActionId | null {
-  return typeof value === 'string' && STAGED_SETUP_FLOW_ACTIONS.includes(value as StagedSetupFlowActionId)
+  if (typeof value !== 'string') return null;
+  if (STAGED_SETUP_FLOW_ACTIONS.includes(value as (typeof STAGED_SETUP_FLOW_ACTIONS)[number])) {
+    return value as StagedSetupFlowActionId;
+  }
+  return /^(?:strategyToggle|strategyPriorityDown|strategyPriorityUp|strategyScope):(?:collections|playlists|genres|directors|decades|recentlyAdded|studios|actors)$/u.test(value)
     ? value as StagedSetupFlowActionId
     : null;
 }
@@ -379,19 +381,6 @@ export function readChannelSetupActionId(value: string | undefined): ChannelSetu
   switch (value) {
     case 'selectAppendBuildMode':
     case 'selectReplaceBuildMode':
-      return value;
-    default:
-      return null;
-  }
-}
-
-export type ChannelCommitActionId = 'append' | 'replace' | 'confirmReplace';
-
-export function readChannelCommitActionId(value: string | undefined): ChannelCommitActionId | null {
-  switch (value) {
-    case 'append':
-    case 'replace':
-    case 'confirmReplace':
       return value;
     default:
       return null;

@@ -71,6 +71,9 @@ const DEFAULT_REPEAT_DELAY_MS = 450;
 const DEFAULT_REPEAT_INTERVAL_MS = 120;
 
 export function mapDesktopKeyEvent(event: DesktopKeyEventLike): DesktopInputButton | null {
+  if (event.ctrlKey === true || event.metaKey === true || event.altKey === true) {
+    return null;
+  }
   switch (event.key) {
     case 'ArrowUp':
       return 'up';

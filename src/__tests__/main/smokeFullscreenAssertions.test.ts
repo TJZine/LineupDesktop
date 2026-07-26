@@ -35,6 +35,21 @@ test('fullscreen observation handles state before the correct event', async () =
   assertClean(window, scheduler);
 });
 
+test('fullscreen observation rejects a target state that reverted before the transition event', async () => {
+  const scheduler = new FakeScheduler();
+  const window = new FakeFullscreenWindow(false);
+  const observation = waitForFullscreenState(window, true, scheduler);
+
+  window.fullscreen = true;
+  scheduler.advance(25);
+  window.fullscreen = false;
+  window.emit('enter-full-screen');
+  scheduler.advance(4975);
+
+  assert.equal(await observation, false);
+  assertClean(window, scheduler);
+});
+
 test('fullscreen observation rejects event-only completion at the existing deadline', async () => {
   const scheduler = new FakeScheduler();
   const window = new FakeFullscreenWindow(false);

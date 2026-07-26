@@ -1,5 +1,5 @@
 import { isValidContentSource } from './channelContentSourceValidator.js';
-import { cloneChannelForOwnership, cloneContentFilters, cloneContentSource } from './channelDomainClone.js';
+import { cloneChannelForOwnership, cloneContentFilters, cloneContentSource, cloneOwnEnumerableStringRecordWithNullPrototype } from './channelDomainClone.js';
 import type { ChannelPersistenceStore } from './channelPersistenceStore.js';
 import { CHANNEL_DOMAIN_FORBIDDEN_KEYS } from './channelSafety.js';
 import {
@@ -491,17 +491,13 @@ function readPersistedLibraryFilter(value: unknown): Record<string, string | num
   if (hasForbiddenKeys(record)) {
     return null;
   }
-  const filter: Record<string, string | number> = {};
-  for (const [key, entry] of Object.entries(record)) {
-    if (typeof entry === 'string') {
-      filter[key] = entry;
-    } else if (typeof entry === 'number' && Number.isFinite(entry)) {
-      filter[key] = entry;
-    } else {
-      return null;
-    }
+  for (const entry of Object.values(record)) {
+    if (typeof entry !== 'string' && !(typeof entry === 'number' && Number.isFinite(entry))) return null;
   }
-  return filter;
+  return cloneOwnEnumerableStringRecordWithNullPrototype(
+    record as Record<string, string | number>,
+    (entry) => entry,
+  );
 }
 
 function hasForbiddenKeys(record: Record<string, unknown>): boolean {

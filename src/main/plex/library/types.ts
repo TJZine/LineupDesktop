@@ -153,6 +153,12 @@ export interface PlexTagDirectoryItem {
   thumb?: string;
 }
 
+export interface PlexListingPage<T> {
+  entries: T[];
+  offset: number;
+  totalSize: number | null;
+}
+
 export type PlexLibraryRequestIntent = 'preview' | 'background';
 
 export interface LibraryQueryOptions {

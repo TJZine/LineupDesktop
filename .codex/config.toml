@@ -7,7 +7,7 @@ description = "Read-only codebase explorer for gathering evidence before changes
 config_file = "agents/explorer.toml"
 
 [agents.explorer_fallback]
-description = "Fallback read-only explorer when spark usage is constrained or unavailable."
+description = "Fallback read-only explorer when the primary explorer is constrained or unavailable."
 config_file = "agents/explorer-fallback.toml"
 
 [agents.reviewer]

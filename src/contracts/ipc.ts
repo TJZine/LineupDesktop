@@ -120,26 +120,17 @@ export const LINEUP_PLEX_GET_METADATA_CHANNEL =
 export const LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL =
   'lineup:channelSetup:getStatus' as const;
 
-export const LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL =
-  'lineup:channelSetup:commit' as const;
+export const LINEUP_CHANNEL_SETUP_START_REVIEW_CHANNEL =
+  'lineup:channelSetup:startReview' as const;
 
-export const LINEUP_CHANNEL_SETUP_GET_RECORD_CHANNEL =
-  'lineup:channelSetup:getRecord' as const;
+export const LINEUP_CHANNEL_SETUP_START_APPLY_CHANNEL =
+  'lineup:channelSetup:startApply' as const;
 
-export const LINEUP_CHANNEL_SETUP_PREVIEW_CHANNEL =
-  'lineup:channelSetup:preview' as const;
+export const LINEUP_CHANNEL_SETUP_GET_OPERATION_CHANNEL =
+  'lineup:channelSetup:getOperation' as const;
 
-export const LINEUP_CHANNEL_SETUP_REVIEW_CHANNEL =
-  'lineup:channelSetup:review' as const;
-
-export const LINEUP_CHANNEL_SETUP_BUILD_CHANNEL =
-  'lineup:channelSetup:build' as const;
-
-export const LINEUP_CHANNEL_SETUP_CANCEL_BUILD_CHANNEL =
-  'lineup:channelSetup:cancelBuild' as const;
-
-export const LINEUP_CHANNEL_SETUP_PROGRESS_CHANNEL =
-  'lineup:channelSetup:progress' as const;
+export const LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL =
+  'lineup:channelSetup:cancel' as const;
 
 export const LINEUP_GUIDE_GET_PRESENTATION_CHANNEL =
   'lineup:guide:getPresentation' as const;

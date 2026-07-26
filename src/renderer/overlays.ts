@@ -94,7 +94,7 @@ export function openOsd(
   if (state.activeOverlayId === 'playbackOptions' ||
     state.activeOverlayId === 'nowPlaying' || state.activeOverlayId === 'miniGuide') return state;
   if (!isAudioControlEligible(snapshot) && !isSubtitleControlEligible(snapshot)) return closeActive(state);
-  return { ...closeTransient(state), activeOverlayId: 'playerOsd' };
+  return { ...closeActive(state), activeOverlayId: 'playerOsd' };
 }
 
 export function openNowPlaying(
@@ -103,7 +103,7 @@ export function openNowPlaying(
   blocked: boolean,
 ): PlayerOverlayState {
   if (!hasCurrentProgram || blocked || state.activeOverlayId === 'playbackOptions') return state;
-  return { ...closeTransient(state), activeOverlayId: 'nowPlaying' };
+  return { ...closeActive(state), activeOverlayId: 'nowPlaying' };
 }
 
 export function openMiniGuide(
@@ -112,7 +112,7 @@ export function openMiniGuide(
 ): PlayerOverlayState {
   if (presentation.channels.length === 0) return state;
   return {
-    ...closeTransient(state),
+    ...closeActive(state),
     activeOverlayId: 'miniGuide',
     miniGuideSelectedChannelId: state.miniGuideSelectedChannelId ??
       presentation.currentChannelId ?? presentation.channels[0]?.id ?? null,
@@ -161,7 +161,7 @@ export function openPlaybackOptions(
 export function appendChannelDigit(state: PlayerOverlayState, digit: string): PlayerOverlayState {
   if (state.channelNumberStatus === 'pending' || !/^\d$/u.test(digit)) return state;
   return {
-    ...closeTransient(state),
+    ...closeActive(state),
     activeOverlayId: 'channelNumber',
     channelNumberBuffer: `${state.channelNumberBuffer}${digit}`.slice(0, 3),
     channelNumberStatus: 'editing',
@@ -210,22 +210,6 @@ export function reconcileSnapshotState(
 }
 
 function closeActive(state: PlayerOverlayState): PlayerOverlayState {
-  return {
-    ...state,
-    activeOverlayId: null,
-    playbackOptionsFamily: null,
-    playbackOptionsFocusId: null,
-    playbackOptionsInvoker: null,
-    playbackOptionsError: null,
-    miniGuideError: null,
-    pendingTrackFocusId: null,
-    channelNumberBuffer: '',
-    channelNumberStatus: null,
-    channelNumberMessage: null,
-  };
-}
-
-function closeTransient(state: PlayerOverlayState): PlayerOverlayState {
   return {
     ...state,
     activeOverlayId: null,

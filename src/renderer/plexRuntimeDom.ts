@@ -9,7 +9,6 @@ import {
   renderServers,
 } from './plexRuntimeRows.js';
 import { createPlexLinkQr } from './onboarding/plexLinkQr.js';
-import { hasPlexAuthenticationFailure } from './setup/setupEntryLifecycle.js';
 
 export type PlexOnboardingStateId =
   | 'auth-link-code'
@@ -30,9 +29,6 @@ export function readPlexOnboardingState(
   if (profilePinActive) return 'profile-pin';
   if (SETUP_STAGES.has(activeSetupStage)) return null;
   const authState = state.snapshot?.auth.state ?? 'signed-out';
-  if (activeSetupStage === 'account' && hasPlexAuthenticationFailure(state.snapshot)) {
-    return 'auth-error';
-  }
   if (authState !== 'signed-in') {
     if (state.errorText !== null) return 'auth-error';
     return (state.snapshot?.auth.pin ?? null) === null ? 'auth-link-code' : 'auth-waiting';
@@ -90,9 +86,8 @@ export function renderPlexRuntimeDom(
     onboardingState === null ? '' : onboardingStatus(state, onboardingState),
   );
   const activeError = activeOwner?.querySelector<HTMLElement>('[data-onboarding-error]') ?? null;
-  const activeErrorText = onboardingErrorText(state, onboardingState);
-  setText(activeError, activeErrorText);
-  activeError?.toggleAttribute('hidden', activeErrorText.length === 0);
+  setText(activeError, state.errorText ?? '');
+  activeError?.toggleAttribute('hidden', state.errorText === null);
   setText(dom.plexStatusElement, state.statusText);
   setText(dom.plexErrorElement, state.errorText ?? '');
   dom.plexErrorElement?.toggleAttribute('hidden', state.errorText === null);
@@ -145,15 +140,6 @@ export function renderPlexRuntimeDom(
   for (const switchButton of supportsOnboardingDom ? Array.from(document.querySelectorAll<HTMLButtonElement>('[data-focus-id="btn-server-switch-profile"]')) : []) {
     projectPendingControl(switchButton, serverPending, serverPending);
   }
-}
-
-function onboardingErrorText(
-  state: PlexRuntimeRendererState,
-  owner: PlexOnboardingStateId | null,
-): string {
-  if (owner === 'auth-error') return state.errorText ?? 'Plex sign-in needs attention. Try again.';
-  if (owner === 'server-error') return state.errorText ?? '';
-  return '';
 }
 
 function projectPendingControl(button: HTMLButtonElement, disabled: boolean, busy: boolean): void {

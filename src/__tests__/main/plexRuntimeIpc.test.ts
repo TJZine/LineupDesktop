@@ -252,14 +252,6 @@ class FakeLibraryTransport implements LivePlexLibraryTransport {
     return this.playlistItemsResponse as never;
   }
 
-  async listVideoPlaylists() {
-    return { kind: 'json', data: { MediaContainer: { Metadata: [] } } } as never;
-  }
-
-  async listLibraryTagDirectory() {
-    return { kind: 'json', data: { MediaContainer: { Directory: [] } } } as never;
-  }
-
   async stopTranscodeSession() {
     // No-op
   }
@@ -495,109 +487,6 @@ test('desktop plex runtime refreshes, restores, and selects servers while keepin
   assert.equal(fixture.discovery.getSelectedConnectionForMain()?.uri, 'https://local.example:32400');
   assert.equal(JSON.stringify(selected).includes('local.example'), false);
   assertRendererSafe(selected);
-});
-
-test('desktop plex runtime promptly notifies channel setup when selected context changes or clears', async () => {
-  const fixture = createRuntimeFixture();
-  await signIn(fixture);
-  const notifications: number[] = [];
-  const unsubscribe = fixture.runtime.subscribeChannelSetupContextInvalidation(() => notifications.push(notifications.length + 1));
-  fixture.discoveryTransport.resources = [
-    createPlexApiResource({
-      clientIdentifier: 'server-1', name: 'Living Room',
-      connections: [connection({ address: 'local', uri: 'https://local.example:32400' })],
-    }),
-  ];
-  fixture.discoveryTransport.enqueueProbe('local', { outcome: 'reachable', latencyMs: 12 });
-  await fixture.runtime.refreshServers('refresh-context');
-  await fixture.runtime.selectServer('select-context', 'server-1');
-  assert.equal(notifications.length, 1);
-
-  fixture.discoveryTransport.resources = [
-    createPlexApiResource({
-      clientIdentifier: 'server-1', name: 'Living Room',
-      connections: [connection({ address: 'new-local', uri: 'https://new-local.example:32400' })],
-    }),
-  ];
-  fixture.discoveryTransport.enqueueProbe('new-local', { outcome: 'reachable', latencyMs: 8 });
-  await fixture.runtime.refreshServers('refresh-connection');
-  await fixture.runtime.selectServer('select-new-connection', 'server-1');
-  assert.equal(notifications.length, 2);
-
-  fixture.discoveryTransport.resources = [];
-  await fixture.runtime.refreshServers('refresh-clears-context');
-  assert.equal(fixture.discovery.getSelectedServerSummary(), null);
-  assert.equal(notifications.length, 3);
-
-  fixture.discoveryTransport.resources = [
-    createPlexApiResource({
-      clientIdentifier: 'server-1', name: 'Living Room',
-      connections: [connection({ address: 'local', uri: 'https://local.example:32400' })],
-    }),
-  ];
-  fixture.discoveryTransport.enqueueProbe('local', { outcome: 'reachable', latencyMs: 12 });
-  await fixture.runtime.refreshServers('refresh-again');
-  await fixture.runtime.selectServer('select-again', 'server-1');
-  assert.equal(notifications.length, 4);
-  fixture.selectedServerStore.persisted = null;
-  fixture.selectedServerStore.persistedByProfileId.clear();
-  await fixture.runtime.restoreSelectedServer('restore-preserves-context');
-  assert.equal(fixture.discovery.getSelectedServerSummary()?.serverId, 'server-1');
-  assert.equal(notifications.length, 4);
-
-  fixture.discoveryTransport.enqueueProbe('local', { outcome: 'unreachable' });
-  await fixture.runtime.selectServer('probe-clears-context', 'server-1');
-  assert.equal(fixture.discovery.getSelectedServerSummary(), null);
-  assert.equal(notifications.length, 5);
-  fixture.authTransport.enqueue('switch-home-user', {
-    status: 200,
-    payload: { kind: 'json', data: { authToken: placeholderManagedToken } },
-  });
-  fixture.authTransport.enqueue('validate-token', {
-    status: 200,
-    payload: { kind: 'json', data: accountPayload({ id: 'managed', username: 'managed' }) },
-  });
-  await fixture.runtime.switchHomeUser('switch-notifies-context', { userId: 'managed', pin: '1234' });
-  assert.equal(notifications.length, 6);
-  unsubscribe();
-});
-
-test('desktop plex runtime rejects stale preview and review context work when the selected connection changes in place', async () => {
-  const fixture = createRuntimeFixture();
-  await signInAndSelectServer(fixture);
-  const previewStarted = createDeferred<void>();
-  const reviewStarted = createDeferred<void>();
-  const releaseWork = createDeferred<void>();
-  const stalePreview = fixture.runtime.withActiveChannelSetupContext(async () => {
-    previewStarted.resolve();
-    await releaseWork.promise;
-    return 'stale-preview';
-  });
-  const staleReview = fixture.runtime.withActiveChannelSetupContext(async () => {
-    reviewStarted.resolve();
-    await releaseWork.promise;
-    return 'stale-review';
-  });
-  await Promise.all([previewStarted.promise, reviewStarted.promise]);
-
-  fixture.discoveryTransport.resources = [
-    createPlexApiResource({
-      clientIdentifier: 'server-1', name: 'Living Room',
-      connections: [connection({ address: 'replacement', uri: 'https://replacement.example:32400' })],
-    }),
-  ];
-  fixture.discoveryTransport.enqueueProbe('replacement', { outcome: 'reachable', latencyMs: 5 });
-  await fixture.discovery.refreshServers({ token: placeholderAccountToken });
-  await fixture.discovery.selectServer('server-1', { profileId: 'account-1', token: placeholderAccountToken });
-  releaseWork.resolve();
-
-  const results = await Promise.allSettled([stalePreview, staleReview]);
-  for (const result of results) {
-    assert.equal(result.status, 'rejected');
-    if (result.status === 'rejected') {
-      assert.equal(result.reason instanceof LivePlexTransportError && result.reason.code === 'aborted', true);
-    }
-  }
 });
 
 test('desktop plex runtime clears library data when selected server changes', async () => {
@@ -1631,17 +1520,6 @@ test('live plex transport encodes library browse filters and search types safely
     limit: 5,
     types: ['movie', 'episode'],
   });
-  await transport.listVideoPlaylists({
-    connection: connection({ uri: 'https://server.example:32400' }),
-    token: placeholderAccountToken,
-  });
-  await transport.listLibraryTagDirectory({
-    connection: connection({ uri: 'https://server.example:32400' }),
-    token: placeholderAccountToken,
-    sectionId: 'shows/unsafe',
-    family: 'actor',
-    type: 4,
-  });
 
   const browse = new URL(seen[0] ?? '');
   assert.equal(browse.pathname, '/library/sections/1/all');
@@ -1658,12 +1536,6 @@ test('live plex transport encodes library browse filters and search types safely
   assert.equal(search.searchParams.get('sectionId'), '1');
   assert.equal(search.searchParams.get('limit'), '5');
   assert.equal(search.searchParams.get('types'), 'movie,episode');
-  const playlists = new URL(seen[2] ?? '');
-  assert.equal(playlists.pathname, '/playlists');
-  assert.equal(playlists.searchParams.get('playlistType'), 'video');
-  const tags = new URL(seen[3] ?? '');
-  assert.equal(tags.pathname, '/library/sections/shows%2Funsafe/actor');
-  assert.equal(tags.searchParams.get('type'), '4');
   assert.equal(JSON.stringify(seen).includes(placeholderAccountToken), false);
 });
 

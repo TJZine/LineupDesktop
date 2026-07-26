@@ -20,6 +20,13 @@ interface EnrichLibrarySectionCountsInput {
 export async function loadLibrarySectionsWithCounts(
   input: Omit<EnrichLibrarySectionCountsInput, 'sections'>,
 ): Promise<PlexLibrarySectionSummary[]> {
+  const sections = await loadLibrarySectionRecordsWithCounts(input);
+  return sections.map(toRendererSafeLibrarySectionSummary);
+}
+
+export async function loadLibrarySectionRecordsWithCounts(
+  input: Omit<EnrichLibrarySectionCountsInput, 'sections'>,
+): Promise<PlexLibrarySection[]> {
   const payload = await input.libraryTransport.listLibrarySections({
     connection: input.connection,
     token: input.token,
@@ -29,7 +36,14 @@ export async function loadLibrarySectionsWithCounts(
     extractLibrarySectionDirectories(payloadAsContainer<RawLibrarySection>(payload), 'library sections'),
   );
   await enrichLibrarySectionCounts({ ...input, sections });
-  return sections.map(toRendererSafeLibrarySectionSummary);
+  return sections.map(cloneLibrarySection);
+}
+
+function cloneLibrarySection(section: PlexLibrarySection): PlexLibrarySection {
+  return {
+    ...section,
+    lastScannedAt: new Date(section.lastScannedAt.getTime()),
+  };
 }
 
 async function enrichLibrarySectionCounts(input: EnrichLibrarySectionCountsInput): Promise<void> {

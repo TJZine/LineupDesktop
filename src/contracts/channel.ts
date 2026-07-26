@@ -1,3 +1,11 @@
+import type {
+  ChannelBuilderStrategyKey,
+  ChannelSetupConfig,
+  ChannelSetupReviewDiff,
+  ChannelSetupWarning,
+  NormalizedChannelSetupConfig,
+} from '../domain/channelBuilder/types.js';
+
 export const CHANNEL_SETUP_STATUS_VALUES = [
   'not-configured',
   'configured',
@@ -5,67 +13,34 @@ export const CHANNEL_SETUP_STATUS_VALUES = [
   'recovery-failed',
 ] as const;
 
-/** Legacy status/commit bridge vocabulary retained until the P3 bridge lands. */
-export const CHANNEL_SETUP_RUNTIME_ERROR_CODES = [
-  'CHANNEL_UNAUTHORIZED',
-  'CHANNEL_VALIDATION_FAILED',
-  'CHANNEL_REPLACE_CONFIRMATION_REQUIRED',
-  'CHANNEL_PLEX_REQUIRED',
-  'CHANNEL_STORAGE_UNAVAILABLE',
-  'CHANNEL_STORAGE_CORRUPT',
-  'CHANNEL_UNKNOWN',
-] as const;
-
 export const CHANNEL_SETUP_ERROR_CODES = [
   'CHANNEL_UNAUTHORIZED',
   'CHANNEL_VALIDATION_FAILED',
-  'CHANNEL_REPLACE_CONFIRMATION_REQUIRED',
+  'CHANNEL_BUSY',
   'CHANNEL_PLEX_REQUIRED',
+  'CHANNEL_CONTEXT_CHANGED',
+  'CHANNEL_LINEUP_CONFLICT',
+  'CHANNEL_PLAN_NOT_FOUND',
+  'CHANNEL_PLAN_EXPIRED',
+  'CHANNEL_PLAN_ALREADY_USED',
+  'CHANNEL_OPERATION_NOT_FOUND',
+  'CHANNEL_OPERATION_EXPIRED',
+  'CHANNEL_REPLACE_CONFIRMATION_REQUIRED',
+  'CHANNEL_REPLACEMENT_EMPTY',
   'CHANNEL_STORAGE_UNAVAILABLE',
   'CHANNEL_STORAGE_CORRUPT',
-  'CHANNEL_STORAGE_UNSUPPORTED_VERSION',
-  'CHANNEL_BUILD_ACTIVE',
-  'CHANNEL_BUILD_ID_REUSED',
-  'CHANNEL_BUILD_ID_CAPACITY',
-  'CHANNEL_BUILD_CANCELED',
-  'CHANNEL_BUILD_TOO_LATE',
   'CHANNEL_UNKNOWN',
 ] as const;
 
 export const CHANNEL_SETUP_OPERATIONS = [
   'getStatus',
-  'getRecord',
-  'preview',
-  'review',
-  'build',
-  'cancelBuild',
-  'commit',
+  'startReview',
+  'startApply',
+  'getOperation',
+  'cancel',
 ] as const;
 
-export const CHANNEL_SETUP_COMMIT_MODES = ['append', 'replace', 'merge'] as const;
-
-export const CHANNEL_SETUP_STRATEGY_KEYS = [
-  'playlists',
-  'collections',
-  'recentlyAdded',
-  'genres',
-  'studios',
-  'actors',
-  'decades',
-  'directors',
-] as const;
-
-export const CHANNEL_SETUP_PROGRESS_TASKS = [
-  'fetch_playlists',
-  'fetch_collections',
-  'fetch_facets',
-  'scan_library_items',
-  'build_pending',
-  'create_channels',
-  'apply_channels',
-  'refresh_guide',
-  'done',
-] as const;
+export const CHANNEL_SETUP_BUILD_MODES = ['append', 'replace', 'merge'] as const;
 
 export const CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS = [
   'rawPayload',
@@ -99,152 +74,16 @@ export const CHANNEL_SETUP_FORBIDDEN_RENDERER_FIELD_KEYS = [
 ] as const;
 
 export type ChannelSetupStatusValue = (typeof CHANNEL_SETUP_STATUS_VALUES)[number];
-export type ChannelSetupWorkflowErrorCode = (typeof CHANNEL_SETUP_ERROR_CODES)[number];
-export type ChannelSetupErrorCode = (typeof CHANNEL_SETUP_RUNTIME_ERROR_CODES)[number];
-export type ChannelSetupOperation = (typeof CHANNEL_SETUP_OPERATIONS)[number];
-export type ChannelSetupCommitMode = (typeof CHANNEL_SETUP_COMMIT_MODES)[number];
-export type ChannelSetupStrategyKey = (typeof CHANNEL_SETUP_STRATEGY_KEYS)[number];
-export type ChannelSetupStrategyScope = 'per-library' | 'cross-library';
-export type ChannelSetupActorStudioCombineMode = 'separate' | 'combined';
-export type ChannelSetupSeriesPlaybackMode = 'shuffle' | 'sequential' | 'block';
-export type ChannelSetupVariantType = 'none' | 'sequential' | 'block';
-export type ChannelSetupProgressTask = (typeof CHANNEL_SETUP_PROGRESS_TASKS)[number];
+export type ChannelSetupErrorCode = (typeof CHANNEL_SETUP_ERROR_CODES)[number];
+export type ChannelSetupOperationName = (typeof CHANNEL_SETUP_OPERATIONS)[number];
+export type ChannelSetupBuildMode = (typeof CHANNEL_SETUP_BUILD_MODES)[number];
 
-export interface ChannelSetupStrategyConfig {
-  enabled: boolean;
-  priority: number;
-  scope: ChannelSetupStrategyScope;
-}
-
-export interface ChannelSetupExpansionConfig {
-  addAlternateLineups: boolean;
-  alternateLineupCopies: number;
-  variantType: ChannelSetupVariantType;
-  variantBlockSize: number;
-}
-
-export interface ChannelSetupSeriesOrderingConfig {
-  basePlaybackMode: ChannelSetupSeriesPlaybackMode;
-  baseBlockSize: number;
-}
-
-export interface ChannelSetupConfigDraft {
-  selectedLibraryIds: readonly string[];
-  maxChannels: number;
-  buildMode: ChannelSetupCommitMode;
-  strategyConfig: Partial<Record<ChannelSetupStrategyKey, Partial<ChannelSetupStrategyConfig>>>;
-  channelExpansion?: Partial<ChannelSetupExpansionConfig>;
-  seriesOrdering?: Partial<ChannelSetupSeriesOrderingConfig>;
-  actorStudioCombineMode: ChannelSetupActorStudioCombineMode;
-  minItemsPerChannel: number;
-}
-
-export interface ChannelSetupConfig {
-  selectedLibraryIds: readonly string[];
-  maxChannels: number;
-  buildMode: ChannelSetupCommitMode;
-  strategyConfig: Readonly<Record<ChannelSetupStrategyKey, ChannelSetupStrategyConfig>>;
-  channelExpansion: ChannelSetupExpansionConfig;
-  seriesOrdering: ChannelSetupSeriesOrderingConfig;
-  actorStudioCombineMode: ChannelSetupActorStudioCombineMode;
-  minItemsPerChannel: number;
-}
-
-export interface ChannelSetupEstimates {
-  total: number;
-  playlists: number;
-  collections: number;
-  recentlyAdded: number;
-  genres: number;
-  studios: number;
-  actors: number;
-  decades: number;
-  directors: number;
-}
-
-export interface ChannelSetupPreview {
-  status: 'ready' | 'blocked' | 'slow';
-  config: ChannelSetupConfig;
-  estimates: ChannelSetupEstimates;
-  eligibleGeneratedCount: number;
-  selectedGeneratedCount: number;
-  droppedByMinItemsCount: number;
-  droppedByPlanCapCount: number;
-  reachedMaxChannels: boolean;
-  warnings: readonly string[];
-  message?: string;
-  failureReason?: 'unsupported' | 'empty' | 'timeout' | 'error' | 'transient';
-}
-
-export interface ChannelSetupDiffSummary {
-  created: number;
-  removed: number;
-  unchanged: number;
-}
-
-export interface ChannelSetupDiffSamples {
-  created: readonly string[];
-  removed: readonly string[];
-  unchanged: readonly string[];
-}
-
-export interface ChannelSetupReview {
-  preview: ChannelSetupPreview;
-  diff: {
-    summary: ChannelSetupDiffSummary;
-    samples: ChannelSetupDiffSamples;
-  };
-}
-
-export type ChannelSetupRecordSummary =
-  | { status: 'missing' }
-  | { status: 'ready'; config: ChannelSetupConfig; createdAtMs: number; updatedAtMs: number }
-  | { status: 'corrupt' }
-  | { status: 'unsupported-version' }
-  | { status: 'unavailable' };
-
-export interface ChannelSetupBuildProgress {
-  task: ChannelSetupProgressTask;
-  current: number;
-  total: number | null;
-  label: string;
-  detail: string;
-}
-
-export type ChannelSetupGuideRefreshResult =
-  | { kind: 'completed' }
-  | { kind: 'failed'; message: string }
-  | { kind: 'interrupted'; message: string };
-
-export interface ChannelSetupBuildCounts {
-  plannedGeneratedCount: number;
-  createdCount: number;
-  updatedCount: number;
-  preservedCount: number;
-  removedCount: number;
-  skippedCount: number;
-  reachedMaxChannels: boolean;
-  channelNumberCapacityExhausted: boolean;
-  errorCount: number;
-}
-
-export type ChannelSetupBuildResult =
-  | { kind: 'canceled'; buildId: string; counts: ChannelSetupBuildCounts; warnings: readonly string[] }
-  | { kind: 'failed'; buildId: string; counts: ChannelSetupBuildCounts; warnings: readonly string[]; error: ChannelSetupWorkflowError }
-  | {
-      kind: 'committed' | 'committed-with-record-warning';
-      buildId: string;
-      counts: ChannelSetupBuildCounts;
-      warnings: readonly string[];
-      guideRefresh: ChannelSetupGuideRefreshResult;
-    };
-
-export type ChannelSetupCancelStatus = 'accepted' | 'too-late' | 'not-active';
-
-export interface ChannelSetupCancelResult {
-  buildId: string;
-  status: ChannelSetupCancelStatus;
-}
+export type {
+  ChannelSetupConfig,
+  ChannelSetupReviewDiff,
+  ChannelSetupWarning,
+  NormalizedChannelSetupConfig,
+};
 
 export interface ChannelSetupPersistedChannelSummary {
   id: string;
@@ -257,12 +96,24 @@ export interface ChannelSetupPersistedChannelSummary {
 
 export interface ChannelSetupSummary {
   status: ChannelSetupStatusValue;
+  lineupRevision: number;
   channelCount: number;
   currentChannelId: string | null;
   currentChannelNumber: number | null;
   currentChannelName: string | null;
   channelNumbers: readonly number[];
   channels: readonly ChannelSetupPersistedChannelSummary[];
+  builder:
+    | {
+        completion: 'unknown';
+        normalizedConfig: null;
+        completedAtMs: null;
+      }
+    | {
+        completion: 'complete';
+        normalizedConfig: NormalizedChannelSetupConfig;
+        completedAtMs: number;
+      };
   updatedAtMs: number;
   recovery: {
     loaded: boolean;
@@ -275,56 +126,147 @@ export interface ChannelSetupRuntimeError {
   message: string;
   retryable: boolean;
   recoverable: boolean;
-  operation: ChannelSetupOperation;
+  operation: ChannelSetupOperationName;
 }
 
-export interface ChannelSetupWorkflowError extends Omit<ChannelSetupRuntimeError, 'code'> {
-  code: ChannelSetupWorkflowErrorCode;
+export interface ChannelSetupOperationProgress {
+  completed: number;
+  total: number | null;
 }
+
+type ChannelSetupOperationBase = {
+  operationId: string;
+  startedAtMs: number;
+  updatedAtMs: number;
+  progress: ChannelSetupOperationProgress;
+};
+
+export type ChannelSetupApplySummary = Readonly<{
+  created: number;
+  removed: number;
+  unchanged: number;
+  skipped: number;
+  finalChannelCount: number;
+  reachedMaxChannels: boolean;
+  watchChannelId: string | null;
+  byStrategy: Readonly<
+    Record<ChannelBuilderStrategyKey, Readonly<{ created: number; skipped: number }>>
+  >;
+  warnings: readonly ChannelSetupWarning[];
+}>;
+
+export type ChannelSetupOperation =
+  | (ChannelSetupOperationBase & {
+      kind: 'review';
+      state: 'queued';
+      phase: 'discover-facets';
+      result: null;
+      error: null;
+    })
+  | (ChannelSetupOperationBase & {
+      kind: 'review';
+      state: 'running' | 'canceling';
+      phase: 'discover-facets' | 'plan';
+      result: null;
+      error: null;
+    })
+  | (ChannelSetupOperationBase & {
+      kind: 'review';
+      state: 'review-ready';
+      phase: 'review-ready';
+      result: {
+        kind: 'review';
+        planId: string | null;
+        contextEpoch: number;
+        lineupRevision: number;
+        status: 'ready' | 'slow' | 'blocked';
+        diff: ChannelSetupReviewDiff;
+        warnings: readonly ChannelSetupWarning[];
+        reachedCap: boolean;
+      };
+      error: null;
+    })
+  | (ChannelSetupOperationBase & {
+      kind: 'apply';
+      state: 'queued' | 'canceling';
+      phase: 'materialize';
+      result: null;
+      error: null;
+    })
+  | (ChannelSetupOperationBase & {
+      kind: 'apply';
+      state: 'running';
+      phase: 'materialize' | 'persist' | 'refresh-guide';
+      result: null;
+      error: null;
+    })
+  | (ChannelSetupOperationBase & {
+      kind: 'apply';
+      state: 'succeeded';
+      phase: 'done';
+      result: {
+        kind: 'apply';
+        commit: 'committed';
+        summary: ChannelSetupApplySummary;
+        guideRefresh: 'completed' | 'failed';
+      };
+      error: null;
+    })
+  | (ChannelSetupOperationBase & {
+      kind: 'review' | 'apply';
+      state: 'canceled';
+      phase: 'done';
+      result: { kind: 'canceled' };
+      error: null;
+    })
+  | (ChannelSetupOperationBase & {
+      kind: 'review' | 'apply';
+      state: 'failed';
+      phase: 'done';
+      result: null;
+      error: ChannelSetupRuntimeError;
+    });
 
 export type ChannelSetupIpcResult<TValue> =
   | { ok: true; requestId: string; value: TValue }
   | { ok: false; requestId: string; error: ChannelSetupRuntimeError };
 
-export type ChannelSetupWorkflowIpcResult<TValue> =
-  | { ok: true; requestId: string; value: TValue }
-  | { ok: false; requestId: string; error: ChannelSetupWorkflowError };
-
-export type ChannelSetupEmptyRequest = {
+export type ChannelSetupGetStatusRequest = {
   requestId: string;
   payload: Record<string, never>;
 };
 
-export type ChannelSetupCommitRequest = {
+export type ChannelSetupStartReviewRequest = {
   requestId: string;
-  payload: {
-    mode: ChannelSetupCommitMode;
-    sectionIds: readonly string[];
-    confirmReplace?: boolean;
-  };
+  payload: { config: ChannelSetupConfig };
 };
 
-export type ChannelSetupConfigRequest = {
+export type ChannelSetupStartApplyRequest = {
   requestId: string;
-  payload: { config: ChannelSetupConfigDraft };
+  payload: { planId: string; confirmReplace: boolean };
 };
 
-export type ChannelSetupBuildRequest = {
+export type ChannelSetupGetOperationRequest = {
   requestId: string;
-  payload: { buildId: string; config: ChannelSetupConfigDraft; confirmReplace: boolean };
+  payload: { operationId: string };
 };
 
-export type ChannelSetupCancelRequest = {
-  requestId: string;
-  payload: { buildId: string };
+export type ChannelSetupCancelRequest = ChannelSetupGetOperationRequest;
+
+export type ChannelSetupAcceptedOperation = {
+  accepted: true;
+  operation: ChannelSetupOperation;
 };
 
-export interface ChannelSetupProgressEnvelope {
-  buildId: string;
-  buildRequestId: string;
-  sequence: number;
-  progress: ChannelSetupBuildProgress;
-}
+export type ChannelSetupOperationResult = {
+  operation: ChannelSetupOperation;
+};
+
+export type ChannelSetupCancelResult = {
+  accepted: boolean;
+  reason: null | 'already-terminal' | 'commit-started';
+  operation: ChannelSetupOperation;
+};
 
 export function channelSetupSuccess<TValue>(
   requestId: string,

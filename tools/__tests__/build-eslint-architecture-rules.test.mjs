@@ -36,13 +36,16 @@ function getRestrictedGlobalNames(files) {
 
 test('domain boundary blocks runtime imports', () => {
   const restriction = getRestrictionFor('src/domain/**/*.ts');
+  const restrictedPaths = getRestrictedPathsForEntry('src/domain/**/*.ts');
 
   assert.equal(restriction.message, architectureRuleMessages.domainBoundary);
   assert.ok(restriction.group.includes('electron'));
   assert.ok(restriction.group.includes('node:*'));
-  assert.ok(restriction.group.includes('crypto'));
-  assert.ok(restriction.group.includes('node:crypto'));
-  assert.ok(restriction.group.includes('fs/promises'));
+  assert.equal(restriction.group.includes('crypto'), false);
+  assert.ok(restrictedPaths.some((entry) => entry.name === 'crypto'));
+  assert.equal(restriction.group.includes('node:crypto'), false);
+  assert.equal(restriction.group.includes('fs/promises'), false);
+  assert.ok(restrictedPaths.some((entry) => entry.name === 'fs/promises'));
   assert.ok(restriction.group.includes('src/main'));
   assert.ok(restriction.group.includes('src/main/**'));
   assert.ok(restriction.group.includes('src/preload'));
@@ -211,13 +214,16 @@ test('ESLint rejects domain globalThis runtime access', async () => {
 
 test('renderer boundary blocks privileged imports', () => {
   const restriction = getRestrictionFor('src/renderer/**/*.ts');
+  const restrictedPaths = getRestrictedPathsForEntry('src/renderer/**/*.ts');
 
   assert.equal(restriction.message, architectureRuleMessages.rendererBoundary);
   assert.ok(restriction.group.includes('electron'));
   assert.ok(restriction.group.includes('node:*'));
-  assert.ok(restriction.group.includes('crypto'));
-  assert.ok(restriction.group.includes('node:crypto'));
-  assert.ok(restriction.group.includes('fs/promises'));
+  assert.equal(restriction.group.includes('crypto'), false);
+  assert.ok(restrictedPaths.some((entry) => entry.name === 'crypto'));
+  assert.equal(restriction.group.includes('node:crypto'), false);
+  assert.equal(restriction.group.includes('fs/promises'), false);
+  assert.ok(restrictedPaths.some((entry) => entry.name === 'fs/promises'));
   assert.ok(restriction.group.includes('src/main/**'));
   assert.ok(restriction.group.includes('**/main/**'));
   assert.ok(restriction.group.includes('src/native-helper/**'));
@@ -244,6 +250,55 @@ test('ESLint rejects renderer Node imports and nested main imports', async () =>
 
   const restrictedMessages = result.messages.filter((message) => message.ruleId === 'no-restricted-imports');
   assert.equal(restrictedMessages.length, 2);
+});
+
+test('renderer permits relative domain config while preserving privileged boundaries', async () => {
+  const eslint = new ESLint({
+    overrideConfigFile: true,
+    overrideConfig: buildEslintArchitectureRules(desktopArchitectureRules),
+  });
+  const [allowed] = await eslint.lintText([
+    "import { createDefaultChannelSetupConfig } from '../../domain/channelBuilder/config.js';",
+    'void createDefaultChannelSetupConfig;',
+  ].join('\n'), { filePath: 'src/renderer/channelSetup/builderConfigState.ts' });
+  assert.equal(allowed.messages.length, 0);
+
+  const [forbiddenBuiltins] = await eslint.lintText([
+    "import legacyDomain from 'domain';",
+    "import nodeDomain from 'node:domain';",
+    'void legacyDomain;',
+    'void nodeDomain;',
+  ].join('\n'), { filePath: 'src/renderer/channelSetup/builderConfigState.ts' });
+  assert.equal(
+    forbiddenBuiltins.messages.filter((message) => message.ruleId === 'no-restricted-imports').length,
+    2,
+  );
+
+  const [forbiddenBoundaries] = await eslint.lintText([
+    "import mainThing from '../../main/window';",
+    "import preloadThing from '../../preload/index.cjs';",
+    "import helperThing from '../../native-helper/host';",
+    "const dynamicMain = await import('../../main/window');",
+    "const target = '../../preload/index.cjs';",
+    'const computed = await import(target);',
+    'void mainThing;',
+    'void preloadThing;',
+    'void helperThing;',
+    'void dynamicMain;',
+    'void computed;',
+  ].join('\n'), { filePath: 'src/renderer/channelSetup/builderConfigState.ts' });
+  assert.equal(
+    forbiddenBoundaries.messages.filter(
+      (message) => message.ruleId === 'no-restricted-imports',
+    ).length,
+    3,
+  );
+  assert.equal(
+    forbiddenBoundaries.messages.filter(
+      (message) => message.ruleId === 'no-restricted-syntax',
+    ).length,
+    2,
+  );
 });
 
 test('ESLint rejects renderer dynamic imports across privileged boundaries', async () => {

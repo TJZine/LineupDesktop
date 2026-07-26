@@ -6,9 +6,13 @@ import type { ChannelRuntimeRendererState } from '../../renderer/channelRuntimeS
 import { createPlayerOverlayState, openOsd, openPlaybackOptions } from '../../renderer/overlays.js';
 import { createEmptyPlayerSnapshot } from '../../renderer/playerOverlayPresentation.js';
 import { setEpgPresentationState, type EpgPresentationSource } from '../../renderer/epg.js';
-import { renderRouteDom, renderWorkflowDom } from '../../renderer/routeDom.js';
+import {
+  renderChannelSetupResult,
+  renderRouteDom,
+  renderWorkflowDom,
+} from '../../renderer/routeDom.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
-import { applyWorkflowAction, applyWorkflowChannelSetupAction, createWorkflowState as createWorkflowStateCore } from '../../renderer/workflow.js';
+import { applyWorkflowChannelSetupAction, createWorkflowState as createWorkflowStateCore } from '../../renderer/workflow.js';
 import { renderShellDom, type ShellDomBindings } from '../../renderer/shell/shellDom.js';
 import { beginFullscreenRequest, rejectFullscreenRequest } from '../../renderer/shell/shellState.js';
 
@@ -348,6 +352,10 @@ test('route DOM renders guide states and focused program details', () => {
     assert.match(renderedText, /Guide ready/u);
     assert.match(renderedText, /The Midnight Archive/u);
     assert.match(renderedText, /S2 E4/u);
+    assert.match(collectVisibleText(grid), /Edit lineup/u);
+    const editLineupActions = findElementsByDataset(grid, 'guideAction', 'setup');
+    assert.equal(editLineupActions.length, 1);
+    assert.equal(editLineupActions[0]?.dataset.focusId, 'guide-state-setup');
     assert.equal(grid.getAttribute('role'), 'grid');
     const readyRows = findElementsByRole(grid, 'row');
     assert.equal(readyRows.length, 2);
@@ -679,7 +687,7 @@ test('route DOM renders player OSD fields and playback option rows', () => {
   }
 });
 
-test('route DOM renders channel setup review without privileged data', () => {
+test('route workflow DOM leaves staged builder review policy to channelSetup/dom', () => {
   const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   const documentDouble = {
     documentElement: { dataset: {} },
@@ -713,7 +721,7 @@ test('route DOM renders channel setup review without privileged data', () => {
     );
 
     const renderedText = [channelList, validation].map(collectText).join(' ');
-    assert.match(renderedText, /Choose a movie or show library section before saving channels/u);
+    assert.equal(renderedText.trim(), '');
     assert.doesNotMatch(renderedText, /Demo Library|The Vault|Weekend Queue|Liminal One/u);
     assert.doesNotMatch(renderedText, /serverUri|token|https?:|raw payload/u);
   } finally {
@@ -721,78 +729,7 @@ test('route DOM renders channel setup review without privileged data', () => {
   }
 });
 
-test('route DOM keeps channel commit controls gated by status, selection, and confirmation', () => {
-  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
-  const documentDouble = {
-    documentElement: { dataset: {} },
-    querySelector: () => null,
-  };
-  Object.defineProperty(globalThis, 'document', {
-    value: documentDouble,
-    configurable: true,
-  });
-
-  try {
-    const appendButton = new ElementDouble();
-    appendButton.dataset.channelCommitAction = 'append';
-    const replaceButton = new ElementDouble();
-    replaceButton.dataset.channelCommitAction = 'replace';
-    const confirmButton = new ElementDouble();
-    confirmButton.dataset.channelCommitAction = 'confirmReplace';
-    const dom = createOverlayDomBindings({
-      overlayStack: new ElementDouble(),
-      overlays: [],
-      overlayActions: [],
-    });
-    dom.channelCommitButtons = [appendButton, replaceButton, confirmButton] as unknown as HTMLButtonElement[];
-
-    renderWorkflowDom(
-      createWorkflowState('channelSetup'),
-      createPlayerOverlayState(),
-      createRendererSafePlayerSnapshot(),
-      dom,
-      configuredChannelRuntimeState(),
-      null,
-    );
-    assert.equal(appendButton.disabled, true);
-    assert.equal(replaceButton.disabled, true);
-    assert.equal(confirmButton.disabled, true);
-
-    renderWorkflowDom(
-      createWorkflowState('channelSetup'),
-      createPlayerOverlayState(),
-      createRendererSafePlayerSnapshot(),
-      dom,
-      configuredChannelRuntimeState(),
-      liveSelection(),
-    );
-    assert.equal(appendButton.disabled, false);
-    assert.equal(replaceButton.disabled, false);
-    assert.equal(confirmButton.disabled, true);
-
-    renderWorkflowDom(
-      createWorkflowState('channelSetup'),
-      createPlayerOverlayState(),
-      createRendererSafePlayerSnapshot(),
-      dom,
-      {
-        ...configuredChannelRuntimeState(),
-        statusText: 'Channel status unavailable',
-        errorText: 'Replacing saved channels requires confirmation.',
-        commitMode: 'replace',
-        confirmReplace: true,
-      },
-      liveSelection(),
-    );
-    assert.equal(appendButton.disabled, false);
-    assert.equal(replaceButton.disabled, false);
-    assert.equal(confirmButton.disabled, false);
-  } finally {
-    restoreDocument(originalDocument);
-  }
-});
-
-test('route DOM renders selected Plex library and strategy controls through product setup bindings', () => {
+test('route workflow DOM projects selected-library summary without overwriting staged builder policy', () => {
   const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   const documentDouble = {
     documentElement: { dataset: {} },
@@ -811,10 +748,6 @@ test('route DOM renders selected Plex library and strategy controls through prod
     const sourceList = new ElementDouble();
     const review = new ElementDouble();
     const validation = new ElementDouble();
-    const appendButton = new ElementDouble();
-    appendButton.dataset.channelCommitAction = 'append';
-    const replaceButton = new ElementDouble();
-    replaceButton.dataset.channelCommitAction = 'replace';
     const dom = createOverlayDomBindings({
       overlayStack: new ElementDouble(),
       overlays: [],
@@ -826,7 +759,6 @@ test('route DOM renders selected Plex library and strategy controls through prod
     dom.channelDraftListElement = sourceList as unknown as HTMLElement;
     dom.channelSetupReviewElement = review as unknown as HTMLElement;
     dom.setupValidationElement = validation as unknown as HTMLElement;
-    dom.channelCommitButtons = [appendButton, replaceButton] as unknown as HTMLButtonElement[];
 
     const replaceWorkflow = applyWorkflowChannelSetupAction(
       createWorkflowState('channelSetup'),
@@ -846,12 +778,95 @@ test('route DOM renders selected Plex library and strategy controls through prod
       .join(' ');
 
     assert.match(renderedText, /Selected Movies/u);
-    assert.match(renderedText, /Movie library source selected for channel creation/u);
-    assert.match(renderedText, /2 known movies/u);
-    assert.match(renderedText, /Replace saved lineup/u);
-    assert.match(renderedText, /Review the strategy, then append it to saved channels or replace the lineup/u);
-    assert.equal(appendButton.textContent, 'Build appended channel');
-    assert.equal(replaceButton.textContent, 'Review replace mode');
+    assert.match(renderedText, /1 of 1/u);
+    assert.match(renderedText, /2 library items/u);
+    assert.equal([sourceList, review, validation].map(collectText).join(' ').trim(), '');
+  } finally {
+    restoreDocument(originalDocument);
+  }
+});
+
+test('route workflow DOM renders committed counts, warnings, and terminal cancellation', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const selectors = new Map<string, ElementDouble>([
+    ['[data-setup-result-title]', new ElementDouble()],
+    ['[data-setup-result-intro]', new ElementDouble()],
+    ['[data-setup-result-mark]', new ElementDouble()],
+    ['[data-channel-setup-result-detail]', new ElementDouble()],
+  ]);
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: (selector: string) => selectors.get(selector) ?? null,
+    createElement: (tagName: string) => new ElementDouble(tagName),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+  try {
+    const result = new ElementDouble();
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.channelSetupResultElement = result as unknown as HTMLElement;
+    const renderResult = (
+      setupResult: Parameters<typeof renderChannelSetupResult>[1],
+    ) => renderChannelSetupResult(dom, setupResult);
+    renderResult({
+      kind: 'committed',
+      summary: {
+        created: 2,
+        removed: 1,
+        unchanged: 3,
+        skipped: 4,
+        finalChannelCount: 5,
+        reachedMaxChannels: false,
+        watchChannelId: 'watch',
+        byStrategy: {
+          genres: { created: 2, skipped: 4 },
+        },
+        warnings: [
+          {
+            code: 'MIN_ITEMS_SKIPPED',
+            phase: 'planning',
+            strategy: 'genres',
+            affectedCount: 4,
+          },
+          {
+            code: 'GUIDE_REFRESH_FAILED',
+            phase: 'refresh',
+            strategy: null,
+            affectedCount: null,
+          },
+          {
+            code: 'EXISTING_SOURCE_UNMATCHABLE',
+            phase: 'planning',
+            strategy: null,
+            affectedCount: 1,
+          },
+        ],
+      } as never,
+    });
+    assert.match(result.textContent, /2 created, 1 removed, 3 unchanged, and 4 skipped/u);
+    assert.match(collectText(selectors.get('[data-channel-setup-result-detail]')!), /Genres: 2 created, 4 skipped/u);
+    assert.match(
+      collectText(selectors.get('[data-channel-setup-result-detail]')!),
+      /Channels below the minimum item count were skipped \(4\)\./u,
+    );
+    assert.match(
+      collectText(selectors.get('[data-channel-setup-result-detail]')!),
+      /Channels were saved, but Guide refresh did not complete\. Open Guide and retry refresh\./u,
+    );
+    assert.match(
+      collectText(selectors.get('[data-channel-setup-result-detail]')!),
+      /Some existing channels can be retained but cannot be matched or updated by Channel Builder\./u,
+    );
+
+    renderResult({ kind: 'canceled' });
+    assert.equal(selectors.get('[data-setup-result-title]')?.textContent, 'Build canceled');
+    assert.match(result.textContent, /stopped before the atomic save completed/u);
   } finally {
     restoreDocument(originalDocument);
   }
@@ -979,6 +994,9 @@ test('static product route visible text avoids internal implementation-status te
 
   assert.doesNotMatch(readVisibleTextFromMarkup(root.innerHTML), PRODUCT_ROUTE_INTERNAL_COPY_PATTERN);
   assert.doesNotMatch(root.innerHTML, /data-channel-setup-fixture-status/u);
+  assert.match(root.innerHTML, /data-staged-owner="replace-confirm" role="dialog" aria-modal="true"/u);
+  assert.match(root.innerHTML, /data-setup-flow-action="cancelReplaceConfirm" data-focus-id="setup-replace-cancel"/u);
+  assert.match(root.innerHTML, /data-setup-flow-action="confirmReplace" data-focus-id="setup-replace-confirm"/u);
 });
 
 test('static player DOM keeps native presentation beside the route-owned overlay stack', () => {
@@ -1005,78 +1023,6 @@ test('static player DOM keeps native presentation beside the route-owned overlay
     /poster-placeholder|clear-logo-placeholder|icon-placeholder|player-quick-actions|Sleep|Volume|Playback rate|Quality/u,
   );
   assert.equal((root.innerHTML.match(/class="playback-options__section"/gu) ?? []).length, 1);
-  assert.match(
-    root.innerHTML,
-    /data-setup-reminder="player"[\s\S]*data-route-action="openChannelSetup"[\s\S]*data-focus-id="player-setup-reminder"/u,
-  );
-});
-
-test('player setup reminder is focusable for zero channels and hidden for a configured lineup', () => {
-  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
-  const reminder = new ElementDouble();
-  const documentDouble = {
-    documentElement: { dataset: {} },
-    querySelector: () => null,
-    querySelectorAll: (selector: string) => selector === '[data-setup-reminder]' ? [reminder] : [],
-  };
-  Object.defineProperty(globalThis, 'document', { value: documentDouble, configurable: true });
-
-  try {
-    const dom = createOverlayDomBindings({
-      overlayStack: new ElementDouble(), overlays: [], overlayActions: [],
-    });
-    const configured = configuredChannelRuntimeState();
-    if (configured.summary === null) throw new Error('Configured fixture requires a summary.');
-    renderWorkflowDom(
-      createWorkflowState('player'),
-      createPlayerOverlayState(),
-      createRendererSafePlayerSnapshot(),
-      dom,
-      {
-        ...configured,
-        summary: {
-          ...configured.summary,
-          status: 'not-configured', channelCount: 0, channels: [], channelNumbers: [],
-          currentChannelId: null, currentChannelNumber: null, currentChannelName: null,
-        },
-      },
-    );
-    assert.equal(reminder.hidden, false);
-    assert.equal(reminder.getAttribute('aria-hidden'), 'false');
-
-    renderWorkflowDom(
-      createWorkflowState('player'),
-      createPlayerOverlayState(),
-      createRendererSafePlayerSnapshot(),
-      dom,
-      configuredChannelRuntimeState(),
-    );
-    assert.equal(reminder.hidden, true);
-    assert.equal(reminder.getAttribute('aria-hidden'), 'true');
-
-    const recoveryStates: ChannelRuntimeRendererState[] = [
-      { ...configured, summary: null },
-      { ...configured, summary: null, errorText: 'Channel setup status could not be loaded.' },
-      {
-        ...configured,
-        summary: { ...configured.summary, channelCount: 2 },
-      },
-    ];
-    const resumedPlayer = applyWorkflowAction(createWorkflowState('settings'), 'resumePlayer');
-    for (const recoveryState of recoveryStates) {
-      renderWorkflowDom(
-        resumedPlayer,
-        createPlayerOverlayState(),
-        createRendererSafePlayerSnapshot(),
-        dom,
-        recoveryState,
-      );
-      assert.equal(reminder.hidden, true);
-      assert.equal(reminder.getAttribute('aria-hidden'), 'true');
-    }
-  } finally {
-    restoreDocument(originalDocument);
-  }
 });
 
 const PRODUCT_ROUTE_INTERNAL_COPY_PATTERN =
@@ -1093,6 +1039,22 @@ function readVisibleTextFromMarkup(markup: string): string {
 
 function collectText(element: ElementDouble): string {
   return [element.textContent, ...element.children.map(collectText)].join(' ');
+}
+
+function collectVisibleText(element: ElementDouble): string {
+  if (element.hidden || element.getAttribute('aria-hidden') === 'true') return '';
+  return [element.textContent, ...element.children.map(collectVisibleText)].join(' ');
+}
+
+function findElementsByDataset(
+  element: ElementDouble,
+  key: string,
+  value: string,
+): ElementDouble[] {
+  return [
+    ...(element.dataset[key] === value ? [element] : []),
+    ...element.children.flatMap((child) => findElementsByDataset(child, key, value)),
+  ];
 }
 
 function findElementsByRole(element: ElementDouble, role: string): ElementDouble[] {
@@ -1118,10 +1080,10 @@ function configuredChannelRuntimeState(): ChannelRuntimeRendererState {
     pending: false,
     statusText: 'Recovered',
     errorText: null,
-    commitMode: 'append',
-    confirmReplace: false,
+    operation: null,
     summary: {
       status: 'configured',
+      lineupRevision: 1,
       channelCount: 1,
       currentChannelId: 'channel-one',
       currentChannelNumber: 101,
@@ -1139,6 +1101,7 @@ function configuredChannelRuntimeState(): ChannelRuntimeRendererState {
       ],
       updatedAtMs: 1,
       recovery: { loaded: true, repaired: false },
+      builder: { completion: 'unknown', normalizedConfig: null, completedAtMs: null },
     },
   };
 }
@@ -1171,7 +1134,6 @@ function createOverlayDomBindings({
     routeActionButtons: [],
     settingsActionButtons: [],
     setupActionButtons: [],
-    channelCommitButtons: [],
     epgActionButtons: [],
     overlayActionButtons: overlayActions as unknown as HTMLButtonElement[],
     screens: [],

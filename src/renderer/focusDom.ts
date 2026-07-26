@@ -80,10 +80,6 @@ export function registerRendererFocusTargets(
     registerOrderedButton(focusRegistry, registered, button, plexActionFocusOrder(button, index));
   });
 
-  dom.channelCommitButtons.forEach((button, index) => {
-    registerOrderedButton(focusRegistry, registered, button, 40 + index);
-  });
-
   dom.focusableElements.forEach((element, index) => {
     const focusId = element.dataset.focusId;
     const route = readClosestRouteId(element);

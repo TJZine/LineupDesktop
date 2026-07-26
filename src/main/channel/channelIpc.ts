@@ -3,31 +3,46 @@ import { createRequire } from 'node:module';
 import type { IpcMain, IpcMainInvokeEvent } from 'electron';
 
 import type {
-  ChannelSetupEmptyRequest,
-  ChannelSetupIpcResult,
-  ChannelSetupSummary,
-  ChannelSetupCommitMode,
-  ChannelSetupCommitRequest,
+  ChannelSetupCancelRequest,
+  ChannelSetupGetOperationRequest,
+  ChannelSetupGetStatusRequest,
+  ChannelSetupStartApplyRequest,
+  ChannelSetupStartReviewRequest,
 } from '../../contracts/channel.js';
 import {
   channelSetupFailure,
 } from '../../contracts/channel.js';
 import {
-  LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL,
+  LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL,
+  LINEUP_CHANNEL_SETUP_GET_OPERATION_CHANNEL,
   LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL,
+  LINEUP_CHANNEL_SETUP_START_APPLY_CHANNEL,
+  LINEUP_CHANNEL_SETUP_START_REVIEW_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
 } from '../../contracts/ipc.js';
 import type { ChannelRuntime } from './channelRuntime.js';
 import type { GuideRuntime } from './guideRuntime.js';
+import {
+  ChannelPublicReferenceConsistencyError,
+  type ChannelPublicReferenceOwner,
+} from './channelPublicReferenceOwner.js';
 import type { GuideIpcResult, GuideRuntimeError } from '../../contracts/guide.js';
 import { LivePlexTransportError } from '../plex/livePlexTransport.js';
+import {
+  channelBuilderRequestError,
+  readChannelSetupEmptyRequest,
+  readChannelSetupOperationRequest,
+  readChannelSetupStartApplyRequest,
+  readChannelSetupStartReviewRequest,
+} from './channelBuilderIpcValidation.js';
 
 type ChannelIpcMain = Pick<IpcMain, 'handle' | 'removeHandler'>;
 
 export interface RegisterChannelIpcHandlersOptions {
   runtime: ChannelRuntime;
   guideRuntime?: GuideRuntime;
+  publicReferenceOwner?: ChannelPublicReferenceOwner;
   isAuthorizedEvent(event: IpcMainInvokeEvent): boolean;
   createRequestId(prefix: string): string;
   ipcMain?: ChannelIpcMain;
@@ -44,29 +59,78 @@ export function registerChannelIpcHandlers(
   const ipcMain = options.ipcMain ?? getElectronIpcMain();
 
   ipcMain.handle(LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL, (event, payload: unknown) => {
-    const request = readEmptyRequest(payload, options);
+    const request = readChannelSetupEmptyRequest(
+      payload,
+      options.createRequestId('channel-setup-status'),
+    );
     if (!options.isAuthorizedEvent(event)) {
-      return unauthorizedResult(request.requestId);
+      return channelSetupFailure(request.requestId, channelBuilderRequestError('getStatus', 'unauthorized'));
     }
     if (!request.ok) {
-      return validationResult(request.requestId);
+      return channelSetupFailure(request.requestId, channelBuilderRequestError('getStatus', 'validation'));
     }
     return options.runtime.getStatus(request.requestId);
   });
 
-  ipcMain.handle(LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL, (event, payload: unknown) => {
-    const request = readCommitRequest(payload, options);
+  ipcMain.handle(LINEUP_CHANNEL_SETUP_START_REVIEW_CHANNEL, (event, payload: unknown) => {
+    const request = readChannelSetupStartReviewRequest(
+      payload,
+      options.createRequestId('channel-setup-review'),
+    );
     if (!options.isAuthorizedEvent(event)) {
-      return unauthorizedResult(request.requestId, 'commit');
+      return channelSetupFailure(request.requestId, channelBuilderRequestError('startReview', 'unauthorized'));
     }
     if (!request.ok) {
-      return validationResult(request.requestId, 'commit');
+      return channelSetupFailure(request.requestId, channelBuilderRequestError('startReview', 'validation'));
     }
-    return options.runtime.commit(request.requestId, request.payload);
+    return options.runtime.startReview(request.requestId, request.payload.config);
   });
 
-  if (options.guideRuntime) {
+  ipcMain.handle(LINEUP_CHANNEL_SETUP_START_APPLY_CHANNEL, (event, payload: unknown) => {
+    const request = readChannelSetupStartApplyRequest(
+      payload,
+      options.createRequestId('channel-setup-apply'),
+    );
+    if (!options.isAuthorizedEvent(event)) {
+      return channelSetupFailure(request.requestId, channelBuilderRequestError('startApply', 'unauthorized'));
+    }
+    if (!request.ok) {
+      return channelSetupFailure(request.requestId, channelBuilderRequestError('startApply', 'validation'));
+    }
+    return options.runtime.startApply(request.requestId, request.payload);
+  });
+
+  ipcMain.handle(LINEUP_CHANNEL_SETUP_GET_OPERATION_CHANNEL, (event, payload: unknown) => {
+    const request = readChannelSetupOperationRequest(
+      payload,
+      options.createRequestId('channel-setup-operation'),
+    );
+    if (!options.isAuthorizedEvent(event)) {
+      return channelSetupFailure(request.requestId, channelBuilderRequestError('getOperation', 'unauthorized'));
+    }
+    if (!request.ok) {
+      return channelSetupFailure(request.requestId, channelBuilderRequestError('getOperation', 'validation'));
+    }
+    return options.runtime.getOperation(request.requestId, request.payload.operationId);
+  });
+
+  ipcMain.handle(LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL, (event, payload: unknown) => {
+    const request = readChannelSetupOperationRequest(
+      payload,
+      options.createRequestId('channel-setup-cancel'),
+    );
+    if (!options.isAuthorizedEvent(event)) {
+      return channelSetupFailure(request.requestId, channelBuilderRequestError('cancel', 'unauthorized'));
+    }
+    if (!request.ok) {
+      return channelSetupFailure(request.requestId, channelBuilderRequestError('cancel', 'validation'));
+    }
+    return options.runtime.cancel(request.requestId, request.payload.operationId);
+  });
+
+  if (options.guideRuntime && options.publicReferenceOwner) {
     const guideRuntime = options.guideRuntime;
+    const publicReferenceOwner = options.publicReferenceOwner;
 
     ipcMain.handle(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL, async (event, payload: unknown) => {
       const request = readPresentationRequest(payload, options);
@@ -76,19 +140,37 @@ export function registerChannelIpcHandlers(
       if (!request.ok) {
         return validationGuideResult(request.requestId, 'getPresentation');
       }
-      try {
-        const value = await guideRuntime.getPresentation(
-          request.payload.startTimeMs,
-          request.payload.durationMs,
-        );
-        return { ok: true, value, requestId: request.requestId };
-      } catch (error: unknown) {
-        return {
-          ok: false,
-          requestId: request.requestId,
-          error: mapGuidePresentationError(error),
-        };
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const generationA = await options.runtime.loadPublicReferenceGeneration();
+          const raw = await guideRuntime.getPresentation(
+            request.payload.startTimeMs,
+            request.payload.durationMs,
+          );
+          const generationB = await options.runtime.loadPublicReferenceGeneration();
+          if (generationA.fingerprint !== generationB.fingerprint) continue;
+          const value = publicReferenceOwner.projectPresentation(generationA, raw);
+          return { ok: true, value, requestId: request.requestId };
+        } catch (error: unknown) {
+          if (error instanceof ChannelPublicReferenceConsistencyError) continue;
+          return {
+            ok: false,
+            requestId: request.requestId,
+            error: mapGuidePresentationError(error),
+          };
+        }
       }
+      return {
+        ok: false,
+        requestId: request.requestId,
+        error: {
+          code: 'GUIDE_PRESENTATION_STALE',
+          message: 'Guide changed while loading. Try again.',
+          retryable: true,
+          recoverable: true,
+          operation: 'getPresentation',
+        },
+      };
     });
 
     ipcMain.handle(LINEUP_PLAYER_TUNE_CHANNEL, async (event, payload: unknown) => {
@@ -100,15 +182,23 @@ export function registerChannelIpcHandlers(
         return validationGuideResult(request.requestId, 'tuneChannel');
       }
       try {
-        await guideRuntime.tuneChannel(request.payload.channelId);
+        const generation = await options.runtime.loadPublicReferenceGeneration();
+        const rawChannelId = publicReferenceOwner.resolveChannel(
+          generation,
+          request.payload.channelId,
+        );
+        if (rawChannelId === null) {
+          return validationGuideResult(request.requestId, 'tuneChannel');
+        }
+        await guideRuntime.tuneChannel(rawChannelId);
         return { ok: true, value: {}, requestId: request.requestId };
-      } catch (error: unknown) {
+      } catch {
         return {
           ok: false,
           requestId: request.requestId,
           error: {
-            code: 'CHANNEL_TUNING_FAILED',
-            message: readErrorMessage(error) || 'Failed to tune channel.',
+            code: 'GUIDE_TUNE_FAILED',
+            message: 'Channel could not be tuned.',
             retryable: true,
             recoverable: true,
             operation: 'tuneChannel',
@@ -120,111 +210,15 @@ export function registerChannelIpcHandlers(
 
   return async () => {
     ipcMain.removeHandler(LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL);
-    ipcMain.removeHandler(LINEUP_CHANNEL_SETUP_COMMIT_CHANNEL);
+    ipcMain.removeHandler(LINEUP_CHANNEL_SETUP_START_REVIEW_CHANNEL);
+    ipcMain.removeHandler(LINEUP_CHANNEL_SETUP_START_APPLY_CHANNEL);
+    ipcMain.removeHandler(LINEUP_CHANNEL_SETUP_GET_OPERATION_CHANNEL);
+    ipcMain.removeHandler(LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL);
     if (options.guideRuntime) {
       ipcMain.removeHandler(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL);
       ipcMain.removeHandler(LINEUP_PLAYER_TUNE_CHANNEL);
     }
   };
-}
-
-type ReadRequestResult =
-  | { ok: true; requestId: string; payload: Record<string, never> }
-  | { ok: false; requestId: string; payload: Partial<Record<string, never>> };
-
-function readEmptyRequest(
-  value: unknown,
-  options: Pick<RegisterChannelIpcHandlersOptions, 'createRequestId'>,
-): ReadRequestResult {
-  const fallbackRequestId = options.createRequestId('channel-setup-status');
-  if (!isPlainRecord(value)) {
-    return { ok: false, requestId: fallbackRequestId, payload: {} };
-  }
-  const requestId =
-    typeof value.requestId === 'string' && REQUEST_ID_PATTERN.test(value.requestId)
-      ? value.requestId
-      : fallbackRequestId;
-  if (
-    typeof value.requestId !== 'string' ||
-    !REQUEST_ID_PATTERN.test(value.requestId) ||
-    !isPlainRecord(value.payload) ||
-    !hasOnlyKeys(value, ['requestId', 'payload']) ||
-    Object.keys(value.payload).length !== 0
-  ) {
-    return { ok: false, requestId, payload: {} };
-  }
-  return { ok: true, requestId, payload: value.payload as Record<string, never> };
-}
-
-type ReadCommitRequestResult =
-  | { ok: true; requestId: string; payload: ChannelSetupCommitRequest['payload'] }
-  | { ok: false; requestId: string; payload: Partial<ChannelSetupCommitRequest['payload']> };
-
-function readCommitRequest(
-  value: unknown,
-  options: Pick<RegisterChannelIpcHandlersOptions, 'createRequestId'>,
-): ReadCommitRequestResult {
-  const fallbackRequestId = options.createRequestId('channel-setup-commit');
-  if (!isPlainRecord(value)) {
-    return { ok: false, requestId: fallbackRequestId, payload: {} };
-  }
-  const requestId =
-    typeof value.requestId === 'string' && REQUEST_ID_PATTERN.test(value.requestId)
-      ? value.requestId
-      : fallbackRequestId;
-  if (
-    typeof value.requestId !== 'string' ||
-    !REQUEST_ID_PATTERN.test(value.requestId) ||
-    !isPlainRecord(value.payload) ||
-    !hasOnlyKeys(value, ['requestId', 'payload']) ||
-    !hasOnlyKeys(value.payload, ['mode', 'sectionIds', 'confirmReplace']) ||
-    !isCommitMode(value.payload.mode) ||
-    !Array.isArray(value.payload.sectionIds) ||
-    value.payload.sectionIds.length === 0 ||
-    value.payload.sectionIds.length > 24 ||
-    !value.payload.sectionIds.every(isSafeChannelId) ||
-    (
-      value.payload.confirmReplace !== undefined &&
-      typeof value.payload.confirmReplace !== 'boolean'
-    )
-  ) {
-    return { ok: false, requestId, payload: {} };
-  }
-  return {
-    ok: true,
-    requestId,
-    payload: {
-      mode: value.payload.mode,
-      sectionIds: [...value.payload.sectionIds],
-      ...(value.payload.confirmReplace === undefined ? {} : { confirmReplace: value.payload.confirmReplace }),
-    },
-  };
-}
-
-function unauthorizedResult(
-  requestId: string,
-  operation: 'getStatus' | 'commit' = 'getStatus',
-): ChannelSetupIpcResult<ChannelSetupSummary> {
-  return channelSetupFailure(requestId, {
-    code: 'CHANNEL_UNAUTHORIZED',
-    message: 'Channel setup request is not authorized.',
-    retryable: false,
-    recoverable: false,
-    operation,
-  });
-}
-
-function validationResult(
-  requestId: string,
-  operation: 'getStatus' | 'commit' = 'getStatus',
-): ChannelSetupIpcResult<ChannelSetupSummary> {
-  return channelSetupFailure(requestId, {
-    code: 'CHANNEL_VALIDATION_FAILED',
-    message: 'Channel setup request payload is invalid.',
-    retryable: false,
-    recoverable: false,
-    operation,
-  });
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -241,24 +235,17 @@ function hasOnlyKeys(value: object, requiredKeys: readonly string[]): boolean {
     Object.keys(value).every((key) => allowed.has(key));
 }
 
-function isCommitMode(value: unknown): value is ChannelSetupCommitMode {
-  return value === 'append' || value === 'replace';
-}
-
-function isSafeChannelId(value: unknown): value is string {
-  return typeof value === 'string' &&
-    value.trim() === value &&
-    value.length > 0 &&
-    value.length <= 120 &&
-    REQUEST_ID_PATTERN.test(value);
-}
-
 function getElectronIpcMain(): ChannelIpcMain {
   const require = createRequire(import.meta.url);
   return require('electron').ipcMain as ChannelIpcMain;
 }
 
-export type ChannelIpcRequestEnvelope = ChannelSetupEmptyRequest | ChannelSetupCommitRequest;
+export type ChannelIpcRequestEnvelope =
+  | ChannelSetupGetStatusRequest
+  | ChannelSetupStartReviewRequest
+  | ChannelSetupStartApplyRequest
+  | ChannelSetupGetOperationRequest
+  | ChannelSetupCancelRequest;
 
 type ReadPresentationRequestResult =
   | { ok: true; requestId: string; payload: { startTimeMs: number; durationMs: number } }
@@ -328,7 +315,7 @@ function mapGuidePresentationError(error: unknown): GuideRuntimeError {
 
   return {
     code: 'GUIDE_PRESENTATION_FAILED',
-    message: readErrorMessage(error) || 'Failed to fetch guide presentation.',
+    message: 'Guide presentation could not be projected.',
     retryable: true,
     recoverable: true,
     operation: 'getPresentation',

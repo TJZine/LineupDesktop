@@ -1,5 +1,6 @@
 import { decodeStoredChannelData, encodeStoredChannelData } from './storedChannelDataCodec.js';
 import type { StoredChannelData } from './types.js';
+import type { ChannelBuilderPersistedStateV1 } from '../channelBuilder/types.js';
 
 export class CorruptChannelPersistenceDataError extends Error {
   public constructor() {
@@ -23,7 +24,46 @@ export interface ChannelPersistenceStoragePort {
   clearStoredChannelData(): Promise<void>;
   readCurrentChannelId(): Promise<string | null>;
   writeCurrentChannelId(channelId: string | null): Promise<void>;
+  readChannelAggregate(): Promise<ChannelAggregate>;
+  mutateChannelAggregate(
+    request: ChannelAggregateMutationRequest,
+  ): Promise<ChannelAggregateMutationResult>;
 }
+
+export type ChannelAggregate = Readonly<{
+  storedChannelData: StoredChannelData | null;
+  currentChannelId: string | null;
+  lineupRevision: number;
+  channelBuilderState: ChannelBuilderPersistedStateV1 | null;
+}>;
+
+export type ChannelAggregateMutate = (
+  current: Readonly<ChannelAggregate>,
+) => ChannelAggregate;
+
+export type ChannelAggregateMutationRequest =
+  | Readonly<{
+      kind: 'builder-lineup';
+      expectedLineupRevision: number;
+      mutate: ChannelAggregateMutate;
+      onCommitBarrier: () => 'proceed' | 'cancel';
+    }>
+  | Readonly<{
+      kind: 'custom-lineup';
+      expectedLineupRevision: null;
+      mutate: ChannelAggregateMutate;
+      onCommitBarrier: () => 'proceed' | 'cancel';
+    }>
+  | Readonly<{
+      kind: 'current-channel';
+      mutate: ChannelAggregateMutate;
+      onCommitBarrier: () => 'proceed' | 'cancel';
+    }>;
+
+export type ChannelAggregateMutationResult =
+  | Readonly<{ status: 'committed'; aggregate: ChannelAggregate }>
+  | Readonly<{ status: 'conflict'; actualLineupRevision: number }>
+  | Readonly<{ status: 'canceled' }>;
 
 export class ChannelPersistenceStore {
   public constructor(private readonly storage: ChannelPersistenceStoragePort) {}
@@ -34,13 +74,11 @@ export class ChannelPersistenceStore {
       return null;
     }
     if (raw.trim().length === 0) {
-      await this.storage.clearStoredChannelData();
       return null;
     }
 
     const parsed = decodeStoredChannelData(raw);
     if (parsed === null) {
-      await this.storage.clearStoredChannelData();
       throw new CorruptChannelPersistenceDataError();
     }
     return parsed;
@@ -62,11 +100,7 @@ export class ChannelPersistenceStore {
 
     const normalized = raw.trim();
     if (normalized.length === 0) {
-      await this.storage.writeCurrentChannelId(null);
       return null;
-    }
-    if (normalized !== raw) {
-      await this.storage.writeCurrentChannelId(normalized);
     }
     return normalized;
   }
@@ -74,5 +108,15 @@ export class ChannelPersistenceStore {
   public async writeCurrentChannelId(channelId: string | null): Promise<void> {
     const normalized = channelId?.trim() ?? '';
     await this.storage.writeCurrentChannelId(normalized.length > 0 ? normalized : null);
+  }
+
+  public readChannelAggregate(): Promise<ChannelAggregate> {
+    return this.storage.readChannelAggregate();
+  }
+
+  public mutateChannelAggregate(
+    request: ChannelAggregateMutationRequest,
+  ): Promise<ChannelAggregateMutationResult> {
+    return this.storage.mutateChannelAggregate(request);
   }
 }

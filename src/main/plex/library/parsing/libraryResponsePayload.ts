@@ -1,6 +1,7 @@
 import { PlexLibraryError } from '../plexLibraryError.js';
 import type {
   PlexMediaContainer,
+  PlexListingPage,
   RawCollection,
   RawDirectoryTag,
   RawLibrarySection,
@@ -70,6 +71,50 @@ export function extractDirectoryArray<T>(response: PlexMediaContainer<T>, contex
   }
 
   return directory as T[];
+}
+
+export function extractMetadataPage<T>(
+  response: PlexMediaContainer<T>,
+  context: string,
+): PlexListingPage<T> {
+  return extractListingPage(response, extractMetadataArray(response, context), context);
+}
+
+export function extractDirectoryPage<T>(
+  response: PlexMediaContainer<T>,
+  context: string,
+): PlexListingPage<T> {
+  return extractListingPage(response, extractDirectoryArray(response, context), context);
+}
+
+function extractListingPage<T>(
+  response: PlexMediaContainer<T>,
+  entries: T[],
+  context: string,
+): PlexListingPage<T> {
+  const container = extractMediaContainer(response, context);
+  const offset = readNonNegativeSafeInteger(container.offset, 0, `${context} offset`);
+  const totalSize =
+    container.totalSize === undefined
+      ? null
+      : readNonNegativeSafeInteger(container.totalSize, null, `${context} totalSize`);
+  return { entries, offset, totalSize };
+}
+
+function readNonNegativeSafeInteger<T extends number | null>(
+  value: unknown,
+  fallback: T,
+  context: string,
+): number | T {
+  if (value === undefined) return fallback;
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value < 0
+  ) {
+    throw new PlexLibraryError('parse-error', `Invalid ${context}`);
+  }
+  return value;
 }
 
 export function extractSearchHubs(

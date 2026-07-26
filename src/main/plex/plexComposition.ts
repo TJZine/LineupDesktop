@@ -19,15 +19,22 @@ import { readOrCreateDesktopPlexClientIdentifier } from './desktopPlexClientIden
 import { DesktopPlexRuntime } from './desktopPlexRuntime.js';
 import { LivePlexTransport } from './livePlexTransport.js';
 import { registerPlexIpcHandlers, type PlexIpcTeardown } from './plexIpc.js';
-import { registerChannelSetupProofPlexComposition } from './channelSetupProofPlexComposition.js';
 
-export interface RegisterPlexCompositionOptions {
+export interface CreatePlexCompositionOptions {
   app: Pick<App, 'getPath' | 'getVersion'>;
+  diagnosticEventStore?: DiagnosticEventStore;
+}
+
+export interface RegisterPlexCompositionIpcOptions {
   shellMode: ShellMode;
   isAuthorizedEvent(event: IpcMainInvokeEvent): boolean;
   createRequestId(prefix: string): string;
   diagnosticEventStore?: DiagnosticEventStore;
-  channelSetupProofFixture?: boolean;
+}
+
+export interface PlexComposition {
+  runtime: DesktopPlexRuntime;
+  teardown: () => Promise<void>;
 }
 
 export interface PlexCompositionRegistration {
@@ -35,16 +42,16 @@ export interface PlexCompositionRegistration {
   teardown: () => Promise<void>;
 }
 
-export async function registerPlexComposition(
-  options: RegisterPlexCompositionOptions,
-): Promise<PlexCompositionRegistration> {
-  if (options.channelSetupProofFixture === true) {
-    return registerChannelSetupProofPlexComposition({
-      isAuthorizedEvent: options.isAuthorizedEvent,
-      createRequestId: options.createRequestId,
-      diagnosticEventStore: options.diagnosticEventStore,
-    });
-  }
+type PlexCompositionState = {
+  registrationTeardown: PlexIpcTeardown | null;
+  teardownPromise: Promise<void> | null;
+};
+
+const compositionStates = new WeakMap<PlexComposition, PlexCompositionState>();
+
+export async function createPlexComposition(
+  options: CreatePlexCompositionOptions,
+): Promise<PlexComposition> {
   const paths = resolveDesktopAppDataPaths(options.app);
   const clientIdentifier = await readOrCreateDesktopPlexClientIdentifier(paths);
   const persistenceStore = new DesktopPersistenceStore({
@@ -73,13 +80,39 @@ export async function registerPlexComposition(
     credentialStore,
     serverDiscovery,
     libraryTransport: liveTransport,
+    channelBuilderFacetTransport: liveTransport,
     diagnosticEventStore: options.diagnosticEventStore,
   });
-  const teardownIpc: PlexIpcTeardown = registerPlexIpcHandlers({
+  const state: PlexCompositionState = {
+    registrationTeardown: null,
+    teardownPromise: null,
+  };
+  const composition: PlexComposition = {
     runtime,
+    teardown: () => teardownComposition(runtime, state),
+  };
+  compositionStates.set(composition, state);
+  return composition;
+}
+
+export function registerPlexCompositionIpc(
+  composition: PlexComposition,
+  options: RegisterPlexCompositionIpcOptions,
+): PlexCompositionRegistration {
+  const state = compositionStates.get(composition);
+  if (state === undefined || state.registrationTeardown !== null || state.teardownPromise !== null) {
+    throw new Error('Plex composition IPC is already registered or the composition is closed.');
+  }
+  const teardownIpc = registerPlexIpcHandlers({
+    runtime: composition.runtime,
     isAuthorizedEvent: options.isAuthorizedEvent,
     createRequestId: options.createRequestId,
   });
+  let registrationTeardownPromise: Promise<void> | null = null;
+  state.registrationTeardown = () => {
+    registrationTeardownPromise ??= teardownIpc();
+    return registrationTeardownPromise;
+  };
 
   options.diagnosticEventStore?.record({
     surface: 'main',
@@ -95,10 +128,21 @@ export async function registerPlexComposition(
   });
 
   return {
-    runtime,
-    teardown: async () => {
-      // `registerPlexIpcHandlers` owns runtime shutdown before handler removal.
-      await teardownIpc();
-    },
+    runtime: composition.runtime,
+    teardown: () => teardownComposition(composition.runtime, state),
   };
+}
+
+function teardownComposition(
+  runtime: DesktopPlexRuntime,
+  state: PlexCompositionState,
+): Promise<void> {
+  state.teardownPromise ??= (async () => {
+    if (state.registrationTeardown === null) {
+      await runtime.shutdown();
+      return;
+    }
+    await state.registrationTeardown();
+  })();
+  return state.teardownPromise;
 }

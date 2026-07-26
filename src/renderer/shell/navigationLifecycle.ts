@@ -22,13 +22,11 @@ export interface NavigationLifecycleOptions {
   onFocusChanged(focusId: string | null): void;
   scrollFocusedIntoView(): void;
   handleGuideDirection?(direction: 'up' | 'down' | 'left' | 'right'): boolean;
-  handleChannelSetupDirection?(direction: 'up' | 'down' | 'left' | 'right'): boolean;
   handlePlayerInput?(input: DesktopInputButton): boolean;
   activateRoute(route: AppRouteId): void;
   isProfileModalActive(): boolean;
   closeProfileModal(): void;
   handleChannelSetupBack(): Promise<boolean>;
-  handlePlayerOverlayBack(): boolean;
   dismissInlineError(): void;
   requestFullscreen(acceptedFocusId: string): Promise<void>;
   invalidateFullscreenRequest(): void;
@@ -172,7 +170,6 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
 
       if (input === 'up' || input === 'down' || input === 'left' || input === 'right') {
         if (options.getRoute() === 'guide' && options.handleGuideDirection?.(input) === true) return;
-        if (options.getRoute() === 'channelSetup' && options.handleChannelSetupDirection?.(input) === true) return;
         moveFocus(input);
         return;
       }
@@ -187,7 +184,6 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
         }
         if (options.getRoute() === 'channelSetup' && await options.handleChannelSetupBack()) return;
         if (options.getRoute() === 'player') {
-          if (options.handlePlayerOverlayBack()) return;
           openExit();
           return;
         }

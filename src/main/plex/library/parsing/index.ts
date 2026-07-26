@@ -10,9 +10,11 @@ export { parseMediaFiles } from './mediaFileParser.js';
 export { parseStream } from './streamParser.js';
 export {
   extractDirectoryArray,
+  extractDirectoryPage,
   extractLibrarySectionDirectories,
   extractMediaContainer,
   extractMetadataArray,
+  extractMetadataPage,
   extractSearchHubMetadata,
   extractSearchHubs,
 } from './libraryResponsePayload.js';

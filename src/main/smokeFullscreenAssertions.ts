@@ -227,7 +227,6 @@ export function waitForFullscreenState<TimerHandle>(
   return new Promise((resolve) => {
     let completed = false;
     let eventObserved = false;
-    let stateObserved = false;
     let pollTimer: TimerHandle | null = null;
     let deadlineTimer: TimerHandle | null = null;
     const eventName = enabled ? 'enter-full-screen' : 'leave-full-screen';
@@ -243,8 +242,7 @@ export function waitForFullscreenState<TimerHandle>(
     };
     const reconcile = (): void => {
       if (window.isDestroyed()) { finish(false); return; }
-      stateObserved ||= isFullscreenState(window, enabled);
-      if (eventObserved && stateObserved) finish(true);
+      if (eventObserved && isFullscreenState(window, enabled)) finish(true);
     };
     const poll = (): void => {
       pollTimer = null;

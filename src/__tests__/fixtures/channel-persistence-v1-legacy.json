@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "storedChannelData": {
+    "channels": [
+      {
+        "id": "legacy-channel",
+        "number": 1,
+        "name": "Legacy Channel",
+        "contentSource": {
+          "type": "library",
+          "libraryId": "legacy-library",
+          "libraryType": "movie",
+          "includeWatched": true
+        },
+        "playbackMode": "sequential",
+        "startTimeAnchor": 0,
+        "skipIntros": false,
+        "skipCredits": false,
+        "createdAt": 0,
+        "updatedAt": 0,
+        "lastContentRefresh": 0,
+        "itemCount": 1,
+        "totalDurationMs": 60000
+      }
+    ],
+    "channelOrder": [
+      "legacy-channel"
+    ],
+    "currentChannelId": "legacy-channel",
+    "savedAt": 0
+  },
+  "currentChannelId": "legacy-channel"
+}

@@ -3,28 +3,47 @@ import test from 'node:test';
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import { FocusRegistry, type FocusState } from '../../renderer/navigation.js';
 import { createNavigationLifecycle, type NavigationLifecycleOptions } from '../../renderer/shell/navigationLifecycle.js';
-import { createRendererShellState } from '../../renderer/shell/shellState.js';
+import {
+  createRendererShellState,
+  type RendererShellState,
+} from '../../renderer/shell/shellState.js';
 
 function createHarness(
   handleGuideDirection: NavigationLifecycleOptions['handleGuideDirection'],
   handlePlayerInput?: NavigationLifecycleOptions['handlePlayerInput'],
-  handleChannelSetupDirection?: NavigationLifecycleOptions['handleChannelSetupDirection'],
 ) {
   const registry = new FocusRegistry();
   registry.register({ id: 'player-guide', route: 'player', order: 0 });
   registry.register({ id: 'player-settings', route: 'player', order: 1 });
   registry.register({ id: 'guide-program-one--current', route: 'guide', order: 0 });
   registry.register({ id: 'guide-program-one--next', route: 'guide', order: 1 });
-  registry.register({ id: 'builder-priority-directors', route: 'channelSetup', order: 0 });
-  let route: 'player' | 'guide' | 'channelSetup' = 'guide';
+  let route: 'player' | 'guide' = 'guide';
   let focus: FocusState = { activeRoute: 'guide', activeId: 'guide-program-one--current' };
-  const dom = { focusableElements: [] } as unknown as RendererDomBindings;
+  let shellState: RendererShellState = {
+    ...createRendererShellState(),
+    bootstrap: 'ready',
+  };
+  let playerPresentationFocusCount = 0;
+  const dom = {
+    focusableElements: [],
+    routeActionButtons: [],
+    epgActionButtons: [],
+    settingsActionButtons: [],
+    setupActionButtons: [],
+    plexActionButtons: [],
+    overlayActionButtons: [],
+    playerPresentationElement: {
+      focus: () => {
+        playerPresentationFocusCount += 1;
+      },
+    },
+  } as unknown as RendererDomBindings;
   const lifecycle = createNavigationLifecycle({
     getRoute: () => route,
     getFocusState: () => focus,
     setFocusState: (state) => { focus = state; },
-    getShellState: () => ({ ...createRendererShellState(), bootstrap: 'ready' }),
-    setShellState: () => undefined,
+    getShellState: () => shellState,
+    setShellState: (state) => { shellState = state; },
     render: () => undefined,
     focusRegistry: registry,
     dom,
@@ -32,12 +51,10 @@ function createHarness(
     scrollFocusedIntoView: () => undefined,
     handleGuideDirection,
     handlePlayerInput,
-    handleChannelSetupDirection,
-    activateRoute: (nextRoute) => { route = nextRoute as 'player' | 'guide' | 'channelSetup'; },
+    activateRoute: (nextRoute) => { route = nextRoute as 'player' | 'guide'; },
     isProfileModalActive: () => false,
     closeProfileModal: () => undefined,
     handleChannelSetupBack: async () => false,
-    handlePlayerOverlayBack: () => false,
     dismissInlineError: () => undefined,
     requestFullscreen: async () => undefined,
     invalidateFullscreenRequest: () => undefined,
@@ -48,7 +65,8 @@ function createHarness(
     getFocus: () => focus,
     setFocus: (state: FocusState) => { focus = state; },
     getRoute: () => route,
-    setRoute: (nextRoute: 'player' | 'guide' | 'channelSetup') => { route = nextRoute; },
+    setRoute: (nextRoute: 'player' | 'guide') => { route = nextRoute; },
+    getPlayerPresentationFocusCount: () => playerPresentationFocusCount,
     unregister: (focusId: string) => registry.unregister(focusId),
   };
 }
@@ -63,15 +81,6 @@ test('Guide directional first refusal runs before generic focus movement', async
   const fallback = createHarness(() => false);
   await fallback.lifecycle.handleInput('right');
   assert.equal(fallback.getFocus().activeId, 'guide-program-one--next');
-});
-
-test('grabbed Guide Order rows intercept setup Up and Down before generic focus movement', async () => {
-  const directions: string[] = [];
-  const harness = createHarness(() => false, undefined, (direction) => { directions.push(direction); return true; });
-  harness.setRoute('channelSetup'); harness.setFocus({ activeRoute: 'channelSetup', activeId: 'builder-priority-directors' });
-  await harness.lifecycle.handleInput('up'); await harness.lifecycle.handleInput('down');
-  assert.deepEqual(directions, ['up', 'down']);
-  assert.equal(harness.getFocus().activeId, 'builder-priority-directors');
 });
 
 test('Guide Back restores the exact reachable Player invoker', async () => {
@@ -118,6 +127,18 @@ test('cleanup makes later Guide input inert', async () => {
   harness.lifecycle.cleanup();
   await harness.lifecycle.handleInput('left');
   assert.equal(calls, 0);
+});
+
+test('canceling exit restores the unfocused Player presentation surface', async () => {
+  const harness = createHarness(() => false, () => false);
+  harness.setRoute('player');
+  harness.setFocus({ activeRoute: 'player', activeId: null });
+
+  await harness.lifecycle.handleInput('back');
+  harness.lifecycle.cancelExit();
+
+  assert.deepEqual(harness.getFocus(), { activeRoute: 'player', activeId: null });
+  assert.equal(harness.getPlayerPresentationFocusCount(), 1);
 });
 
 test('Player first refusal runs before generic focus, OK, Back, and route shortcuts', async () => {

@@ -15,6 +15,5 @@ export * from './contentResolver.js';
 export * from './contentSelectionPolicy.js';
 export * from './customChannelDraft.js';
 export * from './interfaces.js';
-export * from './setupPlanning/index.js';
 export * from './sourceResolutionCache.js';
 export * from './types.js';

@@ -1,16 +1,11 @@
 import type { PlayerRendererIntentEnvelope, RendererIntentEnvelope } from './ipc.js';
 import type {
-  ChannelSetupBuildProgress,
-  ChannelSetupBuildResult,
+  ChannelSetupAcceptedOperation,
   ChannelSetupCancelResult,
-  ChannelSetupCommitMode,
-  ChannelSetupConfigDraft,
+  ChannelSetupConfig,
   ChannelSetupIpcResult,
-  ChannelSetupPreview,
-  ChannelSetupRecordSummary,
-  ChannelSetupReview,
+  ChannelSetupOperationResult,
   ChannelSetupSummary,
-  ChannelSetupWorkflowIpcResult,
 } from './channel.js';
 import type {
   DiagnosticsExportSupportBundleResult,
@@ -190,19 +185,18 @@ export interface LineupDesktopPreloadApi {
   };
   channelSetup: {
     getStatus: () => Promise<ChannelSetupIpcResult<ChannelSetupSummary>>;
-    commit: (input: {
-      mode: ChannelSetupCommitMode;
-      sectionIds: readonly string[];
-      confirmReplace?: boolean;
-    }) => Promise<ChannelSetupIpcResult<ChannelSetupSummary>>;
-    getRecord: () => Promise<ChannelSetupWorkflowIpcResult<ChannelSetupRecordSummary>>;
-    preview: (input: ChannelSetupConfigDraft) => Promise<ChannelSetupWorkflowIpcResult<ChannelSetupPreview>>;
-    review: (input: ChannelSetupConfigDraft) => Promise<ChannelSetupWorkflowIpcResult<ChannelSetupReview>>;
-    build: (
-      input: { buildId: string; config: ChannelSetupConfigDraft; confirmReplace: boolean },
-      onProgress: (progress: ChannelSetupBuildProgress) => void,
-    ) => Promise<ChannelSetupWorkflowIpcResult<ChannelSetupBuildResult>>;
-    cancelBuild: (input: { buildId: string }) => Promise<ChannelSetupWorkflowIpcResult<ChannelSetupCancelResult>>;
+    startReview: (
+      input: { config: ChannelSetupConfig },
+    ) => Promise<ChannelSetupIpcResult<ChannelSetupAcceptedOperation>>;
+    startApply: (
+      input: { planId: string; confirmReplace: boolean },
+    ) => Promise<ChannelSetupIpcResult<ChannelSetupAcceptedOperation>>;
+    getOperation: (
+      input: { operationId: string },
+    ) => Promise<ChannelSetupIpcResult<ChannelSetupOperationResult>>;
+    cancel: (
+      input: { operationId: string },
+    ) => Promise<ChannelSetupIpcResult<ChannelSetupCancelResult>>;
   };
   customChannels: {
     getSnapshot: () => Promise<CustomChannelIpcResult<CustomChannelSnapshot>>;

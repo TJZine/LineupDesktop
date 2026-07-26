@@ -7,9 +7,10 @@ import {
   assertRendererCloseLifecycle,
 } from './smokeFullscreenAssertions.js';
 import { GUIDE_SMOKE_ASSERTIONS_SOURCE } from './smokeGuideAssertions.js';
-import { evaluateSetupSmokeProjection } from './smokeSetupAssertions.js';
-
-const SETUP_SMOKE_EVALUATOR_SOURCE = `(${evaluateSetupSmokeProjection.toString()})`;
+import {
+  CHANNEL_BUILDER_BRIDGE_ASSERTIONS_SOURCE,
+  CHANNEL_BUILDER_FLOW_ASSERTIONS_SOURCE,
+} from './smokeChannelBuilderAssertions.js';
 
 const PACKAGE_ONE_GUIDE_SMOKE_ASSERTIONS_SOURCE = GUIDE_SMOKE_ASSERTIONS_SOURCE.replace(
   `      const guideButton = document.querySelector('[data-route-button="guide"]');
@@ -52,37 +53,20 @@ export async function runSmokeAssertions(
         failures.push('status event');
       }
       if (csp !== expectedCsp) failures.push('csp meta');
+      if (document.documentElement.dataset.activeRoute === 'channelSetup') {
+        const firstRunSetup = document.querySelector('[data-screen="channelSetup"]');
+        if (!(firstRunSetup instanceof HTMLElement) || firstRunSetup.hidden) {
+          failures.push('first-run channel setup route');
+        }
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
       try {
         Function('return 1')();
         failures.push('csp unsafe eval');
       } catch {}
-      const initialSetupScreen = document.querySelector('[data-screen="channelSetup"]');
-      const initialAuthOwner = document.querySelector('[data-onboarding-owner="auth-link-code"]');
-      const initialPlayerScreen = document.querySelector('[data-screen="player"]');
-      const initialPlayerPresentation = document.querySelector('[data-player-presentation-surface]');
-      if (document.documentElement.dataset.activeRoute !== 'channelSetup') failures.push('isolated startup route');
-      if (!(initialSetupScreen instanceof HTMLElement) || initialSetupScreen.hidden) failures.push('isolated setup visible');
-      if (!(initialAuthOwner instanceof HTMLElement) || initialAuthOwner.hidden) failures.push('isolated auth link code visible');
-      if (!(initialPlayerScreen instanceof HTMLElement) || !initialPlayerScreen.hidden) failures.push('isolated player hidden');
-      if (!(initialPlayerPresentation instanceof HTMLElement) || !initialPlayerPresentation.hidden) failures.push('isolated presentation hidden');
-
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      const recoveryCategory = document.querySelector('[data-focus-id="settings-category-recovery"]');
-      if (document.documentElement.dataset.activeRoute !== 'settings') failures.push('isolated settings navigation');
-      if (!(recoveryCategory instanceof HTMLButtonElement)) failures.push('settings recovery category');
-      else recoveryCategory.click();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      const settingsPlayer = document.querySelector('[data-focus-id="settings-player"]');
-      if (!(recoveryCategory instanceof HTMLButtonElement) || !recoveryCategory.classList.contains('is-active')) {
-        failures.push('settings recovery category active');
-      }
-      if (!(settingsPlayer instanceof HTMLButtonElement) || settingsPlayer.dataset.routeAction !== 'resumePlayer') {
-        failures.push('settings resume player action');
-      } else settingsPlayer.click();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      if (document.documentElement.dataset.activeRoute !== 'player') failures.push('isolated player activation');
-
       const rootStyle = getComputedStyle(document.documentElement);
       const appShell = document.querySelector('[data-style-surface="app-shell"]');
       const screenRoot = document.querySelector('[data-static-screen-root]');
@@ -190,7 +174,7 @@ export async function runSmokeAssertions(
         'restoreSelectedServer', 'refreshServers', 'selectServer', 'listLibrarySections',
         'listLibraryItems', 'searchLibrary', 'getMetadata',
       ]);
-      assertBridgeMethods('channelSetup', ['getStatus', 'commit']);
+      ${CHANNEL_BUILDER_BRIDGE_ASSERTIONS_SOURCE}
       assertBridgeMethods('guide', ['getPresentation']);
       if (bridge && typeof bridge === 'object' && 'ipcRenderer' in bridge) failures.push('raw ipc bridge');
       if (bridge && typeof bridge === 'object' && 'invoke' in bridge) failures.push('raw invoke bridge');
@@ -407,57 +391,7 @@ export async function runSmokeAssertions(
         failures.push('settings desktop copy');
       }
 
-      const setupButton = document.querySelector('[data-focus-id="settings-open-channel-setup"]');
-      if (!(setupButton instanceof HTMLButtonElement)) {
-        failures.push('channel setup pointer action');
-      } else {
-        setupButton.click();
-      }
-      const setupScreen = document.querySelector('[data-screen="channelSetup"]');
-      if (document.documentElement.dataset.activeRoute !== 'channelSetup') {
-        failures.push('channel setup route activation');
-      }
-      if (!(setupScreen instanceof HTMLElement) || setupScreen.hidden) failures.push('channel setup screen visible');
-      const onboardingHost = document.querySelector('[data-onboarding-host]');
-      const authOwner = document.querySelector('[data-onboarding-owner="auth-link-code"]');
-      const setupWorkspace = document.querySelector('[data-setup-workspace]');
-      const smokeLibraryOwner = document.querySelector('[data-staged-owner="library"]');
-      const libraryStatusText = document.querySelector('[data-setup-library-status]')?.textContent ?? '';
-      const librarySections = smokeLibraryOwner?.querySelector('[data-plex-sections]') ?? null;
-      const libraryStatus = libraryStatusText.includes('Loading libraries') ? 'loading'
-        : libraryStatusText.includes('No eligible libraries') ? 'empty'
-        : libraryStatusText.includes('could not be loaded') ? 'error'
-        : librarySections?.querySelector('[data-plex-section-id]') instanceof HTMLElement ? 'ready'
-        : 'idle';
-      const setupProjection = {
-        obsoleteSelectorsPresent: setupScreen instanceof HTMLElement
-          && setupScreen.querySelector('.channel-setup-commit, .setup-rail, [data-setup-section], [data-setup-steps], [data-channel-draft-list], [data-setup-validation]') !== null,
-        auth: {
-          hostVisible: onboardingHost instanceof HTMLElement && !onboardingHost.hidden && !onboardingHost.inert,
-          owner: document.documentElement.dataset.onboardingState ?? null,
-          ownerVisible: authOwner instanceof HTMLElement && !authOwner.hidden && !authOwner.inert,
-          requestPinControlPresent: authOwner?.querySelector('[data-focus-id="btn-auth-request"]') instanceof HTMLButtonElement,
-        },
-        library: {
-          workspaceVisible: setupWorkspace instanceof HTMLElement && !setupWorkspace.hidden && !setupWorkspace.inert,
-          documentOwner: document.documentElement.dataset.setupOwner ?? null,
-          ownerVisible: smokeLibraryOwner instanceof HTMLElement && !smokeLibraryOwner.hidden && !smokeLibraryOwner.inert,
-          ownerActive: smokeLibraryOwner instanceof HTMLElement && smokeLibraryOwner.dataset.ownerActive === 'true',
-          status: libraryStatus,
-          sectionsPresent: librarySections instanceof HTMLElement,
-          selectAllPresent: smokeLibraryOwner?.querySelector('[data-focus-id="setup-select-all"]') instanceof HTMLButtonElement,
-          clearAllPresent: smokeLibraryOwner?.querySelector('[data-focus-id="setup-clear-all"]') instanceof HTMLButtonElement,
-          nextPresent: smokeLibraryOwner?.querySelector('[data-focus-id="setup-next"]') instanceof HTMLButtonElement,
-          backPresent: smokeLibraryOwner?.querySelector('[data-focus-id="setup-back"]') instanceof HTMLButtonElement,
-        },
-      };
-      const setupEvaluation = ${SETUP_SMOKE_EVALUATOR_SOURCE}(setupProjection);
-      if (!setupEvaluation.accepted) {
-        failures.push('channel setup plex flow content ' + JSON.stringify({
-          failures: setupEvaluation.failures,
-          projection: setupProjection,
-        }));
-      }
+      ${CHANNEL_BUILDER_FLOW_ASSERTIONS_SOURCE}
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 100));
       if (document.documentElement.dataset.activeRoute !== 'player') {
@@ -554,20 +488,15 @@ export async function runSmokeAssertions(
   if (!rendererReady) {
     throw new Error('Electron smoke failed: renderer boot readiness timeout');
   }
-  const closeRouteReady = await window.webContents.executeJavaScript(`
+  await window.webContents.executeJavaScript(`
     (async () => {
+      if (document.documentElement.dataset.activeRoute !== 'channelSetup') return;
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));
-      const settingsPlayer = document.querySelector('[data-focus-id="settings-player"]');
-      if (!(settingsPlayer instanceof HTMLButtonElement)) return false;
-      settingsPlayer.click();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));
-      return document.documentElement.dataset.activeRoute === 'player';
     })();
-  `) as boolean;
-  if (!closeRouteReady) {
-    throw new Error('Electron smoke failed: close lifecycle Player precondition');
-  }
+  `);
   await assertRendererCloseLifecycle(window, result.failures);
   if (result.failures.length > 0) {
     throw new Error(`Electron smoke failed: ${result.failures.join(', ')}`);

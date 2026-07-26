@@ -279,8 +279,35 @@ export function renderEpgGuideDom(
     button.textContent = action.label;
     stateActions.append(button);
   }
-  stateElement.append(stateActions);
+  if (view.guide.presentationState !== 'ready') {
+    stateElement.append(stateActions);
+  }
 
+  shell.append(classicHeader);
+  if (nowWatching !== null) shell.append(nowWatching);
+  shell.append(stateElement);
+  if (view.guide.presentationState === 'ready') {
+    stateElement.hidden = true;
+    stateElement.setAttribute('aria-hidden', 'true');
+    shell.append(stateActions);
+    if (view.guide.tuneError !== null) {
+      const actionError = document.createElement('p');
+      actionError.className = 'epg-action-error';
+      actionError.dataset.guideTuneError = '';
+      actionError.setAttribute('role', 'status');
+      actionError.textContent = view.guide.tuneError;
+      shell.append(actionError);
+    }
+    shell.append(...readyGuideGridDom(view, trackWidth, settings.previewBadgesEnabled));
+  }
+  dom.epgGridElement.replaceChildren(shell);
+}
+
+function readyGuideGridDom(
+  view: RouteWorkflowViewModel,
+  trackWidth: number,
+  previewBadgesEnabled: boolean,
+): HTMLElement[] {
   const header = document.createElement('div');
   header.className = 'epg-time-header';
   header.setAttribute('role', 'row');
@@ -348,7 +375,7 @@ export function renderEpgGuideDom(
         windowStartMs,
         windowEndMs,
         trackWidth,
-        settings.previewBadgesEnabled,
+        previewBadgesEnabled,
       );
       programs.append(cell);
     }
@@ -364,23 +391,7 @@ export function renderEpgGuideDom(
     return rowElement;
   });
 
-  shell.append(classicHeader);
-  if (nowWatching !== null) shell.append(nowWatching);
-  shell.append(stateElement);
-  if (view.guide.presentationState === 'ready') {
-    stateElement.hidden = true;
-    stateElement.setAttribute('aria-hidden', 'true');
-    if (view.guide.tuneError !== null) {
-      const actionError = document.createElement('p');
-      actionError.className = 'epg-action-error';
-      actionError.dataset.guideTuneError = '';
-      actionError.setAttribute('role', 'status');
-      actionError.textContent = view.guide.tuneError;
-      shell.append(actionError);
-    }
-    shell.append(header, ...rows);
-  }
-  dom.epgGridElement.replaceChildren(shell);
+  return [header, ...rows];
 }
 
 function stateActionsFor(

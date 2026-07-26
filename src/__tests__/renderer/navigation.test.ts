@@ -84,7 +84,6 @@ test('navigation lifecycle preserves shortcuts, route focus memory, exit restore
     isProfileModalActive: () => false,
     closeProfileModal: () => undefined,
     handleChannelSetupBack: async () => false,
-    handlePlayerOverlayBack: () => false,
     dismissInlineError: () => { shell = { ...shell, inlineError: null }; focus = { ...focus, activeId: 'player-fullscreen' }; },
     requestFullscreen: async () => undefined,
     invalidateFullscreenRequest: () => undefined,

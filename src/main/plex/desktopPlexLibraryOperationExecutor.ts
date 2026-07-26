@@ -4,13 +4,14 @@ import {
   extractMetadataArray,
   extractSearchHubMetadata,
   extractSearchHubs,
-  loadLibrarySectionsWithCounts,
+  loadLibrarySectionRecordsWithCounts,
   mapSearchHubTypeToMediaType,
   normalizeLibraryPagination,
   parseMediaItems,
   PLEX_LIBRARY_CONSTANTS,
   toRendererSafeMediaItemSummary,
   type PlexMediaType,
+  toRendererSafeLibrarySectionSummary,
   type RawMediaItem,
 } from './library/index.js';
 import { PlexLibraryError } from './library/plexLibraryError.js';
@@ -47,13 +48,33 @@ export class DesktopPlexLibraryOperationExecutor {
   }
 
   async listSections(context: PlexLibraryExecutionContext): Promise<readonly PlexLibrarySectionSummary[]> {
-    return loadLibrarySectionsWithCounts({
+    return (await this.listSectionsForMain(context)).sections;
+  }
+
+  async listSectionsForMain(context: PlexLibraryExecutionContext): Promise<Readonly<{
+    sections: readonly PlexLibrarySectionSummary[];
+    libraryPairs: readonly Readonly<{ libraryId: string; libraryUuid: string }>[];
+  }>> {
+    const records = await loadLibrarySectionRecordsWithCounts({
       libraryTransport: this.#libraryTransport,
       connection: context.connection,
       token: context.token,
       signal: context.signal,
       shouldRethrowCountError: (error) => error instanceof StaleRuntimeMutationError,
     });
+    const libraryPairs = records.map((record) => ({
+      libraryId: record.id.trim(),
+      libraryUuid: record.uuid.trim(),
+    }));
+    validateLibraryPairs(libraryPairs);
+    libraryPairs.sort((left, right) =>
+      left.libraryId.localeCompare(right.libraryId) ||
+      left.libraryUuid.localeCompare(right.libraryUuid)
+    );
+    return {
+      sections: records.map(toRendererSafeLibrarySectionSummary),
+      libraryPairs,
+    };
   }
 
   async listItems(input: ListLibraryItemsInput, context: PlexLibraryExecutionContext): Promise<{
@@ -148,5 +169,20 @@ export class DesktopPlexLibraryOperationExecutor {
     return parseMediaItems(
       extractMetadataArray<RawMediaItem>(payloadAsContainer<RawMediaItem>(payload), 'metadata'),
     ).map(toRendererSafeMediaItemSummary)[0] ?? null;
+  }
+}
+
+function validateLibraryPairs(
+  pairs: readonly Readonly<{ libraryId: string; libraryUuid: string }>[],
+): void {
+  const ids = new Set<string>();
+  for (const pair of pairs) {
+    if (pair.libraryId.length === 0 || pair.libraryUuid.length === 0) {
+      throw new PlexLibraryError('parse-error', 'Plex library identity was invalid');
+    }
+    if (ids.has(pair.libraryId)) {
+      throw new PlexLibraryError('parse-error', 'Plex library identity was duplicated');
+    }
+    ids.add(pair.libraryId);
   }
 }

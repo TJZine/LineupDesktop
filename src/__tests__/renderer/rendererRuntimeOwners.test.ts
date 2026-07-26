@@ -736,7 +736,6 @@ function createPlexControllerStub(calls: string[]): PlexRuntimeController {
     clearSelectedServer: () => record('clearSelectedServer'),
     clearPinSubflow: () => recordAsync('clearPinSubflow'),
     dismissPinError: () => recordAsync('dismissPinError'),
-    returnToAuthLink: () => recordAsync('returnToAuthLink'),
     invalidateProfileSwitch: () => record('invalidateProfileSwitch'),
     invalidateOnboardingOperations: () => record('invalidateOnboardingOperations'),
     handleBack: async () => false,

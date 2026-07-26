@@ -838,7 +838,11 @@ test('preload API contract exposes shell, window, player, diagnostics, plex, and
     'getMetadata',
   ];
   const channelSetupKeys: Array<keyof LineupDesktopPreloadApi['channelSetup']> = [
-    'getStatus', 'commit', 'getRecord', 'preview', 'review', 'build', 'cancelBuild',
+    'getStatus',
+    'startReview',
+    'startApply',
+    'getOperation',
+    'cancel',
   ];
 
   assert.deepEqual(apiKeys, ['shell', 'window', 'player', 'diagnostics', 'plex', 'channelSetup']);
@@ -865,7 +869,13 @@ test('preload API contract exposes shell, window, player, diagnostics, plex, and
     'searchLibrary',
     'getMetadata',
   ]);
-  assert.deepEqual(channelSetupKeys, ['getStatus', 'commit', 'getRecord', 'preview', 'review', 'build', 'cancelBuild']);
+  assert.deepEqual(channelSetupKeys, [
+    'getStatus',
+    'startReview',
+    'startApply',
+    'getOperation',
+    'cancel',
+  ]);
 });
 
 test('player IPC result and dispatch contracts stay renderer-safe', () => {

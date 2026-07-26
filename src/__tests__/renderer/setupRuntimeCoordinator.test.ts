@@ -15,6 +15,10 @@ import {
 } from '../../renderer/setup/setupLibrarySelection.js';
 import type { PlexLibrarySectionSummary } from '../../contracts/plex.js';
 import { deferred } from '../helpers/deferred.js';
+import {
+  applyChannelBuilderConfigAction,
+  createChannelBuilderConfigState,
+} from '../../renderer/channelSetup/builderConfigState.js';
 
 test('setup library selection is ordered, deduplicated, eligible-only, and capped at 24', () => {
   const sections = Array.from({ length: 26 }, (_, index) => section(`library-${String(index + 1)}`, index === 25 ? 'artist' : index % 2 ? 'show' : 'movie'));
@@ -153,18 +157,15 @@ test('setup composition entry generation prevents an invalidated continuation fr
   } as unknown as PlexRuntimeController;
   const composition = createSetupComposition({
     plexController,
-    channelController: {} as Parameters<typeof createSetupComposition>[0]['channelController'],
-    channelSetupBridge: { getRecord: async () => ({ ok: true, requestId: 'record', value: { status: 'missing' } }) } as unknown as Parameters<typeof createSetupComposition>[0]['channelSetupBridge'],
+    channelController: {
+      getState: () => ({ summary: null }),
+    } as Parameters<typeof createSetupComposition>[0]['channelController'],
     customController: {} as Parameters<typeof createSetupComposition>[0]['customController'],
     render: () => undefined,
     returnToServer: () => undefined,
     closeSetup: () => undefined,
     tuneChannel: async () => false,
     clearDependentActionState: () => undefined,
-    setSetupStage: () => undefined,
-    activateSetupRoute: () => undefined,
-    loadProfiles: () => undefined,
-    enterServerSelection: () => undefined,
   });
 
   const stale = composition.enter('settings', 'settings-setup');
@@ -180,49 +181,46 @@ test('setup composition entry generation prevents an invalidated continuation fr
   assert.equal(composition.controller.getState().focusIntent, 'plex-dyn-section-latest');
 });
 
-test('server-origin Back invalidates a pending library entry before showing server onboarding', async () => {
-  const pendingLibraries = deferred<void>();
-  let state = plexState('server-1', [], null);
-  const events: string[] = [];
-  const plexController = {
-    getState: () => state,
-    listLibrarySections: async () => {
-      await pendingLibraries.promise;
-      state = plexState('server-1', [section('stale-library', 'movie')], null);
-    },
-    listLibraryItems: async () => undefined,
-    getMetadata: async () => undefined,
-    setSelectedSection: () => undefined,
-  } as unknown as PlexRuntimeController;
-  const composition = createSetupComposition({
-    plexController,
+test('setup entry restores persisted builder libraries and configuration after restart', () => {
+  const controller = createSetupComposition({
+    plexController: {} as PlexRuntimeController,
     channelController: {} as Parameters<typeof createSetupComposition>[0]['channelController'],
-    channelSetupBridge: { getRecord: async () => ({ ok: true, requestId: 'record', value: { status: 'missing' } }) } as unknown as Parameters<typeof createSetupComposition>[0]['channelSetupBridge'],
     customController: {} as Parameters<typeof createSetupComposition>[0]['customController'],
     render: () => undefined,
-    returnToServer: () => events.push('stage:server'),
-    closeSetup: () => events.push('close'),
+    returnToServer: () => undefined,
+    closeSetup: () => undefined,
     tuneChannel: async () => false,
     clearDependentActionState: () => undefined,
-    setSetupStage: () => events.push('stage:library'),
-    activateSetupRoute: () => events.push('route:channelSetup'),
-    loadProfiles: () => undefined,
-    enterServerSelection: () => undefined,
+  }).controller;
+  const created = createChannelBuilderConfigState({
+    serverId: 'server-1',
+    selectedLibraryIds: ['shows', 'movies'],
   });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+  const merged = applyChannelBuilderConfigAction(created.state, 'configModeMerge');
+  assert.equal(merged.ok, true);
+  if (!merged.ok) return;
+  const sections = [section('movies', 'movie'), section('shows', 'show')];
 
-  const entry = composition.enter('player', 'player-setup-reminder', true);
-  await Promise.resolve();
-  assert.equal(composition.runtime.getState().library, 'loading');
-  await composition.apply('setupBack');
-  assert.equal(composition.runtime.getState().library, 'idle');
-  assert.equal(composition.controller.getState().focusIntent, 'setup-select-all');
-  assert.equal(events.at(-1), 'stage:server');
+  controller.enter('settings', 'settings-setup', false);
+  assert.equal(controller.restorePersistedConfig('server-1', sections, {
+    completion: 'complete',
+    normalizedConfig: merged.state.config,
+    completedAtMs: 10,
+  }), 'plex-dyn-section-movies');
+  assert.deepEqual(controller.getState().selectedSectionIds, ['movies', 'shows']);
+  assert.equal(controller.getState().builderConfig?.config.buildMode, 'merge');
 
-  pendingLibraries.resolve();
-  await entry;
-  assert.equal(composition.controller.getState().owner, 'library');
-  assert.equal(composition.controller.getState().focusIntent, 'setup-select-all');
-  assert.equal(events.includes('close'), false);
+  controller.enter('settings', 'settings-setup', false);
+  controller.restorePersistedConfig('server-2', sections, {
+    completion: 'complete',
+    normalizedConfig: merged.state.config,
+    completedAtMs: 10,
+  });
+  assert.deepEqual(controller.getState().selectedSectionIds, []);
+  assert.equal(controller.getState().builderConfig, null);
+  assert.equal(controller.getState().buildMode, 'append');
 });
 
 test('setup preview coalesces queued cursor changes so the latest cursor performs a real load', async () => {
@@ -380,8 +378,8 @@ function plexState(serverId: string, sections: readonly PlexLibrarySectionSummar
   return {
     ...createPlexRuntimeRendererState(), selectedServerId: serverId, selectedSectionId, errorText,
     snapshot: {
-      auth: { state: 'signed-in', pin: null, profile: { accountId: 'account' }, homeUsers: [], credentialStatus: 'present' },
-      servers: { status: 'ready', selected: { serverId, name: 'Server', owned: true, connectionCount: 1, hasLocalConnection: true, hasRemoteConnection: false, hasRelayConnection: false, selected: true }, items: [], lastSelection: null },
+      auth: { state: 'signed-in', pin: null, profile: null, homeUsers: [], credentialStatus: 'present' },
+      servers: { status: 'ready', selected: null, items: [], lastSelection: null },
       library: { status: 'ready', sections, selectedSectionId, items: ratingKeys.map((ratingKey) => ({ ratingKey, type: 'movie', title: ratingKey, sortTitle: ratingKey, summary: '', year: 2026, durationMs: 1, addedAtMs: 0, updatedAtMs: 0 })), search: null, metadata: null },
       lastError: null,
       updatedAtMs: 0,

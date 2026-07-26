@@ -1,5 +1,4 @@
 import {
-  readChannelCommitActionId,
   readChannelSetupActionId,
   readCustomChannelActionId,
   readEpgActionId,
@@ -12,7 +11,6 @@ import {
   type RendererDomBindings,
 } from './domBindings.js';
 import type { StagedSetupFlowActionId } from './setup/stagedSetupController.js';
-import { readChannelBuilderAction, type ChannelBuilderAction } from './setup/channelBuilderController.js';
 import {
   readPlexHomeUserId,
   readPlexRatingKey,
@@ -25,7 +23,6 @@ export interface RendererActionHandlers {
   applyRouteAction(action: NonNullable<ReturnType<typeof readRouteActionId>>): void;
   applySettingsAction(action: NonNullable<ReturnType<typeof readSettingsActionId>>): void;
   applyChannelSetupAction(action: NonNullable<ReturnType<typeof readChannelSetupActionId>>): void;
-  applyChannelCommitAction(action: NonNullable<ReturnType<typeof readChannelCommitActionId>>): void;
   applyEpgAction(action: NonNullable<ReturnType<typeof readEpgActionId>>): void;
   applyGuideAction?(action: GuideActionId): void;
   focusGuideProgramFromPointer?(target: GuideProgramActionTarget): boolean;
@@ -50,7 +47,6 @@ export interface RendererActionHandlers {
   applySettingsCategory?(category: string): void;
   applySetupStage?(stage: string): void;
   applyStagedSetupAction?(action: StagedSetupFlowActionId): void;
-  applyChannelBuilderAction?(action: ChannelBuilderAction, detail?: string): void;
 }
 
 export type GuideActionId = 'back' | 'setup' | 'refresh' | 'retry';
@@ -98,12 +94,6 @@ export function registerRendererActions(
   const setupScreen = documentRef.getElementById('screen-channel-setup');
   setupScreen?.addEventListener('click', (event) => {
     if (!(event.target instanceof HTMLElement)) return;
-    const builderButton = event.target.closest<HTMLButtonElement>('[data-builder-action]');
-    const builderAction = readChannelBuilderAction(builderButton?.dataset.builderAction);
-    if (builderAction !== null && builderButton !== null && isEligibleDelegatedAction(builderButton) && isActiveStagedAction(builderButton)) {
-      handlers.applyChannelBuilderAction?.(builderAction, builderButton.dataset.builderDetail);
-      return;
-    }
     const customButton = event.target.closest<HTMLButtonElement>('[data-custom-channel-action]');
     const customAction = readCustomChannelActionId(customButton?.dataset.customChannelAction);
     if (customAction !== null && customButton !== null && isEligibleDelegatedAction(customButton) && isActiveStagedAction(customButton)) {
@@ -128,12 +118,6 @@ export function registerRendererActions(
       if (action !== null) handlers.applyChannelSetupAction(action);
     });
   }
-  for (const button of dom.channelCommitButtons) {
-    button.addEventListener('click', () => {
-      const action = readChannelCommitActionId(button.dataset.channelCommitAction);
-      if (action !== null) handlers.applyChannelCommitAction(action);
-    });
-  }
   for (const button of dom.epgActionButtons) {
     button.addEventListener('click', () => {
       const action = readEpgActionId(button.dataset.epgAction);
@@ -143,6 +127,8 @@ export function registerRendererActions(
   const guideScreen = documentRef.getElementById('screen-guide');
   let pointerFocusOnlyId: string | null = null;
   guideScreen?.addEventListener('pointerdown', (event) => {
+    pointerFocusOnlyId = null;
+    if (event.button !== 0) return;
     if (!(event.target instanceof HTMLElement)) return;
     const target = readGuideProgramTarget(event.target);
     pointerFocusOnlyId = target !== null && handlers.focusGuideProgramFromPointer?.(target) === true
@@ -150,14 +136,12 @@ export function registerRendererActions(
       : null;
   });
   guideScreen?.addEventListener('click', (event) => {
+    const focusOnlyId = pointerFocusOnlyId;
+    pointerFocusOnlyId = null;
     if (!(event.target instanceof HTMLElement)) return;
     const target = readGuideProgramTarget(event.target);
     if (target !== null) {
-      if (pointerFocusOnlyId === target.focusId) {
-        pointerFocusOnlyId = null;
-        return;
-      }
-      pointerFocusOnlyId = null;
+      if (focusOnlyId === target.focusId) return;
       handlers.activateGuideProgram?.(target);
       return;
     }
@@ -222,16 +206,24 @@ export function registerRendererActions(
   dom.overlayAudioOptionsElement?.addEventListener('click', (event) => {
     if (!(event.target instanceof HTMLElement)) return;
     const button = event.target.closest<HTMLButtonElement>('.playback-options__row');
-    if (button && button.dataset.trackId && isEligibleDelegatedAction(button)) {
-      handlers.selectAudioTrack(button.dataset.trackId, button.dataset.focusId ?? '');
+    if (
+      button &&
+      button.dataset.trackId &&
+      button.dataset.focusId &&
+      isEligibleDelegatedAction(button)
+    ) {
+      handlers.selectAudioTrack(button.dataset.trackId, button.dataset.focusId);
     }
   });
   dom.overlaySubtitleOptionsElement?.addEventListener('click', (event) => {
     if (!(event.target instanceof HTMLElement)) return;
     const button = event.target.closest<HTMLButtonElement>('.playback-options__row');
-    if (button && isEligibleDelegatedAction(button)) {
+    if (button && button.dataset.focusId && isEligibleDelegatedAction(button)) {
       const trackId = button.dataset.trackId;
-      handlers.selectSubtitleTrack(trackId === 'subtitles-off' || !trackId ? null : trackId, button.dataset.focusId ?? '');
+      handlers.selectSubtitleTrack(
+        trackId === 'subtitles-off' || !trackId ? null : trackId,
+        button.dataset.focusId,
+      );
     }
   });
   dom.overlayMiniGuideElement?.addEventListener('click', (event) => {

@@ -346,31 +346,6 @@ test('overlay busy-focus custody preserves exact focus without granting activati
   }
 });
 
-test('channel setup focus moves from selected library to commit before optional preview', () => {
-  const registry = new FocusRegistry();
-  const listSections = new FocusElementDouble('plex-list-sections', false, undefined, 'listLibrarySections');
-  const section = new FocusElementDouble('plex-dyn-section-movies');
-  const append = new FocusElementDouble('channel-append');
-  const replace = new FocusElementDouble('channel-replace');
-  const previewItem = new FocusElementDouble('plex-dyn-item-rating-1');
-  const clearMetadata = new FocusElementDouble('plex-clear-metadata', false, undefined, 'clearMetadata');
-  const dom = createFocusDomBindings([listSections, section, append, replace, previewItem, clearMetadata]);
-  dom.plexActionButtons = [listSections, clearMetadata] as unknown as HTMLButtonElement[];
-  dom.channelCommitButtons = [append, replace] as unknown as HTMLButtonElement[];
-  dom.plexSectionsElement = { querySelectorAll: () => [section] } as unknown as HTMLElement;
-  dom.plexItemsElement = { querySelectorAll: () => [previewItem] } as unknown as HTMLElement;
-
-  syncRendererFocusTargets(registry, dom);
-
-  const selectedSection = registry.focusTarget(
-    registry.createInitialState('channelSetup'),
-    'plex-dyn-section-movies',
-  ).state;
-  assert.equal(registry.move(selectedSection, 'down').state.activeId, 'channel-append');
-  assert.equal(registry.move({ activeRoute: 'channelSetup', activeId: 'channel-replace' }, 'down').state.activeId, 'plex-clear-metadata');
-  assert.equal(registry.move({ activeRoute: 'channelSetup', activeId: 'plex-clear-metadata' }, 'down').state.activeId, 'plex-dyn-item-rating-1');
-});
-
 test('Package 3 fixed setup owners use the refrozen linear focus graphs', () => {
   assert.deepEqual(getStagedSetupNeighbors('setup-preview-toggle', null), {
     up: 'channel-strategy-build-custom', down: 'setup-next', left: 'setup-category-build', right: 'setup-preview-toggle',
@@ -406,10 +381,15 @@ test('Package 3 active setup owners expose exact DOM-backed retry and build edge
   const append = activeOwnerDocument('build', ['setup-back', 'setup-confirm']);
   assert.equal(getStagedSetupNeighbors('setup-back', append)?.down, 'setup-confirm');
   assert.equal(getStagedSetupNeighbors('setup-confirm', append)?.up, 'setup-back');
-  const replace = activeOwnerDocument('build', ['setup-replace-confirm', 'setup-back', 'setup-confirm']);
-  assert.equal(getStagedSetupNeighbors('setup-replace-confirm', replace)?.down, 'setup-back');
-  assert.equal(getStagedSetupNeighbors('setup-back', replace)?.up, 'setup-replace-confirm');
-  assert.equal(getStagedSetupNeighbors('setup-back', replace)?.down, 'setup-confirm');
+  const replace = activeOwnerDocument('build', ['setup-back', 'setup-confirm-replace']);
+  assert.equal(getStagedSetupNeighbors('setup-back', replace)?.down, 'setup-confirm-replace');
+  assert.equal(getStagedSetupNeighbors('setup-confirm-replace', replace)?.up, 'setup-back');
+
+  const replaceModal = activeOwnerDocument('replace-confirm', [
+    'setup-replace-cancel', 'setup-replace-confirm',
+  ]);
+  assert.equal(getStagedSetupNeighbors('setup-replace-cancel', replaceModal)?.down, 'setup-replace-confirm');
+  assert.equal(getStagedSetupNeighbors('setup-replace-confirm', replaceModal)?.up, 'setup-replace-cancel');
 
   const selectedReplace = activeOwnerDocument('preview', [
     'setup-category-build', 'channel-strategy-build-append', 'channel-strategy-build-replace', 'channel-strategy-build-custom',
@@ -463,7 +443,6 @@ function createFocusDomBindings(focusableElements: FocusElementDouble[]): Render
     routeActionButtons: [],
     settingsActionButtons: [],
     setupActionButtons: [],
-    channelCommitButtons: [],
     epgActionButtons: [],
     overlayActionButtons: [],
     screens: [],

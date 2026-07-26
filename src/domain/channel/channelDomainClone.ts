@@ -53,6 +53,26 @@ export function cloneContentFilters(filters: ContentFilter[]): ContentFilter[] {
   }));
 }
 
+export function cloneOwnEnumerableStringRecordWithNullPrototype<TInput, TOutput>(
+  record: Readonly<Record<string, TInput>>,
+  cloneValue: (value: TInput, key: string) => TOutput,
+): Record<string, TOutput> {
+  const clone = Object.create(null) as Record<string, TOutput>;
+  for (const key of Object.keys(record)) {
+    const descriptor = Object.getOwnPropertyDescriptor(record, key);
+    if (descriptor === undefined || !descriptor.enumerable || !('value' in descriptor)) {
+      continue;
+    }
+    Object.defineProperty(clone, key, {
+      value: cloneValue(descriptor.value as TInput, key),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return clone;
+}
+
 export function cloneContentSource(source: ChannelContentSource): ChannelContentSource {
   switch (source.type) {
     case 'library':
@@ -61,7 +81,14 @@ export function cloneContentSource(source: ChannelContentSource): ChannelContent
         libraryId: source.libraryId,
         libraryType: source.libraryType,
         includeWatched: source.includeWatched,
-        ...(source.libraryFilter ? { libraryFilter: { ...source.libraryFilter } } : {}),
+        ...(source.libraryFilter
+          ? {
+              libraryFilter: cloneOwnEnumerableStringRecordWithNullPrototype(
+                source.libraryFilter,
+                (value) => value,
+              ),
+            }
+          : {}),
       };
     case 'manual':
       return {
