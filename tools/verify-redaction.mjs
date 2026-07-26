@@ -84,11 +84,8 @@ const bareSecretFieldValuePattern = String.raw`(?:(?=[-A-Za-z0-9._~+/=]{8,})(?=[
 const secretFieldValuePattern = String.raw`(?:${quotedSecretFieldValuePattern}|${bareSecretFieldValuePattern})`;
 const privilegedCredentialValuePattern = String.raw`(?:(?=[-A-Za-z0-9._~+/=]{8,})(?=[-A-Za-z0-9._~+/=]*[0-9])[-A-Za-z0-9._~+/=]+|${bareAlphabeticSecretValuePattern})`;
 const privilegedDiagnosticFieldValuePattern = String.raw`(?:https?:\/\/(?!(?:secret\.example|example\.invalid)(?:[/:?#"')\s,}\r\n]|$))[^\s,}\r\n]+|${privilegedCredentialValuePattern})`;
-const absoluteFilesystemPathPattern = String.raw`(?:[A-Za-z]:\\(?!\\)[^\r\n"'<>|?*),;]*[^\s\r\n"'<>|?*),;.!]|\\\\(?!\\)[^\r\n"'<>|?*),;]*[^\s\r\n"'<>|?*),;.!]|\/(?=[A-Za-z._-])[^\r\n"'<>|?*),;]*[^\s\r\n"'<>|?*),;.!])`;
-const serializedAbsoluteFilesystemPathPattern = String.raw`(?:${absoluteFilesystemPathPattern}|[A-Za-z]:\\\\[^\r\n"'<>|?*),;]*[^\s\r\n"'<>|?*),;.!]|\\\\\\\\[^\r\n"'<>|?*),;]*[^\s\r\n"'<>|?*),;.!])`;
-const filesystemPathValuePattern = String.raw`(?:"${serializedAbsoluteFilesystemPathPattern}"|'${serializedAbsoluteFilesystemPathPattern}'|${serializedAbsoluteFilesystemPathPattern})`;
-const repositoryFilesystemPathValuePattern = String.raw`(?:"(?:[A-Za-z]:\\(?:Users|ProgramData|Windows|Temp|tmp)\\[^"\r\n]+|\/(?:Users|home|var|tmp|private|Volumes)\/[^"\r\n]+)"|'(?:[A-Za-z]:\\(?:Users|ProgramData|Windows|Temp|tmp)\\[^'\r\n]+|\/(?:Users|home|var|tmp|private|Volumes)\/[^'\r\n]+)'|(?:[A-Za-z]:\\(?:Users|ProgramData|Windows|Temp|tmp)\\[^\s,}\r\n]+|\/(?:Users|home|var|tmp|private|Volumes)\/[^\s,}\r\n]+))`;
-const repositoryUnkeyedFilesystemPathPattern = String.raw`(?:[A-Za-z]:\\(?:Users|ProgramData|Windows|Temp|tmp)\\[^\r\n"')]*?\.(?:log|txt|json|ndjson|dmp|dump|mkv|mp4|mov|avi)|\/(?:Users|home|var|tmp|private|Volumes)\/[^\r\n"')]*?\.(?:log|txt|json|ndjson|dmp|dump|mkv|mp4|mov|avi))`;
+const repositoryFilesystemPathValuePattern = String.raw`(?:"(?:[A-Za-z]:[\\/](?:Users|ProgramData|Windows|Temp|tmp)[\\/][^"\r\n]+|\\\\[^"\r\n]+|\/(?:Users|home|var|tmp|private|Volumes)\/[^"\r\n]+)"|'(?:[A-Za-z]:[\\/](?:Users|ProgramData|Windows|Temp|tmp)[\\/][^'\r\n]+|\\\\[^'\r\n]+|\/(?:Users|home|var|tmp|private|Volumes)\/[^'\r\n]+)'|(?:[A-Za-z]:[\\/](?:Users|ProgramData|Windows|Temp|tmp)[\\/][^\s,}\r\n]+|\\\\[^\s,}\r\n]+|\/(?:Users|home|var|tmp|private|Volumes)\/[^\s,}\r\n]+))`;
+const repositoryUnkeyedFilesystemPathPattern = String.raw`(?:[A-Za-z]:[\\/](?:Users|ProgramData|Windows|Temp|tmp)[\\/][^\r\n"')]*?\.(?:log|txt|json|ndjson|dmp|dump|mkv|mp4|mov|avi)|\\\\[^\r\n"')]*?\.(?:log|txt|json|ndjson|dmp|dump|mkv|mp4|mov|avi)|\/(?:Users|home|var|tmp|private|Volumes)\/[^\r\n"')]*?\.(?:log|txt|json|ndjson|dmp|dump|mkv|mp4|mov|avi))`;
 const diagnosticMessageKeyPattern = ['message', 'errorMessage', 'diagnosticMessage']
   .map(caseInsensitiveLiteral)
   .join('|');
@@ -106,7 +103,6 @@ const repositoryFilesystemPathPattern = new RegExp(
   String.raw`(?<![?&\w-])(?:"(?:${rawFilesystemPathKeyPattern})"|'(?:${rawFilesystemPathKeyPattern})'|(?:${rawFilesystemPathKeyPattern}))\s*(?:=|:\s*)\s*${repositoryFilesystemPathValuePattern}|(?<![\w-])(?:${diagnosticMessageKeyPattern})\s*(?:=|:\s*)\s*${repositoryUnkeyedFilesystemPathPattern}|(?:^|[\r\n])\s*${repositoryUnkeyedFilesystemPathPattern}`,
   'u',
 );
-
 const forbiddenPatterns = [
   {
     label: 'token-query-parameter',
@@ -169,20 +165,6 @@ const forbiddenPatterns = [
     ),
   },
   {
-    label: 'raw-filesystem-path',
-    pattern: new RegExp(
-      String.raw`(?<![?&\w-])(?:"(?:${rawFilesystemPathKeyPattern})"|'(?:${rawFilesystemPathKeyPattern})'|(?:${rawFilesystemPathKeyPattern}))\s*(?:=|:\s*)\s*${filesystemPathValuePattern}`,
-      'u',
-    ),
-  },
-  {
-    label: 'raw-filesystem-path',
-    pattern: new RegExp(
-      String.raw`(?<![\w-])(?:${diagnosticMessageKeyPattern})\s*(?:=|:\s*)\s*${filesystemPathValuePattern}|(?:^|[\r\n])\s*(?!\/oauth2(?:\/|\s|$))${serializedAbsoluteFilesystemPathPattern}`,
-      'u',
-    ),
-  },
-  {
     label: 'raw-process-data',
     pattern: new RegExp(
       String.raw`(?<![?&\w-])(?:"(?:${rawProcessDataKeyPattern})"|'(?:${rawProcessDataKeyPattern})'|(?:${rawProcessDataKeyPattern}))\s*(?:=|:\s*|\s+)\s*(?:"(?:[^"\r\n]*(?:[A-Za-z]:\\|\/Users\/|\/home\/|token=|Authorization:)[^"\r\n]*)"|'(?:[^'\r\n]*(?:[A-Za-z]:\\|\/Users\/|\/home\/|token=|Authorization:)[^'\r\n]*)'|\d{2,})`,
@@ -219,16 +201,51 @@ export function scanFileContent(content) {
       findings.push(label);
     }
   }
-  return findings;
-}
-
-function scanSupportBundleFileContent(content) {
-  const findings = scanFileContent(content);
-  const absolutePathPattern = new RegExp(serializedAbsoluteFilesystemPathPattern, 'u');
-  if (absolutePathPattern.test(content) && !findings.includes('raw-filesystem-path')) {
+  if (containsAbsoluteFilesystemPath(content)) {
     findings.push('raw-filesystem-path');
   }
   return findings;
+}
+
+function containsAbsoluteFilesystemPath(content) {
+  return findAbsoluteFilesystemPathStart(content, 0) !== -1;
+}
+
+function findAbsoluteFilesystemPathStart(content, fromIndex) {
+  for (let index = fromIndex; index < content.length; index += 1) {
+    if (!isAbsoluteFilesystemPathStartBoundary(content[index - 1])) {
+      continue;
+    }
+
+    const current = content[index];
+    const next = content[index + 1];
+    const afterNext = content[index + 2];
+    const isDrivePath = /^[A-Za-z]$/u.test(current)
+      && next === ':'
+      && (afterNext === '\\' || afterNext === '/');
+    const isUncPath = current === '\\' && next === '\\';
+    const isUnixPath = current === '/'
+      && next !== undefined
+      && next !== '/'
+      && next !== '"'
+      && !/\s/u.test(next);
+
+    if (isDrivePath || isUncPath || isUnixPath) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function isAbsoluteFilesystemPathStartBoundary(value) {
+  return value === undefined || !/[\p{L}\p{N}._~+/\\-]/u.test(value);
+}
+
+function containsRepositoryAbsoluteFilesystemPath(content) {
+  repositoryFilesystemPathPattern.lastIndex = 0;
+  const candidate = repositoryFilesystemPathPattern.exec(content)?.[0];
+  return candidate !== undefined && containsAbsoluteFilesystemPath(candidate);
 }
 
 export function scanRepo(root = repoRoot) {
@@ -241,7 +258,10 @@ export function scanRepo(root = repoRoot) {
     }
     const content = fs.readFileSync(absolutePath, 'utf8');
     for (const reason of scanFileContent(content)) {
-      if (reason === 'raw-filesystem-path' && !repositoryFilesystemPathPattern.test(content)) {
+      if (
+        reason === 'raw-filesystem-path' &&
+        !containsRepositoryAbsoluteFilesystemPath(content)
+      ) {
         continue;
       }
       findings.push({ file: relativePath, reason });
@@ -264,7 +284,7 @@ export function scanSupportBundleDirectory(root, options = {}) {
     }
     scannedByteCount += stat.size;
     const content = fs.readFileSync(absolutePath, 'utf8');
-    for (const label of scanSupportBundleFileContent(content)) {
+    for (const label of scanFileContent(content)) {
       findingsByLabel[label] = (findingsByLabel[label] ?? 0) + 1;
       findingCount += 1;
     }

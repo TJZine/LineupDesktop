@@ -161,12 +161,17 @@ test('rd17 diagnostics smoke build is time and output bounded without exposing c
 test('rd17 evidence scanning fails closed on arbitrary absolute paths', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd17-path-scan-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  fs.writeFileSync(
-    path.join(root, 'summary.json'),
-    JSON.stringify({
-      note: ['D:', '\\', 'Media Library', '\\', 'private'].join(''),
-    }),
-  );
+  const absolutePaths = [
+    ['D:', '\\', 'Media Library', '\\', 'private'].join(''),
+    ['D:', '/', 'Media', '/', 'private.mkv'].join(''),
+    ['', 'Médiathèque, 2026; (Director\'s Archive)', 'private-media-folder'].join('/'),
+  ];
+  absolutePaths.forEach((absolutePath, index) => {
+    fs.writeFileSync(
+      path.join(root, `summary-${index}.json`),
+      JSON.stringify({ note: absolutePath }),
+    );
+  });
 
   const report = scanRd17EvidenceDirectory(root, {
     timestampMs: 1,
@@ -175,7 +180,24 @@ test('rd17 evidence scanning fails closed on arbitrary absolute paths', (t) => {
   });
 
   assert.equal(report.status, 'failed');
-  assert.equal(report.findingsByLabel['raw-filesystem-path'], 1);
+  assert.equal(report.findingsByLabel['raw-filesystem-path'], absolutePaths.length);
+});
+
+test('rd17 evidence scanning permits relative paths and fractions', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd17-safe-path-scan-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(
+    path.join(root, 'summary.json'),
+    JSON.stringify({
+      source: 'src/contracts/diagnostics.ts',
+      progress: '1/2/3.14',
+    }),
+  );
+
+  const report = scanRd17EvidenceDirectory(root, { timestampMs: 1 });
+
+  assert.equal(report.status, 'passed');
+  assert.equal(report.findingsByLabel['raw-filesystem-path'], undefined);
 });
 
 test('rd17 diagnostics smoke child close wait resolves when exit is already observed', async () => {

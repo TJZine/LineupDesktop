@@ -230,7 +230,9 @@ test('scanFileContent reports raw filesystem paths process data native handles a
   for (const arbitraryPath of [
     ['', 'etc', 'passwd'].join('/'),
     ['', 'opt', 'Lineup Data', 'private-media-folder'].join('/'),
+    ['', 'Médiathèque, 2026; (Director\'s Archive)', 'private-media-folder'].join('/'),
     ['D:', '\\', 'Media Library', '\\', 'private'].join(''),
+    ['D:', '/', 'Media', '/', 'private.mkv'].join(''),
     ['\\\\', 'media-host', '\\', 'Shared Library', '\\', 'private'].join(''),
   ]) {
     assert.deepEqual(scanFileContent(arbitraryPath), ['raw-filesystem-path']);
@@ -258,12 +260,18 @@ test('scanFileContent reports raw filesystem paths process data native handles a
 test('support bundle scanning rejects absolute paths under arbitrary JSON keys', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-support-scan-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  fs.writeFileSync(
-    path.join(root, 'environment.json'),
-    JSON.stringify({
-      note: ['', 'opt', 'Lineup Data', 'private-media-folder'].join('/'),
-    }),
-  );
+  const absolutePaths = [
+    ['', 'opt', 'Lineup Data', 'private-media-folder'].join('/'),
+    ['', 'Médiathèque, 2026; (Director\'s Archive)', 'private-media-folder'].join('/'),
+    ['D:', '/', 'Media', '/', 'private.mkv'].join(''),
+    ['\\\\', 'media-host', '\\', 'Shared Library', '\\', 'private'].join(''),
+  ];
+  absolutePaths.forEach((absolutePath, index) => {
+    fs.writeFileSync(
+      path.join(root, `environment-${index}.json`),
+      JSON.stringify({ note: absolutePath }),
+    );
+  });
 
   const report = scanSupportBundleDirectory(root, {
     timestampMs: 1,
@@ -272,15 +280,34 @@ test('support bundle scanning rejects absolute paths under arbitrary JSON keys',
   });
 
   assert.equal(report.status, 'failed');
-  assert.equal(report.findingsByLabel['raw-filesystem-path'], 1);
+  assert.equal(report.findingsByLabel['raw-filesystem-path'], absolutePaths.length);
+});
+
+test('support bundle scanning permits relative paths and fractions', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-support-safe-scan-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(
+    path.join(root, 'environment.json'),
+    JSON.stringify({
+      source: 'src/contracts/diagnostics.ts',
+      progress: '1/2/3.14',
+    }),
+  );
+
+  const report = scanSupportBundleDirectory(root, { timestampMs: 1 });
+
+  assert.equal(report.status, 'passed');
+  assert.equal(report.findingsByLabel['raw-filesystem-path'], undefined);
 });
 
 test('scanFileContent reports oauth2 token path segments', () => {
   assert.deepEqual(scanFileContent(`/oauth2/${placeholderSecret}/pin`), [
     'oauth-token-path-segment',
+    'raw-filesystem-path',
   ]);
   assert.deepEqual(scanFileContent(`/oauth2/${alphabeticCredential}`), [
     'oauth-token-path-segment',
+    'raw-filesystem-path',
   ]);
 });
 
@@ -322,7 +349,7 @@ test('scanFileContent does not report safe policy prose', () => {
     'tokenized URL fields are forbidden in diagnostics.',
     'native handle values must stay inside main.',
     'raw auth header maps are never renderer safe.',
-    '/oauth2/ token paths are discussed without material.',
+    'oauth2 token paths are discussed without material.',
   ].join('\n');
 
   assert.deepEqual(scanFileContent(content), []);
@@ -339,4 +366,26 @@ test('scanRepo reports raw auth headers in fixture content', () => {
   assert.equal(findings.length, 2);
   assert.equal(findings[0].reason, 'raw-auth-header');
   assert.equal(findings[1].reason, 'credential-scheme');
+});
+
+test('scanRepo applies shared absolute-path recognition to filesystem fields', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-desktop-path-scan-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(
+    path.join(root, 'safe.json'),
+    JSON.stringify({
+      filePath: 'src/contracts/diagnostics.ts',
+      progress: '1/2/3.14',
+    }),
+  );
+  fs.writeFileSync(
+    path.join(root, 'leak.json'),
+    JSON.stringify({
+      filePath: ['', 'Users', 'Médiathèque, 2026; (Director\'s Archive)', 'private-media-folder'].join('/'),
+    }),
+  );
+
+  assert.deepEqual(scanRepo(root), [
+    { file: 'leak.json', reason: 'raw-filesystem-path' },
+  ]);
 });

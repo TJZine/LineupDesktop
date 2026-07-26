@@ -139,15 +139,17 @@ test('diagnostic text sanitizers redact raw values before storage', () => {
 test('diagnostic text redaction replaces whole extensionless absolute paths', () => {
   const absolutePaths = [
     ['', 'opt', 'Lineup Data', 'private-media-folder'].join('/'),
+    ['', 'Médiathèque, 2026; (Director\'s Archive)', 'private-media-folder'].join('/'),
     ['D:', '\\', 'Media Library', '\\', 'private'].join(''),
+    ['D:', '/', 'Media', '/', 'private.mkv'].join(''),
     ['\\\\', 'media-host', '\\', 'Shared Library', '\\', 'private'].join(''),
     ['', 'etc', 'passwd'].join('/'),
   ];
 
   for (const absolutePath of absolutePaths) {
     assert.equal(
-      redactDiagnosticText(`Playback failed at ${absolutePath}.`),
-      'Playback failed at [redacted].',
+      redactDiagnosticText(`Playback failed at ${absolutePath}. Retry from the library.`),
+      'Playback failed at [redacted]. Retry from the library.',
     );
   }
 

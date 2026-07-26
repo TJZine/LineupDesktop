@@ -17,20 +17,28 @@ test('diagnostics export removes whole extensionless absolute paths before the f
   const parentDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-diagnostics-ipc-'));
   t.after(() => fs.rm(parentDirectory, { recursive: true, force: true }));
   const ipcMain = new IpcMainDouble();
+  let recordSequence = 0;
   const store = new DiagnosticEventStore({
     clock: () => 1000,
-    idGenerator: () => 'absolute-path-record',
+    idGenerator: () => `absolute-path-record-${recordSequence += 1}`,
   });
-  const unixPath = ['', 'opt', 'Lineup Data', 'private-media-folder'].join('/');
-  const windowsPath = ['D:', '\\', 'Media Library', '\\', 'private'].join('');
-  store.record({
-    surface: 'main',
-    category: 'support-bundle-export',
-    severity: 'error',
-    status: 'failed',
-    operation: 'support-bundle.path-redaction',
-    message: `Unix ${unixPath}; Windows ${windowsPath}.`,
-  });
+  const absolutePaths = [
+    ['', 'opt', 'Lineup Data', 'private-media-folder'].join('/'),
+    ['', 'Médiathèque, 2026; (Director\'s Archive)', 'private-media-folder'].join('/'),
+    ['D:', '\\', 'Media Library', '\\', 'private'].join(''),
+    ['D:', '/', 'Media', '/', 'private.mkv'].join(''),
+    ['\\\\', 'media-host', '\\', 'Shared Library', '\\', 'private'].join(''),
+  ];
+  for (const absolutePath of absolutePaths) {
+    store.record({
+      surface: 'main',
+      category: 'support-bundle-export',
+      severity: 'error',
+      status: 'failed',
+      operation: 'support-bundle.path-redaction',
+      message: `Leak ${absolutePath}. Retry from the library.`,
+    });
+  }
   registerDiagnosticsIpcHandlers({
     eventStore: store,
     shellMode: 'development',
@@ -59,11 +67,22 @@ test('diagnostics export removes whole extensionless absolute paths before the f
     .split('\n')
     .filter(Boolean)
     .map((line) => JSON.parse(line) as { operation: string; message: string });
-  const record = records.find((candidate) => candidate.message.startsWith('Unix '));
-  assert.ok(record);
-  assert.equal(record.message, 'Unix [redacted]; Windows [redacted].');
-  assert.equal(diagnostics.includes('private-media-folder'), false);
-  assert.equal(diagnostics.includes('Media Library'), false);
+  const pathRecords = records.filter((candidate) => candidate.message.startsWith('Leak '));
+  assert.equal(pathRecords.length, absolutePaths.length);
+  assert.deepEqual(
+    pathRecords.map((record) => record.message),
+    absolutePaths.map(() => 'Leak [redacted]. Retry from the library.'),
+  );
+  for (const sensitiveFragment of [
+    'private-media-folder',
+    'Director',
+    'Media Library',
+    'private.mkv',
+    'Shared Library',
+    'D:',
+  ]) {
+    assert.equal(diagnostics.includes(sensitiveFragment), false);
+  }
 });
 
 test('diagnostics IPC records authorized renderer events and rejects forbidden fields', async () => {
