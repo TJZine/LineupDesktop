@@ -429,7 +429,9 @@ test('family and global caps preserve exact and unknown omission accounting incl
     session.listTagDirectoryPage = async (request) => {
       const entries = Array.from({ length: 100 }, (_, pageIndex) => ({
         key: `${request.sectionId}-${request.family}-${request.offset + pageIndex}`,
-        title: pageIndex === 98
+        title: request.family === 'year'
+          ? String(1900 + ((request.offset + pageIndex) % 200))
+          : pageIndex === 98
           ? `Bearer ${request.sectionId}-${request.family}-${request.offset}`
           : pageIndex === 99
             ? `token=${request.sectionId}-${request.family}-${request.offset}`
@@ -476,6 +478,32 @@ test('family and global caps preserve exact and unknown omission accounting incl
       assert.equal(JSON.stringify(reversed.snapshot).includes('Bearer '), false);
       assert.equal(JSON.stringify(reversed.snapshot).includes('token='), false);
     }
+  }
+});
+
+test('oversized facet pages enforce the requested page bound and preserve omission certainty', async () => {
+  for (const [name, totalSize, omitted] of [
+    ['known total', 501, 401],
+    ['unknown total', null, null],
+  ] as const) {
+    let calls = 0;
+    const session = emptySession([movieLibrary()]);
+    session.listServerPlaylistsPage = async (request) => {
+      calls += 1;
+      return playlistPage(request.offset, 501, totalSize);
+    };
+
+    const result = await discoverWithSession(session, configWithOnly('playlists'));
+
+    assert.equal(result.kind, 'slow', name);
+    if (result.kind !== 'slow') continue;
+    assert.equal(calls, 1, name);
+    assert.equal(result.snapshot.playlists.length, 100, name);
+    assert.equal(result.snapshot.aggregate.omittedCappedCount, omitted, name);
+    assert.ok(
+      result.snapshot.aggregate.warningCodes.includes('FACET_CAP_REACHED'),
+      name,
+    );
   }
 });
 
@@ -890,6 +918,39 @@ test('tag semantics, mapping, and cap survivors are invariant across display pro
     assert.equal(serialized.includes(placeholderCredential), false);
   }
   assert.equal(calls.length, 0);
+});
+
+test('year facets require complete safe decimal values and omit malformed entries', async () => {
+  const session = emptySession([movieLibrary()]);
+  session.listTagDirectoryPage = async (request) => ({
+    entries: [
+      { key: 'valid', title: '1994', count: 5 },
+      { key: 'signed', title: '+1995', count: 5 },
+      { key: 'spaced', title: ' 1996 ', count: 5 },
+      { key: 'trailing', title: '1997 release', count: 5 },
+      { key: 'exponent', title: '2e3', count: 5 },
+      { key: 'unsafe', title: '9007199254740992', count: 5 },
+    ],
+    offset: request.offset,
+    totalSize: 6,
+  });
+
+  const result = await discoverWithSession(session, configWithOnly('decades'));
+
+  assert.equal(result.kind, 'slow');
+  if (result.kind !== 'slow') return;
+  assert.deepEqual(
+    result.snapshot.tags.map(({ displayTitle, yearValue }) => ({ displayTitle, yearValue })),
+    [
+      { displayTitle: '1994', yearValue: 1994 },
+      { displayTitle: '+1995', yearValue: 1995 },
+      { displayTitle: '1996', yearValue: 1996 },
+    ],
+  );
+  assert.equal(result.snapshot.aggregate.omittedMalformedCount, 3);
+  assert.deepEqual(result.snapshot.aggregate.warningCodes, [
+    'FACET_MALFORMED_ENTRIES_OMITTED',
+  ]);
 });
 
 test('director references and inline decade filters materialize only against matching retained facets', async () => {
