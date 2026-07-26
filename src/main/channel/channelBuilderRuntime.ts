@@ -58,6 +58,7 @@ export class ChannelBuilderRuntime {
   private readonly nowMs: () => number;
   private readonly guideRefreshDeadlineMs: number;
   private readonly activeApplyByPlan = new Map<string, string>();
+  private closed = false;
 
   constructor(options: ChannelBuilderRuntimeOptions) {
     this.store = options.store;
@@ -77,7 +78,7 @@ export class ChannelBuilderRuntime {
     requestId: string,
     config: NormalizedChannelSetupConfig,
   ): ChannelSetupIpcResult<ChannelSetupAcceptedOperation> {
-    if (this.operationOwner.hasActiveOperation()) {
+    if (this.closed || this.operationOwner.hasActiveOperation()) {
       return channelSetupFailure(requestId, activeOperationError('startReview'));
     }
     let selected;
@@ -97,7 +98,10 @@ export class ChannelBuilderRuntime {
       return channelSetupFailure(requestId, unknownError('startReview'));
     }
     void this.runReview(handle.operationId, handle.signal, config, selected).catch(() => {
-      if (this.operationOwner.get(handle.operationId)?.state === 'canceling') {
+      if (this.closed) return;
+      const current = this.operationOwner.get(handle.operationId);
+      if (current === null) return;
+      if (current.state === 'canceling') {
         this.operationOwner.markCanceled(handle.operationId);
       } else {
         this.operationOwner.markFailed(handle.operationId, unknownError('startReview'));
@@ -124,7 +128,7 @@ export class ChannelBuilderRuntime {
     requestId: string,
     input: Readonly<{ planId: string; confirmReplace: boolean }>,
   ): ChannelSetupIpcResult<ChannelSetupAcceptedOperation> {
-    if (this.operationOwner.hasActiveOperation()) {
+    if (this.closed || this.operationOwner.hasActiveOperation()) {
       return channelSetupFailure(requestId, activeOperationError('startApply'));
     }
     const lookup = this.operationOwner.lookupPlan(input.planId);
@@ -168,7 +172,10 @@ export class ChannelBuilderRuntime {
       return channelSetupFailure(requestId, unknownError('startApply'));
     }
     void this.runApply(handle.operationId, handle.signal, body).catch((error: unknown) => {
-      if (this.operationOwner.get(handle.operationId)?.state === 'canceling') {
+      if (this.closed) return;
+      const current = this.operationOwner.get(handle.operationId);
+      if (current === null) return;
+      if (current.state === 'canceling') {
         this.operationOwner.markCanceled(handle.operationId);
       } else {
         this.operationOwner.markFailed(
@@ -195,6 +202,8 @@ export class ChannelBuilderRuntime {
   }
 
   shutdown(): void {
+    if (this.closed) return;
+    this.closed = true;
     this.operationOwner.shutdown();
     this.planningWorker.shutdown();
     this.contextOwner.shutdown();
@@ -216,6 +225,7 @@ export class ChannelBuilderRuntime {
         total: null,
       });
       const aggregate = await this.store.readChannelAggregate();
+      if (this.closed) return;
       this.contextOwner.assertCurrent(selected.context, selected.selectedLibraryPairs);
       const discovered = await this.facetSource.discover({
         normalizedConfig: config,
@@ -223,6 +233,10 @@ export class ChannelBuilderRuntime {
         deadlineAtMs: this.nowMs() + REVIEW_DEADLINE_MS,
         signal,
       });
+      if (this.closed) {
+        discovered.materializationIndex?.dispose();
+        return;
+      }
       if (signal.aborted || discovered.kind === 'canceled') {
         this.operationOwner.markCanceled(operationId);
         return;
@@ -263,6 +277,7 @@ export class ChannelBuilderRuntime {
         },
         signal,
       );
+      if (this.closed) return;
       this.operationOwner.markRunning(operationId, 'plan', {
         completed: 1,
         total: 1,
@@ -348,6 +363,11 @@ export class ChannelBuilderRuntime {
     try {
       this.assertPlanContext(body);
       const before = await this.store.readChannelAggregate();
+      if (this.closed) return;
+      if (signal.aborted) {
+        this.operationOwner.markCanceled(operationId);
+        return;
+      }
       if (before.lineupRevision !== body.lineupRevision) {
         this.operationOwner.markFailed(operationId, lineupConflictError());
         return;
@@ -378,6 +398,7 @@ export class ChannelBuilderRuntime {
           expectedContext: body.context,
           signal,
         });
+        if (this.closed) return;
         if (signal.aborted) {
           this.operationOwner.markCanceled(operationId);
           return;
@@ -431,6 +452,7 @@ export class ChannelBuilderRuntime {
         },
         onCommitBarrier: () => this.operationOwner.beginCommit(operationId),
       });
+      if (this.closed) return;
       if (mutation.status === 'conflict') {
         this.operationOwner.markFailed(operationId, lineupConflictError());
         return;
@@ -459,6 +481,7 @@ export class ChannelBuilderRuntime {
       ) {
         guideRefresh = 'failed';
       }
+      if (this.closed) return;
       this.operationOwner.markRunning(operationId, 'refresh-guide', {
         completed: 1,
         total: 1,
