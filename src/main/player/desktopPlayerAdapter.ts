@@ -105,6 +105,7 @@ export class DesktopPlayerAdapter {
     }
     this.#requestCustody.begin(command);
     const events: PlayerEvent[] = [];
+    const snapshotBeforeLoad = command.command === 'load' ? cloneSnapshot(this.#snapshot) : null;
     if (command.command === 'load') {
       events.push(this.#applyLoadSnapshot(command));
     }
@@ -113,6 +114,7 @@ export class DesktopPlayerAdapter {
       if (hostResult.ok) {
         const validatedBatch = this.#validateHostEventBatch(hostResult.events ?? []);
         if ('error' in validatedBatch) {
+          events.push(...this.#restoreSnapshotAfterMalformedLoad(command, snapshotBeforeLoad));
           events.push(...this.#emitBoundaryError(validatedBatch.error));
           events.push(this.#failedCommandSettlement(command, validatedBatch.error));
           return this.#result(true, command, events);
@@ -193,6 +195,7 @@ export class DesktopPlayerAdapter {
     }
     this.#requestCustody.begin(command);
     const events: PlayerEvent[] = [];
+    const snapshotBeforeLoad = command.command === 'load' ? cloneSnapshot(this.#snapshot) : null;
     if (command.command === 'load') {
       events.push(this.#applyLoadSnapshot(command));
     }
@@ -201,6 +204,7 @@ export class DesktopPlayerAdapter {
       if (hostResult.ok) {
         const validatedBatch = this.#validateHostEventBatch(hostResult.events ?? []);
         if ('error' in validatedBatch) {
+          events.push(...this.#restoreSnapshotAfterMalformedLoad(command, snapshotBeforeLoad));
           events.push(...this.#emitBoundaryError(validatedBatch.error));
           events.push(this.#failedCommandSettlement(command, validatedBatch.error));
           return this.#result(true, command, events);
@@ -469,6 +473,16 @@ export class DesktopPlayerAdapter {
       lastError: null,
     };
     return this.#stateChanged();
+  }
+  #restoreSnapshotAfterMalformedLoad(
+    command: PlayerCommand,
+    snapshotBeforeLoad: PlayerSnapshot | null,
+  ): readonly PlayerEvent[] {
+    if (snapshotBeforeLoad === null || this.#snapshot.requestId !== command.requestId) {
+      return [];
+    }
+    this.#snapshot = snapshotBeforeLoad;
+    return [this.#stateChanged()];
   }
   #stateChanged(): PlayerEvent {
     return { event: 'state.changed', requestId: this.#snapshot.requestId, snapshot: cloneSnapshot(this.#snapshot) };

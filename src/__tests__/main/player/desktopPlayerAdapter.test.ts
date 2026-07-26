@@ -179,6 +179,42 @@ function privilegedContext(requestId = 'request-load-1'): PrivilegedPlaybackDisp
   };
 }
 
+function loadedPlayingBatch(requestId: string): readonly NativePlayerHostEvent[] {
+  return [
+    {
+      type: 'media.loaded',
+      requestId,
+      media,
+      durationMs: 120_000,
+      tracks: [audioTrack],
+    },
+    {
+      type: 'playback.state',
+      requestId,
+      status: 'playing',
+      playing: true,
+    },
+  ];
+}
+
+function malformedLoadBatch(requestId: string): readonly NativePlayerHostEvent[] {
+  return [
+    {
+      type: 'media.loaded',
+      requestId,
+      media: { ...media, id: 'media-replacement' },
+      durationMs: 120_000,
+      tracks: [audioTrack],
+    },
+    {
+      type: 'time.updated',
+      requestId,
+      positionMs: -1,
+      durationMs: 120_000,
+    },
+  ] as unknown as NativePlayerHostEvent[];
+}
+
 function emptyEnvelope(
   intent: RendererIntentEnvelope<unknown>['intent'],
   requestId: string,
@@ -769,6 +805,72 @@ test('desktop player adapter rejects a malformed returned event batch atomically
     assertErrorEvent(result.events, 'validation-failure');
     assertNoForbiddenKeys(result);
   }
+});
+
+test('desktop player adapter restores the prior snapshot after a malformed renderer load batch', async () => {
+  const host = new FakeNativePlayerHost();
+  host.executeResult = { ok: true, events: loadedPlayingBatch('request-renderer-prior') };
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRendererIntent(loadEnvelope('request-renderer-prior'));
+  const before = adapter.getSnapshot();
+  host.executeResult = {
+    ok: true,
+    events: malformedLoadBatch('request-renderer-malformed'),
+  };
+
+  const result = await adapter.dispatchRendererIntent(loadEnvelope('request-renderer-malformed'));
+
+  assert.equal(result.accepted, true);
+  assert.deepEqual(result.snapshot, before);
+  assert.deepEqual(adapter.getSnapshot(), before);
+  assert.equal(result.events.some((event) => event.event === 'media.loaded'), false);
+  assert.equal(
+    result.events.some((event) => event.event === 'command.settled' && !event.ok),
+    true,
+  );
+  const finalStateEvent = result.events.filter((event) => event.event === 'state.changed').at(-1);
+  assert.equal(finalStateEvent?.event, 'state.changed');
+  if (finalStateEvent?.event === 'state.changed') {
+    assert.deepEqual(finalStateEvent.snapshot, before);
+  }
+  assertErrorEvent(result.events, 'validation-failure');
+  assertNoForbiddenKeys(result);
+});
+
+test('desktop player adapter restores the prior snapshot after a malformed privileged runtime load batch', async () => {
+  const host = new FakeNativePlayerHost();
+  host.executeResult = { ok: true, events: loadedPlayingBatch('request-runtime-prior') };
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('request-runtime-prior'),
+    privilegedContext('request-runtime-prior'),
+  );
+  const before = adapter.getSnapshot();
+  host.executeResult = {
+    ok: true,
+    events: malformedLoadBatch('request-runtime-malformed'),
+  };
+
+  const result = await adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('request-runtime-malformed'),
+    privilegedContext('request-runtime-malformed'),
+  );
+
+  assert.equal(result.accepted, true);
+  assert.deepEqual(result.snapshot, before);
+  assert.deepEqual(adapter.getSnapshot(), before);
+  assert.equal(result.events.some((event) => event.event === 'media.loaded'), false);
+  assert.equal(
+    result.events.some((event) => event.event === 'command.settled' && !event.ok),
+    true,
+  );
+  const finalStateEvent = result.events.filter((event) => event.event === 'state.changed').at(-1);
+  assert.equal(finalStateEvent?.event, 'state.changed');
+  if (finalStateEvent?.event === 'state.changed') {
+    assert.deepEqual(finalStateEvent.snapshot, before);
+  }
+  assertErrorEvent(result.events, 'validation-failure');
+  assertNoForbiddenKeys(result);
 });
 
 test('desktop player adapter excludes forbidden fields from host events and errors', async () => {
