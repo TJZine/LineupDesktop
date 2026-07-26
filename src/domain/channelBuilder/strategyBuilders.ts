@@ -312,6 +312,9 @@ export function buildStrategyCandidatesWithIdentityOperations(
   const { normalizedConfig: config, facetSnapshot: snapshot, seed } = input;
   const libraries = snapshot.libraries.slice(0, config.selectedLibraryIds.length);
   const libraryByFacetId = new Map(libraries.map((library) => [library.facetId, library]));
+  const libraryOrdinalByFacetId = new Map(
+    libraries.map((library, ordinal) => [library.facetId, ordinal] as const),
+  );
   const seriesLibraryFacetIds = new Set(
     libraries
       .filter((library) => library.mediaType === 'show')
@@ -505,13 +508,9 @@ export function buildStrategyCandidatesWithIdentityOperations(
       } of orderedGroups) {
         const sorted = [...group].sort((left, right) => {
           const leftOrdinal =
-            libraries.findIndex(
-              (library) => library.facetId === left.libraryFacetId,
-            );
+            libraryOrdinalByFacetId.get(left.libraryFacetId) ?? Number.MAX_SAFE_INTEGER;
           const rightOrdinal =
-            libraries.findIndex(
-              (library) => library.facetId === right.libraryFacetId,
-            );
+            libraryOrdinalByFacetId.get(right.libraryFacetId) ?? Number.MAX_SAFE_INTEGER;
           return leftOrdinal - rightOrdinal || compareTagFacet(left, right);
         });
         const known = sorted.every(
@@ -559,12 +558,10 @@ export function buildStrategyCandidatesWithIdentityOperations(
       }
     } else {
       for (const tag of [...allTags].sort((left, right) => {
-        const leftOrdinal = libraries.findIndex(
-          (library) => library.facetId === left.libraryFacetId,
-        );
-        const rightOrdinal = libraries.findIndex(
-          (library) => library.facetId === right.libraryFacetId,
-        );
+        const leftOrdinal =
+          libraryOrdinalByFacetId.get(left.libraryFacetId) ?? Number.MAX_SAFE_INTEGER;
+        const rightOrdinal =
+          libraryOrdinalByFacetId.get(right.libraryFacetId) ?? Number.MAX_SAFE_INTEGER;
         return leftOrdinal - rightOrdinal || compareTagFacet(left, right);
       })) {
         const library = libraryByFacetId.get(tag.libraryFacetId);

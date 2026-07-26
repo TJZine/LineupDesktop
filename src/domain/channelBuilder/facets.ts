@@ -1,7 +1,9 @@
 import {
   CHANNEL_BUILDER_FACET_WARNING_CODES,
   CHANNEL_BUILDER_MAX_CANDIDATES,
+  CHANNEL_BUILDER_MAX_WARNINGS,
 } from './constants.js';
+import { hasExactPlainRecordKeys } from './exactRecord.js';
 import {
   channelBuilderIdentityOperations,
   type ChannelBuilderIdentityOperations,
@@ -28,14 +30,6 @@ const filterPattern = /^content-filters:[a-f0-9]{64}$/u;
 const warningCodeSet = new Set<ChannelBuilderFacetWarningCode>(
   CHANNEL_BUILDER_FACET_WARNING_CODES,
 );
-
-function hasExactKeys(value: object, keys: readonly string[]): boolean {
-  const actual = Object.keys(value);
-  return (
-    actual.length === keys.length &&
-    keys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
-  );
-}
 
 function validCount(value: unknown, nullable = false): boolean {
   return (
@@ -81,7 +75,7 @@ export function isValidChannelBuilderCandidateContentFilterPlanWithIdentityOpera
   }
   if (plan.kind === 'none') {
     return (
-      hasExactKeys(plan, ['kind', 'contentFilterIdentity']) &&
+      hasExactPlainRecordKeys(plan, ['kind', 'contentFilterIdentity']) &&
       plan.contentFilterIdentity === null
     );
   }
@@ -92,7 +86,7 @@ export function isValidChannelBuilderCandidateContentFilterPlanWithIdentityOpera
   }
   if (plan.kind === 'main-index-reference') {
     return (
-      hasExactKeys(plan, ['kind', 'contentFilterIdentity', 'facetId']) &&
+      hasExactPlainRecordKeys(plan, ['kind', 'contentFilterIdentity', 'facetId']) &&
       /^director:[a-f0-9]{64}$/u.test(plan.facetId) &&
       snapshot.tags.some(
         (tag) =>
@@ -104,7 +98,7 @@ export function isValidChannelBuilderCandidateContentFilterPlanWithIdentityOpera
   }
   if (
     plan.kind !== 'inline' ||
-    !hasExactKeys(plan, ['kind', 'contentFilterIdentity', 'filters']) ||
+    !hasExactPlainRecordKeys(plan, ['kind', 'contentFilterIdentity', 'filters']) ||
     !Array.isArray(plan.filters) ||
     plan.filters.length === 0 ||
     !plan.filters.every(
@@ -112,7 +106,7 @@ export function isValidChannelBuilderCandidateContentFilterPlanWithIdentityOpera
         filter !== null &&
         typeof filter === 'object' &&
         !Array.isArray(filter) &&
-        hasExactKeys(filter, ['field', 'operator', 'value']) &&
+        hasExactPlainRecordKeys(filter, ['field', 'operator', 'value']) &&
         typeof filter.value === 'number' &&
         Number.isFinite(filter.value),
     )
@@ -139,7 +133,7 @@ export function isValidChannelBuilderFacetSnapshot(
     snapshot === null ||
     typeof snapshot !== 'object' ||
     Array.isArray(snapshot) ||
-    !hasExactKeys(snapshot, [
+    !hasExactPlainRecordKeys(snapshot, [
       'context',
       'libraries',
       'playlists',
@@ -148,7 +142,7 @@ export function isValidChannelBuilderFacetSnapshot(
       'recentlyAdded',
       'aggregate',
     ]) ||
-    !hasExactKeys(snapshot.context, [
+    !hasExactPlainRecordKeys(snapshot.context, [
       'contextEpoch',
       'profileBinding',
       'serverBinding',
@@ -182,7 +176,7 @@ export function isValidChannelBuilderFacetSnapshot(
   );
   for (const facet of snapshot.libraries) {
     if (
-      !hasExactKeys(facet, [
+      !hasExactPlainRecordKeys(facet, [
         'facetId',
         'sourceIdentity',
         'title',
@@ -198,7 +192,7 @@ export function isValidChannelBuilderFacetSnapshot(
   }
   for (const facet of snapshot.playlists) {
     if (
-      !hasExactKeys(facet, [
+      !hasExactPlainRecordKeys(facet, [
         'facetId',
         'sourceIdentity',
         'title',
@@ -214,7 +208,7 @@ export function isValidChannelBuilderFacetSnapshot(
   }
   for (const facet of snapshot.collections) {
     if (
-      !hasExactKeys(facet, [
+      !hasExactPlainRecordKeys(facet, [
         'facetId',
         'sourceIdentity',
         'libraryFacetId',
@@ -233,7 +227,7 @@ export function isValidChannelBuilderFacetSnapshot(
       libraryTypes.get(facet.libraryFacetId) === 'show' &&
       (facet.family === 'actor' || facet.family === 'director');
     if (
-      !hasExactKeys(facet, [
+      !hasExactPlainRecordKeys(facet, [
         'facetId',
         'sourceIdentity',
         'libraryFacetId',
@@ -276,7 +270,7 @@ export function isValidChannelBuilderFacetSnapshot(
   }
   for (const facet of snapshot.recentlyAdded) {
     if (
-      !hasExactKeys(facet, [
+      !hasExactPlainRecordKeys(facet, [
         'facetId',
         'sourceIdentity',
         'libraryFacetId',
@@ -295,9 +289,15 @@ export function isValidChannelBuilderFacetSnapshotAggregate(
   aggregate: ChannelBuilderFacetSnapshot['aggregate'],
 ): boolean {
   if (
+    !hasExactPlainRecordKeys(aggregate, [
+      'status',
+      'warningCodes',
+      'omittedMalformedCount',
+      'omittedCappedCount',
+    ]) ||
     !['ready', 'blocked', 'slow'].includes(aggregate.status) ||
     !Array.isArray(aggregate.warningCodes) ||
-    aggregate.warningCodes.length > 7
+    aggregate.warningCodes.length > CHANNEL_BUILDER_FACET_WARNING_CODES.length
   ) {
     return false;
   }
@@ -381,7 +381,7 @@ export function sortAndDedupeChannelSetupWarnings(
     if (phase !== 0) return phase;
     return compareLexical(left.strategy ?? '', right.strategy ?? '');
   });
-  return merged.slice(0, 50);
+  return merged.slice(0, CHANNEL_BUILDER_MAX_WARNINGS);
 }
 
 export function strategyWarning(

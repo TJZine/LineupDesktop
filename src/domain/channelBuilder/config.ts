@@ -1,8 +1,11 @@
 import {
+  CHANNEL_BUILDER_MAX_CHANNELS,
   CHANNEL_BUILDER_MAX_LIBRARIES,
+  CHANNEL_BUILDER_MAX_MIN_ITEMS_PER_CHANNEL,
   CHANNEL_BUILDER_MIXED_SCOPE_STRATEGIES,
   CHANNEL_BUILDER_STRATEGY_KEYS,
 } from './constants.js';
+import { hasExactPlainRecordKeys } from './exactRecord.js';
 import type {
   ChannelBuilderStrategyConfig,
   ChannelBuilderStrategyKey,
@@ -53,17 +56,6 @@ type ConfigResult =
   | Readonly<{ ok: true; config: NormalizedChannelSetupConfig }>
   | Readonly<{ ok: false }>;
 
-function hasExactKeys(
-  value: unknown,
-  expected: readonly string[],
-): value is Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) return false;
-  const keys = Object.keys(value);
-  return keys.length === expected.length && expected.every((key) => keys.includes(key));
-}
-
 function validIdentifier(value: unknown): value is string {
   return typeof value === 'string' && value === value.trim() && identifierPattern.test(value);
 }
@@ -95,7 +87,7 @@ function cloneConfig(config: ChannelSetupConfig): NormalizedChannelSetupConfig {
 }
 
 function validateContext(value: unknown): value is ChannelSetupConfigContext {
-  if (!hasExactKeys(value, ['serverId', 'selectedLibraryIds'])) return false;
+  if (!hasExactPlainRecordKeys(value, ['serverId', 'selectedLibraryIds'])) return false;
   if (!validIdentifier(value.serverId) || !Array.isArray(value.selectedLibraryIds)) return false;
   if (
     value.selectedLibraryIds.length < 1 ||
@@ -125,7 +117,7 @@ export function normalizeChannelSetupConfig(
 ): ConfigResult {
   if (!validateContext(expectedContext)) return { ok: false };
   if (
-    !hasExactKeys(input, [
+    !hasExactPlainRecordKeys(input, [
       'serverId',
       'selectedLibraryIds',
       'maxChannels',
@@ -148,8 +140,12 @@ export function normalizeChannelSetupConfig(
     return { ok: false };
   }
   if (
-    !validInteger(input.maxChannels, 1, 500) ||
-    !validInteger(input.minItemsPerChannel, 1, 500) ||
+    !validInteger(input.maxChannels, 1, CHANNEL_BUILDER_MAX_CHANNELS) ||
+    !validInteger(
+      input.minItemsPerChannel,
+      1,
+      CHANNEL_BUILDER_MAX_MIN_ITEMS_PER_CHANNEL,
+    ) ||
     (input.buildMode !== 'append' &&
       input.buildMode !== 'replace' &&
       input.buildMode !== 'merge') ||
@@ -158,7 +154,9 @@ export function normalizeChannelSetupConfig(
   ) {
     return { ok: false };
   }
-  if (!hasExactKeys(input.strategyConfig, CHANNEL_BUILDER_STRATEGY_KEYS)) return { ok: false };
+  if (!hasExactPlainRecordKeys(input.strategyConfig, CHANNEL_BUILDER_STRATEGY_KEYS)) {
+    return { ok: false };
+  }
   const normalizedStrategies = {} as Record<
     ChannelBuilderStrategyKey,
     ChannelBuilderStrategyConfig
@@ -166,7 +164,7 @@ export function normalizeChannelSetupConfig(
   for (const key of CHANNEL_BUILDER_STRATEGY_KEYS) {
     const candidate = input.strategyConfig[key];
     if (
-      !hasExactKeys(candidate, ['enabled', 'priority', 'scope']) ||
+      !hasExactPlainRecordKeys(candidate, ['enabled', 'priority', 'scope']) ||
       typeof candidate.enabled !== 'boolean' ||
       !validInteger(candidate.priority, 1, 100) ||
       (candidate.scope !== 'per-library' && candidate.scope !== 'cross-library') ||
@@ -181,7 +179,7 @@ export function normalizeChannelSetupConfig(
     };
   }
   if (
-    !hasExactKeys(input.channelExpansion, [
+    !hasExactPlainRecordKeys(input.channelExpansion, [
       'addAlternateLineups',
       'alternateLineupCopies',
       'variantType',
@@ -189,18 +187,18 @@ export function normalizeChannelSetupConfig(
     ]) ||
     typeof input.channelExpansion.addAlternateLineups !== 'boolean' ||
     !validInteger(input.channelExpansion.alternateLineupCopies, 1, 3) ||
-    !['none', 'sequential', 'block'].includes(
-      String(input.channelExpansion.variantType),
-    ) ||
+    (input.channelExpansion.variantType !== 'none' &&
+      input.channelExpansion.variantType !== 'sequential' &&
+      input.channelExpansion.variantType !== 'block') ||
     !validInteger(input.channelExpansion.variantBlockSize, 2, 5)
   ) {
     return { ok: false };
   }
   if (
-    !hasExactKeys(input.seriesOrdering, ['basePlaybackMode', 'baseBlockSize']) ||
-    !['shuffle', 'sequential', 'block'].includes(
-      String(input.seriesOrdering.basePlaybackMode),
-    ) ||
+    !hasExactPlainRecordKeys(input.seriesOrdering, ['basePlaybackMode', 'baseBlockSize']) ||
+    (input.seriesOrdering.basePlaybackMode !== 'shuffle' &&
+      input.seriesOrdering.basePlaybackMode !== 'sequential' &&
+      input.seriesOrdering.basePlaybackMode !== 'block') ||
     !validInteger(input.seriesOrdering.baseBlockSize, 2, 5)
   ) {
     return { ok: false };
@@ -218,14 +216,11 @@ export function normalizeChannelSetupConfig(
       channelExpansion: {
         addAlternateLineups: input.channelExpansion.addAlternateLineups,
         alternateLineupCopies: input.channelExpansion.alternateLineupCopies,
-        variantType: input.channelExpansion.variantType as 'none' | 'sequential' | 'block',
+        variantType: input.channelExpansion.variantType,
         variantBlockSize: input.channelExpansion.variantBlockSize,
       },
       seriesOrdering: {
-        basePlaybackMode: input.seriesOrdering.basePlaybackMode as
-          | 'shuffle'
-          | 'sequential'
-          | 'block',
+        basePlaybackMode: input.seriesOrdering.basePlaybackMode,
         baseBlockSize: input.seriesOrdering.baseBlockSize,
       },
     }),

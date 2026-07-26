@@ -13,6 +13,7 @@ import {
 import { normalizeChannelSetupConfig } from './config.js';
 import {
   channelBuilderIdentityOperations,
+  type CanonicalJsonValue,
   type ChannelBuilderIdentityOperations,
   type CandidateIdentityTuple,
 } from './planIdentity.js';
@@ -299,7 +300,7 @@ function buildReviewDiff(
 function existingIdentityProjection(
   identityOperations: ChannelBuilderIdentityOperations,
   entry: ChannelBuilderExistingLineupEntry,
-): unknown {
+): CanonicalJsonValue {
   return {
     id: identityOperations.createPersistedStringV1(entry.id),
     number: entry.number,
@@ -326,7 +327,7 @@ function existingIdentityProjection(
 function outputIdentityProjection(
   identityOperations: ChannelBuilderIdentityOperations,
   output: Omit<ChannelBuilderPlannerOutput, 'planIdentity'>,
-): unknown {
+): CanonicalJsonValue {
   return {
     ...output,
     candidateLedger: output.candidateLedger.map((entry) => ({
@@ -553,8 +554,8 @@ function buildChannelSetupPlanWithIdentityOperations(
       ),
       clock: input.clock,
       seed: input.seed,
-    } as never,
-    outputIdentityProjection(identityOperations, outputWithoutIdentity) as never,
+    },
+    outputIdentityProjection(identityOperations, outputWithoutIdentity),
   );
   return { planIdentity, ...outputWithoutIdentity };
 }

@@ -4,7 +4,11 @@ import type {
   PlaybackMode,
   SortOrder,
 } from '../channel/types.js';
-import { CHANNEL_DOMAIN_FORBIDDEN_KEYS } from './constants.js';
+import {
+  CHANNEL_BUILDER_MAX_SOURCE_DEPTH,
+  CHANNEL_BUILDER_MAX_SOURCE_LEAVES,
+  CHANNEL_DOMAIN_FORBIDDEN_KEYS,
+} from './constants.js';
 import type {
   ChannelBuilderCandidateId,
   ChannelBuilderCandidateIdentity,
@@ -21,7 +25,7 @@ import type {
   PersistedStringV1,
 } from './types.js';
 
-type CanonicalJsonValue =
+export type CanonicalJsonValue =
   | null
   | boolean
   | number
@@ -797,7 +801,9 @@ function createSourceIdentityAtDepth(
   depth: number,
   traversal: SourceTreeTraversal,
 ): ChannelBuilderSourceIdentity {
-  if (depth > 8) throw new TypeError('Invalid source identity input.');
+  if (depth > CHANNEL_BUILDER_MAX_SOURCE_DEPTH) {
+    throw new TypeError('Invalid source identity input.');
+  }
   if (source === null || typeof source !== 'object' || !isPlainRecord(source)) {
     throw new TypeError('Invalid source identity input.');
   }
@@ -873,11 +879,13 @@ function createSourceIdentityAtDepth(
         !hasExactOwnKeys(source, ['type', 'items']) ||
         !Array.isArray(source.items) ||
         source.items.length < 1 ||
-        source.items.length > 500
+        source.items.length > CHANNEL_BUILDER_MAX_SOURCE_LEAVES
       ) {
         throw new TypeError('Invalid manual source.');
       }
-      if (depth + 1 > 8) throw new TypeError('Invalid manual source.');
+      if (depth + 1 > CHANNEL_BUILDER_MAX_SOURCE_DEPTH) {
+        throw new TypeError('Invalid manual source.');
+      }
       addSourceLeaves(traversal, source.items.length);
       const items = source.items.map((item) => {
         if (
@@ -911,7 +919,7 @@ function createSourceIdentityAtDepth(
         !hasExactOwnKeys(source, ['type', 'sources', 'mixMode']) ||
         !Array.isArray(source.sources) ||
         source.sources.length < 1 ||
-        source.sources.length > 500 ||
+        source.sources.length > CHANNEL_BUILDER_MAX_SOURCE_LEAVES ||
         !['sequential', 'interleave'].includes(source.mixMode)
       ) {
         throw new TypeError('Invalid mixed source.');
@@ -931,7 +939,7 @@ function createSourceIdentityAtDepth(
 
 function addSourceLeaves(traversal: SourceTreeTraversal, count: number): void {
   traversal.leafCount += count;
-  if (traversal.leafCount > 500) {
+  if (traversal.leafCount > CHANNEL_BUILDER_MAX_SOURCE_LEAVES) {
     throw new TypeError('Invalid source identity input.');
   }
 }
@@ -952,7 +960,7 @@ function createMixedSourceIdentityWithSha256(
     !['sequential', 'interleave'].includes(mixMode) ||
     !Array.isArray(sources) ||
     sources.length < 1 ||
-    sources.length > 500 ||
+    sources.length > CHANNEL_BUILDER_MAX_SOURCE_LEAVES ||
     !sources.every((source) => /^source:[a-f0-9]{64}$/u.test(source))
   ) {
     throw new TypeError('Invalid mixed source identity input.');
@@ -1164,7 +1172,7 @@ function isValidSafeSourceReference(
   },
 ): source is ChannelBuilderSafeSourceReference {
   if (
-    traversal.depth > 8 ||
+    traversal.depth > CHANNEL_BUILDER_MAX_SOURCE_DEPTH ||
     source === null ||
     typeof source !== 'object' ||
     Array.isArray(source) ||
@@ -1195,8 +1203,8 @@ function isValidSafeSourceReference(
         hasExactOwnKeys(source, ['kind', 'sourceIdentity', 'items']) &&
         Array.isArray(items) &&
         items.length >= 1 &&
-        items.length <= 500 &&
-        traversal.depth + 1 <= 8 &&
+        items.length <= CHANNEL_BUILDER_MAX_SOURCE_LEAVES &&
+        traversal.depth + 1 <= CHANNEL_BUILDER_MAX_SOURCE_DEPTH &&
         items.every(
           (item) =>
             item !== null &&
@@ -1225,7 +1233,7 @@ function isValidSafeSourceReference(
       ['sequential', 'interleave'].includes(String(source.mixMode)) &&
       Array.isArray(source.sources) &&
       source.sources.length >= 1 &&
-      source.sources.length <= 500 &&
+      source.sources.length <= CHANNEL_BUILDER_MAX_SOURCE_LEAVES &&
       source.sources.every((child) =>
         isValidSafeSourceReference(child, seen, {
           depth: traversal.depth + 1,
@@ -1299,10 +1307,10 @@ export function createCandidateIdentityPreimage(
     !['sequential', 'shuffle', 'block', 'random'].includes(
       input.playbackMode,
     ) ||
-    input.lineupReplicaIndex !== null &&
-    (!Number.isInteger(input.lineupReplicaIndex) ||
-      input.lineupReplicaIndex < 0 ||
-      input.lineupReplicaIndex > 3)
+    (input.lineupReplicaIndex !== null &&
+      (!Number.isInteger(input.lineupReplicaIndex) ||
+        input.lineupReplicaIndex < 0 ||
+        input.lineupReplicaIndex > 3))
   ) {
     throw new TypeError('Invalid candidate identity input.');
   }
@@ -1404,10 +1412,12 @@ function createCandidateIdWithSha256(
   }
   const seed = normalizedIdentityInput(input.seed);
   const strategy = input.strategy.normalize('NFC');
-  const bytes =
-    `{"candidateIdentity":${JSON.stringify(input.candidateIdentity)},` +
-    `"occurrence":${input.occurrence},"seed":${JSON.stringify(seed)},` +
-    `"strategy":${JSON.stringify(strategy)}}`;
+  const bytes = canonicalJsonV1({
+    candidateIdentity: input.candidateIdentity,
+    occurrence: input.occurrence,
+    seed,
+    strategy,
+  });
   return identityBytes(
     createSha256,
     'candidate:',

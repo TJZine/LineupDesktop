@@ -571,10 +571,12 @@ describe('Channel Builder Identity V1', () => {
           tagValue: 'private-raw-value',
           unknown: true,
         } as never),
-      (error: unknown) =>
-        error instanceof TypeError &&
-        error.message === 'Invalid tag semantic group identity input.' &&
-        !error.message.includes('private-raw-value'),
+      (error: unknown) => {
+        assert.ok(error instanceof TypeError);
+        assert.equal(error.message, 'Invalid tag semantic group identity input.');
+        assert.equal(String(error).includes('private-raw-value'), false);
+        return true;
+      },
     );
     assert.throws(
       () =>

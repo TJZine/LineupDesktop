@@ -32,6 +32,7 @@ export const CHANNEL_BUILDER_MIXED_SCOPE_STRATEGIES = Object.freeze([
 ] as const satisfies readonly ChannelBuilderStrategyKey[]);
 
 export const CHANNEL_BUILDER_MAX_CHANNELS = 500;
+export const CHANNEL_BUILDER_MAX_MIN_ITEMS_PER_CHANNEL = 500;
 export const CHANNEL_BUILDER_MAX_CANDIDATES = 50_000;
 export const CHANNEL_BUILDER_MAX_LIBRARIES = 24;
 export const CHANNEL_BUILDER_MAX_WARNINGS = 50;

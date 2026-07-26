@@ -23,6 +23,7 @@ const pure = channelBuilderIdentityOperations;
 const native = channelBuilderProductionIdentityOperations;
 
 function operationParity(
+  label: string,
   run: (operations: ChannelBuilderIdentityOperations) => unknown,
 ): void {
   let pureValue: unknown;
@@ -40,13 +41,13 @@ function operationParity(
     nativeError = error;
   }
   if (pureError !== undefined || nativeError !== undefined) {
-    assert.ok(pureError instanceof Error);
-    assert.ok(nativeError instanceof Error);
-    assert.equal(nativeError.name, pureError.name);
-    assert.equal(nativeError.message, pureError.message);
+    assert.ok(pureError instanceof Error, `${label}: pure error`);
+    assert.ok(nativeError instanceof Error, `${label}: native error`);
+    assert.equal(nativeError.name, pureError.name, `${label}: error name`);
+    assert.equal(nativeError.message, pureError.message, `${label}: error message`);
     return;
   }
-  assert.deepEqual(nativeValue, pureValue);
+  assert.deepEqual(nativeValue, pureValue, label);
 }
 
 function identityVectors(): readonly ((
@@ -585,8 +586,11 @@ function plannerInput(
 
 describe('production Channel Builder planner', () => {
   it('matches every frozen identity operation across golden and hostile classes', () => {
-    for (const vector of [...identityVectors(), ...hostileVectors()]) {
-      operationParity(vector);
+    for (const [index, vector] of identityVectors().entries()) {
+      operationParity(`identity vector ${index}`, vector);
+    }
+    for (const [index, vector] of hostileVectors().entries()) {
+      operationParity(`hostile vector ${index}`, vector);
     }
   });
 

@@ -49,6 +49,15 @@ describe('channel builder contracts', () => {
     });
     assert.equal(Object.isFrozen(CHANNEL_SETUP_BEHAVIOR_DEFAULTS), true);
     assert.equal(Object.isFrozen(CHANNEL_SETUP_BEHAVIOR_DEFAULTS.strategyConfig), true);
+    for (const strategy of CHANNEL_BUILDER_STRATEGY_KEYS) {
+      assert.equal(
+        Object.isFrozen(CHANNEL_SETUP_BEHAVIOR_DEFAULTS.strategyConfig[strategy]),
+        true,
+        strategy,
+      );
+    }
+    assert.equal(Object.isFrozen(CHANNEL_SETUP_BEHAVIOR_DEFAULTS.channelExpansion), true);
+    assert.equal(Object.isFrozen(CHANNEL_SETUP_BEHAVIOR_DEFAULTS.seriesOrdering), true);
   });
 
   it('creates and normalizes only complete exact context-bound configs', () => {
@@ -100,6 +109,32 @@ describe('channel builder contracts', () => {
           channelExpansion: {
             ...created.config.channelExpansion,
             alternateLineupCopies: 4,
+          },
+        },
+        context,
+      ),
+      { ok: false },
+    );
+    assert.deepEqual(
+      normalizeChannelSetupConfig(
+        {
+          ...created.config,
+          channelExpansion: {
+            ...created.config.channelExpansion,
+            variantType: { toString: () => 'sequential' },
+          },
+        },
+        context,
+      ),
+      { ok: false },
+    );
+    assert.deepEqual(
+      normalizeChannelSetupConfig(
+        {
+          ...created.config,
+          seriesOrdering: {
+            ...created.config.seriesOrdering,
+            basePlaybackMode: { toString: () => 'shuffle' },
           },
         },
         context,
@@ -188,6 +223,12 @@ describe('channel builder contracts', () => {
       omittedCappedCount: null,
     };
     assert.equal(isValidChannelBuilderFacetSnapshotAggregate(aggregate), true);
+    assert.equal(
+      isValidChannelBuilderFacetSnapshotAggregate(
+        Object.assign(Object.create({ inherited: true }), aggregate),
+      ),
+      false,
+    );
     assert.deepEqual(convertFacetWarnings(aggregate), [
       {
         code: 'FACET_CAP_REACHED',
