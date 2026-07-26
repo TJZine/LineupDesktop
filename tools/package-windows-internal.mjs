@@ -17,6 +17,8 @@ export const NATIVE_HELPER_BLOCKED_RELATIVE_PATH =
 export const MEDIA_BINARIES_BLOCKED_RELATIVE_PATH =
   'resources/media-binaries/REDISTRIBUTION_BLOCKED.txt';
 
+const RUNTIME_PROBE_TIMEOUT_MS = 15_000;
+const RUNTIME_PROBE_MAX_BUFFER_BYTES = 64 * 1024;
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export function parsePackageArgs(args) {
@@ -186,8 +188,10 @@ export function collectRuntimeVersions(root = repoRoot) {
   return collectRuntimeVersionsFromDir(resolveElectronRuntimeDir(root));
 }
 
-export function collectRuntimeVersionsFromDir(runtimeDir) {
+export function collectRuntimeVersionsFromDir(runtimeDir, probeLimits = {}) {
   const electronExecutable = path.join(runtimeDir, 'electron.exe');
+  const timeout = probeLimits.timeout ?? RUNTIME_PROBE_TIMEOUT_MS;
+  const maxBuffer = probeLimits.maxBuffer ?? RUNTIME_PROBE_MAX_BUFFER_BYTES;
   const expression = [
     'JSON.stringify({',
     'electron:process.versions.electron,',
@@ -205,27 +209,19 @@ export function collectRuntimeVersionsFromDir(runtimeDir) {
     },
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
+    timeout,
+    maxBuffer,
   });
 
   if (result.error || result.status !== 0) {
-    throw new Error(
-      [
-        'Unable to collect bundled Electron runtime versions for RD-18 provenance.',
-        formatRuntimeProbeDiagnostics(result),
-      ].filter(Boolean).join(' '),
-    );
+    throw new Error(formatRuntimeProbeFailure(result));
   }
 
   let versions;
   try {
     versions = JSON.parse(lastNonEmptyLine(result.stdout) ?? '');
   } catch {
-    throw new Error(
-      [
-        'Bundled Electron runtime version output was not valid JSON.',
-        formatRuntimeProbeDiagnostics(result),
-      ].filter(Boolean).join(' '),
-    );
+    throw new Error('Bundled Electron runtime version output was not valid JSON.');
   }
 
   return {
@@ -475,26 +471,21 @@ function assertRuntimeVersion(value, label) {
   return value;
 }
 
-function formatRuntimeProbeDiagnostics(result) {
-  const stderrLastLine = lastNonEmptyLine(result.stderr);
-  const parts = [
-    `status=${result.status ?? 'unknown'}`,
-    result.signal ? `signal=${result.signal}` : undefined,
-    result.error ? `error=${result.error.message}` : undefined,
-    stderrLastLine ? `stderrLastLine=${stderrLastLine}` : undefined,
-    formatDiagnosticExcerpt('stdout', result.stdout),
-    formatDiagnosticExcerpt('stderr', result.stderr),
-  ];
-
-  return parts.filter(Boolean).join('; ');
-}
-
-function formatDiagnosticExcerpt(label, value) {
-  const excerpt = String(value ?? '').trim();
-  if (excerpt.length === 0) {
-    return undefined;
+function formatRuntimeProbeFailure(result) {
+  if (result.error?.code === 'ETIMEDOUT') {
+    return 'Bundled Electron runtime version probe timed out.';
   }
-  return `${label}=${excerpt.slice(-500).replace(/\s+/gu, ' ')}`;
+  if (result.error?.code === 'ENOBUFS') {
+    return 'Bundled Electron runtime version probe exceeded its output limit.';
+  }
+  if (result.error) {
+    return 'Bundled Electron runtime version probe could not be started.';
+  }
+  if (result.signal) {
+    return 'Bundled Electron runtime version probe was terminated by a signal.';
+  }
+  const status = Number.isInteger(result.status) ? result.status : 'unknown';
+  return `Bundled Electron runtime version probe exited unsuccessfully (status=${status}).`;
 }
 
 function lastNonEmptyLine(value) {

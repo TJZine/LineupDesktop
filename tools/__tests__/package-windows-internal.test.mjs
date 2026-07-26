@@ -103,29 +103,106 @@ test('collectRuntimeVersions reads bundled Electron process versions', (t) => {
   });
 });
 
-test('collectRuntimeVersions includes child-process diagnostics on probe failures', (t) => {
+test('collectRuntimeVersions classifies nonzero probe failures without child output', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-failure-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
 
   const runtimeDir = path.join(root, 'runtime');
+  const sensitiveChildOutput = 'sensitive-runtime-probe-output';
   const preloadPath = createNodeBackedElectronRuntime(runtimeDir, undefined, [
-    'console.error("runtime probe exploded");',
+    `console.error(${JSON.stringify(sensitiveChildOutput)});`,
     'process.exit(7);',
   ]);
 
   withTemporaryNodeOptions(preloadPath, () => {
     assert.throws(
       () => collectRuntimeVersionsFromDir(runtimeDir),
-      /Unable to collect bundled Electron runtime versions.*status=7.*stderrLastLine=runtime probe exploded/u,
+      (error) => {
+        assert.equal(
+          error.message,
+          'Bundled Electron runtime version probe exited unsuccessfully (status=7).',
+        );
+        assert.equal(error.message.includes(sensitiveChildOutput), false);
+        return true;
+      },
     );
   });
 });
 
-test('collectRuntimeVersions includes stdout and stderr diagnostics on invalid JSON', (t) => {
+test('collectRuntimeVersions classifies launch failures without executable paths', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-launch-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const runtimeDir = path.join(root, 'sensitive-runtime-location');
+  fs.mkdirSync(runtimeDir);
+
+  assert.throws(
+    () => collectRuntimeVersionsFromDir(runtimeDir),
+    (error) => {
+      assert.equal(
+        error.message,
+        'Bundled Electron runtime version probe could not be started.',
+      );
+      assert.equal(error.message.includes(runtimeDir), false);
+      return true;
+    },
+  );
+});
+
+test('collectRuntimeVersions classifies timeout without child output', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-timeout-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const runtimeDir = path.join(root, 'runtime');
+  const sensitiveChildOutput = 'sensitive-timeout-output';
+  const preloadPath = createNodeBackedElectronRuntime(runtimeDir, undefined, [
+    `console.error(${JSON.stringify(sensitiveChildOutput)});`,
+    'setInterval(() => {}, 1_000);',
+  ]);
+
+  withTemporaryNodeOptions(preloadPath, () => {
+    assert.throws(
+      () => collectRuntimeVersionsFromDir(runtimeDir, { timeout: 100 }),
+      (error) => {
+        assert.equal(error.message, 'Bundled Electron runtime version probe timed out.');
+        assert.equal(error.message.includes(sensitiveChildOutput), false);
+        return true;
+      },
+    );
+  });
+});
+
+test('collectRuntimeVersions classifies output overflow without child output', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-overflow-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const runtimeDir = path.join(root, 'runtime');
+  const sensitiveChildOutput = 'sensitive-overflow-output';
+  const preloadPath = createNodeBackedElectronRuntime(runtimeDir, undefined, [
+    `process.stderr.write(${JSON.stringify(sensitiveChildOutput)}.repeat(1_000));`,
+  ]);
+
+  withTemporaryNodeOptions(preloadPath, () => {
+    assert.throws(
+      () => collectRuntimeVersionsFromDir(runtimeDir, { maxBuffer: 256 }),
+      (error) => {
+        assert.equal(
+          error.message,
+          'Bundled Electron runtime version probe exceeded its output limit.',
+        );
+        assert.equal(error.message.includes(sensitiveChildOutput), false);
+        return true;
+      },
+    );
+  });
+});
+
+test('collectRuntimeVersions rejects invalid JSON without child output', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-json-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
 
   const runtimeDir = path.join(root, 'runtime');
+  const sensitiveChildOutput = 'sensitive-json-probe-output';
   const preloadPath = createNodeBackedElectronRuntime(runtimeDir, {
     electron: '42.0.0',
     node: '24.15.0',
@@ -134,14 +211,18 @@ test('collectRuntimeVersions includes stdout and stderr diagnostics on invalid J
     modules: '146',
     napi: '10',
   }, [
-    'console.error("json probe stderr context");',
+    `console.error(${JSON.stringify(sensitiveChildOutput)});`,
     'JSON.stringify = () => "not-json";',
   ]);
 
   withTemporaryNodeOptions(preloadPath, () => {
     assert.throws(
       () => collectRuntimeVersionsFromDir(runtimeDir),
-      /Bundled Electron runtime version output was not valid JSON.*stdout=.*not-json.*stderr=.*json probe stderr context/u,
+      (error) => {
+        assert.equal(error.message, 'Bundled Electron runtime version output was not valid JSON.');
+        assert.equal(error.message.includes(sensitiveChildOutput), false);
+        return true;
+      },
     );
   });
 });
