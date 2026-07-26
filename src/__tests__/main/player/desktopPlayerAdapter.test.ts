@@ -873,6 +873,81 @@ test('desktop player adapter restores the prior snapshot after a malformed privi
   assertNoForbiddenKeys(result);
 });
 
+test('desktop player adapter restores stable state after overlapping malformed renderer loads', async () => {
+  const host = new DeferredNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  const priorDispatch = adapter.dispatchRendererIntent(loadEnvelope('request-renderer-stable'));
+  host.resolveNext({ ok: true, events: loadedPlayingBatch('request-renderer-stable') });
+  await priorDispatch;
+  const stable = adapter.getSnapshot();
+
+  const first = adapter.dispatchRendererIntent(loadEnvelope('request-renderer-overlap-a'));
+  const second = adapter.dispatchRendererIntent(loadEnvelope('request-renderer-overlap-b'));
+  host.resolveNext({
+    ok: true,
+    events: malformedLoadBatch('request-renderer-overlap-a'),
+  });
+  await first;
+  assert.equal(adapter.getSnapshot().requestId, 'request-renderer-overlap-b');
+
+  host.resolveNext({
+    ok: true,
+    events: malformedLoadBatch('request-renderer-overlap-b'),
+  });
+  const result = await second;
+
+  assert.deepEqual(result.snapshot, stable);
+  assert.deepEqual(adapter.getSnapshot(), stable);
+  assertErrorEvent(result.events, 'validation-failure');
+  assert.equal(
+    result.events.some((event) => event.event === 'command.settled' && !event.ok),
+    true,
+  );
+  assertNoForbiddenKeys(result);
+});
+
+test('desktop player adapter restores stable state after overlapping malformed privileged runtime loads', async () => {
+  const host = new DeferredNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  const priorDispatch = adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('request-runtime-stable'),
+    privilegedContext('request-runtime-stable'),
+  );
+  host.resolveNext({ ok: true, events: loadedPlayingBatch('request-runtime-stable') });
+  await priorDispatch;
+  const stable = adapter.getSnapshot();
+
+  const first = adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('request-runtime-overlap-a'),
+    privilegedContext('request-runtime-overlap-a'),
+  );
+  const second = adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('request-runtime-overlap-b'),
+    privilegedContext('request-runtime-overlap-b'),
+  );
+  host.resolveNext({
+    ok: true,
+    events: malformedLoadBatch('request-runtime-overlap-a'),
+  });
+  await first;
+  assert.equal(adapter.getSnapshot().requestId, 'request-runtime-overlap-b');
+
+  host.resolveNext({
+    ok: true,
+    events: malformedLoadBatch('request-runtime-overlap-b'),
+  });
+  const result = await second;
+
+  assert.deepEqual(result.snapshot, stable);
+  assert.deepEqual(adapter.getSnapshot(), stable);
+  assertErrorEvent(result.events, 'validation-failure');
+  assert.equal(
+    result.events.some((event) => event.event === 'command.settled' && !event.ok),
+    true,
+  );
+  assertNoForbiddenKeys(result);
+});
+
 test('desktop player adapter excludes forbidden fields from host events and errors', async () => {
   const host = new FakeNativePlayerHost();
   const adapter = new DesktopPlayerAdapter(host);

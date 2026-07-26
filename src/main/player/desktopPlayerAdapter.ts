@@ -57,6 +57,7 @@ export class DesktopPlayerAdapter {
   readonly #rejectRendererLoad: boolean;
   #snapshot: PlayerSnapshot = createInitialSnapshot();
   readonly #requestCustody = new PlayerAdapterRequestCustody();
+  readonly #loadRollbackSnapshots = new Map<PlayerRequestId, PlayerSnapshot>();
   constructor(host: NativePlayerHostPort, options: DesktopPlayerAdapterOptions = {}) {
     this.#host = host;
     this.#onEvents = options.onEvents;
@@ -105,7 +106,7 @@ export class DesktopPlayerAdapter {
     }
     this.#requestCustody.begin(command);
     const events: PlayerEvent[] = [];
-    const snapshotBeforeLoad = command.command === 'load' ? cloneSnapshot(this.#snapshot) : null;
+    const snapshotBeforeLoad = this.#captureLoadRollbackSnapshot(command);
     if (command.command === 'load') {
       events.push(this.#applyLoadSnapshot(command));
     }
@@ -155,6 +156,7 @@ export class DesktopPlayerAdapter {
       return this.#result(true, command, events);
     } finally {
       this.#requestCustody.settle(command.requestId);
+      this.#loadRollbackSnapshots.delete(command.requestId);
     }
   }
   async dispatchRuntimeCommand(
@@ -195,7 +197,7 @@ export class DesktopPlayerAdapter {
     }
     this.#requestCustody.begin(command);
     const events: PlayerEvent[] = [];
-    const snapshotBeforeLoad = command.command === 'load' ? cloneSnapshot(this.#snapshot) : null;
+    const snapshotBeforeLoad = this.#captureLoadRollbackSnapshot(command);
     if (command.command === 'load') {
       events.push(this.#applyLoadSnapshot(command));
     }
@@ -245,6 +247,7 @@ export class DesktopPlayerAdapter {
       return this.#result(true, command, events);
     } finally {
       this.#requestCustody.settle(command.requestId);
+      this.#loadRollbackSnapshots.delete(command.requestId);
     }
   }
   handleHostEvent(event: unknown): readonly PlayerEvent[] {
@@ -264,6 +267,7 @@ export class DesktopPlayerAdapter {
         'request id did not match current playback state',
       );
     }
+    this.#loadRollbackSnapshots.delete(hostRequestId ?? this.#snapshot.requestId);
     switch (hostEvent.type) {
       case 'media.loaded': {
         const withTracks = applyTrackSnapshot(
@@ -396,11 +400,19 @@ export class DesktopPlayerAdapter {
     this.#recordDiagnostic('helper-crash', failure.requestId, 'helper.lifecycle', 'failed', failure.error.code);
     return this.#recordError(hostLifecycleFailureToError(requestId, failure.error));
   }
-  async cleanup(): Promise<DesktopPlayerAdapterDispatchResult> {
-    const requestId = this.#snapshot.requestId;
+  async cleanup(scopedRequestId?: PlayerRequestId | null): Promise<DesktopPlayerAdapterDispatchResult> {
+    const scoped = scopedRequestId !== undefined;
+    const requestId = scopedRequestId === undefined ? this.#snapshot.requestId : scopedRequestId;
+    if (scoped && requestId !== this.#snapshot.requestId) {
+      return this.#result(true, null, []);
+    }
     try {
       await this.#host.cleanup(requestId);
+      if (scoped && requestId !== this.#snapshot.requestId) {
+        return this.#result(true, null, []);
+      }
       this.#requestCustody.clear();
+      this.#loadRollbackSnapshots.clear();
       this.#snapshot = createInitialSnapshot();
       return this.#result(true, null, [this.#stateChanged()]);
     } catch {
@@ -427,7 +439,11 @@ export class DesktopPlayerAdapter {
           reason: 'helper cleanup rejected',
         },
       });
-      return this.#result(false, null, this.#recordError(error));
+      const events =
+        scoped && requestId !== this.#snapshot.requestId
+          ? this.#emitBoundaryError(error)
+          : this.#recordError(error);
+      return this.#result(false, null, events);
     }
   }
   #emitBoundaryError(error: PlayerError): readonly PlayerEvent[] {
@@ -442,6 +458,10 @@ export class DesktopPlayerAdapter {
   }
   #recordError(error: PlayerError): readonly PlayerEvent[] {
     const safeError = sanitizePlayerError(error, 'PLAYER_UNKNOWN_ERROR');
+    const requestId = safeError.requestId ?? this.#snapshot.requestId;
+    if (requestId !== null) {
+      this.#loadRollbackSnapshots.delete(requestId);
+    }
     this.#snapshot = {
       ...this.#snapshot,
       status: 'error',
@@ -473,6 +493,18 @@ export class DesktopPlayerAdapter {
       lastError: null,
     };
     return this.#stateChanged();
+  }
+  #captureLoadRollbackSnapshot(command: PlayerCommand): PlayerSnapshot | null {
+    if (command.command !== 'load') {
+      return null;
+    }
+    const optimisticParent =
+      this.#snapshot.requestId === null
+        ? undefined
+        : this.#loadRollbackSnapshots.get(this.#snapshot.requestId);
+    const rollbackSnapshot = cloneSnapshot(optimisticParent ?? this.#snapshot);
+    this.#loadRollbackSnapshots.set(command.requestId, rollbackSnapshot);
+    return rollbackSnapshot;
   }
   #restoreSnapshotAfterMalformedLoad(
     command: PlayerCommand,

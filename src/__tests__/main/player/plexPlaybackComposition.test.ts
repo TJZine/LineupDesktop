@@ -13,8 +13,13 @@ import {
   createPlexPlaybackRuntimeComposition,
   type PlexPlaybackCompositionResolverPort,
 } from '../../../main/player/plexPlaybackComposition.js';
+import { DesktopPlayerAdapter } from '../../../main/player/desktopPlayerAdapter.js';
 import { DiagnosticEventStore } from '../../../main/diagnostics/diagnosticEventStore.js';
 import type { PlexStreamResolverInput, PlexStreamResolverResult } from '../../../main/plex/streamResolver.js';
+import type {
+  NativePlayerHostCommandResult,
+  NativePlayerHostPort,
+} from '../../../main/player/nativePlayerHostPort.js';
 import type {
   PlexPlaybackPmsSessionLease,
   PlexPlaybackRuntimeCleanupReason,
@@ -291,6 +296,37 @@ class FakeDesktopPlayerAdapter {
   }
 }
 
+class DeferredStopNativePlayerHost implements NativePlayerHostPort {
+  readonly cleanupRequestIds: Array<string | null> = [];
+  readonly stopStarted: Promise<void>;
+  #resolveStopStarted: () => void = () => undefined;
+  #resolveStop: (result: NativePlayerHostCommandResult) => void = () => undefined;
+
+  constructor() {
+    this.stopStarted = new Promise<void>((resolve) => {
+      this.#resolveStopStarted = resolve;
+    });
+  }
+
+  async execute(command: PlayerCommand): Promise<NativePlayerHostCommandResult> {
+    if (command.command !== 'stop') {
+      return { ok: true };
+    }
+    this.#resolveStopStarted();
+    return new Promise<NativePlayerHostCommandResult>((resolve) => {
+      this.#resolveStop = resolve;
+    });
+  }
+
+  async cleanup(requestId: string | null): Promise<void> {
+    this.cleanupRequestIds.push(requestId);
+  }
+
+  resolveStop(): void {
+    this.#resolveStop({ ok: true });
+  }
+}
+
 function assertUnhandledRendererIntentCommand(command: PlayerCommand): never {
   throw new Error(`Unhandled PlayerCommand in composition test fake: ${command.command}`);
 }
@@ -414,4 +450,42 @@ test('RD-12 desktop adapter runtime port reports cleanup rejection to runtime cl
   await assert.rejects(() => player.cleanup('request-from-runtime'), {
     message: 'Desktop player adapter cleanup failed.',
   });
+});
+
+test('desktop adapter runtime port keeps a replacement session when prior stop cleanup settles late', async () => {
+  const scheduler = new FakeScheduler();
+  const resolver = new FakeResolver();
+  const pms = new FakePmsPort();
+  const host = new DeferredStopNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  const requestIds = ['request-a', 'request-b'];
+  const composition = createPlexPlaybackRuntimeComposition({
+    scheduler,
+    resolver,
+    player: createDesktopPlayerAdapterRuntimePort(adapter),
+    pms,
+    capabilityProfile,
+    createRequestId: () => {
+      const requestId = requestIds.shift();
+      assert.ok(requestId, 'expected a playback request id');
+      return requestId;
+    },
+  });
+  const first = await composition.runtime.startCurrentPlayback('startup');
+  assert.equal(first.requestId, 'request-a');
+
+  const stopping = composition.runtime.stop();
+  await host.stopStarted;
+  const replacement = await composition.runtime.startCurrentPlayback('manual-switch');
+  host.resolveStop();
+  await stopping;
+
+  assert.equal(replacement.accepted, true);
+  assert.equal(composition.runtime.getActiveRequestId(), 'request-b');
+  assert.equal(adapter.getSnapshot().requestId, 'request-b');
+  assert.deepEqual(host.cleanupRequestIds, []);
+
+  await composition.runtime.teardown();
+  assert.deepEqual(host.cleanupRequestIds, ['request-b']);
+  assert.equal(adapter.getSnapshot().requestId, null);
 });
