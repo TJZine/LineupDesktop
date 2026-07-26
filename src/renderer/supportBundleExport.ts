@@ -7,6 +7,28 @@ import {
 export type SupportBundleExportInvoker = () => Promise<DiagnosticsExportSupportBundleResult>;
 export type SupportBundleWorkflowStateProvider = () => WorkflowState;
 
+export class SupportBundleExportCoordinator {
+  #activeRequestId: number | null = null;
+  #nextRequestId = 0;
+
+  public start(): number | null {
+    if (this.#activeRequestId !== null) {
+      return null;
+    }
+    this.#nextRequestId += 1;
+    this.#activeRequestId = this.#nextRequestId;
+    return this.#activeRequestId;
+  }
+
+  public settle(requestId: number): boolean {
+    if (this.#activeRequestId !== requestId) {
+      return false;
+    }
+    this.#activeRequestId = null;
+    return true;
+  }
+}
+
 export async function applySupportBundleExportResult(
   readWorkflowState: SupportBundleWorkflowStateProvider,
   exportSupportBundle: SupportBundleExportInvoker,

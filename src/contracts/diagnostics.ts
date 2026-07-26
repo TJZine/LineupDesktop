@@ -327,9 +327,13 @@ const DIAGNOSTIC_CREDENTIAL_SCHEME_PATTERN_REGEXP = new RegExp(
 );
 const DIAGNOSTIC_URL_PATTERN = /https?:\/\/[^\s"')]+/giu;
 const DIAGNOSTIC_RAW_FILESYSTEM_PATH_WITH_SPACES_PATTERN =
-  /(?:[A-Za-z]:\\(?:Users|ProgramData|Windows|Temp|tmp)\\[^\r\n"')]*?\.[A-Za-z0-9]{1,8}|\/(?:Users|home|var|tmp|private|Volumes)\/[^\r\n"')]*?\.[A-Za-z0-9]{1,8})/gu;
-const DIAGNOSTIC_RAW_FILESYSTEM_PATH_PATTERN =
-  /(?:[A-Za-z]:\\(?:Users|ProgramData|Windows|Temp|tmp)\\[^\s"')]+|\/(?:Users|home|var|tmp|private|Volumes)\/[^\s"')]+)/gu;
+  /(?:[A-Za-z]:\\[^\r\n"')]*?\.[A-Za-z0-9]{1,8}|\\\\[^\\\r\n"')]+\\[^\r\n"')]*?\.[A-Za-z0-9]{1,8}|\/[A-Za-z0-9._-]+\/[^\r\n"')]*?\.[A-Za-z0-9]{1,8})/gu;
+const DIAGNOSTIC_RAW_FILESYSTEM_PATH_PATTERN_SOURCE =
+  String.raw`(?<![A-Za-z0-9._~+/-])(?:[A-Za-z]:\\[^\s"'<>|?*),;]+|\\\\[^\\\s"'<>|?*),;]+\\[^\\\s"'<>|?*),;]+(?:\\[^\\\s"'<>|?*),;]+)*|\/[A-Za-z0-9._-]+(?:\/[^\s"'<>),;]*)*)`;
+const DIAGNOSTIC_RAW_FILESYSTEM_PATH_PATTERN = new RegExp(
+  DIAGNOSTIC_RAW_FILESYSTEM_PATH_PATTERN_SOURCE,
+  'gu',
+);
 const DIAGNOSTIC_FREEFORM_PROCESS_NATIVE_IPC_PATTERN = new RegExp(
   String.raw`(?<![\w-])\b(?:pid|process|argv|env|stderr|stdout|crashDump|minidump|rawLog|nativeHandle|libmpvObject|engineId)[-:\s]+\d{2,}\b|(?<![\w-])\brawIpc[-:\s]+(?:channel\s+)?[^\s"')]+`,
   'giu',
@@ -387,6 +391,10 @@ export function redactDiagnosticText(value: string): string {
     .replace(DIAGNOSTIC_FREEFORM_PROCESS_NATIVE_IPC_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
     .replace(DIAGNOSTIC_FREEFORM_CREDENTIAL_VALUE_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
     .replace(DIAGNOSTIC_KEYWORD_PATTERN, REDACTED_DIAGNOSTIC_VALUE);
+}
+
+export function containsDiagnosticAbsolutePath(value: string): boolean {
+  return new RegExp(DIAGNOSTIC_RAW_FILESYSTEM_PATH_PATTERN_SOURCE, 'u').test(value);
 }
 
 export function sanitizeDiagnosticOperation(value: string): {

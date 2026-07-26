@@ -29,6 +29,8 @@ const SUPPORT_BUNDLE_PARENT_NAME = 'support-bundle-parent';
 const SUPPORT_BUNDLE_ID = 'windows-smoke';
 const CREATED_AT_MS = 1_801_000_000_000;
 const CHILD_CLOSE_TIMEOUT_MS = 30_000;
+export const BUILD_TIMEOUT_MS = 120_000;
+export const BUILD_OUTPUT_LIMIT_BYTES = 1024 * 1024;
 
 const LOAD_COMMAND = {
   command: 'load',
@@ -235,15 +237,25 @@ async function runWindowsSmoke(outRoot) {
   await assertRequiredEvidenceFiles(outRoot);
 }
 
-function runBuild() {
-  const result = spawnSync('npm', ['run', 'build:electron'], {
+export function runBuild(options = {}) {
+  const spawnSyncImpl = options.spawnSyncImpl ?? spawnSync;
+  const platform = options.platform ?? process.platform;
+  const result = spawnSyncImpl('npm', ['run', 'build:electron'], {
     cwd: REPO_ROOT,
-    shell: process.platform === 'win32',
+    shell: platform === 'win32',
     stdio: 'pipe',
     encoding: 'utf8',
+    timeout: BUILD_TIMEOUT_MS,
+    maxBuffer: BUILD_OUTPUT_LIMIT_BYTES,
   });
   if (result.status !== 0) {
-    throw new Error('Electron build failed before RD-17 diagnostics smoke.');
+    if (result.error?.code === 'ETIMEDOUT') {
+      throw new Error('Electron build timed out before RD-17 diagnostics smoke.');
+    }
+    if (result.error !== undefined) {
+      throw new Error('Electron build could not start before RD-17 diagnostics smoke.');
+    }
+    throw new Error('Electron build exited unsuccessfully before RD-17 diagnostics smoke.');
   }
 }
 

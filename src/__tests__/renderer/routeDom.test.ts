@@ -12,7 +12,11 @@ import {
   renderWorkflowDom,
 } from '../../renderer/routeDom.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
-import { applyWorkflowChannelSetupAction, createWorkflowState as createWorkflowStateCore } from '../../renderer/workflow.js';
+import {
+  applyWorkflowChannelSetupAction,
+  applyWorkflowSettingsAction,
+  createWorkflowState as createWorkflowStateCore,
+} from '../../renderer/workflow.js';
 import { renderShellDom, type ShellDomBindings } from '../../renderer/shell/shellDom.js';
 import { beginFullscreenRequest, rejectFullscreenRequest } from '../../renderer/shell/shellState.js';
 
@@ -307,6 +311,51 @@ test('route DOM renders support bundle status without filesystem paths', () => {
     assert.match(renderedText, /Ready/u);
     assert.doesNotMatch(renderedText, /\/Users\/|[A-Za-z]:\\/u);
     assert.doesNotMatch(renderedText, /\bpath\b|\bdirectory\b/u);
+  } finally {
+    restoreDocument(originalDocument);
+  }
+});
+
+test('route DOM disables support bundle export while an export is active', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    createElement: (tagName: string) => new ElementDouble(tagName),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const settingsSectionsElement = new ElementDouble();
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.settingsSectionsElement = settingsSectionsElement as unknown as HTMLElement;
+    const exportingState = applyWorkflowSettingsAction(
+      createWorkflowState('settings'),
+      'exportSupportBundle',
+    );
+
+    renderWorkflowDom(
+      exportingState,
+      createPlayerOverlayState(),
+      createRendererSafePlayerSnapshot(),
+      dom,
+    );
+
+    const exportButton = findElementsByDataset(
+      settingsSectionsElement,
+      'settingsAction',
+      'exportSupportBundle',
+    )[0];
+    assert.ok(exportButton);
+    assert.equal(exportButton.disabled, true);
   } finally {
     restoreDocument(originalDocument);
   }

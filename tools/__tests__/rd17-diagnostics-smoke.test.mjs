@@ -6,6 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  BUILD_OUTPUT_LIMIT_BYTES,
+  BUILD_TIMEOUT_MS,
   REQUIRED_RD17_SMOKE_FILES,
   RD17_SMOKE_EVIDENCE_ROOT,
   RD17_SMOKE_EVIDENCE_ROOT_ABSOLUTE,
@@ -13,6 +15,7 @@ import {
   isWindowsProofPlatform,
   parseSmokeArgs,
   resolveEvidenceDirectory,
+  runBuild,
   waitForChildClose,
 } from '../rd17-diagnostics-smoke.mjs';
 
@@ -120,6 +123,37 @@ test('rd17 diagnostics smoke failure output stays path-free', () => {
   assert.equal(
     formatSmokeFailure(new Error('RD-17 smoke output must be under the RD-17 evidence root.')),
     'RD-17 smoke output must be under the RD-17 evidence root.',
+  );
+});
+
+test('rd17 diagnostics smoke build is time and output bounded without exposing child output', () => {
+  let observedCall = null;
+  runBuild({
+    platform: 'win32',
+    spawnSyncImpl: (...args) => {
+      observedCall = args;
+      return { status: 0 };
+    },
+  });
+
+  assert.deepEqual(observedCall?.slice(0, 2), ['npm', ['run', 'build:electron']]);
+  assert.equal(observedCall?.[2].timeout, BUILD_TIMEOUT_MS);
+  assert.equal(observedCall?.[2].maxBuffer, BUILD_OUTPUT_LIMIT_BYTES);
+  assert.equal(observedCall?.[2].shell, true);
+
+  assert.throws(
+    () => runBuild({
+      spawnSyncImpl: () => ({
+        status: null,
+        error: { code: 'ETIMEDOUT' },
+        stdout: ['/', 'private', '/build.log'].join(''),
+        stderr: 'credential-shaped child output',
+      }),
+    }),
+    (error) => (
+      error instanceof Error &&
+      error.message === 'Electron build timed out before RD-17 diagnostics smoke.'
+    ),
   );
 });
 

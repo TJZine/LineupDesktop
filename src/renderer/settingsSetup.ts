@@ -29,6 +29,7 @@ export interface SettingsItemViewModel {
   label: string;
   valueLabel: string;
   description: string;
+  disabled?: boolean;
 }
 
 export interface SettingsSectionViewModel {
@@ -219,6 +220,7 @@ export function createSettingsSections(
           label: 'Support bundle',
           valueLabel: formatSupportBundleStatus(state.supportBundleExport),
           description: 'Main-owned diagnostics export with redaction scan status.',
+          disabled: state.supportBundleExport.status === 'exporting',
         },
       ],
     },

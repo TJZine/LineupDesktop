@@ -86,7 +86,9 @@ import {
   DIAGNOSTICS_ERROR_CODES,
   REDACTION_SCAN_FINDING_LABELS,
   SUPPORT_BUNDLE_SCHEMA_VERSION,
+  containsDiagnosticAbsolutePath,
   isSafeRendererDiagnosticContextValue,
+  redactDiagnosticText,
   type DiagnosticsRendererEventEnvelope,
   type DiagnosticRecord,
   type DiagnosticsError,
@@ -402,6 +404,33 @@ test('diagnostics truncation and scanner report vocabulary match RD-17 Unit 1', 
     'native-handle',
     'raw-ipc-frame',
   ]);
+});
+
+test('diagnostics redacts arbitrary absolute filesystem paths without mangling ordinary text', () => {
+  const absolutePaths = [
+    ['D:', '\\', 'Movies'].join(''),
+    ['C:', '\\', 'Media', '\\', 'feature.mkv'].join(''),
+    ['\\\\', 'media-host', '\\', 'library', '\\', 'feature.mkv'].join(''),
+    ['', 'etc'].join('/'),
+    ['', 'opt', 'lineup', 'config.json'].join('/'),
+  ];
+
+  for (const absolutePath of absolutePaths) {
+    assert.equal(containsDiagnosticAbsolutePath(absolutePath), true);
+    const redacted = redactDiagnosticText(`Playback failed at ${absolutePath}`);
+    assert.equal(redacted.includes(absolutePath), false);
+    assert.match(redacted, /\[redacted\]/u);
+  }
+
+  for (const ordinaryText of [
+    'Playback failed after the library scan.',
+    'Choose audio/video settings.',
+    'Retry 2/3 after waiting.',
+    'Channel D: Movies',
+  ]) {
+    assert.equal(containsDiagnosticAbsolutePath(ordinaryText), false);
+    assert.equal(redactDiagnosticText(ordinaryText), ordinaryText);
+  }
 });
 
 test('player command, event, and snapshot contracts carry request ids', () => {

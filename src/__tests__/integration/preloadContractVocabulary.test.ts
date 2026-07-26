@@ -2224,6 +2224,57 @@ test('preload diagnostics guards accept declared record surfaces and reject case
   );
 });
 
+test('preload diagnostics export guard rejects contradictory redaction reports', () => {
+  const diagnosticsGuardExports = evaluateDiagnosticsGuardModule();
+  const guard =
+    diagnosticsGuardExports.isDiagnosticsExportSupportBundleResult as (value: unknown) => boolean;
+  const report = {
+    redactionVersion: 'rd17-redaction-v1',
+    scannedFileCount: 6,
+    scannedByteCount: 512,
+    findingCount: 0,
+    findingsByLabel: {},
+    truncatedRecordCount: 0,
+    omittedFileCount: 0,
+    status: 'passed',
+    timestampMs: 1,
+  };
+  const success = {
+    status: 'succeeded',
+    bundleId: 'bundle-1',
+    bundleDirectoryName: 'lineup-desktop-support-bundle-1',
+    createdAtMs: 1,
+    fileCount: 6,
+    byteCount: 512,
+    includedFiles: ['manifest.json'],
+    redactionReport: report,
+  };
+
+  assert.equal(guard(success), true);
+  assert.equal(guard({
+    ...success,
+    redactionReport: { ...report, status: 'failed' },
+  }), false);
+  assert.equal(guard({
+    ...success,
+    redactionReport: {
+      ...report,
+      findingCount: 1,
+      findingsByLabel: { 'raw-filesystem-path': 1 },
+      status: 'passed',
+    },
+  }), false);
+  assert.equal(guard({
+    ...success,
+    redactionReport: {
+      ...report,
+      findingCount: 2,
+      findingsByLabel: { 'raw-filesystem-path': 1 },
+      status: 'failed',
+    },
+  }), false);
+});
+
 test('preload diagnostics result guard validates cancellation discriminator exactly', () => {
   const declaration = findDiagnosticsGuardFunctionDeclaration('isDiagnosticsResult');
   assert.ok(declaration, 'expected preload diagnostics result guard to be declared');

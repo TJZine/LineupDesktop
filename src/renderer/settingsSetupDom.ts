@@ -73,8 +73,10 @@ export function renderSettingsDom(
             row.className = 'settings-control-row';
             row.dataset.settingsAction = action;
             row.dataset.focusId = focusId;
-            row.disabled = document.documentElement.dataset.settingsSaving === 'true' &&
-              action !== 'exportSupportBundle';
+            row.disabled = setting.disabled === true || (
+              document.documentElement.dataset.settingsSaving === 'true' &&
+              action !== 'exportSupportBundle'
+            );
 
             const labelContainer = document.createElement('div');
             labelContainer.className = 'settings-control-row__label-container';
