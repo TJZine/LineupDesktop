@@ -48,10 +48,14 @@ test('renderer runtime copy includes the byte-exact relative dependency closure 
   try {
     fs.mkdirSync(compiled, { recursive: true });
     for (const [fileName, source] of [
-      ['config.js', "import './constants.js';\nexport { exact } from './exactRecord.js';\n"],
+      [
+        'config.js',
+        "import './constants.js';\nexport { exact } from './exactRecord.js';\nvoid import('./lazy.js');\n",
+      ],
       ['constants.js', 'export const maximum = 500;\n'],
       ['exactRecord.js', "import { helper } from './recordHelper.js';\nexport const exact = helper;\n"],
       ['recordHelper.js', 'export const helper = true;\n'],
+      ['lazy.js', 'export const lazy = true;\n'],
       ['config.js.map', new Uint8Array([9])],
       ['index.js', new Uint8Array([10])],
       ['planner.js', new Uint8Array([11])],
@@ -66,6 +70,7 @@ test('renderer runtime copy includes the byte-exact relative dependency closure 
       'config.js',
       'constants.js',
       'exactRecord.js',
+      'lazy.js',
       'recordHelper.js',
     ]) {
       assert.equal(
@@ -81,19 +86,69 @@ test('renderer runtime copy includes the byte-exact relative dependency closure 
       'config.js',
       'constants.js',
       'exactRecord.js',
+      'lazy.js',
       'recordHelper.js',
     ]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
-    for (const fileName of fs.readdirSync(served)) {
-      const source = fs.readFileSync(path.join(served, fileName), 'utf8');
-      for (const specifier of relativeModuleSpecifiers(source)) {
-        assert.equal(
-          fs.existsSync(path.resolve(served, specifier)),
-          true,
-          `${fileName} dependency ${specifier}`,
-        );
-      }
+test('renderer runtime copy ignores comments, strings, import.meta, and nonliteral dynamic imports', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-renderer-runtime-syntax-'));
+  const compiled = path.join(root, 'dist', 'domain', 'channelBuilder');
+  const renderer = path.join(root, 'dist', 'renderer');
+  try {
+    fs.mkdirSync(compiled, { recursive: true });
+    fs.writeFileSync(
+      path.join(compiled, 'config.js'),
+      [
+        "// import './commented-line.js';",
+        "/* export { noise } from './commented-block.js'; */",
+        "const sourceText = \"import './string-noise.js';\";",
+        'const moduleUrl = import.meta.url;',
+        "const computedSpecifier = './computed.js';",
+        'void import(computedSpecifier);',
+        'export { moduleUrl, sourceText };',
+      ].join('\n'),
+    );
+    for (const fileName of [
+      'commented-line.js',
+      'commented-block.js',
+      'string-noise.js',
+      'computed.js',
+    ]) {
+      fs.writeFileSync(path.join(compiled, fileName), 'export const noise = true;\n');
     }
+
+    copyRendererChannelBuilderRuntime(compiled, renderer);
+
+    const served = path.join(renderer, 'domain', 'channelBuilder');
+    assert.deepEqual(fs.readdirSync(served), ['config.js']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('renderer runtime copy reports unresolved dependencies without absolute paths', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-renderer-runtime-missing-'));
+  const compiled = path.join(root, 'dist', 'domain', 'channelBuilder');
+  const renderer = path.join(root, 'dist', 'renderer');
+  try {
+    fs.mkdirSync(compiled, { recursive: true });
+    fs.writeFileSync(path.join(compiled, 'config.js'), "import './missing.js';\n");
+
+    assert.throws(
+      () => copyRendererChannelBuilderRuntime(compiled, renderer),
+      (error) => {
+        assert.equal(
+          error.message,
+          'Renderer Channel Builder runtime dependency could not be resolved: "./missing.js" imported by "config.js"',
+        );
+        assert.equal(error.message.includes(root), false);
+        return true;
+      },
+    );
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -117,20 +172,51 @@ test('renderer runtime copy rejects dependencies outside the Channel Builder dir
   }
 });
 
+test('renderer runtime copy rejects the exact parent directory dependency', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-renderer-runtime-parent-'));
+  const compiled = path.join(root, 'dist', 'domain', 'channelBuilder');
+  const renderer = path.join(root, 'dist', 'renderer');
+  try {
+    fs.mkdirSync(compiled, { recursive: true });
+    fs.writeFileSync(path.join(compiled, 'config.js'), "import '..';\n");
+
+    assert.throws(
+      () => copyRendererChannelBuilderRuntime(compiled, renderer),
+      /escapes its allowed directory/u,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('renderer runtime copy rejects dependencies whose symlink target escapes the boundary', (t) => {
+  if (process.platform === 'win32') {
+    t.skip('Creating symlinks requires privileges that are not guaranteed on Windows CI.');
+    return;
+  }
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-renderer-runtime-symlink-'));
+  const compiled = path.join(root, 'dist', 'domain', 'channelBuilder');
+  const renderer = path.join(root, 'dist', 'renderer');
+  try {
+    fs.mkdirSync(compiled, { recursive: true });
+    const outside = path.join(root, 'outside.js');
+    fs.writeFileSync(path.join(compiled, 'config.js'), "import './linked.js';\n");
+    fs.writeFileSync(outside, 'export const privileged = true;\n');
+    fs.symlinkSync(outside, path.join(compiled, 'linked.js'));
+
+    assert.throws(
+      () => copyRendererChannelBuilderRuntime(compiled, renderer),
+      /escapes its allowed directory/u,
+    );
+    assert.equal(
+      fs.existsSync(path.join(renderer, 'domain', 'channelBuilder', 'linked.js')),
+      false,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function sha256(filePath) {
   return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
-}
-
-function relativeModuleSpecifiers(source) {
-  const specifiers = [];
-  for (const pattern of [
-    /\b(?:import|export)\s+[^;]*?\s+from\s+(['"])([^'"]+)\1/gu,
-    /\bimport\s+(['"])([^'"]+)\1/gu,
-    /\bimport\s*\(\s*(['"])([^'"]+)\1\s*\)/gu,
-  ]) {
-    for (const match of source.matchAll(pattern)) {
-      if (match[2].startsWith('.')) specifiers.push(match[2]);
-    }
-  }
-  return specifiers;
 }
