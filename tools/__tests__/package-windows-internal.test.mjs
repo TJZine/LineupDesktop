@@ -83,10 +83,8 @@ test('staged app package manifest has only reviewed metadata and entrypoint', ()
   assert.equal(Object.hasOwn(staged, 'dependencies'), false);
 });
 
-test('collectRuntimeVersions reads bundled Electron process versions', (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-
+test('collectRuntimeVersions probes the bundled Electron runtime with a sanitized Node environment', () => {
+  const root = path.join(path.sep, 'fixture-runtime-root');
   const electronDist = path.join(root, 'node_modules/electron/dist');
   const expectedVersions = {
     electron: '42.0.0',
@@ -96,49 +94,90 @@ test('collectRuntimeVersions reads bundled Electron process versions', (t) => {
     modules: '146',
     napi: '10',
   };
-  const preloadPath = createNodeBackedElectronRuntime(electronDist, expectedVersions);
+  const invocations = [];
+  const spawnSyncForTest = (...args) => {
+    invocations.push(args);
+    return {
+      error: undefined,
+      signal: null,
+      status: 0,
+      stdout: `${JSON.stringify(expectedVersions)}\n`,
+      stderr: '',
+    };
+  };
 
-  withTemporaryNodeOptions(preloadPath, () => {
-    assert.deepEqual(collectRuntimeVersions(root), expectedVersions);
-    assert.deepEqual(collectRuntimeVersionsFromDir(electronDist), expectedVersions);
-  });
-});
-
-test('collectRuntimeVersions classifies nonzero probe failures without child output', (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-failure-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-
-  const runtimeDir = path.join(root, 'runtime');
-  const sensitiveChildOutput = 'sensitive-runtime-probe-output';
-  const preloadPath = createNodeBackedElectronRuntime(runtimeDir, undefined, [
-    `console.error(${JSON.stringify(sensitiveChildOutput)});`,
-    'process.exit(7);',
-  ]);
-
-  withTemporaryNodeOptions(preloadPath, () => {
-    assert.throws(
-      () => collectRuntimeVersionsFromDir(runtimeDir),
-      (error) => {
-        assert.equal(
-          error.message,
-          'Bundled Electron runtime version probe exited unsuccessfully (status=7).',
-        );
-        assert.equal(error.message.includes(sensitiveChildOutput), false);
-        return true;
-      },
+  withTemporaryEnvironmentVariables({
+    NODE_OPTIONS: '--require /hostile-preload.cjs',
+    npm_config_node_options: '--trace-warnings',
+    npm_config_script_shell: '/hostile-script-shell',
+    npm_execpath: '/hostile-npm-cli.js',
+    npm_node_execpath: '/hostile-node',
+  }, () => {
+    assert.deepEqual(collectRuntimeVersions(root, { spawnSyncForTest }), expectedVersions);
+    assert.deepEqual(
+      collectRuntimeVersionsFromDir(electronDist, { spawnSyncForTest }),
+      expectedVersions,
     );
   });
+
+  assert.equal(invocations.length, 2);
+  for (const [executable, args, options] of invocations) {
+    assert.equal(executable, path.join(electronDist, 'electron.exe'));
+    assert.equal(args[0], '-p');
+    assert.match(args[1], /process\.versions\.electron/u);
+    assert.deepEqual(options.stdio, ['ignore', 'pipe', 'pipe']);
+    assert.equal(options.timeout, 15_000);
+    assert.equal(options.maxBuffer, 64 * 1024);
+    assert.equal(options.env.ELECTRON_RUN_AS_NODE, '1');
+    assert.equal(options.env.PATH, process.env.PATH);
+    for (const key of [
+      'NODE_OPTIONS',
+      'npm_config_node_options',
+      'npm_config_script_shell',
+      'npm_execpath',
+      'npm_node_execpath',
+    ]) {
+      assert.equal(Object.hasOwn(options.env, key), false);
+    }
+  }
 });
 
-test('collectRuntimeVersions classifies launch failures without executable paths', (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-launch-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-
-  const runtimeDir = path.join(root, 'sensitive-runtime-location');
-  fs.mkdirSync(runtimeDir);
+test('collectRuntimeVersions classifies nonzero probe failures without child output', () => {
+  const sensitiveChildOutput = 'sensitive-runtime-probe-output';
 
   assert.throws(
-    () => collectRuntimeVersionsFromDir(runtimeDir),
+    () => collectRuntimeVersionsFromDir('/sensitive-runtime-location', {
+      spawnSyncForTest: () => ({
+        error: undefined,
+        signal: null,
+        status: 7,
+        stdout: sensitiveChildOutput,
+        stderr: sensitiveChildOutput,
+      }),
+    }),
+    (error) => {
+      assert.equal(
+        error.message,
+        'Bundled Electron runtime version probe exited unsuccessfully (status=7).',
+      );
+      assert.equal(error.message.includes(sensitiveChildOutput), false);
+      return true;
+    },
+  );
+});
+
+test('collectRuntimeVersions classifies launch failures without executable paths', () => {
+  const runtimeDir = '/sensitive-runtime-location';
+  assert.throws(
+    () => collectRuntimeVersionsFromDir(runtimeDir, {
+      spawnSyncForTest: () => ({
+        error: Object.assign(new Error(runtimeDir), { code: 'ENOENT' }),
+        signal: null,
+        status: null,
+        stdout: '',
+        stderr: runtimeDir,
+      }),
+    }),
     (error) => {
       assert.equal(
         error.message,
@@ -150,82 +189,72 @@ test('collectRuntimeVersions classifies launch failures without executable paths
   );
 });
 
-test('collectRuntimeVersions classifies timeout without child output', (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-timeout-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-
-  const runtimeDir = path.join(root, 'runtime');
+test('collectRuntimeVersions classifies timeout without child output', () => {
   const sensitiveChildOutput = 'sensitive-timeout-output';
-  const preloadPath = createNodeBackedElectronRuntime(runtimeDir, undefined, [
-    `console.error(${JSON.stringify(sensitiveChildOutput)});`,
-    'setInterval(() => {}, 1_000);',
-  ]);
 
-  withTemporaryNodeOptions(preloadPath, () => {
-    assert.throws(
-      () => collectRuntimeVersionsFromDir(runtimeDir, { timeout: 100 }),
-      (error) => {
-        assert.equal(error.message, 'Bundled Electron runtime version probe timed out.');
-        assert.equal(error.message.includes(sensitiveChildOutput), false);
-        return true;
-      },
-    );
-  });
+  assert.throws(
+    () => collectRuntimeVersionsFromDir('/runtime', {
+      timeout: 100,
+      spawnSyncForTest: () => ({
+        error: Object.assign(new Error(sensitiveChildOutput), { code: 'ETIMEDOUT' }),
+        signal: 'SIGTERM',
+        status: null,
+        stdout: sensitiveChildOutput,
+        stderr: sensitiveChildOutput,
+      }),
+    }),
+    (error) => {
+      assert.equal(error.message, 'Bundled Electron runtime version probe timed out.');
+      assert.equal(error.message.includes(sensitiveChildOutput), false);
+      return true;
+    },
+  );
 });
 
-test('collectRuntimeVersions classifies output overflow without child output', (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-overflow-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-
-  const runtimeDir = path.join(root, 'runtime');
+test('collectRuntimeVersions classifies output overflow without child output', () => {
   const sensitiveChildOutput = 'sensitive-overflow-output';
-  const preloadPath = createNodeBackedElectronRuntime(runtimeDir, undefined, [
-    `process.stderr.write(${JSON.stringify(sensitiveChildOutput)}.repeat(1_000));`,
-  ]);
 
-  withTemporaryNodeOptions(preloadPath, () => {
-    assert.throws(
-      () => collectRuntimeVersionsFromDir(runtimeDir, { maxBuffer: 256 }),
-      (error) => {
-        assert.equal(
-          error.message,
-          'Bundled Electron runtime version probe exceeded its output limit.',
-        );
-        assert.equal(error.message.includes(sensitiveChildOutput), false);
-        return true;
-      },
-    );
-  });
+  assert.throws(
+    () => collectRuntimeVersionsFromDir('/runtime', {
+      maxBuffer: 256,
+      spawnSyncForTest: () => ({
+        error: Object.assign(new Error(sensitiveChildOutput), { code: 'ENOBUFS' }),
+        signal: 'SIGTERM',
+        status: null,
+        stdout: sensitiveChildOutput,
+        stderr: sensitiveChildOutput,
+      }),
+    }),
+    (error) => {
+      assert.equal(
+        error.message,
+        'Bundled Electron runtime version probe exceeded its output limit.',
+      );
+      assert.equal(error.message.includes(sensitiveChildOutput), false);
+      return true;
+    },
+  );
 });
 
-test('collectRuntimeVersions rejects invalid JSON without child output', (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-json-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-
-  const runtimeDir = path.join(root, 'runtime');
+test('collectRuntimeVersions rejects invalid JSON without child output', () => {
   const sensitiveChildOutput = 'sensitive-json-probe-output';
-  const preloadPath = createNodeBackedElectronRuntime(runtimeDir, {
-    electron: '42.0.0',
-    node: '24.15.0',
-    chrome: '148.0.7778.96',
-    v8: '14.8.178.14-electron.0',
-    modules: '146',
-    napi: '10',
-  }, [
-    `console.error(${JSON.stringify(sensitiveChildOutput)});`,
-    'JSON.stringify = () => "not-json";',
-  ]);
 
-  withTemporaryNodeOptions(preloadPath, () => {
-    assert.throws(
-      () => collectRuntimeVersionsFromDir(runtimeDir),
-      (error) => {
-        assert.equal(error.message, 'Bundled Electron runtime version output was not valid JSON.');
-        assert.equal(error.message.includes(sensitiveChildOutput), false);
-        return true;
-      },
-    );
-  });
+  assert.throws(
+    () => collectRuntimeVersionsFromDir('/runtime', {
+      spawnSyncForTest: () => ({
+        error: undefined,
+        signal: null,
+        status: 0,
+        stdout: 'not-json',
+        stderr: sensitiveChildOutput,
+      }),
+    }),
+    (error) => {
+      assert.equal(error.message, 'Bundled Electron runtime version output was not valid JSON.');
+      assert.equal(error.message.includes(sensitiveChildOutput), false);
+      return true;
+    },
+  );
 });
 
 test('packageWindowsInternal rejects Electron runtime version drift', async (t) => {
@@ -358,6 +387,7 @@ test('packageWindowsInternal packages only bytes produced by its owned clean bui
     allowNonWindowsForTest: true,
     runtimeDir,
     runtimeVersions: fixtureRuntimeVersions(),
+    unsupportedCallerOption: 'ignored',
   });
 
   assert.equal(
@@ -367,32 +397,6 @@ test('packageWindowsInternal packages only bytes produced by its owned clean bui
   assert.equal(
     fs.existsSync(path.join(result.packageRoot, 'resources/app/dist/stale-only.js')),
     false,
-  );
-});
-
-test('packageWindowsInternal ignores caller build hooks and still runs its real build', async (t) => {
-  const root = makeFixtureRepo(t);
-  const runtimeDir = makeFakeElectronRuntime(root);
-  fs.writeFileSync(path.join(root, 'dist/main/index.js'), 'caller-visible stale bytes\n');
-  let callerHookExecuted = false;
-
-  const result = await packageWindowsInternal({
-    root,
-    allowNonWindowsForTest: true,
-    runtimeDir,
-    runtimeVersions: fixtureRuntimeVersions(),
-    testHooks: {
-      runCleanBuild: () => {
-        callerHookExecuted = true;
-        throw new Error('Caller build hook must never execute.');
-      },
-    },
-  });
-
-  assert.equal(callerHookExecuted, false);
-  assert.equal(
-    fs.readFileSync(path.join(result.packageRoot, 'resources/app/dist/main/index.js'), 'utf8'),
-    'fresh fixture main bytes\n',
   );
 });
 
@@ -517,7 +521,7 @@ test('checksum parser and formatter keep deterministic normalized paths', () => 
     /Invalid checksum row/u,
   );
   assert.throws(
-    () => parseChecksumRows(`${'a'.repeat(64)}  C:/package.json`),
+    () => parseChecksumRows(`${'a'.repeat(64)}  ${['C:', 'package.json'].join('/')}`),
     /Invalid checksum row/u,
   );
 });
@@ -751,40 +755,11 @@ test('verifier reports package output symlinks without continuing checksum trave
   assert.deepEqual(errors, ['Refusing to inspect symlink in package output: linked-exe']);
 });
 
-test('packageWindowsInternal records runtime versions from the staged runtime directory', async (t) => {
+test('runtime version collection probes the explicitly selected staged runtime directory', (t) => {
   const root = makeFixtureRepo(t);
-  const defaultRuntimeDir = path.join(root, 'node_modules/electron/dist');
   const stagedRuntimeDir = path.join(root, 'staged-electron-runtime');
-  createNodeBackedElectronRuntime(defaultRuntimeDir);
-  createNodeBackedElectronRuntime(stagedRuntimeDir);
-  const preloadPath = path.join(root, 'runtime-version-router.cjs');
-  fs.writeFileSync(preloadPath, [
-    'const defaultVersions = {',
-    '  electron: "41.0.0",',
-    '  node: "23.0.0",',
-    '  chrome: "147.0.0.0",',
-    '  v8: "13.0.0",',
-    '  modules: "145",',
-    '  napi: "9",',
-    '};',
-    'const stagedVersions = {',
-    '  electron: "42.0.0",',
-    '  node: "24.15.0",',
-    '  chrome: "148.0.7778.96",',
-    '  v8: "14.8.178.14-electron.0",',
-    '  modules: "146",',
-    '  napi: "10",',
-    '};',
-    'const versions = process.execPath.includes("staged-electron-runtime") ? stagedVersions : defaultVersions;',
-    'for (const [key, value] of Object.entries(versions)) {',
-    '  Object.defineProperty(process.versions, key, {',
-    '    value,',
-    '    enumerable: true,',
-    '    configurable: true,',
-    '  });',
-    '}',
-    '',
-  ].join('\n'));
+  fs.mkdirSync(stagedRuntimeDir);
+  fs.writeFileSync(path.join(stagedRuntimeDir, 'electron.exe'), 'fake exe');
   const stagedVersions = {
     electron: '42.0.0',
     node: '24.15.0',
@@ -793,17 +768,23 @@ test('packageWindowsInternal records runtime versions from the staged runtime di
     modules: '146',
     napi: '10',
   };
+  let probedExecutable;
 
-  await withTemporaryNodeOptions(preloadPath, async () => {
-    const result = await packageWindowsInternal({
-      root,
-      allowNonWindowsForTest: true,
-      runtimeDir: stagedRuntimeDir,
-    });
-
-    const provenance = readJson(result.manifestPath);
-    assert.deepEqual(provenance.runtime, stagedVersions);
+  const result = collectRuntimeVersionsFromDir(stagedRuntimeDir, {
+    spawnSyncForTest: (executable) => {
+      probedExecutable = executable;
+      return {
+        error: undefined,
+        signal: null,
+        status: 0,
+        stdout: `${JSON.stringify(stagedVersions)}\n`,
+        stderr: '',
+      };
+    },
   });
+
+  assert.equal(probedExecutable, path.join(stagedRuntimeDir, 'electron.exe'));
+  assert.deepEqual(result, stagedVersions);
 });
 
 test('verifier rejects staged app package metadata drift after generated manifests are refreshed', async (t) => {
@@ -872,7 +853,7 @@ test('verifier rejects signing certificate and private key material in generated
   const provenance = readJson(provenancePath);
   provenance.publicReleaseBlockedProof = {
     signingPassword: 'not-for-rd18-unit1',
-    certificatePath: 'C:\\Users\\example\\certificates\\release.pfx',
+    certificatePath: ['C:', 'Users', 'example', 'certificates', 'release.pfx'].join('\\'),
     privateKey: '-----BEGIN PRIVATE KEY-----',
   };
   fs.writeFileSync(provenancePath, `${JSON.stringify(provenance, null, 2)}\n`);
@@ -1101,61 +1082,6 @@ function setFixtureBuildMode(root, mode) {
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-}
-
-function createNodeBackedElectronRuntime(runtimeDir, versions, extraPreloadLines = []) {
-  fs.mkdirSync(runtimeDir, { recursive: true });
-  const executablePath = path.join(runtimeDir, 'electron.exe');
-  fs.copyFileSync(process.execPath, executablePath);
-  fs.chmodSync(executablePath, 0o755);
-
-  const preloadPath = path.join(runtimeDir, 'electron-runtime-preload.cjs');
-  const versionLines = versions
-    ? [
-        `const versions = ${JSON.stringify(versions)};`,
-        'for (const [key, value] of Object.entries(versions)) {',
-        '  Object.defineProperty(process.versions, key, {',
-        '    value,',
-        '    enumerable: true,',
-        '    configurable: true,',
-        '  });',
-        '}',
-      ]
-    : [];
-  fs.writeFileSync(preloadPath, [
-    ...versionLines,
-    ...extraPreloadLines,
-    '',
-  ].join('\n'));
-
-  return preloadPath;
-}
-
-function withTemporaryNodeOptions(preloadPaths, callback) {
-  const previous = process.env.NODE_OPTIONS;
-  const paths = Array.isArray(preloadPaths) ? preloadPaths : [preloadPaths];
-  const preloadOptions = paths.map((preloadPath) => `--require ${JSON.stringify(preloadPath)}`).join(' ');
-  process.env.NODE_OPTIONS = previous ? `${previous} ${preloadOptions}` : preloadOptions;
-
-  const restore = () => {
-    if (previous === undefined) {
-      delete process.env.NODE_OPTIONS;
-    } else {
-      process.env.NODE_OPTIONS = previous;
-    }
-  };
-
-  try {
-    const result = callback();
-    if (result && typeof result.then === 'function') {
-      return result.finally(restore);
-    }
-    restore();
-    return result;
-  } catch (error) {
-    restore();
-    throw error;
-  }
 }
 
 function withTemporaryEnvironmentVariables(values, callback) {

@@ -127,7 +127,7 @@ test('rd17 diagnostics smoke failure output stays path-free', () => {
   );
 });
 
-test('rd17 diagnostics smoke build is time and output bounded without exposing child output', () => {
+test('rd17 diagnostics smoke build is time and output bounded', () => {
   let observedCall = null;
   runBuild({
     platform: 'win32',
@@ -141,21 +141,46 @@ test('rd17 diagnostics smoke build is time and output bounded without exposing c
   assert.equal(observedCall?.[2].timeout, BUILD_TIMEOUT_MS);
   assert.equal(observedCall?.[2].maxBuffer, BUILD_OUTPUT_LIMIT_BYTES);
   assert.equal(observedCall?.[2].shell, true);
+});
 
-  assert.throws(
-    () => runBuild({
-      spawnSyncImpl: () => ({
-        status: null,
-        error: { code: 'ETIMEDOUT' },
-        stdout: ['/', 'private', '/build.log'].join(''),
-        stderr: 'credential-shaped child output',
+test('rd17 diagnostics smoke build classifies failures without exposing child output', () => {
+  const sensitiveChildOutput = 'credential-shaped child output';
+  const cases = [
+    {
+      result: { status: null, error: { code: 'ETIMEDOUT' } },
+      expected: 'Electron build timed out before RD-17 diagnostics smoke.',
+    },
+    {
+      result: { status: null, error: { code: 'ENOBUFS' } },
+      expected: 'Electron build exceeded its output limit before RD-17 diagnostics smoke.',
+    },
+    {
+      result: { status: null, error: new Error(sensitiveChildOutput) },
+      expected: 'Electron build could not start before RD-17 diagnostics smoke.',
+    },
+    {
+      result: { status: 7, error: undefined },
+      expected: 'Electron build exited unsuccessfully before RD-17 diagnostics smoke.',
+    },
+  ];
+
+  for (const { result, expected } of cases) {
+    assert.throws(
+      () => runBuild({
+        spawnSyncImpl: () => ({
+          ...result,
+          stdout: ['/', 'private', '/build.log'].join(''),
+          stderr: sensitiveChildOutput,
+        }),
       }),
-    }),
-    (error) => (
-      error instanceof Error &&
-      error.message === 'Electron build timed out before RD-17 diagnostics smoke.'
-    ),
-  );
+      (error) => {
+        assert.equal(error.message, expected);
+        assert.equal(error.message.includes(sensitiveChildOutput), false);
+        assert.equal(error.message.includes('/private'), false);
+        return true;
+      },
+    );
+  }
 });
 
 test('rd17 evidence scanning fails closed on arbitrary absolute paths', (t) => {

@@ -256,6 +256,9 @@ export function runBuild(options = {}) {
     if (result.error?.code === 'ETIMEDOUT') {
       throw new Error('Electron build timed out before RD-17 diagnostics smoke.');
     }
+    if (result.error?.code === 'ENOBUFS') {
+      throw new Error('Electron build exceeded its output limit before RD-17 diagnostics smoke.');
+    }
     if (result.error !== undefined) {
       throw new Error('Electron build could not start before RD-17 diagnostics smoke.');
     }

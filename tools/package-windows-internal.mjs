@@ -197,14 +197,15 @@ export function resolveElectronRuntimeDir(root = repoRoot) {
   return path.join(root, 'node_modules/electron/dist');
 }
 
-export function collectRuntimeVersions(root = repoRoot) {
-  return collectRuntimeVersionsFromDir(resolveElectronRuntimeDir(root));
+export function collectRuntimeVersions(root = repoRoot, probeOptions = {}) {
+  return collectRuntimeVersionsFromDir(resolveElectronRuntimeDir(root), probeOptions);
 }
 
-export function collectRuntimeVersionsFromDir(runtimeDir, probeLimits = {}) {
+export function collectRuntimeVersionsFromDir(runtimeDir, probeOptions = {}) {
   const electronExecutable = path.join(runtimeDir, 'electron.exe');
-  const timeout = probeLimits.timeout ?? RUNTIME_PROBE_TIMEOUT_MS;
-  const maxBuffer = probeLimits.maxBuffer ?? RUNTIME_PROBE_MAX_BUFFER_BYTES;
+  const timeout = probeOptions.timeout ?? RUNTIME_PROBE_TIMEOUT_MS;
+  const maxBuffer = probeOptions.maxBuffer ?? RUNTIME_PROBE_MAX_BUFFER_BYTES;
+  const spawn = probeOptions.spawnSyncForTest ?? spawnSync;
   const expression = [
     'JSON.stringify({',
     'electron:process.versions.electron,',
@@ -215,9 +216,9 @@ export function collectRuntimeVersionsFromDir(runtimeDir, probeLimits = {}) {
     'napi:process.versions.napi',
     '})',
   ].join('');
-  const result = spawnSync(electronExecutable, ['-p', expression], {
+  const result = spawn(electronExecutable, ['-p', expression], {
     env: {
-      ...process.env,
+      ...createElectronBuildEnvironment(),
       ELECTRON_RUN_AS_NODE: '1',
     },
     encoding: 'utf8',
