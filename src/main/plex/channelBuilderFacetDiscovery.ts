@@ -656,7 +656,7 @@ async function loadPages<T>(
 function parseYearValue(value: string): number {
   const parsed = /^[+-]?\d+$/u.test(value) ? Number(value) : Number.NaN;
   if (!Number.isSafeInteger(parsed)) {
-    throw new Error('Invalid main-only year facet value');
+    throw new Error('Invalid year facet value');
   }
   return parsed;
 }

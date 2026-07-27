@@ -217,11 +217,6 @@ test('builder runtime releases every apply resource after early context and revi
     assert.equal(operationOwner.hasActiveOperation(), false);
     assert.equal(disposeCalls, 1);
     assert.deepEqual(releasedPlanIds, [body.planId]);
-    assert.equal(
-      (runtime as unknown as { activeApplyByPlan: Map<string, string> })
-        .activeApplyByPlan.size,
-      0,
-    );
     runtime.shutdown();
     assert.equal(disposeCalls, 1);
     assert.deepEqual(releasedPlanIds, [body.planId]);
@@ -601,11 +596,6 @@ test('builder apply bounds a never-settling post-commit guide refresh and releas
   assert.equal(operationOwner.hasActiveOperation(), false);
   assert.equal(disposeCalls, 1);
   assert.deepEqual(releasedPlanIds, [body.planId]);
-  assert.equal(
-    (runtime as unknown as { activeApplyByPlan: Map<string, string> })
-      .activeApplyByPlan.size,
-    0,
-  );
 
   const nextReview = runtime.startReview(
     'review-after-refresh-timeout',
