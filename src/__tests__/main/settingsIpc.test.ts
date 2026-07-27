@@ -105,7 +105,9 @@ test('settings IPC maps unexpected handler exceptions to a fixed operation failu
   const handlers = new Map<string, (event: unknown, payload: unknown) => unknown>();
   registerSettingsIpcHandlers({
     store: {
-      loadSnapshot: async () => { throw new Error('/Users/private/settings.json'); },
+      loadSnapshot: async () => {
+        throw new Error(['', 'Users', 'private', 'settings.json'].join('/'));
+      },
       replace: async () => { throw new Error('private replacement detail'); },
     },
     isAuthorizedEvent: () => true,

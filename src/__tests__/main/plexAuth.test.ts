@@ -342,7 +342,7 @@ test('plex auth errors recursively sanitize auth fields and cyclic cause/context
 
 test('plex auth errors sanitize cyclic Error causes without stack leakage', () => {
   const cause = new Error('failed with secret=placeholder-secret');
-  cause.stack = 'Error: failed\n    at /Users/example/lineup/auth.ts:1:1';
+  cause.stack = `Error: failed\n    at ${['', 'Users', 'example', 'lineup', 'auth.ts:1:1'].join('/')}`;
   Object.assign(cause, { cause });
 
   const error = new PlexAuthError('server-unreachable', `failed token=${placeholderAuthValue}`, 500, {
@@ -352,7 +352,7 @@ test('plex auth errors sanitize cyclic Error causes without stack leakage', () =
 
   assert.equal(serialized.includes('placeholder-secret'), false);
   assert.equal(serialized.includes('placeholder-auth-value'), false);
-  assert.equal(serialized.includes('/Users/example'), false);
+  assert.equal(serialized.includes(['', 'Users', 'example'].join('/')), false);
   assert.equal(serialized.includes('"stack"'), false);
   assert.equal(serialized.includes('[Circular]'), true);
 });

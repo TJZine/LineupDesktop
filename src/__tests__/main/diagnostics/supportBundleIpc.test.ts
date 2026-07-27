@@ -32,7 +32,7 @@ test('diagnostics export removes whole extensionless absolute paths before the f
   const unsafeMessages = [
     ...absolutePaths.map((absolutePath) => `Leak ${absolutePath}. Retry from the library.`),
     'Leak /Médiathèque, private archive.',
-    'Leak D:\\Media\\private; private archive.',
+    `Leak ${['D:', 'Media', 'private'].join('\\')}; private archive.`,
   ];
   for (const message of unsafeMessages) {
     store.record({

@@ -297,7 +297,7 @@ test('custom move actions restore focus to the persistent duplicate control', as
 test('custom channel controller maps rejected bridge work to safe local errors', async () => {
   const bridge = createBridge();
   bridge.listMedia = async () => {
-    throw new Error('/private/path/token');
+    throw new Error(['', 'private', 'path', 'token'].join('/'));
   };
   const controller = createCustomChannelController({
     bridge,

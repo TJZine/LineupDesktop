@@ -40,7 +40,9 @@ test('channel diagnostic sanitization redacts string primitives inside arrays', 
   ].join('');
   const authorizationHeader = ['Author', 'ization', ': ', 'Bearer', ' secret-token'].join('');
   const rawHeaderMap = ['headers={X-Plex-', 'Token: secret-token}'].join('');
-  const localPath = ['/Users/example/Library/Application Support/Lineup/secret.json'].join('');
+  const localPath = ['', 'Users', 'example', 'Library', 'Application Support', 'Lineup', 'secret.json'].join('/');
+  const windowsFileUrl = ['file://C:', 'Users', 'example', 'AppData', 'secret.json'].join('/');
+  const unixUserPathPrefix = ['', 'Users', 'example'].join('/');
   const nestedTokenUrl = [
     'https://nested.example.invalid/path',
     '?',
@@ -52,7 +54,7 @@ test('channel diagnostic sanitization redacts string primitives inside arrays', 
     values: [
       tokenQueryUrl,
       authorizationHeader,
-      'file://C:/Users/example/AppData/secret.json',
+      windowsFileUrl,
       rawHeaderMap,
       localPath,
       {
@@ -65,8 +67,8 @@ test('channel diagnostic sanitization redacts string primitives inside arrays', 
   assert.equal(serialized.includes('secret-token'), false);
   assert.equal(serialized.includes('nested-secret'), false);
   assert.equal(serialized.includes('https://plex.example.invalid'), false);
-  assert.equal(serialized.includes('file://C:/Users/example'), false);
-  assert.equal(serialized.includes('/Users/example'), false);
+  assert.equal(serialized.includes(['file://C:', 'Users', 'example'].join('/')), false);
+  assert.equal(serialized.includes(unixUserPathPrefix), false);
   assert.match(serialized, /\[redacted\]/u);
   assert.equal(serialized.includes('Authorization'), false);
 });

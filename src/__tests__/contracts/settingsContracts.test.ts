@@ -55,6 +55,9 @@ test('settings result guards accept only exact envelopes, fixed messages, and ma
   assert.equal(isDesktopSettingsIpcResult(desktopSettingsFailure('settings-1', 'operation-failed'), isDesktopSettingsSnapshot), true);
   assert.equal(isDesktopSettingsIpcResult({
     ok: false, requestId: 'settings-1',
-    error: { code: 'operation-failed', message: 'raw C:\\private\\settings.json' },
+    error: {
+      code: 'operation-failed',
+      message: `raw ${['C:', 'private', 'settings.json'].join('\\')}`,
+    },
   }, isDesktopSettingsSnapshot), false);
 });

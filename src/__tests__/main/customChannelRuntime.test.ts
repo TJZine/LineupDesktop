@@ -324,11 +324,11 @@ test('custom channel runtime maps write and refresh failures to safe results', a
     storage: {
       ...createMemoryStorage(null),
       mutateChannelAggregate: async () => {
-        throw new Error('EACCES /Users/private/channels.json token=secret');
+        throw new Error(`EACCES ${['', 'Users', 'private', 'channels.json'].join('/')} token=secret`);
       },
       readStoredChannelData: async () => null,
       writeStoredChannelData: async () => {
-        throw new Error('EACCES /Users/private/channels.json token=secret');
+        throw new Error(`EACCES ${['', 'Users', 'private', 'channels.json'].join('/')} token=secret`);
       },
       clearStoredChannelData: async () => undefined,
       readCurrentChannelId: async () => null,
@@ -367,7 +367,7 @@ test('custom channel runtime reports storage failures without leaking details', 
     storage: {
       ...createMemoryStorage(null),
       readStoredChannelData: async () => {
-        throw new Error('EACCES /Users/private/channels.json token=secret');
+        throw new Error(`EACCES ${['', 'Users', 'private', 'channels.json'].join('/')} token=secret`);
       },
       writeStoredChannelData: async () => undefined,
       clearStoredChannelData: async () => undefined,

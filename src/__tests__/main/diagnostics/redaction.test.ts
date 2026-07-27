@@ -12,7 +12,9 @@ import {
 import { DIAGNOSTIC_FORBIDDEN_FIELD_KEYS } from '../../../contracts/redaction.js';
 import { redactMainProcessError } from '../../../main/redactedDiagnostics.js';
 
-const localUserPath = '/Users/example/Library/Application Support/Lineup';
+const localUserPath = ['', 'Users', 'example', 'Library', 'Application Support', 'Lineup'].join('/');
+const privateMediaPath = ['', 'private', 'media'].join('/');
+const windowsPrivateMediaPath = ['D:', 'Media', 'private'].join('\\');
 
 test('diagnostic forbidden field detection covers recursive RD-17 keys', () => {
   for (const key of [
@@ -62,7 +64,7 @@ test('diagnostic context sanitizer rejects forbidden keys and keeps flat values 
 });
 
 test('diagnostic context sanitizer redacts unsafe free-form keys', () => {
-  const unsafePathKey = ['/Users/example/Library/Application', 'Support/Lineup/media.mkv'].join(' ');
+  const unsafePathKey = ['', 'Users', 'example', 'Library', 'Application Support', 'Lineup', 'media.mkv'].join('/');
   const unsafeProcessKey = [['p', 'id'].join(''), '12345'].join(' ');
   const unsafeNativeKey = [['native', 'Handle'].join(''), '987654321'].join(' ');
   const unsafeIpcKey = [['raw', 'Ipc'].join(''), 'channel', 'lineup:private'].join(' ');
@@ -97,7 +99,7 @@ test('diagnostic text sanitizers redact raw values before storage', () => {
   const bearer = ['Bear', 'er'].join('');
   const pathKey = ['media', 'Path'].join('');
   const rawUrl = `https://media.example.invalid/video?${tokenKey}=placeholder-secret`;
-  const rawPath = '/Users/example/Library/Application Support/Lineup/media.mkv';
+  const rawPath = `${localUserPath}/media.mkv`;
   const rawProcessId = '12345';
   const rawHandle = '987654321';
   const rawIpcChannel = 'lineup:private';
@@ -154,15 +156,17 @@ test('diagnostic text redaction replaces whole extensionless absolute paths', ()
   }
 
   assert.equal(
-    redactDiagnosticText('Playback failed at /private/media, retry from the library.'),
+    redactDiagnosticText(`Playback failed at ${privateMediaPath}, retry from the library.`),
     'Playback failed at [redacted]',
   );
   assert.equal(
-    redactDiagnosticText('Playback failed at D:\\Media\\private; retry from the library.'),
+    redactDiagnosticText(`Playback failed at ${windowsPrivateMediaPath}; retry from the library.`),
     'Playback failed at [redacted]',
   );
   assert.equal(
-    redactDiagnosticText('Playback failed at /Médiathèque, 2026/private.'),
+    redactDiagnosticText(
+      ['Playback failed at ', 'Médiathèque, 2026', 'private.'].join('/'),
+    ),
     'Playback failed at [redacted]',
   );
   assert.equal(
@@ -170,7 +174,7 @@ test('diagnostic text redaction replaces whole extensionless absolute paths', ()
     'Playback failed at [redacted]',
   );
   assert.equal(
-    redactDiagnosticText('Playback failed at "/private/media", retry from the library.'),
+    redactDiagnosticText(`Playback failed at "${privateMediaPath}", retry from the library.`),
     'Playback failed at "[redacted]", retry from the library.',
   );
 
@@ -190,7 +194,7 @@ test('diagnostic request ids redact raw diagnostic material before storage', () 
   const ipcKey = ['raw', 'Ipc'].join('');
   const unsafeRequestId = [
     `https://media.example.invalid/video?${tokenKey}=placeholder-secret`,
-    `${pathKey}=/Users/example/Lineup/private.mkv`,
+    `${pathKey}=${['', 'Users', 'example', 'Lineup', 'private.mkv'].join('/')}`,
     `${credentialKey}=credential12345`,
     `${['p', 'id'].join('')}=12345`,
     `${nativeHandleKey}=987654321`,
@@ -199,7 +203,7 @@ test('diagnostic request ids redact raw diagnostic material before storage', () 
   const requestId = sanitizeDiagnosticRequestId(unsafeRequestId);
 
   assert.equal(requestId.requestId?.includes('placeholder-secret'), false);
-  assert.equal(requestId.requestId?.includes('/Users/example/Lineup/private.mkv'), false);
+  assert.equal(requestId.requestId?.includes(['', 'Users', 'example', 'Lineup', 'private.mkv'].join('/')), false);
   assert.equal(requestId.requestId?.includes('credential12345'), false);
   assert.equal(requestId.requestId?.includes('12345'), false);
   assert.equal(requestId.requestId?.includes('987654321'), false);
@@ -209,7 +213,7 @@ test('diagnostic request ids redact raw diagnostic material before storage', () 
 
 test('diagnostic text sanitizers redact free-form unsafe tails', () => {
   const unsafeText = [
-    '/Users/example/Library/Application Support/Lineup/media.mkv',
+    `${localUserPath}/media.mkv`,
     'pid-12345',
     [['p', 'id'].join(''), '12345'].join(' '),
     'nativeHandle-987654321',

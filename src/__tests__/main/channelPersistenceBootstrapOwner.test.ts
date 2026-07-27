@@ -8,7 +8,7 @@ import {
 } from '../../main/persistence/channelPersistenceBootstrapOwner.js';
 
 test('channel persistence bootstrap creates and binds the canonical persistence parent', async () => {
-  const userData = path.resolve('/safe/user-data');
+  const userData = path.resolve(path.sep, 'safe', 'user-data');
   const calls: string[] = [];
   const fileSystem: ChannelPersistenceBootstrapFileSystem = {
     realpath: async (value) => value,
@@ -55,7 +55,7 @@ test('channel persistence bootstrap fails closed for symlink and path failures',
     },
   ] satisfies ChannelPersistenceBootstrapFileSystem[]) {
     const result = await new ChannelPersistenceBootstrapOwner({
-      app: { getPath: () => path.resolve('/safe/user-data') },
+      app: { getPath: () => path.resolve(path.sep, 'safe', 'user-data') },
       fileSystem,
       platform: 'win32',
     }).bootstrap();

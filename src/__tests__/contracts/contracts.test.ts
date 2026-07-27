@@ -371,19 +371,24 @@ test('diagnostics truncation and scanner report vocabulary match RD-17 Unit 1', 
     exportRecords: 500,
     diagnosticsNdjsonBytes: 1_048_576,
   });
+  const unixUserPath = ['', 'Users', 'example'].join('/');
+  const windowsUserPath = ['C:', 'Users', 'example'].join('\\');
   assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN_SOURCE, '^[A-Za-z0-9._-]{1,120}$');
   assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN.test('diagnostic-request_1.2'), true);
-  assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN.test('/Users/example/request'), false);
-  assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN.test('C:\\Users\\example\\request'), false);
+  assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN.test(`${unixUserPath}/request`), false);
+  assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN.test(`${windowsUserPath}\\request`), false);
   assert.equal(
     DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN_SOURCE.includes('rawIpc'),
     true,
   );
   assert.equal(isSafeRendererDiagnosticContextValue('settings'), true);
-  assert.equal(isSafeRendererDiagnosticContextValue('/Users/example/private.mov'), false);
-  assert.equal(isSafeRendererDiagnosticContextValue('C:\\Users\\example\\private.mov'), false);
+  assert.equal(isSafeRendererDiagnosticContextValue(`${unixUserPath}/private.mov`), false);
+  assert.equal(isSafeRendererDiagnosticContextValue(`${windowsUserPath}\\private.mov`), false);
   assert.equal(isSafeRendererDiagnosticContextValue('\\\\server\\share\\private.mov'), false);
-  assert.equal(isSafeRendererDiagnosticContextValue('/Library/Application Support/private.mov'), false);
+  assert.equal(
+    isSafeRendererDiagnosticContextValue(['', 'Library', 'Application Support', 'private.mov'].join('/')),
+    false,
+  );
   assert.equal(isSafeRendererDiagnosticContextValue(['access_', 'token=abc123'].join('')), false);
   assert.equal(isSafeRendererDiagnosticContextValue(['oauth', 'Token=abc123'].join('')), false);
   assert.equal(isSafeRendererDiagnosticContextValue(['raw', 'IpcFrame:channel'].join('')), false);

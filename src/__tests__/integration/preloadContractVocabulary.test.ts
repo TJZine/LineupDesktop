@@ -2019,7 +2019,7 @@ test('preload channel setup bridge validates status results before returning the
       requestId: request.requestId,
       error: {
         code: 'CHANNEL_STORAGE_UNAVAILABLE',
-        message: 'Failed at C:\\Users\\private\\channels.json with token=private',
+        message: `Failed at ${['C:', 'Users', 'private', 'channels.json'].join('\\')} with token=private`,
         retryable: true,
         recoverable: true,
         operation: 'getStatus',

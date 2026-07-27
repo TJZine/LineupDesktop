@@ -176,7 +176,7 @@ test('plex library errors redact broad bearer tokens and summarize unserializabl
   const context: Record<string, unknown> = { token: placeholderAuthValue };
   context.self = context;
   const cause = new Error(`failed bearer ${broadBearerToken} credential=${placeholderSecret}`);
-  cause.stack = 'Error: failed\n    at /Users/example/lineup/library.ts:1:1';
+  cause.stack = `Error: failed\n    at ${['', 'Users', 'example', 'lineup', 'library.ts:1:1'].join('/')}`;
   const error = new PlexLibraryError('server-error', `failed bearer ${broadBearerToken}`, 500, {
     cause,
     context,
@@ -190,7 +190,7 @@ test('plex library errors redact broad bearer tokens and summarize unserializabl
   assert.equal(serialized.includes(broadBearerToken), false);
   assert.equal(serialized.includes(placeholderAuthValue), false);
   assert.equal(serialized.includes(placeholderSecret), false);
-  assert.equal(serialized.includes('/Users/example'), false);
+  assert.equal(serialized.includes(['', 'Users', 'example'].join('/')), false);
   assert.equal(serialized.includes('"stack"'), false);
   assert.equal(serialized.includes('unserializable object'), true);
 

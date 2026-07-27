@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { Buffer } from 'node:buffer';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -84,14 +86,6 @@ const bareSecretFieldValuePattern = String.raw`(?:(?=[-A-Za-z0-9._~+/=]{8,})(?=[
 const secretFieldValuePattern = String.raw`(?:${quotedSecretFieldValuePattern}|${bareSecretFieldValuePattern})`;
 const privilegedCredentialValuePattern = String.raw`(?:(?=[-A-Za-z0-9._~+/=]{8,})(?=[-A-Za-z0-9._~+/=]*[0-9])[-A-Za-z0-9._~+/=]+|${bareAlphabeticSecretValuePattern})`;
 const privilegedDiagnosticFieldValuePattern = String.raw`(?:https?:\/\/(?!(?:secret\.example|example\.invalid)(?:[/:?#"')\s,}\r\n]|$))[^\s,}\r\n]+|${privilegedCredentialValuePattern})`;
-const repositoryFilesystemPathValuePattern = String.raw`(?:"(?:[A-Za-z]:[\\/](?:Users|ProgramData|Windows|Temp|tmp)[\\/][^"\r\n]+|\\\\[^"\r\n]+|\/(?:Users|home|var|tmp|private|Volumes)\/[^"\r\n]+)"|'(?:[A-Za-z]:[\\/](?:Users|ProgramData|Windows|Temp|tmp)[\\/][^'\r\n]+|\\\\[^'\r\n]+|\/(?:Users|home|var|tmp|private|Volumes)\/[^'\r\n]+)'|(?:[A-Za-z]:[\\/](?:Users|ProgramData|Windows|Temp|tmp)[\\/][^\s,}\r\n]+|\\\\[^\s,}\r\n]+|\/(?:Users|home|var|tmp|private|Volumes)\/[^\s,}\r\n]+))`;
-const repositoryUnkeyedFilesystemPathPattern = String.raw`(?:[A-Za-z]:[\\/](?:Users|ProgramData|Windows|Temp|tmp)[\\/][^\r\n"')]*?\.(?:log|txt|json|ndjson|dmp|dump|mkv|mp4|mov|avi)|\\\\[^\r\n"')]*?\.(?:log|txt|json|ndjson|dmp|dump|mkv|mp4|mov|avi)|\/(?:Users|home|var|tmp|private|Volumes)\/[^\r\n"')]*?\.(?:log|txt|json|ndjson|dmp|dump|mkv|mp4|mov|avi))`;
-const diagnosticMessageKeyPattern = ['message', 'errorMessage', 'diagnosticMessage']
-  .map(caseInsensitiveLiteral)
-  .join('|');
-const rawFilesystemPathKeyPattern = ['path', 'filePath', 'directory', 'userData', 'home', 'mediaPath', 'localPath']
-  .map(caseInsensitiveLiteral)
-  .join('|');
 const rawProcessDataKeyPattern = ['env', 'argv', 'pid', 'stderr', 'stdout', 'crashDump', 'minidump', 'rawLog']
   .map(caseInsensitiveLiteral)
   .join('|');
@@ -99,13 +93,29 @@ const nativeHandleKeyPattern = ['nativeHandle', 'libmpvObject', 'engineId']
   .map(caseInsensitiveLiteral)
   .join('|');
 const rawIpcFrameKeyPattern = ['rawIpc'].map(caseInsensitiveLiteral).join('|');
-const repositoryFilesystemPathPattern = new RegExp(
-  String.raw`(?<![?&\w-])(?:"(?:${rawFilesystemPathKeyPattern})"|'(?:${rawFilesystemPathKeyPattern})'|(?:${rawFilesystemPathKeyPattern}))\s*(?:=|:\s*)\s*${repositoryFilesystemPathValuePattern}|(?<![\w-])(?:${diagnosticMessageKeyPattern})\s*(?:=|:\s*)\s*${repositoryUnkeyedFilesystemPathPattern}|(?:^|[\r\n])\s*${repositoryUnkeyedFilesystemPathPattern}`,
+const repositoryUnixFilesystemPathPattern = new RegExp(
+  String.raw`(?<![\p{L}\p{N}._~+/\\-])/(?:Applications|Library|Users|Volumes|etc|home|opt|private|root|srv|tmp|usr|var|(?=[\p{L}\p{N}._()-]*[^\x00-\x7F])[\p{L}\p{N}._()-]+)/(?![/?#])[^"'<>{}\r\n]+`,
+  'u',
+);
+const repositoryDriveFilesystemPathPattern = new RegExp(
+  String.raw`(?<![\p{L}\p{N}._~+/\\-])[A-Za-z]:(?:/(?!/)|\\(?!\\))[^"'<>{}\r\n]+`,
+  'u',
+);
+const repositoryUncFilesystemPathPattern = new RegExp(
+  String.raw`(?<!\\)\\\\(?!\\)[A-Za-z0-9][A-Za-z0-9.-]*\\[A-Za-z0-9][A-Za-z0-9 ._()-]*\\[^"'<>{}\r\n]+`,
   'u',
 );
 const repositorySerializedFilesystemPathPattern = new RegExp(
-  String.raw`"(?:${rawFilesystemPathKeyPattern})"\s*:\s*"(?:\\.|[^"\\])*"`,
-  'gu',
+  String.raw`"[^"\r\n]+"\s*:\s*"(?:[A-Za-z]:(?:/|\\\\)|\\\\\\\\|/(?!/))(?=[^"\r\n]*[\\/])(?:\\.|[^"\\])+"`,
+  'u',
+);
+const repositoryFileUrlFilesystemPathPattern = new RegExp(
+  String.raw`file:\/\/(?:\/(?!\/)[^/\s"'<>]+\/|[A-Za-z]:[\\/]|[A-Za-z0-9][A-Za-z0-9.-]*\/[^/\s"'<>]+\/)`,
+  'u',
+);
+const repositoryContextualUnixFilesystemPathPattern = new RegExp(
+  String.raw`\b(?:absolute|archive|cache|copied|directory|file|filesystem|folder|generated|local|mounted|output|path|saved|workspace)\b[^\r\n]{0,80}?(?<![\p{L}\p{N}._~+/\\-])/(?!/)[\p{L}\p{N}._()-]+(?:/[\p{L}\p{N} ._()-]+)+`,
+  'iu',
 );
 const forbiddenPatterns = [
   {
@@ -187,9 +197,9 @@ const forbiddenPatterns = [
 const textFilePattern = /\.(md|ts|tsx|js|mjs|cjs|json|ndjson|toml|yaml|yml|txt)$/u;
 
 /**
- * Repository redaction scan walks text files in deterministic order and applies
- * best-effort diagnostic redaction patterns for token query params, auth
- * headers, credential schemes, and secret-shaped fields.
+ * Repository redaction scans version-controlled, non-binary file content in
+ * deterministic order. Support-bundle scanning retains its narrower text-file
+ * contract because it validates a generated artifact rather than source input.
  */
 export function collectFiles(root = repoRoot) {
   const files = [];
@@ -198,15 +208,20 @@ export function collectFiles(root = repoRoot) {
 }
 
 export function scanFileContent(content) {
+  const findings = scanForbiddenContent(content);
+  if (containsAbsoluteFilesystemPath(content)) {
+    findings.push('raw-filesystem-path');
+  }
+  return findings;
+}
+
+function scanForbiddenContent(content) {
   const findings = [];
   for (const { label, pattern } of forbiddenPatterns) {
     pattern.lastIndex = 0;
     if (pattern.test(content)) {
       findings.push(label);
     }
-  }
-  if (containsAbsoluteFilesystemPath(content)) {
-    findings.push('raw-filesystem-path');
   }
   return findings;
 }
@@ -247,37 +262,81 @@ function isAbsoluteFilesystemPathStartBoundary(value) {
 }
 
 function containsRepositoryAbsoluteFilesystemPath(content) {
-  repositorySerializedFilesystemPathPattern.lastIndex = 0;
-  for (const match of content.matchAll(repositorySerializedFilesystemPathPattern)) {
-    if (containsAbsoluteFilesystemPath(match[0])) {
+  for (const pattern of [
+    repositoryUnixFilesystemPathPattern,
+    repositoryDriveFilesystemPathPattern,
+    repositoryUncFilesystemPathPattern,
+    repositorySerializedFilesystemPathPattern,
+    repositoryFileUrlFilesystemPathPattern,
+    repositoryContextualUnixFilesystemPathPattern,
+  ]) {
+    pattern.lastIndex = 0;
+    if (pattern.test(content)) {
       return true;
     }
   }
-  repositoryFilesystemPathPattern.lastIndex = 0;
-  const candidate = repositoryFilesystemPathPattern.exec(content)?.[0];
-  return candidate !== undefined && containsAbsoluteFilesystemPath(candidate);
+  return false;
 }
 
 export function scanRepo(root = repoRoot) {
   const findings = [];
-  for (const relativePath of collectFiles(root)) {
-    const absolutePath = path.join(root, relativePath);
-    const stat = fs.statSync(absolutePath);
-    if (!stat.isFile()) {
-      continue;
-    }
-    const content = fs.readFileSync(absolutePath, 'utf8');
-    for (const reason of scanFileContent(content)) {
-      if (
-        reason === 'raw-filesystem-path' &&
-        !containsRepositoryAbsoluteFilesystemPath(content)
-      ) {
+  const resolvedRoot = path.resolve(root);
+  const files = resolvedRoot === repoRoot
+    ? collectGitVisibleFiles(resolvedRoot)
+    : collectAllFiles(resolvedRoot);
+  for (const relativePath of files) {
+    const absolutePath = path.join(resolvedRoot, relativePath);
+    let stat;
+    try {
+      stat = fs.lstatSync(absolutePath);
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
         continue;
       }
+      throw error;
+    }
+    if (!stat.isFile() && !stat.isSymbolicLink()) {
+      continue;
+    }
+    const bytes = stat.isSymbolicLink()
+      ? Buffer.from(fs.readlinkSync(absolutePath))
+      : fs.readFileSync(absolutePath);
+    if (isBinaryContent(bytes)) {
+      continue;
+    }
+    const content = bytes.toString('utf8');
+    const reasons = scanForbiddenContent(content);
+    if (containsRepositoryAbsoluteFilesystemPath(content)) {
+      reasons.push('raw-filesystem-path');
+    }
+    for (const reason of reasons) {
       findings.push({ file: relativePath, reason });
     }
   }
   return findings;
+}
+
+function collectGitVisibleFiles(root) {
+  const output = execFileSync(
+    'git',
+    ['-C', root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z'],
+    {
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+      windowsHide: true,
+    },
+  );
+  return output.split('\0').filter(Boolean).sort();
+}
+
+function collectAllFiles(root) {
+  const files = [];
+  walkAllFiles(root, root, files);
+  return files.sort();
+}
+
+function isBinaryContent(content) {
+  return content.includes(0);
 }
 
 export function scanSupportBundleDirectory(root, options = {}) {
@@ -335,6 +394,29 @@ function walkDirectory(root, directory, files) {
       continue;
     }
     if (entry.isFile() && textFilePattern.test(entry.name)) {
+      files.push(path.relative(root, absolute));
+    }
+  }
+}
+
+function walkAllFiles(root, directory, files) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const absolute = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (
+        entry.name === 'node_modules' ||
+        entry.name === '.git' ||
+        entry.name === '.codanna' ||
+        entry.name === 'dist' ||
+        entry.name === 'out' ||
+        entry.name === 'coverage'
+      ) {
+        continue;
+      }
+      walkAllFiles(root, absolute, files);
+      continue;
+    }
+    if (entry.isFile() || entry.isSymbolicLink()) {
       files.push(path.relative(root, absolute));
     }
   }

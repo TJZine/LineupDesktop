@@ -14,7 +14,6 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultOutDir = path.join(repoRoot, 'docs/runs/rd-06-native-libmpv-host-spike');
 const helperSourcePath = path.join(scriptDir, 'rd-06-native-libmpv-host-spike-helper.cs');
-const knownMpvRoot = 'C:\\Software\\LineupDesktop-prereqs\\mpv\\shinchiro-20260421-x86_64-dev';
 const dummyHeader = Object.freeze({ name: 'X-Lineup-RD06', value: 'dummy' });
 const evidenceFiles = Object.freeze([
   'manifest.redacted.json',
@@ -156,9 +155,9 @@ export function assertDummyHeaderPolicy(header = dummyHeader) {
 }
 
 export function discoverPrerequisites(env = process.env, platform = process.platform) {
-  const mpvRoot = env.RD06_MPV_ROOT || knownMpvRoot;
-  const mpvExecutable = env.RD06_MPV_EXE || path.join(mpvRoot, 'mpv.exe');
-  const libmpvDll = env.RD06_LIBMPV_DLL || path.join(mpvRoot, 'libmpv-2.dll');
+  const mpvRoot = env.RD06_MPV_ROOT || null;
+  const mpvExecutable = env.RD06_MPV_EXE || (mpvRoot ? path.join(mpvRoot, 'mpv.exe') : null);
+  const libmpvDll = env.RD06_LIBMPV_DLL || (mpvRoot ? path.join(mpvRoot, 'libmpv-2.dll') : null);
 
   return {
     platform,
@@ -463,7 +462,9 @@ async function runPreflight({ outDir, renderApi, nativePresentation = false }) {
   const facts = discoverPrerequisites();
   const validation = validatePreflightFacts(facts);
   const dotnet = facts.dotnetExecutable ? getToolVersion(facts.dotnetExecutable, ['--info'], /^\.NET SDK/mu) : [];
-  const mpv = fs.existsSync(facts.mpvExecutable) ? getToolVersion(facts.mpvExecutable, ['--version'], /^mpv /mu) : [];
+  const mpv = facts.mpvExecutable && fs.existsSync(facts.mpvExecutable)
+    ? getToolVersion(facts.mpvExecutable, ['--version'], /^mpv /mu)
+    : [];
   const libmpvApiEvents = validation.status === 'passed' ? await runLibmpvApiProbe(facts, { renderApi }) : [];
   const libmpvApiStatus = libmpvApiEvents.some((event) => event.proof === 'libmpv-client-api' && event.kind === 'observed')
     ? 'passed'
@@ -935,8 +936,12 @@ function buildEvidencePolicy() {
 
 export function buildNativePrerequisiteEvidence(facts, mpvVersionLines = []) {
   return {
-    mpvExecutable: fs.existsSync(facts.mpvExecutable) ? 'resolved-local-prerequisite' : 'missing',
-    libmpvDll: fs.existsSync(facts.libmpvDll) ? 'resolved-local-prerequisite' : 'missing',
+    mpvExecutable: facts.mpvExecutable && fs.existsSync(facts.mpvExecutable)
+      ? 'resolved-local-prerequisite'
+      : 'missing',
+    libmpvDll: facts.libmpvDll && fs.existsSync(facts.libmpvDll)
+      ? 'resolved-local-prerequisite'
+      : 'missing',
     libmpvDllName: path.basename(facts.libmpvDll ?? '') || 'missing',
     mpvVersion: summarizeTool(mpvVersionLines),
     libmpvClientApiVersion: facts.libmpvClientApiVersion ?? 'requires-helper-preflight',

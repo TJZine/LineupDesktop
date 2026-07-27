@@ -4,7 +4,7 @@ import test from 'node:test';
 
 import { resolveRendererProtocolRequest } from '../../main/rendererProtocolPolicy.js';
 
-const rendererRoot = path.resolve('/safe/renderer');
+const rendererRoot = path.resolve(path.sep, 'safe', 'renderer');
 
 test('renderer protocol policy resolves only approved self-owned MIME types', () => {
   assert.deepEqual(resolveRendererProtocolRequest('lineup://shell/index.html', rendererRoot), {

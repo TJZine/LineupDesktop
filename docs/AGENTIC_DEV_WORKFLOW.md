@@ -92,8 +92,7 @@ they need.
 
 When starting a new Codex chat in this repository:
 
-1. Confirm the workspace is rooted at `/Users/tristan/Software/LineupDesktop`
-   or another checkout of this repository.
+1. Confirm the workspace is rooted at a checkout of this repository.
 2. Read `AGENTS.md`, this runbook, the session-prompt README, skill strategy,
    current architecture state, and the active plan or handoff named by the user.
 3. Use project skills from `.agents/skills/` when they match the task. They are

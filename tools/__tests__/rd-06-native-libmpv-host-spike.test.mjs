@@ -15,6 +15,7 @@ import {
   createSanitizedEventCollector,
   buildNativePrerequisiteEvidence,
   createDummyVisualMediaBuffer,
+  discoverPrerequisites,
   loadRd16MediaMatrixDescriptor,
   parseArgs,
   rd16MediaMatrixCases,
@@ -167,6 +168,26 @@ test('validatePreflightFacts requires Windows, Electron, dotnet, mpv, and libmpv
   });
   assert.equal(blocked.status, 'blocked');
   assert.ok(blocked.checks.some((check) => check.name === 'windows' && !check.ok));
+});
+
+test('discoverPrerequisites requires explicit mpv configuration and derives root children safely', () => {
+  const missing = discoverPrerequisites({}, 'win32');
+  assert.equal(missing.mpvExecutable, null);
+  assert.equal(missing.libmpvDll, null);
+
+  const configuredRoot = ['C:', 'rd06', 'mpv'].join('\\');
+  const configured = discoverPrerequisites({ RD06_MPV_ROOT: configuredRoot }, 'win32');
+  assert.equal(configured.mpvExecutable, path.join(configuredRoot, 'mpv.exe'));
+  assert.equal(configured.libmpvDll, path.join(configuredRoot, 'libmpv-2.dll'));
+
+  const explicitExecutable = path.join('fixture', 'mpv.exe');
+  const explicitDll = path.join('fixture', 'libmpv-2.dll');
+  const explicit = discoverPrerequisites({
+    RD06_MPV_EXE: explicitExecutable,
+    RD06_LIBMPV_DLL: explicitDll,
+  }, 'win32');
+  assert.equal(explicit.mpvExecutable, explicitExecutable);
+  assert.equal(explicit.libmpvDll, explicitDll);
 });
 
 test('dummy header policy allows only the RD-06 non-secret header', () => {
@@ -399,7 +420,7 @@ test('RD-16 media matrix rejects raw paths, URLs, native handles, and secret-sha
   assert.throws(
     () => summarizeRd16MediaMatrixDescriptor({
       cases: {
-        'multi-audio': { label: 'C:/samples/multi-audio.mkv', status: 'observed' },
+        'multi-audio': { label: ['C:', 'samples', 'multi-audio.mkv'].join('/'), status: 'observed' },
       },
     }),
     /forbidden evidence/u,
@@ -415,7 +436,7 @@ test('RD-16 media matrix rejects raw paths, URLs, native handles, and secret-sha
   assert.throws(
     () => summarizeRd16MediaMatrixDescriptor({
       cases: {
-        hdr: { label: 'file:///C:/samples/hdr.mkv', status: 'observed' },
+        hdr: { label: ['file://', 'C:', 'samples', 'hdr.mkv'].join('/'), status: 'observed' },
       },
     }),
     /forbidden evidence/u,
