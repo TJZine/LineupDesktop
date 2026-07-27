@@ -9,7 +9,6 @@ import {
 import type { DiagnosticEventStore, DiagnosticEventInput } from '../diagnostics/diagnosticEventStore.js';
 import type {
   NativePlayerHostCommandResult,
-  NativePlayerHostEvent,
   NativePlayerHostFailure,
   NativePlayerHostLifecycleFailure,
   NativePlayerHostPort,
@@ -26,7 +25,7 @@ import {
 
 type PendingCommand = {
   requestId: PlayerRequestId; resolve(result: NativePlayerHostCommandResult): void;
-  timeout: ReturnType<typeof setTimeout>; events: NativePlayerHostEvent[];
+  timeout: ReturnType<typeof setTimeout>; events: unknown[];
 };
 export interface NativePlayerHostChildProcess extends EventEmitter {
   stdin: Writable;
@@ -54,7 +53,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
   #pending = new Map<PlayerRequestId, PendingCommand>();
   #lineBuffer = '';
   #lifecycleFailureListeners = new Set<(failure: NativePlayerHostLifecycleFailure) => void>();
-  #eventListeners = new Set<(event: NativePlayerHostEvent) => void>();
+  #eventListeners = new Set<(event: unknown) => void>();
   #recoveryPending = false;
   constructor(options: NativePlayerHostProcessOptions) {
     this.#spawnHostProcess = options.spawnHostProcess;
@@ -159,7 +158,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       this.#lifecycleFailureListeners.delete(listener);
     };
   }
-  onEvent(listener: (event: NativePlayerHostEvent) => void): () => void {
+  onEvent(listener: (event: unknown) => void): () => void {
     this.#eventListeners.add(listener);
     return () => {
       this.#eventListeners.delete(listener);
@@ -268,7 +267,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       return;
     }
     if (message.message.type === 'event') {
-      const requestId = message.message.event.requestId;
+      const requestId = readHelperEventRequestId(message.message.event);
       const pending = requestId === null ? undefined : this.#pending.get(requestId);
       if (pending !== undefined) {
         pending.events.push(message.message.event);
@@ -282,9 +281,15 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       return;
     }
     if (message.message.ok) {
+      const resultEvents =
+        message.message.events === undefined
+          ? pending.events
+          : Array.isArray(message.message.events)
+            ? [...pending.events, ...message.message.events]
+            : message.message.events;
       this.#resolvePending(pending.requestId, {
         ok: true,
-        events: [...pending.events, ...(message.message.events ?? [])],
+        events: resultEvents,
       });
       return;
     }
@@ -347,7 +352,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       }
     }
   }
-  #emitEvent(event: NativePlayerHostEvent): void {
+  #emitEvent(event: unknown): void {
     for (const listener of [...this.#eventListeners]) {
       try {
         listener(event);
@@ -431,6 +436,20 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       }
     });
   }
+}
+
+function readHelperEventRequestId(event: unknown): PlayerRequestId | null {
+  if (
+    typeof event !== 'object' ||
+    event === null ||
+    Array.isArray(event) ||
+    !('requestId' in event)
+  ) {
+    return null;
+  }
+  return typeof event.requestId === 'string' && event.requestId.length > 0
+    ? event.requestId
+    : null;
 }
 function diagnosticCategoryForFailure(error: NativePlayerHostFailure): DiagnosticEventInput['category'] {
   return error.category === 'aborted' ? 'cleanup' : 'helper-crash';

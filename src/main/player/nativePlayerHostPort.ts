@@ -89,7 +89,7 @@ export interface NativePlayerHostLifecycleFailure {
 export type NativePlayerHostCommandResult =
   | {
       ok: true;
-      events?: readonly NativePlayerHostEvent[];
+      events?: unknown;
     }
   | {
       ok: false;
@@ -108,7 +108,7 @@ export interface NativePlayerHostPort {
     listener: (failure: NativePlayerHostLifecycleFailure) => void,
   ): () => void;
   onEvent?(
-    listener: (event: NativePlayerHostEvent) => void,
+    listener: (event: unknown) => void,
   ): () => void;
 }
 

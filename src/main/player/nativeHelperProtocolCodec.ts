@@ -4,17 +4,14 @@ import {
   type PlayerCommand,
   type PlayerRequestId,
 } from '../../contracts/player.js';
-import type {
-  NativePlayerHostEvent,
-  NativePlayerHostFailure,
-} from './nativePlayerHostPort.js';
+import type { NativePlayerHostFailure } from './nativePlayerHostPort.js';
 import type { PrivilegedPlaybackDispatchContext } from './privilegedPlaybackDispatchContext.js';
 import type { NativeHelperInputMessage } from './nativeHelperProtocol.js';
 
 export type NativeHelperProcessMessage =
-  | { type: 'result'; requestId: PlayerRequestId; ok: true; events?: readonly NativePlayerHostEvent[] }
+  | { type: 'result'; requestId: PlayerRequestId; ok: true; events?: unknown }
   | { type: 'result'; requestId: PlayerRequestId; ok: false; error?: unknown }
-  | { type: 'event'; event: NativePlayerHostEvent };
+  | { type: 'event'; event: unknown };
 
 const SAFE_FAILURE_CATEGORIES = PLAYER_ERROR_CATEGORIES.filter(
   (category) => category !== 'stale-request' && category !== 'validation-failure',
@@ -59,11 +56,11 @@ export function parseNativeHelperProcessMessage(
   } catch {
     return { error: safeNativeHostFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true) };
   }
-  if (hasForbiddenPrivilegedField(value) || !isRecord(value)) {
+  if (!isRecord(value)) {
     return { error: safeNativeHostFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true) };
   }
-  if (value.type === 'event' && isRecord(value.event)) {
-    return { message: { type: 'event', event: value.event as NativePlayerHostEvent } };
+  if (value.type === 'event') {
+    return { message: { type: 'event', event: value.event } };
   }
   if (value.type === 'result' && typeof value.requestId === 'string' && value.requestId.length > 0) {
     if (value.ok === true) {
@@ -72,11 +69,14 @@ export function parseNativeHelperProcessMessage(
           type: 'result',
           requestId: value.requestId,
           ok: true,
-          events: Array.isArray(value.events) ? (value.events as NativePlayerHostEvent[]) : undefined,
+          events: value.events,
         },
       };
     }
     if (value.ok === false) {
+      if (hasForbiddenPrivilegedField(value.error)) {
+        return { error: safeNativeHostFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true) };
+      }
       return { message: { type: 'result', requestId: value.requestId, ok: false, error: value.error } };
     }
   }

@@ -220,9 +220,45 @@ test('native host process translates commands and returns safe host events', asy
   const result = await pending;
 
   assert.equal(result.ok, true);
-  assert.equal(result.ok ? result.events?.length : 0, 2);
+  assert.equal(result.ok && Array.isArray(result.events) ? result.events.length : 0, 2);
   assertNoForbiddenKeys(child.writes);
   assertNoForbiddenKeys(result);
+});
+
+test('native host process transports opaque helper event payloads to the adapter seam', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+
+  const malformedEvent = {
+    type: 'time.updated',
+    requestId: 'native-load-1',
+    positionMs: -1,
+    durationMs: 1_000,
+    tokenizedUrl: 'opaque-privileged-marker',
+  };
+  const first = host.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.send({ type: 'event', event: malformedEvent });
+  child.send({ type: 'result', requestId: 'native-load-1', ok: true });
+
+  const firstResult = await first;
+  assert.deepEqual(firstResult, { ok: true, events: [malformedEvent] });
+
+  const second = host.execute({ ...loadCommand, requestId: 'native-load-2' });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const malformedBatch = { event: malformedEvent };
+  child.send({
+    type: 'result',
+    requestId: 'native-load-2',
+    ok: true,
+    events: malformedBatch,
+  });
+
+  const secondResult = await second;
+  assert.deepEqual(secondResult, { ok: true, events: malformedBatch });
 });
 
 test('native host process delivers helper events emitted after command results out of band', async () => {
@@ -384,7 +420,7 @@ test('native host process starts a real helper process and reaps it on cleanup',
     const result = await host.execute(loadCommand);
 
     assert.equal(result.ok, true);
-    assert.equal(result.ok ? result.events?.length : 0, 3);
+    assert.equal(result.ok && Array.isArray(result.events) ? result.events.length : 0, 3);
     assert.equal(child.killed, false);
     assertNoForbiddenKeys(result);
 
@@ -569,17 +605,18 @@ test('native host process normalizes timeout, spawn failure, and exit failure', 
     payload: loadCommand.payload,
   });
 
+  const sensitiveHelperPath = ['', 'tmp', 'helper-secret'].join('/');
   const spawnHost = new NativePlayerHostProcess({
     spawnHostProcess: () => {
-      throw new Error('local path /tmp/helper-secret');
+      throw new Error(`local path ${sensitiveHelperPath}`);
     },
     diagnosticEventStore: diagnostics,
   });
   const spawnResult = await spawnHost.execute(loadCommand);
   assert.equal(spawnResult.ok, false);
   assert.equal(spawnResult.ok ? null : spawnResult.error.code, 'PLAYER_HELPER_SPAWN_FAILED');
-  assertTextAbsent(spawnResult, '/tmp/helper-secret');
-  assertTextAbsent(diagnostics.getRecords(), '/tmp/helper-secret');
+  assertTextAbsent(spawnResult, sensitiveHelperPath);
+  assertTextAbsent(diagnostics.getRecords(), sensitiveHelperPath);
   assert.equal(diagnostics.getCrashRecoverySummary().helperRestartCount, 1);
 
   const exitChild = new FakeHostChildProcess();

@@ -113,7 +113,10 @@ export class DesktopPlayerAdapter {
     try {
       const hostResult = await this.#host.execute(command);
       if (hostResult.ok) {
-        const validatedBatch = this.#validateHostEventBatch(hostResult.events ?? []);
+        const validatedBatch = this.#validateHostEventBatch(
+          hostResult.events === undefined ? [] : hostResult.events,
+          command.requestId,
+        );
         if ('error' in validatedBatch) {
           events.push(...this.#restoreSnapshotAfterMalformedLoad(command, snapshotBeforeLoad));
           events.push(...this.#emitBoundaryError(validatedBatch.error));
@@ -121,7 +124,7 @@ export class DesktopPlayerAdapter {
           return this.#result(true, command, events);
         }
         for (const hostEvent of validatedBatch.events) {
-          events.push(...this.handleHostEvent(hostEvent));
+          events.push(...this.#handleValidatedHostEvent(hostEvent));
         }
         events.push(...this.#applySuccessfulCommandMutation(command));
         events.push({
@@ -204,7 +207,10 @@ export class DesktopPlayerAdapter {
     try {
       const hostResult = await this.#host.execute(command, context);
       if (hostResult.ok) {
-        const validatedBatch = this.#validateHostEventBatch(hostResult.events ?? []);
+        const validatedBatch = this.#validateHostEventBatch(
+          hostResult.events === undefined ? [] : hostResult.events,
+          command.requestId,
+        );
         if ('error' in validatedBatch) {
           events.push(...this.#restoreSnapshotAfterMalformedLoad(command, snapshotBeforeLoad));
           events.push(...this.#emitBoundaryError(validatedBatch.error));
@@ -212,7 +218,7 @@ export class DesktopPlayerAdapter {
           return this.#result(true, command, events);
         }
         for (const hostEvent of validatedBatch.events) {
-          events.push(...this.handleHostEvent(hostEvent));
+          events.push(...this.#handleValidatedHostEvent(hostEvent));
         }
         events.push(...this.#applySuccessfulCommandMutation(command));
         events.push({
@@ -253,9 +259,15 @@ export class DesktopPlayerAdapter {
   handleHostEvent(event: unknown): readonly PlayerEvent[] {
     const validation = validateHostEvent(event);
     if ('error' in validation) {
-      return this.#emitBoundaryError(validation.error);
+      const safeError = sanitizePlayerError(validation.error, 'PLAYER_VALIDATION_FAILED');
+      return this.#emitBoundaryError(createPlayerError({
+        ...safeError,
+        requestId: this.#snapshot.requestId ?? undefined,
+      }));
     }
-    const hostEvent = validation.event;
+    return this.#handleValidatedHostEvent(validation.event);
+  }
+  #handleValidatedHostEvent(hostEvent: NativePlayerHostEvent): readonly PlayerEvent[] {
     const hostRequestId = hostEvent.requestId;
     if (this.#snapshot.requestId === null) {
       return this.#staleHostEventWarning(hostEvent, hostRequestId, 'no active player request');
@@ -531,13 +543,36 @@ export class DesktopPlayerAdapter {
     return [];
   }
   #validateHostEventBatch(
-    events: readonly NativePlayerHostEvent[],
+    events: unknown,
+    requestId: PlayerRequestId,
   ): { events: readonly NativePlayerHostEvent[] } | { error: PlayerError } {
+    if (!Array.isArray(events)) {
+      return {
+        error: createPlayerError({
+          code: 'PLAYER_VALIDATION_FAILED',
+          category: 'validation-failure',
+          message: 'The player helper returned an invalid event batch.',
+          requestId,
+          diagnostic: {
+            component: 'desktop-player-adapter',
+            operation: 'host-event-batch',
+            status: 'rejected',
+            reason: 'host event batch must be an array',
+          },
+        }),
+      };
+    }
     const validatedEvents: NativePlayerHostEvent[] = [];
     for (const event of events) {
       const validation = validateHostEvent(event);
       if ('error' in validation) {
-        return { error: sanitizePlayerError(validation.error, 'PLAYER_VALIDATION_FAILED') };
+        const safeError = sanitizePlayerError(validation.error, 'PLAYER_VALIDATION_FAILED');
+        return {
+          error: createPlayerError({
+            ...safeError,
+            requestId,
+          }),
+        };
       }
       validatedEvents.push(validation.event);
     }
