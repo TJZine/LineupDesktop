@@ -16,6 +16,11 @@ namespace Lineup.NativePlayerHost
         private const int MpvEventEndFile = 7;
         private const int MpvEventFileLoaded = 8;
         private const int MpvEventPropertyChange = 22;
+        private const int MpvEndFileReasonEof = 0;
+        private const int MpvEndFileReasonStop = 2;
+        private const int MpvEndFileReasonQuit = 3;
+        private const int MpvEndFileReasonError = 4;
+        private const int MpvEndFileReasonRedirect = 5;
 
         private const int MpvFormatNone = 0;
         private const int MpvFormatString = 1;
@@ -63,6 +68,16 @@ namespace Lineup.NativePlayerHost
             public string name;
             public int format;
             public IntPtr data;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MpvEventEndFile
+        {
+            public int reason;
+            public int error;
+            public long playlist_entry_id;
+            public long playlist_insert_id;
+            public int playlist_insert_num_entries;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -581,11 +596,7 @@ namespace Lineup.NativePlayerHost
                 }
                 else if (ev.event_id == MpvEventEndFile)
                 {
-                    WriteOutputEvent(new Dictionary<string, object?>
-                    {
-                        ["type"] = "ended",
-                        ["requestId"] = currentRequestId
-                    });
+                    HandleEndFileEvent(ev.data);
                 }
                 else if (ev.event_id == MpvEventPropertyChange)
                 {
@@ -593,6 +604,49 @@ namespace Lineup.NativePlayerHost
                     HandlePropertyChange(prop);
                 }
             }
+        }
+
+        private static void HandleEndFileEvent(IntPtr data)
+        {
+            if (data == IntPtr.Zero)
+            {
+                WritePlaybackEndedWithError(false);
+                return;
+            }
+
+            MpvEventEndFile endFile = Marshal.PtrToStructure<MpvEventEndFile>(data);
+            if (endFile.reason == MpvEndFileReasonRedirect)
+            {
+                return;
+            }
+            if (endFile.reason == MpvEndFileReasonEof ||
+                endFile.reason == MpvEndFileReasonStop ||
+                endFile.reason == MpvEndFileReasonQuit)
+            {
+                WriteOutputEvent(new Dictionary<string, object?>
+                {
+                    ["type"] = "ended",
+                    ["requestId"] = currentRequestId
+                });
+                return;
+            }
+            WritePlaybackEndedWithError(endFile.reason == MpvEndFileReasonError);
+        }
+
+        private static void WritePlaybackEndedWithError(bool retryable)
+        {
+            WriteOutputEvent(new Dictionary<string, object?>
+            {
+                ["type"] = "error",
+                ["requestId"] = currentRequestId,
+                ["error"] = new Dictionary<string, object?>
+                {
+                    ["code"] = "PLAYER_HELPER_PLAYBACK_ENDED_WITH_ERROR",
+                    ["category"] = "engine-failure",
+                    ["recoverable"] = retryable,
+                    ["retryable"] = retryable
+                }
+            });
         }
 
         private static void HandlePropertyChange(MpvEventProperty prop)

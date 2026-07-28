@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { setImmediate } from 'node:timers';
 
 import {
   PlexPlaybackRuntime,
@@ -12,6 +13,8 @@ import {
   type PlexPlaybackRuntimeSchedulerPort,
   type PlexPlaybackScheduleSelection,
 } from '../../../main/player/plexPlaybackRuntime.js';
+import type { PlexPlaybackRecoveryTimerPort } from '../../../main/player/plexPlaybackRecoveryOwner.js';
+import { createPlaybackEventRouter } from '../../../main/player/playbackEventRouter.js';
 import { DiagnosticEventStore } from '../../../main/diagnostics/diagnosticEventStore.js';
 import {
   isRendererSafePlayerEvent,
@@ -126,6 +129,33 @@ class FakePmsPort {
   }
 }
 
+class FakeRecoveryTimer implements PlexPlaybackRecoveryTimerPort {
+  readonly delays: number[] = [];
+  readonly pending = new Map<number, () => void>();
+  #nextHandle = 1;
+
+  set(delayMs: number, callback: () => void): unknown {
+    const handle = this.#nextHandle;
+    this.#nextHandle += 1;
+    this.delays.push(delayMs);
+    this.pending.set(handle, callback);
+    return handle;
+  }
+
+  clear(handle: unknown): void {
+    if (typeof handle === 'number') {
+      this.pending.delete(handle);
+    }
+  }
+
+  runNext(): void {
+    const entry = this.pending.entries().next().value as [number, () => void] | undefined;
+    assert.ok(entry, 'expected a pending recovery timer');
+    this.pending.delete(entry[0]);
+    entry[1]();
+  }
+}
+
 function createRuntime(): {
   runtime: PlexPlaybackRuntime;
   scheduler: FakeSchedulerPort;
@@ -134,6 +164,7 @@ function createRuntime(): {
   pms: FakePmsPort;
   emitted: PlayerEvent[];
   diagnostics: DiagnosticEventStore;
+  recoveryTimer: FakeRecoveryTimer;
 } {
   const scheduler = new FakeSchedulerPort();
   const channel = new FakeChannelPort();
@@ -144,6 +175,7 @@ function createRuntime(): {
     clock: () => 1_000,
     idGenerator: () => 'runtime-diagnostic',
   });
+  const recoveryTimer = new FakeRecoveryTimer();
   const runtime = new PlexPlaybackRuntime({
     scheduler,
     channel,
@@ -153,8 +185,9 @@ function createRuntime(): {
     createRequestId: (prefix) => `${prefix}-generated`,
     onEvents: (events) => emitted.push(...events),
     diagnosticEventStore: diagnostics,
+    recoveryTimer,
   });
-  return { runtime, scheduler, channel, player, pms, emitted, diagnostics };
+  return { runtime, scheduler, channel, player, pms, emitted, diagnostics, recoveryTimer };
 }
 
 function assertNoForbiddenKeys(value: unknown): void {
@@ -211,6 +244,34 @@ function createDeferred<T>(): {
   };
 }
 
+function eligibleEngineError(requestId: string): PlayerEvent {
+  return {
+    event: 'error',
+    requestId,
+    error: {
+      code: 'PLAYER_HOST_ENGINE_FAILURE',
+      category: 'engine-failure',
+      message: 'The player engine failed.',
+      recoverable: true,
+      retryable: true,
+      requestId,
+    },
+  };
+}
+
+async function waitFor(
+  predicate: () => boolean,
+  message: string,
+): Promise<void> {
+  for (let index = 0; index < 20; index += 1) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assert.fail(message);
+}
+
 test('RD-12 plex playback runtime starts current scheduled media through fakeable ports', async () => {
   const { runtime, scheduler, channel, player, emitted } = createRuntime();
   player.dispatchResult = {
@@ -240,6 +301,158 @@ test('RD-12 plex playback runtime starts current scheduled media through fakeabl
   assertNoForbiddenKeys(emitted);
   assertRendererSafePlayerEvents(result.events);
   assertRendererSafePlayerEvents(emitted);
+});
+
+test('playback runtime ingests one eligible async error and retries the exact current identity', async () => {
+  const {
+    runtime,
+    scheduler,
+    player,
+    pms,
+    emitted,
+    recoveryTimer,
+  } = createRuntime();
+  await runtime.startCurrentPlayback('startup');
+  emitted.length = 0;
+
+  const accepted = runtime.ingestPlayerEvents([eligibleEngineError('request-1')]);
+
+  assert.deepEqual(accepted, [eligibleEngineError('request-1')]);
+  assert.deepEqual(emitted, [eligibleEngineError('request-1')]);
+  assert.deepEqual(recoveryTimer.delays, [1_000]);
+
+  recoveryTimer.runNext();
+  await waitFor(() => player.commands.length === 2, 'recovery load did not dispatch');
+
+  assert.equal(scheduler.calls.length, 2);
+  assert.deepEqual(
+    scheduler.calls.map((call) => call.reason),
+    ['startup', 'schedule-tick'],
+  );
+  assert.deepEqual(player.cleanupRequestIds, ['request-1']);
+  assert.deepEqual(
+    pms.releases.map((release) => release.reason),
+    ['switch'],
+  );
+  assert.equal(runtime.getActiveRequestId(), 'request-1');
+});
+
+test('playback runtime does not recover an unscoped engine error', async () => {
+  const { runtime, recoveryTimer } = createRuntime();
+  await runtime.startCurrentPlayback('startup');
+
+  runtime.ingestPlayerEvents([
+    {
+      event: 'error',
+      requestId: null,
+      error: {
+        code: 'PLAYER_HOST_ENGINE_FAILURE',
+        category: 'engine-failure',
+        message: 'The player engine failed.',
+        recoverable: true,
+        retryable: true,
+      },
+    },
+  ]);
+
+  assert.deepEqual(recoveryTimer.delays, []);
+});
+
+test('playback runtime charges candidate/load failures to the same three-attempt budget', async () => {
+  const {
+    runtime,
+    channel,
+    player,
+    emitted,
+    recoveryTimer,
+  } = createRuntime();
+  await runtime.startCurrentPlayback('startup');
+  emitted.length = 0;
+  channel.candidate = {
+    requestId: 'request-invalid',
+    load: loadPayload,
+    pmsSession: { id: 'pms-invalid', requestId: 'different-request' },
+  };
+  runtime.ingestPlayerEvents([eligibleEngineError('request-1')]);
+
+  for (let expectedAttempts = 1; expectedAttempts <= 3; expectedAttempts += 1) {
+    recoveryTimer.runNext();
+    await waitFor(
+      () => emitted.filter((event) => event.event === 'error').length >= expectedAttempts + 1,
+      `recovery attempt ${expectedAttempts} did not settle`,
+    );
+  }
+
+  assert.deepEqual(recoveryTimer.delays, [1_000, 2_000, 4_000]);
+  assert.equal(recoveryTimer.pending.size, 0);
+  assert.equal(player.commands.length, 1);
+  assert.equal(
+    emitted.filter((event) => (
+      event.event === 'error' &&
+      event.error.code === 'PLAYER_HOST_ENGINE_FAILURE'
+    )).length,
+    1,
+  );
+});
+
+test('playback runtime does not grant a fourth attempt after three rejected recovery loads', async () => {
+  const { runtime, player, emitted, recoveryTimer } = createRuntime();
+  await runtime.startCurrentPlayback('startup');
+  emitted.length = 0;
+  player.dispatchResult = { ok: false };
+  runtime.ingestPlayerEvents([eligibleEngineError('request-1')]);
+
+  for (let expectedAttempts = 1; expectedAttempts <= 3; expectedAttempts += 1) {
+    recoveryTimer.runNext();
+    await waitFor(
+      () => player.commands.length === expectedAttempts + 1,
+      `rejected recovery load ${expectedAttempts} did not settle`,
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+
+  assert.deepEqual(recoveryTimer.delays, [1_000, 2_000, 4_000]);
+  assert.equal(recoveryTimer.pending.size, 0);
+  assert.equal(player.commands.length, 4);
+  assert.equal(
+    emitted.filter((event) => (
+      event.event === 'error' &&
+      event.error.code === 'PLAYER_HOST_ENGINE_FAILURE'
+    )).length,
+    1,
+  );
+});
+
+test('playback runtime quarantines a retry when the scheduled identity changes', async () => {
+  const { runtime, scheduler, player, pms, recoveryTimer } = createRuntime();
+  await runtime.startCurrentPlayback('startup');
+  runtime.ingestPlayerEvents([eligibleEngineError('request-1')]);
+  scheduler.current = {
+    ...selection,
+    programId: 'program-2',
+  };
+
+  recoveryTimer.runNext();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.equal(player.commands.length, 1);
+  assert.deepEqual(player.cleanupRequestIds, []);
+  assert.deepEqual(pms.releases, []);
+  assert.equal(recoveryTimer.pending.size, 0);
+  assert.equal(runtime.getActiveRequestId(), 'request-1');
+});
+
+test('playback runtime cleanup cancels a pending automatic retry', async () => {
+  const { runtime, player, recoveryTimer } = createRuntime();
+  await runtime.startCurrentPlayback('startup');
+  runtime.ingestPlayerEvents([eligibleEngineError('request-1')]);
+  assert.equal(recoveryTimer.pending.size, 1);
+
+  await runtime.cleanup({ reason: 'server-change' });
+
+  assert.equal(recoveryTimer.pending.size, 0);
+  assert.equal(runtime.getActiveRequestId(), null);
+  assert.deepEqual(player.cleanupRequestIds, ['request-1']);
 });
 
 test('RD-25 plex playback runtime rejects invalid privileged descriptors before player dispatch', async () => {
@@ -522,6 +735,34 @@ test('RD-17 plex playback runtime helper-crash cleanup records safe diagnostics 
   assertNoForbiddenKeys(events);
   assertNoForbiddenKeys(emitted);
   assertRendererSafePlayerEvents(events);
+});
+
+test('RD-17 helper lifecycle flush delivers queued engine failure before crash custody cleanup', async () => {
+  const { runtime, emitted } = createRuntime();
+  await runtime.startCurrentPlayback();
+  emitted.length = 0;
+  const router = createPlaybackEventRouter({
+    getRuntime: () => runtime,
+  });
+
+  router.route([eligibleEngineError('request-1')]);
+  router.flushCurrentRuntime();
+  await runtime.handleHelperCrash();
+
+  assert.equal(emitted[0]?.event, 'error');
+  if (emitted[0]?.event === 'error') {
+    assert.equal(emitted[0].error.code, 'PLAYER_HOST_ENGINE_FAILURE');
+  }
+  assert.equal(
+    emitted.some(
+      (event) =>
+        event.event === 'warning' &&
+        event.warning.category === 'stale-request',
+    ),
+    false,
+  );
+  assert.equal(runtime.getActiveRequestId(), null);
+  router.dispose();
 });
 
 test('RD-12 plex playback runtime normalizes rejecting player dispatch and cleans active state', async () => {

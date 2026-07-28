@@ -46,6 +46,10 @@ import {
   type ChannelCompositionRegistration,
 } from './channel/channelComposition.js';
 import { bootstrapPlaybackRuntime } from './player/playbackRuntimeBootstrap.js';
+import {
+  createPlaybackEventRouter,
+  type PlaybackEventRouter,
+} from './player/playbackEventRouter.js';
 import { wirePlexPlaybackCleanup } from './player/plexPlaybackCleanupWiring.js';
 import type { PlexPlaybackRuntime } from './player/plexPlaybackRuntime.js';
 import {
@@ -82,6 +86,7 @@ let teardownSettingsIpc: SettingsIpcTeardown | null = null;
 let plexComposition: PlexCompositionRegistration | null = null;
 let channelComposition: ChannelCompositionRegistration | null = null;
 let playbackRuntime: PlexPlaybackRuntime | null = null;
+let playbackEventRouter: PlaybackEventRouter | null = null;
 let channelSchedulerProgramStartHandler: (() => void | Promise<void>) | null = null;
 let playerIpcQuitTeardownInProgress = false;
 let playerIpcQuitTeardownComplete = false;
@@ -96,14 +101,24 @@ let containmentCounters: ShellContainmentCounters = {
 app.commandLine.appendSwitch('disable-gpu');
 
 void startApplication().catch(async (error: unknown) => {
+  const teardownPlayer = teardownPlayerIpc;
+  teardownPlayerIpc = null;
+  const teardownRouter = playbackEventRouter;
+  playbackEventRouter = null;
+  const teardownPlaybackRuntime = playbackRuntime;
+  playbackRuntime = null;
   const teardownChannel = channelComposition?.teardown ?? null;
   channelComposition = null;
   const teardownPlex = plexComposition?.teardown ?? null;
   plexComposition = null;
+  await teardownPlayer?.teardown().catch(() => undefined);
+  teardownRouter?.dispose();
+  await teardownPlaybackRuntime?.teardown().catch(() => undefined);
   await Promise.all([
-    teardownChannel?.() ?? Promise.resolve(),
-    teardownPlex?.() ?? Promise.resolve(),
-  ]).catch(() => undefined);
+      teardownChannel?.() ?? Promise.resolve(),
+      teardownPlex?.() ?? Promise.resolve(),
+    ])
+    .catch(() => undefined);
   console.error(redactError(error));
   app.exit(1);
 });
@@ -222,28 +237,29 @@ async function startApplication(): Promise<void> {
       getShellWindow: () => getShellWindowController().getWindow(),
       appVersion: app.getVersion(),
     });
-    const originalNativeHostFactory = createProductionNativeHostFactory({
+    const nativeHostFactory = createProductionNativeHostFactory({
       diagnosticEventStore,
     });
-    const nativeHostFactory = originalNativeHostFactory
-      ? () => {
-          const host = originalNativeHostFactory();
-          host.onLifecycleFailure?.(() => {
-            if (playbackRuntime) {
-              void playbackRuntime.handleHelperCrash();
-            }
-          });
-          return host;
-        }
-      : null;
+    const eventRouter = createPlaybackEventRouter({
+      getRuntime: () => playbackRuntime,
+      reportDiagnostic: reportMainProcessDiagnostic,
+    });
+    playbackEventRouter = eventRouter;
     teardownPlayerIpc = registerPlayerIpcHandlers({
       shellMode,
       isAuthorizedEvent,
-      sendPlayerEvent,
+      sendSynchronousPlayerEvent: sendPlayerEvent,
+      onAsynchronousAdapterEvents: eventRouter.route,
       createRequestId,
       reportDiagnostic: reportMainProcessDiagnostic,
       diagnosticEventStore,
       nativeHostFactory: nativeHostFactory ?? undefined,
+      onNativeHostLifecycleFailure: () => {
+        eventRouter.flushCurrentRuntime();
+        if (playbackRuntime !== null) {
+          void playbackRuntime.handleHelperCrash();
+        }
+      },
     });
     wirePlexPlaybackCleanup({
       plexRuntime: plexComposition.runtime,
@@ -255,6 +271,11 @@ async function startApplication(): Promise<void> {
       scheduler: channelComposition.activeChannelScheduler,
       adapter: teardownPlayerIpc.adapter,
       createRequestId,
+      onEvents: (events) => {
+        for (const event of events) {
+          sendPlayerEvent(event);
+        }
+      },
       diagnosticEventStore,
       plexRuntime: plexComposition.runtime,
     });
@@ -324,6 +345,8 @@ function registerApplicationLifecycleHandlers(): void {
     teardownSettingsIpc = null;
     const teardown = teardownPlayerIpc;
     if (playerIpcQuitTeardownComplete || teardown === null) {
+      const localPlaybackEventRouter = playbackEventRouter;
+      playbackEventRouter = null;
       const localPlaybackRuntime = playbackRuntime;
       playbackRuntime = null;
       const localChannelComposition = channelComposition;
@@ -337,13 +360,16 @@ function registerApplicationLifecycleHandlers(): void {
       }
       const teardownPlex = plexComposition?.teardown ?? null;
       plexComposition = null;
-      void Promise.all([
-        localPlaybackRuntime?.teardown() ?? Promise.resolve(),
-        teardownPlex?.() ?? Promise.resolve(),
-        localChannelComposition?.teardown() ?? Promise.resolve(),
-      ]).catch((error: unknown) => {
-        reportMainProcessDiagnostic('Runtime composition cleanup failed during quit', error);
-      });
+      localPlaybackEventRouter?.dispose();
+      void (async () => {
+        await localPlaybackRuntime?.teardown();
+        await Promise.all([
+          teardownPlex?.() ?? Promise.resolve(),
+          localChannelComposition?.teardown() ?? Promise.resolve(),
+        ]);
+      })().catch((error: unknown) => {
+          reportMainProcessDiagnostic('Runtime composition cleanup failed during quit', error);
+        });
       return;
     }
     if (playerIpcQuitTeardownInProgress) {
@@ -362,6 +388,8 @@ function registerApplicationLifecycleHandlers(): void {
     playerIpcQuitTeardownInProgress = true;
     const localPlaybackRuntime = playbackRuntime;
     playbackRuntime = null;
+    const localPlaybackEventRouter = playbackEventRouter;
+    playbackEventRouter = null;
     if (localChannelComposition !== null && channelSchedulerProgramStartHandler !== null) {
       localChannelComposition.activeChannelScheduler.off(
         'programStart',
@@ -369,12 +397,15 @@ function registerApplicationLifecycleHandlers(): void {
       );
       channelSchedulerProgramStartHandler = null;
     }
-    Promise.all([
-      teardown.teardown(),
-      teardownPlex?.() ?? Promise.resolve(),
-      localChannelComposition?.teardown() ?? Promise.resolve(),
-      localPlaybackRuntime?.teardown() ?? Promise.resolve(),
-    ])
+    (async () => {
+      await teardown.teardown();
+      localPlaybackEventRouter?.dispose();
+      await localPlaybackRuntime?.teardown();
+      await Promise.all([
+        teardownPlex?.() ?? Promise.resolve(),
+        localChannelComposition?.teardown() ?? Promise.resolve(),
+      ]);
+    })()
       .catch((error: unknown) => {
         reportMainProcessDiagnostic('Player IPC cleanup failed during quit', error);
       })

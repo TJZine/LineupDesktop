@@ -23,6 +23,7 @@ import type {
   NativePlayerHostCommandResult,
   NativePlayerHostEvent,
   NativePlayerHostFactory,
+  NativePlayerHostLifecycleFailure,
   NativePlayerHostPort,
 } from './nativePlayerHostPort.js';
 
@@ -31,11 +32,13 @@ type PlayerIpcMain = Pick<IpcMain, 'handle' | 'removeHandler'>;
 export interface RegisterPlayerIpcHandlersOptions {
   shellMode: ShellMode;
   isAuthorizedEvent(event: IpcMainInvokeEvent): boolean;
-  sendPlayerEvent(event: PlayerEvent): void;
+  sendSynchronousPlayerEvent(event: PlayerEvent): void;
+  onAsynchronousAdapterEvents(events: readonly PlayerEvent[]): void;
   createRequestId(prefix: string): string;
   reportDiagnostic?(message: string, error: unknown): void;
   diagnosticEventStore?: DiagnosticEventStore;
   nativeHostFactory?: NativePlayerHostFactory;
+  onNativeHostLifecycleFailure?(failure: NativePlayerHostLifecycleFailure): void;
   ipcMain?: PlayerIpcMain;
 }
 
@@ -56,23 +59,23 @@ export function registerPlayerIpcHandlers(
   options: RegisterPlayerIpcHandlersOptions,
 ): PlayerIpcRegistration {
   const ipcMain = options.ipcMain ?? getElectronIpcMain();
-  const runtime =
+  const host =
     options.shellMode === 'development' || options.shellMode === 'smoke'
-      ? {
-          adapter: new DesktopPlayerAdapter(createDevelopmentHost(options), {
-            onEvents: (events) => emitEvents(options, events),
-            diagnosticEventStore: options.diagnosticEventStore,
-          }),
-        }
-      : options.nativeHostFactory
-        ? {
-            adapter: new DesktopPlayerAdapter(options.nativeHostFactory(), {
-              onEvents: (events) => emitEvents(options, events),
-              diagnosticEventStore: options.diagnosticEventStore,
-              rejectRendererLoad: true,
-            }),
-          }
-        : { adapter: null };
+      ? createDevelopmentHost(options)
+      : options.nativeHostFactory?.() ?? null;
+  const adapter =
+    host === null
+      ? null
+      : new DesktopPlayerAdapter(host, {
+          onEvents: options.onAsynchronousAdapterEvents,
+          diagnosticEventStore: options.diagnosticEventStore,
+          rejectRendererLoad: options.shellMode === 'production',
+        });
+  let unsubscribeMainLifecycle =
+    host !== null && options.onNativeHostLifecycleFailure !== undefined
+      ? host.onLifecycleFailure?.(options.onNativeHostLifecycleFailure) ?? null
+      : null;
+  const runtime = { adapter };
 
   ipcMain.handle(LINEUP_PLAYER_COMMAND_CHANNEL, async (event, payload: unknown) => {
     const requestId = getPayloadRequestId(payload) ?? options.createRequestId('player-command');
@@ -146,6 +149,9 @@ export function registerPlayerIpcHandlers(
   return {
     adapter: runtime.adapter,
     teardown: async () => {
+      const unsubscribe = unsubscribeMainLifecycle;
+      unsubscribeMainLifecycle = null;
+      unsubscribe?.();
       try {
         const result = await runtime.adapter?.cleanup();
         if (result !== undefined && !result.accepted) {
@@ -199,11 +205,11 @@ function createDevelopmentHost(
 }
 
 function emitEvents(
-  options: Pick<RegisterPlayerIpcHandlersOptions, 'sendPlayerEvent'>,
+  options: Pick<RegisterPlayerIpcHandlersOptions, 'sendSynchronousPlayerEvent'>,
   events: readonly PlayerEvent[],
 ): void {
   for (const event of events) {
-    options.sendPlayerEvent(event);
+    options.sendSynchronousPlayerEvent(event);
   }
 }
 

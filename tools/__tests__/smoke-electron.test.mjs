@@ -16,6 +16,54 @@ import {
   runElectronSmoke,
 } from '../smoke-electron.mjs';
 
+const repoRoot = path.resolve(import.meta.dirname, '..', '..');
+
+test('smoke composition keeps synchronous and asynchronous player delivery in distinct sinks', async () => {
+  const [mainSource, playerIpcSource] = await Promise.all([
+    fs.readFile(path.join(repoRoot, 'src/main/index.ts'), 'utf8'),
+    fs.readFile(path.join(repoRoot, 'src/main/player/playerIpc.ts'), 'utf8'),
+  ]);
+
+  assert.match(
+    mainSource,
+    /sendSynchronousPlayerEvent:\s*sendPlayerEvent,\s*onAsynchronousAdapterEvents:\s*eventRouter\.route/u,
+  );
+  assert.match(
+    mainSource,
+    /bootstrapPlaybackRuntime\(\{[\s\S]*?onEvents:\s*\(events\)\s*=>\s*\{[\s\S]*?sendPlayerEvent\(event\)/u,
+  );
+  assert.match(
+    playerIpcSource,
+    /onEvents:\s*options\.onAsynchronousAdapterEvents/u,
+  );
+  assert.match(
+    playerIpcSource,
+    /options\.sendSynchronousPlayerEvent\(event\)/u,
+  );
+  assert.match(
+    mainSource,
+    /nativeHostFactory:\s*nativeHostFactory\s*\?\?\s*undefined/u,
+  );
+  assert.doesNotMatch(mainSource, /originalNativeHostFactory/u);
+  assert.match(
+    mainSource,
+    /onNativeHostLifecycleFailure:\s*\(\)\s*=>\s*\{\s*eventRouter\.flushCurrentRuntime\(\);[\s\S]*?playbackRuntime\.handleHelperCrash\(\)/u,
+  );
+  assert.match(
+    playerIpcSource,
+    /new DesktopPlayerAdapter\([\s\S]*?host\.onLifecycleFailure\?\.\(options\.onNativeHostLifecycleFailure\)/u,
+  );
+  assert.match(
+    playerIpcSource,
+    /const unsubscribe = unsubscribeMainLifecycle;[\s\S]*?unsubscribe\?\.\(\);[\s\S]*?runtime\.adapter\?\.cleanup\(\)/u,
+  );
+  assert.match(
+    mainSource,
+    /await teardown\.teardown\(\);\s*localPlaybackEventRouter\?\.dispose\(\);\s*await localPlaybackRuntime\?\.teardown\(\)/u,
+  );
+  assert.doesNotMatch(playerIpcSource, /sendPlayerEvent/u);
+});
+
 test('smoke launcher creates a canonical nonce-bound sentinel and exact arguments', async () => {
   const bootstrap = await createSmokeBootstrap(process.platform);
   try {

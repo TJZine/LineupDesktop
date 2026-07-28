@@ -19,6 +19,7 @@ export interface PlaybackRuntimeBootstrapOptions {
   scheduler: Pick<IChannelScheduler, 'getCurrentProgram' | 'getState'>;
   adapter: DesktopPlayerAdapter | null;
   createRequestId: (prefix: string) => string;
+  onEvents: (events: readonly PlayerEvent[]) => void;
   diagnosticEventStore?: DiagnosticEventStore;
   plexRuntime?: DesktopPlexRuntime;
 }
@@ -30,7 +31,15 @@ export interface PlaybackRuntimeBootstrapResult {
 export function bootstrapPlaybackRuntime(
   options: PlaybackRuntimeBootstrapOptions,
 ): PlaybackRuntimeBootstrapResult {
-  const { shellMode, scheduler, adapter, createRequestId, diagnosticEventStore, plexRuntime } = options;
+  const {
+    shellMode,
+    scheduler,
+    adapter,
+    createRequestId,
+    onEvents,
+    diagnosticEventStore,
+    plexRuntime,
+  } = options;
 
   if (shellMode === 'development' || shellMode === 'smoke') {
     // Development / Smoke: Use fake resolver and capability profile
@@ -56,6 +65,7 @@ export function bootstrapPlaybackRuntime(
       pms: fakePmsPort,
       capabilityProfile,
       createRequestId,
+      onEvents,
       diagnosticEventStore,
     });
 
@@ -144,6 +154,7 @@ export function bootstrapPlaybackRuntime(
     pms: pmsPort,
     capabilityProfile,
     createRequestId,
+    onEvents,
     diagnosticEventStore,
   });
 

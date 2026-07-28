@@ -298,6 +298,49 @@ test('native host process delivers helper events emitted after command results o
   assertNoForbiddenKeys(asyncEvents);
 });
 
+test('native host process transports the safe helper end-file ERROR envelope out of band', async () => {
+  const child = new FakeHostChildProcess();
+  const asyncEvents: unknown[] = [];
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+  host.onEvent((event) => asyncEvents.push(event));
+
+  const pending = host.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.send({ type: 'result', requestId: 'native-load-1', ok: true, events: [] });
+  await pending;
+  child.send({
+    type: 'event',
+    event: {
+      type: 'error',
+      requestId: 'native-load-1',
+      error: {
+        code: 'PLAYER_HELPER_PLAYBACK_ENDED_WITH_ERROR',
+        category: 'engine-failure',
+        recoverable: true,
+        retryable: true,
+      },
+    },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(asyncEvents, [
+    {
+      type: 'error',
+      requestId: 'native-load-1',
+      error: {
+        code: 'PLAYER_HELPER_PLAYBACK_ENDED_WITH_ERROR',
+        category: 'engine-failure',
+        recoverable: true,
+        retryable: true,
+      },
+    },
+  ]);
+  assertNoForbiddenKeys(asyncEvents);
+});
+
 test('native host process rejects duplicate in-flight request IDs without overwriting pending commands', async () => {
   const child = new FakeHostChildProcess();
   const host = new NativePlayerHostProcess({

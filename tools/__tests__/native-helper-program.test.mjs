@@ -159,3 +159,32 @@ test('native helper checks essential property observation registration before st
     /if \(NativeMethods\.mpv_observe_property[\s\S]*?< 0\)\s*\{\s*TeardownMpvContext\(\);\s*throw new InvalidOperationException/u,
   );
 });
+
+test('native helper classifies official end-file reasons without exposing raw mpv values', async () => {
+  const source = await readFile(programPath, 'utf8');
+
+  assert.match(
+    source,
+    /private struct MpvEventEndFile\s*\{\s*public int reason;\s*public int error;\s*public long playlist_entry_id;\s*public long playlist_insert_id;\s*public int playlist_insert_num_entries;\s*\}/su,
+  );
+  for (const [name, value] of [
+    ['MpvEndFileReasonEof', 0],
+    ['MpvEndFileReasonStop', 2],
+    ['MpvEndFileReasonQuit', 3],
+    ['MpvEndFileReasonError', 4],
+    ['MpvEndFileReasonRedirect', 5],
+  ]) {
+    assert.match(source, new RegExp(`private const int ${name} = ${value};`, 'u'));
+  }
+  assert.match(source, /else if \(ev\.event_id == MpvEventEndFile\)\s*\{\s*HandleEndFileEvent\(ev\.data\);\s*\}/su);
+  assert.match(source, /if \(data == IntPtr\.Zero\)\s*\{\s*WritePlaybackEndedWithError\(false\);/su);
+  assert.match(source, /if \(endFile\.reason == MpvEndFileReasonRedirect\)\s*\{\s*return;/su);
+  assert.match(
+    source,
+    /endFile\.reason == MpvEndFileReasonEof \|\|\s*endFile\.reason == MpvEndFileReasonStop \|\|\s*endFile\.reason == MpvEndFileReasonQuit[\s\S]*?\["type"\]\s*=\s*"ended"/u,
+  );
+  assert.match(source, /WritePlaybackEndedWithError\(endFile\.reason == MpvEndFileReasonError\)/u);
+  assert.match(source, /\["code"\]\s*=\s*"PLAYER_HELPER_PLAYBACK_ENDED_WITH_ERROR"/u);
+  assert.match(source, /\["category"\]\s*=\s*"engine-failure"/u);
+  assert.doesNotMatch(source, /\["(?:reason|error)"\]\s*=\s*endFile\./u);
+});

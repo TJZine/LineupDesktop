@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { setImmediate } from 'node:timers';
 
 import type {
   PlayerCommand,
@@ -28,6 +29,7 @@ import type {
 import type { DesktopStreamCapabilityProfile } from '../../../main/player/streamPolicy/types.js';
 import { assertPublicSafe } from './playerPublicSafetyAssertions.js';
 import type { PrivilegedPlaybackDispatchContext } from '../../../main/player/privilegedPlaybackDispatchContext.js';
+import type { PlexPlaybackRecoveryTimerPort } from '../../../main/player/plexPlaybackRecoveryOwner.js';
 
 const rawPrivateValues = [
   ['X', 'Plex', 'Token'].join('-'),
@@ -255,9 +257,75 @@ class FakePmsPort implements PlexPlaybackRuntimePmsPort {
   }
 }
 
+class FakeRecoveryTimer implements PlexPlaybackRecoveryTimerPort {
+  readonly delays: number[] = [];
+  readonly pending = new Map<number, () => void>();
+  #nextHandle = 1;
+
+  set(delayMs: number, callback: () => void): unknown {
+    const handle = this.#nextHandle;
+    this.#nextHandle += 1;
+    this.delays.push(delayMs);
+    this.pending.set(handle, callback);
+    return handle;
+  }
+
+  clear(handle: unknown): void {
+    if (typeof handle === 'number') {
+      this.pending.delete(handle);
+    }
+  }
+
+  runNext(): void {
+    const entry = this.pending.entries().next().value as [number, () => void] | undefined;
+    assert.ok(entry, 'expected pending recovery timer');
+    this.pending.delete(entry[0]);
+    entry[1]();
+  }
+}
+
+class RejectingPlaybackHost implements NativePlayerHostPort {
+  loadCount = 0;
+
+  async execute(command: PlayerCommand): Promise<NativePlayerHostCommandResult> {
+    if (command.command === 'load') {
+      this.loadCount += 1;
+    }
+    return {
+      ok: false,
+      error: {
+        code: 'PLAYER_HELPER_PLAYBACK_ENDED_WITH_ERROR',
+        category: 'engine-failure',
+        message: 'private helper detail',
+        recoverable: true,
+        retryable: true,
+      },
+    };
+  }
+
+  async cleanup(): Promise<void> {}
+}
+
+async function waitFor(
+  predicate: () => boolean,
+  message: string,
+): Promise<void> {
+  for (let index = 0; index < 20; index += 1) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assert.fail(message);
+}
+
 class FakeDesktopPlayerAdapter {
   readonly envelopes: PlayerRendererIntentEnvelope[] = [];
   cleanupAccepted = true;
+  runtimeAccepted = true;
+  runtimeEvents:
+    | ((command: PlayerCommand) => readonly PlayerEvent[])
+    | null = null;
 
   async dispatchRendererIntent(envelope: PlayerRendererIntentEnvelope): Promise<{
     accepted: boolean;
@@ -288,7 +356,18 @@ class FakeDesktopPlayerAdapter {
           return assertUnhandledRendererIntentCommand(cmd);
       }
     };
-    return this.dispatchRendererIntent(toRendererIntentEnvelope(command));
+    this.envelopes.push(toRendererIntentEnvelope(command));
+    return {
+      accepted: this.runtimeAccepted,
+      events: this.runtimeEvents?.(command) ?? [
+        {
+          event: 'command.settled',
+          requestId: command.requestId,
+          command: command.command,
+          ok: true,
+        },
+      ],
+    };
   }
 
   async cleanup(): Promise<{ accepted: boolean; events: readonly PlayerEvent[] }> {
@@ -411,6 +490,46 @@ test('RD-17 composition passes diagnostics store into playback runtime', async (
   assertPublicSafe(diagnostics.getRecords(), rawPrivateValues);
 });
 
+test('playback composition propagates the recovery timer and runtime event sink', async () => {
+  const scheduler = new FakeScheduler();
+  const resolver = new FakeResolver();
+  const player = new FakePlayerPort();
+  const pms = new FakePmsPort();
+  const recoveryTimer = new FakeRecoveryTimer();
+  const emitted: PlayerEvent[] = [];
+  const composition = createPlexPlaybackRuntimeComposition({
+    scheduler,
+    resolver,
+    player,
+    pms,
+    capabilityProfile,
+    createRequestId: () => 'request-from-runtime',
+    recoveryTimer,
+    onEvents: (events) => emitted.push(...events),
+  });
+  await composition.runtime.startCurrentPlayback('startup');
+  emitted.length = 0;
+
+  composition.runtime.ingestPlayerEvents([
+    {
+      event: 'error',
+      requestId: 'request-from-runtime',
+      error: {
+        code: 'PLAYER_HOST_ENGINE_FAILURE',
+        category: 'engine-failure',
+        message: 'The player engine failed.',
+        recoverable: true,
+        retryable: true,
+        requestId: 'request-from-runtime',
+      },
+    },
+  ]);
+
+  assert.equal(emitted.length, 1);
+  assert.equal(emitted[0]?.event, 'error');
+  assert.deepEqual(recoveryTimer.delays, [1_000]);
+});
+
 test('RD-12 desktop adapter runtime port maps main-owned player commands without exposing Plex setup', async () => {
   const adapter = new FakeDesktopPlayerAdapter();
   const player = createDesktopPlayerAdapterRuntimePort(adapter);
@@ -440,6 +559,141 @@ test('RD-12 desktop adapter runtime port maps main-owned player commands without
     payload: {},
   });
   assertPublicSafe(adapter.envelopes, rawPrivateValues);
+});
+
+test('desktop adapter runtime port requires one exact successful command settlement', async () => {
+  const cases: Array<{
+    name: string;
+    events(command: PlayerCommand): readonly PlayerEvent[];
+  }> = [
+    {
+      name: 'missing',
+      events: () => [],
+    },
+    {
+      name: 'mismatched request',
+      events: (command) => [{
+        event: 'command.settled',
+        requestId: `${command.requestId}-other`,
+        command: command.command,
+        ok: true,
+      }],
+    },
+    {
+      name: 'failed',
+      events: (command) => [{
+        event: 'command.settled',
+        requestId: command.requestId,
+        command: command.command,
+        ok: false,
+      }],
+    },
+    {
+      name: 'conflicting',
+      events: (command) => [
+        {
+          event: 'command.settled',
+          requestId: command.requestId,
+          command: command.command,
+          ok: true,
+        },
+        {
+          event: 'command.settled',
+          requestId: command.requestId,
+          command: command.command,
+          ok: false,
+        },
+      ],
+    },
+    {
+      name: 'matching plus mismatched',
+      events: (command) => [
+        {
+          event: 'command.settled',
+          requestId: command.requestId,
+          command: command.command,
+          ok: true,
+        },
+        {
+          event: 'command.settled',
+          requestId: `${command.requestId}-other`,
+          command: command.command,
+          ok: true,
+        },
+      ],
+    },
+  ];
+
+  for (const entry of cases) {
+    const adapter = new FakeDesktopPlayerAdapter();
+    adapter.runtimeEvents = entry.events;
+    const player = createDesktopPlayerAdapterRuntimePort(adapter);
+    const command: PlayerCommand = {
+      command: 'load',
+      requestId: `request-${entry.name}`,
+      payload: loadPayload,
+    };
+
+    const result = await player.dispatch(command);
+
+    assert.equal(result.ok, false, entry.name);
+    assert.deepEqual(result.events, entry.events(command), entry.name);
+  }
+});
+
+test('real desktop adapter host rejection consumes exactly three recovery attempts', async () => {
+  const scheduler = new FakeScheduler();
+  const resolver = new FakeResolver();
+  const pms = new FakePmsPort();
+  const recoveryTimer = new FakeRecoveryTimer();
+  const host = new RejectingPlaybackHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  let requestCounter = 0;
+  const emitted: PlayerEvent[] = [];
+  const composition = createPlexPlaybackRuntimeComposition({
+    scheduler,
+    resolver,
+    player: createDesktopPlayerAdapterRuntimePort(adapter),
+    pms,
+    capabilityProfile,
+    recoveryTimer,
+    createRequestId: () => {
+      requestCounter += 1;
+      return `recovery-request-${requestCounter}`;
+    },
+    onEvents: (events) => emitted.push(...events),
+  });
+
+  const initial = await composition.runtime.startCurrentPlayback('startup');
+  assert.equal(initial.accepted, false);
+  assert.deepEqual(recoveryTimer.delays, [1_000]);
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    recoveryTimer.runNext();
+    await waitFor(
+      () => host.loadCount === attempt + 1,
+      `recovery load ${attempt} did not settle`,
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+
+  assert.equal(host.loadCount, 4);
+  assert.deepEqual(recoveryTimer.delays, [1_000, 2_000, 4_000]);
+  assert.equal(recoveryTimer.pending.size, 0);
+  assert.equal(
+    emitted.filter((event) => (
+      event.event === 'error' &&
+      event.error.code === 'PLAYER_HOST_ENGINE_FAILURE'
+    )).length,
+    4,
+  );
+  assert.equal(
+    emitted.some((event) => (
+      event.event === 'command.settled' &&
+      event.ok === false
+    )),
+    true,
+  );
 });
 
 test('RD-12 desktop adapter runtime port reports cleanup rejection to runtime cleanup owner', async () => {
