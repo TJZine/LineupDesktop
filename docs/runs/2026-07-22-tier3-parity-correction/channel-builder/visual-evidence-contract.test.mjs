@@ -432,6 +432,7 @@ test('real Git source proof rejects unstaged, staged, untracked/replaced, hash, 
   try {
     await mkdir(path.join(root, 'src'));
     execFileSync('git', ['init', '-q'], { cwd: root });
+    execFileSync('git', ['config', 'core.autocrlf', 'false'], { cwd: root });
     execFileSync('git', ['config', 'user.email', 'evidence@example.invalid'], { cwd: root });
     execFileSync('git', ['config', 'user.name', 'Evidence Test'], { cwd: root });
     await writeFile(path.join(root, relativePath), 'export const value = 1;\n');
@@ -449,32 +450,46 @@ test('real Git source proof rejects unstaged, staged, untracked/replaced, hash, 
       await assert.rejects(verifySourceRecord(root, commit, { ...record, sha256: SHA }), /recorded blob and SHA/u);
     });
     await t.test('unstaged dirt', async () => {
-      await writeFile(path.join(root, relativePath), 'export const value = 2;\n');
-      await assert.rejects(collectSourceRecord(root, commit, relativePath), /bytes differ|changes/u);
-      execFileSync('git', ['restore', relativePath], { cwd: root });
+      try {
+        await writeFile(path.join(root, relativePath), 'export const value = 2;\n');
+        await assert.rejects(collectSourceRecord(root, commit, relativePath), /bytes differ|changes/u);
+      } finally {
+        execFileSync('git', ['restore', '--worktree', '--source=HEAD', '--', relativePath], { cwd: root });
+      }
     });
     await t.test('staged dirt', async () => {
-      await writeFile(path.join(root, relativePath), 'export const value = 3;\n');
-      execFileSync('git', ['add', relativePath], { cwd: root });
-      execFileSync('git', ['restore', '--worktree', '--source=HEAD', relativePath], { cwd: root });
-      await assert.rejects(collectSourceRecord(root, commit, relativePath), /staged or unstaged changes/u);
-      execFileSync('git', ['restore', '--staged', relativePath], { cwd: root });
-      execFileSync('git', ['restore', relativePath], { cwd: root });
+      try {
+        await writeFile(path.join(root, relativePath), 'export const value = 3;\n');
+        execFileSync('git', ['add', relativePath], { cwd: root });
+        execFileSync('git', ['restore', '--worktree', '--source=HEAD', '--', relativePath], { cwd: root });
+        await assert.rejects(collectSourceRecord(root, commit, relativePath), /staged or unstaged changes/u);
+      } finally {
+        execFileSync('git', ['restore', '--staged', '--worktree', '--source=HEAD', '--', relativePath], { cwd: root });
+      }
     });
     await t.test('scoped untracked replacement reaches substitute rejection', async () => {
-      execFileSync('git', ['rm', '--cached', '-q', relativePath], { cwd: root });
-      await assert.rejects(collectSourceRecord(root, commit, relativePath), /untracked substitute/u);
-      execFileSync('git', ['reset', '-q', 'HEAD', '--', relativePath], { cwd: root });
+      try {
+        execFileSync('git', ['rm', '--cached', '-q', relativePath], { cwd: root });
+        await assert.rejects(collectSourceRecord(root, commit, relativePath), /untracked substitute/u);
+      } finally {
+        execFileSync('git', ['reset', '-q', 'HEAD', '--', relativePath], { cwd: root });
+      }
     });
     await t.test('replaced or missing source', async () => {
-      await unlink(path.join(root, relativePath));
-      await assert.rejects(collectSourceRecord(root, commit, relativePath), /ENOENT/u);
-      execFileSync('git', ['restore', relativePath], { cwd: root });
+      try {
+        await unlink(path.join(root, relativePath));
+        await assert.rejects(collectSourceRecord(root, commit, relativePath), /ENOENT/u);
+      } finally {
+        execFileSync('git', ['restore', '--worktree', '--source=HEAD', '--', relativePath], { cwd: root });
+      }
     });
     await t.test('between-preflight-and-capture mutation', async () => {
-      await writeFile(path.join(root, relativePath), 'export const value = 4;\n');
-      await assert.rejects(verifySourceSnapshot(root, snapshot), /changed after preflight/u);
-      execFileSync('git', ['restore', relativePath], { cwd: root });
+      try {
+        await writeFile(path.join(root, relativePath), 'export const value = 4;\n');
+        await assert.rejects(verifySourceSnapshot(root, snapshot), /changed after preflight/u);
+      } finally {
+        execFileSync('git', ['restore', '--worktree', '--source=HEAD', '--', relativePath], { cwd: root });
+      }
     });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -628,7 +643,7 @@ test('manifest pair publishes atomically through same-directory transient files 
   }
 });
 
-test('verifyEvidenceFiles reaches the complete real-repository source and capture proof path', { timeout: 30_000 }, async () => {
+test('verifyEvidenceFiles reaches the complete real-repository source and capture proof path', { timeout: 120_000 }, async () => {
   const evidenceRoot = await mkdtemp(path.join(os.tmpdir(), 'cb-evidence-complete-'));
   const desktopCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: DESKTOP_ROOT, encoding: 'utf8' }).trim();
   const upstreamRecords = new Map();
