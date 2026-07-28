@@ -2212,3 +2212,941 @@ code-complete claim with the reopened parity requirements; freeze the smallest
 vertical playback unit that produces real user value; and route the
 decision-complete exact-file plan to lineup-desktop-feature-review before any
 product edit. Carry all deferred WS1 and Windows-native proof as open debt.
+
+---
+
+ACTIVE_WS2_EXECUTION_AMENDMENT_2026_07_28: This is the current whole-WS2
+execution authority. It supplements the plan's existing required headings and
+supersedes only the stale implication that RD-25/RD-26 code-complete wording
+established current playback parity. The task remains Tier 3 feature/design
+work. Product edits remain blocked until an independent
+`lineup-desktop-feature-review` approves this amendment and explicitly approves
+Package 2A with no unresolved material finding.
+
+**ACTIVE_WS2_MAC_COMPLETION_OVERRIDE_2026_07_28:** the user's latest explicit
+direction supersedes every conflicting Windows-machine, `.NET` Release-build,
+native-helper build, live libmpv ERROR/EOF-path, Windows soak/manual, or Windows
+capability-proof requirement anywhere in this canonical plan solely to the
+extent that requirement would gate WS2 work, Package 2A–2E progression,
+WS2 checkpoint/commit/publishing, or WS2 closeout. This plan-wide-as-applied-to-
+WS2 precedence explicitly includes the earlier “relevant platform/manual gates
+pass at each workstream close” clause and the earlier MacBook entry condition
+that required a `.NET` Release build before any native-helper edit. Those
+earlier clauses retain full, unchanged force for WS1, WS3–WS9, RD-27, RD-28,
+their own workstream gates, and overall parity-program closeout; this override
+neither waives nor defers any non-WS2 obligation. The superseded WS2
+observations are now one named post-WS2 validation debt,
+`WS2-POST-VALIDATION-01`, and are not executable WS2 packages or acceptance
+gates. Their absence cannot block Package 2A checkpoint/commit/publishing,
+Packages 2B–2E, Package 2D's conservative no-op disposition, Package 2E
+authority reconciliation, or honest WS2 closeout on this Mac. This override
+does not convert missing proof into support: the production capability profile
+stays conservative, every affected row remains partial/proof-open or
+later-contribution as classified below, and no capability may be promoted until
+the deferred proof is later obtained and independently reviewed. Preserve the
+exact implemented Package 2A diff and all observed local review/verification
+evidence; no Windows command is rerun or fabricated for WS2.
+
+### WS2 freshness evidence and claim boundary
+
+Desktop was independently observed at clean `initial-build` HEAD
+`76b741caed85623671419b5dbc95e67b7c7714df`, tracking
+`origin/initial-build`. The controller observed a clean full `npm run verify`
+baseline at that checkpoint before this plan edit. This planner independently
+observed the clean worktree and exact HEAD but did not rerun the already-green
+full baseline. The sibling upstream checkout was observed at audited authority
+`0258dbe15b04d2d141d0a4a44575fecb5bb72d41`; its tracked
+`scorecard.png` modification and untracked local documents are unrelated and
+must not be read as product authority, adapted, or committed.
+
+Codanna reported a fresh index with semantic search enabled, but the broad
+playback query returned sparse capability/contract matches and noisy unrelated
+results. Exact discovery therefore fell back deterministically to `rg`,
+`rg --files`, line-count inventory, and direct reads of the current Desktop
+contracts, main/player and main/Plex owners, preload, renderer overlays, native
+helper, focused tests, authority docs, and the scoped upstream player, recovery,
+stream, navigation, settings, and error-recovery owners. This fallback is the
+recorded discovery path for WS2.
+
+RD-25/RD-26 remain valid historical implementation claims at their reviewed
+scope: production-shaped Plex resolution, private descriptor handoff, native
+helper process/protocol, renderer-safe events, track/quality state, and
+renderer controls exist. They do not establish the reopened rows because
+`getProductionCapabilityProfile()` still advertises only MP4/H.264/AAC direct
+play, subtitle delivery `none`, and unsupported audio/subtitle switching, HDR,
+Dolby Vision, direct stream, and every transcode family. Current Desktop also
+has a manual same-channel Retry/Guide error surface but not the audited
+upstream behavior of three bounded automatic retries plus explicit Retry and
+Skip recovery actions. Current native-helper source maps every
+`MPV_EVENT_END_FILE` to `ended` without reading
+`mpv_event_end_file.reason` or `.error`; command timeouts settle command
+dispatch and are not a production mid-playback trigger. Current `playerIpc.ts`
+uses one `sendPlayerEvent` callback for synchronous command/cleanup result
+arrays and asynchronous adapter events, while `bootstrapPlaybackRuntime()`
+does not pass the composition's existing `onEvents` seam. Finally,
+`ChannelScheduler.skipToNext()` synchronously emits `programStart`, while
+`src/main/index.ts` observes its async runtime-start handler as `void`. Those
+three facts are must-fix ownership inputs below. Windows production media,
+hardware, video-surface, track, HDR, recovery, and packaged-helper observations
+remain unproved.
+
+The audited upstream behavior at `0258dbe` is a functionality target, not a
+Desktop ownership template:
+
+- `RetryManager.ts` caps automatic network retries at three with delays of
+  1,000, 2,000, and 4,000 ms, cancels owned timers/listeners, and resets after
+  successful playback;
+- `PlaybackRuntimeController.ts` attempts the current supported fallback before
+  surfacing a nonrecoverable playback failure and advances after ended media;
+- `RecoveryActions.ts` exposes explicit Retry and Skip for playback failures;
+- subtitle, audio, DTS, HDR/Dolby Vision, direct-stream, transcode, and fallback
+  policy are driven by upstream settings and browser/webOS capability owners.
+
+Desktop preserves those user-observable recovery semantics where approved
+below but intentionally diverges in ownership: retry/skip orchestration stays
+main-owned, renderer calls remain narrow and validated, helper/libmpv and Plex
+details never cross the bridge, and Windows-observed facts rather than upstream
+webOS constants decide the production capability profile.
+
+### WS2 registry audit
+
+Every WS2 ID has exactly one present classification from the approved
+vocabulary. A classification is not closure.
+
+| ID | Present classification | Observed Desktop/upstream reconciliation | WS2 disposition |
+| --- | --- | --- | --- |
+| `LIB-05` | implemented-but-proof-open | Main-owned stream parsing covers files, parts, streams, language, dynamic range, and track identity; live representative samples remain unobserved. | Local automated proof is sufficient for the WS2 implementation gate; representative native samples remain `WS2-POST-VALIDATION-01`. Do not change parser absent a demonstrated defect. |
+| `PB-01` | implemented-but-proof-open | Guide/current-program tuning reaches the production-shaped runtime. | Local runtime/integration proof closes the WS2 implementation gate; production Windows media observation remains `WS2-POST-VALIDATION-01`. |
+| `PB-02` | implemented-but-proof-open | Mini-guide tune and channel transition exist; Windows native-video/focus proof remains. | Local transition/focus tests close the WS2 implementation gate; native Windows observation remains `WS2-POST-VALIDATION-01`. |
+| `PB-03` | implemented-but-proof-open | Three-digit entry, timeout, invalid result, and tune exist. | Local input/runtime tests close the WS2 implementation gate; keyboard/numpad observation remains `WS2-POST-VALIDATION-01`. |
+| `PB-04` | partial | Direct Play exists, but production truth is deliberately MP4/H.264/AAC only. | Keep the current conservative literal profile; Package 2D is a no-op. Broader native observation/promotion is deferred to `WS2-POST-VALIDATION-01`. |
+| `PB-05` | partial | Policy/resolver remux paths exist while production remux/audio conversion are disabled. | Keep unsupported in Package 2D; observation/promotion is post-WS2 debt. |
+| `PB-06` | partial | PMS start/release and transcode setup paths exist while every production transcode family is disabled. | Keep unsupported in Package 2D; observation/promotion is post-WS2 debt. |
+| `PB-07` | later-workstream contribution | WS2 source/non-packaged helper boundary exists; packaged helper/libmpv redistribution remains WS9/RD-28-owned. | Local static/protocol/integration proof completes the WS2 contribution; native build/live validation is `WS2-POST-VALIDATION-01`, and packaged proof remains WS9/RD-28. |
+| `PB-08` | partial | Renderer/native presentation structure exists, but current production video plus mandatory three-row Windows audit is open. | Local presentation tests close the WS2 implementation gate; native three-row audit remains `WS2-POST-VALIDATION-01`. |
+| `PB-12` | implemented-but-proof-open | Contract/helper/renderer states cover idle, loading, buffering, seeking, stalled, ended, and error. | Packages 2A/2B plus platform-neutral tests close the WS2 implementation gate; live native states remain post-WS2 debt. |
+| `PB-13` | partial | Manual same-channel retry exists; bounded automatic retry and upstream Retry/Skip action parity are missing. libmpv may report interrupted/incomplete/corrupt playback as EOF as well as ERROR, so an ERROR-only helper seam cannot prove every interruption class. | Packages 2A/2B plus deterministic 1/2/4 and explicit-action tests close the WS2 implementation gate. Live ERROR/EOF classification remains `WS2-POST-VALIDATION-01`, so the row stays partial. |
+| `PB-14` | implemented-but-proof-open | Crash detection, cleanup, safe diagnostics, and replacement-process behavior have automated/harness coverage. | Local lifecycle/order/replacement tests close the WS2 implementation gate; native soak remains post-WS2 and packaged soak remains later. |
+| `PB-19` | partial | Renderer/helper track list and selection paths exist but production switching is disabled. | Package 2D keeps switching unsupported; native observation/promotion is post-WS2. |
+| `PB-20` | partial | Subtitle Off/list/selection paths exist but production delivery is `none` and switching disabled. | Package 2D keeps delivery/switching unsupported; native observation/promotion is post-WS2. |
+| `PB-21` | partial | Direct/conversion/burn-in policy and resolver tests exist; production conversion/transcode and Windows samples are disabled/unproved. | Package 2D remains conservative/no-op; native samples are post-WS2 debt and there is no renderer-side subtitle pipeline. |
+| `PB-22` | later-workstream contribution | Forced/default selection policy exists; preferred-language contract/persistence/control belongs to WS3. | Preserve WS2 policy/tests and close the WS2 contribution; the row remains open through WS3 and any post-WS2 native proof. |
+| `PB-23` | later-workstream contribution | Audio fallback policy exists; DTS preference/control belongs to WS3 and production support is unproved. | Preserve and close the WS2 contribution; the row remains open through WS3/post-WS2 native proof. |
+| `PB-24` | later-workstream contribution | HDR10/HLG/Dolby Vision metadata, policy, and helper quality state exist; fallback preference/control belongs to WS3 and production support is unproved. | Preserve and close the WS2 contribution; the row remains open through WS3/post-WS2 native proof. |
+| `WIN-01` | named Windows/native/package blocked | Current production breadth is conservative by design; Mac and upstream constants cannot establish Windows libmpv/hardware truth. | Remains open as `WS2-POST-VALIDATION-01`; it does not block WS2 and cannot enable Package 2D promotion. |
+| `WIN-06` | named Windows/native/package blocked | Safe quality summaries exist, but actual GPU/display/media capability and fallback diagnostics are not observed. | Remains open as `WS2-POST-VALIDATION-01`; a future privileged diagnostic need requires its own reviewed replan. |
+| `WIN-07` | later-workstream contribution | Process isolation, redaction, and support bundle exist; packaged replacement-helper recovery belongs to WS9/RD-28. | Local lifecycle proof completes the WS2 contribution; native validation is post-WS2 and packaged recovery remains WS9/RD-28. |
+| `UI-41` | implemented-but-proof-open | Runtime-backed idle surface exists and has historical local-match evidence. | Local renderer/runtime proof closes the WS2 implementation gate; native observation remains post-WS2 debt. |
+| `UI-42` | implemented-but-proof-open | Runtime-backed loading transition exists and has historical local-match evidence. | Local renderer/runtime proof closes the WS2 implementation gate; native observation remains post-WS2 debt. |
+| `UI-43` | partial | Error surface exists, but it substitutes Guide for upstream Skip and lacks bounded automatic recovery presentation. | Packages 2A/2B implement and locally prove recovery actions; live native observation remains post-WS2 debt. |
+
+No WS2 row is presently classified `already correct for present gate` or
+`missing`: the former implementation-shaped rows still have named proof debt,
+and the newly identified recovery gap is partial rather than absent.
+
+### WS2 architecture, security, and lifecycle invariants
+
+- Electron main owns scheduler selection, retry/skip orchestration, Plex stream
+  resolution, PMS leases, privileged playback descriptors, helper lifecycle,
+  and capability truth. Preload validates narrow closed requests/results.
+  Renderer owns display, focus, and ephemeral pending-action state only.
+- Renderer never receives credentials, headers, tokenized URLs, raw Plex
+  payloads, server/connection details, native handles, helper internals, native
+  logs, process details, app paths, engine track ids, or capability-probe raw
+  output.
+- Retry, skip, stop, teardown, schedule tick, channel switch, server/profile
+  change, helper crash, and replacement playback each have one generation owner.
+  Timers, async completions, PMS leases, helper processes, and player requests
+  are canceled, released, or quarantined by that owner.
+- Automatic recovery is limited to the current scheduled identity. A stale
+  timer or completion cannot restart old media, revive a released PMS lease,
+  overwrite a newer player snapshot, or consume a retry budget belonging to a
+  replacement program.
+- Asynchronous adapter events and synchronous renderer-command/cleanup result
+  events have different named sinks. Adapter batches enter the runtime exactly
+  once; runtime-emitted batches and synchronous IPC result batches each reach
+  the renderer exactly once. No event is fed through both paths.
+- One main-owned schedule-transition owner is the only `programStart`
+  subscriber used for playback and the only recovery caller of
+  `skipToNext()`. It installs skip settlement before the scheduler's
+  synchronous emission and resolves only after the resulting runtime start.
+- Production capabilities stay conservative until exact Windows observations
+  pass. Policy branches, helper source, dev harnesses, upstream constants, or a
+  successful .NET build do not by themselves enable a capability. Those
+  observations now occur only under `WS2-POST-VALIDATION-01`; their absence
+  does not block WS2 closeout.
+- There is no new dependency, package/lockfile policy, persistent schema,
+  credential/storage owner, renderer browser storage, compatibility shim,
+  fallback API variant, broad RPC bridge, or duplicated public contract.
+- No Package 2A/2B code touches WS1 product/evidence/manifest/checklist owners.
+  If playback work exposes a lineup, persistence, guide-refresh, or mutation
+  defect, stop before further WS2 product edit or commit and route the smallest
+  reviewed WS1 repair.
+- Package 2A is the reviewed exception for exactly
+  `src/native-helper/Lineup.NativePlayerHost/Program.cs`. It adds the official
+  `mpv_event_end_file` layout and reason branch; it does not add a helper
+  envelope or expose raw mpv values. This macOS workspace has no `dotnet`
+  executable. Package 2A therefore checkpoints from the named platform-neutral
+  static/protocol/adapter/process/runtime/smoke/full gates plus independent
+  review. Release build and live native validation are
+  `WS2-POST-VALIDATION-01`, not commit or closeout blockers. A second helper
+  file, P/Invoke signature, dependency, project, package, or envelope change
+  still requires reviewed replan.
+- Any copied or behaviorally adapted upstream recovery slice receives a
+  serialized import-ledger row before or with its implementation checkpoint.
+  No upstream dirty artifact is in scope.
+
+### WS2 files out of scope for every package
+
+- WS1 Channel Builder product, evidence harness, paired manifests, checklists,
+  performance fixture/cap, and authority conclusions
+- WS3–WS9 product or authority implementation, including Settings preference
+  contracts/persistence/controls, input/media keys, Guide feature work, release
+  packaging, signing, updater, installer, helper/libmpv redistribution, and
+  RD-27/RD-28 execution
+- `src/main/persistence/**`, Plex credentials/auth/discovery/library browsing,
+  channel mutation/persistence, diagnostics schema, package/lockfile files, and
+  public release configuration
+- native-helper files other than Package 2A's exact `Program.cs` exception
+
+### WS2 file-shape disposition
+
+Observed attention owners are `src/contracts/player.ts` (726 lines),
+`src/main/player/desktopPlayerAdapter.ts` (640, named hotspot),
+`src/main/player/plexPlaybackRuntime.ts` (566),
+`src/main/player/streamPolicy/desktopStreamPolicy.ts` (624),
+`src/main/plex/streamResolver.ts` (666),
+`src/renderer/playerOverlayController.ts` (797), and native-helper
+`Program.cs` (1,414).
+
+`plexPlaybackRuntime.ts` remains the main request/epoch/active-session
+coordinator, but Package 2A extracts the distinct retry timer/budget lifecycle
+into a focused owner rather than adding that lifecycle to the coordinator.
+`Program.cs` may grow only for end-file constants, the exact sequential struct,
+and focused branch/emitter. `playerIpc.ts` receives only the two named delivery
+callbacks and their call-site split, not a new lifecycle.
+Package 2B extracts the distinct renderer player-error recovery request,
+generation, and settlement lifecycle into
+`playerErrorRecoveryController.ts` and the schedule transition into
+`playbackProgramTransitionOwner.ts`; `playerOverlayController.ts` remains the
+overlay/timer/focus coordinator and must not grow to absorb either policy. The
+new owners must perform meaningful request-generation and synchronous-event
+settlement behavior rather than act as forwarding wrappers. Reaching 800 lines in
+`playerOverlayController.ts`, needing a second unrelated recovery policy, or
+making renderer state authoritative triggers replan and fresh architecture
+review. Package 2D is now an explicit conservative no-op and edits no
+capability-profile, policy, resolver, source, or test owner during WS2. Any
+future post-validation promotion requires a new reviewed post-WS2 plan with
+observed facts and a fresh cohesion disposition. The named adapter hotspot
+stays no-touch. The 1,414-line helper
+receives only the bounded exception above and otherwise stays no-touch. Every
+production-source package runs `npm run verify:maintainability` and gets fresh
+architecture review.
+
+### WS2 serial execution packages
+
+Parallel product edits are prohibited. Packages execute exactly
+2A → 2B → 2D conservative no-op → 2E. Former Package 2C is removed from the
+executable WS2 graph and retained only as
+`WS2-POST-VALIDATION-01`. Package 2A has no Windows/.NET completion sub-gate:
+its checkpoint, commit, and publication proceed after the complete Mac-runnable
+automated/static/smoke/full verification and fresh independent review pass.
+Package 2D completes by recording that the current conservative profile is
+unchanged and that promotion is deferred; it performs no product/test edit,
+needs no Package 2C input, and cannot infer support. Package 2E follows that
+reviewed no-op disposition.
+
+#### Package 2A — bounded current-program automatic recovery
+
+**IMPLEMENTER_ROLE_ELIGIBILITY:** `worker`. The owner and behavioral boundary
+are frozen, but integrating native event classification, a timer lifecycle,
+and exact event provenance with existing epoch/cleanup ordering requires
+bounded design judgment. `worker_sol_low` and `worker_luna` are not eligible.
+The helper edit may be checkpointed, committed, and published on this Mac after
+all named platform-neutral gates and fresh independent review pass. Deferred
+Windows/native validation is recorded but is not Package 2A acceptance.
+
+**Owned files:**
+
+- `src/native-helper/Lineup.NativePlayerHost/Program.cs`
+- new `src/main/player/plexPlaybackRecoveryOwner.ts`
+- new `src/main/player/playbackEventRouter.ts`
+- `src/main/player/playerIpc.ts`
+- `src/main/player/plexPlaybackRuntime.ts`
+- `src/main/player/plexPlaybackComposition.ts`
+- `src/main/player/playbackRuntimeBootstrap.ts`
+- composition-only callback wiring in `src/main/index.ts`
+- new `src/__tests__/main/player/plexPlaybackRecoveryOwner.test.ts`
+- new `src/__tests__/main/player/playbackEventRouter.test.ts`
+- `src/__tests__/main/playerIpc.test.ts`
+- `src/__tests__/main/player/plexPlaybackRuntime.test.ts`
+- `src/__tests__/main/player/plexPlaybackComposition.test.ts`
+- `src/__tests__/main/player/playbackRuntimeBootstrap.test.ts`
+- `src/__tests__/main/player/desktopPlayerAdapter.test.ts`
+- `src/__tests__/main/player/nativePlayerHostProcess.test.ts`
+- `tools/__tests__/native-helper-program.test.mjs`
+- `tools/__tests__/smoke-electron.test.mjs`
+- `docs/architecture/import-ledger.md`
+
+This exhaustive scope is 19 files, including two new production owners and two
+new tests.
+
+**PACKAGE_2A_IMPLEMENTATION_REMEDIATION_2026_07_28:** implementation review
+rejected the then-current uncommitted Package 2A diff on four correctness grounds:
+adapter acceptance was mistaken for successful load settlement; an eligible
+failure during an unresolved retry was lost; same-turn asynchronous host events
+could overtake older synchronous result events; and the main helper-lifecycle
+listener invalidated runtime custody before the adapter's renderer-safe error
+was delivered. Preserve the complete 19-file diff without reverting,
+committing, or editing Package 2B. A `worker` may remediate only this 11-file
+subset after fresh plan approval:
+
+- `src/main/player/plexPlaybackComposition.ts`
+- `src/main/player/plexPlaybackRecoveryOwner.ts`
+- `src/main/player/playbackEventRouter.ts`
+- `src/main/player/playerIpc.ts`
+- `src/main/index.ts`
+- `src/__tests__/main/player/plexPlaybackComposition.test.ts`
+- `src/__tests__/main/player/plexPlaybackRecoveryOwner.test.ts`
+- `src/__tests__/main/player/playbackEventRouter.test.ts`
+- `src/__tests__/main/player/plexPlaybackRuntime.test.ts`
+- `src/__tests__/main/playerIpc.test.ts`
+- `tools/__tests__/smoke-electron.test.mjs`
+
+The other eight Package 2A files remain preserved exactly as reviewed during
+this remediation. If any fix requires `desktopPlayerAdapter.ts`,
+`nativePlayerHostProcess.ts`, a public contract, preload, native helper,
+Package 2B, or a twelfth file, stop before edit and return to plan review.
+
+**Production-reachable trigger:** `Program.cs` defines the official sequential
+`mpv_event_end_file` data layout exactly as reason `int`, error `int`,
+playlist-entry id `long`, playlist-insert id `long`, and inserted-entry count
+`int`, plus reason constants EOF `0`, STOP `2`, QUIT `3`, ERROR `4`, and
+REDIRECT `5`. The `MPV_EVENT_END_FILE` branch must inspect non-null event data:
+
+- EOF, STOP, and QUIT preserve a non-retry terminal `ended` event for the
+  current request; STOP/QUIT never consume recovery budget;
+- REDIRECT emits no terminal event because libmpv is continuing to another
+  file;
+- ERROR emits the existing helper `error` envelope with fixed safe code
+  `PLAYER_HELPER_PLAYBACK_ENDED_WITH_ERROR`, category `engine-failure`, and
+  `recoverable/retryable: true`;
+- null data or an unknown reason emits the same fixed safe error category with
+  `recoverable/retryable: false`.
+
+No numeric mpv error/reason, source URL, native message, or helper detail crosses
+the envelope. The ERROR classification is deliberately `engine-failure`, never
+`network`: libmpv documents its error as approximate and
+`MPV_ERROR_LOADING_FAILED` as generic. It is nevertheless a real
+production-reachable mid-playback failure event, unlike a synthetic adapter
+event or command timeout. libmpv also documents that interrupted/incomplete or
+corrupt media may arrive as EOF; Package 2A must not relabel EOF, and therefore
+does not close that interruption-class proof.
+
+**Recovery and single-delivery seam:** add one main-owned recovery owner,
+injected with a timer host and a callback that retries an exact stable schedule
+identity `(channelId, programId, startedAtMs)`. Eligibility is exactly the
+current request's normalized `PLAYER_HOST_ENGINE_FAILURE` event in category
+`engine-failure` carrying both recovery flags. Other engine errors, plus source,
+authentication, authorization, network, timeout, unsupported
+media/capability, validation, track, render, helper, cleanup, aborted, stale,
+and unknown failures remain manual. The owner allows three attempts for one
+identity at exactly 1,000, 2,000, and 4,000 ms. The runtime re-resolves once per
+attempt and must compare the exact identity before dispatch; mismatch cancels
+without consuming the replacement program's budget. A current-request
+authoritative `playing` event resets the budget. Eligible errors continue to
+the renderer once while retry is pending; a successful retry's ordinary
+loading/playing events clear the error, and exhaustion leaves the final error
+visible for Package 2B actions.
+
+The adapter runtime port interprets load success from command settlement, not
+from `DesktopPlayerAdapterDispatchResult.accepted`. It returns `ok: true` only
+when `accepted` is true and the event batch contains exactly one matching
+`command.settled` for the dispatched request id and command with `ok: true`,
+with no matching failed or conflicting settlement. Missing, mismatched,
+duplicate/conflicting, or `ok: false` settlement returns `ok: false` while
+preserving the complete renderer-safe event batch for runtime observation.
+Thus the adapter's legitimate `accepted: true` plus host error and
+`command.settled ok: false` means the recovery load failed and consumes the
+current attempt; it can never be reported `started`.
+
+The recovery owner retains one boolean failure latch scoped to the active
+identity, owner generation, and in-flight attempt generation. An eligible
+engine error observed while that attempt is unresolved sets the latch instead
+of being discarded by the in-flight guard. Attempt settlement is
+decision-complete:
+
+- `stale`, identity replacement, or explicit cancel invalidates the generation,
+  clears the latch, and schedules nothing;
+- a current authoritative `playing` event is the only success reset: it clears
+  the latch, marks the in-flight generation successful, resets the budget, and
+  prevents that attempt's later promise settlement from scheduling;
+- without an observed playing reset, `failed` or a latched eligible error
+  schedules exactly the next remaining delay once, even if the callback result
+  is `started`;
+- `started` with no latch schedules nothing and waits for a later accepted
+  playing/error event; after settlement such a later eligible error enters the
+  ordinary next-attempt path.
+
+The third attempt may latch or return failure but cannot create a fourth timer.
+Timer cancellation, stale completion, cleanup, teardown, helper crash, schedule
+replacement, and integer generation rollover clear all latch/settlement state.
+
+`RegisterPlayerIpcHandlersOptions` replaces the ambiguous callback with two
+required named sinks: `sendSynchronousPlayerEvent(event)` is used only for
+renderer command/cleanup result arrays and local unsupported results;
+`onAsynchronousAdapterEvents(events)` is passed only to
+`DesktopPlayerAdapter.onEvents`. The focused `playbackEventRouter` owns only
+the latter batch path, but it intentionally retains shallow-copied,
+renderer-safe batches until a FIFO next-turn drain. Its injected scheduling
+port has `schedule(callback)` and `cancel(handle)`; production uses
+`setImmediate`/`clearImmediate`, not a microtask. This lets all promise
+continuations from a native result, adapter dispatch, composition port, and
+runtime synchronous result publication settle before a later event from the
+same stdout turn is ingested. Multiple queued batches preserve arrival order.
+
+Each queue entry captures the runtime object at enqueue. At drain it is
+delivered exactly once only if that object is still the current runtime; a
+replacement/null runtime drops it with a safe diagnostic. The unchanged
+runtime request/epoch custody then rejects stale request ids. A batch arriving
+when no runtime exists is dropped immediately. `flushCurrentRuntime()` cancels
+the scheduled handle and synchronously drains the eligible FIFO under the same
+current-runtime checks; `dispose()` is idempotent, cancels the handle, clears
+all retained batches, advances the router generation, and prevents future
+delivery. The router retains no batch after drain, replacement drop, or
+dispose.
+
+`bootstrapPlaybackRuntime()` continues to pass `onEvents` in both
+development/smoke and production branches, so synchronous runtime results are
+visible. `src/main/index.ts` sends those results directly to
+`sendPlayerEvent`, sends renderer IPC command/cleanup results through the
+separate synchronous sink, and routes only adapter-async batches through the
+FIFO. No returned or emitted batch feeds a second source.
+
+Helper lifecycle uses the same ordering owner. `playerIpc.ts` creates the native
+host, constructs `DesktopPlayerAdapter` first (registering the adapter
+lifecycle listener), and only then registers the optional main lifecycle
+callback supplied in `RegisterPlayerIpcHandlersOptions`. It retains that
+unsubscribe and invokes it exactly once at the beginning of registration
+teardown, before adapter cleanup and handler removal. The production
+composition passes the original native-host factory unchanged. When the later
+main listener fires, it calls `flushCurrentRuntime()` first so the adapter's
+already-queued helper error is accepted and published while custody is active;
+only then does it invoke `runtime.handleHelperCrash()`. Cleanup never precedes
+that flush. Main shutdown unregisters the lifecycle callback through player IPC
+teardown, disposes the router, and only then tears down runtime/Plex/channel
+owners; both quit paths and re-entry use the same idempotent order.
+
+Manual/schedule channel replacement, changed scheduled identity, stop, cleanup,
+teardown, helper crash, server/profile lifecycle cleanup, and dispose cancel the
+timer and invalidate its generation. Candidate-resolution and load-dispatch
+failures from a recovery attempt consume the same budget; stale failures consume
+none. A callback result of `started` is provisional until accepted playing or
+error observation; it does not erase a failure latched during that attempt.
+After exhaustion, the existing renderer-safe terminal error remains
+visible and manually actionable; the owner neither loops, skips automatically,
+changes capabilities, nor fabricates success. PMS cleanup and current epoch
+custody remain in the existing runtime/cleanup owners.
+
+The import ledger records a focused behavioral adaptation of upstream
+`src/modules/player/recovery/RetryManager.ts` and
+`src/modules/player/core/ErrorHandler.ts` at audited pin `0258dbe`: Desktop
+retains cap/backoff/cancellation semantics but moves ownership from
+`HTMLVideoElement` to main runtime generations and does not copy browser source.
+
+**Exact no-touch files and neighboring owners:** no public contract, preload,
+renderer, stream policy/resolver, adapter, native-host process/port/protocol
+TypeScript source, scheduler/channel, persistence, diagnostics schema, package,
+roadmap, matrix, or current-state edit. In particular,
+`nativeHelperProtocol.ts`, `nativeHelperProtocolCodec.ts`,
+`hostEventProjection.ts`, `desktopPlayerAdapter.ts`, and
+`nativePlayerHostProcess.ts` remain source no-touch because their existing
+closed `error` event path already validates and normalizes the new safe helper
+event. `src/main/index.ts` changes only event-router composition, post-adapter
+lifecycle callback wiring, lifecycle flush-before-cleanup, and idempotent
+router/registration/runtime teardown order. It does not absorb adapter,
+process, retry, or event-validation policy. Stop if listener order cannot be
+made deterministic without either no-touch owner, if causal ordering requires
+changing native stdout parsing, or if a helper project/P/Invoke/envelope
+change, public schema, scheduler mutation, fallback decision, raw native
+diagnostic, or renderer state is needed.
+
+**Verification classification:** `new regression/contract test required`.
+Focused tests must prove exact delays/cap, one budget per scheduled identity,
+success reset, cleanup cancellation, stale timer/completion quarantine,
+candidate/load failure accounting, provisional-start latch reconciliation, no
+automatic retry for unsafe/nonretryable errors, causal cross-sink order,
+lifecycle error-before-cleanup, PMS/player cleanup ordering, and unchanged
+terminal error.
+`native-helper-program.test.mjs` statically asserts the exact struct field
+order, reason constants/branches, fixed safe payload, no raw numeric emission,
+and no blanket END_FILE-to-ended branch. Adapter/process tests inject the
+helper ERROR envelope through the real validation/projection path.
+`plexPlaybackComposition.test.ts` first proves the port maps an exact matching
+successful settlement to `ok: true` and maps accepted host failure, missing,
+mismatched, and conflicting settlement to `ok: false` without dropping events.
+Its concrete regression composes a real `DesktopPlayerAdapter` with a host
+rejection that the adapter represents as `accepted: true` plus failed
+settlement, and proves the runtime schedules
+exactly 1,000/2,000/4,000 ms, performs no fourth retry, and leaves the final
+error visible.
+
+`plexPlaybackRecoveryOwner.test.ts` holds a retry promise unresolved, injects
+an eligible error, resolves the callback `started`, and proves the latch
+schedules the next delay; companion cases prove later playing clears the latch,
+failed-plus-latched schedules only once, and identity replacement, cancel,
+cleanup/stale completion, and third-attempt exhaustion clear or cap it.
+
+`playbackEventRouter.test.ts` injects its scheduler and reproduces one native
+result plus a later async buffering/error batch in the same turn. It proves the
+synchronous loading/result batch is emitted first, the queued batch is emitted
+second exactly once, FIFO is stable, microtask draining is forbidden,
+replacement runtime entries are dropped, current-runtime stale events remain
+runtime-filtered, explicit lifecycle flush is synchronous, and dispose cancels
+and empties the queue. `playerIpc.test.ts` retains the sink-separation case and
+adds a Set-ordered production host regression proving adapter lifecycle
+delivery is registered before the main callback, teardown unsubscribes main
+before cleanup, and post-teardown failure cannot call main.
+`plexPlaybackRuntime.test.ts` routes a helper lifecycle error, flushes it, then
+calls crash cleanup and proves the renderer observes the helper error—not only
+stale warnings—before custody invalidation. `smoke-electron.test.mjs` locks the
+composition root to the original factory, post-adapter lifecycle callback,
+flush-before-crash order, and router disposal before runtime teardown.
+Router/runtime/composition/bootstrap tests continue to prove async ingest once,
+stale rejection, recovery observation once, and visible synchronous runtime
+emissions. Run locally:
+
+```sh
+node --test tools/__tests__/native-helper-program.test.mjs
+node --import tsx --test src/__tests__/main/player/desktopPlayerAdapter.test.ts src/__tests__/main/player/nativePlayerHostProcess.test.ts src/__tests__/main/playerIpc.test.ts src/__tests__/main/player/plexPlaybackRecoveryOwner.test.ts src/__tests__/main/player/playbackEventRouter.test.ts src/__tests__/main/player/plexPlaybackRuntime.test.ts src/__tests__/main/player/plexPlaybackComposition.test.ts src/__tests__/main/player/playbackRuntimeBootstrap.test.ts
+npm run typecheck
+npm run build:electron
+node --test tools/__tests__/smoke-electron.test.mjs
+npm run smoke:electron
+npm run verify:maintainability
+npm run verify:architecture
+npm run verify:redaction
+npm run verify
+git diff --check
+```
+
+The following commands are retained only as
+`WS2-POST-VALIDATION-01`'s future Windows/.NET debt packet. They are not run,
+required, or awaited by WS2:
+
+```sh
+dotnet build src/native-helper/Lineup.NativePlayerHost/Lineup.NativePlayerHost.csproj --configuration Release
+node --test tools/__tests__/native-helper-program.test.mjs
+node --import tsx --test src/__tests__/main/player/desktopPlayerAdapter.test.ts src/__tests__/main/player/nativePlayerHostProcess.test.ts src/__tests__/main/player/productionNativeHostFactory.test.ts src/__tests__/main/player/plexPlaybackLifecycleIntegration.test.ts
+dotnet clean src/native-helper/Lineup.NativePlayerHost/Lineup.NativePlayerHost.csproj --configuration Release
+npm run verify:redaction
+git diff --check
+```
+
+When that post-WS2 validation is eventually authorized, inspect only the exact
+helper `bin/` and `obj/` outputs after clean and remove only confirmed generated
+remnants if they obstruct redaction. Missing/unrun/failed Windows/.NET build or
+live ERROR projection remains honest open validation debt; it does not block
+the Package 2A checkpoint, commit, publication, later WS2 package, or WS2
+closeout. For current WS2 acceptance, a deterministic injected test must observe recovery
+without a stale restart, leaked lease, extra fourth attempt, duplicate event,
+or public contract change. All gates and independent implementation review
+must pass. The remediation is accepted only when all four rejected
+reproductions pass at their public seams, the preserved eight files have no
+additional diff, the full 19-file Package 2A set is freshly reviewed, and no
+material finding remains. If a remediation edit must be abandoned, revert only
+that edit back to the preserved rejected 19-file state for replanning; do not
+discard unrelated Package 2A work or partially commit a fix. Final rollback
+after an accepted checkpoint remains the entire 19-file unit.
+Checkpoint commit: `feat(player): add bounded playback recovery`. No partial
+TypeScript-only or helper-only commit is allowed.
+
+PACKAGE_2A_FIX_HANDOFF
+STATUS: preserve the approved remediation plan, exact implemented 19-file diff,
+and all existing local verification/independent-review evidence
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
+TASK: Review Package 2A Correctness Remediation Plan
+TASK_FAMILY: feature/design
+TIER: Tier 3
+PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
+ARTIFACT: PACKAGE_2A_IMPLEMENTATION_REMEDIATION_2026_07_28
+PRESERVE: the exact implemented 19-file Package 2A product/test/import diff
+EDIT_AFTER_APPROVAL: only the exact 11-file remediation subset
+IMPLEMENTER_AFTER_APPROVAL: `worker`
+BLOCKERS: only a failed required Mac-runnable gate or unresolved material
+independent-review finding; no Windows-machine blocker applies because the
+Release/live-native work is `WS2-POST-VALIDATION-01`
+MESSAGE:
+Freshly review the complete WS2 amendment and the exact
+PACKAGE_2A_IMPLEMENTATION_REMEDIATION_2026_07_28 handoff. Reproduce and
+adjudicate adapter settlement accounting, the in-flight failure latch,
+same-turn cross-sink causal ordering, and adapter-error-before-helper-cleanup
+lifecycle order. Confirm the fixes remain inside the 11-file subset of the
+preserved 19-file Package 2A diff, tests fail on the rejected behavior and
+prove the frozen outcomes, no-touch owners remain untouched, rollback and
+post-WS2 validation debt remain honest, and Package 2B/proof debt are unchanged. Do not
+authorize implementation until no material plan finding remains.
+
+#### Package 2B — explicit Retry and Skip recovery actions
+
+**IMPLEMENTER_ROLE_ELIGIBILITY:** `worker`. This is a reviewed cross-process
+vertical slice and needs bounded judgment inside frozen contracts; lower roles
+are ineligible.
+
+**Owned owners/files:** `src/contracts/ipc.ts`, `src/contracts/shell.ts`, new
+`src/preload/playerRecoveryBridge.cts`, `src/preload/channels.cts`,
+`src/preload/index.cts`, new `src/main/player/playerRecoveryIpc.ts`,
+new `src/main/player/playbackProgramTransitionOwner.ts`,
+`src/main/player/plexPlaybackRuntime.ts`,
+`src/main/player/plexPlaybackComposition.ts`,
+composition, owner teardown, and removal of the old program-start,
+channel-tuned, and post-initialize playback starts in
+`src/main/index.ts`, `src/renderer/playerOverlayController.ts`,
+new `src/renderer/playerErrorRecoveryController.ts`,
+`src/renderer/playerOverlayDom.ts`, `src/renderer/overlays.ts`,
+`src/renderer/overlayViewModels.ts`, `src/renderer/domBindings.ts`,
+`src/renderer/index.ts`, new
+`src/__tests__/main/player/playerRecoveryIpc.test.ts`,
+new `src/__tests__/main/player/playbackProgramTransitionOwner.test.ts`,
+new
+`src/__tests__/main/player/playbackProgramTransitionIntegration.test.ts`,
+`src/__tests__/main/player/plexPlaybackRuntime.test.ts`,
+`src/__tests__/main/player/plexPlaybackComposition.test.ts`,
+`src/__tests__/domain/schedulerDomain.test.ts`,
+`src/__tests__/main/guideRuntime.test.ts`,
+`src/__tests__/contracts/contracts.test.ts`,
+`src/__tests__/integration/preloadContractVocabulary.test.ts`,
+new `src/__tests__/renderer/playerErrorRecoveryController.test.ts`,
+`src/__tests__/renderer/playerOverlayController.test.ts`,
+`src/__tests__/renderer/overlays.test.ts`,
+`tools/__tests__/smoke-electron.test.mjs`, and
+`docs/architecture/import-ledger.md`. This list is exhaustive.
+The exhaustive scope is 31 files, including two new production owners and
+four new tests.
+
+The public API adds one closed player recovery operation with action exactly
+`retry-current` or `skip-next`; request/result envelopes echo one opaque request
+id and expose only accepted/failed status plus the current renderer-safe player
+snapshot/error vocabulary. Retry resolves the currently authoritative scheduled
+program through the runtime, resets Package 2A's exhausted manual budget, and
+starts it once. Skip advances the main-owned scheduler exactly once and starts
+the newly current program; it never accepts a renderer-supplied channel,
+program, media, URL, or offset. Both reject absent/stale playback context
+safely, are serialized against tune/cleanup generations, and cannot resurrect a
+released session. Renderer replaces the error surface's Guide substitute with
+upstream-shaped Retry and Skip actions, preserves deterministic focus/busy/error
+state, and falls back to Guide only when no current/next playable program is
+available. This is a reviewed Desktop process-boundary divergence from
+upstream's in-process callbacks, not a behavior divergence.
+The focused renderer recovery owner, not the 797-line overlay controller, owns
+request generations, one in-flight action, bridge timeout/settlement, safe
+failure text, and retry/skip completion. The overlay controller composes it
+with existing presentation, render, and focus callbacks.
+
+**Single skip transition owner and awaitable contract:** current
+`ChannelScheduler.skipToNext()` calls `jumpToProgram()`, which updates
+current/next state and synchronously emits exactly one `programStart`. The
+existing `channelSchedulerProgramStartHandler` in `src/main/index.ts` returns a
+promise to an event API typed `(program) => void`, so the emitter neither
+awaits nor reports that playback transition. Package 2B removes that handler
+and its teardown bookkeeping. `playbackProgramTransitionOwner` becomes the
+sole playback `programStart` subscriber and the sole recovery caller of
+`skipToNext()`; `playerRecoveryIpc` receives this owner, never the scheduler.
+
+The owner is authoritative for every scheduler-emitted start, not only a
+natural tick or skip. `ChannelScheduler.loadChannel()` synchronously emits
+`programStart`; `GuideRuntime.tuneChannel()` then invokes `onChannelTuned`, and
+`initializeActiveChannel()` calls that same tune path. Therefore
+`src/main/index.ts` also removes `onChannelTunedCallback`, stops supplying the
+`onChannelTuned` option to `createChannelComposition()`, and removes the
+post-`initializeActiveChannel()` explicit
+`startCurrentPlayback('startup')`. It creates/subscribes the transition owner
+after runtime bootstrap and before calling `initializeActiveChannel()`.
+Initialization retains only its existing safe rejection diagnostic.
+`src/main/channel/channelComposition.ts` and
+`src/main/channel/guideRuntime.ts` remain source no-touch: their optional
+callback stays available to non-playback consumers, but the production
+composition root supplies no playback callback.
+
+Every `programStart`, whether caused by startup load, manual tune, channel
+refresh, natural clock transition, or skip, invokes exactly one
+`runtime.startCurrentPlayback('schedule-tick')`. Here `schedule-tick` means a
+scheduler-authoritative program transition, not only a timer origin;
+`startup` and `manual-switch` remain runtime vocabulary for non-scheduler
+callers/tests but are not used by the production composition root. A non-skip
+listener failure is caught and reported once through the owner's injected safe
+diagnostic callback; it cannot become an unhandled rejection or trigger a
+second start.
+
+For `skip-next`, the owner freezes the current schedule identity, creates one
+serialized transition generation and pending settlement, and registers that
+pending generation before calling `skipToNext()` exactly once. The synchronous
+`programStart(nextProgram)` listener must observe a different authoritative
+identity, attach exactly one
+`runtime.startCurrentPlayback('schedule-tick')` promise to the pending
+settlement, and never start playback from the outer skip method. Skip resolves
+`accepted` only after that runtime start settles and its `onEvents` callback
+has synchronously published the result. It returns a safe failure if no
+program event/change occurs, runtime start fails, cleanup/tune invalidates the
+generation, or the event does not name the authoritative new current program.
+A normal schedule event with no skip pending enters the same listener and
+starts once with safe failure diagnostics. Concurrent recovery actions are
+rejected busy; cleanup, teardown, manual tune, and a newer program event settle
+or invalidate the old deferred once. No direct skip-start remains in
+`playerRecoveryIpc` or `src/main/index.ts`.
+
+`retry-current` enters the same transition owner without scheduler mutation:
+it freezes the current identity, resets Package 2A's manual budget, and invokes
+the runtime's exact-identity retry once. It settles only after runtime
+completion/event publication under the same generation rules. A manual tune's
+`loadChannel()` event is a newer program generation and invalidates a pending
+recovery action before its single runtime start. The owner's idempotent
+`dispose()` unsubscribes the listener, invalidates/settles any deferred, and is
+called before runtime cleanup in both main shutdown paths; the removed legacy
+handler/callback has no separate teardown.
+
+The import ledger records the behavioral adaptation of upstream
+`src/core/error-recovery/RecoveryActions.ts` and the playback action portion of
+`PlaybackRuntimeController.ts` at `0258dbe`. No upstream UI framework,
+`HTMLVideoElement`, browser storage, or webOS routing source is copied.
+
+**No-touch boundary:** no scheduler interface/implementation/event-owner,
+persistence, Settings, stream capability/policy, Plex transport,
+adapter/native-host/helper, package, WS1 owner, or later workstream edit.
+Specifically `src/domain/scheduler/interfaces.ts`,
+`src/domain/scheduler/channelScheduler.ts`, including its local
+`SchedulerEventOwner`, `src/main/channel/channelComposition.ts`, and
+`src/main/channel/guideRuntime.ts` remain source no-touch; existing synchronous
+load/tune behavior is locked by the named domain, guide, owner, and integration
+tests.
+The shared player contract gains no helper detail and the renderer gains no
+scheduler port. Stop if one closed operation is insufficient, skip requires
+channel mutation/persistence, a scheduler signature must become async, a new
+owner would be a forwarding wrapper, or `playerOverlayController.ts` would
+reach 800 lines.
+
+**Verification classification:** `new regression/contract test required`.
+Tests cover exact payload/key rejection, sender/origin authorization, preload
+invoke rejection, request-id echo, retry currentness, one-step skip, empty/end
+cases, tune/cleanup races, stale completion, focus/busy/error recovery,
+forbidden-field recursion, and unchanged existing player APIs. The scheduler
+domain test locks one synchronous `programStart` per `skipToNext`, and the
+guide test locks `loadChannel` emission before optional tune notification. The
+owner test proves pending-before-emission, one runtime start, no outer-method
+duplicate, await-through-runtime settlement, no-emission failure, concurrent
+busy rejection, and tune/cleanup/dispose invalidation. The real
+GuideRuntime/ChannelScheduler integration test proves exactly one runtime start
+for initialize-active-channel, manual tune, natural clock transition, and
+skip—never the former two/triple starts. The smoke test locks production
+composition omission of both `onChannelTuned` playback wiring and the
+post-initialize explicit start, and proves subscription precedes
+initialization. The main IPC test proves an accepted result cannot precede the
+runtime's observable event callback. Run:
+
+```sh
+npm run typecheck
+npm run build:electron
+node --import tsx --test src/__tests__/domain/schedulerDomain.test.ts src/__tests__/main/guideRuntime.test.ts src/__tests__/main/player/playerRecoveryIpc.test.ts src/__tests__/main/player/playbackProgramTransitionOwner.test.ts src/__tests__/main/player/playbackProgramTransitionIntegration.test.ts src/__tests__/main/player/plexPlaybackRuntime.test.ts src/__tests__/main/player/plexPlaybackComposition.test.ts src/__tests__/contracts/contracts.test.ts src/__tests__/integration/preloadContractVocabulary.test.ts src/__tests__/renderer/playerErrorRecoveryController.test.ts src/__tests__/renderer/playerOverlayController.test.ts src/__tests__/renderer/overlays.test.ts
+node --test tools/__tests__/smoke-electron.test.mjs
+npm run smoke:electron
+npm run verify:maintainability
+npm run verify:architecture
+npm run verify:redaction
+npm run verify
+git diff --check
+```
+
+Rollback is the whole closed recovery API/action slice; never leave a contract,
+channel, preload method, main handler, or renderer control unmatched.
+Checkpoint commit: `feat(player): add retry and skip recovery actions`.
+
+#### `WS2-POST-VALIDATION-01` — deferred native/Windows validation debt
+
+This is not Package 2C, is not in the executable WS2 sequence, owns no current
+edit/commit, and has no WS2 blocking power. A later separately reviewed task
+may run the preserved Windows/.NET Release build/clean, live helper ERROR/EOF
+projection, representative direct-play/remux/transcode media matrix,
+windowed/fullscreen OSD/mini-guide/options focus audit, keyboard/numpad checks,
+loading/buffering/seeking/stalled/ended/interruption recovery, Retry/Skip,
+helper crash/replacement soak, audio/subtitle switching and delivery, HDR/HLG/
+Dolby Vision/SDR fallback, and safe hardware/display capability observations.
+It must use exact then-committed source, sanitized evidence, redaction checks,
+and the existing no-private-data rules.
+
+Unavailable, unrun, ambiguous, or failed observations remain debt and keep the
+affected registry rows partial/proof-open; they do not reopen or invalidate an
+honestly closed WS2 implementation gate. A discovered product defect returns
+through a new reviewed remediation plan. Observed additional support may
+propose a new post-WS2 capability-promotion plan, but never mutates capability
+truth directly. Existing WS9/RD-27/RD-28 packaged Windows owners remain
+separate and unchanged.
+
+#### Package 2D — conservative capability no-op
+
+**IMPLEMENTER_ROLE_ELIGIBILITY:** no implementation worker is delegated.
+The controller records the reviewed disposition that
+`getProductionCapabilityProfile()` remains byte-for-byte conservative:
+MP4/H.264/AAC direct play only, subtitle delivery `none`, and unsupported
+audio/subtitle switching, HDR/Dolby Vision, direct-stream, and transcode
+families.
+
+Package 2D owns no source, test, evidence, or capability edit; runs no
+Windows/native command; creates no checkpoint commit; and is complete for WS2
+when the no-op disposition is reviewed and handed to Package 2E. Any promotion
+is deferred until `WS2-POST-VALIDATION-01` later supplies exact reviewed facts
+under a new plan. Unobserved support remains unsupported.
+
+**Verification classification:** `no new automated test needed`. Package 2A/2B
+and full Mac verification already exercise the unchanged profile; Package 2E
+records the conservative no-op. A changed profile, new support literal, or
+attempt to infer capability from helper source/static tests is a stop/replan,
+not Package 2D work.
+
+#### Package 2E — WS2 authority reconciliation and implementation-gate closeout
+
+**IMPLEMENTER_ROLE_ELIGIBILITY:** `worker_sol_low` only after the controller
+freezes every row disposition from accepted commits and evidence. The mapped
+role is eligible because it must perform an exact mechanical authority update
+and must make no product, architecture, proof-depth, or classification decision.
+
+**Exact owned files:** `docs/plans/2026-07-22-tier3-parity-correction-plan.md`,
+`docs/architecture/CURRENT_STATE.md`,
+`docs/architecture/playback-architecture.md`,
+`docs/product/lineup-product-parity-matrix.md`,
+`docs/roadmap/desktop-port-roadmap.md`, and
+`docs/architecture/import-ledger.md` only if an accepted implementation import
+row still needs its final evidence/commit reference. No source, test, tool,
+run-harness, WS1 evidence/checklist, later-workstream authority, or package file
+may be edited.
+
+The worker updates only controller-supplied exact statuses/evidence links,
+removes the stale unqualified RD-25/RD-26 parity implication, records commits
+and observed commands, keeps all unavailable Windows claims open, and preserves
+`PB-07`, `WIN-07`, and `PB-22`–`PB-24` as open through their named
+contributors. It records `WS2-POST-VALIDATION-01` as nonblocking post-WS2 debt
+and Package 2D as a conservative no-op. It must not decide whether a row
+advances, paraphrase missing proof into a pass, alter WS1 debt, authorize
+WS3–WS9, weaken a target, or invent a Windows result. Missing Windows evidence
+is expected and does not stop closeout; a missing controller disposition,
+conflicting authority, failed Mac-runnable verifier, or requested product edit
+is an immediate stop/escalation.
+
+**Verification classification:** `no new automated test needed`. Exact proof is
+authority consistency plus:
+
+```sh
+npm run verify:docs
+npm run verify:redaction
+git diff --check
+npm run verify
+```
+
+Rollback is the single docs-only closeout commit; accepted product commits and
+ignored redacted evidence remain intact. Checkpoint:
+`docs(parity): record ws2 playback implementation gate`.
+
+### WS2 acceptance, rollback, and replan rules
+
+WS2's implementation gate is complete after 2A and 2B are committed/published
+and cleanly reviewed, Package 2D's conservative no-op is reviewed, Package 2E
+passes, all named platform-neutral static/contract/integration/smoke/
+architecture/maintainability/redaction/full verification is green, imports are
+ledgered, and active playback no longer relies on fake WS2-owned production
+behavior. `WS2-POST-VALIDATION-01` is carried in closeout/handoffs but does not
+keep WS2 active or closeout-pending and does not block commits or publishing.
+Missing native/Windows proof never becomes a support claim.
+
+Rollback is per checkpoint and must preserve one buildable/smokeable state.
+Never roll back shared channel/persistence data, erase honest blocked evidence,
+erase honest post-WS2 debt, or combine packages into one unreviewable commit.
+
+Stop and replan before further product edit or commit when:
+
+- a WS1 lineup, persistence, guide-refresh, or mutation defect appears;
+- source/contract/owner freshness contradicts this amendment;
+- recovery cannot remain main-owned and generation-safe;
+- a public schema, IPC method, persisted setting, capability field, helper
+  protocol, or exact file outside the active package is required;
+- any native-helper source edit beyond Package 2A's exact `Program.cs`
+  branch/struct/emitter, or any dependency/lockfile/package policy,
+  redistribution, signing/updater, or new privileged diagnostic surface is
+  required;
+- Package 2D attempts any capability/profile edit or claims support without a
+  future reviewed post-WS2 evidence package;
+- a touched attention owner reaches its extraction/review trigger;
+- required verification fails or evidence would contain private material; or
+- current upstream changes materially beyond audited `0258dbe`.
+
+Carry WS1 debt unchanged, including paired visual manifests, live multi-library
+facet/filter proof, append/replace proof, manual accessibility/input/scale
+proof, packaged ACL proof, and `WS1-PERF-01`: workflow `30074270895`, job
+`89421508431`, exact head `335a13acfcee3f5450c104ed3fc48e45e461264a`,
+Windows Server 2025, Node 22.19.0, unchanged 50,000-candidate fixture,
+2,690.61 ms observed against the unchanged 2,000 ms cap.
+
+MODEL_SUGGESTION
+PLANNER: current tracked planner
+IMPLEMENTER: tracked role selected per package
+REVIEWER: current tracked reviewer
+WHY: WS2 crosses main runtime lifecycle, typed IPC/security, renderer recovery,
+native playback, conservative capability truth, deferred validation debt, and
+later-workstream contribution gates.
+
+WS2_MAC_COMPLETION_OVERRIDE_REVIEW_PACKET
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
+TASK: Review WS2 Mac Completion Override
+TASK_FAMILY: feature/design
+TIER: Tier 3
+PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
+ARTIFACT: ACTIVE_WS2_MAC_COMPLETION_OVERRIDE_2026_07_28 within
+ACTIVE_WS2_EXECUTION_AMENDMENT_2026_07_28
+FILES:
+- docs/plans/2026-07-22-tier3-parity-correction-plan.md
+PRESERVE:
+- the exact implemented Package 2A diff and every observed local verification
+  and independent-review result
+- Package 2B scope/semantics and all existing WS1/WS3–WS9 contribution debt
+EXECUTABLE_WS2_SEQUENCE:
+- Package 2A
+- Package 2B
+- Package 2D conservative no-op
+- Package 2E
+POST_WS2_DEBT:
+- `WS2-POST-VALIDATION-01` owns every Windows/.NET Release/native build, live
+  libmpv ERROR/EOF, Windows native/manual/soak, and capability observation
+BLOCKERS:
+- failed platform-neutral Package 2A/2B focused or full verification
+- unresolved material independent-review finding
+- non-conservative Package 2D edit/claim
+- inconsistent Package 2E authority reconciliation
+NONBLOCKERS:
+- unavailable/unrun/failed Windows machine, `.NET`, Release helper build, live
+  libmpv path, Windows manual/soak, or capability proof
+- absence of a former Package 2C execution
+REQUIRED_REVIEW_ASSERTIONS:
+- the override has plan-wide precedence over every conflicting Windows/.NET/
+  native/manual/soak/capability requirement only as applied to WS2, including
+  clauses earlier than the active amendment
+- all such earlier requirements retain full force for WS1, WS3–WS9, RD-27,
+  RD-28, their own gates, and parity-program closeout
+- Mac-runnable static/contract/integration/smoke/typecheck/build/architecture/
+  maintainability/redaction/full verification plus independent review remain
+  mandatory
+- no missing proof is converted to support and the production capability
+  profile remains conservative
+- Package 2C is absent from the executable graph, Package 2D is a reviewed
+  no-op with no edit/commit, and Package 2E records the debt without blocking
+  closeout
+- Package 2A may checkpoint/commit/publish and WS2 may close while
+  `WS2-POST-VALIDATION-01` remains open
+MESSAGE:
+Adversarially review only the planning override and its consistency across the
+complete canonical plan, including clauses earlier than the active WS2
+amendment. Confirm its plan-wide-as-applied-to-WS2 precedence permits honest Mac-only WS2
+completion without weakening platform-neutral verification/review or promoting
+unproved capabilities; carries all Windows/native/live/capability work under
+the exact nonblocking debt ID; preserves the implemented Package 2A diff and
+local evidence; removes Package 2C from execution; closes Package 2D as a
+conservative no-op; and updates acceptance, rollback, closeout, and handoff
+without altering Package 2B or weakening WS1, WS3–WS9, RD-27/RD-28, or program
+closeout requirements. Report material findings or explicit approval.
