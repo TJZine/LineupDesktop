@@ -212,7 +212,7 @@ Failure to resolve any selected library ID to exactly one current main-owned `{ 
 
 | Family | Exact preimage |
 | --- | --- |
-| library | `{ profileBinding, serverBinding, family: 'library', libraryId, libraryUuid, libraryType }`, using current `PlexLibrarySection.id`, `.uuid`, and mapped `movie | show`; title/count/art/thumb/agent/scanner/timestamps are excluded |
+| library | `{ profileBinding, serverBinding, family: 'library', libraryId, libraryUuid, libraryType }`, using current `PlexLibrarySection.id`, `.uuid`, and mapped `movie` or `show`; title/count/art/thumb/agent/scanner/timestamps are excluded |
 | playlist | `{ profileBinding, serverBinding, family: 'playlist', libraryId: null, libraryUuid: null, ratingKey, key }`, using current `PlexPlaylist.ratingKey` and `.key`; Plex playlists are server-wide in the current source, so absent library ownership is represented by both explicit nulls, never omission or guessed ownership |
 | collection | `{ profileBinding, serverBinding, family: 'collection', libraryId, libraryUuid, ratingKey, key }`, using its owning library pair plus current `PlexCollection.ratingKey` and `.key` |
 | genre/director/year/studio/actor | `{ profileBinding, serverBinding, family, libraryId, libraryUuid, key, tagValue, fastKey }`, using the owning library pair, current `PlexTagDirectoryItem.key`, exact raw-main-only trimmed/NFC runtime-semantic `title` as `tagValue`, and exact NFC `fastKey` or null; count/thumb and separately projected `displayTitle` are excluded |
@@ -230,7 +230,7 @@ All facet raw values are retained only in the main materialization index. Displa
 | playlist | `lineup-builder/source/playlist/v1:` | `{ type: 'playlist', playlistKey }`; `playlistName` is excluded |
 | manual item leaf | `lineup-builder/source/manual-item/v1:` | `{ ratingKey, title, durationMs }`; title is included because it is persisted/runtime manual-item semantics, duration is a positive safe integer, and item order is not represented here |
 | manual | `lineup-builder/source/manual/v1:` | `{ type: 'manual', items }`, where items is the original-order array of manual-item source identities |
-| mixed | `lineup-builder/source/mixed/v1:` | `{ type: 'mixed', mixMode, sources }`, where `mixMode` is `sequential | interleave` and sources is the original-order array of recursively computed child source identities |
+| mixed | `lineup-builder/source/mixed/v1:` | `{ type: 'mixed', mixMode, sources }`, where `mixMode` is `sequential` or `interleave` and sources is the original-order array of recursively computed child source identities |
 
 `libraryFilter` is the one typed dictionary exception to ordinary exact-object unknown-field and plain-object rejection. After the current library-filter validator accepts any non-null, non-array object, the source constructor reads exactly its own enumerable string-key entries with `Object.entries`; prototype state, non-enumerable properties, and symbol keys remain outside the dictionary exactly as they are in current validation. There is no positive key allowlist and no generic “unknown key” rejection inside this dictionary. It rejects only an exact raw key equal to one of `CHANNEL_DOMAIN_FORBIDDEN_KEYS`: `rawMediaUrl`, `tokenizedUrl`, `authHeaders`, `rawAuthHeaders`, `persistentToken`, `credentialMaterial`, `nativeHandle`, `libmpvObject`, `engineId`, `electronApi`, `nodeApi`, `rawPlexPayload`, `streamKey`, `partKey`, `secretDiagnostics`, `localStorage`, `storageKey`, `currentChannelKey`, `serverUri`, or `connectionUri`. Each value is admitted if and only if it is a string or any finite JavaScript number. The identity-only canonical representation is an array of exact `{ keyNfc, keyUtf16, value }` entries: `keyNfc` is the raw key normalized to NFC, `keyUtf16` is the raw key's complete ordered UTF-16 code-unit array with each unit an integer 0–65535, string values use the normal NFC string rule, numeric values use the finite-number rule above, and entries sort by `keyNfc` in lexical Unicode-code-point order then lexicographically by `keyUtf16`. Exact raw object keys are unique, so the second key is total; NFC-equivalent distinct raw keys remain separate entries with multiplicity and raw spelling preserved. This conversion exists only in the library-source identity preimage: it never changes the retained runtime `libraryFilter`, and outer typed source/preimage objects still reject unknown fields normally.
 
@@ -1977,6 +1977,9 @@ Stop the active package and return to planning if any of the following occurs:
 
 After this planning artifact passes docs verification, route it to an independent adversarial feature-plan review before any WS1 implementation.
 
+> **Historical/superseded handoff:** retained as WS1 execution evidence only.
+> See [Current WS2 status and next authority](#current-ws2-status-and-next-authority).
+
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-plan
 TASK: Complete 2026-07-22 Tier 3 Parity Correction Through Quality Loop
@@ -2188,6 +2191,10 @@ fell back to direct reads of `docs/architecture/CURRENT_STATE.md`,
 of the current player/Plex/native-helper/renderer/test surfaces. No WS2 exact
 file list is frozen by this sequencing amendment.
 
+> **Historical/superseded handoff:** WS2 is closed; this entry packet is no
+> longer executable. See
+> [Current WS2 status and next authority](#current-ws2-status-and-next-authority).
+
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-plan
 TASK: Complete WS2 Playback Through Quality Loop
@@ -2222,6 +2229,17 @@ established current playback parity. The task remains Tier 3 feature/design
 work. Product edits remain blocked until an independent
 `lineup-desktop-feature-review` approves this amendment and explicitly approves
 Package 2A with no unresolved material finding.
+
+### Current WS2 status and next authority
+
+> **Authoritative status (2026-07-28):** Packages 2A (`8dc1057`) and 2B
+> (`d2f1e97`) are published and cleanly reviewed, Package 2D is a reviewed
+> conservative no-op, and Package 2E closes WS2's platform-neutral
+> implementation gate. Every Package 2A/2B remediation, scope, custody, and
+> override review packet retained below is historical evidence, not executable
+> instruction. The only current continuation authority in this document is the
+> [WS3 freshness handoff](#current-ws3-freshness-handoff-2026-07-28) at the end
+> of the plan; it authorizes planning and review, not WS3 product edits.
 
 **ACTIVE_WS2_MAC_COMPLETION_OVERRIDE_2026_07_28:** the user's latest explicit
 direction supersedes every conflicting Windows-machine, `.NET` Release-build,
@@ -2761,6 +2779,9 @@ after an accepted checkpoint remains the entire 19-file unit.
 Checkpoint commit: `feat(player): add bounded playback recovery`. No partial
 TypeScript-only or helper-only commit is allowed.
 
+> **Historical/superseded packet:** retained as Package 2A review evidence
+> only. See [Current WS2 status and next authority](#current-ws2-status-and-next-authority).
+
 PACKAGE_2A_FIX_HANDOFF
 STATUS: preserve the approved remediation plan, exact implemented 19-file diff,
 and all existing local verification/independent-review evidence
@@ -2988,6 +3009,9 @@ route-DOM authority assertion unmatched. The route-DOM correction is not an
 independent product change and must roll back with Package 2B.
 Checkpoint commit: `feat(player): add retry and skip recovery actions`.
 
+> **Historical/superseded packet:** retained as Package 2B scope-review
+> evidence only. See [Current WS2 status and next authority](#current-ws2-status-and-next-authority).
+
 PACKAGE_2B_ROUTE_DOM_SCOPE_REVIEW_PACKET_2026_07_28
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
 TASK: Review Package 2B Route-DOM Scope Correction
@@ -3037,6 +3061,10 @@ assertion plus nearby Retry/Skip and Guide-fallback DOM proof, forbids productio
 or broad route-DOM refactoring, adds the test to focused verification, preserves
 whole-slice rollback and every other invariant, and keeps the worker paused
 until explicit approval.
+
+> **Historical/superseded section:** the remediation below is accepted,
+> published evidence and is no longer executable. See
+> [Current WS2 status and next authority](#current-ws2-status-and-next-authority).
 
 **PACKAGE_2B_IMPLEMENTATION_REMEDIATION_2026_07_28:** two independent
 implementation reviews reproduced seven unique material defects in the current
@@ -3365,6 +3393,9 @@ including the approved route-DOM correction and this remediation. Do not
 partially roll back one trust boundary, generation owner, test authority, or
 preload guard while leaving the public recovery method active.
 
+> **Historical/superseded packet:** retained as Package 2B remediation-review
+> evidence only. See [Current WS2 status and next authority](#current-ws2-status-and-next-authority).
+
 PACKAGE_2B_IMPLEMENTATION_REMEDIATION_REVIEW_PACKET_2026_07_28
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
 TASK: Review Package 2B Seven-Finding Remediation Plan
@@ -3428,6 +3459,10 @@ a newer session and no permanent busy remains; every prior fix remains
 decision-complete; and no original Package 2B or later obligation is weakened.
 Report findings by severity and explicitly APPROVE or REJECT. Do not authorize
 implementation while any material finding remains.
+
+> **Historical/superseded packet:** retained as Package 2B cleanup-custody
+> review evidence only. See
+> [Current WS2 status and next authority](#current-ws2-status-and-next-authority).
 
 PACKAGE_2B_CLEANUP_CUSTODY_REVIEW_PACKET_2026_07_28
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
@@ -3643,6 +3678,10 @@ WHY: WS2 crosses main runtime lifecycle, typed IPC/security, renderer recovery,
 native playback, conservative capability truth, deferred validation debt, and
 later-workstream contribution gates.
 
+> **Historical/superseded packet:** retained as the reviewed WS2 completion
+> override evidence only. See
+> [Current WS2 status and next authority](#current-ws2-status-and-next-authority).
+
 WS2_MAC_COMPLETION_OVERRIDE_REVIEW_PACKET
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
 TASK: Review WS2 Mac Completion Override
@@ -3701,3 +3740,33 @@ local evidence; removes Package 2C from execution; closes Package 2D as a
 conservative no-op; and updates acceptance, rollback, closeout, and handoff
 without altering Package 2B or weakening WS1, WS3–WS9, RD-27/RD-28, or program
 closeout requirements. Report material findings or explicit approval.
+
+### Current WS3 freshness handoff (2026-07-28)
+
+NEXT_SESSION_HANDOFF
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-plan
+TASK: Plan WS3 Settings From Current Repository State
+TASK_FAMILY: feature/design
+TIER: Tier 3
+PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
+ARTIFACT: published WS2 closeout at `247f7b4`, including Package 2A `8dc1057`,
+Package 2B `d2f1e97`, the reviewed Package 2D conservative no-op, and Package
+2E authority reconciliation
+FILES:
+- docs/plans/2026-07-22-tier3-parity-correction-plan.md
+- docs/architecture/CURRENT_STATE.md
+- docs/architecture/playback-architecture.md
+- docs/product/lineup-product-parity-matrix.md
+- docs/roadmap/desktop-port-roadmap.md
+BLOCKERS: WS3 product edits remain blocked until a fresh exact-file Settings
+plan freezes ownership, verification, acceptance, rollback, and replan triggers
+and passes adversarial `lineup-desktop-feature-review`
+MESSAGE:
+Start a fresh Tier 3 WS3 Settings audit from current repository state. Preserve
+WS1 proof debt, `WS2-POST-VALIDATION-01`, the conservative production playback
+capability profile, and every later-workstream contribution gate. Reconcile
+WS3's 40 registered rows against current settings contracts, persistence,
+main/preload/renderer ownership, tests, architecture, and current upstream
+behavior. Produce the smallest decision-complete vertical plan and route it to
+review before any product edit. Historical Package 2A/2B packets above are
+evidence only and confer no implementation authority.
