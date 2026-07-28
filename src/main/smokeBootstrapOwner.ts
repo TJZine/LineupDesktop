@@ -61,12 +61,13 @@ export class SmokeBootstrapOwner {
     }
 
     try {
+      const appUserDataPath = this.options.app.getPath('userData');
+      const temporaryDirectory = this.options.temporaryDirectory ?? os.tmpdir();
       const canonicalRoot = fs.realpathSync(smokeRootArgument);
       const canonicalArgumentUserData = fs.realpathSync(userDataArgument);
-      const canonicalAppUserData = fs.realpathSync(this.options.app.getPath('userData'));
-      const canonicalTemporaryDirectory = fs.realpathSync(
-        this.options.temporaryDirectory ?? os.tmpdir(),
-      );
+      const canonicalAppUserData = fs.realpathSync(appUserDataPath);
+      const canonicalTemporaryDirectory = fs.realpathSync(temporaryDirectory);
+      const resolvedTemporaryDirectory = path.resolve(temporaryDirectory);
       const canonicalAppData = fs.realpathSync(this.options.app.getPath('appData'));
       const normalUserData = path.resolve(canonicalAppData, this.options.app.getName());
       if (
@@ -75,8 +76,18 @@ export class SmokeBootstrapOwner {
         canonicalRoot === normalUserData ||
         !isStrictChild(canonicalTemporaryDirectory, canonicalRoot) ||
         !path.basename(canonicalRoot).includes(nonce) ||
-        fs.lstatSync(smokeRootArgument).isSymbolicLink() ||
-        fs.lstatSync(userDataArgument).isSymbolicLink()
+        hasSymbolicLinkBelow(
+          [canonicalTemporaryDirectory, resolvedTemporaryDirectory],
+          smokeRootArgument,
+        ) ||
+        hasSymbolicLinkBelow(
+          [canonicalTemporaryDirectory, resolvedTemporaryDirectory],
+          userDataArgument,
+        ) ||
+        hasSymbolicLinkBelow(
+          [canonicalTemporaryDirectory, resolvedTemporaryDirectory],
+          appUserDataPath,
+        )
       ) {
         return smokeFailure();
       }
@@ -132,6 +143,24 @@ function readArgument(argv: readonly string[], prefix: string): string | null {
 function isStrictChild(parentPath: string, childPath: string): boolean {
   const relative = path.relative(parentPath, childPath);
   return relative.length > 0 && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+function hasSymbolicLinkBelow(
+  candidateParents: readonly string[],
+  childPath: string,
+): boolean {
+  const absoluteChild = path.resolve(childPath);
+  const parentPath = candidateParents.find((candidate) =>
+    isStrictChild(candidate, absoluteChild));
+  if (parentPath === undefined) return true;
+
+  const relativeParts = path.relative(parentPath, absoluteChild).split(path.sep);
+  let currentPath = parentPath;
+  for (const part of relativeParts) {
+    currentPath = path.join(currentPath, part);
+    if (fs.lstatSync(currentPath).isSymbolicLink()) return true;
+  }
+  return false;
 }
 
 function isExactSentinel(value: unknown, nonce: string): boolean {

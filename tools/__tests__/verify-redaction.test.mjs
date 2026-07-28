@@ -37,7 +37,10 @@ test('shared traversal preserves support-bundle filtering and directory skips', 
   fs.mkdirSync(path.join(root, 'node_modules'));
   fs.writeFileSync(path.join(root, 'nested', 'included.md'), 'safe');
   fs.writeFileSync(path.join(root, 'nested', 'excluded.html'), 'safe');
-  fs.writeFileSync(path.join(root, 'node_modules', 'skipped.md'), 'safe');
+  fs.writeFileSync(
+    path.join(root, 'node_modules', 'skipped.md'),
+    `${authorizationHeader}: ${bearerScheme} ${['placeholder', 'secret'].join('-')}`,
+  );
 
   assert.deepEqual(collectFiles(root), [path.join('nested', 'included.md')]);
   assert.deepEqual(scanRepo(root), []);
