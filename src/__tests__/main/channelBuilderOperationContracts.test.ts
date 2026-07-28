@@ -511,6 +511,196 @@ test('builder runtime applies an append plan through the aggregate barrier and r
   runtime.shutdown();
 });
 
+test('builder runtime accepts cancellation before the commit barrier without committing the aggregate', async () => {
+  const barrierRelease = deferred<void>();
+  const barrierReached = deferred<void>();
+  let aggregatePreparationCalls = 0;
+  let committedOutcomes = 0;
+  let refreshCalls = 0;
+  const operationOwner = new ChannelBuilderOperationOwner({
+    randomHex128: idSource(),
+  });
+  const body = readyAppendBody();
+  operationOwner.retainPlan(body);
+  const runtime = new ChannelBuilderRuntime({
+    store: {
+      readChannelAggregate: async () => ({
+        storedChannelData: null,
+        currentChannelId: null,
+        lineupRevision: 0,
+        channelBuilderState: null,
+      }),
+    },
+    contextOwner: {
+      capture: () => ({
+        context: body.context,
+        selectedLibraryPairs: [{ libraryId: 'library', libraryUuid: 'uuid' }],
+      }),
+      assertCurrent: () => undefined,
+      retain: () => undefined,
+      release: () => undefined,
+      shutdown: () => undefined,
+    },
+    facetSource: {},
+    planningWorker: { shutdown: () => undefined },
+    operationOwner,
+    mutationCoordinator: {
+      mutateBuilderLineup: async (input: {
+        onCommitBarrier(): 'proceed' | 'cancel';
+        mutate(current: Readonly<ChannelAggregate>): ChannelAggregate;
+      }) => {
+        aggregatePreparationCalls += 1;
+        const aggregate = input.mutate({
+          storedChannelData: null,
+          currentChannelId: null,
+          lineupRevision: 0,
+          channelBuilderState: null,
+        });
+        barrierReached.resolve();
+        await barrierRelease.promise;
+        if (input.onCommitBarrier() === 'cancel') return { status: 'canceled' };
+        committedOutcomes += 1;
+        return { status: 'committed', aggregate };
+      },
+    },
+    refreshGuide: async () => {
+      refreshCalls += 1;
+    },
+    randomHex128: () => 'c'.repeat(32),
+    nowMs: () => 100,
+  } as unknown as ChannelBuilderRuntimeOptions);
+
+  try {
+    const accepted = runtime.startApply('cancel-before-barrier', {
+      planId: body.planId,
+      confirmReplace: false,
+    });
+    assert.equal(accepted.ok, true);
+    if (!accepted.ok) assert.fail('apply operation must be accepted');
+    const operationId = accepted.value.operation.operationId;
+    await barrierReached.promise;
+
+    const canceled = runtime.cancel('cancel-before-barrier-request', operationId);
+    assert.equal(canceled.ok, true);
+    if (!canceled.ok) assert.fail('cancel request must return an operation result');
+    assert.equal(canceled.value.accepted, true);
+    assert.equal(canceled.value.operation.state, 'canceling');
+    assert.equal(canceled.value.operation.phase, 'materialize');
+
+    barrierRelease.resolve();
+    await waitFor(() => {
+      const result = runtime.getOperation('canceled-operation', operationId);
+      return result.ok && result.value.operation.state === 'canceled';
+    });
+    const terminal = runtime.getOperation('canceled-terminal', operationId);
+    assert.equal(terminal.ok, true);
+    if (!terminal.ok) assert.fail('canceled operation must remain available');
+    assert.equal(terminal.value.operation.state, 'canceled');
+    assert.equal(aggregatePreparationCalls, 1);
+    assert.equal(committedOutcomes, 0);
+    assert.equal(refreshCalls, 0);
+  } finally {
+    barrierRelease.resolve();
+    runtime.shutdown();
+  }
+});
+
+test('builder runtime publishes persist atomically when the commit barrier proceeds', async () => {
+  const commitRelease = deferred<void>();
+  const barrierProceeded = deferred<void>();
+  const barrierDecision: { value: 'proceed' | 'cancel' | null } = { value: null };
+  const operationOwner = new ChannelBuilderOperationOwner({
+    randomHex128: idSource(),
+  });
+  const body = readyAppendBody();
+  operationOwner.retainPlan(body);
+  const runtime = new ChannelBuilderRuntime({
+    store: {
+      readChannelAggregate: async () => ({
+        storedChannelData: null,
+        currentChannelId: null,
+        lineupRevision: 0,
+        channelBuilderState: null,
+      }),
+    },
+    contextOwner: {
+      capture: () => ({
+        context: body.context,
+        selectedLibraryPairs: [{ libraryId: 'library', libraryUuid: 'uuid' }],
+      }),
+      assertCurrent: () => undefined,
+      retain: () => undefined,
+      release: () => undefined,
+      shutdown: () => undefined,
+    },
+    facetSource: {},
+    planningWorker: { shutdown: () => undefined },
+    operationOwner,
+    mutationCoordinator: {
+      mutateBuilderLineup: async (input: {
+        onCommitBarrier(): 'proceed' | 'cancel';
+        mutate(current: Readonly<ChannelAggregate>): ChannelAggregate;
+      }) => {
+        const aggregate = input.mutate({
+          storedChannelData: null,
+          currentChannelId: null,
+          lineupRevision: 0,
+          channelBuilderState: null,
+        });
+        barrierDecision.value = input.onCommitBarrier();
+        barrierProceeded.resolve();
+        if (barrierDecision.value === 'cancel') return { status: 'canceled' };
+        await commitRelease.promise;
+        return { status: 'committed', aggregate };
+      },
+    },
+    refreshGuide: async () => undefined,
+    randomHex128: () => 'd'.repeat(32),
+    nowMs: () => 100,
+  } as unknown as ChannelBuilderRuntimeOptions);
+
+  try {
+    const accepted = runtime.startApply('proceed-at-barrier', {
+      planId: body.planId,
+      confirmReplace: false,
+    });
+    assert.equal(accepted.ok, true);
+    if (!accepted.ok) assert.fail('apply operation must be accepted');
+    const operationId = accepted.value.operation.operationId;
+    await barrierProceeded.promise;
+
+    assert.equal(barrierDecision.value, 'proceed');
+    const operation = runtime.getOperation('operation-at-proceed-barrier', operationId);
+    assert.equal(operation.ok, true);
+    if (!operation.ok) assert.fail('proceeding operation must remain available');
+    assert.equal(operation.value.operation.state, 'running');
+    assert.equal(operation.value.operation.phase, 'persist');
+    assert.deepEqual(operation.value.operation.progress, {
+      completed: 0,
+      total: 1,
+    });
+    assert.equal(operation.value.operation.result, null);
+    assert.equal(operation.value.operation.error, null);
+
+    const canceled = runtime.cancel('cancel-after-barrier', operationId);
+    assert.equal(canceled.ok, true);
+    if (!canceled.ok) assert.fail('cancel request must return an operation result');
+    assert.equal(canceled.value.accepted, false);
+    assert.equal(canceled.value.reason, 'commit-started');
+    assert.equal(canceled.value.operation.state, 'running');
+    assert.equal(canceled.value.operation.phase, 'persist');
+
+    commitRelease.resolve();
+    await waitFor(() => {
+      const result = runtime.getOperation('committed-operation', operationId);
+      return result.ok && result.value.operation.state === 'succeeded';
+    });
+  } finally {
+    commitRelease.resolve();
+    runtime.shutdown();
+  }
+});
+
 test('builder apply bounds a never-settling post-commit guide refresh and releases the next review', async () => {
   const refresh = deferred<void>();
   let disposeCalls = 0;

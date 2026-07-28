@@ -433,10 +433,6 @@ export class ChannelBuilderRuntime {
       const applied: {
         value: ReturnType<typeof buildAppliedAggregate> | null;
       } = { value: null };
-      this.operationOwner.markRunning(operationId, 'persist', {
-        completed: 0,
-        total: 1,
-      });
       const mutation = await this.mutationCoordinator.mutateBuilderLineup({
         expectedLineupRevision: body.lineupRevision,
         mutate: (latest) => {
