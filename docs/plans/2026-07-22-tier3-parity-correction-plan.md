@@ -3569,6 +3569,33 @@ Rollback is the single docs-only closeout commit; accepted product commits and
 ignored redacted evidence remain intact. Checkpoint:
 `docs(parity): record ws2 playback implementation gate`.
 
+**Package 2E closeout record (2026-07-28):** reviewed plan checkpoints
+`9a66dd6` and `60c68f4`, reviewed Package 2A commit `8dc1057`, and reviewed
+Package 2B commit `d2f1e97` are published on `initial-build`. Package 2B
+observed 46/46 cleanup/runtime/composition, 114/114 remediation, 196/196
+complete-package, 994 aggregate contract passes plus one intentional skip, and
+179/179 harness/docs tests; typecheck, Electron build, static/live Electron
+smoke, architecture, maintainability, redaction, docs, full `npm run verify`,
+and `git diff --check` also passed. Its 794-line runtime and 799-line overlay
+controller were reviewed as cohesive below the existing 800-line threshold
+with no growth headroom.
+
+Package 2D received independent approval as a conservative no-op at `d2f1e97`;
+its focused production-profile test passed 2/2 and it made no source, test,
+evidence, capability, or commit change. Production remains MP4/H.264/AAC
+Direct Play only, with subtitle delivery `none` and switching, HDR/Dolby
+Vision, Direct Stream/remux, and every transcode family unsupported.
+
+This closes only WS2's platform-neutral implementation gate. Every unavailable
+or unrun Windows/.NET Release/native build, live libmpv ERROR/EOF,
+representative-media, Windows video/focus/input/manual/soak,
+track-delivery/switching, HDR/display/hardware-capability, and helper-
+replacement observation remains nonblocking post-WS2 debt under
+`WS2-POST-VALIDATION-01`. No support or capability promotion follows. WS1
+remains open unchanged; WS3–WS9 are not started or authorized, with WS3 only
+the next unopened freshness-planning target; RD-27/RD-28 and WS9 packaged
+proof ownership remain unchanged.
+
 ### WS2 acceptance, rollback, and replan rules
 
 WS2's implementation gate is complete after 2A and 2B are committed/published

@@ -11,10 +11,11 @@ evidence, not a current-upstream completion claim. The 2026-07-22 one-by-one
 audit in [`lineup-product-parity-matrix.md`](../product/lineup-product-parity-matrix.md)
 reopens missing feature/UI implementation. The active reviewed Tier 3
 nine-workstream parity-correction plan now owns that sequence. WS1 Channel
-Builder implementation/review landed but its deferred proof remains open; an
-explicit sequencing override authorizes WS2 freshness planning next without
-closing WS1 or authorizing WS3 through WS9. Windows proof cannot implement or
-waive those gaps.
+Builder implementation/review landed but its deferred proof remains open.
+WS2's platform-neutral implementation gate is closed at published `d2f1e97`;
+`WS2-POST-VALIDATION-01` carries nonblocking Windows/native proof without a
+capability promotion. WS3–WS9 are unopened, with WS3 only the next
+freshness-planning target. Windows proof cannot implement or waive those gaps.
 
 This is not an implementation plan for any single slice. Each serious in-flight
 slice still needs its own active tracked plan under
@@ -31,8 +32,9 @@ durable completion summary.
 - [x] External `mpv` allowed only as a disposable private POC.
 - [x] Single-package repo shape accepted for the initial port.
 - [ ] Execute the active nine-workstream parity-correction plan before RD-27:
-      WS1 implementation/review landed but proof remains open; WS2 freshness
-      planning is next under the active override; WS3–WS9 are not authorized.
+      WS1 implementation/review landed but proof remains open; WS2's
+      platform-neutral implementation gate is closed; WS3–WS9 are unopened,
+      with WS3 only the next freshness-planning target.
 - [x] Workflow, skills, launchers, role config, docs verifier, redaction
   verifier, and architecture lint scaffolded.
 - [x] First active implementation plan created for the Electron shell security
@@ -325,7 +327,7 @@ live integration blockers delay the complete Desktop skeleton.
 | Production playback controls and playback-state presentation over native video | RD-25 | Preserve the upstream playback interaction feel where it fits Desktop native-helper boundaries; renderer stays free of raw playback descriptors, URLs, headers, and native handles. |
 | Subtitle/audio/HDR option UI and playback-quality controls | RD-26 | Import or adapt upstream media-option presentation and interaction patterns only after runtime media-option behavior is real and renderer-safe. |
 | Historical WebOS-informed local renderer regression bundle | Complete WebOS UI Parity Reopen, proof bundle closed 2026-07-16 | Packages 0–8 are locally captured at exact viewports; the 2026-07-22 master matrix supersedes any full feature/UI parity interpretation. |
-| Current-upstream feature/UI parity correction | Active reviewed nine-workstream parity-correction plan | WS1 implementation/review landed but deferred proof remains open; WS2 freshness planning is next under the active override; WS3–WS9 are not authorized. Do not bury implementation inside RD-27 observation. |
+| Current-upstream feature/UI parity correction | Active reviewed nine-workstream parity-correction plan | WS1 implementation/review landed but deferred proof remains open. WS2's platform-neutral implementation gate is closed at `d2f1e97`; Package 2D made no capability edit and `WS2-POST-VALIDATION-01` remains open. WS3–WS9 are unopened, with WS3 only the next freshness-planning target. Do not bury implementation inside RD-27 observation. |
 | Full MVP Windows behavior proof | RD-27, blocked pending WS1–WS8 and WS9 prerequisite hardening plus refreshed Windows proof planning | Run redaction-safe Windows operational proof across implemented upstream-adapted UI surfaces, including the mandatory fresh three-row Package 6 audit; RD-28 follows. |
 
 Each owning slice must record copied or adapted upstream UI source, CSS, copy,
@@ -381,7 +383,8 @@ When a roadmap slice reaches its exit gates:
 - route to `lineup-desktop-feature-implement` only after the relevant plan
   review is clean
 
-RD-01 through RD-26 are code complete at their recorded scope, and Complete
+RD-01 through RD-26 historical slices are complete only at their recorded
+scope, and Complete
 WebOS UI Parity Reopen Packages 0–8 are locally complete and verified. Package
 6's operator-assisted fullscreen platform proof remains bound to fresh RD-27
 Windows execution. RD-21 superseded the former RD-21
@@ -1716,8 +1719,9 @@ Stop and replan if:
 
 ### RD-25 Production Native Playback MVP
 
-Status: code complete and reviewed; renderer parity is locally complete and
-RD-27 owns pending Windows/manual product proof.
+Status: historical slice complete and reviewed at its recorded scope. WS2
+closes the current platform-neutral implementation gate; Windows/native/manual
+proof remains `WS2-POST-VALIDATION-01` and RD-27 work as applicable.
 
 Depends on:
 
@@ -1770,8 +1774,9 @@ Stop and replan if:
 
 ### RD-26 Runtime Media Options And Playback Quality
 
-Status: code complete and reviewed; renderer parity is locally complete and
-RD-27 owns pending Windows/manual product proof.
+Status: historical slice complete and reviewed at its recorded scope. WS2
+does not promote the conservative capability profile; Windows/native/manual
+proof remains `WS2-POST-VALIDATION-01` and RD-27 work as applicable.
 
 Depends on:
 
@@ -1815,9 +1820,10 @@ Stop and replan if:
 
 Status: blocked from planning/execution while the active reviewed
 nine-workstream parity-correction plan executes. WS1 implementation/review
-landed but proof remains deferred/open; WS2 freshness planning is authorized
-next by the active override; WS3 through WS9 are not authorized. RD-27 remains
-the later Windows observation/soak owner; it is not canceled.
+landed but proof remains deferred/open; WS2's platform-neutral implementation
+gate is closed while `WS2-POST-VALIDATION-01` remains nonblocking debt; WS3
+through WS9 are unopened. RD-27 remains the later Windows observation/soak
+owner; it is not canceled.
 
 Depends on:
 

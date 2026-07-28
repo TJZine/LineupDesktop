@@ -13,8 +13,9 @@ file owns the one-by-one parity disposition.
 - Upstream product baseline: Lineup commit
   `0258dbe15b04d2d141d0a4a44575fecb5bb72d41` (2026-07-22). Uncommitted
   upstream documents were excluded.
-- Desktop baseline and current authority amendment:
-  `3e8cebe5cc86276ea2187c8ad108716dd2bb8327` (2026-07-28). The upstream
+- Desktop WS2 implementation-gate baseline:
+  `d2f1e97` (2026-07-28), with reviewed plan checkpoints `9a66dd6` and
+  `60c68f4`, Package 2A at `8dc1057`, and Package 2B at `d2f1e97`. The upstream
   audited code pin remains
   `0258dbe15b04d2d141d0a4a44575fecb5bb72d41`.
 - The existing visual bundle was initially captured against upstream
@@ -134,7 +135,7 @@ Desktop `src/main/plex/library/**`, `src/main/plex/desktopPlexRuntime.ts`,
 | LIB-02 | Browse library items | `live-local` | `partial` | Prove pagination/large libraries and current-upstream presentation. | P1 |
 | LIB-03 | Search library content | `live-local` | `partial` | Prove cancel/stale/error/empty behavior on live Windows data. | P1 |
 | LIB-04 | Load item metadata/details | `live-local` | `partial` | Desktop summary is narrower than upstream metadata/artwork presentation. | P2 |
-| LIB-05 | Parse media files, parts, streams, language, HDR, and tracks | `live-local` | `not-a-visual-row` | Parser/test coverage exists; live sample matrix is still required. | P1 |
+| LIB-05 | Parse media files, parts, streams, language, HDR, and tracks | `live-local` | `not-a-visual-row` | WS2's local implementation gate is complete; representative native media samples remain `WS2-POST-VALIDATION-01`. | P1 |
 | LIB-06 | Collections, playlists, genres, people, studio, and tag-directory discovery for builder planning | `live-local` | `partial` | WS1 facet discovery/materialization is wired; live proof across multiple eligible libraries and the complete supported filter surface remains open. | P0 |
 | LIB-07 | Request scoping, abort, and identity change containment | `live-local` | `not-a-visual-row` | Maintain local tests and prove visible recovery under live account/server switches. | P2 |
 
@@ -255,30 +256,30 @@ player contracts/tests, and Windows spike evidence.
 
 | ID | Capability/state | Desktop status | Visual status | Gap / acceptance needed | Priority |
 | --- | --- | --- | --- | --- | --- |
-| PB-01 | Tune current Guide program into player | `live-local` | `local-match` | Production Windows media proof required. | P0 |
-| PB-02 | Channel up/down and mini-guide tune | `live-local` | `local-match` | Windows focus/native-video/channel-transition proof required. | P1 |
-| PB-03 | Numeric channel entry, timeout, invalid result, tune | `live-local` | `local-match` | Windows keyboard/numpad proof required. | P1 |
-| PB-04 | Direct Play | `partial` | `not-a-visual-row` | Production profile allows only MP4/H.264/AAC; prove and expand from real Windows sample matrix. | P0 |
-| PB-05 | Direct Stream/remux | `partial` | `not-a-visual-row` | Policy/resolver paths exist, but production profile declares remux/audio conversion unsupported. | P0 |
-| PB-06 | Plex transcode session start/stop | `partial` | `not-a-visual-row` | Transport/session code exists, but production profile declares video/audio/subtitle/HDR transcode unsupported. | P0 |
-| PB-07 | Native libmpv helper discovery, spawn, load, render, cleanup | `partial` | `proof-only` | Code and spike proof exist; packaged helper/libmpv redistribution and product observation remain open. | P0 |
-| PB-08 | Windowed/fullscreen native video with renderer UI over it | `partial` | `local-match` | Mandatory fresh three-row Package 6 Windows audit plus production video proof. | P0 |
+| PB-01 | Tune current Guide program into player | `live-local` | `local-match` | Local tune/runtime gate is complete; production Windows media observation remains `WS2-POST-VALIDATION-01`. | P0 |
+| PB-02 | Channel up/down and mini-guide tune | `live-local` | `local-match` | Local transition/focus gate is complete; Windows native-video/focus observation remains `WS2-POST-VALIDATION-01`. | P1 |
+| PB-03 | Numeric channel entry, timeout, invalid result, tune | `live-local` | `local-match` | Local numeric input/runtime gate is complete; Windows keyboard/numpad observation remains `WS2-POST-VALIDATION-01`. | P1 |
+| PB-04 | Direct Play | `partial` | `not-a-visual-row` | The conservative MP4/H.264/AAC Direct Play profile is unchanged; broader proof or promotion remains `WS2-POST-VALIDATION-01`. | P0 |
+| PB-05 | Direct Stream/remux | `partial` | `not-a-visual-row` | Remux and audio conversion remain unsupported; observation or promotion remains `WS2-POST-VALIDATION-01`. | P0 |
+| PB-06 | Plex transcode session start/stop | `partial` | `not-a-visual-row` | PMS lifecycle exists, but transcode families remain unsupported; observation or promotion remains `WS2-POST-VALIDATION-01`. | P0 |
+| PB-07 | Native libmpv helper discovery, spawn, load, render, cleanup | `partial` | `proof-only` | WS2 source/non-packaged-helper contribution is locally complete; native build/live proof remains `WS2-POST-VALIDATION-01`, while packaged helper/libmpv proof remains WS9/RD-28. | P0 |
+| PB-08 | Windowed/fullscreen native video with renderer UI over it | `partial` | `local-match` | Local presentation gate is complete; Windows production video and the three-row audit remain `WS2-POST-VALIDATION-01`/RD-27 as applicable. | P0 |
 | PB-09 | Play/pause | `partial` | `partial` | Space dispatch exists; upstream remote media play/pause key mapping is absent. The upstream OSD action strip does not add a separate play/pause button. | P1 |
 | PB-10 | Seek/rewind/fast-forward | `partial` | `missing` | Main/helper contracts support relative/absolute seek, but renderer remote/media-key routing does not expose upstream behavior; upstream has no separate OSD seek action. | P1 |
 | PB-11 | Stop playback | `partial` | `missing` | Main runtime supports stop/cleanup; renderer remote/media-key routing lacks upstream Stop behavior, not an OSD button. | P1 |
-| PB-12 | Loading, buffering, seeking, stalled, ended, and error states | `live-local` | `local-match` | Prove every state against real media/network interruption on Windows. | P1 |
-| PB-13 | Retry/recovery after media failure | `partial` | `local-match` | Retry UI/runtime exists; live retry limits, skip/fallback, and recovery parity need proof. | P1 |
-| PB-14 | Helper crash detection, cleanup, and restart | `live-local` | `not-a-visual-row` | Harness proof exists; production native-media proof and soak remain. | P1 |
+| PB-12 | Loading, buffering, seeking, stalled, ended, and error states | `live-local` | `local-match` | Local state/error gate is complete; real-media/network Windows states remain `WS2-POST-VALIDATION-01`. | P1 |
+| PB-13 | Retry/recovery after media failure | `partial` | `local-match` | Bounded 1/2/4 recovery plus explicit Retry/Skip/Guide fallback is implemented and reviewed; live ERROR/EOF/recovery observation remains `WS2-POST-VALIDATION-01`, so status does not advance. | P1 |
+| PB-14 | Helper crash detection, cleanup, and restart | `live-local` | `not-a-visual-row` | Local crash/cleanup/restart gate is complete; native media and soak remain `WS2-POST-VALIDATION-01`. | P1 |
 | PB-15 | OSD program info, progress, timecode, buffer, ends-at | `live-local` | `local-match` | Current-upstream freshness and Windows native-video proof. | P1 |
 | PB-16 | Now Playing information, progress, up-next | `live-local` | `local-match` | Metadata/art richness and Windows proof remain. | P2 |
 | PB-17 | Mini Guide | `live-local` | `local-match` | Windows focus/paging/tune proof. | P1 |
 | PB-18 | Channel badge and transition overlay | `live-local` | `local-match` | Windows timing/native-video proof. | P2 |
-| PB-19 | Audio track list and selection | `partial` | `local-match` | UI/helper paths exist, but production capability profile says audio switching unsupported. | P0 |
-| PB-20 | Subtitle off/list/selection | `partial` | `local-match` | UI/helper paths exist, but production profile exposes subtitle delivery `none` and switching unsupported. | P0 |
-| PB-21 | Subtitle direct/extract/burn-in fallback pipeline | `partial` | `partial` | Policy/resolver tests exist; production profile disables conversion/transcode and Windows samples are unproven. | P0 |
-| PB-22 | Forced/default/preferred-language subtitle auto-selection | `partial` | `partial` | Forced/default policy exists; preferred-language setting/selection parity is missing. | P1 |
-| PB-23 | Audio fallback and DTS passthrough | `partial` | `missing` | Policy can select fallback tracks, but upstream user controls and DTS setting are absent; production profile is conservative. | P1 |
-| PB-24 | HDR10/HLG/Dolby Vision detection and fallback | `partial` | `partial` | Metadata/policy/helper quality state exist, but production profile disables HDR/DV and upstream fallback controls are missing. | P0 |
+| PB-19 | Audio track list and selection | `partial` | `local-match` | UI/helper paths remain, but switching is unsupported; observation or promotion remains `WS2-POST-VALIDATION-01`. | P0 |
+| PB-20 | Subtitle off/list/selection | `partial` | `local-match` | Delivery remains `none` and switching unsupported; observation or promotion remains `WS2-POST-VALIDATION-01`. | P0 |
+| PB-21 | Subtitle direct/extract/burn-in fallback pipeline | `partial` | `partial` | Policy paths remain, but conversion/transcode are unsupported; representative native samples remain `WS2-POST-VALIDATION-01`. | P0 |
+| PB-22 | Forced/default/preferred-language subtitle auto-selection | `partial` | `partial` | WS2's policy contribution remains; preferred-language Settings/control integration remains WS3, with native proof in `WS2-POST-VALIDATION-01`. | P1 |
+| PB-23 | Audio fallback and DTS passthrough | `partial` | `missing` | WS2's fallback contribution remains; DTS/user controls remain WS3, with native proof in `WS2-POST-VALIDATION-01`. | P1 |
+| PB-24 | HDR10/HLG/Dolby Vision detection and fallback | `partial` | `partial` | WS2's metadata/policy/helper contribution remains; HDR/Dolby Vision controls remain WS3, with native proof in `WS2-POST-VALIDATION-01`. | P0 |
 | PB-25 | Sleep timer cycles, countdown, expiry, and stop | `missing` | `missing` | Implement or explicitly obtain product approval to diverge. | P1 |
 | PB-26 | Keepalive and long-playback continuity | `proof-only` | `not-a-visual-row` | Real long-playback soak remains missing. | P1 |
 | PB-27 | Sleep/wake recovery | `missing` | `not-a-visual-row` | Add Windows power lifecycle design and proof. | P1 |
@@ -436,9 +437,9 @@ a matching shell screenshot from closing missing controls or runtime behavior.
 | UI-38 | `guide-empty-programs` / No programs | `live-local` | `local-match` | `reference:guide-empty-programs` / `capture:guide-empty-programs` | EPG-14 |
 | UI-39 | `guide-error` / Guide error | `desktop-addition` | `desktop-specific` | `reference:guide-error` / `capture:guide-error` | EPG-14 |
 | UI-40 | `guide-focused-detail` / Focused detail | `partial` | `local-match` | `reference:guide-focused-detail` / `capture:guide-focused-detail` | EPG-04–EPG-05 |
-| UI-41 | `player-idle` / Player idle | `live-local` | `local-match` | `reference:player-idle` / `capture:player-idle` | PB-01–PB-03 |
-| UI-42 | `player-loading` / Loading transition | `live-local` | `local-match` | `reference:player-loading` / `capture:player-loading` | PB-12 |
-| UI-43 | `player-error` / Player error | `partial` | `local-match` | `reference:player-error` / `capture:player-error` | PB-12–PB-13 |
+| UI-41 | `player-idle` / Player idle | `live-local` | `local-match` | Local idle/runtime gate complete; Windows native observation remains `WS2-POST-VALIDATION-01`. | PB-01–PB-03 |
+| UI-42 | `player-loading` / Loading transition | `live-local` | `local-match` | Local loading-transition gate complete; Windows observation remains `WS2-POST-VALIDATION-01`. | PB-12 |
+| UI-43 | `player-error` / Player error | `partial` | `local-match` | Reviewed Retry/Skip error actions landed; Windows live recovery remains `WS2-POST-VALIDATION-01`. | PB-12–PB-13 |
 | UI-44 | `overlay-osd` / Player OSD | `partial` | `local-match` | `reference:overlay-osd` / `capture:overlay-osd` | PB-09–PB-15 |
 | UI-45 | `overlay-now-playing` / Now Playing | `live-local` | `local-match` | `reference:overlay-now-playing` / `capture:overlay-now-playing` | PB-16 |
 | UI-46 | `overlay-mini-guide` / Mini Guide | `live-local` | `local-match` | `reference:overlay-mini-guide` / `capture:overlay-mini-guide` | PB-02, PB-17 |
@@ -475,13 +476,13 @@ product opportunities.
 
 | ID | Native gain | Current state | Required next proof/design |
 | --- | --- | --- | --- |
-| WIN-01 | libmpv codec/container breadth and hardware decoding | `partial` | Derive production capability profile from observed Windows samples instead of the current MP4/H.264/AAC-only profile. |
+| WIN-01 | libmpv codec/container breadth and hardware decoding | `partial` | Conservative profile unchanged; capability observation or promotion remains `WS2-POST-VALIDATION-01`. |
 | WIN-02 | Native audio-device selection | `missing` | Use a main/helper-owned device list and replace upstream Web Audio setup with a Windows-appropriate first-run/settings flow. |
 | WIN-03 | Windows media keys / System Media Transport Controls | `missing` | Route play/pause/seek/stop without global-secret or focus-boundary leakage. |
 | WIN-04 | Power request while playing plus sleep/resume recovery | `missing` | Add explicit main-owned lifecycle, cleanup, diagnostics, and soak proof. |
 | WIN-05 | Multi-monitor/DPI/fullscreen restore | `partial` | Existing window controller needs production native-video observation across displays/scales. |
-| WIN-06 | Hardware/HDR capability diagnostics and safe fallback | `partial` | Observe actual GPU/display/media facts, expose only safe summaries, and connect them to user policy. |
-| WIN-07 | Crash-isolated native playback helper and support bundle | `live-local` | Preserve process isolation/redaction; prove packaged replacement-helper recovery. |
+| WIN-06 | Hardware/HDR capability diagnostics and safe fallback | `partial` | No privileged diagnostic expansion occurred; hardware/display/HDR facts remain `WS2-POST-VALIDATION-01` or require a future reviewed replan. |
+| WIN-07 | Crash-isolated native playback helper and support bundle | `live-local` | WS2's crash-isolation contribution is locally complete; native observation remains `WS2-POST-VALIDATION-01`, while packaged replacement-helper proof remains WS9/RD-28. |
 | WIN-08 | Windowed/fullscreen launch choice | `live-local` | Preserve as a Desktop addition and verify packaged relaunch behavior. |
 | WIN-09 | Keyboard, mouse, numpad, and gamepad alongside TV-style focus | `partial` | Complete media keys and validate mixed-input focus/cursor transitions. |
 
@@ -490,10 +491,12 @@ product opportunities.
 1. **WS1 — Channel Builder:** implementation and independent review landed,
    but stable-ID closure does not advance. Deferred visual/live/manual/package
    proof and `WS1-PERF-01` keep WS1 open.
-2. **WS2 — Production playback capability:** freshness planning and review are
-   authorized next by the active sequencing override; implementation is
-   authorized only after that reviewed plan is implementation-ready.
-3. **WS3 through WS9:** not authorized. Their Settings, input/overlay, Guide,
+2. **WS2 — Production playback capability:** the platform-neutral
+   implementation gate is closed at published `d2f1e97`; Package 2D made no
+   capability edit, and `WS2-POST-VALIDATION-01` carries nonblocking
+   Windows/native proof without promoting support.
+3. **WS3 through WS9:** not started or authorized by WS2 closeout. WS3 is only
+   the next unopened freshness-planning target. Their Settings, input/overlay, Guide,
    fresh UI, credential/lifecycle, package/soak, and remaining ordered scopes
    retain their current conservative rows until separately entered.
 4. **RD-27/RD-28:** remain later. RD-27 waits for WS1–WS8 plus WS9 prerequisite

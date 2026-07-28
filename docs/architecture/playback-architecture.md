@@ -1,7 +1,9 @@
 # Playback Architecture
 
 Lineup Desktop runtime playback is code complete and reviewed, with
-Windows/manual product proof still pending. RD-25 implements the production
+Windows/manual product proof still pending. WS2 now closes the current
+platform-neutral playback implementation gate without promoting the
+conservative production profile. RD-25 implements the production
 native playback MVP, replacing the fake playback bootstrap with a
 production-shaped, main/helper-owned native playback path for live Plex-backed
 scheduled media. A main-only privileged load context propagates the private
@@ -10,7 +12,8 @@ process. The helper communicates with the main process via an NDJSON protocol
 over stdin/stdout. Live Plex stream resolution, media detail, and PMS session
 ports are composed and wired. Renderer player UI state binds dynamically to safe
 player IPC events. Manual proof of running native playback on Windows is
-deferred to RD-27 and remains pending.
+deferred to RD-27 and remains pending; the WS2-specific native/live subset is
+also carried as nonblocking `WS2-POST-VALIDATION-01`.
 
 ## Current Hypothesis
 
@@ -269,9 +272,42 @@ engine ids, Plex stream ids, Plex part keys, stream keys, URLs, headers, or
 native handles belong behind main/helper or domain-owned boundaries and require
 a reviewed plan before they are introduced.
 
+## WS2 Playback Implementation Gate
+
+The reviewed WS2 plan checkpoints are `9a66dd6` and `60c68f4`. Package 2A
+(`8dc1057`) added bounded 1,000/2,000/4,000 ms current-program recovery.
+Package 2B (`d2f1e97`) added the closed Retry-current/Skip-next operation:
+`playbackProgramTransitionOwner` and `playerRecoveryIpc` keep exact schedule
+identity and transition authority in main, `playerRecoveryBridge` validates the
+narrow preload result, and `playerErrorRecoveryController` owns only
+renderer-safe focus/busy/error settlement. Both packages received clean final
+reviews.
+
+Observed Package 2B proof included 46/46 cleanup/runtime/composition tests,
+114/114 remediation tests, 196/196 complete-package tests, 994 aggregate
+contract passes plus one intentional skip, 179/179 harness/docs tests,
+typecheck, Electron build, static and live Electron smoke, architecture,
+maintainability, redaction, docs, full `npm run verify`, and
+`git diff --check`. The 794-line runtime and 799-line overlay controller remain
+cohesive and below the existing 800-line threshold with no growth headroom.
+
+Package 2D was independently reviewed as a conservative no-op: MP4/H.264/AAC
+Direct Play remains the only production profile, subtitle delivery remains
+`none`, and audio/subtitle switching, Direct Stream/remux, transcode, HDR, and
+Dolby Vision remain unsupported. Its focused profile test passed 2/2; it made
+no source, test, evidence, capability, or commit change.
+
+`WS2-POST-VALIDATION-01` carries every unavailable Windows/.NET Release/native
+build, live libmpv ERROR/EOF, representative-media, native-video/focus/input,
+manual/soak, track-delivery/switching, HDR/display/hardware-capability, and
+helper-replacement observation. This is nonblocking post-WS2 debt, not a
+support claim or capability promotion.
+
 ## RD-25 Production Native Playback MVP
 
-RD-25 code implementation is complete and reviewed; Windows/manual product proof remains deferred to RD-27. The production native playback MVP replaces the fake playback bootstrap with a production-shaped, main/helper-owned native playback path for live Plex-backed scheduled media.
+RD-25's historical code implementation is complete and reviewed at its recorded
+scope; WS2 closes the current platform-neutral implementation gate while
+Windows/manual product proof remains open. The production native playback MVP replaces the fake playback bootstrap with a production-shaped, main/helper-owned native playback path for live Plex-backed scheduled media.
 
 ### Seam Propagation and Setup Flow
 
@@ -285,7 +321,9 @@ Manual proof of running native playback on Windows is deferred to RD-27, leaving
 
 ## RD-26 Runtime Media Options And Playback Quality
 
-RD-26 code implementation is complete and reviewed; Windows/manual product proof remains deferred to RD-27. It implements runtime media options and playback quality over the production native playback path.
+RD-26's historical code implementation is complete and reviewed at its recorded
+scope; WS2 does not promote the conservative profile, and Windows/manual
+product proof remains open. It implements runtime media options and playback quality over the production native playback path.
 
 ### Seam Propagation and Setup Flow
 
