@@ -319,6 +319,7 @@ test('native host process transports the safe helper end-file ERROR envelope out
       error: {
         code: 'PLAYER_HELPER_PLAYBACK_ENDED_WITH_ERROR',
         category: 'engine-failure',
+        message: 'Native playback ended with a player engine error.',
         recoverable: true,
         retryable: true,
       },
@@ -333,6 +334,7 @@ test('native host process transports the safe helper end-file ERROR envelope out
       error: {
         code: 'PLAYER_HELPER_PLAYBACK_ENDED_WITH_ERROR',
         category: 'engine-failure',
+        message: 'Native playback ended with a player engine error.',
         recoverable: true,
         retryable: true,
       },

@@ -643,6 +643,7 @@ namespace Lineup.NativePlayerHost
                 {
                     ["code"] = "PLAYER_HELPER_PLAYBACK_ENDED_WITH_ERROR",
                     ["category"] = "engine-failure",
+                    ["message"] = "Native playback ended with a player engine error.",
                     ["recoverable"] = retryable,
                     ["retryable"] = retryable
                 }

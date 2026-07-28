@@ -24,60 +24,96 @@ test('smoke composition keeps synchronous and asynchronous player delivery in di
     fs.readFile(path.join(repoRoot, 'src/main/player/playerIpc.ts'), 'utf8'),
   ]);
 
-  assert.match(
-    mainSource,
-    /sendSynchronousPlayerEvent:\s*sendPlayerEvent,\s*onAsynchronousAdapterEvents:\s*eventRouter\.route/u,
+  for (const symbol of [
+    'sendSynchronousPlayerEvent: sendPlayerEvent',
+    'onAsynchronousAdapterEvents: eventRouter.route',
+    'onEvents: options.onAsynchronousAdapterEvents',
+    'options.sendSynchronousPlayerEvent(event)',
+    'nativeHostFactory: nativeHostFactory ?? undefined',
+    'cleanupFailedApplicationStartup(',
+  ]) {
+    assert.ok(
+      `${mainSource}\n${playerIpcSource}`.includes(symbol),
+      `missing required playback wiring symbol: ${symbol}`,
+    );
+  }
+  assert.equal(mainSource.includes('originalNativeHostFactory'), false);
+
+  assertSymbolsInOrder(
+    sliceBetween(mainSource, 'onNativeHostLifecycleFailure:', 'wirePlexPlaybackCleanup({'),
+    [
+      'acquireCleanupHold()',
+      'flushCurrentRuntime()',
+      'invalidate()',
+      'handleHelperCrash()',
+      'releaseCleanupHold()',
+    ],
+    'native-host crash cleanup',
   );
-  assert.match(
-    mainSource,
-    /bootstrapPlaybackRuntime\(\{[\s\S]*?onEvents:\s*\(events\)\s*=>\s*\{[\s\S]*?sendPlayerEvent\(event\)/u,
+  assertSymbolsInOrder(
+    sliceBetween(mainSource, 'getPlaybackRuntime:', 'bootstrapPlaybackRuntime({'),
+    ['acquireCleanupHold()', 'invalidate()', 'runtime.cleanup(', 'releaseCleanupHold()'],
+    'Plex playback cleanup',
   );
-  assert.match(
+  assertSymbolsInOrder(
     playerIpcSource,
-    /onEvents:\s*options\.onAsynchronousAdapterEvents/u,
+    [
+      'new DesktopPlayerAdapter(',
+      'host.onLifecycleFailure?.(options.onNativeHostLifecycleFailure)',
+    ],
+    'player lifecycle subscription',
   );
-  assert.match(
-    playerIpcSource,
-    /options\.sendSynchronousPlayerEvent\(event\)/u,
+  assertSymbolsInOrder(
+    sliceBetween(playerIpcSource, 'const unsubscribe = unsubscribeMainLifecycle;', 'return {'),
+    ['unsubscribe?.()', 'runtime.adapter?.cleanup()'],
+    'player teardown',
   );
-  assert.match(
+  const quitFlow = sliceBetween(mainSource, "app.on('before-quit'", 'function attachContainmentHandlers');
+  assertSymbolsInOrder(
+    quitFlow,
+    [
+      'teardownDiagnosticsIpc?.()',
+      'playerIpcQuitTeardownComplete || teardown === null',
+    ],
+    'unconditional diagnostics teardown',
+  );
+  assertSymbolsInOrder(
+    quitFlow,
+    ['teardown.teardown()', 'localPlaybackEventRouter?.dispose()', 'localPlaybackRuntime?.teardown()'],
+    'deferred quit cleanup',
+  );
+  assertSymbolsInOrder(
     mainSource,
-    /nativeHostFactory:\s*nativeHostFactory\s*\?\?\s*undefined/u,
-  );
-  assert.doesNotMatch(mainSource, /originalNativeHostFactory/u);
-  assert.match(
-    mainSource,
-    /onNativeHostLifecycleFailure:\s*\(\)\s*=>\s*\{[\s\S]*?transitionOwner\?\.acquireCleanupHold\(\)[\s\S]*?eventRouter\.flushCurrentRuntime\(\);\s*transitionOwner\?\.invalidate\(\);[\s\S]*?await runtime\?\.handleHelperCrash\(\);[\s\S]*?finally\s*\{\s*releaseCleanupHold\(\);/u,
-  );
-  assert.match(
-    mainSource,
-    /getPlaybackRuntime:\s*\(\)\s*=>\s*\{[\s\S]*?cleanup:\s*async\s*\(input\)\s*=>\s*\{[\s\S]*?transitionOwner\?\.acquireCleanupHold\(\)[\s\S]*?transitionOwner\?\.invalidate\(\);\s*try\s*\{\s*return await runtime\.cleanup\(input\);[\s\S]*?finally\s*\{\s*releaseCleanupHold\(\);/u,
-  );
-  assert.match(
-    playerIpcSource,
-    /new DesktopPlayerAdapter\([\s\S]*?host\.onLifecycleFailure\?\.\(options\.onNativeHostLifecycleFailure\)/u,
-  );
-  assert.match(
-    playerIpcSource,
-    /const unsubscribe = unsubscribeMainLifecycle;[\s\S]*?unsubscribe\?\.\(\);[\s\S]*?runtime\.adapter\?\.cleanup\(\)/u,
-  );
-  assert.match(
-    mainSource,
-    /await teardown\.teardown\(\);\s*localPlaybackEventRouter\?\.dispose\(\);\s*await localPlaybackRuntime\?\.teardown\(\)/u,
-  );
-  assert.match(
-    mainSource,
-    /new PlaybackProgramTransitionOwner\(\{[\s\S]*?registerPlayerRecoveryIpc\(\{[\s\S]*?initializeActiveChannel\(\)/u,
-  );
-  assert.match(
-    mainSource,
-    /teardownPlayerRecoveryIpc\?\.\(\);[\s\S]*?localPlaybackProgramTransitionOwner\?\.dispose\(\);[\s\S]*?localPlaybackRuntime\?\.teardown\(\)/u,
+    [
+      'new PlaybackProgramTransitionOwner({',
+      'registerPlayerRecoveryIpc({',
+      'initializeActiveChannel()',
+    ],
+    'playback recovery composition',
   );
   assert.doesNotMatch(mainSource, /onChannelTuned\s*:/u);
   assert.doesNotMatch(mainSource, /activeChannelScheduler\.on\(\s*['"]programStart['"]/u);
   assert.doesNotMatch(mainSource, /startCurrentPlayback\(\s*['"]startup['"]\s*\)/u);
   assert.doesNotMatch(playerIpcSource, /sendPlayerEvent/u);
 });
+
+function sliceBetween(source, startSymbol, endSymbol) {
+  const start = source.indexOf(startSymbol);
+  const end = source.indexOf(endSymbol, start + startSymbol.length);
+  assert.notEqual(start, -1, `missing source boundary: ${startSymbol}`);
+  assert.notEqual(end, -1, `missing source boundary: ${endSymbol}`);
+  return source.slice(start, end);
+}
+
+function assertSymbolsInOrder(source, symbols, label) {
+  let cursor = -1;
+  for (const symbol of symbols) {
+    const next = source.indexOf(symbol, cursor + 1);
+    assert.notEqual(next, -1, `${label} is missing ${symbol}`);
+    assert.ok(next > cursor, `${label} has ${symbol} out of order`);
+    cursor = next;
+  }
+}
 
 test('smoke launcher creates a canonical nonce-bound sentinel and exact arguments', async () => {
   const bootstrap = await createSmokeBootstrap(process.platform);

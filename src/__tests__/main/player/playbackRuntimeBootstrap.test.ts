@@ -29,7 +29,7 @@ test('production playback capability profile advertises only proven conservative
   assert.equal(profile.transcode.hdr, 'unsupported');
 });
 
-test('playback bootstrap wires runtime events in development and production branches', async () => {
+test('playback bootstrap wires runtime events in smoke and production modes', async () => {
   for (const shellMode of ['smoke', 'production'] as const) {
     const emitted: PlayerEvent[] = [];
     const result = bootstrapPlaybackRuntime({

@@ -86,7 +86,10 @@ import {
   PLEX_RUNTIME_ERROR_CODES,
   PLEX_RUNTIME_OPERATIONS,
 } from '../../contracts/plex.js';
-import { SHELL_STATUS_VALUES } from '../../contracts/shell.js';
+import {
+  PLAYER_RECOVERY_ACTIONS,
+  SHELL_STATUS_VALUES,
+} from '../../contracts/shell.js';
 
 const preloadSourceUrl = new URL('../../preload/index.cts', import.meta.url);
 const preloadSourceText = readFileSync(preloadSourceUrl, 'utf8');
@@ -373,8 +376,12 @@ function evaluatePlayerRecoveryBridgeModule(): Record<string, unknown> {
     fileName: 'src/preload/playerRecoveryBridge.cts',
   }).outputText;
   new Function('require', 'exports', 'module', compiled)(
-    (moduleName: string) =>
-      assert.fail(`unexpected player recovery bridge require ${moduleName}`),
+    (moduleName: string) => {
+      if (moduleName === '../contracts/shell.js') {
+        return { PLAYER_RECOVERY_ACTIONS };
+      }
+      return assert.fail(`unexpected player recovery bridge require ${moduleName}`);
+    },
     exportsObject,
     moduleObject,
   );
@@ -1468,6 +1475,16 @@ test('preload player recovery bridge exposes only the closed action vocabulary a
   assert.equal(
     (rejectedResult as { error: { code: string; message: string } }).error.code,
     'PLAYER_OPERATION_UNAVAILABLE',
+  );
+  assert.equal(
+    (rejectedResult as { error: { recoverable: boolean; retryable: boolean } })
+      .error.recoverable,
+    true,
+  );
+  assert.equal(
+    (rejectedResult as { error: { recoverable: boolean; retryable: boolean } })
+      .error.retryable,
+    true,
   );
   assert.doesNotMatch(
     (rejectedResult as { error: { message: string } }).error.message,

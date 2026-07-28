@@ -186,5 +186,9 @@ test('native helper classifies official end-file reasons without exposing raw mp
   assert.match(source, /WritePlaybackEndedWithError\(endFile\.reason == MpvEndFileReasonError\)/u);
   assert.match(source, /\["code"\]\s*=\s*"PLAYER_HELPER_PLAYBACK_ENDED_WITH_ERROR"/u);
   assert.match(source, /\["category"\]\s*=\s*"engine-failure"/u);
+  assert.match(
+    source,
+    /\["message"\]\s*=\s*"Native playback ended with a player engine error\."/u,
+  );
   assert.doesNotMatch(source, /\["(?:reason|error)"\]\s*=\s*endFile\./u);
 });

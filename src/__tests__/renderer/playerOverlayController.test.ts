@@ -5,6 +5,7 @@ import type { PlayerEvent, PlayerIpcResult, PlayerSnapshot } from '../../contrac
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import { createPlayerOverlayController, type PlayerOverlayTimerHost } from '../../renderer/playerOverlayController.js';
 import { subscribePlayerBridge } from '../../renderer/playerBridgeSubscription.js';
+import type { PlayerErrorRecoveryController } from '../../renderer/playerErrorRecoveryController.js';
 import { createPlayerOverlayState } from '../../renderer/overlays.js';
 import { createPlayerOverlayView } from '../../renderer/overlayViewModels.js';
 import { createEmptyPlayerSnapshot, type PlayerOverlayPresentationSource } from '../../renderer/playerOverlayPresentation.js';
@@ -697,11 +698,48 @@ test('options contain Space, membership loss closes an ineligible family, and tu
   assert.equal(retryHarness.state().transitionChannelId, null);
 });
 
+test('authoritative terminal cleanup invalidates active recovery ownership before clearing UI state', () => {
+  let invalidations = 0;
+  const recovery: PlayerErrorRecoveryController = {
+    retry: () => false,
+    skip: () => false,
+    reconcileSnapshot: () => false,
+    invalidate: () => {
+      invalidations += 1;
+    },
+    dispose: () => undefined,
+  };
+  const harness = createHarness(playingSnapshot(), { recovery });
+  harness.replaceState({
+    ...harness.state(),
+    transitionChannelId: 'one',
+    transitionVisible: true,
+    retryPending: true,
+    recoveryPendingAction: 'retry-current',
+  });
+
+  harness.controller.reconcileSnapshot(
+    {
+      ...playingSnapshot(),
+      status: 'error',
+      playing: false,
+      lastError: safeError(),
+    },
+    true,
+  );
+
+  assert.equal(invalidations, 1);
+  assert.equal(harness.state().transitionChannelId, null);
+  assert.equal(harness.state().retryPending, false);
+  assert.equal(harness.state().retryTransitionActive, false);
+});
+
 function createHarness(snapshot: PlayerSnapshot, overrides: Partial<{
   dispatch: LineupDesktopPreloadApi['player']['dispatch'];
   tuneChannel: LineupDesktopPreloadApi['player']['tuneChannel'];
   refreshChannelStatus: () => Promise<void>;
   refreshGuidePresentation: () => Promise<void>;
+  recovery: PlayerErrorRecoveryController;
 }> = {}) {
   let playerSnapshot = snapshot;
   let state = createPlayerOverlayState(presentation(snapshot));
@@ -723,7 +761,7 @@ function createHarness(snapshot: PlayerSnapshot, overrides: Partial<{
     refreshChannelStatus: overrides.refreshChannelStatus ?? (async () => undefined),
     refreshGuidePresentation: overrides.refreshGuidePresentation ?? (async () => undefined),
     recordDiagnostic: (_operation, message) => { diagnostics.push(message); },
-    recovery: {
+    recovery: overrides.recovery ?? {
       retry: () => {
         state = {
           ...state,
@@ -739,6 +777,7 @@ function createHarness(snapshot: PlayerSnapshot, overrides: Partial<{
         if (next.status !== 'error' && next.status !== 'destroyed') {
           state = { ...state, retryTransitionActive: false };
         }
+        return false;
       },
       invalidate: () => undefined,
       dispose: () => undefined,
@@ -748,6 +787,7 @@ function createHarness(snapshot: PlayerSnapshot, overrides: Partial<{
     controller, timers, focus, diagnostics,
     state: () => state,
     snapshot: () => playerSnapshot,
+    replaceState: (next: ReturnType<typeof createPlayerOverlayState>) => { state = next; },
     replaceSnapshot: (next: PlayerSnapshot) => { playerSnapshot = next; },
     setSnapshot: (next: PlayerSnapshot) => { playerSnapshot = next; controller.reconcileSnapshot(next, true); },
   };

@@ -23,7 +23,7 @@ export interface PlayerErrorRecoveryControllerOptions {
 export interface PlayerErrorRecoveryController {
   retry(): boolean;
   skip(): boolean;
-  reconcileSnapshot(snapshot: PlayerSnapshot): void;
+  reconcileSnapshot(snapshot: PlayerSnapshot): boolean;
   invalidate(): void;
   dispose(): void;
 }
@@ -144,6 +144,7 @@ export function createPlayerErrorRecoveryController(
     retry: () => run('retry-current'),
     skip: () => run('skip-next'),
     reconcileSnapshot(snapshot) {
+      let invalidated = false;
       const nextErrorRequestId =
         snapshot.status === 'error' || snapshot.status === 'destroyed'
           ? snapshot.requestId
@@ -153,6 +154,7 @@ export function createPlayerErrorRecoveryController(
         nextErrorRequestId !== lastErrorRequestId
       ) {
         invalidate();
+        invalidated = true;
       }
       lastErrorRequestId = nextErrorRequestId;
       if (nextErrorRequestId === null && options.getState().retryTransitionActive) {
@@ -162,6 +164,7 @@ export function createPlayerErrorRecoveryController(
           retryError: null,
         }));
       }
+      return invalidated;
     },
     invalidate,
     dispose() {

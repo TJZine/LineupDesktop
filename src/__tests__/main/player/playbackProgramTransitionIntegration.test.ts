@@ -23,6 +23,7 @@ import {
   projectPlexPlaybackScheduleSelection,
 } from '../../../main/player/plexPlaybackRuntime.js';
 import type { PlayerCommand } from '../../../contracts/player.js';
+import { deferred } from '../../helpers/deferred.js';
 
 test('real guide and scheduler produce one runtime start for initialize, tune, natural transition, and skip', async () => {
   let nowMs = 1_000;
@@ -478,15 +479,4 @@ function createSuccessfulPlexRuntime(): PlaybackCleanupPlexRuntime {
       } satisfies PlexIpcResult<PlexSelectServerValue>;
     },
   };
-}
-
-function deferred<T>(): {
-  promise: Promise<T>;
-  resolve(value: T): void;
-} {
-  let resolve = (_value: T): void => undefined;
-  const promise = new Promise<T>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
 }

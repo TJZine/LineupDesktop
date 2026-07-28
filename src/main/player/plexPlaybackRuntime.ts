@@ -45,6 +45,8 @@ export type PlexPlaybackRuntimeCleanupReason = 'stop'
   | 'server-change'
   | 'profile-change'
   | 'teardown';
+type PlexPlaybackRetryOwner = 'manual' | 'recovery';
+type PlexPlaybackRetryResult = 'started' | 'failed' | 'stale';
 export interface PlexPlaybackScheduleSelection {
   channelId: string;
   programId: string;
@@ -203,46 +205,9 @@ export class PlexPlaybackRuntime {
   async retryCurrentPlayback(
     expectedSelection: PlexPlaybackScheduleSelection,
   ): Promise<boolean> {
-    if (
-      this.#cleanupHoldCount > 0 ||
-      !isSafeScheduleSelection(expectedSelection) ||
-      expectedSelection.endsAtMs === undefined ||
-      expectedSelection.endsAtMs === null
-    ) {
-      return false;
-    }
-    const initialEpoch = this.#epoch;
-    let selection: PlexPlaybackScheduleSelection | null;
-    try {
-      selection = await this.#scheduler.getCurrentPlayback({
-        nowMs: this.#clock.now(),
-        reason: 'schedule-tick',
-      });
-    } catch {
-      return false;
-    }
-    if (
-      this.#cleanupHoldCount > 0 ||
-      !this.#isCurrentEpoch(initialEpoch) ||
-      !isSafeScheduleSelection(selection) ||
-      !isSamePlexPlaybackScheduleSelection(selection, expectedSelection)
-    ) {
-      return false;
-    }
-    this.#recovery.cancel();
-    const epoch = this.#nextEpoch();
-    const events: PlayerEvent[] = [
-      ...(await this.#cleanupActive('switch', { invalidateEpoch: false })),
-    ];
-    if (!this.#isCurrentEpoch(epoch)) {
-      return false;
-    }
-    const result = await this.#startSelection(epoch, events, selection);
     return (
-      result.accepted &&
-      this.#isCurrentEpoch(epoch) &&
-      isSamePlexPlaybackScheduleSelection(this.#activeSelection, expectedSelection)
-    );
+      await this.#restartSelectionForRetry(expectedSelection, 'manual')
+    ) === 'started';
   }
   async startCurrentPlayback(
     reason: 'startup' | 'schedule-tick' | 'manual-switch' = 'schedule-tick',
@@ -484,16 +449,26 @@ export class PlexPlaybackRuntime {
   }
   async #retrySelection(
     identity: PlexPlaybackRecoveryIdentity,
-  ): Promise<'started' | 'failed' | 'stale'> {
+  ): Promise<PlexPlaybackRetryResult> {
+    return this.#restartSelectionForRetry(identity, 'recovery');
+  }
+  async #restartSelectionForRetry(
+    identity: PlexPlaybackRecoveryIdentity,
+    owner: PlexPlaybackRetryOwner,
+  ): Promise<PlexPlaybackRetryResult> {
     if (
       this.#cleanupHoldCount > 0 ||
       !isSafeScheduleSelection(identity) ||
       identity.endsAtMs === undefined ||
       identity.endsAtMs === null ||
-      !isSamePlexPlaybackScheduleSelection(this.#activeSelection, identity)
+      (
+        owner === 'recovery' &&
+        !isSamePlexPlaybackScheduleSelection(this.#activeSelection, identity)
+      )
     ) {
       return 'stale';
     }
+    const initialEpoch = this.#epoch;
     let selection: PlexPlaybackScheduleSelection | null;
     try {
       selection = await this.#scheduler.getCurrentPlayback({
@@ -501,7 +476,10 @@ export class PlexPlaybackRuntime {
         reason: 'schedule-tick',
       });
     } catch {
-      return isSamePlexPlaybackScheduleSelection(this.#activeSelection, identity)
+      return (
+        owner === 'recovery' &&
+        isSamePlexPlaybackScheduleSelection(this.#activeSelection, identity)
+      )
         ? 'failed'
         : 'stale';
     }
@@ -509,9 +487,16 @@ export class PlexPlaybackRuntime {
       this.#cleanupHoldCount > 0 ||
       !isSafeScheduleSelection(selection) ||
       !isSamePlexPlaybackScheduleSelection(selection, identity) ||
-      !isSamePlexPlaybackScheduleSelection(this.#activeSelection, identity)
+      (
+        owner === 'manual'
+          ? !this.#isCurrentEpoch(initialEpoch)
+          : !isSamePlexPlaybackScheduleSelection(this.#activeSelection, identity)
+      )
     ) {
       return 'stale';
+    }
+    if (owner === 'manual') {
+      this.#recovery.cancel();
     }
     const epoch = this.#nextEpoch();
     const events: PlayerEvent[] = [
@@ -519,7 +504,10 @@ export class PlexPlaybackRuntime {
     ];
     if (
       !this.#isCurrentEpoch(epoch) ||
-      !isSamePlexPlaybackScheduleSelection(this.#activeSelection, identity)
+      (
+        owner === 'recovery' &&
+        !isSamePlexPlaybackScheduleSelection(this.#activeSelection, identity)
+      )
     ) {
       return 'stale';
     }

@@ -297,6 +297,8 @@ test('cleanup hold settles attached Skip stale and disposal remains terminal aft
   });
   owner.dispose();
   releaseCleanupHold();
+  releaseCleanupHold();
+  owner.acquireCleanupHold()();
   assert.deepEqual(await owner.retryCurrent(), {
     accepted: false,
     reason: 'unavailable',

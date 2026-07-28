@@ -1,7 +1,9 @@
 import type { PlayerError, PlayerSnapshot } from '../contracts/player.js';
-import type {
-  LineupDesktopPreloadApi,
-  PlayerRecoveryIpcResult,
+import {
+  PLAYER_RECOVERY_ACTIONS,
+  type LineupDesktopPreloadApi,
+  type PlayerRecoveryAction,
+  type PlayerRecoveryIpcResult,
 } from '../contracts/shell.js';
 
 export type PlayerRecoveryBridgeInvoke = (
@@ -28,7 +30,7 @@ export function createPlayerRecoveryBridge(
     if (
       !isPlainRecord(input) ||
       !hasOnlyKeys(input, ['action']) ||
-      (input.action !== 'retry-current' && input.action !== 'skip-next')
+      !isPlayerRecoveryAction(input.action)
     ) {
       return failure(
         requestId,
@@ -57,6 +59,7 @@ export function createPlayerRecoveryBridge(
           code: 'PLAYER_OPERATION_UNAVAILABLE',
           category: 'unknown',
           message: 'Player recovery is unavailable.',
+          recoverable: true,
           retryable: true,
         },
       );
@@ -146,6 +149,13 @@ function createEmptySnapshot(): PlayerSnapshot {
     },
     lastError: null,
   };
+}
+
+function isPlayerRecoveryAction(value: unknown): value is PlayerRecoveryAction {
+  return (
+    typeof value === 'string' &&
+    PLAYER_RECOVERY_ACTIONS.some((action) => action === value)
+  );
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

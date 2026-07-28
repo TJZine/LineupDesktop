@@ -737,6 +737,7 @@ test('real desktop adapter host rejection consumes exactly three recovery attemp
     )),
     true,
   );
+  assertPublicSafe(emitted, [...rawPrivateValues, 'private helper detail']);
 });
 
 test('RD-12 desktop adapter runtime port reports cleanup rejection to runtime cleanup owner', async () => {

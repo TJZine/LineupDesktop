@@ -98,17 +98,26 @@ class LifecycleNativeHost extends ConfigurableNativeHost {
 
 class OrderedLifecycleNativeHost extends ConfigurableNativeHost {
   readonly trace: string[] = [];
+  mainListener: ((failure: NativePlayerHostLifecycleFailure) => void) | null = null;
+  private adapterListener: ((failure: NativePlayerHostLifecycleFailure) => void) | null = null;
   private readonly listeners = new Map<
     (failure: NativePlayerHostLifecycleFailure) => void,
     string
   >();
 
   onLifecycleFailure(listener: (failure: NativePlayerHostLifecycleFailure) => void): () => void {
-    const label = this.listeners.size === 0 ? 'adapter' : 'main';
+    const label = listener === this.mainListener ? 'main' : 'adapter';
+    if (label === 'adapter') {
+      assert.equal(this.adapterListener, null, 'expected exactly one adapter lifecycle listener');
+      this.adapterListener = listener;
+    }
     this.listeners.set(listener, label);
     return () => {
       if (this.listeners.delete(listener)) {
         this.trace.push(`unsubscribe:${label}`);
+      }
+      if (listener === this.adapterListener) {
+        this.adapterListener = null;
       }
     };
   }
@@ -871,15 +880,17 @@ test('player IPC registers adapter lifecycle handling before main and unsubscrib
   const ipcMain = new FakeIpcMain();
   const host = new OrderedLifecycleNativeHost();
   let mainLifecycleCalls = 0;
+  const mainListener = () => {
+    mainLifecycleCalls += 1;
+  };
+  host.mainListener = mainListener;
   const teardown = registerPlayerIpcHandlers({
     shellMode: 'production',
     isAuthorizedEvent,
     ...playerEventSinks(),
     createRequestId,
     nativeHostFactory: () => host,
-    onNativeHostLifecycleFailure: () => {
-      mainLifecycleCalls += 1;
-    },
+    onNativeHostLifecycleFailure: mainListener,
     ipcMain,
   });
   const failure = {

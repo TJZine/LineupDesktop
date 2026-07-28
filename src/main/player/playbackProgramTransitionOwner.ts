@@ -167,6 +167,9 @@ export class PlaybackProgramTransitionOwner {
         return;
       }
       released = true;
+      if (this.#disposed) {
+        return;
+      }
       this.#cleanupHoldCount -= 1;
     };
   }
@@ -176,6 +179,7 @@ export class PlaybackProgramTransitionOwner {
       return;
     }
     this.#disposed = true;
+    this.#cleanupHoldCount = 0;
     this.#scheduler.off('programStart', this.#programStartHandler);
     this.invalidate();
   }

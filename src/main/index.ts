@@ -76,6 +76,7 @@ import { ChannelPersistenceBootstrapOwner } from './persistence/channelPersisten
 import { ChannelPersistenceStartupOwner } from './persistence/channelPersistenceStartupOwner.js';
 import { DesktopChannelPersistenceStore } from './persistence/desktopChannelPersistenceStore.js';
 import { createChannelBuilderSmokeFixture } from './channel/channelBuilderSmokeFixture.js';
+import { cleanupFailedApplicationStartup } from './applicationStartupCleanup.js';
 
 registerLineupProtocolScheme();
 
@@ -109,6 +110,10 @@ let containmentCounters: ShellContainmentCounters = {
 app.commandLine.appendSwitch('disable-gpu');
 
 void startApplication().catch(async (error: unknown) => {
+  const cleanupSettingsIpc = teardownSettingsIpc;
+  teardownSettingsIpc = null;
+  const cleanupDiagnosticsIpc = teardownDiagnosticsIpc;
+  teardownDiagnosticsIpc = null;
   const teardownPlayer = teardownPlayerIpc;
   teardownPlayerIpc = null;
   const teardownRouter = playbackEventRouter;
@@ -119,20 +124,27 @@ void startApplication().catch(async (error: unknown) => {
   playbackProgramTransitionOwner = null;
   const teardownRecoveryIpc = teardownPlayerRecoveryIpc;
   teardownPlayerRecoveryIpc = null;
+  const cleanupSingleInstanceOwner = singleInstanceOwner;
+  singleInstanceOwner = null;
   const teardownChannel = channelComposition?.teardown ?? null;
   channelComposition = null;
   const teardownPlex = plexComposition?.teardown ?? null;
   plexComposition = null;
-  teardownRecoveryIpc?.();
-  teardownTransitionOwner?.dispose();
-  await teardownPlayer?.teardown().catch(() => undefined);
-  teardownRouter?.dispose();
-  await teardownPlaybackRuntime?.teardown().catch(() => undefined);
-  await Promise.all([
-      teardownChannel?.() ?? Promise.resolve(),
-      teardownPlex?.() ?? Promise.resolve(),
-    ])
-    .catch(() => undefined);
+  await cleanupFailedApplicationStartup(
+    {
+      settingsIpc: cleanupSettingsIpc,
+      diagnosticsIpc: cleanupDiagnosticsIpc,
+      playerRecoveryIpc: teardownRecoveryIpc,
+      playbackTransitionOwner: teardownTransitionOwner,
+      playerIpc: teardownPlayer,
+      playbackEventRouter: teardownRouter,
+      playbackRuntime: teardownPlaybackRuntime,
+      channelComposition: teardownChannel,
+      plexComposition: teardownPlex,
+      singleInstanceOwner: cleanupSingleInstanceOwner,
+    },
+    reportMainProcessDiagnostic,
+  );
   console.error(redactError(error));
   app.exit(1);
 });
@@ -365,6 +377,8 @@ function registerApplicationLifecycleHandlers(): void {
     publishShellStatus('closing');
     teardownSettingsIpc?.();
     teardownSettingsIpc = null;
+    teardownDiagnosticsIpc?.();
+    teardownDiagnosticsIpc = null;
     teardownPlayerRecoveryIpc?.();
     teardownPlayerRecoveryIpc = null;
     const localPlaybackProgramTransitionOwner = playbackProgramTransitionOwner;
@@ -399,8 +413,6 @@ function registerApplicationLifecycleHandlers(): void {
 
     event.preventDefault();
     teardownPlayerIpc = null;
-    teardownDiagnosticsIpc?.();
-    teardownDiagnosticsIpc = null;
     const teardownPlex = plexComposition?.teardown ?? null;
     plexComposition = null;
     const localChannelComposition = channelComposition;

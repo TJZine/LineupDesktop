@@ -4,6 +4,7 @@ import type { IpcMain, IpcMainInvokeEvent } from 'electron';
 
 import { LINEUP_PLAYER_RECOVERY_CHANNEL } from '../../contracts/ipc.js';
 import {
+  PLAYER_RECOVERY_ACTIONS,
   type PlayerRecoveryAction,
   type PlayerRecoveryIpcResult,
 } from '../../contracts/shell.js';
@@ -132,8 +133,7 @@ function readRequest(
     value.requestId !== requestId ||
     !isPlainRecord(value.payload) ||
     !hasOnlyKeys(value.payload, ['action']) ||
-    (value.payload.action !== 'retry-current' &&
-      value.payload.action !== 'skip-next')
+    !isPlayerRecoveryAction(value.payload.action)
   ) {
     return { ok: false, requestId };
   }
@@ -142,6 +142,13 @@ function readRequest(
     requestId,
     action: value.payload.action,
   };
+}
+
+function isPlayerRecoveryAction(value: unknown): value is PlayerRecoveryAction {
+  return (
+    typeof value === 'string' &&
+    PLAYER_RECOVERY_ACTIONS.some((action) => action === value)
+  );
 }
 
 function transitionFailure(

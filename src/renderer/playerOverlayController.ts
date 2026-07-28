@@ -20,6 +20,7 @@ import {
   type PlayerOverlayPresentationSource,
 } from './playerOverlayPresentation.js';
 import type { PlayerErrorRecoveryController } from './playerErrorRecoveryController.js';
+import { createPlayerOverlayView } from './overlayViewModels.js';
 
 export interface PlayerOverlayTimerHost {
   setTimeout(callback: () => void, delayMs: number): number;
@@ -207,34 +208,12 @@ export function createPlayerOverlayController(
   };
 
   const focusActive = (): void => {
-    const state = options.getState();
-    const presentation = options.getPresentation();
-    const snapshot = presentation.playerSnapshot;
-    if (state.activeOverlayId === 'playerOsd') {
-      options.focus(isAudioControlEligible(snapshot) ? 'overlay-osd-audio' : 'overlay-osd-subtitles');
-    } else if (state.activeOverlayId === 'miniGuide' && state.miniGuideSelectedChannelId !== null) {
-      options.focus(`overlay-mini-channel-${encodeURIComponent(state.miniGuideSelectedChannelId)}`);
-    } else if (state.activeOverlayId === 'playbackOptions') {
-      options.focus(state.pendingTrackFocusId ?? state.playbackOptionsFocusId);
-    } else if (
-      snapshot.status === 'error' &&
-      presentation.channels.find(
-        (channel) => channel.id === presentation.currentChannelId,
-      )?.currentProgram !== undefined
-    ) {
-      options.focus('overlay-player-retry');
-    } else if (
-      snapshot.status === 'error' &&
-      presentation.channels.find(
-        (channel) => channel.id === presentation.currentChannelId,
-      )?.nextProgram !== undefined
-    ) {
-      options.focus('overlay-player-skip');
-    } else if ((snapshot.status === 'error' || snapshot.status === 'destroyed') && presentation.channels.length > 0) {
-      options.focus('overlay-player-guide');
-    } else {
-      options.focus(null);
-    }
+    options.focus(
+      createPlayerOverlayView(
+        options.getState(),
+        options.getPresentation(),
+      ).activeFocusId,
+    );
   };
 
   const armOsdTimer = (): void => {
@@ -608,7 +587,8 @@ export function createPlayerOverlayController(
 
   const reconcileSnapshot = (snapshot: PlayerSnapshot, authoritative: boolean, explicitTrackList = false): void => {
     if (disposed) return;
-    options.recovery.reconcileSnapshot(snapshot);
+    const recoveryWasActive = isRecoveryActive(options.getState());
+    const recoveryAlreadyInvalidated = options.recovery.reconcileSnapshot(snapshot);
     const previousAuthoritativeStatus = lastAuthoritativeStatus;
     if (authoritative) lastAuthoritativeStatus = snapshot.status;
     const previousRequest = lastSnapshotRequestId;
@@ -639,6 +619,15 @@ export function createPlayerOverlayController(
         }
       }
     }
+    if ((authoritative || snapshot.status === 'ended') && options.getState().transitionChannelId !== null) {
+      if (['idle', 'ready', 'playing', 'paused', 'ended', 'error', 'destroyed'].includes(snapshot.status)) {
+        transitionTimer = clearTimer(transitionTimer);
+        if (recoveryWasActive && !recoveryAlreadyInvalidated) {
+          options.recovery.invalidate();
+        }
+        update((state) => ({ ...state, transitionChannelId: null, transitionVisible: false, pendingTuneChannelId: null, retryPending: false, retryTransitionActive: false }));
+      }
+    }
     if (authoritative && (snapshot.status === 'error' || snapshot.status === 'destroyed')) {
       clearOverlayTimers();
       releasePendingCommand();
@@ -647,12 +636,6 @@ export function createPlayerOverlayController(
       update((state) => reconcileSnapshotState(state, snapshot));
       focusActive();
       return;
-    }
-    if ((authoritative || snapshot.status === 'ended') && options.getState().transitionChannelId !== null) {
-      if (['idle', 'ready', 'playing', 'paused', 'ended', 'error', 'destroyed'].includes(snapshot.status)) {
-        transitionTimer = clearTimer(transitionTimer);
-        update((state) => ({ ...state, transitionChannelId: null, transitionVisible: false, pendingTuneChannelId: null, retryPending: false, retryTransitionActive: false }));
-      }
     }
     if (pendingCommand?.kind === 'space' && authoritative && isInconsistentPlaybackPair(snapshot)) {
       failPendingCommand(pendingCommand.requestId, 'Inconsistent player state ignored.');
@@ -791,6 +774,14 @@ function safeMessage(message: string, fallback: string): string {
     return fallback;
   }
   return compact.slice(0, 180);
+}
+
+function isRecoveryActive(state: PlayerOverlayState): boolean {
+  return (
+    state.retryPending ||
+    state.recoveryPendingAction !== null ||
+    state.retryTransitionActive
+  );
 }
 
 function isInconsistentPlaybackPair(snapshot: PlayerSnapshot): boolean {

@@ -1067,6 +1067,7 @@ test('desktop player adapter normalizes the helper end-file ERROR envelope for s
     error: {
       code: 'PLAYER_HELPER_PLAYBACK_ENDED_WITH_ERROR',
       category: 'engine-failure',
+      message: 'Native playback ended with a player engine error.',
       recoverable: true,
       retryable: true,
     },
@@ -1077,6 +1078,7 @@ test('desktop player adapter normalizes the helper end-file ERROR envelope for s
   if (errorEvent?.event === 'error') {
     assert.equal(errorEvent.error.code, 'PLAYER_HOST_ENGINE_FAILURE');
     assert.equal(errorEvent.error.category, 'engine-failure');
+    assert.equal(errorEvent.error.message, 'The player engine failed.');
     assert.equal(errorEvent.error.recoverable, true);
     assert.equal(errorEvent.error.retryable, true);
   }
