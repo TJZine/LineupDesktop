@@ -1025,6 +1025,31 @@ function hasExactOwnKeys(value: object, expected: readonly string[]): boolean {
   );
 }
 
+function hasExactOwnDataKeys(value: object, expected: readonly string[]): boolean {
+  return (
+    hasExactOwnKeys(value, expected) &&
+    expected.every((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return descriptor !== undefined && 'value' in descriptor;
+    })
+  );
+}
+
+function hasOnlyOwnDataProperties(value: object): boolean {
+  return Object.keys(value).every((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor !== undefined && 'value' in descriptor;
+  });
+}
+
+function hasDenseDataElements(values: readonly unknown[]): boolean {
+  for (let index = 0; index < values.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(values, String(index));
+    if (descriptor === undefined || !('value' in descriptor)) return false;
+  }
+  return true;
+}
+
 function normalizedFilters(
   filters: readonly ContentFilter[],
 ): readonly CanonicalJsonObject[] {
@@ -1194,6 +1219,7 @@ function isValidSafeSourceReference(
     typeof source !== 'object' ||
     Array.isArray(source) ||
     !isPlainRecord(source) ||
+    !hasOnlyOwnDataProperties(source) ||
     seen.has(source) ||
     typeof source.kind !== 'string' ||
     typeof source.sourceIdentity !== 'string' ||
@@ -1205,7 +1231,7 @@ function isValidSafeSourceReference(
   try {
     if (source.kind === 'facet') {
       const valid =
-        hasExactOwnKeys(source, ['kind', 'facetId', 'sourceIdentity']) &&
+        hasExactOwnDataKeys(source, ['kind', 'facetId', 'sourceIdentity']) &&
         (source.facetId === null ||
           (typeof source.facetId === 'string' &&
             /^(library|playlist|collection|genre|director|year|studio|actor|recently-added):[a-f0-9]{64}$/u.test(
@@ -1217,10 +1243,11 @@ function isValidSafeSourceReference(
     if (source.kind === 'manual') {
       const items = source.items;
       const valid =
-        hasExactOwnKeys(source, ['kind', 'sourceIdentity', 'items']) &&
+        hasExactOwnDataKeys(source, ['kind', 'sourceIdentity', 'items']) &&
         Array.isArray(items) &&
         items.length >= 1 &&
         items.length <= CHANNEL_BUILDER_MAX_SOURCE_LEAVES &&
+        hasDenseDataElements(items) &&
         traversal.depth + 1 <= CHANNEL_BUILDER_MAX_SOURCE_DEPTH &&
         items.every(
           (item) =>
@@ -1228,7 +1255,7 @@ function isValidSafeSourceReference(
             typeof item === 'object' &&
             !Array.isArray(item) &&
             isPlainRecord(item) &&
-            hasExactOwnKeys(item, ['kind', 'facetId', 'sourceIdentity']) &&
+            hasExactOwnDataKeys(item, ['kind', 'facetId', 'sourceIdentity']) &&
             item.kind === 'facet' &&
             item.facetId === null &&
             typeof item.sourceIdentity === 'string' &&
@@ -1241,7 +1268,7 @@ function isValidSafeSourceReference(
     }
     return (
       source.kind === 'mixed' &&
-      hasExactOwnKeys(source, [
+      hasExactOwnDataKeys(source, [
         'kind',
         'sourceIdentity',
         'mixMode',
@@ -1251,6 +1278,7 @@ function isValidSafeSourceReference(
       Array.isArray(source.sources) &&
       source.sources.length >= 1 &&
       source.sources.length <= CHANNEL_BUILDER_MAX_SOURCE_LEAVES &&
+      hasDenseDataElements(source.sources) &&
       source.sources.every((child) =>
         isValidSafeSourceReference(child, seen, {
           depth: traversal.depth + 1,
@@ -1274,12 +1302,24 @@ export type CandidateIdentityInput = Readonly<{
   blockSize: number | null;
 }>;
 
+export type CandidateIdentityPreimage = Readonly<{
+  identityVersion: 1;
+  origin: ChannelBuilderOriginBinding;
+  sourceTree: CanonicalJsonValue;
+  contentFilterIdentity: ChannelBuilderContentFilterIdentity | null;
+  sortOrder: SortOrder | null;
+  lineupReplicaIndex: number;
+  isPlaybackModeVariant: boolean;
+  variantPlaybackMode: PlaybackMode | null;
+  variantBlockSize: number | null;
+}>;
+
 export function createCandidateIdentityPreimage(
   input: CandidateIdentityInput,
-): Readonly<Record<string, CanonicalJsonValue>> {
+): CandidateIdentityPreimage {
   if (
     !isPlainRecord(input) ||
-    !hasExactOwnKeys(input, [
+    !hasExactOwnDataKeys(input, [
       'origin',
       'sourceReference',
       'contentFilterIdentity',
@@ -1292,7 +1332,7 @@ export function createCandidateIdentityPreimage(
     input.origin === null ||
     typeof input.origin !== 'object' ||
     !isPlainRecord(input.origin) ||
-    !hasExactOwnKeys(input.origin, [
+    !hasExactOwnDataKeys(input.origin, [
       'profileBinding',
       'serverBinding',
       'librarySetBinding',
@@ -1340,7 +1380,11 @@ export function createCandidateIdentityPreimage(
   const isVariant = input.isPlaybackModeVariant === true;
   return {
     identityVersion: 1,
-    origin: input.origin,
+    origin: {
+      profileBinding: input.origin.profileBinding,
+      serverBinding: input.origin.serverBinding,
+      librarySetBinding: input.origin.librarySetBinding,
+    },
     sourceTree: sourceTreeIdentity(input.sourceReference),
     contentFilterIdentity: input.contentFilterIdentity,
     sortOrder: input.sortOrder,
@@ -1424,14 +1468,15 @@ function createCandidateIdWithSha256(
     occurrence: number;
   }>,
 ): ChannelBuilderCandidateId {
-  if (!Number.isSafeInteger(input.occurrence) || input.occurrence < 0) {
+  const occurrence = input.occurrence;
+  if (!Number.isSafeInteger(occurrence) || occurrence < 0) {
     throw new TypeError('Invalid candidate occurrence.');
   }
   const seed = normalizedIdentityInput(input.seed);
   const strategy = input.strategy.normalize('NFC');
   const bytes =
     `{"candidateIdentity":${JSON.stringify(input.candidateIdentity)},` +
-    `"occurrence":${input.occurrence},` +
+    `"occurrence":${occurrence},` +
     `"seed":${JSON.stringify(seed)},` +
     `"strategy":${JSON.stringify(strategy)}}`;
   return identityBytes(
@@ -1447,30 +1492,29 @@ function createCandidateIdentityBytes(input: CandidateIdentityInput): string {
   // to canonicalJsonV1(createCandidateIdentityPreimage(input)); the identity
   // conformance test pins that invariant independently of the digest.
   const preimage = createCandidateIdentityPreimage(input);
-  const isVariant = input.isPlaybackModeVariant === true;
   const origin =
-    `{"librarySetBinding":${JSON.stringify(input.origin.librarySetBinding)},` +
-    `"profileBinding":${JSON.stringify(input.origin.profileBinding)},` +
-    `"serverBinding":${JSON.stringify(input.origin.serverBinding)}}`;
-  const sourceTree = input.sourceReference.kind === 'facet'
+    `{"librarySetBinding":${JSON.stringify(preimage.origin.librarySetBinding)},` +
+    `"profileBinding":${JSON.stringify(preimage.origin.profileBinding)},` +
+    `"serverBinding":${JSON.stringify(preimage.origin.serverBinding)}}`;
+  const sourceTree = preimage.sourceTree !== null &&
+    typeof preimage.sourceTree === 'object' &&
+    isPlainRecord(preimage.sourceTree) &&
+    preimage.sourceTree.kind === 'facet' &&
+    typeof preimage.sourceTree.sourceIdentity === 'string'
     ? `{"kind":"facet","sourceIdentity":${JSON.stringify(
-        input.sourceReference.sourceIdentity,
+        preimage.sourceTree.sourceIdentity,
       )}}`
     : canonicalJsonV1(preimage.sourceTree);
   return (
-    `{"contentFilterIdentity":${jsonScalar(input.contentFilterIdentity)},` +
+    `{"contentFilterIdentity":${jsonScalar(preimage.contentFilterIdentity)},` +
     `"identityVersion":1,` +
-    `"isPlaybackModeVariant":${String(isVariant)},` +
-    `"lineupReplicaIndex":${String(input.lineupReplicaIndex ?? 0)},` +
+    `"isPlaybackModeVariant":${String(preimage.isPlaybackModeVariant)},` +
+    `"lineupReplicaIndex":${String(preimage.lineupReplicaIndex)},` +
     `"origin":${origin},` +
-    `"sortOrder":${jsonScalar(input.sortOrder)},` +
+    `"sortOrder":${jsonScalar(preimage.sortOrder)},` +
     `"sourceTree":${sourceTree},` +
-    `"variantBlockSize":${String(
-      isVariant && input.playbackMode === 'block' ? input.blockSize : null,
-    )},` +
-    `"variantPlaybackMode":${jsonScalar(
-      isVariant ? input.playbackMode : null,
-    )}}`
+    `"variantBlockSize":${String(preimage.variantBlockSize)},` +
+    `"variantPlaybackMode":${jsonScalar(preimage.variantPlaybackMode)}}`
   );
 }
 
