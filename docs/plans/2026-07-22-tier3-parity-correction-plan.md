@@ -2798,6 +2798,7 @@ are ineligible.
 `src/preload/index.cts`, new `src/main/player/playerRecoveryIpc.ts`,
 new `src/main/player/playbackProgramTransitionOwner.ts`,
 `src/main/player/plexPlaybackRuntime.ts`,
+`src/main/player/plexPlaybackBridge.ts`,
 `src/main/player/plexPlaybackComposition.ts`,
 composition, owner teardown, and removal of the old program-start,
 channel-tuned, and post-initialize playback starts in
@@ -2811,6 +2812,7 @@ new `src/__tests__/main/player/playbackProgramTransitionOwner.test.ts`,
 new
 `src/__tests__/main/player/playbackProgramTransitionIntegration.test.ts`,
 `src/__tests__/main/player/plexPlaybackRuntime.test.ts`,
+`src/__tests__/main/player/plexPlaybackBridge.test.ts`,
 `src/__tests__/main/player/plexPlaybackComposition.test.ts`,
 `src/__tests__/domain/schedulerDomain.test.ts`,
 `src/__tests__/main/guideRuntime.test.ts`,
@@ -2819,10 +2821,27 @@ new
 new `src/__tests__/renderer/playerErrorRecoveryController.test.ts`,
 `src/__tests__/renderer/playerOverlayController.test.ts`,
 `src/__tests__/renderer/overlays.test.ts`,
+`src/__tests__/renderer/routeDom.test.ts`,
 `tools/__tests__/smoke-electron.test.mjs`, and
 `docs/architecture/import-ledger.md`. This list is exhaustive.
-The exhaustive scope is 31 files, including two new production owners and
+The exhaustive scope is 34 files, including two new production owners and
 four new tests.
+
+**Accepted route-DOM test-authority correction:** the only newly permitted
+Package 2B edit is the existing
+`src/__tests__/renderer/routeDom.test.ts` player-error assertion block at or
+around the stale Guide-visible assertion previously reported at line 677.
+Replace the obsolete expectation that Guide remains visible while the selected
+channel has playable current and next programs. Add or adjust only semantic DOM
+assertions proving that this actionable error state projects Retry and Skip,
+including their current visible/available or pending/busy state, while hiding
+Guide; then prove an explicit no-current/no-next playable-program state hides
+Retry and Skip and exposes Guide as the fallback. Reuse the existing route DOM
+fixture and public DOM bindings. Do not refactor route-DOM setup, navigation,
+focus, input, unrelated fixtures/assertions, selectors, static DOM, production
+renderer owners, or any other Package 2B behavior to make this test pass. If
+the frozen production behavior cannot pass through this test-only correction,
+stop and return to plan review instead of widening scope.
 
 The public API adds one closed player recovery operation with action exactly
 `retry-current` or `skip-next`; request/result envelopes echo one opaque request
@@ -2926,6 +2945,13 @@ owner would be a forwarding wrapper, or `playerOverlayController.ts` would
 reach 800 lines.
 
 **Verification classification:** `new regression/contract test required`.
+The observed full `npm run verify` baseline after the reviewed Package 2B
+implementation was 982 passing and one failing test, exactly
+`src/__tests__/renderer/routeDom.test.ts` at the stale Guide-visible assertion;
+the reviewed production behavior and the new in-scope overlay coverage already
+agree that actionable current/next programs expose Retry/Skip and reserve Guide
+for the no-playable-program fallback. Treat this as a test-authority mismatch,
+not permission for a production change.
 Tests cover exact payload/key rejection, sender/origin authorization, preload
 invoke rejection, request-id echo, retry currentness, one-step skip, empty/end
 cases, tune/cleanup races, stale completion, focus/busy/error recovery,
@@ -2946,7 +2972,7 @@ runtime's observable event callback. Run:
 ```sh
 npm run typecheck
 npm run build:electron
-node --import tsx --test src/__tests__/domain/schedulerDomain.test.ts src/__tests__/main/guideRuntime.test.ts src/__tests__/main/player/playerRecoveryIpc.test.ts src/__tests__/main/player/playbackProgramTransitionOwner.test.ts src/__tests__/main/player/playbackProgramTransitionIntegration.test.ts src/__tests__/main/player/plexPlaybackRuntime.test.ts src/__tests__/main/player/plexPlaybackComposition.test.ts src/__tests__/contracts/contracts.test.ts src/__tests__/integration/preloadContractVocabulary.test.ts src/__tests__/renderer/playerErrorRecoveryController.test.ts src/__tests__/renderer/playerOverlayController.test.ts src/__tests__/renderer/overlays.test.ts
+node --import tsx --test src/__tests__/domain/schedulerDomain.test.ts src/__tests__/main/guideRuntime.test.ts src/__tests__/main/player/playerRecoveryIpc.test.ts src/__tests__/main/player/playbackProgramTransitionOwner.test.ts src/__tests__/main/player/playbackProgramTransitionIntegration.test.ts src/__tests__/main/player/plexPlaybackRuntime.test.ts src/__tests__/main/player/plexPlaybackBridge.test.ts src/__tests__/main/player/plexPlaybackComposition.test.ts src/__tests__/contracts/contracts.test.ts src/__tests__/integration/preloadContractVocabulary.test.ts src/__tests__/renderer/playerErrorRecoveryController.test.ts src/__tests__/renderer/playerOverlayController.test.ts src/__tests__/renderer/overlays.test.ts src/__tests__/renderer/routeDom.test.ts
 node --test tools/__tests__/smoke-electron.test.mjs
 npm run smoke:electron
 npm run verify:maintainability
@@ -2957,8 +2983,506 @@ git diff --check
 ```
 
 Rollback is the whole closed recovery API/action slice; never leave a contract,
-channel, preload method, main handler, or renderer control unmatched.
+channel, preload method, main handler, renderer control, or its corrected
+route-DOM authority assertion unmatched. The route-DOM correction is not an
+independent product change and must roll back with Package 2B.
 Checkpoint commit: `feat(player): add retry and skip recovery actions`.
+
+PACKAGE_2B_ROUTE_DOM_SCOPE_REVIEW_PACKET_2026_07_28
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
+TASK: Review Package 2B Route-DOM Scope Correction
+TASK_FAMILY: feature/design
+TIER: Tier 3
+PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
+ARTIFACT: PACKAGE_2B_ROUTE_DOM_SCOPE_REVIEW_PACKET_2026_07_28
+FILES:
+- docs/plans/2026-07-22-tier3-parity-correction-plan.md
+SCOPE_DELTA:
+- add exactly `src/__tests__/renderer/routeDom.test.ts` to Package 2B
+- increase the exhaustive Package 2B count from 31 to 32 files
+CURRENT_SUPERSEDING_SCOPE:
+- the later `PACKAGE_2B_IMPLEMENTATION_REMEDIATION_2026_07_28` expands the
+  active exhaustive boundary from 32 to 34 files solely for canonical playback
+  identity projection and its existing bridge test; this does not broaden the
+  approved route-DOM edit
+PERMITTED_IMPLEMENTATION_EDIT:
+- replace only the stale player-error Guide-always-visible assertion and add or
+  adjust nearby semantic DOM assertions for Retry/Skip in the playable
+  current/next state and Guide in the explicit no-current/no-next fallback
+NON_GOALS:
+- no production source, selector, static-DOM, route setup, navigation, focus,
+  input, unrelated fixture/assertion, or broad route-DOM refactor
+OBSERVED_CONTRADICTION:
+- full verification reached 982 passing and one failing test, exactly the stale
+  `src/__tests__/renderer/routeDom.test.ts` assertion reported at line 677
+REQUIRED_REVIEW_ASSERTIONS:
+- the reviewed route-DOM delta added no file other than the existing route-DOM
+  test; the later 34-file remediation boundary is separately reviewed
+- the permitted test edit aligns public DOM assertions with already frozen
+  Package 2B Retry/Skip and Guide-fallback behavior without authorizing a
+  production change
+- the focused command includes the route-DOM test, full `npm run verify` must
+  pass before Package 2B resumes or closes, and rollback remains the whole
+  Package 2B slice
+- every other Package 2B scope, invariant, no-touch boundary, stop condition,
+  verification gate, and WS1/WS3–WS9/RD-27/RD-28 obligation remains unchanged
+BLOCKERS:
+- worker remains paused until fresh independent plan review reports no material
+  finding
+MESSAGE:
+Adversarially review only the accepted Package 2B route-DOM scope correction.
+Confirm it adds exactly one existing test file, changes the exhaustive count
+from 31 to 32, limits implementation to replacing the stale Guide-visible
+assertion plus nearby Retry/Skip and Guide-fallback DOM proof, forbids production
+or broad route-DOM refactoring, adds the test to focused verification, preserves
+whole-slice rollback and every other invariant, and keeps the worker paused
+until explicit approval.
+
+**PACKAGE_2B_IMPLEMENTATION_REMEDIATION_2026_07_28:** two independent
+implementation reviews reproduced seven unique material defects in the current
+uncommitted Package 2B diff. Accept all seven findings and the later P1 plan
+review finding that item 5 lacked one implementable canonical identity owner.
+Preserve the complete current diff and expand the exhaustive Package 2B
+boundary from 32 to 34 files only for the existing playback bridge source and
+test named below. Preserve the independently approved route-DOM correction
+without reverting, committing, or starting Package 2D.
+Accept the later P1 implementation-review finding that invalidation alone opens
+a recovery/start window while asynchronous player/PMS cleanup drains. The
+prior clean remediation-plan review is superseded for this lifecycle amendment.
+The prior route-DOM plan approval does not authorize remediation implementation:
+the worker remains paused until this complete amendment receives fresh
+independent plan approval.
+
+**IMPLEMENTER_ROLE_ELIGIBILITY:** `worker` only. The fixes span authorization,
+main cleanup/transition generations, runtime retry custody, preload validation,
+and renderer settlement/projection ordering; lower worker roles are ineligible.
+
+The remediation edit subset is exactly these 20 files inside the revised
+34-file Package 2B boundary:
+
+- `src/main/player/playerRecoveryIpc.ts`
+- `src/main/player/playbackProgramTransitionOwner.ts`
+- `src/main/player/plexPlaybackRuntime.ts`
+- `src/main/player/plexPlaybackBridge.ts`
+- `src/main/index.ts`
+- `src/preload/playerRecoveryBridge.cts`
+- `src/preload/index.cts`
+- `src/renderer/playerErrorRecoveryController.ts`
+- `src/renderer/overlayViewModels.ts`
+- `src/__tests__/main/player/playerRecoveryIpc.test.ts`
+- `src/__tests__/main/player/playbackProgramTransitionOwner.test.ts`
+- `src/__tests__/main/player/playbackProgramTransitionIntegration.test.ts`
+- `src/__tests__/main/player/plexPlaybackRuntime.test.ts`
+- `src/__tests__/main/player/plexPlaybackBridge.test.ts`
+- `src/__tests__/main/player/plexPlaybackComposition.test.ts`
+- `src/__tests__/integration/preloadContractVocabulary.test.ts`
+- `src/__tests__/renderer/playerErrorRecoveryController.test.ts`
+- `src/__tests__/renderer/overlays.test.ts`
+- `src/__tests__/renderer/routeDom.test.ts`
+- `tools/__tests__/smoke-electron.test.mjs`
+
+Every other Package 2B file is preserve/no-touch during remediation. No new
+file, public recovery action, renderer-supplied program identity, contract
+field, IPC channel, scheduler interface/implementation, cleanup-owner edit,
+dependency, native-helper change, or broader renderer refactor is authorized.
+If any accepted fix cannot be completed inside this 20-file subset, stop before
+editing a twenty-first file and return to plan review.
+
+**Required composition-test signature correction:** the nonoptional
+`retryCurrentPlayback(expectedSelection)` contract intentionally removes the
+old zero-argument call. In
+`src/__tests__/main/player/plexPlaybackComposition.test.ts`, edit only the
+existing manual-retry composition test at or around the prior line 481 to
+derive the expected selection through the same runtime-owned canonical
+projector and pass it to `retryCurrentPlayback`. Preserve that test's exact
+two-load behavior, repeated media id, player load-command count, one prior
+request cleanup, and `switch` PMS-release assertions. Do not add an optional or
+default identity, compatibility overload/fallback, local program-id encoder,
+weaker equality, production change for this test, unrelated test refactor, or
+another file.
+
+**Accepted cleanup-custody lifecycle correction:** the existing 20-file
+remediation boundary is sufficient; no count or file changes are authorized.
+The current rejected implementation calls transition-owner `invalidate()` and
+then immediately permits new actions while asynchronous PMS/player cleanup is
+still draining. Preserve the complete current remediated diff, but replace that
+open interval with complementary runtime and transition-owner cleanup custody:
+
+The cleanup-custody correction may edit exactly this eight-file subset of the
+approved 20-file remediation boundary:
+
+- `src/main/player/plexPlaybackRuntime.ts`
+- `src/main/player/playbackProgramTransitionOwner.ts`
+- `src/main/index.ts`
+- `src/__tests__/main/player/plexPlaybackRuntime.test.ts`
+- `src/__tests__/main/player/playbackProgramTransitionOwner.test.ts`
+- `src/__tests__/main/player/playbackProgramTransitionIntegration.test.ts`
+- `src/__tests__/main/player/plexPlaybackComposition.test.ts`
+- `tools/__tests__/smoke-electron.test.mjs`
+
+The other 12 remediation files preserve their current reviewed fixes. If this
+lifecycle correction requires a ninth file, a contract change, or
+`plexPlaybackCleanupWiring.ts`, stop before edit and return to plan review.
+
+The only cleanup-custody edit permitted in
+`src/__tests__/main/player/plexPlaybackComposition.test.ts` is the existing
+test `desktop adapter runtime port keeps a replacement session when prior stop
+cleanup settles late`. Preserve its deferred native stop, request-A cleanup,
+adapter snapshot, PMS/session, late-stop isolation, and teardown proof. While
+the stop drain is pending, assert the manual-switch replacement fails closed,
+does not consume or install request B, and performs no request-B
+resolver/player/PMS work. After stop fully settles and custody releases, invoke
+one fresh manual-switch start, assert it receives and keeps request B, and prove
+the completed request-A stop output cannot clear, overwrite, or relabel that
+replacement. Preserve final request-B adapter/PMS teardown cleanup. Do not
+change production code for this test, weaken the stop hold, queue/replay the
+rejected start, add an optional fallback, or refactor another composition test.
+The test title may change only to state that replacement is blocked until the
+prior stop cleanup settles.
+
+- `PlexPlaybackRuntime` acquires cleanup custody synchronously at entry to every
+  public asynchronous cleanup path that can drain or release player/PMS state,
+  including `cleanup`, `stop`, `handleHelperCrash` through `cleanup`, and
+  `teardown` through `cleanup`. Custody is a nested count, not a boolean:
+  overlapping cleanup calls each acquire one hold and release exactly their own
+  idempotent hold in `finally`; starts remain blocked until the last hold
+  releases. Cleanup cancels automatic recovery, clears active selection,
+  advances epoch, awaits the complete player/PMS drain, emits only that
+  cleanup's renderer-safe events while custody is still held, and releases
+  after emission/settlement.
+- While runtime cleanup custody is nonzero,
+  `startCurrentPlayback()` fails closed before scheduler/candidate resolution
+  with `accepted: false`, the current epoch, `requestId: null`, and no new
+  session event; `retryCurrentPlayback(expectedSelection)` returns `false`
+  before resolving or installing a selection; and an automatic Package 2A retry
+  returns stale without dispatch. Work that began before cleanup remains
+  governed by the advanced epoch and may not install or publish a current
+  session after cleanup acquisition. A second overlapping cleanup may finish
+  first, but cannot reopen starts while any older hold remains.
+- `PlaybackProgramTransitionOwner` exposes one bounded synchronous cleanup-hold
+  acquisition that returns an idempotent release. Holds are nested. Main
+  acquires the hold before calling `invalidate()`, so the pre-cleanup pending
+  action settles stale but no new action can enter the opened generation.
+  During any hold, Retry and Skip both reject exactly `busy`; Skip rejects
+  before `skipToNext()` or any scheduler mutation. Releasing one of multiple
+  holds does not reopen actions, and final release does not replay work.
+  `dispose()` remains terminal and a later release cannot reopen a disposed
+  owner.
+- A scheduler `programStart` observed during transition cleanup custody is
+  deliberately dropped, not queued, coalesced, or replayed. It advances
+  generation, invokes no runtime start, and may report only a fixed safe
+  diagnostic without program identity. The safe consequence is explicit:
+  cleanup leaves playback idle/error rather than automatically starting media
+  from a profile, server, or helper context being torn down. After final
+  release, a later scheduler event/tune starts exactly once through the existing
+  owner, or an explicit Retry reprojects and revalidates the latest exact
+  authoritative canonical selection and starts once. Release alone never
+  starts playback.
+- In `src/main/index.ts`, the helper-crash callback acquires transition cleanup
+  custody synchronously before flushing the already-routed safe adapter event,
+  then invalidates, awaits `handleHelperCrash()` with safe rejection reporting,
+  and releases only in `finally`. The profile/server facade supplied to
+  `wirePlexPlaybackCleanup()` similarly acquires before invalidation, awaits the
+  real runtime cleanup, and releases in `finally`. Existing quit ordering stays
+  dispose-before-runtime-teardown and needs no reopenable hold. Do not edit
+  `plexPlaybackCleanupWiring.ts` or add a new composition owner.
+- Cleanup events and failures belong to the epoch/session being drained. Because
+  runtime custody prevents any replacement session until all overlapping holds
+  settle and emits cleanup events before release, late old cleanup output cannot
+  overwrite, obscure, clean, or relabel a newer session. Existing stale-event
+  quarantine remains in force after release; do not suppress cleanup failures
+  by mutating a later snapshot.
+
+The public regressions use deferred PMS release and player cleanup, not private
+state probes. `plexPlaybackRuntime.test.ts` proves Retry and scheduled start
+fail closed throughout a deferred cleanup, overlapping cleanup keeps the hold
+until the oldest drain settles, no request-2 resolver/player/PMS work starts
+early, old cleanup events settle before release, and exact-authoritative Retry
+starts request-2 only afterward without later request-1 cleanup affecting it.
+`playbackProgramTransitionOwner.test.ts` proves pending Retry and Skip settle
+stale after hold-then-invalidate; new Retry/Skip reject busy during one or
+nested holds; Skip never mutates the scheduler; programStart is dropped without
+runtime dispatch or replay; partial and idempotent release do not reopen; final
+release permits a later exact Retry and later programStart exactly once.
+`playbackProgramTransitionIntegration.test.ts` uses the real public transition
+owner and real `wirePlexPlaybackCleanup()` with a deferred cleanup facade to
+prove the profile-change and server-change sequences, plus the helper-crash
+sequence: custody precedes invalidation, pending action settles, concurrent
+actions/events cannot start, and post-cleanup Retry succeeds without permanent
+busy state. `tools/__tests__/smoke-electron.test.mjs` locks the main helper and
+profile/server composition order—acquire, invalidate, await/catch, finally
+release—without replacing those public-seam tests. No new test file is needed.
+
+Run the focused cleanup-custody surface before the complete remediation command:
+
+```sh
+node --import tsx --test src/__tests__/main/player/plexPlaybackRuntime.test.ts src/__tests__/main/player/playbackProgramTransitionOwner.test.ts src/__tests__/main/player/playbackProgramTransitionIntegration.test.ts src/__tests__/main/player/plexPlaybackComposition.test.ts
+node --test tools/__tests__/smoke-electron.test.mjs
+```
+
+The seven fixes are frozen as follows:
+
+1. **Authorization failure is inert.** `playerRecoveryIpc.ts` returns one fixed
+   idle renderer-safe snapshot for unauthorized recovery requests and does not
+   call `getSnapshot()` on that branch. It must expose no live request id,
+   media, position, duration, tracks, capability, quality detail, or last error.
+   Payload validation and authorized accepted/failed results retain their
+   existing behavior. The IPC regression supplies a live sentinel snapshot,
+   proves the unauthorized result is exactly inert, and proves the live
+   snapshot supplier was not read.
+2. **Every composed cleanup invalidates transition custody first.**
+   `src/main/index.ts` supplies `wirePlexPlaybackCleanup()` a narrow facade that
+   calls `PlaybackProgramTransitionOwner.invalidate()` immediately before the
+   real runtime cleanup for successful profile and server changes. The native
+   host failure callback may first flush the already-routed safe adapter event,
+   but must then invalidate the transition owner before
+   `handleHelperCrash()`. Both quit branches preserve the existing
+   owner-dispose-before-runtime-teardown order. Do not edit
+   `plexPlaybackCleanupWiring.ts`. Public owner/integration regressions prove a
+   pending Retry and a pending Skip each settle stale rather than remain busy,
+   a later action is not permanently rejected busy, and profile-change,
+   server-change, helper-crash, and teardown order invalidate before cleanup.
+   The smoke source assertion locks the composition ordering without replacing
+   the public-seam proof.
+3. **Renderer settlements are terminal by generation.** Timeout, bridge
+   failure result, invoke rejection, and accepted result each terminally advance
+   the current action generation before projecting terminal state. A late
+   settlement from a timed-out or otherwise failed action cannot clear its safe
+   error, install a snapshot, reactivate transition state, change focus, or
+   render. Focused controller tests settle both late accepted and late failed
+   results after timeout and prove no resurrection.
+4. **Busy projection is symmetric.** While either `retry-current` or
+   `skip-next` is in flight, both visible recovery actions remain visible but
+   project the existing focus-preserving busy/unavailable semantics:
+   `aria-busy="true"`, `aria-disabled="true"`, and busy-focus-custody
+   projection, with no second dispatch accepted. When settlement completes,
+   both clear together. View-model, route-DOM, and recovery-controller tests
+   cover both initiating actions and both controls. No
+   `playerOverlayController.ts` or `playerOverlayDom.ts` production edit is
+   authorized; the existing DOM projection consumes the corrected view model.
+5. **Explicit Retry survives completed helper cleanup without weakening stale
+   custody.** `plexPlaybackRuntime.ts`, which owns
+   `PlexPlaybackScheduleSelection`, becomes the sole canonical projection and
+   equality owner. It exports one narrow projector from
+   `(channelId, ratingKey, scheduledStartTime, scheduledEndTime)` to the complete
+   canonical selection `(channelId, programId, startedAtMs, endsAtMs)` and one
+   exact selection equality guard. Move the existing `programId` construction,
+   safe-id normalization, and full selection equality out of
+   `plexPlaybackBridge.ts` without changing their behavior.
+   `plexPlaybackBridge.ts` consumes those exports for both
+   `getCurrentPlayback()` and stale-candidate comparison; it retains scheduler
+   reading and resolver/candidate ownership and defines no second encoder or
+   equality implementation. `PlaybackProgramTransitionOwner` uses the same
+   runtime-owned projector over its authoritative scheduler state/program,
+   freezes that complete canonical selection, and passes it to
+   `retryCurrentPlayback(expectedSelection)`. No renderer identity or media
+   locator is accepted.
+
+   The runtime captures the current epoch, re-reads its main-owned scheduler
+   selection, requires exact equality with `expectedSelection`, and only then
+   installs that selection as the fresh retry candidate and starts it through
+   the existing candidate/PMS resolution path. This permits Retry after
+   completed helper-crash cleanup has cleared `activeSelection`, but rejects a
+   changed rating key/program id, channel, start, end, tune/program replacement,
+   concurrent cleanup, stale scheduler completion, and epoch change before
+   installing or starting the selection. It never reuses a released session or
+   resurrects an old request. Do not duplicate the bridge's former encoding,
+   compare only channel/time, omit end time, accept a callback that hides
+   identity comparison, or export scheduler/domain objects across the runtime
+   port. Bridge tests lock byte-for-byte-equivalent canonical projection and
+   stale comparison before/after the ownership move; runtime, owner, and real
+   helper-crash-to-Retry integration regressions prove success after completed
+   crash cleanup plus rejection for tune, cleanup, changed-program, and stale-
+   identity races.
+6. **Accepted snapshot precedes success render.** On an accepted renderer
+   recovery result, the controller terminally closes the generation, clears
+   pending state, installs the accepted snapshot through `acceptSnapshot`, and
+   only then performs the render that projects successful transition state.
+   There is no render of the old error snapshot between settlement and snapshot
+   installation. A composed ordering regression records snapshot acceptance
+   before the success render and proves the old error surface is not left
+   projected when no later player event arrives.
+7. **Preload recursively rejects forbidden recovery results.**
+   `playerRecoveryBridge.cts` accepts an injected forbidden-field predicate in
+   its existing validator bundle and rejects the entire invoke result before
+   accepting either snapshot or error. `preload/index.cts` supplies its existing
+   recursive player forbidden-key predicate and vocabulary; do not add a second
+   list, broaden Plex vocabulary, or move privileged validation into renderer.
+   Integration regressions submit both an accepted snapshot and a failed error
+   containing nested `diagnostic.counts.nativeHandle` and prove fixed safe
+   validation failure with no hostile value accepted.
+
+Architecture dispositions remain bounded. `src/main/index.ts` stays a
+composition/lifecycle owner and adds only invalidation-before-cleanup wiring.
+The sandboxed `src/preload/index.cts` composition root only injects its existing
+recursive predicate into the focused bridge; it gains no second validator
+vocabulary. The 794-line `plexPlaybackRuntime.ts` cohesively owns the
+canonical `PlexPlaybackScheduleSelection` projection/equality, main-scheduler
+identity revalidation, epoch, candidate, PMS-session, retry, and nested cleanup
+custody lifecycle. Crossing 800 lines still triggers the existing mandatory
+fresh architecture review; it does not authorize a forwarding wrapper or
+separate cleanup state owner without a distinct responsibility and reviewed
+replan.
+`plexPlaybackBridge.ts` remains the scheduler-to-runtime and resolver adapter
+and consumes that canonical seam rather than retaining duplicate identity
+policy; extracting a forwarding wrapper would weaken custody.
+`playerOverlayController.ts` remains no-touch at 799 lines and must not cross
+800. Fresh independent architecture review remains mandatory.
+
+**Verification classification:** `new regression/contract test required`.
+Each new regression must fail for its reproduced rejected behavior and pass for
+the frozen public outcome. Run the focused remediation surface, then the
+complete Package 2B and full gates:
+
+```sh
+node --import tsx --test src/__tests__/main/player/playerRecoveryIpc.test.ts src/__tests__/main/player/playbackProgramTransitionOwner.test.ts src/__tests__/main/player/playbackProgramTransitionIntegration.test.ts src/__tests__/main/player/plexPlaybackRuntime.test.ts src/__tests__/main/player/plexPlaybackBridge.test.ts src/__tests__/main/player/plexPlaybackComposition.test.ts src/__tests__/integration/preloadContractVocabulary.test.ts src/__tests__/renderer/playerErrorRecoveryController.test.ts src/__tests__/renderer/overlays.test.ts src/__tests__/renderer/routeDom.test.ts
+node --test tools/__tests__/smoke-electron.test.mjs
+npm run typecheck
+npm run build:electron
+node --import tsx --test src/__tests__/domain/schedulerDomain.test.ts src/__tests__/main/guideRuntime.test.ts src/__tests__/main/player/playerRecoveryIpc.test.ts src/__tests__/main/player/playbackProgramTransitionOwner.test.ts src/__tests__/main/player/playbackProgramTransitionIntegration.test.ts src/__tests__/main/player/plexPlaybackRuntime.test.ts src/__tests__/main/player/plexPlaybackBridge.test.ts src/__tests__/main/player/plexPlaybackComposition.test.ts src/__tests__/contracts/contracts.test.ts src/__tests__/integration/preloadContractVocabulary.test.ts src/__tests__/renderer/playerErrorRecoveryController.test.ts src/__tests__/renderer/playerOverlayController.test.ts src/__tests__/renderer/overlays.test.ts src/__tests__/renderer/routeDom.test.ts
+npm run smoke:electron
+npm run verify:maintainability
+npm run verify:architecture
+npm run verify:redaction
+npm run verify
+git diff --check
+```
+
+Acceptance requires all seven public regressions, every original Package 2B
+focused test, all full gates, the unchanged 799-line overlay-controller cap,
+exact 20-file remediation scope, and fresh independent implementation review
+to pass. Any live-state authorization exposure, pending action after cleanup,
+late renderer resurrection, asymmetric busy projection, Retry using
+renderer-supplied or stale identity, old-error success render, nested forbidden
+field acceptance, recovery/scheduled start during runtime or transition cleanup
+custody, Skip mutation during a hold, replay of a cleanup-time program event,
+premature nested-hold release, old cleanup output affecting a newer session,
+permanent post-cleanup busy state, scope expansion, or material review finding
+blocks the Package 2B checkpoint.
+
+Rollback remains the entire 34-file Package 2B recovery API/action slice,
+including the approved route-DOM correction and this remediation. Do not
+partially roll back one trust boundary, generation owner, test authority, or
+preload guard while leaving the public recovery method active.
+
+PACKAGE_2B_IMPLEMENTATION_REMEDIATION_REVIEW_PACKET_2026_07_28
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
+TASK: Review Package 2B Seven-Finding Remediation Plan
+TASK_FAMILY: feature/design
+TIER: Tier 3
+PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
+ARTIFACT: PACKAGE_2B_IMPLEMENTATION_REMEDIATION_2026_07_28
+FILES:
+- docs/plans/2026-07-22-tier3-parity-correction-plan.md
+PRESERVE:
+- the complete current uncommitted Package 2B diff, revised 34-file boundary,
+  and all passed verification evidence
+- the independently approved route-DOM scope correction
+EDIT_AFTER_APPROVAL:
+- only the exact 20-file remediation subset named above
+REQUIRED_REVIEW_ASSERTIONS:
+- all seven reproduced findings have one decision-complete owner, invariant,
+  public regression, and stop condition
+- no finding requires a twenty-first file, cleanup-owner edit, contract expansion,
+  renderer identity authority, duplicated identity encoding/equality, duplicated
+  forbidden vocabulary, or broad renderer refactor
+- `plexPlaybackRuntime.ts` is the sole canonical projector/equality owner,
+  `plexPlaybackBridge.ts` only consumes it, and the bridge regression preserves
+  the former program-id bytes and full stale-selection comparison
+- the existing composition manual-retry test passes a required canonical
+  selection while preserving its exact two-load and switch-cleanup assertions;
+  no optional/default identity or compatibility fallback is authorized
+- runtime and transition cleanup custody are acquired synchronously, nest
+  correctly, release only in `finally` after full cleanup settlement, and block
+  Retry, Skip, scheduled starts, and automatic retry without permanent busy
+- cleanup-time `programStart` is intentionally dropped without scheduler
+  mutation, runtime dispatch, coalescing, or release-time replay; a later event
+  or exact-authoritative Retry is the only post-release start
+- deferred public-seam regressions cover PMS/player drain, overlapping cleanup,
+  helper crash, composed profile/server cleanup, late old cleanup output,
+  post-cleanup Retry, and exactly-once later program transition
+- helper-crash Retry re-resolves and revalidates exact main-owned current
+  identity under epoch custody and never reuses a released session
+- profile/server/helper/teardown cleanup invalidates transition custody first,
+  terminal renderer generations cannot resurrect, both actions project
+  symmetric busy state, and accepted snapshots render in the frozen order
+- authorization failure is inert and preload rejects nested forbidden fields
+  before accepting either snapshot or error
+- original Package 2B semantics, no-touch boundaries, 799-line cap, full
+  verification, whole-slice rollback, later-workstream obligations, and Mac
+  completion override remain unchanged
+BLOCKERS:
+- worker remains paused until fresh independent plan review explicitly approves
+  this complete remediation amendment
+MESSAGE:
+Adversarially review the complete
+PACKAGE_2B_IMPLEMENTATION_REMEDIATION_2026_07_28 amendment against all seven
+accepted implementation findings and the P1 identity-ownership plan finding.
+Confirm the exact 20-file subset is sufficient and remains inside the revised
+34-file boundary; the runtime-owned canonical projector/equality seam is
+implementable without duplicate encoding or weaker comparison; nested runtime
+and transition cleanup custody closes every pre-release start window; the
+drop-without-replay programStart policy is safe and exactly-once; deferred
+runtime/owner/helper/profile/server regressions prove no old cleanup can affect
+a newer session and no permanent busy remains; every prior fix remains
+decision-complete; and no original Package 2B or later obligation is weakened.
+Report findings by severity and explicitly APPROVE or REJECT. Do not authorize
+implementation while any material finding remains.
+
+PACKAGE_2B_CLEANUP_CUSTODY_REVIEW_PACKET_2026_07_28
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
+TASK: Review Package 2B Cleanup-Custody Lifecycle Amendment
+TASK_FAMILY: feature/design
+TIER: Tier 3
+PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
+ARTIFACT: accepted cleanup-custody lifecycle correction within
+PACKAGE_2B_IMPLEMENTATION_REMEDIATION_2026_07_28
+FILES:
+- docs/plans/2026-07-22-tier3-parity-correction-plan.md
+IMPLEMENTATION_AFTER_APPROVAL:
+- only the exact eight-file cleanup-custody subset
+PRESERVE:
+- the complete current remediated Package 2B diff and all seven prior fixes
+- 34-file Package 2B scope, 20-file remediation scope, canonical identity,
+  route-DOM authority, 799-line overlay-controller cap, rollback, and full gates
+FROZEN_POLICY:
+- runtime cleanup uses synchronous nested holds through full player/PMS
+  settlement and event emission; starts/retries fail closed until final release
+- transition cleanup uses nested idempotent holds acquired before invalidation
+  and released in `finally`; Retry/Skip reject busy and Skip never mutates
+- cleanup-time `programStart` is dropped with no runtime call, queue,
+  coalescing, or replay; later exact Retry or later scheduler event is required
+- old cleanup events cannot affect a replacement session, post-cleanup exact
+  Retry succeeds, and overlapping cleanup cannot reopen early or remain busy
+REQUIRED_REVIEW_ASSERTIONS:
+- the eight existing files are sufficient and no cleanup-wiring/contract/new
+  file edit is required
+- runtime and transition holds close the reproduced request-2-during-request-1-
+  cleanup race across helper, profile, server, stop, teardown, and overlapping
+  cleanup paths
+- drop-without-replay is a safe explicit scheduler policy and preserves honest
+  exactly-once semantics
+- deferred PMS/player public tests prove no early resolver/player/PMS work, no
+  Skip mutation, no program-event dispatch/replay, release only after complete
+  drain, stale old output quarantine, and successful later exact Retry/event
+- the existing composition deferred-stop test rejects and does not install or
+  consume request B during the hold, then starts and preserves request B only
+  after release while retaining request-A and final request-B cleanup proof
+- no previous remediation behavior, trust boundary, proof gate, or later
+  workstream obligation is weakened
+BLOCKERS:
+- worker remains paused until fresh independent plan review explicitly approves
+  this lifecycle amendment
+MESSAGE:
+Adversarially review only the accepted Package 2B cleanup-custody lifecycle
+amendment in the canonical plan. Reproduce the open invalidation-to-cleanup-
+settlement window conceptually, then confirm the nested runtime and transition
+holds, main acquisition/finally ordering, fail-closed actions, explicit
+drop-without-replay programStart policy, overlapping cleanup semantics,
+late-event isolation, post-cleanup success, exact eight-file scope, regressions,
+rollback, and stop conditions are decision-complete. Report findings by
+severity and explicitly APPROVE or REJECT. Do not authorize implementation
+while any material finding remains.
 
 #### `WS2-POST-VALIDATION-01` — deferred native/Windows validation debt
 
