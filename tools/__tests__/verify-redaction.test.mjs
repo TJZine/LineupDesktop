@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  collectFiles,
   scanFileContent,
   scanRepo,
   scanSupportBundleDirectory,
@@ -28,6 +29,19 @@ const scannerLabels = [
 const plexTokenHeader = ['X-Plex', 'Token'].join('-');
 const authorizationHeader = ['Authorization'].join('');
 const bearerScheme = ['Bearer'].join('');
+
+test('shared traversal preserves support-bundle filtering and directory skips', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-redaction-walk-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'nested'));
+  fs.mkdirSync(path.join(root, 'node_modules'));
+  fs.writeFileSync(path.join(root, 'nested', 'included.md'), 'safe');
+  fs.writeFileSync(path.join(root, 'nested', 'excluded.html'), 'safe');
+  fs.writeFileSync(path.join(root, 'node_modules', 'skipped.md'), 'safe');
+
+  assert.deepEqual(collectFiles(root), [path.join('nested', 'included.md')]);
+  assert.deepEqual(scanRepo(root), []);
+});
 const basicScheme = ['Basic'].join('');
 const tokenScheme = ['Token'].join('');
 const headersKey = ['headers'].join('');

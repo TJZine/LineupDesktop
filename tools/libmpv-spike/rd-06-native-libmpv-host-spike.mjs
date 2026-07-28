@@ -170,14 +170,23 @@ export function discoverPrerequisites(env = process.env, platform = process.plat
   };
 }
 
+function isRegularFile(candidate) {
+  if (!candidate) return false;
+  try {
+    return fs.statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+}
+
 export function validatePreflightFacts(facts) {
   const checks = [
     { name: 'windows', ok: facts.platform === 'win32' },
     { name: 'node', ok: /^v(?:2[2-9]|[3-9]\d)\./u.test(facts.node) },
-    { name: 'electron', ok: Boolean(facts.electronExecutable && fs.existsSync(facts.electronExecutable)) },
+    { name: 'electron', ok: isRegularFile(facts.electronExecutable) },
     { name: 'dotnet', ok: Boolean(facts.dotnetExecutable) },
-    { name: 'mpv-executable', ok: Boolean(facts.mpvExecutable && fs.existsSync(facts.mpvExecutable)) },
-    { name: 'libmpv-dll', ok: Boolean(facts.libmpvDll && fs.existsSync(facts.libmpvDll)) },
+    { name: 'mpv-executable', ok: isRegularFile(facts.mpvExecutable) },
+    { name: 'libmpv-dll', ok: isRegularFile(facts.libmpvDll) },
   ];
 
   return {
@@ -462,7 +471,7 @@ async function runPreflight({ outDir, renderApi, nativePresentation = false }) {
   const facts = discoverPrerequisites();
   const validation = validatePreflightFacts(facts);
   const dotnet = facts.dotnetExecutable ? getToolVersion(facts.dotnetExecutable, ['--info'], /^\.NET SDK/mu) : [];
-  const mpv = facts.mpvExecutable && fs.existsSync(facts.mpvExecutable)
+  const mpv = isRegularFile(facts.mpvExecutable)
     ? getToolVersion(facts.mpvExecutable, ['--version'], /^mpv /mu)
     : [];
   const libmpvApiEvents = validation.status === 'passed' ? await runLibmpvApiProbe(facts, { renderApi }) : [];
@@ -936,10 +945,10 @@ function buildEvidencePolicy() {
 
 export function buildNativePrerequisiteEvidence(facts, mpvVersionLines = []) {
   return {
-    mpvExecutable: facts.mpvExecutable && fs.existsSync(facts.mpvExecutable)
+    mpvExecutable: isRegularFile(facts.mpvExecutable)
       ? 'resolved-local-prerequisite'
       : 'missing',
-    libmpvDll: facts.libmpvDll && fs.existsSync(facts.libmpvDll)
+    libmpvDll: isRegularFile(facts.libmpvDll)
       ? 'resolved-local-prerequisite'
       : 'missing',
     libmpvDllName: path.basename(facts.libmpvDll ?? '') || 'missing',

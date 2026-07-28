@@ -195,6 +195,14 @@ const forbiddenPatterns = [
 ];
 
 const textFilePattern = /\.(md|ts|tsx|js|mjs|cjs|json|ndjson|toml|yaml|yml|txt)$/u;
+const skippedDirectoryNames = new Set([
+  'node_modules',
+  '.git',
+  '.codanna',
+  'dist',
+  'out',
+  'coverage',
+]);
 
 /**
  * Repository redaction scans version-controlled, non-binary file content in
@@ -203,7 +211,8 @@ const textFilePattern = /\.(md|ts|tsx|js|mjs|cjs|json|ndjson|toml|yaml|yml|txt)$
  */
 export function collectFiles(root = repoRoot) {
   const files = [];
-  walkDirectory(root, root, files);
+  walkFiles(root, root, files, (entry) =>
+    entry.isFile() && textFilePattern.test(entry.name));
   return files.sort();
 }
 
@@ -331,7 +340,8 @@ function collectGitVisibleFiles(root) {
 
 function collectAllFiles(root) {
   const files = [];
-  walkAllFiles(root, root, files);
+  walkFiles(root, root, files, (entry) =>
+    entry.isFile() || entry.isSymbolicLink());
   return files.sort();
 }
 
@@ -376,47 +386,15 @@ export function scanSupportBundleDirectory(root, options = {}) {
   };
 }
 
-function walkDirectory(root, directory, files) {
+function walkFiles(root, directory, files, includeFile) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      if (
-        entry.name === 'node_modules' ||
-        entry.name === '.git' ||
-        entry.name === '.codanna' ||
-        entry.name === 'dist' ||
-        entry.name === 'out' ||
-        entry.name === 'coverage'
-      ) {
-        continue;
-      }
-      walkDirectory(root, absolute, files);
+      if (skippedDirectoryNames.has(entry.name)) continue;
+      walkFiles(root, absolute, files, includeFile);
       continue;
     }
-    if (entry.isFile() && textFilePattern.test(entry.name)) {
-      files.push(path.relative(root, absolute));
-    }
-  }
-}
-
-function walkAllFiles(root, directory, files) {
-  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    const absolute = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      if (
-        entry.name === 'node_modules' ||
-        entry.name === '.git' ||
-        entry.name === '.codanna' ||
-        entry.name === 'dist' ||
-        entry.name === 'out' ||
-        entry.name === 'coverage'
-      ) {
-        continue;
-      }
-      walkAllFiles(root, absolute, files);
-      continue;
-    }
-    if (entry.isFile() || entry.isSymbolicLink()) {
+    if (includeFile(entry)) {
       files.push(path.relative(root, absolute));
     }
   }

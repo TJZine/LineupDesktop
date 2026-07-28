@@ -183,11 +183,38 @@ test('discoverPrerequisites requires explicit mpv configuration and derives root
   const explicitExecutable = path.join('fixture', 'mpv.exe');
   const explicitDll = path.join('fixture', 'libmpv-2.dll');
   const explicit = discoverPrerequisites({
+    RD06_MPV_ROOT: configuredRoot,
     RD06_MPV_EXE: explicitExecutable,
     RD06_LIBMPV_DLL: explicitDll,
   }, 'win32');
   assert.equal(explicit.mpvExecutable, explicitExecutable);
   assert.equal(explicit.libmpvDll, explicitDll);
+});
+
+test('preflight and evidence reject directories as native prerequisites', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd06-prerequisite-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const facts = {
+    platform: 'win32',
+    node: 'v22.21.1',
+    electronExecutable: process.execPath,
+    dotnetExecutable: 'dotnet',
+    mpvExecutable: directory,
+    libmpvDll: directory,
+  };
+
+  const validation = validatePreflightFacts(facts);
+  assert.equal(validation.status, 'blocked');
+  assert.equal(
+    validation.checks.find((check) => check.name === 'mpv-executable')?.ok,
+    false,
+  );
+  assert.equal(
+    validation.checks.find((check) => check.name === 'libmpv-dll')?.ok,
+    false,
+  );
+  assert.equal(buildNativePrerequisiteEvidence(facts).mpvExecutable, 'missing');
+  assert.equal(buildNativePrerequisiteEvidence(facts).libmpvDll, 'missing');
 });
 
 test('dummy header policy allows only the RD-06 non-secret header', () => {
