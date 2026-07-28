@@ -18,3 +18,13 @@ diagnostics/
 crash-dumps/
 docs/runs/*
 !docs/runs/README.md
+!docs/runs/2026-07-22-tier3-parity-correction/
+docs/runs/2026-07-22-tier3-parity-correction/*
+!docs/runs/2026-07-22-tier3-parity-correction/channel-builder/
+docs/runs/2026-07-22-tier3-parity-correction/channel-builder/*
+!docs/runs/2026-07-22-tier3-parity-correction/channel-builder/states.mjs
+!docs/runs/2026-07-22-tier3-parity-correction/channel-builder/capture-upstream.mjs
+!docs/runs/2026-07-22-tier3-parity-correction/channel-builder/capture.mjs
+!docs/runs/2026-07-22-tier3-parity-correction/channel-builder/verify.mjs
+!docs/runs/2026-07-22-tier3-parity-correction/channel-builder/visual-evidence-contract.test.mjs
+!docs/runs/2026-07-22-tier3-parity-correction/channel-builder/windows-checklist.template.md

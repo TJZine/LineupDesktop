@@ -1,0 +1,249 @@
+export const ROW_IDS = Object.freeze(['UI-17', 'UI-18', 'UI-19', 'UI-21', 'UI-22', 'UI-23', 'UI-24']);
+
+export const UPSTREAM_COMMIT = '0258dbe15b04d2d141d0a4a44575fecb5bb72d41';
+
+const dimensions = (
+  contentDipWidth,
+  contentDipHeight,
+  cssViewportWidth,
+  cssViewportHeight,
+  windowsScalePercent,
+  devicePixelRatio,
+  zoomPercent,
+) => Object.freeze({
+  contentDipWidth,
+  contentDipHeight,
+  cssViewportWidth,
+  cssViewportHeight,
+  windowsScalePercent,
+  devicePixelRatio,
+  zoomPercent,
+});
+
+const row = ({
+  upstreamSources,
+  upstreamStates,
+  desktopSources,
+  desktopScenarioId,
+  desktopCaptures,
+  scenarioDimensions,
+}) => Object.freeze({
+  upstreamSources: Object.freeze(upstreamSources),
+  upstreamStates: Object.freeze(upstreamStates.map(([stateId, captureId]) => Object.freeze({ stateId, captureId }))),
+  desktopSources: Object.freeze(desktopSources),
+  desktopScenarioId,
+  desktopCaptures: Object.freeze(desktopCaptures),
+  dimensions: scenarioDimensions,
+});
+
+export const ROWS = Object.freeze({
+  'UI-17': row({
+    upstreamSources: [
+      'src/modules/ui/channel-setup/ChannelSetupScreen.ts',
+      'src/modules/ui/channel-setup/steps/LibraryStepController.ts',
+      'src/modules/ui/channel-setup/styles.core.css',
+      'src/modules/ui/channel-setup/styles.library.css',
+    ],
+    upstreamStates: [
+      ['library-selected', 'upstream-ui-17-library-selected'],
+      ['library-empty', 'upstream-ui-17-library-empty'],
+    ],
+    desktopSources: [
+      'src/renderer/staticDom.ts',
+      'src/renderer/shell/shellDom.ts',
+      'src/renderer/setup/stagedSetupDom.ts',
+      'src/renderer/setup/setupLibrarySelection.ts',
+      'src/renderer/plexRuntimeDom.ts',
+      'src/renderer/plexRuntimeRows.ts',
+      'src/renderer/styles.css',
+      'src/renderer/styles/base.css',
+      'src/renderer/styles/setup-workflow.css',
+      'src/renderer/styles/plex-onboarding-cards.css',
+      'src/renderer/styles/responsive-accessibility.css',
+    ],
+    desktopScenarioId: 'CB-UI-05-NARROW-BREAKPOINT',
+    desktopCaptures: ['desktop-ui-17-library-selected', 'desktop-ui-17-library-empty'],
+    scenarioDimensions: dimensions(600, 700, 600, 700, 125, 1.25, 100),
+  }),
+  'UI-18': row({
+    upstreamSources: [
+      'src/modules/ui/channel-setup/ChannelSetupSessionState.ts',
+      'src/modules/ui/channel-setup/steps/StrategyStepController.ts',
+      'src/modules/ui/channel-setup/styles.strategy.css',
+    ],
+    upstreamStates: [
+      ['strategy-preview-expanded', 'upstream-ui-18-preview-expanded'],
+      ['strategy-preview-unavailable', 'upstream-ui-18-preview-unavailable'],
+    ],
+    desktopSources: [
+      'src/renderer/staticDom.ts',
+      'src/renderer/shell/shellDom.ts',
+      'src/renderer/setup/stagedSetupDom.ts',
+      'src/renderer/channelSetup/dom.ts',
+      'src/renderer/channelSetup/viewModel.ts',
+      'src/domain/channelBuilder/constants.ts',
+      'src/renderer/plexRuntimeDom.ts',
+      'src/renderer/plexRuntimeRows.ts',
+      'src/renderer/styles.css',
+      'src/renderer/styles/base.css',
+      'src/renderer/styles/setup-workflow.css',
+      'src/renderer/styles/plex-onboarding-cards.css',
+      'src/renderer/styles/responsive-accessibility.css',
+    ],
+    desktopScenarioId: 'CB-UI-02-BASELINE-REVIEW',
+    desktopCaptures: ['desktop-ui-18-preview-expanded', 'desktop-ui-18-preview-unavailable'],
+    scenarioDimensions: dimensions(1280, 720, 1280, 720, 100, 1, 100),
+  }),
+  'UI-19': row({
+    upstreamSources: [
+      'src/modules/ui/channel-setup/ChannelSetupSessionState.ts',
+      'src/modules/ui/channel-setup/steps/StrategyStepControlDescriptors.ts',
+      'src/modules/ui/channel-setup/steps/StrategyStepController.ts',
+      'src/modules/ui/channel-setup/steps/StrategyStepInteractionController.ts',
+      'src/modules/ui/channel-setup/styles.strategy.css',
+    ],
+    upstreamStates: [
+      ['strategy-all-controls', 'upstream-ui-19-all-controls'],
+      ['strategy-disabled-boundaries', 'upstream-ui-19-disabled-boundaries'],
+    ],
+    desktopSources: [
+      'src/renderer/staticDom.ts',
+      'src/renderer/shell/shellDom.ts',
+      'src/renderer/setup/stagedSetupDom.ts',
+      'src/renderer/channelSetup/builderConfigState.ts',
+      'src/domain/channelBuilder/config.ts',
+      'src/domain/channelBuilder/constants.ts',
+      'src/renderer/channelSetup/dom.ts',
+      'src/renderer/channelSetup/viewModel.ts',
+      'src/renderer/styles.css',
+      'src/renderer/styles/base.css',
+      'src/renderer/styles/setup-workflow.css',
+      'src/renderer/styles/responsive-accessibility.css',
+    ],
+    desktopScenarioId: 'CB-UI-01-WIDE-CONFIG',
+    desktopCaptures: ['desktop-ui-19-all-controls', 'desktop-ui-19-disabled-boundaries'],
+    scenarioDimensions: dimensions(1920, 1080, 1920, 1080, 100, 1, 100),
+  }),
+  'UI-21': row({
+    upstreamSources: [
+      'src/modules/ui/channel-setup/steps/BuildReviewStepController.ts',
+      'src/modules/ui/channel-setup/styles.review-progress.css',
+    ],
+    upstreamStates: [
+      ['review-replace-required', 'upstream-ui-21-replace-required'],
+      ['review-replace-confirmed', 'upstream-ui-21-replace-confirmed'],
+    ],
+    desktopSources: [
+      'src/renderer/staticDom.ts',
+      'src/renderer/shell/shellDom.ts',
+      'src/renderer/setup/stagedSetupDom.ts',
+      'src/renderer/channelSetup/dom.ts',
+      'src/renderer/channelSetup/viewModel.ts',
+      'src/renderer/workflow.ts',
+      'src/renderer/styles.css',
+      'src/renderer/styles/base.css',
+      'src/renderer/styles/setup-workflow.css',
+      'src/renderer/styles/responsive-accessibility.css',
+    ],
+    desktopScenarioId: 'CB-UI-02-BASELINE-REVIEW',
+    desktopCaptures: ['desktop-ui-21-replace-required', 'desktop-ui-21-replace-confirmed'],
+    scenarioDimensions: dimensions(1280, 720, 1280, 720, 100, 1, 100),
+  }),
+  'UI-22': row({
+    upstreamSources: [
+      'src/modules/ui/channel-setup/steps/BuildProgressStepController.ts',
+      'src/modules/ui/channel-setup/steps/ChannelSetupBuildStepPresenter.ts',
+      'src/modules/ui/channel-setup/styles.review-progress.css',
+    ],
+    upstreamStates: [
+      ['progress-running', 'upstream-ui-22-progress-running'],
+      ['progress-canceling', 'upstream-ui-22-progress-canceling'],
+      ['progress-canceled', 'upstream-ui-22-progress-canceled'],
+    ],
+    desktopSources: [
+      'src/renderer/staticDom.ts',
+      'src/renderer/shell/shellDom.ts',
+      'src/renderer/setup/stagedSetupDom.ts',
+      'src/renderer/channelSetup/viewModel.ts',
+      'src/renderer/channelSetup/dom.ts',
+      'src/renderer/workflow.ts',
+      'src/renderer/styles.css',
+      'src/renderer/styles/base.css',
+      'src/renderer/styles/setup-workflow.css',
+      'src/renderer/styles/responsive-accessibility.css',
+    ],
+    desktopScenarioId: 'CB-UI-04-STACK-BREAKPOINT',
+    desktopCaptures: [
+      'desktop-ui-22-progress-running',
+      'desktop-ui-22-progress-canceling',
+      'desktop-ui-22-progress-canceled',
+      'desktop-ui-22-progress-commit-started',
+    ],
+    scenarioDimensions: dimensions(900, 700, 900, 700, 150, 1.5, 100),
+  }),
+  'UI-23': row({
+    upstreamSources: [
+      'src/modules/ui/channel-setup/steps/ChannelSetupBuildStepPresenter.ts',
+      'src/modules/ui/channel-setup/styles.review-progress.css',
+    ],
+    upstreamStates: [
+      ['result-success', 'upstream-ui-23-result-success'],
+      ['result-warning', 'upstream-ui-23-result-warning'],
+    ],
+    desktopSources: [
+      'src/renderer/staticDom.ts',
+      'src/renderer/shell/shellDom.ts',
+      'src/renderer/setup/stagedSetupDom.ts',
+      'src/renderer/routeDom.ts',
+      'src/renderer/channelSetup/dom.ts',
+      'src/renderer/channelSetup/viewModel.ts',
+      'src/renderer/workflow.ts',
+      'src/renderer/styles.css',
+      'src/renderer/styles/base.css',
+      'src/renderer/styles/setup-workflow.css',
+      'src/renderer/styles/responsive-accessibility.css',
+    ],
+    desktopScenarioId: 'CB-UI-07-REDUCED-MOTION-ZOOM',
+    desktopCaptures: ['desktop-ui-23-result-success', 'desktop-ui-23-result-warning'],
+    scenarioDimensions: dimensions(1280, 720, 640, 360, 100, 2, 200),
+  }),
+  'UI-24': row({
+    upstreamSources: [
+      'src/modules/ui/channel-setup/ChannelSetupSessionState.ts',
+      'src/modules/ui/channel-setup/steps/ChannelSetupBuildStepPresenter.ts',
+      'src/modules/ui/channel-setup/styles.review-progress.css',
+    ],
+    upstreamStates: [
+      ['recovery-blocked', 'upstream-ui-24-recovery-blocked'],
+      ['recovery-error', 'upstream-ui-24-recovery-error'],
+    ],
+    desktopSources: [
+      'src/renderer/staticDom.ts',
+      'src/renderer/shell/shellDom.ts',
+      'src/renderer/setup/stagedSetupDom.ts',
+      'src/renderer/setup/setupRuntimeCoordinator.ts',
+      'src/renderer/workflow.ts',
+      'src/renderer/styles.css',
+      'src/renderer/styles/base.css',
+      'src/renderer/styles/setup-workflow.css',
+      'src/renderer/styles/responsive-accessibility.css',
+    ],
+    desktopScenarioId: 'CB-UI-07-REDUCED-MOTION-ZOOM',
+    desktopCaptures: ['desktop-ui-24-recovery-blocked', 'desktop-ui-24-recovery-error'],
+    scenarioDimensions: dimensions(1280, 720, 640, 360, 100, 2, 200),
+  }),
+});
+
+export const BLOCKER_CODES = Object.freeze([
+  'source-dirty',
+  'source-missing',
+  'source-hash-mismatch',
+  'capture-unavailable',
+  'render-unavailable',
+  'comparison-incomplete',
+]);
+
+export const CAPTURE_RELATIVE_PATH = Object.freeze({
+  upstream: (captureId) => `captures/upstream/${captureId}.png`,
+  desktop: (captureId) => `captures/desktop/${captureId}.png`,
+});
