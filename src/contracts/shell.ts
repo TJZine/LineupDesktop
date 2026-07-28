@@ -15,6 +15,7 @@ import type {
 } from './diagnostics.js';
 import type {
   PlayerDispatchResult,
+  PlayerError,
   PlayerEvent,
   PlayerIpcResult,
   PlayerSnapshot,
@@ -110,6 +111,28 @@ export type WindowFullscreenIntentEnvelope = RendererIntentEnvelope<Record<strin
   intent: 'window.enterFullscreen' | 'window.exitFullscreen';
 };
 
+export const PLAYER_RECOVERY_ACTIONS = ['retry-current', 'skip-next'] as const;
+export type PlayerRecoveryAction = (typeof PLAYER_RECOVERY_ACTIONS)[number];
+
+export type PlayerRecoveryIpcResult =
+  | {
+      ok: true;
+      requestId: string;
+      value: {
+        status: 'accepted';
+        snapshot: PlayerSnapshot;
+      };
+    }
+  | {
+      ok: false;
+      requestId: string;
+      value: {
+        status: 'failed';
+        snapshot: PlayerSnapshot;
+      };
+      error: PlayerError;
+    };
+
 /**
  * This is the narrow renderer-facing bridge contract exposed by preload.
  * Invoke methods return typed result envelopes expected from authorized main
@@ -140,6 +163,7 @@ export interface LineupDesktopPreloadApi {
     getSnapshot: () => Promise<PlayerIpcResult<PlayerSnapshot>>;
     cleanup: () => Promise<PlayerIpcResult<PlayerSnapshot>>;
     tuneChannel: (input: { channelId: string }) => Promise<GuideIpcResult<never>>;
+    recover: (input: { action: PlayerRecoveryAction }) => Promise<PlayerRecoveryIpcResult>;
     onEvent: (listener: (event: PlayerEvent) => void) => () => void;
   };
   diagnostics: {

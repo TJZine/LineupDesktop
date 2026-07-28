@@ -47,7 +47,11 @@ test('smoke composition keeps synchronous and asynchronous player delivery in di
   assert.doesNotMatch(mainSource, /originalNativeHostFactory/u);
   assert.match(
     mainSource,
-    /onNativeHostLifecycleFailure:\s*\(\)\s*=>\s*\{\s*eventRouter\.flushCurrentRuntime\(\);[\s\S]*?playbackRuntime\.handleHelperCrash\(\)/u,
+    /onNativeHostLifecycleFailure:\s*\(\)\s*=>\s*\{[\s\S]*?transitionOwner\?\.acquireCleanupHold\(\)[\s\S]*?eventRouter\.flushCurrentRuntime\(\);\s*transitionOwner\?\.invalidate\(\);[\s\S]*?await runtime\?\.handleHelperCrash\(\);[\s\S]*?finally\s*\{\s*releaseCleanupHold\(\);/u,
+  );
+  assert.match(
+    mainSource,
+    /getPlaybackRuntime:\s*\(\)\s*=>\s*\{[\s\S]*?cleanup:\s*async\s*\(input\)\s*=>\s*\{[\s\S]*?transitionOwner\?\.acquireCleanupHold\(\)[\s\S]*?transitionOwner\?\.invalidate\(\);\s*try\s*\{\s*return await runtime\.cleanup\(input\);[\s\S]*?finally\s*\{\s*releaseCleanupHold\(\);/u,
   );
   assert.match(
     playerIpcSource,
@@ -61,6 +65,17 @@ test('smoke composition keeps synchronous and asynchronous player delivery in di
     mainSource,
     /await teardown\.teardown\(\);\s*localPlaybackEventRouter\?\.dispose\(\);\s*await localPlaybackRuntime\?\.teardown\(\)/u,
   );
+  assert.match(
+    mainSource,
+    /new PlaybackProgramTransitionOwner\(\{[\s\S]*?registerPlayerRecoveryIpc\(\{[\s\S]*?initializeActiveChannel\(\)/u,
+  );
+  assert.match(
+    mainSource,
+    /teardownPlayerRecoveryIpc\?\.\(\);[\s\S]*?localPlaybackProgramTransitionOwner\?\.dispose\(\);[\s\S]*?localPlaybackRuntime\?\.teardown\(\)/u,
+  );
+  assert.doesNotMatch(mainSource, /onChannelTuned\s*:/u);
+  assert.doesNotMatch(mainSource, /activeChannelScheduler\.on\(\s*['"]programStart['"]/u);
+  assert.doesNotMatch(mainSource, /startCurrentPlayback\(\s*['"]startup['"]\s*\)/u);
   assert.doesNotMatch(playerIpcSource, /sendPlayerEvent/u);
 });
 

@@ -34,6 +34,7 @@ export type PlayerOverlayActionId =
   | 'openAudioOptions'
   | 'openSubtitleOptions'
   | 'retryPlayer'
+  | 'skipPlayer'
   | 'miniGuidePrevious'
   | 'miniGuideNext'
   | 'miniGuidePagePrevious'
@@ -57,6 +58,7 @@ export interface PlayerOverlayState {
   transitionChannelId: string | null;
   transitionVisible: boolean;
   retryPending: boolean;
+  recoveryPendingAction: 'retry-current' | 'skip-next' | null;
   retryTransitionActive: boolean;
   lastTuneChannelId: string | null;
 }
@@ -81,6 +83,7 @@ export function createPlayerOverlayState(
     transitionChannelId: null,
     transitionVisible: false,
     retryPending: false,
+    recoveryPendingAction: null,
     retryTransitionActive: false,
     lastTuneChannelId: null,
   };
@@ -187,6 +190,10 @@ export function closeAllPlayerOverlays(state: PlayerOverlayState): PlayerOverlay
     ...createPlayerOverlayState(),
     miniGuideSelectedChannelId: state.miniGuideSelectedChannelId,
     lastTuneChannelId: state.lastTuneChannelId,
+    retryError: state.retryError,
+    retryPending: state.retryPending,
+    recoveryPendingAction: state.recoveryPendingAction,
+    retryTransitionActive: state.retryTransitionActive,
   };
 }
 

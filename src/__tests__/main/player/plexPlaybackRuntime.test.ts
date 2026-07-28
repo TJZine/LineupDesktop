@@ -11,6 +11,7 @@ import {
   type PlexPlaybackRuntimePlayerDispatchResult,
   type PlexPlaybackRuntimePlayerPort,
   type PlexPlaybackRuntimeSchedulerPort,
+  type PlexPlaybackRuntimeStartResult,
   type PlexPlaybackScheduleSelection,
 } from '../../../main/player/plexPlaybackRuntime.js';
 import type { PlexPlaybackRecoveryTimerPort } from '../../../main/player/plexPlaybackRecoveryOwner.js';
@@ -49,6 +50,7 @@ const loadPayload: PlayerLoadCommandPayload = {
 
 class FakeSchedulerPort implements PlexPlaybackRuntimeSchedulerPort {
   current: PlexPlaybackScheduleSelection | null = selection;
+  currentPromise: Promise<PlexPlaybackScheduleSelection | null> | null = null;
   failure: Error | null = null;
   readonly calls: Array<{ nowMs: number; reason: string }> = [];
 
@@ -60,7 +62,7 @@ class FakeSchedulerPort implements PlexPlaybackRuntimeSchedulerPort {
     if (this.failure !== null) {
       throw this.failure;
     }
-    return this.current;
+    return this.currentPromise ?? this.current;
   }
 }
 
@@ -88,6 +90,7 @@ class FakePlayerPort implements PlexPlaybackRuntimePlayerPort {
   readonly cleanupRequestIds: Array<string | null> = [];
   dispatchResult: PlexPlaybackRuntimePlayerDispatchResult = { ok: true };
   stopDispatchPromise: Promise<PlexPlaybackRuntimePlayerDispatchResult> | null = null;
+  cleanupPromise: Promise<void> | null = null;
   dispatchFailure: Error | null = null;
   cleanupFailure: Error | null = null;
 
@@ -104,6 +107,9 @@ class FakePlayerPort implements PlexPlaybackRuntimePlayerPort {
 
   async cleanup(requestId: string | null): Promise<void> {
     this.cleanupRequestIds.push(requestId);
+    if (this.cleanupPromise !== null) {
+      await this.cleanupPromise;
+    }
     if (this.cleanupFailure !== null) {
       throw this.cleanupFailure;
     }
@@ -116,6 +122,7 @@ class FakePmsPort {
     reason: PlexPlaybackRuntimeCleanupReason;
     requestId: string;
   }> = [];
+  releasePromise: Promise<void> | null = null;
   failure: Error | null = null;
 
   async releaseSession(
@@ -123,6 +130,9 @@ class FakePmsPort {
     input: { reason: PlexPlaybackRuntimeCleanupReason; requestId: string },
   ): Promise<void> {
     this.releases.push({ session, reason: input.reason, requestId: input.requestId });
+    if (this.releasePromise !== null) {
+      await this.releasePromise;
+    }
     if (this.failure !== null) {
       throw this.failure;
     }
@@ -165,6 +175,9 @@ function createRuntime(): {
   emitted: PlayerEvent[];
   diagnostics: DiagnosticEventStore;
   recoveryTimer: FakeRecoveryTimer;
+  eventObserver: {
+    current: ((events: readonly PlayerEvent[]) => void) | null;
+  };
 } {
   const scheduler = new FakeSchedulerPort();
   const channel = new FakeChannelPort();
@@ -176,6 +189,9 @@ function createRuntime(): {
     idGenerator: () => 'runtime-diagnostic',
   });
   const recoveryTimer = new FakeRecoveryTimer();
+  const eventObserver = {
+    current: null as ((events: readonly PlayerEvent[]) => void) | null,
+  };
   const runtime = new PlexPlaybackRuntime({
     scheduler,
     channel,
@@ -183,11 +199,24 @@ function createRuntime(): {
     pms,
     clock: { now: () => 42_000 },
     createRequestId: (prefix) => `${prefix}-generated`,
-    onEvents: (events) => emitted.push(...events),
+    onEvents: (events) => {
+      emitted.push(...events);
+      eventObserver.current?.(events);
+    },
     diagnosticEventStore: diagnostics,
     recoveryTimer,
   });
-  return { runtime, scheduler, channel, player, pms, emitted, diagnostics, recoveryTimer };
+  return {
+    runtime,
+    scheduler,
+    channel,
+    player,
+    pms,
+    emitted,
+    diagnostics,
+    recoveryTimer,
+    eventObserver,
+  };
 }
 
 function assertNoForbiddenKeys(value: unknown): void {
@@ -337,6 +366,100 @@ test('playback runtime ingests one eligible async error and retries the exact cu
   assert.equal(runtime.getActiveRequestId(), 'request-1');
 });
 
+test('manual recovery resets the exhausted automatic budget and retries the frozen identity once', async () => {
+  const {
+    runtime,
+    player,
+    emitted,
+    recoveryTimer,
+  } = createRuntime();
+  await runtime.startCurrentPlayback('startup');
+  player.dispatchResult = { ok: false };
+  runtime.ingestPlayerEvents([eligibleEngineError('request-1')]);
+
+  for (let expectedLoads = 2; expectedLoads <= 4; expectedLoads += 1) {
+    recoveryTimer.runNext();
+    await waitFor(
+      () => player.commands.length === expectedLoads,
+      `automatic recovery load ${String(expectedLoads - 1)} did not settle`,
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assert.equal(recoveryTimer.pending.size, 0);
+
+  player.dispatchResult = { ok: true };
+  const retried = await runtime.retryCurrentPlayback(selection);
+
+  assert.equal(retried, true);
+  assert.equal(player.commands.length, 5);
+  assert.equal(player.commands.at(-1)?.command, 'load');
+  assert.equal(runtime.getActiveRequestId(), 'request-1');
+
+  runtime.ingestPlayerEvents([eligibleEngineError('request-1')]);
+  assert.deepEqual(recoveryTimer.delays, [1_000, 2_000, 4_000, 1_000]);
+  assert.equal(emitted.at(-1)?.event, 'error');
+});
+
+test('manual recovery refuses to start when the authoritative schedule identity changed', async () => {
+  const { runtime, scheduler, player } = createRuntime();
+  await runtime.startCurrentPlayback('startup');
+  scheduler.current = {
+    ...selection,
+    programId: 'program-2',
+  };
+
+  const retried = await runtime.retryCurrentPlayback(selection);
+
+  assert.equal(retried, false);
+  assert.equal(player.commands.length, 1);
+  assert.deepEqual(player.cleanupRequestIds, []);
+  assert.equal(runtime.getActiveRequestId(), 'request-1');
+});
+
+test('manual recovery re-resolves the exact current selection after helper cleanup', async () => {
+  const { runtime, scheduler, player, pms } = createRuntime();
+  await runtime.startCurrentPlayback('startup');
+  await runtime.handleHelperCrash();
+
+  const retried = await runtime.retryCurrentPlayback(selection);
+
+  assert.equal(retried, true);
+  assert.equal(scheduler.calls.length, 2);
+  assert.deepEqual(
+    player.commands.map((command) => command.command),
+    ['load', 'load'],
+  );
+  assert.deepEqual(player.cleanupRequestIds, ['request-1']);
+  assert.deepEqual(
+    pms.releases.map((release) => release.reason),
+    ['helper-crash'],
+  );
+  assert.equal(runtime.getActiveRequestId(), 'request-1');
+});
+
+test('manual recovery rejects changed end time and cleanup during scheduler revalidation', async () => {
+  const { runtime, scheduler, player } = createRuntime();
+  await runtime.startCurrentPlayback('startup');
+
+  assert.equal(
+    await runtime.retryCurrentPlayback({
+      ...selection,
+      endsAtMs: 121_001,
+    }),
+    false,
+  );
+
+  const current = createDeferred<PlexPlaybackScheduleSelection | null>();
+  scheduler.currentPromise = current.promise;
+  const pending = runtime.retryCurrentPlayback(selection);
+  await runtime.cleanup({ reason: 'server-change' });
+  current.resolve(selection);
+
+  assert.equal(await pending, false);
+  assert.equal(player.commands.length, 1);
+  assert.equal(runtime.getActiveRequestId(), null);
+});
+
 test('playback runtime does not recover an unscoped engine error', async () => {
   const { runtime, recoveryTimer } = createRuntime();
   await runtime.startCurrentPlayback('startup');
@@ -453,6 +576,92 @@ test('playback runtime cleanup cancels a pending automatic retry', async () => {
   assert.equal(recoveryTimer.pending.size, 0);
   assert.equal(runtime.getActiveRequestId(), null);
   assert.deepEqual(player.cleanupRequestIds, ['request-1']);
+});
+
+test('playback runtime cleanup custody blocks every start path through nested PMS and player drain', async () => {
+  const {
+    runtime,
+    scheduler,
+    channel,
+    player,
+    pms,
+    emitted,
+    recoveryTimer,
+    eventObserver,
+  } = createRuntime();
+  await runtime.startCurrentPlayback('startup');
+  runtime.ingestPlayerEvents([eligibleEngineError('request-1')]);
+  const automaticRetry = [...recoveryTimer.pending.values()][0];
+  assert.ok(automaticRetry);
+
+  const pmsRelease = createDeferred<void>();
+  const playerCleanup = createDeferred<void>();
+  pms.releasePromise = pmsRelease.promise;
+  player.cleanupPromise = playerCleanup.promise;
+  const startDuringCleanupEvent = {
+    current: null as Promise<PlexPlaybackRuntimeStartResult> | null,
+  };
+  eventObserver.current = (events) => {
+    if (events.some((event) => event.event === 'error')) {
+      startDuringCleanupEvent.current =
+        runtime.startCurrentPlayback('schedule-tick');
+    }
+  };
+
+  const oldestCleanup = runtime.cleanup({ reason: 'server-change' });
+  const newerCleanup = runtime.cleanup({ reason: 'profile-change' });
+  await newerCleanup;
+
+  const heldEpoch = runtime.getCurrentEpoch();
+  assert.deepEqual(await runtime.startCurrentPlayback('manual-switch'), {
+    accepted: false,
+    epoch: heldEpoch,
+    requestId: null,
+    events: [],
+  });
+  assert.equal(await runtime.retryCurrentPlayback(selection), false);
+  automaticRetry();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(scheduler.calls.length, 1);
+  assert.equal(channel.selections.length, 1);
+  assert.equal(player.commands.length, 1);
+
+  pmsRelease.resolve();
+  await waitFor(
+    () => player.cleanupRequestIds.length === 1,
+    'player cleanup did not begin after PMS release',
+  );
+  assert.equal((await runtime.startCurrentPlayback()).accepted, false);
+  playerCleanup.reject(new Error('safe cleanup regression fixture'));
+  await oldestCleanup;
+
+  const cleanupEventStart = startDuringCleanupEvent.current;
+  assert.ok(cleanupEventStart);
+  assert.equal((await cleanupEventStart).accepted, false);
+  assert.equal(emitted.at(-1)?.event, 'error');
+
+  eventObserver.current = null;
+  pms.releasePromise = null;
+  player.cleanupPromise = null;
+  channel.candidate = {
+    requestId: 'request-2',
+    load: {
+      ...loadPayload,
+      media: { ...loadPayload.media, id: 'media-2', title: 'Episode 2' },
+    },
+    pmsSession: { id: 'pms-2', requestId: 'request-2' },
+  };
+
+  assert.equal(await runtime.retryCurrentPlayback(selection), true);
+  assert.deepEqual(
+    player.commands.map((command) => command.requestId),
+    ['request-1', 'request-2'],
+  );
+  assert.deepEqual(
+    pms.releases.map((release) => release.session.requestId),
+    ['request-1'],
+  );
+  assert.equal(runtime.getActiveRequestId(), 'request-2');
 });
 
 test('RD-25 plex playback runtime rejects invalid privileged descriptors before player dispatch', async () => {
@@ -578,7 +787,7 @@ test('RD-12 plex playback runtime cleans the previous PMS session before switchi
   assertRendererSafePlayerEvents(result.events);
 });
 
-test('plex playback runtime stop cleanup cannot release a replacement session', async () => {
+test('plex playback runtime stop holds replacement starts until its complete drain settles', async () => {
   const { runtime, channel, player, pms } = createRuntime();
   await runtime.startCurrentPlayback('startup');
   const stopDispatch = createDeferred<PlexPlaybackRuntimePlayerDispatchResult>();
@@ -597,10 +806,14 @@ test('plex playback runtime stop cleanup cannot release a replacement session', 
   };
   const replacement = await runtime.startCurrentPlayback('manual-switch');
 
+  assert.equal(replacement.accepted, false);
+  assert.equal(replacement.requestId, null);
+  assert.equal(runtime.getActiveRequestId(), null);
   stopDispatch.resolve({ ok: true });
   await stopping;
 
-  assert.equal(replacement.accepted, true);
+  const postStop = await runtime.startCurrentPlayback('manual-switch');
+  assert.equal(postStop.accepted, true);
   assert.equal(runtime.getActiveRequestId(), 'request-2');
   assert.deepEqual(
     pms.releases.map((release) => ({

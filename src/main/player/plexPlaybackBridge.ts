@@ -4,6 +4,8 @@ import type { PlexStreamResolverInput, PlexStreamResolverResult } from '../plex/
 import type { DesktopStreamCapabilityProfile } from './streamPolicy/types.js';
 import {
   PlexPlaybackRuntimeCandidateResolutionError,
+  isSamePlexPlaybackScheduleSelection,
+  projectPlexPlaybackScheduleSelection,
   type PlexPlaybackRuntimeCandidate,
   type PlexPlaybackRuntimeChannelPort,
   type PlexPlaybackRuntimeSchedulerPort,
@@ -61,7 +63,12 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
       return null;
     }
 
-    return projectScheduleSelection(channelId, program);
+    return projectPlexPlaybackScheduleSelection({
+      channelId,
+      ratingKey: program.item.ratingKey,
+      scheduledStartTime: program.scheduledStartTime,
+      scheduledEndTime: program.scheduledEndTime,
+    });
   }
 
   async resolvePlaybackCandidate(
@@ -127,8 +134,13 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
     if (channelId === null) {
       return null;
     }
-    const currentSelection = projectScheduleSelection(channelId, current);
-    if (!isSameSelection(currentSelection, selection)) {
+    const currentSelection = projectPlexPlaybackScheduleSelection({
+      channelId,
+      ratingKey: current.item.ratingKey,
+      scheduledStartTime: current.scheduledStartTime,
+      scheduledEndTime: current.scheduledEndTime,
+    });
+    if (!isSamePlexPlaybackScheduleSelection(currentSelection, selection)) {
       return null;
     }
     return current;
@@ -140,45 +152,6 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
     }
     return this.#capabilityProfile;
   }
-}
-
-function projectScheduleSelection(
-  channelId: string,
-  program: ScheduledProgram,
-): PlexPlaybackScheduleSelection {
-  return {
-    channelId,
-    programId: toProgramId(channelId, program),
-    startedAtMs: program.scheduledStartTime,
-    endsAtMs: program.scheduledEndTime,
-  };
-}
-
-function toProgramId(channelId: string, program: ScheduledProgram): string {
-  return [
-    'program',
-    safeIdPart(channelId),
-    safeIdPart(program.item.ratingKey),
-    String(program.scheduledStartTime),
-    String(program.scheduledEndTime),
-  ].join('-');
-}
-
-function safeIdPart(value: string): string {
-  const normalized = value.trim().replace(/[^a-zA-Z0-9._-]+/gu, '-');
-  return normalized === '' ? 'unknown' : normalized;
-}
-
-function isSameSelection(
-  left: PlexPlaybackScheduleSelection,
-  right: PlexPlaybackScheduleSelection,
-): boolean {
-  return (
-    left.channelId === right.channelId &&
-    left.programId === right.programId &&
-    left.startedAtMs === right.startedAtMs &&
-    (left.endsAtMs ?? null) === (right.endsAtMs ?? null)
-  );
 }
 
 function createBridgeError(input: {

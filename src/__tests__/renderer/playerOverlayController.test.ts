@@ -407,17 +407,17 @@ test('subtitle Off completion restores native surface when its invoking OSD cont
   assert.equal(harness.focus.at(-1), null);
 });
 
-test('terminal states refuse Info and mini-guide while retry success suppresses the old error owner', async () => {
+test('terminal states refuse Info and mini-guide while recovery success suppresses the old error owner', () => {
   const harness = createHarness({ ...playingSnapshot(), status: 'error', playing: false, lastError: safeError() });
   assert.equal(harness.controller.requestNowPlaying(), true);
   assert.equal(harness.controller.requestMiniGuide(), true);
   assert.equal(harness.state().activeOverlayId, null);
 
-  await harness.controller.tune('one', 'retry');
+  harness.controller.retry();
   assert.equal(harness.state().retryTransitionActive, true);
   assert.equal(createPlayerOverlayView(harness.state(), presentation(harness.snapshot())).visibleOverlays.playerError, false);
   harness.setSnapshot({ ...playingSnapshot(), status: 'loading', playing: false, lastError: safeError() });
-  assert.equal(harness.state().transitionChannelId, 'one');
+  assert.equal(harness.state().retryTransitionActive, false);
   harness.setSnapshot({ ...playingSnapshot(), status: 'ready', playing: false, lastError: null });
   assert.equal(harness.state().transitionChannelId, null);
   assert.equal(harness.state().retryTransitionActive, false);
@@ -593,22 +593,18 @@ test('Info retains custody across mini-guide and number tune success or failure'
   }
 });
 
-test('terminal focus and actions use real retry then Guide fallback and let OK click focused action', async () => {
-  const pending = deferred<{ ok: false; requestId: string; error: { code: string; message: string; retryable: boolean; recoverable: boolean; operation: string } }>();
-  const harness = createHarness({ ...playingSnapshot(), status: 'error', playing: false, lastError: safeError() }, {
-    tuneChannel: async () => pending.promise,
+test('terminal focus and actions delegate recovery then use Guide fallback', () => {
+  const harness = createHarness({
+    ...playingSnapshot(),
+    status: 'error',
+    playing: false,
+    lastError: safeError(),
   });
   harness.controller.reconcileSnapshot(harness.snapshot(), true);
   assert.equal(harness.focus.at(-1), 'overlay-player-retry');
   assert.equal(harness.controller.handleInput('ok'), false);
   assert.equal(harness.controller.retry(), true);
-  assert.equal(harness.state().retryPending, true);
-  pending.resolve({
-    ok: false, requestId: 'retry',
-    error: { code: 'FAILED', message: 'Retry failed safely.', retryable: true, recoverable: true, operation: 'player.tuneChannel' },
-  });
-  await flushPromiseQueue();
-  assert.equal(harness.state().retryError, 'Retry failed safely.');
+  assert.equal(harness.state().retryTransitionActive, true);
 
   const destroyed = createHarness({ ...playingSnapshot(), status: 'destroyed', playing: false, lastError: null });
   destroyed.controller.reconcileSnapshot(destroyed.snapshot(), true);
@@ -691,12 +687,11 @@ test('options contain Space, membership loss closes an ineligible family, and tu
   const retryHarness = createHarness({ ...playingSnapshot(), status: 'error', playing: false, lastError: safeError() }, {
     refreshChannelStatus: () => refresh.promise,
   });
-  const tune = retryHarness.controller.tune('one', 'retry');
+  retryHarness.controller.retry();
   await flushPromiseQueue();
   assert.equal(retryHarness.state().retryTransitionActive, true);
   assert.equal(retryHarness.state().activeOverlayId, null);
   refresh.resolve();
-  await tune;
 
   retryHarness.controller.reconcileSnapshot({ ...playingSnapshot(), status: 'ended', playing: false }, false);
   assert.equal(retryHarness.state().transitionChannelId, null);
@@ -728,6 +723,26 @@ function createHarness(snapshot: PlayerSnapshot, overrides: Partial<{
     refreshChannelStatus: overrides.refreshChannelStatus ?? (async () => undefined),
     refreshGuidePresentation: overrides.refreshGuidePresentation ?? (async () => undefined),
     recordDiagnostic: (_operation, message) => { diagnostics.push(message); },
+    recovery: {
+      retry: () => {
+        state = {
+          ...state,
+          retryPending: false,
+          recoveryPendingAction: null,
+          retryTransitionActive: true,
+          retryError: null,
+        };
+        return true;
+      },
+      skip: () => false,
+      reconcileSnapshot: (next) => {
+        if (next.status !== 'error' && next.status !== 'destroyed') {
+          state = { ...state, retryTransitionActive: false };
+        }
+      },
+      invalidate: () => undefined,
+      dispose: () => undefined,
+    },
   });
   return {
     controller, timers, focus, diagnostics,

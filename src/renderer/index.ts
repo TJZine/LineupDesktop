@@ -27,6 +27,7 @@ import { readPlexOnboardingState, renderPlexRuntimeDom } from './plexRuntimeDom.
 import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowEpgAction, applyWorkflowEpgDirection, applyWorkflowSettingsAction, applyWorkflowSettingsValues, createWorkflowState, getRouteWorkflowView, selectWorkflowEpgProgram, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
 import { createEmptyPlayerSnapshot, createPlayerOverlayPresentation } from './playerOverlayPresentation.js';
 import { createPlayerOverlayController } from './playerOverlayController.js';
+import { createPlayerErrorRecoveryController } from './playerErrorRecoveryController.js';
 import { recordRendererBridgeFailure } from './rendererBridgeFailures.js';
 import { findEpgProgramCell, setEpgPresentationState, setEpgTuneError, updateEpgState } from './epg.js';
 import { registerRendererActions, type GuideActionId, type GuideProgramActionTarget } from './rendererActionRegistration.js';
@@ -128,6 +129,24 @@ initializeProfilePinModal({
 syncRendererFocusTargets(focusRegistry, dom);
 focusState = focusRegistry.createInitialState(workflowState.routeState.activeRoute);
 let guidePresentationPolling: ReturnType<typeof createGuidePresentationPolling>;
+const playerErrorRecoveryController = createPlayerErrorRecoveryController({
+  bridge: window.lineupDesktop.player,
+  host: window,
+  getState: () => overlayState,
+  setState: (state) => { overlayState = state; },
+  acceptSnapshot: (snapshot) => {
+    playerSnapshot = snapshot;
+  },
+  render: renderApp,
+  focus: (focusId) => {
+    if (focusId === null) {
+      focusState = { activeRoute: 'player', activeId: null };
+      dom.playerPresentationElement?.focus();
+      return;
+    }
+    restoreFocusTarget(focusId);
+  },
+});
 const playerOverlayController = createPlayerOverlayController({
   player: window.lineupDesktop.player,
   host: window,
@@ -143,6 +162,7 @@ const playerOverlayController = createPlayerOverlayController({
   refreshChannelStatus: () => channelController.loadStatus(),
   refreshGuidePresentation: () => guidePresentationPolling.refresh('player-tune-success', { showLoading: false, allowPlayerRoute: true }),
   recordDiagnostic: (operation, message) => recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'player.dispatch', message, { operation, route: workflowState.routeState.activeRoute }),
+  recovery: playerErrorRecoveryController,
 });
 const shellController = createShellController({
   shell: window.lineupDesktop.shell,
@@ -495,6 +515,7 @@ function applyOverlayAction(action: PlayerOverlayActionId): void {
     case 'openAudioOptions': playerOverlayController.openOptions('audio'); return;
     case 'openSubtitleOptions': playerOverlayController.openOptions('subtitle'); return;
     case 'retryPlayer': playerOverlayController.retry(); return;
+    case 'skipPlayer': playerOverlayController.skip(); return;
     case 'miniGuidePrevious': playerOverlayController.handleInput('up'); return;
     case 'miniGuideNext': playerOverlayController.handleInput('down'); return;
     case 'miniGuidePagePrevious': playerOverlayController.handleInput('pageUp'); return;

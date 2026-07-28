@@ -50,6 +50,13 @@ import {
   createPlaybackEventRouter,
   type PlaybackEventRouter,
 } from './player/playbackEventRouter.js';
+import {
+  PlaybackProgramTransitionOwner,
+} from './player/playbackProgramTransitionOwner.js';
+import {
+  registerPlayerRecoveryIpc,
+  type PlayerRecoveryIpcTeardown,
+} from './player/playerRecoveryIpc.js';
 import { wirePlexPlaybackCleanup } from './player/plexPlaybackCleanupWiring.js';
 import type { PlexPlaybackRuntime } from './player/plexPlaybackRuntime.js';
 import {
@@ -87,7 +94,8 @@ let plexComposition: PlexCompositionRegistration | null = null;
 let channelComposition: ChannelCompositionRegistration | null = null;
 let playbackRuntime: PlexPlaybackRuntime | null = null;
 let playbackEventRouter: PlaybackEventRouter | null = null;
-let channelSchedulerProgramStartHandler: (() => void | Promise<void>) | null = null;
+let playbackProgramTransitionOwner: PlaybackProgramTransitionOwner | null = null;
+let teardownPlayerRecoveryIpc: PlayerRecoveryIpcTeardown | null = null;
 let playerIpcQuitTeardownInProgress = false;
 let playerIpcQuitTeardownComplete = false;
 let singleInstanceOwner: SingleInstanceOwner | null = null;
@@ -107,10 +115,16 @@ void startApplication().catch(async (error: unknown) => {
   playbackEventRouter = null;
   const teardownPlaybackRuntime = playbackRuntime;
   playbackRuntime = null;
+  const teardownTransitionOwner = playbackProgramTransitionOwner;
+  playbackProgramTransitionOwner = null;
+  const teardownRecoveryIpc = teardownPlayerRecoveryIpc;
+  teardownPlayerRecoveryIpc = null;
   const teardownChannel = channelComposition?.teardown ?? null;
   channelComposition = null;
   const teardownPlex = plexComposition?.teardown ?? null;
   plexComposition = null;
+  teardownRecoveryIpc?.();
+  teardownTransitionOwner?.dispose();
   await teardownPlayer?.teardown().catch(() => undefined);
   teardownRouter?.dispose();
   await teardownPlaybackRuntime?.teardown().catch(() => undefined);
@@ -195,15 +209,11 @@ async function startApplication(): Promise<void> {
     smokeMode,
     publishShellStatus,
   });
-  let onChannelTunedCallback: ((channelId: string) => void | Promise<void>) | null = null;
   const channelCreated = createChannelComposition({
     persistence,
     plexRuntime: plexCreated.runtime,
     channelBuilderContextSource: smokeFixture?.contextSource,
     diagnosticEventStore,
-    onChannelTuned: (channelId) => {
-      if (onChannelTunedCallback) void onChannelTunedCallback(channelId);
-    },
   });
   channelComposition = channelCreated;
   plexComposition = registerPlexCompositionIpc(plexCreated, {
@@ -255,15 +265,47 @@ async function startApplication(): Promise<void> {
       diagnosticEventStore,
       nativeHostFactory: nativeHostFactory ?? undefined,
       onNativeHostLifecycleFailure: () => {
+        const transitionOwner = playbackProgramTransitionOwner;
+        const runtime = playbackRuntime;
+        const releaseCleanupHold =
+          transitionOwner?.acquireCleanupHold() ?? (() => undefined);
         eventRouter.flushCurrentRuntime();
-        if (playbackRuntime !== null) {
-          void playbackRuntime.handleHelperCrash();
-        }
+        transitionOwner?.invalidate();
+        void (async () => {
+          try {
+            await runtime?.handleHelperCrash();
+          } catch (error: unknown) {
+            reportMainProcessDiagnostic(
+              'Playback cleanup on helper-crash failed',
+              error,
+            );
+          } finally {
+            releaseCleanupHold();
+          }
+        })();
       },
     });
     wirePlexPlaybackCleanup({
       plexRuntime: plexComposition.runtime,
-      getPlaybackRuntime: () => playbackRuntime,
+      getPlaybackRuntime: () => {
+        const runtime = playbackRuntime;
+        if (runtime === null) {
+          return null;
+        }
+        return {
+          cleanup: async (input) => {
+            const transitionOwner = playbackProgramTransitionOwner;
+            const releaseCleanupHold =
+              transitionOwner?.acquireCleanupHold() ?? (() => undefined);
+            transitionOwner?.invalidate();
+            try {
+              return await runtime.cleanup(input);
+            } finally {
+              releaseCleanupHold();
+            }
+          },
+        };
+      },
       reportDiagnostic: reportMainProcessDiagnostic,
     });
     const playbackRuntimeComposition = bootstrapPlaybackRuntime({
@@ -280,39 +322,19 @@ async function startApplication(): Promise<void> {
       plexRuntime: plexComposition.runtime,
     });
     playbackRuntime = playbackRuntimeComposition.runtime;
-
-    channelSchedulerProgramStartHandler = async () => {
-      if (playbackRuntime === null) {
-        return;
-      }
-      try {
-        await playbackRuntime.startCurrentPlayback('schedule-tick');
-      } catch (error: unknown) {
-        reportMainProcessDiagnostic('Automatic schedule tick playback transition failed', error);
-      }
-    };
-    channelComposition.activeChannelScheduler.on('programStart', channelSchedulerProgramStartHandler);
-
-    onChannelTunedCallback = async () => {
-      if (playbackRuntime) {
-        try {
-          await playbackRuntime.startCurrentPlayback('manual-switch');
-        } catch (error) {
-          reportMainProcessDiagnostic('Manual channel switch playback start failed', error);
-        }
-      }
-    };
-
+    const transitionOwner = new PlaybackProgramTransitionOwner({
+      scheduler: channelComposition.activeChannelScheduler,
+      runtime: playbackRuntime,
+      reportDiagnostic: reportMainProcessDiagnostic,
+    });
+    playbackProgramTransitionOwner = transitionOwner;
+    teardownPlayerRecoveryIpc = registerPlayerRecoveryIpc({
+      transitionOwner,
+      getSnapshot: () => teardownPlayerIpc?.adapter?.getSnapshot() ?? null,
+      isAuthorizedEvent,
+      createRequestId,
+    });
     void channelComposition.guideRuntime.initializeActiveChannel()
-      .then(async () => {
-        if (playbackRuntime) {
-          try {
-            await playbackRuntime.startCurrentPlayback('startup');
-          } catch (error) {
-            reportMainProcessDiagnostic('Startup playback start failed', error);
-          }
-        }
-      })
       .catch((error) => {
         reportMainProcessDiagnostic('Guide runtime active channel initialization failed', error);
       });
@@ -343,6 +365,11 @@ function registerApplicationLifecycleHandlers(): void {
     publishShellStatus('closing');
     teardownSettingsIpc?.();
     teardownSettingsIpc = null;
+    teardownPlayerRecoveryIpc?.();
+    teardownPlayerRecoveryIpc = null;
+    const localPlaybackProgramTransitionOwner = playbackProgramTransitionOwner;
+    playbackProgramTransitionOwner = null;
+    localPlaybackProgramTransitionOwner?.dispose();
     const teardown = teardownPlayerIpc;
     if (playerIpcQuitTeardownComplete || teardown === null) {
       const localPlaybackEventRouter = playbackEventRouter;
@@ -351,13 +378,6 @@ function registerApplicationLifecycleHandlers(): void {
       playbackRuntime = null;
       const localChannelComposition = channelComposition;
       channelComposition = null;
-      if (localChannelComposition !== null && channelSchedulerProgramStartHandler !== null) {
-        localChannelComposition.activeChannelScheduler.off(
-          'programStart',
-          channelSchedulerProgramStartHandler,
-        );
-        channelSchedulerProgramStartHandler = null;
-      }
       const teardownPlex = plexComposition?.teardown ?? null;
       plexComposition = null;
       localPlaybackEventRouter?.dispose();
@@ -390,13 +410,6 @@ function registerApplicationLifecycleHandlers(): void {
     playbackRuntime = null;
     const localPlaybackEventRouter = playbackEventRouter;
     playbackEventRouter = null;
-    if (localChannelComposition !== null && channelSchedulerProgramStartHandler !== null) {
-      localChannelComposition.activeChannelScheduler.off(
-        'programStart',
-        channelSchedulerProgramStartHandler,
-      );
-      channelSchedulerProgramStartHandler = null;
-    }
     (async () => {
       await teardown.teardown();
       localPlaybackEventRouter?.dispose();

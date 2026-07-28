@@ -134,9 +134,62 @@ test('authoritative terminal snapshots close normal overlays without inventing e
   assert.equal(reconcileSnapshotState(opened, snapshot('paused')).activeOverlayId, 'miniGuide');
 });
 
+test('player error exposes deterministic Retry, Skip, and Guide fallback actions', () => {
+  const errored = snapshot('error');
+  const actionable = createPlayerOverlayView(
+    createPlayerOverlayState(),
+    source(errored, channels()),
+  );
+  assert.equal(actionable.retryVisible, true);
+  assert.equal(actionable.skipVisible, true);
+  assert.equal(actionable.guideVisible, false);
+  assert.equal(actionable.activeFocusId, 'overlay-player-retry');
+
+  for (const recoveryPendingAction of ['retry-current', 'skip-next'] as const) {
+    const busy = createPlayerOverlayView(
+      {
+        ...createPlayerOverlayState(),
+        retryPending: true,
+        recoveryPendingAction,
+      },
+      source(errored, channels()),
+    );
+    assert.equal(busy.retryVisible, true);
+    assert.equal(busy.skipVisible, true);
+    assert.equal(busy.retryBusy, true);
+    assert.equal(busy.skipBusy, true);
+  }
+
+  const skipOnlyChannels = channels().map((channel) => ({
+    ...channel,
+    currentProgram: undefined,
+  }));
+  const skipOnly = createPlayerOverlayView(
+    createPlayerOverlayState(),
+    source(errored, skipOnlyChannels),
+  );
+  assert.equal(skipOnly.retryVisible, false);
+  assert.equal(skipOnly.skipVisible, true);
+  assert.equal(skipOnly.activeFocusId, 'overlay-player-skip');
+
+  const guideOnlyChannels = channels().map((channel) => ({
+    ...channel,
+    currentProgram: undefined,
+    nextProgram: undefined,
+  }));
+  const guideOnly = createPlayerOverlayView(
+    createPlayerOverlayState(),
+    source(errored, guideOnlyChannels),
+  );
+  assert.equal(guideOnly.retryVisible, false);
+  assert.equal(guideOnly.skipVisible, false);
+  assert.equal(guideOnly.guideVisible, true);
+  assert.equal(guideOnly.activeFocusId, 'overlay-player-guide');
+});
+
 function source(
   playerSnapshot: PlayerSnapshot,
-  channelList = channels(),
+  channelList: PlayerOverlayPresentationSource['channels'] = channels(),
 ): PlayerOverlayPresentationSource {
   return { channels: channelList, currentChannelId: channelList[0]?.id ?? null, playerSnapshot, nowMs: 1_000 };
 }

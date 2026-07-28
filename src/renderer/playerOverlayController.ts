@@ -17,9 +17,9 @@ import {
   availableTracks,
   isAudioControlEligible,
   isSubtitleControlEligible,
-  resolveRetryChannelId,
   type PlayerOverlayPresentationSource,
 } from './playerOverlayPresentation.js';
+import type { PlayerErrorRecoveryController } from './playerErrorRecoveryController.js';
 
 export interface PlayerOverlayTimerHost {
   setTimeout(callback: () => void, delayMs: number): number;
@@ -38,6 +38,7 @@ export interface PlayerOverlayControllerOptions {
   refreshChannelStatus(): Promise<void>;
   refreshGuidePresentation(): Promise<void>;
   recordDiagnostic(operation: string, message: string): void;
+  recovery: PlayerErrorRecoveryController;
 }
 
 export interface PlayerOverlayController {
@@ -47,9 +48,10 @@ export interface PlayerOverlayController {
   requestMiniGuide(): boolean;
   activateMiniGuideChannel(channelId: string): boolean;
   retry(): boolean;
+  skip(): boolean;
   openOptions(family: 'audio' | 'subtitle'): boolean;
   selectTrack(family: 'audio' | 'subtitle', trackId: string | null, focusId: string): Promise<void>;
-  tune(channelId: string, invoker: 'miniGuide' | 'number' | 'retry'): Promise<void>;
+  tune(channelId: string, invoker: 'miniGuide' | 'number'): Promise<void>;
   handlePlayerEvent(event: PlayerEvent): void;
   reconcileSnapshot(snapshot: PlayerSnapshot, authoritative: boolean, explicitTrackList?: boolean): void;
   closeTop(): boolean;
@@ -74,7 +76,6 @@ const NUMBER_RESULT_MS = 2_000;
 const NUMBER_COMPLETE_MS = 650;
 const TRANSITION_DELAY_MS = 175;
 const PLAYER_BRIDGE_REQUEST_TIMEOUT_MS = 30_000;
-
 class PlayerBridgeRequestTimeoutError extends Error {
   constructor() {
     super('Player bridge request timed out.');
@@ -215,9 +216,20 @@ export function createPlayerOverlayController(
       options.focus(`overlay-mini-channel-${encodeURIComponent(state.miniGuideSelectedChannelId)}`);
     } else if (state.activeOverlayId === 'playbackOptions') {
       options.focus(state.pendingTrackFocusId ?? state.playbackOptionsFocusId);
-    } else if (snapshot.status === 'error' && snapshot.lastError?.retryable === true &&
-      resolveRetryChannelId(presentation, state.lastTuneChannelId) !== null) {
+    } else if (
+      snapshot.status === 'error' &&
+      presentation.channels.find(
+        (channel) => channel.id === presentation.currentChannelId,
+      )?.currentProgram !== undefined
+    ) {
       options.focus('overlay-player-retry');
+    } else if (
+      snapshot.status === 'error' &&
+      presentation.channels.find(
+        (channel) => channel.id === presentation.currentChannelId,
+      )?.nextProgram !== undefined
+    ) {
+      options.focus('overlay-player-skip');
     } else if ((snapshot.status === 'error' || snapshot.status === 'destroyed') && presentation.channels.length > 0) {
       options.focus('overlay-player-guide');
     } else {
@@ -300,13 +312,7 @@ export function createPlayerOverlayController(
   };
 
   const retry = (): boolean => {
-    const presentation = options.getPresentation();
-    const state = options.getState();
-    const channelId = resolveRetryChannelId(presentation, state.lastTuneChannelId);
-    if (presentation.playerSnapshot.status !== 'error' ||
-      presentation.playerSnapshot.lastError?.retryable !== true || channelId === null || state.retryPending) return false;
-    void tune(channelId, 'retry');
-    return true;
+    return options.recovery.retry();
   };
 
   const openOptions = (family: 'audio' | 'subtitle'): boolean => {
@@ -440,7 +446,7 @@ export function createPlayerOverlayController(
 
   const tune = async (
     channelId: string,
-    invoker: 'miniGuide' | 'number' | 'retry',
+    invoker: 'miniGuide' | 'number',
   ): Promise<void> => {
     if (disposed || !options.getPresentation().channels.some((channel) => channel.id === channelId)) return;
     const state = options.getState();
@@ -455,12 +461,10 @@ export function createPlayerOverlayController(
       pendingTuneChannelId: channelId,
       transitionChannelId: channelId,
       transitionVisible: false,
-      retryPending: invoker === 'retry',
       channelNumberStatus: invoker === 'number' ? 'pending' : current.channelNumberStatus,
       channelNumberMessage: null,
       playbackOptionsError: null,
       miniGuideError: invoker === 'miniGuide' ? null : current.miniGuideError,
-      retryError: invoker === 'retry' ? null : current.retryError,
     }));
     transitionTimer = options.host.setTimeout(() => {
       transitionTimer = null;
@@ -487,8 +491,6 @@ export function createPlayerOverlayController(
             ? null
             : current.activeOverlayId,
           pendingTuneChannelId: null,
-          retryPending: false,
-          retryTransitionActive: invoker === 'retry',
           lastTuneChannelId: channelId,
           channelNumberStatus: invoker === 'number' && invokerOwnedAtSettlement ? 'completed' : current.channelNumberStatus,
           channelNumberMessage: invoker === 'number' && invokerOwnedAtSettlement ? 'Tuned' : current.channelNumberMessage,
@@ -496,7 +498,7 @@ export function createPlayerOverlayController(
       });
       if (invoker === 'number' && invokerOwnedAtSettlement) {
         numberTimer = options.host.setTimeout(closeNumber, NUMBER_COMPLETE_MS);
-      } else if ((invoker === 'miniGuide' && invokerOwnedAtSettlement) || invoker === 'retry') {
+      } else if (invoker === 'miniGuide' && invokerOwnedAtSettlement) {
         options.focus(null);
       }
       await options.refreshChannelStatus().catch(() => undefined);
@@ -518,7 +520,7 @@ export function createPlayerOverlayController(
 
   const failTune = (
     generation: number,
-    invoker: 'miniGuide' | 'number' | 'retry',
+    invoker: 'miniGuide' | 'number',
     message: string,
   ): void => {
     if (generation !== tuneGeneration || disposed) return;
@@ -533,16 +535,12 @@ export function createPlayerOverlayController(
         pendingTuneChannelId: null,
         transitionChannelId: null,
         transitionVisible: false,
-        retryPending: false,
-        retryTransitionActive: false,
         miniGuideError: invoker === 'miniGuide' && invokerOwnedAtSettlement ? safe : state.miniGuideError,
-        retryError: invoker === 'retry' ? safe : state.retryError,
         channelNumberStatus: invoker === 'number' && invokerOwnedAtSettlement ? 'error' : state.channelNumberStatus,
         channelNumberMessage: invoker === 'number' && invokerOwnedAtSettlement ? safe : state.channelNumberMessage,
       };
     });
     if (invoker === 'miniGuide' && invokerOwnedAtSettlement) focusActive();
-    if (invoker === 'retry') options.focus('overlay-player-retry');
     if (invoker === 'number' && invokerOwnedAtSettlement) numberTimer = options.host.setTimeout(closeNumber, NUMBER_RESULT_MS);
   };
 
@@ -610,6 +608,7 @@ export function createPlayerOverlayController(
 
   const reconcileSnapshot = (snapshot: PlayerSnapshot, authoritative: boolean, explicitTrackList = false): void => {
     if (disposed) return;
+    options.recovery.reconcileSnapshot(snapshot);
     const previousAuthoritativeStatus = lastAuthoritativeStatus;
     if (authoritative) lastAuthoritativeStatus = snapshot.status;
     const previousRequest = lastSnapshotRequestId;
@@ -683,6 +682,7 @@ export function createPlayerOverlayController(
     ++tuneGeneration;
     releasePendingCommand();
     cancelBridgeRequests();
+    options.recovery.invalidate();
     options.setState(closeAllPlayerOverlays(options.getState()));
     options.render();
   };
@@ -736,6 +736,7 @@ export function createPlayerOverlayController(
     requestMiniGuide,
     activateMiniGuideChannel,
     retry,
+    skip: options.recovery.skip,
     openOptions,
     selectTrack,
     tune,
@@ -759,6 +760,7 @@ export function createPlayerOverlayController(
     dispose() {
       if (disposed) return;
       routeLeave();
+      options.recovery.dispose();
       disposed = true;
     },
   };

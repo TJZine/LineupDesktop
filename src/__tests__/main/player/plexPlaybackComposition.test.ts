@@ -21,10 +21,11 @@ import type {
   NativePlayerHostCommandResult,
   NativePlayerHostPort,
 } from '../../../main/player/nativePlayerHostPort.js';
-import type {
-  PlexPlaybackPmsSessionLease,
-  PlexPlaybackRuntimeCleanupReason,
-  PlexPlaybackRuntimePmsPort,
+import {
+  projectPlexPlaybackScheduleSelection,
+  type PlexPlaybackPmsSessionLease,
+  type PlexPlaybackRuntimeCleanupReason,
+  type PlexPlaybackRuntimePmsPort,
 } from '../../../main/player/plexPlaybackRuntime.js';
 import type { DesktopStreamCapabilityProfile } from '../../../main/player/streamPolicy/types.js';
 import { assertPublicSafe } from './playerPublicSafetyAssertions.js';
@@ -463,6 +464,48 @@ test('RD-12 composition wires scheduler, resolver, runtime, player, and PMS thro
   assert.deepEqual(player.cleanupRequestIds, ['request-from-runtime']);
 });
 
+test('playback composition carries an exact-current manual retry through its runtime port', async () => {
+  const scheduler = new FakeScheduler();
+  const resolver = new FakeResolver();
+  const player = new FakePlayerPort();
+  const pms = new FakePmsPort();
+  const composition = createPlexPlaybackRuntimeComposition({
+    scheduler,
+    resolver,
+    player,
+    pms,
+    capabilityProfile,
+    createRequestId: () => 'request-from-runtime',
+  });
+  await composition.runtime.startCurrentPlayback('startup');
+  const current = scheduler.getCurrentProgram();
+
+  const retried = await composition.runtime.retryCurrentPlayback(
+    projectPlexPlaybackScheduleSelection({
+      channelId: scheduler.getState().channelId,
+      ratingKey: current.item.ratingKey,
+      scheduledStartTime: current.scheduledStartTime,
+      scheduledEndTime: current.scheduledEndTime,
+    }),
+  );
+
+  assert.equal(retried, true);
+  assert.equal(resolver.inputs.length, 2);
+  assert.deepEqual(
+    resolver.inputs.map((input) => input.mediaId),
+    ['42', '42'],
+  );
+  assert.deepEqual(
+    player.commands.map((command) => command.command),
+    ['load', 'load'],
+  );
+  assert.deepEqual(player.cleanupRequestIds, ['request-from-runtime']);
+  assert.deepEqual(
+    pms.releases.map((release) => release.reason),
+    ['switch'],
+  );
+});
+
 test('RD-17 composition passes diagnostics store into playback runtime', async () => {
   const scheduler = new FakeScheduler();
   const resolver = new FakeResolver();
@@ -706,7 +749,7 @@ test('RD-12 desktop adapter runtime port reports cleanup rejection to runtime cl
   });
 });
 
-test('desktop adapter runtime port keeps a replacement session when prior stop cleanup settles late', async () => {
+test('desktop adapter runtime port starts a fresh replacement only after prior stop cleanup settles', async () => {
   const scheduler = new FakeScheduler();
   const resolver = new FakeResolver();
   const pms = new FakePmsPort();
@@ -730,16 +773,54 @@ test('desktop adapter runtime port keeps a replacement session when prior stop c
 
   const stopping = composition.runtime.stop();
   await host.stopStarted;
-  const replacement = await composition.runtime.startCurrentPlayback('manual-switch');
+  const blockedReplacement =
+    await composition.runtime.startCurrentPlayback('manual-switch');
+
+  assert.deepEqual(blockedReplacement, {
+    accepted: false,
+    epoch: composition.runtime.getCurrentEpoch(),
+    requestId: null,
+    events: [],
+  });
+  assert.deepEqual(requestIds, ['request-b']);
+  assert.equal(resolver.inputs.length, 1);
+  assert.notEqual(adapter.getSnapshot().requestId, 'request-b');
+  assert.equal(pms.releases.length, 0);
+
   host.resolveStop();
   await stopping;
 
+  assert.equal(composition.runtime.getActiveRequestId(), null);
+  assert.equal(adapter.getSnapshot().requestId, null);
+  assert.deepEqual(
+    pms.releases.map((release) => ({
+      requestId: release.requestId,
+      reason: release.reason,
+    })),
+    [{ requestId: 'request-a', reason: 'stop' }],
+  );
+
+  const replacement =
+    await composition.runtime.startCurrentPlayback('manual-switch');
   assert.equal(replacement.accepted, true);
+  assert.equal(replacement.requestId, 'request-b');
+  assert.deepEqual(requestIds, []);
+  assert.equal(resolver.inputs.length, 2);
   assert.equal(composition.runtime.getActiveRequestId(), 'request-b');
   assert.equal(adapter.getSnapshot().requestId, 'request-b');
-  assert.deepEqual(host.cleanupRequestIds, []);
+  assert.deepEqual(host.cleanupRequestIds, ['request-a']);
 
   await composition.runtime.teardown();
-  assert.deepEqual(host.cleanupRequestIds, ['request-b']);
+  assert.deepEqual(host.cleanupRequestIds, ['request-a', 'request-b']);
   assert.equal(adapter.getSnapshot().requestId, null);
+  assert.deepEqual(
+    pms.releases.map((release) => ({
+      requestId: release.requestId,
+      reason: release.reason,
+    })),
+    [
+      { requestId: 'request-a', reason: 'stop' },
+      { requestId: 'request-b', reason: 'teardown' },
+    ],
+  );
 });

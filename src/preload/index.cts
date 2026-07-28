@@ -17,6 +17,10 @@ import {
   createPlayerSnapshotBridge,
   type PlayerSnapshotBridgeInvoke,
 } from './playerBridge.cjs';
+import {
+  createPlayerRecoveryBridge,
+  type PlayerRecoveryBridgeInvoke,
+} from './playerRecoveryBridge.cjs';
 import { createSettingsBridge, type SettingsBridgeInvoke } from './settingsBridge.cjs';
 import {
   LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL,
@@ -41,6 +45,7 @@ import {
   LINEUP_PLAYER_COMMAND_CHANNEL,
   LINEUP_PLAYER_EVENT_CHANNEL,
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
+  LINEUP_PLAYER_RECOVERY_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
   LINEUP_PLEX_CANCEL_PIN_CHANNEL,
   LINEUP_PLEX_GET_HOME_USERS_CHANNEL,
@@ -1552,6 +1557,18 @@ const playerSnapshotBridge = createPlayerSnapshotBridge(
     isPlayerError,
   },
 );
+const invokePlayerRecovery: PlayerRecoveryBridgeInvoke = (channel, input) =>
+  ipcRenderer.invoke(channel, input);
+const playerRecoveryBridge = createPlayerRecoveryBridge(
+  invokePlayerRecovery,
+  LINEUP_PLAYER_RECOVERY_CHANNEL,
+  createRequestId,
+  {
+    isSnapshot: isPlayerSnapshot,
+    isError: isPlayerError,
+    hasForbiddenField: hasForbiddenPrivilegedField,
+  },
+);
 const invokeSettings: SettingsBridgeInvoke = (channel, input) => ipcRenderer.invoke(channel, input);
 
 const lineupDesktop: LineupDesktopPreloadApi = {
@@ -1617,6 +1634,7 @@ const lineupDesktop: LineupDesktopPreloadApi = {
       LINEUP_PLAYER_TUNE_CHANNEL,
       createRequestId,
     ),
+    recover: playerRecoveryBridge,
     onEvent: (listener) => {
       if (typeof listener !== 'function') {
         throw new TypeError('Player event listener must be a function.');

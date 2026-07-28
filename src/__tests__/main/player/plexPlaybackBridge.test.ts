@@ -15,6 +15,8 @@ import {
 } from '../../../main/player/plexPlaybackBridge.js';
 import {
   PlexPlaybackRuntime,
+  isSamePlexPlaybackScheduleSelection,
+  projectPlexPlaybackScheduleSelection,
   type PlexPlaybackRuntimePlayerDispatchResult,
   type PlexPlaybackRuntimePlayerPort,
 } from '../../../main/player/plexPlaybackRuntime.js';
@@ -294,6 +296,53 @@ test('RD-12 bridge trims scheduler channel id before projecting selections', asy
   assert.equal(selection?.channelId, 'channel-safe');
   assert.equal(selection?.programId.startsWith('program-channel-safe-'), true);
   assertPublicSafe(selection, rawPrivateValues);
+});
+
+test('runtime owns byte-stable canonical schedule projection and exact equality', async () => {
+  const projected = projectPlexPlaybackScheduleSelection({
+    channelId: '  channel safe  ',
+    ratingKey: ' rating / one ',
+    scheduledStartTime: 1_000,
+    scheduledEndTime: 2_000,
+  });
+  assert.deepEqual(projected, {
+    channelId: 'channel safe',
+    programId: 'program-channel-safe-rating-one-1000-2000',
+    startedAtMs: 1_000,
+    endsAtMs: 2_000,
+  });
+  assert.equal(
+    isSamePlexPlaybackScheduleSelection(projected, { ...projected }),
+    true,
+  );
+  assert.equal(
+    isSamePlexPlaybackScheduleSelection(projected, {
+      ...projected,
+      endsAtMs: 2_001,
+    }),
+    false,
+  );
+
+  const scheduler = new FakeScheduler();
+  const bridge = new PlexPlaybackBridge({
+    scheduler,
+    resolver: new FakeResolver(),
+    capabilityProfile,
+  });
+  const selection = await bridge.getCurrentPlayback({
+    nowMs: 1_090_000,
+    reason: 'schedule-tick',
+  });
+  const current = scheduler.getCurrentProgram();
+  assert.deepEqual(
+    selection,
+    projectPlexPlaybackScheduleSelection({
+      channelId: scheduler.getState().channelId,
+      ratingKey: current.item.ratingKey,
+      scheduledStartTime: current.scheduledStartTime,
+      scheduledEndTime: current.scheduledEndTime,
+    }),
+  );
 });
 
 test('RD-12 bridge normalizes resolver failure before player dispatch', async () => {
