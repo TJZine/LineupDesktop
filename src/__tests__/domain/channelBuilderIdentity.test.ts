@@ -4,6 +4,8 @@ import {
   canonicalJsonV1,
   createCandidateId,
   createCandidateIdentity,
+  createCandidateIdentityPreimage,
+  createCandidateIdentityTuple,
   createContentFilterIdentity,
   findByteEqualCandidateTupleIndex,
   createFacetIdentity,
@@ -404,16 +406,21 @@ describe('Channel Builder Identity V1', () => {
       sourceIdentity,
       'source:aaa337d0a488a2562359929d182167f62635bfd86318e1b50996aed8d194e554',
     );
-    const candidateIdentity = createCandidateIdentity({
+    const candidateInput = {
       origin: { profileBinding, serverBinding, librarySetBinding },
       sourceReference: { kind: 'facet', facetId, sourceIdentity },
       contentFilterIdentity: null,
       sortOrder: null,
       lineupReplicaIndex: null,
       isPlaybackModeVariant: null,
-      playbackMode: 'shuffle',
+      playbackMode: 'shuffle' as const,
       blockSize: null,
-    });
+    } as const;
+    const candidateIdentity = createCandidateIdentity(candidateInput);
+    assert.equal(
+      createCandidateIdentityTuple(candidateInput).bytes,
+      canonicalJsonV1(createCandidateIdentityPreimage(candidateInput)),
+    );
     assert.equal(
       candidateIdentity,
       'candidate-identity:ebcb958e4f6304cdc59d5382c21fc1c7a9038979f22a2d7cfc0056d51b41b64b',

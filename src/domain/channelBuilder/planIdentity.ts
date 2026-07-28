@@ -379,19 +379,16 @@ function updateCanonicalJsonV1(
   hasher: ChannelBuilderIncrementalSha256,
   value: unknown,
 ): void {
-  const chunks: string[] = [];
-  const shapeCache = new Map<string, readonly (readonly [string, string])[]>();
-  let bufferedUnits = 0;
+  let buffered = '';
+  const shapeCache: CanonicalShapeCacheNode = { children: new Map() };
   const flush = (): void => {
-    if (chunks.length === 0) return;
-    hasher.updateUtf8(chunks.join(''));
-    chunks.length = 0;
-    bufferedUnits = 0;
+    if (buffered.length === 0) return;
+    hasher.updateUtf8(buffered);
+    buffered = '';
   };
   const write = (chunk: string): void => {
-    chunks.push(chunk);
-    bufferedUnits += chunk.length;
-    if (bufferedUnits >= 65_536) flush();
+    buffered += chunk;
+    if (buffered.length >= 65_536) flush();
   };
   writeCanonicalValue(value, new Set(), shapeCache, write);
   flush();
@@ -400,7 +397,7 @@ function updateCanonicalJsonV1(
 function writeCanonicalValue(
   value: unknown,
   seen: Set<object>,
-  shapeCache: Map<string, readonly (readonly [string, string])[]>,
+  shapeCache: CanonicalShapeCacheNode,
   write: (chunk: string) => void,
 ): void {
   if (value === null) {
@@ -451,9 +448,17 @@ function writeCanonicalValue(
       throw new TypeError('Identity V1 objects must be plain records.');
     }
     const rawKeys = Object.keys(value);
-    const shapeKey = JSON.stringify(rawKeys);
-    let entries = shapeCache.get(shapeKey);
-    if (entries === undefined) {
+    let cacheNode = shapeCache;
+    for (const rawKey of rawKeys) {
+      let child = cacheNode.children.get(rawKey);
+      if (child === undefined) {
+        child = { children: new Map() };
+        cacheNode.children.set(rawKey, child);
+      }
+      cacheNode = child;
+    }
+    let shape = cacheNode.shape;
+    if (shape === undefined) {
       const normalizedKeys = new Map<string, string>();
       for (const rawKey of rawKeys) {
         const normalizedKey = rawKey.normalize('NFC');
@@ -464,17 +469,20 @@ function writeCanonicalValue(
         }
         normalizedKeys.set(normalizedKey, rawKey);
       }
-      entries = [...normalizedKeys.entries()].sort(([left], [right]) =>
-        compareCodePoints(left, right),
-      );
-      shapeCache.set(shapeKey, entries);
+      shape = {
+        entries: [...normalizedKeys.entries()]
+          .sort(([left], [right]) => compareCodePoints(left, right))
+          .map(([normalizedKey, rawKey], index) => [
+            `${index > 0 ? ',' : ''}${JSON.stringify(normalizedKey)}:`,
+            rawKey,
+          ]),
+      };
+      cacheNode.shape = shape;
     }
     write('{');
-    for (let index = 0; index < entries.length; index += 1) {
-      const [normalizedKey, rawKey] = entries[index]!;
-      if (index > 0) write(',');
-      write(JSON.stringify(normalizedKey));
-      write(':');
+    for (let index = 0; index < shape.entries.length; index += 1) {
+      const [prefix, rawKey] = shape.entries[index]!;
+      write(prefix);
       writeCanonicalValue(value[rawKey], seen, shapeCache, write);
     }
     write('}');
@@ -482,6 +490,15 @@ function writeCanonicalValue(
     seen.delete(value);
   }
 }
+
+type CanonicalObjectShape = Readonly<{
+  entries: readonly (readonly [string, string])[];
+}>;
+
+type CanonicalShapeCacheNode = {
+  children: Map<string, CanonicalShapeCacheNode>;
+  shape?: CanonicalObjectShape;
+};
 
 function identity<T extends string>(
   createSha256: ChannelBuilderIncrementalSha256Factory,
@@ -1345,7 +1362,7 @@ function createCandidateIdentityWithSha256(
   createSha256: ChannelBuilderIncrementalSha256Factory,
   input: CandidateIdentityInput,
 ): ChannelBuilderCandidateIdentity {
-  const bytes = canonicalJsonV1(createCandidateIdentityPreimage(input));
+  const bytes = createCandidateIdentityBytes(input);
   return identityBytes(
     createSha256,
     'candidate-identity:',
@@ -1369,7 +1386,7 @@ function createCandidateIdentityTupleWithSha256(
   createSha256: ChannelBuilderIncrementalSha256Factory,
   input: CandidateIdentityInput,
 ): CandidateIdentityTuple {
-  const bytes = canonicalJsonV1(createCandidateIdentityPreimage(input));
+  const bytes = createCandidateIdentityBytes(input);
   const hasher = createSha256();
   hasher.updateUtf8('lineup-builder/candidate-identity/v1:');
   hasher.updateUtf8(bytes);
@@ -1412,18 +1429,53 @@ function createCandidateIdWithSha256(
   }
   const seed = normalizedIdentityInput(input.seed);
   const strategy = input.strategy.normalize('NFC');
-  const bytes = canonicalJsonV1({
-    candidateIdentity: input.candidateIdentity,
-    occurrence: input.occurrence,
-    seed,
-    strategy,
-  });
+  const bytes =
+    `{"candidateIdentity":${JSON.stringify(input.candidateIdentity)},` +
+    `"occurrence":${input.occurrence},` +
+    `"seed":${JSON.stringify(seed)},` +
+    `"strategy":${JSON.stringify(strategy)}}`;
   return identityBytes(
     createSha256,
     'candidate:',
     'lineup-builder/candidate-id/v1:',
     bytes,
   );
+}
+
+function createCandidateIdentityBytes(input: CandidateIdentityInput): string {
+  // This is the planner hot path. Keep its fixed-order encoding byte-identical
+  // to canonicalJsonV1(createCandidateIdentityPreimage(input)); the identity
+  // conformance test pins that invariant independently of the digest.
+  const preimage = createCandidateIdentityPreimage(input);
+  const isVariant = input.isPlaybackModeVariant === true;
+  const origin =
+    `{"librarySetBinding":${JSON.stringify(input.origin.librarySetBinding)},` +
+    `"profileBinding":${JSON.stringify(input.origin.profileBinding)},` +
+    `"serverBinding":${JSON.stringify(input.origin.serverBinding)}}`;
+  const sourceTree = input.sourceReference.kind === 'facet'
+    ? `{"kind":"facet","sourceIdentity":${JSON.stringify(
+        input.sourceReference.sourceIdentity,
+      )}}`
+    : canonicalJsonV1(preimage.sourceTree);
+  return (
+    `{"contentFilterIdentity":${jsonScalar(input.contentFilterIdentity)},` +
+    `"identityVersion":1,` +
+    `"isPlaybackModeVariant":${String(isVariant)},` +
+    `"lineupReplicaIndex":${String(input.lineupReplicaIndex ?? 0)},` +
+    `"origin":${origin},` +
+    `"sortOrder":${jsonScalar(input.sortOrder)},` +
+    `"sourceTree":${sourceTree},` +
+    `"variantBlockSize":${String(
+      isVariant && input.playbackMode === 'block' ? input.blockSize : null,
+    )},` +
+    `"variantPlaybackMode":${jsonScalar(
+      isVariant ? input.playbackMode : null,
+    )}}`
+  );
+}
+
+function jsonScalar(value: string | null): string {
+  return value === null ? 'null' : JSON.stringify(value);
 }
 
 export function createPlanIdentity(
