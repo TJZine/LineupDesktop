@@ -29,19 +29,46 @@ test('valid canonical nonce-bound temporary root grants smoke capability', () =>
     const result = fixture.validate();
     assert.equal(result.status, 'smoke');
     assert.equal(result.status === 'smoke' && isSmokeBootstrapCapability(result.capability), true);
+    if (result.status === 'smoke') {
+      assert.equal(
+        result.capability.protectionPolicy,
+        globalThis.process.platform === 'win32'
+          ? 'windows-inherited-userdata-acl'
+          : 'posix-0600',
+      );
+    }
   } finally {
     fixture.cleanup();
   }
 });
 
-test('smoke validation fails closed for environment-only, mismatch, symlink, and mode errors', () => {
+test('smoke validation fails closed for environment-only and nonce mismatch', () => {
   const fixture = createFixture();
   try {
     assert.equal(fixture.validate({ argv: [] }).status, 'failed');
     assert.equal(fixture.validate({ nonce: '0'.repeat(64) }).status, 'failed');
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('smoke validation fails closed for insecure POSIX sentinel modes', {
+  skip: globalThis.process.platform === 'win32',
+}, () => {
+  const fixture = createFixture();
+  try {
     fs.chmodSync(fixture.sentinelPath, 0o644);
     assert.equal(fixture.validate().status, 'failed');
-    fs.chmodSync(fixture.sentinelPath, 0o600);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('smoke validation fails closed for symlink roots', {
+  skip: globalThis.process.platform === 'win32',
+}, () => {
+  const fixture = createFixture();
+  try {
     const link = path.join(fixture.temporaryRoot, `lineup-${fixture.nonce}-link`);
     fs.symlinkSync(fixture.root, link, 'dir');
     assert.equal(fixture.validate({ root: link }).status, 'failed');
@@ -78,7 +105,7 @@ function createFixture() {
         LINEUP_DESKTOP_SMOKE: '1',
         LINEUP_DESKTOP_SMOKE_NONCE: overrides.nonce ?? nonce,
       },
-      platform: 'linux',
+      platform: globalThis.process.platform,
       temporaryDirectory: temporaryRoot,
     }).validate();
   };

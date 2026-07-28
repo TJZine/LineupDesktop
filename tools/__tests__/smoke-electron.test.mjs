@@ -17,11 +17,19 @@ import {
 } from '../smoke-electron.mjs';
 
 test('smoke launcher creates a canonical nonce-bound sentinel and exact arguments', async () => {
-  const bootstrap = await createSmokeBootstrap('linux');
+  const bootstrap = await createSmokeBootstrap(process.platform);
   try {
     assert.match(bootstrap.nonce, /^[a-f0-9]{64}$/u);
     assert.ok(bootstrap.canonicalRoot.includes(bootstrap.nonce));
-    assert.equal((await fs.lstat(bootstrap.sentinelPath)).mode & 0o777, 0o600);
+    assert.equal(
+      bootstrap.protectionPolicy,
+      process.platform === 'win32'
+        ? 'windows-inherited-userdata-acl'
+        : 'posix-0600',
+    );
+    if (process.platform !== 'win32') {
+      assert.equal((await fs.lstat(bootstrap.sentinelPath)).mode & 0o777, 0o600);
+    }
     assert.deepEqual(
       JSON.parse(await fs.readFile(bootstrap.sentinelPath, 'utf8')),
       { mode: 'lineup-desktop-smoke-v1', nonce: bootstrap.nonce },
