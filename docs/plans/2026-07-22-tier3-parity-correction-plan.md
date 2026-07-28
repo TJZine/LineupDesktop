@@ -21,7 +21,11 @@ Codanna was available during planning, but its current index returned no useful 
 - Do not infer builder completion from existing channels during migration.
 - Do not claim live Plex, packaged Windows, accessibility, performance, or visual proof from unit tests or synthetic fixtures.
 - Do not promote later-workstream file guesses into scope. Their exact paths require a freshness read and review when that workstream becomes active.
-- Do not begin WS2 through WS9 product implementation while WS1 is active.
+- Do not begin WS3 through WS9 product implementation while an earlier
+  workstream is active. WS2 is the sole exception: the reviewed
+  `ACTIVE_WS1_PROOF_DEFERRAL_AND_WS2_ENTRY_OVERRIDE_2026_07_28` below permits
+  WS2 planning and later reviewed implementation while WS1 proof debt remains
+  open.
 
 ## Architecture And Invariants
 
@@ -2111,11 +2115,100 @@ with no concurrent npm/Node test workload. It measured 2,690.61 ms against the
 unchanged 2,000 ms cap. The above-cap result remains honest deferred debt and
 is not resolved by a later non-authoritative local sample.
 
-MacBook continuation may fetch the published `initial-build` branch and use
-this handoff as current WS1 state. It must not begin WS2 product implementation:
-the program dependency still forbids WS2 while WS1 is active. Resume Package
-1F closeout from the remaining portable visual-evidence preparation or
-cross-platform verification surfaces, preserve all Windows-only obligations as
-open, and return the named Windows manual/packaged gates to a Windows machine.
-Only after reviewed WS1 evidence and authority closeout may the controller
-freshness-read, exact-file-scope, and adversarially review WS2.
+ACTIVE_WS1_PROOF_DEFERRAL_AND_WS2_ENTRY_OVERRIDE_2026_07_28: This is an
+explicit user-approved sequencing amendment and supersedes the earlier rule
+that WS2 cannot start while WS1 is active. The decision is **accept with
+modification**: unavailable screenshots and broader manual testing are
+deferred, not waived, passed, or converted into implementation evidence. The
+same disposition applies to the other still-open Package 1F proof-only gates
+listed above so they cannot indirectly block playback development. WS1 remains
+open, its stable IDs and evidence classifications do not advance, and its
+deferred proof debt must be completed before any claim that WS1 or the full
+parity-correction program is closed.
+
+The exception is justified by observed implementation state rather than an
+assumed pass. WS1's shared lineup persistence/mutation boundary is implemented,
+the cancellation race is repaired and reviewed, focused contracts pass, and
+live merge proof plus restart persistence establish a usable channel lineup for
+playback development. The remaining WS1 blockers are evidence/closeout work and
+do not currently identify a product defect in the shared playback dependency.
+`WS1-PERF-01` is separate from unavailable proof: it remains an observed
+2,690.61 ms failure against the unchanged 2,000 ms target under its existing
+non-blocking deferred-debt disposition. This amendment neither passes nor
+weakens that target. The result does not identify a WS2 playback dependency,
+but it remains open and must be carried until separately resolved or reviewed
+under the plan's existing performance-debt policy. If later proof contradicts
+the sequencing assumption or exposes a lineup, persistence, guide-refresh, or
+mutation defect, stop immediately before any further WS2 product edit, commit,
+or workstream advancement and route the smallest reviewed WS1 repair.
+
+This amendment authorizes exactly WS2 freshness, plan review, and—only after
+that reviewed plan is implementation-ready—WS2 product implementation. It does
+not authorize WS3 through WS9, mark any WS1 row complete, weaken a future
+Windows/manual or packaged gate, or let WS2 edit Package 1F evidence owners to
+manufacture closure. WS2 must treat the 24 registered playback IDs as audit
+inputs rather than assume the older RD-25/RD-26 “code complete” statement means
+current parity. Its freshness pass must reread those rows, current player,
+Plex-stream, native-helper, preload, renderer, persistence/cleanup, and test
+owners, plus current upstream behavior, then classify what is already correct,
+what is partial, and what is missing before freezing exact files.
+
+MacBook entry conditions are:
+
+- fetch the published `initial-build` branch and begin from this reviewed
+  amendment;
+- run a fresh clean-checkout baseline, including `npm run verify`, before WS2
+  implementation; resolve every failure or record a reviewed exact
+  pre-existing/non-WS2 disposition before any product edit rather than merely
+  noting or weakening it;
+- keep renderer custody unprivileged and retain credentials, headers, tokenized
+  URLs, native handles, raw Plex payloads, helper internals, and native logs in
+  privileged owners only;
+- preserve all WS1 product, evidence-harness, manifest, checklist, and
+  authority-document owners unless a reviewed cross-workstream replan names the
+  exact shared edit;
+- keep Windows native-playback, video-surface, fullscreen, recovery,
+  track-selection, HDR, and packaged-helper observations open when the MacBook
+  cannot prove them; and
+- exclude `src/native-helper/Lineup.NativePlayerHost/**` from MacBook product
+  edits unless the reviewed WS2 plan names and successfully runs at minimum
+  `dotnet build src/native-helper/Lineup.NativePlayerHost/Lineup.NativePlayerHost.csproj --configuration Release`
+  plus the relevant protocol/factory contract tests; if that proof is
+  unavailable, route any helper change to a separately reviewed Windows-capable
+  unit; and
+- stop before implementation if freshness cannot isolate a bounded WS2 unit,
+  requires a new dependency/package policy, or contradicts the current
+  helper-hosted native-libmpv architecture.
+
+Codanna semantic search was attempted for the playback owner sweep but the
+current index reported that embeddings were unavailable. Discovery therefore
+fell back to direct reads of `docs/architecture/CURRENT_STATE.md`,
+`docs/architecture/playback-architecture.md`,
+`docs/product/lineup-product-parity-matrix.md`, the roadmap, and `rg` inventory
+of the current player/Plex/native-helper/renderer/test surfaces. No WS2 exact
+file list is frozen by this sequencing amendment.
+
+NEXT_SESSION_HANDOFF
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-plan
+TASK: Complete WS2 Playback Through Quality Loop
+TASK_FAMILY: feature/design
+TIER: Tier 3
+PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
+ARTIFACT: reviewed WS1 proof-deferral and WS2-entry sequencing amendment
+FILES:
+- docs/plans/2026-07-22-tier3-parity-correction-plan.md
+- docs/architecture/CURRENT_STATE.md
+- docs/architecture/playback-architecture.md
+- docs/product/lineup-product-parity-matrix.md
+- docs/roadmap/desktop-port-roadmap.md
+BLOCKERS: none for WS2 freshness and planning; product edits remain blocked
+until the WS2 plan freezes exact files, verification, acceptance, and replan
+triggers and passes adversarial review
+MESSAGE:
+Start the reviewed Tier 3 WS2 freshness pass from the active sequencing
+amendment. Audit all 24 WS2 IDs against current playback code, tests,
+architecture, and current upstream behavior; reconcile the older RD-25/RD-26
+code-complete claim with the reopened parity requirements; freeze the smallest
+vertical playback unit that produces real user value; and route the
+decision-complete exact-file plan to lineup-desktop-feature-review before any
+product edit. Carry all deferred WS1 and Windows-native proof as open debt.
