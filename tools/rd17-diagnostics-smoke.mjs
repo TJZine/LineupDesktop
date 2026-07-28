@@ -29,6 +29,8 @@ const SUPPORT_BUNDLE_PARENT_NAME = 'support-bundle-parent';
 const SUPPORT_BUNDLE_ID = 'windows-smoke';
 const CREATED_AT_MS = 1_801_000_000_000;
 const CHILD_CLOSE_TIMEOUT_MS = 30_000;
+export const BUILD_TIMEOUT_MS = 120_000;
+export const BUILD_OUTPUT_LIMIT_BYTES = 1024 * 1024;
 
 const LOAD_COMMAND = {
   command: 'load',
@@ -57,6 +59,10 @@ const REPLACEMENT_LOAD_COMMAND = {
 
 export function isWindowsProofPlatform(platform = process.platform) {
   return platform === 'win32';
+}
+
+export function scanRd17EvidenceDirectory(root, options = {}) {
+  return scanSupportBundleDirectory(root, options);
 }
 
 export function parseSmokeArgs(argv = process.argv.slice(2)) {
@@ -164,7 +170,7 @@ async function runWindowsSmoke(outRoot) {
   const exporter = new SupportBundleExporter({
     eventStore: diagnostics,
     parentDirectoryProvider: () => supportParent,
-    redactionScanner: (bundleDirectory, options) => scanSupportBundleDirectory(bundleDirectory, options),
+    redactionScanner: (bundleDirectory, options) => scanRd17EvidenceDirectory(bundleDirectory, options),
     clock: () => CREATED_AT_MS,
     bundleIdGenerator: () => SUPPORT_BUNDLE_ID,
     appVersion: '0.0.0',
@@ -188,7 +194,7 @@ async function runWindowsSmoke(outRoot) {
   await fs.rm(supportParent, { recursive: true, force: true });
   await assertRequiredSupportBundleFiles(evidenceBundleDirectory);
 
-  const supportBundleReport = scanSupportBundleDirectory(evidenceBundleDirectory, {
+  const supportBundleReport = scanRd17EvidenceDirectory(evidenceBundleDirectory, {
     timestampMs: CREATED_AT_MS,
     truncatedRecordCount: exportResult.redactionReport.truncatedRecordCount,
     omittedFileCount: exportResult.redactionReport.omittedFileCount,
@@ -225,7 +231,7 @@ async function runWindowsSmoke(outRoot) {
 
   await writeJson(path.join(outRoot, 'manifest.json'), manifest);
   await writeJson(path.join(outRoot, 'summary.json'), summary);
-  const topLevelReport = scanSupportBundleDirectory(outRoot, {
+  const topLevelReport = scanRd17EvidenceDirectory(outRoot, {
     timestampMs: CREATED_AT_MS,
     truncatedRecordCount: supportBundleReport.truncatedRecordCount,
     omittedFileCount: supportBundleReport.omittedFileCount,
@@ -235,15 +241,28 @@ async function runWindowsSmoke(outRoot) {
   await assertRequiredEvidenceFiles(outRoot);
 }
 
-function runBuild() {
-  const result = spawnSync('npm', ['run', 'build:electron'], {
+export function runBuild(options = {}) {
+  const spawnSyncImpl = options.spawnSyncImpl ?? spawnSync;
+  const platform = options.platform ?? process.platform;
+  const result = spawnSyncImpl('npm', ['run', 'build:electron'], {
     cwd: REPO_ROOT,
-    shell: process.platform === 'win32',
+    shell: platform === 'win32',
     stdio: 'pipe',
     encoding: 'utf8',
+    timeout: BUILD_TIMEOUT_MS,
+    maxBuffer: BUILD_OUTPUT_LIMIT_BYTES,
   });
   if (result.status !== 0) {
-    throw new Error('Electron build failed before RD-17 diagnostics smoke.');
+    if (result.error?.code === 'ETIMEDOUT') {
+      throw new Error('Electron build timed out before RD-17 diagnostics smoke.');
+    }
+    if (result.error?.code === 'ENOBUFS') {
+      throw new Error('Electron build exceeded its output limit before RD-17 diagnostics smoke.');
+    }
+    if (result.error !== undefined) {
+      throw new Error('Electron build could not start before RD-17 diagnostics smoke.');
+    }
+    throw new Error('Electron build exited unsuccessfully before RD-17 diagnostics smoke.');
   }
 }
 

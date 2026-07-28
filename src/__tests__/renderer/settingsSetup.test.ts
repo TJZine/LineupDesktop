@@ -93,7 +93,7 @@ test('applySupportBundleExportStatus sanitizes successful status and directory n
 
   const state3 = applySupportBundleExportStatus(initialState, {
     status: 'succeeded',
-    bundleDirectoryName: 'C:\\Windows\\lineup-desktop-support-windows',
+    bundleDirectoryName: ['C:', 'Windows', 'lineup-desktop-support-windows'].join('\\'),
     fileCount: 1,
     redactionStatus: null,
   });

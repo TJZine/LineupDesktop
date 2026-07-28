@@ -21,7 +21,7 @@ test('diagnostic event store bounds records and serializes only sanitized record
     clock: () => 1234,
     idGenerator: createIdGenerator('diag'),
   });
-  const unsafePath = ['/Users/example/Library/Application', 'Support/Lineup/media.mkv'].join(' ');
+  const unsafePath = ['', 'Users', 'example', 'Library', 'Application Support', 'Lineup', 'media.mkv'].join('/');
   const unsafeNativeKey = [['native', 'Handle'].join(''), '987654321'].join(' ');
 
   for (let index = 0; index < 5; index += 1) {
@@ -196,7 +196,7 @@ test('support bundle exporter returns a safe cancellation envelope without creat
 });
 
 test('support bundle exporter wraps parent provider failures in a safe envelope', async () => {
-  const unsafePath = ['/Users/example/Library/Application', 'Support/Lineup/media.mkv'].join(' ');
+  const unsafePath = ['', 'Users', 'example', 'Library', 'Application Support', 'Lineup', 'media.mkv'].join('/');
   const store = new DiagnosticEventStore();
   const exporter = new SupportBundleExporter({
     eventStore: store,
@@ -256,7 +256,7 @@ test('support bundle exporter wraps bad target and id generation in a safe envel
 });
 
 test('support bundle exporter does not expose filesystem failure paths with spaces', async () => {
-  const parentDirectory = ['/Users/example/Library/Application', 'Support/Lineup Selected Folder'].join(' ');
+  const parentDirectory = ['', 'Users', 'example', 'Library', 'Application Support', 'Lineup Selected Folder'].join('/');
   const targetDirectory = path.join(parentDirectory, `${SUPPORT_BUNDLE_DIRECTORY_PREFIX}mkdir-failure`);
   const store = new DiagnosticEventStore();
   const exporter = new SupportBundleExporter({
@@ -411,7 +411,7 @@ function createUnsafeProviderSummary(): Record<string, unknown> {
   return {
     [processKey]: 12345,
     [nativeKey]: 987654321,
-    path: ['/Users/example/Library/Application', 'Support/Lineup/media.mkv'].join(' '),
+    path: ['', 'Users', 'example', 'Library', 'Application Support', 'Lineup', 'media.mkv'].join('/'),
     secret: ['credential', '12345'].join(''),
     safeStatus: 'failed',
   };
@@ -440,7 +440,7 @@ function createUnsafePlayerSnapshot() {
     lastError: null,
     [processKey]: 12345,
     [nativeKey]: 987654321,
-    mediaPath: ['/Users/example/Library/Application', 'Support/Lineup/media.mkv'].join(' '),
+    mediaPath: ['', 'Users', 'example', 'Library', 'Application Support', 'Lineup', 'media.mkv'].join('/'),
     credential: ['credential', '12345'].join(''),
   } as const;
 }

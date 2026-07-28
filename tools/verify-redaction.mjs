@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { Buffer } from 'node:buffer';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -84,14 +86,6 @@ const bareSecretFieldValuePattern = String.raw`(?:(?=[-A-Za-z0-9._~+/=]{8,})(?=[
 const secretFieldValuePattern = String.raw`(?:${quotedSecretFieldValuePattern}|${bareSecretFieldValuePattern})`;
 const privilegedCredentialValuePattern = String.raw`(?:(?=[-A-Za-z0-9._~+/=]{8,})(?=[-A-Za-z0-9._~+/=]*[0-9])[-A-Za-z0-9._~+/=]+|${bareAlphabeticSecretValuePattern})`;
 const privilegedDiagnosticFieldValuePattern = String.raw`(?:https?:\/\/(?!(?:secret\.example|example\.invalid)(?:[/:?#"')\s,}\r\n]|$))[^\s,}\r\n]+|${privilegedCredentialValuePattern})`;
-const filesystemPathValuePattern = String.raw`(?:"(?:[A-Za-z]:\\(?:Users|ProgramData|Windows|Temp|tmp)\\[^"\r\n]+|\/(?:Users|home|var|tmp|private|Volumes)\/[^"\r\n]+)"|'(?:[A-Za-z]:\\(?:Users|ProgramData|Windows|Temp|tmp)\\[^'\r\n]+|\/(?:Users|home|var|tmp|private|Volumes)\/[^'\r\n]+)'|(?:[A-Za-z]:\\(?:Users|ProgramData|Windows|Temp|tmp)\\[^\s,}\r\n]+|\/(?:Users|home|var|tmp|private|Volumes)\/[^\s,}\r\n]+))`;
-const unkeyedFilesystemPathPattern = String.raw`(?:[A-Za-z]:\\(?:Users|ProgramData|Windows|Temp|tmp)\\[^\r\n"')]*?\.(?:log|txt|json|ndjson|dmp|dump|mkv|mp4|mov|avi)|\/(?:Users|home|var|tmp|private|Volumes)\/[^\r\n"')]*?\.(?:log|txt|json|ndjson|dmp|dump|mkv|mp4|mov|avi))`;
-const diagnosticMessageKeyPattern = ['message', 'errorMessage', 'diagnosticMessage']
-  .map(caseInsensitiveLiteral)
-  .join('|');
-const rawFilesystemPathKeyPattern = ['path', 'filePath', 'directory', 'userData', 'home', 'mediaPath', 'localPath']
-  .map(caseInsensitiveLiteral)
-  .join('|');
 const rawProcessDataKeyPattern = ['env', 'argv', 'pid', 'stderr', 'stdout', 'crashDump', 'minidump', 'rawLog']
   .map(caseInsensitiveLiteral)
   .join('|');
@@ -99,7 +93,30 @@ const nativeHandleKeyPattern = ['nativeHandle', 'libmpvObject', 'engineId']
   .map(caseInsensitiveLiteral)
   .join('|');
 const rawIpcFrameKeyPattern = ['rawIpc'].map(caseInsensitiveLiteral).join('|');
-
+const repositoryUnixFilesystemPathPattern = new RegExp(
+  String.raw`(?<![\p{L}\p{N}._~+/\\-])/(?:Applications|Library|Users|Volumes|etc|home|opt|private|root|srv|tmp|usr|var|(?=[\p{L}\p{N}._()-]*[^\x00-\x7F])[\p{L}\p{N}._()-]+)/(?![/?#])[^"'<>{}\r\n]+`,
+  'u',
+);
+const repositoryDriveFilesystemPathPattern = new RegExp(
+  String.raw`(?<![\p{L}\p{N}._~+/\\-])[A-Za-z]:(?:/(?!/)|\\(?!\\))[^"'<>{}\r\n]+`,
+  'u',
+);
+const repositoryUncFilesystemPathPattern = new RegExp(
+  String.raw`(?<!\\)\\\\(?!\\)[A-Za-z0-9][A-Za-z0-9.-]*\\[A-Za-z0-9][A-Za-z0-9 ._()-]*\\[^"'<>{}\r\n]+`,
+  'u',
+);
+const repositorySerializedFilesystemPathPattern = new RegExp(
+  String.raw`"[^"\r\n]+"\s*:\s*"(?:[A-Za-z]:(?:/|\\\\)|\\\\\\\\|/(?!/))(?=[^"\r\n]*[\\/])(?:\\.|[^"\\])+"`,
+  'u',
+);
+const repositoryFileUrlFilesystemPathPattern = new RegExp(
+  String.raw`file:\/\/(?:\/(?!\/)[^/\s"'<>]+\/|[A-Za-z]:[\\/]|[A-Za-z0-9][A-Za-z0-9.-]*\/[^/\s"'<>]+\/)`,
+  'u',
+);
+const repositoryContextualUnixFilesystemPathPattern = new RegExp(
+  String.raw`\b(?:absolute|archive|cache|copied|directory|file|filesystem|folder|generated|local|mounted|output|path|saved|workspace)\b[^\r\n]{0,80}?(?<![\p{L}\p{N}._~+/\\-])/(?!/)[\p{L}\p{N}._()-]+(?:/[\p{L}\p{N} ._()-]+)+`,
+  'iu',
+);
 const forbiddenPatterns = [
   {
     label: 'token-query-parameter',
@@ -162,20 +179,6 @@ const forbiddenPatterns = [
     ),
   },
   {
-    label: 'raw-filesystem-path',
-    pattern: new RegExp(
-      String.raw`(?<![?&\w-])(?:"(?:${rawFilesystemPathKeyPattern})"|'(?:${rawFilesystemPathKeyPattern})'|(?:${rawFilesystemPathKeyPattern}))\s*(?:=|:\s*)\s*${filesystemPathValuePattern}`,
-      'u',
-    ),
-  },
-  {
-    label: 'raw-filesystem-path',
-    pattern: new RegExp(
-      String.raw`(?<![\w-])(?:${diagnosticMessageKeyPattern})\s*(?:=|:\s*)\s*${unkeyedFilesystemPathPattern}|(?:^|[\r\n])\s*${unkeyedFilesystemPathPattern}`,
-      'u',
-    ),
-  },
-  {
     label: 'raw-process-data',
     pattern: new RegExp(
       String.raw`(?<![?&\w-])(?:"(?:${rawProcessDataKeyPattern})"|'(?:${rawProcessDataKeyPattern})'|(?:${rawProcessDataKeyPattern}))\s*(?:=|:\s*|\s+)\s*(?:"(?:[^"\r\n]*(?:[A-Za-z]:\\|\/Users\/|\/home\/|token=|Authorization:)[^"\r\n]*)"|'(?:[^'\r\n]*(?:[A-Za-z]:\\|\/Users\/|\/home\/|token=|Authorization:)[^'\r\n]*)'|\d{2,})`,
@@ -192,19 +195,36 @@ const forbiddenPatterns = [
 ];
 
 const textFilePattern = /\.(md|ts|tsx|js|mjs|cjs|json|ndjson|toml|yaml|yml|txt)$/u;
+const skippedDirectoryNames = new Set([
+  'node_modules',
+  '.git',
+  '.codanna',
+  'dist',
+  'out',
+  'coverage',
+]);
 
 /**
- * Repository redaction scan walks text files in deterministic order and applies
- * best-effort diagnostic redaction patterns for token query params, auth
- * headers, credential schemes, and secret-shaped fields.
+ * Repository redaction scans version-controlled, non-binary file content in
+ * deterministic order. Support-bundle scanning retains its narrower text-file
+ * contract because it validates a generated artifact rather than source input.
  */
 export function collectFiles(root = repoRoot) {
   const files = [];
-  walkDirectory(root, root, files);
+  walkFiles(root, root, files, (entry) =>
+    entry.isFile() && textFilePattern.test(entry.name));
   return files.sort();
 }
 
 export function scanFileContent(content) {
+  const findings = scanForbiddenContent(content);
+  if (containsAbsoluteFilesystemPath(content)) {
+    findings.push('raw-filesystem-path');
+  }
+  return findings;
+}
+
+function scanForbiddenContent(content) {
   const findings = [];
   for (const { label, pattern } of forbiddenPatterns) {
     pattern.lastIndex = 0;
@@ -215,20 +235,118 @@ export function scanFileContent(content) {
   return findings;
 }
 
-export function scanRepo(root = repoRoot) {
-  const findings = [];
-  for (const relativePath of collectFiles(root)) {
-    const absolutePath = path.join(root, relativePath);
-    const stat = fs.statSync(absolutePath);
-    if (!stat.isFile()) {
+function containsAbsoluteFilesystemPath(content) {
+  return findAbsoluteFilesystemPathStart(content, 0) !== -1;
+}
+
+function findAbsoluteFilesystemPathStart(content, fromIndex) {
+  for (let index = fromIndex; index < content.length; index += 1) {
+    if (!isAbsoluteFilesystemPathStartBoundary(content[index - 1])) {
       continue;
     }
-    const content = fs.readFileSync(absolutePath, 'utf8');
-    for (const reason of scanFileContent(content)) {
+
+    const current = content[index];
+    const next = content[index + 1];
+    const afterNext = content[index + 2];
+    const isDrivePath = /^[A-Za-z]$/u.test(current)
+      && next === ':'
+      && (afterNext === '\\' || afterNext === '/');
+    const isUncPath = current === '\\' && next === '\\';
+    const isUnixPath = current === '/'
+      && next !== undefined
+      && next !== '/'
+      && next !== '"'
+      && !/\s/u.test(next);
+
+    if (isDrivePath || isUncPath || isUnixPath) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function isAbsoluteFilesystemPathStartBoundary(value) {
+  return value === undefined || !/[\p{L}\p{N}._~+/\\-]/u.test(value);
+}
+
+function containsRepositoryAbsoluteFilesystemPath(content) {
+  for (const pattern of [
+    repositoryUnixFilesystemPathPattern,
+    repositoryDriveFilesystemPathPattern,
+    repositoryUncFilesystemPathPattern,
+    repositorySerializedFilesystemPathPattern,
+    repositoryFileUrlFilesystemPathPattern,
+    repositoryContextualUnixFilesystemPathPattern,
+  ]) {
+    pattern.lastIndex = 0;
+    if (pattern.test(content)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function scanRepo(root = repoRoot) {
+  const findings = [];
+  const resolvedRoot = path.resolve(root);
+  const files = resolvedRoot === repoRoot
+    ? collectGitVisibleFiles(resolvedRoot)
+    : collectAllFiles(resolvedRoot);
+  for (const relativePath of files) {
+    const absolutePath = path.join(resolvedRoot, relativePath);
+    let stat;
+    try {
+      stat = fs.lstatSync(absolutePath);
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        continue;
+      }
+      throw error;
+    }
+    if (!stat.isFile() && !stat.isSymbolicLink()) {
+      continue;
+    }
+    const bytes = stat.isSymbolicLink()
+      ? Buffer.from(fs.readlinkSync(absolutePath))
+      : fs.readFileSync(absolutePath);
+    if (isBinaryContent(bytes)) {
+      continue;
+    }
+    const content = bytes.toString('utf8');
+    const reasons = scanForbiddenContent(content);
+    if (containsRepositoryAbsoluteFilesystemPath(content)) {
+      reasons.push('raw-filesystem-path');
+    }
+    for (const reason of reasons) {
       findings.push({ file: relativePath, reason });
     }
   }
   return findings;
+}
+
+function collectGitVisibleFiles(root) {
+  const output = execFileSync(
+    'git',
+    ['-C', root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z'],
+    {
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+      windowsHide: true,
+    },
+  );
+  return output.split('\0').filter(Boolean).sort();
+}
+
+function collectAllFiles(root) {
+  const files = [];
+  walkFiles(root, root, files, (entry) =>
+    entry.isFile() || entry.isSymbolicLink());
+  return files.sort();
+}
+
+function isBinaryContent(content) {
+  return content.includes(0);
 }
 
 export function scanSupportBundleDirectory(root, options = {}) {
@@ -268,24 +386,15 @@ export function scanSupportBundleDirectory(root, options = {}) {
   };
 }
 
-function walkDirectory(root, directory, files) {
+function walkFiles(root, directory, files, includeFile) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      if (
-        entry.name === 'node_modules' ||
-        entry.name === '.git' ||
-        entry.name === '.codanna' ||
-        entry.name === 'dist' ||
-        entry.name === 'out' ||
-        entry.name === 'coverage'
-      ) {
-        continue;
-      }
-      walkDirectory(root, absolute, files);
+      if (skippedDirectoryNames.has(entry.name)) continue;
+      walkFiles(root, absolute, files, includeFile);
       continue;
     }
-    if (entry.isFile() && textFilePattern.test(entry.name)) {
+    if (includeFile(entry)) {
       files.push(path.relative(root, absolute));
     }
   }

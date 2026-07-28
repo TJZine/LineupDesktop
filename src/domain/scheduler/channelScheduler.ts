@@ -210,7 +210,7 @@ export class ChannelScheduler implements IChannelScheduler {
     this.ensureLoaded();
     const now = this.clock.now();
 
-    if (startTime >= endTime) {
+    if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || startTime >= endTime) {
       throw new Error(SCHEDULER_ERROR_MESSAGES.INVALID_TIME_RANGE);
     }
 
@@ -232,10 +232,14 @@ export class ChannelScheduler implements IChannelScheduler {
     this.ensureLoaded();
     const now = this.clock.now();
 
+    if (!Number.isFinite(count) || !Number.isInteger(count) || count < 0) {
+      throw new RangeError('Upcoming count must be a non-negative integer');
+    }
+
     const programs = output ?? [];
     programs.length = 0;
 
-    if (count <= 0) {
+    if (count === 0) {
       return programs;
     }
 

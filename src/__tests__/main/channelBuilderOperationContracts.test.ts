@@ -1,6 +1,7 @@
 import test from 'node:test';
-import { setImmediate } from 'node:timers';
+import { setImmediate, setTimeout } from 'node:timers';
 import assert from 'node:assert/strict';
+import process from 'node:process';
 
 import {
   createDefaultChannelSetupConfig,
@@ -18,6 +19,7 @@ import {
   ChannelBuilderRuntime,
   type ChannelBuilderRuntimeOptions,
 } from '../../main/channel/channelBuilderRuntime.js';
+import { deferred } from '../helpers/deferred.js';
 
 test('operation owner enforces one active operation and idempotent cancel lifecycle', () => {
   const ids = idSource();
@@ -215,15 +217,148 @@ test('builder runtime releases every apply resource after early context and revi
     assert.equal(operationOwner.hasActiveOperation(), false);
     assert.equal(disposeCalls, 1);
     assert.deepEqual(releasedPlanIds, [body.planId]);
-    assert.equal(
-      (runtime as unknown as { activeApplyByPlan: Map<string, string> })
-        .activeApplyByPlan.size,
-      0,
-    );
     runtime.shutdown();
     assert.equal(disposeCalls, 1);
     assert.deepEqual(releasedPlanIds, [body.planId]);
   }
+});
+
+test('builder runtime shutdown settles a pending review read without unhandled rejection or late work', async () => {
+  const read = deferred<ChannelAggregate>();
+  const body = reviewedBody(`channel-builder-plan-${'8'.repeat(32)}`);
+  let discoverCalls = 0;
+  const operationOwner = new ChannelBuilderOperationOwner({
+    randomHex128: idSource(),
+  });
+  const runtime = new ChannelBuilderRuntime({
+    store: { readChannelAggregate: async () => read.promise },
+    contextOwner: {
+      capture: () => ({
+        context: body.context,
+        selectedLibraryPairs: [{ libraryId: 'library', libraryUuid: 'uuid' }],
+      }),
+      assertCurrent: () => undefined,
+      retain: () => undefined,
+      release: () => undefined,
+      shutdown: () => undefined,
+    },
+    facetSource: {
+      discover: async () => {
+        discoverCalls += 1;
+        throw new Error('Discovery must not start after shutdown.');
+      },
+    },
+    planningWorker: { shutdown: () => undefined },
+    operationOwner,
+    mutationCoordinator: {},
+    refreshGuide: async () => undefined,
+    randomHex128: () => 'a'.repeat(32),
+  } as unknown as ChannelBuilderRuntimeOptions);
+
+  const unhandled = await captureUnhandledRejections(async () => {
+    const accepted = runtime.startReview(
+      'pending-review-shutdown',
+      body.normalizedConfig,
+    );
+    assert.equal(accepted.ok, true);
+    runtime.shutdown();
+
+    const rejected = runtime.startReview(
+      'review-after-shutdown',
+      body.normalizedConfig,
+    );
+    assert.equal(rejected.ok, false);
+    if (!rejected.ok) assert.equal(rejected.error.code, 'CHANNEL_BUSY');
+
+    read.resolve({
+      storedChannelData: null,
+      currentChannelId: null,
+      lineupRevision: 0,
+      channelBuilderState: null,
+    });
+    await settleAsyncWork();
+  });
+
+  assert.deepEqual(unhandled, []);
+  assert.equal(discoverCalls, 0);
+  assert.equal(operationOwner.hasActiveOperation(), false);
+});
+
+test('builder runtime shutdown settles a pending apply read and releases consumed resources', async () => {
+  const read = deferred<ChannelAggregate>();
+  const base = readyAppendBody();
+  let disposeCalls = 0;
+  let mutationCalls = 0;
+  const releasedPlanIds: string[] = [];
+  const body: ChannelBuilderReviewedPlanBody = {
+    ...base,
+    materializationIndex: {
+      ...base.materializationIndex,
+      dispose: () => {
+        disposeCalls += 1;
+      },
+    },
+  };
+  const operationOwner = new ChannelBuilderOperationOwner({
+    randomHex128: idSource(),
+  });
+  operationOwner.retainPlan(body);
+  const runtime = new ChannelBuilderRuntime({
+    store: { readChannelAggregate: async () => read.promise },
+    contextOwner: {
+      capture: () => ({
+        context: body.context,
+        selectedLibraryPairs: [{ libraryId: 'library', libraryUuid: 'uuid' }],
+      }),
+      assertCurrent: () => undefined,
+      retain: () => undefined,
+      release: (planId: string) => releasedPlanIds.push(planId),
+      shutdown: () => undefined,
+    },
+    facetSource: {},
+    planningWorker: { shutdown: () => undefined },
+    operationOwner,
+    mutationCoordinator: {
+      mutateBuilderLineup: async () => {
+        mutationCalls += 1;
+        throw new Error('Mutation must not start after shutdown.');
+      },
+    },
+    refreshGuide: async () => undefined,
+    randomHex128: () => 'a'.repeat(32),
+  } as unknown as ChannelBuilderRuntimeOptions);
+
+  const unhandled = await captureUnhandledRejections(async () => {
+    const accepted = runtime.startApply('pending-apply-shutdown', {
+      planId: body.planId,
+      confirmReplace: false,
+    });
+    assert.equal(accepted.ok, true);
+    runtime.shutdown();
+
+    const rejected = runtime.startApply('apply-after-shutdown', {
+      planId: body.planId,
+      confirmReplace: false,
+    });
+    assert.equal(rejected.ok, false);
+    if (!rejected.ok) assert.equal(rejected.error.code, 'CHANNEL_BUSY');
+
+    read.resolve({
+      storedChannelData: null,
+      currentChannelId: null,
+      lineupRevision: 0,
+      channelBuilderState: null,
+    });
+    await settleAsyncWork();
+  });
+
+  assert.deepEqual(unhandled, []);
+  assert.equal(mutationCalls, 0);
+  assert.equal(disposeCalls, 1);
+  assert.deepEqual(releasedPlanIds, [body.planId]);
+  assert.equal(operationOwner.hasActiveOperation(), false);
+  runtime.shutdown();
+  assert.equal(disposeCalls, 1);
 });
 
 test('review context churn aborts worker planning and disposes its unretained index', async () => {
@@ -374,6 +509,108 @@ test('builder runtime applies an append plan through the aggregate barrier and r
   assert.equal(committed.value?.currentChannelId, 'concurrent-channel');
   assert.equal(refreshCalls, 1);
   runtime.shutdown();
+});
+
+test('builder apply bounds a never-settling post-commit guide refresh and releases the next review', async () => {
+  const refresh = deferred<void>();
+  let disposeCalls = 0;
+  const releasedPlanIds: string[] = [];
+  const operationOwner = new ChannelBuilderOperationOwner({
+    randomHex128: idSource(),
+  });
+  const base = readyAppendBody();
+  const body: ChannelBuilderReviewedPlanBody = {
+    ...base,
+    materializationIndex: {
+      ...base.materializationIndex,
+      dispose: () => {
+        disposeCalls += 1;
+      },
+    },
+  };
+  operationOwner.retainPlan(body);
+  const runtime = new ChannelBuilderRuntime({
+    store: {
+      readChannelAggregate: async () => ({
+        storedChannelData: null,
+        currentChannelId: null,
+        lineupRevision: 0,
+        channelBuilderState: null,
+      }),
+    },
+    contextOwner: {
+      capture: () => ({
+        context: body.context,
+        selectedLibraryPairs: [{ libraryId: 'library', libraryUuid: 'uuid' }],
+      }),
+      assertCurrent: () => undefined,
+      retain: () => undefined,
+      release: (planId: string) => releasedPlanIds.push(planId),
+      shutdown: () => undefined,
+    },
+    facetSource: {},
+    planningWorker: { shutdown: () => undefined },
+    operationOwner,
+    mutationCoordinator: {
+      mutateBuilderLineup: async (input: {
+        onCommitBarrier(): 'proceed' | 'cancel';
+        mutate(current: Readonly<ChannelAggregate>): ChannelAggregate;
+      }) => {
+        assert.equal(input.onCommitBarrier(), 'proceed');
+        const aggregate = input.mutate({
+          storedChannelData: null,
+          currentChannelId: null,
+          lineupRevision: 0,
+          channelBuilderState: null,
+        });
+        return { status: 'committed', aggregate };
+      },
+    },
+    refreshGuide: async () => refresh.promise,
+    guideRefreshDeadlineMs: 0,
+    randomHex128: () => 'b'.repeat(32),
+    nowMs: () => 100,
+  } as unknown as ChannelBuilderRuntimeOptions);
+
+  const accepted = runtime.startApply('apply-never-refreshes', {
+    planId: body.planId,
+    confirmReplace: false,
+  });
+  assert.equal(accepted.ok, true);
+  if (!accepted.ok) return;
+  const operationId = accepted.value.operation.operationId;
+  await waitFor(() => operationOwner.get(operationId)?.state === 'succeeded');
+
+  const terminal = operationOwner.get(operationId);
+  assert.equal(terminal?.state, 'succeeded');
+  if (terminal?.state !== 'succeeded') return;
+  assert.equal(terminal.result.commit, 'committed');
+  assert.equal(terminal.result.guideRefresh, 'failed');
+  assert.equal(
+    terminal.result.summary.warnings.some(
+      (warning) =>
+        warning.code === 'GUIDE_REFRESH_FAILED' && warning.phase === 'refresh',
+    ),
+    true,
+  );
+  assert.equal(operationOwner.hasActiveOperation(), false);
+  assert.equal(disposeCalls, 1);
+  assert.deepEqual(releasedPlanIds, [body.planId]);
+
+  const nextReview = runtime.startReview(
+    'review-after-refresh-timeout',
+    body.normalizedConfig,
+  );
+  assert.equal(nextReview.ok, true);
+  if (nextReview.ok) {
+    await waitFor(
+      () =>
+        operationOwner.get(nextReview.value.operation.operationId)?.state ===
+        'failed',
+    );
+  }
+  runtime.shutdown();
+  assert.equal(disposeCalls, 1);
 });
 
 test('review projection cannot inherit provenance for hostile channel ids', async () => {
@@ -655,7 +892,29 @@ function hasCode(code: string): (error: unknown) => boolean {
 async function waitFor(predicate: () => boolean): Promise<void> {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     if (predicate()) return;
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
   assert.fail('Timed out waiting for builder operation.');
+}
+
+async function captureUnhandledRejections(
+  run: () => Promise<void>,
+): Promise<readonly unknown[]> {
+  const unhandled: unknown[] = [];
+  const listener = (error: unknown): void => {
+    unhandled.push(error);
+  };
+  process.on('unhandledRejection', listener);
+  try {
+    await run();
+    await settleAsyncWork();
+    return unhandled;
+  } finally {
+    process.off('unhandledRejection', listener);
+  }
+}
+
+async function settleAsyncWork(): Promise<void> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await new Promise<void>((resolve) => setImmediate(resolve));
 }

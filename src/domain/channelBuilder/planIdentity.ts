@@ -379,19 +379,16 @@ function updateCanonicalJsonV1(
   hasher: ChannelBuilderIncrementalSha256,
   value: unknown,
 ): void {
-  const chunks: string[] = [];
-  const shapeCache = new Map<string, readonly (readonly [string, string])[]>();
-  let bufferedUnits = 0;
+  let buffered = '';
+  const shapeCache: CanonicalShapeCacheNode = { children: new Map() };
   const flush = (): void => {
-    if (chunks.length === 0) return;
-    hasher.updateUtf8(chunks.join(''));
-    chunks.length = 0;
-    bufferedUnits = 0;
+    if (buffered.length === 0) return;
+    hasher.updateUtf8(buffered);
+    buffered = '';
   };
   const write = (chunk: string): void => {
-    chunks.push(chunk);
-    bufferedUnits += chunk.length;
-    if (bufferedUnits >= 65_536) flush();
+    buffered += chunk;
+    if (buffered.length >= 65_536) flush();
   };
   writeCanonicalValue(value, new Set(), shapeCache, write);
   flush();
@@ -400,7 +397,7 @@ function updateCanonicalJsonV1(
 function writeCanonicalValue(
   value: unknown,
   seen: Set<object>,
-  shapeCache: Map<string, readonly (readonly [string, string])[]>,
+  shapeCache: CanonicalShapeCacheNode,
   write: (chunk: string) => void,
 ): void {
   if (value === null) {
@@ -451,9 +448,17 @@ function writeCanonicalValue(
       throw new TypeError('Identity V1 objects must be plain records.');
     }
     const rawKeys = Object.keys(value);
-    const shapeKey = JSON.stringify(rawKeys);
-    let entries = shapeCache.get(shapeKey);
-    if (entries === undefined) {
+    let cacheNode = shapeCache;
+    for (const rawKey of rawKeys) {
+      let child = cacheNode.children.get(rawKey);
+      if (child === undefined) {
+        child = { children: new Map() };
+        cacheNode.children.set(rawKey, child);
+      }
+      cacheNode = child;
+    }
+    let shape = cacheNode.shape;
+    if (shape === undefined) {
       const normalizedKeys = new Map<string, string>();
       for (const rawKey of rawKeys) {
         const normalizedKey = rawKey.normalize('NFC');
@@ -464,17 +469,20 @@ function writeCanonicalValue(
         }
         normalizedKeys.set(normalizedKey, rawKey);
       }
-      entries = [...normalizedKeys.entries()].sort(([left], [right]) =>
-        compareCodePoints(left, right),
-      );
-      shapeCache.set(shapeKey, entries);
+      shape = {
+        entries: [...normalizedKeys.entries()]
+          .sort(([left], [right]) => compareCodePoints(left, right))
+          .map(([normalizedKey, rawKey], index) => [
+            `${index > 0 ? ',' : ''}${JSON.stringify(normalizedKey)}:`,
+            rawKey,
+          ]),
+      };
+      cacheNode.shape = shape;
     }
     write('{');
-    for (let index = 0; index < entries.length; index += 1) {
-      const [normalizedKey, rawKey] = entries[index]!;
-      if (index > 0) write(',');
-      write(JSON.stringify(normalizedKey));
-      write(':');
+    for (let index = 0; index < shape.entries.length; index += 1) {
+      const [prefix, rawKey] = shape.entries[index]!;
+      write(prefix);
       writeCanonicalValue(value[rawKey], seen, shapeCache, write);
     }
     write('}');
@@ -482,6 +490,15 @@ function writeCanonicalValue(
     seen.delete(value);
   }
 }
+
+type CanonicalObjectShape = Readonly<{
+  entries: readonly (readonly [string, string])[];
+}>;
+
+type CanonicalShapeCacheNode = {
+  children: Map<string, CanonicalShapeCacheNode>;
+  shape?: CanonicalObjectShape;
+};
 
 function identity<T extends string>(
   createSha256: ChannelBuilderIncrementalSha256Factory,
@@ -1008,6 +1025,31 @@ function hasExactOwnKeys(value: object, expected: readonly string[]): boolean {
   );
 }
 
+function hasExactOwnDataKeys(value: object, expected: readonly string[]): boolean {
+  return (
+    hasExactOwnKeys(value, expected) &&
+    expected.every((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return descriptor !== undefined && 'value' in descriptor;
+    })
+  );
+}
+
+function hasOnlyOwnDataProperties(value: object): boolean {
+  return Object.keys(value).every((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor !== undefined && 'value' in descriptor;
+  });
+}
+
+function hasDenseDataElements(values: readonly unknown[]): boolean {
+  for (let index = 0; index < values.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(values, String(index));
+    if (descriptor === undefined || !('value' in descriptor)) return false;
+  }
+  return true;
+}
+
 function normalizedFilters(
   filters: readonly ContentFilter[],
 ): readonly CanonicalJsonObject[] {
@@ -1177,6 +1219,7 @@ function isValidSafeSourceReference(
     typeof source !== 'object' ||
     Array.isArray(source) ||
     !isPlainRecord(source) ||
+    !hasOnlyOwnDataProperties(source) ||
     seen.has(source) ||
     typeof source.kind !== 'string' ||
     typeof source.sourceIdentity !== 'string' ||
@@ -1188,7 +1231,7 @@ function isValidSafeSourceReference(
   try {
     if (source.kind === 'facet') {
       const valid =
-        hasExactOwnKeys(source, ['kind', 'facetId', 'sourceIdentity']) &&
+        hasExactOwnDataKeys(source, ['kind', 'facetId', 'sourceIdentity']) &&
         (source.facetId === null ||
           (typeof source.facetId === 'string' &&
             /^(library|playlist|collection|genre|director|year|studio|actor|recently-added):[a-f0-9]{64}$/u.test(
@@ -1200,10 +1243,11 @@ function isValidSafeSourceReference(
     if (source.kind === 'manual') {
       const items = source.items;
       const valid =
-        hasExactOwnKeys(source, ['kind', 'sourceIdentity', 'items']) &&
+        hasExactOwnDataKeys(source, ['kind', 'sourceIdentity', 'items']) &&
         Array.isArray(items) &&
         items.length >= 1 &&
         items.length <= CHANNEL_BUILDER_MAX_SOURCE_LEAVES &&
+        hasDenseDataElements(items) &&
         traversal.depth + 1 <= CHANNEL_BUILDER_MAX_SOURCE_DEPTH &&
         items.every(
           (item) =>
@@ -1211,7 +1255,7 @@ function isValidSafeSourceReference(
             typeof item === 'object' &&
             !Array.isArray(item) &&
             isPlainRecord(item) &&
-            hasExactOwnKeys(item, ['kind', 'facetId', 'sourceIdentity']) &&
+            hasExactOwnDataKeys(item, ['kind', 'facetId', 'sourceIdentity']) &&
             item.kind === 'facet' &&
             item.facetId === null &&
             typeof item.sourceIdentity === 'string' &&
@@ -1224,7 +1268,7 @@ function isValidSafeSourceReference(
     }
     return (
       source.kind === 'mixed' &&
-      hasExactOwnKeys(source, [
+      hasExactOwnDataKeys(source, [
         'kind',
         'sourceIdentity',
         'mixMode',
@@ -1234,6 +1278,7 @@ function isValidSafeSourceReference(
       Array.isArray(source.sources) &&
       source.sources.length >= 1 &&
       source.sources.length <= CHANNEL_BUILDER_MAX_SOURCE_LEAVES &&
+      hasDenseDataElements(source.sources) &&
       source.sources.every((child) =>
         isValidSafeSourceReference(child, seen, {
           depth: traversal.depth + 1,
@@ -1257,12 +1302,24 @@ export type CandidateIdentityInput = Readonly<{
   blockSize: number | null;
 }>;
 
+export type CandidateIdentityPreimage = Readonly<{
+  identityVersion: 1;
+  origin: ChannelBuilderOriginBinding;
+  sourceTree: CanonicalJsonValue;
+  contentFilterIdentity: ChannelBuilderContentFilterIdentity | null;
+  sortOrder: SortOrder | null;
+  lineupReplicaIndex: number;
+  isPlaybackModeVariant: boolean;
+  variantPlaybackMode: PlaybackMode | null;
+  variantBlockSize: number | null;
+}>;
+
 export function createCandidateIdentityPreimage(
   input: CandidateIdentityInput,
-): Readonly<Record<string, CanonicalJsonValue>> {
+): CandidateIdentityPreimage {
   if (
     !isPlainRecord(input) ||
-    !hasExactOwnKeys(input, [
+    !hasExactOwnDataKeys(input, [
       'origin',
       'sourceReference',
       'contentFilterIdentity',
@@ -1275,7 +1332,7 @@ export function createCandidateIdentityPreimage(
     input.origin === null ||
     typeof input.origin !== 'object' ||
     !isPlainRecord(input.origin) ||
-    !hasExactOwnKeys(input.origin, [
+    !hasExactOwnDataKeys(input.origin, [
       'profileBinding',
       'serverBinding',
       'librarySetBinding',
@@ -1323,7 +1380,11 @@ export function createCandidateIdentityPreimage(
   const isVariant = input.isPlaybackModeVariant === true;
   return {
     identityVersion: 1,
-    origin: input.origin,
+    origin: {
+      profileBinding: input.origin.profileBinding,
+      serverBinding: input.origin.serverBinding,
+      librarySetBinding: input.origin.librarySetBinding,
+    },
     sourceTree: sourceTreeIdentity(input.sourceReference),
     contentFilterIdentity: input.contentFilterIdentity,
     sortOrder: input.sortOrder,
@@ -1345,7 +1406,7 @@ function createCandidateIdentityWithSha256(
   createSha256: ChannelBuilderIncrementalSha256Factory,
   input: CandidateIdentityInput,
 ): ChannelBuilderCandidateIdentity {
-  const bytes = canonicalJsonV1(createCandidateIdentityPreimage(input));
+  const bytes = createCandidateIdentityBytes(input);
   return identityBytes(
     createSha256,
     'candidate-identity:',
@@ -1369,7 +1430,7 @@ function createCandidateIdentityTupleWithSha256(
   createSha256: ChannelBuilderIncrementalSha256Factory,
   input: CandidateIdentityInput,
 ): CandidateIdentityTuple {
-  const bytes = canonicalJsonV1(createCandidateIdentityPreimage(input));
+  const bytes = createCandidateIdentityBytes(input);
   const hasher = createSha256();
   hasher.updateUtf8('lineup-builder/candidate-identity/v1:');
   hasher.updateUtf8(bytes);
@@ -1407,23 +1468,58 @@ function createCandidateIdWithSha256(
     occurrence: number;
   }>,
 ): ChannelBuilderCandidateId {
-  if (!Number.isSafeInteger(input.occurrence) || input.occurrence < 0) {
+  const occurrence = input.occurrence;
+  if (!Number.isSafeInteger(occurrence) || occurrence < 0) {
     throw new TypeError('Invalid candidate occurrence.');
   }
   const seed = normalizedIdentityInput(input.seed);
   const strategy = input.strategy.normalize('NFC');
-  const bytes = canonicalJsonV1({
-    candidateIdentity: input.candidateIdentity,
-    occurrence: input.occurrence,
-    seed,
-    strategy,
-  });
+  const bytes =
+    `{"candidateIdentity":${JSON.stringify(input.candidateIdentity)},` +
+    `"occurrence":${occurrence},` +
+    `"seed":${JSON.stringify(seed)},` +
+    `"strategy":${JSON.stringify(strategy)}}`;
   return identityBytes(
     createSha256,
     'candidate:',
     'lineup-builder/candidate-id/v1:',
     bytes,
   );
+}
+
+function createCandidateIdentityBytes(input: CandidateIdentityInput): string {
+  // This is the planner hot path. Keep its fixed-order encoding byte-identical
+  // to canonicalJsonV1(createCandidateIdentityPreimage(input)); the identity
+  // conformance test pins that invariant independently of the digest.
+  const preimage = createCandidateIdentityPreimage(input);
+  const origin =
+    `{"librarySetBinding":${JSON.stringify(preimage.origin.librarySetBinding)},` +
+    `"profileBinding":${JSON.stringify(preimage.origin.profileBinding)},` +
+    `"serverBinding":${JSON.stringify(preimage.origin.serverBinding)}}`;
+  const sourceTree = preimage.sourceTree !== null &&
+    typeof preimage.sourceTree === 'object' &&
+    isPlainRecord(preimage.sourceTree) &&
+    preimage.sourceTree.kind === 'facet' &&
+    typeof preimage.sourceTree.sourceIdentity === 'string'
+    ? `{"kind":"facet","sourceIdentity":${JSON.stringify(
+        preimage.sourceTree.sourceIdentity,
+      )}}`
+    : canonicalJsonV1(preimage.sourceTree);
+  return (
+    `{"contentFilterIdentity":${jsonScalar(preimage.contentFilterIdentity)},` +
+    `"identityVersion":1,` +
+    `"isPlaybackModeVariant":${String(preimage.isPlaybackModeVariant)},` +
+    `"lineupReplicaIndex":${String(preimage.lineupReplicaIndex)},` +
+    `"origin":${origin},` +
+    `"sortOrder":${jsonScalar(preimage.sortOrder)},` +
+    `"sourceTree":${sourceTree},` +
+    `"variantBlockSize":${String(preimage.variantBlockSize)},` +
+    `"variantPlaybackMode":${jsonScalar(preimage.variantPlaybackMode)}}`
+  );
+}
+
+function jsonScalar(value: string | null): string {
+  return value === null ? 'null' : JSON.stringify(value);
 }
 
 export function createPlanIdentity(

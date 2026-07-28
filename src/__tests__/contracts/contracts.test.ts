@@ -86,12 +86,14 @@ import {
   DIAGNOSTICS_ERROR_CODES,
   REDACTION_SCAN_FINDING_LABELS,
   SUPPORT_BUNDLE_SCHEMA_VERSION,
+  containsDiagnosticAbsolutePath,
   isSafeRendererDiagnosticContextValue,
+  redactDiagnosticText,
   type DiagnosticsRendererEventEnvelope,
   type DiagnosticRecord,
   type DiagnosticsError,
   type DiagnosticsResult,
-  type RedactionScanReport,
+  type PassedRedactionScanReport,
   type SupportBundleExportFailure,
   type SupportBundleExportResult,
 } from '../../contracts/diagnostics.js';
@@ -299,9 +301,9 @@ test('diagnostics result and support bundle contracts remain renderer-safe', () 
     cancelled: true,
     error: { ...error, code: 'DIAGNOSTICS_EXPORT_CANCELLED' },
   };
-  const report: RedactionScanReport = {
+  const report: PassedRedactionScanReport = {
     redactionVersion: DIAGNOSTIC_REDACTION_VERSION,
-    scannedFileCount: 4,
+    scannedFileCount: 2,
     scannedByteCount: 512,
     findingCount: 0,
     findingsByLabel: {},
@@ -315,7 +317,7 @@ test('diagnostics result and support bundle contracts remain renderer-safe', () 
     bundleId: 'bundle-1',
     bundleDirectoryName: 'lineup-desktop-support-bundle-1',
     createdAtMs: 1,
-    fileCount: 4,
+    fileCount: 2,
     byteCount: 512,
     includedFiles: ['manifest.json', 'diagnostics.ndjson'],
     redactionReport: report,
@@ -369,19 +371,24 @@ test('diagnostics truncation and scanner report vocabulary match RD-17 Unit 1', 
     exportRecords: 500,
     diagnosticsNdjsonBytes: 1_048_576,
   });
+  const unixUserPath = ['', 'Users', 'example'].join('/');
+  const windowsUserPath = ['C:', 'Users', 'example'].join('\\');
   assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN_SOURCE, '^[A-Za-z0-9._-]{1,120}$');
   assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN.test('diagnostic-request_1.2'), true);
-  assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN.test('/Users/example/request'), false);
-  assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN.test('C:\\Users\\example\\request'), false);
+  assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN.test(`${unixUserPath}/request`), false);
+  assert.equal(DIAGNOSTICS_REQUEST_ID_PATTERN.test(`${windowsUserPath}\\request`), false);
   assert.equal(
     DIAGNOSTICS_UNSAFE_RENDERER_CONTEXT_VALUE_PATTERN_SOURCE.includes('rawIpc'),
     true,
   );
   assert.equal(isSafeRendererDiagnosticContextValue('settings'), true);
-  assert.equal(isSafeRendererDiagnosticContextValue('/Users/example/private.mov'), false);
-  assert.equal(isSafeRendererDiagnosticContextValue('C:\\Users\\example\\private.mov'), false);
+  assert.equal(isSafeRendererDiagnosticContextValue(`${unixUserPath}/private.mov`), false);
+  assert.equal(isSafeRendererDiagnosticContextValue(`${windowsUserPath}\\private.mov`), false);
   assert.equal(isSafeRendererDiagnosticContextValue('\\\\server\\share\\private.mov'), false);
-  assert.equal(isSafeRendererDiagnosticContextValue('/Library/Application Support/private.mov'), false);
+  assert.equal(
+    isSafeRendererDiagnosticContextValue(['', 'Library', 'Application Support', 'private.mov'].join('/')),
+    false,
+  );
   assert.equal(isSafeRendererDiagnosticContextValue(['access_', 'token=abc123'].join('')), false);
   assert.equal(isSafeRendererDiagnosticContextValue(['oauth', 'Token=abc123'].join('')), false);
   assert.equal(isSafeRendererDiagnosticContextValue(['raw', 'IpcFrame:channel'].join('')), false);
@@ -402,6 +409,33 @@ test('diagnostics truncation and scanner report vocabulary match RD-17 Unit 1', 
     'native-handle',
     'raw-ipc-frame',
   ]);
+});
+
+test('diagnostics redacts arbitrary absolute filesystem paths without mangling ordinary text', () => {
+  const absolutePaths = [
+    ['D:', '\\', 'Movies'].join(''),
+    ['C:', '\\', 'Media', '\\', 'feature.mkv'].join(''),
+    ['\\\\', 'media-host', '\\', 'library', '\\', 'feature.mkv'].join(''),
+    ['', 'etc'].join('/'),
+    ['', 'opt', 'lineup', 'config.json'].join('/'),
+  ];
+
+  for (const absolutePath of absolutePaths) {
+    assert.equal(containsDiagnosticAbsolutePath(absolutePath), true);
+    const redacted = redactDiagnosticText(`Playback failed at ${absolutePath}`);
+    assert.equal(redacted.includes(absolutePath), false);
+    assert.match(redacted, /\[redacted\]/u);
+  }
+
+  for (const ordinaryText of [
+    'Playback failed after the library scan.',
+    'Choose audio/video settings.',
+    'Retry 2/3 after waiting.',
+    'Channel D: Movies',
+  ]) {
+    assert.equal(containsDiagnosticAbsolutePath(ordinaryText), false);
+    assert.equal(redactDiagnosticText(ordinaryText), ordinaryText);
+  }
 });
 
 test('player command, event, and snapshot contracts carry request ids', () => {

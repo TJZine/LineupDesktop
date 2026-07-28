@@ -29,7 +29,7 @@ import type { PrivilegedPlaybackDispatchContext } from '../../../main/player/pri
 class FakeNativePlayerHost implements NativePlayerHostPort {
   readonly commands: PlayerCommand[] = [];
   readonly cleanupRequestIds: Array<string | null> = [];
-  private readonly eventListeners = new Set<(event: NativePlayerHostEvent) => void>();
+  private readonly eventListeners = new Set<(event: unknown) => void>();
   executeResult: NativePlayerHostCommandResult = { ok: true };
   cleanupError: Error | null = null;
 
@@ -45,14 +45,14 @@ class FakeNativePlayerHost implements NativePlayerHostPort {
     }
   }
 
-  onEvent(listener: (event: NativePlayerHostEvent) => void): () => void {
+  onEvent(listener: (event: unknown) => void): () => void {
     this.eventListeners.add(listener);
     return () => {
       this.eventListeners.delete(listener);
     };
   }
 
-  emitEvent(event: NativePlayerHostEvent): void {
+  emitEvent(event: unknown): void {
     for (const listener of [...this.eventListeners]) {
       listener(event);
     }
@@ -177,6 +177,42 @@ function privilegedContext(requestId = 'request-load-1'): PrivilegedPlaybackDisp
       },
     },
   };
+}
+
+function loadedPlayingBatch(requestId: string): readonly NativePlayerHostEvent[] {
+  return [
+    {
+      type: 'media.loaded',
+      requestId,
+      media,
+      durationMs: 120_000,
+      tracks: [audioTrack],
+    },
+    {
+      type: 'playback.state',
+      requestId,
+      status: 'playing',
+      playing: true,
+    },
+  ];
+}
+
+function malformedLoadBatch(requestId: string): readonly unknown[] {
+  return [
+    {
+      type: 'media.loaded',
+      requestId,
+      media: { ...media, id: 'media-replacement' },
+      durationMs: 120_000,
+      tracks: [audioTrack],
+    },
+    {
+      type: 'time.updated',
+      requestId,
+      positionMs: -1,
+      durationMs: 120_000,
+    },
+  ];
 }
 
 function emptyEnvelope(
@@ -716,6 +752,272 @@ test('desktop player adapter rejects invalid host events before mutation', async
   assertNoForbiddenKeys(after);
 });
 
+test('desktop player adapter rejects a malformed returned event batch atomically', async () => {
+  for (const dispatchKind of ['renderer', 'runtime'] as const) {
+    const host = new FakeNativePlayerHost();
+    const adapter = new DesktopPlayerAdapter(host);
+    await adapter.dispatchRendererIntent(loadEnvelope(`request-${dispatchKind}-load`));
+    const before = adapter.getSnapshot();
+    host.executeResult = {
+      ok: true,
+      events: [
+        {
+          type: 'time.updated',
+          requestId: before.requestId,
+          positionMs: 42_000,
+          durationMs: 120_000,
+        },
+        {
+          type: 'time.updated',
+          requestId: before.requestId,
+          positionMs: -1,
+          durationMs: 120_000,
+        },
+      ],
+    };
+
+    const result =
+      dispatchKind === 'renderer'
+        ? await adapter.dispatchRendererIntent({
+            intent: 'player.setVolume',
+            requestId: `request-${dispatchKind}-volume`,
+            payload: { volume: 0.25 },
+          })
+        : await adapter.dispatchRuntimeCommand({
+            command: 'volume.set',
+            requestId: `request-${dispatchKind}-volume`,
+            payload: { volume: 0.25 },
+          });
+
+    assert.equal(result.accepted, true);
+    assert.deepEqual(result.snapshot, before);
+    assert.deepEqual(adapter.getSnapshot(), before);
+    assert.equal(result.events.filter((event) => event.event === 'error').length, 1);
+    assert.equal(result.events.filter((event) => event.event === 'time.updated').length, 0);
+    assert.equal(
+      result.events.filter((event) => event.event === 'command.settled' && !event.ok).length,
+      1,
+    );
+    assert.equal(
+      result.events.some((event) => event.event === 'command.settled' && event.ok),
+      false,
+    );
+    assertErrorEvent(result.events, 'validation-failure');
+    assertNoForbiddenKeys(result);
+  }
+});
+
+test('desktop player adapter rejects a non-array returned event batch atomically', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRendererIntent(loadEnvelope('request-non-array-load'));
+  const before = adapter.getSnapshot();
+  host.executeResult = {
+    ok: true,
+    events: {
+      type: 'time.updated',
+      requestId: 'request-non-array-load',
+      positionMs: 42_000,
+      durationMs: 120_000,
+    },
+  };
+
+  const result = await adapter.dispatchRendererIntent({
+    intent: 'player.setVolume',
+    requestId: 'request-non-array-volume',
+    payload: { volume: 0.25 },
+  });
+
+  assert.deepEqual(result.snapshot, before);
+  assert.deepEqual(adapter.getSnapshot(), before);
+  assert.equal(result.events.some((event) => event.event === 'time.updated'), false);
+  const errorEvent = assertErrorEvent(result.events, 'validation-failure');
+  assert.equal(errorEvent.event === 'error' ? errorEvent.error.code : null, 'PLAYER_VALIDATION_FAILED');
+  assert.equal(
+    result.events.some((event) => event.event === 'command.settled' && !event.ok),
+    true,
+  );
+  assertNoForbiddenKeys(result);
+});
+
+test('desktop player adapter restores the prior snapshot after a malformed renderer load batch', async () => {
+  const host = new FakeNativePlayerHost();
+  host.executeResult = { ok: true, events: loadedPlayingBatch('request-renderer-prior') };
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRendererIntent(loadEnvelope('request-renderer-prior'));
+  const before = adapter.getSnapshot();
+  host.executeResult = {
+    ok: true,
+    events: malformedLoadBatch('request-renderer-malformed'),
+  };
+
+  const result = await adapter.dispatchRendererIntent(loadEnvelope('request-renderer-malformed'));
+
+  assert.equal(result.accepted, true);
+  assert.deepEqual(result.snapshot, before);
+  assert.deepEqual(adapter.getSnapshot(), before);
+  assert.equal(result.events.some((event) => event.event === 'media.loaded'), false);
+  assert.equal(
+    result.events.some((event) => event.event === 'command.settled' && !event.ok),
+    true,
+  );
+  const finalStateEvent = result.events.filter((event) => event.event === 'state.changed').at(-1);
+  assert.equal(finalStateEvent?.event, 'state.changed');
+  if (finalStateEvent?.event === 'state.changed') {
+    assert.deepEqual(finalStateEvent.snapshot, before);
+  }
+  assertErrorEvent(result.events, 'validation-failure');
+  assertNoForbiddenKeys(result);
+});
+
+test('desktop player adapter replaces malformed helper correlation with command custody', async () => {
+  const host = new FakeNativePlayerHost();
+  const helperRequestId = 'raw-helper-correlation';
+  host.executeResult = {
+    ok: true,
+    events: [
+      {
+        type: 'time.updated',
+        requestId: helperRequestId,
+        positionMs: -1,
+        durationMs: 120_000,
+        tokenizedUrl: 'opaque-privileged-marker',
+      },
+    ],
+  };
+  const adapter = new DesktopPlayerAdapter(host);
+
+  const result = await adapter.dispatchRendererIntent(
+    emptyEnvelope('player.play', 'request-command-custody'),
+  );
+
+  const serialized = JSON.stringify(result);
+  assert.equal(serialized.includes(helperRequestId), false);
+  assert.equal(serialized.includes('opaque-privileged-marker'), false);
+  const errorEvent = assertErrorEvent(result.events, 'validation-failure');
+  assert.equal(errorEvent.event === 'error' ? errorEvent.error.requestId : null, 'request-command-custody');
+  const settlement = result.events.find((event) => event.event === 'command.settled');
+  assert.equal(settlement?.event === 'command.settled' ? settlement.requestId : null, 'request-command-custody');
+  assert.equal(
+    settlement?.event === 'command.settled' && !settlement.ok
+      ? settlement.error?.requestId
+      : null,
+    'request-command-custody',
+  );
+  assertNoForbiddenKeys(result);
+});
+
+test('desktop player adapter restores the prior snapshot after a malformed privileged runtime load batch', async () => {
+  const host = new FakeNativePlayerHost();
+  host.executeResult = { ok: true, events: loadedPlayingBatch('request-runtime-prior') };
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('request-runtime-prior'),
+    privilegedContext('request-runtime-prior'),
+  );
+  const before = adapter.getSnapshot();
+  host.executeResult = {
+    ok: true,
+    events: malformedLoadBatch('request-runtime-malformed'),
+  };
+
+  const result = await adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('request-runtime-malformed'),
+    privilegedContext('request-runtime-malformed'),
+  );
+
+  assert.equal(result.accepted, true);
+  assert.deepEqual(result.snapshot, before);
+  assert.deepEqual(adapter.getSnapshot(), before);
+  assert.equal(result.events.some((event) => event.event === 'media.loaded'), false);
+  assert.equal(
+    result.events.some((event) => event.event === 'command.settled' && !event.ok),
+    true,
+  );
+  const finalStateEvent = result.events.filter((event) => event.event === 'state.changed').at(-1);
+  assert.equal(finalStateEvent?.event, 'state.changed');
+  if (finalStateEvent?.event === 'state.changed') {
+    assert.deepEqual(finalStateEvent.snapshot, before);
+  }
+  assertErrorEvent(result.events, 'validation-failure');
+  assertNoForbiddenKeys(result);
+});
+
+test('desktop player adapter restores stable state after overlapping malformed renderer loads', async () => {
+  const host = new DeferredNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  const priorDispatch = adapter.dispatchRendererIntent(loadEnvelope('request-renderer-stable'));
+  host.resolveNext({ ok: true, events: loadedPlayingBatch('request-renderer-stable') });
+  await priorDispatch;
+  const stable = adapter.getSnapshot();
+
+  const first = adapter.dispatchRendererIntent(loadEnvelope('request-renderer-overlap-a'));
+  const second = adapter.dispatchRendererIntent(loadEnvelope('request-renderer-overlap-b'));
+  host.resolveNext({
+    ok: true,
+    events: malformedLoadBatch('request-renderer-overlap-a'),
+  });
+  await first;
+  assert.equal(adapter.getSnapshot().requestId, 'request-renderer-overlap-b');
+
+  host.resolveNext({
+    ok: true,
+    events: malformedLoadBatch('request-renderer-overlap-b'),
+  });
+  const result = await second;
+
+  assert.deepEqual(result.snapshot, stable);
+  assert.deepEqual(adapter.getSnapshot(), stable);
+  assertErrorEvent(result.events, 'validation-failure');
+  assert.equal(
+    result.events.some((event) => event.event === 'command.settled' && !event.ok),
+    true,
+  );
+  assertNoForbiddenKeys(result);
+});
+
+test('desktop player adapter restores stable state after overlapping malformed privileged runtime loads', async () => {
+  const host = new DeferredNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  const priorDispatch = adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('request-runtime-stable'),
+    privilegedContext('request-runtime-stable'),
+  );
+  host.resolveNext({ ok: true, events: loadedPlayingBatch('request-runtime-stable') });
+  await priorDispatch;
+  const stable = adapter.getSnapshot();
+
+  const first = adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('request-runtime-overlap-a'),
+    privilegedContext('request-runtime-overlap-a'),
+  );
+  const second = adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('request-runtime-overlap-b'),
+    privilegedContext('request-runtime-overlap-b'),
+  );
+  host.resolveNext({
+    ok: true,
+    events: malformedLoadBatch('request-runtime-overlap-a'),
+  });
+  await first;
+  assert.equal(adapter.getSnapshot().requestId, 'request-runtime-overlap-b');
+
+  host.resolveNext({
+    ok: true,
+    events: malformedLoadBatch('request-runtime-overlap-b'),
+  });
+  const result = await second;
+
+  assert.deepEqual(result.snapshot, stable);
+  assert.deepEqual(adapter.getSnapshot(), stable);
+  assertErrorEvent(result.events, 'validation-failure');
+  assert.equal(
+    result.events.some((event) => event.event === 'command.settled' && !event.ok),
+    true,
+  );
+  assertNoForbiddenKeys(result);
+});
+
 test('desktop player adapter excludes forbidden fields from host events and errors', async () => {
   const host = new FakeNativePlayerHost();
   const adapter = new DesktopPlayerAdapter(host);
@@ -754,6 +1056,27 @@ test('desktop player adapter excludes forbidden fields from host events and erro
   assertNoForbiddenKeys(adapter.getSnapshot());
 });
 
+test('desktop player adapter binds malformed asynchronous events to active request custody', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRendererIntent(loadEnvelope('request-active-custody'));
+
+  const events = adapter.handleHostEvent({
+    type: 'time.updated',
+    requestId: 'raw-helper-correlation',
+    positionMs: -1,
+    durationMs: 10_000,
+    nativeHandle: 'opaque-privileged-marker',
+  });
+
+  const serialized = JSON.stringify(events);
+  assert.equal(serialized.includes('raw-helper-correlation'), false);
+  assert.equal(serialized.includes('opaque-privileged-marker'), false);
+  const errorEvent = assertErrorEvent(events, 'validation-failure');
+  assert.equal(errorEvent.event === 'error' ? errorEvent.error.requestId : null, 'request-active-custody');
+  assertNoForbiddenKeys(events);
+});
+
 test('desktop player adapter normalizes host failure strings before renderer exposure', async () => {
   const host = new FakeNativePlayerHost();
   const diagnostics = new DiagnosticEventStore({ clock: () => 3_000, idGenerator: () => 'adapter-host-failure' });
@@ -784,7 +1107,8 @@ test('desktop player adapter normalizes host failure strings before renderer exp
     }),
     true,
   );
-  assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 1);
+  assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 0);
+  assert.equal(diagnostics.getRecords().some((record) => record.category === 'playback'), true);
   assertTextAbsent(diagnostics.getRecords(), 'RAW_NATIVE_HANDLE');
 });
 
@@ -818,7 +1142,8 @@ test('desktop player adapter shared diagnostics summary counts one helper crash 
 
   assertErrorEvent(result.events, 'helper-failure');
   assert.equal(diagnostics.getCrashRecoverySummary().helperCrashCount, 1);
-  assert.equal(diagnostics.getCrashRecoverySummary().events.filter((event) => event.category === 'helper-crash').length, 2);
+  assert.equal(diagnostics.getCrashRecoverySummary().events.filter((event) => event.category === 'helper-crash').length, 1);
+  assert.equal(diagnostics.getRecords().filter((event) => event.category === 'playback').length, 1);
   assertTextAbsent(diagnostics.getRecords(), 'raw helper close detail');
 });
 

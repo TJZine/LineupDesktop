@@ -202,6 +202,40 @@ test('scheduler domain preserves current next previous lookup and schedule windo
   );
 });
 
+test('scheduler domain rejects invalid upcoming counts and non-finite window endpoints', () => {
+  const scheduler = new ChannelScheduler({
+    clock: new FakeClock(1_015_000),
+  });
+  scheduler.loadChannel(config());
+
+  const output: ReturnType<typeof scheduler.getUpcoming> = [];
+  assert.equal(scheduler.getUpcoming(0, output), output);
+  assert.deepEqual(output, []);
+
+  for (const count of [
+    -1,
+    1.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+  ]) {
+    assert.throws(() => scheduler.getUpcoming(count), {
+      name: 'RangeError',
+      message: 'Upcoming count must be a non-negative integer',
+    });
+  }
+
+  for (const [startTime, endTime] of [
+    [Number.NaN, 1_020_000],
+    [1_005_000, Number.POSITIVE_INFINITY],
+    [Number.NEGATIVE_INFINITY, 1_020_000],
+  ]) {
+    assert.throws(() => scheduler.getScheduleWindow(startTime, endTime), {
+      message: SCHEDULER_ERROR_MESSAGES.INVALID_TIME_RANGE,
+    });
+  }
+});
+
 test('scheduler domain snapshots clock once for public read metadata', () => {
   const scheduler = new ChannelScheduler({
     clock: new SequenceClock([

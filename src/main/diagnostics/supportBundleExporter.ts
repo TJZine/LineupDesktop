@@ -8,6 +8,7 @@ import {
   SUPPORT_BUNDLE_SCHEMA_VERSION,
   type DiagnosticContextValue,
   type DiagnosticsError,
+  type PassedRedactionScanReport,
   type RedactionScanReport,
   type SupportBundleExportFailure,
   type SupportBundleExportResult,
@@ -99,7 +100,7 @@ export class SupportBundleExporter {
       await this.writeBundleFiles(target.bundleDirectoryPath, files);
 
       const preliminaryReport = await this.scanBundle(target.bundleDirectoryPath, diagnostics, createdAtMs);
-      if (preliminaryReport.status === 'failed') {
+      if (!isPassedRedactionScanReport(preliminaryReport)) {
         await this.cleanupBundle(target.bundleDirectoryPath);
         this.#options.eventStore.recordExportStatus('failed', preliminaryReport);
         return createExportFailure(
@@ -119,7 +120,7 @@ export class SupportBundleExporter {
       files.set('redaction-report.json', redactionReportContent);
 
       const finalReport = await this.scanBundle(target.bundleDirectoryPath, diagnostics, createdAtMs);
-      if (finalReport.status === 'failed') {
+      if (!isPassedRedactionScanReport(finalReport)) {
         await this.cleanupBundle(target.bundleDirectoryPath);
         this.#options.eventStore.recordExportStatus('failed', finalReport);
         return createExportFailure(
@@ -273,6 +274,12 @@ export class SupportBundleExporter {
       // Export failures must stay renderer-safe; cleanup best-effort is enough here.
     }
   }
+}
+
+function isPassedRedactionScanReport(
+  report: RedactionScanReport,
+): report is PassedRedactionScanReport {
+  return report.status === 'passed';
 }
 
 const NODE_SUPPORT_BUNDLE_FILE_SYSTEM: SupportBundleFileSystem = {

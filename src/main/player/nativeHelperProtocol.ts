@@ -1,6 +1,5 @@
 import type { PlayerCommandName, PlayerRequestId } from '../../contracts/player.js';
 import type { NativeHelperPlaybackSetup } from './nativeHelperPlaybackSetup.js';
-import type { NativePlayerHostEvent } from './nativePlayerHostPort.js';
 
 export const MAX_HELPER_MESSAGE_SIZE = 1024 * 1024; // 1MB
 
@@ -28,7 +27,7 @@ export type NativeHelperOutputMessage =
       type: 'result';
       requestId: PlayerRequestId;
       ok: true;
-      events?: readonly NativePlayerHostEvent[];
+      events?: unknown;
     }
   | {
       type: 'result';
@@ -44,7 +43,7 @@ export type NativeHelperOutputMessage =
     }
   | {
       type: 'event';
-      event: NativePlayerHostEvent;
+      event: unknown;
     };
 
 export function validateHelperMessageSize(messageStr: string): void {

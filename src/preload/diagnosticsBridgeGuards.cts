@@ -350,7 +350,11 @@ export function isDiagnosticsExportSupportBundleResult(
       isFiniteNonNegativeNumber(value.byteCount) &&
       Array.isArray(value.includedFiles) &&
       value.includedFiles.every(isSafeBundleFileName) &&
-      isRedactionScanReport(value.redactionReport)
+      isRedactionScanReport(value.redactionReport) &&
+      isPlainRecord(value.redactionReport) &&
+      value.redactionReport.status === 'passed' &&
+      value.fileCount === value.includedFiles.length &&
+      value.fileCount === value.redactionReport.scannedFileCount
     );
   }
   return (
@@ -399,7 +403,29 @@ function isRedactionScanReport(value: unknown): boolean {
     isFiniteNonNegativeNumber(value.truncatedRecordCount) &&
     isFiniteNonNegativeNumber(value.omittedFileCount) &&
     (value.status === 'passed' || value.status === 'failed') &&
-    isFiniteNonNegativeNumber(value.timestampMs)
+    isFiniteNonNegativeNumber(value.timestampMs) &&
+    hasConsistentRedactionFindings(value)
+  );
+}
+
+function hasConsistentRedactionFindings(value: Record<string, unknown>): boolean {
+  if (
+    !isFiniteNonNegativeNumber(value.findingCount) ||
+    !isPlainRecord(value.findingsByLabel) ||
+    (value.status !== 'passed' && value.status !== 'failed')
+  ) {
+    return false;
+  }
+  let reportedFindingCount = 0;
+  for (const count of Object.values(value.findingsByLabel)) {
+    if (!isFiniteNonNegativeNumber(count)) {
+      return false;
+    }
+    reportedFindingCount += count;
+  }
+  return (
+    reportedFindingCount === value.findingCount &&
+    (value.status === 'passed') === (value.findingCount === 0)
   );
 }
 

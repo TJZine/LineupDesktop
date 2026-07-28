@@ -1,4 +1,5 @@
 import { PlexAuthError } from './plexAuthError.js';
+import { decodeXmlEntities } from './plexXmlFallback.js';
 
 const SWITCH_TOKEN_KEYS = ['authToken', 'authenticationToken', 'token'] as const;
 const SWITCH_PAYLOAD_CONTAINER_KEYS = new Set(['mediacontainer', 'user', 'homeuser']);
@@ -103,14 +104,18 @@ function readTokenFromXmlNode(node: Element | null | undefined): string | null {
 function parseSwitchTokenText(payload: string): string | null {
   for (const key of SWITCH_TOKEN_KEYS) {
     const escapedKey = escapeRegExp(key);
-    const attrMatch = payload.match(new RegExp(`${escapedKey}=["']([^"']+)["']`, 'i'));
-    if (attrMatch?.[1]) {
-      return attrMatch[1];
+    const attrRegex = new RegExp(`${escapedKey}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, 'gi');
+    for (const attrMatch of payload.matchAll(attrRegex)) {
+      const attrValue = decodeXmlEntities(attrMatch[2] ?? '').trim();
+      if (attrValue) {
+        return attrValue;
+      }
     }
 
     const nodeMatch = payload.match(new RegExp(`<${escapedKey}>([^<]+)</${escapedKey}>`, 'i'));
-    if (nodeMatch?.[1]) {
-      return nodeMatch[1];
+    const nodeValue = decodeXmlEntities(nodeMatch?.[1] ?? '').trim();
+    if (nodeValue) {
+      return nodeValue;
     }
   }
 

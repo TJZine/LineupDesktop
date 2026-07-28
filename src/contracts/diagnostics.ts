@@ -189,6 +189,10 @@ export interface RedactionScanReport {
   timestampMs: number;
 }
 
+export type PassedRedactionScanReport = RedactionScanReport & {
+  status: 'passed';
+};
+
 export interface SupportBundleExportResult {
   status: 'succeeded';
   bundleId: string;
@@ -197,7 +201,7 @@ export interface SupportBundleExportResult {
   fileCount: number;
   byteCount: number;
   includedFiles: readonly string[];
-  redactionReport: RedactionScanReport;
+  redactionReport: PassedRedactionScanReport;
 }
 
 export interface SupportBundleExportFailure {
@@ -326,10 +330,6 @@ const DIAGNOSTIC_CREDENTIAL_SCHEME_PATTERN_REGEXP = new RegExp(
   'giu',
 );
 const DIAGNOSTIC_URL_PATTERN = /https?:\/\/[^\s"')]+/giu;
-const DIAGNOSTIC_RAW_FILESYSTEM_PATH_WITH_SPACES_PATTERN =
-  /(?:[A-Za-z]:\\(?:Users|ProgramData|Windows|Temp|tmp)\\[^\r\n"')]*?\.[A-Za-z0-9]{1,8}|\/(?:Users|home|var|tmp|private|Volumes)\/[^\r\n"')]*?\.[A-Za-z0-9]{1,8})/gu;
-const DIAGNOSTIC_RAW_FILESYSTEM_PATH_PATTERN =
-  /(?:[A-Za-z]:\\(?:Users|ProgramData|Windows|Temp|tmp)\\[^\s"')]+|\/(?:Users|home|var|tmp|private|Volumes)\/[^\s"')]+)/gu;
 const DIAGNOSTIC_FREEFORM_PROCESS_NATIVE_IPC_PATTERN = new RegExp(
   String.raw`(?<![\w-])\b(?:pid|process|argv|env|stderr|stdout|crashDump|minidump|rawLog|nativeHandle|libmpvObject|engineId)[-:\s]+\d{2,}\b|(?<![\w-])\brawIpc[-:\s]+(?:channel\s+)?[^\s"')]+`,
   'giu',
@@ -372,7 +372,7 @@ export function truncateDiagnosticString(
 }
 
 export function redactDiagnosticText(value: string): string {
-  return value
+  const redacted = value
     .replace(DIAGNOSTIC_JSON_QUOTED_ESCAPED_KEY_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
     .replace(DIAGNOSTIC_JSON_QUOTED_KEY_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
     .replace(DIAGNOSTIC_AUTH_HEADER_OBJECT_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
@@ -382,11 +382,75 @@ export function redactDiagnosticText(value: string): string {
     .replace(DIAGNOSTIC_TOKEN_QUERY_PARAM_PATTERN, `$1${REDACTED_DIAGNOSTIC_VALUE}`)
     .replace(DIAGNOSTIC_CREDENTIAL_SCHEME_PATTERN_REGEXP, `$1 ${REDACTED_DIAGNOSTIC_VALUE}`)
     .replace(DIAGNOSTIC_URL_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
-    .replace(DIAGNOSTIC_RAW_FILESYSTEM_PATH_WITH_SPACES_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
-    .replace(DIAGNOSTIC_RAW_FILESYSTEM_PATH_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
     .replace(DIAGNOSTIC_FREEFORM_PROCESS_NATIVE_IPC_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
     .replace(DIAGNOSTIC_FREEFORM_CREDENTIAL_VALUE_PATTERN, REDACTED_DIAGNOSTIC_VALUE)
     .replace(DIAGNOSTIC_KEYWORD_PATTERN, REDACTED_DIAGNOSTIC_VALUE);
+  return redactDiagnosticAbsolutePaths(redacted);
+}
+
+export function containsDiagnosticAbsolutePath(value: string): boolean {
+  return findDiagnosticAbsolutePathStart(value, 0) !== -1;
+}
+
+function redactDiagnosticAbsolutePaths(value: string): string {
+  let cursor = 0;
+  let output = '';
+  while (cursor < value.length) {
+    const pathStart = findDiagnosticAbsolutePathStart(value, cursor);
+    if (pathStart === -1) {
+      output += value.slice(cursor);
+      break;
+    }
+    const pathEnd = findDiagnosticAbsolutePathEnd(value, pathStart);
+    output += value.slice(cursor, pathStart) + REDACTED_DIAGNOSTIC_VALUE;
+    cursor = pathEnd;
+  }
+  return output;
+}
+
+function findDiagnosticAbsolutePathStart(value: string, fromIndex: number): number {
+  for (let index = fromIndex; index < value.length; index += 1) {
+    if (!isDiagnosticPathStartBoundary(value[index - 1])) {
+      continue;
+    }
+    const current = value[index];
+    const next = value[index + 1];
+    const afterNext = value[index + 2];
+    const isDrivePath =
+      current !== undefined &&
+      /^[A-Za-z]$/u.test(current) &&
+      next === ':' &&
+      (afterNext === '\\' || afterNext === '/');
+    const isUncPath = current === '\\' && next === '\\';
+    const isUnixPath =
+      current === '/' &&
+      next !== undefined &&
+      next !== '/' &&
+      next !== '"' &&
+      !/\s/u.test(next);
+    if (isDrivePath || isUncPath || isUnixPath) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function findDiagnosticAbsolutePathEnd(value: string, pathStart: number): number {
+  let end = pathStart;
+  while (end < value.length && value[end] !== '\r' && value[end] !== '\n' && value[end] !== '"') {
+    end += 1;
+  }
+  if (value[end] === '"') {
+    return end;
+  }
+  while (end > pathStart && /\s/u.test(value[end - 1] ?? '')) {
+    end -= 1;
+  }
+  return end;
+}
+
+function isDiagnosticPathStartBoundary(value: string | undefined): boolean {
+  return value === undefined || !/[\p{L}\p{N}._~+/\\-]/u.test(value);
 }
 
 export function sanitizeDiagnosticOperation(value: string): {

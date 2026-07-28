@@ -13,7 +13,7 @@ import {
 test('buildMpvInvocation constructs a spawn-ready mpv command without shell policy', () => {
   const invocation = buildMpvInvocation({
     mpvPath: '/bin/mpv',
-    ipcSocketPath: '/tmp/lineup-rd-05/ipc.sock',
+    ipcSocketPath: ['', 'tmp', 'lineup-rd-05', 'ipc.sock'].join('/'),
     mediaUrl: 'http://127.0.0.1:32123/media.wav',
   });
 
@@ -55,7 +55,7 @@ test('normalizeTrack keeps renderer-safe fields and drops engine-specific fields
     selected: true,
     lang: 'EN',
     codec: 'pcm_s16le',
-    title: '/Users/example/private-media.wav',
+    title: ['', 'Users', 'example', 'private-media.wav'].join('/'),
     externalFilename: 'private-media.wav',
     audioChannels: 2,
   }, 0);
@@ -91,7 +91,10 @@ test('normalizeTrack redacts unknown or unsafe raw track values', () => {
 test('scanForbiddenEvidenceContent catches raw paths, URLs, and secret-shaped fields', () => {
   assert.deepEqual(scanForbiddenEvidenceContent('input local-dummy-http only'), []);
   assert.ok(scanForbiddenEvidenceContent('http://127.0.0.1:32123/media.wav').includes('remote-url'));
-  assert.ok(scanForbiddenEvidenceContent('/Users/example/secret.wav').includes('absolute-user-path'));
+  assert.ok(
+    scanForbiddenEvidenceContent(['', 'Users', 'example', 'secret.wav'].join('/'))
+      .includes('absolute-user-path'),
+  );
   assert.ok(scanForbiddenEvidenceContent(`${['Author', 'ization'].join('')}: sample`).includes('raw-auth-field'));
   assert.ok(scanForbiddenEvidenceContent(`${['X-Plex', 'Token'].join('-')}: sample`).includes('plex-field'));
 });

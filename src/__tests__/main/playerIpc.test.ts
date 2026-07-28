@@ -436,6 +436,69 @@ test('development and smoke player IPC dispatches through fake host and emits sa
   assertNoForbiddenKeys(events);
 });
 
+test('development player host keeps playback events scoped to the active load request', async () => {
+  const ipcMain = new FakeIpcMain();
+  const events: PlayerEvent[] = [];
+  registerPlayerIpcHandlers({
+    shellMode: 'development',
+    isAuthorizedEvent,
+    sendPlayerEvent: (event) => events.push(event),
+    createRequestId,
+    ipcMain,
+  });
+
+  await ipcMain.invoke(
+    LINEUP_PLAYER_COMMAND_CHANNEL,
+    authorizedEvent(),
+    loadEnvelope('player-active-load'),
+  );
+  const commands = [
+    { intent: 'player.pause', requestId: 'player-pause', payload: {} },
+    { intent: 'player.play', requestId: 'player-play', payload: {} },
+    {
+      intent: 'player.seekAbsolute',
+      requestId: 'player-seek',
+      payload: { positionMs: 500 },
+    },
+    {
+      intent: 'player.setVolume',
+      requestId: 'player-volume',
+      payload: { volume: 0.4 },
+    },
+    {
+      intent: 'player.setMute',
+      requestId: 'player-mute',
+      payload: { muted: true },
+    },
+    { intent: 'player.stop', requestId: 'player-stop', payload: {} },
+  ];
+  const results = [];
+  for (const command of commands) {
+    results.push(
+      await ipcMain.invoke(LINEUP_PLAYER_COMMAND_CHANNEL, authorizedEvent(), command),
+    );
+  }
+
+  assert.equal((results[0] as { value: { snapshot: { status: string } } }).value.snapshot.status, 'paused');
+  assert.equal((results[1] as { value: { snapshot: { status: string } } }).value.snapshot.status, 'playing');
+  assert.equal((results[2] as { value: { snapshot: { positionMs: number } } }).value.snapshot.positionMs, 500);
+  assert.equal((results[3] as { value: { snapshot: { volume: number } } }).value.snapshot.volume, 0.4);
+  assert.equal((results[4] as { value: { snapshot: { muted: boolean } } }).value.snapshot.muted, true);
+  assert.equal((results[5] as { value: { snapshot: { status: string } } }).value.snapshot.status, 'ended');
+  assert.equal(
+    events.some((event) => event.event === 'warning' && event.warning.category === 'stale-request'),
+    false,
+  );
+  assert.equal(
+    events
+      .filter((event) => event.event === 'state.changed')
+      .every((event) => event.requestId === 'player-active-load'),
+    true,
+  );
+  assertNoForbiddenKeys(results);
+  assertNoForbiddenKeys(events);
+});
+
 test('player IPC emits renderer-safe error when helper lifecycle fails asynchronously', async () => {
   const ipcMain = new FakeIpcMain();
   const host = new LifecycleNativeHost();

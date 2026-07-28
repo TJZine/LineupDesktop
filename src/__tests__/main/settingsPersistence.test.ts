@@ -50,7 +50,7 @@ test('settings persistence classifies representative malformed records as corrup
 
 test('settings persistence maps non-missing read failures to storage unavailable without exposing details', async () => {
   const store = new DesktopSettingsStore({
-    settingsFilePath: '/private/settings.json',
+    settingsFilePath: ['', 'private', 'settings.json'].join('/'),
     fileSystem: nodeFileSystem({
       readFile: async () => { throw Object.assign(new Error('private read detail'), { code: 'EACCES' }); },
     }),

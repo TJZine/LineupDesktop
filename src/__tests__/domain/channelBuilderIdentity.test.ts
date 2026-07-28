@@ -4,6 +4,8 @@ import {
   canonicalJsonV1,
   createCandidateId,
   createCandidateIdentity,
+  createCandidateIdentityPreimage,
+  createCandidateIdentityTuple,
   createContentFilterIdentity,
   findByteEqualCandidateTupleIndex,
   createFacetIdentity,
@@ -15,6 +17,7 @@ import {
   createSourceIdentity,
   createTagSemanticGroupIdentity,
   sha256HexV1,
+  type CandidateIdentityInput,
 } from '../../domain/channelBuilder/index.js';
 
 describe('Channel Builder Identity V1', () => {
@@ -404,16 +407,21 @@ describe('Channel Builder Identity V1', () => {
       sourceIdentity,
       'source:aaa337d0a488a2562359929d182167f62635bfd86318e1b50996aed8d194e554',
     );
-    const candidateIdentity = createCandidateIdentity({
+    const candidateInput = {
       origin: { profileBinding, serverBinding, librarySetBinding },
       sourceReference: { kind: 'facet', facetId, sourceIdentity },
       contentFilterIdentity: null,
       sortOrder: null,
       lineupReplicaIndex: null,
       isPlaybackModeVariant: null,
-      playbackMode: 'shuffle',
+      playbackMode: 'shuffle' as const,
       blockSize: null,
-    });
+    } as const;
+    const candidateIdentity = createCandidateIdentity(candidateInput);
+    assert.equal(
+      createCandidateIdentityTuple(candidateInput).bytes,
+      canonicalJsonV1(createCandidateIdentityPreimage(candidateInput)),
+    );
     assert.equal(
       candidateIdentity,
       'candidate-identity:ebcb958e4f6304cdc59d5382c21fc1c7a9038979f22a2d7cfc0056d51b41b64b',
@@ -487,6 +495,103 @@ describe('Channel Builder Identity V1', () => {
         blockSize: null,
         unknown: true,
       } as never),
+    );
+  });
+
+  it('encodes only validated candidate projections across source and variant shapes', () => {
+    const origin = {
+      profileBinding: createProfileBinding('profile-1'),
+      serverBinding: createServerBinding('server-1'),
+      librarySetBinding: createLibrarySetBinding([
+        { libraryId: '1', libraryUuid: 'uuid-1' },
+      ]),
+    };
+    const leaf = {
+      kind: 'facet' as const,
+      facetId: null,
+      sourceIdentity: `source:${'1'.repeat(64)}` as const,
+    };
+    const inputs = [
+      {
+        origin,
+        sourceReference: leaf,
+        contentFilterIdentity: null,
+        sortOrder: null,
+        lineupReplicaIndex: null,
+        isPlaybackModeVariant: null,
+        playbackMode: 'shuffle',
+        blockSize: null,
+      },
+      {
+        origin,
+        sourceReference: {
+          kind: 'manual',
+          sourceIdentity: `source:${'2'.repeat(64)}`,
+          items: [leaf],
+        },
+        contentFilterIdentity: null,
+        sortOrder: 'title_asc',
+        lineupReplicaIndex: 1,
+        isPlaybackModeVariant: false,
+        playbackMode: 'sequential',
+        blockSize: null,
+      },
+      {
+        origin,
+        sourceReference: {
+          kind: 'mixed',
+          sourceIdentity: `source:${'3'.repeat(64)}`,
+          mixMode: 'interleave',
+          sources: [leaf],
+        },
+        contentFilterIdentity: `content-filters:${'4'.repeat(64)}`,
+        sortOrder: 'year_desc',
+        lineupReplicaIndex: 3,
+        isPlaybackModeVariant: true,
+        playbackMode: 'block',
+        blockSize: 5,
+      },
+    ] as const satisfies readonly CandidateIdentityInput[];
+
+    for (const input of inputs) {
+      assert.equal(
+        createCandidateIdentityTuple(input).bytes,
+        canonicalJsonV1(createCandidateIdentityPreimage(input)),
+      );
+    }
+
+    const accessorInput = { ...inputs[0] } as Record<string, unknown>;
+    let getterReads = 0;
+    Object.defineProperty(accessorInput, 'contentFilterIdentity', {
+      enumerable: true,
+      get: () => {
+        getterReads += 1;
+        return getterReads === 1 ? null : 'raw-unvalidated';
+      },
+    });
+    assert.throws(
+      () => createCandidateIdentityTuple(accessorInput as never),
+      /Invalid candidate identity input/u,
+    );
+    assert.equal(getterReads, 0);
+
+    const candidateIdentity = `candidate-identity:${'5'.repeat(64)}` as const;
+    const normalizedSeed = 'séed';
+    const normalizedStrategy = 'Café';
+    const bytes = canonicalJsonV1({
+      candidateIdentity,
+      occurrence: 2,
+      seed: normalizedSeed,
+      strategy: normalizedStrategy,
+    });
+    assert.equal(
+      createCandidateId({
+        seed: ' se\u0301ed ',
+        strategy: 'Cafe\u0301',
+        candidateIdentity,
+        occurrence: 2,
+      }),
+      `candidate:${sha256HexV1(`lineup-builder/candidate-id/v1:${bytes}`)}`,
     );
   });
 

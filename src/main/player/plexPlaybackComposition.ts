@@ -20,7 +20,7 @@ type DesktopPlayerAdapterRuntimePort = {
     accepted: boolean;
     events: readonly PlayerEvent[];
   }>;
-  cleanup(): Promise<{
+  cleanup(requestId?: PlayerRequestId | null): Promise<{
     accepted: boolean;
     events: readonly PlayerEvent[];
   }>;
@@ -84,13 +84,12 @@ export function createDesktopPlayerAdapterRuntimePort(
       const result = await adapter.dispatchRuntimeCommand(command, context);
       return { ok: result.accepted, events: result.events };
     },
-    async cleanup(_requestId) {
-      const result = await adapter.cleanup();
+    async cleanup(requestId) {
+      const result = await adapter.cleanup(requestId);
       if (!result.accepted) {
         throw new Error('Desktop player adapter cleanup failed.');
       }
     },
   };
 }
-
 

@@ -236,6 +236,56 @@ test('plex home and switch parsers accept JSON and XML payload shapes', () => {
   }
 });
 
+test('plex auth XML fallbacks allow spaced attributes and decode XML entities', () => {
+  const originalDomParser = globalThis.DOMParser;
+  const encodedAuthValue = `${placeholderAuthValue.replaceAll('-', '&#x2D;')}&amp;value`;
+  Object.defineProperty(globalThis, 'DOMParser', {
+    configurable: true,
+    value: undefined,
+  });
+
+  try {
+    assert.deepEqual(
+      parseHomeUsersPayload({
+        kind: 'text',
+        data:
+          '<MediaContainer><User id = "managed&#x2D;1" title = "Kids &amp; Family" ' +
+          'thumb = "/profiles/kids&#47;family" admin = "false" protected = "true" /></MediaContainer>',
+      }),
+      [{
+        id: 'managed-1',
+        title: 'Kids & Family',
+        thumb: '/profiles/kids/family',
+        admin: false,
+        protected: true,
+      }],
+    );
+
+    assert.deepEqual(
+      parseSwitchResponsePayload({
+        kind: 'text',
+        data: `<MediaContainer><User authToken = "${encodedAuthValue}" /></MediaContainer>`,
+      }),
+      { authToken: `${placeholderAuthValue}&value` },
+    );
+
+    assert.deepEqual(
+      parseSwitchResponsePayload({
+        kind: 'text',
+        data:
+          `<MediaContainer authToken = ""><User authToken = "${placeholderAuthValue}" />` +
+          '</MediaContainer>',
+      }),
+      { authToken: placeholderAuthValue },
+    );
+  } finally {
+    Object.defineProperty(globalThis, 'DOMParser', {
+      configurable: true,
+      value: originalDomParser,
+    });
+  }
+});
+
 test('plex home switch parser handles self-referential arrays without recursing forever', () => {
   const payload: unknown[] = [];
   payload.push(payload);
@@ -292,7 +342,7 @@ test('plex auth errors recursively sanitize auth fields and cyclic cause/context
 
 test('plex auth errors sanitize cyclic Error causes without stack leakage', () => {
   const cause = new Error('failed with secret=placeholder-secret');
-  cause.stack = 'Error: failed\n    at /Users/example/lineup/auth.ts:1:1';
+  cause.stack = `Error: failed\n    at ${['', 'Users', 'example', 'lineup', 'auth.ts:1:1'].join('/')}`;
   Object.assign(cause, { cause });
 
   const error = new PlexAuthError('server-unreachable', `failed token=${placeholderAuthValue}`, 500, {
@@ -302,7 +352,7 @@ test('plex auth errors sanitize cyclic Error causes without stack leakage', () =
 
   assert.equal(serialized.includes('placeholder-secret'), false);
   assert.equal(serialized.includes('placeholder-auth-value'), false);
-  assert.equal(serialized.includes('/Users/example'), false);
+  assert.equal(serialized.includes(['', 'Users', 'example'].join('/')), false);
   assert.equal(serialized.includes('"stack"'), false);
   assert.equal(serialized.includes('[Circular]'), true);
 });

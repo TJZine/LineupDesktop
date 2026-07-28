@@ -6,6 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  BUILD_OUTPUT_LIMIT_BYTES,
+  BUILD_TIMEOUT_MS,
   REQUIRED_RD17_SMOKE_FILES,
   RD17_SMOKE_EVIDENCE_ROOT,
   RD17_SMOKE_EVIDENCE_ROOT_ABSOLUTE,
@@ -13,6 +15,8 @@ import {
   isWindowsProofPlatform,
   parseSmokeArgs,
   resolveEvidenceDirectory,
+  runBuild,
+  scanRd17EvidenceDirectory,
   waitForChildClose,
 } from '../rd17-diagnostics-smoke.mjs';
 
@@ -121,6 +125,104 @@ test('rd17 diagnostics smoke failure output stays path-free', () => {
     formatSmokeFailure(new Error('RD-17 smoke output must be under the RD-17 evidence root.')),
     'RD-17 smoke output must be under the RD-17 evidence root.',
   );
+});
+
+test('rd17 diagnostics smoke build is time and output bounded', () => {
+  let observedCall = null;
+  runBuild({
+    platform: 'win32',
+    spawnSyncImpl: (...args) => {
+      observedCall = args;
+      return { status: 0 };
+    },
+  });
+
+  assert.deepEqual(observedCall?.slice(0, 2), ['npm', ['run', 'build:electron']]);
+  assert.equal(observedCall?.[2].timeout, BUILD_TIMEOUT_MS);
+  assert.equal(observedCall?.[2].maxBuffer, BUILD_OUTPUT_LIMIT_BYTES);
+  assert.equal(observedCall?.[2].shell, true);
+});
+
+test('rd17 diagnostics smoke build classifies failures without exposing child output', () => {
+  const sensitiveChildOutput = 'credential-shaped child output';
+  const cases = [
+    {
+      result: { status: null, error: { code: 'ETIMEDOUT' } },
+      expected: 'Electron build timed out before RD-17 diagnostics smoke.',
+    },
+    {
+      result: { status: null, error: { code: 'ENOBUFS' } },
+      expected: 'Electron build exceeded its output limit before RD-17 diagnostics smoke.',
+    },
+    {
+      result: { status: null, error: new Error(sensitiveChildOutput) },
+      expected: 'Electron build could not start before RD-17 diagnostics smoke.',
+    },
+    {
+      result: { status: 7, error: undefined },
+      expected: 'Electron build exited unsuccessfully before RD-17 diagnostics smoke.',
+    },
+  ];
+
+  for (const { result, expected } of cases) {
+    assert.throws(
+      () => runBuild({
+        spawnSyncImpl: () => ({
+          ...result,
+          stdout: ['/', 'private', '/build.log'].join(''),
+          stderr: sensitiveChildOutput,
+        }),
+      }),
+      (error) => {
+        assert.equal(error.message, expected);
+        assert.equal(error.message.includes(sensitiveChildOutput), false);
+        assert.equal(error.message.includes('/private'), false);
+        return true;
+      },
+    );
+  }
+});
+
+test('rd17 evidence scanning fails closed on arbitrary absolute paths', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd17-path-scan-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const absolutePaths = [
+    ['D:', '\\', 'Media Library', '\\', 'private'].join(''),
+    ['D:', '/', 'Media', '/', 'private.mkv'].join(''),
+    ['', 'Médiathèque, 2026; (Director\'s Archive)', 'private-media-folder'].join('/'),
+  ];
+  absolutePaths.forEach((absolutePath, index) => {
+    fs.writeFileSync(
+      path.join(root, `summary-${index}.json`),
+      JSON.stringify({ note: absolutePath }),
+    );
+  });
+
+  const report = scanRd17EvidenceDirectory(root, {
+    timestampMs: 1,
+    truncatedRecordCount: 0,
+    omittedFileCount: 0,
+  });
+
+  assert.equal(report.status, 'failed');
+  assert.equal(report.findingsByLabel['raw-filesystem-path'], absolutePaths.length);
+});
+
+test('rd17 evidence scanning permits relative paths and fractions', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd17-safe-path-scan-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(
+    path.join(root, 'summary.json'),
+    JSON.stringify({
+      source: 'src/contracts/diagnostics.ts',
+      progress: '1/2/3.14',
+    }),
+  );
+
+  const report = scanRd17EvidenceDirectory(root, { timestampMs: 1 });
+
+  assert.equal(report.status, 'passed');
+  assert.equal(report.findingsByLabel['raw-filesystem-path'], undefined);
 });
 
 test('rd17 diagnostics smoke child close wait resolves when exit is already observed', async () => {

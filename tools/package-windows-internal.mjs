@@ -17,6 +17,17 @@ export const NATIVE_HELPER_BLOCKED_RELATIVE_PATH =
 export const MEDIA_BINARIES_BLOCKED_RELATIVE_PATH =
   'resources/media-binaries/REDISTRIBUTION_BLOCKED.txt';
 
+const RUNTIME_PROBE_TIMEOUT_MS = 15_000;
+const RUNTIME_PROBE_MAX_BUFFER_BYTES = 64 * 1024;
+const ELECTRON_BUILD_TIMEOUT_MS = 180_000;
+const ELECTRON_BUILD_MAX_BUFFER_BYTES = 1024 * 1024;
+const ELECTRON_BUILD_BLOCKED_ENV_KEYS = new Set([
+  'node_options',
+  'npm_config_node_options',
+  'npm_config_script_shell',
+  'npm_execpath',
+  'npm_node_execpath',
+]);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export function parsePackageArgs(args) {
@@ -151,6 +162,10 @@ export function createProvenanceManifest({
     lockfile: {
       packageCount: metadata.lockfilePackageCount,
     },
+    build: {
+      strategy: 'package-time-clean-build',
+      command: 'npm run build:electron',
+    },
     buildInputChecksums,
     artifactFileChecksums,
     licenseAndNoticeStatus: {
@@ -182,12 +197,15 @@ export function resolveElectronRuntimeDir(root = repoRoot) {
   return path.join(root, 'node_modules/electron/dist');
 }
 
-export function collectRuntimeVersions(root = repoRoot) {
-  return collectRuntimeVersionsFromDir(resolveElectronRuntimeDir(root));
+export function collectRuntimeVersions(root = repoRoot, probeOptions = {}) {
+  return collectRuntimeVersionsFromDir(resolveElectronRuntimeDir(root), probeOptions);
 }
 
-export function collectRuntimeVersionsFromDir(runtimeDir) {
+export function collectRuntimeVersionsFromDir(runtimeDir, probeOptions = {}) {
   const electronExecutable = path.join(runtimeDir, 'electron.exe');
+  const timeout = probeOptions.timeout ?? RUNTIME_PROBE_TIMEOUT_MS;
+  const maxBuffer = probeOptions.maxBuffer ?? RUNTIME_PROBE_MAX_BUFFER_BYTES;
+  const spawn = probeOptions.spawnSyncForTest ?? spawnSync;
   const expression = [
     'JSON.stringify({',
     'electron:process.versions.electron,',
@@ -198,34 +216,26 @@ export function collectRuntimeVersionsFromDir(runtimeDir) {
     'napi:process.versions.napi',
     '})',
   ].join('');
-  const result = spawnSync(electronExecutable, ['-p', expression], {
+  const result = spawn(electronExecutable, ['-p', expression], {
     env: {
-      ...process.env,
+      ...createElectronBuildEnvironment(),
       ELECTRON_RUN_AS_NODE: '1',
     },
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
+    timeout,
+    maxBuffer,
   });
 
   if (result.error || result.status !== 0) {
-    throw new Error(
-      [
-        'Unable to collect bundled Electron runtime versions for RD-18 provenance.',
-        formatRuntimeProbeDiagnostics(result),
-      ].filter(Boolean).join(' '),
-    );
+    throw new Error(formatRuntimeProbeFailure(result));
   }
 
   let versions;
   try {
     versions = JSON.parse(lastNonEmptyLine(result.stdout) ?? '');
   } catch {
-    throw new Error(
-      [
-        'Bundled Electron runtime version output was not valid JSON.',
-        formatRuntimeProbeDiagnostics(result),
-      ].filter(Boolean).join(' '),
-    );
+    throw new Error('Bundled Electron runtime version output was not valid JSON.');
   }
 
   return {
@@ -238,6 +248,31 @@ export function collectRuntimeVersionsFromDir(runtimeDir) {
   };
 }
 
+export function runCleanElectronBuild(root = repoRoot, testOptions = {}) {
+  let result;
+  try {
+    const spawn = testOptions.spawnSyncForTest ?? spawnSync;
+    const nodeExecutable = testOptions.nodeExecutableForTest ?? process.execPath;
+    const npmCliPath = testOptions.npmCliPathForTest ?? resolveNpmCliPath();
+    fs.rmSync(path.join(root, 'dist'), { recursive: true, force: true });
+    result = spawn(nodeExecutable, [npmCliPath, 'run', 'build:electron'], {
+      cwd: root,
+      encoding: 'utf8',
+      env: createElectronBuildEnvironment(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: ELECTRON_BUILD_TIMEOUT_MS,
+      maxBuffer: ELECTRON_BUILD_MAX_BUFFER_BYTES,
+      shell: false,
+    });
+  } catch {
+    throw new Error('Electron clean build could not be started.');
+  }
+
+  if (result.error || result.status !== 0) {
+    throw new Error(formatElectronBuildFailure(result));
+  }
+}
+
 export async function packageWindowsInternal(options = {}) {
   if (options.allowNonWindowsForTest !== true) {
     assertWindowsX64Runtime(options.runtimePlatform);
@@ -246,6 +281,7 @@ export async function packageWindowsInternal(options = {}) {
   const root = options.root ?? repoRoot;
   const metadata = loadPackageMetadata(root);
   const runtimeDir = options.runtimeDir ?? resolveElectronRuntimeDir(root);
+  runCleanElectronBuild(root);
   const runtimeVersions = options.runtimeVersions ?? collectRuntimeVersionsFromDir(runtimeDir);
   if (runtimeVersions.electron !== undefined && runtimeVersions.electron !== metadata.electronVersion) {
     throw new Error('Bundled Electron runtime version does not match package-lock electron version.');
@@ -266,7 +302,7 @@ export async function packageWindowsInternal(options = {}) {
   };
 }
 
-export async function stagePackage({ root, packageRoot, runtimeDir, metadata, runtimeVersions }) {
+async function stagePackage({ root, packageRoot, runtimeDir, metadata, runtimeVersions }) {
   const distRoot = path.join(root, 'dist');
   assertDirectoryExists(runtimeDir, 'Electron runtime directory');
   assertDirectoryExists(distRoot, 'dist directory');
@@ -475,26 +511,79 @@ function assertRuntimeVersion(value, label) {
   return value;
 }
 
-function formatRuntimeProbeDiagnostics(result) {
-  const stderrLastLine = lastNonEmptyLine(result.stderr);
-  const parts = [
-    `status=${result.status ?? 'unknown'}`,
-    result.signal ? `signal=${result.signal}` : undefined,
-    result.error ? `error=${result.error.message}` : undefined,
-    stderrLastLine ? `stderrLastLine=${stderrLastLine}` : undefined,
-    formatDiagnosticExcerpt('stdout', result.stdout),
-    formatDiagnosticExcerpt('stderr', result.stderr),
-  ];
+function resolveNpmCliPath() {
+  const nodeExecutables = new Set([process.execPath]);
+  try {
+    nodeExecutables.add(fs.realpathSync(process.execPath));
+  } catch {
+    throw new Error('Electron clean build could not be started.');
+  }
 
-  return parts.filter(Boolean).join('; ');
+  const candidates = [];
+  for (const nodeExecutable of nodeExecutables) {
+    const nodeDirectory = path.dirname(nodeExecutable);
+    candidates.push(
+      path.join(nodeDirectory, 'node_modules/npm/bin/npm-cli.js'),
+      path.resolve(nodeDirectory, '../lib/node_modules/npm/bin/npm-cli.js'),
+      path.resolve(nodeDirectory, '../libexec/lib/node_modules/npm/bin/npm-cli.js'),
+      path.resolve(nodeDirectory, '../share/node_modules/npm/bin/npm-cli.js'),
+      path.resolve(nodeDirectory, '../share/nodejs/npm/bin/npm-cli.js'),
+    );
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const realCandidate = fs.realpathSync(candidate);
+      if (fs.statSync(realCandidate).isFile()) {
+        return realCandidate;
+      }
+    } catch {
+      // Try the next fixed installation-relative candidate.
+    }
+  }
+  throw new Error('Electron clean build could not be started.');
 }
 
-function formatDiagnosticExcerpt(label, value) {
-  const excerpt = String(value ?? '').trim();
-  if (excerpt.length === 0) {
-    return undefined;
+function createElectronBuildEnvironment() {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => (
+      !ELECTRON_BUILD_BLOCKED_ENV_KEYS.has(key.toLowerCase())
+    )),
+  );
+}
+
+function formatElectronBuildFailure(result) {
+  if (result.error?.code === 'ETIMEDOUT') {
+    return 'Electron clean build timed out.';
   }
-  return `${label}=${excerpt.slice(-500).replace(/\s+/gu, ' ')}`;
+  if (result.error?.code === 'ENOBUFS') {
+    return 'Electron clean build exceeded its output limit.';
+  }
+  if (result.error) {
+    return 'Electron clean build could not be started.';
+  }
+  if (result.signal) {
+    return 'Electron clean build was terminated by a signal.';
+  }
+  const status = Number.isInteger(result.status) ? result.status : 'unknown';
+  return `Electron clean build exited unsuccessfully (status=${status}).`;
+}
+
+function formatRuntimeProbeFailure(result) {
+  if (result.error?.code === 'ETIMEDOUT') {
+    return 'Bundled Electron runtime version probe timed out.';
+  }
+  if (result.error?.code === 'ENOBUFS') {
+    return 'Bundled Electron runtime version probe exceeded its output limit.';
+  }
+  if (result.error) {
+    return 'Bundled Electron runtime version probe could not be started.';
+  }
+  if (result.signal) {
+    return 'Bundled Electron runtime version probe was terminated by a signal.';
+  }
+  const status = Number.isInteger(result.status) ? result.status : 'unknown';
+  return `Bundled Electron runtime version probe exited unsuccessfully (status=${status}).`;
 }
 
 function lastNonEmptyLine(value) {

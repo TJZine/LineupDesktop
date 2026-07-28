@@ -3,6 +3,22 @@ import type { AppRouteId } from './navigation.js';
 import { isEpgProgramPlayable, type EpgProgramCellViewModel } from './epg.js';
 import { summarizeRendererBridgeError } from './rendererBridgeFailures.js';
 
+const GUIDE_TUNE_REQUEST_TIMEOUT_MS = 30_000;
+
+class GuideTuneRequestTimeoutError extends Error {
+  constructor() {
+    super('Channel tune timed out.');
+    this.name = 'GuideTuneRequestTimeoutError';
+  }
+}
+
+class GuideTuneRequestCanceledError extends Error {
+  constructor() {
+    super('Channel tune was canceled.');
+    this.name = 'GuideTuneRequestCanceledError';
+  }
+}
+
 export interface GuideTuneTarget {
   channelId: string;
   programId: string;
@@ -19,6 +35,7 @@ export interface GuideTuneControllerOptions {
   onPendingChanged(target: GuideTuneTarget | null): void;
   onAccepted(target: GuideTuneTarget): void;
   onFailure(target: GuideTuneTarget, message: string): void;
+  requestTimeoutMs?: number;
 }
 
 export interface GuideTuneController {
@@ -31,6 +48,7 @@ export interface GuideTuneController {
 export function createGuideTuneController(options: GuideTuneControllerOptions): GuideTuneController {
   let requestGeneration = 0;
   let pendingTarget: GuideTuneTarget | null = null;
+  let cancelActiveRequest: (() => void) | null = null;
 
   const notifyPending = (target: GuideTuneTarget | null): void => {
     try {
@@ -44,6 +62,7 @@ export function createGuideTuneController(options: GuideTuneControllerOptions): 
     requestGeneration += 1;
     pendingTarget = null;
     notifyPending(null);
+    cancelActiveRequest?.();
   };
 
   return {
@@ -64,14 +83,24 @@ export function createGuideTuneController(options: GuideTuneControllerOptions): 
       pendingTarget = target;
       notifyPending(target);
       let result: Awaited<ReturnType<typeof options.player.tuneChannel>>;
+      const request = waitForGuideTune(
+        () => options.player.tuneChannel({ channelId: target.channelId }),
+        options.requestTimeoutMs ?? GUIDE_TUNE_REQUEST_TIMEOUT_MS,
+      );
+      cancelActiveRequest = request.cancel;
       try {
-        result = await options.player.tuneChannel({ channelId: target.channelId });
+        result = await request.promise;
       } catch (error: unknown) {
         if (isCurrent(generation, target)) {
           pendingTarget = null;
           notifyPending(null);
           try {
-            options.onFailure(target, summarizeRendererBridgeError(error));
+            options.onFailure(
+              target,
+              error instanceof GuideTuneRequestTimeoutError
+                ? error.message
+                : summarizeRendererBridgeError(error),
+            );
           } catch {
             // The bridge request is settled even if a UI callback fails.
           }
@@ -79,6 +108,8 @@ export function createGuideTuneController(options: GuideTuneControllerOptions): 
           clearStalePending(generation, target);
         }
         return true;
+      } finally {
+        if (cancelActiveRequest === request.cancel) cancelActiveRequest = null;
       }
 
       if (!isCurrent(generation, target)) {
@@ -111,4 +142,29 @@ export function createGuideTuneController(options: GuideTuneControllerOptions): 
     pendingTarget = null;
     notifyPending(null);
   }
+}
+
+function waitForGuideTune<T>(
+  request: () => Promise<T>,
+  timeoutMs: number,
+): Readonly<{ promise: Promise<T>; cancel(): void }> {
+  let cancel = (): void => undefined;
+  const promise = new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const timeout = globalThis.setTimeout(() => {
+      settle(() => reject(new GuideTuneRequestTimeoutError()));
+    }, timeoutMs);
+    const settle = (action: () => void): void => {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timeout);
+      action();
+    };
+    cancel = () => settle(() => reject(new GuideTuneRequestCanceledError()));
+    void Promise.resolve().then(request).then(
+      (value) => settle(() => resolve(value)),
+      (error: unknown) => settle(() => reject(error)),
+    );
+  });
+  return { promise, cancel };
 }

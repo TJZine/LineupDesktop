@@ -66,7 +66,7 @@ test('startup owner leaves corrupt bytes untouched and returns a fixed safe fail
   }).bootstrap();
   assert.equal(bootstrap.status, 'ready');
   if (bootstrap.status !== 'ready') return;
-  const corrupt = '{private-path:/do/not/expose';
+  const corrupt = ['{private-path:', 'do', 'not', 'expose'].join('/');
   await fs.writeFile(bootstrap.capability.persistenceFilePath, corrupt);
   const result = await new ChannelPersistenceStartupOwner({
     store: new DesktopChannelPersistenceStore({

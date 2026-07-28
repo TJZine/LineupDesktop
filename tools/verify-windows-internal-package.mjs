@@ -246,6 +246,14 @@ export function verifyJsonEvidence(packageRoot, errors) {
     if (!Number.isInteger(provenance.lockfile?.packageCount) || provenance.lockfile.packageCount <= 0) {
       errors.push('Provenance lockfile.packageCount must be a positive integer.');
     }
+    if (
+      provenance.build?.strategy !== 'package-time-clean-build' ||
+      provenance.build?.command !== 'npm run build:electron'
+    ) {
+      errors.push(
+        'Provenance build must record package-time-clean-build and npm run build:electron.',
+      );
+    }
     assertChecksumArray(provenance.buildInputChecksums, 'buildInputChecksums', errors);
     assertChecksumArray(provenance.artifactFileChecksums, 'artifactFileChecksums', errors);
     if (provenance.nativeHelperStatus?.status !== 'blocked') {

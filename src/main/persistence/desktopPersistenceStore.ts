@@ -166,34 +166,11 @@ export class DesktopPersistenceStore {
       };
     }
 
+    let decrypted;
     try {
-      const decrypted = await this.secureStringCodec.decryptString(
+      decrypted = await this.secureStringCodec.decryptString(
         Buffer.from(record.encryptedSecretBase64, 'base64'),
       );
-      if (decrypted.shouldReencrypt) {
-        await this.reencryptCredential(
-          record.credentialId,
-          record.encryptedSecretBase64,
-          decrypted.value,
-        );
-      }
-      return {
-        status: 'present',
-        accountId,
-        credentialId,
-        secretValue: decrypted.value,
-        shouldReencrypt: decrypted.shouldReencrypt,
-        profile: record.profile,
-        diagnostics: [
-          {
-            component: 'desktop-persistence-store',
-            operation: 'read-plex-credential',
-            status: 'present',
-            credentialId,
-            accountId,
-          },
-        ],
-      };
     } catch (error) {
       const unavailable = error instanceof SecureStorageUnavailableError;
       return {
@@ -210,6 +187,43 @@ export class DesktopPersistenceStore {
         ],
       };
     }
+
+    const diagnostics: PersistenceRendererSafeDiagnostic[] = [
+      {
+        component: 'desktop-persistence-store',
+        operation: 'read-plex-credential',
+        status: 'present',
+        credentialId,
+        accountId,
+      },
+    ];
+    if (decrypted.shouldReencrypt) {
+      try {
+        await this.reencryptCredential(
+          record.credentialId,
+          record.encryptedSecretBase64,
+          decrypted.value,
+        );
+      } catch {
+        diagnostics.push({
+          component: 'desktop-persistence-store',
+          operation: 'reencrypt-plex-credential',
+          status: 'unavailable',
+          reason: 'credential re-encryption failed; retry required',
+          credentialId,
+          accountId,
+        });
+      }
+    }
+    return {
+      status: 'present',
+      accountId,
+      credentialId,
+      secretValue: decrypted.value,
+      shouldReencrypt: decrypted.shouldReencrypt,
+      profile: record.profile,
+      diagnostics,
+    };
   }
 
   async getSelectedPlexServer(profileId?: string | null): Promise<PlexSelectedServerSummary | null> {

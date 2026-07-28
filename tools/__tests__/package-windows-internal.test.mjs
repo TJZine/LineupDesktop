@@ -23,6 +23,7 @@ import {
   parseChecksumRows,
   parsePackageArgs,
   packageWindowsInternal,
+  runCleanElectronBuild,
 } from '../package-windows-internal.mjs';
 import {
   parseVerifyArgs,
@@ -82,10 +83,8 @@ test('staged app package manifest has only reviewed metadata and entrypoint', ()
   assert.equal(Object.hasOwn(staged, 'dependencies'), false);
 });
 
-test('collectRuntimeVersions reads bundled Electron process versions', (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-
+test('collectRuntimeVersions probes the bundled Electron runtime with a sanitized Node environment', () => {
+  const root = path.join(path.sep, 'fixture-runtime-root');
   const electronDist = path.join(root, 'node_modules/electron/dist');
   const expectedVersions = {
     electron: '42.0.0',
@@ -95,55 +94,167 @@ test('collectRuntimeVersions reads bundled Electron process versions', (t) => {
     modules: '146',
     napi: '10',
   };
-  const preloadPath = createNodeBackedElectronRuntime(electronDist, expectedVersions);
+  const invocations = [];
+  const spawnSyncForTest = (...args) => {
+    invocations.push(args);
+    return {
+      error: undefined,
+      signal: null,
+      status: 0,
+      stdout: `${JSON.stringify(expectedVersions)}\n`,
+      stderr: '',
+    };
+  };
 
-  withTemporaryNodeOptions(preloadPath, () => {
-    assert.deepEqual(collectRuntimeVersions(root), expectedVersions);
-    assert.deepEqual(collectRuntimeVersionsFromDir(electronDist), expectedVersions);
-  });
-});
-
-test('collectRuntimeVersions includes child-process diagnostics on probe failures', (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-failure-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-
-  const runtimeDir = path.join(root, 'runtime');
-  const preloadPath = createNodeBackedElectronRuntime(runtimeDir, undefined, [
-    'console.error("runtime probe exploded");',
-    'process.exit(7);',
-  ]);
-
-  withTemporaryNodeOptions(preloadPath, () => {
-    assert.throws(
-      () => collectRuntimeVersionsFromDir(runtimeDir),
-      /Unable to collect bundled Electron runtime versions.*status=7.*stderrLastLine=runtime probe exploded/u,
+  withTemporaryEnvironmentVariables({
+    NODE_OPTIONS: '--require /hostile-preload.cjs',
+    npm_config_node_options: '--trace-warnings',
+    npm_config_script_shell: '/hostile-script-shell',
+    npm_execpath: '/hostile-npm-cli.js',
+    npm_node_execpath: '/hostile-node',
+  }, () => {
+    assert.deepEqual(collectRuntimeVersions(root, { spawnSyncForTest }), expectedVersions);
+    assert.deepEqual(
+      collectRuntimeVersionsFromDir(electronDist, { spawnSyncForTest }),
+      expectedVersions,
     );
   });
+
+  assert.equal(invocations.length, 2);
+  for (const [executable, args, options] of invocations) {
+    assert.equal(executable, path.join(electronDist, 'electron.exe'));
+    assert.equal(args[0], '-p');
+    assert.match(args[1], /process\.versions\.electron/u);
+    assert.deepEqual(options.stdio, ['ignore', 'pipe', 'pipe']);
+    assert.equal(options.timeout, 15_000);
+    assert.equal(options.maxBuffer, 64 * 1024);
+    assert.equal(options.env.ELECTRON_RUN_AS_NODE, '1');
+    assert.equal(options.env.PATH, process.env.PATH);
+    for (const key of [
+      'NODE_OPTIONS',
+      'npm_config_node_options',
+      'npm_config_script_shell',
+      'npm_execpath',
+      'npm_node_execpath',
+    ]) {
+      assert.equal(Object.hasOwn(options.env, key), false);
+    }
+  }
 });
 
-test('collectRuntimeVersions includes stdout and stderr diagnostics on invalid JSON', (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-rd18-runtime-json-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+test('collectRuntimeVersions classifies nonzero probe failures without child output', () => {
+  const sensitiveChildOutput = 'sensitive-runtime-probe-output';
 
-  const runtimeDir = path.join(root, 'runtime');
-  const preloadPath = createNodeBackedElectronRuntime(runtimeDir, {
-    electron: '42.0.0',
-    node: '24.15.0',
-    chrome: '148.0.7778.96',
-    v8: '14.8.178.14-electron.0',
-    modules: '146',
-    napi: '10',
-  }, [
-    'console.error("json probe stderr context");',
-    'JSON.stringify = () => "not-json";',
-  ]);
+  assert.throws(
+    () => collectRuntimeVersionsFromDir('/sensitive-runtime-location', {
+      spawnSyncForTest: () => ({
+        error: undefined,
+        signal: null,
+        status: 7,
+        stdout: sensitiveChildOutput,
+        stderr: sensitiveChildOutput,
+      }),
+    }),
+    (error) => {
+      assert.equal(
+        error.message,
+        'Bundled Electron runtime version probe exited unsuccessfully (status=7).',
+      );
+      assert.equal(error.message.includes(sensitiveChildOutput), false);
+      return true;
+    },
+  );
+});
 
-  withTemporaryNodeOptions(preloadPath, () => {
-    assert.throws(
-      () => collectRuntimeVersionsFromDir(runtimeDir),
-      /Bundled Electron runtime version output was not valid JSON.*stdout=.*not-json.*stderr=.*json probe stderr context/u,
-    );
-  });
+test('collectRuntimeVersions classifies launch failures without executable paths', () => {
+  const runtimeDir = '/sensitive-runtime-location';
+  assert.throws(
+    () => collectRuntimeVersionsFromDir(runtimeDir, {
+      spawnSyncForTest: () => ({
+        error: Object.assign(new Error(runtimeDir), { code: 'ENOENT' }),
+        signal: null,
+        status: null,
+        stdout: '',
+        stderr: runtimeDir,
+      }),
+    }),
+    (error) => {
+      assert.equal(
+        error.message,
+        'Bundled Electron runtime version probe could not be started.',
+      );
+      assert.equal(error.message.includes(runtimeDir), false);
+      return true;
+    },
+  );
+});
+
+test('collectRuntimeVersions classifies timeout without child output', () => {
+  const sensitiveChildOutput = 'sensitive-timeout-output';
+
+  assert.throws(
+    () => collectRuntimeVersionsFromDir('/runtime', {
+      timeout: 100,
+      spawnSyncForTest: () => ({
+        error: Object.assign(new Error(sensitiveChildOutput), { code: 'ETIMEDOUT' }),
+        signal: 'SIGTERM',
+        status: null,
+        stdout: sensitiveChildOutput,
+        stderr: sensitiveChildOutput,
+      }),
+    }),
+    (error) => {
+      assert.equal(error.message, 'Bundled Electron runtime version probe timed out.');
+      assert.equal(error.message.includes(sensitiveChildOutput), false);
+      return true;
+    },
+  );
+});
+
+test('collectRuntimeVersions classifies output overflow without child output', () => {
+  const sensitiveChildOutput = 'sensitive-overflow-output';
+
+  assert.throws(
+    () => collectRuntimeVersionsFromDir('/runtime', {
+      maxBuffer: 256,
+      spawnSyncForTest: () => ({
+        error: Object.assign(new Error(sensitiveChildOutput), { code: 'ENOBUFS' }),
+        signal: 'SIGTERM',
+        status: null,
+        stdout: sensitiveChildOutput,
+        stderr: sensitiveChildOutput,
+      }),
+    }),
+    (error) => {
+      assert.equal(
+        error.message,
+        'Bundled Electron runtime version probe exceeded its output limit.',
+      );
+      assert.equal(error.message.includes(sensitiveChildOutput), false);
+      return true;
+    },
+  );
+});
+
+test('collectRuntimeVersions rejects invalid JSON without child output', () => {
+  const sensitiveChildOutput = 'sensitive-json-probe-output';
+
+  assert.throws(
+    () => collectRuntimeVersionsFromDir('/runtime', {
+      spawnSyncForTest: () => ({
+        error: undefined,
+        signal: null,
+        status: 0,
+        stdout: 'not-json',
+        stderr: sensitiveChildOutput,
+      }),
+    }),
+    (error) => {
+      assert.equal(error.message, 'Bundled Electron runtime version output was not valid JSON.');
+      assert.equal(error.message.includes(sensitiveChildOutput), false);
+      return true;
+    },
+  );
 });
 
 test('packageWindowsInternal rejects Electron runtime version drift', async (t) => {
@@ -161,6 +272,232 @@ test('packageWindowsInternal rejects Electron runtime version drift', async (t) 
       napi: '10',
     },
   }), /does not match package-lock/u);
+});
+
+test('clean Electron build runner invokes bounded npm CLI without a shell', () => {
+  let invocation;
+  withTemporaryEnvironmentVariables({
+    NODE_OPTIONS: '--require /hostile-preload.cjs',
+    npm_config_node_options: '--trace-warnings',
+    npm_config_script_shell: '/hostile-script-shell',
+    npm_execpath: '/hostile-npm-cli.js',
+    npm_node_execpath: '/hostile-node',
+  }, () => {
+    runCleanElectronBuild('/fixture-root', {
+      nodeExecutableForTest: '/fixture-node',
+      npmCliPathForTest: '/fixture-npm-cli.js',
+      spawnSyncForTest: (...args) => {
+        invocation = args;
+        return { error: undefined, signal: null, status: 0 };
+      },
+    });
+  });
+
+  assert.deepEqual(invocation.slice(0, 2), [
+    '/fixture-node',
+    ['/fixture-npm-cli.js', 'run', 'build:electron'],
+  ]);
+  const { env, ...spawnOptions } = invocation[2];
+  assert.deepEqual(spawnOptions, {
+    cwd: '/fixture-root',
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 180_000,
+    maxBuffer: 1024 * 1024,
+    shell: false,
+  });
+  assert.equal(env.PATH, process.env.PATH);
+  for (const key of [
+    'NODE_OPTIONS',
+    'npm_config_node_options',
+    'npm_config_script_shell',
+    'npm_execpath',
+    'npm_node_execpath',
+  ]) {
+    assert.equal(Object.hasOwn(env, key), false);
+  }
+});
+
+test('clean Electron build runner classifies failures without child output or paths', () => {
+  const sensitiveChildOutput = 'sensitive-build-child-output';
+  const cases = [
+    {
+      result: {
+        error: Object.assign(new Error(sensitiveChildOutput), { code: 'ETIMEDOUT' }),
+        signal: 'SIGTERM',
+        status: null,
+      },
+      expected: 'Electron clean build timed out.',
+    },
+    {
+      result: {
+        error: Object.assign(new Error(sensitiveChildOutput), { code: 'ENOBUFS' }),
+        signal: 'SIGTERM',
+        status: null,
+      },
+      expected: 'Electron clean build exceeded its output limit.',
+    },
+    {
+      result: {
+        error: Object.assign(new Error(sensitiveChildOutput), { code: 'ENOENT' }),
+        signal: null,
+        status: null,
+      },
+      expected: 'Electron clean build could not be started.',
+    },
+    {
+      result: { error: undefined, signal: 'SIGTERM', status: null },
+      expected: 'Electron clean build was terminated by a signal.',
+    },
+    {
+      result: { error: undefined, signal: null, status: 9 },
+      expected: 'Electron clean build exited unsuccessfully (status=9).',
+    },
+  ];
+
+  for (const { result, expected } of cases) {
+    assert.throws(
+      () => runCleanElectronBuild('/sensitive-build-root', {
+        nodeExecutableForTest: '/sensitive-node-path',
+        npmCliPathForTest: '/sensitive-npm-cli-path',
+        spawnSyncForTest: () => ({
+          ...result,
+          stdout: sensitiveChildOutput,
+          stderr: sensitiveChildOutput,
+        }),
+      }),
+      (error) => {
+        assert.equal(error.message, expected);
+        assert.equal(error.message.includes(sensitiveChildOutput), false);
+        assert.equal(error.message.includes('/sensitive'), false);
+        return true;
+      },
+    );
+  }
+});
+
+test('packageWindowsInternal packages only bytes produced by its owned clean build', async (t) => {
+  const root = makeFixtureRepo(t);
+  const runtimeDir = makeFakeElectronRuntime(root);
+  fs.writeFileSync(path.join(root, 'dist/main/index.js'), 'stale main bytes\n');
+  fs.writeFileSync(path.join(root, 'dist/stale-only.js'), 'stale only bytes\n');
+
+  const result = await packageWindowsInternal({
+    root,
+    allowNonWindowsForTest: true,
+    runtimeDir,
+    runtimeVersions: fixtureRuntimeVersions(),
+    unsupportedCallerOption: 'ignored',
+  });
+
+  assert.equal(
+    fs.readFileSync(path.join(result.packageRoot, 'resources/app/dist/main/index.js'), 'utf8'),
+    'fresh fixture main bytes\n',
+  );
+  assert.equal(
+    fs.existsSync(path.join(result.packageRoot, 'resources/app/dist/stale-only.js')),
+    false,
+  );
+});
+
+test('packageWindowsInternal ignores hostile npm executable and Node option environment', async (t) => {
+  const root = makeFixtureRepo(t);
+  const runtimeDir = makeFakeElectronRuntime(root);
+  const hostileRoot = path.join(root, 'hostile-environment');
+  fs.mkdirSync(hostileRoot);
+  const hostileNpmMarker = path.join(hostileRoot, 'npm-cli-executed');
+  const hostilePreloadMarker = path.join(hostileRoot, 'node-options-executed');
+  const hostileNpmCliPath = path.join(hostileRoot, 'npm-cli.js');
+  const hostilePreloadPath = path.join(hostileRoot, 'preload.cjs');
+  fs.writeFileSync(hostileNpmCliPath, [
+    "const fs = require('node:fs');",
+    `fs.writeFileSync(${JSON.stringify(hostileNpmMarker)}, 'executed');`,
+    'process.exit(0);',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(hostilePreloadPath, [
+    "const fs = require('node:fs');",
+    `fs.writeFileSync(${JSON.stringify(hostilePreloadMarker)}, 'executed');`,
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(root, 'dist/main/index.js'), 'hostile environment stale bytes\n');
+
+  const result = await withTemporaryEnvironmentVariables({
+    NODE_OPTIONS: `--require ${JSON.stringify(hostilePreloadPath)}`,
+    npm_execpath: hostileNpmCliPath,
+    npm_node_execpath: path.join(hostileRoot, 'hostile-node'),
+  }, () => packageWindowsInternal({
+    root,
+    allowNonWindowsForTest: true,
+    runtimeDir,
+    runtimeVersions: fixtureRuntimeVersions(),
+  }));
+
+  assert.equal(fs.existsSync(hostileNpmMarker), false);
+  assert.equal(fs.existsSync(hostilePreloadMarker), false);
+  assert.equal(
+    fs.readFileSync(path.join(result.packageRoot, 'resources/app/dist/main/index.js'), 'utf8'),
+    'fresh fixture main bytes\n',
+  );
+});
+
+test('packageWindowsInternal preserves an existing package when its clean build fails', async (t) => {
+  const root = makeFixtureRepo(t);
+  const { packageRoot } = buildInternalPackagePaths({ root });
+  fs.mkdirSync(packageRoot, { recursive: true });
+  const sentinelPath = path.join(packageRoot, 'existing-package-sentinel.txt');
+  fs.writeFileSync(sentinelPath, 'existing package bytes\n');
+  setFixtureBuildMode(root, 'fail');
+
+  await assert.rejects(
+    () => packageWindowsInternal({
+      root,
+      allowNonWindowsForTest: true,
+      runtimeVersions: fixtureRuntimeVersions(),
+    }),
+    /Electron clean build exited unsuccessfully \(status=9\)/u,
+  );
+
+  assert.equal(fs.readFileSync(sentinelPath, 'utf8'), 'existing package bytes\n');
+  assert.deepEqual(fs.readdirSync(packageRoot), ['existing-package-sentinel.txt']);
+});
+
+test('packageWindowsInternal runs its clean build before runtime and fails closed on no-op build', async (t) => {
+  const root = makeFixtureRepo(t);
+  const { packageRoot } = buildInternalPackagePaths({ root });
+  fs.writeFileSync(path.join(root, 'dist/main/index.js'), 'stale before runtime validation\n');
+
+  await assert.rejects(
+    () => packageWindowsInternal({
+      root,
+      allowNonWindowsForTest: true,
+      runtimeDir: path.join(root, 'missing-runtime'),
+      runtimeVersions: fixtureRuntimeVersions(),
+    }),
+    /Electron runtime directory is missing/u,
+  );
+
+  assert.equal(
+    fs.readFileSync(path.join(root, 'dist/main/index.js'), 'utf8'),
+    'fresh fixture main bytes\n',
+  );
+  assert.equal(fs.existsSync(packageRoot), false);
+
+  const runtimeDir = makeFakeElectronRuntime(root);
+  fs.writeFileSync(path.join(root, 'dist/main/index.js'), 'stale before no-op build\n');
+  setFixtureBuildMode(root, 'noop');
+  await assert.rejects(
+    () => packageWindowsInternal({
+      root,
+      allowNonWindowsForTest: true,
+      runtimeDir,
+      runtimeVersions: fixtureRuntimeVersions(),
+    }),
+    /dist directory is missing/u,
+  );
+
+  assert.equal(fs.existsSync(path.join(root, 'dist')), false);
+  assert.equal(fs.existsSync(packageRoot), false);
 });
 
 test('build input checksums include the packaging tool that defines provenance', () => {
@@ -184,7 +521,7 @@ test('checksum parser and formatter keep deterministic normalized paths', () => 
     /Invalid checksum row/u,
   );
   assert.throws(
-    () => parseChecksumRows(`${'a'.repeat(64)}  C:/package.json`),
+    () => parseChecksumRows(`${'a'.repeat(64)}  ${['C:', 'package.json'].join('/')}`),
     /Invalid checksum row/u,
   );
 });
@@ -267,6 +604,10 @@ test('packageWindowsInternal stages the reviewed layout with a fake Windows runt
   assert.equal(provenance.runtime.electron, '42.0.0');
   assert.equal(provenance.lockfile.packageCount, 2);
   assert.equal(provenance.packageLayout.asar, false);
+  assert.deepEqual(provenance.build, {
+    strategy: 'package-time-clean-build',
+    command: 'npm run build:electron',
+  });
   assert.equal(provenance.mediaBinariesStatus.rd06LocalPrerequisitesCopied, false);
   assert(provenance.buildInputChecksums.some((row) => row.path === 'tools/package-windows-internal.mjs'));
 
@@ -289,6 +630,29 @@ test('verifier rejects package roots outside the reviewed RD-18 output path', as
   });
 
   assert(errors.some((error) => error.includes('Package root must be exactly out/rd-18-windows-internal')));
+});
+
+test('verifier requires truthful package-owned clean-build provenance', async (t) => {
+  const { root, packageRoot } = await makeVerifiedPackage(t);
+  const provenancePath = path.join(packageRoot, PROVENANCE_RELATIVE_PATH);
+  const provenance = readJson(provenancePath);
+  provenance.build = {
+    strategy: 'caller-prebuilt-dist',
+    command: 'npm run build:electron',
+  };
+  fs.writeFileSync(provenancePath, `${JSON.stringify(provenance, null, 2)}\n`);
+  rewriteChecksumManifest(packageRoot);
+
+  const errors = verifyWindowsInternalPackage({
+    root,
+    packageRoot,
+    manifestPath: provenancePath,
+  });
+
+  assert(errors.some((error) => (
+    error.includes('Provenance build must record package-time-clean-build')
+  )));
+  assert.equal(errors.some((error) => error.includes('checksums.sha256 must match')), false);
 });
 
 test('verifier rejects alternate layouts app.asar and copied native/media binaries', async (t) => {
@@ -391,40 +755,11 @@ test('verifier reports package output symlinks without continuing checksum trave
   assert.deepEqual(errors, ['Refusing to inspect symlink in package output: linked-exe']);
 });
 
-test('packageWindowsInternal records runtime versions from the staged runtime directory', async (t) => {
+test('runtime version collection probes the explicitly selected staged runtime directory', (t) => {
   const root = makeFixtureRepo(t);
-  const defaultRuntimeDir = path.join(root, 'node_modules/electron/dist');
   const stagedRuntimeDir = path.join(root, 'staged-electron-runtime');
-  createNodeBackedElectronRuntime(defaultRuntimeDir);
-  createNodeBackedElectronRuntime(stagedRuntimeDir);
-  const preloadPath = path.join(root, 'runtime-version-router.cjs');
-  fs.writeFileSync(preloadPath, [
-    'const defaultVersions = {',
-    '  electron: "41.0.0",',
-    '  node: "23.0.0",',
-    '  chrome: "147.0.0.0",',
-    '  v8: "13.0.0",',
-    '  modules: "145",',
-    '  napi: "9",',
-    '};',
-    'const stagedVersions = {',
-    '  electron: "42.0.0",',
-    '  node: "24.15.0",',
-    '  chrome: "148.0.7778.96",',
-    '  v8: "14.8.178.14-electron.0",',
-    '  modules: "146",',
-    '  napi: "10",',
-    '};',
-    'const versions = process.execPath.includes("staged-electron-runtime") ? stagedVersions : defaultVersions;',
-    'for (const [key, value] of Object.entries(versions)) {',
-    '  Object.defineProperty(process.versions, key, {',
-    '    value,',
-    '    enumerable: true,',
-    '    configurable: true,',
-    '  });',
-    '}',
-    '',
-  ].join('\n'));
+  fs.mkdirSync(stagedRuntimeDir);
+  fs.writeFileSync(path.join(stagedRuntimeDir, 'electron.exe'), 'fake exe');
   const stagedVersions = {
     electron: '42.0.0',
     node: '24.15.0',
@@ -433,17 +768,23 @@ test('packageWindowsInternal records runtime versions from the staged runtime di
     modules: '146',
     napi: '10',
   };
+  let probedExecutable;
 
-  await withTemporaryNodeOptions(preloadPath, async () => {
-    const result = await packageWindowsInternal({
-      root,
-      allowNonWindowsForTest: true,
-      runtimeDir: stagedRuntimeDir,
-    });
-
-    const provenance = readJson(result.manifestPath);
-    assert.deepEqual(provenance.runtime, stagedVersions);
+  const result = collectRuntimeVersionsFromDir(stagedRuntimeDir, {
+    spawnSyncForTest: (executable) => {
+      probedExecutable = executable;
+      return {
+        error: undefined,
+        signal: null,
+        status: 0,
+        stdout: `${JSON.stringify(stagedVersions)}\n`,
+        stderr: '',
+      };
+    },
   });
+
+  assert.equal(probedExecutable, path.join(stagedRuntimeDir, 'electron.exe'));
+  assert.deepEqual(result, stagedVersions);
 });
 
 test('verifier rejects staged app package metadata drift after generated manifests are refreshed', async (t) => {
@@ -512,7 +853,7 @@ test('verifier rejects signing certificate and private key material in generated
   const provenance = readJson(provenancePath);
   provenance.publicReleaseBlockedProof = {
     signingPassword: 'not-for-rd18-unit1',
-    certificatePath: 'C:\\Users\\example\\certificates\\release.pfx',
+    certificatePath: ['C:', 'Users', 'example', 'certificates', 'release.pfx'].join('\\'),
     privateKey: '-----BEGIN PRIVATE KEY-----',
   };
   fs.writeFileSync(provenancePath, `${JSON.stringify(provenance, null, 2)}\n`);
@@ -648,6 +989,9 @@ function makeFixtureRepo(t) {
     version: '0.0.0',
     license: 'Apache-2.0',
     type: 'module',
+    scripts: {
+      'build:electron': 'node fixture-build.mjs',
+    },
   }));
   fs.writeFileSync(path.join(root, 'package-lock.json'), JSON.stringify({
     lockfileVersion: 3,
@@ -668,11 +1012,34 @@ function makeFixtureRepo(t) {
   ]) {
     fs.writeFileSync(path.join(root, 'tools', tool), `// ${tool}\n`);
   }
+  writeFixtureDist(root, 'stale fixture main bytes\n');
+  writeFixtureDist(path.join(root, 'fixture-build-output'), 'fresh fixture main bytes\n');
+  fs.writeFileSync(path.join(root, 'fixture-build.mjs'), [
+    "import fs from 'node:fs';",
+    "import path from 'node:path';",
+    '',
+    'const root = process.cwd();',
+    "const modePath = path.join(root, 'fixture-build-mode.txt');",
+    "const mode = fs.existsSync(modePath) ? fs.readFileSync(modePath, 'utf8').trim() : 'success';",
+    "const distRoot = path.join(root, 'dist');",
+    "if (mode === 'fail') process.exit(9);",
+    "if (mode === 'noop') process.exit(0);",
+    'fs.rmSync(distRoot, { recursive: true, force: true });',
+    "if (mode !== 'missing-dist') {",
+    "  fs.cpSync(path.join(root, 'fixture-build-output', 'dist'), distRoot, { recursive: true });",
+    '}',
+    '',
+  ].join('\n'));
+
+  return root;
+}
+
+function writeFixtureDist(root, mainIndexContent = 'console.log("main");\n') {
   fs.mkdirSync(path.join(root, 'dist/main'), { recursive: true });
   fs.mkdirSync(path.join(root, 'dist/main/channel'), { recursive: true });
   fs.mkdirSync(path.join(root, 'dist/renderer/styles'), { recursive: true });
   fs.mkdirSync(path.join(root, 'dist/renderer/domain/channelBuilder'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'dist/main/index.js'), 'console.log("main");\n');
+  fs.writeFileSync(path.join(root, 'dist/main/index.js'), mainIndexContent);
   fs.writeFileSync(
     path.join(root, 'dist/main/channel/channelBuilderPlanningWorkerEntry.js'),
     'console.log("worker");\n',
@@ -689,52 +1056,49 @@ function makeFixtureRepo(t) {
     'export const constants = true;\n',
   );
 
-  return root;
+}
+
+function makeFakeElectronRuntime(root) {
+  const runtimeDir = path.join(root, 'runtime');
+  fs.mkdirSync(runtimeDir, { recursive: true });
+  fs.writeFileSync(path.join(runtimeDir, 'electron.exe'), 'fake exe');
+  fs.writeFileSync(path.join(runtimeDir, 'version'), '42.0.0');
+  return runtimeDir;
+}
+
+function fixtureRuntimeVersions() {
+  return {
+    node: '24.15.0',
+    chrome: '148.0.7778.96',
+    v8: '14.8.178.14-electron.0',
+    modules: '146',
+    napi: '10',
+  };
+}
+
+function setFixtureBuildMode(root, mode) {
+  fs.writeFileSync(path.join(root, 'fixture-build-mode.txt'), `${mode}\n`);
 }
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
-function createNodeBackedElectronRuntime(runtimeDir, versions, extraPreloadLines = []) {
-  fs.mkdirSync(runtimeDir, { recursive: true });
-  const executablePath = path.join(runtimeDir, 'electron.exe');
-  fs.copyFileSync(process.execPath, executablePath);
-  fs.chmodSync(executablePath, 0o755);
-
-  const preloadPath = path.join(runtimeDir, 'electron-runtime-preload.cjs');
-  const versionLines = versions
-    ? [
-        `const versions = ${JSON.stringify(versions)};`,
-        'for (const [key, value] of Object.entries(versions)) {',
-        '  Object.defineProperty(process.versions, key, {',
-        '    value,',
-        '    enumerable: true,',
-        '    configurable: true,',
-        '  });',
-        '}',
-      ]
-    : [];
-  fs.writeFileSync(preloadPath, [
-    ...versionLines,
-    ...extraPreloadLines,
-    '',
-  ].join('\n'));
-
-  return preloadPath;
-}
-
-function withTemporaryNodeOptions(preloadPaths, callback) {
-  const previous = process.env.NODE_OPTIONS;
-  const paths = Array.isArray(preloadPaths) ? preloadPaths : [preloadPaths];
-  const preloadOptions = paths.map((preloadPath) => `--require ${JSON.stringify(preloadPath)}`).join(' ');
-  process.env.NODE_OPTIONS = previous ? `${previous} ${preloadOptions}` : preloadOptions;
+function withTemporaryEnvironmentVariables(values, callback) {
+  const previousValues = new Map(
+    Object.keys(values).map((key) => [key, process.env[key]]),
+  );
+  for (const [key, value] of Object.entries(values)) {
+    process.env[key] = value;
+  }
 
   const restore = () => {
-    if (previous === undefined) {
-      delete process.env.NODE_OPTIONS;
-    } else {
-      process.env.NODE_OPTIONS = previous;
+    for (const [key, previous] of previousValues) {
+      if (previous === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = previous;
+      }
     }
   };
 

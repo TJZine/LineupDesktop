@@ -9,7 +9,10 @@ import {
   renderWorkflowDom,
 } from './routeDom.js';
 import { mountStaticRendererDom } from './staticDom.js';
-import { applySupportBundleExportResult } from './supportBundleExport.js';
+import {
+  applySupportBundleExportResult,
+  SupportBundleExportCoordinator,
+} from './supportBundleExport.js';
 import { createPlexRuntimeController } from './plexRuntimeActions.js';
 import { resolveChannelSetupLiveSelection } from './channelSetup/liveSelection.js';
 import { createChannelRuntimeController } from './channelRuntimeActions.js';
@@ -59,6 +62,7 @@ const fullscreenTransport = createFullscreenTransportCoordinator({
   },
 });
 let workflowState = createWorkflowState('player');
+const supportBundleExportCoordinator = new SupportBundleExportCoordinator();
 let overlayState = createPlayerOverlayState();
 let playerSnapshot = createEmptyPlayerSnapshot();
 let activeSettingsCategory: SettingsSectionId = 'appearance', activeSetupStage = 'account';
@@ -390,9 +394,13 @@ async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
 
 function applySettingsAction(action: SettingsActionId): void {
   if (action === 'exportSupportBundle') {
+    const exportRequestId = supportBundleExportCoordinator.start();
+    if (exportRequestId === null) {
+      return;
+    }
     workflowState = applyWorkflowSettingsAction(workflowState, action);
     renderApp();
-    void exportSupportBundle();
+    void exportSupportBundle(exportRequestId);
     return;
   }
   void settingsRuntime.applyAction(action);
@@ -495,7 +503,7 @@ function applyOverlayAction(action: PlayerOverlayActionId): void {
   }
 }
 
-async function exportSupportBundle(): Promise<void> {
+async function exportSupportBundle(exportRequestId: number): Promise<void> {
   const requestId = `support-bundle-${Date.now()}`;
   void window.lineupDesktop.diagnostics.recordRendererEvent({
     requestId,
@@ -509,10 +517,14 @@ async function exportSupportBundle(): Promise<void> {
     },
   }).catch(() => undefined);
 
-  workflowState = await applySupportBundleExportResult(
+  const nextWorkflowState = await applySupportBundleExportResult(
     () => workflowState,
     () => window.lineupDesktop.diagnostics.exportSupportBundle(),
   );
+  if (!supportBundleExportCoordinator.settle(exportRequestId)) {
+    return;
+  }
+  workflowState = nextWorkflowState;
   renderApp();
 }
 

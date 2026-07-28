@@ -463,8 +463,7 @@ async function buildRawTagFacet(
           filters: [{ field: 'director', operator: 'eq', value: tagValue }],
         })
       : null;
-  const parsedYear = family === 'year' ? Number.parseInt(tagValue, 10) : Number.NaN;
-  const yearValue = family === 'year' && Number.isFinite(parsedYear) ? parsedYear : null;
+  const yearValue = family === 'year' ? parseYearValue(tagValue) : null;
   const common = {
     facetId,
     sourceIdentity,
@@ -619,26 +618,47 @@ async function loadPages<T>(
   const entries: T[] = [];
   let offset = 0;
   let knownTotal: number | null = null;
+  let observedEntryCount = 0;
+  const cappedResult = () => ({
+    entries,
+    cappedOmitted: knownTotal === null
+      ? null
+      : Math.max(0, Math.max(knownTotal, observedEntryCount) - entries.length),
+    reachedCap: true as const,
+  });
   while (offset <= MAX_PAGE_OFFSET) {
     ensureActive(input);
     const page = await load(offset);
     ensureActive(input);
     if (page.offset !== offset) throw new Error('Unexpected facet page offset');
     knownTotal = page.totalSize;
-    entries.push(...page.entries);
-    if (
+    observedEntryCount += page.entries.length;
+    const retainedPageEntryCount = Math.min(
+      page.entries.length,
+      CHANNEL_BUILDER_FACET_PAGE_SIZE,
+      MAX_FAMILY_ENTRIES - entries.length,
+    );
+    entries.push(...page.entries.slice(0, retainedPageEntryCount));
+    const pageExceededLimit = page.entries.length > CHANNEL_BUILDER_FACET_PAGE_SIZE;
+    const listingComplete =
       page.entries.length < CHANNEL_BUILDER_FACET_PAGE_SIZE ||
-      (knownTotal !== null && entries.length >= knownTotal)
-    ) return { entries, cappedOmitted: 0, reachedCap: false };
+      (knownTotal !== null && observedEntryCount >= knownTotal);
+    if (pageExceededLimit) return cappedResult();
+    if (listingComplete) {
+      return { entries, cappedOmitted: 0, reachedCap: false };
+    }
+    if (entries.length >= MAX_FAMILY_ENTRIES) return cappedResult();
     offset += CHANNEL_BUILDER_FACET_PAGE_SIZE;
   }
-  const cappedOmitted =
-    knownTotal === null ? null : Math.max(0, knownTotal - entries.length);
-  return {
-    entries: entries.slice(0, MAX_FAMILY_ENTRIES),
-    cappedOmitted,
-    reachedCap: true,
-  };
+  return cappedResult();
+}
+
+function parseYearValue(value: string): number {
+  const parsed = /^[+-]?\d+$/u.test(value) ? Number(value) : Number.NaN;
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error('Invalid year facet value');
+  }
+  return parsed;
 }
 
 function noteCap(

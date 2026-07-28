@@ -31,7 +31,7 @@ test('validated smoke fixture is deterministic, non-empty, and memory-backed', a
         LINEUP_DESKTOP_SMOKE: '1',
         LINEUP_DESKTOP_SMOKE_NONCE: nonce,
       },
-      platform: 'linux',
+      platform: globalThis.process.platform,
       temporaryDirectory: temporaryRoot,
     }).validate();
     assert.equal(grant.status, 'smoke');

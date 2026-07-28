@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import type { IpcMainInvokeEvent } from 'electron';
 
 import {
@@ -9,6 +12,85 @@ import {
 } from '../../../contracts/ipc.js';
 import { DiagnosticEventStore } from '../../../main/diagnostics/diagnosticEventStore.js';
 import { registerDiagnosticsIpcHandlers } from '../../../main/diagnostics/supportBundleIpc.js';
+
+test('diagnostics export removes whole extensionless absolute paths before the final scan', async (t) => {
+  const parentDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-diagnostics-ipc-'));
+  t.after(() => fs.rm(parentDirectory, { recursive: true, force: true }));
+  const ipcMain = new IpcMainDouble();
+  let recordSequence = 0;
+  const store = new DiagnosticEventStore({
+    clock: () => 1000,
+    idGenerator: () => `absolute-path-record-${recordSequence += 1}`,
+  });
+  const absolutePaths = [
+    ['', 'opt', 'Lineup Data', 'private-media-folder'].join('/'),
+    ['', 'Médiathèque, 2026; (Director\'s Archive)', 'private-media-folder'].join('/'),
+    ['D:', '\\', 'Media Library', '\\', 'private'].join(''),
+    ['D:', '/', 'Media', '/', 'private.mkv'].join(''),
+    ['\\\\', 'media-host', '\\', 'Shared Library', '\\', 'private'].join(''),
+  ];
+  const unsafeMessages = [
+    ...absolutePaths.map((absolutePath) => `Leak ${absolutePath}. Retry from the library.`),
+    'Leak /Médiathèque, private archive.',
+    `Leak ${['D:', 'Media', 'private'].join('\\')}; private archive.`,
+  ];
+  for (const message of unsafeMessages) {
+    store.record({
+      surface: 'main',
+      category: 'support-bundle-export',
+      severity: 'error',
+      status: 'failed',
+      operation: 'support-bundle.path-redaction',
+      message,
+    });
+  }
+  registerDiagnosticsIpcHandlers({
+    eventStore: store,
+    shellMode: 'development',
+    isAuthorizedEvent: () => true,
+    createRequestId: () => 'diagnostics-request',
+    parentDirectoryProvider: () => parentDirectory,
+    ipcMain,
+  });
+
+  const result = await ipcMain.invoke(
+    LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
+    {},
+  ) as {
+    status: string;
+    bundleDirectoryName: string;
+    redactionReport: { status: string };
+  };
+
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.redactionReport.status, 'passed');
+  const diagnostics = await fs.readFile(
+    path.join(parentDirectory, result.bundleDirectoryName, 'diagnostics.ndjson'),
+    'utf8',
+  );
+  const records = diagnostics
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { operation: string; message: string });
+  const pathRecords = records.filter((candidate) => candidate.message.startsWith('Leak '));
+  assert.equal(pathRecords.length, unsafeMessages.length);
+  assert.deepEqual(
+    pathRecords.map((record) => record.message),
+    unsafeMessages.map(() => 'Leak [redacted]'),
+  );
+  for (const sensitiveFragment of [
+    'private-media-folder',
+    'Director',
+    'Media Library',
+    'private.mkv',
+    'Shared Library',
+    'D:',
+    'private archive',
+    'Retry from the library',
+  ]) {
+    assert.equal(diagnostics.includes(sensitiveFragment), false);
+  }
+});
 
 test('diagnostics IPC records authorized renderer events and rejects forbidden fields', async () => {
   const ipcMain = new IpcMainDouble();

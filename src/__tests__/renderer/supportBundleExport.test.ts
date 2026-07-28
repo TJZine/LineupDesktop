@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   DIAGNOSTIC_REDACTION_VERSION,
   type DiagnosticsExportSupportBundleResult,
-  type RedactionScanReport,
+  type PassedRedactionScanReport,
 } from '../../contracts/diagnostics.js';
 import {
   activateWorkflowRoute,
@@ -12,7 +12,25 @@ import {
   applyWorkflowSettingsValues,
   createWorkflowState,
 } from '../../renderer/workflow.js';
-import { applySupportBundleExportResult } from '../../renderer/supportBundleExport.js';
+import {
+  applySupportBundleExportResult,
+  SupportBundleExportCoordinator,
+} from '../../renderer/supportBundleExport.js';
+
+test('support bundle export coordinator rejects concurrent starts and stale settlement', () => {
+  const coordinator = new SupportBundleExportCoordinator();
+  const firstRequestId = coordinator.start();
+
+  assert.equal(typeof firstRequestId, 'number');
+  assert.equal(coordinator.start(), null);
+  assert.equal(coordinator.settle((firstRequestId ?? 0) + 1), false);
+  assert.equal(coordinator.start(), null);
+  assert.equal(coordinator.settle(firstRequestId ?? 0), true);
+
+  const secondRequestId = coordinator.start();
+  assert.equal(typeof secondRequestId, 'number');
+  assert.notEqual(secondRequestId, firstRequestId);
+});
 
 test('support bundle export result applies succeeded status through renderer sanitization', async () => {
   const state = await applySupportBundleExportResult(
@@ -108,7 +126,9 @@ function createDeferred<T>(): {
   };
 }
 
-function createReport(overrides: Partial<RedactionScanReport> = {}): RedactionScanReport {
+function createReport(
+  overrides: Partial<PassedRedactionScanReport> = {},
+): PassedRedactionScanReport {
   return {
     redactionVersion: DIAGNOSTIC_REDACTION_VERSION,
     scannedFileCount: 6,

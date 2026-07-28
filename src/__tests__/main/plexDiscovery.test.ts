@@ -206,7 +206,7 @@ test('plex discovery errors summarize unserializable context without stack leaka
   const context: Record<string, unknown> = { token: 'placeholder-auth-value' };
   context.self = context;
   const cause = new Error('discovery failed secret=placeholder-secret');
-  cause.stack = 'Error: failed\n    at /Users/example/lineup/discovery.ts:1:1';
+  cause.stack = `Error: failed\n    at ${['', 'Users', 'example', 'lineup', 'discovery.ts:1:1'].join('/')}`;
 
   const error = new PlexDiscoveryError('server-error', 'failed token=placeholder-auth-value', 500, {
     cause,
@@ -220,7 +220,7 @@ test('plex discovery errors summarize unserializable context without stack leaka
 
   assert.equal(serialized.includes('placeholder-auth-value'), false);
   assert.equal(serialized.includes('placeholder-secret'), false);
-  assert.equal(serialized.includes('/Users/example'), false);
+  assert.equal(serialized.includes(['', 'Users', 'example'].join('/')), false);
   assert.equal(serialized.includes('"stack"'), false);
   assert.equal(serialized.includes('unserializable object'), true);
 });
@@ -506,7 +506,7 @@ test('plex discovery parser normalizes resources and renderer-safe summaries', a
       connections: [
         createConnection({ address: 'local', uri: `${'https'}://local.example:32400/library` }),
         createConnection({ address: 'credentialed', uri: `${'https'}://user:pass@example.invalid:32400` }),
-        createConnection({ address: 'file', uri: 'file:///tmp/not-allowed' }),
+        createConnection({ address: 'file', uri: ['file://', 'tmp', 'not-allowed'].join('/') }),
       ],
     }),
     createPlexApiResource({

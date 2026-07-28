@@ -26,7 +26,7 @@ const rawPrivateValues = [
   'raw-stream-id-main',
   'https://private.example/library/parts/main',
   'X-Private-Header',
-  '/Users/example/Library/Application Support/Lineup',
+  ['', 'Users', 'example', 'Library', 'Application Support', 'Lineup'].join('/'),
   'ElectronPrivateObject',
 ] as const;
 

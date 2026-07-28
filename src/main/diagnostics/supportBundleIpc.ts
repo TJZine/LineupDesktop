@@ -21,6 +21,7 @@ import {
   type DiagnosticsRendererEventEnvelope,
   type RedactionScanReport,
   containsDiagnosticForbiddenField,
+  containsDiagnosticAbsolutePath,
   isDiagnosticForbiddenFieldKey,
   isSafeRendererDiagnosticContextValue,
 } from '../../contracts/diagnostics.js';
@@ -356,7 +357,7 @@ function scanSupportBundleContent(content: string): Array<keyof RedactionScanRep
   if (/\b(?:bearer|basic|token)\s+[A-Za-z0-9._~+/=-]{8,}/iu.test(content)) {
     findings.push('credential-scheme');
   }
-  if (/\b(?:path|filePath|directory|userData|home|mediaPath|localPath)\s*[:=]\s*(?:"[A-Za-z]:\\|"\/(?:Users|home|var|tmp|private|Volumes)\/)/u.test(content)) {
+  if (containsDiagnosticAbsolutePath(content)) {
     findings.push('raw-filesystem-path');
   }
   if (/\b(?:pid|argv|env|stderr|stdout|crashDump|minidump|rawLog)\s*[:=]\s*(?:"[^"]+"|\d{2,})/iu.test(content)) {

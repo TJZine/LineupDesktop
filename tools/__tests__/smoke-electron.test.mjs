@@ -1,18 +1,35 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
+import {
+  clearInterval as clearNodeInterval,
+  setImmediate as setNodeImmediate,
+  setInterval as setNodeInterval,
+} from 'node:timers';
 
 import {
   buildSmokeSpawnOptions,
   createSmokeBootstrap,
+  runElectronSmoke,
 } from '../smoke-electron.mjs';
 
 test('smoke launcher creates a canonical nonce-bound sentinel and exact arguments', async () => {
-  const bootstrap = await createSmokeBootstrap('linux');
+  const bootstrap = await createSmokeBootstrap(process.platform);
   try {
     assert.match(bootstrap.nonce, /^[a-f0-9]{64}$/u);
     assert.ok(bootstrap.canonicalRoot.includes(bootstrap.nonce));
-    assert.equal((await fs.lstat(bootstrap.sentinelPath)).mode & 0o777, 0o600);
+    assert.equal(
+      bootstrap.protectionPolicy,
+      process.platform === 'win32'
+        ? 'windows-inherited-userdata-acl'
+        : 'posix-0600',
+    );
+    if (process.platform !== 'win32') {
+      assert.equal((await fs.lstat(bootstrap.sentinelPath)).mode & 0o777, 0o600);
+    }
     assert.deepEqual(
       JSON.parse(await fs.readFile(bootstrap.sentinelPath, 'utf8')),
       { mode: 'lineup-desktop-smoke-v1', nonce: bootstrap.nonce },
@@ -35,3 +52,133 @@ test('Windows capability branch records ACL policy without numeric mode enforcem
     await fs.rm(bootstrap.canonicalRoot, { recursive: true, force: true });
   }
 });
+
+test('smoke launcher preserves a successful child exit and cleans its temporary root', { timeout: 1_000 }, async () => {
+  const child = new FakeSmokeChild();
+  let smokeRoot;
+
+  const resultPromise = runElectronSmoke({
+    spawnChild: (_executable, args) => {
+      smokeRoot = smokeRootFromArgs(args);
+      setNodeImmediate(() => child.emit('exit', 0, null));
+      return child;
+    },
+    deadlineMs: 100,
+    reapDeadlineMs: 20,
+  });
+
+  assert.equal(await resultPromise, 0);
+  assert.equal(await pathExists(smokeRoot), false);
+  assert.deepEqual(child.killSignals, []);
+});
+
+test('smoke launcher force-kills a non-exiting child, reports a fixed failure, and cleans up', { timeout: 1_000 }, async () => {
+  const child = new FakeSmokeChild({ killResult: false, withRefedHandle: true });
+  const failures = [];
+  let smokeRoot;
+
+  try {
+    const result = await runElectronSmoke({
+      spawnChild: (_executable, args) => {
+        smokeRoot = smokeRootFromArgs(args);
+        return child;
+      },
+      deadlineMs: 30,
+      reapDeadlineMs: 5,
+      reportFailure: (message) => failures.push(message),
+    });
+
+    assert.equal(result, 1);
+    assert.deepEqual(child.killSignals, ['SIGKILL']);
+    assert.equal(child.unrefCount, 1);
+    assert.equal(child.handle?.hasRef(), false);
+    assert.equal(child.listenerCount('error'), 0);
+    assert.equal(child.listenerCount('exit'), 0);
+    assert.deepEqual(failures, ['Electron smoke exceeded its deadline.']);
+    assert.equal(await pathExists(smokeRoot), false);
+  } finally {
+    child.dispose();
+  }
+});
+
+test('smoke launcher safely reports bootstrap failure and removes its provisional root', { timeout: 1_000 }, async () => {
+  const failures = [];
+  const bootstrapRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'lineup-smoke-bootstrap-failure-'),
+  );
+
+  const result = await runElectronSmoke({
+    createBootstrap: (_platform, { onRootCreated }) => {
+      onRootCreated(bootstrapRoot);
+      throw new Error('untrusted bootstrap detail');
+    },
+    deadlineMs: 100,
+    reportFailure: (message) => failures.push(message),
+  });
+
+  assert.equal(result, 1);
+  assert.deepEqual(failures, ['Electron smoke setup failed.']);
+  assert.equal(await pathExists(bootstrapRoot), false);
+});
+
+test('smoke launcher bounds a hung bootstrap and removes its provisional root', { timeout: 1_000 }, async () => {
+  const failures = [];
+  const bootstrapRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'lineup-smoke-bootstrap-hang-'),
+  );
+
+  const result = await runElectronSmoke({
+    createBootstrap: (_platform, { onRootCreated }) => {
+      onRootCreated(bootstrapRoot);
+      return new Promise(() => {});
+    },
+    deadlineMs: 5,
+    reapDeadlineMs: 5,
+    reportFailure: (message) => failures.push(message),
+  });
+
+  assert.equal(result, 1);
+  assert.deepEqual(failures, ['Electron smoke exceeded its deadline.']);
+  assert.equal(await pathExists(bootstrapRoot), false);
+});
+
+class FakeSmokeChild extends EventEmitter {
+  killSignals = [];
+  unrefCount = 0;
+
+  constructor({ killResult = true, withRefedHandle = false } = {}) {
+    super();
+    this.killResult = killResult;
+    this.handle = withRefedHandle ? setNodeInterval(() => {}, 60_000) : undefined;
+  }
+
+  kill(signal) {
+    this.killSignals.push(signal);
+    return this.killResult;
+  }
+
+  unref() {
+    this.unrefCount += 1;
+    this.handle?.unref();
+    return this;
+  }
+
+  dispose() {
+    if (this.handle !== undefined) clearNodeInterval(this.handle);
+  }
+}
+
+function smokeRootFromArgs(args) {
+  const argument = args.find((value) => value.startsWith('--lineup-smoke-root='));
+  assert.ok(argument);
+  return argument.slice('--lineup-smoke-root='.length);
+}
+
+async function pathExists(candidate) {
+  try {
+    await fs.access(candidate);
+    return true;
+  } catch {
+    return false;
+  }
+}
