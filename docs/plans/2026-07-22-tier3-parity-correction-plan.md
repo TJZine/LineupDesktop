@@ -2061,3 +2061,61 @@ For the mechanical registry reconciliation, confirm the entire
 `playerOverlayPresentation.test.ts` diff is only the exact two required
 `channelSummary` fields and that no player/presentation assertion, behavior, or
 coverage changed.
+
+ACTIVE_WS1_PACKAGE_1F_HANDOFF_2026_07_28: This paragraph supersedes the stale
+Package 1F cancellation-race blocker and is the current cross-machine
+continuation boundary. Preserve commits `027e674` (`test(ws1): harden channel
+builder evidence contract`) and `e9da53d` (`fix(ws1): make channel builder
+commit transition atomic`). The fix makes the abort decision and commit-barrier
+publication one synchronous owner transition, publishes exact
+`running`/`persist` state only after commit is irrevocable, and removes the
+runtime's earlier pre-barrier persist publication. Focused main/preload
+contracts passed 42/42, the exact visual-evidence contract passed 94/94, and an
+independent implementation rereview reported no findings.
+
+On a fresh Electron build of exact commit `e9da53d`, after operator-owned Plex
+linking and selected-server restoration through the safe public bridge, the
+repaired live cancellation boundary passed without recording account, server,
+library, media, credential, endpoint, or machine-path material. A pre-barrier
+live merge cancel was accepted while apply was in `materialize`; the operation
+ended `canceled`, lineup revision remained 4, and channel count remained 401.
+A separate post-barrier live merge apply was observed at
+`running`/`persist`; cancel was rejected with exact reason `commit-started`,
+the operation ended `succeeded`, guide refresh completed, revision advanced
+from 4 to 5, and channel count remained 401. After a complete app close and
+restart, safe status reported revision 5, 401 channels, and `configured`.
+Therefore the cancellation race is resolved and is no longer a Package 1F
+blocker.
+
+WS1 and Package 1F are not closed. No approved paired capture manifests yet
+close `UI-17`, `UI-18`, `UI-19`, `UI-21`, `UI-22`, `UI-23`, or `UI-24`.
+The repaired exact-HEAD live run exercised merge cancellation only; live safe
+facet discovery across multiple eligible libraries, the complete supported
+filter surface, and live append and replace review/apply proof remain open.
+The named manual Windows scale/zoom, contrast/reduced-motion, D-pad/gamepad,
+slow/blocked-state, and packaged ACL obligations remain open. Full
+`npm run verify` is not currently a green closeout claim: one observed run
+passed the 939-contract surface with 937 passed and 2 skipped but later failed
+two unrelated packaging-harness environment assertions; another observed an
+intermittent unrelated concurrent first-run Plex-client-identity failure that
+passed 3/3 in isolation. `npm run verify:redaction` is also obstructed on this
+Windows worktree only by the unrelated untracked
+`src/native-helper/Lineup.NativePlayerHost/obj/` generated tree, which must not
+be committed as WS1 evidence.
+
+Carry `WS1-PERF-01` unchanged: workflow run `30074270895`, job `89421508431`,
+exact head `335a13acfcee3f5450c104ed3fc48e45e461264a`, Windows Server 2025,
+Node `22.19.0`, unchanged deterministic 50,000-candidate fixture, and isolated
+command `npm run verify:channel-builder-performance`, executed sequentially
+with no concurrent npm/Node test workload. It measured 2,690.61 ms against the
+unchanged 2,000 ms cap. The above-cap result remains honest deferred debt and
+is not resolved by a later non-authoritative local sample.
+
+MacBook continuation may fetch the published `initial-build` branch and use
+this handoff as current WS1 state. It must not begin WS2 product implementation:
+the program dependency still forbids WS2 while WS1 is active. Resume Package
+1F closeout from the remaining portable visual-evidence preparation or
+cross-platform verification surfaces, preserve all Windows-only obligations as
+open, and return the named Windows manual/packaged gates to a Windows machine.
+Only after reviewed WS1 evidence and authority closeout may the controller
+freshness-read, exact-file-scope, and adversarially review WS2.
