@@ -84,6 +84,7 @@ test('native helper rejects controls before media is loaded', async () => {
 test('native helper uses official mpv format values and structured runtime property setters', async () => {
   const source = await readFile(programPath, 'utf8');
 
+  assert.match(source, /MpvFormatNone\s*=\s*0/u);
   assert.match(source, /MpvFormatString\s*=\s*1/u);
   assert.match(source, /MpvFormatFlag\s*=\s*3/u);
   assert.match(source, /MpvFormatInt64\s*=\s*4/u);
@@ -144,6 +145,14 @@ test('native helper checks essential property observation registration before st
   assert.match(
     source,
     /ObserveProperty\(mpvContext,\s*1,\s*"time-pos",\s*MpvFormatDouble\)[\s\S]*?ObserveProperty\(mpvContext,\s*10,\s*"audio-codec",\s*MpvFormatString\)[\s\S]*?renderThread\.Start\(\)/u,
+  );
+  assert.match(
+    source,
+    /ObserveProperty\(mpvContext,\s*8,\s*"video-params",\s*MpvFormatNone\)/u,
+  );
+  assert.doesNotMatch(
+    source,
+    /ObserveProperty\(mpvContext,\s*8,\s*"video-params",\s*MpvFormatString\)/u,
   );
   assert.match(
     source,

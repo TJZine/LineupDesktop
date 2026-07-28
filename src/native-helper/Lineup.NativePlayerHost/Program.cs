@@ -17,6 +17,7 @@ namespace Lineup.NativePlayerHost
         private const int MpvEventFileLoaded = 8;
         private const int MpvEventPropertyChange = 22;
 
+        private const int MpvFormatNone = 0;
         private const int MpvFormatString = 1;
         private const int MpvFormatFlag = 3;
         private const int MpvFormatInt64 = 4;
@@ -504,7 +505,7 @@ namespace Lineup.NativePlayerHost
                 ObserveProperty(mpvContext, 5, "aid", MpvFormatString);
                 ObserveProperty(mpvContext, 6, "sid", MpvFormatString);
                 ObserveProperty(mpvContext, 7, "vid", MpvFormatString);
-                ObserveProperty(mpvContext, 8, "video-params", MpvFormatString);
+                ObserveProperty(mpvContext, 8, "video-params", MpvFormatNone);
                 ObserveProperty(mpvContext, 9, "video-codec", MpvFormatString);
                 ObserveProperty(mpvContext, 10, "audio-codec", MpvFormatString);
 
