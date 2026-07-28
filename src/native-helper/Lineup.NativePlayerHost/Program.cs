@@ -903,10 +903,10 @@ namespace Lineup.NativePlayerHost
 
         private static int SetPropertyDouble(IntPtr mpv, string name, double value)
         {
-            IntPtr data = Marshal.AllocHGlobal(Marshal.SizeOf<double>());
+            IntPtr data = Marshal.AllocHGlobal(sizeof(long));
             try
             {
-                Marshal.StructureToPtr(value, data, false);
+                Marshal.WriteInt64(data, BitConverter.DoubleToInt64Bits(value));
                 return NativeMethods.mpv_set_property(mpv, name, MpvFormatDouble, data);
             }
             finally

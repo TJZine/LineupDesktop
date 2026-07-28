@@ -127,6 +127,11 @@ test('native helper gates runtime control results and formats seek values invari
   assert.match(source, /deltaSeconds\.ToString\("F3",\s*CultureInfo\.InvariantCulture\)/u);
   assert.match(source, /if \(nativeResult >= 0\)[\s\S]*?PLAYER_HELPER_COMMAND_FAILED/u);
   assert.doesNotMatch(source, /PLAYER_HELPER_COMMAND_EXCEPTION/u);
+  assert.match(
+    source,
+    /Marshal\.WriteInt64\(data,\s*BitConverter\.DoubleToInt64Bits\(value\)\)/u,
+  );
+  assert.doesNotMatch(source, /Marshal\.StructureToPtr\(value,\s*data/u);
 });
 
 test('native helper checks essential property observation registration before starting threads', async () => {
