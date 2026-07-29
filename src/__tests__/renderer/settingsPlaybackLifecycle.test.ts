@@ -75,19 +75,25 @@ test('settings playback lifecycle cleanup releases pause custody', async () => {
 test('settings playback lifecycle does not acquire resume custody after route exit or cleanup', async () => {
   let snapshot = playing('media-1');
   const intents: string[] = [];
-  const resolvers: Array<(value: Awaited<ReturnType<LineupDesktopPreloadApi['player']['dispatch']>>) => void> = [];
+  const resolvers: Array<{
+    requestId: string;
+    resolve(value: Awaited<ReturnType<LineupDesktopPreloadApi['player']['dispatch']>>): void;
+  }> = [];
   const dispatch: LineupDesktopPreloadApi['player']['dispatch'] = (envelope) => {
     intents.push(envelope.intent);
-    return new Promise((resolve) => { resolvers.push(resolve); });
+    return new Promise((resolve) => {
+      resolvers.push({ requestId: envelope.requestId, resolve });
+    });
   };
   const lifecycle = createSettingsPlaybackLifecycle({ player: { dispatch }, getSnapshot: () => snapshot });
 
   const entry = lifecycle.routeChanged('player', 'settings', false);
   await lifecycle.routeChanged('settings', 'player', false);
   snapshot = { ...snapshot, status: 'paused', playing: false };
-  resolvers.shift()?.({
+  const pendingRouteExit = resolvers.shift();
+  pendingRouteExit?.resolve({
     ok: true,
-    requestId: 'settings-playback-pause-1',
+    requestId: pendingRouteExit.requestId,
     value: { accepted: true, events: [], snapshot },
   });
   await entry;
@@ -97,9 +103,10 @@ test('settings playback lifecycle does not acquire resume custody after route ex
   const pendingCleanup = lifecycle.routeChanged('player', 'settings', false);
   lifecycle.cleanup();
   snapshot = { ...snapshot, status: 'paused', playing: false };
-  resolvers.shift()?.({
+  const pendingCleanupResult = resolvers.shift();
+  pendingCleanupResult?.resolve({
     ok: true,
-    requestId: 'settings-playback-pause-2',
+    requestId: pendingCleanupResult.requestId,
     value: { accepted: true, events: [], snapshot },
   });
   await pendingCleanup;

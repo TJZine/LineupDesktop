@@ -205,7 +205,16 @@ export function isPersistedSettingsActionEnabled(
     case 'cycleGuideDensity':
     case 'cycleGuideLayout':
     case 'cyclePastItemsWindow': return false;
-    default: return true;
+    case 'cycleLaunchMode':
+    case 'toggleKeepPlaybackRunning':
+    case 'cycleTheme':
+    case 'cycleNowPlayingAutoHide':
+    case 'toggleShowProfilePickerOnStartup':
+    case 'toggleDebugLogging':
+    case 'toggleSubtitleDebugLogging':
+    case 'togglePreviewBadges':
+    case 'toggleSetupReminder':
+      return true;
   }
 }
 
@@ -273,7 +282,7 @@ export function createSettingsSections(
     disabled: disabledReason !== undefined,
     disabledReason,
   });
-  const guidePending = 'Takes effect after Guide support (WS5).';
+  const guidePending = 'Available when Guide preferences are supported.';
   return [
     {
       id: 'audio-subtitles',
@@ -392,6 +401,17 @@ export function createSettingsSections(
       ],
     },
   ];
+}
+
+export function createSettingsSectionControlFocusIds(): ReadonlyMap<string, readonly string[]> {
+  return new Map(
+    createSettingsSections(createSettingsDraftState()).map((section) => [
+      `settings-category-${section.id}`,
+      section.items
+        .filter((item) => item.action !== undefined)
+        .map((item) => `settings-${item.id}`),
+    ]),
+  );
 }
 
 function cycle<T>(value: T, values: readonly T[]): T {

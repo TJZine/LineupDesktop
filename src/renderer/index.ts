@@ -51,6 +51,7 @@ import { renderStagedSetupDom } from './setup/stagedSetupDom.js';
 import { cleanupSetupRouteLifecycle, clearSetupSourceLifecycle, createSetupComposition } from './setup/setupComposition.js';
 import { createSettingsRuntime } from './settings/settingsRuntime.js';
 import { createAudioSetupRuntime } from './settings/audioSetupRuntime.js';
+import { canActivateRouteDuringAudioSetup } from './settings/audioSetupNavigation.js';
 import { renderAudioSetupDom } from './settings/audioSetupDom.js';
 import { createSettingsPlaybackLifecycle } from './settings/settingsPlaybackLifecycle.js';
 import { renderSettingsProfileDom } from './settingsSetupDom.js';
@@ -406,8 +407,13 @@ function renderStatus(event: ShellStatusEvent): void {
   }
 }
 
-function activateRoute(route: AppRouteId): void {
+function activateRoute(route: AppRouteId): boolean {
   const previousRoute = workflowState.routeState.activeRoute;
+  if (!canActivateRouteDuringAudioSetup(
+    previousRoute,
+    audioSetupRuntime.getState().status,
+    route,
+  )) return false;
   if (previousRoute === 'player' && route !== 'player') playerOverlayController.routeLeave();
   if (previousRoute === 'channelSetup' && route !== 'channelSetup') {
     plexController.invalidateOnboardingOperations();
@@ -426,15 +432,25 @@ function activateRoute(route: AppRouteId): void {
   if (previousRoute !== route && route === 'channelSetup') {
     void onboardingFlow.changeStage(resolveChannelSetupEntryStage(plexController.getState()));
   }
+  return true;
 }
 
 async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
+  const currentRoute = workflowState.routeState.activeRoute;
+  const proposedState = applyWorkflowAction(workflowState, action);
+  if (!canActivateRouteDuringAudioSetup(
+    currentRoute,
+    audioSetupRuntime.getState().status,
+    proposedState.routeState.activeRoute,
+  )) {
+    return;
+  }
   if (action === 'openGuide') {
     await navigationLifecycle.handleInput('guide');
     return;
   }
   const previousRoute = workflowState.routeState.activeRoute;
-  const nextWorkflowState = applyWorkflowAction(workflowState, action);
+  const nextWorkflowState = proposedState;
   const nextRoute = nextWorkflowState.routeState.activeRoute;
   if (previousRoute === 'channelSetup' && nextRoute !== 'channelSetup') {
     plexController.invalidateOnboardingOperations();

@@ -427,7 +427,7 @@ a matching shell screenshot from closing missing controls or runtime behavior.
 | UI-11 | `profile-pin` / Profile PIN modal | `live-local` | `local-match` | `reference:profile-pin` / `capture:profile-pin` | ON-07 |
 | UI-12 | `server-select` / Server selection | `live-local` | `local-match` | `reference:server-select` / `capture:server-select` | ON-09, ON-10 |
 | UI-13 | `server-error` / Server error | `partial` | `local-match` | `reference:server-error` / `capture:server-error` | ON-11, ON-16–ON-18 |
-| UI-14 | `audio-setup` / Audio setup | `partial` | `missing` | First-run safe System Default/opaque-output and injected unavailable-saved-output surface landed; `WS3-PROOF-01` real Windows journey and `WS3-PROOF-06` paired visual remain open. | ON-12, WIN-02 |
+| UI-14 | `audio-setup` / Audio setup | `partial` | `partial` | First-run safe System Default/opaque-output and injected unavailable-saved-output surface landed; `WS3-PROOF-01` real Windows journey and `WS3-PROOF-06` paired visual remain open. | ON-12, WIN-02 |
 | UI-15 | `setup-account` / Desktop account stage | `desktop-addition` | `desktop-specific` | `reference:setup-account` / `capture:setup-account` | ON-02–ON-08 |
 | UI-16 | `setup-server` / Desktop server stage | `desktop-addition` | `desktop-specific` | `reference:setup-server` / `capture:setup-server` | ON-09–ON-11 |
 | UI-17 | `setup-library` / Library selection | `live-local` | `partial` | WS1 UI landed; current paired visual manifest remains open. | LIB-01, CB-01–CB-02 |

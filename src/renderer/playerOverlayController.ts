@@ -245,6 +245,18 @@ export function createPlayerOverlayController(
     }, MINI_GUIDE_TIMEOUT_MS);
   };
 
+  const armNowPlayingTimer = (): void => {
+    nowPlayingTimer = clearTimer(nowPlayingTimer);
+    if (nowPlayingAutoHideMs === 0) return;
+    nowPlayingTimer = options.host.setTimeout(() => {
+      nowPlayingTimer = null;
+      if (options.getState().activeOverlayId === 'nowPlaying') {
+        update(closeTopOverlay);
+        options.focus(null);
+      }
+    }, nowPlayingAutoHideMs);
+  };
+
   const requestOsd = (): boolean => {
     const before = options.getState();
     const next = openOsd(before, options.getPresentation().playerSnapshot);
@@ -270,15 +282,7 @@ export function createPlayerOverlayController(
     options.setState(next);
     options.render();
     options.focus(null);
-    if (nowPlayingAutoHideMs > 0) {
-      nowPlayingTimer = options.host.setTimeout(() => {
-        nowPlayingTimer = null;
-        if (options.getState().activeOverlayId === 'nowPlaying') {
-          update(closeTopOverlay);
-          options.focus(null);
-        }
-      }, nowPlayingAutoHideMs);
-    }
+    armNowPlayingTimer();
     return true;
   };
 
@@ -758,15 +762,10 @@ export function createPlayerOverlayController(
     routeLeave,
     setNowPlayingAutoHideMs(value) {
       nowPlayingAutoHideMs = value;
-      nowPlayingTimer = clearTimer(nowPlayingTimer);
-      if (options.getState().activeOverlayId === 'nowPlaying' && value > 0) {
-        nowPlayingTimer = options.host.setTimeout(() => {
-          nowPlayingTimer = null;
-          if (options.getState().activeOverlayId === 'nowPlaying') {
-            update(closeTopOverlay);
-            options.focus(null);
-          }
-        }, value);
+      if (options.getState().activeOverlayId === 'nowPlaying') {
+        armNowPlayingTimer();
+      } else {
+        nowPlayingTimer = clearTimer(nowPlayingTimer);
       }
     },
     dispose() {

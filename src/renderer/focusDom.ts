@@ -6,6 +6,10 @@ import type {
   FocusState,
 } from './navigation.js';
 import { getStagedSetupNeighbors } from './setup/stagedSetupFocus.js';
+import {
+  SETTINGS_SECTION_IDS,
+  createSettingsSectionControlFocusIds,
+} from './settingsSetup.js';
 
 const dynamicFocusIdsByRegistry = new WeakMap<FocusRegistry, Set<string>>();
 const focusIdsByRegistry = new WeakMap<FocusRegistry, Set<string>>();
@@ -427,23 +431,10 @@ function getSettingsNeighbors(
 }
 
 const SETTINGS_CATEGORY_FOCUS_IDS: readonly string[] = [
-  'settings-category-audio-subtitles',
-  'settings-category-playback-hdr',
-  'settings-category-appearance',
-  'settings-category-guide',
-  'settings-category-account',
-  'settings-category-developer',
-  'settings-category-recovery',
+  ...SETTINGS_SECTION_IDS.map((sectionId) => `settings-category-${sectionId}`),
 ];
 
-const SETTINGS_CONTROL_CATEGORY = new Map<string, readonly string[]>([
-  ['settings-category-audio-subtitles', ['settings-audio-output', 'settings-dts-passthrough', 'settings-direct-play-audio-fallback', 'settings-subtitle-mode', 'settings-preferred-subtitle-language', 'settings-prefer-forced-subtitles']],
-  ['settings-category-playback-hdr', ['settings-keep-playback-running', 'settings-hdr-fallback', 'settings-transcode-quality', 'settings-transcode-compatibility']],
-  ['settings-category-appearance', ['settings-launch-mode', 'settings-info-box-background', 'settings-theme', 'settings-cinematic-now-playing', 'settings-prefer-clear-logos', 'settings-now-playing-auto-hide', 'settings-preview-badges']],
-  ['settings-category-account', ['settings-profile-picker-startup']],
-  ['settings-category-developer', ['settings-debug-logging', 'settings-subtitle-debug-logging', 'settings-support-bundle-export']],
-  ['settings-category-recovery', ['settings-setup-reminder']],
-]);
+const SETTINGS_CONTROL_CATEGORY = createSettingsSectionControlFocusIds();
 
 function findSettingsControlCategory(focusId: string): string | undefined {
   for (const [category, controls] of SETTINGS_CONTROL_CATEGORY) {

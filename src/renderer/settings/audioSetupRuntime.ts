@@ -36,7 +36,7 @@ export function createAudioSetupRuntime(options: {
 
   return {
     async initialize(): Promise<void> {
-      const operationGeneration = generation;
+      const operationGeneration = ++generation;
       state = { ...state, status: 'loading', message: 'Checking available audio outputs…' };
       publish();
       const requestId = `audio-setup-${String(++requestSequence)}`;
@@ -63,7 +63,7 @@ export function createAudioSetupRuntime(options: {
         outputs: result.value.outputs.map((row) => ({ ...row })),
         selectedId,
         message: persistedId !== null && !persistedOutputAvailable
-          ? 'The saved output is unavailable. System Default will be used.'
+          ? 'The saved output is unavailable. System default will be used.'
           : result.value.status === 'unavailable'
           ? 'Audio outputs are unavailable. You can safely use System default.'
           : result.value.status === 'partial'
@@ -78,18 +78,29 @@ export function createAudioSetupRuntime(options: {
       publish();
     },
     async complete(): Promise<void> {
-      if (!active || state.status !== 'ready') return;
+      if (!active || (state.status !== 'ready' && state.status !== 'failed')) return;
       const operationGeneration = generation;
       const selectedId = state.selectedId;
       const selectedRow = state.outputs.find((row) => row.id === selectedId);
       const selectedDeviceId = selectedRow?.kind === 'device' ? selectedRow.id : null;
       state = { ...state, status: 'saving', message: 'Saving audio setup…' };
       publish();
-      await options.replaceValues((values) => ({
-        ...values,
-        audioOutputDeviceId: selectedDeviceId,
-        audioSetupCompleted: true,
-      }));
+      try {
+        await options.replaceValues((values) => ({
+          ...values,
+          audioOutputDeviceId: selectedDeviceId,
+          audioSetupCompleted: true,
+        }));
+      } catch {
+        if (!active || operationGeneration !== generation) return;
+        state = {
+          ...state,
+          status: 'failed',
+          message: 'Could not save audio setup. Check desktop settings storage and try again.',
+        };
+        publish();
+        return;
+      }
       if (!active || operationGeneration !== generation) return;
       const values = options.getSettingsValues();
       const expectedId = selectedDeviceId;

@@ -7,7 +7,11 @@ import {
   type DesktopSettingsValues,
 } from '../../contracts/settings.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
-import { createAudioSetupRuntime, type AudioSetupState } from '../../renderer/settings/audioSetupRuntime.js';
+import {
+  createAudioSetupRuntime,
+  type AudioSetupState,
+} from '../../renderer/settings/audioSetupRuntime.js';
+import { canActivateRouteDuringAudioSetup } from '../../renderer/settings/audioSetupNavigation.js';
 import { deferred } from '../helpers/deferred.js';
 
 test('audio setup offers System default when enumeration is unavailable and persists completion', async () => {
@@ -97,7 +101,7 @@ test('audio setup shows an honest missing saved output and persists System Defau
       { kind: 'device', id: availableId, label: 'Available output' },
     ],
     selectedId: 'system-default',
-    message: 'The saved output is unavailable. System Default will be used.',
+    message: 'The saved output is unavailable. System default will be used.',
   });
   assert.equal(values.audioOutputDeviceId, savedId);
   assert.equal(values.audioSetupCompleted, false);
@@ -147,6 +151,59 @@ test('audio setup cleanup ignores a late enumeration result', async () => {
   await initializing;
   assert.equal(states.length, 1);
   assert.equal(states[0]?.status, 'loading');
+});
+
+test('audio setup contains navigation while enumeration or persistence is in flight', () => {
+  assert.equal(canActivateRouteDuringAudioSetup('audioSetup', 'loading', 'player'), false);
+  assert.equal(canActivateRouteDuringAudioSetup('audioSetup', 'loading', 'audioSetup'), true);
+  assert.equal(canActivateRouteDuringAudioSetup('audioSetup', 'saving', 'guide'), false);
+  assert.equal(canActivateRouteDuringAudioSetup('audioSetup', 'saving', 'audioSetup'), true);
+  assert.equal(canActivateRouteDuringAudioSetup('audioSetup', 'ready', 'player'), true);
+  assert.equal(canActivateRouteDuringAudioSetup('player', 'loading', 'guide'), true);
+});
+
+test('audio setup retries a failed save directly and ignores stale initialize results', async () => {
+  const firstEnumeration =
+    deferred<Awaited<ReturnType<LineupDesktopPreloadApi['settings']['getAudioOutputs']>>>();
+  let enumeration = 0;
+  let saves = 0;
+  let values: DesktopSettingsValues = { ...DEFAULT_DESKTOP_SETTINGS_VALUES };
+  const runtime = createRuntime({
+    getAudioOutputs: ({ requestId }) => {
+      enumeration += 1;
+      if (enumeration === 1) return firstEnumeration.promise;
+      return Promise.resolve(desktopSettingsSuccess(requestId, {
+        status: 'unavailable',
+        reason: 'platform-unsupported',
+        outputs: [{ kind: 'system-default', id: 'system-default', label: 'System default' }],
+      }));
+    },
+    getValues: () => values,
+    replace: async (transform) => {
+      saves += 1;
+      if (saves === 1) throw new Error('storage unavailable');
+      values = transform(values);
+    },
+  });
+
+  const staleInitialization = runtime.initialize();
+  await runtime.initialize();
+  firstEnumeration.resolve(desktopSettingsSuccess('audio-setup-1', {
+    status: 'ready',
+    reason: 'available',
+    outputs: [
+      { kind: 'system-default', id: 'system-default', label: 'System default' },
+      { kind: 'device', id: `audio_${'Z'.repeat(43)}`, label: 'Stale output' },
+    ],
+  }));
+  await staleInitialization;
+  assert.equal(runtime.getState().outputs.length, 1);
+
+  await runtime.complete();
+  assert.equal(runtime.getState().status, 'failed');
+  await runtime.complete();
+  assert.equal(values.audioSetupCompleted, true);
+  assert.equal(runtime.getState().status, 'ready');
 });
 
 function createRuntime(overrides: {

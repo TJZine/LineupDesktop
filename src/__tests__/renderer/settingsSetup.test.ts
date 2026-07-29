@@ -9,6 +9,7 @@ import {
   createSettingsDraftState,
   applySettingsAction,
   applySupportBundleExportStatus,
+  createSettingsSectionControlFocusIds,
   createSettingsSections,
   isPersistedSettingsActionEnabled,
   nextDesktopSettingsValues,
@@ -212,7 +213,12 @@ test('settings sections preserve exact category order, closed options, and disab
   assert.equal(items.find((item) => item.id === 'subtitle-mode')?.valueLabel, 'Full (Burn-in, default)');
   assert.equal(items.find((item) => item.id === 'guide-density')?.valueLabel, 'Detailed (2h)');
   assert.equal(items.find((item) => item.id === 'info-box-background')?.disabledReason, 'Disabled until safe artwork is available.');
-  assert.equal(sections[3]?.items.every((item) => item.disabledReason === 'Takes effect after Guide support (WS5).'), true);
+  assert.equal(
+    sections[3]?.items.every((item) => (
+      item.disabledReason === 'Available when Guide preferences are supported.'
+    )),
+    true,
+  );
 
   let values = { ...DEFAULT_DESKTOP_SETTINGS_VALUES };
   const themes = [values.theme];
@@ -227,6 +233,21 @@ test('settings sections preserve exact category order, closed options, and disab
     durations.push(values.nowPlayingAutoHideMs);
   }
   assert.deepEqual(durations, [0, 5000, 10000, 15000, 30000, 60000, 120000]);
+});
+
+test('settings focus ownership is derived from rendered interactive section definitions', () => {
+  const sections = createSettingsSections(createSettingsDraftState());
+  const focusIds = createSettingsSectionControlFocusIds();
+
+  assert.deepEqual(
+    [...focusIds],
+    sections.map((section) => [
+      `settings-category-${section.id}`,
+      section.items
+        .filter((item) => item.action !== undefined)
+        .map((item) => `settings-${item.id}`),
+    ]),
+  );
 });
 
 test('Settings Audio Output requires supported capability without gating first-run defaults', () => {

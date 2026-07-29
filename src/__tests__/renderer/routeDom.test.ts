@@ -1081,7 +1081,7 @@ test('reachable product route text avoids internal implementation-status terms',
     }
 
     assert.doesNotMatch(
-      renderedRouteText.map(({ text }) => text).join(' '),
+      removeApprovedDebugLabels(renderedRouteText.map(({ text }) => text).join(' ')),
       PRODUCT_ROUTE_INTERNAL_COPY_PATTERN,
     );
     const channelSetupRouteText =
@@ -1103,7 +1103,10 @@ test('static product route visible text avoids internal implementation-status te
 
   mountStaticRendererDom(documentDouble as unknown as Document);
 
-  assert.doesNotMatch(readVisibleTextFromMarkup(root.innerHTML), PRODUCT_ROUTE_INTERNAL_COPY_PATTERN);
+  assert.doesNotMatch(
+    removeApprovedDebugLabels(readVisibleTextFromMarkup(root.innerHTML)),
+    PRODUCT_ROUTE_INTERNAL_COPY_PATTERN,
+  );
   assert.doesNotMatch(root.innerHTML, /data-channel-setup-fixture-status/u);
   assert.match(root.innerHTML, /data-staged-owner="replace-confirm" role="dialog" aria-modal="true"/u);
   assert.match(root.innerHTML, /data-setup-flow-action="cancelReplaceConfirm" data-focus-id="setup-replace-cancel"/u);
@@ -1137,7 +1140,13 @@ test('static player DOM keeps native presentation beside the route-owned overlay
 });
 
 const PRODUCT_ROUTE_INTERNAL_COPY_PATTERN =
-  /\bRD-\d+[A-Z]?\b|future RD|\bruntime\b|runtime wiring|scheduler wiring|later runtime pass|pending runtime|not implemented|implementation status|roadmap|\bfixture\b|\bfake\b|\bsmoke\b|\bproof\b|\bscaffold\b|\bdraft(?:\b|\s+(?:channel|programming|source|controls|setup))|not proven here|live Plex/iu;
+  /\bRD-\d+[A-Z]?\b|future RD|\bruntime\b|runtime wiring|scheduler wiring|later runtime pass|pending runtime|not implemented|implementation status|roadmap|\bfixture\b|\bfake\b|\bsmoke\b|\bproof\b|\bscaffold\b|\bdebug\b|\bdraft(?:\b|\s+(?:channel|programming|source|controls|setup))|not proven here|live Plex/iu;
+
+function removeApprovedDebugLabels(value: string): string {
+  return value
+    .replaceAll('Subtitle Debug Logging', '')
+    .replaceAll('Debug Logging', '');
+}
 
 function readVisibleTextFromMarkup(markup: string): string {
   return markup
