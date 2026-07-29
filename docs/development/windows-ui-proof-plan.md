@@ -1,11 +1,13 @@
 # Windows UI Proof Plan
 
 Packages 0–8 renderer parity implementation and local automated verification
-are complete. RD-27 is the next Tier 3 planning target, but it cannot close
-without the fresh mandatory three-row Windows `Package 6 operator-assisted
-fullscreen focus audit`; Mac diagnostics and Package 7 local fullscreen proof
-substitute for none of its rows. Windows-required matrix rows remain blocked
-until observed Windows proof.
+remain historical regression evidence. The accepted 2026-07-22 audit now
+drives ordered WS1–WS9 correction work: WS1 implementation/review landed with
+proof debt, WS2's local implementation gate closed with
+`WS2-POST-VALIDATION-01`, and WS3 is the next targeted quality-loop workstream.
+RD-27 is not the next implementation target. It begins one consolidated
+Windows proof campaign after WS3–WS8 and WS9 prerequisite implementation/
+hardening. Windows-required matrix rows remain blocked until observed proof.
 
 ## Purpose
 
@@ -15,6 +17,12 @@ multi-monitor, and UI-over-video claims. It is paired with
 `docs/product/lineup-product-parity-matrix.md` and exists to prevent seeded
 parity rows from becoming product-readiness claims without observed,
 redaction-safe Windows evidence.
+
+The consolidated campaign includes accumulated WS1 proof debt,
+`WS2-POST-VALIDATION-01`, later workstream Windows/native/manual/live
+obligations, RD-27 operational observation/soak, RD-28 package lifecycle, and
+the final 227-row program audit. Deferral to that campaign is sequencing, not a
+waiver or evidence claim.
 
 Unit 1 creates the proof rules only. It does not run Windows proof, change
 runtime behavior, add preload or renderer APIs, implement production playback,
@@ -99,8 +107,8 @@ the required platform depth.
 
 ## Expected Windows Proof Areas
 
-Future RD-21 proof units should define scenario ids, pass/fail criteria, and
-redacted summaries for these areas before making claims:
+Future consolidated-campaign proof units should define scenario ids, pass/fail
+criteria, and redacted summaries for these areas before making claims:
 
 | Area | Minimum expected proof before product-complete claim |
 | --- | --- |
@@ -139,7 +147,9 @@ confirmation without semantic focus change. It then observes actual fullscreen
 enter/leave with native and semantic focus continuity, restores window bounds,
 content bounds, CSS viewport, and DPR exactly, cleans up, and emits only
 token-free redacted evidence. The Mac diagnostic row satisfies none of these
-Windows rows, and further deferral requires another explicit reviewed replan.
+Windows rows. The active implementation-first sequence defers them only to the
+final consolidated campaign; deferral beyond that campaign requires another
+explicit reviewed replan.
 
 ## Relationship To The Parity Matrix
 
@@ -159,6 +169,14 @@ Matrix updates must:
   is explicit
 - rerun `npm run verify:docs`, `npm run verify:redaction`, and
   `git diff --check` after tracked edits
+
+Before leaving any implementation workstream, its deferred-proof packet must
+name the affected stable IDs, required machine/environment, exact scenario,
+expected result, source checkpoint, allowed redacted summary, and final
+campaign owner. Do not rerun the full 227-row audit at workstream entry; use the
+accepted matrix baseline and reconcile only the active workstream's assigned
+rows and direct dependencies. The complete one-by-one audit runs once at final
+program closeout.
 
 If a future proof run needs new runtime behavior, IPC, preload APIs, renderer
 Plex APIs, persistence IPC, native playback, packaging/release behavior, or raw

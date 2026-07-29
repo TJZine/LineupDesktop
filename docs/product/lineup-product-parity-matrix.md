@@ -1,6 +1,8 @@
 # Lineup WebOS to Desktop Master Parity Matrix
 
 Last audited: 2026-07-28
+Execution authority updated: 2026-07-29. This sequencing update does not repeat
+or replace the accepted one-by-one audit.
 
 This is the single authoritative feature and UI parity ledger for the Windows
 Desktop port. It replaces the former 14-row RD-21 summary, which was too coarse
@@ -18,6 +20,9 @@ file owns the one-by-one parity disposition.
   `60c68f4`, Package 2A at `8dc1057`, and Package 2B at `d2f1e97`. The upstream
   audited code pin remains
   `0258dbe15b04d2d141d0a4a44575fecb5bb72d41`.
+- Current WS3 handoff authority is based on `0fd7793`, including WS2
+  post-closeout lifecycle hardening at `358e8de`. Those later commits do not
+  constitute a new program audit or advance any stable-ID classification.
 - The existing visual bundle was initially captured against upstream
   `6ef20801019e1d1aae2a0158128eba9142d0d008`. Later target/freshness evidence
   used `196a54765c0c6f782ef78c52382de92f1ca1bfd2` for Package 1,
@@ -495,14 +500,18 @@ product opportunities.
    implementation gate is closed at published `d2f1e97`; Package 2D made no
    capability edit, and `WS2-POST-VALIDATION-01` carries nonblocking
    Windows/native proof without promoting support.
-3. **WS3 through WS9:** not started or authorized by WS2 closeout. WS3 is only
-   the next unopened freshness-planning target. Their Settings, input/overlay, Guide,
-   fresh UI, credential/lifecycle, package/soak, and remaining ordered scopes
-   retain their current conservative rows until separately entered.
-4. **RD-27/RD-28:** remain later. RD-27 waits for WS1–WS8 plus WS9 prerequisite
-   hardening and a refreshed Windows proof plan; RD-28 follows RD-27
-   observation. Windows observation cannot implement or waive missing product
-   behavior.
+3. **WS3 through WS9:** proceed in order through complete Tier 3 quality loops.
+   WS3 is the next authorized target; WS4–WS9 remain unopened until their
+   preceding handoff. Each entry reuses this accepted audit and validates only
+   its assigned rows, affected owners, and direct dependencies. Do not repeat
+   the 227-row audit or recompute unrelated rows at every workstream.
+4. **Consolidated platform proof and final audit:** Windows/native/manual/live/
+   package evidence may remain explicitly proof-open while WS3–WS8 and WS9
+   prerequisite implementation/hardening advance through local review and
+   verification. Afterward, one consolidated campaign runs accumulated proof,
+   RD-27 observation/soak, RD-28 package lifecycle, and the final 227-row
+   program audit. Windows observation cannot implement or waive missing product
+   behavior, and absent proof cannot advance a row.
 
 ## 13. Maintenance gate
 

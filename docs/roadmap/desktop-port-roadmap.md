@@ -14,8 +14,11 @@ nine-workstream parity-correction plan now owns that sequence. WS1 Channel
 Builder implementation/review landed but its deferred proof remains open.
 WS2's platform-neutral implementation gate is closed at published `d2f1e97`;
 `WS2-POST-VALIDATION-01` carries nonblocking Windows/native proof without a
-capability promotion. WS3–WS9 are unopened, with WS3 only the next
-freshness-planning target. Windows proof cannot implement or waive those gaps.
+capability promotion, and `358e8de` adds recovery/teardown lifecycle hardening.
+WS3 is the next targeted quality-loop workstream; WS4–WS9 remain unopened.
+Locally verifiable implementation advances in order before one consolidated
+Windows/native/manual/live/package campaign. Windows proof cannot implement or
+waive code gaps, and absent proof cannot promote a row.
 
 This is not an implementation plan for any single slice. Each serious in-flight
 slice still needs its own active tracked plan under
@@ -33,8 +36,8 @@ durable completion summary.
 - [x] Single-package repo shape accepted for the initial port.
 - [ ] Execute the active nine-workstream parity-correction plan before RD-27:
       WS1 implementation/review landed but proof remains open; WS2's
-      platform-neutral implementation gate is closed; WS3–WS9 are unopened,
-      with WS3 only the next freshness-planning target.
+      platform-neutral implementation gate is closed; WS3 is the next
+      authorized quality-loop target and WS4–WS9 remain unopened.
 - [x] Workflow, skills, launchers, role config, docs verifier, redaction
   verifier, and architecture lint scaffolded.
 - [x] First active implementation plan created for the Electron shell security
@@ -259,7 +262,8 @@ after that shell proves the main/preload/renderer boundary.
 4. Route Tier 3 roadmap slices through the feature-quality-loop controller so
    the next session owns the whole roadmap item: planning, plan review, bounded
    execution-unit selection, implementation, implementation review, verification,
-   closeout, and platform proof unless a blocker stops the loop.
+   local implementation closeout, and exact deferred-proof accounting unless a
+   genuine blocker stops the loop.
 5. Create or update one active tracked plan for that roadmap item in
    `docs/plans/`. The plan should cover the whole item and split implementation
    into bounded execution units only when that improves reviewability.
@@ -327,8 +331,8 @@ live integration blockers delay the complete Desktop skeleton.
 | Production playback controls and playback-state presentation over native video | RD-25 | Preserve the upstream playback interaction feel where it fits Desktop native-helper boundaries; renderer stays free of raw playback descriptors, URLs, headers, and native handles. |
 | Subtitle/audio/HDR option UI and playback-quality controls | RD-26 | Import or adapt upstream media-option presentation and interaction patterns only after runtime media-option behavior is real and renderer-safe. |
 | Historical WebOS-informed local renderer regression bundle | Complete WebOS UI Parity Reopen, proof bundle closed 2026-07-16 | Packages 0–8 are locally captured at exact viewports; the 2026-07-22 master matrix supersedes any full feature/UI parity interpretation. |
-| Current-upstream feature/UI parity correction | Active reviewed nine-workstream parity-correction plan | WS1 implementation/review landed but deferred proof remains open. WS2's platform-neutral implementation gate is closed at `d2f1e97`; Package 2D made no capability edit and `WS2-POST-VALIDATION-01` remains open. WS3–WS9 are unopened, with WS3 only the next freshness-planning target. Do not bury implementation inside RD-27 observation. |
-| Full MVP Windows behavior proof | RD-27, blocked pending WS1–WS8 and WS9 prerequisite hardening plus refreshed Windows proof planning | Run redaction-safe Windows operational proof across implemented upstream-adapted UI surfaces, including the mandatory fresh three-row Package 6 audit; RD-28 follows. |
+| Current-upstream feature/UI parity correction | Active reviewed nine-workstream parity-correction plan | WS1 implementation/review landed but deferred proof remains open. WS2's platform-neutral implementation gate is closed at `d2f1e97`, lifecycle hardening landed at `358e8de`, Package 2D made no capability edit, and `WS2-POST-VALIDATION-01` remains open. WS3 is the next targeted quality-loop workstream; WS4–WS9 remain unopened. Do not bury implementation inside RD-27 observation. |
+| Full MVP Windows behavior proof | Consolidated campaign beginning with RD-27 after WS3–WS8 and WS9 prerequisite implementation/hardening | Run accumulated redaction-safe Windows/native/manual/live proof across implemented surfaces, including WS1 debt, `WS2-POST-VALIDATION-01`, and the mandatory fresh three-row Package 6 audit. RD-28 package lifecycle and the final 227-row program audit follow. |
 
 Each owning slice must record copied or adapted upstream UI source, CSS, copy,
 assets, or tests in the import ledger before or with the import. Exact DOM or
@@ -338,12 +342,12 @@ security, process, accessibility, or platform rationale.
 
 The Complete WebOS UI Parity Reopen's local bundle closed after RD-26. The
 2026-07-22 audit then reopened product parity before RD-27. RD-27 may resume
-only after WS1–WS8 and WS9 prerequisite hardening are complete/reviewed and the
-Windows proof plan is refreshed. It must still route newly observed
-implementation defects back to the smallest owning slice rather than silently
-backfill them as soak work.
-Each owning slice must close its own parity gate before the next runtime slice
-treats that surface as complete.
+only after WS3–WS8 and WS9 prerequisite implementation/hardening are locally
+complete/reviewed and the Windows proof plan is refreshed. It must still route
+newly observed implementation defects back to the smallest owning slice rather
+than silently backfill them as soak work. Each owning slice must close its
+local implementation gate and record exact remaining proof before the next
+slice begins; final parity closure waits for the consolidated campaign.
 
 ## Platform Proof Convention
 
@@ -1821,9 +1825,9 @@ Stop and replan if:
 Status: blocked from planning/execution while the active reviewed
 nine-workstream parity-correction plan executes. WS1 implementation/review
 landed but proof remains deferred/open; WS2's platform-neutral implementation
-gate is closed while `WS2-POST-VALIDATION-01` remains nonblocking debt; WS3
-through WS9 are unopened. RD-27 remains the later Windows observation/soak
-owner; it is not canceled.
+gate is closed while `WS2-POST-VALIDATION-01` remains proof debt; WS3 is the
+next quality-loop target and WS4 through WS9 remain unopened. RD-27 begins the
+final consolidated Windows observation/soak campaign; it is not canceled.
 
 Depends on:
 
@@ -1832,9 +1836,10 @@ Depends on:
   master matrix.
 - Complete WebOS UI Parity Reopen Packages 0–8 locally verified as a historical
   regression bundle, without a current feature/UI completion claim.
-- WS1 through WS8 complete their required implementation/proof gates, and WS9
-  completes prerequisite hardening plus a refreshed Windows proof plan before
-  RD-27 observation begins.
+- WS3 through WS8 complete their local implementation/review gates, WS9
+  completes prerequisite implementation/hardening, and every accumulated WS1
+  through WS9 environment-specific obligation has an exact proof-debt entry
+  before RD-27 observation begins.
 - `docs/development/windows-ui-proof-plan.md` current.
 
 Objective:
@@ -1842,6 +1847,8 @@ Objective:
 - Run the redaction-safe Windows proof matrix for the real MVP: navigation,
   focus, keyboard/remote-like input, player overlays, fullscreen, multi-monitor,
   UI over video, sleep/wake, long playback, diagnostics export, and recovery.
+- Execute accumulated WS1 proof debt, `WS2-POST-VALIDATION-01`, and later
+  workstream Windows/native/manual/live scenarios at their named proof depth.
 - Run the non-optional `Package 6 operator-assisted fullscreen focus audit`
   afresh for all three named rows; Mac diagnostic evidence substitutes for none
   of them.
@@ -1876,6 +1883,8 @@ Exit gates:
 - `npm run verify:docs`, `npm run verify:redaction`, `git diff --check`, and
   any reviewed runtime verifier commands pass.
 - Implementation/proof review is clean.
+- The final one-by-one 227-row program audit remains scheduled after RD-28;
+  RD-27 evidence alone does not close the program.
 
 Stop and replan if:
 
@@ -1915,6 +1924,8 @@ Exit gates:
 - `npm run verify:docs`, `npm run verify:redaction`, `git diff --check`, and
   any reviewed package verifier commands pass.
 - Implementation/proof review is clean.
+- The consolidated campaign proceeds to the final 227-row program audit after
+  RD-28 and any smallest-owner remediation are complete.
 
 Stop and replan if:
 

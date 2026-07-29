@@ -21,11 +21,11 @@ Codanna was available during planning, but its current index returned no useful 
 - Do not infer builder completion from existing channels during migration.
 - Do not claim live Plex, packaged Windows, accessibility, performance, or visual proof from unit tests or synthetic fixtures.
 - Do not promote later-workstream file guesses into scope. Their exact paths require a freshness read and review when that workstream becomes active.
-- Do not begin WS3 through WS9 product implementation while an earlier
-  workstream is active. WS2 is the sole exception: the reviewed
-  `ACTIVE_WS1_PROOF_DEFERRAL_AND_WS2_ENTRY_OVERRIDE_2026_07_28` below permits
-  WS2 planning and later reviewed implementation while WS1 proof debt remains
-  open.
+- Do not begin a later workstream unless the current reviewed handoff expressly
+  authorizes it and carries every earlier proof/debt obligation. The active
+  implementation-first sequence authorizes WS3's local quality loop while WS1
+  proof debt remains open; WS4 through WS9 remain unauthorized until their
+  preceding reviewed handoff.
 
 ## Architecture And Invariants
 
@@ -2238,8 +2238,9 @@ Package 2A with no unresolved material finding.
 > implementation gate. Every Package 2A/2B remediation, scope, custody, and
 > override review packet retained below is historical evidence, not executable
 > instruction. The only current continuation authority in this document is the
-> [WS3 freshness handoff](#current-ws3-freshness-handoff-2026-07-28) at the end
-> of the plan; it authorizes planning and review, not WS3 product edits.
+> [WS3 quality-loop handoff](#current-ws3-quality-loop-handoff-2026-07-29) at
+> the end of the plan. It authorizes the whole WS3 loop, but product edits still
+> wait for the handoff's fresh plan-review gate.
 
 **ACTIVE_WS2_MAC_COMPLETION_OVERRIDE_2026_07_28:** the user's latest explicit
 direction supersedes every conflicting Windows-machine, `.NET` Release-build,
@@ -3627,9 +3628,9 @@ representative-media, Windows video/focus/input/manual/soak,
 track-delivery/switching, HDR/display/hardware-capability, and helper-
 replacement observation remains nonblocking post-WS2 debt under
 `WS2-POST-VALIDATION-01`. No support or capability promotion follows. WS1
-remains open unchanged; WS3–WS9 are not started or authorized, with WS3 only
-the next unopened freshness-planning target; RD-27/RD-28 and WS9 packaged
-proof ownership remain unchanged.
+remains open unchanged. WS3 is the next authorized quality-loop target;
+WS4–WS9 are not started. RD-27/RD-28 and WS9 packaged-proof ownership remain
+unchanged.
 
 ### WS2 acceptance, rollback, and replan rules
 
@@ -3741,32 +3742,174 @@ conservative no-op; and updates acceptance, rollback, closeout, and handoff
 without altering Package 2B or weakening WS1, WS3–WS9, RD-27/RD-28, or program
 closeout requirements. Report material findings or explicit approval.
 
-### Current WS3 freshness handoff (2026-07-28)
+### Active implementation-first and consolidated-proof sequence (2026-07-29)
+
+**ACTIVE_IMPLEMENTATION_FIRST_CONSOLIDATED_PROOF_SEQUENCE_2026_07_29:** the
+user's approved program direction is to finish the locally verifiable
+implementation units for WS3–WS8 and WS9 prerequisite implementation/hardening
+before returning to the Windows machine for one consolidated proof campaign.
+This later authority supersedes any earlier clause solely to the extent that
+the clause would require incremental Windows-machine, production-native,
+operator-assisted, live-environment, soak, or package-lifecycle evidence before
+the next workstream may begin. It does not supersede any implementation,
+architecture, security, review, redaction, documentation, or local automated
+verification gate.
+
+For WS3's local implementation gate, this authority also expressly supersedes
+the former Non-Goal that made WS2 the sole earlier-workstream exception and the
+WS1 sequencing amendment's historical statement that it did not authorize
+WS3–WS9. This permits WS3 to begin while the exact WS1 proof and
+`WS1-PERF-01` debt remains open; it does not pass, weaken, relabel, rerun, or
+erase that debt. WS4 through WS9 remain unauthorized inside WS3.
+
+The accepted 2026-07-22 227-row audit and this canonical plan remain the
+program baseline. Workstream entry must not repeat the repository-wide audit,
+recompute every open row, or re-review completed WS1/WS2 implementation without
+a concrete contradictory signal. Each controller instead reads its assigned
+registry rows, checks only directly affected current owners and cross-workstream
+dependencies, and uses targeted history or upstream discovery only where those
+facts may have drifted. A material contradiction, new upstream behavior in the
+assigned scope, or a changed shared seam triggers the smallest necessary
+replan; it does not trigger an automatic full-program audit.
+
+Every implementation workstream still requires a decision-complete plan, fresh
+independent plan review, bounded implementation units, material-only
+implementation review, focused verification, and a final full local
+`npm run verify` closeout. The workstream plan should run one clean full
+baseline before its first product edit and one full closeout verification after
+its final accepted unit. Between those gates, use the focused tests and
+applicable architecture, build, smoke, maintainability, redaction, or docs
+checks named for the active unit; do not rerun the entire suite after every
+micro-step without a reviewed reason.
+
+Deferred proof is accumulated, never waived. Each workstream must record the
+affected stable IDs, exact missing scenario, required machine/environment,
+expected result, source checkpoint, evidence/redaction rules, and final closure
+owner. Missing observation cannot promote a capability or move a proof-
+dependent row to `complete`. Preserve WS1's named proof/performance debt,
+`WS2-POST-VALIDATION-01`, conservative playback capability reporting, and every
+later contribution gate.
+
+After WS3–WS8 and WS9 prerequisite implementation/hardening, run one
+consolidated Windows campaign covering the accumulated WS1 debt,
+`WS2-POST-VALIDATION-01`, later workstream Windows/native/manual/live
+obligations, the current-upstream visual proof required by the final plan,
+RD-27 operational observation/soak, RD-28 package lifecycle, and the final
+227-row program audit. A failure that demonstrates missing or defective product
+behavior routes to the smallest reviewed remediation owner; proof work must not
+silently implement it. RD-27 and RD-28 remain mandatory and no overall parity,
+MVP, platform, native, or package closeout may occur before their applicable
+evidence is observed and independently reviewed.
+
+### Current WS3 quality-loop handoff (2026-07-29)
 
 NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-plan
-TASK: Plan WS3 Settings From Current Repository State
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
+TASK: Complete WS3 Settings Through The Tier 3 Feature Quality Loop
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: published WS2 closeout at `247f7b4`, including Package 2A `8dc1057`,
-Package 2B `d2f1e97`, the reviewed Package 2D conservative no-op, and Package
-2E authority reconciliation
+ARTIFACT: this committed authority update, based on `0fd7793`, including WS2
+closeout `247f7b4`, lifecycle hardening `358e8de`, Package 2A `8dc1057`,
+Package 2B `d2f1e97`, and the reviewed Package 2D conservative no-op
 FILES:
 - docs/plans/2026-07-22-tier3-parity-correction-plan.md
 - docs/architecture/CURRENT_STATE.md
 - docs/architecture/playback-architecture.md
 - docs/product/lineup-product-parity-matrix.md
 - docs/roadmap/desktop-port-roadmap.md
-BLOCKERS: WS3 product edits remain blocked until a fresh exact-file Settings
-plan freezes ownership, verification, acceptance, rollback, and replan triggers
-and passes adversarial `lineup-desktop-feature-review`
+- docs/development/windows-ui-proof-plan.md
+SCOPE_ROWS:
+- ON-12
+- ST-01 through ST-30
+- WIN-02
+- UI-14
+- UI-28 through UI-34
+CONTROLLER_SEQUENCE:
+- scope-load
+- plan
+- plan-review
+- plan-revise when material findings require it
+- execution-unit-select
+- implement
+- implementation-review
+- implementation-revise when accepted findings require it
+- closeout
+- done or genuinely blocked
+BLOCKERS: none for scope-load, targeted planning, and plan review. WS3 product
+edits remain gated until a targeted exact-file Settings plan
+freezes ownership, verification, acceptance, rollback, and replan triggers and
+receives fresh adversarial `lineup-desktop-feature-review` approval
+STOP_OR_REPLAN_TRIGGERS:
+- a material contradiction in WS3's assigned rows, current owners, shared
+  contracts, persistence schema, or later-workstream contribution boundaries
+- a failed required local gate that cannot be resolved inside an approved WS3
+  unit
+NONBLOCKERS:
+- unavailable Windows-machine, production-native, operator-assisted,
+  live-environment, soak, or package-lifecycle evidence when it is recorded
+  under the consolidated-proof sequence above
 MESSAGE:
-Start a fresh Tier 3 WS3 Settings audit from current repository state. Preserve
-WS1 proof debt, `WS2-POST-VALIDATION-01`, the conservative production playback
-capability profile, and every later-workstream contribution gate. Reconcile
-WS3's 40 registered rows against current settings contracts, persistence,
-main/preload/renderer ownership, tests, architecture, and current upstream
-behavior. Produce the smallest decision-complete vertical plan and route it to
-review before any product edit. Historical Package 2A/2B packets above are
-evidence only and confer no implementation authority.
+Own the complete WS3 Settings workstream through the Tier 3 feature-quality
+loop; do not stop after planning. Use the accepted master audit and canonical
+plan as baseline. Do not repeat the 227-row audit, recompute the whole registry,
+or re-audit completed WS1/WS2 implementation. Target only WS3's 40 assigned
+rows, their current Settings contracts/persistence/main/preload/renderer/test
+owners, and directly affected dependencies. Preserve `PB-22` through `PB-24`
+as WS2 contributions awaiting WS3 preference/control work and native proof;
+keep `ST-11` through `ST-16` open through their WS5 consumers; require
+persistent Settings `Switch Profile` for `ST-23` without claiming WS8's
+`ON-08`; and preserve all WS1 debt, `WS2-POST-VALIDATION-01`, conservative
+playback capabilities, and later contribution gates.
+
+Preflight by fetching and reconciling the latest `initial-build`, confirming
+that this committed handoff is an ancestor of the tracked branch, recording
+`git status --short --branch`, and inventorying any pre-existing changes
+without absorbing unrelated work. Use Codanna only when its current targeted
+index improves discovery; otherwise use `rg` and direct reads without launching
+a broad repository survey.
+
+Use `lineup-desktop-feature-plan` through a tracked planner to create or amend
+one decision-complete whole-WS3 plan. Freeze the smallest useful vertical
+units, exact owners/no-touch boundaries, intended configured worker role,
+acceptance criteria, focused and closeout verification, rollback, checkpoint
+commit, hotspot evidence, import-ledger needs, and replan triggers. Obtain one
+fresh independent `lineup-desktop-feature-review` with no unresolved material
+finding that explicitly approves the first execution unit before the first
+product edit. Resolve material findings; do not spend cycles on cosmetic review
+loops.
+
+Resolve each implementation role through `.codex/config.toml`. Use
+`worker_sol_low` only for a fully specified mechanical unit with no unresolved
+architecture, ownership, schema, product, proof-depth, or verification
+decision; use `worker` when bounded repository judgment remains; reserve
+`worker_luna` for exceptionally mechanical, exact, cheap-to-verify work. No
+worker may invent a seam, broaden scope, choose weaker proof, or edit outside
+its approved unit.
+
+Execute approved units serially unless the plan proves disjoint ownership.
+Before each unit, freshness-read only its plan section, owners, affected tests,
+authority, and worktree. Keep the controller responsible for integration,
+review adjudication, verification, checkpoint acceptance, commits, and
+publishing. Keep the renderer unprivileged; keep secrets, storage, privileged
+I/O, raw Plex/native data, and diagnostics in main-owned boundaries; expose only
+narrow typed validated preload contracts. Add no dependency or public schema
+without a reviewed replan, and ledger copied/adapted upstream source before or
+with its import.
+
+Run one clean full baseline before the first WS3 product edit, focused
+unit-specific proof during execution, and one full local `npm run verify`
+closeout after the final accepted unit. Obtain a fresh material-only
+implementation review before accepting each checkpoint. Record every
+unavailable Windows/native/manual/live/package obligation in an exact
+consolidated-proof debt packet without promoting support or closing its row.
+At each checkpoint report the loop phase, active/completed/remaining units,
+files and commits, observed verification, review status, open proof debt, exact
+next action, and active/closeout/blocked state.
+
+Close WS3's local implementation gate only after all reviewed units, local
+verification, import/architecture/registry/roadmap reconciliation, and a clean
+closeout review. Leave proof-dependent rows open for the final consolidated
+campaign. Do not begin WS4–WS9 product work inside WS3. End by keeping this
+canonical plan active and issuing a complete WS4 feature-quality-loop handoff
+under the same targeted-audit and consolidated-proof policy.
