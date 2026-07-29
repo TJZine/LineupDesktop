@@ -100,12 +100,15 @@ export function isDesktopAudioOutputStatusReason(
 }
 
 export function sanitizeAudioOutputLabel(value: string): string {
-  return [...value.normalize('NFKC')
+  const normalized = value.normalize('NFKC')
     .replace(/[\p{Cc}\p{Cf}]/gu, ' ')
     .replace(/\s+/gu, ' ')
-    .trim()]
+    .trim();
+
+  return [...normalized]
     .slice(0, DESKTOP_AUDIO_OUTPUT_MAX_LABEL_LENGTH)
-    .join('');
+    .join('')
+    .trim();
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

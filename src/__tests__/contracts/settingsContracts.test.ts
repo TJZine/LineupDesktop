@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   CONSERVATIVE_DESKTOP_SETTINGS_CAPABILITIES,
   DEFAULT_DESKTOP_SETTINGS_VALUES,
+  DESKTOP_AUDIO_OUTPUT_MAX_LABEL_LENGTH,
   DESKTOP_SETTINGS_ERROR_CODES,
   DESKTOP_SETTINGS_ERROR_MESSAGES,
   DESKTOP_SETTINGS_LOAD_STATUSES,
@@ -25,6 +26,7 @@ import {
   isDesktopSettingsView,
   normalizeDesktopSettingsReplaceValues,
   readDesktopSettingsRequestId,
+  sanitizeAudioOutputLabel,
 } from '../../contracts/settings.js';
 
 const opaqueAudioId = `audio_${'A'.repeat(43)}` as const;
@@ -224,4 +226,13 @@ test('audio output contract accepts only exact bounded ordered safe lists', () =
       })),
     ],
   }), false);
+});
+
+test('audio output label sanitization is bounded and idempotent after truncation', () => {
+  const value = `${'A'.repeat(DESKTOP_AUDIO_OUTPUT_MAX_LABEL_LENGTH - 1)} B`;
+  const sanitized = sanitizeAudioOutputLabel(value);
+
+  assert.equal(sanitized, 'A'.repeat(DESKTOP_AUDIO_OUTPUT_MAX_LABEL_LENGTH - 1));
+  assert.ok([...sanitized].length <= DESKTOP_AUDIO_OUTPUT_MAX_LABEL_LENGTH);
+  assert.equal(sanitizeAudioOutputLabel(sanitized), sanitized);
 });
