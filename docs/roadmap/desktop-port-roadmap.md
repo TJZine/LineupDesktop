@@ -15,7 +15,12 @@ Builder implementation/review landed but its deferred proof remains open.
 WS2's platform-neutral implementation gate is closed at published `d2f1e97`;
 `WS2-POST-VALIDATION-01` carries nonblocking Windows/native proof without a
 capability promotion, and `358e8de` adds recovery/teardown lifecycle hardening.
-WS3 is the next targeted quality-loop workstream; WS4–WS9 remain unopened.
+WS3's final product source is Unit 3C-F checkpoint `87662b5`; Unit 3C-D
+`5f368d4`, viewport repair `77d09ad`, and test-only checkpoint `f0e2817`
+remain accepted history. Unit 3D is accepted and WS3's local gate is closed.
+WS4 targeted scope-load/planning is active; no product/test/package/config edit
+begins before its own decision-complete plan and fresh approval of an exact
+first unit. WS5–WS9 remain unopened.
 Locally verifiable implementation advances in order before one consolidated
 Windows/native/manual/live/package campaign. Windows proof cannot implement or
 waive code gaps, and absent proof cannot promote a row.
@@ -36,8 +41,12 @@ durable completion summary.
 - [x] Single-package repo shape accepted for the initial port.
 - [ ] Execute the active nine-workstream parity-correction plan before RD-27:
       WS1 implementation/review landed but proof remains open; WS2's
-      platform-neutral implementation gate is closed; WS3 is the next
-      authorized quality-loop target and WS4–WS9 remain unopened.
+      platform-neutral implementation gate is closed; WS3 product checkpoints
+      through final product checkpoint `87662b5` plus test-only harness proof
+      `f0e2817` are closed; Unit 3D is accepted and WS4 targeted
+      scope-load/planning is active. Product/test/package/config edits require
+      a decision-complete WS4 plan and fresh approval of an exact first unit;
+      WS5–WS9 remain unopened.
 - [x] Workflow, skills, launchers, role config, docs verifier, redaction
   verifier, and architecture lint scaffolded.
 - [x] First active implementation plan created for the Electron shell security
@@ -331,7 +340,7 @@ live integration blockers delay the complete Desktop skeleton.
 | Production playback controls and playback-state presentation over native video | RD-25 | Preserve the upstream playback interaction feel where it fits Desktop native-helper boundaries; renderer stays free of raw playback descriptors, URLs, headers, and native handles. |
 | Subtitle/audio/HDR option UI and playback-quality controls | RD-26 | Import or adapt upstream media-option presentation and interaction patterns only after runtime media-option behavior is real and renderer-safe. |
 | Historical WebOS-informed local renderer regression bundle | Complete WebOS UI Parity Reopen, proof bundle closed 2026-07-16 | Packages 0–8 are locally captured at exact viewports; the 2026-07-22 master matrix supersedes any full feature/UI parity interpretation. |
-| Current-upstream feature/UI parity correction | Active reviewed nine-workstream parity-correction plan | WS1 implementation/review landed but deferred proof remains open. WS2's platform-neutral implementation gate is closed at `d2f1e97`, lifecycle hardening landed at `358e8de`, Package 2D made no capability edit, and `WS2-POST-VALIDATION-01` remains open. WS3 is the next targeted quality-loop workstream; WS4–WS9 remain unopened. Do not bury implementation inside RD-27 observation. |
+| Current-upstream feature/UI parity correction | Active reviewed nine-workstream parity-correction plan | WS1 implementation/review landed but deferred proof remains open. WS2's platform-neutral implementation gate is closed at `d2f1e97`, lifecycle hardening landed at `358e8de`, Package 2D made no capability edit, and `WS2-POST-VALIDATION-01` remains open. WS3 product source closes through `81bc0b7`, `e8445e5`, `11dd704`, `1540de3`, viewport repair `77d09ad`, Unit 3C-D `5f368d4`, and final Unit 3C-F repair `87662b5`; test-only `f0e2817` remains harness proof and changes no classification. Unit 3D is accepted and the consolidated proof packet remains open. WS4 targeted scope-load/planning is active; product/test/package/config edits require its own decision-complete plan and fresh approval of an exact first unit. WS5–WS9 remain unopened. Do not bury implementation inside RD-27 observation. |
 | Full MVP Windows behavior proof | Consolidated campaign beginning with RD-27 after WS3–WS8 and WS9 prerequisite implementation/hardening | Run accumulated redaction-safe Windows/native/manual/live proof across implemented surfaces, including WS1 debt, `WS2-POST-VALIDATION-01`, and the mandatory fresh three-row Package 6 audit. RD-28 package lifecycle and the final 227-row program audit follow. |
 
 Each owning slice must record copied or adapted upstream UI source, CSS, copy,
@@ -1826,7 +1835,11 @@ Status: blocked from planning/execution while the active reviewed
 nine-workstream parity-correction plan executes. WS1 implementation/review
 landed but proof remains deferred/open; WS2's platform-neutral implementation
 gate is closed while `WS2-POST-VALIDATION-01` remains proof debt; WS3 is the
-next quality-loop target and WS4 through WS9 remain unopened. RD-27 begins the
+final product source is `87662b5`; `5f368d4` remains prior Unit 3C-D,
+`77d09ad` the viewport repair, and `f0e2817` test-only harness proof. WS4
+targeted scope-load/planning is active after accepted Unit 3D. Product/test/
+package/config edits require its own decision-complete plan and fresh approval
+of an exact first unit; WS5 through WS9 remain unopened. RD-27 begins the
 final consolidated Windows observation/soak campaign; it is not canceled.
 
 Depends on:

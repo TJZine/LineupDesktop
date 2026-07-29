@@ -4,8 +4,20 @@ Packages 0–8 renderer parity implementation and local automated verification
 remain historical regression evidence. The accepted 2026-07-22 audit now
 drives ordered WS1–WS9 correction work: WS1 implementation/review landed with
 proof debt, WS2's local implementation gate closed with
-`WS2-POST-VALIDATION-01`, and WS3 is the next targeted quality-loop workstream.
-RD-27 is not the next implementation target. It begins one consolidated
+`WS2-POST-VALIDATION-01`, and WS3's final product source is Unit 3C-F
+checkpoint `87662b5`. Prior Unit 3C-D `5f368d4` and viewport repair `77d09ad`
+close their local diagnostic/audio-fallback and Recovery/Switch Profile
+obligations. Those are local behavior and DOM/layout/focus proof only, not
+deferred Windows or paired-current-upstream proof. Test-only checkpoint `f0e2817`
+restores full verification of shared production-host wiring without changing
+product behavior or any platform claim. Unit 3C-D locally proves injected
+missing-output presentation and production fixed-schema ST-24/ST-25 producers;
+real Windows audio disappearance/relaunch/application, subtitle behavior, and
+support-bundle observation remain open. Unit 3D is accepted and WS3's local
+gate is closed. WS4 targeted scope-load/planning is active; no
+product/test/package/config edit starts before its own decision-complete plan
+and fresh approval of an exact first unit. RD-27
+is not the next implementation target. It begins one consolidated
 Windows proof campaign after WS3–WS8 and WS9 prerequisite implementation/
 hardening. Windows-required matrix rows remain blocked until observed proof.
 
@@ -128,6 +140,30 @@ criteria, and redacted summaries for these areas before making claims:
 | Package install/delete | Internal or public package flow is observed at the scope claimed, with installer/signing/update gaps classified separately. |
 | Sleep/wake and long playback | Reviewed Windows sleep/wake and soak scenarios prove recovery, cleanup, resource behavior, and redaction-safe evidence handling. |
 | Multi-monitor/fullscreen/UI over video | Display placement, fullscreen transitions, video composition, and overlays are observed on Windows for the claimed playback mode. |
+
+## WS3 Consolidated-Proof Packet
+
+The ignored local packet under `docs/runs/ws3-settings-quality-loop/` carries
+the full prerequisite, entry-action, expected/forbidden-result,
+capability-before/after, evidence/hash, redaction, closure-owner, and
+failure-routing fields. Its source product checkpoint is `87662b5`. None of
+these entries automatically promotes a capability or closes a matrix row:
+
+| Debt / contribution id | Stable ids | Missing scenario and final owner |
+| --- | --- | --- |
+| `WS3-PROOF-01` | `ON-12`, `WIN-02`, `UI-14` | Real Windows production-helper audio enumeration, stable opaque selection, disappearance/relaunch, playback application, and fallback observation. Injected missing-row presentation, retained saved-id behavior, and explicit System Default completion are locally proved at `5f368d4`. Final closure: consolidated Windows/native campaign under WS9/RD-27 with WS3 authority reconciliation after reviewed proof. |
+| `WS3-PROOF-02` | `ST-02`–`ST-10`, `UI-28`, `UI-29`; contribution ids `PB-22`–`PB-24` | Representative native/live audio, subtitle, HDR, Direct Stream/transcode, capability-disabled, and redacted-diagnostic behavior. Final closure: consolidated native/live campaign; `PB-22`–`PB-24` remain WS2-owned and `WS2-POST-VALIDATION-01` stays separate. |
+| `WS3-PROOF-03` | `ST-17`, `ST-19`, `ST-20`, `UI-30` | Live-safe artwork availability and honest disabled/enabled Appearance behavior without renderer tokenized URLs. Final closure: later safe-artwork implementation owner plus consolidated live/paired proof. |
+| `WS3-PROOF-04` | `ST-25`, `ST-29`, `UI-32` | Windows subtitle-debug and support-bundle export with fixed-schema diagnostics and successful redaction scan. Final closure: consolidated Windows diagnostics proof. |
+| `WS3-PROOF-05` | `ST-26`, `ST-30`, `UI-34` | Windows launch mode, version-1 migration/relaunch, corruption/unsupported/revision/save-failure recovery, ACL/temp cleanup, and visible recovery. Final closure: consolidated Windows persistence/recovery proof. |
+| `WS3-PROOF-06` | `ST-01`, `UI-28`–`UI-34` | Current-upstream paired Settings visuals/interactions at approved viewports, reduced motion, forced colors, keyboard/D-pad, narrow viewport, and native-video continuity where applicable. Final closure: WS7 current-upstream comparison plus consolidated Windows/native-video proof. Reviewed `77d09ad` closes the local ~900×700 reachability defect and `87662b5` closes enabled-detail category entry, but neither supplies paired/Windows/native proof. |
+| `WS3-CONTRIBUTION-WS5` | `ST-11`–`ST-16`, `UI-33` | Persisted values and controls await real WS5 Guide consumers. Final closure: WS5 contribution review and matrix update; registry ownership remains WS3. |
+| `WS3-CONTRIBUTION-WS8` | `ST-22`, `ST-23`; contribution target `ON-08` | Startup-picker and persistent Switch Profile implementation plus reviewed local viewport repair are complete, then await WS8 live/profile-switch lifecycle proof. Final closure: WS8 contributes to `ON-08` without taking `ST-23` ownership. |
+
+The packet preserves WS1 proof debt, `WS1-PERF-01`,
+`WS2-POST-VALIDATION-01`, conservative production capabilities, later
+contribution gates, RD-27, and RD-28. A packet failure routes to the smallest
+reviewed implementation owner; the proof run never implements a fix.
 
 ## Blocking Package 6 Three-Row Protocol
 
