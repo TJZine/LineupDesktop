@@ -2238,7 +2238,7 @@ Package 2A with no unresolved material finding.
 > implementation gate. Every Package 2A/2B remediation, scope, custody, and
 > override review packet retained below is historical evidence, not executable
 > instruction. The only current continuation authority in this document is the
-> [WS3 quality-loop handoff](#current-ws3-quality-loop-handoff-2026-07-29) at
+> [WS3 quality-loop handoff](#whole-ws3-settings-execution-plan-2026-07-29) at
 > the end of the plan. It authorizes the whole WS3 loop, but product edits still
 > wait for the handoff's fresh plan-review gate.
 
@@ -3801,115 +3801,1394 @@ silently implement it. RD-27 and RD-28 remain mandatory and no overall parity,
 MVP, platform, native, or package closeout may occur before their applicable
 evidence is observed and independently reviewed.
 
-### Current WS3 quality-loop handoff (2026-07-29)
+### Whole-WS3 Settings execution plan (2026-07-29)
+
+**WS3 plan state:** implementation-ready. A fresh independent
+`lineup-desktop-feature-review` reported no material findings and explicitly
+approved Unit 3A after the required clean full baseline passed.
+
+**WS3 task family:** feature/design.
+
+**WS3 tier:** Tier 3.
+
+**Accepted plan-review adjudication:** Finding 1 is accepted: observed current
+contracts do not define the new capability/audio DTO, so this revision freezes
+it completely and routes contract/preload proof to Units 3A/3B. Finding 2 is
+accepted with the controller's smaller revision: observed source has two
+Settings channels, so Unit 3A retains two and Unit 3B owns the entire third
+operation. Finding 3 is accepted: the registry evidence requires seven
+one-to-one UI categories and the overlay owner/test are direct Unit 3C
+consumers. All three block implementation until fresh review approves the
+revised Unit 3A.
+
+**Second plan-review adjudication:** All four material findings are accepted.
+Observed source has no public `migrated` status, conflates persisted and
+enumeration audio-id semantics, currently constructs the production host inside
+player IPC from a factory, and has no correlated helper audio-query protocol.
+This revision keeps migration publicly `ready`, freezes canonical persisted
+audio ids, removes policy runtime ownership from Unit 3A, and gives Unit 3B one
+shared-host custody/protocol/lifecycle design. Later focused reviews resolved
+the remaining platform-fallback, route-ownership, and Release-build proof
+details before Unit 3A approval.
+
+#### WS3 Goal
+
+Complete the locally verifiable Settings implementation gate for exactly these
+40 WS3 registry rows:
+
+- `ON-12`
+- `ST-01` through `ST-30`
+- `WIN-02`
+- `UI-14`
+- `UI-28` through `UI-34`
+
+The gate expands the current four-value version-1 Settings record into one
+versioned, normalized main-owned Settings model; renders exactly seven rail
+categories—Audio & Subtitles, Playback & HDR, Appearance, Guide, Account,
+Developer, and Recovery; wires preferences only to current safe consumers;
+provides a persistent first-run audio-output journey and Settings
+`Switch Profile`; and renders an explicit disabled/unavailable state wherever
+the production capability or live-safe consumer is not proved.
+
+This plan does not equate a complete local implementation gate with all 40 rows
+being `complete`. It records locally closeable behavior separately from
+contribution-open and platform-proof-open behavior and never promotes the
+conservative playback profile.
+
+#### WS3 targeted evidence and freshness
+
+- Preflight at `1dfc002` observed branch `initial-build` one commit ahead of
+  `origin/initial-build` at `0fd7793`, a clean worktree, and no pre-existing
+  changes to absorb. The committed WS3 handoff is an ancestor of the active
+  branch.
+- The accepted 227-row audit was not repeated. Direct reads covered only the
+  40 assigned matrix rows, the current Settings owners/tests, the main
+  playback-policy and resolver input, the Plex profile-switch renderer flow,
+  diagnostics export, and the three composition roots.
+- Codanna's targeted index had already identified the persistence boundary.
+  Exact contract shapes, literals, callers, and tests were more useful as
+  source text, so planning used `rg` and direct reads after that targeted
+  result; no broad repository survey was launched.
+- The scoped upstream Settings reference checkout `../Lineup` is at exact
+  `0258dbe15b04d2d141d0a4a44575fecb5bb72d41`. Its Settings reference sources
+  were clean; unrelated upstream changes were ignored. WS3 uses those files as
+  behavior/reference evidence only. No copied or adapted upstream source is
+  approved by this plan.
+- Current source confirms a strict version-1 whole-snapshot contract in
+  `src/contracts/settings.ts`, serialized atomic main-owned storage in
+  `src/main/persistence/desktopSettingsStore.ts`, two authorized IPC methods,
+  narrow preload validation, and a three-category renderer surface.
+- `PlexPlaybackBridge` currently constructs `PlexStreamResolverInput` without
+  Settings. `DesktopStreamPolicyInput` currently contains only capability,
+  candidates, and requested track ids. The production profile continues to
+  report subtitle switching, HDR, Direct Stream, and transcode as unsupported.
+- The existing renderer profile flow already switches Plex Home users through
+  the unprivileged `PlexRuntimeController` and main-owned Plex runtime. WS3
+  reuses that flow; it does not add a Plex request primitive or duplicate
+  profile-switch ownership.
+
+#### WS3 Non-Goals
+
+- Do not re-audit WS1/WS2, modify their implementation, pass `WS1-PERF-01`,
+  clear any WS1 proof debt, or clear `WS2-POST-VALIDATION-01`.
+- Do not begin WS4–WS9 product work. In particular, WS3 does not implement WS5
+  Guide consumers, WS7 final current-upstream comparison, WS8 live/profile
+  lifecycle proof, or WS9/RD-27/RD-28 package and Windows proof.
+- Do not claim `ON-08` from `ST-23`, close `PB-22`–`PB-24`, or close
+  `ST-11`–`ST-16`.
+- Do not expose raw Plex/native device ids, credentials, headers, tokenized
+  URLs, paths, raw payloads, native handles, helper output, or diagnostic
+  records to preload or renderer.
+- Do not add a dependency, compatibility wrapper, browser-storage fallback,
+  public generic RPC, old upstream path shim, raw console logging mode, or
+  second Settings store.
+- Do not fabricate artwork, native-device support, DTS/HDR/transcode support,
+  or live subtitle behavior to make a control appear enabled.
+- Do not copy or adapt upstream source in Units 3A–3D. A later implementation
+  finding that adaptation is necessary triggers replan and an import-ledger
+  entry before or with the import.
+
+#### WS3 Architecture And Invariants
+
+##### Owner and trust boundaries
+
+1. `src/contracts/settings.ts` remains the sole public Settings vocabulary
+   owner. Settings values are renderer-safe preferences, never privileged
+   device/transport state.
+2. `DesktopSettingsStore` remains the sole filesystem owner. It resolves no app
+   paths itself, serializes all reads/replacements/migration, and publishes only
+   same-directory mode-0600 temporary-file replacements.
+3. A new focused main Settings policy owner caches only the last accepted
+   renderer-safe Settings snapshot and projects only these named main-consumer
+   inputs: audio/subtitle selection preferences to
+   `DesktopStreamPolicy`, HDR/transcode preferences to
+   `PlexStreamResolver`, debug/subtitle-debug admission flags to
+   `DiagnosticEventStore`, and opaque-output/DTS preferences to
+   `settingsAudioOutputOwner` plus private helper setup. It has no route
+   projection and does not own filesystem, Plex transport, helper lifecycle,
+   renderer route state, or renderer playback custody.
+4. Settings IPC remains authorized against the shell sender/main frame/origin.
+   Preload continues to expose a closed Settings API with exact request/result
+   validation and request-id echoing; no arbitrary channel or payload passes.
+5. Raw native audio-device keys exist only in the helper and main audio-output
+   owner. Renderer receives stable opaque ids derived in main and bounded safe
+   labels. The persisted selected id is opaque; main resolves it back to a
+   currently enumerated raw key immediately before helper setup and otherwise
+   falls back to system default.
+6. `PlexPlaybackBridge` receives a narrow async Settings preference provider.
+   It injects preferences into resolver/policy input per playback request.
+   Preferences may narrow or select among behavior allowed by the injected
+   capability profile; they may never upgrade `unsupported`, `unknown`, or
+   `unproven` capability state.
+7. Renderer owns category selection, control presentation, focus, first-run
+   audio setup presentation, route-triggered pause/resume custody, theme
+   projection, and overlay timer behavior. It owns no filesystem, native
+   device discovery, Plex transport, diagnostics store, or profile token.
+8. `Switch Profile` activates the existing Channel Setup/profile flow through
+   the current renderer controller. The button is persistent below the
+   category rail. WS3 verifies route/focus/action plumbing only; WS8 retains
+   live profile-switch lifecycle and `ON-08`.
+9. `ST-11`–`ST-16` values, defaults, migration, controls, and renderer-safe
+   projection land in WS3. Their Guide/EPG behavior remains disabled or marked
+   “takes effect after Guide support” until WS5 consumes and proves them.
+10. Debug settings never enable raw console/native/Plex logging. General debug
+    admits additional fixed-schema, already-sanitized main diagnostic events
+    to the existing bounded store. Subtitle debug additionally admits only
+    counts, normalized language/delivery categories, capability ids, and fixed
+    reason codes; no track ids, labels, paths, URLs, headers, or raw helper
+    values.
+
+##### Version-2 schema, migration, defaults, and normalization
+
+Unit 3A changes `SETTINGS_SCHEMA_VERSION` from `1` to `2` and freezes this exact
+flat `DesktopSettingsValues` vocabulary:
+
+| Value | Type / allowlist | Default | Current consumer posture |
+| --- | --- | --- | --- |
+| `launchMode` | `windowed` / `fullscreen` | `windowed` | existing window consumer |
+| `audioSetupCompleted` | boolean | `false` | first-run audio setup |
+| `audioOutputDeviceId` | `null` or `^audio_[A-Za-z0-9_-]{43}$` | `null` | persisted `null` means system default; raw native key remains main/helper-only |
+| `dtsPassthroughEnabled` | boolean | `false` | capability-gated, disabled while unproved |
+| `directPlayAudioFallbackEnabled` | boolean | `false` | main stream policy |
+| `subtitleMode` | `off` / `direct` / `standard` / `full` | `full` | main stream policy, capability cannot be promoted |
+| `preferredSubtitleLanguage` | `null`, `en`, `es`, `fr`, `de`, `it`, `pt`, `ru`, `ja`, `ko`, `zh` | `null` | main stream policy |
+| `preferForcedSubtitlesEnabled` | boolean | `false` | main stream policy |
+| `keepPlaybackRunningInSettings` | boolean | `false` | renderer route lifecycle |
+| `hdrFallbackMode` | `off` / `prefer-hdr10` / `force-hls` | `off` | main policy; disabled under conservative production capability |
+| `transcodeQuality` | `default`, `12000-1080p`, `8000-1080p`, `4000-720p`, `2000-720p`, `1500-480p` | `default` | resolver only for an already-authorized transcode |
+| `transcodeCompatibilityModeEnabled` | boolean | `false` | resolver only for an already-authorized transcode |
+| `libraryTabsEnabled` | boolean | `true` | WS5 contribution-open |
+| `nowWatchingBannerEnabled` | boolean | `true` | WS5 contribution-open |
+| `aggressiveGuidePreloadEnabled` | boolean | `false` | WS5 contribution-open |
+| `guideDensity` | `comfortable` / `compact` | `comfortable` | persisted internal values retained; UI labels are **Detailed** / **Wide**; WS5 contribution-open |
+| `guideLayout` | `overlay` / `classic` | `classic` | WS5 contribution-open |
+| `pastItemsWindow` | `auto` / `0` / `15` / `30` | `auto` | WS5 contribution-open |
+| `infoBoxBackgroundMode` | `artwork-bleed` / `artwork` / `theme-default` | `theme-default` | artwork choices disabled until safe artwork is present |
+| `theme` | `ember-steel`, `slate-pine`, `swiss`, `directv`, `glass` | `ember-steel` | renderer root/theme tokens |
+| `cinematicNowPlayingEnabled` | boolean | `false` | disabled until safe artwork is present |
+| `preferClearLogosEnabled` | boolean | `false` | disabled until safe logo projection is present |
+| `nowPlayingAutoHideMs` | `0`, `5000`, `10000`, `15000`, `30000`, `60000`, `120000` | `0` | renderer overlay timer; `0` means persistent |
+| `showProfilePickerOnStartup` | boolean | `false` | existing renderer Plex profile flow |
+| `debugLoggingEnabled` | boolean | `false` | main fixed-schema diagnostic admission |
+| `subtitleDebugLoggingEnabled` | boolean | `false` | main fixed-schema subtitle diagnostic admission |
+| `previewBadgesEnabled` | boolean | `true` | existing renderer consumers |
+| `setupReminderEnabled` | boolean | `true` | existing renderer consumer |
+
+The contract owns one exhaustive key list, literal allowlists, defaults,
+cloning/equality, and normalization. Unknown keys are rejected. Persisted
+`DesktopSettingsValues.audioOutputDeviceId` is exactly `null` or a canonical
+opaque id matching `^audio_[A-Za-z0-9_-]{43}$`; `null` is the sole persisted
+system-default representation. The literal `system-default` is enumeration/
+view-only and is never stored or returned in a persisted snapshot.
+
+`DesktopSettingsReplaceRequest.values` uses the same exact values shape except
+that its audio selection input also permits the exact literal
+`system-default`. Before calling the store, Settings IPC converts that exact
+literal to `null`. It accepts `null` and already-canonical opaque ids unchanged.
+It rejects every string whose pre-trim value differs from its trimmed value,
+including whitespace-wrapped `system-default` or opaque ids; it performs no
+trim-and-accept coercion. It also rejects wrong prefix/length/alphabet,
+empty strings, raw native keys, and extra keys. Letter case is preserved and
+never normalized; either case is valid only where the exact base64url grammar
+allows it. Contract, IPC, preload, persistence, migration, and renderer-runtime
+tests must prove exact-literal-to-null conversion, canonical id round trip, and
+each rejection class. Unsupported language or quality values are likewise
+rejected on public replacement.
+
+A valid version-1 record migrates once inside the serialized store:
+
+- preserve `launchMode`, `previewBadgesEnabled`, and `setupReminderEnabled`;
+- preserve `guideDensity` as `comfortable` / `compact`; those remain the
+  internal persisted values while Settings presents **Detailed** / **Wide**;
+- fill every other value from the version-2 defaults;
+- increment the stored revision by one and atomically publish exact version-2
+  bytes before returning an ordinary version-2 snapshot with existing status
+  `ready`;
+- reject migration at `Number.MAX_SAFE_INTEGER` without rewriting;
+- keep missing/corrupt behavior at revision zero with version-2 defaults and no
+  read-time rewrite; and
+- keep unknown/future versions `unsupported-version`, byte-preserved, and
+  nonreplaceable.
+
+Migration write failure resolves through the existing fixed error vocabulary;
+no legacy record is partially published. Repeated load after migration returns
+the same version-2 revision and does not rewrite. `migrated` is not added to
+`DESKTOP_SETTINGS_LOAD_STATUSES`, the persisted record, IPC, preload, or
+renderer.
+
+The store accepts one optional fixed migration-event sink with no access to
+paths, bytes, values, or exceptions. After a successful atomic rename it emits
+exactly
+`{ fromVersion: 1, toVersion: 2, status: 'succeeded', revision: <new revision> }`;
+on migration write failure it emits the same fixed fields with
+`status: 'failed'` and the attempted new revision before returning the existing
+safe store failure. Sink failure is swallowed and cannot change store outcome.
+Missing, corrupt, future-version, already-v2, and repeated post-migration loads
+emit no migration event. Unit 3A tests assert `ready`, revision increment,
+exact rewritten bytes, one success event, idempotent second load/no event,
+fixed failure event, no rewrite on failure, and absence of any public
+`migrated` literal.
+
+##### Exact public Settings view and capability contract
+
+`DesktopSettingsSnapshot` remains the persisted/store-owned shape with exactly
+`schemaVersion`, `revision`, `status`, and `values`. Capabilities are never
+written, migrated, revisioned, or compared by the store. Both existing
+operations, `getSnapshot` and `replace`, return one exact success value named
+`DesktopSettingsView`:
+
+```text
+{
+  snapshot: DesktopSettingsSnapshot,
+  capabilities: DesktopSettingsCapabilityProjection
+}
+```
+
+`DesktopSettingsCapabilityProjection` has exactly these seven required keys,
+with no index signature or optional key:
+
+- `audioOutputSelection`
+- `dtsPassthrough`
+- `directPlayAudioFallback`
+- `subtitleSelection`
+- `hdrFallback`
+- `transcode`
+- `artworkPresentation`
+
+Every value is exactly
+`{ status: DesktopSettingsCapabilityStatus, reason: DesktopSettingsCapabilityReason }`.
+The only status literals are `supported`, `unsupported`, and `unproven`. The
+only reason literals are `available`, `platform-unsupported`,
+`helper-unavailable`, `native-proof-required`,
+`production-capability-unsupported`, and `safe-artwork-unavailable`. The only
+valid status/reason pairs are:
+
+| Status | Allowed reason |
+| --- | --- |
+| `supported` | `available` |
+| `unsupported` | `platform-unsupported`, `helper-unavailable`, `production-capability-unsupported`, `safe-artwork-unavailable` |
+| `unproven` | `native-proof-required` |
+
+Unit 3A publishes this exact conservative projection:
+
+| Family | Status | Reason |
+| --- | --- | --- |
+| `audioOutputSelection` | `unproven` | `native-proof-required` |
+| `dtsPassthrough` | `unproven` | `native-proof-required` |
+| `directPlayAudioFallback` | `supported` | `available` |
+| `subtitleSelection` | `unsupported` | `production-capability-unsupported` |
+| `hdrFallback` | `unsupported` | `production-capability-unsupported` |
+| `transcode` | `unsupported` | `production-capability-unsupported` |
+| `artworkPresentation` | `unsupported` | `safe-artwork-unavailable` |
+
+In Unit 3A this table is an immutable contract-owned constant cloned into each
+two-operation response. It is not backed by a runtime policy owner and no IPC
+handler synchronizes runtime policy. Unit 3B replaces only the composition
+source with its initialized main policy owner while preserving the exact public
+shape and allowed pairs.
+
+Unit 3B may change only `audioOutputSelection` to
+`unsupported/platform-unsupported` off Windows or
+`unsupported/helper-unavailable` when the production helper is absent.
+On Windows it remains `unproven/native-proof-required` even after a clean
+enumeration until reviewed Windows/native proof causes replan; a `ready` audio
+list is runtime availability evidence, not automatic production capability
+promotion. Injected test profiles may exercise `supported/available`, but that
+state may not enter production composition. No other family is promoted. The
+projection is recomputed in main for every `DesktopSettingsView`; renderer
+never infers capability from a persisted preference or enumeration status.
+
+The two v2 requests retain their current exact shapes:
+`{ requestId }` for `getSnapshot` and
+`{ requestId, expectedRevision, values }` for `replace`.
+Their success envelope is exactly
+`{ ok: true, requestId, value: DesktopSettingsView }`; their failure envelope
+is exactly `{ ok: false, requestId, error: { code, message } }` using only the
+existing fixed Settings codes/messages. Request ids continue to match
+`^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$`; malformed ids are echoed only as
+`settings-invalid-request`. All request, view, projection, entry, envelope,
+error, snapshot, and values guards reject missing or extra keys.
+
+##### Exact Unit 3B audio-output operation
+
+Unit 3B alone adds `lineup:settings:getAudioOutputs`. Its request is exactly
+`{ requestId }` under the existing request-id rule. Its success envelope is
+exactly `{ ok: true, requestId, value: DesktopAudioOutputList }`; failure uses
+the same exact Settings failure envelope and may emit only `unauthorized`,
+`validation-failed`, or `operation-failed`; helper/platform/enumeration
+outcomes are successful bounded list values, not rejected promises.
+`DesktopAudioOutputList` is exactly:
+
+```text
+{
+  status: 'ready' | 'partial' | 'unavailable',
+  reason:
+    | 'available'
+    | 'platform-unsupported'
+    | 'helper-unavailable'
+    | 'enumeration-failed'
+    | 'device-list-sanitized'
+    | 'device-list-truncated',
+  outputs: DesktopAudioOutputRow[]
+}
+```
+
+The only valid list status/reason pairs are:
+
+| Status | Allowed reason |
+| --- | --- |
+| `ready` | `available` |
+| `partial` | `device-list-sanitized`, `device-list-truncated` |
+| `unavailable` | `platform-unsupported`, `helper-unavailable`, `enumeration-failed` |
+
+The only system row is exactly
+`{ kind: 'system-default', id: 'system-default', label: 'System default' }`.
+It is always `outputs[0]` and occurs exactly once. A native device row is
+exactly `{ kind: 'device', id, label }`. Device ids match
+`^audio_[A-Za-z0-9_-]{43}$` and are
+base64url-without-padding SHA-256 of the UTF-8 bytes for
+`lineup-desktop-audio-output-v1\0<raw-native-key>`. Only main computes the id;
+the raw native key remains helper/main-only and is neither persisted nor
+returned.
+
+At most 32 native device rows are returned, so `outputs` has at most 33 rows
+including system default. Labels are NFKC-normalized; C0/C1 controls are
+replaced with spaces; Unicode whitespace is collapsed to one space; leading
+and trailing whitespace is removed; and the result is truncated to 80 Unicode
+scalar values. Empty normalized labels and invalid rows are dropped. Repeated
+raw keys keep the first occurrence and make the result `partial` with
+`device-list-sanitized`. Equal display labels are allowed. Device rows sort by
+normalized label using ascending UTF-16 code-unit order, then by opaque id.
+After sorting, rows beyond 32 are dropped and make the result `partial` with
+`device-list-truncated`; when sanitization and truncation both occur,
+`device-list-sanitized` wins.
+
+A clean enumeration, including zero native devices, is `ready/available`. A
+query with at least one retained device plus dropped/duplicate/truncated rows
+is `partial` with the reason above. Platform detection is the first and
+controlling branch: off Windows returns
+`unavailable/platform-unsupported` without inspecting or invoking a host.
+Only on Windows does a null/absent production host return
+`unavailable/helper-unavailable`. On Windows, query/protocol failure or no
+retained native row after invalid input is
+`unavailable/enumeration-failed`. Every unavailable result contains only the
+system-default row.
+
+If two distinct raw keys produce one opaque id, main fails closed: it discards
+the entire native list, returns
+`unavailable/enumeration-failed` with system default only, and admits only the
+fixed diagnostic reason `audio-output-id-collision` without either raw key.
+Preload and contract guards reject duplicate ids, duplicate/misordered system
+rows, over-limit arrays, invalid status/reason pairs, unsanitized/out-of-bound
+labels, invalid opaque ids, and extra keys at every level. Audio labels may be
+rendered only as text and are excluded from diagnostics/support bundles;
+public requests/results/errors, Settings tests, docs, and logs never contain
+raw native keys. Synthetic private keys are permitted only in Unit 3B
+host/protocol tests that prove the main/helper boundary.
+
+##### Capability and user-visible truth
+
+The following current production posture is mandatory:
+
+- MP4/H.264/AAC Direct Play remains the only supported production media path.
+- DTS passthrough, subtitle delivery/switching, HDR/Dolby Vision, Direct
+  Stream, transcode, and artwork-backed Settings choices remain
+  `unsupported` or `unproven` until later proof changes the authoritative
+  capability provider.
+- Controls for unsupported/unproved behavior are visible, carry the fixed
+  reason, do not mutate persisted state, and are keyboard/D-pad
+  non-activatable while still readable by assistive technology.
+- A stored choice that becomes unavailable is displayed as unavailable and is
+  not deleted silently. Runtime uses the safe default and does not claim the
+  stored choice took effect.
+- The first-run audio surface is always reachable. If native enumeration is
+  unavailable, it offers only “System default,” explains the limitation, and
+  allows the user to persist completion without claiming device selection.
+
+##### Cross-workstream closure classification
+
+| Classification after WS3 local closeout | Rows |
+| --- | --- |
+| Locally implemented and eligible for WS3 authority reconciliation after focused/integrated proof | `ST-01`, `ST-07`, `ST-18`, `ST-21`, `ST-22`, `ST-23`, `ST-24`, `UI-31`; the current Desktop additions `ST-27` and `ST-28` remain subject to their named local consumer proof |
+| WS3 implementation contribution complete, row intentionally open for WS5 consumer proof | `ST-11`–`ST-16`, `UI-33` |
+| WS3 control/persistence/policy contribution complete, row open for native/live/capability proof and the preserved WS2 contribution | `ST-02`–`ST-06`, `ST-08`–`ST-10`; `PB-22`–`PB-24` remain registered to WS2 and open |
+| Honest Settings surface implemented, row open because the current safe/native/live consumer is unavailable or unproved | `ON-12`, `WIN-02`, `ST-17`, `ST-19`, `ST-20`, `ST-25`, `UI-14`, `UI-28`, `UI-29`, `UI-30`, `UI-32` |
+| Existing Desktop behavior retained; Windows/manual/recovery/visual proof remains consolidated debt | `ST-26`, `ST-29`, `ST-30`, `UI-34` |
+
+This table is an execution acceptance classification, not permission to edit
+the parity matrix before the final reviewed authority unit.
+
+#### WS3 Files In Scope
+
+The union below is the maximum WS3 product allowlist. Each unit has a smaller
+exact list. Any additional production/test file requires replan.
+
+**Contracts, persistence, IPC, preload**
+
+- `src/contracts/settings.ts`
+- `src/contracts/ipc.ts`
+- `src/contracts/shell.ts`
+- `src/main/persistence/desktopSettingsStore.ts`
+- `src/main/settings/settingsIpc.ts`
+- `src/main/settings/desktopSettingsPolicy.ts` (new)
+- `src/main/settings/settingsAudioOutputOwner.ts` (new)
+- `src/preload/channels.cts`
+- `src/preload/settingsBridge.cts`
+- `src/preload/settingsBridgeGuards.cts`
+- `src/preload/index.cts` (composition wiring only)
+
+**Playback/native/diagnostics direct consumers**
+
+- `src/main/player/streamPolicy/types.ts`
+- `src/main/player/streamPolicy/desktopStreamPolicy.ts`
+- `src/main/plex/streamResolver.ts`
+- `src/main/player/plexPlaybackBridge.ts`
+- `src/main/player/plexPlaybackComposition.ts`
+- `src/main/player/playbackRuntimeBootstrap.ts`
+- `src/main/player/playerIpc.ts`
+- `src/main/player/productionNativeHostFactory.ts`
+- `src/main/player/nativePlayerHostPort.ts`
+- `src/main/player/nativeHelperProtocol.ts`
+- `src/main/player/nativeHelperProtocolCodec.ts`
+- `src/main/player/nativePlayerHostProcess.ts`
+- `src/main/player/nativeHelperPlaybackSetup.ts`
+- `src/main/player/privilegedPlaybackDispatchContext.ts`
+- `src/native-helper/Lineup.NativePlayerHost/Program.cs`
+- `src/main/diagnostics/diagnosticEventStore.ts`
+- `src/main/index.ts`
+
+**Renderer**
+
+- `src/renderer/settings/settingsRuntime.ts`
+- `src/renderer/settings/settingsPlaybackLifecycle.ts` (new)
+- `src/renderer/settings/audioSetupRuntime.ts` (new)
+- `src/renderer/settings/audioSetupDom.ts` (new)
+- `src/renderer/settingsSetup.ts`
+- `src/renderer/settingsSetupDom.ts`
+- `src/renderer/staticDom.ts`
+- `src/renderer/domBindings.ts`
+- `src/renderer/rendererActionRegistration.ts`
+- `src/renderer/routeDom.ts`
+- `src/renderer/workflow.ts`
+- `src/renderer/navigation.ts`
+- `src/renderer/focusDom.ts`
+- `src/renderer/playerOverlayController.ts`
+- `src/renderer/playerOverlayDom.ts`
+- `src/renderer/plexRuntimeActions.ts`
+- `src/renderer/onboarding/plexOnboardingFlow.ts`
+- `src/renderer/styles.css`
+- `src/renderer/styles/settings.css`
+- `src/renderer/styles/responsive-accessibility.css`
+- `src/renderer/index.ts`
+
+**Focused tests**
+
+- `src/__tests__/contracts/settingsContracts.test.ts`
+- `src/__tests__/contracts/contracts.test.ts`
+- `src/__tests__/main/settingsPersistence.test.ts`
+- `src/__tests__/main/settingsIpc.test.ts`
+- `src/__tests__/main/settingsPolicy.test.ts` (new)
+- `src/__tests__/main/settingsAudioOutputOwner.test.ts` (new)
+- `src/__tests__/main/settingsNativeHostComposition.test.ts` (new)
+- `src/__tests__/main/player/desktopStreamPolicy.test.ts`
+- `src/__tests__/main/plexStreamResolver.test.ts`
+- `src/__tests__/main/player/plexPlaybackBridge.test.ts`
+- `src/__tests__/main/player/plexPlaybackComposition.test.ts`
+- `src/__tests__/main/player/plexPlaybackRuntime.test.ts`
+- `src/__tests__/main/player/playbackRuntimeBootstrap.test.ts`
+- `src/__tests__/main/player/desktopPlayerAdapter.test.ts`
+- `src/__tests__/main/player/nativePlayerHostProcess.test.ts`
+- `src/__tests__/main/player/productionNativeHostFactory.test.ts`
+- `src/__tests__/main/playerIpc.test.ts`
+- `src/__tests__/main/diagnosticEventStore.test.ts` (new)
+- `src/__tests__/integration/preloadContractVocabulary.test.ts`
+- `tools/__tests__/native-helper-program.test.mjs`
+- `src/__tests__/renderer/settingsRuntime.test.ts`
+- `src/__tests__/renderer/settingsSetup.test.ts`
+- `src/__tests__/renderer/fullscreenTransport.test.ts`
+- `src/__tests__/renderer/settingsPlaybackLifecycle.test.ts` (new)
+- `src/__tests__/renderer/audioSetupRuntime.test.ts` (new)
+- `src/__tests__/renderer/rendererActionRegistration.test.ts`
+- `src/__tests__/renderer/routeDom.test.ts`
+- `src/__tests__/renderer/workflow.test.ts`
+- `src/__tests__/renderer/navigation.test.ts`
+- `src/__tests__/renderer/focusDom.test.ts`
+- `src/__tests__/renderer/playerOverlayController.test.ts`
+- `src/__tests__/renderer/plexRuntime.test.ts`
+- `src/__tests__/renderer/rendererRuntimeOwners.test.ts`
+
+**Authority closeout only**
+
+- `docs/plans/2026-07-22-tier3-parity-correction-plan.md`
+- `docs/architecture/CURRENT_STATE.md`
+- `docs/architecture/playback-architecture.md`
+- `docs/architecture/security-and-secret-flow.md`
+- `docs/architecture/renderer-architecture.md`
+- `docs/architecture/import-ledger.md` only if replan later approves adaptation
+- `docs/product/lineup-product-parity-matrix.md`
+- `docs/roadmap/desktop-port-roadmap.md`
+- `docs/development/windows-ui-proof-plan.md`
+- local ignored `docs/runs/ws3-settings-quality-loop/**`
+
+#### WS3 Files Out Of Scope
+
+- all WS1 Channel Builder and Custom Channels product owners
+- `src/domain/channel/**`, `src/domain/channelBuilder/**`, and
+  `src/domain/scheduler/**`
+- WS2 recovery owners and tests except the explicitly listed playback-policy,
+  resolver, bridge, bootstrap, protocol, and native-host direct consumers
+- `src/main/plex/auth/**`, `src/main/plex/discovery/**`,
+  `src/main/plex/livePlexTransport.ts`, and Plex IPC/preload contracts
+- raw artwork transport/resolution, `src/contracts/artwork.ts`, and any new
+  remote/tokenized artwork surface
+- Guide/EPG data, virtualization, layout, polling, and schedule consumers;
+  those are WS5-owned even though WS3 freezes their Settings values
+- package scripts, `package.json`, lockfiles, dependencies, release/signing/
+  updater owners, and RD-27/RD-28 tools/evidence
+- `src/main/persistence/desktopPersistenceStore.ts`, encrypted credentials,
+  selected-server records, channel persistence, and browser storage
+- any file not listed in the unit currently being executed, even if it appears
+  in the maximum allowlist above
+
+#### WS3 Execution Packages
+
+Units are serial because all four product units share the version-2 Settings
+contract. No implementation parallelism is approved.
+
+Before every unit, freshness-read that unit, its exact files/tests, relevant
+authority, and `git status --short --branch`. A changed contract, owner, or
+capability posture returns to plan review.
+
+##### Unit 3A — version-2 two-operation foundation
+
+**Status:** selected first execution unit; implementation-ready only after the
+fresh independent plan review expressly approves it.
+
+**IMPLEMENTER_ROLE_ELIGIBILITY:** `worker`. Although schema/default/migration
+decisions are frozen, exact integration into the current strict guards and
+serialized atomic store still requires bounded repository judgment.
+
+**Exact production files**
+
+- `src/contracts/settings.ts`
+- `src/contracts/ipc.ts`
+- `src/contracts/shell.ts`
+- `src/main/persistence/desktopSettingsStore.ts`
+- `src/main/settings/settingsIpc.ts`
+- `src/preload/settingsBridge.cts`
+- `src/preload/settingsBridgeGuards.cts`
+- `src/renderer/settings/settingsRuntime.ts`
+- `src/renderer/settingsSetup.ts`
+
+**Exact tests**
+
+- `src/__tests__/contracts/settingsContracts.test.ts`
+- `src/__tests__/contracts/contracts.test.ts`
+- `src/__tests__/main/settingsPersistence.test.ts`
+- `src/__tests__/main/settingsIpc.test.ts`
+- `src/__tests__/integration/preloadContractVocabulary.test.ts`
+- `src/__tests__/renderer/settingsRuntime.test.ts`
+- `src/__tests__/renderer/settingsSetup.test.ts`
+- `src/__tests__/renderer/fullscreenTransport.test.ts`
+
+**Behavior and acceptance**
+
+- Land exactly the version-2 values, defaults, key allowlist, the
+  `DesktopSettingsView` and fixed conservative capability projection above,
+  the existing two closed Settings operations (`getSnapshot`, `replace`), and
+  fixed safe failures. Unit 3A adds no channel or preload method.
+- Implement the exact one-time version-1 migration above while preserving
+  missing/corrupt/unsupported bytes and atomic/CAS behavior.
+- IPC validates before store calls, authorizes both operations, canonicalizes
+  only exact `system-default` to persisted `null`, wraps the store snapshot
+  with a clone of the contract-owned conservative capability constant, and
+  never constructs, hydrates, updates, or synchronizes a runtime policy owner.
+- Preload keeps exactly two reviewed methods, validates both request/result
+  shapes independently, rejects extra keys/forbidden values locally, and never
+  imports the TypeScript contract at sandbox runtime.
+- The renderer runtime and draft owner adopt the exact version-2
+  `DesktopSettingsView` without exposing Unit 3C controls, keeping this
+  checkpoint typecheck- and build-complete.
+
+**Focused proof**
+
+```sh
+node --import tsx --test \
+  src/__tests__/contracts/settingsContracts.test.ts \
+  src/__tests__/contracts/contracts.test.ts \
+  src/__tests__/main/settingsPersistence.test.ts \
+  src/__tests__/main/settingsIpc.test.ts \
+  src/__tests__/integration/preloadContractVocabulary.test.ts \
+  src/__tests__/renderer/settingsRuntime.test.ts \
+  src/__tests__/renderer/settingsSetup.test.ts \
+  src/__tests__/renderer/fullscreenTransport.test.ts
+npm run test:contracts
+npm run typecheck
+npm run verify:architecture
+npm run verify:redaction
+npm run build:electron
+git diff --check
+```
+
+Expected: exact version-2 round trips; valid version-1 atomic migration and
+ordinary `ready` status, fixed migration diagnostics, idempotent second load;
+canonical/null/system-default audio-id cases; unsupported/corrupt byte
+preservation; stale revision
+rejection; unauthorized/malformed IPC rejection; exact two-method preload
+surface; strict persisted/nonpersisted view
+separation; exact capability pairs; no forbidden field or private error.
+
+**No-touch and stop conditions**
+
+Do not edit any composition root, `src/preload/channels.cts`, a
+playback/native/audio owner, renderer outside the two listed shape consumers,
+authority doc, package file, or unlisted test. Stop for replan if Unit 3A needs
+a third Settings operation, audio provider, runtime policy owner, policy
+hydration/synchronization, or composition edit; if migration requires a
+compatibility store or in-place rewrite; if any persisted setting needs a
+secret/raw device value; or if the existing whole-snapshot CAS cannot preserve
+revision semantics.
+
+**Rollback/checkpoint**
+
+The unit is one atomic checkpoint. Roll back all Unit 3A files together; do not
+leave schema version 2 with version-1 preload/store guards. After focused proof
+and a fresh material-only implementation review, controller intent is
+`feat(settings): add versioned settings foundation`.
+
+##### Unit 3B — main media, native audio, and diagnostics consumers
+
+**IMPLEMENTER_ROLE_ELIGIBILITY:** `worker`. Native protocol, policy semantics,
+redaction, and composition wiring need bounded repository judgment; no
+lower-effort worker is eligible.
+
+**Exact production files**
+
+- `src/contracts/settings.ts`
+- `src/contracts/ipc.ts`
+- `src/contracts/shell.ts`
+- `src/main/settings/settingsAudioOutputOwner.ts` (new)
+- `src/main/settings/desktopSettingsPolicy.ts` (new)
+- `src/main/player/streamPolicy/types.ts`
+- `src/main/player/streamPolicy/desktopStreamPolicy.ts`
+- `src/main/plex/streamResolver.ts`
+- `src/main/player/plexPlaybackBridge.ts`
+- `src/main/player/plexPlaybackComposition.ts`
+- `src/main/player/playbackRuntimeBootstrap.ts`
+- `src/main/player/playerIpc.ts`
+- `src/main/player/productionNativeHostFactory.ts`
+- `src/main/player/nativePlayerHostPort.ts`
+- `src/main/player/nativeHelperProtocol.ts`
+- `src/main/player/nativeHelperProtocolCodec.ts`
+- `src/main/player/nativePlayerHostProcess.ts`
+- `src/main/player/nativeHelperPlaybackSetup.ts`
+- `src/main/player/privilegedPlaybackDispatchContext.ts`
+- `src/native-helper/Lineup.NativePlayerHost/Program.cs`
+- `src/main/diagnostics/diagnosticEventStore.ts`
+- `src/main/settings/settingsIpc.ts`
+- `src/preload/channels.cts`
+- `src/preload/settingsBridge.cts`
+- `src/preload/settingsBridgeGuards.cts`
+- `src/preload/index.cts`
+- `src/main/index.ts`
+
+**Exact tests**
+
+- `src/__tests__/contracts/settingsContracts.test.ts`
+- `src/__tests__/contracts/contracts.test.ts`
+- `src/__tests__/main/settingsPolicy.test.ts` (new)
+- `src/__tests__/main/settingsAudioOutputOwner.test.ts` (new)
+- `src/__tests__/main/settingsNativeHostComposition.test.ts` (new)
+- `src/__tests__/main/player/desktopStreamPolicy.test.ts`
+- `src/__tests__/main/plexStreamResolver.test.ts`
+- `src/__tests__/main/player/plexPlaybackBridge.test.ts`
+- `src/__tests__/main/player/plexPlaybackComposition.test.ts`
+- `src/__tests__/main/player/plexPlaybackRuntime.test.ts`
+- `src/__tests__/main/player/playbackRuntimeBootstrap.test.ts`
+- `src/__tests__/main/player/desktopPlayerAdapter.test.ts`
+- `src/__tests__/main/player/nativePlayerHostProcess.test.ts`
+- `src/__tests__/main/player/productionNativeHostFactory.test.ts`
+- `src/__tests__/main/playerIpc.test.ts`
+- `src/__tests__/main/diagnosticEventStore.test.ts` (new)
+- `src/__tests__/main/settingsIpc.test.ts`
+- `src/__tests__/integration/preloadContractVocabulary.test.ts`
+- `tools/__tests__/native-helper-program.test.mjs`
+
+**Behavior and acceptance**
+
+- Main creates one `DesktopSettingsStore`, awaits exactly one initial
+  `loadSnapshot()` before registering Settings/player handlers or publishing
+  shell ready, and hydrates the new policy owner from that result. A
+  successfully converted v1 record hydrates its returned `ready` snapshot.
+  Missing, corrupt, and
+  unsupported-version snapshots hydrate only their returned safe default
+  values while preserving their public status/bytes. A thrown storage failure
+  aborts startup through the existing main startup failure path; no
+  uninitialized policy or handler is published.
+- Before that initial load, main connects the store's fixed migration-event
+  sink to `DiagnosticEventStore`; only the frozen version/status/revision
+  fields are admitted. Unit 3A proves the sink contract with a fake, while
+  Unit 3B proves production composition.
+- Main injects that same store and policy into Settings IPC. `getSnapshot`
+  loads the store and returns the resulting snapshot plus the policy's current
+  nonpersisted capability projection; direct external file mutation is
+  unsupported and does not rehydrate preference policy. A successful
+  `replace` first commits through the store, then synchronously accepts that
+  exact store-produced snapshot into policy, then returns the view. Failed
+  validation/store replacement leaves policy unchanged. Policy acceptance is
+  total for store-produced v2 snapshots and performs no I/O.
+- Unit 3B alone constructs, initially hydrates, and synchronizes
+  `desktopSettingsPolicy`. Unit 3A has only the contract-owned conservative
+  projection constant and no runtime policy lifecycle.
+- Add the exact `getAudioOutputs` request/result/envelope types, IPC channel,
+  authorized handler, shell method, preload channel vocabulary, independent
+  guards, and root wiring specified above. This is the only Unit 3B public
+  Settings vocabulary addition; the two-operation Unit 3A surface remains
+  unchanged otherwise.
+- In production main invokes `createProductionNativeHostFactory(...)` at most
+  once during composition and retains the resulting single
+  `NativePlayerHostProcess` instance (or `null`). The same instance is injected
+  directly into player IPC and the Settings audio-output owner. Production
+  `registerPlayerIpcHandlers` accepts a direct `nativeHost` and never invokes a
+  factory; `nativeHostFactory` remains a development/smoke test hook only.
+  A null host keeps the existing conservative player unsupported. The audio
+  owner checks platform first: off Windows it returns
+  `unavailable/platform-unsupported`; only on Windows does that same null host
+  map to `unavailable/helper-unavailable`. No Settings owner, player owner,
+  retry, or recovery path may construct a parallel helper/process.
+- Player IPC remains the sole lifecycle/cleanup owner for the shared host. The
+  Settings audio owner borrows it and has no `cleanup`, `kill`, spawn, or
+  recovery authority. Main teardown first removes Settings handlers, then
+  player teardown unsubscribes the main lifecycle listener, adapter cleanup
+  calls the shared host's single `cleanup`, all pending player/audio requests
+  settle as safe aborted failures, and the child is reaped once. A later
+  helper restart remains lazy inside that same `NativePlayerHostProcess`.
+- `NativePlayerHostPort` adds one required private method
+  `queryAudioOutputs(requestId)` returning either
+  `{ ok: true, outputs: { nativeKey: string, label: string }[] }` or
+  `{ ok: false, error: NativePlayerHostFailure }`. Development/inert/fake
+  hosts implement the method with a fixed unsupported result unless a focused
+  test explicitly supplies synthetic private rows.
+- The private NDJSON protocol adds exactly
+  `{ type: 'audio-output.query', requestId }` and either
+  `{ type: 'audio-output.result', requestId, ok: true, outputs }` or
+  `{ type: 'audio-output.result', requestId, ok: false, error }`. The Settings
+  request id is never reused: the audio owner injects main's
+  `createRequestId('native-audio-output')`, and the process uses the same
+  pending map, duplicate-id rejection, timeout, quarantine, cleanup
+  cancellation, message-size, and child-restart lifecycle as player commands.
+  Result type and request id must match the pending operation; a mismatched
+  type quarantines the child, while a late/unknown id is ignored with only a
+  fixed count-only diagnostic.
+- Private successful helper output is bounded before public projection to at
+  most 128 exact `{ nativeKey, label }` rows, each native key 1–512 and label
+  0–512 Unicode scalar values. Extra keys, invalid types/bounds, over-limit
+  arrays, or forbidden privileged field names quarantine the child and resolve
+  the query with a fixed safe helper failure. Only synthetic private keys may
+  appear in host/protocol tests; no real device value enters fixtures,
+  diagnostics, docs, or public DTOs.
+- The helper handles audio queries in the existing command loop under
+  `MpvLock`. It reads libmpv's audio-device list from the active context when
+  one exists; otherwise it creates, initializes, queries, and destroys one
+  transient probe context inside the same helper process. It never tears down
+  or mutates active playback, creates no second helper process, emits no raw
+  key in an event/error, and returns a fixed failure if probing is unavailable.
+- Add one private helper query for audio devices. Main hashes raw native keys
+  into stable opaque ids, sanitizes labels, bounds counts/lengths, rejects
+  duplicate/invalid rows, and caches no raw key beyond the current enumeration.
+  `getAudioOutputs` returns system default plus safe rows or a fixed
+  unavailable state on non-Windows/missing-helper/failure.
+- Immediately before a load, resolve the persisted opaque id against fresh
+  enumeration through the shared host. The load path rechecks current request
+  custody after the query and before dispatch. Private helper setup receives
+  the raw key only on an exact current match; stale/unavailable ids use system
+  default and generate only fixed reason/count diagnostics. Raw ids never
+  enter public contracts, renderer/preload, persisted bytes, or diagnostics.
+- `NativeHelperPlaybackSetup` adds exactly two required private fields:
+  `audioOutputNativeKey: string | null` and
+  `dtsPassthroughEnabled: boolean`. Stream resolution constructs conservative
+  `null/false`; immediately before privileged load dispatch the bridge
+  composition replaces them with the fresh main-only resolution. The
+  privileged descriptor validator requires both exact keys/types, and the
+  protocol codec forwards them only on `load`.
+- The helper applies a non-null audio key as libmpv's `audio-device` option
+  before `mpv_initialize`; `null` leaves the system default. It applies the
+  closed DTS passthrough option set (`dts,dts-hd`) only when the setup boolean
+  is true and otherwise does not enable passthrough. Failure to apply a
+  non-null device or requested DTS option fails the load safely; it never
+  silently claims the setting took effect.
+- Stream policy consumes audio-fallback and subtitle preferences. `off`
+  selects none; language selection is deterministic; forced preference
+  precedes a same-language full subtitle only when allowed; direct/standard/
+  full never bypass capability support. Audio fallback occurs only when
+  enabled. Current explicit user-selected track ids retain precedence.
+- HDR and transcode preferences affect only candidate/URL selection already
+  allowed by the injected profile. `force-hls` cannot create transcode support;
+  quality uses the exact allowlist; compatibility mode only removes optional
+  parameters and never adds a generic query facility.
+- DTS is passed to helper setup only when both preference and native capability
+  are supported. The current production provider reports it unproven, so the
+  production setup is always `false`; supported DTS setup is test-fixture-only
+  until reviewed Windows/native proof replans the production capability.
+- Debug admission preserves all existing warning/error/cleanup events.
+  Additional debug/subtitle events use the fixed safe projection above.
+- `getProductionCapabilityProfile()` remains byte-for-byte conservative in its
+  supported/unsupported fields unless fresh reviewed native proof causes a
+  replan. Development/smoke profiles may exercise supported branches only as
+  test fixtures and must not leak into production selection.
+
+**Focused proof**
+
+```sh
+node --import tsx --test \
+  src/__tests__/contracts/settingsContracts.test.ts \
+  src/__tests__/contracts/contracts.test.ts \
+  src/__tests__/main/settingsPolicy.test.ts \
+  src/__tests__/main/settingsAudioOutputOwner.test.ts \
+  src/__tests__/main/settingsNativeHostComposition.test.ts \
+  src/__tests__/main/player/desktopStreamPolicy.test.ts \
+  src/__tests__/main/plexStreamResolver.test.ts \
+  src/__tests__/main/player/plexPlaybackBridge.test.ts \
+  src/__tests__/main/player/plexPlaybackComposition.test.ts \
+  src/__tests__/main/player/plexPlaybackRuntime.test.ts \
+  src/__tests__/main/player/playbackRuntimeBootstrap.test.ts \
+  src/__tests__/main/player/desktopPlayerAdapter.test.ts \
+  src/__tests__/main/player/nativePlayerHostProcess.test.ts \
+  src/__tests__/main/player/productionNativeHostFactory.test.ts \
+  src/__tests__/main/playerIpc.test.ts \
+  src/__tests__/main/diagnosticEventStore.test.ts \
+  src/__tests__/main/settingsIpc.test.ts \
+  src/__tests__/integration/preloadContractVocabulary.test.ts
+node --test tools/__tests__/native-helper-program.test.mjs
+dotnet build src/native-helper/Lineup.NativePlayerHost/Lineup.NativePlayerHost.csproj --configuration Release
+npm run test:contracts
+npm run typecheck
+npm run build:electron
+npm run verify:architecture
+npm run verify:maintainability
+npm run verify:redaction
+npm run smoke:electron
+git diff --check
+```
+
+Expected: deterministic preference branches under injected supported
+capabilities; unchanged conservative production profile; fixed unavailable
+audio state off Windows; raw-to-opaque device separation; stale device fallback;
+exact transcode allowlist; no privileged material in IPC/diagnostics.
+The exact three-method public/preload vocabulary, strict audio row/envelope
+guards, bounded ordering/sanitization, and fixed unavailable/partial cases also
+pass. Shared-host proof observes one production factory invocation/instance,
+the same host identity at player/audio owners, no production factory call
+inside player IPC, correlated concurrent command/query results, duplicate,
+timeout, mismatched, late, cleanup, crash/restart, and teardown cases, exact
+private setup fields/options, and no parallel helper or production capability
+promotion. The exact Release helper build exits zero. This locally runnable
+compile gate is required Unit 3B proof; it is not Windows/manual/native
+observation debt, and its generated ignored output is never staged.
+
+**No-touch and stop conditions**
+
+Do not edit player renderer contracts, Plex auth/discovery/transport,
+credentials, package metadata, or any native surface other than the exact
+private helper query/setup fields. Stop for replan if device enumeration needs
+a dependency, shell command, environment/argv secret, public raw id, long-lived
+raw mapping, or broad player command; if policy preference can promote a
+capability; if the public audio operation differs from the exact DTO above; if
+`src/preload/index.cts` or `src/main/index.ts` must own behavior rather than
+wiring; if player and audio paths cannot share one production host with player
+teardown as sole cleanup owner; if the private query cannot share exact
+request/timeout/quarantine/cleanup custody without disrupting playback; if
+setup requires any field beyond the exact raw-key/boolean pair; or if another
+public method/channel is needed.
+
+**Rollback/checkpoint**
+
+Rollback the entire main/native preference propagation checkpoint if either
+private protocol direction or safe Settings result cannot be validated. Unit
+3A remains independently buildable with unsupported capability results. After
+focused proof and fresh material-only review, controller intent is
+`feat(settings): connect safe runtime preferences`.
+
+##### Unit 3C — complete Settings, first-run audio, and profile UI
+
+**IMPLEMENTER_ROLE_ELIGIBILITY:** `worker`. The bounded unit crosses current
+renderer composition, focus, persistence concurrency, and profile-flow
+integration; `worker_sol_low` and `worker_luna` are not eligible.
+
+**Exact production files**
+
+- `src/renderer/settings/settingsRuntime.ts`
+- `src/renderer/settings/settingsPlaybackLifecycle.ts` (new)
+- `src/renderer/settings/audioSetupRuntime.ts` (new)
+- `src/renderer/settings/audioSetupDom.ts` (new)
+- `src/renderer/settingsSetup.ts`
+- `src/renderer/settingsSetupDom.ts`
+- `src/renderer/staticDom.ts`
+- `src/renderer/domBindings.ts`
+- `src/renderer/rendererActionRegistration.ts`
+- `src/renderer/routeDom.ts`
+- `src/renderer/workflow.ts`
+- `src/renderer/navigation.ts`
+- `src/renderer/focusDom.ts`
+- `src/renderer/playerOverlayController.ts`
+- `src/renderer/plexRuntimeActions.ts`
+- `src/renderer/onboarding/plexOnboardingFlow.ts`
+- `src/renderer/styles.css`
+- `src/renderer/styles/settings.css`
+- `src/renderer/styles/responsive-accessibility.css`
+- `src/renderer/index.ts`
+
+**Exact tests**
+
+- `src/__tests__/renderer/settingsRuntime.test.ts`
+- `src/__tests__/renderer/settingsSetup.test.ts`
+- `src/__tests__/renderer/settingsPlaybackLifecycle.test.ts` (new)
+- `src/__tests__/renderer/audioSetupRuntime.test.ts` (new)
+- `src/__tests__/renderer/rendererActionRegistration.test.ts`
+- `src/__tests__/renderer/routeDom.test.ts`
+- `src/__tests__/renderer/workflow.test.ts`
+- `src/__tests__/renderer/navigation.test.ts`
+- `src/__tests__/renderer/focusDom.test.ts`
+- `src/__tests__/renderer/playerOverlayController.test.ts`
+- `src/__tests__/renderer/plexRuntime.test.ts`
+- `src/__tests__/renderer/rendererRuntimeOwners.test.ts`
+
+**Behavior and acceptance**
+
+- Replace the current three-category rail with exactly seven categories in
+  this order: Audio & Subtitles, Playback & HDR, Appearance, Guide, Account,
+  Developer, Recovery. Map the registry rows one-to-one:
+  `UI-28` Audio & Subtitles, `UI-29` Playback & HDR, `UI-30` Appearance,
+  `UI-33` Guide, `UI-31` Account, `UI-32` Developer, and `UI-34` Recovery.
+  The detail pane displays only the active category; rail/detail directional
+  focus, Back, reduced motion, forced colors, zoom, and narrow viewport remain
+  deterministic.
+- Render every version-2 setting with the exact labels/options above.
+  Capability-gated controls are visible with a fixed disabled reason and do
+  not issue `replace`. A save disables persisted controls, coalesces the latest
+  desired whole snapshot, rebases once on conflict, and retains the existing
+  launch-mode rollback/cleanup guarantees.
+- Replace the profile placeholder with the current renderer-safe Plex profile
+  display or “No profile selected.” Add the persistent `Switch Profile` button
+  below the rail. Activation routes to Channel Setup/profile, loads Home users
+  through the existing controller, and restores deterministic profile focus.
+  It adds no new Plex contract or IPC.
+- When `showProfilePickerOnStartup` is true and a signed-in account supports
+  Home users, route through the same profile stage after Settings and Plex
+  snapshots settle. It executes once per launch generation, is cancellable on
+  teardown, and does not claim live/profile lifecycle proof.
+- Add the first-run `audioSetup` route/surface. It appears while
+  `audioSetupCompleted` is false, lists only safe audio rows, persists the
+  chosen opaque id plus completion, and permits “Use System Default” when
+  enumeration is unavailable. Relaunch skips the surface after a successful
+  save; failure leaves it open with fixed safe copy.
+- `keepPlaybackRunningInSettings=false` pauses only a currently playing
+  request when entering Settings and resumes only the request it paused on
+  exit. `true` leaves playback untouched. Stale route/player completions,
+  user-initiated pause, request replacement, cleanup, and failed intents never
+  cause an unsolicited resume. Unit 3C's renderer Settings runtime reads this
+  persisted value directly and passes it to the renderer-owned route lifecycle
+  controller; no main policy projection or main route consumer exists.
+- Theme selection applies a closed root `data-theme` value. Five complete
+  token overrides must preserve contrast/focus treatment. Now Playing
+  auto-hide injects the persisted closed `nowPlayingAutoHideMs` duration into
+  `playerOverlayController` through renderer composition. The controller owns
+  timer cancellation/rescheduling and treats `0` as persistent; it never reads
+  Settings or gains category/UI policy.
+- Artwork-backed Info Box, Cinematic, and Clear Logo choices stay visible but
+  disabled while no safe artwork reference is available. No placeholder URL,
+  remote asset, tokenized path, or fake support is introduced.
+- Guide values are persisted and presented but state explicitly that the
+  current Guide consumer remains pending WS5. No Guide/EPG owner is edited.
+- Support bundle export remains an action, not a persisted setting; its current
+  path/name/count/redaction sanitization is preserved.
+
+**Focused proof**
+
+```sh
+node --import tsx --test \
+  src/__tests__/renderer/settingsRuntime.test.ts \
+  src/__tests__/renderer/settingsSetup.test.ts \
+  src/__tests__/renderer/settingsPlaybackLifecycle.test.ts \
+  src/__tests__/renderer/audioSetupRuntime.test.ts \
+  src/__tests__/renderer/rendererActionRegistration.test.ts \
+  src/__tests__/renderer/routeDom.test.ts \
+  src/__tests__/renderer/workflow.test.ts \
+  src/__tests__/renderer/navigation.test.ts \
+  src/__tests__/renderer/focusDom.test.ts \
+  src/__tests__/renderer/playerOverlayController.test.ts \
+  src/__tests__/renderer/plexRuntime.test.ts \
+  src/__tests__/renderer/rendererRuntimeOwners.test.ts
+npm run typecheck
+npm run build:electron
+npm run smoke:electron
+npm run verify:architecture
+npm run verify:maintainability
+npm run verify:redaction
+git diff --check
+```
+
+Expected: exact seven-category/UI-row mapping, first-run/relaunch audio behavior,
+persistent switch-profile action, capability-disabled nonmutation, conflict/
+failure/cleanup behavior, route-scoped pause/resume, all five theme values,
+all closed timer values including `0`, replacement/cancellation behavior,
+support-bundle safety, focus/accessibility invariants, and no renderer
+privilege.
+
+**No-touch and stop conditions**
+
+Do not edit Guide/EPG, Plex contracts/preload/main, raw artwork, native/player
+main owners, or package files. Stop for replan if startup profile selection
+requires a new Plex operation, if audio setup requires renderer raw device
+state, if route pause/resume cannot bind to exact current request identity, or
+if overlay duration cannot be injected without the controller reading
+Settings/category state, or if a composition root would absorb Settings policy
+instead of wiring focused owners.
+
+**Rollback/checkpoint**
+
+Rollback Unit 3C as one renderer checkpoint; do not leave a version-2 runtime
+with a partial seven-category/action vocabulary or a changed overlay timer
+contract. Reverting Unit 3C restores the prior overlay duration behavior
+together with the renderer flows; Units 3A/3B remain valid with
+capability-safe defaults. After focused proof and fresh material-only review,
+controller intent is `feat(settings): complete desktop settings flows`.
+
+##### Unit 3D — integrated proof, debt packet, and authority reconciliation
+
+**IMPLEMENTER_ROLE_ELIGIBILITY:** `worker`. Authority classification and proof
+calibration require repository judgment. No product behavior is added in this
+unit.
+
+**Exact files**
+
+- the authority-closeout files listed above, excluding
+  `docs/architecture/import-ledger.md` unless copied/adapted source actually
+  landed after a reviewed replan
+- local ignored `docs/runs/ws3-settings-quality-loop/**`
+
+**Behavior and acceptance**
+
+- Run the focused complete-WS3 test set plus one clean full local
+  `npm run verify`; run `npm run verify:docs` after authority edits.
+- Inspect Settings UI at the plan-approved local viewports/states and record
+  sanitized manifests only. Local visual evidence may prove DOM/layout/focus
+  behavior, not Windows/native/live capability.
+- Reconcile current-state, security, renderer/playback architecture, matrix,
+  roadmap, and Windows proof plan without changing registry ownership or
+  advancing proof-dependent rows.
+- If no upstream source was copied/adapted, record “import ledger unchanged:
+  reference-only at `0258dbe`.” If source was adapted only after replan, add the
+  complete ledger row before or with the import and verify it here.
+- Obtain one final fresh material-only closeout review of the complete WS3 diff
+  and authority classification. Do not accept the checkpoint with any
+  unresolved material finding.
+- Keep this canonical plan active and append the complete targeted WS4
+  feature-quality-loop handoff only after WS3's local gate is accepted.
+
+**Rollback/checkpoint**
+
+Authority edits are a separate conventional checkpoint and must be reverted
+without reverting accepted product commits if classification is wrong.
+Controller intent after clean review is
+`docs(parity): record ws3 settings implementation gate`.
+
+#### WS3 Hotspot And Cohesion Dispositions
+
+| Owner | Evidence at planning | Disposition |
+| --- | --- | --- |
+| `src/main/index.ts` (598 lines; named composition root) | currently constructs a private Settings store inline and passes a factory that player IPC invokes | Unit 3B wiring-only edit constructs/loads one store and policy, invokes the production host factory at most once, and injects the same host identity into player IPC and audio owner. No setting, migration, query, device, policy, or diagnostic logic. Fresh architecture/security review mandatory. |
+| `src/preload/index.cts` (1878 lines; named composition root) | currently wires two Settings methods | Unit 3B wiring-only edit adds the reviewed third channel to the existing declarative Settings bridge construction. No validation, policy, or device logic; fresh architecture/security review required. Unit 3A does not touch this owner. |
+| `src/main/player/playerIpc.ts` (437 lines) | currently invokes the native-host factory and owns adapter/host teardown | Unit 3B accepts the already-created production host directly, retains factory construction only for development/smoke injection, and remains sole shared-host cleanup owner. No Settings/audio policy. |
+| `src/main/player/productionNativeHostFactory.ts` | current factory creates a new process per invocation | Factory/path resolution remains cohesive; main invokes the returned factory at most once. It gains no cache, Settings, IPC, or cleanup ownership. |
+| `src/renderer/index.ts` (852 lines; named composition root and over 800) | currently owns Settings callbacks, route wiring, and render composition | Wiring-only edit to focused Settings/audio/lifecycle owners. No control tables, policy, migration, or native/Plex logic. Fresh architecture/UI review mandatory; net growth over 45 lines is a replan trigger. |
+| `src/main/player/streamPolicy/desktopStreamPolicy.ts` (624 lines) | cohesive deterministic policy owner | Cohesive preference inputs and decisions only. No persistence, IPC, helper, URL, or diagnostics ownership. Fresh playback review mandatory. |
+| `src/main/plex/streamResolver.ts` (666 lines) | cohesive resolver/URL/private descriptor owner | Cohesive closed quality/compat parameter projection only. No Settings store, UI, generic query builder, or capability promotion. Fresh Plex/security review mandatory. |
+| `src/main/player/nativePlayerHostProcess.ts` | private helper process/protocol owner and one pending-command map | Generalize the same pending map to discriminated command/audio queries with shared timeout/quarantine/cleanup/restart custody. No Settings/UI/persistence policy or second child. Fresh native/security review mandatory. |
+| `src/native-helper/Lineup.NativePlayerHost/Program.cs` | native libmpv command/event owner | Cohesive enumeration and private selected-device application only. No settings file, UI, or public identifiers. Native proof remains debt. |
+| `src/main/diagnostics/diagnosticEventStore.ts` | bounded sanitized event owner | Cohesive fixed-schema admission only; never a raw logger or Settings store. |
+| `src/renderer/playerOverlayController.ts` (current WS2 hotspot) | renderer overlay timers and exact request state | Only the closed auto-hide-duration injection may change. No Settings read, category/UI policy, or playback capability logic; fresh UI/maintainability review mandatory. |
+
+Any other touched owner over 500 lines receives the compact guardrail
+disposition and independent review before its checkpoint is accepted. Line
+count alone does not authorize a split.
+
+#### WS3 Verification Commands
+
+**WS3 verification classification:** broader integration/manual proof required.
+
+Before the first WS3 product edit, the controller runs and observes one clean:
+
+```sh
+npm run verify
+git status --short --branch
+```
+
+Each unit runs its focused commands above. Before accepting each checkpoint,
+the controller inspects the diff, runs `git diff --check`, confirms only that
+unit's files changed, and obtains a fresh independent material-only
+implementation review. A failed required local gate is fixed inside the
+approved unit or triggers replan; it is never hidden behind another passing
+gate.
+
+After Unit 3C and before authority closeout:
+
+```sh
+npm run typecheck
+npm run build:electron
+npm run smoke:electron
+npm run verify:architecture
+npm run verify:maintainability
+npm run verify:redaction
+npm run test:contracts
+npm run verify
+git diff --check
+```
+
+After Unit 3D authority edits:
+
+```sh
+npm run verify:docs
+git diff --check
+git status --short --branch
+```
+
+Expected closeout: all commands exit zero; production capability assertions
+remain conservative; version-1 migration and version-2 relaunch pass; native/
+Windows/live/manual/package rows remain open with exact debt; no untracked
+generated artifacts or unrelated changes are absorbed.
+
+Unavailable Windows-machine, production-native, operator-assisted,
+live-environment, soak, or package-lifecycle proof is nonblocking only when its
+debt packet is complete. It is never replaced by development/smoke fixture
+evidence.
+
+#### WS3 Consolidated-Proof Debt Packet
+
+For every unavailable obligation, append one row under the ignored WS3 run
+bundle and reconcile its sanitized summary into the Windows proof plan. Every
+row must contain exactly:
+
+- debt id, WS3 stable ids, and any contribution ids;
+- missing scenario stated as an observable user journey;
+- why local automation cannot prove it;
+- required OS, machine, helper/libmpv build, Plex/server/media, display/audio
+  hardware, account/profile, package, and operator prerequisites;
+- exact source checkpoint commit and clean-tree requirement;
+- exact entry action, expected renderer-safe result, and forbidden result;
+- capability state expected before and after evidence, with “no automatic
+  promotion” explicit;
+- evidence filenames, hashes/count-only tracking rule, and redaction scan;
+- final closure owner/workstream and matrix/roadmap fields that may change only
+  after reviewed proof; and
+- failure routing to the smallest implementation owner, never implementation
+  inside the proof run.
+
+At minimum the packet carries:
+
+- `WS3-PROOF-01`: `ON-12`, `WIN-02`, `UI-14` Windows native audio enumeration,
+  stable opaque selection, relaunch, playback application, missing-device
+  fallback, and first-run UI.
+- `WS3-PROOF-02`: `ST-02`–`ST-10`, `UI-28`, `UI-29`, and WS2 contribution ids
+  `PB-22`–`PB-24`; representative native/live audio, subtitle, HDR, Direct
+  Stream/transcode, capability-disabled, and redacted-diagnostic behavior.
+- `WS3-PROOF-03`: `ST-17`, `ST-19`, `ST-20`, `UI-30`; live-safe artwork
+  availability and disabled/enabled Appearance behavior without tokenized
+  renderer URLs.
+- `WS3-PROOF-04`: `ST-25`, `ST-29`, `UI-32`; Windows subtitle-debug and support
+  bundle export with redaction.
+- `WS3-PROOF-05`: `ST-26`, `ST-30`, `UI-34`; Windows launch mode, version-1
+  migration/relaunch, corruption/unsupported/revision/save-failure recovery,
+  ACL/temp cleanup, and product-visible recovery.
+- `WS3-PROOF-06`: current-upstream paired Settings visuals and interaction for
+  `ST-01`, `UI-28`–`UI-34`, reduced motion, forced colors, keyboard/D-pad,
+  narrow viewport, and native-video continuity where applicable.
+- `WS3-CONTRIBUTION-WS5`: `ST-11`–`ST-16`, `UI-33` values and controls awaiting
+  WS5 Guide consumers.
+- `WS3-CONTRIBUTION-WS8`: `ST-22`, `ST-23` implementation evidence awaiting
+  WS8 live/profile-switch lifecycle contribution to `ON-08`.
+
+`WS2-POST-VALIDATION-01` remains separate and unchanged; cross-reference rather
+than duplicate its native playback scenarios.
+
+#### WS3 Acceptance Criteria
+
+- Fresh plan review explicitly approves Unit 3A with no unresolved material
+  finding before any product edit.
+- Units 3A–3C each remain inside their exact file list, pass focused proof,
+  receive a fresh clean material-only implementation review, and land as a
+  buildable reversible checkpoint.
+- Version-2 schema/defaults/normalization and one-time version-1 migration are
+  exact, atomic, idempotent, publicly `ready`, and byte-preserving for
+  corrupt/future versions; fixed migration diagnostics contain no values or
+  paths.
+- Persisted audio selection is only canonical opaque id or `null`; exact
+  view-only `system-default` converts to `null`, pre-trim variants are rejected,
+  and raw native keys never cross main/helper custody.
+- Main owns Settings storage, raw native audio keys, capability projection,
+  `DesktopStreamPolicy`/`PlexStreamResolver` preference input, diagnostic
+  admission, native-audio/private playback setup, and privileged I/O. It owns
+  no route preference or route-triggered playback decision. Preload is
+  closed/validated and renderer remains unprivileged.
+- Main constructs at most one production native host and shares that identity
+  between player/audio owners; player teardown is its sole cleanup owner,
+  private audio queries are exactly correlated/cancelled, and production
+  capability state is not promoted without reviewed Windows/native proof.
+- Unit 3B passes
+  `dotnet build src/native-helper/Lineup.NativePlayerHost/Lineup.NativePlayerHost.csproj --configuration Release`
+  locally before checkpoint acceptance. This compile gate is not deferred
+  Windows/native/manual evidence.
+- The seven-category Settings UI with the exact `UI-28`–`UI-34` mapping,
+  first-run audio surface, profile display,
+  persistent Switch Profile, startup profile preference, recovery/export
+  surface, focus, disabled states, reduced motion, and forced colors pass
+  focused automated proof and local approved UI inspection.
+- Settings preferences cannot promote conservative production capabilities.
+  Unsupported/unproved controls are honest and nonmutating.
+- `PB-22`–`PB-24` remain WS2-owned and open; `ST-11`–`ST-16` remain WS3-owned
+  and open through WS5; `ST-23` does not claim WS8 `ON-08`.
+- WS1 debt, `WS1-PERF-01`, `WS2-POST-VALIDATION-01`, later contribution gates,
+  RD-27/RD-28, and WS4–WS9 ownership remain unchanged.
+- The complete WS3 local suite and final `npm run verify` pass from a clean
+  checkpoint; authority changes then pass `npm run verify:docs`.
+- Authority docs classify only observed local implementation/proof and preserve
+  every consolidated-proof debt row. No unsupported/native/live row is marked
+  complete.
+- Final independent closeout review reports no unresolved material finding.
+
+#### WS3 Rollback And Commit Policy
+
+- Controller, not a worker, stages, adjudicates review, accepts checkpoints,
+  commits, and publishes.
+- Each checkpoint is independently buildable. Do not squash a failed partial
+  unit into an earlier accepted unit to hide rollback boundaries.
+- Unit 3A rollback is all-or-nothing across schema/store/two-operation
+  IPC/preload guards and renderer view-shape consumers; it never includes a
+  channel or composition-root edit.
+- Unit 3B rollback removes the audio-output public operation, channel/preload
+  wiring, policy lifecycle, shared-host direct injection/query protocol,
+  private setup fields, and main/native consumers together, restoring Unit
+  3A's exact two-operation surface and contract-owned conservative capability
+  projection. It must not leave player IPC expecting a direct host while main
+  still supplies a factory, or leave either side of the private query/setup
+  protocol changed alone.
+- Unit 3C rollback removes renderer flows while leaving Units 3A/3B buildable;
+  it must not restore a version-1 renderer against version-2 contracts.
+- Unit 3D authority rollback never rewrites accepted product history.
+- No commit contains generated `dist`, native binaries, local proof media,
+  account/server/device names, paths, URLs, tokens, headers, payloads, or
+  private screenshots/logs.
+- At every checkpoint report phase, active/completed/remaining units, exact
+  files/commit, observed commands, review status, proof debt, next action, and
+  active/closeout/blocked state.
+
+#### WS3 Replan Triggers
+
+Stop and return to `lineup-desktop-feature-plan` plus fresh adversarial review
+if:
+
+- current source contradicts the schema, ownership, no-touch boundary, or
+  cross-workstream classification above;
+- a setting, capability result, audio device, diagnostic, or profile action
+  requires a secret/raw identifier/path/URL/header/payload/native value in
+  public state;
+- version-1 migration cannot preserve revision, atomicity, corrupt/future
+  bytes, or one-store serialization;
+- an additional public method, schema field, dependency, package/lockfile
+  change, compatibility shim, or copied/adapted upstream source is needed;
+- the production capability profile would need promotion before native/live
+  evidence;
+- audio enumeration/application requires a shell command, broad player command,
+  renderer raw id, or long-lived raw mapping rather than the reviewed
+  helper/main seam;
+- policy must be constructed, hydrated, or synchronized in Unit 3A;
+- production requires more than one native host/process, another owner to
+  spawn/clean/recover it, or an audio query outside the shared
+  request/timeout/quarantine/cleanup custody;
+- the private load setup cannot remain exactly the required raw-key/null and
+  DTS boolean fields, or applying them requires public/raw leakage;
+- a clean enumeration alone would promote a production capability before
+  reviewed Windows/native evidence;
+- `Switch Profile` or startup picker requires a new Plex operation instead of
+  the existing renderer-safe flow;
+- `ST-11`–`ST-16` cannot remain contribution-open without editing WS5 Guide
+  consumers;
+- safe artwork choices cannot remain disabled without adding raw artwork
+  transport in WS3;
+- a hotspot must absorb feature policy, Unit 3B's `src/preload/index.cts`
+  change needs more than the approved third-channel wiring, or
+  `src/renderer/index.ts` grows by more than 45 net lines;
+- Unit 3B's exact local Release helper build fails and cannot be resolved
+  inside the approved Unit 3B files; the failure must be fixed in that unit or
+  trigger replan and may never be moved into consolidated Windows/manual/native
+  proof debt;
+- a required focused/local/full/docs gate fails and cannot be fixed inside the
+  current reviewed unit; or
+- independent review finds a material security, ownership, persistence,
+  behavior, proof-depth, or rollback gap.
+
+#### WS3 plan-review handoff
 
 NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
-TASK: Complete WS3 Settings Through The Tier 3 Feature Quality Loop
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
+TASK: Review Whole-WS3 Settings Plan And Approve Unit 3A
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: this committed authority update, based on `0fd7793`, including WS2
-closeout `247f7b4`, lifecycle hardening `358e8de`, Package 2A `8dc1057`,
-Package 2B `d2f1e97`, and the reviewed Package 2D conservative no-op
+ARTIFACT: Whole-WS3 Settings execution plan dated 2026-07-29; no product edit
 FILES:
 - docs/plans/2026-07-22-tier3-parity-correction-plan.md
-- docs/architecture/CURRENT_STATE.md
-- docs/architecture/playback-architecture.md
-- docs/product/lineup-product-parity-matrix.md
-- docs/roadmap/desktop-port-roadmap.md
-- docs/development/windows-ui-proof-plan.md
-SCOPE_ROWS:
-- ON-12
-- ST-01 through ST-30
-- WIN-02
-- UI-14
-- UI-28 through UI-34
-CONTROLLER_SEQUENCE:
-- scope-load
-- plan
-- plan-review
-- plan-revise when material findings require it
-- execution-unit-select
-- implement
-- implementation-review
-- implementation-revise when accepted findings require it
-- closeout
-- done or genuinely blocked
-BLOCKERS: none for scope-load, targeted planning, and plan review. WS3 product
-edits remain gated until a targeted exact-file Settings plan
-freezes ownership, verification, acceptance, rollback, and replan triggers and
-receives fresh adversarial `lineup-desktop-feature-review` approval
-STOP_OR_REPLAN_TRIGGERS:
-- a material contradiction in WS3's assigned rows, current owners, shared
-  contracts, persistence schema, or later-workstream contribution boundaries
-- a failed required local gate that cannot be resolved inside an approved WS3
-  unit
-NONBLOCKERS:
-- unavailable Windows-machine, production-native, operator-assisted,
-  live-environment, soak, or package-lifecycle evidence when it is recorded
-  under the consolidated-proof sequence above
+BLOCKERS: WS3 product edits remain closed until this independent review has no
+unresolved material finding and explicitly approves Unit 3A
 MESSAGE:
-Own the complete WS3 Settings workstream through the Tier 3 feature-quality
-loop; do not stop after planning. Use the accepted master audit and canonical
-plan as baseline. Do not repeat the 227-row audit, recompute the whole registry,
-or re-audit completed WS1/WS2 implementation. Target only WS3's 40 assigned
-rows, their current Settings contracts/persistence/main/preload/renderer/test
-owners, and directly affected dependencies. Preserve `PB-22` through `PB-24`
-as WS2 contributions awaiting WS3 preference/control work and native proof;
-keep `ST-11` through `ST-16` open through their WS5 consumers; require
-persistent Settings `Switch Profile` for `ST-23` without claiming WS8's
-`ON-08`; and preserve all WS1 debt, `WS2-POST-VALIDATION-01`, conservative
-playback capabilities, and later contribution gates.
+Freshly and independently review the revised Whole-WS3 Settings execution plan
+only. Confirm the exact 40-row scope; v2 values/defaults/migration; exact
+persisted snapshot versus nonpersisted `DesktopSettingsView`; exhaustive
+capability keys/status/reason pairs; bounded/redacted audio DTO, opaque-id,
+ordering, duplicate/collision, unavailable/partial, and strict-guard rules;
+Unit 3A's exact two-operation boundary; Unit 3B's ownership of the complete
+third operation and composition wiring; public `ready` migration semantics and
+fixed migration diagnostics; canonical/null/view-only audio-id conversion and
+pre-trim rejection; absence of runtime policy lifecycle from Unit 3A; Unit
+3B's initial policy hydration/replace synchronization; its single shared
+production-host custody, correlated private audio query, exact private
+raw-key/DTS setup fields, platform-first enumeration precedence (off Windows
+is `platform-unsupported`; only Windows plus null/absent helper is
+`helper-unavailable`), teardown/restart rules, the mandatory local Release
+helper build, and no capability promotion;
+Unit 3C's seven-category
+`UI-28`–`UI-34` mapping, renderer-owned persisted
+`keepPlaybackRunningInSettings` route lifecycle with no main route projection,
+and overlay-duration consumer; roles, verification,
+rollback, hotspots, contribution/proof gates, debt packet, and replan triggers.
+Verify that `PB-22`–`PB-24`, `ST-11`–`ST-16`, `ST-23`/`ON-08`, WS1 debt,
+`WS2-POST-VALIDATION-01`, conservative production capabilities, and WS4–WS9
+boundaries are preserved. Report material findings only; if none remain,
+explicitly approve Unit 3A as implementation-ready.
 
-Preflight by fetching and reconciling the latest `initial-build`, confirming
-that this committed handoff is an ancestor of the tracked branch, recording
-`git status --short --branch`, and inventorying any pre-existing changes
-without absorbing unrelated work. Use Codanna only when its current targeted
-index improves discovery; otherwise use `rg` and direct reads without launching
-a broad repository survey.
-
-Use `lineup-desktop-feature-plan` through a tracked planner to create or amend
-one decision-complete whole-WS3 plan. Freeze the smallest useful vertical
-units, exact owners/no-touch boundaries, intended configured worker role,
-acceptance criteria, focused and closeout verification, rollback, checkpoint
-commit, hotspot evidence, import-ledger needs, and replan triggers. Obtain one
-fresh independent `lineup-desktop-feature-review` with no unresolved material
-finding that explicitly approves the first execution unit before the first
-product edit. Resolve material findings; do not spend cycles on cosmetic review
-loops.
-
-Resolve each implementation role through `.codex/config.toml`. Use
-`worker_sol_low` only for a fully specified mechanical unit with no unresolved
-architecture, ownership, schema, product, proof-depth, or verification
-decision; use `worker` when bounded repository judgment remains; reserve
-`worker_luna` for exceptionally mechanical, exact, cheap-to-verify work. No
-worker may invent a seam, broaden scope, choose weaker proof, or edit outside
-its approved unit.
-
-Execute approved units serially unless the plan proves disjoint ownership.
-Before each unit, freshness-read only its plan section, owners, affected tests,
-authority, and worktree. Keep the controller responsible for integration,
-review adjudication, verification, checkpoint acceptance, commits, and
-publishing. Keep the renderer unprivileged; keep secrets, storage, privileged
-I/O, raw Plex/native data, and diagnostics in main-owned boundaries; expose only
-narrow typed validated preload contracts. Add no dependency or public schema
-without a reviewed replan, and ledger copied/adapted upstream source before or
-with its import.
-
-Run one clean full baseline before the first WS3 product edit, focused
-unit-specific proof during execution, and one full local `npm run verify`
-closeout after the final accepted unit. Obtain a fresh material-only
-implementation review before accepting each checkpoint. Record every
-unavailable Windows/native/manual/live/package obligation in an exact
-consolidated-proof debt packet without promoting support or closing its row.
-At each checkpoint report the loop phase, active/completed/remaining units,
-files and commits, observed verification, review status, open proof debt, exact
-next action, and active/closeout/blocked state.
-
-Close WS3's local implementation gate only after all reviewed units, local
-verification, import/architecture/registry/roadmap reconciliation, and a clean
-closeout review. Leave proof-dependent rows open for the final consolidated
-campaign. Do not begin WS4–WS9 product work inside WS3. End by keeping this
-canonical plan active and issuing a complete WS4 feature-quality-loop handoff
-under the same targeted-audit and consolidated-proof policy.
+**Review outcome:** after the material findings above were adjudicated and the
+plan was revised, a fresh independent reviewer reported no material findings
+and stated `Unit 3A is implementation-ready and approved.` The controller then
+observed the required clean full `npm run verify` baseline. Unit 3A may proceed
+under its exact reviewed scope; later units remain gated by freshness reads and
+checkpoint review.
