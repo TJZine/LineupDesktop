@@ -26,6 +26,18 @@ export function copyRendererAssets(sourceDirectory, targetDirectory) {
   });
 }
 
+export function copyRendererSettingsRuntime(
+  compiledContractsDirectory,
+  targetRendererDirectory,
+) {
+  const targetDirectory = path.join(targetRendererDirectory, 'contracts');
+  fs.mkdirSync(targetDirectory, { recursive: true });
+  fs.copyFileSync(
+    path.join(compiledContractsDirectory, 'settings.js'),
+    path.join(targetDirectory, 'settings.js'),
+  );
+}
+
 export function copyRendererChannelBuilderRuntime(
   compiledChannelBuilderDirectory,
   targetRendererDirectory,
@@ -114,6 +126,7 @@ function assertPathInsideDirectory(filePath, directory, specifier) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   copyRendererAssets(sourceRoot, targetRoot);
+  copyRendererSettingsRuntime(path.join(repoRoot, 'dist', 'contracts'), targetRoot);
   copyRendererChannelBuilderRuntime(
     path.join(repoRoot, 'dist', 'domain', 'channelBuilder'),
     targetRoot,

@@ -8,6 +8,7 @@ import test from 'node:test';
 import {
   copyRendererAssets,
   copyRendererChannelBuilderRuntime,
+  copyRendererSettingsRuntime,
 } from '../copy-renderer-assets.mjs';
 
 test('renderer asset copy preserves recursive files and exact binary hashes', () => {
@@ -39,6 +40,40 @@ test('renderer asset copy preserves recursive files and exact binary hashes', ()
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('renderer settings runtime copy stages only the exact compiled contract', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-renderer-settings-runtime-'));
+  const compiled = path.join(root, 'dist', 'contracts');
+  const renderer = path.join(root, 'dist', 'renderer');
+  try {
+    fs.mkdirSync(path.join(compiled, 'nested'), { recursive: true });
+    fs.writeFileSync(
+      path.join(compiled, 'settings.js'),
+      new Uint8Array([0, 255, 10, 13, 42]),
+    );
+    fs.writeFileSync(path.join(compiled, 'settings.js.map'), new Uint8Array([1]));
+    fs.writeFileSync(path.join(compiled, 'shell.js'), new Uint8Array([2]));
+    fs.writeFileSync(path.join(compiled, 'nested', 'other.js'), new Uint8Array([3]));
+
+    copyRendererSettingsRuntime(compiled, renderer);
+
+    const servedContracts = path.join(renderer, 'contracts');
+    const servedSettings = path.join(servedContracts, 'settings.js');
+    assert.equal(sha256(servedSettings), sha256(path.join(compiled, 'settings.js')));
+    assert.deepEqual(fs.readdirSync(renderer), ['contracts']);
+    assert.deepEqual(fs.readdirSync(servedContracts), ['settings.js']);
+    for (const relativePath of [
+      'settings.js.map',
+      'shell.js',
+      path.join('nested', 'other.js'),
+    ]) {
+      assert.equal(fs.existsSync(path.join(servedContracts, relativePath)), false, relativePath);
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  assert.equal(fs.existsSync(root), false);
 });
 
 test('renderer runtime copy includes the byte-exact relative dependency closure for config', () => {
