@@ -309,8 +309,11 @@ namespace Lineup.NativePlayerHost
                         }
                         try
                         {
-                            EnsureOptionSet(probe, "terminal", "no");
-                            EnsureOptionSet(probe, "msg-level", "all=no");
+                            if (SetOption(probe, "terminal", "no") < 0 ||
+                                SetOption(probe, "msg-level", "all=no") < 0)
+                            {
+                                throw new InvalidOperationException();
+                            }
                             if (NativeMethods.mpv_initialize(probe) < 0)
                             {
                                 throw new InvalidOperationException();
@@ -335,12 +338,16 @@ namespace Lineup.NativePlayerHost
         {
             MpvNode node = new MpvNode();
             int result = NativeMethods.mpv_get_property(context, "audio-device-list", MpvFormatNode, ref node);
-            if (result < 0 || node.format != MpvFormatNodeArray || node.value.listValue == IntPtr.Zero)
+            if (result < 0)
             {
                 throw new InvalidOperationException();
             }
             try
             {
+                if (node.format != MpvFormatNodeArray || node.value.listValue == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException();
+                }
                 List<Dictionary<string, string>> outputs = new List<Dictionary<string, string>>();
                 MpvNodeList list = Marshal.PtrToStructure<MpvNodeList>(node.value.listValue);
                 int nodeSize = Marshal.SizeOf<MpvNode>();

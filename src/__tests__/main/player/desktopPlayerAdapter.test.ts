@@ -447,6 +447,15 @@ test('native helper protocol codec normalizes failure codes and rejects top-leve
   if ('error' in result) {
     assert.equal(result.error.code, 'PLAYER_HELPER_MALFORMED_OUTPUT');
   }
+
+  for (const malformed of [
+    { type: 'result', requestId: 'request-1', ok: false },
+    { type: 'audio-output.result', requestId: 'request-1', ok: false },
+    { type: 'result', requestId: 'request-1', ok: true, extra: true },
+  ]) {
+    const parsed = parseNativeHelperProcessMessage(JSON.stringify(malformed));
+    assert.equal('error' in parsed, true);
+  }
 });
 
 test('desktop player adapter emits renderer-safe snapshots and host events', async () => {

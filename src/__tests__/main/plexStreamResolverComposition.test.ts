@@ -180,9 +180,11 @@ test('createLivePlexStreamResolverComposition injects the existing diagnostic st
   });
 
   assert.equal(result.ok, true);
-  assert.deepEqual(
-    diagnostics.getRecords().map((record) => record.operation),
-    ['settings.subtitle-policy'],
+  assert.equal(
+    diagnostics.getRecords().some((record) => (
+      record.operation === 'settings.subtitle-policy'
+    )),
+    true,
   );
 });
 

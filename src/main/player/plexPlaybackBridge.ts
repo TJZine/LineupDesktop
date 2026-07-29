@@ -102,7 +102,16 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
     }
 
     const requestId = this.#createRequestId('plex-playback');
-    const settingsPreferences = await this.#settingsPreferences?.();
+    const settingsPreferences = await this.#readSettingsPreferences(requestId);
+    const resolveAudioOutput = this.#resolveAudioOutput;
+    const privateAudioSetup =
+      settingsPreferences !== undefined && resolveAudioOutput !== undefined
+        ? await this.#resolvePrivateAudioSetup(
+          requestId,
+          settingsPreferences,
+          resolveAudioOutput,
+        )
+        : undefined;
     const resolverInput: PlexStreamResolverInput = {
       requestId,
       mediaId: program.item.ratingKey,
@@ -118,19 +127,14 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
     }
 
     let privatePlayback = result.privatePlayback;
-    if (settingsPreferences !== undefined && this.#resolveAudioOutput !== undefined) {
-      const resolvedOutput = await this.#resolveAudioOutput(
-        settingsPreferences.audioOutputDeviceId,
-      );
-      const dtsSupported =
-        this.#settingsCapabilities?.().dtsPassthrough.status === 'supported';
+    if (settingsPreferences !== undefined && privateAudioSetup !== undefined) {
       privatePlayback = {
         ...privatePlayback,
         setup: {
           ...privatePlayback.setup,
-          audioOutputNativeKey: resolvedOutput.audioOutputNativeKey,
+          audioOutputNativeKey: privateAudioSetup.resolvedOutput.audioOutputNativeKey,
           dtsPassthroughEnabled:
-            settingsPreferences.dtsPassthroughEnabled && dtsSupported,
+            settingsPreferences.dtsPassthroughEnabled && privateAudioSetup.dtsSupported,
         },
       };
     }
@@ -188,12 +192,54 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
     }
     return this.#capabilityProfile;
   }
+
+  async #readSettingsPreferences(
+    requestId: PlayerRequestId,
+  ): Promise<DesktopPlaybackSettingsPreferences | undefined> {
+    try {
+      return await this.#settingsPreferences?.();
+    } catch {
+      throw new PlexPlaybackRuntimeCandidateResolutionError(createBridgeError({
+        code: 'PLEX_PLAYBACK_SETTINGS_UNAVAILABLE',
+        requestId,
+        category: 'source',
+        operation: 'settings.read',
+        reason: 'settings preferences unavailable',
+        retryable: true,
+      }));
+    }
+  }
+
+  async #resolvePrivateAudioSetup(
+    requestId: PlayerRequestId,
+    settingsPreferences: DesktopPlaybackSettingsPreferences,
+    resolveAudioOutput: NonNullable<PlexPlaybackBridgeOptions['resolveAudioOutput']>,
+  ): Promise<{ resolvedOutput: ResolvedAudioOutput; dtsSupported: boolean }> {
+    try {
+      const resolvedOutput = await resolveAudioOutput(
+        settingsPreferences.audioOutputDeviceId,
+      );
+      const dtsSupported =
+        this.#settingsCapabilities?.().dtsPassthrough.status === 'supported';
+      return { resolvedOutput, dtsSupported };
+    } catch {
+      throw new PlexPlaybackRuntimeCandidateResolutionError(createBridgeError({
+        code: 'PLEX_PLAYBACK_AUDIO_SETUP_UNAVAILABLE',
+        requestId,
+        category: 'source',
+        operation: 'settings.audio.resolve',
+        reason: 'private audio setup unavailable',
+        retryable: true,
+      }));
+    }
+  }
 }
 
 function createBridgeError(input: {
   code: string;
   requestId: PlayerRequestId | undefined;
   category: 'stale-request' | 'source';
+  operation?: 'schedule.map' | 'settings.read' | 'settings.audio.resolve';
   reason: string;
   retryable: boolean;
 }) {
@@ -206,7 +252,7 @@ function createBridgeError(input: {
     ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
     diagnostic: {
       component: 'plex-playback-bridge',
-      operation: 'schedule.map',
+      operation: input.operation ?? 'schedule.map',
       status: 'ignored',
       reason: input.reason,
     },

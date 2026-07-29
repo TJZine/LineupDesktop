@@ -117,7 +117,7 @@ test('native helper queries audio devices in-process and applies requested outpu
   );
   assert.match(
     source,
-    /lock \(MpvLock\)[\s\S]*?mpvContext != IntPtr\.Zero[\s\S]*?ReadAudioOutputs\(mpvContext\)[\s\S]*?NativeMethods\.mpv_create\(\)[\s\S]*?ReadAudioOutputs\(probe\)[\s\S]*?mpv_terminate_destroy\(probe\)/u,
+    /NativeMethods\.mpv_create\(\)[\s\S]*?SetOption\(probe,\s*"terminal",\s*"no"\)[\s\S]*?SetOption\(probe,\s*"msg-level",\s*"all=no"\)[\s\S]*?ReadAudioOutputs\(probe\)[\s\S]*?finally[\s\S]*?mpv_terminate_destroy\(probe\)/u,
   );
   assert.match(
     source,
@@ -127,6 +127,10 @@ test('native helper queries audio devices in-process and applies requested outpu
   assert.match(
     source,
     /EnsureOptionSet\(mpvContext,\s*"audio-device",\s*msg\.setup\.audioOutputNativeKey\)[\s\S]*?EnsureOptionSet\(mpvContext,\s*"audio-spdif",\s*"dts,dts-hd"\)[\s\S]*?mpv_initialize\(mpvContext\)/u,
+  );
+  assert.match(
+    source,
+    /if \(result < 0\)[\s\S]*?try[\s\S]*?node\.format != MpvFormatNodeArray[\s\S]*?finally[\s\S]*?mpv_free_node_contents\(ref node\)/u,
   );
 });
 

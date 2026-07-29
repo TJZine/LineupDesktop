@@ -380,11 +380,11 @@ test('plex stream resolver bounds counts and encodes closed reason codes in subt
   assert.deepEqual(events[0]?.context, {
     candidateCount: 999,
     subtitleTrackCount: 999,
-    subtitleSelected: result.decision.selectedTrackIds.subtitle !== null,
+    subtitleSelected: true,
     subtitleMode: 'standard',
-    decisionKind: result.decision.kind,
-    reasonCodeCount: Math.min(result.decision.reasonCodes.length, 999),
-    reasonCodes: result.decision.reasonCodes.slice(0, 8).join(',') || 'none',
+    decisionKind: 'direct-play',
+    reasonCodeCount: 1,
+    reasonCodes: 'direct-play-supported',
   });
 });
 

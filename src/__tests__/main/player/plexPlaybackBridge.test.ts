@@ -15,6 +15,7 @@ import {
 } from '../../../main/player/plexPlaybackBridge.js';
 import {
   PlexPlaybackRuntime,
+  PlexPlaybackRuntimeCandidateResolutionError,
   isSamePlexPlaybackScheduleSelection,
   projectPlexPlaybackScheduleSelection,
   type PlexPlaybackRuntimePlayerDispatchResult,
@@ -73,6 +74,20 @@ const loadPayload: PlayerLoadCommandPayload = {
   },
   capabilityProfileId: capabilityProfile.id,
 };
+
+function defaultSettingsPreferences(): DesktopPlaybackSettingsPreferences {
+  return {
+    audioOutputDeviceId: null,
+    dtsPassthroughEnabled: false,
+    directPlayAudioFallbackEnabled: true,
+    subtitleMode: 'full',
+    preferredSubtitleLanguage: null,
+    preferForcedSubtitlesEnabled: false,
+    hdrFallbackMode: 'off',
+    transcodeQuality: 'default',
+    transcodeCompatibilityModeEnabled: false,
+  };
+}
 
 class FakeScheduler implements Pick<IChannelScheduler, 'getCurrentProgram' | 'getState'> {
   state: SchedulerState = {
@@ -254,7 +269,7 @@ test('RD-12 bridge maps current scheduler program to resolver input and runtime 
   assertPublicSafe(player.commands[0], rawPrivateValues);
 });
 
-test('playback bridge propagates settings and resolves private audio setup immediately before load', async () => {
+test('playback bridge settles private audio setup before creating a resolver session', async () => {
   const scheduler = new FakeScheduler();
   const resolver = new FakeResolver();
   const settingsPreferences: DesktopPlaybackSettingsPreferences = {
@@ -346,6 +361,75 @@ test('playback bridge never enables DTS from preference without supported capabi
   assert.ok(candidate.privatePlayback);
 
   assert.equal(candidate.privatePlayback.setup.dtsPassthroughEnabled, false);
+});
+
+test('playback bridge converts settings provider failures into typed candidate errors', async () => {
+  const cases = [
+    {
+      expectedCode: 'PLEX_PLAYBACK_SETTINGS_UNAVAILABLE',
+      options: {
+        settingsPreferences: () => {
+          throw new Error('private settings failure');
+        },
+      },
+    },
+    {
+      expectedCode: 'PLEX_PLAYBACK_AUDIO_SETUP_UNAVAILABLE',
+      options: {
+        settingsPreferences: () => defaultSettingsPreferences(),
+        resolveAudioOutput: async () => {
+          throw new Error('private audio lookup failure');
+        },
+      },
+    },
+    {
+      expectedCode: 'PLEX_PLAYBACK_AUDIO_SETUP_UNAVAILABLE',
+      options: {
+        settingsPreferences: () => defaultSettingsPreferences(),
+        resolveAudioOutput: async () => ({
+          audioOutputNativeKey: null,
+          matched: true,
+        }),
+        settingsCapabilities: () => {
+          throw new Error('private capability failure');
+        },
+      },
+    },
+  ] as const;
+
+  for (const failureCase of cases) {
+    const resolver = new FakeResolver();
+    const bridge = new PlexPlaybackBridge({
+      scheduler: new FakeScheduler(),
+      resolver,
+      capabilityProfile,
+      createRequestId: () => 'request-settings-failure',
+      ...failureCase.options,
+    });
+    const selection = await bridge.getCurrentPlayback();
+    assert.ok(selection);
+
+    await assert.rejects(
+      bridge.resolvePlaybackCandidate(selection),
+      (error: unknown) => {
+        assert.ok(error instanceof PlexPlaybackRuntimeCandidateResolutionError);
+        assert.equal(error.playerError.code, failureCase.expectedCode);
+        assert.equal(error.playerError.requestId, 'request-settings-failure');
+        assert.equal(error.playerError.category, 'source');
+        assert.match(
+          error.playerError.diagnostic?.operation ?? '',
+          /^settings\.(?:read|audio\.resolve)$/u,
+        );
+        assert.doesNotMatch(JSON.stringify(error.playerError), /private .* failure/u);
+        return true;
+      },
+    );
+    assert.equal(
+      resolver.inputs.length,
+      0,
+      'settings enrichment must settle before a PMS-backed resolver session is created',
+    );
+  }
 });
 
 test('RD-12 bridge returns no selection for inactive or unloaded scheduler state', async () => {

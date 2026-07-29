@@ -39,7 +39,7 @@ export type NativeHelperOutputMessage =
       type: 'result';
       requestId: PlayerRequestId;
       ok: false;
-      error?: {
+      error: {
         code: string;
         message: string;
         category?: string;
@@ -61,7 +61,7 @@ export type NativeHelperOutputMessage =
       type: 'audio-output.result';
       requestId: PlayerRequestId;
       ok: false;
-      error?: unknown;
+      error: unknown;
     };
 
 export function validateHelperMessageSize(messageStr: string): void {

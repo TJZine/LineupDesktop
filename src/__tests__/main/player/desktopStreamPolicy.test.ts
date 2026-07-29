@@ -6,6 +6,7 @@ import { decideDesktopStreamPolicy } from '../../../main/player/streamPolicy/des
 import type {
   DesktopStreamPolicyDecision,
   DesktopStreamPolicyDecisionKind,
+  DesktopStreamPolicyInput,
   DesktopStreamPolicyReasonCode,
   DesktopStreamPolicyUnknownCode,
 } from '../../../main/player/streamPolicy/types.js';
@@ -49,6 +50,21 @@ const RD08_FORBIDDEN_TEXT = [
   'Authorization',
   'Bearer ',
 ] as const;
+
+type DesktopStreamPolicyPreferences =
+  NonNullable<DesktopStreamPolicyInput['preferences']>;
+
+function preferences(
+  overrides: Partial<DesktopStreamPolicyPreferences> = {},
+): DesktopStreamPolicyPreferences {
+  return {
+    directPlayAudioFallbackEnabled: true,
+    subtitleMode: 'full',
+    preferredSubtitleLanguage: null,
+    preferForcedSubtitlesEnabled: false,
+    ...overrides,
+  };
+}
 
 function assertNoForbiddenFields(value: unknown, path = 'value'): void {
   if (Array.isArray(value)) {
@@ -185,12 +201,10 @@ test('desktop stream policy records audio fallback without exposing internals', 
 test('desktop stream policy does not select an alternate audio track when fallback is disabled', () => {
   const decision = decideDesktopStreamPolicy({
     ...desktopStreamPolicyInputs.audioFallback,
-    preferences: {
+    preferences: preferences({
       directPlayAudioFallbackEnabled: false,
       subtitleMode: 'direct',
-      preferredSubtitleLanguage: null,
-      preferForcedSubtitlesEnabled: false,
-    },
+    }),
   });
 
   assert.equal(decision.selectedTrackIds.audio, 'audio-track-requested-flac');
@@ -244,12 +258,11 @@ test('desktop stream policy prefers forced subtitles over default subtitles with
 test('desktop stream policy subtitle off preference selects no subtitle', () => {
   const decision = decideDesktopStreamPolicy({
     ...desktopStreamPolicyInputs.forcedSubtitle,
-    preferences: {
-      directPlayAudioFallbackEnabled: true,
+    preferences: preferences({
       subtitleMode: 'off',
       preferredSubtitleLanguage: 'es',
       preferForcedSubtitlesEnabled: true,
-    },
+    }),
   });
 
   assert.equal(decision.selectedTrackIds.subtitle, null);
@@ -261,12 +274,11 @@ test('desktop stream policy preserves an explicit supported subtitle when automa
   const decision = decideDesktopStreamPolicy({
     ...desktopStreamPolicyInputs.forcedSubtitle,
     preferredSubtitleTrackId: 'subtitle-track-en-default',
-    preferences: {
-      directPlayAudioFallbackEnabled: true,
+    preferences: preferences({
       subtitleMode: 'off',
       preferredSubtitleLanguage: 'es',
       preferForcedSubtitlesEnabled: true,
-    },
+    }),
   });
 
   assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-en-default');
@@ -277,12 +289,9 @@ test('desktop stream policy preserves an explicit supported subtitle when automa
 test('desktop stream policy preserves an explicit convertible subtitle when automatic mode is off', () => {
   const decision = decideDesktopStreamPolicy({
     ...desktopStreamPolicyInputs.subtitleConversion,
-    preferences: {
-      directPlayAudioFallbackEnabled: true,
+    preferences: preferences({
       subtitleMode: 'off',
-      preferredSubtitleLanguage: null,
-      preferForcedSubtitlesEnabled: false,
-    },
+    }),
   });
 
   assert.equal(decision.kind, 'direct-stream');
@@ -294,12 +303,11 @@ test('desktop stream policy preserves an explicit convertible subtitle when auto
 test('desktop stream policy prefers a forced subtitle in the configured language', () => {
   const decision = decideDesktopStreamPolicy({
     ...desktopStreamPolicyInputs.forcedSubtitle,
-    preferences: {
-      directPlayAudioFallbackEnabled: true,
+    preferences: preferences({
       subtitleMode: 'standard',
       preferredSubtitleLanguage: 'es',
       preferForcedSubtitlesEnabled: true,
-    },
+    }),
   });
 
   assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-es-forced');
@@ -309,12 +317,7 @@ test('desktop stream policy prefers a forced subtitle in the configured language
 test('desktop stream policy selects the default subtitle when automatic forced subtitles are disabled', () => {
   const decision = decideDesktopStreamPolicy({
     ...desktopStreamPolicyInputs.forcedSubtitle,
-    preferences: {
-      directPlayAudioFallbackEnabled: true,
-      subtitleMode: 'full',
-      preferredSubtitleLanguage: null,
-      preferForcedSubtitlesEnabled: false,
-    },
+    preferences: preferences(),
   });
 
   assert.equal(decision.kind, 'direct-play');
@@ -338,12 +341,7 @@ test('desktop stream policy ignores a selected forced subtitle when automatic fo
         ],
       },
     ],
-    preferences: {
-      directPlayAudioFallbackEnabled: true,
-      subtitleMode: 'full',
-      preferredSubtitleLanguage: null,
-      preferForcedSubtitlesEnabled: false,
-    },
+    preferences: preferences(),
   });
 
   assert.equal(decision.kind, 'direct-play');
@@ -366,12 +364,7 @@ test('desktop stream policy ignores a default forced subtitle when automatic for
         ],
       },
     ],
-    preferences: {
-      directPlayAudioFallbackEnabled: true,
-      subtitleMode: 'full',
-      preferredSubtitleLanguage: null,
-      preferForcedSubtitlesEnabled: false,
-    },
+    preferences: preferences(),
   });
 
   assert.equal(decision.kind, 'direct-play');
@@ -388,12 +381,7 @@ test('desktop stream policy selects no automatic subtitle when only forced track
         subtitleTracks: [forcedSubtitleCandidate.subtitleTracks[1]!],
       },
     ],
-    preferences: {
-      directPlayAudioFallbackEnabled: true,
-      subtitleMode: 'full',
-      preferredSubtitleLanguage: null,
-      preferForcedSubtitlesEnabled: false,
-    },
+    preferences: preferences(),
   });
 
   assert.equal(decision.kind, 'direct-play');
@@ -408,12 +396,7 @@ test('desktop stream policy preserves an explicitly selected forced subtitle whe
   const decision = decideDesktopStreamPolicy({
     ...desktopStreamPolicyInputs.forcedSubtitle,
     preferredSubtitleTrackId: 'subtitle-track-es-forced',
-    preferences: {
-      directPlayAudioFallbackEnabled: true,
-      subtitleMode: 'full',
-      preferredSubtitleLanguage: null,
-      preferForcedSubtitlesEnabled: false,
-    },
+    preferences: preferences(),
   });
 
   assert.equal(decision.kind, 'direct-play');
@@ -441,12 +424,7 @@ test('desktop stream policy ignores unknown delivery on an ineligible forced aut
       },
     ],
     preferredSubtitleTrackId: undefined,
-    preferences: {
-      directPlayAudioFallbackEnabled: true,
-      subtitleMode: 'full',
-      preferredSubtitleLanguage: null,
-      preferForcedSubtitlesEnabled: false,
-    },
+    preferences: preferences(),
   });
 
   assert.equal(decision.kind, 'direct-stream');

@@ -11,10 +11,10 @@ import type { NativeAudioOutput } from './nativePlayerHostPort.js';
 
 export type NativeHelperProcessMessage =
   | { type: 'result'; requestId: PlayerRequestId; ok: true; events?: unknown }
-  | { type: 'result'; requestId: PlayerRequestId; ok: false; error?: unknown }
+  | { type: 'result'; requestId: PlayerRequestId; ok: false; error: unknown }
   | { type: 'event'; event: unknown }
   | { type: 'audio-output.result'; requestId: PlayerRequestId; ok: true; outputs: NativeAudioOutput[] }
-  | { type: 'audio-output.result'; requestId: PlayerRequestId; ok: false; error?: unknown };
+  | { type: 'audio-output.result'; requestId: PlayerRequestId; ok: false; error: unknown };
 
 const SAFE_FAILURE_CATEGORIES = PLAYER_ERROR_CATEGORIES.filter(
   (category) => category !== 'stale-request' && category !== 'validation-failure',
@@ -110,6 +110,12 @@ export function parseNativeHelperProcessMessage(
   }
   if (value.type === 'result' && typeof value.requestId === 'string' && value.requestId.length > 0) {
     if (value.ok === true) {
+      const hasValidKeys = value.events === undefined
+        ? hasExactKeys(value, ['type', 'requestId', 'ok'])
+        : hasExactKeys(value, ['type', 'requestId', 'ok', 'events']);
+      if (!hasValidKeys) {
+        return { error: safeNativeHostFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true) };
+      }
       return {
         message: {
           type: 'result',
@@ -120,7 +126,10 @@ export function parseNativeHelperProcessMessage(
       };
     }
     if (value.ok === false) {
-      if (hasForbiddenPrivilegedField(value.error)) {
+      if (
+        !hasExactKeys(value, ['type', 'requestId', 'ok', 'error']) ||
+        hasForbiddenPrivilegedField(value.error)
+      ) {
         return { error: safeNativeHostFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true) };
       }
       return { message: { type: 'result', requestId: value.requestId, ok: false, error: value.error } };
