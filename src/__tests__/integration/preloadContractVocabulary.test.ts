@@ -1720,6 +1720,28 @@ test('preload player dispatch validates invoke results before returning them', a
   assert.equal((result as { ok: boolean }).ok, true);
 });
 
+test('preload player dispatch forwards guarded lifecycle intent envelopes unchanged', async () => {
+  const snapshot = createSafePlayerSnapshot();
+  const harness = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPreloadInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: { accepted: true, events: [], snapshot },
+    });
+  });
+  const envelope = {
+    intent: 'player.pauseIfCurrent',
+    requestId: 'settings-pause-1',
+    payload: { snapshotRequestId: 'player-load-1' },
+  };
+
+  const result = await harness.api.player.dispatch(harness.input(envelope));
+
+  assert.equal((result as { ok: boolean }).ok, true);
+  assert.deepEqual(harness.calls, [{ channel: LINEUP_PLAYER_COMMAND_CHANNEL, request: envelope }]);
+});
+
 test('preload player dispatch converts malformed or privileged invoke results to local validation failures', async () => {
   const harness = createPreloadHarness((_channel, request, input) => {
     assert.ok(isPreloadInvokeRequest(request));

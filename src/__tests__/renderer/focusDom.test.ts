@@ -182,6 +182,62 @@ test('focus sync excludes controls inside inactive hidden setup sections', () =>
   }
 });
 
+test('Settings focus excludes inactive detail controls and connects Recovery to Switch Profile', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const recovery = new FocusElementDouble('settings-category-recovery', false, 'settings');
+  const switchProfile = new FocusElementDouble('settings-switch-profile', false, 'settings');
+  const activeControl = new FocusElementDouble('settings-setup-reminder', false, 'settings');
+  const inactiveControl = new FocusElementDouble('settings-theme', true, 'settings');
+  Object.defineProperty(globalThis, 'document', {
+    value: {
+      querySelectorAll: () => [recovery, switchProfile, activeControl, inactiveControl],
+      activeElement: null,
+    },
+    configurable: true,
+  });
+  try {
+    const registry = new FocusRegistry();
+    const dom = createFocusDomBindings([]);
+    syncRendererFocusTargets(registry, dom);
+    assert.equal(dom.focusableElements.includes(inactiveControl as unknown as HTMLElement), false);
+    const recoveryState = registry.focusTarget(
+      registry.createInitialState('settings'),
+      'settings-category-recovery',
+    ).state;
+    const switchState = registry.move(recoveryState, 'down').state;
+    assert.equal(switchState.activeId, 'settings-switch-profile');
+    assert.equal(registry.move(switchState, 'up').state.activeId, 'settings-category-recovery');
+    assert.equal(registry.move(recoveryState, 'right').state.activeId, 'settings-setup-reminder');
+  } finally {
+    if (originalDocument === undefined) Reflect.deleteProperty(globalThis, 'document');
+    else Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
+  }
+});
+
+test('direct audio setup focus and invalid fallback use the complete action', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const output = new FocusElementDouble('audio-output-system-default', false, 'audioSetup');
+  const complete = new FocusElementDouble('audio-setup-complete', false, 'audioSetup');
+  Object.defineProperty(globalThis, 'document', {
+    value: { querySelectorAll: () => [output, complete], activeElement: null },
+    configurable: true,
+  });
+  try {
+    const registry = new FocusRegistry();
+    const dom = createFocusDomBindings([]);
+    syncRendererFocusTargets(registry, dom);
+    const initial = registry.createInitialState('audioSetup');
+    assert.equal(initial.activeId, 'audio-setup-complete');
+    assert.equal(
+      registry.focusTarget({ activeRoute: 'audioSetup', activeId: 'missing' }, 'missing').state.activeId,
+      'audio-setup-complete',
+    );
+  } finally {
+    if (originalDocument === undefined) Reflect.deleteProperty(globalThis, 'document');
+    else Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
+  }
+});
+
 test('focus sync registers and removes dynamic Guide program identities', () => {
   const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   const guideCell = new FocusElementDouble('guide-program-channel--program', false, 'guide');

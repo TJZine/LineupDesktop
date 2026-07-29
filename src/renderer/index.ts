@@ -35,7 +35,7 @@ import { subscribePlayerBridge } from './playerBridgeSubscription.js';
 import { createGuidePresentationPolling } from './guidePresentationPolling.js';
 import { dispatchPlexRuntimeAction } from './plexRuntimeActionDispatch.js';
 import { initializeProfilePinModal, openProfilePinModal, isProfilePinModalActive, closeProfilePinModal } from './profilePinModal.js';
-import type { SettingsSectionId } from './settingsSetup.js';
+import { SETTINGS_SECTION_IDS, isPersistedSettingsActionEnabled, type SettingsSectionId } from './settingsSetup.js';
 import { queryShellDom, renderShellDom } from './shell/shellDom.js';
 import { createRendererShellState, type RendererShellState } from './shell/shellState.js';
 import { createShellController } from './shell/shellController.js';
@@ -44,11 +44,16 @@ import {
   createPlexOnboardingFlow,
   resolveChannelSetupEntryStage,
   resolveInitialChannelSetupStage,
+  supportsStartupProfilePicker,
 } from './onboarding/plexOnboardingFlow.js';
 import { handleStagedSetupBack } from './setup/stagedSetupController.js';
 import { renderStagedSetupDom } from './setup/stagedSetupDom.js';
 import { cleanupSetupRouteLifecycle, clearSetupSourceLifecycle, createSetupComposition } from './setup/setupComposition.js';
 import { createSettingsRuntime } from './settings/settingsRuntime.js';
+import { createAudioSetupRuntime } from './settings/audioSetupRuntime.js';
+import { renderAudioSetupDom } from './settings/audioSetupDom.js';
+import { createSettingsPlaybackLifecycle } from './settings/settingsPlaybackLifecycle.js';
+import { renderSettingsProfileDom } from './settingsSetupDom.js';
 import { createFullscreenTransportCoordinator } from './fullscreenTransport.js';
 import { createGuideTuneController, type GuideTuneTarget } from './guideTuneController.js';
 mountStaticRendererDom();
@@ -66,13 +71,16 @@ let workflowState = createWorkflowState('player');
 const supportBundleExportCoordinator = new SupportBundleExportCoordinator();
 let overlayState = createPlayerOverlayState();
 let playerSnapshot = createEmptyPlayerSnapshot();
-let activeSettingsCategory: SettingsSectionId = 'appearance', activeSetupStage = 'account';
-let pendingGuideFocusId: string | null = null;
+let activeSettingsCategory: SettingsSectionId = 'audio-subtitles', activeSetupStage = 'account';
+let pendingGuideFocusId: string | null = null, launchActive = true;
+let startupProfilePickerHandled = false;
 const focusRegistry = new FocusRegistry(); let focusState: FocusState;
 const settingsRuntime = createSettingsRuntime({
   settings: window.lineupDesktop.settings, windowBridge: fullscreenTransport,
   onStateChanged: (state) => {
-    workflowState = applyWorkflowSettingsValues(workflowState, state.values);
+    workflowState = applyWorkflowSettingsValues(workflowState, state.values, state.capabilities);
+    document.documentElement.dataset.theme = state.values.theme;
+    playerOverlayController.setNowPlayingAutoHideMs(state.values.nowPlayingAutoHideMs);
     document.documentElement.dataset.settingsSaving = String(state.saving); document.documentElement.dataset.settingsErrorCode = state.errorCode ?? '';
     const errorElement = document.querySelector<HTMLElement>('[data-settings-error]');
     if (errorElement) { errorElement.textContent = state.errorMessage ?? ''; errorElement.hidden = state.errorMessage === null; }
@@ -163,6 +171,13 @@ const playerOverlayController = createPlayerOverlayController({
   refreshGuidePresentation: () => guidePresentationPolling.refresh('player-tune-success', { showLoading: false, allowPlayerRoute: true }),
   recordDiagnostic: (operation, message) => recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'player.dispatch', message, { operation, route: workflowState.routeState.activeRoute }),
   recovery: playerErrorRecoveryController,
+  nowPlayingAutoHideMs: workflowState.settingsDraft.nowPlayingAutoHideMs,
+});
+const settingsPlaybackLifecycle = createSettingsPlaybackLifecycle({ player: window.lineupDesktop.player, getSnapshot: () => playerSnapshot });
+const audioSetupRuntime = createAudioSetupRuntime({
+  settings: window.lineupDesktop.settings, getSettingsValues: () => settingsRuntime.getState().values,
+  replaceValues: settingsRuntime.replaceValues, onStateChanged: () => renderApp(),
+  onComplete: () => { activateRoute('player'); void continueAfterAudioSetup(); },
 });
 const shellController = createShellController({
   shell: window.lineupDesktop.shell,
@@ -214,6 +229,7 @@ const playerBridgeSubscription = subscribePlayerBridge({
   getSnapshot: () => playerSnapshot,
   setSnapshot: (snapshot) => {
     playerSnapshot = snapshot;
+    settingsPlaybackLifecycle.observeSnapshot(snapshot);
   },
   onSnapshot: playerOverlayController.reconcileSnapshot,
   onEvent: playerOverlayController.handlePlayerEvent,
@@ -284,6 +300,9 @@ attachNavigationInputRuntime(navigationLifecycle, {
     playerOverlayController.dispose();
     shellController.cleanup();
     settingsRuntime.cleanup();
+    settingsPlaybackLifecycle.cleanup();
+    audioSetupRuntime.cleanup();
+    launchActive = false;
     void channelController.shutdown();
     cleanupPlexRuntime('beforeunload');
   },
@@ -294,9 +313,12 @@ registerRendererActions(dom, document, {
   applyRouteAction: (action) => { void applyRouteAction(action); },
   applySettingsAction,
   applySettingsCategory: (category) => {
+    if (!SETTINGS_SECTION_IDS.includes(category as SettingsSectionId)) return;
     activeSettingsCategory = category as SettingsSectionId;
     renderApp();
   },
+  selectAudioOutput: (id) => audioSetupRuntime.select(id),
+  completeAudioSetup: () => { void audioSetupRuntime.complete(); },
   applySetupStage: (stage) => { void onboardingFlow.changeStage(stage); },
   applyStagedSetupAction: (action) => { void applyStagedSetupAction(action); },
   applyChannelSetupAction: (action) => setupComposition.setBuildMode(action === 'selectReplaceBuildMode' ? 'replace' : 'append'),
@@ -339,7 +361,8 @@ registerRendererActions(dom, document, {
 });
 
 document.documentElement.dataset.activeRoute = workflowState.routeState.activeRoute;
-void settingsRuntime.initialize().then(() => shellController.start()).finally(() => {
+const settingsInitialization = settingsRuntime.initialize();
+void settingsInitialization.then(() => shellController.start()).finally(() => {
   document.documentElement.dataset.shellBoot = 'ready';
 });
 const initialPlexLoad = plexController.loadSnapshot().then(async () => {
@@ -348,7 +371,24 @@ const initialPlexLoad = plexController.loadSnapshot().then(async () => {
   }
 });
 const initialChannelLoad = channelController.loadStatus();
-void Promise.allSettled([initialPlexLoad, initialChannelLoad]).then(() => {
+void Promise.allSettled([settingsInitialization, initialPlexLoad, initialChannelLoad]).then(async () => {
+  if (!launchActive) return;
+  if (!settingsRuntime.getState().values.audioSetupCompleted) {
+    activateRoute('audioSetup'); await audioSetupRuntime.initialize();
+    return;
+  }
+  await continueAfterAudioSetup();
+});
+
+async function continueAfterAudioSetup(): Promise<void> {
+  if (!launchActive) return;
+  if (!startupProfilePickerHandled) {
+    startupProfilePickerHandled = true;
+    if (settingsRuntime.getState().values.showProfilePickerOnStartup && supportsStartupProfilePicker(plexController.getState())) {
+      activateRoute('channelSetup'); await onboardingFlow.openProfileSelection();
+      return;
+    }
+  }
   if (workflowState.routeState.activeRoute !== 'player') return;
   const stage = resolveInitialChannelSetupStage(
     plexController.getState(),
@@ -356,7 +396,7 @@ void Promise.allSettled([initialPlexLoad, initialChannelLoad]).then(() => {
   );
   if (stage === null) return;
   activateRoute('channelSetup');
-});
+}
 guidePresentationPolling.start();
 void customChannelController.loadSnapshot();
 
@@ -373,6 +413,7 @@ function activateRoute(route: AppRouteId): void {
     plexController.invalidateOnboardingOperations();
   }
   workflowState = activateWorkflowRoute(workflowState, route);
+  void settingsPlaybackLifecycle.routeChanged(previousRoute, route, workflowState.settingsDraft.keepPlaybackRunningInSettings);
   navigationLifecycle?.routeChanged(previousRoute, workflowState.routeState.activeRoute);
   cleanupPlexRuntimeForRouteChange(previousRoute, workflowState.routeState.activeRoute);
   if (previousRoute === 'guide' && workflowState.routeState.activeRoute !== 'guide') {
@@ -405,6 +446,7 @@ async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
     if (previousRoute === 'guide' && nextRoute !== 'guide') guideTuneController.stop();
     guidePresentationPolling.reconcile(previousRoute, nextRoute);
     focusState = focusRegistry.focusRoute(focusState, nextRoute).state;
+    void settingsPlaybackLifecycle.routeChanged(previousRoute, nextRoute, workflowState.settingsDraft.keepPlaybackRunningInSettings);
   }
   renderApp();
   if (previousRoute !== nextRoute && nextRoute === 'channelSetup') {
@@ -413,6 +455,14 @@ async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
 }
 
 function applySettingsAction(action: SettingsActionId): void {
+  if (action === 'switchProfile') {
+    activateRoute('channelSetup'); void onboardingFlow.openProfileSelection();
+    return;
+  }
+  if (action === 'selectAudioOutput' && isPersistedSettingsActionEnabled(action, settingsRuntime.getState().capabilities)) {
+    activateRoute('audioSetup'); void audioSetupRuntime.initialize();
+    return;
+  }
   if (action === 'exportSupportBundle') {
     const exportRequestId = supportBundleExportCoordinator.start();
     if (exportRequestId === null) {
@@ -714,6 +764,8 @@ function renderApp(): void {
     activeSetupStage,
   );
   renderPlexRuntimeDom(plexState, dom, activeSetupStage, isProfilePinModalActive(), stagedSetupController.getState().selectedSectionIds, workflowState.settingsDraft.previewBadgesEnabled);
+  renderSettingsProfileDom(plexState.snapshot?.auth.profile?.displayName ?? plexState.snapshot?.auth.profile?.username ?? null, document);
+  renderAudioSetupDom(audioSetupRuntime.getState(), document);
   renderCustomChannelWorkspace(customChannelController.getState(), dom);
   renderStagedSetupDom({
     state: stagedSetupController.getState(),
@@ -818,18 +870,11 @@ function updateActiveFromFocus(focusId: string | null): void {
     }
     return;
   }
-  if (focusId === 'settings-category-appearance' && activeSettingsCategory !== 'appearance') {
-    activeSettingsCategory = 'appearance';
-    renderApp();
-    return;
-  }
-  if (focusId === 'settings-category-guide' && activeSettingsCategory !== 'guide') {
-    activeSettingsCategory = 'guide';
-    renderApp();
-    return;
-  }
-  if (focusId === 'settings-category-recovery' && activeSettingsCategory !== 'recovery') {
-    activeSettingsCategory = 'recovery';
+  const category = focusId?.startsWith('settings-category-')
+    ? focusId.slice('settings-category-'.length) as SettingsSectionId
+    : null;
+  if (category !== null && SETTINGS_SECTION_IDS.includes(category) && activeSettingsCategory !== category) {
+    activeSettingsCategory = category;
     renderApp();
     return;
   }

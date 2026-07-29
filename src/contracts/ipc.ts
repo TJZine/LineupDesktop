@@ -3,7 +3,9 @@ export type DesktopIpcOwner = 'renderer' | 'preload' | 'main' | 'native-helper';
 export type RendererIntent =
   | 'player.load'
   | 'player.play'
+  | 'player.playIfCurrent'
   | 'player.pause'
+  | 'player.pauseIfCurrent'
   | 'player.stop'
   | 'player.seekAbsolute'
   | 'player.seekRelative'
@@ -22,7 +24,9 @@ type AssertTrue<TValue extends true> = TValue;
 export const PLAYER_RENDERER_INTENTS = [
   'player.load',
   'player.play',
+  'player.playIfCurrent',
   'player.pause',
+  'player.pauseIfCurrent',
   'player.stop',
   'player.seekAbsolute',
   'player.seekRelative',

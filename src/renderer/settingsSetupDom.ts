@@ -2,6 +2,11 @@ import type { RendererDomBindings } from './domBindings.js';
 import type { SettingsSectionId } from './settingsSetup.js';
 import type { RouteWorkflowViewModel } from './workflow.js';
 
+export function renderSettingsProfileDom(profileName: string | null, documentRef: Document): void {
+  const element = documentRef.querySelector<HTMLElement>('[data-settings-profile-name]');
+  if (element !== null) element.textContent = profileName ?? 'No profile selected.';
+}
+
 export function renderSettingsDom(
   view: RouteWorkflowViewModel,
   dom: RendererDomBindings,
@@ -30,9 +35,14 @@ export function renderSettingsDom(
     dom.settingsSectionsElement.replaceChildren(
       ...view.settings.sections.map((section) => {
         const article = document.createElement('article');
+        const isActive = section.id === activeSettingsCategory;
         article.className = 'settings-section';
         article.dataset.settingsCategory = section.id;
-        article.dataset.active = String(section.id === activeSettingsCategory);
+        article.dataset.active = String(isActive);
+        article.hidden = !isActive;
+        if (isActive) article.removeAttribute('inert');
+        else article.setAttribute('inert', '');
+        article.setAttribute('aria-hidden', String(!isActive));
 
         const title = document.createElement('h3');
         title.textContent = section.title;
@@ -45,26 +55,8 @@ export function renderSettingsDom(
         itemsContainer.className = 'settings-items-list';
 
         for (const setting of section.items) {
-          // Determine if interactive and get action/focus-id mapping
-          let action: string | null = null;
-          let focusId: string | null = null;
-
-          if (setting.id === 'launch-mode') {
-            action = 'cycleLaunchMode';
-            focusId = 'settings-launch-mode';
-          } else if (setting.id === 'preview-badges') {
-            action = 'togglePreviewBadges';
-            focusId = 'settings-preview-badges';
-          } else if (setting.id === 'guide-density') {
-            action = 'cycleGuideDensity';
-            focusId = 'settings-guide-density';
-          } else if (setting.id === 'setup-reminder') {
-            action = 'toggleSetupReminder';
-            focusId = 'settings-setup-reminder';
-          } else if (setting.id === 'support-bundle-export') {
-            action = 'exportSupportBundle';
-            focusId = 'settings-export-support-bundle';
-          }
+          const action = setting.action ?? null;
+          const focusId = action === null ? null : `settings-${setting.id}`;
 
           if (action !== null && focusId !== null) {
             // Render as TV-style interactive button row
@@ -77,13 +69,19 @@ export function renderSettingsDom(
               document.documentElement.dataset.settingsSaving === 'true' &&
               action !== 'exportSupportBundle'
             );
+            row.setAttribute('aria-disabled', String(row.disabled));
+            if (setting.disabledReason !== undefined) {
+              row.dataset.disabledReason = setting.disabledReason;
+            }
 
             const labelContainer = document.createElement('div');
             labelContainer.className = 'settings-control-row__label-container';
             const label = document.createElement('strong');
             label.textContent = setting.label;
             const desc = document.createElement('p');
-            desc.textContent = setting.description;
+            desc.textContent = setting.disabledReason === undefined
+              ? setting.description
+              : `${setting.description} ${setting.disabledReason}`;
             labelContainer.append(label, desc);
 
             const value = document.createElement('span');

@@ -45,6 +45,8 @@ export interface RendererActionHandlers {
   selectSubtitleTrack(trackId: string | null, focusId: string): void;
   tuneOverlayChannel?(channelId: string): void;
   applySettingsCategory?(category: string): void;
+  selectAudioOutput?(id: string): void;
+  completeAudioSetup?(): void;
   applySetupStage?(stage: string): void;
   applyStagedSetupAction?(action: StagedSetupFlowActionId): void;
 }
@@ -90,6 +92,17 @@ export function registerRendererActions(
     if (category) {
       handlers.applySettingsCategory?.(category);
     }
+  });
+  const audioSetupScreen = documentRef.getElementById('screen-audio-setup');
+  audioSetupScreen?.addEventListener('click', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    const output = event.target.closest<HTMLButtonElement>('[data-audio-output-id]');
+    if (output !== null && isEligibleDelegatedAction(output) && output.dataset.audioOutputId !== undefined) {
+      handlers.selectAudioOutput?.(output.dataset.audioOutputId);
+      return;
+    }
+    const complete = event.target.closest<HTMLButtonElement>('[data-audio-setup-action="complete"]');
+    if (complete !== null && isEligibleDelegatedAction(complete)) handlers.completeAudioSetup?.();
   });
   const setupScreen = documentRef.getElementById('screen-channel-setup');
   setupScreen?.addEventListener('click', (event) => {

@@ -1,4 +1,4 @@
-export const APP_ROUTES = ['player', 'guide', 'settings', 'channelSetup'] as const;
+export const APP_ROUTES = ['player', 'guide', 'settings', 'audioSetup', 'channelSetup'] as const;
 
 export type AppRouteId = (typeof APP_ROUTES)[number];
 

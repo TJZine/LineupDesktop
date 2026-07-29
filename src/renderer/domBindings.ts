@@ -5,6 +5,7 @@ import type {
   RouteWorkflowActionId,
   SettingsActionId,
 } from './workflow.js';
+import { PERSISTED_SETTINGS_ACTION_IDS } from './settingsSetup.js';
 import type { PlayerOverlayActionId } from './overlays.js';
 import { CUSTOM_CHANNEL_ACTIONS, type CustomChannelActionId } from './customChannels/controller.js';
 import {
@@ -329,6 +330,7 @@ export function readRouteId(value: string | undefined): AppRouteId | null {
     case 'player':
     case 'guide':
     case 'settings':
+    case 'audioSetup':
     case 'channelSetup':
       return value;
     default:
@@ -367,16 +369,11 @@ export function readStagedSetupFlowActionId(value: string | undefined): StagedSe
 }
 
 export function readSettingsActionId(value: string | undefined): SettingsActionId | null {
-  switch (value) {
-    case 'cycleLaunchMode':
-    case 'cycleGuideDensity':
-    case 'togglePreviewBadges':
-    case 'toggleSetupReminder':
-    case 'exportSupportBundle':
-      return value;
-    default:
-      return null;
-  }
+  if (value === 'switchProfile' || value === 'exportSupportBundle') return value;
+  return typeof value === 'string'
+    && PERSISTED_SETTINGS_ACTION_IDS.includes(value as (typeof PERSISTED_SETTINGS_ACTION_IDS)[number])
+    ? value as (typeof PERSISTED_SETTINGS_ACTION_IDS)[number]
+    : null;
 }
 
 export function readChannelSetupActionId(value: string | undefined): ChannelSetupActionId | null {

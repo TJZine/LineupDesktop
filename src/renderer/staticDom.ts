@@ -34,14 +34,19 @@ const STATIC_SCREEN_MARKUP = `
       <nav class="settings-rail" aria-label="Settings categories">
         <div class="settings-profile-row">
           <div class="settings-profile-avatar">P</div>
-          <span class="settings-profile-name">Plex Profile</span>
+          <span class="settings-profile-name" data-settings-profile-name>No profile selected.</span>
         </div>
         <div class="settings-rail-categories">
+          <button type="button" data-settings-category="audio-subtitles" data-focus-id="settings-category-audio-subtitles" class="settings-cat-btn">Audio &amp; Subtitles</button>
+          <button type="button" data-settings-category="playback-hdr" data-focus-id="settings-category-playback-hdr" class="settings-cat-btn">Playback &amp; HDR</button>
           <button type="button" data-settings-category="appearance" data-focus-id="settings-category-appearance" class="settings-cat-btn">Appearance</button>
           <button type="button" data-settings-category="guide" data-focus-id="settings-category-guide" class="settings-cat-btn">Guide</button>
+          <button type="button" data-settings-category="account" data-focus-id="settings-category-account" class="settings-cat-btn">Account</button>
+          <button type="button" data-settings-category="developer" data-focus-id="settings-category-developer" class="settings-cat-btn">Developer</button>
           <button type="button" data-settings-category="recovery" data-focus-id="settings-category-recovery" class="settings-cat-btn">Recovery</button>
         </div>
         <div class="settings-rail-nav">
+          <button type="button" data-settings-action="switchProfile" data-focus-id="settings-switch-profile">Switch Profile</button>
           <button type="button" data-route-action="openChannelSetup" data-focus-id="settings-open-channel-setup">Channel setup</button>
           <button type="button" data-route-action="resumePlayer" data-focus-id="settings-player">Back to player</button>
         </div>
@@ -61,6 +66,17 @@ const STATIC_SCREEN_MARKUP = `
         </dl>
         <div class="settings-sections" data-settings-sections></div>
       </main>
+    </div>
+  </section>
+
+  <section id="screen-audio-setup" class="screen" data-screen="audioSetup" data-style-surface="screen" aria-labelledby="audio-setup-title" hidden>
+    <div class="screen__content audio-setup-shell">
+      <p class="screen__kicker">First-run setup</p>
+      <h2 id="audio-setup-title">Audio Setup</h2>
+      <p>Choose a renderer-safe audio output. You can change this later in Settings.</p>
+      <p data-audio-setup-status role="status" aria-live="polite"></p>
+      <div class="audio-output-list" data-audio-setup-outputs></div>
+      <button type="button" data-audio-setup-action="complete" data-focus-id="audio-setup-complete">Use selected output</button>
     </div>
   </section>
   <section id="screen-channel-setup" class="screen screen--onboarding" data-screen="channelSetup" data-style-surface="screen" data-plex-runtime-panel aria-labelledby="screen-channel-setup-title" hidden>

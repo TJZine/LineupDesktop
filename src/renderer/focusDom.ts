@@ -188,9 +188,9 @@ function plexActionFocusOrder(button: HTMLButtonElement, index: number): number 
 }
 
 function focusElementOrder(focusId: string, index: number): number {
-  if (focusId === 'settings-category-appearance') return 10;
-  if (focusId === 'settings-category-guide') return 11;
-  if (focusId === 'settings-category-recovery') return 12;
+  if (focusId === 'audio-setup-complete') return 0;
+  const settingsCategoryIndex = SETTINGS_CATEGORY_FOCUS_IDS.indexOf(focusId);
+  if (settingsCategoryIndex >= 0) return 10 + settingsCategoryIndex;
   if (focusId.startsWith('btn-profile-profile-')) return 10 + index / 1000;
   if (focusId === 'btn-profile-main') return 20;
   if (focusId.startsWith('btn-server-select-server-')) return 10 + index / 1000;
@@ -368,30 +368,64 @@ function getNumpadNeighbors(focusId: string): Partial<Record<FocusDirection, str
 }
 
 function getSettingsNeighbors(focusId: string): Partial<Record<FocusDirection, string>> | undefined {
+  const categoryIndex = SETTINGS_CATEGORY_FOCUS_IDS.indexOf(focusId);
+  if (categoryIndex >= 0) {
+    return {
+      up: SETTINGS_CATEGORY_FOCUS_IDS[Math.max(0, categoryIndex - 1)],
+      down: categoryIndex === SETTINGS_CATEGORY_FOCUS_IDS.length - 1
+        ? 'settings-switch-profile'
+        : SETTINGS_CATEGORY_FOCUS_IDS[categoryIndex + 1],
+      right: SETTINGS_CATEGORY_FIRST_CONTROL[focusId],
+    };
+  }
+  const owner = findSettingsControlCategory(focusId);
+  if (owner !== undefined) return { left: owner };
   switch (focusId) {
-    case 'settings-category-appearance':
-      return { right: 'settings-launch-mode', down: 'settings-category-guide' };
-    case 'settings-category-guide':
-      return { right: 'settings-guide-density', up: 'settings-category-appearance', down: 'settings-category-recovery' };
-    case 'settings-category-recovery':
-      return { right: 'settings-setup-reminder', up: 'settings-category-guide', down: 'settings-setup-reminder' };
+    case 'settings-switch-profile':
+      return { up: 'settings-category-recovery', down: 'settings-open-channel-setup' };
     case 'settings-open-channel-setup':
-      return { left: 'settings-category-recovery', up: 'settings-setup-reminder', down: 'settings-export-support-bundle' };
+      return { up: 'settings-switch-profile', down: 'settings-player' };
     case 'settings-player':
       return { up: 'settings-open-channel-setup' };
-    case 'settings-launch-mode':
-      return { left: 'settings-category-appearance', up: 'settings-category-recovery', down: 'settings-preview-badges' };
-    case 'settings-preview-badges':
-      return { left: 'settings-category-appearance', up: 'settings-launch-mode' };
-    case 'settings-guide-density':
-      return { left: 'settings-category-guide', up: 'settings-category-recovery' };
-    case 'settings-setup-reminder':
-      return { left: 'settings-category-recovery', up: 'settings-category-recovery', down: 'settings-open-channel-setup' };
-    case 'settings-export-support-bundle':
-      return { left: 'settings-category-recovery', up: 'settings-open-channel-setup' };
     default:
       return undefined;
   }
+}
+
+const SETTINGS_CATEGORY_FOCUS_IDS: readonly string[] = [
+  'settings-category-audio-subtitles',
+  'settings-category-playback-hdr',
+  'settings-category-appearance',
+  'settings-category-guide',
+  'settings-category-account',
+  'settings-category-developer',
+  'settings-category-recovery',
+];
+
+const SETTINGS_CATEGORY_FIRST_CONTROL: Readonly<Record<string, string | undefined>> = {
+  'settings-category-audio-subtitles': 'settings-audio-output',
+  'settings-category-playback-hdr': 'settings-keep-playback-running',
+  'settings-category-appearance': 'settings-launch-mode',
+  'settings-category-guide': undefined,
+  'settings-category-account': 'settings-profile-picker-startup',
+  'settings-category-developer': 'settings-debug-logging',
+  'settings-category-recovery': 'settings-setup-reminder',
+};
+
+const SETTINGS_CONTROL_CATEGORY = new Map<string, readonly string[]>([
+  ['settings-category-audio-subtitles', ['settings-audio-output', 'settings-dts-passthrough', 'settings-direct-play-audio-fallback', 'settings-subtitle-mode', 'settings-preferred-subtitle-language', 'settings-prefer-forced-subtitles']],
+  ['settings-category-playback-hdr', ['settings-keep-playback-running', 'settings-hdr-fallback', 'settings-transcode-quality', 'settings-transcode-compatibility']],
+  ['settings-category-appearance', ['settings-launch-mode', 'settings-info-box-background', 'settings-theme', 'settings-cinematic-now-playing', 'settings-prefer-clear-logos', 'settings-now-playing-auto-hide', 'settings-preview-badges']],
+  ['settings-category-account', ['settings-profile-picker-startup']],
+  ['settings-category-developer', ['settings-debug-logging', 'settings-subtitle-debug-logging', 'settings-support-bundle-export']],
+  ['settings-category-recovery', ['settings-setup-reminder']],
+]);
+
+function findSettingsControlCategory(focusId: string): string | undefined {
+  for (const [category, controls] of SETTINGS_CONTROL_CATEGORY) {
+    if (controls.includes(focusId)) return category;
+  }
+  return undefined;
 }
 
 function getSetupNeighbors(focusId: string): Partial<Record<FocusDirection, string>> | undefined {

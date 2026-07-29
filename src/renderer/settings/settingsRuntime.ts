@@ -13,6 +13,11 @@ import {
   desktopSettingsValuesEqual,
 } from '../../contracts/settings.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
+import {
+  isPersistedSettingsActionEnabled,
+  nextDesktopSettingsValues,
+  type PersistedSettingsActionId,
+} from '../settingsSetup.js';
 
 const DESKTOP_SETTINGS_ERROR_MESSAGES: Record<DesktopSettingsErrorCode, string> = {
   unauthorized: 'Desktop settings request was not authorized.',
@@ -22,12 +27,6 @@ const DESKTOP_SETTINGS_ERROR_MESSAGES: Record<DesktopSettingsErrorCode, string> 
   'unsupported-version': 'Desktop settings require a newer compatible version.',
   'operation-failed': 'Desktop settings operation failed.',
 };
-
-export type PersistedSettingsActionId =
-  | 'cycleLaunchMode'
-  | 'cycleGuideDensity'
-  | 'togglePreviewBadges'
-  | 'toggleSetupReminder';
 
 export interface SettingsRuntimeState {
   values: DesktopSettingsValues;
@@ -48,6 +47,7 @@ export interface SettingsRuntimeOptions {
 export interface SettingsRuntimeController {
   initialize(): Promise<void>;
   applyAction(action: PersistedSettingsActionId): Promise<void>;
+  replaceValues(transform: (values: DesktopSettingsValues) => DesktopSettingsValues): Promise<void>;
   getState(): SettingsRuntimeState;
   cleanup(): void;
 }
@@ -333,7 +333,18 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
     },
     applyAction: async (action) => {
       if (!active || lastAccepted === null) return;
-      const desired = nextValues(visibleValues, action);
+      if (!isPersistedSettingsActionEnabled(action, capabilities)) return;
+      const desired = nextDesktopSettingsValues(visibleValues, action);
+      visibleValues = desired;
+      pendingDesired = { ...desired };
+      pendingDesiredRequiresPersistence = true;
+      setError(null);
+      publish();
+      await drainMutations();
+    },
+    replaceValues: async (transform) => {
+      if (!active || lastAccepted === null) return;
+      const desired = transform({ ...visibleValues });
       visibleValues = desired;
       pendingDesired = { ...desired };
       pendingDesiredRequiresPersistence = true;
@@ -362,22 +373,6 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
       mutationDrain = null;
     },
   };
-}
-
-function nextValues(
-  values: DesktopSettingsValues,
-  action: PersistedSettingsActionId,
-): DesktopSettingsValues {
-  switch (action) {
-    case 'cycleLaunchMode':
-      return { ...values, launchMode: values.launchMode === 'windowed' ? 'fullscreen' : 'windowed' };
-    case 'cycleGuideDensity':
-      return { ...values, guideDensity: values.guideDensity === 'comfortable' ? 'compact' : 'comfortable' };
-    case 'togglePreviewBadges':
-      return { ...values, previewBadgesEnabled: !values.previewBadgesEnabled };
-    case 'toggleSetupReminder':
-      return { ...values, setupReminderEnabled: !values.setupReminderEnabled };
-  }
 }
 
 function operationFailure(requestId: string): DesktopSettingsIpcResult<DesktopSettingsView> {

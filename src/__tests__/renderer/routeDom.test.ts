@@ -311,6 +311,13 @@ test('route DOM renders support bundle status without filesystem paths', () => {
     assert.match(renderedText, /Ready/u);
     assert.doesNotMatch(renderedText, /\/Users\/|[A-Za-z]:\\/u);
     assert.doesNotMatch(renderedText, /\bpath\b|\bdirectory\b/u);
+    assert.equal(settingsSectionsElement.children.length, 7);
+    settingsSectionsElement.children.forEach((article, index) => {
+      const active = index === 2;
+      assert.equal(article.hidden, !active);
+      assert.equal(article.getAttribute('aria-hidden'), String(!active));
+      assert.equal(article.attributes.has('inert'), !active);
+    });
   } finally {
     restoreDocument(originalDocument);
   }
@@ -1130,7 +1137,7 @@ test('static player DOM keeps native presentation beside the route-owned overlay
 });
 
 const PRODUCT_ROUTE_INTERNAL_COPY_PATTERN =
-  /\bRD-\d+[A-Z]?\b|future RD|\bruntime\b|runtime wiring|scheduler wiring|later runtime pass|pending runtime|not implemented|implementation status|roadmap|\bfixture\b|\bfake\b|\bdebug\b|\bsmoke\b|\bproof\b|\bscaffold\b|\bdraft(?:\b|\s+(?:channel|programming|source|controls|setup))|not proven here|live Plex/iu;
+  /\bRD-\d+[A-Z]?\b|future RD|\bruntime\b|runtime wiring|scheduler wiring|later runtime pass|pending runtime|not implemented|implementation status|roadmap|\bfixture\b|\bfake\b|\bsmoke\b|\bproof\b|\bscaffold\b|\bdraft(?:\b|\s+(?:channel|programming|source|controls|setup))|not proven here|live Plex/iu;
 
 function readVisibleTextFromMarkup(markup: string): string {
   return markup

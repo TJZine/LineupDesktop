@@ -256,7 +256,9 @@ const PLAYER_COMMAND_VALUES = [
 const PLAYER_RENDERER_INTENT_VALUES = [
   'player.load',
   'player.play',
+  'player.playIfCurrent',
   'player.pause',
+  'player.pauseIfCurrent',
   'player.stop',
   'player.seekAbsolute',
   'player.seekRelative',

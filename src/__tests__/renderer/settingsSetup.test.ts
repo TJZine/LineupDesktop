@@ -1,12 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DEFAULT_DESKTOP_SETTINGS_VALUES } from '../../contracts/settings.js';
+import {
+  DEFAULT_DESKTOP_SETTINGS_VALUES,
+  createConservativeDesktopSettingsCapabilities,
+} from '../../contracts/settings.js';
 import {
   createSettingsDraftState,
   applySettingsAction,
   applySupportBundleExportStatus,
   createSettingsSections,
+  isPersistedSettingsActionEnabled,
+  nextDesktopSettingsValues,
 } from '../../renderer/settingsSetup.js';
 
 test('settingsSetup initial state has expected default values', () => {
@@ -176,13 +181,12 @@ test('createSettingsSections generates sections with expected structures', () =>
     recovery: { loaded: true, repaired: false },
   });
 
-  assert.equal(sections.length, 3);
-  assert.equal(sections[0]?.id, 'appearance');
-  assert.equal(sections[1]?.id, 'guide');
-  assert.equal(sections[2]?.id, 'recovery');
+  assert.deepEqual(sections.map((section) => section.id), [
+    'audio-subtitles', 'playback-hdr', 'appearance', 'guide', 'account', 'developer', 'recovery',
+  ]);
 
-  const setupSection = sections[2];
-  assert.equal(setupSection?.items.length, 5);
+  const setupSection = sections[6];
+  assert.equal(setupSection?.items.length, 4);
   assert.equal(setupSection?.items[0]?.id, 'setup-reminder');
   assert.equal(setupSection?.items[1]?.id, 'setup-channel-count');
   assert.equal(setupSection?.items[1]?.valueLabel, '12');
@@ -190,4 +194,65 @@ test('createSettingsSections generates sections with expected structures', () =>
   assert.equal(setupSection?.items[2]?.valueLabel, 'Recovered');
   assert.equal(setupSection?.items[3]?.id, 'setup-current-channel');
   assert.equal(setupSection?.items[3]?.valueLabel, '101');
+
+  const ids = sections.flatMap((section) => section.items.map((item) => item.id));
+  assert.equal(ids.length, 32);
+  assert.ok(ids.includes('audio-output'));
+  assert.ok(ids.includes('audio-setup-status'));
+  assert.ok(ids.includes('now-playing-auto-hide'));
+  assert.equal(sections[3]?.items.every((item) => item.disabled), true);
+});
+
+test('settings sections preserve exact category order, closed options, and disabled truth', () => {
+  const sections = createSettingsSections(createSettingsDraftState());
+  assert.deepEqual(sections.map((section) => section.title), [
+    'Audio & Subtitles', 'Playback & HDR', 'Appearance', 'Guide', 'Account', 'Developer', 'Recovery',
+  ]);
+  const items = sections.flatMap((section) => section.items);
+  assert.equal(items.find((item) => item.id === 'subtitle-mode')?.valueLabel, 'Full (Burn-in, default)');
+  assert.equal(items.find((item) => item.id === 'guide-density')?.valueLabel, 'Detailed (2h)');
+  assert.equal(items.find((item) => item.id === 'info-box-background')?.disabledReason, 'Disabled until safe artwork is available.');
+  assert.equal(sections[3]?.items.every((item) => item.disabledReason === 'Takes effect after Guide support (WS5).'), true);
+
+  let values = { ...DEFAULT_DESKTOP_SETTINGS_VALUES };
+  const themes = [values.theme];
+  for (let index = 0; index < 4; index += 1) {
+    values = nextDesktopSettingsValues(values, 'cycleTheme');
+    themes.push(values.theme);
+  }
+  assert.deepEqual(themes, ['ember-steel', 'slate-pine', 'swiss', 'directv', 'glass']);
+  const durations = [values.nowPlayingAutoHideMs];
+  for (let index = 0; index < 6; index += 1) {
+    values = nextDesktopSettingsValues(values, 'cycleNowPlayingAutoHide');
+    durations.push(values.nowPlayingAutoHideMs);
+  }
+  assert.deepEqual(durations, [0, 5000, 10000, 15000, 30000, 60000, 120000]);
+});
+
+test('Settings Audio Output requires supported capability without gating first-run defaults', () => {
+  const conservative = createConservativeDesktopSettingsCapabilities();
+  const conservativeRow = createSettingsSections(
+    createSettingsDraftState(),
+    null,
+    conservative,
+  )[0]?.items.find((item) => item.id === 'audio-output');
+  assert.equal(conservativeRow?.disabled, true);
+  assert.equal(
+    conservativeRow?.disabledReason,
+    'Disabled until native capability verification is complete.',
+  );
+  assert.equal(isPersistedSettingsActionEnabled('selectAudioOutput', conservative), false);
+
+  const supported = {
+    ...conservative,
+    audioOutputSelection: { status: 'supported', reason: 'available' } as const,
+  };
+  const supportedRow = createSettingsSections(
+    createSettingsDraftState(),
+    null,
+    supported,
+  )[0]?.items.find((item) => item.id === 'audio-output');
+  assert.equal(supportedRow?.disabled, false);
+  assert.equal(supportedRow?.disabledReason, undefined);
+  assert.equal(isPersistedSettingsActionEnabled('selectAudioOutput', supported), true);
 });

@@ -734,12 +734,34 @@ test('authoritative terminal cleanup invalidates active recovery ownership befor
   assert.equal(harness.state().retryTransitionActive, false);
 });
 
+test('Now Playing auto-hide honors every closed duration including persistent zero and replacement', () => {
+  for (const duration of [5_000, 10_000, 15_000, 30_000, 60_000, 120_000] as const) {
+    const harness = createHarness(playingSnapshot(), { nowPlayingAutoHideMs: duration });
+    harness.controller.requestNowPlaying();
+    harness.timers.advance(duration - 1);
+    assert.equal(harness.state().activeOverlayId, 'nowPlaying');
+    harness.timers.advance(1);
+    assert.equal(harness.state().activeOverlayId, null);
+  }
+  const persistent = createHarness(playingSnapshot(), { nowPlayingAutoHideMs: 0 });
+  persistent.controller.requestNowPlaying();
+  persistent.timers.advance(120_000);
+  assert.equal(persistent.state().activeOverlayId, 'nowPlaying');
+  persistent.controller.setNowPlayingAutoHideMs(5_000);
+  persistent.timers.advance(4_999);
+  assert.equal(persistent.state().activeOverlayId, 'nowPlaying');
+  persistent.controller.setNowPlayingAutoHideMs(0);
+  persistent.timers.advance(60_000);
+  assert.equal(persistent.state().activeOverlayId, 'nowPlaying');
+});
+
 function createHarness(snapshot: PlayerSnapshot, overrides: Partial<{
   dispatch: LineupDesktopPreloadApi['player']['dispatch'];
   tuneChannel: LineupDesktopPreloadApi['player']['tuneChannel'];
   refreshChannelStatus: () => Promise<void>;
   refreshGuidePresentation: () => Promise<void>;
   recovery: PlayerErrorRecoveryController;
+  nowPlayingAutoHideMs: 0 | 5000 | 10000 | 15000 | 30000 | 60000 | 120000;
 }> = {}) {
   let playerSnapshot = snapshot;
   let state = createPlayerOverlayState(presentation(snapshot));
@@ -761,6 +783,7 @@ function createHarness(snapshot: PlayerSnapshot, overrides: Partial<{
     refreshChannelStatus: overrides.refreshChannelStatus ?? (async () => undefined),
     refreshGuidePresentation: overrides.refreshGuidePresentation ?? (async () => undefined),
     recordDiagnostic: (_operation, message) => { diagnostics.push(message); },
+    nowPlayingAutoHideMs: overrides.nowPlayingAutoHideMs ?? 0,
     recovery: overrides.recovery ?? {
       retry: () => {
         state = {

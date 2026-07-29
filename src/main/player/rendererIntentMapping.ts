@@ -20,13 +20,16 @@ import {
 
 interface CommandMappingResult {
   command: PlayerCommand;
+  expectedSnapshotRequestId?: string;
 }
 
 const EMPTY_PAYLOAD: Record<string, never> = {};
 const PLAYER_INTENT_TO_COMMAND = {
   'player.load': 'load',
   'player.play': 'play',
+  'player.playIfCurrent': 'play',
   'player.pause': 'pause',
+  'player.pauseIfCurrent': 'pause',
   'player.stop': 'stop',
   'player.seekAbsolute': 'seek.absolute',
   'player.seekRelative': 'seek.relative',
@@ -51,6 +54,20 @@ export function mapRendererIntentToCommand(envelope: unknown): CommandMappingRes
     return validationFailure(requestId, 'renderer envelope intent is not a player intent');
   }
   const commandName = PLAYER_INTENT_TO_COMMAND[envelope.intent];
+  if (envelope.intent === 'player.playIfCurrent' || envelope.intent === 'player.pauseIfCurrent') {
+    const guardedCommandName = envelope.intent === 'player.playIfCurrent' ? 'play' : 'pause';
+    const payload = validateObjectPayload(envelope.payload, ['snapshotRequestId']);
+    if ('error' in payload || !isNonEmptyString(payload.value.snapshotRequestId)) {
+      return validationFailure(
+        requestId,
+        `${guardedCommandName} if-current payload must include snapshotRequestId`,
+      );
+    }
+    return {
+      command: { command: guardedCommandName, requestId, payload: EMPTY_PAYLOAD },
+      expectedSnapshotRequestId: payload.value.snapshotRequestId,
+    };
+  }
   switch (commandName) {
     case 'load': {
       const payload = validateLoadPayload(envelope.payload);

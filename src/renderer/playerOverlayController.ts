@@ -1,4 +1,5 @@
 import type { PlayerCommandName, PlayerEvent, PlayerSnapshot } from '../contracts/player.js';
+import type { DesktopSettingsValues } from '../contracts/settings.js';
 import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
 import type { DesktopInputButton } from './navigation.js';
 import {
@@ -40,6 +41,7 @@ export interface PlayerOverlayControllerOptions {
   refreshGuidePresentation(): Promise<void>;
   recordDiagnostic(operation: string, message: string): void;
   recovery: PlayerErrorRecoveryController;
+  nowPlayingAutoHideMs: DesktopSettingsValues['nowPlayingAutoHideMs'];
 }
 
 export interface PlayerOverlayController {
@@ -57,6 +59,7 @@ export interface PlayerOverlayController {
   reconcileSnapshot(snapshot: PlayerSnapshot, authoritative: boolean, explicitTrackList?: boolean): void;
   closeTop(): boolean;
   routeLeave(): void;
+  setNowPlayingAutoHideMs(value: DesktopSettingsValues['nowPlayingAutoHideMs']): void;
   dispose(): void;
 }
 
@@ -109,10 +112,12 @@ export function createPlayerOverlayController(
   >();
   let osdTimer: number | null = null;
   let miniGuideTimer: number | null = null;
+  let nowPlayingTimer: number | null = null;
   let numberTimer: number | null = null;
   let transitionTimer: number | null = null;
   let lastSnapshotRequestId = options.getPresentation().playerSnapshot.requestId;
   let lastAuthoritativeStatus = options.getPresentation().playerSnapshot.status;
+  let nowPlayingAutoHideMs = options.nowPlayingAutoHideMs;
 
   const update = (transform: (state: PlayerOverlayState) => PlayerOverlayState): void => {
     if (disposed) return;
@@ -128,6 +133,7 @@ export function createPlayerOverlayController(
   const clearTransientTimers = (): void => {
     osdTimer = clearTimer(osdTimer);
     miniGuideTimer = clearTimer(miniGuideTimer);
+    nowPlayingTimer = clearTimer(nowPlayingTimer);
     numberTimer = clearTimer(numberTimer);
   };
 
@@ -264,6 +270,15 @@ export function createPlayerOverlayController(
     options.setState(next);
     options.render();
     options.focus(null);
+    if (nowPlayingAutoHideMs > 0) {
+      nowPlayingTimer = options.host.setTimeout(() => {
+        nowPlayingTimer = null;
+        if (options.getState().activeOverlayId === 'nowPlaying') {
+          update(closeTopOverlay);
+          options.focus(null);
+        }
+      }, nowPlayingAutoHideMs);
+    }
     return true;
   };
 
@@ -652,6 +667,7 @@ export function createPlayerOverlayController(
     if (pendingCommand?.kind === 'track') releasePendingCommand();
     if (state.activeOverlayId === 'miniGuide') miniGuideTimer = clearTimer(miniGuideTimer);
     if (state.activeOverlayId === 'playerOsd') osdTimer = clearTimer(osdTimer);
+    if (state.activeOverlayId === 'nowPlaying') nowPlayingTimer = clearTimer(nowPlayingTimer);
     if (state.activeOverlayId === 'channelNumber') numberTimer = clearTimer(numberTimer);
     options.setState(closeTopOverlay(state));
     options.render();
@@ -740,6 +756,19 @@ export function createPlayerOverlayController(
     reconcileSnapshot,
     closeTop,
     routeLeave,
+    setNowPlayingAutoHideMs(value) {
+      nowPlayingAutoHideMs = value;
+      nowPlayingTimer = clearTimer(nowPlayingTimer);
+      if (options.getState().activeOverlayId === 'nowPlaying' && value > 0) {
+        nowPlayingTimer = options.host.setTimeout(() => {
+          nowPlayingTimer = null;
+          if (options.getState().activeOverlayId === 'nowPlaying') {
+            update(closeTopOverlay);
+            options.focus(null);
+          }
+        }, value);
+      }
+    },
     dispose() {
       if (disposed) return;
       routeLeave();

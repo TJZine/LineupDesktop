@@ -34,6 +34,7 @@ export interface PlexOnboardingFlow {
   selectServer(serverId: string): Promise<void>;
   changeStage(stage: string): Promise<void>;
   returnToProfileSelection(): void;
+  openProfileSelection(): Promise<void>;
 }
 
 export function createPlexOnboardingFlow({
@@ -112,5 +113,18 @@ export function createPlexOnboardingFlow({
       focusIntent = profileReturnFocusId;
       render();
     },
+    async openProfileSelection(): Promise<void> {
+      controller.invalidateOnboardingOperations(true);
+      setStage('profile');
+      focusIntent = profileReturnFocusId ?? 'btn-profile-main';
+      render();
+      await controller.getHomeUsers();
+      if (isCurrentStage('profile')) render();
+    },
   };
+}
+
+export function supportsStartupProfilePicker(state: ReturnType<PlexRuntimeController['getState']>): boolean {
+  return state.snapshot?.auth.state === 'signed-in'
+    && state.snapshot.auth.homeUsers.length > 0;
 }

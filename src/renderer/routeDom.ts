@@ -48,7 +48,8 @@ export function renderRouteDom(
 
   for (const screen of dom.screens) {
     const isActive = screen.dataset.screen === activeRoute;
-    screen.hidden = !isActive;
+    const isAudioSetupBackdrop = activeRoute === 'audioSetup' && screen.dataset.screen === 'player';
+    screen.hidden = !isActive && !isAudioSetupBackdrop;
     screen.inert = !isActive;
     screen.setAttribute('aria-hidden', String(!isActive));
     screen.classList.toggle('screen--active', isActive);

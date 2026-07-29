@@ -507,7 +507,9 @@ test('player renderer intents are closed and separate from shell window intents'
   assert.deepEqual([...PLAYER_RENDERER_INTENTS], [
     'player.load',
     'player.play',
+    'player.playIfCurrent',
     'player.pause',
+    'player.pauseIfCurrent',
     'player.stop',
     'player.seekAbsolute',
     'player.seekRelative',

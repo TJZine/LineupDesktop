@@ -42,7 +42,7 @@ import {
   type ChannelSetupProgressViewModel,
   type ChannelSetupLiveSelectionViewModel,
 } from './channelSetup/viewModel.js';
-import type { DesktopSettingsValues } from '../contracts/settings.js';
+import type { DesktopSettingsCapabilityProjection, DesktopSettingsValues } from '../contracts/settings.js';
 
 export type { ChannelSetupActionId, SettingsActionId } from './settingsSetup.js';
 export type { EpgActionId } from './epg.js';
@@ -155,6 +155,7 @@ const ROUTE_ACTIONS = {
       statusText: 'Returned to player from settings.',
     },
   ],
+  audioSetup: [],
   channelSetup: [],
 } as const satisfies Record<AppRouteId, readonly RouteActionViewModel[]>;
 
@@ -180,8 +181,16 @@ const ROUTE_COPY = {
     kicker: 'Desktop preferences',
     tone: 'ready',
     primaryText: 'Desktop preferences are stored securely by the main process.',
-    secondaryText: 'Appearance, Guide, and recovery choices apply across relaunches.',
+    secondaryText: 'Seven focused categories expose every desktop preference and capability state.',
     defaultStatus: 'Desktop settings are ready.',
+  },
+  audioSetup: {
+    title: 'Audio Setup',
+    kicker: 'First-run setup',
+    tone: 'attention',
+    primaryText: 'Choose an audio output or safely use the system default.',
+    secondaryText: 'Only renderer-safe output labels and opaque identifiers are shown.',
+    defaultStatus: 'Audio setup is required.',
   },
   channelSetup: {
     title: 'Channel setup',
@@ -428,10 +437,15 @@ export function applyWorkflowSettingsAction(
 export function applyWorkflowSettingsValues(
   state: WorkflowState,
   values: DesktopSettingsValues,
+  capabilities?: DesktopSettingsCapabilityProjection | null,
 ): WorkflowState {
   return {
     ...state,
-    settingsDraft: applyPersistedSettingsValues(state.settingsDraft, values),
+    settingsDraft: applyPersistedSettingsValues(
+      state.settingsDraft,
+      values,
+      capabilities ?? state.settingsDraft.capabilities,
+    ),
   };
 }
 

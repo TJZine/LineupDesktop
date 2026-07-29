@@ -326,6 +326,105 @@ test('desktop player adapter maps renderer intents to closed player commands', a
   assertNoForbiddenKeys(host.commands);
 });
 
+test('desktop player adapter maps guarded lifecycle intents without forwarding snapshot identity', async () => {
+  const host = new FakeNativePlayerHost();
+  host.executeResult = { ok: true, events: loadedPlayingBatch('request-load-current') };
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRendererIntent(loadEnvelope('request-load-current'));
+  host.executeResult = { ok: true };
+
+  const result = await adapter.dispatchRendererIntent({
+    intent: 'player.pauseIfCurrent',
+    requestId: 'request-pause-current',
+    payload: { snapshotRequestId: 'request-load-current' },
+  });
+
+  assert.equal(result.accepted, true);
+  assert.deepEqual(host.commands.at(-1), {
+    command: 'pause',
+    requestId: 'request-pause-current',
+    payload: {},
+  });
+  assert.equal(Object.hasOwn(host.commands.at(-1) ?? {}, 'expectedSnapshotRequestId'), false);
+});
+
+test('desktop player adapter rejects stale or malformed guarded lifecycle intents before custody and host', async () => {
+  const host = new FakeNativePlayerHost();
+  host.executeResult = { ok: true, events: loadedPlayingBatch('request-load-current') };
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRendererIntent(loadEnvelope('request-load-current'));
+  const snapshotBefore = adapter.getSnapshot();
+  const commandCountBefore = host.commands.length;
+
+  const stale = await adapter.dispatchRendererIntent({
+    intent: 'player.playIfCurrent',
+    requestId: 'request-play-stale',
+    payload: { snapshotRequestId: 'request-load-replaced' },
+  });
+  const ordinaryWithGuardedPayload = await adapter.dispatchRendererIntent({
+    intent: 'player.play',
+    requestId: 'request-play-not-guarded',
+    payload: { snapshotRequestId: 'request-load-current' },
+  });
+  assert.equal(ordinaryWithGuardedPayload.accepted, false);
+  for (const payload of [{}, { snapshotRequestId: '' }, {
+    snapshotRequestId: 'request-load-current',
+    extra: true,
+  }]) {
+    const malformed = await adapter.dispatchRendererIntent({
+      intent: 'player.pauseIfCurrent',
+      requestId: `request-pause-malformed-${String(Object.keys(payload).length)}`,
+      payload,
+    });
+    assert.equal(malformed.accepted, false);
+  }
+
+  assert.equal(stale.accepted, false);
+  assert.equal(stale.command?.command, 'play');
+  assert.deepEqual(adapter.getSnapshot(), snapshotBefore);
+  assert.equal(adapter.getPendingRequestCount(), 0);
+  assert.equal(host.commands.length, commandCountBefore);
+  const errorEvent = assertErrorEvent(stale.events, 'stale-request');
+  assert.equal(errorEvent.event, 'error');
+  if (errorEvent.event === 'error') {
+    assert.equal(errorEvent.requestId, 'request-play-stale');
+    assert.equal(errorEvent.error.code, 'PLAYER_VALIDATION_FAILED');
+    assert.equal(errorEvent.error.message, 'Player lifecycle command targeted a stale player snapshot.');
+    assert.ok(errorEvent.error.diagnostic);
+    assert.deepEqual({
+      component: errorEvent.error.diagnostic.component,
+      operation: errorEvent.error.diagnostic.operation,
+      status: errorEvent.error.diagnostic.status,
+      reason: errorEvent.error.diagnostic.reason,
+    }, {
+      component: 'desktop-player-adapter',
+      operation: 'play',
+      status: 'rejected',
+      reason: 'snapshot request mismatch',
+    });
+  }
+});
+
+test('desktop player adapter submits a matching guarded command before a later load in the same turn', async () => {
+  const host = new DeferredNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  const initialLoad = adapter.dispatchRendererIntent(loadEnvelope('request-load-current'));
+  host.resolveNext({ ok: true, events: loadedPlayingBatch('request-load-current') });
+  await initialLoad;
+
+  const guardedPause = adapter.dispatchRendererIntent({
+    intent: 'player.pauseIfCurrent',
+    requestId: 'request-pause-current',
+    payload: { snapshotRequestId: 'request-load-current' },
+  });
+  const replacementLoad = adapter.dispatchRendererIntent(loadEnvelope('request-load-replacement'));
+
+  assert.deepEqual(host.commands.slice(-2).map((command) => command.command), ['pause', 'load']);
+  host.resolveNext();
+  host.resolveNext({ ok: true, events: loadedPlayingBatch('request-load-replacement') });
+  await Promise.all([guardedPause, replacementLoad]);
+});
+
 test('native helper protocol codec normalizes failure codes and rejects top-level arrays', () => {
   assert.deepEqual(
     normalizeNativeHelperFailure({

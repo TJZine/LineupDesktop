@@ -41,13 +41,35 @@ test('settings runtime loads before presentation, applies launch intent, and per
   });
   await runtime.initialize();
   assert.deepEqual(fullscreen, [true]);
-  await runtime.applyAction('cycleGuideDensity');
+  await runtime.applyAction('toggleKeepPlaybackRunning');
   assert.deepEqual(replaceInputs[0], {
     requestId: 'settings-replace-1', expectedRevision: 4,
-    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, launchMode: 'fullscreen', guideDensity: 'compact' },
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, launchMode: 'fullscreen', keepPlaybackRunningInSettings: true },
   });
   assert.equal(states.at(-1)?.snapshot?.revision, 5);
   assert.deepEqual(states.at(-1)?.capabilities, CONSERVATIVE_DESKTOP_SETTINGS_CAPABILITIES);
+});
+
+test('settings runtime refuses capability-gated and pending Guide mutations', async () => {
+  let replacements = 0;
+  const runtime = createSettingsRuntime({
+    settings: {
+      getAudioOutputs,
+      getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
+      replace: async (input) => {
+        replacements += 1;
+        return desktopSettingsSuccess(input.requestId, snapshot(2));
+      },
+    },
+    windowBridge: windowBridge([]),
+    onStateChanged: () => undefined,
+  });
+  await runtime.initialize();
+  await runtime.applyAction('toggleDtsPassthrough');
+  await runtime.applyAction('cycleGuideDensity');
+  assert.equal(replacements, 0);
+  assert.equal(runtime.getState().values.dtsPassthroughEnabled, false);
+  assert.equal(runtime.getState().values.guideDensity, 'comfortable');
 });
 
 test('settings runtime serializes a user launch change behind pending startup fullscreen', async () => {
@@ -142,13 +164,13 @@ test('settings runtime coalesces latest desired values and rebases once after re
     windowBridge: windowBridge([]), onStateChanged: () => undefined,
   });
   await runtime.initialize();
-  const compact = runtime.applyAction('cycleGuideDensity');
+  const compact = runtime.applyAction('toggleKeepPlaybackRunning');
   const hidden = runtime.applyAction('togglePreviewBadges');
   first.resolve(desktopSettingsFailure('settings-replace-1', 'revision-conflict'));
   await Promise.all([compact, hidden]);
   assert.equal(inputs.length, 2);
   assert.equal(inputs[1]?.expectedRevision, 8);
-  assert.equal(inputs[1]?.values.guideDensity, 'compact');
+  assert.equal(inputs[1]?.values.keepPlaybackRunningInSettings, true);
   assert.equal(inputs[1]?.values.previewBadgesEnabled, false);
 });
 
@@ -190,7 +212,7 @@ test('settings runtime synchronizes a rebased launch mode before retrying persis
   });
 
   await runtime.initialize();
-  const density = runtime.applyAction('cycleGuideDensity');
+  const density = runtime.applyAction('toggleKeepPlaybackRunning');
   const launch = runtime.applyAction('cycleLaunchMode');
   firstReplace.resolve(desktopSettingsFailure('settings-replace-1', 'revision-conflict'));
   await fullscreenRetryCalled.promise;
@@ -204,7 +226,7 @@ test('settings runtime synchronizes a rebased launch mode before retrying persis
   assert.equal(inputs.length, 2);
   assert.equal(inputs[1]?.expectedRevision, 8);
   assert.equal(inputs[1]?.values.launchMode, 'fullscreen');
-  assert.equal(inputs[1]?.values.guideDensity, 'compact');
+  assert.equal(inputs[1]?.values.keepPlaybackRunningInSettings, true);
 });
 
 test('settings runtime keeps newer whole-snapshot intent behind pending fullscreen', async () => {
@@ -407,12 +429,12 @@ test('settings runtime preserves newer nonlaunch intent after an older replace f
     onStateChanged: () => undefined,
   });
   await runtime.initialize();
-  const density = runtime.applyAction('cycleGuideDensity');
+  const density = runtime.applyAction('toggleKeepPlaybackRunning');
   const badges = runtime.applyAction('togglePreviewBadges');
   firstReplace.resolve(desktopSettingsFailure('settings-replace-1', 'operation-failed'));
   await Promise.all([density, badges]);
   assert.equal(inputs.length, 2);
-  assert.equal(inputs[1]?.values.guideDensity, 'compact');
+  assert.equal(inputs[1]?.values.keepPlaybackRunningInSettings, true);
   assert.equal(inputs[1]?.values.previewBadgesEnabled, false);
   assert.equal(runtime.getState().snapshot?.revision, 2);
 });
@@ -433,10 +455,10 @@ test('settings runtime stops after one failed conflict rebase and restores accep
     onStateChanged: () => undefined,
   });
   await runtime.initialize();
-  await runtime.applyAction('cycleGuideDensity');
+  await runtime.applyAction('toggleKeepPlaybackRunning');
   assert.equal(gets, 2);
   assert.equal(replacements, 2);
-  assert.equal(runtime.getState().values.guideDensity, 'comfortable');
+  assert.equal(runtime.getState().values.keepPlaybackRunningInSettings, false);
   assert.equal(runtime.getState().snapshot?.revision, 7);
   assert.equal(runtime.getState().errorCode, 'revision-conflict');
 });
