@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { DEFAULT_DESKTOP_SETTINGS_VALUES } from '../../contracts/settings.js';
 import {
   DIAGNOSTIC_REDACTION_VERSION,
   type DiagnosticsExportSupportBundleResult,
@@ -65,10 +66,8 @@ test('support bundle export result applies to the latest workflow state', async 
 
   currentState = activateWorkflowRoute(
     applyWorkflowSettingsValues(currentState, {
-      launchMode: 'windowed',
+      ...DEFAULT_DESKTOP_SETTINGS_VALUES,
       guideDensity: 'compact',
-      previewBadgesEnabled: true,
-      setupReminderEnabled: true,
     }),
     'guide',
   );

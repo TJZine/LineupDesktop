@@ -9,7 +9,10 @@ export type ChannelSetupActionId =
   | 'selectAppendBuildMode'
   | 'selectReplaceBuildMode';
 
-import type { DesktopSettingsValues } from '../contracts/settings.js';
+import {
+  createDefaultDesktopSettingsValues,
+  type DesktopSettingsValues,
+} from '../contracts/settings.js';
 
 export type SettingsSectionId = 'appearance' | 'guide' | 'recovery';
 
@@ -53,10 +56,7 @@ export interface ChannelSetupSummaryViewModel {
 
 export function createSettingsDraftState(): SettingsDraftState {
   return {
-    launchMode: 'windowed',
-    guideDensity: 'comfortable',
-    previewBadgesEnabled: true,
-    setupReminderEnabled: true,
+    ...createDefaultDesktopSettingsValues(),
     supportBundleExport: {
       status: 'ready',
       bundleDirectoryName: null,

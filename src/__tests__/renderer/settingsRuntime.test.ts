@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DEFAULT_DESKTOP_SETTINGS_VALUES, desktopSettingsFailure, desktopSettingsSuccess } from '../../contracts/settings.js';
+import {
+  CONSERVATIVE_DESKTOP_SETTINGS_CAPABILITIES,
+  DEFAULT_DESKTOP_SETTINGS_VALUES,
+  createDesktopSettingsView,
+  desktopSettingsFailure,
+  desktopSettingsSuccess,
+  normalizeDesktopSettingsReplaceValues,
+} from '../../contracts/settings.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import { createSettingsRuntime, type SettingsRuntimeState } from '../../renderer/settings/settingsRuntime.js';
 import { deferred } from '../helpers/deferred.js';
@@ -15,7 +22,10 @@ test('settings runtime loads before presentation, applies launch intent, and per
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(4, { launchMode: 'fullscreen' })),
       replace: async (input) => {
         replaceInputs.push(input);
-        return desktopSettingsSuccess(input.requestId, { schemaVersion: 1, revision: 5, status: 'ready', values: input.values });
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          5,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: windowBridge(fullscreen),
@@ -29,6 +39,7 @@ test('settings runtime loads before presentation, applies launch intent, and per
     values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, launchMode: 'fullscreen', guideDensity: 'compact' },
   });
   assert.equal(states.at(-1)?.snapshot?.revision, 5);
+  assert.deepEqual(states.at(-1)?.capabilities, CONSERVATIVE_DESKTOP_SETTINGS_CAPABILITIES);
 });
 
 test('settings runtime serializes a user launch change behind pending startup fullscreen', async () => {
@@ -37,11 +48,7 @@ test('settings runtime serializes a user launch change behind pending startup fu
   const windowedCorrection = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['window']['setFullscreen']>>>();
   const correctionCalled = deferred<void>();
   const fullscreenCalls: boolean[] = [];
-  const replacements: Array<{
-    requestId: string;
-    expectedRevision: number;
-    values: typeof DEFAULT_DESKTOP_SETTINGS_VALUES;
-  }> = [];
+  const replacements: Array<Parameters<LineupDesktopPreloadApi['settings']['replace']>[0]> = [];
   let activeIntents = 0;
   let maximumActiveIntents = 0;
   const runtime = createSettingsRuntime({
@@ -52,7 +59,10 @@ test('settings runtime serializes a user launch change behind pending startup fu
       ),
       replace: async (input) => {
         replacements.push(input);
-        return desktopSettingsSuccess(input.requestId, snapshot(4, input.values));
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          4,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: {
@@ -113,7 +123,10 @@ test('settings runtime coalesces latest desired values and rebases once after re
       replace: async (input) => {
         inputs.push(input);
         if (inputs.length === 1) return first.promise;
-        return desktopSettingsSuccess(input.requestId, { schemaVersion: 1, revision: 9, status: 'ready', values: input.values });
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          9,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: windowBridge([]), onStateChanged: () => undefined,
@@ -148,7 +161,10 @@ test('settings runtime synchronizes a rebased launch mode before retrying persis
       replace: async (input) => {
         inputs.push(input);
         if (inputs.length === 1) return firstReplace.promise;
-        return desktopSettingsSuccess(input.requestId, snapshot(9, input.values));
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          9,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: {
@@ -182,13 +198,16 @@ test('settings runtime synchronizes a rebased launch mode before retrying persis
 
 test('settings runtime keeps newer whole-snapshot intent behind pending fullscreen', async () => {
   const fullscreen = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['window']['setFullscreen']>>>();
-  const inputs: Array<{ values: typeof DEFAULT_DESKTOP_SETTINGS_VALUES }> = [];
+  const inputs: Array<Parameters<LineupDesktopPreloadApi['settings']['replace']>[0]> = [];
   const runtime = createSettingsRuntime({
     settings: {
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         inputs.push(input);
-        return desktopSettingsSuccess(input.requestId, { schemaVersion: 1, revision: 2, status: 'ready', values: input.values });
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          2,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: { setFullscreen: async (enabled) => enabled
@@ -250,7 +269,10 @@ test('settings runtime cleanup invalidates a late fullscreen consumer continuati
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         replacements += 1;
-        return desktopSettingsSuccess(input.requestId, snapshot(2, input.values));
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          2,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: {
@@ -275,7 +297,7 @@ test('settings runtime serializes rapid launch intents and persists only the lat
   const disable = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['window']['setFullscreen']>>>();
   const disableCalled = deferred<void>();
   const fullscreenCalls: boolean[] = [];
-  const replacements: Array<{ values: typeof DEFAULT_DESKTOP_SETTINGS_VALUES }> = [];
+  const replacements: Array<Parameters<LineupDesktopPreloadApi['settings']['replace']>[0]> = [];
   let activeIntents = 0;
   let maximumActiveIntents = 0;
   let initialized = false;
@@ -284,7 +306,10 @@ test('settings runtime serializes rapid launch intents and persists only the lat
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         replacements.push(input);
-        return desktopSettingsSuccess(input.requestId, snapshot(2, input.values));
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          2,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: {
@@ -324,7 +349,10 @@ test('settings runtime treats a successful but mismatched fullscreen result as a
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         replacements += 1;
-        return desktopSettingsSuccess(input.requestId, snapshot(2, input.values));
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          2,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: {
@@ -345,14 +373,17 @@ test('settings runtime treats a successful but mismatched fullscreen result as a
 
 test('settings runtime preserves newer nonlaunch intent after an older replace fails', async () => {
   const firstReplace = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['settings']['replace']>>>();
-  const inputs: Array<{ values: typeof DEFAULT_DESKTOP_SETTINGS_VALUES }> = [];
+  const inputs: Array<Parameters<LineupDesktopPreloadApi['settings']['replace']>[0]> = [];
   const runtime = createSettingsRuntime({
     settings: {
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         inputs.push(input);
         if (inputs.length === 1) return firstReplace.promise;
-        return desktopSettingsSuccess(input.requestId, snapshot(2, input.values));
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          2,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: windowBridge([]),
@@ -393,7 +424,12 @@ test('settings runtime stops after one failed conflict rebase and restores accep
 });
 
 function snapshot(revision: number, overrides: Partial<typeof DEFAULT_DESKTOP_SETTINGS_VALUES> = {}) {
-  return { schemaVersion: 1 as const, revision, status: 'ready' as const, values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, ...overrides } };
+  return createDesktopSettingsView({
+    schemaVersion: 2,
+    revision,
+    status: 'ready',
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, ...overrides },
+  });
 }
 
 function windowBridge(calls: boolean[]): LineupDesktopPreloadApi['window'] {

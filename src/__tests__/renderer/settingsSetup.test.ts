@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { DEFAULT_DESKTOP_SETTINGS_VALUES } from '../../contracts/settings.js';
 import {
   createSettingsDraftState,
   applySettingsAction,
@@ -10,6 +11,13 @@ import {
 
 test('settingsSetup initial state has expected default values', () => {
   const state = createSettingsDraftState();
+  assert.deepEqual(
+    Object.fromEntries(Object.keys(DEFAULT_DESKTOP_SETTINGS_VALUES).map((key) => [
+      key,
+      state[key as keyof typeof DEFAULT_DESKTOP_SETTINGS_VALUES],
+    ])),
+    DEFAULT_DESKTOP_SETTINGS_VALUES,
+  );
   assert.equal(state.launchMode, 'windowed');
   assert.equal(state.guideDensity, 'comfortable');
   assert.equal(state.previewBadgesEnabled, true);

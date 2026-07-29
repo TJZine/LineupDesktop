@@ -90,6 +90,10 @@ import {
   PLAYER_RECOVERY_ACTIONS,
   SHELL_STATUS_VALUES,
 } from '../../contracts/shell.js';
+import {
+  DEFAULT_DESKTOP_SETTINGS_VALUES,
+  createConservativeDesktopSettingsCapabilities,
+} from '../../contracts/settings.js';
 
 const preloadSourceUrl = new URL('../../preload/index.cts', import.meta.url);
 const preloadSourceText = readFileSync(preloadSourceUrl, 'utf8');
@@ -2514,23 +2518,42 @@ test('preload settings bridge exposes two total guarded methods with exact reque
       ok: true,
       requestId,
       value: {
-        schemaVersion: 1,
-        revision: channel === LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL ? 2 : 3,
-        status: 'ready',
-        values: {
-          launchMode: 'windowed', guideDensity: 'comfortable',
-          previewBadgesEnabled: true, setupReminderEnabled: true,
+        snapshot: {
+          schemaVersion: 2,
+          revision: channel === LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL ? 2 : 3,
+          status: 'ready',
+          values: DEFAULT_DESKTOP_SETTINGS_VALUES,
         },
+        capabilities: createConservativeDesktopSettingsCapabilities(),
       },
     };
   }, { getSnapshot: LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, replace: LINEUP_SETTINGS_REPLACE_CHANNEL });
   assert.deepEqual(Object.keys(bridge).sort(), ['getSnapshot', 'replace']);
   assert.equal((await bridge.getSnapshot?.({ requestId: 'settings-get-1' }) as { ok: boolean }).ok, true);
+  assert.equal((await bridge.replace?.({
+    requestId: 'settings-replace-1',
+    expectedRevision: 2,
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, audioOutputDeviceId: 'system-default' },
+  }) as { ok: boolean }).ok, true);
+  assert.equal((await bridge.replace?.({
+    requestId: 'settings-replace-2',
+    expectedRevision: 3,
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, audioOutputDeviceId: `audio_${'Q'.repeat(43)}` },
+  }) as { ok: boolean }).ok, true);
+  for (const audioOutputDeviceId of [' system-default', `audio_${'Q'.repeat(42)}`, 'native-output']) {
+    const rejected = await bridge.replace?.({
+      requestId: 'settings-replace-invalid-audio',
+      expectedRevision: 3,
+      values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, audioOutputDeviceId },
+    }) as { ok: boolean; error: { code: string } };
+    assert.equal(rejected.ok, false);
+    assert.equal(rejected.error.code, 'validation-failed');
+  }
   const invalid = await bridge.replace?.({ requestId: 'bad id' }) as { ok: boolean; requestId: string; error: { code: string } };
   assert.equal(invalid.ok, false);
   assert.equal(invalid.requestId, 'settings-invalid-request');
   assert.equal(invalid.error.code, 'validation-failed');
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 3);
 });
 
 test('preload settings bridge maps invoke rejection and mismatched results without rejecting', async () => {
@@ -2549,6 +2572,49 @@ test('preload settings bridge maps invoke rejection and mismatched results witho
   const mismatch = await mismatched.getSnapshot?.({ requestId: 'settings-get-3' }) as { requestId: string; error: { code: string } };
   assert.equal(mismatch.requestId, 'settings-get-3');
   assert.equal(mismatch.error.code, 'validation-failed');
+});
+
+test('preload settings guards reject persisted system-default, invalid capability pairs, and extra keys', () => {
+  const guards = evaluateSettingsGuardModule();
+  const isSettingsResult = guards.isSettingsResult as (value: unknown, requestId: string) => boolean;
+  const base = {
+    ok: true,
+    requestId: 'settings-get-strict',
+    value: {
+      snapshot: {
+        schemaVersion: 2,
+        revision: 1,
+        status: 'ready',
+        values: DEFAULT_DESKTOP_SETTINGS_VALUES,
+      },
+      capabilities: createConservativeDesktopSettingsCapabilities(),
+    },
+  };
+  assert.equal(isSettingsResult(base, base.requestId), true);
+  assert.equal(isSettingsResult({
+    ...base,
+    value: {
+      ...base.value,
+      snapshot: {
+        ...base.value.snapshot,
+        values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, audioOutputDeviceId: 'system-default' },
+      },
+    },
+  }, base.requestId), false);
+  assert.equal(isSettingsResult({
+    ...base,
+    value: {
+      ...base.value,
+      capabilities: {
+        ...base.value.capabilities,
+        transcode: { status: 'supported', reason: 'native-proof-required' },
+      },
+    },
+  }, base.requestId), false);
+  assert.equal(isSettingsResult({
+    ...base,
+    value: { ...base.value, extra: true },
+  }, base.requestId), false);
 });
 
 test('preload bridge guard rejects Electron value imports while allowing type imports', () => {

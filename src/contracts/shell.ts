@@ -61,7 +61,7 @@ import type {
   DesktopSettingsGetSnapshotRequest,
   DesktopSettingsIpcResult,
   DesktopSettingsReplaceRequest,
-  DesktopSettingsSnapshot,
+  DesktopSettingsView,
 } from './settings.js';
 
 export const LINEUP_PROTOCOL_ORIGIN = 'lineup://shell' as const;
@@ -151,10 +151,10 @@ export interface LineupDesktopPreloadApi {
   settings: {
     getSnapshot: (
       input: DesktopSettingsGetSnapshotRequest,
-    ) => Promise<DesktopSettingsIpcResult<DesktopSettingsSnapshot>>;
+    ) => Promise<DesktopSettingsIpcResult<DesktopSettingsView>>;
     replace: (
       input: DesktopSettingsReplaceRequest,
-    ) => Promise<DesktopSettingsIpcResult<DesktopSettingsSnapshot>>;
+    ) => Promise<DesktopSettingsIpcResult<DesktopSettingsView>>;
   };
   player: {
     dispatch: (

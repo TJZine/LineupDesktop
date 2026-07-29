@@ -5,9 +5,14 @@ import {
   LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
   LINEUP_SETTINGS_REPLACE_CHANNEL,
 } from '../../contracts/ipc.js';
-import { DEFAULT_DESKTOP_SETTINGS_VALUES } from '../../contracts/settings.js';
+import {
+  DEFAULT_DESKTOP_SETTINGS_VALUES,
+  createDesktopSettingsView,
+} from '../../contracts/settings.js';
 import { DesktopSettingsStoreError } from '../../main/persistence/desktopSettingsStore.js';
 import { registerSettingsIpcHandlers } from '../../main/settings/settingsIpc.js';
+
+type SuccessfulSettingsView = { value: ReturnType<typeof view> };
 
 test('settings IPC authorizes, validates, echoes request ids, and registers exactly two handlers', async () => {
   const handlers = new Map<string, (event: unknown, payload: unknown) => unknown>();
@@ -28,7 +33,7 @@ test('settings IPC authorizes, validates, echoes request ids, and registers exac
   const get = handlers.get(LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL)!;
   const replace = handlers.get(LINEUP_SETTINGS_REPLACE_CHANNEL)!;
   assert.deepEqual(await get('authorized', { requestId: 'settings-get-1' }), {
-    ok: true, requestId: 'settings-get-1', value: snapshot(3),
+    ok: true, requestId: 'settings-get-1', value: view(3),
   });
   const unauthorized = await get('other', { requestId: 'settings-get-2' }) as { error: { code: string } };
   assert.equal(unauthorized.error.code, 'unauthorized');
@@ -38,6 +43,55 @@ test('settings IPC authorizes, validates, echoes request ids, and registers exac
   assert.equal(writes, 0);
   teardown();
   assert.deepEqual(removed, [LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, LINEUP_SETTINGS_REPLACE_CHANNEL]);
+});
+
+test('settings IPC canonicalizes only exact system-default and clones capabilities per response', async () => {
+  const handlers = new Map<string, (event: unknown, payload: unknown) => unknown>();
+  const storedValues: unknown[] = [];
+  registerSettingsIpcHandlers({
+    store: {
+      loadSnapshot: async () => snapshot(2),
+      replace: async (_revision, values) => {
+        storedValues.push(values);
+        return { ...snapshot(3), values };
+      },
+    },
+    isAuthorizedEvent: () => true,
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler as never), removeHandler: () => undefined },
+  });
+  const get = handlers.get(LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL)!;
+  const replace = handlers.get(LINEUP_SETTINGS_REPLACE_CHANNEL)!;
+  const first = await get({}, { requestId: 'settings-get-capabilities-1' }) as SuccessfulSettingsView;
+  const second = await get({}, { requestId: 'settings-get-capabilities-2' }) as SuccessfulSettingsView;
+  assert.deepEqual(first.value.capabilities, second.value.capabilities);
+  assert.notEqual(first.value.capabilities, second.value.capabilities);
+  assert.notEqual(first.value.capabilities.audioOutputSelection, second.value.capabilities.audioOutputSelection);
+
+  const systemDefault = await replace({}, {
+    requestId: 'settings-replace-system',
+    expectedRevision: 2,
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, audioOutputDeviceId: 'system-default' },
+  }) as SuccessfulSettingsView;
+  assert.equal((storedValues[0] as { audioOutputDeviceId: unknown }).audioOutputDeviceId, null);
+  assert.equal(systemDefault.value.snapshot.values.audioOutputDeviceId, null);
+
+  const opaqueId = `audio_${'z'.repeat(43)}`;
+  await replace({}, {
+    requestId: 'settings-replace-device',
+    expectedRevision: 3,
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, audioOutputDeviceId: opaqueId },
+  });
+  assert.equal((storedValues[1] as { audioOutputDeviceId: unknown }).audioOutputDeviceId, opaqueId);
+
+  for (const audioOutputDeviceId of [` ${opaqueId}`, `${opaqueId} `, ' system-default', 'native-device']) {
+    const result = await replace({}, {
+      requestId: 'settings-replace-invalid-audio',
+      expectedRevision: 3,
+      values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, audioOutputDeviceId },
+    }) as { ok: false; error: { code: string } };
+    assert.equal(result.error.code, 'validation-failed');
+  }
+  assert.equal(storedValues.length, 2);
 });
 
 test('settings IPC maps every store failure to fixed renderer-safe results and never rejects', async () => {
@@ -129,5 +183,9 @@ test('settings IPC maps unexpected handler exceptions to a fixed operation failu
 });
 
 function snapshot(revision: number) {
-  return { schemaVersion: 1 as const, revision, status: 'ready' as const, values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES } };
+  return { schemaVersion: 2 as const, revision, status: 'ready' as const, values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES } };
+}
+
+function view(revision: number) {
+  return createDesktopSettingsView(snapshot(revision));
 }

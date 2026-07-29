@@ -7,11 +7,13 @@ import {
 import {
   desktopSettingsFailure,
   desktopSettingsSuccess,
+  createDesktopSettingsView,
   isDesktopSettingsGetSnapshotRequest,
   isDesktopSettingsReplaceRequest,
+  normalizeDesktopSettingsReplaceValues,
   readDesktopSettingsRequestId,
   type DesktopSettingsIpcResult,
-  type DesktopSettingsSnapshot,
+  type DesktopSettingsView,
 } from '../../contracts/settings.js';
 import {
   DesktopSettingsStoreError,
@@ -40,7 +42,10 @@ export function registerSettingsIpcHandlers(
       return desktopSettingsFailure(requestId, 'validation-failed');
     }
     try {
-      return desktopSettingsSuccess(payload.requestId, await options.store.loadSnapshot());
+      return desktopSettingsSuccess(
+        payload.requestId,
+        createDesktopSettingsView(await options.store.loadSnapshot()),
+      );
     } catch (error: unknown) {
       return storeFailure(payload.requestId, error);
     }
@@ -55,8 +60,11 @@ export function registerSettingsIpcHandlers(
       return desktopSettingsFailure(requestId, 'validation-failed');
     }
     try {
-      const snapshot = await options.store.replace(payload.expectedRevision, payload.values);
-      return desktopSettingsSuccess(payload.requestId, snapshot);
+      const snapshot = await options.store.replace(
+        payload.expectedRevision,
+        normalizeDesktopSettingsReplaceValues(payload.values),
+      );
+      return desktopSettingsSuccess(payload.requestId, createDesktopSettingsView(snapshot));
     } catch (error: unknown) {
       return storeFailure(payload.requestId, error);
     }
@@ -71,7 +79,7 @@ export function registerSettingsIpcHandlers(
 function storeFailure(
   requestId: string,
   error: unknown,
-): DesktopSettingsIpcResult<DesktopSettingsSnapshot> {
+): DesktopSettingsIpcResult<DesktopSettingsView> {
   if (error instanceof DesktopSettingsStoreError) {
     return desktopSettingsFailure(requestId, error.code);
   }
