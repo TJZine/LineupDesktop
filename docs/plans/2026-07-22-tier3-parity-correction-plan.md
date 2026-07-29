@@ -4323,9 +4323,9 @@ exact list. Any additional production/test file requires replan.
 - `src/__tests__/main/diagnosticEventStore.test.ts` (new)
 - `src/__tests__/integration/preloadContractVocabulary.test.ts`
 - `tools/__tests__/native-helper-program.test.mjs`
-- `src/__tests__/renderer/settingsRuntime.test.ts`
+- `src/__tests__/renderer/settingsRuntime.test.ts` (Units 3A and 3B)
 - `src/__tests__/renderer/settingsSetup.test.ts`
-- `src/__tests__/renderer/fullscreenTransport.test.ts`
+- `src/__tests__/renderer/fullscreenTransport.test.ts` (Units 3A and 3B)
 - `src/__tests__/renderer/supportBundleExport.test.ts`
 - `src/__tests__/renderer/settingsPlaybackLifecycle.test.ts` (new)
 - `src/__tests__/renderer/audioSetupRuntime.test.ts` (new)
@@ -4505,6 +4505,19 @@ and a fresh material-only implementation review, controller intent is
 redaction, and composition wiring need bounded repository judgment; no
 lower-effort worker is eligible.
 
+**Observed stop/replan adjudication:** The controller-observed strict shell API
+typecheck, with partial approved Unit 3B edits held unstaged, exposed exactly
+two structurally incomplete bridge fakes:
+`src/__tests__/renderer/settingsRuntime.test.ts` and
+`src/__tests__/renderer/fullscreenTransport.test.ts`. The worker reverted its
+unreviewed additions and both tests are clean versus `HEAD`. The finding is
+accepted as a blocking exact-test-scope omission. Unit 3B adds only these two
+existing tests to its allowlist, solely to add the required fixed safe
+`getAudioOutputs` fake method described below. This does not authorize a
+renderer production edit, renderer behavior assertion, compatibility shim, or
+any other production/test owner. The worker remains paused until a fresh
+independent review explicitly approves this amended Unit 3B scope.
+
 **Exact production files**
 
 - `src/contracts/settings.ts`
@@ -4555,6 +4568,8 @@ lower-effort worker is eligible.
 - `src/__tests__/main/diagnosticEventStore.test.ts` (new)
 - `src/__tests__/main/settingsIpc.test.ts`
 - `src/__tests__/integration/preloadContractVocabulary.test.ts`
+- `src/__tests__/renderer/settingsRuntime.test.ts`
+- `src/__tests__/renderer/fullscreenTransport.test.ts`
 - `tools/__tests__/native-helper-program.test.mjs`
 
 **Behavior and acceptance**
@@ -4588,6 +4603,14 @@ lower-effort worker is eligible.
   guards, and root wiring specified above. This is the only Unit 3B public
   Settings vocabulary addition; the two-operation Unit 3A surface remains
   unchanged otherwise.
+- In the two newly allowed renderer tests, each structurally complete Settings
+  bridge fake adds only the required `getAudioOutputs` method. It echoes the
+  input request id and returns exact success value
+  `{ status: 'unavailable', reason: 'platform-unsupported', outputs:
+  [{ kind: 'system-default', id: 'system-default', label: 'System default' }] }`.
+  It has no side effect, call assertion, alternate result, or production
+  behavior implication. No existing assertion or tested renderer behavior
+  changes.
 - In production main invokes `createProductionNativeHostFactory(...)` at most
   once during composition and retains the resulting single
   `NativePlayerHostProcess` instance (or `null`). The same instance is injected
@@ -4701,7 +4724,9 @@ node --import tsx --test \
   src/__tests__/main/playerIpc.test.ts \
   src/__tests__/main/diagnosticEventStore.test.ts \
   src/__tests__/main/settingsIpc.test.ts \
-  src/__tests__/integration/preloadContractVocabulary.test.ts
+  src/__tests__/integration/preloadContractVocabulary.test.ts \
+  src/__tests__/renderer/settingsRuntime.test.ts \
+  src/__tests__/renderer/fullscreenTransport.test.ts
 node --test tools/__tests__/native-helper-program.test.mjs
 dotnet build src/native-helper/Lineup.NativePlayerHost/Lineup.NativePlayerHost.csproj --configuration Release
 npm run test:contracts
@@ -4728,6 +4753,8 @@ private setup fields/options, and no parallel helper or production capability
 promotion. The exact Release helper build exits zero. This locally runnable
 compile gate is required Unit 3B proof; it is not Windows/manual/native
 observation debt, and its generated ignored output is never staged.
+The two renderer bridge-fake tests compile and pass with only the fixed safe
+third method above; their existing assertions and behavior remain unchanged.
 
 **No-touch and stop conditions**
 
@@ -4743,6 +4770,10 @@ teardown as sole cleanup owner; if the private query cannot share exact
 request/timeout/quarantine/cleanup custody without disrupting playback; if
 setup requires any field beyond the exact raw-key/boolean pair; or if another
 public method/channel is needed.
+The two allowed renderer tests may change only their fixed safe
+`getAudioOutputs` fake methods. Any renderer production edit, assertion
+expansion, compatibility shim, different fake result, or third test owner
+triggers replan.
 
 **Rollback/checkpoint**
 
@@ -5174,49 +5205,38 @@ if:
 
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
-TASK: Review Whole-WS3 Settings Plan And Approve Unit 3A
+TASK: Review Unit 3B Bridge-Fake Scope Amendment And Approve Resume
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: Whole-WS3 Settings execution plan dated 2026-07-29 with targeted
-Unit 3A test-scope amendment; partial Unit 3A product edits remain held unstaged
+ARTIFACT: Whole-WS3 Settings execution plan dated 2026-07-29 with the targeted
+Unit 3B bridge-fake test-scope amendment; partial approved Unit 3B product edits
+remain held unstaged
 FILES:
 - docs/plans/2026-07-22-tier3-parity-correction-plan.md
-BLOCKERS: WS3 product edits remain closed until this independent review has no
-unresolved material finding and explicitly approves Unit 3A
+BLOCKERS: the Unit 3B worker remains paused until this independent review has no
+unresolved material finding and explicitly approves the amended exact Unit 3B
+test scope and worker resume
 MESSAGE:
-Freshly and independently review the revised Whole-WS3 Settings execution plan
-only. Confirm the exact 40-row scope; v2 values/defaults/migration; exact
-persisted snapshot versus nonpersisted `DesktopSettingsView`; exhaustive
-capability keys/status/reason pairs; bounded/redacted audio DTO, opaque-id,
-ordering, duplicate/collision, unavailable/partial, and strict-guard rules;
-Unit 3A's exact two-operation boundary and the sole addition of
-`src/__tests__/renderer/supportBundleExport.test.ts` to replace its old
-four-key fixture with exact v2 DEFAULT-derived values while retaining
-`guideDensity: 'compact'`; confirm this does not authorize
-`src/renderer/workflow.ts`, another owner, optional keys, or a compatibility
-shim. Confirm Unit 3B's ownership of the complete
-third operation and composition wiring; public `ready` migration semantics and
-fixed migration diagnostics; canonical/null/view-only audio-id conversion and
-pre-trim rejection; absence of runtime policy lifecycle from Unit 3A; Unit
-3B's initial policy hydration/replace synchronization; its single shared
-production-host custody, correlated private audio query, exact private
-raw-key/DTS setup fields, platform-first enumeration precedence (off Windows
-is `platform-unsupported`; only Windows plus null/absent helper is
-`helper-unavailable`), teardown/restart rules, the mandatory local Release
-helper build, and no capability promotion;
-Unit 3C's seven-category
-`UI-28`–`UI-34` mapping, renderer-owned persisted
-`keepPlaybackRunningInSettings` route lifecycle with no main route projection,
-and overlay-duration consumer; roles, verification,
-rollback, hotspots, contribution/proof gates, debt packet, and replan triggers.
-Verify that `PB-22`–`PB-24`, `ST-11`–`ST-16`, `ST-23`/`ON-08`, WS1 debt,
-`WS2-POST-VALIDATION-01`, conservative production capabilities, and WS4–WS9
-boundaries are preserved. Report material findings only; if none remain,
-explicitly approve Unit 3A as implementation-ready.
+Freshly and independently review only the targeted Unit 3B bridge-fake
+test-scope amendment. Confirm that
+`src/__tests__/renderer/settingsRuntime.test.ts` and
+`src/__tests__/renderer/fullscreenTransport.test.ts` are the only added Unit 3B
+test owners and that each may change only its structurally incomplete Settings
+bridge fakes by adding the required fixed-safe `getAudioOutputs` method. Confirm
+that the method echoes the request ID and returns exactly the approved
+`platform-unsupported` success result with the sole system-default output, with
+no side effect, call assertion, alternate result, or production-behavior
+implication. Confirm that the amendment authorizes no renderer production edit,
+behavior-assertion expansion, compatibility shim, third test owner, or broader
+scope, and that every existing Unit 3B ownership, verification, rollback,
+checkpoint, proof-debt, and stop/replan boundary remains intact. Report material
+findings only; if none remain, explicitly approve the amended exact Unit 3B test
+scope and worker resume.
 
-**Review outcome:** the prior Unit 3A approval is superseded by the
-controller-observed typecheck stop/replan above. The clean full baseline remains
-recorded, but the worker is paused with partial edits held unstaged. Unit 3A may
-resume only after a fresh independent reviewer reports no material finding and
-explicitly approves the amended exact test scope.
+**Review outcome:** any prior Unit 3B resume authority is superseded by the
+controller-observed strict-shell typecheck stop/replan above. Partial approved
+Unit 3B product edits remain held unstaged; the two unreviewed bridge-fake test
+changes were reverted and both tests are clean versus `HEAD`. The Unit 3B worker
+may resume only after a fresh independent reviewer reports no material finding
+and explicitly approves the amended exact test scope.
