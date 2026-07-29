@@ -3803,9 +3803,11 @@ evidence is observed and independently reviewed.
 
 ### Whole-WS3 Settings execution plan (2026-07-29)
 
-**WS3 plan state:** implementation-ready. A fresh independent
-`lineup-desktop-feature-review` reported no material findings and explicitly
-approved Unit 3A after the required clean full baseline passed.
+**WS3 plan state:** targeted repair replan required. Unit 3A is committed at
+`81bc0b7`; partial approved Unit 3B edits remain held unstaged. Unit 3B is
+paused until the serial Unit 3A-R repair below receives fresh independent plan
+approval, lands as a separate reviewed commit, and passes its clean-commit smoke
+gate without the held Unit 3B diff.
 
 **WS3 task family:** feature/design.
 
@@ -3886,6 +3888,27 @@ conservative playback profile.
   the unprivileged `PlexRuntimeController` and main-owned Plex runtime. WS3
   reuses that flow; it does not add a Plex request primitive or duplicate
   profile-switch ownership.
+- Targeted repair preflight observed `initial-build` five commits ahead of
+  `origin/initial-build`, with partial approved Unit 3B work held unstaged.
+  `tools/copy-renderer-assets.mjs`,
+  `tools/__tests__/copy-renderer-assets.test.mjs`, and
+  `src/main/protocol.ts` were clean versus `HEAD`; the held product diff is not
+  part of Unit 3A-R.
+- Commit `81bc0b7` moved renderer Settings defaults and runtime value helpers
+  into `src/contracts/settings.ts`, leaving emitted renderer imports that
+  request `lineup://shell/contracts/settings.js`. TypeScript emits that module
+  at `dist/contracts/settings.js`, while the existing contained custom protocol
+  serves only `dist/renderer`; the requested renderer-relative module therefore
+  is absent and Electron smoke fails at that exact request.
+- The controller's direct `net.fetch` probe succeeded for an existing file
+  inside the staged renderer tree. That rejects a generic fetch/custom-protocol
+  transport failure and isolates the missing staged module as the cause.
+  Expanding the protocol root or handler is rejected because the existing
+  renderer-only containment is correct and the emitted Settings contract can
+  be staged by the current post-`tsc` renderer-copy owner.
+- Direct reads of the exact commit diff, protocol owner, TypeScript output
+  configuration, build command, copy tool, and copy-tool tests were more useful
+  than the repository index for this two-file repair; no broad survey was run.
 
 #### WS3 Non-Goals
 
@@ -4301,6 +4324,11 @@ exact list. Any additional production/test file requires replan.
 - `src/renderer/styles/responsive-accessibility.css`
 - `src/renderer/index.ts`
 
+**Build staging repair (Unit 3A-R only)**
+
+- `tools/copy-renderer-assets.mjs`
+- `tools/__tests__/copy-renderer-assets.test.mjs`
+
 **Focused tests**
 
 - `src/__tests__/contracts/settingsContracts.test.ts`
@@ -4366,6 +4394,9 @@ exact list. Any additional production/test file requires replan.
   those are WS5-owned even though WS3 freezes their Settings values
 - package scripts, `package.json`, lockfiles, dependencies, release/signing/
   updater owners, and RD-27/RD-28 tools/evidence
+- `src/main/protocol.ts`, `src/main/rendererProtocolPolicy.ts`, every renderer
+  production owner, and every main/preload/product contract are out of scope for
+  Unit 3A-R
 - `src/main/persistence/desktopPersistenceStore.ts`, encrypted credentials,
   selected-server records, channel persistence, and browser storage
 - any file not listed in the unit currently being executed, even if it appears
@@ -4373,8 +4404,11 @@ exact list. Any additional production/test file requires replan.
 
 #### WS3 Execution Packages
 
-Units are serial because all four product units share the version-2 Settings
-contract. No implementation parallelism is approved.
+The exact sequence is committed Unit 3A, repair Unit 3A-R, Unit 3B, Unit 3C,
+then Unit 3D authority closeout. All remaining units are serial because they
+share the version-2 Settings runtime/build boundary. No implementation
+parallelism is approved, and Unit 3B checkpoint acceptance cannot precede Unit
+3A-R acceptance.
 
 Before every unit, freshness-read that unit, its exact files/tests, relevant
 authority, and `git status --short --branch`. A changed contract, owner, or
@@ -4382,10 +4416,10 @@ capability posture returns to plan review.
 
 ##### Unit 3A — version-2 two-operation foundation
 
-**Status:** selected first execution unit; implementation-ready only after the
-fresh independent plan review expressly approves it.
+**Status:** committed checkpoint `81bc0b7`. Unit 3A product scope is closed;
+the runtime packaging defect is owned only by Unit 3A-R below.
 
-**Observed stop/replan adjudication:** The controller-observed Unit 3A
+**Resolved stop/replan adjudication:** The controller-observed Unit 3A
 typecheck, with partial product edits held unstaged, exposed one legacy
 four-key `DesktopSettingsValues` fixture in
 `src/__tests__/renderer/supportBundleExport.test.ts`. The finding is accepted
@@ -4394,8 +4428,8 @@ to its allowlist: its one fixture must spread the exact v2
 `DEFAULT_DESKTOP_SETTINGS_VALUES` and override only
 `guideDensity: 'compact'`. It does not authorize
 `src/renderer/workflow.ts`, any other production/test owner, optional v2 keys,
-or a compatibility shim. The worker remains paused until a fresh independent
-plan review explicitly approves this amended Unit 3A scope.
+or a compatibility shim. That amendment did not authorize build/protocol
+changes; the accepted Unit 3A product checkpoint is `81bc0b7`.
 
 **IMPLEMENTER_ROLE_ELIGIBILITY:** `worker`. Although schema/default/migration
 decisions are frozen, exact integration into the current strict guards and
@@ -4499,6 +4533,141 @@ leave schema version 2 with version-1 preload/store guards. After focused proof
 and a fresh material-only implementation review, controller intent is
 `feat(settings): add versioned settings foundation`.
 
+##### Unit 3A-R — stage the Settings runtime contract
+
+**Status:** selected repair unit. No Unit 3A-R implementation edit is
+authorized until a fresh independent `lineup-desktop-feature-review` reports no
+material finding and explicitly approves this exact unit.
+
+**IMPLEMENTER_ROLE_ELIGIBILITY:** `worker_sol_low`. The root cause, two-file
+ownership, byte-copy behavior, negative scope, test assertions, proof depth,
+rollback, and commit boundary are frozen. The worker still needs bounded
+repository comprehension to extend the existing copy tool/test without
+disturbing its Channel Builder dependency-closure behavior; no architecture,
+protocol, product, or verification judgment remains open.
+
+**Diagnosis and selected owner**
+
+- Unit 3A commit `81bc0b7` added renderer runtime value imports from
+  `src/contracts/settings.ts`. Their emitted relative URL is exactly
+  `lineup://shell/contracts/settings.js`.
+- `tsc -p tsconfig.electron.json` emits the required byte source at
+  `dist/contracts/settings.js`, but the contained custom protocol correctly
+  serves only `dist/renderer`. The exact requested destination
+  `dist/renderer/contracts/settings.js` is missing.
+- A controller probe proved `net.fetch` succeeds for an existing contained
+  renderer file. The failure is absent build staging, not fetch transport,
+  MIME handling, protocol resolution, or renderer privilege.
+- `tools/copy-renderer-assets.mjs` already owns the post-`tsc` staging of exact
+  renderer assets and the bounded Channel Builder runtime closure. Adding one
+  exact local emitted module is cohesive with that current responsibility and
+  does not create a hotspot or new owner.
+- Expanding `src/main/protocol.ts`, changing renderer imports, bundling a
+  contract tree, or adding a compatibility shim is rejected. No import-ledger
+  entry is required because this is a byte copy of this repository's emitted
+  TypeScript output, not copied/adapted upstream source.
+
+**Exact files**
+
+- `tools/copy-renderer-assets.mjs`
+- `tools/__tests__/copy-renderer-assets.test.mjs`
+
+**Behavior and acceptance**
+
+- Preserve the existing `build:electron` order and package script unchanged:
+  clean `dist`, run `tsc`, bundle preload, then run the renderer-copy tool.
+- In the copy tool's existing CLI path, after TypeScript has emitted the
+  contracts, byte-copy exactly `dist/contracts/settings.js` to exactly
+  `dist/renderer/contracts/settings.js`. Create only the destination
+  `contracts` directory when needed.
+- The destination bytes must be identical to the source bytes. A missing or
+  unreadable exact source fails the tool/build; there is no stale-file,
+  generated fallback, or success-without-copy path.
+- Do not copy `settings.js.map`, another contract, a directory tree, or another
+  runtime module. Do not add globbing, recursive contract traversal, import
+  discovery, configurable paths, or a generic contract-staging abstraction.
+- Preserve the existing renderer asset copy and the full contained
+  `copyRendererChannelBuilderRuntime` dependency-closure behavior. The repair
+  must not weaken its realpath containment, dependency validation, missing-file
+  failure, source-map exclusion, or symlink-escape rejection.
+- Add no renderer, main, preload, protocol-policy, contract, package,
+  dependency, or lockfile edit. The renderer remains unprivileged and the
+  protocol remains rooted at `dist/renderer`.
+
+**Exact test assertions**
+
+- Extend only `tools/__tests__/copy-renderer-assets.test.mjs` with a clean
+  temporary `dist`-shaped fixture containing the exact compiled
+  `contracts/settings.js`, its source map, at least one sibling contract, and a
+  nested contract file.
+- Invoke the new exact staging behavior with an absent destination contracts
+  directory. Assert the sole destination is
+  `renderer/contracts/settings.js`, its SHA-256 equals the exact source hash,
+  and the destination contracts directory contains exactly `settings.js`.
+- Assert that `settings.js.map`, the sibling contract, the nested contract
+  tree, and any other source entry are absent from the renderer target.
+- Retain the suite's temporary-root cleanup discipline and assert the repair
+  case removes its temporary tree. The existing renderer asset and Channel
+  Builder closure tests remain unchanged and passing.
+- The focused tool test proves isolated copy/negative-scope/cleanup behavior;
+  `npm run build:electron` proves the real clean-then-`tsc` build path invokes
+  the staging behavior, and the clean-commit Electron smoke proves the exact
+  `lineup://shell/contracts/settings.js` request resolves at runtime.
+
+**Focused and checkpoint proof**
+
+Before the repair commit:
+
+```sh
+node --test tools/__tests__/copy-renderer-assets.test.mjs
+npm run build:electron
+npm run typecheck
+npm run verify:architecture
+npm run verify:redaction
+git diff --check
+```
+
+Expected: every command exits zero; the focused test proves the exact
+destination/hash and negative copy set; the clean build stages the emitted
+Settings module without changing protocol containment or the Channel Builder
+closure. A fresh material-only implementation review then reports no unresolved
+finding on only the two-file repair diff.
+
+After controller acceptance, stage and commit only the two exact Unit 3A-R
+files with intent `fix(renderer): stage settings runtime contract`. Do not
+stage the held Unit 3B diff or generated `dist`. Before Unit 3B resumes, the
+controller must run and observe:
+
+```sh
+npm run smoke:electron
+git status --short --branch
+```
+
+at the exact repair commit in a clean checkout/worktree that excludes all held
+Unit 3B changes. Record the repair SHA and clean status with the smoke result.
+This clean-commit smoke is a required local checkpoint gate, not consolidated
+Windows/manual/native debt.
+
+**No-touch and stop/replan conditions**
+
+Stop and return to plan review if the repair needs a renderer/main/preload/
+protocol/contract/package edit; another emitted module, source map, contract
+tree, glob, recursive copier, dependency, configurable path, compatibility shim,
+or protocol-root expansion; any weakening or behavioral change to the existing
+Channel Builder closure/containment; or a third Unit 3A-R file. Replan if normal
+`tsc` output no longer produces exact `dist/contracts/settings.js`, the runtime
+request is not exact `lineup://shell/contracts/settings.js`, the staged exact
+file still cannot be fetched, any required proof fails outside the exact two
+files, or smoke passes only with held Unit 3B changes present.
+
+**Rollback/checkpoint**
+
+Unit 3A-R is one separate reversible repair checkpoint. If focused proof,
+implementation review, or clean-commit smoke fails, Unit 3B remains paused.
+Revert only the repair commit and regenerate ignored `dist` through the normal
+clean build; do not rewrite `81bc0b7`, absorb the held Unit 3B diff, broaden the
+protocol, or waive either repair smoke or Unit 3B's own later smoke gate.
+
 ##### Unit 3B — main media, native audio, and diagnostics consumers
 
 **IMPLEMENTER_ROLE_ELIGIBILITY:** `worker`. Native protocol, policy semantics,
@@ -4515,8 +4684,10 @@ accepted as a blocking exact-test-scope omission. Unit 3B adds only these two
 existing tests to its allowlist, solely to add the required fixed safe
 `getAudioOutputs` fake method described below. This does not authorize a
 renderer production edit, renderer behavior assertion, compatibility shim, or
-any other production/test owner. The worker remains paused until a fresh
-independent review explicitly approves this amended Unit 3B scope.
+any other production/test owner. That amendment is part of the approved held
+Unit 3B scope. Unit 3B is now paused by Unit 3A-R and may not resume or receive
+checkpoint acceptance until the repair's separate reviewed commit and clean-
+commit smoke gate pass.
 
 **Exact production files**
 
@@ -4982,6 +5153,7 @@ Controller intent after clean review is
 | `src/native-helper/Lineup.NativePlayerHost/Program.cs` | native libmpv command/event owner | Cohesive enumeration and private selected-device application only. No settings file, UI, or public identifiers. Native proof remains debt. |
 | `src/main/diagnostics/diagnosticEventStore.ts` | bounded sanitized event owner | Cohesive fixed-schema admission only; never a raw logger or Settings store. |
 | `src/renderer/playerOverlayController.ts` (current WS2 hotspot) | renderer overlay timers and exact request state | Only the closed auto-hide-duration injection may change. No Settings read, category/UI policy, or playback capability logic; fresh UI/maintainability review mandatory. |
+| `tools/copy-renderer-assets.mjs` (Unit 3A-R) | small existing post-`tsc` renderer asset and bounded Channel Builder runtime staging owner | Cohesively adds one exact byte-copy from emitted `dist/contracts/settings.js` into the served renderer tree. No protocol change, generic contract tree, source map, dependency discovery, or new owner; existing containment and closure tests remain mandatory. |
 
 Any other touched owner over 500 lines receives the compact guardrail
 disposition and independent review before its checkpoint is accepted. Line
@@ -5004,6 +5176,13 @@ unit's files changed, and obtains a fresh independent material-only
 implementation review. A failed required local gate is fixed inside the
 approved unit or triggers replan; it is never hidden behind another passing
 gate.
+
+Before Unit 3B resumes, Unit 3A-R must pass its focused pre-commit commands,
+fresh implementation review, separate two-file repair commit, and
+`npm run smoke:electron` at that exact clean repair commit with the held Unit 3B
+diff absent. This repair smoke neither replaces nor weakens Unit 3B's original
+focused `npm run smoke:electron` gate; both are mandatory local proof and
+neither may be moved into consolidated Windows/manual/native debt.
 
 After Unit 3C and before authority closeout:
 
@@ -5089,9 +5268,15 @@ than duplicate its native playback scenarios.
 
 - Fresh plan review explicitly approves Unit 3A with no unresolved material
   finding before any product edit.
-- Units 3A–3C each remain inside their exact file list, pass focused proof,
-  receive a fresh clean material-only implementation review, and land as a
-  buildable reversible checkpoint.
+- Fresh plan review explicitly approves the exact Unit 3A-R two-file repair
+  before either tool/test edit. Unit 3A-R then passes focused proof, receives a
+  fresh clean material-only implementation review, lands alone as
+  `fix(renderer): stage settings runtime contract`, and passes
+  `npm run smoke:electron` at that exact clean repair commit without the held
+  Unit 3B diff before Unit 3B resumes.
+- Units 3A, 3A-R, 3B, and 3C each remain inside their exact file list, pass
+  their focused proof, receive the required fresh clean material-only
+  implementation review, and land as buildable reversible checkpoints.
 - Version-2 schema/defaults/normalization and one-time version-1 migration are
   exact, atomic, idempotent, publicly `ready`, and byte-preserving for
   corrupt/future versions; fixed migration diagnostics contain no values or
@@ -5112,6 +5297,9 @@ than duplicate its native playback scenarios.
   `dotnet build src/native-helper/Lineup.NativePlayerHost/Lineup.NativePlayerHost.csproj --configuration Release`
   locally before checkpoint acceptance. This compile gate is not deferred
   Windows/native/manual evidence.
+- Unit 3B also passes its original focused `npm run smoke:electron` after its
+  own implementation. Unit 3A-R's earlier clean-commit smoke does not satisfy,
+  waive, or convert that Unit 3B gate into proof debt.
 - The seven-category Settings UI with the exact `UI-28`–`UI-34` mapping,
   first-run audio surface, profile display,
   persistent Switch Profile, startup profile preference, recovery/export
@@ -5139,6 +5327,10 @@ than duplicate its native playback scenarios.
 - Unit 3A rollback is all-or-nothing across schema/store/two-operation
   IPC/preload guards and renderer view-shape consumers; it never includes a
   channel or composition-root edit.
+- Unit 3A-R rollback reverts only its exact two-file repair commit and
+  regenerates ignored `dist` through the normal clean build. It never rewrites
+  Unit 3A, absorbs held Unit 3B files, broadens the protocol, or leaves a
+  partial contract tree in tracked source.
 - Unit 3B rollback removes the audio-output public operation, channel/preload
   wiring, policy lifecycle, shared-host direct injection/query protocol,
   private setup fields, and main/native consumers together, restoring Unit
@@ -5168,6 +5360,15 @@ if:
   public state;
 - version-1 migration cannot preserve revision, atomicity, corrupt/future
   bytes, or one-store serialization;
+- Unit 3A-R needs any file beyond its exact copy tool/test, any renderer/main/
+  preload/protocol/contract/package edit, any module beyond exact
+  `settings.js`, a source map or broader contract tree, a generic/glob/recursive
+  staging path, or a weakening of the existing Channel Builder closure and
+  containment;
+- normal `tsc` output no longer emits exact `dist/contracts/settings.js`, the
+  runtime request differs from exact `lineup://shell/contracts/settings.js`,
+  the contained protocol cannot serve the exact staged destination, or repair
+  smoke succeeds only with held Unit 3B changes;
 - an additional public method, schema field, dependency, package/lockfile
   change, compatibility shim, or copied/adapted upstream source is needed;
 - the production capability profile would need promotion before native/live
@@ -5205,38 +5406,43 @@ if:
 
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
-TASK: Review Unit 3B Bridge-Fake Scope Amendment And Approve Resume
+TASK: Review Unit 3A-R Settings Runtime Staging Repair
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: Whole-WS3 Settings execution plan dated 2026-07-29 with the targeted
-Unit 3B bridge-fake test-scope amendment; partial approved Unit 3B product edits
-remain held unstaged
+ARTIFACT: Whole-WS3 Settings execution plan dated 2026-07-29 with targeted
+Unit 3A-R repair replan; Unit 3A is committed at `81bc0b7` and partial approved
+Unit 3B product edits remain held unstaged
 FILES:
 - docs/plans/2026-07-22-tier3-parity-correction-plan.md
-BLOCKERS: the Unit 3B worker remains paused until this independent review has no
-unresolved material finding and explicitly approves the amended exact Unit 3B
-test scope and worker resume
+BLOCKERS: no Unit 3A-R tool/test edit is authorized until this independent
+review reports no unresolved material finding and explicitly approves the exact
+repair unit; Unit 3B remains paused through the repair's separate commit and
+clean-commit smoke gate
 MESSAGE:
-Freshly and independently review only the targeted Unit 3B bridge-fake
-test-scope amendment. Confirm that
-`src/__tests__/renderer/settingsRuntime.test.ts` and
-`src/__tests__/renderer/fullscreenTransport.test.ts` are the only added Unit 3B
-test owners and that each may change only its structurally incomplete Settings
-bridge fakes by adding the required fixed-safe `getAudioOutputs` method. Confirm
-that the method echoes the request ID and returns exactly the approved
-`platform-unsupported` success result with the sole system-default output, with
-no side effect, call assertion, alternate result, or production-behavior
-implication. Confirm that the amendment authorizes no renderer production edit,
-behavior-assertion expansion, compatibility shim, third test owner, or broader
-scope, and that every existing Unit 3B ownership, verification, rollback,
-checkpoint, proof-debt, and stop/replan boundary remains intact. Report material
-findings only; if none remain, explicitly approve the amended exact Unit 3B test
-scope and worker resume.
+Freshly and independently review only targeted Unit 3A-R. Confirm the diagnosis:
+Unit 3A commit `81bc0b7` emits renderer runtime imports for exact
+`lineup://shell/contracts/settings.js`; `tsc` writes the source at
+`dist/contracts/settings.js`; the contained protocol correctly serves only
+`dist/renderer`; and a successful direct fetch of an existing staged file
+rejects protocol transport as the cause. Confirm the repair owns exactly
+`tools/copy-renderer-assets.mjs` and
+`tools/__tests__/copy-renderer-assets.test.mjs`: after `tsc`, byte-copy only
+`dist/contracts/settings.js` to
+`dist/renderer/contracts/settings.js`, preserving existing asset staging,
+Channel Builder closure/containment, and the renderer-only protocol root.
+Confirm the test freezes exact destination/hash, absence of the map/sibling/
+nested contract tree, clean target creation, cleanup discipline, and unchanged
+existing copy behavior. Confirm there is no renderer/main/preload/protocol/
+contract/package/dependency edit, generic copier, compatibility shim, or import
+ledger obligation. Confirm the exact pre-commit proof, fresh implementation
+review, separate `fix(renderer): stage settings runtime contract` commit, and
+clean-checkout smoke at that exact repair SHA before Unit 3B resumes. Unit 3B's
+own original smoke remains mandatory and is not proof debt. Report material
+findings only; if none remain, explicitly approve Unit 3A-R as
+implementation-ready.
 
-**Review outcome:** any prior Unit 3B resume authority is superseded by the
-controller-observed strict-shell typecheck stop/replan above. Partial approved
-Unit 3B product edits remain held unstaged; the two unreviewed bridge-fake test
-changes were reverted and both tests are clean versus `HEAD`. The Unit 3B worker
-may resume only after a fresh independent reviewer reports no material finding
-and explicitly approves the amended exact test scope.
+**Review outcome:** pending fresh independent Unit 3A-R review. Unit 3B remains
+paused with its approved partial diff held unstaged and may not resume until
+Unit 3A-R is reviewed, separately committed, and proven by the required
+clean-commit smoke.
