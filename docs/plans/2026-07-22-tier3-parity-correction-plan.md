@@ -6265,15 +6265,25 @@ scope-load/planning. This authorizes no product work; WS4
 product/test/package/config edits require its own decision-complete plan and
 fresh approval of an exact first unit.
 
+MODEL_SUGGESTION
+PLANNER: configured `planner` role
+IMPLEMENTER: resolve `worker`, `worker_sol_low`, or `worker_luna` per approved
+unit through `.codex/config.toml`
+REVIEWER: configured `reviewer` role
+WHY: WS4 is Tier 3 input/overlay work spanning renderer focus and presentation,
+main-owned window/app-command/player seams, platform proof, and multiple current
+owners; exact model and reasoning settings remain role-TOML-owned.
+
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
-TASK: Complete WS4 Input And Overlay Through Quality Loop
+TASK: Complete WS4 Input And Overlay Through The Tier 3 Feature Quality Loop
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: active canonical nine-workstream plan with accepted WS3 local
-classification and consolidated-proof packet; WS4 targeted scope-load/planning
-is active
+ARTIFACT: committed WS3 authority checkpoint `7506bb1`, including final WS3
+product source `87662b5`, accepted WS3 local classification, and its open
+consolidated-proof packet; this active canonical plan now routes WS4 from
+targeted scope-load through closeout
 FILES:
 - docs/plans/2026-07-22-tier3-parity-correction-plan.md
 - docs/product/lineup-product-parity-matrix.md
@@ -6282,31 +6292,123 @@ FILES:
 - docs/architecture/playback-architecture.md
 - docs/roadmap/desktop-port-roadmap.md
 - docs/development/windows-ui-proof-plan.md
-BLOCKERS: none for WS4 scope-load, targeted planning, or plan review; no WS4
-product/test/package/config edit before a decision-complete plan receives
-fresh approval for an exact first execution unit
+SCOPE_ROWS:
+- PB-09
+- PB-10
+- PB-11
+- PB-15 through PB-18
+- PB-25
+- NAV-01 through NAV-16
+- WIN-03
+- WIN-09
+- UI-44 through UI-52
+CONTROLLER_SEQUENCE:
+- scope-load
+- plan
+- plan-review
+- plan-revise when material findings require it
+- execution-unit-select
+- implement
+- implementation-review
+- implementation-revise when accepted findings require it
+- closeout
+- done or genuinely blocked
+BLOCKERS: none for WS4 scope-load, targeted planning, or plan review. WS4
+product/test/package/config edits remain gated until a targeted exact-file
+whole-WS4 plan freezes ownership, verification, acceptance, rollback, and
+replan triggers and receives fresh adversarial
+`lineup-desktop-feature-review` approval for its first execution unit
+STOP_OR_REPLAN_TRIGGERS:
+- a material contradiction in WS4's assigned rows, current input/navigation/
+  overlay/player/focus owners, shared contracts, platform behavior, or
+  later-workstream contribution boundaries
+- an approved unit needs a product owner outside its exact file list, a new
+  public contract or dependency, a changed privilege boundary, a new upstream
+  import, or weaker proof than the reviewed plan
+- a required focused, build, architecture, or full local gate fails and cannot
+  be resolved inside the approved unit
+NONBLOCKERS:
+- unavailable Windows-machine, production-native, operator-assisted,
+  live-environment, soak, paired-visual, or package-lifecycle evidence when it
+  is recorded under the consolidated-proof sequence without promoting support
+  or closing its row
 MESSAGE:
-Enter WS4 at `scope-load` and run a targeted freshness audit only for its exact
-35 registry rows: `PB-09`, `PB-10`, `PB-11`, `PB-15`, `PB-16`, `PB-17`,
-`PB-18`, `PB-25`, `NAV-01`, `NAV-02`, `NAV-03`, `NAV-04`, `NAV-05`,
-`NAV-06`, `NAV-07`, `NAV-08`, `NAV-09`, `NAV-10`, `NAV-11`, `NAV-12`,
-`NAV-13`, `NAV-14`, `NAV-15`, `NAV-16`, `WIN-03`, `WIN-09`, `UI-44`,
-`UI-45`, `UI-46`, `UI-47`, `UI-48`, `UI-49`, `UI-50`, `UI-51`, `UI-52`.
-Do not repeat the 227-row audit or reopen accepted WS1–WS3 implementation
-without a concrete contradictory signal. Freshness-read those rows, current
-input/navigation/overlay/player/focus owners and tests, the cross-workstream
-classification table, the WS3 consolidated-proof packet, current architecture,
-the roadmap, Windows proof policy, and relevant upstream behavior at exact
-`0258dbe`. Use targeted owner/history/upstream discovery; broaden only on a
-material contradiction.
+Own the complete WS4 Input And Overlay workstream through the Tier 3
+feature-quality loop; do not stop after planning. Use the accepted 227-row
+master audit and this canonical plan as baseline. Do not repeat the whole audit,
+recompute the registry, or re-audit accepted WS1–WS3 implementation without a
+concrete contradictory signal. Target only WS4's exact 35 assigned rows, their
+current input/navigation/overlay/player/focus owners and tests, and directly
+affected dependencies.
 
-Author a decision-complete whole-WS4 Tier 3 plan, obtain fresh independent plan
-review, and select one bounded exact first unit before implementation. Preserve
-all WS1 proof/performance debt, `WS2-POST-VALIDATION-01`, `PB-22`–`PB-24`
+Preflight by fetching and reconciling the latest `initial-build`, confirming
+that this committed handoff is an ancestor of the tracked branch, recording
+`git status --short --branch`, and inventorying any pre-existing changes
+without absorbing unrelated work. Use Codanna only when its current targeted
+index improves discovery; otherwise use `rg`, history, and direct reads without
+launching a broad repository survey. Freshness-read the exact WS4 rows, the
+cross-workstream classification table, the WS3 consolidated-proof packet,
+current architecture, roadmap and Windows-proof authority, current owners and
+affected tests, and relevant upstream behavior at exact `0258dbe`.
+
+Use `lineup-desktop-feature-plan` through a tracked planner to create or amend
+one decision-complete whole-WS4 plan. Freeze the smallest useful vertical units,
+exact file owners and no-touch boundaries, intended configured worker role,
+behavior and accessibility acceptance criteria, focused and closeout
+verification, rollback, checkpoint commit, hotspot/cohesion evidence,
+import-ledger needs, platform-proof disposition, and replan triggers. Obtain one
+fresh independent `lineup-desktop-feature-review` with no unresolved material
+finding that explicitly approves the first execution unit before the first WS4
+product edit. Resolve material findings; do not spend cycles on cosmetic review
+loops.
+
+Resolve every implementation role through `.codex/config.toml`. Use `worker` by
+default when bounded repository judgment remains; use `worker_sol_low` only
+when ownership and every architecture, behavior, proof-depth, and verification
+decision are frozen but codebase comprehension remains material; reserve
+`worker_luna` for an exceptionally mechanical, exact, repeatable, and
+cheap-to-verify unit. No worker may invent a seam, broaden scope, choose weaker
+proof, or edit outside its approved unit.
+
+Execute approved units serially unless the reviewed plan proves disjoint
+ownership, files, and verification. Before each unit, freshness-read only its
+plan section, exact owners, affected tests, authority, upstream slice when
+applicable, and current worktree. Keep the controller responsible for
+integration, review adjudication, verification, checkpoint acceptance, commits,
+and publishing.
+
+Keep the renderer unprivileged and preserve current focus-registry,
+overlay-precedence, player-state, and route ownership unless the reviewed plan
+explicitly assigns a bounded correction. Keep BrowserWindow/app-command,
+privileged input, playback/native state, Plex data, raw platform values, and
+diagnostics in their current main-owned boundaries. Expose only narrow typed
+validated preload contracts where a reviewed unit proves one is necessary.
+Add no dependency or public schema and copy/adapt no upstream source without a
+reviewed replan; ledger any approved copied/adapted source before or with its
+import.
+
+Run one clean full `npm run verify` baseline before the first WS4 product edit,
+focused unit-specific proof during execution, and one clean full local
+`npm run verify` closeout after the final accepted unit. For UI and input units,
+include the reviewed local viewport, keyboard/D-pad, focus, reduced-motion,
+forced-colors, and interaction proof that applies to their assigned rows.
+Obtain a fresh material-only implementation review before accepting each
+checkpoint. Record every unavailable Windows/native/manual/live/paired-visual/
+package obligation in an exact consolidated-proof debt packet without
+promoting support or closing its row.
+
+At each checkpoint report the loop phase, active/completed/remaining units,
+files and commits, observed verification, review status, open proof debt, exact
+next action, and active/closeout/blocked state. Preserve all WS1 proof and
+performance debt, `WS2-POST-VALIDATION-01`, `PB-22`–`PB-24`
 ownership/open status, WS3 proof debt and WS5/WS8 contribution gates,
 conservative production playback capabilities, later-workstream gates, RD-27,
-and RD-28. Accumulate Windows/native/manual/live/paired-visual/package
-obligations into the consolidated campaign with stable IDs, exact missing
-scenarios, checkpoints, evidence/redaction rules, and final owners; do not
-implement during proof or promote an unobserved row. No WS4 product work is
-authorized by this handoff itself.
+and RD-28.
+
+Close WS4's local implementation gate only after all reviewed units, observed
+local verification, import/architecture/registry/roadmap/Windows-proof
+reconciliation, and a clean closeout review. Leave proof-dependent rows open
+for the final consolidated campaign. Do not begin WS5–WS9 product work inside
+WS4. End by keeping this canonical plan active and issuing a complete WS5
+feature-quality-loop handoff under the same targeted-audit and
+consolidated-proof policy.
