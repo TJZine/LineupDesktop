@@ -256,3 +256,15 @@ test('Settings Audio Output requires supported capability without gating first-r
   assert.equal(supportedRow?.disabledReason, undefined);
   assert.equal(isPersistedSettingsActionEnabled('selectAudioOutput', supported), true);
 });
+
+test('Settings Audio Output summary describes a non-null preference as saved until enumeration', () => {
+  const state = createSettingsDraftState();
+  state.audioOutputDeviceId = `audio_${'E'.repeat(43)}`;
+  const row = createSettingsSections(state)[0]?.items.find((item) => item.id === 'audio-output');
+
+  assert.equal(row?.valueLabel, 'Saved output');
+  assert.equal(
+    row?.description,
+    'Open Audio Output to check current availability or choose System default.',
+  );
+});

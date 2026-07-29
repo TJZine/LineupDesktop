@@ -69,6 +69,67 @@ test('audio setup persists only a safe opaque selected device and leaves failure
   assert.match(runtime.getState().message, /Could not save audio setup/u);
 });
 
+test('audio setup shows an honest missing saved output and persists System Default only on completion', async () => {
+  const savedId = `audio_${'B'.repeat(43)}` as const;
+  const availableId = `audio_${'C'.repeat(43)}` as const;
+  let values: DesktopSettingsValues = {
+    ...DEFAULT_DESKTOP_SETTINGS_VALUES,
+    audioOutputDeviceId: savedId,
+  };
+  const runtime = createRuntime({
+    getAudioOutputs: async ({ requestId }) => desktopSettingsSuccess(requestId, {
+      status: 'ready',
+      reason: 'available',
+      outputs: [
+        { kind: 'system-default', id: 'system-default', label: 'System default' },
+        { kind: 'device', id: availableId, label: 'Available output' },
+      ],
+    }),
+    getValues: () => values,
+    replace: async (transform) => { values = transform(values); },
+  });
+
+  await runtime.initialize();
+  assert.deepEqual(runtime.getState(), {
+    status: 'ready',
+    outputs: [
+      { kind: 'system-default', id: 'system-default', label: 'System default' },
+      { kind: 'device', id: availableId, label: 'Available output' },
+    ],
+    selectedId: 'system-default',
+    message: 'The saved output is unavailable. System Default will be used.',
+  });
+  assert.equal(values.audioOutputDeviceId, savedId);
+  assert.equal(values.audioSetupCompleted, false);
+
+  await runtime.complete();
+  assert.equal(values.audioOutputDeviceId, null);
+  assert.equal(values.audioSetupCompleted, true);
+});
+
+test('audio setup selects a saved output normally when it becomes available again', async () => {
+  const savedId = `audio_${'D'.repeat(43)}` as const;
+  const values: DesktopSettingsValues = {
+    ...DEFAULT_DESKTOP_SETTINGS_VALUES,
+    audioOutputDeviceId: savedId,
+  };
+  const runtime = createRuntime({
+    getAudioOutputs: async ({ requestId }) => desktopSettingsSuccess(requestId, {
+      status: 'ready',
+      reason: 'available',
+      outputs: [
+        { kind: 'system-default', id: 'system-default', label: 'System default' },
+        { kind: 'device', id: savedId, label: 'Saved device' },
+      ],
+    }),
+    getValues: () => values,
+  });
+
+  await runtime.initialize();
+  assert.equal(runtime.getState().selectedId, savedId);
+  assert.equal(runtime.getState().message, 'Choose the audio output Lineup Desktop should use.');
+});
+
 test('audio setup cleanup ignores a late enumeration result', async () => {
   const pending = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['settings']['getAudioOutputs']>>>();
   const states: AudioSetupState[] = [];

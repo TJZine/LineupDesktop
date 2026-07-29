@@ -53,14 +53,18 @@ export function createAudioSetupRuntime(options: {
         return;
       }
       const persistedId = options.getSettingsValues().audioOutputDeviceId;
-      const selectedId = persistedId !== null && result.value.outputs.some((row) => row.id === persistedId)
+      const persistedOutputAvailable =
+        persistedId !== null && result.value.outputs.some((row) => row.id === persistedId);
+      const selectedId = persistedOutputAvailable
         ? persistedId
         : 'system-default';
       state = {
         status: 'ready',
         outputs: result.value.outputs.map((row) => ({ ...row })),
         selectedId,
-        message: result.value.status === 'unavailable'
+        message: persistedId !== null && !persistedOutputAvailable
+          ? 'The saved output is unavailable. System Default will be used.'
+          : result.value.status === 'unavailable'
           ? 'Audio outputs are unavailable. You can safely use System default.'
           : result.value.status === 'partial'
             ? 'Some audio outputs were omitted for safety.'

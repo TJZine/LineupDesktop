@@ -8,6 +8,7 @@ import {
   type DesktopSettingsSnapshot,
   type DesktopSettingsValues,
 } from '../../contracts/settings.js';
+import type { DiagnosticEventInput } from '../diagnostics/diagnosticEventStore.js';
 
 type RuntimePlatform = typeof processPlatform;
 
@@ -16,6 +17,7 @@ export interface DesktopSettingsDiagnosticAdmissionPort {
     debugLoggingEnabled: boolean;
     subtitleDebugLoggingEnabled: boolean;
   }): void;
+  recordSettingsDebug(input: DiagnosticEventInput): unknown;
 }
 
 export interface DesktopPlaybackSettingsPreferences {
@@ -59,6 +61,23 @@ export class DesktopSettingsPolicy {
       debugLoggingEnabled: snapshot.values.debugLoggingEnabled,
       subtitleDebugLoggingEnabled: snapshot.values.subtitleDebugLoggingEnabled,
     });
+    try {
+      this.#diagnosticAdmission?.recordSettingsDebug({
+        surface: 'main',
+        category: 'lifecycle',
+        severity: 'debug',
+        status: 'observed',
+        operation: 'settings.snapshot.accepted',
+        message: 'Desktop settings snapshot accepted.',
+        result: 'success',
+        context: {
+          revision: snapshot.revision,
+          subtitleDebugLoggingEnabled: snapshot.values.subtitleDebugLoggingEnabled,
+        },
+      });
+    } catch {
+      // Optional diagnostics must not invalidate an accepted snapshot.
+    }
   }
 
   public getPreferences(): DesktopPlaybackSettingsPreferences {

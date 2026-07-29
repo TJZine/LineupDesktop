@@ -18,6 +18,7 @@ import type { PlexConnection } from './discovery/types.js';
 import type { PlexMediaFile, PlexMediaItem, PlexMediaPart, PlexStream } from './library/types.js';
 import { buildPlaybackTrackMap, type PlaybackTrackMap } from './streamTrackMapping.js';
 import type { DesktopPlaybackSettingsPreferences } from '../settings/desktopSettingsPolicy.js';
+import type { DiagnosticEventInput } from '../diagnostics/diagnosticEventStore.js';
 
 export interface PlexStreamResolverSelectedConnectionPort {
   getSelectedConnection(): Promise<PlexConnection | null>;
@@ -45,6 +46,10 @@ export interface PlexStreamResolverPmsSessionPort {
   startSession(input: PlexStreamResolverPmsSessionStartInput): Promise<PlexStreamResolverPmsSessionLease | null>;
 }
 
+export interface PlexStreamResolverSubtitleDiagnosticPort {
+  recordSubtitleDebug(input: DiagnosticEventInput): unknown;
+}
+
 export interface PlexStreamResolverPmsSessionStartInput {
   requestId: PlayerRequestId;
   media: Pick<PlayerMediaSummary, 'id' | 'title'>;
@@ -57,6 +62,7 @@ export interface PlexStreamResolverOptions {
   activeCredential: PlexStreamResolverActiveCredentialPort;
   mediaDetail: PlexStreamResolverMediaDetailPort;
   pmsSession?: PlexStreamResolverPmsSessionPort;
+  subtitleDiagnostics?: PlexStreamResolverSubtitleDiagnosticPort;
 }
 
 export interface PlexStreamResolverInput {
@@ -121,12 +127,14 @@ export class PlexStreamResolver {
   readonly #activeCredential: PlexStreamResolverActiveCredentialPort;
   readonly #mediaDetail: PlexStreamResolverMediaDetailPort;
   readonly #pmsSession?: PlexStreamResolverPmsSessionPort;
+  readonly #subtitleDiagnostics?: PlexStreamResolverSubtitleDiagnosticPort;
 
   constructor(options: PlexStreamResolverOptions) {
     this.#selectedConnection = options.selectedConnection;
     this.#activeCredential = options.activeCredential;
     this.#mediaDetail = options.mediaDetail;
     this.#pmsSession = options.pmsSession;
+    this.#subtitleDiagnostics = options.subtitleDiagnostics;
   }
 
   async resolve(input: PlexStreamResolverInput): Promise<PlexStreamResolverResult> {
@@ -186,6 +194,34 @@ export class PlexStreamResolver {
           }
         : {}),
     });
+    try {
+      this.#subtitleDiagnostics?.recordSubtitleDebug({
+        surface: 'main',
+        category: 'playback',
+        severity: 'debug',
+        status: 'observed',
+        operation: 'settings.subtitle-policy',
+        message: 'Subtitle policy evaluation recorded.',
+        result: 'success',
+        context: {
+          candidateCount: Math.min(candidatesForPolicy.length, 999),
+          subtitleTrackCount: Math.min(
+            candidatesForPolicy.reduce(
+              (count, candidate) => count + candidate.subtitleTracks.length,
+              0,
+            ),
+            999,
+          ),
+          subtitleSelected: decision.selectedTrackIds.subtitle !== null,
+          subtitleMode: input.settingsPreferences?.subtitleMode ?? 'unconfigured',
+          decisionKind: decision.kind,
+          reasonCodeCount: Math.min(decision.reasonCodes.length, 999),
+          reasonCodes: decision.reasonCodes.slice(0, 8).join(',') || 'none',
+        },
+      });
+    } catch {
+      // Optional diagnostics must not affect playback settlement.
+    }
 
     if (decision.kind === 'unsupported' || decision.candidateId === null) {
       return this.#failure(

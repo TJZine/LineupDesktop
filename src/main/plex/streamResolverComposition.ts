@@ -62,6 +62,7 @@ export function createLivePlexStreamResolverComposition(
     activeCredential,
     mediaDetail,
     pmsSession: pmsSessionPort,
+    subtitleDiagnostics: options.diagnosticEventStore,
   });
 
   return {

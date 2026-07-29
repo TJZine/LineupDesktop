@@ -280,7 +280,7 @@ export function createSettingsSections(
       title: 'Audio & Subtitles',
       detail: 'Choose Desktop audio output and subtitle preferences.',
       items: [
-        control('audio-output', 'Audio Output', state.audioOutputDeviceId === null ? 'System default' : 'Selected output', 'Choose a renderer-safe audio output. System default is always available.', 'selectAudioOutput', capabilityReason('audioOutputSelection')),
+        control('audio-output', 'Audio Output', state.audioOutputDeviceId === null ? 'System default' : 'Saved output', 'Open Audio Output to check current availability or choose System default.', 'selectAudioOutput', capabilityReason('audioOutputSelection')),
         {
           id: 'audio-setup-status',
           label: 'Audio Setup',

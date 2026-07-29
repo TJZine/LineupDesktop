@@ -6,15 +6,18 @@ import {
   type DesktopSettingsCapabilityProjection,
   type DesktopSettingsValues,
 } from '../../contracts/settings.js';
+import { DiagnosticEventStore } from '../../main/diagnostics/diagnosticEventStore.js';
 import { DesktopSettingsPolicy } from '../../main/settings/desktopSettingsPolicy.js';
 
 test('desktop settings policy requires hydration and projects exact playback preferences', () => {
   const admission: unknown[] = [];
+  const events: unknown[] = [];
   const policy = new DesktopSettingsPolicy({
     platform: 'win32',
     nativeHostAvailable: true,
     diagnosticAdmission: {
       setSettingsAdmission: (input) => admission.push(input),
+      recordSettingsDebug: (input) => events.push(input),
     },
   });
   assert.throws(() => policy.getPreferences(), /not been hydrated/u);
@@ -48,6 +51,132 @@ test('desktop settings policy requires hydration and projects exact playback pre
     debugLoggingEnabled: true,
     subtitleDebugLoggingEnabled: true,
   }]);
+  assert.deepEqual(events, [{
+    surface: 'main',
+    category: 'lifecycle',
+    severity: 'debug',
+    status: 'observed',
+    operation: 'settings.snapshot.accepted',
+    message: 'Desktop settings snapshot accepted.',
+    result: 'success',
+    context: {
+      revision: 1,
+      subtitleDebugLoggingEnabled: true,
+    },
+  }]);
+});
+
+test('desktop settings snapshot diagnostics follow general admission with exact safe context', () => {
+  let eventId = 0;
+  const diagnostics = new DiagnosticEventStore({
+    clock: () => 1_000,
+    idGenerator: () => `settings-event-${String(++eventId)}`,
+  });
+  const policy = new DesktopSettingsPolicy({
+    platform: 'win32',
+    nativeHostAvailable: true,
+    diagnosticAdmission: diagnostics,
+  });
+
+  policy.acceptSnapshot({ ...snapshot({}), revision: 3 });
+  assert.equal(diagnostics.getRecords().length, 0);
+
+  policy.acceptSnapshot({
+    ...snapshot({ debugLoggingEnabled: true }),
+    revision: 7,
+  });
+  policy.acceptSnapshot({
+    ...snapshot({
+      debugLoggingEnabled: true,
+      subtitleDebugLoggingEnabled: true,
+    }),
+    revision: 9,
+  });
+
+  assert.deepEqual(
+    diagnostics.getRecords().map(({ surface, category, severity, status, operation, message, result, context }) => ({
+      surface,
+      category,
+      severity,
+      status,
+      operation,
+      message,
+      result,
+      context,
+    })),
+    [
+      {
+        surface: 'main',
+        category: 'lifecycle',
+        severity: 'debug',
+        status: 'observed',
+        operation: 'settings.snapshot.accepted',
+        message: 'Desktop settings snapshot accepted.',
+        result: 'success',
+        context: {
+          revision: 7,
+          subtitleDebugLoggingEnabled: false,
+        },
+      },
+      {
+        surface: 'main',
+        category: 'lifecycle',
+        severity: 'debug',
+        status: 'observed',
+        operation: 'settings.snapshot.accepted',
+        message: 'Desktop settings snapshot accepted.',
+        result: 'success',
+        context: {
+          revision: 9,
+          subtitleDebugLoggingEnabled: true,
+        },
+      },
+    ],
+  );
+});
+
+test('desktop settings policy retains an accepted snapshot when optional diagnostic recording throws', () => {
+  const admission: unknown[] = [];
+  const policy = new DesktopSettingsPolicy({
+    platform: 'win32',
+    nativeHostAvailable: true,
+    diagnosticAdmission: {
+      setSettingsAdmission: (input) => admission.push(input),
+      recordSettingsDebug() {
+        throw new Error('diagnostic recording failed');
+      },
+    },
+  });
+  const acceptedSnapshot = snapshot({
+    audioOutputDeviceId: `audio_${'F'.repeat(43)}`,
+    dtsPassthroughEnabled: true,
+    directPlayAudioFallbackEnabled: false,
+    subtitleMode: 'off',
+    preferredSubtitleLanguage: 'de',
+    preferForcedSubtitlesEnabled: true,
+    hdrFallbackMode: 'force-hls',
+    transcodeQuality: '2000-720p',
+    transcodeCompatibilityModeEnabled: true,
+    debugLoggingEnabled: true,
+    subtitleDebugLoggingEnabled: false,
+  });
+
+  assert.doesNotThrow(() => policy.acceptSnapshot(acceptedSnapshot));
+  assert.deepEqual(admission, [{
+    debugLoggingEnabled: true,
+    subtitleDebugLoggingEnabled: false,
+  }]);
+  assert.deepEqual(policy.getPreferences(), {
+    audioOutputDeviceId: `audio_${'F'.repeat(43)}`,
+    dtsPassthroughEnabled: true,
+    directPlayAudioFallbackEnabled: false,
+    subtitleMode: 'off',
+    preferredSubtitleLanguage: 'de',
+    preferForcedSubtitlesEnabled: true,
+    hdrFallbackMode: 'force-hls',
+    transcodeQuality: '2000-720p',
+    transcodeCompatibilityModeEnabled: true,
+  });
 });
 
 test('desktop settings policy preserves conservative production capability truth', () => {
