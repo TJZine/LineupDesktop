@@ -4,6 +4,7 @@ import type {
   PlayerSubtitleDeliveryMode,
   PlayerTrackId,
 } from '../../../contracts/player.js';
+import type { DesktopSettingsValues } from '../../../contracts/settings.js';
 
 export type DesktopStreamPolicyDecisionKind =
   | 'direct-play'
@@ -141,6 +142,12 @@ export interface DesktopStreamPolicyInput {
   candidates: readonly DesktopStreamMediaCandidate[];
   preferredAudioTrackId?: PlayerTrackId | null;
   preferredSubtitleTrackId?: PlayerTrackId | null;
+  preferences?: {
+    directPlayAudioFallbackEnabled: boolean;
+    subtitleMode: DesktopSettingsValues['subtitleMode'];
+    preferredSubtitleLanguage: DesktopSettingsValues['preferredSubtitleLanguage'];
+    preferForcedSubtitlesEnabled: boolean;
+  };
 }
 
 export interface DesktopStreamPolicyDecision {

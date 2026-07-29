@@ -171,6 +171,8 @@ export const LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL =
 
 export const LINEUP_SETTINGS_REPLACE_CHANNEL =
   'lineup:settings:replace' as const;
+export const LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL =
+  'lineup:settings:getAudioOutputs' as const;
 
 /**
  * Known privileged renderer payload field names are denied at contract seams.

@@ -96,6 +96,15 @@ export type NativePlayerHostCommandResult =
       error: NativePlayerHostFailure;
     };
 
+export interface NativeAudioOutput {
+  nativeKey: string;
+  label: string;
+}
+
+export type NativePlayerHostAudioOutputResult =
+  | { ok: true; outputs: NativeAudioOutput[] }
+  | { ok: false; error: NativePlayerHostFailure };
+
 import type { PrivilegedPlaybackDispatchContext } from './privilegedPlaybackDispatchContext.js';
 
 export interface NativePlayerHostPort {
@@ -103,6 +112,7 @@ export interface NativePlayerHostPort {
     command: PlayerCommand,
     context?: PrivilegedPlaybackDispatchContext | null,
   ): Promise<NativePlayerHostCommandResult>;
+  queryAudioOutputs(requestId: PlayerRequestId): Promise<NativePlayerHostAudioOutputResult>;
   cleanup(requestId: PlayerRequestId | null): Promise<void>;
   onLifecycleFailure?(
     listener: (failure: NativePlayerHostLifecycleFailure) => void,

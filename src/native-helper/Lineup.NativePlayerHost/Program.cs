@@ -27,6 +27,9 @@ namespace Lineup.NativePlayerHost
         private const int MpvFormatFlag = 3;
         private const int MpvFormatInt64 = 4;
         private const int MpvFormatDouble = 5;
+        private const int MpvFormatNode = 6;
+        private const int MpvFormatNodeArray = 7;
+        private const int MpvFormatNodeMap = 8;
 
         private const int GlColorBufferBit = 0x00004000;
         private const int SwpShowWindow = 0x0040;
@@ -71,7 +74,7 @@ namespace Lineup.NativePlayerHost
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        private struct MpvEventEndFile
+        private struct MpvEventEndFileData
         {
             public int reason;
             public int error;
@@ -103,6 +106,28 @@ namespace Lineup.NativePlayerHost
             public int internal_format;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct MpvNode
+        {
+            public MpvNodeUnion value;
+            public int format;
+        }
+
+        [StructLayout(LayoutKind.Explicit)]
+        internal struct MpvNodeUnion
+        {
+            [FieldOffset(0)] public IntPtr stringValue;
+            [FieldOffset(0)] public IntPtr listValue;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MpvNodeList
+        {
+            public int num;
+            public IntPtr values;
+            public IntPtr keys;
+        }
+
         public sealed class InputMessage
         {
             public string? type { get; set; }
@@ -123,6 +148,8 @@ namespace Lineup.NativePlayerHost
             public TrackSelection? selectedTrackIds { get; set; }
             public PrivateTrackSelection? selectedPrivateTrackIds { get; set; }
             public PlaybackTrackMap? trackMap { get; set; }
+            public string? audioOutputNativeKey { get; set; }
+            public bool dtsPassthroughEnabled { get; set; }
         }
 
         public sealed class PlaybackTrackMap
@@ -243,6 +270,12 @@ namespace Lineup.NativePlayerHost
                         break;
                     }
 
+                    if (message.type == "audio-output.query" && message.requestId != null)
+                    {
+                        HandleAudioOutputQuery(message.requestId);
+                        continue;
+                    }
+
                     if (message.type == "command" && message.requestId != null && message.command != null)
                     {
                         HandleCommand(message);
@@ -252,6 +285,103 @@ namespace Lineup.NativePlayerHost
                 {
                     WriteResult(currentRequestId ?? "unknown", false, "PLAYER_HELPER_PARSE_ERROR", ex.Message);
                 }
+            }
+        }
+
+        private static void HandleAudioOutputQuery(string requestId)
+        {
+            try
+            {
+                List<Dictionary<string, string>> outputs;
+                lock (MpvLock)
+                {
+                    if (mpvContext != IntPtr.Zero)
+                    {
+                        outputs = ReadAudioOutputs(mpvContext);
+                    }
+                    else
+                    {
+                        EnsureLibmpvResolverRegistered();
+                        IntPtr probe = NativeMethods.mpv_create();
+                        if (probe == IntPtr.Zero)
+                        {
+                            throw new InvalidOperationException();
+                        }
+                        try
+                        {
+                            EnsureOptionSet(probe, "terminal", "no");
+                            EnsureOptionSet(probe, "msg-level", "all=no");
+                            if (NativeMethods.mpv_initialize(probe) < 0)
+                            {
+                                throw new InvalidOperationException();
+                            }
+                            outputs = ReadAudioOutputs(probe);
+                        }
+                        finally
+                        {
+                            NativeMethods.mpv_terminate_destroy(probe);
+                        }
+                    }
+                }
+                WriteAudioOutputResult(requestId, true, outputs);
+            }
+            catch
+            {
+                WriteAudioOutputResult(requestId, false, null);
+            }
+        }
+
+        private static List<Dictionary<string, string>> ReadAudioOutputs(IntPtr context)
+        {
+            MpvNode node = new MpvNode();
+            int result = NativeMethods.mpv_get_property(context, "audio-device-list", MpvFormatNode, ref node);
+            if (result < 0 || node.format != MpvFormatNodeArray || node.value.listValue == IntPtr.Zero)
+            {
+                throw new InvalidOperationException();
+            }
+            try
+            {
+                List<Dictionary<string, string>> outputs = new List<Dictionary<string, string>>();
+                MpvNodeList list = Marshal.PtrToStructure<MpvNodeList>(node.value.listValue);
+                int nodeSize = Marshal.SizeOf<MpvNode>();
+                for (int index = 0; index < list.num; index += 1)
+                {
+                    MpvNode item = Marshal.PtrToStructure<MpvNode>(IntPtr.Add(list.values, index * nodeSize));
+                    if (item.format != MpvFormatNodeMap || item.value.listValue == IntPtr.Zero)
+                    {
+                        continue;
+                    }
+                    MpvNodeList map = Marshal.PtrToStructure<MpvNodeList>(item.value.listValue);
+                    string? nativeKey = null;
+                    string? label = null;
+                    for (int fieldIndex = 0; fieldIndex < map.num; fieldIndex += 1)
+                    {
+                        IntPtr keyPointer = Marshal.ReadIntPtr(map.keys, fieldIndex * IntPtr.Size);
+                        string? key = Marshal.PtrToStringUTF8(keyPointer);
+                        MpvNode value = Marshal.PtrToStructure<MpvNode>(
+                            IntPtr.Add(map.values, fieldIndex * nodeSize));
+                        if (value.format != MpvFormatString)
+                        {
+                            continue;
+                        }
+                        string? text = Marshal.PtrToStringUTF8(value.value.stringValue);
+                        if (key == "name") nativeKey = text;
+                        if (key == "description") label = text;
+                    }
+                    if (!string.IsNullOrEmpty(nativeKey))
+                    {
+                        outputs.Add(new Dictionary<string, string>
+                        {
+                            ["nativeKey"] = nativeKey,
+                            ["label"] = label ?? string.Empty
+                        });
+                    }
+                }
+                return outputs;
+            }
+            finally
+            {
+                NativeMethods.mpv_free_node_contents(ref node);
             }
         }
 
@@ -455,6 +585,14 @@ namespace Lineup.NativePlayerHost
                 EnsureOptionSet(mpvContext, "msg-level", "all=no");
                 EnsureOptionSet(mpvContext, "vo", "libmpv");
                 EnsureOptionSet(mpvContext, "osc", "no");
+                if (!string.IsNullOrEmpty(msg.setup?.audioOutputNativeKey))
+                {
+                    EnsureOptionSet(mpvContext, "audio-device", msg.setup.audioOutputNativeKey);
+                }
+                if (msg.setup?.dtsPassthroughEnabled == true)
+                {
+                    EnsureOptionSet(mpvContext, "audio-spdif", "dts,dts-hd");
+                }
                 if (msg.credentialHeader != null &&
                     !string.IsNullOrEmpty(msg.credentialHeader.name) &&
                     !string.IsNullOrEmpty(msg.credentialHeader.value))
@@ -614,7 +752,7 @@ namespace Lineup.NativePlayerHost
                 return;
             }
 
-            MpvEventEndFile endFile = Marshal.PtrToStructure<MpvEventEndFile>(data);
+            MpvEventEndFileData endFile = Marshal.PtrToStructure<MpvEventEndFileData>(data);
             if (endFile.reason == MpvEndFileReasonRedirect)
             {
                 return;
@@ -1068,6 +1206,35 @@ namespace Lineup.NativePlayerHost
             Console.Out.Flush();
         }
 
+        private static void WriteAudioOutputResult(
+            string requestId,
+            bool ok,
+            List<Dictionary<string, string>>? outputs)
+        {
+            var result = new Dictionary<string, object>
+            {
+                ["type"] = "audio-output.result",
+                ["requestId"] = requestId,
+                ["ok"] = ok
+            };
+            if (ok)
+            {
+                result["outputs"] = outputs ?? new List<Dictionary<string, string>>();
+            }
+            else
+            {
+                result["error"] = new Dictionary<string, object>
+                {
+                    ["code"] = "PLAYER_HELPER_AUDIO_OUTPUT_QUERY_FAILED",
+                    ["category"] = "helper-failure",
+                    ["recoverable"] = true,
+                    ["retryable"] = true
+                };
+            }
+            Console.Out.WriteLine(JsonSerializer.Serialize(result));
+            Console.Out.Flush();
+        }
+
         private static void WriteOutputEvent(object eventData)
         {
             var envelope = new Dictionary<string, object>
@@ -1261,8 +1428,14 @@ namespace Lineup.NativePlayerHost
             [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
             public static extern IntPtr mpv_get_property_string(IntPtr context, string name);
 
+            [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+            internal static extern int mpv_get_property(IntPtr context, string name, int format, ref MpvNode data);
+
             [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)]
             public static extern void mpv_free(IntPtr data);
+
+            [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)]
+            internal static extern void mpv_free_node_contents(ref MpvNode node);
 
             [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)]
             public static extern int mpv_command(IntPtr context, IntPtr args);

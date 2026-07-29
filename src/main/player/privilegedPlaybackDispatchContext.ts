@@ -120,6 +120,8 @@ function validatePlaybackSetup(
       'selectedTrackIds',
       'selectedPrivateTrackIds',
       'trackMap',
+      'audioOutputNativeKey',
+      'dtsPassthroughEnabled',
     ])
   ) {
     return { ok: false, reason: 'unsupported-setup-field' };
@@ -130,6 +132,10 @@ function validatePlaybackSetup(
     !isNonEmptyString(value.partPath)
   ) {
     return { ok: false, reason: 'invalid-setup-scalar' };
+  }
+  if (!(value.audioOutputNativeKey === null || isNonEmptyString(value.audioOutputNativeKey)) ||
+    typeof value.dtsPassthroughEnabled !== 'boolean') {
+    return { ok: false, reason: 'invalid-audio-output-setup' };
   }
   const selectedTrackIds = validateTrackSelection(value.selectedTrackIds, 'selected-track-ids');
   if (!selectedTrackIds.ok) {

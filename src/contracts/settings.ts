@@ -29,6 +29,19 @@ export const SETTINGS_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/
 export const SETTINGS_INVALID_REQUEST_ID = 'settings-invalid-request' as const;
 export const AUDIO_OUTPUT_DEVICE_ID_PATTERN = /^audio_[A-Za-z0-9_-]{43}$/u;
 export type DesktopAudioOutputDeviceId = `audio_${string}`;
+export const DESKTOP_AUDIO_OUTPUT_LIST_STATUSES = [
+  'ready',
+  'partial',
+  'unavailable',
+] as const;
+export const DESKTOP_AUDIO_OUTPUT_LIST_REASONS = [
+  'available',
+  'platform-unsupported',
+  'helper-unavailable',
+  'enumeration-failed',
+  'device-list-sanitized',
+  'device-list-truncated',
+] as const;
 
 export const DESKTOP_SETTINGS_VALUE_KEYS = [
   'launchMode',
@@ -167,6 +180,20 @@ export interface DesktopSettingsReplaceRequest {
   values: DesktopSettingsReplaceValues;
 }
 
+export interface DesktopSettingsGetAudioOutputsRequest {
+  requestId: string;
+}
+
+export type DesktopAudioOutputRow =
+  | { kind: 'system-default'; id: 'system-default'; label: 'System default' }
+  | { kind: 'device'; id: DesktopAudioOutputDeviceId; label: string };
+
+export interface DesktopAudioOutputList {
+  status: (typeof DESKTOP_AUDIO_OUTPUT_LIST_STATUSES)[number];
+  reason: (typeof DESKTOP_AUDIO_OUTPUT_LIST_REASONS)[number];
+  outputs: DesktopAudioOutputRow[];
+}
+
 export type DesktopSettingsIpcResult<T> =
   | { ok: true; value: T; requestId: string }
   | {
@@ -295,6 +322,69 @@ export function isDesktopSettingsReplaceRequest(
     isDesktopSettingsRequestId(value.requestId) &&
     isSafeRevision(value.expectedRevision) &&
     isDesktopSettingsReplaceValues(value.values);
+}
+
+export function isDesktopSettingsGetAudioOutputsRequest(
+  value: unknown,
+): value is DesktopSettingsGetAudioOutputsRequest {
+  return isDesktopSettingsGetSnapshotRequest(value);
+}
+
+export function isDesktopAudioOutputList(value: unknown): value is DesktopAudioOutputList {
+  if (
+    !isPlainRecord(value) ||
+    !hasOnlyKeys(value, ['status', 'reason', 'outputs']) ||
+    !isAudioOutputStatusReason(value.status, value.reason) ||
+    !Array.isArray(value.outputs) ||
+    value.outputs.length < 1 ||
+    value.outputs.length > 33
+  ) {
+    return false;
+  }
+  const [systemRow, ...deviceRows] = value.outputs;
+  if (
+    !isPlainRecord(systemRow) ||
+    !hasOnlyKeys(systemRow, ['kind', 'id', 'label']) ||
+    systemRow.kind !== 'system-default' ||
+    systemRow.id !== 'system-default' ||
+    systemRow.label !== 'System default'
+  ) {
+    return false;
+  }
+  const ids = new Set<string>(['system-default']);
+  let previous: { label: string; id: string } | null = null;
+  for (const row of deviceRows) {
+    if (
+      !isPlainRecord(row) ||
+      !hasOnlyKeys(row, ['kind', 'id', 'label']) ||
+      row.kind !== 'device' ||
+      typeof row.id !== 'string' ||
+      !AUDIO_OUTPUT_DEVICE_ID_PATTERN.test(row.id) ||
+      typeof row.label !== 'string' ||
+      row.label.length === 0 ||
+      row.label !== sanitizeAudioOutputLabel(row.label) ||
+      [...row.label].length > 80 ||
+      ids.has(row.id)
+    ) {
+      return false;
+    }
+    if (
+      previous !== null &&
+      (previous.label > row.label ||
+        (previous.label === row.label && previous.id >= row.id))
+    ) {
+      return false;
+    }
+    ids.add(row.id);
+    previous = { label: row.label, id: row.id };
+  }
+  if (value.status === 'unavailable' && deviceRows.length !== 0) {
+    return false;
+  }
+  if (value.status === 'partial' && deviceRows.length === 0) {
+    return false;
+  }
+  return true;
 }
 
 export function isDesktopSettingsSnapshot(value: unknown): value is DesktopSettingsSnapshot {
@@ -439,6 +529,26 @@ function isAudioOutputDeviceId(value: unknown, allowSystemDefault: boolean): boo
   return typeof value === 'string' &&
     value === value.trim() &&
     AUDIO_OUTPUT_DEVICE_ID_PATTERN.test(value);
+}
+
+function isAudioOutputStatusReason(status: unknown, reason: unknown): boolean {
+  if (status === 'ready') return reason === 'available';
+  if (status === 'partial') {
+    return reason === 'device-list-sanitized' || reason === 'device-list-truncated';
+  }
+  return status === 'unavailable' &&
+    (reason === 'platform-unsupported' ||
+      reason === 'helper-unavailable' ||
+      reason === 'enumeration-failed');
+}
+
+function sanitizeAudioOutputLabel(value: string): string {
+  return [...value.normalize('NFKC')
+    .replace(/\p{Cc}/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()]
+    .slice(0, 80)
+    .join('');
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

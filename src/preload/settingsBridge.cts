@@ -1,6 +1,7 @@
 import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
 import {
   isSettingsGetSnapshotRequest,
+  isSettingsAudioOutputResult,
   isSettingsReplaceRequest,
   isSettingsResult,
   readSettingsRequestId,
@@ -12,6 +13,7 @@ export type SettingsBridgeInvoke = (channel: string, input: unknown) => Promise<
 export interface SettingsBridgeChannels {
   getSnapshot: string;
   replace: string;
+  getAudioOutputs: string;
 }
 
 export function createSettingsBridge(
@@ -32,6 +34,24 @@ export function createSettingsBridge(
         return settingsBridgeFailure(requestId, 'validation-failed');
       }
       return invokeSettings(invoke, channels.replace, input, requestId);
+    },
+    getAudioOutputs: async (input) => {
+      const requestId = readSettingsRequestId(input);
+      if (!isSettingsGetSnapshotRequest(input)) {
+        return settingsBridgeFailure(requestId, 'validation-failed');
+      }
+      let result: unknown;
+      try {
+        result = await invoke(channels.getAudioOutputs, input);
+      } catch {
+        return settingsBridgeFailure(requestId, 'operation-failed');
+      }
+      if (!isSettingsAudioOutputResult(result, requestId)) {
+        return settingsBridgeFailure(requestId, 'validation-failed');
+      }
+      return result as Awaited<
+        ReturnType<LineupDesktopPreloadApi['settings']['getAudioOutputs']>
+      >;
     },
   };
 }

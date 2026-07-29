@@ -2,6 +2,11 @@ import type { PlayerRequestId } from '../../contracts/player.js';
 import type { IChannelScheduler, ScheduledProgram } from '../../domain/scheduler/index.js';
 import type { PlexStreamResolverInput, PlexStreamResolverResult } from '../plex/streamResolver.js';
 import type { DesktopStreamCapabilityProfile } from './streamPolicy/types.js';
+import type {
+  DesktopPlaybackSettingsPreferences,
+} from '../settings/desktopSettingsPolicy.js';
+import type { DesktopSettingsCapabilityProjection } from '../../contracts/settings.js';
+import type { ResolvedAudioOutput } from '../settings/settingsAudioOutputOwner.js';
 import {
   PlexPlaybackRuntimeCandidateResolutionError,
   isSamePlexPlaybackScheduleSelection,
@@ -24,6 +29,11 @@ export interface PlexPlaybackBridgeOptions {
     | (() => DesktopStreamCapabilityProfile | Promise<DesktopStreamCapabilityProfile>);
   createRequestId?: (prefix: string) => PlayerRequestId;
   autoplay?: boolean;
+  settingsPreferences?: () => DesktopPlaybackSettingsPreferences | Promise<DesktopPlaybackSettingsPreferences>;
+  settingsCapabilities?: () => DesktopSettingsCapabilityProjection;
+  resolveAudioOutput?: (
+    selectedId: DesktopPlaybackSettingsPreferences['audioOutputDeviceId'],
+  ) => Promise<ResolvedAudioOutput>;
 }
 
 export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, PlexPlaybackRuntimeChannelPort {
@@ -34,6 +44,9 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
     | (() => DesktopStreamCapabilityProfile | Promise<DesktopStreamCapabilityProfile>);
   readonly #createRequestId: (prefix: string) => PlayerRequestId;
   readonly #autoplay: boolean;
+  readonly #settingsPreferences?: PlexPlaybackBridgeOptions['settingsPreferences'];
+  readonly #settingsCapabilities?: PlexPlaybackBridgeOptions['settingsCapabilities'];
+  readonly #resolveAudioOutput?: PlexPlaybackBridgeOptions['resolveAudioOutput'];
   #requestCounter = 0;
 
   constructor(options: PlexPlaybackBridgeOptions) {
@@ -47,6 +60,9 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
         return `${prefix}-bridge-${this.#requestCounter}`;
       });
     this.#autoplay = options.autoplay ?? true;
+    this.#settingsPreferences = options.settingsPreferences;
+    this.#settingsCapabilities = options.settingsCapabilities;
+    this.#resolveAudioOutput = options.resolveAudioOutput;
   }
 
   async getCurrentPlayback(_input?: {
@@ -86,12 +102,14 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
     }
 
     const requestId = this.#createRequestId('plex-playback');
+    const settingsPreferences = await this.#settingsPreferences?.();
     const resolverInput: PlexStreamResolverInput = {
       requestId,
       mediaId: program.item.ratingKey,
       capabilityProfile: await this.#resolveCapabilityProfile(),
       autoplay: this.#autoplay,
       startPositionMs: program.elapsedMs,
+      ...(settingsPreferences !== undefined ? { settingsPreferences } : {}),
     };
 
     const result = await this.#resolver.resolve(resolverInput);
@@ -99,11 +117,29 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
       throw new PlexPlaybackRuntimeCandidateResolutionError(result.error);
     }
 
+    let privatePlayback = result.privatePlayback;
+    if (settingsPreferences !== undefined && this.#resolveAudioOutput !== undefined) {
+      const resolvedOutput = await this.#resolveAudioOutput(
+        settingsPreferences.audioOutputDeviceId,
+      );
+      const dtsSupported =
+        this.#settingsCapabilities?.().dtsPassthrough.status === 'supported';
+      privatePlayback = {
+        ...privatePlayback,
+        setup: {
+          ...privatePlayback.setup,
+          audioOutputNativeKey: resolvedOutput.audioOutputNativeKey,
+          dtsPassthroughEnabled:
+            settingsPreferences.dtsPassthroughEnabled && dtsSupported,
+        },
+      };
+    }
+
     return {
       requestId,
       load: result.load,
       pmsSession: result.pmsSession,
-      privatePlayback: result.privatePlayback,
+      privatePlayback,
     };
   }
 

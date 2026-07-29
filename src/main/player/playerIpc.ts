@@ -37,6 +37,7 @@ export interface RegisterPlayerIpcHandlersOptions {
   createRequestId(prefix: string): string;
   reportDiagnostic?(message: string, error: unknown): void;
   diagnosticEventStore?: DiagnosticEventStore;
+  nativeHost?: NativePlayerHostPort | null;
   nativeHostFactory?: NativePlayerHostFactory;
   onNativeHostLifecycleFailure?(failure: NativePlayerHostLifecycleFailure): void;
   ipcMain?: PlayerIpcMain;
@@ -62,7 +63,7 @@ export function registerPlayerIpcHandlers(
   const host =
     options.shellMode === 'development' || options.shellMode === 'smoke'
       ? createDevelopmentHost(options)
-      : options.nativeHostFactory?.() ?? null;
+      : options.nativeHost ?? null;
   const adapter =
     host === null
       ? null
@@ -428,6 +429,19 @@ class InertNativePlayerHost implements NativePlayerHostPort {
       case 'track.subtitle.select':
         return { ok: true };
     }
+  }
+
+  async queryAudioOutputs(_requestId: PlayerRequestId) {
+    return {
+      ok: false as const,
+      error: {
+        code: 'PLAYER_HELPER_AUDIO_OUTPUT_UNSUPPORTED',
+        message: 'The player helper cannot perform this operation.',
+        category: 'unsupported-capability' as const,
+        recoverable: false,
+        retryable: false,
+      },
+    };
   }
 
   async cleanup(_requestId: PlayerRequestId | null): Promise<void> {

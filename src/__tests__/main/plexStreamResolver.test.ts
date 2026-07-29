@@ -16,6 +16,7 @@ import {
 import type { PlexConnection } from '../../main/plex/discovery/types.js';
 import type { PlexMediaItem } from '../../main/plex/library/types.js';
 import type { DesktopStreamCapabilityProfile } from '../../main/player/streamPolicy/types.js';
+import type { DesktopPlaybackSettingsPreferences } from '../../main/settings/desktopSettingsPolicy.js';
 
 const PUBLIC_FORBIDDEN_KEYS = [
   'uri',
@@ -181,6 +182,60 @@ test('plex stream resolver projects transcode without leaking private descriptor
   assert.equal(result.decision.reasonCodes.includes('transcode-video'), true);
   assert.match(result.privatePlayback.playbackUrl, /transcode\/universal\/start/u);
   assertPublicProjectionSafe(result);
+});
+
+test('plex stream resolver applies only allowlisted quality parameters to an allowed transcode', async () => {
+  const mediaDetail = createMediaDetail({ videoCodec: 'vp9' });
+  const qualityResult = await createResolver({ mediaDetail }).resolve({
+    requestId: 'request-transcode-quality',
+    mediaId: 'media-input-transcode-quality',
+    capabilityProfile: directPlayProfile,
+    preferredSubtitleTrackId: null,
+    settingsPreferences: settingsPreferences({
+      transcodeQuality: '4000-720p',
+    }),
+  });
+  assertResolved(qualityResult, 'transcode');
+  const qualityUrl = new URL(qualityResult.privatePlayback.playbackUrl);
+  assert.equal(qualityUrl.searchParams.get('videoBitrate'), '4000');
+  assert.equal(qualityUrl.searchParams.get('videoResolution'), '720p');
+
+  const compatibilityResult = await createResolver({ mediaDetail }).resolve({
+    requestId: 'request-transcode-compatibility',
+    mediaId: 'media-input-transcode-compatibility',
+    capabilityProfile: directPlayProfile,
+    preferredSubtitleTrackId: null,
+    settingsPreferences: settingsPreferences({
+      transcodeQuality: '4000-720p',
+      transcodeCompatibilityModeEnabled: true,
+    }),
+  });
+  assertResolved(compatibilityResult, 'transcode');
+  const compatibilityUrl = new URL(compatibilityResult.privatePlayback.playbackUrl);
+  assert.equal(compatibilityUrl.searchParams.has('videoBitrate'), false);
+  assert.equal(compatibilityUrl.searchParams.has('videoResolution'), false);
+  assert.equal(compatibilityUrl.searchParams.get('protocol'), 'hls');
+});
+
+test('plex stream resolver prefers an HDR10 candidate only when the setting requests it', async () => {
+  const mediaDetail = createHdrChoiceMediaDetail();
+  const sourceOrderResult = await createResolver({ mediaDetail }).resolve({
+    requestId: 'request-hdr-source-order',
+    mediaId: 'media-input-hdr-source-order',
+    capabilityProfile: directPlayProfile,
+    settingsPreferences: settingsPreferences(),
+  });
+  assertResolved(sourceOrderResult, 'direct-play');
+  assert.equal(sourceOrderResult.decision.summary.dynamicRange, 'sdr');
+
+  const preferredHdrResult = await createResolver({ mediaDetail }).resolve({
+    requestId: 'request-hdr-preferred',
+    mediaId: 'media-input-hdr-preferred',
+    capabilityProfile: directPlayProfile,
+    settingsPreferences: settingsPreferences({ hdrFallbackMode: 'prefer-hdr10' }),
+  });
+  assertResolved(preferredHdrResult, 'direct-play');
+  assert.equal(preferredHdrResult.decision.summary.dynamicRange, 'hdr10');
 });
 
 test('plex stream resolver normalizes unsupported policy without private playback output', async () => {
@@ -554,6 +609,23 @@ function assertPrivateCarriesPrivilegedSetup(
   );
 }
 
+function settingsPreferences(
+  overrides: Partial<DesktopPlaybackSettingsPreferences> = {},
+): DesktopPlaybackSettingsPreferences {
+  return {
+    audioOutputDeviceId: null,
+    dtsPassthroughEnabled: false,
+    directPlayAudioFallbackEnabled: true,
+    subtitleMode: 'direct',
+    preferredSubtitleLanguage: null,
+    preferForcedSubtitlesEnabled: false,
+    hdrFallbackMode: 'off',
+    transcodeQuality: 'default',
+    transcodeCompatibilityModeEnabled: false,
+    ...overrides,
+  };
+}
+
 function createMediaDetail(options: {
   container?: string;
   videoCodec?: string;
@@ -630,6 +702,37 @@ function createMediaDetail(options: {
               },
             ]
           : [],
+      },
+    ],
+  };
+}
+
+function createHdrChoiceMediaDetail(): PlexMediaItem {
+  const source = createMediaDetail();
+  const sourceVariant = source.media[0]!;
+  const sourcePart = sourceVariant.parts[0]!;
+  const hdrPart = {
+    ...sourcePart,
+    id: 'part-hdr10',
+    key: '/library/parts/hdr10',
+    file: 'hdr10.mkv',
+    streams: sourcePart.streams.map((stream) =>
+      stream.streamType === 1
+        ? {
+            ...stream,
+            id: 'video-hdr10',
+            dynamicRange: 'hdr10',
+          }
+        : stream),
+  };
+  return {
+    ...source,
+    media: [
+      sourceVariant,
+      {
+        ...sourceVariant,
+        id: 'variant-hdr10',
+        parts: [hdrPart],
       },
     ],
   };

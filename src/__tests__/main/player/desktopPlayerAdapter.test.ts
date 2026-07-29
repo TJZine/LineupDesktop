@@ -38,6 +38,10 @@ class FakeNativePlayerHost implements NativePlayerHostPort {
     return this.executeResult;
   }
 
+  async queryAudioOutputs() {
+    return { ok: true as const, outputs: [] };
+  }
+
   async cleanup(requestId: string | null): Promise<void> {
     this.cleanupRequestIds.push(requestId);
     if (this.cleanupError !== null) {
@@ -86,6 +90,10 @@ class DeferredNativePlayerHost implements NativePlayerHostPort {
     return new Promise<NativePlayerHostCommandResult>((resolve) => {
       this.resolvers.push(resolve);
     });
+  }
+
+  async queryAudioOutputs() {
+    return { ok: true as const, outputs: [] };
   }
 
   async cleanup(requestId: string | null): Promise<void> {
@@ -174,6 +182,8 @@ function privilegedContext(requestId = 'request-load-1'): PrivilegedPlaybackDisp
         selectedTrackIds: { video: null, audio: null, subtitle: null },
         selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
         trackMap: { video: [], audio: [], subtitle: [] },
+        audioOutputNativeKey: null,
+        dtsPassthroughEnabled: false,
       },
     },
   };

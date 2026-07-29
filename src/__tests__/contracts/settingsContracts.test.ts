@@ -15,6 +15,8 @@ import {
   desktopSettingsSuccess,
   isDesktopSettingsCapabilityEntry,
   isDesktopSettingsCapabilityProjection,
+  isDesktopAudioOutputList,
+  isDesktopSettingsGetAudioOutputsRequest,
   isDesktopSettingsGetSnapshotRequest,
   isDesktopSettingsIpcResult,
   isDesktopSettingsReplaceRequest,
@@ -162,4 +164,59 @@ test('settings result guards accept only exact view envelopes and fixed messages
       message: `raw ${['C:', 'private', 'settings.json'].join('\\')}`,
     },
   }, isDesktopSettingsView), false);
+});
+
+test('audio output contract accepts only exact bounded ordered safe lists', () => {
+  const audioA = `audio_${'A'.repeat(43)}`;
+  const audioB = `audio_${'B'.repeat(43)}`;
+  const ready = {
+    status: 'ready',
+    reason: 'available',
+    outputs: [
+      { kind: 'system-default', id: 'system-default', label: 'System default' },
+      { kind: 'device', id: audioA, label: 'Alpha' },
+      { kind: 'device', id: audioB, label: 'Beta' },
+    ],
+  };
+  assert.equal(isDesktopSettingsGetAudioOutputsRequest({ requestId: 'settings-audio-1' }), true);
+  assert.equal(isDesktopSettingsGetAudioOutputsRequest({ requestId: 'bad id' }), false);
+  assert.equal(isDesktopAudioOutputList(ready), true);
+  assert.equal(isDesktopAudioOutputList({ ...ready, extra: true }), false);
+  assert.equal(isDesktopAudioOutputList({ ...ready, reason: 'helper-unavailable' }), false);
+  assert.equal(isDesktopAudioOutputList({
+    ...ready,
+    outputs: [ready.outputs[0], ready.outputs[2], ready.outputs[1]],
+  }), false);
+  assert.equal(isDesktopAudioOutputList({
+    status: 'unavailable',
+    reason: 'platform-unsupported',
+    outputs: [ready.outputs[0]],
+  }), true);
+  assert.equal(isDesktopAudioOutputList({
+    status: 'unavailable',
+    reason: 'enumeration-failed',
+    outputs: ready.outputs,
+  }), false);
+  assert.equal(isDesktopAudioOutputList({
+    status: 'partial',
+    reason: 'device-list-sanitized',
+    outputs: [ready.outputs[0], { kind: 'device', id: audioA, label: 'unsafe\u0007label' }],
+  }), false);
+  assert.equal(isDesktopAudioOutputList({
+    status: 'partial',
+    reason: 'device-list-sanitized',
+    outputs: [ready.outputs[0]],
+  }), false);
+  assert.equal(isDesktopAudioOutputList({
+    status: 'partial',
+    reason: 'device-list-truncated',
+    outputs: [
+      ready.outputs[0],
+      ...Array.from({ length: 33 }, (_, index) => ({
+        kind: 'device',
+        id: `audio_${String(index).padStart(43, 'A')}`,
+        label: `Device ${String(index).padStart(2, '0')}`,
+      })),
+    ],
+  }), false);
 });

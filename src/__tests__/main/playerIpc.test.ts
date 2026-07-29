@@ -60,6 +60,10 @@ class ConfigurableNativeHost implements NativePlayerHostPort {
     }
     return undefined;
   }
+
+  async queryAudioOutputs() {
+    return { ok: true as const, outputs: [] };
+  }
 }
 
 class EventNativeHost extends ConfigurableNativeHost {
@@ -224,6 +228,8 @@ function privilegedPlaybackContext(requestId: string): PrivilegedPlaybackDispatc
         selectedTrackIds: { video: null, audio: null, subtitle: null },
         selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
         trackMap: { video: [], audio: [], subtitle: [] },
+        audioOutputNativeKey: null,
+        dtsPassthroughEnabled: false,
       },
     },
   };
@@ -828,20 +834,16 @@ test('production player IPC returns unsupported failures and does not activate f
   assertNoForbiddenKeys(events);
 });
 
-test('production player IPC with nativeHostFactory instantiates adapter but rejects renderer loads', async () => {
+test('production player IPC with an injected native host instantiates adapter but rejects renderer loads', async () => {
   const ipcMain = new FakeIpcMain();
   const events: PlayerEvent[] = [];
-  let nativeHostCreated = false;
   const host = new ConfigurableNativeHost();
   const teardown = registerPlayerIpcHandlers({
     shellMode: 'production',
     isAuthorizedEvent,
     ...playerEventSinks(events),
     createRequestId,
-    nativeHostFactory: () => {
-      nativeHostCreated = true;
-      return host;
-    },
+    nativeHost: host,
     ipcMain,
   });
 
@@ -851,7 +853,6 @@ test('production player IPC with nativeHostFactory instantiates adapter but reje
     loadEnvelope('player-prod-2'),
   );
 
-  assert.equal(nativeHostCreated, true);
   assert.equal((commandResult as { ok: boolean }).ok, false);
   assert.equal(
     (commandResult as { error: { category: string; code: string } }).error.code,
@@ -889,7 +890,7 @@ test('player IPC registers adapter lifecycle handling before main and unsubscrib
     isAuthorizedEvent,
     ...playerEventSinks(),
     createRequestId,
-    nativeHostFactory: () => host,
+    nativeHost: host,
     onNativeHostLifecycleFailure: mainListener,
     ipcMain,
   });
@@ -897,6 +898,12 @@ test('player IPC registers adapter lifecycle handling before main and unsubscrib
     requestId: null,
     error: helperFailure(),
   };
+  const activeLoad = runtimeLoadCommand('player-active-lifecycle');
+  const activeResult = await teardown.adapter?.dispatchRuntimeCommand(
+    activeLoad,
+    privilegedPlaybackContext(activeLoad.requestId),
+  );
+  assert.equal(activeResult?.accepted, true);
 
   host.emitLifecycleFailure(failure);
 

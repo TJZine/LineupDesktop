@@ -22,6 +22,7 @@ import {
 } from '../../../main/player/plexPlaybackRuntime.js';
 import type { DesktopStreamCapabilityProfile } from '../../../main/player/streamPolicy/types.js';
 import type { PlexStreamResolverInput, PlexStreamResolverResult } from '../../../main/plex/streamResolver.js';
+import type { DesktopPlaybackSettingsPreferences } from '../../../main/settings/desktopSettingsPolicy.js';
 import { assertPublicSafe } from './playerPublicSafetyAssertions.js';
 
 const rawPrivateValues = [
@@ -147,6 +148,8 @@ class FakeResolver implements PlexPlaybackBridgeResolverPort {
           ],
           subtitle: [],
         },
+        audioOutputNativeKey: null,
+        dtsPassthroughEnabled: false,
       },
     },
     load: loadPayload,
@@ -249,6 +252,100 @@ test('RD-12 bridge maps current scheduler program to resolver input and runtime 
   assert.deepEqual(player.commands[0]?.payload, loadPayload);
   assertPublicSafe(result, rawPrivateValues);
   assertPublicSafe(player.commands[0], rawPrivateValues);
+});
+
+test('playback bridge propagates settings and resolves private audio setup immediately before load', async () => {
+  const scheduler = new FakeScheduler();
+  const resolver = new FakeResolver();
+  const settingsPreferences: DesktopPlaybackSettingsPreferences = {
+    audioOutputDeviceId: `audio_${'A'.repeat(43)}` as `audio_${string}`,
+    dtsPassthroughEnabled: true,
+    directPlayAudioFallbackEnabled: false,
+    subtitleMode: 'standard' as const,
+    preferredSubtitleLanguage: 'fr' as const,
+    preferForcedSubtitlesEnabled: true,
+    hdrFallbackMode: 'prefer-hdr10' as const,
+    transcodeQuality: '4000-720p' as const,
+    transcodeCompatibilityModeEnabled: false,
+  };
+  const resolvedIds: Array<string | null> = [];
+  const bridge = new PlexPlaybackBridge({
+    scheduler,
+    resolver,
+    capabilityProfile,
+    createRequestId: () => 'request-settings-bridge',
+    settingsPreferences: () => settingsPreferences,
+    settingsCapabilities: () => ({
+      audioOutputSelection: { status: 'supported', reason: 'available' },
+      dtsPassthrough: { status: 'supported', reason: 'available' },
+      directPlayAudioFallback: { status: 'supported', reason: 'available' },
+      subtitleSelection: { status: 'supported', reason: 'available' },
+      hdrFallback: { status: 'supported', reason: 'available' },
+      transcode: { status: 'supported', reason: 'available' },
+      artworkPresentation: { status: 'unsupported', reason: 'safe-artwork-unavailable' },
+    }),
+    resolveAudioOutput: async (selectedId) => {
+      resolvedIds.push(selectedId);
+      return {
+        audioOutputNativeKey: 'synthetic-private-device-key',
+        matched: true,
+      };
+    },
+  });
+
+  const selection = await bridge.getCurrentPlayback();
+  assert.ok(selection);
+  const candidate = await bridge.resolvePlaybackCandidate(selection);
+  assert.ok(candidate.privatePlayback);
+
+  assert.deepEqual(resolver.inputs[0]?.settingsPreferences, settingsPreferences);
+  assert.deepEqual(resolvedIds, [settingsPreferences.audioOutputDeviceId]);
+  assert.equal(
+    candidate.privatePlayback.setup.audioOutputNativeKey,
+    'synthetic-private-device-key',
+  );
+  assert.equal(candidate.privatePlayback.setup.dtsPassthroughEnabled, true);
+});
+
+test('playback bridge never enables DTS from preference without supported capability', async () => {
+  const scheduler = new FakeScheduler();
+  const resolver = new FakeResolver();
+  const bridge = new PlexPlaybackBridge({
+    scheduler,
+    resolver,
+    capabilityProfile,
+    settingsPreferences: () => ({
+      audioOutputDeviceId: null,
+      dtsPassthroughEnabled: true,
+      directPlayAudioFallbackEnabled: true,
+      subtitleMode: 'direct',
+      preferredSubtitleLanguage: null,
+      preferForcedSubtitlesEnabled: false,
+      hdrFallbackMode: 'off',
+      transcodeQuality: 'default',
+      transcodeCompatibilityModeEnabled: false,
+    }),
+    settingsCapabilities: () => ({
+      audioOutputSelection: { status: 'unproven', reason: 'native-proof-required' },
+      dtsPassthrough: { status: 'unproven', reason: 'native-proof-required' },
+      directPlayAudioFallback: { status: 'supported', reason: 'available' },
+      subtitleSelection: { status: 'unsupported', reason: 'production-capability-unsupported' },
+      hdrFallback: { status: 'unsupported', reason: 'production-capability-unsupported' },
+      transcode: { status: 'unsupported', reason: 'production-capability-unsupported' },
+      artworkPresentation: { status: 'unsupported', reason: 'safe-artwork-unavailable' },
+    }),
+    resolveAudioOutput: async () => ({
+      audioOutputNativeKey: null,
+      matched: true,
+    }),
+  });
+
+  const selection = await bridge.getCurrentPlayback();
+  assert.ok(selection);
+  const candidate = await bridge.resolvePlaybackCandidate(selection);
+  assert.ok(candidate.privatePlayback);
+
+  assert.equal(candidate.privatePlayback.setup.dtsPassthroughEnabled, false);
 });
 
 test('RD-12 bridge returns no selection for inactive or unloaded scheduler state', async () => {

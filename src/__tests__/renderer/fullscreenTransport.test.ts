@@ -48,6 +48,11 @@ test('fullscreen coordinator serializes settings and stale shell intents while r
 
   const settings = createSettingsRuntime({
     settings: {
+      getAudioOutputs: async ({ requestId }) => desktopSettingsSuccess(requestId, {
+        status: 'unavailable',
+        reason: 'platform-unsupported',
+        outputs: [{ kind: 'system-default', id: 'system-default', label: 'System default' }],
+      }),
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, createDesktopSettingsView({
         schemaVersion: 2,
         revision: 1,

@@ -58,6 +58,8 @@ import type {
   CustomChannelVisibilityRequest,
 } from './customChannels.js';
 import type {
+  DesktopAudioOutputList,
+  DesktopSettingsGetAudioOutputsRequest,
   DesktopSettingsGetSnapshotRequest,
   DesktopSettingsIpcResult,
   DesktopSettingsReplaceRequest,
@@ -155,6 +157,9 @@ export interface LineupDesktopPreloadApi {
     replace: (
       input: DesktopSettingsReplaceRequest,
     ) => Promise<DesktopSettingsIpcResult<DesktopSettingsView>>;
+    getAudioOutputs: (
+      input: DesktopSettingsGetAudioOutputsRequest,
+    ) => Promise<DesktopSettingsIpcResult<DesktopAudioOutputList>>;
   };
   player: {
     dispatch: (

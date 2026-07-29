@@ -87,6 +87,25 @@ export function isSettingsResult(value: unknown, expectedRequestId: string): boo
   return SETTINGS_ERROR_CODES.includes(code) && value.error.message === SETTINGS_ERROR_MESSAGES[code];
 }
 
+export function isSettingsAudioOutputResult(value: unknown, expectedRequestId: string): boolean {
+  if (!isPlainRecord(value) || typeof value.ok !== 'boolean' ||
+    value.requestId !== expectedRequestId || !isSettingsRequestId(value.requestId)) {
+    return false;
+  }
+  if (value.ok) {
+    return hasOnlyKeys(value, ['ok', 'value', 'requestId']) &&
+      isAudioOutputList(value.value);
+  }
+  if (!hasOnlyKeys(value, ['ok', 'error', 'requestId']) ||
+    !isPlainRecord(value.error) ||
+    !hasOnlyKeys(value.error, ['code', 'message'])) {
+    return false;
+  }
+  const code = value.error.code as PreloadSettingsErrorCode;
+  return ['unauthorized', 'validation-failed', 'operation-failed'].includes(code) &&
+    value.error.message === SETTINGS_ERROR_MESSAGES[code];
+}
+
 export function settingsBridgeFailure(
   requestId: string,
   code: PreloadSettingsErrorCode,
@@ -135,6 +154,55 @@ function isCapabilityEntry(value: unknown): boolean {
   return value.status === 'unsupported' &&
     ['platform-unsupported', 'helper-unavailable', 'production-capability-unsupported', 'safe-artwork-unavailable']
       .includes(value.reason as string);
+}
+
+function isAudioOutputList(value: unknown): boolean {
+  if (!isPlainRecord(value) || !hasOnlyKeys(value, ['status', 'reason', 'outputs']) ||
+    !isAudioStatusReason(value.status, value.reason) || !Array.isArray(value.outputs) ||
+    value.outputs.length < 1 || value.outputs.length > 33) {
+    return false;
+  }
+  const [system, ...devices] = value.outputs;
+  if (!isPlainRecord(system) || !hasOnlyKeys(system, ['kind', 'id', 'label']) ||
+    system.kind !== 'system-default' || system.id !== 'system-default' ||
+    system.label !== 'System default') {
+    return false;
+  }
+  const ids = new Set(['system-default']);
+  let previous: { label: string; id: string } | null = null;
+  for (const row of devices) {
+    if (!isPlainRecord(row) || !hasOnlyKeys(row, ['kind', 'id', 'label']) ||
+      row.kind !== 'device' || typeof row.id !== 'string' ||
+      !/^audio_[A-Za-z0-9_-]{43}$/u.test(row.id) || ids.has(row.id) ||
+      typeof row.label !== 'string' || row.label.length === 0 ||
+      row.label !== sanitizeAudioLabel(row.label) || [...row.label].length > 80) {
+      return false;
+    }
+    if (previous !== null && (previous.label > row.label ||
+      (previous.label === row.label && previous.id >= row.id))) {
+      return false;
+    }
+    ids.add(row.id);
+    previous = { label: row.label, id: row.id };
+  }
+  if (value.status === 'unavailable') return devices.length === 0;
+  return value.status !== 'partial' || devices.length > 0;
+}
+
+function isAudioStatusReason(status: unknown, reason: unknown): boolean {
+  if (status === 'ready') return reason === 'available';
+  if (status === 'partial') {
+    return reason === 'device-list-sanitized' || reason === 'device-list-truncated';
+  }
+  return status === 'unavailable' &&
+    ['platform-unsupported', 'helper-unavailable', 'enumeration-failed'].includes(reason as string);
+}
+
+function sanitizeAudioLabel(value: string): string {
+  return [...value.normalize('NFKC')
+    .replace(/\p{Cc}/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()].slice(0, 80).join('');
 }
 
 const SETTINGS_VALUE_KEYS = [

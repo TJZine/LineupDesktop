@@ -108,6 +108,28 @@ test('native helper keeps credential headers in checked pre-initialize options',
   );
 });
 
+test('native helper queries audio devices in-process and applies requested output options before initialize', async () => {
+  const source = await readFile(programPath, 'utf8');
+
+  assert.match(
+    source,
+    /message\.type == "audio-output\.query"[\s\S]*?HandleAudioOutputQuery\(message\.requestId\)/u,
+  );
+  assert.match(
+    source,
+    /lock \(MpvLock\)[\s\S]*?mpvContext != IntPtr\.Zero[\s\S]*?ReadAudioOutputs\(mpvContext\)[\s\S]*?NativeMethods\.mpv_create\(\)[\s\S]*?ReadAudioOutputs\(probe\)[\s\S]*?mpv_terminate_destroy\(probe\)/u,
+  );
+  assert.match(
+    source,
+    /mpv_get_property\(context,\s*"audio-device-list",\s*MpvFormatNode,\s*ref node\)/u,
+  );
+  assert.match(source, /\["type"\]\s*=\s*"audio-output\.result"/u);
+  assert.match(
+    source,
+    /EnsureOptionSet\(mpvContext,\s*"audio-device",\s*msg\.setup\.audioOutputNativeKey\)[\s\S]*?EnsureOptionSet\(mpvContext,\s*"audio-spdif",\s*"dts,dts-hd"\)[\s\S]*?mpv_initialize\(mpvContext\)/u,
+  );
+});
+
 test('native helper gates runtime control results and formats seek values invariantly', async () => {
   const source = await readFile(programPath, 'utf8');
 
@@ -165,7 +187,7 @@ test('native helper classifies official end-file reasons without exposing raw mp
 
   assert.match(
     source,
-    /private struct MpvEventEndFile\s*\{\s*public int reason;\s*public int error;\s*public long playlist_entry_id;\s*public long playlist_insert_id;\s*public int playlist_insert_num_entries;\s*\}/su,
+    /private struct MpvEventEndFileData\s*\{\s*public int reason;\s*public int error;\s*public long playlist_entry_id;\s*public long playlist_insert_id;\s*public int playlist_insert_num_entries;\s*\}/su,
   );
   for (const [name, value] of [
     ['MpvEndFileReasonEof', 0],

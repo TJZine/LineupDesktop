@@ -13,12 +13,20 @@ import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import { createSettingsRuntime, type SettingsRuntimeState } from '../../renderer/settings/settingsRuntime.js';
 import { deferred } from '../helpers/deferred.js';
 
+const getAudioOutputs: LineupDesktopPreloadApi['settings']['getAudioOutputs'] =
+  async ({ requestId }) => desktopSettingsSuccess(requestId, {
+    status: 'unavailable',
+    reason: 'platform-unsupported',
+    outputs: [{ kind: 'system-default', id: 'system-default', label: 'System default' }],
+  });
+
 test('settings runtime loads before presentation, applies launch intent, and persists whole snapshots', async () => {
   const replaceInputs: unknown[] = [];
   const fullscreen: boolean[] = [];
   const states: SettingsRuntimeState[] = [];
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(4, { launchMode: 'fullscreen' })),
       replace: async (input) => {
         replaceInputs.push(input);
@@ -53,6 +61,7 @@ test('settings runtime serializes a user launch change behind pending startup fu
   let maximumActiveIntents = 0;
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(
         requestId,
         snapshot(3, { launchMode: 'fullscreen' }),
@@ -119,6 +128,7 @@ test('settings runtime coalesces latest desired values and rebases once after re
   let gets = 0;
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, gets++ === 0 ? snapshot(1) : snapshot(8)),
       replace: async (input) => {
         inputs.push(input);
@@ -154,6 +164,7 @@ test('settings runtime synchronizes a rebased launch mode before retrying persis
   let gets = 0;
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(
         requestId,
         gets++ === 0 ? snapshot(1) : snapshot(8),
@@ -201,6 +212,7 @@ test('settings runtime keeps newer whole-snapshot intent behind pending fullscre
   const inputs: Array<Parameters<LineupDesktopPreloadApi['settings']['replace']>[0]> = [];
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         inputs.push(input);
@@ -232,6 +244,7 @@ test('settings runtime rolls optimistic values and fullscreen intent back on sav
   const fullscreen: boolean[] = [];
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(2)),
       replace: async (input) => desktopSettingsFailure(input.requestId, 'operation-failed'),
     },
@@ -248,7 +261,7 @@ test('settings runtime cleanup invalidates late responses without rendering', as
   const pending = deferred<ReturnType<typeof desktopSettingsSuccess<ReturnType<typeof snapshot>>>>();
   const states: SettingsRuntimeState[] = [];
   const runtime = createSettingsRuntime({
-    settings: { getSnapshot: async () => pending.promise, replace: async (input) => desktopSettingsFailure(input.requestId, 'operation-failed') },
+    settings: { getAudioOutputs, getSnapshot: async () => pending.promise, replace: async (input) => desktopSettingsFailure(input.requestId, 'operation-failed') },
     windowBridge: windowBridge([]), onStateChanged: (state) => states.push(state),
   });
   const initializing = runtime.initialize();
@@ -266,6 +279,7 @@ test('settings runtime cleanup invalidates a late fullscreen consumer continuati
   let replacements = 0;
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         replacements += 1;
@@ -303,6 +317,7 @@ test('settings runtime serializes rapid launch intents and persists only the lat
   let initialized = false;
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         replacements.push(input);
@@ -346,6 +361,7 @@ test('settings runtime treats a successful but mismatched fullscreen result as a
   let replacements = 0;
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         replacements += 1;
@@ -376,6 +392,7 @@ test('settings runtime preserves newer nonlaunch intent after an older replace f
   const inputs: Array<Parameters<LineupDesktopPreloadApi['settings']['replace']>[0]> = [];
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         inputs.push(input);
@@ -405,6 +422,7 @@ test('settings runtime stops after one failed conflict rebase and restores accep
   let replacements = 0;
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, gets++ === 0 ? snapshot(1) : snapshot(7)),
       replace: async (input) => {
         replacements += 1;

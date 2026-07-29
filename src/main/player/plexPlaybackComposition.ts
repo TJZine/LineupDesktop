@@ -8,6 +8,9 @@ import { PlexPlaybackRuntime, type PlexPlaybackRuntimeClockPort, type PlexPlayba
 import type { DesktopStreamCapabilityProfile } from './streamPolicy/types.js';
 import type { PrivilegedPlaybackDispatchContext } from './privilegedPlaybackDispatchContext.js';
 import type { PlexPlaybackRecoveryTimerPort } from './plexPlaybackRecoveryOwner.js';
+import type { DesktopPlaybackSettingsPreferences } from '../settings/desktopSettingsPolicy.js';
+import type { DesktopSettingsCapabilityProjection } from '../../contracts/settings.js';
+import type { ResolvedAudioOutput } from '../settings/settingsAudioOutputOwner.js';
 
 type DesktopPlayerAdapterRuntimePort = {
   dispatchRendererIntent(envelope: PlayerRendererIntentEnvelope): Promise<{
@@ -45,6 +48,11 @@ export interface CreatePlexPlaybackRuntimeCompositionOptions {
   onEvents?: (events: readonly PlayerEvent[]) => void;
   recoveryTimer?: PlexPlaybackRecoveryTimerPort;
   diagnosticEventStore?: DiagnosticEventStore;
+  settingsPreferences?: () => DesktopPlaybackSettingsPreferences | Promise<DesktopPlaybackSettingsPreferences>;
+  settingsCapabilities?: () => DesktopSettingsCapabilityProjection;
+  resolveAudioOutput?: (
+    selectedId: DesktopPlaybackSettingsPreferences['audioOutputDeviceId'],
+  ) => Promise<ResolvedAudioOutput>;
 }
 
 export interface PlexPlaybackRuntimeComposition {
@@ -61,6 +69,9 @@ export function createPlexPlaybackRuntimeComposition(
     capabilityProfile: options.capabilityProfile,
     createRequestId: options.createRequestId,
     autoplay: options.autoplay,
+    settingsPreferences: options.settingsPreferences,
+    settingsCapabilities: options.settingsCapabilities,
+    resolveAudioOutput: options.resolveAudioOutput,
   });
 
   return {

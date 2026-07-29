@@ -17,6 +17,7 @@ import type {
 import type { PlexConnection } from './discovery/types.js';
 import type { PlexMediaFile, PlexMediaItem, PlexMediaPart, PlexStream } from './library/types.js';
 import { buildPlaybackTrackMap, type PlaybackTrackMap } from './streamTrackMapping.js';
+import type { DesktopPlaybackSettingsPreferences } from '../settings/desktopSettingsPolicy.js';
 
 export interface PlexStreamResolverSelectedConnectionPort {
   getSelectedConnection(): Promise<PlexConnection | null>;
@@ -66,6 +67,7 @@ export interface PlexStreamResolverInput {
   startPositionMs?: number;
   preferredAudioTrackId?: PlayerTrackId | null;
   preferredSubtitleTrackId?: PlayerTrackId | null;
+  settingsPreferences?: DesktopPlaybackSettingsPreferences;
 }
 
 export type PlexStreamResolverResult =
@@ -109,6 +111,8 @@ export interface PlexPrivilegedPlaybackDescriptor {
       subtitle: string | null;
     };
     trackMap: PlaybackTrackMap;
+    audioOutputNativeKey: string | null;
+    dtsPassthroughEnabled: boolean;
   };
 }
 
@@ -158,11 +162,29 @@ export class PlexStreamResolver {
       capabilityProfileId: input.capabilityProfile.id,
     });
 
+    const candidatesForPolicy = input.settingsPreferences?.hdrFallbackMode === 'prefer-hdr10'
+      ? [...candidates].sort((left, right) =>
+          dynamicRangePreferenceRank(left.video.dynamicRange) -
+          dynamicRangePreferenceRank(right.video.dynamicRange))
+      : candidates;
     const decision = decideDesktopStreamPolicy({
       capabilityProfile: input.capabilityProfile,
-      candidates,
+      candidates: candidatesForPolicy,
       preferredAudioTrackId: input.preferredAudioTrackId,
       preferredSubtitleTrackId: input.preferredSubtitleTrackId,
+      ...(input.settingsPreferences !== undefined
+        ? {
+            preferences: {
+              directPlayAudioFallbackEnabled:
+                input.settingsPreferences.directPlayAudioFallbackEnabled,
+              subtitleMode: input.settingsPreferences.subtitleMode,
+              preferredSubtitleLanguage:
+                input.settingsPreferences.preferredSubtitleLanguage,
+              preferForcedSubtitlesEnabled:
+                input.settingsPreferences.preferForcedSubtitlesEnabled,
+            },
+          }
+        : {}),
     });
 
     if (decision.kind === 'unsupported' || decision.candidateId === null) {
@@ -205,6 +227,7 @@ export class PlexStreamResolver {
       mediaDetail,
       candidate: selected,
       selectedPart: selectedPrivate,
+      settingsPreferences: input.settingsPreferences,
     });
 
     const pmsSession = await this.#startSession(input.requestId, load.media, decision.kind, connection, diagnostics);
@@ -380,11 +403,17 @@ function buildPrivatePlaybackDescriptor(input: {
   mediaDetail: PlexMediaItem;
   candidate: DesktopStreamMediaCandidate;
   selectedPart: PlexMediaPart;
+  settingsPreferences?: DesktopPlaybackSettingsPreferences;
 }): PlexPrivilegedPlaybackDescriptor {
   return {
     requestId: input.requestId,
     decisionKind: input.decision.kind as Exclude<DesktopStreamPolicyDecision['kind'], 'unsupported'>,
-    playbackUrl: buildPlaybackUrl(input.connection, input.decision.kind, input.selectedPart),
+    playbackUrl: buildPlaybackUrl(
+      input.connection,
+      input.decision.kind,
+      input.selectedPart,
+      input.settingsPreferences,
+    ),
     credentialHeader: { ...input.authHeader },
     selectedConnection: projectConnection(input.connection),
     media: { id: toPlayerMediaId(input.mediaDetail), title: input.mediaDetail.title },
@@ -396,6 +425,8 @@ function buildPrivatePlaybackDescriptor(input: {
       selectedTrackIds: input.decision.selectedTrackIds,
       selectedPrivateTrackIds: mapSelectedPrivateTrackIds(input.selectedPart, input.candidate, input.decision),
       trackMap: buildPlaybackTrackMap(input.selectedPart, input.candidate),
+      audioOutputNativeKey: null,
+      dtsPassthroughEnabled: false,
     },
   };
 }
@@ -404,17 +435,33 @@ function buildPlaybackUrl(
   connection: PlexConnection,
   decisionKind: DesktopStreamPolicyDecision['kind'],
   part: PlexMediaPart,
+  preferences?: DesktopPlaybackSettingsPreferences,
 ): string {
   const base = connection.uri.replace(/\/+$/u, '');
   if (decisionKind === 'transcode') {
-    const path = encodeURIComponent(part.key);
-    return `${base}/video/:/transcode/universal/start?path=${path}&protocol=hls`;
+    const parameters = new URLSearchParams({ path: part.key, protocol: 'hls' });
+    if (
+      preferences !== undefined &&
+      !preferences.transcodeCompatibilityModeEnabled &&
+      preferences.transcodeQuality !== 'default'
+    ) {
+      const [videoBitrate, videoResolution] = preferences.transcodeQuality.split('-');
+      parameters.set('videoBitrate', videoBitrate);
+      parameters.set('videoResolution', videoResolution);
+    }
+    return `${base}/video/:/transcode/universal/start?${parameters.toString()}`;
   }
   if (decisionKind === 'direct-stream') {
     const path = encodeURIComponent(part.key);
     return `${base}/video/:/transcode/universal/start?path=${path}&protocol=hls&directStream=1`;
   }
   return `${base}${part.key.startsWith('/') ? part.key : `/${part.key}`}`;
+}
+
+function dynamicRangePreferenceRank(
+  dynamicRange: DesktopStreamDynamicRange | null | undefined,
+): number {
+  return dynamicRange === 'hdr10' ? 0 : 1;
 }
 
 function findSelectedPrivatePart(

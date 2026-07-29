@@ -9,6 +9,7 @@ import {
 import type { DiagnosticEventStore, DiagnosticEventInput } from '../diagnostics/diagnosticEventStore.js';
 import type {
   NativePlayerHostCommandResult,
+  NativePlayerHostAudioOutputResult,
   NativePlayerHostFailure,
   NativePlayerHostLifecycleFailure,
   NativePlayerHostPort,
@@ -21,12 +22,20 @@ import {
   safeNativeHostFailure,
   toNativeHelperCleanupMessage,
   toNativeHelperCommand,
+  toNativeHelperAudioOutputQuery,
 } from './nativeHelperProtocolCodec.js';
 
-type PendingCommand = {
-  requestId: PlayerRequestId; resolve(result: NativePlayerHostCommandResult): void;
-  timeout: ReturnType<typeof setTimeout>; events: unknown[];
-};
+type PendingCommand =
+  | {
+      kind: 'command'; requestId: PlayerRequestId;
+      resolve(result: NativePlayerHostCommandResult): void;
+      timeout: ReturnType<typeof setTimeout>; events: unknown[];
+    }
+  | {
+      kind: 'audio-output'; requestId: PlayerRequestId;
+      resolve(result: NativePlayerHostAudioOutputResult): void;
+      timeout: ReturnType<typeof setTimeout>; events: [];
+    };
 export interface NativePlayerHostChildProcess extends EventEmitter {
   stdin: Writable;
   stdout: Readable;
@@ -84,6 +93,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
         );
       }, this.#requestTimeoutMs);
       const pending: PendingCommand = {
+        kind: 'command',
         requestId: command.requestId,
         resolve: (result) => {
           clearTimeout(timeout);
@@ -118,6 +128,56 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
             true,
             true,
           ),
+        });
+      }
+    });
+  }
+  async queryAudioOutputs(
+    requestId: PlayerRequestId,
+  ): Promise<NativePlayerHostAudioOutputResult> {
+    if (this.#pending.has(requestId)) {
+      return {
+        ok: false,
+        error: safeNativeHostFailure('PLAYER_HELPER_DUPLICATE_REQUEST', 'helper-failure', false, false),
+      };
+    }
+    const child = this.#getOrSpawnChild();
+    if ('error' in child) {
+      return { ok: false, error: child.error };
+    }
+    const activeChild = child.child;
+    return new Promise<NativePlayerHostAudioOutputResult>((resolve) => {
+      const timeout = setTimeout(() => {
+        this.#quarantineChild(
+          activeChild,
+          safeNativeHostFailure('PLAYER_HELPER_TIMEOUT', 'timeout', true, true),
+        );
+      }, this.#requestTimeoutMs);
+      this.#pending.set(requestId, {
+        kind: 'audio-output',
+        requestId,
+        resolve: (result) => {
+          clearTimeout(timeout);
+          resolve(result);
+        },
+        timeout,
+        events: [],
+      });
+      try {
+        const serialized = JSON.stringify(toNativeHelperAudioOutputQuery(requestId));
+        validateHelperMessageSize(serialized);
+        activeChild.stdin.write(`${serialized}\n`, (error) => {
+          if (error !== null && error !== undefined) {
+            this.#resolveAudioPending(requestId, {
+              ok: false,
+              error: safeNativeHostFailure('PLAYER_HELPER_WRITE_FAILED', 'helper-failure', true, true),
+            });
+          }
+        });
+      } catch {
+        this.#resolveAudioPending(requestId, {
+          ok: false,
+          error: safeNativeHostFailure('PLAYER_HELPER_WRITE_FAILED', 'helper-failure', true, true),
         });
       }
     });
@@ -269,7 +329,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     if (message.message.type === 'event') {
       const requestId = readHelperEventRequestId(message.message.event);
       const pending = requestId === null ? undefined : this.#pending.get(requestId);
-      if (pending !== undefined) {
+      if (pending?.kind === 'command') {
         pending.events.push(message.message.event);
         return;
       }
@@ -278,6 +338,38 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     }
     const pending = this.#pending.get(message.message.requestId);
     if (pending === undefined) {
+      this.#recordDiagnostic({
+        category: 'validation',
+        severity: 'warning',
+        status: 'ignored',
+        operation: 'helper.late-result',
+        message: 'A late player helper result was ignored.',
+        result: 'ignored',
+        context: { count: 1 },
+      });
+      return;
+    }
+    if (message.message.type === 'audio-output.result') {
+      if (pending.kind !== 'audio-output') {
+        this.#quarantineChild(
+          child,
+          safeNativeHostFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true),
+        );
+        return;
+      }
+      this.#resolveAudioPending(
+        pending.requestId,
+        message.message.ok
+          ? { ok: true, outputs: message.message.outputs }
+          : { ok: false, error: normalizeNativeHelperFailure(message.message.error) },
+      );
+      return;
+    }
+    if (pending.kind !== 'command') {
+      this.#quarantineChild(
+        child,
+        safeNativeHostFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true),
+      );
       return;
     }
     if (message.message.ok) {
@@ -300,20 +392,36 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
   }
   #resolvePending(requestId: PlayerRequestId, result: NativePlayerHostCommandResult): void {
     const pending = this.#pending.get(requestId);
-    if (pending === undefined) {
+    if (pending === undefined || pending.kind !== 'command') {
       return;
     }
     this.#pending.delete(requestId);
     pending.resolve(result);
   }
-  #rejectAllPending(error: NativePlayerHostFailure): void {
+  #resolveAudioPending(
+    requestId: PlayerRequestId,
+    result: NativePlayerHostAudioOutputResult,
+  ): void {
+    const pending = this.#pending.get(requestId);
+    if (pending === undefined || pending.kind !== 'audio-output') {
+      return;
+    }
+    this.#pending.delete(requestId);
+    pending.resolve(result);
+  }
+  #rejectAllPending(
+    error: NativePlayerHostFailure,
+    options: { recordAudioFailures: boolean } = { recordAudioFailures: true },
+  ): void {
     for (const [requestId, pending] of [...this.#pending]) {
       clearTimeout(pending.timeout);
       const cleanupAborted = error.category === 'aborted';
-      this.#recordFailure(requestId, error, {
-        operation: cleanupAborted ? 'helper.cleanup' : error.category === 'timeout' ? 'helper.timeout' : 'helper.command',
-        status: cleanupAborted ? 'cancelled' : error.code === 'PLAYER_HELPER_MALFORMED_OUTPUT' ? 'redacted' : 'failed',
-      });
+      if (pending.kind === 'command' || options.recordAudioFailures) {
+        this.#recordFailure(requestId, error, {
+          operation: cleanupAborted ? 'helper.cleanup' : error.category === 'timeout' ? 'helper.timeout' : 'helper.command',
+          status: cleanupAborted ? 'cancelled' : error.code === 'PLAYER_HELPER_MALFORMED_OUTPUT' ? 'redacted' : 'failed',
+        });
+      }
       pending.resolve({ ok: false, error });
       this.#pending.delete(requestId);
     }
@@ -333,11 +441,14 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     this.#reapChild(child).catch(() => this.#recordCleanupFailure(requestId));
   }
   #settleProcessFailure(error: NativePlayerHostFailure): void {
-    if (this.#pending.size > 0) {
-      this.#rejectAllPending(error);
-      return;
+    const pendingRequests = [...this.#pending.values()];
+    const hasPendingAudioQuery = pendingRequests.some((pending) => pending.kind === 'audio-output');
+    if (pendingRequests.length > 0) {
+      this.#rejectAllPending(error, { recordAudioFailures: !hasPendingAudioQuery });
     }
-    this.#emitLifecycleFailure({ requestId: null, error });
+    if (pendingRequests.length === 0 || hasPendingAudioQuery) {
+      this.#emitLifecycleFailure({ requestId: null, error });
+    }
   }
   #emitLifecycleFailure(failure: NativePlayerHostLifecycleFailure): void {
     this.#recordFailure(failure.requestId, failure.error, {
