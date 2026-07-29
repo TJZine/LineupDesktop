@@ -70,8 +70,7 @@ import { createShellWindowController } from './window/shellWindowController.js';
 import { resolveDesktopSettingsFilePath } from './persistence/appDataPaths.js';
 import { DesktopSettingsStore } from './persistence/desktopSettingsStore.js';
 import { registerSettingsIpcHandlers, type SettingsIpcTeardown } from './settings/settingsIpc.js';
-import { DesktopSettingsPolicy } from './settings/desktopSettingsPolicy.js';
-import { SettingsAudioOutputOwner } from './settings/settingsAudioOutputOwner.js';
+import { createSettingsNativeHostComposition } from './settings/settingsNativeHostComposition.js';
 import { SmokeBootstrapOwner } from './smokeBootstrapOwner.js';
 import { SingleInstanceOwner } from './singleInstanceOwner.js';
 import { ChannelPersistenceBootstrapOwner } from './persistence/channelPersistenceBootstrapOwner.js';
@@ -270,19 +269,19 @@ async function startApplication(): Promise<void> {
     const productionNativeHostFactory = shellMode === 'production'
       ? createProductionNativeHostFactory({ diagnosticEventStore })
       : null;
-    const productionNativeHost = productionNativeHostFactory?.() ?? null;
-    const settingsPolicy = new DesktopSettingsPolicy({
+    const settingsNativeHostComposition = createSettingsNativeHostComposition({
+      shellMode,
       platform: process.platform,
-      nativeHostAvailable: productionNativeHost !== null,
-      diagnosticAdmission: diagnosticEventStore,
-    });
-    settingsPolicy.acceptSnapshot(initialSettingsSnapshot);
-    const settingsAudioOutputOwner = new SettingsAudioOutputOwner({
-      platform: process.platform,
-      nativeHost: productionNativeHost,
+      initialSnapshot: initialSettingsSnapshot,
+      createProductionNativeHost: () => productionNativeHostFactory?.() ?? null,
       createRequestId,
       diagnosticEventStore,
     });
+    const {
+      nativeHost: productionNativeHost,
+      settingsPolicy,
+      settingsAudioOutputOwner,
+    } = settingsNativeHostComposition;
     teardownSettingsIpc = registerSettingsIpcHandlers({
       store: settingsStore,
       policy: settingsPolicy,

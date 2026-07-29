@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import type { platform as processPlatform } from 'node:process';
 
 import {
+  DESKTOP_AUDIO_OUTPUT_MAX_DEVICE_COUNT,
+  sanitizeAudioOutputLabel,
   type DesktopAudioOutputDeviceId,
   type DesktopAudioOutputList,
   type DesktopAudioOutputRow,
@@ -15,7 +17,7 @@ const SYSTEM_DEFAULT_ROW = Object.freeze({
   label: 'System default',
 } as const);
 const HASH_DOMAIN = 'lineup-desktop-audio-output-v1\0';
-const MAX_NATIVE_OUTPUTS = 32;
+const MAX_NATIVE_OUTPUTS = DESKTOP_AUDIO_OUTPUT_MAX_DEVICE_COUNT;
 type RuntimePlatform = typeof processPlatform;
 
 export interface SettingsAudioOutputOwnerOptions {
@@ -96,7 +98,7 @@ export class SettingsAudioOutputOwner {
         continue;
       }
       seenNativeKeys.add(output.nativeKey);
-      const label = sanitizeLabel(output.label);
+      const label = sanitizeAudioOutputLabel(output.label);
       if (label === '') {
         sanitized = true;
         continue;
@@ -162,15 +164,6 @@ export function createAudioOutputDeviceId(nativeKey: string): DesktopAudioOutput
     .update(nativeKey, 'utf8')
     .digest('base64url');
   return `audio_${digest}`;
-}
-
-function sanitizeLabel(value: string): string {
-  return [...value.normalize('NFKC')
-    .replace(/\p{Cc}/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim()]
-    .slice(0, 80)
-    .join('');
 }
 
 function unavailable(

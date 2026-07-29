@@ -109,6 +109,36 @@ test('settings IPC synchronizes policy only after a successful committed replace
   assert.equal((accepted[0] as ReturnType<typeof snapshot>).values.debugLoggingEnabled, true);
 });
 
+test('settings IPC reports a committed replacement as success when policy refresh fails', async () => {
+  const handlers = new Map<string, (event: unknown, payload: unknown) => unknown>();
+  registerSettingsIpcHandlers({
+    store: {
+      loadSnapshot: async () => snapshot(2),
+      replace: async (_revision, values) => ({ ...snapshot(3), values }),
+    },
+    policy: {
+      acceptSnapshot() {
+        throw new Error('policy refresh failed');
+      },
+      getCapabilityProjection: () => createDesktopSettingsView(snapshot(3)).capabilities,
+    },
+    isAuthorizedEvent: () => true,
+    ipcMain: {
+      handle: (channel, handler) => handlers.set(channel, handler as never),
+      removeHandler: () => undefined,
+    },
+  });
+
+  const result = await handlers.get(LINEUP_SETTINGS_REPLACE_CHANNEL)?.({}, {
+    requestId: 'settings-replace-policy-failure',
+    expectedRevision: 2,
+    values: DEFAULT_DESKTOP_SETTINGS_VALUES,
+  }) as SuccessfulSettingsView & { ok: true };
+
+  assert.equal(result.ok, true);
+  assert.equal(result.value.snapshot.revision, 3);
+});
+
 test('settings IPC canonicalizes only exact system-default and clones capabilities per response', async () => {
   const handlers = new Map<string, (event: unknown, payload: unknown) => unknown>();
   const storedValues: unknown[] = [];

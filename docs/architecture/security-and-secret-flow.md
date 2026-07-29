@@ -101,7 +101,7 @@ Unit 3D acceptance changes only workstream status and no security boundary.
 WS3 also adds exact request-bound `player.pauseIfCurrent` and
 `player.playIfCurrent` renderer intents on the existing player channel.
 Preload admits only the literals and exact outer envelope. Main validates the
-required snapshot request id and rejects stale identity before custody or host
+snapshot request id and rejects stale identity before custody or host
 submission; the identity is never added to `PlayerCommand`, privileged setup,
 or helper input. No Settings value, capability, audio row, intent, diagnostic,
 or proof artifact may expose credentials, headers, tokenized URLs, paths, raw

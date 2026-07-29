@@ -205,6 +205,11 @@ test('audio output contract accepts only exact bounded ordered safe lists', () =
   assert.equal(isDesktopAudioOutputList({
     status: 'partial',
     reason: 'device-list-sanitized',
+    outputs: [ready.outputs[0], { kind: 'device', id: audioA, label: 'safe\u202Eunsafe' }],
+  }), false);
+  assert.equal(isDesktopAudioOutputList({
+    status: 'partial',
+    reason: 'device-list-sanitized',
     outputs: [ready.outputs[0]],
   }), false);
   assert.equal(isDesktopAudioOutputList({

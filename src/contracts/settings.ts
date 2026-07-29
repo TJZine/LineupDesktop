@@ -1,4 +1,21 @@
-export const SETTINGS_SCHEMA_VERSION = 2 as const;
+import {
+  AUDIO_OUTPUT_DEVICE_ID_PATTERN,
+  SETTINGS_SCHEMA_VERSION,
+  isSharedDesktopAudioOutputList,
+  type DESKTOP_AUDIO_OUTPUT_LIST_REASONS,
+  type DESKTOP_AUDIO_OUTPUT_LIST_STATUSES,
+} from './settingsAudioValidation.js';
+
+export {
+  AUDIO_OUTPUT_DEVICE_ID_PATTERN,
+  DESKTOP_AUDIO_OUTPUT_LIST_REASONS,
+  DESKTOP_AUDIO_OUTPUT_LIST_STATUSES,
+  DESKTOP_AUDIO_OUTPUT_MAX_DEVICE_COUNT,
+  DESKTOP_AUDIO_OUTPUT_MAX_LABEL_LENGTH,
+  SETTINGS_SCHEMA_VERSION,
+  isDesktopAudioOutputStatusReason,
+  sanitizeAudioOutputLabel,
+} from './settingsAudioValidation.js';
 
 export const DESKTOP_SETTINGS_LOAD_STATUSES = [
   'ready',
@@ -27,21 +44,7 @@ export const DESKTOP_SETTINGS_ERROR_MESSAGES = {
 
 export const SETTINGS_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/u;
 export const SETTINGS_INVALID_REQUEST_ID = 'settings-invalid-request' as const;
-export const AUDIO_OUTPUT_DEVICE_ID_PATTERN = /^audio_[A-Za-z0-9_-]{43}$/u;
 export type DesktopAudioOutputDeviceId = `audio_${string}`;
-export const DESKTOP_AUDIO_OUTPUT_LIST_STATUSES = [
-  'ready',
-  'partial',
-  'unavailable',
-] as const;
-export const DESKTOP_AUDIO_OUTPUT_LIST_REASONS = [
-  'available',
-  'platform-unsupported',
-  'helper-unavailable',
-  'enumeration-failed',
-  'device-list-sanitized',
-  'device-list-truncated',
-] as const;
 
 export const DESKTOP_SETTINGS_VALUE_KEYS = [
   'launchMode',
@@ -104,6 +107,12 @@ export interface DesktopSettingsValues {
   previewBadgesEnabled: boolean;
   setupReminderEnabled: boolean;
 }
+
+type MissingDesktopSettingsValueKey =
+  Exclude<keyof DesktopSettingsValues, (typeof DESKTOP_SETTINGS_VALUE_KEYS)[number]>;
+const DESKTOP_SETTINGS_VALUE_KEYS_ARE_EXHAUSTIVE:
+  MissingDesktopSettingsValueKey extends never ? true : never = true;
+void DESKTOP_SETTINGS_VALUE_KEYS_ARE_EXHAUSTIVE;
 
 export type DesktopSettingsReplaceValues = Omit<DesktopSettingsValues, 'audioOutputDeviceId'> & {
   audioOutputDeviceId: DesktopSettingsValues['audioOutputDeviceId'] | 'system-default';
@@ -331,60 +340,7 @@ export function isDesktopSettingsGetAudioOutputsRequest(
 }
 
 export function isDesktopAudioOutputList(value: unknown): value is DesktopAudioOutputList {
-  if (
-    !isPlainRecord(value) ||
-    !hasOnlyKeys(value, ['status', 'reason', 'outputs']) ||
-    !isAudioOutputStatusReason(value.status, value.reason) ||
-    !Array.isArray(value.outputs) ||
-    value.outputs.length < 1 ||
-    value.outputs.length > 33
-  ) {
-    return false;
-  }
-  const [systemRow, ...deviceRows] = value.outputs;
-  if (
-    !isPlainRecord(systemRow) ||
-    !hasOnlyKeys(systemRow, ['kind', 'id', 'label']) ||
-    systemRow.kind !== 'system-default' ||
-    systemRow.id !== 'system-default' ||
-    systemRow.label !== 'System default'
-  ) {
-    return false;
-  }
-  const ids = new Set<string>(['system-default']);
-  let previous: { label: string; id: string } | null = null;
-  for (const row of deviceRows) {
-    if (
-      !isPlainRecord(row) ||
-      !hasOnlyKeys(row, ['kind', 'id', 'label']) ||
-      row.kind !== 'device' ||
-      typeof row.id !== 'string' ||
-      !AUDIO_OUTPUT_DEVICE_ID_PATTERN.test(row.id) ||
-      typeof row.label !== 'string' ||
-      row.label.length === 0 ||
-      row.label !== sanitizeAudioOutputLabel(row.label) ||
-      [...row.label].length > 80 ||
-      ids.has(row.id)
-    ) {
-      return false;
-    }
-    if (
-      previous !== null &&
-      (previous.label > row.label ||
-        (previous.label === row.label && previous.id >= row.id))
-    ) {
-      return false;
-    }
-    ids.add(row.id);
-    previous = { label: row.label, id: row.id };
-  }
-  if (value.status === 'unavailable' && deviceRows.length !== 0) {
-    return false;
-  }
-  if (value.status === 'partial' && deviceRows.length === 0) {
-    return false;
-  }
-  return true;
+  return isSharedDesktopAudioOutputList(value);
 }
 
 export function isDesktopSettingsSnapshot(value: unknown): value is DesktopSettingsSnapshot {
@@ -529,26 +485,6 @@ function isAudioOutputDeviceId(value: unknown, allowSystemDefault: boolean): boo
   return typeof value === 'string' &&
     value === value.trim() &&
     AUDIO_OUTPUT_DEVICE_ID_PATTERN.test(value);
-}
-
-function isAudioOutputStatusReason(status: unknown, reason: unknown): boolean {
-  if (status === 'ready') return reason === 'available';
-  if (status === 'partial') {
-    return reason === 'device-list-sanitized' || reason === 'device-list-truncated';
-  }
-  return status === 'unavailable' &&
-    (reason === 'platform-unsupported' ||
-      reason === 'helper-unavailable' ||
-      reason === 'enumeration-failed');
-}
-
-function sanitizeAudioOutputLabel(value: string): string {
-  return [...value.normalize('NFKC')
-    .replace(/\p{Cc}/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim()]
-    .slice(0, 80)
-    .join('');
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

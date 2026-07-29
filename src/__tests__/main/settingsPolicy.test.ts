@@ -179,6 +179,25 @@ test('desktop settings policy retains an accepted snapshot when optional diagnos
   });
 });
 
+test('desktop settings policy remains hydrated when diagnostic admission throws', () => {
+  const policy = new DesktopSettingsPolicy({
+    platform: 'win32',
+    nativeHostAvailable: true,
+    diagnosticAdmission: {
+      setSettingsAdmission() {
+        throw new Error('diagnostic admission failed');
+      },
+      recordSettingsDebug() {
+        throw new Error('must not escape');
+      },
+    },
+  });
+  const acceptedSnapshot = snapshot({ subtitleMode: 'standard' });
+
+  assert.doesNotThrow(() => policy.acceptSnapshot(acceptedSnapshot));
+  assert.equal(policy.getPreferences().subtitleMode, 'standard');
+});
+
 test('desktop settings policy preserves conservative production capability truth', () => {
   const windows = hydratedPolicy('win32', true);
   assert.deepEqual(windows.getCapabilityProjection().audioOutputSelection, {

@@ -38,7 +38,7 @@ test('audio output owner hashes private keys, sanitizes labels, sorts, and resol
   host.result = {
     ok: true,
     outputs: [
-      { nativeKey: 'synthetic-key-b', label: '  Zebra\u0007 Device  ' },
+      { nativeKey: 'synthetic-key-b', label: '  Zebra\u0007\u202E Device  ' },
       { nativeKey: 'synthetic-key-a', label: 'Alpha\u00a0Device' },
     ],
   };

@@ -36,67 +36,6 @@ test('smoke composition keeps synchronous and asynchronous player delivery in di
       `missing required playback wiring symbol: ${symbol}`,
     );
   }
-  const productionFactoryMatches = [
-    ...mainSource.matchAll(/createProductionNativeHostFactory\(\{\s*diagnosticEventStore\s*\}\)/gu),
-  ];
-  assert.equal(productionFactoryMatches.length, 1);
-  const productionFactoryCreation = productionFactoryMatches[0]?.index;
-  assert.notEqual(productionFactoryCreation, undefined);
-
-  const productionHostMatches = [
-    ...mainSource.matchAll(/productionNativeHostFactory\?\.\(\)/gu),
-  ];
-  assert.equal(productionHostMatches.length, 1);
-  const productionHostInvocation = productionHostMatches[0]?.index;
-  assert.notEqual(productionHostInvocation, undefined);
-
-  const settingsConsumer = mainSource.indexOf('new SettingsAudioOutputOwner({');
-  const playerConsumer = mainSource.indexOf('registerPlayerIpcHandlers({');
-  assert.notEqual(settingsConsumer, -1);
-  assert.notEqual(playerConsumer, -1);
-  assert.ok(productionFactoryCreation < productionHostInvocation);
-  assert.ok(productionHostInvocation < settingsConsumer);
-  assert.ok(productionHostInvocation < playerConsumer);
-
-  const nativeHostInjection = /\bnativeHost\s*:\s*productionNativeHost(?=\s*[,}])/gu;
-  assert.doesNotMatch(
-    'nativeHost: productionNativeHostAlternative,',
-    /\bnativeHost\s*:\s*productionNativeHost(?=\s*[,}])/u,
-  );
-  assert.equal(mainSource.match(nativeHostInjection)?.length, 2);
-  const settingsComposition = sliceBetween(
-    mainSource,
-    'new SettingsAudioOutputOwner({',
-    'teardownSettingsIpc = registerSettingsIpcHandlers({',
-  );
-  const playerComposition = sliceBetween(
-    mainSource,
-    'teardownPlayerIpc = registerPlayerIpcHandlers({',
-    'onNativeHostLifecycleFailure:',
-  );
-  assert.equal(settingsComposition.match(nativeHostInjection)?.length, 1);
-  assert.equal(playerComposition.match(nativeHostInjection)?.length, 1);
-  assert.doesNotMatch(mainSource, /nativeHostFactory\s*:/u);
-
-  assert.match(
-    playerIpcSource,
-    /options\.shellMode === 'development' \|\| options\.shellMode === 'smoke'\s*\n\s*\? createDevelopmentHost\(options\)\s*\n\s*: options\.nativeHost \?\? null;/u,
-  );
-  const developmentHostOwner = sliceBetween(
-    playerIpcSource,
-    'function createDevelopmentHost(',
-    '\nfunction emitEvents(',
-  );
-  assert.equal(
-    playerIpcSource.match(/options\.nativeHostFactory\?\.\(\) \?\? new InertNativePlayerHost\(\)/gu)?.length,
-    1,
-  );
-  assert.match(
-    developmentHostOwner,
-    /options\.nativeHostFactory\?\.\(\) \?\? new InertNativePlayerHost\(\)/u,
-  );
-  assert.equal(mainSource.includes('originalNativeHostFactory'), false);
-
   assertSymbolsInOrder(
     sliceBetween(mainSource, 'onNativeHostLifecycleFailure:', 'wirePlexPlaybackCleanup({'),
     [

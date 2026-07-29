@@ -1,3 +1,9 @@
+import {
+  AUDIO_OUTPUT_DEVICE_ID_PATTERN,
+  SETTINGS_SCHEMA_VERSION,
+  isSharedDesktopAudioOutputList,
+} from '../contracts/settingsAudioValidation.js';
+
 export const SETTINGS_INVALID_REQUEST_ID = 'settings-invalid-request';
 export const SETTINGS_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/u;
 export const SETTINGS_ERROR_CODES = [
@@ -68,7 +74,7 @@ export function isSettingsReplaceRequest(value: unknown): value is {
     hasOnlyKeys(value, ['requestId', 'expectedRevision', 'values']) &&
     isSettingsRequestId(value.requestId) &&
     isSafeRevision(value.expectedRevision) &&
-    isSettingsValues(value.values);
+    isSettingsValues(value.values, true);
 }
 
 export function isSettingsResult(value: unknown, expectedRequestId: string): boolean {
@@ -94,7 +100,7 @@ export function isSettingsAudioOutputResult(value: unknown, expectedRequestId: s
   }
   if (value.ok) {
     return hasOnlyKeys(value, ['ok', 'value', 'requestId']) &&
-      isAudioOutputList(value.value);
+      isSharedDesktopAudioOutputList(value.value);
   }
   if (!hasOnlyKeys(value, ['ok', 'error', 'requestId']) ||
     !isPlainRecord(value.error) ||
@@ -115,7 +121,7 @@ export function settingsBridgeFailure(
 
 function isSettingsSnapshot(value: unknown): boolean {
   return isPlainRecord(value) && hasOnlyKeys(value, ['schemaVersion', 'revision', 'status', 'values']) &&
-    value.schemaVersion === 2 && isSafeRevision(value.revision) &&
+    value.schemaVersion === SETTINGS_SCHEMA_VERSION && isSafeRevision(value.revision) &&
     ['ready', 'missing', 'corrupt', 'unsupported-version'].includes(value.status as string) &&
     isSettingsValues(value.values, false);
 }
@@ -156,55 +162,6 @@ function isCapabilityEntry(value: unknown): boolean {
       .includes(value.reason as string);
 }
 
-function isAudioOutputList(value: unknown): boolean {
-  if (!isPlainRecord(value) || !hasOnlyKeys(value, ['status', 'reason', 'outputs']) ||
-    !isAudioStatusReason(value.status, value.reason) || !Array.isArray(value.outputs) ||
-    value.outputs.length < 1 || value.outputs.length > 33) {
-    return false;
-  }
-  const [system, ...devices] = value.outputs;
-  if (!isPlainRecord(system) || !hasOnlyKeys(system, ['kind', 'id', 'label']) ||
-    system.kind !== 'system-default' || system.id !== 'system-default' ||
-    system.label !== 'System default') {
-    return false;
-  }
-  const ids = new Set(['system-default']);
-  let previous: { label: string; id: string } | null = null;
-  for (const row of devices) {
-    if (!isPlainRecord(row) || !hasOnlyKeys(row, ['kind', 'id', 'label']) ||
-      row.kind !== 'device' || typeof row.id !== 'string' ||
-      !/^audio_[A-Za-z0-9_-]{43}$/u.test(row.id) || ids.has(row.id) ||
-      typeof row.label !== 'string' || row.label.length === 0 ||
-      row.label !== sanitizeAudioLabel(row.label) || [...row.label].length > 80) {
-      return false;
-    }
-    if (previous !== null && (previous.label > row.label ||
-      (previous.label === row.label && previous.id >= row.id))) {
-      return false;
-    }
-    ids.add(row.id);
-    previous = { label: row.label, id: row.id };
-  }
-  if (value.status === 'unavailable') return devices.length === 0;
-  return value.status !== 'partial' || devices.length > 0;
-}
-
-function isAudioStatusReason(status: unknown, reason: unknown): boolean {
-  if (status === 'ready') return reason === 'available';
-  if (status === 'partial') {
-    return reason === 'device-list-sanitized' || reason === 'device-list-truncated';
-  }
-  return status === 'unavailable' &&
-    ['platform-unsupported', 'helper-unavailable', 'enumeration-failed'].includes(reason as string);
-}
-
-function sanitizeAudioLabel(value: string): string {
-  return [...value.normalize('NFKC')
-    .replace(/\p{Cc}/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim()].slice(0, 80).join('');
-}
-
 const SETTINGS_VALUE_KEYS = [
   'launchMode',
   'audioSetupCompleted',
@@ -236,7 +193,7 @@ const SETTINGS_VALUE_KEYS = [
   'setupReminderEnabled',
 ] as const;
 
-function isSettingsValues(value: unknown, allowSystemDefault = true): boolean {
+function isSettingsValues(value: unknown, allowSystemDefault: boolean): boolean {
   return isPlainRecord(value) &&
     hasOnlyKeys(value, SETTINGS_VALUE_KEYS) &&
     (value.launchMode === 'windowed' || value.launchMode === 'fullscreen') &&
@@ -273,7 +230,7 @@ function isAudioOutputDeviceId(value: unknown, allowSystemDefault: boolean): boo
   if (value === null || (allowSystemDefault && value === 'system-default')) return true;
   return typeof value === 'string' &&
     value === value.trim() &&
-    /^audio_[A-Za-z0-9_-]{43}$/u.test(value);
+    AUDIO_OUTPUT_DEVICE_ID_PATTERN.test(value);
 }
 
 function isSettingsRequestId(value: unknown): value is string {

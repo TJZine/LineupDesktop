@@ -120,6 +120,10 @@ const playerRecoveryBridgeSourceText = readFileSync(
 );
 const settingsGuardSourceUrl = new URL('../../preload/settingsBridgeGuards.cts', import.meta.url);
 const settingsGuardSourceText = readFileSync(settingsGuardSourceUrl, 'utf8');
+const settingsAudioValidationSourceText = readFileSync(
+  new URL('../../contracts/settingsAudioValidation.ts', import.meta.url),
+  'utf8',
+);
 const settingsBridgeSourceUrl = new URL('../../preload/settingsBridge.cts', import.meta.url);
 const settingsBridgeSourceText = readFileSync(settingsBridgeSourceUrl, 'utf8');
 const preloadBundleToolSourceText = readFileSync(
@@ -394,6 +398,17 @@ function evaluatePlayerRecoveryBridgeModule(): Record<string, unknown> {
 }
 
 function evaluateSettingsGuardModule(): Record<string, unknown> {
+  const sharedExports = {};
+  const sharedModule = { exports: sharedExports };
+  const compiledShared = ts.transpileModule(settingsAudioValidationSourceText, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    fileName: 'src/contracts/settingsAudioValidation.ts',
+  }).outputText;
+  new Function('require', 'exports', 'module', compiledShared)(
+    (moduleName: string) => assert.fail(`unexpected settings audio validation require ${moduleName}`),
+    sharedExports,
+    sharedModule,
+  );
   const exportsObject = {};
   const moduleObject = { exports: exportsObject };
   const compiled = ts.transpileModule(settingsGuardSourceText, {
@@ -401,7 +416,12 @@ function evaluateSettingsGuardModule(): Record<string, unknown> {
     fileName: 'src/preload/settingsBridgeGuards.cts',
   }).outputText;
   new Function('require', 'exports', 'module', compiled)(
-    (moduleName: string) => assert.fail(`unexpected settings guard require ${moduleName}`),
+    (moduleName: string) => {
+      if (moduleName === '../contracts/settingsAudioValidation.js') {
+        return sharedModule.exports;
+      }
+      return assert.fail(`unexpected settings guard require ${moduleName}`);
+    },
     exportsObject,
     moduleObject,
   );
@@ -2712,6 +2732,13 @@ test('preload settings audio guards reject unsafe, unordered, duplicate, and mis
     value: {
       ...base.value,
       outputs: [system, { ...device, label: 'unsafe\u0007label' }],
+    },
+  }, requestId), false);
+  assert.equal(isAudioResult({
+    ...base,
+    value: {
+      ...base.value,
+      outputs: [system, { ...device, label: 'unsafe\u202Elabel' }],
     },
   }, requestId), false);
 });

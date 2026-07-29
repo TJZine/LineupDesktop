@@ -66,16 +66,21 @@ export function registerSettingsIpcHandlers(
     if (!isDesktopSettingsReplaceRequest(payload)) {
       return desktopSettingsFailure(requestId, 'validation-failed');
     }
+    let snapshot: Awaited<ReturnType<typeof options.store.replace>>;
     try {
-      const snapshot = await options.store.replace(
+      snapshot = await options.store.replace(
         payload.expectedRevision,
         normalizeDesktopSettingsReplaceValues(payload.values),
       );
-      options.policy?.acceptSnapshot(snapshot);
-      return desktopSettingsSuccess(payload.requestId, createPolicyView(options, snapshot));
     } catch (error: unknown) {
       return storeFailure(payload.requestId, error);
     }
+    try {
+      options.policy?.acceptSnapshot(snapshot);
+    } catch {
+      // The durable replace already committed; policy refresh is best-effort here.
+    }
+    return desktopSettingsSuccess(payload.requestId, createPolicyView(options, snapshot));
   });
 
   ipc.handle(LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL, async (event, payload: unknown) => {

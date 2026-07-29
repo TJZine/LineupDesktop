@@ -26,50 +26,52 @@ export function createSettingsBridge(
       if (!isSettingsGetSnapshotRequest(input)) {
         return settingsBridgeFailure(requestId, 'validation-failed');
       }
-      return invokeSettings(invoke, channels.getSnapshot, input, requestId);
+      return invokeSettings<
+        Awaited<ReturnType<LineupDesktopPreloadApi['settings']['getSnapshot']>>
+      >(invoke, channels.getSnapshot, input, requestId);
     },
     replace: async (input) => {
       const requestId = readSettingsRequestId(input);
       if (!isSettingsReplaceRequest(input)) {
         return settingsBridgeFailure(requestId, 'validation-failed');
       }
-      return invokeSettings(invoke, channels.replace, input, requestId);
+      return invokeSettings<
+        Awaited<ReturnType<LineupDesktopPreloadApi['settings']['replace']>>
+      >(invoke, channels.replace, input, requestId);
     },
     getAudioOutputs: async (input) => {
       const requestId = readSettingsRequestId(input);
       if (!isSettingsGetSnapshotRequest(input)) {
         return settingsBridgeFailure(requestId, 'validation-failed');
       }
-      let result: unknown;
-      try {
-        result = await invoke(channels.getAudioOutputs, input);
-      } catch {
-        return settingsBridgeFailure(requestId, 'operation-failed');
-      }
-      if (!isSettingsAudioOutputResult(result, requestId)) {
-        return settingsBridgeFailure(requestId, 'validation-failed');
-      }
-      return result as Awaited<
-        ReturnType<LineupDesktopPreloadApi['settings']['getAudioOutputs']>
-      >;
+      return invokeSettings<
+        Awaited<ReturnType<LineupDesktopPreloadApi['settings']['getAudioOutputs']>>
+      >(
+        invoke,
+        channels.getAudioOutputs,
+        input,
+        requestId,
+        isSettingsAudioOutputResult,
+      );
     },
   };
 }
 
-async function invokeSettings(
+async function invokeSettings<TResult>(
   invoke: SettingsBridgeInvoke,
   channel: string,
   input: unknown,
   requestId: string,
-) {
+  resultGuard: (value: unknown, expectedRequestId: string) => boolean = isSettingsResult,
+): Promise<TResult | ReturnType<typeof settingsBridgeFailure>> {
   let result: unknown;
   try {
     result = await invoke(channel, input);
   } catch {
     return settingsBridgeFailure(requestId, 'operation-failed');
   }
-  if (!isSettingsResult(result, requestId)) {
+  if (!resultGuard(result, requestId)) {
     return settingsBridgeFailure(requestId, 'validation-failed');
   }
-  return result as Awaited<ReturnType<LineupDesktopPreloadApi['settings']['getSnapshot']>>;
+  return result as TResult;
 }

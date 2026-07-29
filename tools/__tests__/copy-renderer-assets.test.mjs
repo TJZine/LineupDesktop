@@ -42,7 +42,7 @@ test('renderer asset copy preserves recursive files and exact binary hashes', ()
   }
 });
 
-test('renderer settings runtime copy stages only the exact compiled contract', () => {
+test('renderer settings runtime copy resets and stages the exact compiled dependency closure', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-renderer-settings-runtime-'));
   const compiled = path.join(root, 'dist', 'contracts');
   const renderer = path.join(root, 'dist', 'renderer');
@@ -50,20 +50,34 @@ test('renderer settings runtime copy stages only the exact compiled contract', (
     fs.mkdirSync(path.join(compiled, 'nested'), { recursive: true });
     fs.writeFileSync(
       path.join(compiled, 'settings.js'),
-      new Uint8Array([0, 255, 10, 13, 42]),
+      "import './settingsAudioValidation.js';\nexport const settings = true;\n",
+    );
+    fs.writeFileSync(
+      path.join(compiled, 'settingsAudioValidation.js'),
+      'export const validation = true;\n',
     );
     fs.writeFileSync(path.join(compiled, 'settings.js.map'), new Uint8Array([1]));
     fs.writeFileSync(path.join(compiled, 'shell.js'), new Uint8Array([2]));
     fs.writeFileSync(path.join(compiled, 'nested', 'other.js'), new Uint8Array([3]));
+    fs.mkdirSync(path.join(renderer, 'contracts'), { recursive: true });
+    fs.writeFileSync(path.join(renderer, 'contracts', 'obsolete.js'), 'stale');
 
     copyRendererSettingsRuntime(compiled, renderer);
 
     const servedContracts = path.join(renderer, 'contracts');
     const servedSettings = path.join(servedContracts, 'settings.js');
     assert.equal(sha256(servedSettings), sha256(path.join(compiled, 'settings.js')));
+    assert.equal(
+      sha256(path.join(servedContracts, 'settingsAudioValidation.js')),
+      sha256(path.join(compiled, 'settingsAudioValidation.js')),
+    );
     assert.deepEqual(fs.readdirSync(renderer), ['contracts']);
-    assert.deepEqual(fs.readdirSync(servedContracts), ['settings.js']);
+    assert.deepEqual(
+      fs.readdirSync(servedContracts).sort(),
+      ['settings.js', 'settingsAudioValidation.js'],
+    );
     for (const relativePath of [
+      'obsolete.js',
       'settings.js.map',
       'shell.js',
       path.join('nested', 'other.js'),

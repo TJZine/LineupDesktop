@@ -57,11 +57,11 @@ export class DesktopSettingsPolicy {
 
   public acceptSnapshot(snapshot: DesktopSettingsSnapshot): void {
     this.#values = cloneDesktopSettingsValues(snapshot.values);
-    this.#diagnosticAdmission?.setSettingsAdmission({
-      debugLoggingEnabled: snapshot.values.debugLoggingEnabled,
-      subtitleDebugLoggingEnabled: snapshot.values.subtitleDebugLoggingEnabled,
-    });
     try {
+      this.#diagnosticAdmission?.setSettingsAdmission({
+        debugLoggingEnabled: snapshot.values.debugLoggingEnabled,
+        subtitleDebugLoggingEnabled: snapshot.values.subtitleDebugLoggingEnabled,
+      });
       this.#diagnosticAdmission?.recordSettingsDebug({
         surface: 'main',
         category: 'lifecycle',
@@ -76,7 +76,7 @@ export class DesktopSettingsPolicy {
         },
       });
     } catch {
-      // Optional diagnostics must not invalidate an accepted snapshot.
+      // Best-effort diagnostics must not invalidate an accepted settings snapshot.
     }
   }
 
