@@ -274,6 +274,78 @@ test('Settings focus excludes inactive detail controls and connects Recovery to 
   }
 });
 
+test('Settings category entry uses present detail controls and preserves route containment', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const audioCategory = new FocusElementDouble(
+    'settings-category-audio-subtitles',
+    false,
+    'settings',
+  );
+  const audioFallback = new FocusElementDouble(
+    'settings-direct-play-audio-fallback',
+    false,
+    'settings',
+  );
+  const playbackCategory = new FocusElementDouble(
+    'settings-category-playback-hdr',
+    false,
+    'settings',
+  );
+  const playbackFirst = new FocusElementDouble(
+    'settings-keep-playback-running',
+    false,
+    'settings',
+  );
+  const guideCategory = new FocusElementDouble('settings-category-guide', false, 'settings');
+  const globalDismiss = new FocusElementDouble('shell-inline-dismiss');
+  Object.defineProperty(globalThis, 'document', {
+    value: {
+      querySelectorAll: () => [
+        audioCategory,
+        audioFallback,
+        playbackCategory,
+        playbackFirst,
+        guideCategory,
+        globalDismiss,
+      ],
+      activeElement: null,
+    },
+    configurable: true,
+  });
+  try {
+    const registry = new FocusRegistry();
+    syncRendererFocusTargets(registry, createFocusDomBindings([]));
+
+    const audioState = registry.focusTarget(
+      registry.createInitialState('settings'),
+      'settings-category-audio-subtitles',
+    ).state;
+    const audioDetailState = registry.move(audioState, 'right').state;
+    assert.equal(audioDetailState.activeId, 'settings-direct-play-audio-fallback');
+    assert.equal(registry.move(audioDetailState, 'left').state.activeId, audioState.activeId);
+
+    const playbackState = registry.focusTarget(
+      audioState,
+      'settings-category-playback-hdr',
+    ).state;
+    assert.equal(
+      registry.move(playbackState, 'right').state.activeId,
+      'settings-keep-playback-running',
+    );
+
+    const guideState = registry.focusTarget(audioState, 'settings-category-guide').state;
+    assert.equal(registry.move(guideState, 'right').state.activeId, guideState.activeId);
+
+    assert.equal(
+      registry.focusTarget(audioState, 'shell-inline-dismiss').state.activeId,
+      'shell-inline-dismiss',
+    );
+  } finally {
+    if (originalDocument === undefined) Reflect.deleteProperty(globalThis, 'document');
+    else Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
+  }
+});
+
 test('direct audio setup focus and invalid fallback use the complete action', () => {
   const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   const output = new FocusElementDouble('audio-output-system-default', false, 'audioSetup');

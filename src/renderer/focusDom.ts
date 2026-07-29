@@ -48,6 +48,12 @@ export function registerRendererFocusTargets(
   dom: RendererDomBindings,
 ): void {
   const registered = new Set<string>();
+  const currentFocusIds = new Set(
+    dom.focusableElements
+      .filter((element) => !isElementHiddenFromFocus(element))
+      .map((element) => element.dataset.focusId)
+      .filter((focusId): focusId is string => focusId !== undefined),
+  );
   if (dom.fullscreenButton && !isElementHiddenFromFocus(dom.fullscreenButton)) {
     focusRegistry.register({
       id: 'player-fullscreen',
@@ -67,17 +73,31 @@ export function registerRendererFocusTargets(
       id: focusId,
       route,
       order: 100 + index,
-      neighbors: focusId.startsWith('settings-') ? getSettingsNeighbors(focusId) : undefined,
+      neighbors: focusId.startsWith('settings-')
+        ? getSettingsNeighbors(focusId, currentFocusIds)
+        : undefined,
     });
     registered.add(focusId);
   });
 
   [...dom.epgActionButtons, ...dom.settingsActionButtons, ...dom.setupActionButtons].forEach(
-    (button, index) => registerOrderedButton(focusRegistry, registered, button, 80 + index),
+    (button, index) => registerOrderedButton(
+      focusRegistry,
+      registered,
+      button,
+      80 + index,
+      currentFocusIds,
+    ),
   );
 
   dom.plexActionButtons.forEach((button, index) => {
-    registerOrderedButton(focusRegistry, registered, button, plexActionFocusOrder(button, index));
+    registerOrderedButton(
+      focusRegistry,
+      registered,
+      button,
+      plexActionFocusOrder(button, index),
+      currentFocusIds,
+    );
   });
 
   dom.focusableElements.forEach((element, index) => {
@@ -91,7 +111,7 @@ export function registerRendererFocusTargets(
     const neighbors = focusId.startsWith('btn-profile-pin-')
       ? getNumpadNeighbors(focusId)
       : focusId.startsWith('settings-')
-      ? getSettingsNeighbors(focusId)
+      ? getSettingsNeighbors(focusId, currentFocusIds)
       : focusId.startsWith('setup-') || focusId.startsWith('plex-') || focusId.startsWith('channel-') || focusId.startsWith('custom-') || focusId.startsWith('btn-auth-') || focusId.startsWith('btn-profile-') || focusId.startsWith('btn-server-')
       ? getStagedSetupNeighbors(focusId) ?? getSetupNeighbors(focusId)
       : shellNeighbors ?? undefined;
@@ -158,6 +178,7 @@ function registerOrderedButton(
   registered: Set<string>,
   button: HTMLButtonElement,
   order: number,
+  currentFocusIds: ReadonlySet<string>,
 ): void {
   if (isElementHiddenFromFocus(button)) {
     return;
@@ -171,7 +192,9 @@ function registerOrderedButton(
     id: focusId,
     route,
     order,
-    neighbors: focusId.startsWith('settings-') ? getSettingsNeighbors(focusId) : undefined,
+    neighbors: focusId.startsWith('settings-')
+      ? getSettingsNeighbors(focusId, currentFocusIds)
+      : undefined,
   });
   registered.add(focusId);
 }
@@ -372,15 +395,21 @@ function getNumpadNeighbors(focusId: string): Partial<Record<FocusDirection, str
   return mapping[focusId] ?? {};
 }
 
-function getSettingsNeighbors(focusId: string): Partial<Record<FocusDirection, string>> | undefined {
+function getSettingsNeighbors(
+  focusId: string,
+  currentFocusIds: ReadonlySet<string>,
+): Partial<Record<FocusDirection, string>> | undefined {
   const categoryIndex = SETTINGS_CATEGORY_FOCUS_IDS.indexOf(focusId);
   if (categoryIndex >= 0) {
+    const detailTarget = SETTINGS_CONTROL_CATEGORY
+      .get(focusId)
+      ?.find((controlId) => currentFocusIds.has(controlId));
     return {
       up: SETTINGS_CATEGORY_FOCUS_IDS[Math.max(0, categoryIndex - 1)],
       down: categoryIndex === SETTINGS_CATEGORY_FOCUS_IDS.length - 1
         ? 'settings-switch-profile'
         : SETTINGS_CATEGORY_FOCUS_IDS[categoryIndex + 1],
-      right: SETTINGS_CATEGORY_FIRST_CONTROL[focusId],
+      right: detailTarget ?? focusId,
     };
   }
   const owner = findSettingsControlCategory(focusId);
@@ -406,16 +435,6 @@ const SETTINGS_CATEGORY_FOCUS_IDS: readonly string[] = [
   'settings-category-developer',
   'settings-category-recovery',
 ];
-
-const SETTINGS_CATEGORY_FIRST_CONTROL: Readonly<Record<string, string | undefined>> = {
-  'settings-category-audio-subtitles': 'settings-audio-output',
-  'settings-category-playback-hdr': 'settings-keep-playback-running',
-  'settings-category-appearance': 'settings-launch-mode',
-  'settings-category-guide': undefined,
-  'settings-category-account': 'settings-profile-picker-startup',
-  'settings-category-developer': 'settings-debug-logging',
-  'settings-category-recovery': 'settings-setup-reminder',
-};
 
 const SETTINGS_CONTROL_CATEGORY = new Map<string, readonly string[]>([
   ['settings-category-audio-subtitles', ['settings-audio-output', 'settings-dts-passthrough', 'settings-direct-play-audio-fallback', 'settings-subtitle-mode', 'settings-preferred-subtitle-language', 'settings-prefer-forced-subtitles']],
