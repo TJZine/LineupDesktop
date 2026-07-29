@@ -253,8 +253,13 @@ export function renderRendererFocus(focusState: FocusState, dom: RendererDomBind
     const isHiddenFromRoute = isElementHiddenFromFocus(element);
     element.classList.toggle('is-focused', isActive);
     element.tabIndex = !isHiddenFromRoute && isActive ? 0 : -1;
-    if (isActive && !isHiddenFromRoute && document.activeElement !== element) {
-      element.focus({ preventScroll: true });
+    if (isActive && !isHiddenFromRoute) {
+      if (document.activeElement !== element) {
+        element.focus({ preventScroll: true });
+      }
+      if (readClosestRouteId(element) === 'settings') {
+        element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
     }
   }
 }

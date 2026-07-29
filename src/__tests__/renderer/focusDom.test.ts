@@ -15,6 +15,8 @@ class FocusElementDouble {
   className = '';
   tabIndex = -1;
   focusCount = 0;
+  scrollIntoViewCount = 0;
+  scrollIntoViewOptions: ScrollIntoViewOptions | null = null;
   clickCount = 0;
   disabled = false;
   readonly dataset: Record<string, string> = {};
@@ -81,6 +83,11 @@ class FocusElementDouble {
     documentDouble.activeElement = this;
   }
 
+  scrollIntoView(options?: boolean | ScrollIntoViewOptions): void {
+    this.scrollIntoViewCount += 1;
+    this.scrollIntoViewOptions = typeof options === 'object' ? options : null;
+  }
+
   click(): void {
     this.clickCount += 1;
   }
@@ -114,6 +121,7 @@ test('renderer focus suppresses browser focus and tab stops inside hidden trees'
     assert.equal(hiddenActive.tabIndex, -1);
     assert.equal(visibleActive.tabIndex, 0);
     assert.equal(visibleActive.focusCount, 1);
+    assert.equal(visibleActive.scrollIntoViewCount, 0);
     assert.equal(documentDouble.activeElement, visibleActive);
   } finally {
     documentDouble.activeElement = null;
@@ -125,6 +133,58 @@ test('renderer focus suppresses browser focus and tab stops inside hidden trees'
         configurable: true,
       });
     }
+  }
+});
+
+test('Settings active focus requests nearest scrolling without changing browser focus behavior', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+  try {
+    const switchProfile = new FocusElementDouble('settings-switch-profile', false, 'settings');
+    const dom = createFocusDomBindings([switchProfile]);
+
+    renderRendererFocus(
+      { activeRoute: 'settings', activeId: 'settings-switch-profile' },
+      dom,
+    );
+
+    assert.equal(switchProfile.focusCount, 1);
+    assert.equal(switchProfile.scrollIntoViewCount, 1);
+    assert.deepEqual(switchProfile.scrollIntoViewOptions, {
+      block: 'nearest',
+      inline: 'nearest',
+    });
+  } finally {
+    documentDouble.activeElement = null;
+    if (originalDocument === undefined) Reflect.deleteProperty(globalThis, 'document');
+    else Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
+  }
+});
+
+test('global shell focus over Settings does not request route scrolling', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+  try {
+    const dismiss = new FocusElementDouble('shell-inline-dismiss');
+    const dom = createFocusDomBindings([dismiss]);
+
+    renderRendererFocus(
+      { activeRoute: 'settings', activeId: 'shell-inline-dismiss' },
+      dom,
+    );
+
+    assert.equal(dismiss.focusCount, 1);
+    assert.equal(dismiss.scrollIntoViewCount, 0);
+  } finally {
+    documentDouble.activeElement = null;
+    if (originalDocument === undefined) Reflect.deleteProperty(globalThis, 'document');
+    else Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
   }
 });
 
