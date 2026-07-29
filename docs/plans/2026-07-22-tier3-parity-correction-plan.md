@@ -3803,11 +3803,12 @@ evidence is observed and independently reviewed.
 
 ### Whole-WS3 Settings execution plan (2026-07-29)
 
-**WS3 plan state:** targeted repair replan required. Unit 3A is committed at
-`81bc0b7`; partial approved Unit 3B edits remain held unstaged. Unit 3B is
-paused until the serial Unit 3A-R repair below receives fresh independent plan
-approval, lands as a separate reviewed commit, and passes its clean-commit smoke
-gate without the held Unit 3B diff.
+**WS3 plan state:** targeted Unit 3C amendment review required. Unit 3A is
+committed at `81bc0b7`, Unit 3A-R at `e8445e5`, and Unit 3B at `11dd704`.
+Partial approved Unit 3C renderer edits remain held unstaged. Unit 3C is paused
+until this amendment receives fresh independent plan approval with no
+unresolved material finding and explicitly approves the amended exact unit
+before any contracts, preload, main-player, renderer, or test edit resumes.
 
 **WS3 task family:** feature/design.
 
@@ -3832,6 +3833,22 @@ audio ids, removes policy runtime ownership from Unit 3A, and gives Unit 3B one
 shared-host custody/protocol/lifecycle design. Later focused reviews resolved
 the remaining platform-fallback, route-ownership, and Release-build proof
 details before Unit 3A approval.
+
+**Unit 3C amendment-review adjudication:** All three material findings are
+accepted. First, the existing empty `player.pause` and `player.play` intents
+cannot bind Settings lifecycle commands to the snapshot observed at dispatch,
+so Unit 3C adds two request-bound renderer intents on the existing player
+command channel while leaving the existing intents and internal/native command
+vocabulary unchanged. Second, current inactive Settings sections remain in the
+focus registry, the Recovery rail edge cannot reach persistent
+`Switch Profile`, and direct `audioSetup` has no frozen initial target; this
+amendment freezes semantic section exclusion and exact navigation edges.
+Third, the Settings Audio Output control currently ignores
+`audioOutputSelection`; this amendment requires the projected capability to
+gate the Settings entry action without gating the first-run System Default
+journey. The held renderer work remains approved partial evidence, not an
+accepted checkpoint, and no implementation resumes before fresh independent
+amendment approval.
 
 #### WS3 Goal
 
@@ -3909,6 +3926,26 @@ conservative playback profile.
 - Direct reads of the exact commit diff, protocol owner, TypeScript output
   configuration, build command, copy tool, and copy-tool tests were more useful
   than the repository index for this two-file repair; no broad survey was run.
+- Unit 3C amendment preflight observed `initial-build` eight commits ahead of
+  `origin/initial-build`, with Unit 3A at `81bc0b7`, Unit 3A-R at `e8445e5`,
+  and Unit 3B at `11dd704`. The worktree contains only the approved partial
+  Unit 3C renderer and renderer-test edits inventoried by
+  `git status --short --branch`; no contracts, preload, main-player, plan, or
+  unrelated product edit was present before this amendment.
+- Targeted direct reads confirmed that `src/contracts/ipc.ts` and
+  `src/preload/index.cts` expose the existing player command channel and closed
+  intent vocabulary, `rendererIntentMapping.ts` converts current play/pause
+  intents to empty internal commands, and `desktopPlayerAdapter.ts` begins
+  request custody and calls the host synchronously before its first await.
+  Direct source was more precise than a repository-wide index for this bounded
+  seam, so no broad discovery pass was launched.
+- Targeted renderer reads confirmed that every Settings category section is
+  currently rendered into the DOM without semantic hidden/inert state, focus
+  discovery already excludes ancestors marked `hidden`, `inert`, or
+  `aria-hidden="true"`, Recovery currently clamps its Down neighbor to itself,
+  and direct `audioSetup` has no route action from which to derive initial
+  focus. They also confirmed that the Audio Output row and route action do not
+  currently consult `audioOutputSelection`.
 
 #### WS3 Non-Goals
 
@@ -4278,10 +4315,13 @@ exact list. Any additional production/test file requires replan.
 - `src/preload/channels.cts`
 - `src/preload/settingsBridge.cts`
 - `src/preload/settingsBridgeGuards.cts`
-- `src/preload/index.cts` (composition wiring only)
+- `src/preload/index.cts` (composition wiring plus closed player-intent
+  vocabulary/outer guard only)
 
 **Playback/native/diagnostics direct consumers**
 
+- `src/main/player/rendererIntentMapping.ts`
+- `src/main/player/desktopPlayerAdapter.ts`
 - `src/main/player/streamPolicy/types.ts`
 - `src/main/player/streamPolicy/desktopStreamPolicy.ts`
 - `src/main/plex/streamResolver.ts`
@@ -4535,9 +4575,9 @@ and a fresh material-only implementation review, controller intent is
 
 ##### Unit 3A-R — stage the Settings runtime contract
 
-**Status:** selected repair unit. No Unit 3A-R implementation edit is
-authorized until a fresh independent `lineup-desktop-feature-review` reports no
-material finding and explicitly approves this exact unit.
+**Status:** committed checkpoint `e8445e5`. The repair scope is closed; its
+historical pre-commit and clean-checkpoint requirements below remain the
+checkpoint record and are not rerun by this Unit 3C amendment.
 
 **IMPLEMENTER_ROLE_ELIGIBILITY:** `worker_sol_low`. The root cause, two-file
 ownership, byte-copy behavior, negative scope, test assertions, proof depth,
@@ -4670,6 +4710,9 @@ protocol, or waive either repair smoke or Unit 3B's own later smoke gate.
 
 ##### Unit 3B — main media, native audio, and diagnostics consumers
 
+**Status:** committed checkpoint `11dd704`. Unit 3B product scope is closed;
+the Unit 3C amendment does not reopen its main/native/audio implementation.
+
 **IMPLEMENTER_ROLE_ELIGIBILITY:** `worker`. Native protocol, policy semantics,
 redaction, and composition wiring need bounded repository judgment; no
 lower-effort worker is eligible.
@@ -4684,10 +4727,10 @@ accepted as a blocking exact-test-scope omission. Unit 3B adds only these two
 existing tests to its allowlist, solely to add the required fixed safe
 `getAudioOutputs` fake method described below. This does not authorize a
 renderer production edit, renderer behavior assertion, compatibility shim, or
-any other production/test owner. That amendment is part of the approved held
-Unit 3B scope. Unit 3B is now paused by Unit 3A-R and may not resume or receive
-checkpoint acceptance until the repair's separate reviewed commit and clean-
-commit smoke gate pass.
+any other production/test owner. That amendment became part of committed Unit
+3B scope. Its historical Unit 3A-R ordering and checkpoint gates remain
+recorded below; they do not authorize re-audit or reimplementation during Unit
+3C.
 
 **Exact production files**
 
@@ -4956,12 +4999,21 @@ focused proof and fresh material-only review, controller intent is
 
 ##### Unit 3C — complete Settings, first-run audio, and profile UI
 
+**Status:** targeted amendment awaiting fresh independent approval. Approved
+partial renderer and renderer-test edits remain held unstaged; no Unit 3C
+implementation or test edit resumes before approval of this exact amended
+scope.
+
 **IMPLEMENTER_ROLE_ELIGIBILITY:** `worker`. The bounded unit crosses current
 renderer composition, focus, persistence concurrency, and profile-flow
 integration; `worker_sol_low` and `worker_luna` are not eligible.
 
 **Exact production files**
 
+- `src/contracts/ipc.ts`
+- `src/preload/index.cts` (two intent literals and existing outer guard only)
+- `src/main/player/rendererIntentMapping.ts`
+- `src/main/player/desktopPlayerAdapter.ts`
 - `src/renderer/settings/settingsRuntime.ts`
 - `src/renderer/settings/settingsPlaybackLifecycle.ts` (new)
 - `src/renderer/settings/audioSetupRuntime.ts` (new)
@@ -4985,6 +5037,9 @@ integration; `worker_sol_low` and `worker_luna` are not eligible.
 
 **Exact tests**
 
+- `src/__tests__/contracts/contracts.test.ts`
+- `src/__tests__/integration/preloadContractVocabulary.test.ts`
+- `src/__tests__/main/player/desktopPlayerAdapter.test.ts`
 - `src/__tests__/renderer/settingsRuntime.test.ts`
 - `src/__tests__/renderer/settingsSetup.test.ts`
 - `src/__tests__/renderer/settingsPlaybackLifecycle.test.ts` (new)
@@ -5005,14 +5060,41 @@ integration; `worker_sol_low` and `worker_luna` are not eligible.
   Developer, Recovery. Map the registry rows one-to-one:
   `UI-28` Audio & Subtitles, `UI-29` Playback & HDR, `UI-30` Appearance,
   `UI-33` Guide, `UI-31` Account, `UI-32` Developer, and `UI-34` Recovery.
-  The detail pane displays only the active category; rail/detail directional
-  focus, Back, reduced motion, forced colors, zoom, and narrow viewport remain
-  deterministic.
+  The detail pane displays only the active category. Its active `article`
+  removes `hidden` and `inert` and sets `aria-hidden="false"`; every inactive
+  category `article` sets `hidden`, `inert`, and `aria-hidden="true"` while
+  retaining its category identity. Existing focus discovery must therefore
+  register only active, enabled detail controls rather than relying on visual
+  CSS or a separate category allowlist.
+- Settings Up/Down traversal is deterministic across only the seven visible
+  rail buttons, persistent rail actions, and the active category's enabled
+  detail controls. The exact rail edge is Recovery Down ->
+  `settings-switch-profile` and `settings-switch-profile` Up ->
+  `settings-category-recovery`; inactive or disabled controls are never
+  navigation targets. Right from a category enters its first enabled active
+  detail control when one exists, and Left from an active detail control
+  returns to its owning rail category. Back, reduced motion, forced colors,
+  zoom, and narrow viewport remain deterministic.
+- Direct entry to `audioSetup`, including first-run routing without a prior
+  focus owner, initially focuses its primary action
+  `audio-setup-complete`. Re-render and focus resynchronization may preserve a
+  still-valid active output control, but fallback for an absent/invalid target
+  is the same primary action.
 - Render every version-2 setting with the exact labels/options above.
   Capability-gated controls are visible with a fixed disabled reason and do
   not issue `replace`. A save disables persisted controls, coalesces the latest
   desired whole snapshot, rebases once on conflict, and retains the existing
   launch-mode rollback/cleanup guarantees.
+- The Settings Audio Output row obtains its disabled reason only from
+  `capabilityReason('audioOutputSelection')`. The row and
+  `selectAudioOutput` route action are enabled only when the projected status
+  is `supported`; `unsupported` and `unproven` remain visible with their exact
+  projected reason and cannot route, mutate, enumerate, or issue `replace`.
+  The action handler must enforce the same predicate independently of button
+  state. This gate applies only to Settings: first-run `audioSetup` remains
+  reachable for every capability status, and its System Default path can
+  persist `audioOutputDeviceId: null` plus completion without claiming native
+  output support.
 - Replace the profile placeholder with the current renderer-safe Plex profile
   display or “No profile selected.” Add the persistent `Switch Profile` button
   below the rail. Activation routes to Channel Setup/profile, loads Home users
@@ -5027,12 +5109,48 @@ integration; `worker_sol_low` and `worker_luna` are not eligible.
   chosen opaque id plus completion, and permits “Use System Default” when
   enumeration is unavailable. Relaunch skips the surface after a successful
   save; failure leaves it open with fixed safe copy.
-- `keepPlaybackRunningInSettings=false` pauses only a currently playing
-  request when entering Settings and resumes only the request it paused on
-  exit. `true` leaves playback untouched. Stale route/player completions,
-  user-initiated pause, request replacement, cleanup, and failed intents never
-  cause an unsolicited resume. Unit 3C's renderer Settings runtime reads this
-  persisted value directly and passes it to the renderer-owned route lifecycle
+- Add exactly `player.pauseIfCurrent` and `player.playIfCurrent` to the public
+  renderer-intent union and existing player command-channel vocabulary. Each
+  requires the exact payload `{ snapshotRequestId: string }`, with a nonempty
+  value and no missing or extra key. There is no new IPC channel, preload API
+  method, compatibility/optional public payload, or change to existing
+  `player.pause` / `player.play`, which continue to require exact empty
+  payloads.
+- `src/preload/index.cts` adds only those two literals to its closed intent
+  vocabulary and keeps the existing envelope/request-id/payload outer guard;
+  it does not interpret snapshot ownership or add a bridge. The main mapping
+  validates the exact payload and returns the existing empty internal
+  `pause`/`play` `PlayerCommand` plus mapping-only
+  `expectedSnapshotRequestId`. That metadata is populated only for the two new
+  intents, is absent for every existing mapping, and is never inserted into
+  `PlayerCommand`, privileged dispatch context, host/native/helper input, or a
+  public result.
+- In renderer dispatch, after ordinary envelope, duplicate-request, track, and
+  renderer-load validation and immediately before request custody and
+  `host.execute`, the adapter compares mapping-only expected identity with its
+  current snapshot request id. A mismatch returns `accepted: false`, does not
+  begin custody, mutate the snapshot, or call the host, and emits the fixed
+  boundary error: code `PLAYER_VALIDATION_FAILED`, category `stale-request`,
+  message `Player lifecycle command targeted a stale player snapshot.`, the
+  outer request id, and diagnostic
+  `{ component: 'desktop-player-adapter', operation: <play-or-pause>,
+  status: 'rejected', reason: 'snapshot request mismatch' }`.
+- A matching guarded command begins custody and invokes `host.execute` in the
+  same JavaScript turn with no await introduced between identity comparison
+  and host submission. A later concurrent load dispatch therefore reaches the
+  host only after the guarded play/pause submission; later host settlement
+  does not retroactively acquire lifecycle ownership.
+- `keepPlaybackRunningInSettings=false` dispatches
+  `player.pauseIfCurrent` with the observed playing snapshot request id on
+  Settings entry and records resume custody only when that exact guarded pause
+  settles successfully for the same still-current request. Settings exit
+  dispatches `player.playIfCurrent` with that owned id only while the current
+  snapshot remains paused for it. `true` leaves playback untouched. A
+  replacement already active at adapter dispatch, late route completion,
+  user-initiated pause, later load, exit, cleanup, stale settlement, or failed
+  intent never creates or retains resume custody and never causes an
+  unsolicited resume. Unit 3C's renderer Settings runtime reads the persisted
+  value directly and passes it to the renderer-owned route lifecycle
   controller; no main policy projection or main route consumer exists.
 - Theme selection applies a closed root `data-theme` value. Five complete
   token overrides must preserve contrast/focus treatment. Now Playing
@@ -5052,6 +5170,9 @@ integration; `worker_sol_low` and `worker_luna` are not eligible.
 
 ```sh
 node --import tsx --test \
+  src/__tests__/contracts/contracts.test.ts \
+  src/__tests__/integration/preloadContractVocabulary.test.ts \
+  src/__tests__/main/player/desktopPlayerAdapter.test.ts \
   src/__tests__/renderer/settingsRuntime.test.ts \
   src/__tests__/renderer/settingsSetup.test.ts \
   src/__tests__/renderer/settingsPlaybackLifecycle.test.ts \
@@ -5075,29 +5196,55 @@ git diff --check
 
 Expected: exact seven-category/UI-row mapping, first-run/relaunch audio behavior,
 persistent switch-profile action, capability-disabled nonmutation, conflict/
-failure/cleanup behavior, route-scoped pause/resume, all five theme values,
-all closed timer values including `0`, replacement/cancellation behavior,
-support-bundle safety, focus/accessibility invariants, and no renderer
-privilege.
+failure/cleanup behavior, request-bound route-scoped pause/resume, all five
+theme values, all closed timer values including `0`, replacement/cancellation
+behavior, support-bundle safety, focus/accessibility invariants, and no renderer
+privilege. Contract and preload proof freezes the two new exact intent literals
+and payloads while proving existing play/pause stay empty-payload operations.
+Adapter proof covers matching dispatch, a replacement already active before
+dispatch rejecting with the fixed stale-request error and no custody/host side
+effect, and a later load reaching the host only after the guarded command
+submission. Lifecycle proof covers exact request-id payloads, late pause
+settlement after route exit, cleanup during a pending pause, failed/stale
+dispatch, and exit/cleanup producing no unsolicited play. DOM/focus/navigation
+proof covers semantic inactive-section exclusion, active enabled controls only,
+Recovery Down to Switch Profile, Switch Profile Up to Recovery, and direct
+`audioSetup` initial focus at `audio-setup-complete`. Settings setup/action
+proof covers `supported` activation, `unsupported`/`unproven` exact disabled
+reasons and no route/mutation, plus a reachable first-run System Default path
+under conservative capability projection.
 
 **No-touch and stop conditions**
 
-Do not edit Guide/EPG, Plex contracts/preload/main, raw artwork, native/player
-main owners, or package files. Stop for replan if startup profile selection
-requires a new Plex operation, if audio setup requires renderer raw device
-state, if route pause/resume cannot bind to exact current request identity, or
-if overlay duration cannot be injected without the controller reading
-Settings/category state, or if a composition root would absorb Settings policy
-instead of wiring focused owners.
+Do not edit Guide/EPG, Plex contracts/preload/main, raw artwork, package files,
+`src/contracts/player.ts`, player IPC/channel owners, privileged dispatch
+context, player-command validation helpers, native host/helper owners, or any
+player-main owner other than exact `rendererIntentMapping.ts` and
+`desktopPlayerAdapter.ts`. Existing `player.pause` / `player.play` semantics
+must not change. Stop for replan if startup profile selection requires a new
+Plex operation; audio setup requires renderer raw device state; request binding
+cannot remain exactly the two new intents, mapping-only expected id, and one
+adapter comparison; an optional/compatibility payload, new channel/preload
+method, `PlayerCommand`/native/helper change, or extra player owner is needed;
+same-turn host submission requires a new async seam; overlay duration cannot be
+injected without the controller reading Settings/category state; inactive
+focus requires a parallel focus allowlist rather than semantic DOM exclusion;
+or a composition root would absorb Settings policy instead of wiring focused
+owners.
 
 **Rollback/checkpoint**
 
-Rollback Unit 3C as one renderer checkpoint; do not leave a version-2 runtime
-with a partial seven-category/action vocabulary or a changed overlay timer
-contract. Reverting Unit 3C restores the prior overlay duration behavior
-together with the renderer flows; Units 3A/3B remain valid with
-capability-safe defaults. After focused proof and fresh material-only review,
-controller intent is `feat(settings): complete desktop settings flows`.
+Rollback Unit 3C as one cross-boundary checkpoint; do not leave either new
+renderer intent without its contract, preload vocabulary, exact mapping,
+adapter identity guard, lifecycle caller, and tests, or leave a version-2
+runtime with a partial seven-category/action vocabulary or changed overlay
+timer contract. Reverting Unit 3C removes both request-bound intents and
+restores the prior overlay duration behavior together with the renderer flows;
+existing empty-payload play/pause and committed Units 3A/3B remain valid with
+capability-safe defaults. No partial rollback may retain a public intent whose
+adapter guard or renderer owner is absent. After focused proof and fresh
+material-only implementation review, controller intent is
+`feat(settings): complete desktop settings flows`.
 
 ##### Unit 3D — integrated proof, debt packet, and authority reconciliation
 
@@ -5143,7 +5290,9 @@ Controller intent after clean review is
 | Owner | Evidence at planning | Disposition |
 | --- | --- | --- |
 | `src/main/index.ts` (598 lines; named composition root) | currently constructs a private Settings store inline and passes a factory that player IPC invokes | Unit 3B wiring-only edit constructs/loads one store and policy, invokes the production host factory at most once, and injects the same host identity into player IPC and audio owner. No setting, migration, query, device, policy, or diagnostic logic. Fresh architecture/security review mandatory. |
-| `src/preload/index.cts` (1878 lines; named composition root) | currently wires two Settings methods | Unit 3B wiring-only edit adds the reviewed third channel to the existing declarative Settings bridge construction. No validation, policy, or device logic; fresh architecture/security review required. Unit 3A does not touch this owner. |
+| `src/preload/index.cts` (1878 lines; named composition root) | currently wires the reviewed Settings bridge and owns the closed outer player-intent vocabulary | Unit 3B wiring remains limited to its reviewed third Settings channel. Unit 3C adds only the two request-bound intent literals to the existing player vocabulary; the existing outer envelope/request-id/payload guard remains the only behavior here. No snapshot interpretation, channel/method, validation policy, player custody, Settings policy, or device logic. Fresh architecture/security review required. |
+| `src/main/player/desktopPlayerAdapter.ts` (640 lines; named hotspot) | cohesive renderer/runtime dispatch boundary, snapshot owner, request custody, and host submission | Unit 3C adds one mapping-metadata identity comparison only in renderer dispatch immediately before existing custody/host submission. It does not change runtime dispatch, `PlayerCommand`, privileged context, host/native/helper input, or snapshot mutation. The same-turn no-await ordering and fixed stale rejection require fresh playback/architecture review. |
+| `src/main/player/rendererIntentMapping.ts` | closed renderer-to-internal-command validation and mapping owner | Cohesively validates the two exact request-bound payloads and returns existing empty play/pause commands plus nonforwarded expected-id metadata. No Settings/route policy, host access, or native payload. |
 | `src/main/player/playerIpc.ts` (437 lines) | currently invokes the native-host factory and owns adapter/host teardown | Unit 3B accepts the already-created production host directly, retains factory construction only for development/smoke injection, and remains sole shared-host cleanup owner. No Settings/audio policy. |
 | `src/main/player/productionNativeHostFactory.ts` | current factory creates a new process per invocation | Factory/path resolution remains cohesive; main invokes the returned factory at most once. It gains no cache, Settings, IPC, or cleanup ownership. |
 | `src/renderer/index.ts` (852 lines; named composition root and over 800) | currently owns Settings callbacks, route wiring, and render composition | Wiring-only edit to focused Settings/audio/lifecycle owners. No control tables, policy, migration, or native/Plex logic. Fresh architecture/UI review mandatory; net growth over 45 lines is a replan trigger. |
@@ -5300,11 +5449,25 @@ than duplicate its native playback scenarios.
 - Unit 3B also passes its original focused `npm run smoke:electron` after its
   own implementation. Unit 3A-R's earlier clean-commit smoke does not satisfy,
   waive, or convert that Unit 3B gate into proof debt.
+- Unit 3C does not resume from its held renderer diff until a fresh independent
+  amendment review reports no unresolved material finding and explicitly
+  approves its expanded exact files, request-bound intent seam, focus
+  semantics, capability gate, tests, rollback, and replan triggers.
+- The two new renderer lifecycle intents use the existing channel and exact
+  `{ snapshotRequestId: string }` payload; existing empty-payload play/pause,
+  internal `PlayerCommand`, privileged/native/helper input, and player IPC
+  remain unchanged. Stale identity rejects before custody/host side effects,
+  and matching host submission cannot be overtaken by a later load call.
 - The seven-category Settings UI with the exact `UI-28`–`UI-34` mapping,
   first-run audio surface, profile display,
   persistent Switch Profile, startup profile preference, recovery/export
   surface, focus, disabled states, reduced motion, and forced colors pass
   focused automated proof and local approved UI inspection.
+- Inactive category sections are semantically hidden/inert and absent from
+  focus registration; exact Recovery/Switch Profile edges and direct
+  `audioSetup` primary focus pass. The Settings Audio Output entry is enabled
+  only by `audioOutputSelection: supported`, while conservative first-run
+  System Default remains reachable.
 - Settings preferences cannot promote conservative production capabilities.
   Unsupported/unproved controls are honest and nonmutating.
 - `PB-22`–`PB-24` remain WS2-owned and open; `ST-11`–`ST-16` remain WS3-owned
@@ -5338,8 +5501,11 @@ than duplicate its native playback scenarios.
   projection. It must not leave player IPC expecting a direct host while main
   still supplies a factory, or leave either side of the private query/setup
   protocol changed alone.
-- Unit 3C rollback removes renderer flows while leaving Units 3A/3B buildable;
-  it must not restore a version-1 renderer against version-2 contracts.
+- Unit 3C rollback removes its request-bound public intent literals, preload
+  vocabulary, mapping metadata, adapter guard, lifecycle use, and renderer
+  flows together while leaving Units 3A/3B and existing empty-payload
+  play/pause buildable; it must not retain a public intent without end-to-end
+  validation or restore a version-1 renderer against version-2 contracts.
 - Unit 3D authority rollback never rewrites accepted product history.
 - No commit contains generated `dist`, native binaries, local proof media,
   account/server/device names, paths, URLs, tokens, headers, payloads, or
@@ -5371,6 +5537,19 @@ if:
   smoke succeeds only with held Unit 3B changes;
 - an additional public method, schema field, dependency, package/lockfile
   change, compatibility shim, or copied/adapted upstream source is needed;
+- Unit 3C request binding needs a new IPC channel/preload method, optional or
+  compatibility payload, internal `PlayerCommand` field, privileged/native/
+  helper change, player IPC edit, validation helper, or player-main owner
+  beyond exact mapping and adapter files;
+- the adapter cannot compare current snapshot identity immediately before
+  custody/host submission, or matching host submission cannot remain in the
+  same JavaScript turn ahead of a later concurrent load without a new async
+  seam;
+- inactive Settings controls cannot be excluded through the exact semantic
+  hidden/inert/aria-hidden state already recognized by focus registration, or
+  the Audio Output Settings action cannot enforce the same
+  `audioOutputSelection` predicate as its rendered control without gating the
+  first-run System Default path;
 - the production capability profile would need promotion before native/live
   evidence;
 - audio enumeration/application requires a shell command, broad player command,
@@ -5406,43 +5585,61 @@ if:
 
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
-TASK: Review Unit 3A-R Settings Runtime Staging Repair
+TASK: Review Targeted Unit 3C Settings Amendment
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: Whole-WS3 Settings execution plan dated 2026-07-29 with targeted
-Unit 3A-R repair replan; Unit 3A is committed at `81bc0b7` and partial approved
-Unit 3B product edits remain held unstaged
+ARTIFACT: Whole-WS3 Settings execution plan dated 2026-07-29 with the targeted
+Unit 3C request-bound lifecycle, focus/navigation, and Audio Output capability
+amendment; Units 3A, 3A-R, and 3B are committed at `81bc0b7`, `e8445e5`, and
+`11dd704`, while partial approved Unit 3C renderer edits remain held unstaged
 FILES:
 - docs/plans/2026-07-22-tier3-parity-correction-plan.md
-BLOCKERS: no Unit 3A-R tool/test edit is authorized until this independent
-review reports no unresolved material finding and explicitly approves the exact
-repair unit; Unit 3B remains paused through the repair's separate commit and
-clean-commit smoke gate
+BLOCKERS: no Unit 3C contract, preload, main-player, renderer, or test edit may
+resume until this independent review reports no unresolved material finding and
+explicitly approves the amended exact Unit 3C
 MESSAGE:
-Freshly and independently review only targeted Unit 3A-R. Confirm the diagnosis:
-Unit 3A commit `81bc0b7` emits renderer runtime imports for exact
-`lineup://shell/contracts/settings.js`; `tsc` writes the source at
-`dist/contracts/settings.js`; the contained protocol correctly serves only
-`dist/renderer`; and a successful direct fetch of an existing staged file
-rejects protocol transport as the cause. Confirm the repair owns exactly
-`tools/copy-renderer-assets.mjs` and
-`tools/__tests__/copy-renderer-assets.test.mjs`: after `tsc`, byte-copy only
-`dist/contracts/settings.js` to
-`dist/renderer/contracts/settings.js`, preserving existing asset staging,
-Channel Builder closure/containment, and the renderer-only protocol root.
-Confirm the test freezes exact destination/hash, absence of the map/sibling/
-nested contract tree, clean target creation, cleanup discipline, and unchanged
-existing copy behavior. Confirm there is no renderer/main/preload/protocol/
-contract/package/dependency edit, generic copier, compatibility shim, or import
-ledger obligation. Confirm the exact pre-commit proof, fresh implementation
-review, separate `fix(renderer): stage settings runtime contract` commit, and
-clean-checkout smoke at that exact repair SHA before Unit 3B resumes. Unit 3B's
-own original smoke remains mandatory and is not proof debt. Report material
-findings only; if none remain, explicitly approve Unit 3A-R as
-implementation-ready.
+Freshly and independently review only the targeted Unit 3C amendment against
+current owners and the held partial renderer diff; do not re-audit WS1/WS2 or
+the full registry. Confirm the existing player command channel gains exactly
+`player.pauseIfCurrent` and `player.playIfCurrent`, each with exact required
+payload `{ snapshotRequestId: string }`; existing `player.pause` /
+`player.play` remain exact empty-payload intents, and there is no new channel,
+preload method, compatibility payload, `PlayerCommand`, player IPC,
+privileged/native/helper, dependency, schema, or package change.
 
-**Review outcome:** pending fresh independent Unit 3A-R review. Unit 3B remains
-paused with its approved partial diff held unstaged and may not resume until
-Unit 3A-R is reviewed, separately committed, and proven by the required
-clean-commit smoke.
+Confirm exact amended production ownership:
+`src/contracts/ipc.ts`, `src/preload/index.cts` vocabulary/outer guard only,
+`src/main/player/rendererIntentMapping.ts`,
+`src/main/player/desktopPlayerAdapter.ts`, and the already approved Unit 3C
+renderer owners. Mapping must produce the existing empty internal play/pause
+command plus nonforwarded expected snapshot id. Adapter must compare that id
+with its current snapshot immediately before custody/host submission; mismatch
+must emit the plan's fixed stale-request error with no custody, snapshot, or
+host side effect. Matching host invocation must occur in the same JavaScript
+turn before a later load submission.
+
+Confirm the lifecycle caller sends the guarded intent and exact observed/owned
+snapshot id; replacement already active, late route completion, exit, cleanup,
+failure, or stale settlement cannot acquire resume custody or issue unsolicited
+play. Confirm inactive Settings category sections set semantic hidden, inert,
+and aria-hidden state already recognized by focus registration; focus traverses
+only active enabled detail controls and the rail; Recovery Down reaches Switch
+Profile, Switch Profile Up reaches Recovery; and direct `audioSetup` starts on
+`audio-setup-complete`.
+
+Confirm the Settings Audio Output row and action use
+`audioOutputSelection`: only `supported` activates, while unsupported/unproven
+states retain exact visible reasons and cannot route or mutate. The first-run
+audio route and System Default completion remain reachable under conservative
+capabilities. Confirm the exact contract, preload, adapter, lifecycle,
+settings-setup/action, DOM, focus, and navigation regressions; the unchanged
+`src/renderer/index.ts` +45 net-line replan threshold; the expanded
+cross-boundary rollback; no import-ledger obligation; and every other WS3
+ownership, contribution, conservative-capability, proof-debt, verification,
+and closeout gate. Report material findings only; if none remain, explicitly
+approve the amended Unit 3C as implementation-ready.
+
+**Review outcome:** pending fresh independent Unit 3C amendment review. Unit 3C
+remains paused with its approved partial renderer diff held unstaged until the
+amended exact unit is explicitly approved with no unresolved material finding.
