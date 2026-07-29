@@ -1,3 +1,5 @@
+import { clearTimeout, setTimeout } from 'node:timers';
+
 import {
   hasPlayerForbiddenPrivilegedField,
   type PlayerError,
@@ -29,6 +31,11 @@ import {
   PlexPlaybackRuntimeStaleCustody,
   readEventRequestId,
 } from './plexPlaybackRuntimeStaleCustody.js';
+import {
+  PlexPlaybackRecoveryOwner,
+  type PlexPlaybackRecoveryIdentity,
+  type PlexPlaybackRecoveryTimerPort,
+} from './plexPlaybackRecoveryOwner.js';
 export type PlexPlaybackRuntimeCleanupReason = 'stop'
   | 'switch'
   | 'stale'
@@ -38,11 +45,45 @@ export type PlexPlaybackRuntimeCleanupReason = 'stop'
   | 'server-change'
   | 'profile-change'
   | 'teardown';
+type PlexPlaybackRetryOwner = 'manual' | 'recovery';
+type PlexPlaybackRetryResult = 'started' | 'failed' | 'stale';
 export interface PlexPlaybackScheduleSelection {
   channelId: string;
   programId: string;
   startedAtMs: number;
   endsAtMs?: number | null;
+}
+export function projectPlexPlaybackScheduleSelection(input: {
+  channelId: string;
+  ratingKey: string;
+  scheduledStartTime: number;
+  scheduledEndTime: number;
+}): PlexPlaybackScheduleSelection {
+  const channelId = input.channelId.trim();
+  return {
+    channelId,
+    programId: [
+      'program',
+      safeScheduleIdPart(channelId),
+      safeScheduleIdPart(input.ratingKey),
+      String(input.scheduledStartTime),
+      String(input.scheduledEndTime),
+    ].join('-'),
+    startedAtMs: input.scheduledStartTime,
+    endsAtMs: input.scheduledEndTime,
+  };
+}
+export function isSamePlexPlaybackScheduleSelection(
+  left: PlexPlaybackScheduleSelection | null,
+  right: PlexPlaybackScheduleSelection,
+): boolean {
+  return (
+    left !== null &&
+    left.channelId === right.channelId &&
+    left.programId === right.programId &&
+    left.startedAtMs === right.startedAtMs &&
+    (left.endsAtMs ?? null) === (right.endsAtMs ?? null)
+  );
 }
 export interface PlexPlaybackRuntimeSchedulerPort {
   getCurrentPlayback(input: {
@@ -98,6 +139,7 @@ export interface PlexPlaybackRuntimeOptions {
   clock?: PlexPlaybackRuntimeClockPort;
   createRequestId?: (prefix: string) => PlayerRequestId;
   onEvents?: (events: readonly PlayerEvent[]) => void;
+  recoveryTimer?: PlexPlaybackRecoveryTimerPort;
   diagnosticEventStore?: DiagnosticEventStore;
 }
 export interface PlexPlaybackRuntimeStartResult {
@@ -125,8 +167,11 @@ export class PlexPlaybackRuntime {
   readonly #diagnosticEventStore?: DiagnosticEventStore;
   readonly #cleanupCoordinator: PlexPlaybackRuntimeCleanupCoordinator;
   readonly #staleCustody = new PlexPlaybackRuntimeStaleCustody();
+  readonly #recovery: PlexPlaybackRecoveryOwner;
   #epoch = 0;
   #active: PlexPlaybackActiveSession | null = null;
+  #activeSelection: PlexPlaybackScheduleSelection | null = null;
+  #cleanupHoldCount = 0;
   #requestCounter = 0;
   constructor(options: PlexPlaybackRuntimeOptions) {
     this.#scheduler = options.scheduler;
@@ -146,6 +191,10 @@ export class PlexPlaybackRuntime {
       pms: options.pms,
       diagnosticEventStore: options.diagnosticEventStore,
     });
+    this.#recovery = new PlexPlaybackRecoveryOwner({
+      timer: options.recoveryTimer ?? createDefaultRecoveryTimer(),
+      retry: (identity) => this.#retrySelection(identity),
+    });
   }
   getCurrentEpoch(): number {
     return this.#epoch;
@@ -153,9 +202,26 @@ export class PlexPlaybackRuntime {
   getActiveRequestId(): PlayerRequestId | null {
     return this.#active?.requestId ?? null;
   }
+  async retryCurrentPlayback(
+    expectedSelection: PlexPlaybackScheduleSelection,
+  ): Promise<boolean> {
+    return (
+      await this.#restartSelectionForRetry(expectedSelection, 'manual')
+    ) === 'started';
+  }
   async startCurrentPlayback(
     reason: 'startup' | 'schedule-tick' | 'manual-switch' = 'schedule-tick',
   ): Promise<PlexPlaybackRuntimeStartResult> {
+    if (this.#cleanupHoldCount > 0) {
+      return {
+        accepted: false,
+        epoch: this.#epoch,
+        requestId: null,
+        events: [],
+      };
+    }
+    this.#recovery.cancel();
+    this.#activeSelection = null;
     const epoch = this.#nextEpoch();
     const events: PlayerEvent[] = [];
     events.push(...(await this.#cleanupActive('switch', { invalidateEpoch: false })));
@@ -190,6 +256,15 @@ export class PlexPlaybackRuntime {
       this.#emit(events);
       return { accepted: false, epoch, requestId: null, events };
     }
+    return this.#startSelection(epoch, events, selection);
+  }
+  async #startSelection(
+    epoch: number,
+    events: PlayerEvent[],
+    selection: PlexPlaybackScheduleSelection,
+  ): Promise<PlexPlaybackRuntimeStartResult> {
+    this.#activeSelection = { ...selection };
+    this.#recovery.activate(selection);
     let candidate: PlexPlaybackRuntimeCandidate;
     try {
       candidate = await this.#channel.resolvePlaybackCandidate(selection);
@@ -274,7 +349,9 @@ export class PlexPlaybackRuntime {
       return this.#staleStartResult(epoch, requestId, events, 'player load settled after cleanup');
     }
     for (const event of playerResult.events ?? []) {
-      events.push(...this.handlePlayerEvent(epoch, event));
+      const accepted = this.handlePlayerEvent(epoch, event);
+      this.#observeAcceptedEvents(accepted);
+      events.push(...accepted);
     }
     if (!playerResult.ok) {
       events.push(createRuntimeLoadFailedError(requestId, active.media));
@@ -289,28 +366,42 @@ export class PlexPlaybackRuntime {
   async cleanup(input: {
     reason: PlexPlaybackRuntimeCleanupReason;
   }): Promise<readonly PlayerEvent[]> {
-    const events = await this.#cleanupActive(input.reason, { invalidateEpoch: true });
-    this.#emit(events);
-    return events;
+    const releaseCleanupHold = this.#acquireCleanupHold();
+    try {
+      this.#recovery.cancel();
+      this.#activeSelection = null;
+      const events = await this.#cleanupActive(input.reason, { invalidateEpoch: true });
+      this.#emit(events);
+      return events;
+    } finally {
+      releaseCleanupHold();
+    }
   }
   async stop(): Promise<readonly PlayerEvent[]> {
-    this.#nextEpoch();
-    const active = this.#active;
-    this.#active = null;
-    if (active !== null) {
-      try {
-        await this.#player.dispatch({
-          command: 'stop',
-          requestId: active.requestId,
-          payload: EMPTY_PAYLOAD,
-        });
-      } catch {
-        // Stop is best-effort; scoped cleanup below owns renderer-safe failure reporting.
+    const releaseCleanupHold = this.#acquireCleanupHold();
+    try {
+      this.#recovery.cancel();
+      this.#activeSelection = null;
+      this.#nextEpoch();
+      const active = this.#active;
+      this.#active = null;
+      if (active !== null) {
+        try {
+          await this.#player.dispatch({
+            command: 'stop',
+            requestId: active.requestId,
+            payload: EMPTY_PAYLOAD,
+          });
+        } catch {
+          // Stop is best-effort; scoped cleanup below owns renderer-safe failure reporting.
+        }
       }
+      const events = await this.#cleanupCoordinator.cleanupActive(active, 'stop');
+      this.#emit(events);
+      return events;
+    } finally {
+      releaseCleanupHold();
     }
-    const events = await this.#cleanupCoordinator.cleanupActive(active, 'stop');
-    this.#emit(events);
-    return events;
   }
   async teardown(): Promise<readonly PlayerEvent[]> {
     return this.cleanup({ reason: 'teardown' });
@@ -335,6 +426,16 @@ export class PlexPlaybackRuntime {
     }
     return [event];
   }
+  ingestPlayerEvents(events: readonly PlayerEvent[]): readonly PlayerEvent[] {
+    const accepted: PlayerEvent[] = [];
+    const epoch = this.#epoch;
+    for (const event of events) {
+      accepted.push(...this.handlePlayerEvent(epoch, event));
+    }
+    this.#observeAcceptedEvents(accepted);
+    this.#emit(accepted);
+    return accepted;
+  }
   async handleHelperCrash(): Promise<readonly PlayerEvent[]> {
     recordRuntimeHelperCrashDiagnostic(this.#diagnosticEventStore, this.#active?.requestId);
     return this.cleanup({ reason: 'helper-crash' });
@@ -345,6 +446,90 @@ export class PlexPlaybackRuntime {
   }
   #isCurrentEpoch(epoch: number): boolean {
     return epoch === this.#epoch;
+  }
+  async #retrySelection(
+    identity: PlexPlaybackRecoveryIdentity,
+  ): Promise<PlexPlaybackRetryResult> {
+    return this.#restartSelectionForRetry(identity, 'recovery');
+  }
+  async #restartSelectionForRetry(
+    identity: PlexPlaybackRecoveryIdentity,
+    owner: PlexPlaybackRetryOwner,
+  ): Promise<PlexPlaybackRetryResult> {
+    if (
+      this.#cleanupHoldCount > 0 ||
+      !isSafeScheduleSelection(identity) ||
+      identity.endsAtMs === undefined ||
+      identity.endsAtMs === null ||
+      (
+        owner === 'recovery' &&
+        !isSamePlexPlaybackScheduleSelection(this.#activeSelection, identity)
+      )
+    ) {
+      return 'stale';
+    }
+    const initialEpoch = this.#epoch;
+    let selection: PlexPlaybackScheduleSelection | null;
+    try {
+      selection = await this.#scheduler.getCurrentPlayback({
+        nowMs: this.#clock.now(),
+        reason: 'schedule-tick',
+      });
+    } catch {
+      return (
+        owner === 'recovery' &&
+        isSamePlexPlaybackScheduleSelection(this.#activeSelection, identity)
+      )
+        ? 'failed'
+        : 'stale';
+    }
+    if (
+      this.#cleanupHoldCount > 0 ||
+      !isSafeScheduleSelection(selection) ||
+      !isSamePlexPlaybackScheduleSelection(selection, identity) ||
+      (
+        owner === 'manual'
+          ? !this.#isCurrentEpoch(initialEpoch)
+          : !isSamePlexPlaybackScheduleSelection(this.#activeSelection, identity)
+      )
+    ) {
+      return 'stale';
+    }
+    if (owner === 'manual') {
+      this.#recovery.cancel();
+    }
+    const epoch = this.#nextEpoch();
+    const events: PlayerEvent[] = [
+      ...(await this.#cleanupActive('switch', { invalidateEpoch: false })),
+    ];
+    if (
+      !this.#isCurrentEpoch(epoch) ||
+      (
+        owner === 'recovery' &&
+        !isSamePlexPlaybackScheduleSelection(this.#activeSelection, identity)
+      )
+    ) {
+      return 'stale';
+    }
+    const result = await this.#startSelection(epoch, events, selection);
+    if (!isSamePlexPlaybackScheduleSelection(this.#activeSelection, identity)) {
+      return 'stale';
+    }
+    if (!result.accepted) {
+      return 'failed';
+    }
+    return this.#isCurrentEpoch(epoch) ? 'started' : 'stale';
+  }
+  #acquireCleanupHold(): () => void {
+    this.#cleanupHoldCount += 1;
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      this.#cleanupHoldCount -= 1;
+    };
   }
   async #cleanupActive(
     reason: PlexPlaybackRuntimeCleanupReason,
@@ -397,11 +582,42 @@ export class PlexPlaybackRuntime {
       },
     );
   }
+  #observeAcceptedEvents(events: readonly PlayerEvent[]): void {
+    const identity = this.#activeSelection;
+    const requestId = this.#active?.requestId;
+    if (identity === null || requestId === undefined) {
+      return;
+    }
+    for (const event of events) {
+      if (readEventRequestId(event) !== requestId) {
+        continue;
+      }
+      this.#recovery.observeAcceptedEvent(identity, event);
+      if (event.event === 'ended') {
+        this.#recovery.cancel();
+        this.#activeSelection = null;
+      }
+    }
+  }
   #emit(events: readonly PlayerEvent[]): void {
     if (events.length > 0) {
       this.#onEvents?.(events);
     }
   }
+}
+function createDefaultRecoveryTimer(): PlexPlaybackRecoveryTimerPort {
+  return {
+    set(delayMs, callback) {
+      return setTimeout(callback, delayMs);
+    },
+    clear(handle) {
+      clearTimeout(handle as ReturnType<typeof setTimeout>);
+    },
+  };
+}
+function safeScheduleIdPart(value: string): string {
+  const normalized = value.trim().replace(/[^a-zA-Z0-9._-]+/gu, '-');
+  return normalized === '' ? 'unknown' : normalized;
 }
 function isSafeScheduleSelection(value: unknown): value is PlexPlaybackScheduleSelection {
   if (!isRecord(value) || hasPlayerForbiddenPrivilegedField(value)) {

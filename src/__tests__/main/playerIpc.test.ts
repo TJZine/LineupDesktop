@@ -62,6 +62,23 @@ class ConfigurableNativeHost implements NativePlayerHostPort {
   }
 }
 
+class EventNativeHost extends ConfigurableNativeHost {
+  private readonly listeners = new Set<(event: unknown) => void>();
+
+  onEvent(listener: (event: unknown) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  emitEvent(event: unknown): void {
+    for (const listener of [...this.listeners]) {
+      listener(event);
+    }
+  }
+}
+
 class LifecycleNativeHost extends ConfigurableNativeHost {
   private readonly listeners = new Set<(failure: NativePlayerHostLifecycleFailure) => void>();
 
@@ -76,6 +93,45 @@ class LifecycleNativeHost extends ConfigurableNativeHost {
     for (const listener of [...this.listeners]) {
       listener(failure);
     }
+  }
+}
+
+class OrderedLifecycleNativeHost extends ConfigurableNativeHost {
+  readonly trace: string[] = [];
+  mainListener: ((failure: NativePlayerHostLifecycleFailure) => void) | null = null;
+  private adapterListener: ((failure: NativePlayerHostLifecycleFailure) => void) | null = null;
+  private readonly listeners = new Map<
+    (failure: NativePlayerHostLifecycleFailure) => void,
+    string
+  >();
+
+  onLifecycleFailure(listener: (failure: NativePlayerHostLifecycleFailure) => void): () => void {
+    const label = listener === this.mainListener ? 'main' : 'adapter';
+    if (label === 'adapter') {
+      assert.equal(this.adapterListener, null, 'expected exactly one adapter lifecycle listener');
+      this.adapterListener = listener;
+    }
+    this.listeners.set(listener, label);
+    return () => {
+      if (this.listeners.delete(listener)) {
+        this.trace.push(`unsubscribe:${label}`);
+      }
+      if (listener === this.adapterListener) {
+        this.adapterListener = null;
+      }
+    };
+  }
+
+  emitLifecycleFailure(failure: NativePlayerHostLifecycleFailure): void {
+    for (const [listener, label] of [...this.listeners]) {
+      this.trace.push(label);
+      listener(failure);
+    }
+  }
+
+  override async cleanup(): Promise<void> {
+    this.trace.push('cleanup');
+    await super.cleanup();
   }
 }
 
@@ -98,6 +154,17 @@ function isAuthorizedEvent(event: unknown): boolean {
 
 function createRequestId(prefix: string): string {
   return `${prefix}-generated`;
+}
+
+function playerEventSinks(events?: PlayerEvent[]) {
+  return {
+    sendSynchronousPlayerEvent(event: PlayerEvent): void {
+      events?.push(event);
+    },
+    onAsynchronousAdapterEvents(batch: readonly PlayerEvent[]): void {
+      events?.push(...batch);
+    },
+  };
 }
 
 function loadEnvelope(requestId = 'player-load-1'): unknown {
@@ -201,7 +268,7 @@ test('player IPC registers closed handlers and tears them down', async () => {
   const teardown = registerPlayerIpcHandlers({
     shellMode: 'smoke',
     isAuthorizedEvent,
-    sendPlayerEvent: () => undefined,
+    ...playerEventSinks(),
     createRequestId,
     ipcMain,
   });
@@ -217,6 +284,64 @@ test('player IPC registers closed handlers and tears them down', async () => {
   assert.deepEqual([...ipcMain.handlers.keys()], []);
 });
 
+test('player IPC keeps synchronous command results separate from asynchronous adapter batches', async () => {
+  const ipcMain = new FakeIpcMain();
+  const host = new EventNativeHost();
+  host.executeResult = {
+    ok: true,
+    events: [
+      {
+        type: 'playback.state',
+        requestId: 'request-split-sinks',
+        status: 'playing',
+        playing: true,
+      },
+    ],
+  };
+  const synchronousEvents: PlayerEvent[] = [];
+  const asynchronousBatches: PlayerEvent[][] = [];
+  const registration = registerPlayerIpcHandlers({
+    shellMode: 'development',
+    isAuthorizedEvent,
+    sendSynchronousPlayerEvent: (event) => synchronousEvents.push(event),
+    onAsynchronousAdapterEvents: (events) => asynchronousBatches.push([...events]),
+    createRequestId,
+    nativeHostFactory: () => host,
+    ipcMain,
+  });
+
+  await ipcMain.invoke(
+    LINEUP_PLAYER_COMMAND_CHANNEL,
+    authorizedEvent(),
+    loadEnvelope('request-split-sinks'),
+  );
+  assert.equal(synchronousEvents.length > 0, true);
+  assert.deepEqual(asynchronousBatches, []);
+
+  host.emitEvent({
+    type: 'time.updated',
+    requestId: 'request-split-sinks',
+    positionMs: 500,
+    durationMs: 1_000,
+  });
+
+  assert.equal(
+    synchronousEvents.some((event) => event.event === 'time.updated'),
+    false,
+  );
+  assert.equal(asynchronousBatches.length, 1);
+  assert.deepEqual(asynchronousBatches[0], [
+    {
+      event: 'time.updated',
+      requestId: 'request-split-sinks',
+      positionMs: 500,
+      durationMs: 1_000,
+    },
+  ]);
+
+  await registration.teardown();
+});
+
 test('player IPC reports cleanup failures and still removes handlers', async () => {
   const ipcMain = new FakeIpcMain();
   const host = new ConfigurableNativeHost();
@@ -229,7 +354,7 @@ test('player IPC reports cleanup failures and still removes handlers', async () 
   const teardown = registerPlayerIpcHandlers({
     shellMode: 'development',
     isAuthorizedEvent,
-    sendPlayerEvent: () => undefined,
+    ...playerEventSinks(),
     createRequestId,
     nativeHostFactory: () => host,
     reportDiagnostic: (message, error) => diagnostics.push({ message, error }),
@@ -400,7 +525,7 @@ test('development and smoke player IPC dispatches through fake host and emits sa
   registerPlayerIpcHandlers({
     shellMode: 'development',
     isAuthorizedEvent,
-    sendPlayerEvent: (event) => events.push(event),
+    ...playerEventSinks(events),
     createRequestId,
     ipcMain,
   });
@@ -442,7 +567,7 @@ test('development player host keeps playback events scoped to the active load re
   registerPlayerIpcHandlers({
     shellMode: 'development',
     isAuthorizedEvent,
-    sendPlayerEvent: (event) => events.push(event),
+    ...playerEventSinks(events),
     createRequestId,
     ipcMain,
   });
@@ -506,7 +631,7 @@ test('player IPC emits renderer-safe error when helper lifecycle fails asynchron
   registerPlayerIpcHandlers({
     shellMode: 'development',
     isAuthorizedEvent,
-    sendPlayerEvent: (event) => events.push(event),
+    ...playerEventSinks(events),
     createRequestId,
     nativeHostFactory: () => host,
     ipcMain,
@@ -559,7 +684,7 @@ test('player IPC keeps helper lifecycle reporting after cleanup and later reuse'
   registerPlayerIpcHandlers({
     shellMode: 'development',
     isAuthorizedEvent,
-    sendPlayerEvent: (event) => events.push(event),
+    ...playerEventSinks(events),
     createRequestId,
     nativeHostFactory: () => host,
     ipcMain,
@@ -606,7 +731,7 @@ test('player IPC rejects invalid renderer payloads as failures without host succ
   registerPlayerIpcHandlers({
     shellMode: 'smoke',
     isAuthorizedEvent,
-    sendPlayerEvent: (event) => events.push(event),
+    ...playerEventSinks(events),
     createRequestId,
     ipcMain,
   });
@@ -638,7 +763,7 @@ test('player IPC enforces main authorization before adapter access', async () =>
   registerPlayerIpcHandlers({
     shellMode: 'smoke',
     isAuthorizedEvent,
-    sendPlayerEvent: (event) => events.push(event),
+    ...playerEventSinks(events),
     createRequestId,
     ipcMain,
   });
@@ -662,7 +787,7 @@ test('production player IPC returns unsupported failures and does not activate f
   registerPlayerIpcHandlers({
     shellMode: 'production',
     isAuthorizedEvent,
-    sendPlayerEvent: (event) => events.push(event),
+    ...playerEventSinks(events),
     createRequestId,
     ipcMain,
   });
@@ -711,7 +836,7 @@ test('production player IPC with nativeHostFactory instantiates adapter but reje
   const teardown = registerPlayerIpcHandlers({
     shellMode: 'production',
     isAuthorizedEvent,
-    sendPlayerEvent: (event) => events.push(event),
+    ...playerEventSinks(events),
     createRequestId,
     nativeHostFactory: () => {
       nativeHostCreated = true;
@@ -751,6 +876,43 @@ test('production player IPC with nativeHostFactory instantiates adapter but reje
   await teardown.teardown();
 });
 
+test('player IPC registers adapter lifecycle handling before main and unsubscribes main before cleanup', async () => {
+  const ipcMain = new FakeIpcMain();
+  const host = new OrderedLifecycleNativeHost();
+  let mainLifecycleCalls = 0;
+  const mainListener = () => {
+    mainLifecycleCalls += 1;
+  };
+  host.mainListener = mainListener;
+  const teardown = registerPlayerIpcHandlers({
+    shellMode: 'production',
+    isAuthorizedEvent,
+    ...playerEventSinks(),
+    createRequestId,
+    nativeHostFactory: () => host,
+    onNativeHostLifecycleFailure: mainListener,
+    ipcMain,
+  });
+  const failure = {
+    requestId: null,
+    error: helperFailure(),
+  };
+
+  host.emitLifecycleFailure(failure);
+
+  assert.deepEqual(host.trace, ['adapter', 'main']);
+  assert.equal(mainLifecycleCalls, 1);
+
+  host.trace.length = 0;
+  await teardown.teardown();
+  assert.deepEqual(host.trace, ['unsubscribe:main', 'cleanup']);
+
+  host.trace.length = 0;
+  host.emitLifecycleFailure(failure);
+  assert.deepEqual(host.trace, ['adapter']);
+  assert.equal(mainLifecycleCalls, 1);
+});
+
 test('player IPC cleanup returns a safe failure envelope when host cleanup fails', async () => {
   const ipcMain = new FakeIpcMain();
   const host = new ConfigurableNativeHost();
@@ -759,7 +921,7 @@ test('player IPC cleanup returns a safe failure envelope when host cleanup fails
   registerPlayerIpcHandlers({
     shellMode: 'development',
     isAuthorizedEvent,
-    sendPlayerEvent: (event) => events.push(event),
+    ...playerEventSinks(events),
     createRequestId,
     nativeHostFactory: () => host,
     ipcMain,
@@ -802,7 +964,7 @@ test('player IPC can use an explicit development host factory without changing p
   registerPlayerIpcHandlers({
     shellMode: 'development',
     isAuthorizedEvent,
-    sendPlayerEvent: () => undefined,
+    ...playerEventSinks(),
     createRequestId,
     nativeHostFactory: () => host,
     ipcMain,

@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getProductionCapabilityProfile } from '../../../main/player/playbackRuntimeBootstrap.js';
+import type { PlayerEvent } from '../../../contracts/player.js';
+import {
+  bootstrapPlaybackRuntime,
+  getProductionCapabilityProfile,
+} from '../../../main/player/playbackRuntimeBootstrap.js';
 
 test('production playback capability profile advertises only proven conservative native-helper behaviors', () => {
   const profile = getProductionCapabilityProfile();
@@ -23,4 +27,30 @@ test('production playback capability profile advertises only proven conservative
   assert.equal(profile.transcode.audio, 'unsupported');
   assert.equal(profile.transcode.subtitles, 'unsupported');
   assert.equal(profile.transcode.hdr, 'unsupported');
+});
+
+test('playback bootstrap wires runtime events in smoke and production modes', async () => {
+  for (const shellMode of ['smoke', 'production'] as const) {
+    const emitted: PlayerEvent[] = [];
+    const result = bootstrapPlaybackRuntime({
+      shellMode,
+      scheduler: {
+        getCurrentProgram() {
+          throw new Error('no current program');
+        },
+        getState() {
+          throw new Error('inactive scheduler');
+        },
+      },
+      adapter: null,
+      createRequestId: (prefix) => `${prefix}-${shellMode}`,
+      onEvents: (events) => emitted.push(...events),
+    });
+
+    const start = await result.runtime.startCurrentPlayback('startup');
+
+    assert.equal(start.accepted, false);
+    assert.equal(emitted.length, 1);
+    assert.equal(emitted[0]?.event, 'warning');
+  }
 });

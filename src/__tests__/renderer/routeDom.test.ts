@@ -541,7 +541,12 @@ test('route DOM renders player OSD fields and playback option rows', () => {
     dom.overlayPlayerErrorElement = new ElementDouble() as unknown as HTMLElement;
     dom.overlayPlayerRetryButton = new ElementDouble('button') as unknown as HTMLButtonElement;
     dom.overlayPlayerRetryButton.dataset.overlayAction = 'retryPlayer';
-    dom.overlayActionButtons = [dom.overlayPlayerRetryButton];
+    dom.overlayPlayerSkipButton = new ElementDouble('button') as unknown as HTMLButtonElement;
+    dom.overlayPlayerSkipButton.dataset.overlayAction = 'skipPlayer';
+    dom.overlayActionButtons = [
+      dom.overlayPlayerRetryButton,
+      dom.overlayPlayerSkipButton,
+    ];
     dom.overlayPlayerGuideButton = new ElementDouble('button') as unknown as HTMLButtonElement;
 
     const snapshot = {
@@ -662,7 +667,12 @@ test('route DOM renders player OSD fields and playback option rows', () => {
     };
     renderWorkflowDom(
       createWorkflowState('player'),
-      { ...createPlayerOverlayState(presentation), retryPending: true, retryError: 'Retry failed safely.' },
+      {
+        ...createPlayerOverlayState(presentation),
+        retryPending: true,
+        recoveryPendingAction: 'retry-current',
+        retryError: 'Retry failed safely.',
+      },
       errorSnapshot,
       dom,
       undefined,
@@ -674,6 +684,51 @@ test('route DOM renders player OSD fields and playback option rows', () => {
     assert.equal(dom.overlayPlayerRetryButton.getAttribute('aria-disabled'), 'true');
     assert.equal(dom.overlayPlayerRetryButton.getAttribute('aria-busy'), 'true');
     assert.equal(dom.overlayPlayerRetryButton.dataset.overlayBusyFocusCustody, 'true');
+    assert.equal(dom.overlayPlayerRetryButton.hidden, false);
+    assert.equal(dom.overlayPlayerSkipButton.hidden, false);
+    assert.equal(dom.overlayPlayerSkipButton.getAttribute('aria-disabled'), 'true');
+    assert.equal(dom.overlayPlayerSkipButton.getAttribute('aria-busy'), 'true');
+    assert.equal(dom.overlayPlayerSkipButton.dataset.overlayBusyFocusCustody, 'true');
+    assert.equal(dom.overlayPlayerGuideButton.hidden, true);
+
+    renderWorkflowDom(
+      createWorkflowState('player'),
+      {
+        ...createPlayerOverlayState(presentation),
+        retryPending: true,
+        recoveryPendingAction: 'skip-next',
+      },
+      errorSnapshot,
+      dom,
+      undefined,
+      null,
+      { ...presentation, playerSnapshot: errorSnapshot },
+    );
+    assert.equal(dom.overlayPlayerRetryButton.getAttribute('aria-busy'), 'true');
+    assert.equal(dom.overlayPlayerRetryButton.getAttribute('aria-disabled'), 'true');
+    assert.equal(dom.overlayPlayerSkipButton.getAttribute('aria-busy'), 'true');
+    assert.equal(dom.overlayPlayerSkipButton.getAttribute('aria-disabled'), 'true');
+
+    const fallbackPresentation = {
+      ...presentation,
+      channels: [{
+        id: 'channel-one',
+        number: '101',
+        name: 'Channel One',
+      }],
+      playerSnapshot: errorSnapshot,
+    };
+    renderWorkflowDom(
+      createWorkflowState('player'),
+      createPlayerOverlayState(fallbackPresentation),
+      errorSnapshot,
+      dom,
+      undefined,
+      null,
+      fallbackPresentation,
+    );
+    assert.equal(dom.overlayPlayerRetryButton.hidden, true);
+    assert.equal(dom.overlayPlayerSkipButton.hidden, true);
     assert.equal(dom.overlayPlayerGuideButton.hidden, false);
 
     renderWorkflowDom(

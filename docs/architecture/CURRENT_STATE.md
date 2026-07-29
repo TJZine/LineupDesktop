@@ -1,13 +1,15 @@
 # Current Architecture State
 
-> **UI parity closeout (2026-07-16):** Packages 0–8 renderer parity
-> implementation, exact-viewport local evidence, and package reviews are
-> complete. Fresh integrated proof covers 138 screenshots plus Package 7's 8
-> reduced-motion, 12 forced-colors, and 3 local fullscreen-continuity rows.
-> Package 6 operator-assisted fullscreen platform proof is still incomplete and
-> remains a mandatory fresh three-row RD-27 Windows audit. The Mac limitation is
-> an external proof-tool constraint, not evidence of product behavior; no
-> completed 29-row Mac acceptance manifest exists.
+> **Parity audit correction (2026-07-22):** Packages 0–8 remain valid historical
+> local renderer-regression evidence: 138 screenshots, 8 reduced-motion rows,
+> 12 forced-colors rows, and 3 local fullscreen-continuity rows. They do not
+> establish current-upstream feature or UI completion. The one-by-one audit in
+> `docs/product/lineup-product-parity-matrix.md` reopens parity work, including
+> deferred Channel Builder proof plus Settings, Guide, input/lifecycle, and
+> production playback capability gaps. WS2's platform-neutral implementation
+> gate is closed, while RD-27 Windows observation and
+> `WS2-POST-VALIDATION-01` native proof remain required, while neither is the
+> next catch-all step and neither can close missing code.
 > Established 2026-05-07. This is the canonical current-state architecture
 > document for Lineup Desktop.
 
@@ -16,15 +18,21 @@
 Lineup Desktop is a new Windows-first Electron repository. It currently has a
 secure Electron shell frame, the RD-13 renderer app shell/navigation, workflow,
 settings/channel setup, RD-23/RD-24 runtime-backed channel setup, guide, and
-channel surfaces complete for the current code state, Package 6 runtime-backed
+channel surfaces implemented for the current code state, Package 6 runtime-backed
 player/overlay behavior and corrected focus/accessibility ownership, Package 7
 upstream-adapted overlay presentation, the former RD-22A fixture/injected app body,
 docs, workflow, contract, harness scaffolding, main-owned Plex
 auth/discovery/library domain seams, RD-22B live Plex onboarding/library runtime
-wiring, and RD-25/RD-26 playback code implementation. Code implementation and
-review are complete for RD-25/RD-26. The parity reopen is closed; the still-
-pending Package 6 audit and broader Windows/manual product proof are binding
-RD-27 gates.
+wiring, and RD-25/RD-26 playback foundations. Their historical slices remain
+complete only at their recorded scope; WS2 now closes the current
+platform-neutral playback implementation gate, but the 2026-07-22 master audit found missing upstream
+behavior and conservative production capability gates. The local visual-proof
+run is closed; feature/UI parity is reopened. The active nine-workstream
+parity-correction plan has landed and reviewed WS1 Channel Builder
+implementation, while WS1 remains open for deferred proof and performance debt.
+WS2 Packages 2A and 2B are published and cleanly reviewed, and Package 2D is a
+reviewed conservative no-op. This does not close WS1 or start WS3 through WS9;
+WS3 is only the next unopened freshness-planning target.
 There is no installer
 implementation, public release/signing pipeline, production native-helper media
 binary redistribution, or Windows-observed production playback closeout proof
@@ -278,7 +286,10 @@ native playback, package/dependency/lockfile/signing/update/native-media, or
 public-release behavior. Platform proof remains `Mac/local automated proof
 sufficient` because the completed scope stayed docs/source-audit/provenance
 only.
-RD-21 is complete as product-parity and roadmap work only. The tracked
+Historical RD-21 is complete as its 2026-06 product-parity and roadmap work
+only; its status vocabulary and then-current missing-runtime inventory below
+are superseded by later implementation slices and the 2026-07-22 master audit.
+The tracked
 artifacts are `docs/product/lineup-product-parity-matrix.md`,
 `docs/development/windows-ui-proof-plan.md`, and the revised MVP sequence in
 `docs/roadmap/desktop-port-roadmap.md`. The parity matrix classifies every
@@ -326,7 +337,20 @@ creation, channel persistence, scheduler-backed guide/player data, production
 playback, media options, package/release behavior, native-helper production
 behavior, or public readiness claims.
 
-RD-23 is complete. It implements live channel setup and runtime persistence, turning the live Plex library browsing into persisted Desktop channels. It integrates the channel domain, main-owned channel persistence store, and narrow preload channel setup bridge. The renderer setup route is adapted to support live selection, strategy config (shuffling, block schedules), replace/confirm replace logic, and settings state recovery. Preload validation and selection hardening prevent stale data access.
+RD-23's approved historical slice is complete. Its original implementation
+turned selected Plex libraries into one `libraryFallback` channel per section,
+plus replace/confirm-replace and settings recovery. WS1 has since replaced that
+bulk-setup limitation with the deterministic Channel Builder domain/planner,
+Plex facet session/discovery/materialization, main-owned asynchronous
+review/apply operation runtime, atomic lineup mutation/persistence/startup,
+five-operation preload bridge, and renderer configuration, review, progress,
+result, and recovery flow. Cancellation is accepted before the synchronous
+commit-barrier transition and rejected with `commit-started` after commit
+becomes irrevocable; no partial commit is published. WS1 implementation and
+independent review landed, but WS1 remains open for deferred visual,
+multi-library/filter, append/replace, manual Windows, packaged ACL, and
+performance proof. Preload validation and selection hardening prevent stale
+data access.
 RD-24 is complete. It integrates scheduler-backed guide data and the channel runtime. Persisted channel configurations feed the schedule DayRollover and EPG calculations. Player route, overlays, now-playing, mini-guide, and channel badge are wired to real scheduler state. The app handles manual channel switches, scheduling ticks, and program transitions cleanly.
 Package 6 runtime player and overlay correction is implemented and reviewed.
 Production overlay ancestry, busy focus custody, direct-action eligibility, and
@@ -357,8 +381,10 @@ Plex source changes, resets selected cart state when source custody changes,
 and does not fabricate direct edit drafts from saved-channel summaries. Direct
 in-place edit of persisted channels remains deferred until a reviewed
 main/preload edit-draft API returns full content with `expectedRevision`.
-RD-25 code implementation is complete and reviewed; Windows/manual product proof
-remains pending in RD-27. The production native playback MVP
+RD-25's historical code implementation is complete and reviewed at its recorded
+scope; WS2 closes the current platform-neutral implementation gate, while
+Windows/manual product proof remains pending in `WS2-POST-VALIDATION-01` and
+RD-27 as applicable. The production native playback MVP
 replaces the fake playback bootstrap with a production-shaped, main/helper-owned
 native playback path for live Plex-backed scheduled media. A main-only
 privileged load context propagates the private playback descriptor to the helper
@@ -366,8 +392,10 @@ host, which runs a repo-owned C# native helper process. The helper communicates
 with the main process via an NDJSON protocol over stdin/stdout. Live Plex stream
 resolution, media detail, and PMS session ports are composed and wired.
 Renderer player UI state binds dynamically to safe player IPC events.
-RD-26 code implementation is complete and reviewed; Windows/manual product proof
-remains pending in RD-27. It implements runtime media options
+RD-26's historical code implementation is complete and reviewed at its recorded
+scope; WS2 does not promote its conservative capability profile, and
+Windows/manual product proof remains pending in `WS2-POST-VALIDATION-01` and
+RD-27 as applicable. It implements runtime media options
 and playback quality over the production native playback path. The C# native
 helper is extended to manage audio and subtitle track states and video
 parameters via libmpv. Main process validation gates renderer selection requests
@@ -409,11 +437,11 @@ The watch-list owners that remain over 500 lines are reported by
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
 | Import provenance | `docs/architecture/import-ledger.md` | Current copied/adapted upstream source ledger, including the exact Package 7 overlay presentation slice at pinned `4bdb0e1b3370e7893a582ec80226557727832d0b` and observed-current `a1a7ea7dcb1cfc8aee7cfcf88cf5a1dac718bf30` |
 | Original Lineup compatibility | `docs/architecture/original-lineup-reference-compatibility-matrix.md` and `docs/architecture/original-lineup-divergence-register.md` | Current copied/adapted/reference/proof-context memory, including Package 7 overlay presentation and the reviewed Package 6 Info-precedence divergence |
-| Product parity and MVP roadmap | `docs/product/lineup-product-parity-matrix.md`, `docs/development/windows-ui-proof-plan.md`, and `docs/roadmap/desktop-port-roadmap.md` | Packages 0–8 renderer/local-proof closeout plus conservative Windows proof rules; RD-27 is next, no Windows-required row is platform-complete, and each retains its matrix classification until its owning RD-27 or RD-28 proof is observed |
+| Product parity and MVP roadmap | `docs/product/lineup-product-parity-matrix.md`, `docs/development/windows-ui-proof-plan.md`, `docs/plans/2026-07-22-tier3-parity-correction-plan.md`, and `docs/roadmap/desktop-port-roadmap.md` | WS1 implementation/review landed but proof remains deferred/open. WS2's platform-neutral implementation gate is closed at published `d2f1e97`; `WS2-POST-VALIDATION-01` remains nonblocking native/Windows debt. WS3–WS9 are unopened, with WS3 only the next freshness-planning target. RD-27 remains later. |
 | File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size evidence, cohesion-based dispositions, fresh hotspot review triggers, and Tier 3 file-shape verification |
-| Electron main shell | `src/main/index.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with smoke-only assertion ownership split out of the startup/composition entrypoint, plus RD-14 Unit 2 main-owned BrowserWindow/fullscreen/display/restore controller and Unit 3 foreground app-command controller while `src/main/index.ts` remains composition and IPC wiring |
-| Preload bridge | `src/preload/index.cts`, `src/preload/channels.cts`, `src/preload/channelBridgeGuards.cts`, and `src/preload/diagnosticsBridgeGuards.cts` | Narrow shell/window/player/diagnostics/Plex/channel bridge with runtime payload guards; RD-22B exposes only validated `window.lineupDesktop.plex` operations for snapshot, PIN, Plex Home, server restore/discovery/selection, library sections/items/search, and metadata while rejecting malformed or privileged Plex results locally. ARCH-02 keeps the sandbox-compatible entrypoint as the only `contextBridge`/`ipcRenderer` value owner, while channel constants and diagnostics guard families live in focused preload modules. The integration seam reads preload source text plus renderer-safe contracts to parity-test guard vocabulary, channel constants, the single `lineupDesktop` exposure, and approved `ipcRenderer` method/channel pairs without importing or executing preload |
-| Renderer shell | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md), `src/renderer/index.ts`, `src/renderer/rendererActionRegistration.ts`, `src/renderer/playerBridgeSubscription.ts`, `src/renderer/guidePresentationPolling.ts`, `src/renderer/playerOverlayController.ts`, `src/renderer/playerOverlayDom.ts`, and `src/renderer/plexRuntimeActionDispatch.ts` | Unprivileged runtime-backed app shell with live Plex onboarding/library, persisted setup/Settings, scheduler-backed Guide, safe Player/overlay projection, deterministic focus/input, split overlay presentation owners, and Package 8 local exact-viewport/media/fullscreen-continuity proof; `index.ts` remains composition wiring |
+| Electron main shell | `src/main/index.ts`, `src/main/applicationStartupCleanup.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with smoke-only assertion ownership split out of the startup/composition entrypoint, independently guarded startup-rollback ownership, plus RD-14 Unit 2 main-owned BrowserWindow/fullscreen/display/restore controller and Unit 3 foreground app-command controller while `src/main/index.ts` remains composition and IPC wiring |
+| Preload bridge | `src/preload/index.cts`, `src/preload/channels.cts`, `src/preload/playerRecoveryBridge.cts`, `src/preload/channelSetupBridge.cts`, `src/preload/channelBridgeGuards.cts`, and `src/preload/diagnosticsBridgeGuards.cts` | Narrow shell/window/player/diagnostics/Plex/channel bridge with runtime payload guards. WS2 exposes only the closed validated Retry-current/Skip-next recovery operation through `playerRecoveryBridge.cts`; renderer remains unprivileged. WS1 exposes exactly five validated Channel Builder operations—`getStatus`, `startReview`, `startApply`, `getOperation`, and `cancel`—without privileged payload custody. RD-22B exposes only validated `window.lineupDesktop.plex` operations while rejecting malformed or privileged Plex results locally. ARCH-02 keeps the sandbox-compatible entrypoint as the only `contextBridge`/`ipcRenderer` value owner. |
+| Renderer shell and Channel Builder flow | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md), `src/renderer/index.ts`, `src/renderer/playerErrorRecoveryController.ts`, `src/renderer/channelSetup/builderConfigState.ts`, `src/renderer/workflow.ts`, `src/renderer/domBindings.ts`, and `src/renderer/styles/workflow-screens.css` | Unprivileged runtime-backed app shell with live Plex onboarding/library, persisted setup/Settings, scheduler-backed Guide, safe Player/overlay projection, deterministic focus/input, and WS1 Channel Builder configuration, pre-build review, progress, result, recovery, and cancellation presentation. WS2's renderer recovery controller owns only Retry/Skip request generations, busy/error settlement, and focus restoration; main remains authoritative. Paired visual manifests and the named Windows/manual input/accessibility states remain open; `index.ts` remains composition wiring. |
 | Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window/player bridge contract |
 | Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, diagnostic, IPC result, and runtime event-guard contract |
 | IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window/player/diagnostics/Plex IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
@@ -422,19 +450,23 @@ The watch-list owners that remain over 500 lines are reported by
 | Diagnostics contract vocabulary | `src/contracts/diagnostics.ts` | Renderer-safe RD-17 diagnostic schema, result/error, summary, support-bundle export, redaction-scan, renderer-event, truncation, and sanitizer vocabulary |
 | Main diagnostics and support bundle | `src/main/diagnostics/*` | Main-owned RD-17 diagnostic event store, support-bundle target/path creation, export assembly, redaction scanning, IPC authorization, renderer-event validation, and safe support-bundle result/failure envelopes; renderer never receives absolute export paths or raw diagnostic material |
 | Desktop player adapter boundary | `src/main/player/desktopPlayerAdapter.ts`, `src/main/player/playerAdapterRequestCustody.ts`, `src/main/player/nativePlayerHostPort.ts`, `src/main/player/nativePlayerHostProcess.ts`, `src/main/player/playerIpc.ts`, `src/main/player/productionNativeHostFactory.ts`, `src/main/player/nativeHelperProtocol.ts`, and `src/main/player/nativeHelperPlaybackSetup.ts` | Main-owned adapter core, request-custody helper, native-host process seam, NDJSON helper protocol, and player IPC owner. RD-25 wires the production native host factory and native helper process launch; ARCH-02 keeps request id membership and native process/protocol framing outside the adapter composition owner. |
-| Desktop stream policy | `src/main/player/streamPolicy/desktopStreamPolicy.ts` and `src/main/player/streamPolicy/types.ts` | Main/player-owned deterministic fixture policy for capability-driven direct play, direct stream, transcode, unsupported decisions, RD-16 forced/default subtitle handling, subtitle-off, requested missing/incompatible audio and subtitles, burn-in/conversion decisions, audio fallback, language metadata preservation without language-preference selection, HDR/Dolby Vision/unknown dynamic-range handling, stable reason codes, explicit unknowns, Windows RD-06/RD-07 sample-matrix proof, RD-16 redacted media-matrix proof, and safe policy outputs; not wired to Plex runtime, renderer UI, native helper, secure storage, or runtime IPC |
-| Plex stream resolver boundary | `src/main/plex/streamResolver.ts`, `src/main/plex/streamResolverComposition.ts`, `src/main/plex/playbackMediaDetailPort.ts`, and `src/main/plex/pmsPlaybackSessionPort.ts` | Main-owned resolver and live composition. RD-25 resolves Plex media details and manages PMS session leases with request-scoped start/release ports. |
-| Plex playback runtime boundary | `src/main/player/plexPlaybackRuntime.ts`, `src/main/player/plexPlaybackRuntimeCleanup.ts`, `src/main/player/plexPlaybackCleanupWiring.ts`, `src/main/player/plexPlaybackBridge.ts`, `src/main/player/plexPlaybackComposition.ts`, `src/main/player/playbackRuntimeBootstrap.ts`, and `src/main/player/privilegedPlaybackDispatchContext.ts` | Main-owned runtime, cleanup sequencing owners, and scheduler/channel bridge. RD-25 hooks scheduled playback lifecycle transitions (program ticks, user switch, server switch, helper crashes) to native helper lifecycle and cleanup; ARCH-02 keeps cleanup ordering and cleanup dependency wiring outside the main runtime owner. |
+| Desktop stream policy | `src/main/player/streamPolicy/desktopStreamPolicy.ts` and `src/main/player/streamPolicy/types.ts` | Main/player-owned deterministic capability policy for direct play, direct stream, transcode, unsupported decisions, subtitle/audio fallback, burn-in/conversion, dynamic-range handling, stable reason codes, explicit unknowns, and safe outputs. `src/main/plex/streamResolver.ts` calls `decideDesktopStreamPolicy`; production capabilities remain deliberately conservative, so richer policy branches do not imply enabled Windows production support. |
+| Plex stream resolver boundary | `src/main/plex/streamResolver.ts`, `src/main/plex/streamResolverComposition.ts`, `src/main/plex/playbackMediaDetailPort.ts`, and `src/main/plex/pmsPlaybackSessionPort.ts` | Main-owned resolver and live composition. RD-25 resolves Plex media details, calls the Desktop stream policy, and manages PMS session leases with request-scoped start/release ports while retaining private playback custody. |
+| Channel Builder pure domain and planner | `src/domain/channelBuilder/**` | Pure deterministic WS1 configuration normalization, facet/candidate strategy construction, semantic identity, priority/cap planning, alternate/ordering variants, warnings, estimates, and safe plan projection. No Electron, Plex transport, raw payload, persistence, or renderer custody. |
+| Plex Channel Builder facets | `src/main/plex/channelBuilderFacetSession.ts`, `src/main/plex/channelBuilderFacetDiscovery.ts`, `src/main/plex/channelBuilderFacetMaterialization.ts`, and `src/main/plex/desktopPlexChannelBuilderFacetSource.ts` | Main-owned WS1 facet session, discovery, safe planner input, and apply materialization for selected Plex context. Live proof across multiple eligible libraries and the complete supported filter surface remains open. |
+| Main Channel Builder operation and mutation runtime | `src/main/channel/channelBuilderProductionPlanner.ts`, `src/main/channel/channelBuilderPlanningWorker.ts`, `src/main/channel/channelBuilderOperationOwner.ts`, `src/main/channel/channelBuilderRuntime.ts`, `src/main/channel/channelLineupMutationCoordinator.ts`, `src/main/channel/channelIpc.ts`, and `src/main/channel/channelComposition.ts` | Main-owned WS1 planning worker, asynchronous review/apply operation custody, safe status, cancellation, atomic commit-barrier transition, lineup mutation, persistence, and guide refresh. Live evidence covers pre-barrier merge cancellation plus post-barrier merge apply/restart only; append/replace live proof remains open. |
+| Channel Builder persistence and startup | `src/main/persistence/desktopChannelPersistenceStore.ts`, `src/main/persistence/channelPersistenceBootstrapOwner.ts`, `src/main/persistence/channelPersistenceStartupOwner.ts`, and `src/main/channel/channelPublicReferenceOwner.ts` | Main-owned versioned aggregate persistence, atomic mutation/recovery, startup restoration, and renderer-safe builder status. Packaged ACL proof remains open. |
+| Plex playback runtime boundary | `src/main/player/plexPlaybackRuntime.ts`, `src/main/player/playbackProgramTransitionOwner.ts`, `src/main/player/playerRecoveryIpc.ts`, `src/main/player/plexPlaybackRuntimeCleanup.ts`, `src/main/player/plexPlaybackCleanupWiring.ts`, `src/main/player/plexPlaybackBridge.ts`, `src/main/player/plexPlaybackComposition.ts`, `src/main/player/playbackRuntimeBootstrap.ts`, and `src/main/player/privilegedPlaybackDispatchContext.ts` | Main-owned runtime, bounded recovery, authoritative Retry-current/Skip-next transition owner, closed recovery IPC, cleanup sequencing owners, and scheduler/channel bridge. Exact schedule identity, retry budget, transition serialization, cleanup custody, and privileged playback state remain main-owned. |
 | Product native helper | `src/native-helper/Lineup.NativePlayerHost/**` | C#/.NET native player host executable source that instantiates libmpv and speaks the NDJSON protocol over stdin/stdout. Built binaries are untracked. |
-| Desktop persistence boundary | `src/main/persistence/appDataPaths.ts`, `src/main/persistence/secureStorageCodec.ts`, `src/main/persistence/desktopPersistenceStore.ts`, and `src/main/persistence/desktopChannelPersistenceStore.ts` | Main-owned RD-09 app-data path, Electron safeStorage codec, encrypted Plex credential record, selected-server state, unavailable/corrupt classification, fail-closed no-plaintext fallback, renderer-safe snapshot owner, and RD-23 channel persistence file adapter; RD-22B wires credential availability and selected-server restore into the Plex runtime, RD-23 wires channel setup persistence, and backup/restore remains unimplemented |
-| Desktop Plex runtime | `src/main/plex/desktopPlexRuntime.ts`, `src/main/plex/plexRuntimeOperationOwner.ts`, `src/main/plex/desktopPlexLibraryOperationExecutor.ts`, `src/main/plex/desktopPlexRuntimeSupport.ts`, `src/main/plex/livePlexTransport.ts`, `src/main/plex/plexComposition.ts`, and `src/main/plex/plexIpc.ts` | Main-owned RD-22B live Plex onboarding/library runtime and IPC composition for auth/PIN, credential restore status, Plex Home/profile switching, selected-server restore, server discovery/selection, library sections/items/search/metadata, stale/cancel/error normalization, and renderer-safe snapshots while retaining tokens, selected connections, transport details, raw payloads, endpoint URLs, and app paths in main custody. ARCH-02 gives stale/cancel/error operation custody and library browse/search/metadata execution focused owners under the main Plex runtime boundary. |
+| Desktop persistence boundary | `src/main/persistence/appDataPaths.ts`, `src/main/persistence/secureStorageCodec.ts`, `src/main/persistence/desktopPersistenceStore.ts`, `src/main/persistence/desktopChannelPersistenceStore.ts`, `src/main/persistence/channelPersistenceBootstrapOwner.ts`, and `src/main/persistence/channelPersistenceStartupOwner.ts` | Main-owned app-data paths, Electron safeStorage codec, encrypted Plex credentials, selected-server state, fail-closed recovery, and versioned channel aggregate persistence/startup. RD-22B composes credential and server restoration; WS1 composes atomic lineup/config persistence and startup recovery. Backup/restore remains unimplemented. |
+| Desktop Plex runtime | `src/main/plex/desktopPlexRuntime.ts`, `src/main/plex/plexRuntimeOperationOwner.ts`, `src/main/plex/desktopPlexLibraryOperationExecutor.ts`, `src/main/plex/desktopPlexRuntimeSupport.ts`, `src/main/plex/livePlexTransport.ts`, `src/main/plex/plexComposition.ts`, and `src/main/plex/plexIpc.ts` | Main-owned RD-22B live Plex onboarding/library runtime and IPC composition for auth/PIN, credential restore status, Plex Home/profile switching, selected-server restore, server discovery/selection, library sections/items/search/metadata, stale/cancel/error normalization, and renderer-safe snapshots while retaining tokens, selected connections, transport details, raw payloads, endpoint URLs, and app paths in main custody. ARCH-02 gives stale/cancel/error operation custody and library browse/search/metadata dedicated owners under the main Plex runtime boundary. |
 | Desktop Plex library domain | `src/main/plex/library/*` | Main-owned RD-10 imported/adapted Plex library parser/domain owner for library sections, media metadata, seasons, collections, playlists, tag directories, search hubs, pagination, request intent, and renderer-safe summaries; RD-22B uses these seams through main-owned live runtime composition, with image URL construction, stream resolver runtime, and playback URL setup still out of scope |
 | Desktop Plex auth domain | `src/main/plex/auth/*` | Main-owned RD-10 imported/adapted Plex auth owner for PIN/profile/token validation, Plex Home users, profile switching, injected auth transport, sanitized errors, Desktop identity metadata, and RD-09 credential storage adapter; RD-22B wires live auth/PIN, Plex Home/profile switching, credential restore status, and protected-user PIN failure handling through main/preload/renderer-safe runtime composition |
 | Desktop Plex discovery domain | `src/main/plex/discovery/*` | Main-owned RD-10 imported/adapted Plex discovery and selected-server owner for resource parsing, connection probe policy, health classification, stale discovery-context invalidation, RD-09 selected-server summary persistence, and in-memory selected connection custody; RD-22B wires live discovery, selected-server persistence, and relaunch restore by server id plus fresh probing without persisting or returning connection URI/server URI state |
 | Domain architecture verifier | `tools/architecture-rules/*` and `tools/__tests__/build-eslint-architecture-rules.test.mjs` | RD-11 domain-boundary verifier for `src/domain/**`; blocks Electron, Node, main/preload/renderer/native-helper imports, dynamic owner imports, and browser/runtime globals including direct `globalThis` runtime access. F-004 removes the blanket `src/**/__tests__/**` production-boundary exemption and adds explicit test-owner coverage for `src/__tests__/contracts/**`, `src/__tests__/domain/**`, `src/__tests__/main/**`, `src/__tests__/preload/**`, and `src/__tests__/renderer/**`; `src/__tests__/integration/**` is denied by default except for data-declared named seams. The current integration exception is `preload-contract-vocabulary-parity` at `src/__tests__/integration/preloadContractVocabulary.test.ts`, which may compare preload source text with renderer-safe contract vocabulary while keeping production preload single-file-compatible. |
 | Scheduler domain | `src/domain/scheduler/**` | Pure RD-11 imported/adapted deterministic scheduler and playback-ordering owner for anchor-time schedule calculation, loop wrapping, current/next/previous lookup, schedule windows, shuffle seeds, block playback validation, injected clock/timer ports, and event emission; not wired to Electron main/preload, renderer, Plex runtime, stream resolution, or native playback |
 | Channel and content domain | `src/domain/channel/**` | Pure RD-11 imported/adapted channel authoring, import/export normalization, content resolution through injected domain-safe library ports, stale fallback, source/channel resolution caches, retry scheduling, lineup navigation, and channel persistence port owner; no raw Plex payload, tokenized URL, auth header, Electron, Node, browser storage, preload, renderer, or live network ownership |
-| Channel persistence adapter | `src/main/persistence/desktopChannelPersistenceStore.ts` | Main-owned RD-11 separate versioned channel persistence file adapter behind an injected file path, temp-file write, mode hardening, and typed domain storage port; not wired to Electron app paths, existing credential/selected-server persistence, preload/renderer APIs, backup/restore, or runtime composition |
+| Channel persistence adapter | `src/main/persistence/desktopChannelPersistenceStore.ts` | Main-owned versioned aggregate adapter behind injected paths and filesystem seams, with temp-file replacement, mode hardening, recovery, and typed domain storage. Its RD-11/RD-23 origin is now composed through WS1 bootstrap/startup and mutation owners; backup/restore remains unimplemented. |
 | Redaction contract vocabulary | `src/contracts/redaction.ts` | RD-17 redaction boundary and forbidden diagnostic field vocabulary shared by diagnostics contracts, scanner, and tests |
 | External `mpv` POC tool | `tools/mpv-poc/rd-05-external-mpv-poc.mjs` | Dev-only disposable RD-05 evidence harness |
 | Native libmpv spike tool | `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` | Dev-only disposable RD-06 Windows WID/render API evidence harness |
@@ -443,13 +475,15 @@ The watch-list owners that remain over 500 lines are reported by
 | Redaction verifier | `tools/verify-redaction.mjs` | Active RD-17-aware scanner for secret-shaped values, raw auth/header material, privileged diagnostic fields, raw filesystem paths, process data, native handles, and raw IPC frames |
 | RD-17 diagnostics smoke | `tools/rd17-diagnostics-smoke.mjs` | Windows-only ignored-evidence proof for diagnostics crash recovery and support-bundle redaction closeout |
 
-## UI Parity Closeout
+## Local UI Proof Bundle Closeout
 
-The 2026-07-10 reopen corrected and superseded the earlier 2026-06-12 parity
-claim. Packages 0–8 are now implemented, locally proved, and reviewed at their
-owning seams. The complete plan body is archived only in the ignored local run
-bundle; durable architecture, roadmap, parity, divergence, provenance, and
-Windows-proof conclusions live in tracked docs.
+The 2026-07-10 reopen corrected the earlier 2026-06-12 visual claim. Packages
+0–8 are implemented, locally proved, and reviewed at their historical owning
+seams. The 2026-07-22 one-by-one audit supersedes any interpretation that this
+bundle proved full current-upstream feature/UI parity. The complete plan body is
+archived only in the ignored local run bundle; durable architecture, roadmap,
+parity, divergence, provenance, and Windows-proof conclusions live in tracked
+docs.
 
 Main/preload continue to own Plex, persistence, playback, diagnostics, and IPC
 custody. Local Package 8 evidence proves renderer semantics, exact viewports,
@@ -488,8 +522,10 @@ Development and smoke modes still use the development/smoke host and fake
 playback resolver for deterministic proof. In production mode, player IPC uses
 the production native host factory when a Windows helper binary is available and
 otherwise fails closed with renderer-safe unsupported-capability results.
-RD-25/RD-26 code is complete and reviewed, while Windows/manual product proof
-remains pending in RD-27.
+RD-25/RD-26 historical slices are complete and reviewed only at their recorded
+scope. WS2's current platform-neutral implementation gate is closed; Windows/
+native/manual proof remains `WS2-POST-VALIDATION-01` and RD-27 work as
+applicable.
 Fullscreen requests map to the existing
 `window.enterFullscreen` and `window.exitFullscreen` renderer intents.
 RD-17 also exposes `window.lineupDesktop.diagnostics.recordRendererEvent()`,
@@ -501,9 +537,14 @@ credentials, auth headers, tokenized URLs, or raw IPC traces.
 
 ## Roadmap
 
-Use [`docs/roadmap/desktop-port-roadmap.md`](../roadmap/desktop-port-roadmap.md)
-for the ordered port checklist. RD-27 is the next Tier 3 planning target after
-the renderer-parity closeout. It records what comes next after the secure Electron shell
-foundation, which original Lineup slices are likely reusable, which surfaces
-must be newly designed for Desktop, and the global gates that block broad port
-work.
+Use [`docs/product/lineup-product-parity-matrix.md`](../product/lineup-product-parity-matrix.md)
+for the current one-by-one gap order and
+[`docs/roadmap/desktop-port-roadmap.md`](../roadmap/desktop-port-roadmap.md) for
+durable historical slice context. The active reviewed Tier 3 nine-workstream
+parity-correction plan owns that sequence. WS1 implementation and review
+landed, but WS1 remains open for deferred proof and `WS1-PERF-01` (2,690.61 ms
+against the unchanged 2,000 ms target). WS2 has since closed its platform-neutral
+implementation gate without advancing WS1 stable IDs or evidence
+classifications; WS3 through WS9 remain unopened, with WS3 only the next
+freshness-planning target. RD-27 remains later and
+is not authorized to implement those gaps silently.

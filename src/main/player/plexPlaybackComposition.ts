@@ -7,6 +7,7 @@ import { PlexPlaybackBridge } from './plexPlaybackBridge.js';
 import { PlexPlaybackRuntime, type PlexPlaybackRuntimeClockPort, type PlexPlaybackRuntimePlayerPort, type PlexPlaybackRuntimePmsPort } from './plexPlaybackRuntime.js';
 import type { DesktopStreamCapabilityProfile } from './streamPolicy/types.js';
 import type { PrivilegedPlaybackDispatchContext } from './privilegedPlaybackDispatchContext.js';
+import type { PlexPlaybackRecoveryTimerPort } from './plexPlaybackRecoveryOwner.js';
 
 type DesktopPlayerAdapterRuntimePort = {
   dispatchRendererIntent(envelope: PlayerRendererIntentEnvelope): Promise<{
@@ -42,6 +43,7 @@ export interface CreatePlexPlaybackRuntimeCompositionOptions {
   clock?: PlexPlaybackRuntimeClockPort;
   autoplay?: boolean;
   onEvents?: (events: readonly PlayerEvent[]) => void;
+  recoveryTimer?: PlexPlaybackRecoveryTimerPort;
   diagnosticEventStore?: DiagnosticEventStore;
 }
 
@@ -71,6 +73,7 @@ export function createPlexPlaybackRuntimeComposition(
       createRequestId: options.createRequestId,
       clock: options.clock,
       onEvents: options.onEvents,
+      recoveryTimer: options.recoveryTimer,
       diagnosticEventStore: options.diagnosticEventStore,
     }),
   };
@@ -82,7 +85,21 @@ export function createDesktopPlayerAdapterRuntimePort(
   return {
     async dispatch(command, context) {
       const result = await adapter.dispatchRuntimeCommand(command, context);
-      return { ok: result.accepted, events: result.events };
+      const settlements = result.events.filter(
+        (event): event is Extract<PlayerEvent, { event: 'command.settled' }> => (
+          event.event === 'command.settled'
+        ),
+      );
+      const settlement = settlements[0];
+      return {
+        ok:
+          result.accepted &&
+          settlements.length === 1 &&
+          settlement?.requestId === command.requestId &&
+          settlement.command === command.command &&
+          settlement.ok,
+        events: result.events,
+      };
     },
     async cleanup(requestId) {
       const result = await adapter.cleanup(requestId);
@@ -92,4 +109,3 @@ export function createDesktopPlayerAdapterRuntimePort(
     },
   };
 }
-

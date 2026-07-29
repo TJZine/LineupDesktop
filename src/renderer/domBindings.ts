@@ -102,6 +102,7 @@ export interface RendererDomBindings {
   overlayPlayerLoadingLabelElement?: HTMLElement | null;
   overlayPlayerErrorElement?: HTMLElement | null;
   overlayPlayerRetryButton?: HTMLButtonElement | null;
+  overlayPlayerSkipButton?: HTMLButtonElement | null;
   overlayPlayerGuideButton?: HTMLButtonElement | null;
   osdStatusElement: HTMLElement | null;
   osdTitleElement: HTMLElement | null;
@@ -263,6 +264,7 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     overlayPlayerLoadingLabelElement: documentRef.querySelector<HTMLElement>('[data-overlay-player-loading-label]'),
     overlayPlayerErrorElement: documentRef.querySelector<HTMLElement>('[data-overlay-player-error]'),
     overlayPlayerRetryButton: documentRef.querySelector<HTMLButtonElement>('[data-overlay-action="retryPlayer"]'),
+    overlayPlayerSkipButton: documentRef.querySelector<HTMLButtonElement>('[data-overlay-action="skipPlayer"]'),
     overlayPlayerGuideButton: documentRef.querySelector<HTMLButtonElement>('[data-focus-id="overlay-player-guide"]'),
     osdStatusElement: documentRef.querySelector<HTMLElement>('[data-osd-status]'),
     osdTitleElement: documentRef.querySelector<HTMLElement>('[data-osd-title]'),
@@ -409,6 +411,7 @@ export function readOverlayActionId(value: string | undefined): PlayerOverlayAct
     case 'openAudioOptions':
     case 'openSubtitleOptions':
     case 'retryPlayer':
+    case 'skipPlayer':
     case 'miniGuidePrevious':
     case 'miniGuideNext':
     case 'miniGuidePagePrevious':

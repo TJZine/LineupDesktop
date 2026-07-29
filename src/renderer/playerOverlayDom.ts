@@ -93,6 +93,7 @@ export const PLAYER_OVERLAY_MARKUP = `
     <p data-overlay-player-error></p>
     <div class="player-error__actions">
       <button type="button" data-overlay-action="retryPlayer" data-focus-id="overlay-player-retry">Retry</button>
+      <button type="button" data-overlay-action="skipPlayer" data-focus-id="overlay-player-skip">Skip</button>
       <button type="button" data-route-action="openGuide" data-focus-id="overlay-player-guide">Guide</button>
     </div>
   </section>
@@ -122,12 +123,15 @@ export function renderPlayerOverlaysDom(
     button.disabled = !isPlayerRoute ||
       (action === 'openAudioOptions' && !view.playerOsd.audioEligible) ||
       (action === 'openSubtitleOptions' && !view.playerOsd.subtitleEligible) ||
-      (action === 'retryPlayer' && !view.retryVisible);
+      (action === 'retryPlayer' && !view.retryVisible) ||
+      (action === 'skipPlayer' && !view.skipVisible);
     button.hidden = (action === 'retryPlayer' && !view.retryVisible) ||
+      (action === 'skipPlayer' && !view.skipVisible) ||
       (action === 'openAudioOptions' && !view.playerOsd.audioEligible) ||
       (action === 'openSubtitleOptions' && !view.playerOsd.subtitleEligible);
   }
   if (dom.overlayPlayerRetryButton) projectBusyFocusCustody(dom.overlayPlayerRetryButton, view.retryBusy);
+  if (dom.overlayPlayerSkipButton) projectBusyFocusCustody(dom.overlayPlayerSkipButton, view.skipBusy);
   if (dom.overlayPlayerGuideButton) {
     dom.overlayPlayerGuideButton.hidden = !view.guideVisible;
     dom.overlayPlayerGuideButton.disabled = !isPlayerRoute || !view.guideVisible;

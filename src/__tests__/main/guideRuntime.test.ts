@@ -132,6 +132,34 @@ test('GuideRuntime getPresentation returns empty channels list if none configure
   });
 });
 
+test('GuideRuntime loadChannel emits programStart before optional tune notification', async () => {
+  const repository = new MockChannelRepository();
+  repository.data.channels = [createChannelConfig('chan-1', 1, 'One')];
+  repository.data.currentChannelId = 'chan-1';
+  const plexAdapter = new MockPlexLibraryAdapter();
+  plexAdapter.setLibraryItems('lib-1', [createLibraryItem(1)]);
+  const activeScheduler = new ChannelScheduler({
+    clock: { now: () => 1_000 },
+  });
+  const trace: string[] = [];
+  activeScheduler.on('programStart', () => {
+    trace.push('programStart');
+  });
+  const runtime = new GuideRuntime({
+    repository: repository as unknown as ChannelRepository,
+    plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
+    activeChannelScheduler: activeScheduler,
+    clock: { now: () => 1_000 },
+    onChannelTuned: () => {
+      trace.push('onChannelTuned');
+    },
+  });
+
+  await runtime.tuneChannel('chan-1');
+
+  assert.deepEqual(trace, ['programStart', 'onChannelTuned']);
+});
+
 test('GuideRuntime getPresentation generates schedule presentation for channels', async () => {
   const repository = new MockChannelRepository();
   const chan1 = createChannelConfig('chan-1', 1, 'Channel 1', 'lib-1');

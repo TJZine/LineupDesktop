@@ -277,6 +277,16 @@ export class ChannelBuilderOperationOwner {
     const owned = this.requireActive(operationId);
     if (owned.controller.signal.aborted) return 'cancel';
     owned.commitStarted = true;
+    owned.operation = {
+      ...owned.operation,
+      kind: 'apply',
+      state: 'running',
+      phase: 'persist',
+      updatedAtMs: this.nextUpdatedAt(owned),
+      progress: { completed: 0, total: 1 },
+      result: null,
+      error: null,
+    };
     return 'proceed';
   }
 

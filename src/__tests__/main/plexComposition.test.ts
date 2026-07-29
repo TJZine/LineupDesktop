@@ -55,8 +55,22 @@ test('main startup repairs channels before readiness and tears Plex down on late
   assert.equal(source.slice(0, lifecycle).includes("app.on('window-all-closed'"), false);
   assert.equal(source.slice(0, lifecycle).includes("app.on('before-quit'"), false);
   assert.match(source, /plexComposition = plexCreated;/u);
-  assert.match(
-    source,
-    /const teardownChannel = channelComposition\?\.teardown \?\? null;[\s\S]*const teardownPlex = plexComposition\?\.teardown \?\? null;[\s\S]*await Promise\.all\(\[[\s\S]*teardownChannel\?\.\(\)[\s\S]*teardownPlex\?\.\(\)/u,
+  const rollbackStart = source.indexOf('void startApplication().catch');
+  const applicationStart = source.indexOf('async function startApplication');
+  const rollback = source.slice(rollbackStart, applicationStart);
+  const channelCleanup = rollback.indexOf(
+    'const teardownChannel = channelComposition?.teardown ?? null;',
+  );
+  const plexCleanup = rollback.indexOf(
+    'const teardownPlex = plexComposition?.teardown ?? null;',
+  );
+  const cleanupOwner = rollback.indexOf('cleanupFailedApplicationStartup(');
+  assert.equal(
+    rollbackStart >= 0 &&
+      applicationStart > rollbackStart &&
+      channelCleanup >= 0 &&
+      plexCleanup > channelCleanup &&
+      cleanupOwner > plexCleanup,
+    true,
   );
 });

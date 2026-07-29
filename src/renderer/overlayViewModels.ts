@@ -3,7 +3,6 @@ import {
   availableTracks,
   isAudioControlEligible,
   isSubtitleControlEligible,
-  resolveRetryChannelId,
   type OverlayChannelViewModel,
   type PlayerOverlayPresentationSource,
 } from './playerOverlayPresentation.js';
@@ -36,8 +35,10 @@ export interface PlayerOverlayViewModel {
   baseline: 'native' | 'loading' | 'error';
   errorMessage: string | null;
   retryVisible: boolean;
+  skipVisible: boolean;
   guideVisible: boolean;
   retryBusy: boolean;
+  skipBusy: boolean;
   currentChannel: OverlayChannelViewModel | null;
   nowPlaying: {
     title?: string;
@@ -83,9 +84,17 @@ export function createPlayerOverlayView(
   ) ?? presentation.channels[0] ?? null;
   const baseline = baselineFor(snapshot.status, state.activeOverlayId === 'playerOsd');
   const terminal = baseline === 'error' && !state.retryTransitionActive;
-  const retryVisible = snapshot.status === 'error' && snapshot.lastError?.retryable === true &&
-    resolveRetryChannelId(presentation, state.lastTuneChannelId) !== null;
-  const guideVisible = terminal && presentation.channels.length > 0;
+  const retryVisible =
+    snapshot.status === 'error' && currentChannel?.currentProgram !== undefined;
+  const skipVisible =
+    snapshot.status === 'error' && currentChannel?.nextProgram !== undefined;
+  const guideVisible =
+    terminal &&
+    !retryVisible &&
+    !skipVisible &&
+    presentation.channels.length > 0;
+  const recoveryBusy =
+    state.retryPending || state.recoveryPendingAction !== null;
   const active = terminal ? 'playerError' : state.activeOverlayId;
   const visible = emptyVisibility();
   if (active !== null) visible[active] = true;
@@ -107,7 +116,14 @@ export function createPlayerOverlayView(
     stack: stackFromVisibility(visible),
     visibleOverlays: visible,
     activeOverlayId: active,
-    activeFocusId: focusIdFor(active, state, snapshot, retryVisible, guideVisible),
+    activeFocusId: focusIdFor(
+      active,
+      state,
+      snapshot,
+      retryVisible,
+      skipVisible,
+      guideVisible,
+    ),
     baseline,
     errorMessage: terminal
       ? snapshot.status === 'destroyed'
@@ -115,8 +131,10 @@ export function createPlayerOverlayView(
         : state.retryError ?? snapshot.lastError?.message ?? 'Playback could not continue.'
       : null,
     retryVisible,
+    skipVisible,
     guideVisible,
-    retryBusy: state.retryPending,
+    retryBusy: recoveryBusy,
+    skipBusy: recoveryBusy,
     currentChannel,
     nowPlaying: {
       ...(currentChannel?.currentProgram === undefined && snapshot.media === null ? {} : {
@@ -238,6 +256,7 @@ function focusIdFor(
   state: PlayerOverlayState,
   snapshot: PlayerSnapshot,
   retryVisible: boolean,
+  skipVisible: boolean,
   guideVisible: boolean,
 ): string | null {
   if (active === 'playerOsd') {
@@ -249,6 +268,7 @@ function focusIdFor(
     : `overlay-mini-channel-${encodeURIComponent(state.miniGuideSelectedChannelId)}`;
   if (active === 'playbackOptions') return state.pendingTrackFocusId ?? state.playbackOptionsFocusId;
   if (active === 'playerError' && retryVisible) return 'overlay-player-retry';
+  if (active === 'playerError' && skipVisible) return 'overlay-player-skip';
   if (active === 'playerError' && guideVisible) return 'overlay-player-guide';
   return null;
 }

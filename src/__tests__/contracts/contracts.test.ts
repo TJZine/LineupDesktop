@@ -6,6 +6,7 @@ import {
   LINEUP_PLAYER_COMMAND_CHANNEL,
   LINEUP_PLAYER_EVENT_CHANNEL,
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
+  LINEUP_PLAYER_RECOVERY_CHANNEL,
   LINEUP_PLEX_CANCEL_PIN_CHANNEL,
   LINEUP_PLEX_GET_HOME_USERS_CHANNEL,
   LINEUP_PLEX_GET_METADATA_CHANNEL,
@@ -62,6 +63,7 @@ import {
 } from '../../contracts/plex.js';
 import {
   LINEUP_PROTOCOL_ORIGIN,
+  PLAYER_RECOVERY_ACTIONS,
   shellFailure,
   shellSuccess,
   isShellStatusEvent,
@@ -659,6 +661,7 @@ test('shell IPC channel vocabulary uses the approved literals', () => {
   assert.equal(LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL, 'lineup:player:getSnapshot');
   assert.equal(LINEUP_PLAYER_CLEANUP_CHANNEL, 'lineup:player:cleanup');
   assert.equal(LINEUP_PLAYER_EVENT_CHANNEL, 'lineup:player:event');
+  assert.equal(LINEUP_PLAYER_RECOVERY_CHANNEL, 'lineup:player:recovery');
   assert.equal(
     LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL,
     'lineup:diagnostics:recordRendererEvent',
@@ -687,6 +690,10 @@ test('shell IPC channel vocabulary uses the approved literals', () => {
   assert.equal(LINEUP_PLEX_LIST_LIBRARY_ITEMS_CHANNEL, 'lineup:plex:listLibraryItems');
   assert.equal(LINEUP_PLEX_SEARCH_LIBRARY_CHANNEL, 'lineup:plex:searchLibrary');
   assert.equal(LINEUP_PLEX_GET_METADATA_CHANNEL, 'lineup:plex:getMetadata');
+});
+
+test('player recovery contract freezes the two renderer-safe actions', () => {
+  assert.deepEqual([...PLAYER_RECOVERY_ACTIONS], ['retry-current', 'skip-next']);
 });
 
 test('plex runtime IPC contract freezes RD-22 Unit 1 safe vocabulary', () => {
@@ -849,6 +856,7 @@ test('preload API contract exposes shell, window, player, diagnostics, plex, and
     'dispatch',
     'getSnapshot',
     'cleanup',
+    'recover',
     'onEvent',
   ];
   const diagnosticsKeys: Array<keyof LineupDesktopPreloadApi['diagnostics']> = [
@@ -882,7 +890,7 @@ test('preload API contract exposes shell, window, player, diagnostics, plex, and
   assert.deepEqual(apiKeys, ['shell', 'window', 'player', 'diagnostics', 'plex', 'channelSetup']);
   assert.deepEqual(shellKeys, ['getCapabilities', 'onStatusChanged']);
   assert.deepEqual(windowKeys, ['setFullscreen']);
-  assert.deepEqual(playerKeys, ['dispatch', 'getSnapshot', 'cleanup', 'onEvent']);
+  assert.deepEqual(playerKeys, ['dispatch', 'getSnapshot', 'cleanup', 'recover', 'onEvent']);
   assert.deepEqual(diagnosticsKeys, [
     'recordRendererEvent',
     'getSummary',

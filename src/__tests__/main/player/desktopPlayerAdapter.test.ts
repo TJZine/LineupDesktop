@@ -1056,6 +1056,35 @@ test('desktop player adapter excludes forbidden fields from host events and erro
   assertNoForbiddenKeys(adapter.getSnapshot());
 });
 
+test('desktop player adapter normalizes the helper end-file ERROR envelope for safe recovery', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRendererIntent(loadEnvelope('request-engine-failure'));
+
+  const events = adapter.handleHostEvent({
+    type: 'error',
+    requestId: 'request-engine-failure',
+    error: {
+      code: 'PLAYER_HELPER_PLAYBACK_ENDED_WITH_ERROR',
+      category: 'engine-failure',
+      message: 'Native playback ended with a player engine error.',
+      recoverable: true,
+      retryable: true,
+    },
+  });
+
+  const errorEvent = events.find((event) => event.event === 'error');
+  assert.equal(errorEvent?.event, 'error');
+  if (errorEvent?.event === 'error') {
+    assert.equal(errorEvent.error.code, 'PLAYER_HOST_ENGINE_FAILURE');
+    assert.equal(errorEvent.error.category, 'engine-failure');
+    assert.equal(errorEvent.error.message, 'The player engine failed.');
+    assert.equal(errorEvent.error.recoverable, true);
+    assert.equal(errorEvent.error.retryable, true);
+  }
+  assertNoForbiddenKeys(events);
+});
+
 test('desktop player adapter binds malformed asynchronous events to active request custody', async () => {
   const host = new FakeNativePlayerHost();
   const adapter = new DesktopPlayerAdapter(host);

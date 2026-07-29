@@ -24,6 +24,7 @@ import {
   LINEUP_PLAYER_COMMAND_CHANNEL,
   LINEUP_PLAYER_EVENT_CHANNEL,
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
+  LINEUP_PLAYER_RECOVERY_CHANNEL,
   LINEUP_PLEX_CANCEL_PIN_CHANNEL,
   LINEUP_PLEX_GET_HOME_USERS_CHANNEL,
   LINEUP_PLEX_GET_METADATA_CHANNEL,
@@ -85,7 +86,10 @@ import {
   PLEX_RUNTIME_ERROR_CODES,
   PLEX_RUNTIME_OPERATIONS,
 } from '../../contracts/plex.js';
-import { SHELL_STATUS_VALUES } from '../../contracts/shell.js';
+import {
+  PLAYER_RECOVERY_ACTIONS,
+  SHELL_STATUS_VALUES,
+} from '../../contracts/shell.js';
 
 const preloadSourceUrl = new URL('../../preload/index.cts', import.meta.url);
 const preloadSourceText = readFileSync(preloadSourceUrl, 'utf8');
@@ -105,6 +109,10 @@ const guideBridgeSourceUrl = new URL('../../preload/guideBridge.cts', import.met
 const guideBridgeSourceText = readFileSync(guideBridgeSourceUrl, 'utf8');
 const playerBridgeSourceUrl = new URL('../../preload/playerBridge.cts', import.meta.url);
 const playerBridgeSourceText = readFileSync(playerBridgeSourceUrl, 'utf8');
+const playerRecoveryBridgeSourceText = readFileSync(
+  new URL('../../preload/playerRecoveryBridge.cts', import.meta.url),
+  'utf8',
+);
 const settingsGuardSourceUrl = new URL('../../preload/settingsBridgeGuards.cts', import.meta.url);
 const settingsGuardSourceText = readFileSync(settingsGuardSourceUrl, 'utf8');
 const settingsBridgeSourceUrl = new URL('../../preload/settingsBridge.cts', import.meta.url);
@@ -357,6 +365,29 @@ function evaluatePlayerBridgeModule(): Record<string, unknown> {
   return moduleObject.exports as Record<string, unknown>;
 }
 
+function evaluatePlayerRecoveryBridgeModule(): Record<string, unknown> {
+  const exportsObject = {};
+  const moduleObject = { exports: exportsObject };
+  const compiled = ts.transpileModule(playerRecoveryBridgeSourceText, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: 'src/preload/playerRecoveryBridge.cts',
+  }).outputText;
+  new Function('require', 'exports', 'module', compiled)(
+    (moduleName: string) => {
+      if (moduleName === '../contracts/shell.js') {
+        return { PLAYER_RECOVERY_ACTIONS };
+      }
+      return assert.fail(`unexpected player recovery bridge require ${moduleName}`);
+    },
+    exportsObject,
+    moduleObject,
+  );
+  return moduleObject.exports as Record<string, unknown>;
+}
+
 function evaluateSettingsGuardModule(): Record<string, unknown> {
   const exportsObject = {};
   const moduleObject = { exports: exportsObject };
@@ -412,6 +443,7 @@ function createPreloadHarness(
   const customChannelBridgeExports = evaluateCustomChannelBridgeModule(customChannelGuardExports);
   const guideBridgeExports = evaluateGuideBridgeModule();
   const playerBridgeExports = evaluatePlayerBridgeModule();
+  const playerRecoveryBridgeExports = evaluatePlayerRecoveryBridgeModule();
   const settingsBridgeExports = evaluateSettingsBridgeModule(evaluateSettingsGuardModule());
   const compiled = ts.transpileModule(preloadSourceText, {
     compilerOptions: {
@@ -441,6 +473,9 @@ function createPreloadHarness(
     }
     if (moduleName === './playerBridge.cjs') {
       return playerBridgeExports;
+    }
+    if (moduleName === './playerRecoveryBridge.cjs') {
+      return playerRecoveryBridgeExports;
     }
     if (moduleName === './settingsBridge.cjs') {
       return settingsBridgeExports;
@@ -581,6 +616,7 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
   LINEUP_PLAYER_CLEANUP_CHANNEL,
   LINEUP_PLAYER_EVENT_CHANNEL,
+  LINEUP_PLAYER_RECOVERY_CHANNEL,
   LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL,
   LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL,
   LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
@@ -624,6 +660,7 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_PLAYER_COMMAND_CHANNEL',
     'LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL',
     'LINEUP_PLAYER_CLEANUP_CHANNEL',
+    'LINEUP_PLAYER_RECOVERY_CHANNEL',
     'LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL',
     'LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL',
     'LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL',
@@ -1140,6 +1177,24 @@ function isInvokePlayerSnapshotChannelParameter(node: ts.Identifier): boolean {
   return false;
 }
 
+function isInvokePlayerRecoveryChannelParameter(node: ts.Identifier): boolean {
+  if (node.text !== 'channel') {
+    return false;
+  }
+  let current: ts.Node | undefined = node;
+  while (current !== undefined && !ts.isSourceFile(current)) {
+    if (
+      ts.isVariableDeclaration(current) &&
+      ts.isIdentifier(current.name) &&
+      current.name.text === 'invokePlayerRecovery'
+    ) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
 function isInvokeSettingsChannelParameter(node: ts.Identifier): boolean {
   if (node.text !== 'channel') return false;
   let current: ts.Node | undefined = node;
@@ -1384,6 +1439,129 @@ test('preload player bridge validates snapshot invoke results before returning t
 
   assert.equal(harness.calls.length, 1);
   assert.equal((result as { ok: boolean }).ok, true);
+});
+
+test('preload player recovery bridge exposes only the closed action vocabulary and validates settlement', async () => {
+  const snapshot = createSafePlayerSnapshot();
+  const accepted = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPreloadInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: { status: 'accepted', snapshot },
+    });
+  });
+
+  const acceptedResult = await accepted.api.player.recover(
+    accepted.input({ action: 'retry-current' }),
+  );
+
+  assert.equal((acceptedResult as { ok: boolean }).ok, true);
+  assert.equal(accepted.calls.length, 1);
+  assert.equal(accepted.calls[0]?.channel, LINEUP_PLAYER_RECOVERY_CHANNEL);
+  assert.deepEqual(accepted.calls[0]?.request.payload, { action: 'retry-current' });
+
+  const invalidResult = await accepted.api.player.recover(
+    accepted.input({ action: 'restart-player' }),
+  );
+  assert.equal((invalidResult as { ok: boolean }).ok, false);
+  assert.equal(accepted.calls.length, 1);
+
+  const rejected = createPreloadHarness(() => Promise.reject(new Error('private rejection')));
+  const rejectedResult = await rejected.api.player.recover(
+    rejected.input({ action: 'skip-next' }),
+  );
+  assert.equal((rejectedResult as { ok: boolean }).ok, false);
+  assert.equal(
+    (rejectedResult as { error: { code: string; message: string } }).error.code,
+    'PLAYER_OPERATION_UNAVAILABLE',
+  );
+  assert.equal(
+    (rejectedResult as { error: { recoverable: boolean; retryable: boolean } })
+      .error.recoverable,
+    true,
+  );
+  assert.equal(
+    (rejectedResult as { error: { recoverable: boolean; retryable: boolean } })
+      .error.retryable,
+    true,
+  );
+  assert.doesNotMatch(
+    (rejectedResult as { error: { message: string } }).error.message,
+    /private rejection/u,
+  );
+
+  const mismatched = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPreloadInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: `${request.requestId}-mismatch`,
+      value: { status: 'accepted', snapshot },
+    });
+  });
+  const mismatchedResult = await mismatched.api.player.recover(
+    mismatched.input({ action: 'retry-current' }),
+  );
+  assert.equal((mismatchedResult as { ok: boolean }).ok, false);
+  assert.equal(
+    (mismatchedResult as { error: { code: string } }).error.code,
+    'PLAYER_RECOVERY_VALIDATION_FAILED',
+  );
+
+  const nestedForbiddenError = {
+    code: 'PLAYER_RECOVERY_UNAVAILABLE',
+    category: 'unknown',
+    message: 'Player recovery is unavailable.',
+    recoverable: true,
+    retryable: true,
+    diagnostic: {
+      component: 'player-recovery',
+      operation: 'recover',
+      counts: { nativeHandle: 1 },
+    },
+  };
+  const privilegedAccepted = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPreloadInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        status: 'accepted',
+        snapshot: {
+          ...snapshot,
+          lastError: nestedForbiddenError,
+        },
+      },
+    });
+  });
+  const privilegedAcceptedResult = await privilegedAccepted.api.player.recover(
+    privilegedAccepted.input({ action: 'retry-current' }),
+  );
+  assert.equal((privilegedAcceptedResult as { ok: boolean }).ok, false);
+  assert.equal(
+    (privilegedAcceptedResult as { error: { code: string } }).error.code,
+    'PLAYER_RECOVERY_VALIDATION_FAILED',
+  );
+  assert.doesNotMatch(JSON.stringify(privilegedAcceptedResult), /nativeHandle/u);
+
+  const privilegedFailure = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPreloadInvokeRequest(request));
+    return input({
+      ok: false,
+      requestId: request.requestId,
+      value: { status: 'failed', snapshot },
+      error: nestedForbiddenError,
+    });
+  });
+  const privilegedFailureResult = await privilegedFailure.api.player.recover(
+    privilegedFailure.input({ action: 'skip-next' }),
+  );
+  assert.equal((privilegedFailureResult as { ok: boolean }).ok, false);
+  assert.equal(
+    (privilegedFailureResult as { error: { code: string } }).error.code,
+    'PLAYER_RECOVERY_VALIDATION_FAILED',
+  );
+  assert.doesNotMatch(JSON.stringify(privilegedFailureResult), /nativeHandle/u);
 });
 
 test('preload custom channel bridge validates renderer requests and invoke results', async () => {
@@ -2606,6 +2784,12 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
         return;
       }
 
+      if (isInvokePlayerRecoveryChannelParameter(channelExpression)) {
+        observedCalls.push(`${methodName}:invokePlayerRecovery.channel`);
+        ts.forEachChild(node, visit);
+        return;
+      }
+
       if (isInvokeSettingsChannelParameter(channelExpression)) {
         observedCalls.push(`${methodName}:invokeSettings.channel`);
         ts.forEachChild(node, visit);
@@ -2639,6 +2823,7 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
     'invoke:invokeChannelSetup.channel',
     'invoke:invokeCustomChannels.channel',
     'invoke:invokeGuide.channel',
+    'invoke:invokePlayerRecovery.channel',
     'invoke:invokePlayerSnapshot.channel',
     'invoke:invokePlex.channel',
     'invoke:invokeSettings.channel',

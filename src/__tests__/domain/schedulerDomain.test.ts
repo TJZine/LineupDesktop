@@ -125,6 +125,21 @@ function config(overrides: Partial<ScheduleConfig> = {}): ScheduleConfig {
   };
 }
 
+test('scheduler skipToNext emits exactly one synchronous programStart', () => {
+  const clock = new FakeClock(1_000_000);
+  const scheduler = new ChannelScheduler({ clock });
+  scheduler.loadChannel(config());
+  const started: string[] = [];
+  scheduler.on('programStart', (program) => {
+    started.push(program.item.ratingKey);
+  });
+
+  scheduler.skipToNext();
+
+  assert.deepEqual(started, ['b']);
+  assert.equal(scheduler.getCurrentProgram().item.ratingKey, 'b');
+});
+
 test('scheduler domain resolves deterministic anchor-time programs and wraps before and after anchor', () => {
   const shuffler = new ShuffleGenerator();
   const index = buildScheduleIndex(config(), shuffler, 55);
