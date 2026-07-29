@@ -279,6 +279,10 @@ test('Settings category entry uses present detail controls and preserves route c
       registry.createInitialState('settings'),
       'settings-category-audio-subtitles',
     ).state;
+    assert.deepEqual(registry.move(audioState, 'up'), {
+      state: audioState,
+      changed: false,
+    });
     const audioDetailState = registry.move(audioState, 'right').state;
     assert.equal(audioDetailState.activeId, 'settings-direct-play-audio-fallback');
     assert.equal(registry.move(audioDetailState, 'left').state.activeId, audioState.activeId);

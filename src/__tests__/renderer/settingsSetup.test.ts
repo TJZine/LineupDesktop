@@ -235,19 +235,62 @@ test('settings sections preserve exact category order, closed options, and disab
   assert.deepEqual(durations, [0, 5000, 10000, 15000, 30000, 60000, 120000]);
 });
 
-test('settings focus ownership is derived from rendered interactive section definitions', () => {
-  const sections = createSettingsSections(createSettingsDraftState());
-  const focusIds = createSettingsSectionControlFocusIds();
-
-  assert.deepEqual(
-    [...focusIds],
-    sections.map((section) => [
-      `settings-category-${section.id}`,
-      section.items
-        .filter((item) => item.action !== undefined)
-        .map((item) => `settings-${item.id}`),
-    ]),
-  );
+test('settings focus ownership exposes the exact fixed-schema interactive controls', () => {
+  assert.deepEqual([...createSettingsSectionControlFocusIds()], [
+    [
+      'settings-category-audio-subtitles',
+      [
+        'settings-audio-output',
+        'settings-dts-passthrough',
+        'settings-direct-play-audio-fallback',
+        'settings-subtitle-mode',
+        'settings-preferred-subtitle-language',
+        'settings-prefer-forced-subtitles',
+      ],
+    ],
+    [
+      'settings-category-playback-hdr',
+      [
+        'settings-keep-playback-running',
+        'settings-hdr-fallback',
+        'settings-transcode-quality',
+        'settings-transcode-compatibility',
+      ],
+    ],
+    [
+      'settings-category-appearance',
+      [
+        'settings-launch-mode',
+        'settings-info-box-background',
+        'settings-theme',
+        'settings-cinematic-now-playing',
+        'settings-prefer-clear-logos',
+        'settings-now-playing-auto-hide',
+        'settings-preview-badges',
+      ],
+    ],
+    [
+      'settings-category-guide',
+      [
+        'settings-library-tabs',
+        'settings-now-watching-banner',
+        'settings-aggressive-guide-preload',
+        'settings-guide-density',
+        'settings-guide-layout',
+        'settings-past-items-window',
+      ],
+    ],
+    ['settings-category-account', ['settings-profile-picker-startup']],
+    [
+      'settings-category-developer',
+      [
+        'settings-debug-logging',
+        'settings-subtitle-debug-logging',
+        'settings-support-bundle-export',
+      ],
+    ],
+    ['settings-category-recovery', ['settings-setup-reminder']],
+  ]);
 });
 
 test('Settings Audio Output requires supported capability without gating first-run defaults', () => {
