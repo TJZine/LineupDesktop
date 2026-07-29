@@ -4326,6 +4326,7 @@ exact list. Any additional production/test file requires replan.
 - `src/__tests__/renderer/settingsRuntime.test.ts`
 - `src/__tests__/renderer/settingsSetup.test.ts`
 - `src/__tests__/renderer/fullscreenTransport.test.ts`
+- `src/__tests__/renderer/supportBundleExport.test.ts`
 - `src/__tests__/renderer/settingsPlaybackLifecycle.test.ts` (new)
 - `src/__tests__/renderer/audioSetupRuntime.test.ts` (new)
 - `src/__tests__/renderer/rendererActionRegistration.test.ts`
@@ -4384,6 +4385,18 @@ capability posture returns to plan review.
 **Status:** selected first execution unit; implementation-ready only after the
 fresh independent plan review expressly approves it.
 
+**Observed stop/replan adjudication:** The controller-observed Unit 3A
+typecheck, with partial product edits held unstaged, exposed one legacy
+four-key `DesktopSettingsValues` fixture in
+`src/__tests__/renderer/supportBundleExport.test.ts`. The finding is accepted
+as a blocking exact-test-scope omission. Unit 3A adds only that existing test
+to its allowlist: its one fixture must spread the exact v2
+`DEFAULT_DESKTOP_SETTINGS_VALUES` and override only
+`guideDensity: 'compact'`. It does not authorize
+`src/renderer/workflow.ts`, any other production/test owner, optional v2 keys,
+or a compatibility shim. The worker remains paused until a fresh independent
+plan review explicitly approves this amended Unit 3A scope.
+
 **IMPLEMENTER_ROLE_ELIGIBILITY:** `worker`. Although schema/default/migration
 decisions are frozen, exact integration into the current strict guards and
 serialized atomic store still requires bounded repository judgment.
@@ -4410,6 +4423,7 @@ serialized atomic store still requires bounded repository judgment.
 - `src/__tests__/renderer/settingsRuntime.test.ts`
 - `src/__tests__/renderer/settingsSetup.test.ts`
 - `src/__tests__/renderer/fullscreenTransport.test.ts`
+- `src/__tests__/renderer/supportBundleExport.test.ts`
 
 **Behavior and acceptance**
 
@@ -4429,6 +4443,10 @@ serialized atomic store still requires bounded repository judgment.
 - The renderer runtime and draft owner adopt the exact version-2
   `DesktopSettingsView` without exposing Unit 3C controls, keeping this
   checkpoint typecheck- and build-complete.
+- Update only the old four-key settings fixture in
+  `supportBundleExport.test.ts` to derive the full exact v2 values from
+  `DEFAULT_DESKTOP_SETTINGS_VALUES` and preserve the test's
+  `guideDensity: 'compact'` override and support-bundle behavior.
 
 **Focused proof**
 
@@ -4441,7 +4459,8 @@ node --import tsx --test \
   src/__tests__/integration/preloadContractVocabulary.test.ts \
   src/__tests__/renderer/settingsRuntime.test.ts \
   src/__tests__/renderer/settingsSetup.test.ts \
-  src/__tests__/renderer/fullscreenTransport.test.ts
+  src/__tests__/renderer/fullscreenTransport.test.ts \
+  src/__tests__/renderer/supportBundleExport.test.ts
 npm run test:contracts
 npm run typecheck
 npm run verify:architecture
@@ -4457,12 +4476,16 @@ preservation; stale revision
 rejection; unauthorized/malformed IPC rejection; exact two-method preload
 surface; strict persisted/nonpersisted view
 separation; exact capability pairs; no forbidden field or private error.
+The support-bundle stale-settlement fixture compiles against exact required v2
+keys, retains compact guide density, and changes no workflow behavior.
 
 **No-touch and stop conditions**
 
 Do not edit any composition root, `src/preload/channels.cts`, a
 playback/native/audio owner, renderer outside the two listed shape consumers,
-authority doc, package file, or unlisted test. Stop for replan if Unit 3A needs
+`src/renderer/workflow.ts`, authority doc, package file, or unlisted test.
+`supportBundleExport.test.ts` may change only the named DEFAULT-derived fixture.
+Stop for replan if Unit 3A needs
 a third Settings operation, audio provider, runtime policy owner, policy
 hydration/synchronization, or composition edit; if migration requires a
 compatibility store or in-place rewrite; if any persisted setting needs a
@@ -5155,7 +5178,8 @@ TASK: Review Whole-WS3 Settings Plan And Approve Unit 3A
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: Whole-WS3 Settings execution plan dated 2026-07-29; no product edit
+ARTIFACT: Whole-WS3 Settings execution plan dated 2026-07-29 with targeted
+Unit 3A test-scope amendment; partial Unit 3A product edits remain held unstaged
 FILES:
 - docs/plans/2026-07-22-tier3-parity-correction-plan.md
 BLOCKERS: WS3 product edits remain closed until this independent review has no
@@ -5166,7 +5190,12 @@ only. Confirm the exact 40-row scope; v2 values/defaults/migration; exact
 persisted snapshot versus nonpersisted `DesktopSettingsView`; exhaustive
 capability keys/status/reason pairs; bounded/redacted audio DTO, opaque-id,
 ordering, duplicate/collision, unavailable/partial, and strict-guard rules;
-Unit 3A's exact two-operation boundary; Unit 3B's ownership of the complete
+Unit 3A's exact two-operation boundary and the sole addition of
+`src/__tests__/renderer/supportBundleExport.test.ts` to replace its old
+four-key fixture with exact v2 DEFAULT-derived values while retaining
+`guideDensity: 'compact'`; confirm this does not authorize
+`src/renderer/workflow.ts`, another owner, optional keys, or a compatibility
+shim. Confirm Unit 3B's ownership of the complete
 third operation and composition wiring; public `ready` migration semantics and
 fixed migration diagnostics; canonical/null/view-only audio-id conversion and
 pre-trim rejection; absence of runtime policy lifecycle from Unit 3A; Unit
@@ -5186,9 +5215,8 @@ Verify that `PB-22`–`PB-24`, `ST-11`–`ST-16`, `ST-23`/`ON-08`, WS1 debt,
 boundaries are preserved. Report material findings only; if none remain,
 explicitly approve Unit 3A as implementation-ready.
 
-**Review outcome:** after the material findings above were adjudicated and the
-plan was revised, a fresh independent reviewer reported no material findings
-and stated `Unit 3A is implementation-ready and approved.` The controller then
-observed the required clean full `npm run verify` baseline. Unit 3A may proceed
-under its exact reviewed scope; later units remain gated by freshness reads and
-checkpoint review.
+**Review outcome:** the prior Unit 3A approval is superseded by the
+controller-observed typecheck stop/replan above. The clean full baseline remains
+recorded, but the worker is paused with partial edits held unstaged. Unit 3A may
+resume only after a fresh independent reviewer reports no material finding and
+explicitly approves the amended exact test scope.
