@@ -66,8 +66,8 @@ durable completion summary.
   `docs/architecture/upstream-behavior-guardrails.md`; `npm run verify` passed
   and scoped implementation review was clean on 2026-05-08.
 - [x] RD-05 external `mpv` POC completed through its reviewed plan;
-  `tools/mpv-poc/rd-05-external-mpv-poc.mjs` remains a dev-only disposable
-  script, ignored redacted run evidence exists under
+  its superseded disposable source/test harness has been removed, while ignored
+  redacted run evidence exists under
   `docs/runs/rd-05-external-mpv-poc/`, `npm run verify` passed, and
   implementation review was clean on 2026-05-08.
 - [x] RD-06 Windows native libmpv WID and render API smokes have partial local
@@ -580,10 +580,10 @@ Exit gates:
 
 ### RD-05 External mpv POC
 
-Status: complete. Implemented through
-`tools/mpv-poc/rd-05-external-mpv-poc.mjs` and
-`tools/__tests__/rd-05-mpv-poc.test.mjs`; `npm run verify` passed and
-read-only implementation review was clean on 2026-05-08.
+Status: complete. The disposable source/test harness was removed after its
+observations were preserved and the production native path superseded it;
+`npm run verify` passed and read-only implementation review was clean on
+2026-05-08.
 
 Depends on:
 
@@ -606,9 +606,8 @@ Non-goals:
 
 Exit gates:
 
-- POC results are documented with what was proven, what failed, and whether the
-  POC is deleted or quarantined behind a dev-only flag. RD-05 quarantines the
-  script as dev-only with no package script and keeps run evidence ignored.
+- POC results are documented with what was proven and what failed. The
+  disposable harness has been removed and its run evidence remains ignored.
 - Stop/channel-switch behavior is documented from redacted evidence: `stop`
   succeeded and cleanup completed, while four sanitized post-stop events before
   quit remain an RD-06/RD-07 stale-event follow-up risk rather than accepted

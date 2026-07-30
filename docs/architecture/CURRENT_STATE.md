@@ -67,9 +67,10 @@ later RD notes supersede earlier "unsupported", "not wired", or "in progress"
 statements where they describe completed code but not completed Windows product
 proof.
 RD-04 adds documentation and harness ownership for upstream behavior guardrails
-only; it does not import product runtime code. RD-05 adds a disposable
-dev-only external `mpv` POC tool and ignored redacted local evidence only; it
-does not create production playback architecture. RD-06 adds dev-only Windows
+only; it does not import product runtime code. RD-05 produced disposable,
+dev-only external `mpv` POC observations and ignored redacted local evidence
+only; its superseded source/test harness has since been removed and it does not
+create production playback architecture. RD-06 adds dev-only Windows
 native libmpv WID, render API, and app-owned native presentation spike modes
 with ignored redacted local evidence only. The spike must use dummy visual
 media, active-playback overlay/focus/fullscreen checks, and libmpv client API
@@ -496,7 +497,6 @@ The watch-list owners that remain over 500 lines are reported by
 | Channel and content domain | `src/domain/channel/**` | Pure RD-11 imported/adapted channel authoring, import/export normalization, content resolution through injected domain-safe library ports, stale fallback, source/channel resolution caches, retry scheduling, lineup navigation, and channel persistence port owner; no raw Plex payload, tokenized URL, auth header, Electron, Node, browser storage, preload, renderer, or live network ownership |
 | Channel persistence adapter | `src/main/persistence/desktopChannelPersistenceStore.ts` | Main-owned versioned aggregate adapter behind injected paths and filesystem seams, with temp-file replacement, mode hardening, recovery, and typed domain storage. Its RD-11/RD-23 origin is now composed through WS1 bootstrap/startup and mutation owners; backup/restore remains unimplemented. |
 | Redaction contract vocabulary | `src/contracts/redaction.ts` | RD-17 redaction boundary and forbidden diagnostic field vocabulary shared by diagnostics contracts, scanner, and tests |
-| External `mpv` POC tool | `tools/mpv-poc/rd-05-external-mpv-poc.mjs` | Dev-only disposable RD-05 evidence harness |
 | Native libmpv spike tool | `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` | Dev-only disposable RD-06 Windows WID/render API evidence harness |
 | Internal Windows package tooling | `tools/package-windows-internal.mjs`, `tools/verify-windows-internal-package.mjs`, and `tools/__tests__/package-windows-internal.test.mjs` | RD-18 Unit 1 owner for internal Windows x64 unpacked package staging, provenance, checksums, internal notices, blocked native-helper/media-binary markers, and verifier coverage; generated artifacts stay ignored under `out/rd-18-windows-internal/**`, and public signing/update/native media redistribution remain blocked |
 | Docs verifier | `tools/verify-docs.mjs` | Active |
