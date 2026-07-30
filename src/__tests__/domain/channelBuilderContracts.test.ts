@@ -143,6 +143,20 @@ describe('channel builder contracts', () => {
     );
     assert.deepEqual(
       createDefaultChannelSetupConfig({
+        serverId: '',
+        selectedLibraryIds: ['library-1'],
+      }),
+      { ok: false },
+    );
+    assert.deepEqual(
+      createDefaultChannelSetupConfig({
+        serverId: 'server-1',
+        selectedLibraryIds: [],
+      }),
+      { ok: false },
+    );
+    assert.deepEqual(
+      createDefaultChannelSetupConfig({
         serverId: 'server-1',
         selectedLibraryIds: Array.from({ length: 25 }, (_, index) => `library-${index}`),
       }),

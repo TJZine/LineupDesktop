@@ -24,23 +24,6 @@ test('minimal builder config state delegates defaults and returns ownership-safe
   assert.equal(first.buildMode, 'replace');
 });
 
-test('minimal builder config state rejects incomplete context', () => {
-  assert.deepEqual(
-    createChannelBuilderConfigState({ serverId: '', selectedLibraryIds: [] }),
-    { ok: false },
-  );
-});
-
-test('minimal builder config state delegates the canonical library cap', () => {
-  assert.deepEqual(
-    createChannelBuilderConfigState({
-      serverId: 'server',
-      selectedLibraryIds: Array.from({ length: 25 }, (_, index) => `library-${index}`),
-    }),
-    { ok: false },
-  );
-});
-
 test('editable builder state normalizes every supported configuration family', () => {
   const created = createChannelBuilderConfigState({
     serverId: 'server',
