@@ -3,30 +3,10 @@ import type { DesktopPlexRuntime } from './desktopPlexRuntime.js';
 import type {
   PlexStreamResolverSelectedConnectionPort,
   PlexStreamResolverActiveCredentialPort,
-  PlexStreamResolverAuthHeader,
 } from './streamResolver.js';
 import { PlaybackMediaDetailPort } from './playbackMediaDetailPort.js';
 import { PmsPlaybackSessionPort } from './pmsPlaybackSessionPort.js';
 import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.js';
-
-export class PlaybackActiveCredentialPort implements PlexStreamResolverActiveCredentialPort {
-  readonly #runtime: DesktopPlexRuntime;
-
-  constructor(runtime: DesktopPlexRuntime) {
-    this.#runtime = runtime;
-  }
-
-  async getActiveAuthHeader(): Promise<PlexStreamResolverAuthHeader | null> {
-    try {
-      return await this.#runtime.withActivePlexToken('getMetadata', async (token) => ({
-        name: 'X-Plex-Token',
-        value: token,
-      }));
-    } catch {
-      return null;
-    }
-  }
-}
 
 export interface LiveStreamResolverComposition {
   resolver: PlexStreamResolver;
@@ -41,7 +21,18 @@ export function createLivePlexStreamResolverComposition(
   const selectedConnection: PlexStreamResolverSelectedConnectionPort = {
     getSelectedConnection: async () => runtime.getSelectedConnectionForMain(),
   };
-  const activeCredential = new PlaybackActiveCredentialPort(runtime);
+  const activeCredential: PlexStreamResolverActiveCredentialPort = {
+    getActiveAuthHeader: async () => {
+      try {
+        return await runtime.withActivePlexToken('getMetadata', async (token) => ({
+          name: 'X-Plex-Token',
+          value: token,
+        }));
+      } catch {
+        return null;
+      }
+    },
+  };
   const mediaDetail = new PlaybackMediaDetailPort(runtime, {
     diagnosticEventStore: options.diagnosticEventStore,
   });

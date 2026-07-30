@@ -1,63 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  PlaybackActiveCredentialPort,
-  createLivePlexStreamResolverComposition,
-} from '../../main/plex/streamResolverComposition.js';
+import { createLivePlexStreamResolverComposition } from '../../main/plex/streamResolverComposition.js';
 import { DiagnosticEventStore } from '../../main/diagnostics/diagnosticEventStore.js';
 import type { DesktopPlexRuntime } from '../../main/plex/desktopPlexRuntime.js';
 import type { DesktopStreamCapabilityProfile } from '../../main/player/streamPolicy/types.js';
-
-test('PlaybackActiveCredentialPort returns credentials from runtime', async () => {
-  const mockRuntime = {
-    async withActivePlexToken(
-      _operation: 'getMetadata',
-      run: (token: string) => Promise<unknown>,
-    ) {
-      return run('secret-token');
-    },
-  } as unknown as DesktopPlexRuntime;
-
-  const port = new PlaybackActiveCredentialPort(mockRuntime);
-  const result = await port.getActiveAuthHeader();
-  assert.deepEqual(result, {
-    name: 'X-Plex-Token',
-    value: 'secret-token',
-  });
-});
-
-test('PlaybackActiveCredentialPort returns null if no token', async () => {
-  const mockRuntime = {
-    async withActivePlexToken() {
-      throw new Error('missing token');
-    },
-  } as unknown as DesktopPlexRuntime;
-
-  const port = new PlaybackActiveCredentialPort(mockRuntime);
-  const result = await port.getActiveAuthHeader();
-  assert.equal(result, null);
-});
-
-test('createLivePlexStreamResolverComposition instantiates resolver and pms session port', () => {
-  const mockRuntime = {
-    getSelectedConnectionForMain() {
-      return null;
-    },
-    async withActivePlexToken() {
-      throw new Error('missing token');
-    },
-    async withActiveLibraryContext() {
-      throw new Error('missing context');
-    },
-    getLibraryTransport() {
-      return {};
-    },
-  } as unknown as DesktopPlexRuntime;
-
-  const composition = createLivePlexStreamResolverComposition(mockRuntime);
-  assert.ok(composition.resolver);
-  assert.ok(composition.pmsSessionPort);
-});
 
 test('createLivePlexStreamResolverComposition injects the existing diagnostic store into the resolver', async () => {
   const connection = {
@@ -146,12 +92,45 @@ test('createLivePlexStreamResolverComposition injects the existing diagnostic st
   });
 
   assert.equal(result.ok, true);
+  assert.deepEqual(result.ok ? result.privatePlayback.credentialHeader : null, {
+    name: 'X-Plex-Token',
+    value: 'private-token',
+  });
   assert.equal(
     diagnostics.getRecords().some((record) => (
       record.operation === 'settings.subtitle-policy'
     )),
     true,
   );
+});
+
+test('createLivePlexStreamResolverComposition normalizes missing credentials through the resolver', async () => {
+  const mockRuntime = {
+    getSelectedConnectionForMain() {
+      return {
+        uri: 'https://plex.local',
+        protocol: 'https',
+        address: 'plex.local',
+        port: 32400,
+        local: true,
+        relay: false,
+        latencyMs: null,
+      };
+    },
+    async withActivePlexToken() {
+      throw new Error('missing token');
+    },
+  } as unknown as DesktopPlexRuntime;
+
+  const result = await createLivePlexStreamResolverComposition(mockRuntime).resolver.resolve({
+    requestId: 'composition-missing-credential',
+    mediaId: 'plex-media-123',
+    capabilityProfile: directPlayProfile,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? '' : result.error.code, 'PLEX_STREAM_CREDENTIAL_UNAVAILABLE');
+  assert.equal(JSON.stringify(result).includes('missing token'), false);
 });
 
 const directPlayProfile: DesktopStreamCapabilityProfile = {
