@@ -31,7 +31,9 @@ media behavior. It must not become production architecture.
 RD-05 created a dev-only external `mpv` POC with no package script, dependency,
 product IPC, renderer, preload, main, native-helper, Plex, scheduler, or adapter
 ownership. Its disposable source and dedicated test were removed after the
-observations below were preserved and the production native path superseded it.
+observations below were preserved. The reviewed main/helper-owned native
+architecture—not the POC—now owns the production direction; Windows/manual
+proof remains pending.
 
 Redacted local evidence under ignored
 `docs/runs/rd-05-external-mpv-poc/` observed:

@@ -581,9 +581,10 @@ Exit gates:
 ### RD-05 External mpv POC
 
 Status: complete. The disposable source/test harness was removed after its
-observations were preserved and the production native path superseded it;
-`npm run verify` passed and read-only implementation review was clean on
-2026-05-08.
+observations were preserved. The reviewed main/helper-owned native
+architecture—not the POC—now owns the production direction; Windows/manual
+proof remains pending. `npm run verify` passed and read-only implementation
+review was clean on 2026-05-08.
 
 Depends on:
 
