@@ -252,7 +252,8 @@ implementation would otherwise need to invent ownership or verification policy.
      packaging, import, or verification policy is still unresolved.
 6. Implement narrowly.
    - Execute one approved unit at a time.
-   - Keep implementation inside the approved files, owner, and seam.
+   - Keep implementation inside the approved owner/write boundary and seam;
+     discover and edit the exact cohesive files needed inside that boundary.
    - Prefer a vertical product path inside that seam over preserving a fake
      route shell. A bounded unit may cross renderer submodules when the user
      journey needs sign-in, selection, browse, and clear/back behavior to be
@@ -341,21 +342,24 @@ throughput. Do not replace the default workflow with always-on delegation.
 - Use `docs_researcher` for official external documentation checks with a clear
   deliverable.
 - Use `planner` for durable planning artifacts and execution-ready handoffs.
-- Use `worker` by default for approved, bounded
-  implementation units with disjoint write scopes.
-- Use `worker_sol_low` for an approved bounded unit that
-  still needs repository comprehension but no unresolved architecture or proof
-  decision.
-- Use `worker_luna` only when an approved plan or
-  handoff explicitly declares an exact, bounded, cheap-to-verify unit eligible
-  and supplies direct verification plus stop/escalation rules.
+- Use `worker_luna` by default for bounded implementation when the outcome, owner
+  seam, contracts, acceptance criteria, and direct proof are clear, including work
+  that needs repository comprehension, exact-file discovery, routine local design
+  judgment, focused test design, and diagnosis of failures caused by the
+  implementation.
+- Use `worker` when the same settled bounded unit needs material local design
+  judgment, cross-boundary comprehension, complex diagnosis, or proof
+  interpretation. Return unresolved product, ownership, public-contract,
+  architecture, or proof decisions to planning.
 - Use `reviewer` for read-only adversarial review of plans, diffs, workflow
   artifacts, and handoffs.
 - Use `monitor` for waits, polling, and long-running verification status.
 - Keep read-only roles read-only. Do not route edits through explorer,
   docs_researcher, reviewer, or monitor.
-- Do not let a worker invent architecture seams, broaden scope, or choose
-  verification depth. This applies equally to every worker role.
+- Let workers choose exact files and routine implementation details within the
+  approved seam. Stop and replan when evidence exposes unresolved product intent,
+  ownership, public behavior, architecture, proof depth, dependency or
+  compatibility policy, or scope expansion.
 - Read exact model and reasoning-effort settings only from the selected role's
   `.codex/agents/*.toml`; do not repeat them in plans or workflow prose.
 - Once a delegated planner is active, do not draft a competing local plan unless
@@ -375,6 +379,11 @@ Use `parallel-sidecars` for optional read-only sidecars and
 `bounded-worker-execution` for approved implementation slices. Reuse a worker
 when its retained context helps an unchanged unit; use fresh context for final
 independent review or when prior assumptions could bias the result.
+
+Durable plans describe implementation risk and constraints rather than permanently
+binding a model. The controller selects the current role at dispatch. Require exact
+file lists only for concurrent writers or sensitive shared surfaces that need
+collision protection.
 
 ## Implementation Rules
 

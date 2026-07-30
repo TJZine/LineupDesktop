@@ -32,10 +32,11 @@ Use the smallest role set that keeps work reliable:
   `explorer_fallback` only when the primary role is unavailable or constrained
 - `docs_researcher`: read-only official documentation checks
 - `planner`: durable plans and handoff artifacts
-- `worker`: normal bounded implementation units
-- `worker_sol_low`: frozen units that still need repository comprehension but
-  no architecture or verification judgment
-- `worker_luna`: explicitly eligible, exact, bounded, cheap-to-verify units
+- `worker_luna`: default delegated implementation for bounded units with clear
+  outcomes, established owner seams and contracts, and direct proof
+- `worker`: Sol escalation implementation for a settled bounded unit that still
+  needs material local design judgment, cross-boundary comprehension, complex
+  diagnosis, or proof interpretation
 - `reviewer`: read-only adversarial review
 - `monitor`: waits, polling, and status checks; use `monitor_fallback` only when
   the primary role is unavailable or constrained
@@ -106,7 +107,7 @@ maintenance-program mechanics stay behind.
 | verification strategy | `verification-strategy`, `docs/AGENTIC_DEV_WORKFLOW.md#verification-routing`, and active-plan verification classification; use focused contract, architecture, redaction, smoke, or manual proof instead of defaulting every change to brittle tests. |
 | closeout verification | `closeout-verification`, `docs/AGENTIC_DEV_WORKFLOW.md#review-before-closeout`, and the feature-quality-loop closeout phase; completion claims require observed evidence. |
 | review request and adjudication | `review-request`, `review-adjudication`, `lineup-desktop-feature-review`, and `lineup-desktop-workflow-harness-review`; reviewers stay read-only and the owning session adjudicates findings. |
-| bounded workers and sidecars | `bounded-worker-execution`, `parallel-sidecars`, `large-task-orchestration`, `.codex/agents/*.toml`, and `feature-quality-loop.md`; delegate only bounded, disjoint units after plan/review gates. |
+| bounded workers and sidecars | `bounded-worker-execution`, `parallel-sidecars`, `large-task-orchestration`, `.codex/agents/*.toml`, and `feature-quality-loop.md`; delegate bounded, disjoint units after required plan/review gates, select the current role at dispatch, and leave routine local implementation choices to the worker. |
 | architecture boundaries | `architecture-boundaries`, `docs/AGENTIC_DEV_WORKFLOW.md#desktop-feature-quality-guardrails`, `docs/architecture/CURRENT_STATE.md`, and task-specific architecture docs; Electron main, preload, renderer, helper, Plex, scheduler, and packaging owners must stay narrow. |
 | persistence, Plex, UI, and playback boundaries | `persistence-boundaries`, `plex-integration-boundaries`, `ui-composition-patterns`, `docs/architecture/security-and-secret-flow.md`, `docs/architecture/playback-architecture.md`, `docs/architecture/import-ledger.md`, current-state docs, and active plans. |
 | debugging and model guidance | `debugging-remediation`, `model-selection`, the feature/design workflow, current architecture docs, and official docs checks. |

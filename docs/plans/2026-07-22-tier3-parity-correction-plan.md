@@ -6267,8 +6267,8 @@ fresh approval of an exact first unit.
 
 MODEL_SUGGESTION
 PLANNER: configured `planner` role
-IMPLEMENTER: resolve `worker`, `worker_sol_low`, or `worker_luna` per approved
-unit through `.codex/config.toml`
+IMPLEMENTER: resolve `worker_luna` by default or the Sol `worker` escalation role
+at dispatch from the approved unit through `.codex/config.toml`
 REVIEWER: configured `reviewer` role
 WHY: WS4 is Tier 3 input/overlay work spanning renderer focus and presentation,
 main-owned window/app-command/player seams, platform proof, and multiple current
@@ -6314,15 +6314,15 @@ CONTROLLER_SEQUENCE:
 - closeout
 - done or genuinely blocked
 BLOCKERS: none for WS4 scope-load, targeted planning, or plan review. WS4
-product/test/package/config edits remain gated until a targeted exact-file
-whole-WS4 plan freezes ownership, verification, acceptance, rollback, and
-replan triggers and receives fresh adversarial
+product/test/package/config edits remain gated until a targeted whole-WS4 plan
+freezes ownership, owner/write boundaries, verification, acceptance, rollback,
+and replan triggers and receives fresh adversarial
 `lineup-desktop-feature-review` approval for its first execution unit
 STOP_OR_REPLAN_TRIGGERS:
 - a material contradiction in WS4's assigned rows, current input/navigation/
   overlay/player/focus owners, shared contracts, platform behavior, or
   later-workstream contribution boundaries
-- an approved unit needs a product owner outside its exact file list, a new
+- an approved unit needs a product owner outside its owner/write boundary, a new
   public contract or dependency, a changed privilege boundary, a new upstream
   import, or weaker proof than the reviewed plan
 - a required focused, build, architecture, or full local gate fails and cannot
@@ -6353,22 +6353,26 @@ affected tests, and relevant upstream behavior at exact `0258dbe`.
 
 Use `lineup-desktop-feature-plan` through a tracked planner to create or amend
 one decision-complete whole-WS4 plan. Freeze the smallest useful vertical units,
-exact file owners and no-touch boundaries, intended configured worker role,
-behavior and accessibility acceptance criteria, focused and closeout
-verification, rollback, checkpoint commit, hotspot/cohesion evidence,
+owner/write boundaries and no-touch owners, exact files only for concurrent writers
+or sensitive shared surfaces, behavior and accessibility acceptance criteria,
+focused and closeout verification, rollback, checkpoint commit, hotspot/cohesion
+evidence,
 import-ledger needs, platform-proof disposition, and replan triggers. Obtain one
 fresh independent `lineup-desktop-feature-review` with no unresolved material
 finding that explicitly approves the first execution unit before the first WS4
 product edit. Resolve material findings; do not spend cycles on cosmetic review
 loops.
 
-Resolve every implementation role through `.codex/config.toml`. Use `worker` by
-default when bounded repository judgment remains; use `worker_sol_low` only
-when ownership and every architecture, behavior, proof-depth, and verification
-decision are frozen but codebase comprehension remains material; reserve
-`worker_luna` for an exceptionally mechanical, exact, repeatable, and
-cheap-to-verify unit. No worker may invent a seam, broaden scope, choose weaker
-proof, or edit outside its approved unit.
+Resolve every implementation role through `.codex/config.toml` at dispatch. Use
+`worker_luna` by default when the unit's outcome, owner seam, contracts, acceptance
+criteria, and direct proof are clear, including work that needs repository
+comprehension, exact-file discovery, routine local design judgment, focused test
+design, and diagnosis of failures caused by the implementation. Use `worker` when
+the same settled unit needs material local design judgment, cross-boundary
+comprehension, complex diagnosis, or proof interpretation. Return unresolved
+product, ownership, public-contract, architecture, or proof decisions to planning.
+No worker may invent a seam, broaden scope, choose weaker proof, or edit outside its
+approved owner/write boundary.
 
 Execute approved units serially unless the reviewed plan proves disjoint
 ownership, files, and verification. Before each unit, freshness-read only its

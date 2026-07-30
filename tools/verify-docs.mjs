@@ -36,10 +36,21 @@ export const REQUIRED_ROLES = {
   docs_researcher: 'agents/docs-researcher.toml',
   planner: 'agents/planner.toml',
   worker: 'agents/worker.toml',
-  worker_sol_low: 'agents/worker-sol-low.toml',
   worker_luna: 'agents/worker-luna.toml',
   monitor: 'agents/monitor.toml',
   monitor_fallback: 'agents/monitor-fallback.toml',
+};
+
+export const REQUIRED_ROLE_DEFAULTS = {
+  explorer: { model: 'gpt-5.6-luna', effort: 'max' },
+  explorer_fallback: { model: 'gpt-5.6-luna', effort: 'xhigh' },
+  reviewer: { model: 'gpt-5.6-sol', effort: 'high' },
+  docs_researcher: { model: 'gpt-5.6-luna', effort: 'high' },
+  planner: { model: 'gpt-5.6-sol', effort: 'high' },
+  worker: { model: 'gpt-5.6-sol', effort: 'medium' },
+  worker_luna: { model: 'gpt-5.6-luna', effort: 'max' },
+  monitor: { model: 'gpt-5.3-codex-spark', effort: 'low' },
+  monitor_fallback: { model: 'gpt-5.6-luna', effort: 'low' },
 };
 
 export const REQUIRED_SKILLS = [
@@ -146,6 +157,17 @@ const READ_ONLY_ROLES = new Set([
   'monitor_fallback',
 ]);
 
+export function containsRetiredWorkerRole(content) {
+  return /\bworker_sol_low\b|worker-sol-low/u.test(content);
+}
+
+export function readActivePlanLiveHandoff(content) {
+  const controllerStart = content.lastIndexOf('\n**Controller next action:**');
+  if (controllerStart >= 0) return content.slice(controllerStart);
+  const handoffStart = content.lastIndexOf('\nNEXT_SESSION_HANDOFF');
+  return handoffStart >= 0 ? content.slice(handoffStart) : '';
+}
+
 export function verifyDocs(root = repoRoot) {
   const errors = [];
   checkRequiredFiles(root, errors);
@@ -241,6 +263,15 @@ function checkRoleConfiguration(root, errors) {
     }
     if (READ_ONLY_ROLES.has(role) && unquote(roleConfig.get('sandbox_mode')) !== 'read-only') {
       errors.push(`${expectedConfig} must keep sandbox_mode = "read-only"`);
+    }
+    const expectedDefaults = REQUIRED_ROLE_DEFAULTS[role];
+    if (expectedDefaults) {
+      if (unquote(roleConfig.get('model')) !== expectedDefaults.model) {
+        errors.push(`${expectedConfig} must keep model = "${expectedDefaults.model}"`);
+      }
+      if (unquote(roleConfig.get('model_reasoning_effort')) !== expectedDefaults.effort) {
+        errors.push(`${expectedConfig} must keep model_reasoning_effort = "${expectedDefaults.effort}"`);
+      }
     }
   }
 }
@@ -350,6 +381,10 @@ function checkActivePlans(root, errors) {
       if (markers.length !== 1) {
         errors.push(`${relativePath}: ## Verification Commands must contain exactly one verification classification marker`);
       }
+    }
+    const liveHandoff = readActivePlanLiveHandoff(content);
+    if (containsRetiredWorkerRole(liveHandoff)) {
+      errors.push(`${relativePath}: live handoff references retired worker role`);
     }
   }
 }

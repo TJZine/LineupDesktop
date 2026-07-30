@@ -18,17 +18,19 @@ Plan the expensive decisions, not every local helper:
 
 - task tier and workflow route
 - goal and non-goals
-- files in scope and out of scope
+- likely files or allowed write boundary, plus out-of-scope owners
 - architecture seam and owner boundaries
 - invariants and forbidden shortcuts
 - verification classification, commands, and expected outcomes
 - acceptance criteria, rollback notes, and stop/replan triggers
 
-Worker eligibility and review routing are governed by
+Worker and review routing are governed by
 `docs/AGENTIC_DEV_WORKFLOW.md#multi-agent-usage` and
 `docs/agentic/plan-authoring-standard.md#worker-and-review-routing`. Plans still
-freeze the selected unit's files, owner, invariants, verification, and stop
-conditions before delegation.
+freeze the selected unit's outcome, owner seam, contracts, invariants,
+verification, and stop conditions before delegation. Require exact files only
+when concurrent writers or sensitive shared surfaces need collision protection;
+leave exact-file discovery and routine local implementation choices to the worker.
 
 See AGENTS.md and docs/AGENTIC_DEV_WORKFLOW.md for lifecycle and archival
 policy, including `docs/plans/` archival guidance. For Tier 3 work, route

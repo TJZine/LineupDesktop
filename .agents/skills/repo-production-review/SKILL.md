@@ -38,7 +38,7 @@ home directory instead of committing user-specific absolute paths, for example:
 - `planner`: remediation planning only after accepted findings.
 - `monitor`: observation of safe long-running commands only.
 - `monitor_fallback`: only when `monitor` is unavailable.
-- `worker`: not used during the read-only review pass.
+- `worker` and `worker_luna`: not used during the read-only review pass.
 
 Honor local orchestration limits:
 

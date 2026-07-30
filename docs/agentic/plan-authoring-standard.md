@@ -44,16 +44,18 @@ Record:
 - the current goal, explicit non-goals, public behavior, and trust boundaries;
 - the chosen owner seam, dependency direction, invariants, and forbidden
   shortcuts;
-- exact files for the current execution unit and important adjacent files that
-  require replan before editing;
+- likely files or the allowed write boundary for the current execution unit, plus
+  important adjacent owners that require replan before editing;
 - exact verification commands, expected outcomes, acceptance criteria, and
   stop/replan conditions; and
 - rollback/commit intent when partial completion could create ambiguity.
 
 Future packages may remain less detailed until they become current. Before
-delegation, promote the current package to exact file scope and re-review the
-plan if ownership or contracts changed. A local execution packet may summarize
-the current unit, but it cannot contradict or replace tracked scope and policy.
+delegation, confirm the current package's owner/write boundary and re-review the
+plan if ownership or contracts changed. Require exact files only when concurrent
+writers or sensitive shared surfaces need collision protection. A local execution
+packet may summarize the current unit, but it cannot contradict or replace tracked
+scope and policy.
 
 ## Evidence, Skills, And Freshness
 
@@ -100,11 +102,16 @@ that only restate private helpers or giant output snapshots.
 
 ## Worker And Review Routing
 
-Use `worker` by default. Select `worker_sol_low` only when ownership is frozen
-but repository comprehension remains material. Select `worker_luna` only for a
-controller-approved, exact, repeatable, cheap-to-verify unit with frozen files,
-invariants, proof, and stop conditions. The controller integrates and reruns
-verification.
+Plans describe implementation risk and constraints rather than permanently binding
+a model. At dispatch, use `worker_luna` by default for a bounded unit whose outcome,
+owner seam, contracts, acceptance criteria, and direct proof are clear, including
+work that needs repository comprehension, exact-file discovery, routine local design
+judgment, focused test design, and diagnosis of failures caused by the
+implementation. Use `worker` when the same settled bounded unit needs material
+local design judgment, cross-boundary comprehension, complex diagnosis, or proof
+interpretation. Return unresolved product, ownership, public-contract, architecture,
+or proof decisions to planning. The controller selects the current role, integrates
+the result, and reruns verification.
 
 Require independent review when risk, novelty, blast radius, or weak evidence
 makes hidden risk substantial. Repeat only after a material finding or material

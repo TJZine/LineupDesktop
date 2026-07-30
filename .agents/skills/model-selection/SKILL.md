@@ -13,7 +13,9 @@ Read:
 2. `docs/AGENTIC_DEV_WORKFLOW.md`
 3. the active plan or handoff, if one exists
 
-Choose the smallest capable role permitted by the active plan and task risk.
+Choose the smallest capable role from current task risk and the active plan's
+outcome, owner, contract, and proof constraints. Durable plans do not pin models;
+the controller selects the current implementation role at dispatch.
 Use the canonical role policy in
 [`docs/agentic/skill-strategy.md`](../../../docs/agentic/skill-strategy.md), then
 resolve the selected role's exact `config_file` mapping from `.codex/config.toml`.

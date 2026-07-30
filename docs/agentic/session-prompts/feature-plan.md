@@ -39,11 +39,10 @@ scope.
   moves to the local ignored archive.
 - For Tier 3, identify the first bounded execution unit and whether any
   parallelism is allowed.
-- For every bounded execution unit, record `IMPLEMENTER_ROLE_ELIGIBILITY`.
-  Default to `worker`; include `worker_sol_low` only for a frozen unit needing
-  repository comprehension but no design judgment, and `worker_luna` only for
-  exact, repeatable, cheap-to-verify work. Both require direct verification and
-  explicit stop/escalation conditions.
+- For every bounded execution unit, record the outcome, owner/write boundary,
+  contracts, acceptance criteria, direct verification, and stop/escalation
+  conditions. Describe unresolved implementation judgment instead of permanently
+  binding the unit to a model; the controller selects the current role at dispatch.
 - Confirm the plan is decision-complete under the plan standard before calling
   the current unit implementation-ready.
 
@@ -52,14 +51,16 @@ scope.
 - Satisfy [`plan-authoring-standard.md`](../plan-authoring-standard.md) for
   active tracked plans.
 - Declare `**Task family:** feature/design`.
-- Name the architecture seam, files in scope, files out of scope, invariants,
-  verification commands, expected outcomes, acceptance criteria, rollback notes,
-  and replan triggers.
+- Name the architecture seam, likely files or allowed write boundary, out-of-scope
+  owners, invariants, verification commands, expected outcomes, acceptance
+  criteria, rollback notes, and replan triggers. Require exact files only for
+  concurrent writers or sensitive shared surfaces.
 - Record import ledger obligations when copied/adapted upstream code is in
   scope.
 - Include a `NEXT_SESSION_HANDOFF` routing the plan to
   `lineup-desktop-feature-review`.
-- Record role eligibility for delegated Tier 3 units; exact model and effort
-  settings remain in the role TOMLs.
+- Record implementation constraints and escalation triggers for delegated Tier 3
+  units; exact role, model, and effort settings remain dispatch-time decisions
+  resolved through the role TOMLs.
 - Use the exact handoff shape in
   [`docs/AGENTIC_DEV_WORKFLOW.md#session-handoffs`](../../AGENTIC_DEV_WORKFLOW.md#session-handoffs).

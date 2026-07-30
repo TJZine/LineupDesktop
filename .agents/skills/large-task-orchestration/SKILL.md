@@ -15,13 +15,15 @@ context; keep small or tightly coupled work local.
   review adjudication, and closeout.
 - Resolve concurrency limits and role mappings from `.codex/config.toml`; do not
   create nested agent trees.
-- Give each agent one bounded output, exact scope, invariants, evidence needs,
-  and stop conditions. Writers must have disjoint files and owners.
+- Give each agent one bounded output, owner/write boundary, invariants, evidence
+  needs, and stop conditions. Writers must have disjoint write scopes and owners;
+  require exact files only for concurrent writers or sensitive shared surfaces.
 - Reuse a worker when retained task context helps the next unit and the scope
   remains unchanged. Use fresh context for independent final review or when
   prior assumptions could bias the result.
 - Use read-only sidecars for discovery and documentation. Delegate writes only
-  after the plan freezes architecture and verification.
+  after the plan freezes outcome, owner seam, contracts, acceptance criteria,
+  architecture constraints, and verification.
 - Resolve worker eligibility from `docs/agentic/skill-strategy.md#role-policy`
   and the runbook's multi-agent policy, then read the selected role's exact
   `config_file` mapping from `.codex/config.toml`. Stop workers on ambiguity.
