@@ -184,6 +184,22 @@ test('audio output contract accepts only exact bounded ordered safe lists', () =
   assert.equal(isDesktopSettingsGetAudioOutputsRequest({ requestId: 'bad id' }), false);
   assert.equal(isDesktopAudioOutputList(ready), true);
   assert.equal(isDesktopAudioOutputList({ ...ready, extra: true }), false);
+  assert.equal(isDesktopAudioOutputList({
+    ...ready,
+    outputs: [
+      { ...ready.outputs[0], nativeHandle: 'forbidden' },
+      ready.outputs[1],
+      ready.outputs[2],
+    ],
+  }), false);
+  assert.equal(isDesktopAudioOutputList({
+    ...ready,
+    outputs: [
+      ready.outputs[0],
+      { ...ready.outputs[1], nativeHandle: 'forbidden' },
+      ready.outputs[2],
+    ],
+  }), false);
   assert.equal(isDesktopAudioOutputList({ ...ready, reason: 'helper-unavailable' }), false);
   assert.equal(isDesktopAudioOutputList({
     ...ready,
