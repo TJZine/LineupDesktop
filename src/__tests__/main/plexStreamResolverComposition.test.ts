@@ -1,46 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  PlaybackSelectedConnectionPort,
   PlaybackActiveCredentialPort,
   createLivePlexStreamResolverComposition,
 } from '../../main/plex/streamResolverComposition.js';
 import { DiagnosticEventStore } from '../../main/diagnostics/diagnosticEventStore.js';
 import type { DesktopPlexRuntime } from '../../main/plex/desktopPlexRuntime.js';
 import type { DesktopStreamCapabilityProfile } from '../../main/player/streamPolicy/types.js';
-
-test('PlaybackSelectedConnectionPort returns connection from runtime', async () => {
-  const connection = {
-    uri: 'https://plex.local',
-    protocol: 'https' as const,
-    address: 'plex.local',
-    port: 32400,
-    local: true,
-    relay: false,
-    latencyMs: null,
-  };
-  const mockRuntime = {
-    getSelectedConnectionForMain() {
-      return connection;
-    },
-  } as unknown as DesktopPlexRuntime;
-
-  const port = new PlaybackSelectedConnectionPort(mockRuntime);
-  const result = await port.getSelectedConnection();
-  assert.deepEqual(result, connection);
-});
-
-test('PlaybackSelectedConnectionPort returns null if no connection', async () => {
-  const mockRuntime = {
-    getSelectedConnectionForMain() {
-      return null;
-    },
-  } as unknown as DesktopPlexRuntime;
-
-  const port = new PlaybackSelectedConnectionPort(mockRuntime);
-  const result = await port.getSelectedConnection();
-  assert.equal(result, null);
-});
 
 test('PlaybackActiveCredentialPort returns credentials from runtime', async () => {
   const mockRuntime = {

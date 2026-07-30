@@ -1,6 +1,5 @@
 import { PlexStreamResolver } from './streamResolver.js';
 import type { DesktopPlexRuntime } from './desktopPlexRuntime.js';
-import type { PlexConnection } from './discovery/types.js';
 import type {
   PlexStreamResolverSelectedConnectionPort,
   PlexStreamResolverActiveCredentialPort,
@@ -9,18 +8,6 @@ import type {
 import { PlaybackMediaDetailPort } from './playbackMediaDetailPort.js';
 import { PmsPlaybackSessionPort } from './pmsPlaybackSessionPort.js';
 import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.js';
-
-export class PlaybackSelectedConnectionPort implements PlexStreamResolverSelectedConnectionPort {
-  readonly #runtime: DesktopPlexRuntime;
-
-  constructor(runtime: DesktopPlexRuntime) {
-    this.#runtime = runtime;
-  }
-
-  async getSelectedConnection(): Promise<PlexConnection | null> {
-    return this.#runtime.getSelectedConnectionForMain();
-  }
-}
 
 export class PlaybackActiveCredentialPort implements PlexStreamResolverActiveCredentialPort {
   readonly #runtime: DesktopPlexRuntime;
@@ -51,7 +38,9 @@ export function createLivePlexStreamResolverComposition(
   options: { diagnosticEventStore?: DiagnosticEventStore } = {},
 ): LiveStreamResolverComposition {
   const pmsSessionPort = new PmsPlaybackSessionPort(runtime);
-  const selectedConnection = new PlaybackSelectedConnectionPort(runtime);
+  const selectedConnection: PlexStreamResolverSelectedConnectionPort = {
+    getSelectedConnection: async () => runtime.getSelectedConnectionForMain(),
+  };
   const activeCredential = new PlaybackActiveCredentialPort(runtime);
   const mediaDetail = new PlaybackMediaDetailPort(runtime, {
     diagnosticEventStore: options.diagnosticEventStore,
