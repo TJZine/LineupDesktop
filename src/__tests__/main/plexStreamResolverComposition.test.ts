@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createLivePlexStreamResolverComposition } from '../../main/plex/streamResolverComposition.js';
 import { DiagnosticEventStore } from '../../main/diagnostics/diagnosticEventStore.js';
 import type { DesktopPlexRuntime } from '../../main/plex/desktopPlexRuntime.js';
+import { LivePlexTransportError } from '../../main/plex/livePlexTransportError.js';
 import type { DesktopStreamCapabilityProfile } from '../../main/player/streamPolicy/types.js';
 
 test('createLivePlexStreamResolverComposition injects the existing diagnostic store into the resolver', async () => {
@@ -118,7 +119,10 @@ test('createLivePlexStreamResolverComposition normalizes missing credentials thr
       };
     },
     async withActivePlexToken() {
-      throw new Error('missing token');
+      throw new LivePlexTransportError(
+        'auth-required',
+        'getMetadata requires Plex authentication',
+      );
     },
   } as unknown as DesktopPlexRuntime;
 
@@ -130,7 +134,47 @@ test('createLivePlexStreamResolverComposition normalizes missing credentials thr
 
   assert.equal(result.ok, false);
   assert.equal(result.ok ? '' : result.error.code, 'PLEX_STREAM_CREDENTIAL_UNAVAILABLE');
-  assert.equal(JSON.stringify(result).includes('missing token'), false);
+  assert.equal(
+    result.diagnostics.some((diagnostic) => diagnostic.operation === 'active-credential.read'),
+    false,
+  );
+});
+
+test('createLivePlexStreamResolverComposition preserves unexpected credential failure diagnostics', async () => {
+  const unexpectedFailure = new Error('unexpected private credential failure');
+  const mockRuntime = {
+    getSelectedConnectionForMain() {
+      return {
+        uri: 'https://plex.local',
+        protocol: 'https',
+        address: 'plex.local',
+        port: 32400,
+        local: true,
+        relay: false,
+        latencyMs: null,
+      };
+    },
+    async withActivePlexToken() {
+      throw unexpectedFailure;
+    },
+  } as unknown as DesktopPlexRuntime;
+
+  const result = await createLivePlexStreamResolverComposition(mockRuntime).resolver.resolve({
+    requestId: 'composition-unexpected-credential-failure',
+    mediaId: 'plex-media-123',
+    capabilityProfile: directPlayProfile,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? '' : result.error.code, 'PLEX_STREAM_CREDENTIAL_UNAVAILABLE');
+  assert.equal(
+    result.diagnostics.some((diagnostic) => (
+      diagnostic.operation === 'active-credential.read' &&
+      diagnostic.status === 'failed'
+    )),
+    true,
+  );
+  assert.equal(JSON.stringify(result).includes(unexpectedFailure.message), false);
 });
 
 const directPlayProfile: DesktopStreamCapabilityProfile = {

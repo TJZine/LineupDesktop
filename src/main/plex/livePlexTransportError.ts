@@ -27,6 +27,12 @@ export class LivePlexTransportError extends Error {
   }
 }
 
+export function isPlexAuthenticationUnavailableError(
+  error: unknown,
+): error is LivePlexTransportError {
+  return error instanceof LivePlexTransportError && error.code === 'auth-required';
+}
+
 function sanitizeTransportCause(cause: unknown): unknown {
   if (cause instanceof Error) {
     return { name: cause.name, message: redactTransportText(cause.message) };

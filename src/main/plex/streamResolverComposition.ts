@@ -6,6 +6,7 @@ import type {
 } from './streamResolver.js';
 import { PlaybackMediaDetailPort } from './playbackMediaDetailPort.js';
 import { PmsPlaybackSessionPort } from './pmsPlaybackSessionPort.js';
+import { isPlexAuthenticationUnavailableError } from './livePlexTransportError.js';
 import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.js';
 
 export interface LiveStreamResolverComposition {
@@ -28,8 +29,11 @@ export function createLivePlexStreamResolverComposition(
           name: 'X-Plex-Token',
           value: token,
         }));
-      } catch {
-        return null;
+      } catch (error) {
+        if (isPlexAuthenticationUnavailableError(error)) {
+          return null;
+        }
+        throw error;
       }
     },
   };
