@@ -99,10 +99,11 @@ test('renderer runtime copy includes the byte-exact relative dependency closure 
     for (const [fileName, source] of [
       [
         'config.js',
-        "import './constants.js';\nexport { exact } from './exactRecord.js';\nvoid import('./lazy.js');\n",
+        "import './constants.js';\nexport { exact } from './exactRecord.js';\nexport * as futureOwner from './futureOwner.js';\nvoid import('./lazy.js');\n",
       ],
       ['constants.js', 'export const maximum = 500;\n'],
       ['exactRecord.js', "import { helper } from './recordHelper.js';\nexport const exact = helper;\n"],
+      ['futureOwner.js', 'export const future = true;\n'],
       ['recordHelper.js', 'export const helper = true;\n'],
       ['lazy.js', 'export const lazy = true;\n'],
       ['config.js.map', new Uint8Array([9])],
@@ -119,6 +120,7 @@ test('renderer runtime copy includes the byte-exact relative dependency closure 
       'config.js',
       'constants.js',
       'exactRecord.js',
+      'futureOwner.js',
       'lazy.js',
       'recordHelper.js',
     ]) {
@@ -135,6 +137,7 @@ test('renderer runtime copy includes the byte-exact relative dependency closure 
       'config.js',
       'constants.js',
       'exactRecord.js',
+      'futureOwner.js',
       'lazy.js',
       'recordHelper.js',
     ]);
