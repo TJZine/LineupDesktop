@@ -19,11 +19,11 @@ import { createPlaybackEventRouter } from '../../../main/player/playbackEventRou
 import { DiagnosticEventStore } from '../../../main/diagnostics/diagnosticEventStore.js';
 import {
   isRendererSafePlayerEvent,
-  PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
   type PlayerCommand,
   type PlayerEvent,
   type PlayerLoadCommandPayload,
 } from '../../../contracts/player.js';
+import { assertPublicSafe } from './playerPublicSafetyAssertions.js';
 
 const selection: PlexPlaybackScheduleSelection = {
   channelId: 'channel-1',
@@ -250,29 +250,11 @@ function createRuntime(): {
 }
 
 function assertNoForbiddenKeys(value: unknown): void {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      assertNoForbiddenKeys(item);
-    }
-    return;
-  }
-  if (value === null || typeof value !== 'object') {
-    return;
-  }
-  for (const [key, child] of Object.entries(value)) {
-    assert.equal(
-      PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS.includes(
-        key as (typeof PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS)[number],
-      ),
-      false,
-      `renderer-facing runtime value contains forbidden key ${key}`,
-    );
-    assertNoForbiddenKeys(child);
-  }
+  assertPublicSafe(value, []);
 }
 
 function assertTextAbsent(value: unknown, text: string): void {
-  assert.equal(JSON.stringify(value).includes(text), false, `unexpected renderer-facing text ${text}`);
+  assertPublicSafe(value, [text]);
 }
 
 function assertRendererSafePlayerEvents(events: readonly PlayerEvent[]): void {

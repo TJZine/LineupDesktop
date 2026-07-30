@@ -9,9 +9,9 @@ import { setImmediate } from 'node:timers';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import {
-  PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
   type PlayerCommand,
 } from '../../../contracts/player.js';
+import { assertPublicSafe } from './playerPublicSafetyAssertions.js';
 import {
   NativePlayerHostProcess,
   type NativePlayerHostChildProcess,
@@ -96,31 +96,11 @@ async function completeActiveLoad(
 }
 
 function assertNoForbiddenKeys(value: unknown): void {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      assertNoForbiddenKeys(item);
-    }
-    return;
-  }
-
-  if (value === null || typeof value !== 'object') {
-    return;
-  }
-
-  for (const [key, child] of Object.entries(value)) {
-    assert.equal(
-      PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS.includes(
-        key as (typeof PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS)[number],
-      ),
-      false,
-      `native host process value contains forbidden key ${key}`,
-    );
-    assertNoForbiddenKeys(child);
-  }
+  assertPublicSafe(value, []);
 }
 
 function assertTextAbsent(value: unknown, text: string): void {
-  assert.equal(JSON.stringify(value).includes(text), false, `unexpected renderer-facing text ${text}`);
+  assertPublicSafe(value, [text]);
 }
 
 function spawnNodeHost(script: string): SpawnedNativeHostChildProcess {

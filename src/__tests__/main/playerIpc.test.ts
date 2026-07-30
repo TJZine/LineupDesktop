@@ -8,11 +8,11 @@ import {
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
 } from '../../contracts/ipc.js';
 import {
-  PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
   type PlayerCommand,
   type PlayerEvent,
   type PlayerLoadCommandPayload,
 } from '../../contracts/player.js';
+import { assertPublicSafe } from './player/playerPublicSafetyAssertions.js';
 import { registerPlayerIpcHandlers } from '../../main/player/playerIpc.js';
 import type { PrivilegedPlaybackDispatchContext } from '../../main/player/privilegedPlaybackDispatchContext.js';
 import { redactMainProcessError } from '../../main/redactedDiagnostics.js';
@@ -246,27 +246,7 @@ function helperFailure(): NativePlayerHostFailure {
 }
 
 function assertNoForbiddenKeys(value: unknown): void {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      assertNoForbiddenKeys(item);
-    }
-    return;
-  }
-
-  if (value === null || typeof value !== 'object') {
-    return;
-  }
-
-  for (const [key, child] of Object.entries(value)) {
-    assert.equal(
-      PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS.includes(
-        key as (typeof PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS)[number],
-      ),
-      false,
-      `renderer-facing player IPC value contains forbidden key ${key}`,
-    );
-    assertNoForbiddenKeys(child);
-  }
+  assertPublicSafe(value, []);
 }
 
 test('player IPC registers closed handlers and tears them down', async () => {

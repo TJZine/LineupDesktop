@@ -15,7 +15,6 @@ import type {
   NativePlayerHostPort,
 } from '../../../main/player/nativePlayerHostPort.js';
 import {
-  PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
   type PlayerCommand,
   type PlayerErrorCategory,
   type PlayerEvent,
@@ -23,6 +22,7 @@ import {
   type PlayerMediaSummary,
   type PlayerTrackSummary,
 } from '../../../contracts/player.js';
+import { assertPublicSafe } from './playerPublicSafetyAssertions.js';
 import type { RendererIntentEnvelope } from '../../../contracts/ipc.js';
 import type { PrivilegedPlaybackDispatchContext } from '../../../main/player/privilegedPlaybackDispatchContext.js';
 
@@ -233,27 +233,7 @@ function emptyEnvelope(
 }
 
 function assertNoForbiddenKeys(value: unknown): void {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      assertNoForbiddenKeys(item);
-    }
-    return;
-  }
-
-  if (value === null || typeof value !== 'object') {
-    return;
-  }
-
-  for (const [key, child] of Object.entries(value)) {
-    assert.equal(
-      PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS.includes(
-        key as (typeof PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS)[number],
-      ),
-      false,
-      `renderer-facing adapter value contains forbidden key ${key}`,
-    );
-    assertNoForbiddenKeys(child);
-  }
+  assertPublicSafe(value, []);
 }
 
 function assertErrorEvent(events: readonly PlayerEvent[], category: PlayerErrorCategory): PlayerEvent {
@@ -265,7 +245,7 @@ function assertErrorEvent(events: readonly PlayerEvent[], category: PlayerErrorC
 }
 
 function assertTextAbsent(value: unknown, text: string): void {
-  assert.equal(JSON.stringify(value).includes(text), false, `unexpected renderer-facing text ${text}`);
+  assertPublicSafe(value, [text]);
 }
 
 test('desktop player adapter maps renderer intents to closed player commands', async () => {

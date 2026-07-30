@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS } from '../../../contracts/player.js';
 import { decideDesktopStreamPolicy } from '../../../main/player/streamPolicy/desktopStreamPolicy.js';
+import { assertPublicSafe } from './playerPublicSafetyAssertions.js';
 import type {
   DesktopStreamPolicyDecision,
   DesktopStreamPolicyDecisionKind,
@@ -67,8 +67,13 @@ function preferences(
 }
 
 function assertNoForbiddenFields(value: unknown, path = 'value'): void {
+  assertPublicSafe(value, []);
+  assertNoRd08ForbiddenFields(value, path);
+}
+
+function assertNoRd08ForbiddenFields(value: unknown, path: string): void {
   if (Array.isArray(value)) {
-    value.forEach((item, index) => assertNoForbiddenFields(item, `${path}[${index}]`));
+    value.forEach((item, index) => assertNoRd08ForbiddenFields(item, `${path}[${index}]`));
     return;
   }
   if (value === null || typeof value !== 'object') {
@@ -77,26 +82,16 @@ function assertNoForbiddenFields(value: unknown, path = 'value'): void {
 
   for (const [key, child] of Object.entries(value)) {
     assert.equal(
-      PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS.includes(
-        key as (typeof PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS)[number],
-      ),
-      false,
-      `${path} contains player forbidden field ${key}`,
-    );
-    assert.equal(
       RD08_FORBIDDEN_FIELD_KEYS.includes(key as (typeof RD08_FORBIDDEN_FIELD_KEYS)[number]),
       false,
       `${path} contains RD-08 forbidden field ${key}`,
     );
-    assertNoForbiddenFields(child, `${path}.${key}`);
+    assertNoRd08ForbiddenFields(child, `${path}.${key}`);
   }
 }
 
 function assertNoForbiddenText(value: unknown): void {
-  const serialized = JSON.stringify(value);
-  for (const text of RD08_FORBIDDEN_TEXT) {
-    assert.equal(serialized.includes(text), false, `RD-08 value contains forbidden text ${text}`);
-  }
+  assertPublicSafe(value, RD08_FORBIDDEN_TEXT);
 }
 
 function decideFixture(name: keyof typeof desktopStreamPolicyInputs): DesktopStreamPolicyDecision {
