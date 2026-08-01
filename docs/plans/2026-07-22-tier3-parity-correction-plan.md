@@ -6423,11 +6423,14 @@ consolidated-proof policy.
 **WS4 plan state:** targeted planning was revised after the first independent
 review rejected Unit 4A on two material player-boundary gaps: seek eligibility
 was not renderer-observable, and stop/relative-seek intents were not bound to
-the snapshot they targeted. The narrow correction below is decision-complete.
-Product, test, package, and configuration edits remain blocked until a fresh
-independent `lineup-desktop-feature-review` reports no unresolved material
-finding and explicitly approves revised Unit 4A as the first implementation
-unit. This amendment authorizes re-review, not implementation.
+the snapshot they targeted. A later Unit 4A implementation correctly stopped
+with partial uncommitted edits when typecheck exposed one omitted diagnostics-
+owned inert snapshot producer and its exact test fixture. The narrow correction
+below now includes that seam. Preserve the partial product worktree unchanged;
+all further product/test/package/configuration edits remain blocked until a
+fresh independent `lineup-desktop-feature-review` reports no unresolved
+material finding and explicitly re-approves revised Unit 4A. This amendment
+authorizes re-review, not implementation.
 
 **WS4 task family:** feature/design.
 
@@ -6756,6 +6759,11 @@ replan.
 - Unit 4A renderer safe-snapshot fallback: exactly
   `src/renderer/playerOverlayPresentation.ts`, adding only the required inert
   `seekSupport: 'unknown'` field; presentation policy remains no-touch.
+- Unit 4A diagnostics-owned safe-snapshot fallback: exactly
+  `src/main/diagnostics/supportBundleExporter.ts`, adding only required
+  `seekSupport: 'unknown'` to `createInertPlayerSnapshot()`. No exporter,
+  provider, sanitization, serialization, manifest, filesystem, redaction, or
+  diagnostics policy behavior may change.
 - Focus owner only if fresh Unit 4D evidence proves the existing DOM-order
   registration cannot express the reviewed Subtitles/Sleep/Audio graph:
   exactly `src/renderer/focusDom.ts`. Otherwise it is no-touch.
@@ -6784,6 +6792,10 @@ replan.
   outside the adapter/resolver/bootstrap tests;
   `plexStreamResolverComposition.test.ts` is authorized only for its required
   typed capability-profile fixture and seek-projection assertions.
+  `src/__tests__/main/diagnostics/supportBundleExporter.test.ts` is authorized
+  only to add required `seekSupport: 'unknown'` to its typed/unsafe snapshot
+  fixture and, if needed, one narrow assertion that the safe enum remains in
+  `player-snapshot.json` while existing forbidden fields remain absent/redacted.
 - Ignored/local WS4 run-bundle evidence under
   `docs/runs/ws4-input-overlay-quality-loop/**`. Raw screenshots, traces,
   manifests, hashes, and operator notes remain local and redaction-safe.
@@ -6801,8 +6813,9 @@ replan.
 - All `src/contracts/**`, `src/preload/**`, `src/main/player/**`, and
   `src/main/plex/**` files except the exact Unit 4A files above;
   `src/native-helper/**`, `src/main/settings/**`,
-  `src/main/persistence/**`, `src/main/diagnostics/**`, and every other public
-  IPC or preload vocabulary owner.
+  `src/main/persistence/**`, all `src/main/diagnostics/**` files except the
+  exact inert fallback above, and every other public IPC or preload vocabulary
+  owner.
 - `src/main/index.ts`, `src/main/window/shellWindowController.ts`, other main
   lifecycle/window owners, and `globalShortcut` or background OS integration.
 - Guide data, layout, virtualization, polling, Settings consumption, and WS5
@@ -6831,10 +6844,11 @@ material-only implementation review has no unresolved material finding.
 
 ##### Unit 4A — renderer semantic input and direct player commands
 
-**Status:** the first plan review rejected this unit on the seek-eligibility and
-stale stop/seek gaps. The revised unit is implementation-ready only after a
-fresh review explicitly approves it with no unresolved material finding. This
-remains the first execution unit.
+**Status:** implementation stopped with partial uncommitted edits after the
+required snapshot field exposed the omitted diagnostics fallback/test seam.
+Preserve those edits without extending them. Resume Unit 4A only after a fresh
+review explicitly approves this revision with no unresolved material finding.
+This remains the first execution unit and has no accepted checkpoint yet.
 
 **Outcome:** implement F1/F2/F3/F4 and distinct Info/Now Playing semantics,
 context Page Up/Down, standard DOM media-key mapping, and renderer-safe direct
@@ -6861,7 +6875,10 @@ correction boundary is `src/contracts/ipc.ts`, `src/contracts/player.ts`,
 `src/main/player/playbackRuntimeBootstrap.ts`,
 `src/main/player/plexPlaybackRuntime.ts`, `src/main/player/playerIpc.ts`,
 `src/main/player/playerRecoveryIpc.ts`, `src/main/plex/streamResolver.ts`, and
-`src/main/smokeAssertions.ts`. Renderer behavior tests are limited to
+`src/main/smokeAssertions.ts`; exact diagnostics exception
+`src/main/diagnostics/supportBundleExporter.ts` may add only
+`seekSupport: 'unknown'` to `createInertPlayerSnapshot()`. Renderer behavior
+tests are limited to
 `src/__tests__/renderer/desktopInput.test.ts`,
 `src/__tests__/renderer/navigationLifecycle.test.ts`,
 `src/__tests__/renderer/playerOverlayController.test.ts`,
@@ -6870,8 +6887,10 @@ correction boundary is `src/contracts/ipc.ts`, `src/contracts/player.ts`,
 `src/__tests__/renderer/workflow.test.ts`,
 `src/__tests__/renderer/rendererRuntimeOwners.test.ts`, and new
 `src/__tests__/renderer/playerInputCommandController.test.ts`. Contract/main
-test edits are limited to the exact files listed in WS4 Files In Scope. No
-other main, contract, preload, renderer presentation, DOM, CSS, or authority
+test edits are limited to the exact files listed in WS4 Files In Scope,
+including only the required fixture/shape proof in
+`src/__tests__/main/diagnostics/supportBundleExporter.test.ts`. No other main,
+diagnostics, contract, preload, renderer presentation, DOM, CSS, or authority
 doc edit is allowed.
 
 **Contracts and acceptance:** apply invariants 1–3 and 5–14 exactly.
@@ -6900,6 +6919,7 @@ forwarding-only layer.
 
 ```text
 node --import tsx --test src/__tests__/contracts/contracts.test.ts src/__tests__/integration/preloadContractVocabulary.test.ts src/__tests__/main/player/desktopPlayerAdapter.test.ts src/__tests__/main/player/nativePlayerHostProcess.test.ts src/__tests__/main/player/playbackProgramTransitionIntegration.test.ts src/__tests__/main/player/playerRecoveryIpc.test.ts src/__tests__/main/player/plexPlaybackBridge.test.ts src/__tests__/main/player/plexPlaybackComposition.test.ts src/__tests__/main/player/plexPlaybackRecoveryOwner.test.ts src/__tests__/main/player/plexPlaybackRuntime.test.ts src/__tests__/main/player/playbackRuntimeBootstrap.test.ts src/__tests__/main/playerIpc.test.ts src/__tests__/main/plexStreamResolver.test.ts src/__tests__/main/plexStreamResolverComposition.test.ts
+node --import tsx --test src/__tests__/main/diagnostics/supportBundleExporter.test.ts
 node --import tsx --test src/__tests__/renderer/desktopInput.test.ts src/__tests__/renderer/navigationLifecycle.test.ts src/__tests__/renderer/playerOverlayController.test.ts src/__tests__/renderer/playerOverlayPresentation.test.ts src/__tests__/renderer/epg.test.ts src/__tests__/renderer/workflow.test.ts src/__tests__/renderer/rendererRuntimeOwners.test.ts src/__tests__/renderer/playerInputCommandController.test.ts
 npm run test:contracts
 npm run typecheck
@@ -6916,6 +6936,11 @@ carry the field; selected main-owned profiles project it without exposing the
 profile; matching guarded stop/seek map to unchanged host commands without the
 snapshot identity; stale/malformed/extra-key payloads cause no custody, host
 call, or snapshot mutation; and existing unguarded callers remain unchanged.
+The diagnostics-focused test proves the inert support-bundle snapshot and its
+typed/unsafe provider fixture carry safe `seekSupport: 'unknown'`; the safe enum
+may appear in `player-snapshot.json`, while existing forbidden keys/values stay
+absent or redacted and file count, manifest, serialization, scanner, cleanup,
+and export outcomes remain unchanged.
 Exact key aliases, editable bypass, modal suppression, Page context, 10-second
 deltas, seek eligibility, single pending command, timeout/cleanup/stale
 settlement, focus preservation, and source-owner shape are asserted;
@@ -6941,7 +6966,10 @@ recovery through current safe renderer state; Page routing that requires WS5
 layout/virtualization; direct-command policy that cannot be separated
 cohesively from the overlay hotspot; production profile evidence contradicting
 `seek: 'supported'`; or failed contract/build/architecture/maintainability/
-redaction proof outside this boundary.
+redaction proof outside this boundary; or the diagnostics fallback requires
+anything beyond one inert field plus fixture/shape proof, including sanitizer,
+serialization, manifest, export, filesystem, provider, or redaction-policy
+changes.
 
 ##### Unit 4B — focused Windows BrowserWindow app-command routing
 
@@ -7239,6 +7267,12 @@ production unit:
   the safe load payload. **Decision:** cohesive projection; no stream-policy
   decision, private descriptor, credential, connection, PMS, or diagnostic
   change.
+- **Owner:** `src/main/diagnostics/supportBundleExporter.ts` (429 lines at the
+  stop). **Existing responsibility:** bounded, sanitized support-bundle export
+  with an inert player fallback. **New behavior:** add only required
+  `seekSupport: 'unknown'` to that fallback. **Decision:** required typed-literal
+  propagation, not diagnostics behavior; no sanitizer, serialization, manifest,
+  scanner, filesystem, provider, redaction policy, or exporter branch changes.
 
 Every unit that touches a named hotspot/composition root runs
 `npm run verify:maintainability` directly or through
@@ -7445,7 +7479,8 @@ TIER: Tier 3
 PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
 ARTIFACT: revised Whole-WS4 Input And Overlay execution plan amendment dated
 2026-08-01, resolving the first review's seek-eligibility and stale stop/seek
-blockers
+blockers plus the implementation-stop discovery of the diagnostics-owned inert
+snapshot/test seam
 FILES:
 - docs/plans/2026-07-22-tier3-parity-correction-plan.md
 - docs/product/lineup-product-parity-matrix.md
@@ -7455,9 +7490,10 @@ FILES:
 - docs/architecture/playback-architecture.md
 - docs/roadmap/desktop-port-roadmap.md
 - docs/development/windows-ui-proof-plan.md
-BLOCKERS: none for read-only plan review. Product/test/package/config edits
-remain blocked until review explicitly approves Unit 4A with no unresolved
-material finding.
+BLOCKERS: none for read-only plan review. Partial Unit 4A product edits remain
+uncommitted and must be preserved without extension; all further product/test/
+package/config edits remain blocked until review explicitly re-approves Unit 4A
+with no unresolved material finding.
 MESSAGE:
 Use `lineup-desktop-feature-review` for a fresh read-only material review of the
 revised 2026-08-01 Whole-WS4 section only. Validate exact 35-row scope, upstream
@@ -7467,6 +7503,8 @@ explicitly validate: the additive `player.stopIfCurrent` and
 adapter's existing pre-custody identity guard without forwarding identity to
 the host; required `seekSupport` projection from the main-owned selected
 profile through safe load/snapshot; strict preload/main/runtime/recovery guards;
+the exact `supportBundleExporter.ts` inert `seekSupport: 'unknown'` propagation
+and fixture/redaction proof with no diagnostics behavior change;
 atomic no-migration compatibility posture; exact owner/write and no-touch
 boundaries; conservative capability/proof preservation; test files and focused
 proof; hotspot/cohesion dispositions; rollback/checkpoint; and replan triggers.
@@ -7474,5 +7512,5 @@ Also validate extraction readiness, serial Unit 4A–4E shape, accessibility/
 interaction acceptance, focused/full/local/manual proof, consolidated proof
 debt, cross-workstream preservation, and WS5 handoff intent. Cite material
 findings with exact plan/source lines. Explicitly state whether revised Unit 4A
-is approved for the first WS4 product edit. Return material findings to
+is approved to resume from the preserved partial worktree. Return material findings to
 planning; do not spend a loop on cosmetic wording and do not edit files.
