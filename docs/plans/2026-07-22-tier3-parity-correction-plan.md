@@ -7091,6 +7091,85 @@ mapping. Commit after clean review, for example
 profile/auth ownership, adding main timing/IPC, weakening editable bypass, or
 introducing an input abstraction without a second present consumer.
 
+##### Unit 4C-H — synthetic Escape smoke lifecycle correction
+
+**Observed stop/replan evidence:** accepted Unit 4C checkpoint `a654cdd`
+correctly retains the `keyboard:Escape` press source until its matching keyup so
+repeat keydowns cannot emit duplicate short-Back or long-Back behavior. During
+the preserved partial Unit 4D worktree, `npm run smoke:electron` failed only
+the `player route activation`, `player screen visible`, and `player overlay
+stack visible` assertions. Exact source inspection found four synthetic Escape
+presses in `src/main/smokeAssertions.ts`—the first-run route normalization, the
+post-Channel-Builder player return, the Guide fallback return, and the
+pre-close lifecycle normalization—and every one emitted `keydown` without a
+matching `keyup`. Because those sequences execute in the same renderer
+document, any earlier synthetic keydown can retain `keyboard:Escape` and
+suppress a later press. This contradicts smoke harness fidelity, not Unit 4C
+product behavior: a real completed Escape press includes release, while the
+accepted repeat-suppression and 500 ms hold lifecycle must remain unchanged.
+The Unit 4D product/test/style worktree remains paused and preserved while this
+narrow correction is reviewed and landed.
+
+**Outcome and owner/write boundary:** change exactly existing
+`src/main/smokeAssertions.ts`. Pair each of its four current synthetic Escape
+`keydown` events with an adjacent matching bubbling Escape `keyup` before that
+press's existing wait or next action. All four presses are corrected so the
+smoke session cannot inherit a retained source from an earlier route. Do not
+change the current waits, routes, assertions, failure vocabulary, close
+lifecycle, renderer production code, accepted Unit 4C files, partial Unit 4D
+files, or any other smoke behavior. Direct inspection of
+`src/__tests__/main/smokeChannelBuilderAssertions.test.ts` found no assertion
+whose contract must change; it remains read/run-only. No other production,
+test, harness, package, configuration, dependency, lockfile, public contract,
+IPC/preload, native/helper, architecture-authority, or import-ledger file is
+authorized.
+
+**Architecture and proof invariants:** `smokeAssertions.ts` remains the
+existing main-owned smoke orchestration owner and stays below its historical
+554-line cap; it gains no renderer input policy or helper abstraction. The
+synthetic sequence must model physical press/release lifecycle rather than
+bypass, disable, shorten, or otherwise weaken Unit 4C repeat, hold, protected-
+owner, or cleanup behavior. Electron smoke retains the same assertions and
+timing, so a pass after the correction proves the existing route/player/overlay
+checks under faithful input instead of waiving them. No dependency, contract,
+privilege boundary, product owner, or upstream import changes.
+
+**Verification classification:** existing coverage sufficient.
+
+Run and observe the isolated harness correction with the preserved Unit 4D
+worktree present:
+
+```text
+node --import tsx --test src/__tests__/main/smokeChannelBuilderAssertions.test.ts
+npm run typecheck
+npm run verify:architecture
+npm run smoke:electron
+npm run verify:maintainability
+npm run verify:redaction
+wc -l src/main/smokeAssertions.ts
+git diff --check
+```
+
+Expected: the focused source-oriented smoke test passes; typecheck,
+architecture, maintainability, redaction, and diff checks are clean; Electron
+smoke passes without removing or weakening any assertion; source review shows
+exactly four matched synthetic Escape down/up pairs and no remaining synthetic
+Escape keydown-only press; and `smokeAssertions.ts` remains below 554 lines.
+A fresh material-only `lineup-desktop-feature-review` must approve this
+amendment before the harness edit and approve the exact isolated harness diff
+before checkpoint acceptance. After those gates, commit only the harness file,
+for example `test(smoke): pair synthetic escape presses`, leave the preserved
+Unit 4D worktree uncommitted, and resume Unit 4D at its existing reviewed
+boundary.
+
+**Rollback and stop/replan:** the harness checkpoint reverts independently by
+removing only the four matching keyups; rollback never changes Unit 4C product
+behavior or discards the preserved Unit 4D worktree. Stop and return to planning
+if smoke still fails after faithful press/release pairing, any assertion or
+delay must be weakened, the correction needs renderer/Unit 4C/Unit 4D product
+edits, another harness/test file, a helper abstraction, a contract/dependency/
+configuration change, or any proof gate above fails outside this exact file.
+
 ##### Unit 4D — sleep timer and OSD parity
 
 **Outcome:** add the independent renderer sleep-timer lifecycle and the exact
