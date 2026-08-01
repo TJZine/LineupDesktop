@@ -1,6 +1,6 @@
 ---
 name: bounded-worker-execution
-description: Use when an approved Lineup Desktop plan has concrete, disjoint implementation slices that can be delegated to worker agents without inventing architecture, scope, or verification policy.
+description: Use when Lineup Desktop has a bounded implementation slice suitable for the cost-efficient worker_luna role.
 ---
 
 # Bounded Worker Execution
@@ -15,24 +15,30 @@ Read:
 4. `docs/agentic/session-prompts/feature-quality-loop.md` when the approved plan
    is Tier 3
 
-Delegate only after the plan names:
+Delegate only after the plan or execution brief names:
 
-- exact task and files in scope
-- files out of scope when ambiguity exists
+- exact objective and acceptance criteria
+- owner/write boundary and out-of-scope owners
 - owner boundary and invariants
 - required verification and expected outcome
 - stop/replan conditions
 
-Use `worker` by default. Use `worker_sol_low` when the frozen unit still needs
-repository comprehension but no design judgment. Use `worker_luna` only for
-exact, repeatable, cheap-to-verify work. Both lower-cost roles require explicit
-plan selection, direct verification, and stop/escalation rules. Read exact model
-and effort settings from the selected role's TOML.
+Use `worker_luna` by default when the outcome, owner seam, contracts, acceptance
+criteria, and direct proof are clear. It may discover exact files, use repository
+comprehension and routine local design judgment, add focused tests and related
+documentation, and diagnose failures caused by its implementation. Use `worker`
+when the same settled bounded unit needs material local design judgment,
+cross-boundary comprehension, complex diagnosis, or proof interpretation. Return
+unresolved product, ownership, public-contract, architecture, or proof decisions to
+planning. Read exact model and effort settings from the selected role's TOML.
 
-Worker slices must have disjoint write scopes. Keep architecture decisions,
+Worker slices must have disjoint write scopes. Require exact files only for
+concurrent writers or sensitive shared surfaces. Keep architecture decisions,
 integration, final verification, and commit judgment in the controller session.
-Do not delegate work that needs the worker to choose the seam, broaden scope, or
-decide test depth mid-task.
+The worker may choose implementation details and focused test organization within
+the approved seam, but must stop when evidence exposes unresolved product intent,
+ownership, public behavior, architecture, proof depth, dependency or compatibility
+policy, or scope expansion.
 
 ## Delegation Record
 

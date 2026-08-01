@@ -6,6 +6,10 @@ import type {
   FocusState,
 } from './navigation.js';
 import { getStagedSetupNeighbors } from './setup/stagedSetupFocus.js';
+import {
+  SETTINGS_SECTION_IDS,
+  createSettingsSectionControlFocusIds,
+} from './settingsSetup.js';
 
 const dynamicFocusIdsByRegistry = new WeakMap<FocusRegistry, Set<string>>();
 const focusIdsByRegistry = new WeakMap<FocusRegistry, Set<string>>();
@@ -48,6 +52,12 @@ export function registerRendererFocusTargets(
   dom: RendererDomBindings,
 ): void {
   const registered = new Set<string>();
+  const currentFocusIds = new Set(
+    dom.focusableElements
+      .filter((element) => !isElementHiddenFromFocus(element))
+      .map((element) => element.dataset.focusId)
+      .filter((focusId): focusId is string => focusId !== undefined),
+  );
   if (dom.fullscreenButton && !isElementHiddenFromFocus(dom.fullscreenButton)) {
     focusRegistry.register({
       id: 'player-fullscreen',
@@ -67,17 +77,31 @@ export function registerRendererFocusTargets(
       id: focusId,
       route,
       order: 100 + index,
-      neighbors: focusId.startsWith('settings-') ? getSettingsNeighbors(focusId) : undefined,
+      neighbors: focusId.startsWith('settings-')
+        ? getSettingsNeighbors(focusId, currentFocusIds)
+        : undefined,
     });
     registered.add(focusId);
   });
 
   [...dom.epgActionButtons, ...dom.settingsActionButtons, ...dom.setupActionButtons].forEach(
-    (button, index) => registerOrderedButton(focusRegistry, registered, button, 80 + index),
+    (button, index) => registerOrderedButton(
+      focusRegistry,
+      registered,
+      button,
+      80 + index,
+      currentFocusIds,
+    ),
   );
 
   dom.plexActionButtons.forEach((button, index) => {
-    registerOrderedButton(focusRegistry, registered, button, plexActionFocusOrder(button, index));
+    registerOrderedButton(
+      focusRegistry,
+      registered,
+      button,
+      plexActionFocusOrder(button, index),
+      currentFocusIds,
+    );
   });
 
   dom.focusableElements.forEach((element, index) => {
@@ -91,7 +115,7 @@ export function registerRendererFocusTargets(
     const neighbors = focusId.startsWith('btn-profile-pin-')
       ? getNumpadNeighbors(focusId)
       : focusId.startsWith('settings-')
-      ? getSettingsNeighbors(focusId)
+      ? getSettingsNeighbors(focusId, currentFocusIds)
       : focusId.startsWith('setup-') || focusId.startsWith('plex-') || focusId.startsWith('channel-') || focusId.startsWith('custom-') || focusId.startsWith('btn-auth-') || focusId.startsWith('btn-profile-') || focusId.startsWith('btn-server-')
       ? getStagedSetupNeighbors(focusId) ?? getSetupNeighbors(focusId)
       : shellNeighbors ?? undefined;
@@ -158,6 +182,7 @@ function registerOrderedButton(
   registered: Set<string>,
   button: HTMLButtonElement,
   order: number,
+  currentFocusIds: ReadonlySet<string>,
 ): void {
   if (isElementHiddenFromFocus(button)) {
     return;
@@ -171,7 +196,9 @@ function registerOrderedButton(
     id: focusId,
     route,
     order,
-    neighbors: focusId.startsWith('settings-') ? getSettingsNeighbors(focusId) : undefined,
+    neighbors: focusId.startsWith('settings-')
+      ? getSettingsNeighbors(focusId, currentFocusIds)
+      : undefined,
   });
   registered.add(focusId);
 }
@@ -188,9 +215,9 @@ function plexActionFocusOrder(button: HTMLButtonElement, index: number): number 
 }
 
 function focusElementOrder(focusId: string, index: number): number {
-  if (focusId === 'settings-category-appearance') return 10;
-  if (focusId === 'settings-category-guide') return 11;
-  if (focusId === 'settings-category-recovery') return 12;
+  if (focusId === 'audio-setup-complete') return 0;
+  const settingsCategoryIndex = SETTINGS_CATEGORY_FOCUS_IDS.indexOf(focusId);
+  if (settingsCategoryIndex >= 0) return 10 + settingsCategoryIndex;
   if (focusId.startsWith('btn-profile-profile-')) return 10 + index / 1000;
   if (focusId === 'btn-profile-main') return 20;
   if (focusId.startsWith('btn-server-select-server-')) return 10 + index / 1000;
@@ -253,8 +280,13 @@ export function renderRendererFocus(focusState: FocusState, dom: RendererDomBind
     const isHiddenFromRoute = isElementHiddenFromFocus(element);
     element.classList.toggle('is-focused', isActive);
     element.tabIndex = !isHiddenFromRoute && isActive ? 0 : -1;
-    if (isActive && !isHiddenFromRoute && document.activeElement !== element) {
-      element.focus({ preventScroll: true });
+    if (isActive && !isHiddenFromRoute) {
+      if (document.activeElement !== element) {
+        element.focus({ preventScroll: true });
+      }
+      if (readClosestRouteId(element) === 'settings') {
+        element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
     }
   }
 }
@@ -367,31 +399,48 @@ function getNumpadNeighbors(focusId: string): Partial<Record<FocusDirection, str
   return mapping[focusId] ?? {};
 }
 
-function getSettingsNeighbors(focusId: string): Partial<Record<FocusDirection, string>> | undefined {
+function getSettingsNeighbors(
+  focusId: string,
+  currentFocusIds: ReadonlySet<string>,
+): Partial<Record<FocusDirection, string>> | undefined {
+  const categoryIndex = SETTINGS_CATEGORY_FOCUS_IDS.indexOf(focusId);
+  if (categoryIndex >= 0) {
+    const detailTarget = SETTINGS_CONTROL_CATEGORY
+      .get(focusId)
+      ?.find((controlId) => currentFocusIds.has(controlId));
+    return {
+      up: SETTINGS_CATEGORY_FOCUS_IDS[Math.max(0, categoryIndex - 1)],
+      down: categoryIndex === SETTINGS_CATEGORY_FOCUS_IDS.length - 1
+        ? 'settings-switch-profile'
+        : SETTINGS_CATEGORY_FOCUS_IDS[categoryIndex + 1],
+      right: detailTarget ?? focusId,
+    };
+  }
+  const owner = findSettingsControlCategory(focusId);
+  if (owner !== undefined) return { left: owner };
   switch (focusId) {
-    case 'settings-category-appearance':
-      return { right: 'settings-launch-mode', down: 'settings-category-guide' };
-    case 'settings-category-guide':
-      return { right: 'settings-guide-density', up: 'settings-category-appearance', down: 'settings-category-recovery' };
-    case 'settings-category-recovery':
-      return { right: 'settings-setup-reminder', up: 'settings-category-guide', down: 'settings-setup-reminder' };
+    case 'settings-switch-profile':
+      return { up: 'settings-category-recovery', down: 'settings-open-channel-setup' };
     case 'settings-open-channel-setup':
-      return { left: 'settings-category-recovery', up: 'settings-setup-reminder', down: 'settings-export-support-bundle' };
+      return { up: 'settings-switch-profile', down: 'settings-player' };
     case 'settings-player':
       return { up: 'settings-open-channel-setup' };
-    case 'settings-launch-mode':
-      return { left: 'settings-category-appearance', up: 'settings-category-recovery', down: 'settings-preview-badges' };
-    case 'settings-preview-badges':
-      return { left: 'settings-category-appearance', up: 'settings-launch-mode' };
-    case 'settings-guide-density':
-      return { left: 'settings-category-guide', up: 'settings-category-recovery' };
-    case 'settings-setup-reminder':
-      return { left: 'settings-category-recovery', up: 'settings-category-recovery', down: 'settings-open-channel-setup' };
-    case 'settings-export-support-bundle':
-      return { left: 'settings-category-recovery', up: 'settings-open-channel-setup' };
     default:
       return undefined;
   }
+}
+
+const SETTINGS_CATEGORY_FOCUS_IDS: readonly string[] = [
+  ...SETTINGS_SECTION_IDS.map((sectionId) => `settings-category-${sectionId}`),
+];
+
+const SETTINGS_CONTROL_CATEGORY = createSettingsSectionControlFocusIds();
+
+function findSettingsControlCategory(focusId: string): string | undefined {
+  for (const [category, controls] of SETTINGS_CONTROL_CATEGORY) {
+    if (controls.includes(focusId)) return category;
+  }
+  return undefined;
 }
 
 function getSetupNeighbors(focusId: string): Partial<Record<FocusDirection, string>> | undefined {

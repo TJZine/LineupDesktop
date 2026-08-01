@@ -3,7 +3,9 @@ export type DesktopIpcOwner = 'renderer' | 'preload' | 'main' | 'native-helper';
 export type RendererIntent =
   | 'player.load'
   | 'player.play'
+  | 'player.playIfCurrent'
   | 'player.pause'
+  | 'player.pauseIfCurrent'
   | 'player.stop'
   | 'player.seekAbsolute'
   | 'player.seekRelative'
@@ -22,7 +24,9 @@ type AssertTrue<TValue extends true> = TValue;
 export const PLAYER_RENDERER_INTENTS = [
   'player.load',
   'player.play',
+  'player.playIfCurrent',
   'player.pause',
+  'player.pauseIfCurrent',
   'player.stop',
   'player.seekAbsolute',
   'player.seekRelative',
@@ -171,6 +175,8 @@ export const LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL =
 
 export const LINEUP_SETTINGS_REPLACE_CHANNEL =
   'lineup:settings:replace' as const;
+export const LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL =
+  'lineup:settings:getAudioOutputs' as const;
 
 /**
  * Known privileged renderer payload field names are denied at contract seams.

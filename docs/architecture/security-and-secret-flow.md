@@ -56,21 +56,56 @@ after machine, profile, or password-manager changes. A future release plan must
 prove restore behavior, recovery UX, and credential cleanup before public
 distribution.
 
-Package 4 adds a separate, non-secret Desktop Settings record at
+Package 4 and WS3 own a separate, non-secret Desktop Settings record at
 `<appData>/lineup-desktop-settings.json`. Electron main alone resolves this
-path and owns serialized whole-record compare-and-swap reads and replacements.
-Writes use a same-directory mode-0600 temporary file and atomic rename; an
-unsupported schema version is neither rewritten nor replaced. The renderer
-holds only ephemeral renderer-safe Settings snapshots and has no filesystem,
-browser-storage, migration, or fallback-store access.
+path and owns serialized whole-record compare-and-swap reads, version-1 to
+version-2 migration, normalization, and replacements. Writes use a
+same-directory mode-0600 temporary file and atomic rename; corrupt or
+unsupported schema bytes are neither rewritten nor replaced. The renderer
+holds only ephemeral renderer-safe Settings values, capability projection,
+revision, and fixed status/error state and has no filesystem, browser-storage,
+migration, or fallback-store access.
 
-Preload exposes exactly `settings.getSnapshot` and `settings.replace` on the
-existing `window.lineupDesktop` namespace. It validates exact request/result
-shapes and request-id echoing, catches invoke rejection, and never exposes raw
-Electron, filesystem paths, record contents, or exception detail. Main applies
-the existing shell sender, main-frame, and `lineup://shell` origin authorization
-before delegating to the Settings store. All expected failures resolve one
+Preload exposes exactly `settings.getSnapshot`, `settings.replace`, and
+`settings.getAudioOutputs` on the existing `window.lineupDesktop` namespace.
+It validates exact request/result shapes and request-id echoing, catches invoke
+rejection, and never exposes raw Electron, filesystem paths, record contents,
+native device keys, or exception detail. Main applies the existing shell
+sender, main-frame, and `lineup://shell` origin authorization before delegating
+to the Settings store or audio-output owner. All expected failures resolve one
 fixed renderer-safe typed result rather than rejecting.
+
+`DesktopSettingsPolicy` caches only the last accepted renderer-safe snapshot
+and projects narrow preference inputs to stream policy, Plex resolution,
+diagnostic admission, and private native setup. `SettingsAudioOutputOwner`
+alone maps raw native audio keys to stable opaque ids and bounded labels;
+persisted `null` means System Default. Raw keys remain ephemeral in main/helper
+custody and are resolved immediately before private setup. Main shares the one
+production helper host with player IPC; private audio-query correlation,
+timeout, quarantine, crash, and cleanup use that same process owner.
+Test-only checkpoint `f0e2817` strengthens smoke proof that main constructs one
+production host and injects the same binding into player IPC and the audio
+owner, while keeping the optional factory inside development/smoke custody. It
+adds no runtime path, secret flow, renderer exposure, or capability claim.
+Prior Unit 3C-D checkpoint `5f368d4` connects the accepted Settings and
+subtitle debug admissions to two production events with exact fixed keys,
+bounded closed values, and no ids, labels, language text, connection/auth data,
+URLs, headers, paths, raw Plex/native values, diagnostic arrays, or free-form
+errors. Recording is best-effort: a throwing recorder cannot alter Settings
+acceptance or playback settlement. Windows support-bundle contents and
+redaction remain proof-open.
+Final WS3 product checkpoint `87662b5` is a two-file renderer focus repair and
+adds no secret flow, privileged custody, diagnostic field, or public surface.
+Unit 3D acceptance changes only workstream status and no security boundary.
+
+WS3 also adds exact request-bound `player.pauseIfCurrent` and
+`player.playIfCurrent` renderer intents on the existing player channel.
+Preload admits only the literals and exact outer envelope. Main validates the
+snapshot request id and rejects stale identity before custody or host
+submission; the identity is never added to `PlayerCommand`, privileged setup,
+or helper input. No Settings value, capability, audio row, intent, diagnostic,
+or proof artifact may expose credentials, headers, tokenized URLs, paths, raw
+payloads, native handles, helper output, or raw device ids.
 
 ## Current Plex Domain Boundary
 

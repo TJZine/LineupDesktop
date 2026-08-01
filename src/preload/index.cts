@@ -62,6 +62,7 @@ import {
   LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL,
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
+  LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL,
   LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, LINEUP_SETTINGS_REPLACE_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
 } from './channels.cjs';
@@ -255,7 +256,9 @@ const PLAYER_COMMAND_VALUES = [
 const PLAYER_RENDERER_INTENT_VALUES = [
   'player.load',
   'player.play',
+  'player.playIfCurrent',
   'player.pause',
+  'player.pauseIfCurrent',
   'player.stop',
   'player.seekAbsolute',
   'player.seekRelative',
@@ -1613,7 +1616,9 @@ const lineupDesktop: LineupDesktopPreloadApi = {
     },
   },
   settings: createSettingsBridge(invokeSettings, {
-    getSnapshot: LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, replace: LINEUP_SETTINGS_REPLACE_CHANNEL,
+    getSnapshot: LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
+    replace: LINEUP_SETTINGS_REPLACE_CHANNEL,
+    getAudioOutputs: LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL,
   }),
   player: {
     dispatch: (envelope) => {

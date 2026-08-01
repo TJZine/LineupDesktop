@@ -13,6 +13,8 @@ import type { DesktopStreamCapabilityProfile } from './streamPolicy/types.js';
 import type { PlexStreamResolverInput, PlexStreamResolverResult } from '../plex/streamResolver.js';
 import type { DesktopPlexRuntime } from '../plex/desktopPlexRuntime.js';
 import { createLivePlexStreamResolverComposition } from '../plex/streamResolverComposition.js';
+import type { DesktopSettingsPolicy } from '../settings/desktopSettingsPolicy.js';
+import type { SettingsAudioOutputOwner } from '../settings/settingsAudioOutputOwner.js';
 
 export interface PlaybackRuntimeBootstrapOptions {
   shellMode: ShellMode;
@@ -22,6 +24,8 @@ export interface PlaybackRuntimeBootstrapOptions {
   onEvents: (events: readonly PlayerEvent[]) => void;
   diagnosticEventStore?: DiagnosticEventStore;
   plexRuntime?: DesktopPlexRuntime;
+  settingsPolicy?: Pick<DesktopSettingsPolicy, 'getPreferences' | 'getCapabilityProjection'>;
+  settingsAudioOutputOwner?: Pick<SettingsAudioOutputOwner, 'resolveSelectedOutput'>;
 }
 
 export interface PlaybackRuntimeBootstrapResult {
@@ -39,6 +43,8 @@ export function bootstrapPlaybackRuntime(
     onEvents,
     diagnosticEventStore,
     plexRuntime,
+    settingsPolicy,
+    settingsAudioOutputOwner,
   } = options;
 
   if (shellMode === 'development' || shellMode === 'smoke') {
@@ -156,6 +162,15 @@ export function bootstrapPlaybackRuntime(
     createRequestId,
     onEvents,
     diagnosticEventStore,
+    settingsPreferences: settingsPolicy === undefined
+      ? undefined
+      : () => settingsPolicy.getPreferences(),
+    settingsCapabilities: settingsPolicy === undefined
+      ? undefined
+      : () => settingsPolicy.getCapabilityProjection(),
+    resolveAudioOutput: settingsAudioOutputOwner === undefined
+      ? undefined
+      : (selectedId) => settingsAudioOutputOwner.resolveSelectedOutput(selectedId),
   });
 
   return {
@@ -221,6 +236,8 @@ function createFakeResolver() {
             selectedTrackIds: { video: null, audio: null, subtitle: null },
             selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
             trackMap: { video: [], audio: [], subtitle: [] },
+            audioOutputNativeKey: null,
+            dtsPassthroughEnabled: false,
           },
         },
         decision: {

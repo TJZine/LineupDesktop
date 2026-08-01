@@ -17,6 +17,8 @@ import type {
 import type { PlexConnection } from './discovery/types.js';
 import type { PlexMediaFile, PlexMediaItem, PlexMediaPart, PlexStream } from './library/types.js';
 import { buildPlaybackTrackMap, type PlaybackTrackMap } from './streamTrackMapping.js';
+import type { DesktopPlaybackSettingsPreferences } from '../settings/desktopSettingsPolicy.js';
+import type { DiagnosticEventInput } from '../diagnostics/diagnosticEventStore.js';
 
 export interface PlexStreamResolverSelectedConnectionPort {
   getSelectedConnection(): Promise<PlexConnection | null>;
@@ -44,6 +46,10 @@ export interface PlexStreamResolverPmsSessionPort {
   startSession(input: PlexStreamResolverPmsSessionStartInput): Promise<PlexStreamResolverPmsSessionLease | null>;
 }
 
+export interface PlexStreamResolverSubtitleDiagnosticPort {
+  recordSubtitleDebug(input: DiagnosticEventInput): unknown;
+}
+
 export interface PlexStreamResolverPmsSessionStartInput {
   requestId: PlayerRequestId;
   media: Pick<PlayerMediaSummary, 'id' | 'title'>;
@@ -56,6 +62,7 @@ export interface PlexStreamResolverOptions {
   activeCredential: PlexStreamResolverActiveCredentialPort;
   mediaDetail: PlexStreamResolverMediaDetailPort;
   pmsSession?: PlexStreamResolverPmsSessionPort;
+  subtitleDiagnostics?: PlexStreamResolverSubtitleDiagnosticPort;
 }
 
 export interface PlexStreamResolverInput {
@@ -66,6 +73,7 @@ export interface PlexStreamResolverInput {
   startPositionMs?: number;
   preferredAudioTrackId?: PlayerTrackId | null;
   preferredSubtitleTrackId?: PlayerTrackId | null;
+  settingsPreferences?: DesktopPlaybackSettingsPreferences;
 }
 
 export type PlexStreamResolverResult =
@@ -109,6 +117,8 @@ export interface PlexPrivilegedPlaybackDescriptor {
       subtitle: string | null;
     };
     trackMap: PlaybackTrackMap;
+    audioOutputNativeKey: string | null;
+    dtsPassthroughEnabled: boolean;
   };
 }
 
@@ -117,12 +127,14 @@ export class PlexStreamResolver {
   readonly #activeCredential: PlexStreamResolverActiveCredentialPort;
   readonly #mediaDetail: PlexStreamResolverMediaDetailPort;
   readonly #pmsSession?: PlexStreamResolverPmsSessionPort;
+  readonly #subtitleDiagnostics?: PlexStreamResolverSubtitleDiagnosticPort;
 
   constructor(options: PlexStreamResolverOptions) {
     this.#selectedConnection = options.selectedConnection;
     this.#activeCredential = options.activeCredential;
     this.#mediaDetail = options.mediaDetail;
     this.#pmsSession = options.pmsSession;
+    this.#subtitleDiagnostics = options.subtitleDiagnostics;
   }
 
   async resolve(input: PlexStreamResolverInput): Promise<PlexStreamResolverResult> {
@@ -158,12 +170,58 @@ export class PlexStreamResolver {
       capabilityProfileId: input.capabilityProfile.id,
     });
 
+    const candidatesForPolicy = input.settingsPreferences?.hdrFallbackMode === 'prefer-hdr10'
+      ? [...candidates].sort((left, right) =>
+          dynamicRangePreferenceRank(left.video.dynamicRange) -
+          dynamicRangePreferenceRank(right.video.dynamicRange))
+      : candidates;
     const decision = decideDesktopStreamPolicy({
       capabilityProfile: input.capabilityProfile,
-      candidates,
+      candidates: candidatesForPolicy,
       preferredAudioTrackId: input.preferredAudioTrackId,
       preferredSubtitleTrackId: input.preferredSubtitleTrackId,
+      ...(input.settingsPreferences !== undefined
+        ? {
+            preferences: {
+              directPlayAudioFallbackEnabled:
+                input.settingsPreferences.directPlayAudioFallbackEnabled,
+              subtitleMode: input.settingsPreferences.subtitleMode,
+              preferredSubtitleLanguage:
+                input.settingsPreferences.preferredSubtitleLanguage,
+              preferForcedSubtitlesEnabled:
+                input.settingsPreferences.preferForcedSubtitlesEnabled,
+            },
+          }
+        : {}),
     });
+    try {
+      this.#subtitleDiagnostics?.recordSubtitleDebug({
+        surface: 'main',
+        category: 'playback',
+        severity: 'debug',
+        status: 'observed',
+        operation: 'settings.subtitle-policy',
+        message: 'Subtitle policy evaluation recorded.',
+        result: 'success',
+        context: {
+          candidateCount: Math.min(candidatesForPolicy.length, 999),
+          subtitleTrackCount: Math.min(
+            candidatesForPolicy.reduce(
+              (count, candidate) => count + candidate.subtitleTracks.length,
+              0,
+            ),
+            999,
+          ),
+          subtitleSelected: decision.selectedTrackIds.subtitle !== null,
+          subtitleMode: input.settingsPreferences?.subtitleMode ?? 'unconfigured',
+          decisionKind: decision.kind,
+          reasonCodeCount: Math.min(decision.reasonCodes.length, 999),
+          reasonCodes: decision.reasonCodes.slice(0, 8).join(',') || 'none',
+        },
+      });
+    } catch {
+      // Optional diagnostics must not affect playback settlement.
+    }
 
     if (decision.kind === 'unsupported' || decision.candidateId === null) {
       return this.#failure(
@@ -205,6 +263,7 @@ export class PlexStreamResolver {
       mediaDetail,
       candidate: selected,
       selectedPart: selectedPrivate,
+      settingsPreferences: input.settingsPreferences,
     });
 
     const pmsSession = await this.#startSession(input.requestId, load.media, decision.kind, connection, diagnostics);
@@ -380,11 +439,17 @@ function buildPrivatePlaybackDescriptor(input: {
   mediaDetail: PlexMediaItem;
   candidate: DesktopStreamMediaCandidate;
   selectedPart: PlexMediaPart;
+  settingsPreferences?: DesktopPlaybackSettingsPreferences;
 }): PlexPrivilegedPlaybackDescriptor {
   return {
     requestId: input.requestId,
     decisionKind: input.decision.kind as Exclude<DesktopStreamPolicyDecision['kind'], 'unsupported'>,
-    playbackUrl: buildPlaybackUrl(input.connection, input.decision.kind, input.selectedPart),
+    playbackUrl: buildPlaybackUrl(
+      input.connection,
+      input.decision.kind,
+      input.selectedPart,
+      input.settingsPreferences,
+    ),
     credentialHeader: { ...input.authHeader },
     selectedConnection: projectConnection(input.connection),
     media: { id: toPlayerMediaId(input.mediaDetail), title: input.mediaDetail.title },
@@ -396,6 +461,8 @@ function buildPrivatePlaybackDescriptor(input: {
       selectedTrackIds: input.decision.selectedTrackIds,
       selectedPrivateTrackIds: mapSelectedPrivateTrackIds(input.selectedPart, input.candidate, input.decision),
       trackMap: buildPlaybackTrackMap(input.selectedPart, input.candidate),
+      audioOutputNativeKey: null,
+      dtsPassthroughEnabled: false,
     },
   };
 }
@@ -404,17 +471,33 @@ function buildPlaybackUrl(
   connection: PlexConnection,
   decisionKind: DesktopStreamPolicyDecision['kind'],
   part: PlexMediaPart,
+  preferences?: DesktopPlaybackSettingsPreferences,
 ): string {
   const base = connection.uri.replace(/\/+$/u, '');
   if (decisionKind === 'transcode') {
-    const path = encodeURIComponent(part.key);
-    return `${base}/video/:/transcode/universal/start?path=${path}&protocol=hls`;
+    const parameters = new URLSearchParams({ path: part.key, protocol: 'hls' });
+    if (
+      preferences !== undefined &&
+      !preferences.transcodeCompatibilityModeEnabled &&
+      preferences.transcodeQuality !== 'default'
+    ) {
+      const [videoBitrate, videoResolution] = preferences.transcodeQuality.split('-');
+      parameters.set('videoBitrate', videoBitrate);
+      parameters.set('videoResolution', videoResolution);
+    }
+    return `${base}/video/:/transcode/universal/start?${parameters.toString()}`;
   }
   if (decisionKind === 'direct-stream') {
     const path = encodeURIComponent(part.key);
     return `${base}/video/:/transcode/universal/start?path=${path}&protocol=hls&directStream=1`;
   }
   return `${base}${part.key.startsWith('/') ? part.key : `/${part.key}`}`;
+}
+
+function dynamicRangePreferenceRank(
+  dynamicRange: DesktopStreamDynamicRange | null | undefined,
+): number {
+  return dynamicRange === 'hdr10' ? 0 : 1;
 }
 
 function findSelectedPrivatePart(

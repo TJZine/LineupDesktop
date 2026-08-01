@@ -177,6 +177,8 @@ class FakeResolver implements PlexPlaybackCompositionResolverPort {
           ],
           subtitle: [],
         },
+        audioOutputNativeKey: null,
+        dtsPassthroughEnabled: false,
       },
     },
     load: loadPayload,
@@ -305,6 +307,7 @@ class RejectingPlaybackHost implements NativePlayerHostPort {
   }
 
   async cleanup(): Promise<void> {}
+  async queryAudioOutputs() { return { ok: true as const, outputs: [] }; }
 }
 
 async function waitFor(
@@ -401,6 +404,8 @@ class DeferredStopNativePlayerHost implements NativePlayerHostPort {
   async cleanup(requestId: string | null): Promise<void> {
     this.cleanupRequestIds.push(requestId);
   }
+
+  async queryAudioOutputs() { return { ok: true as const, outputs: [] }; }
 
   resolveStop(): void {
     this.#resolveStop({ ok: true });

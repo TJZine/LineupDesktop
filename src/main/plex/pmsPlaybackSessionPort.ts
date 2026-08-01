@@ -11,6 +11,7 @@ import type {
 } from '../player/plexPlaybackRuntime.js';
 import type { PlexConnection } from './discovery/types.js';
 import type { LivePlexLibraryTransport } from './livePlexTransport.js';
+import { isPlexAuthenticationUnavailableError } from './livePlexTransportError.js';
 
 export interface PmsPlaybackSessionRuntimePort {
   getLibraryTransport(): Pick<LivePlexLibraryTransport, 'stopTranscodeSession'>;
@@ -47,8 +48,11 @@ export class PmsPlaybackSessionPort
     let token: string;
     try {
       token = await this.#runtime.withActivePlexToken('startPlayback', async (activeToken) => activeToken);
-    } catch {
-      return null;
+    } catch (error) {
+      if (isPlexAuthenticationUnavailableError(error)) {
+        return null;
+      }
+      throw error;
     }
 
     if (this.#activeSessions.has(input.requestId)) {

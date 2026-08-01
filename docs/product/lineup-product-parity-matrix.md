@@ -1,6 +1,8 @@
 # Lineup WebOS to Desktop Master Parity Matrix
 
 Last audited: 2026-07-28
+Execution authority updated: 2026-07-29. This sequencing update does not repeat
+or replace the accepted one-by-one audit.
 
 This is the single authoritative feature and UI parity ledger for the Windows
 Desktop port. It replaces the former 14-row RD-21 summary, which was too coarse
@@ -18,6 +20,20 @@ file owns the one-by-one parity disposition.
   `60c68f4`, Package 2A at `8dc1057`, and Package 2B at `d2f1e97`. The upstream
   audited code pin remains
   `0258dbe15b04d2d141d0a4a44575fecb5bb72d41`.
+- Current WS3 product checkpoints are Unit 3A `81bc0b7`, Unit 3A-R `e8445e5`,
+  Unit 3B `11dd704`, Unit 3C `1540de3`, viewport repair `77d09ad`, and final
+  closeout repair `5f368d4`, and final focus repair `87662b5`. The controller's first local
+  viewport inspection found a material narrow-viewport Recovery/Switch Profile
+  rail defect. Reviewed repair `77d09ad` passes focused/full proof, clean
+  re-review, and repeated inspection. This targeted reconciliation does
+  not constitute a new program audit or close any proof-dependent row. Unit
+  3C-D adds production fixed-schema ST-24/ST-25 diagnostic producers and
+  locally proved honest missing-output presentation; Windows support-bundle,
+  subtitle, audio disappearance/relaunch, and application proof remain open.
+- Test-only proof checkpoint `f0e2817` aligns the smoke harness with Unit 3B's
+  shared production-host wiring and restores full verification. It does not
+  change the final WS3 product source (`87662b5`), capability state, visual
+  evidence, ownership, or any stable-ID classification.
 - The existing visual bundle was initially captured against upstream
   `6ef20801019e1d1aae2a0158128eba9142d0d008`. Later target/freshness evidence
   used `196a54765c0c6f782ef78c52382de92f1ca1bfd2` for Package 1,
@@ -75,11 +91,12 @@ are:
    unsupported, even though policy/tests and parts of the native helper model
    richer behavior. Windows observation is necessary, but it cannot close this
    code-level capability gap by itself.
-3. **P1 — Settings parity is substantially incomplete.** Upstream exposes more
-   than twenty playback, audio, subtitle, guide, appearance, account, and
-   developer preferences. Desktop persists four values: launch mode, one guide
-   density choice, preview badges, and setup reminder, plus a support-bundle
-   action.
+3. **P1 — Settings implementation has landed but WS3 remains open.** Desktop
+   now persists the version-2 Settings vocabulary and renders seven categories,
+   first-run audio setup, and persistent Switch Profile. WS5 Guide consumers,
+   native/live media behavior, artwork, current-upstream paired visuals,
+   Windows recovery, and paired proof remain open; conservative
+   capability-disabled controls are not support claims.
 4. **P1 — Input/player-control parity is incomplete.** Desktop handles
    navigation, Guide, Settings, Info, digits, fullscreen, and Space play/pause,
    but does not route upstream-style media play/pause, rewind, fast-forward, or
@@ -111,11 +128,11 @@ Evidence: upstream `src/core/initialization/**`, `src/modules/plex/auth/**`,
 | ON-05 | Restore encrypted credentials on relaunch | `live-local` | `partial` | Windows safeStorage/relaunch observation remains required. | P1 |
 | ON-06 | List Plex Home profiles | `live-local` | `local-match` | Current-upstream and live Windows list/focus proof required. | P1 |
 | ON-07 | Protected profile PIN entry and failure | `live-local` | `local-match` | Prove keypad/text input, failure recovery, and stale completion on Windows. | P1 |
-| ON-08 | Switch Plex Home profile | `live-local` | `partial` | Runtime exists; upstream Settings exposes a persistent Switch Profile affordance that Desktop Settings lacks. | P1 |
+| ON-08 | Switch Plex Home profile | `live-local` | `partial` | WS3 added and locally verified the persistent Settings affordance; WS8 still owns live/profile-switch lifecycle proof and `ON-08` closure. | P1 |
 | ON-09 | Discover and refresh Plex servers | `live-local` | `local-match` | Live LAN/remote/empty/error Windows matrix required. | P1 |
 | ON-10 | Select server and persist/restore selection | `live-local` | `local-match` | Prove relaunch, unavailable saved server, and recovery on Windows. | P1 |
 | ON-11 | Clear/forget selected server and rerun selection | `partial` | `partial` | Renderer can clear selected state, but no equivalent persisted Forget Server product operation was found. | P1 |
-| ON-12 | First-run audio output setup | `missing` | `missing` | Replace Web Audio sink selection with a Windows/libmpv audio-device design; do not silently omit the journey. | P2 |
+| ON-12 | First-run audio output setup | `partial` | `missing` | First-run System Default, safe opaque-row flow, and injected missing-row fallback presentation landed; real Windows enumeration/disappearance/relaunch/application and paired visual proof remain `WS3-PROOF-01`/`WS3-PROOF-06`. | P2 |
 | ON-13 | First-run automatically proceeds into Channel Builder | `live-local` | `partial` | First-run navigation reaches the implemented builder; current paired visual, live-breadth, manual Windows, packaged ACL, and other WS1 closure proof remain open. | P0 |
 | ON-14 | Initialization cancellation/currentness and stale-result containment | `live-local` | `not-a-visual-row` | Local tests exist; prove visible recovery under live network churn. | P2 |
 | ON-15 | Distinct account and selected-server resource credentials | `partial` | `not-a-visual-row` | Desktop securely stores an account credential and a selected-server summary, but no separate refreshable resource-credential owner was found. | P1 |
@@ -277,9 +294,9 @@ player contracts/tests, and Windows spike evidence.
 | PB-19 | Audio track list and selection | `partial` | `local-match` | UI/helper paths remain, but switching is unsupported; observation or promotion remains `WS2-POST-VALIDATION-01`. | P0 |
 | PB-20 | Subtitle off/list/selection | `partial` | `local-match` | Delivery remains `none` and switching unsupported; observation or promotion remains `WS2-POST-VALIDATION-01`. | P0 |
 | PB-21 | Subtitle direct/extract/burn-in fallback pipeline | `partial` | `partial` | Policy paths remain, but conversion/transcode are unsupported; representative native samples remain `WS2-POST-VALIDATION-01`. | P0 |
-| PB-22 | Forced/default/preferred-language subtitle auto-selection | `partial` | `partial` | WS2's policy contribution remains; preferred-language Settings/control integration remains WS3, with native proof in `WS2-POST-VALIDATION-01`. | P1 |
-| PB-23 | Audio fallback and DTS passthrough | `partial` | `missing` | WS2's fallback contribution remains; DTS/user controls remain WS3, with native proof in `WS2-POST-VALIDATION-01`. | P1 |
-| PB-24 | HDR10/HLG/Dolby Vision detection and fallback | `partial` | `partial` | WS2's metadata/policy/helper contribution remains; HDR/Dolby Vision controls remain WS3, with native proof in `WS2-POST-VALIDATION-01`. | P0 |
+| PB-22 | Forced/default/preferred-language subtitle auto-selection | `partial` | `partial` | WS2 remains the owner; WS3's preference/control contribution landed, while native/live proof remains `WS2-POST-VALIDATION-01` plus `WS3-PROOF-02`. | P1 |
+| PB-23 | Audio fallback and DTS passthrough | `partial` | `partial` | WS2 remains the owner; WS3's fallback/DTS preference-control contribution landed, while native/live proof remains `WS2-POST-VALIDATION-01` plus `WS3-PROOF-02`. | P1 |
+| PB-24 | HDR10/HLG/Dolby Vision detection and fallback | `partial` | `partial` | WS2 remains the owner; WS3's HDR preference/control contribution landed without capability promotion, while native/live proof remains `WS2-POST-VALIDATION-01` plus `WS3-PROOF-02`. | P0 |
 | PB-25 | Sleep timer cycles, countdown, expiry, and stop | `missing` | `missing` | Implement or explicitly obtain product approval to diverge. | P1 |
 | PB-26 | Keepalive and long-playback continuity | `proof-only` | `not-a-visual-row` | Real long-playback soak remains missing. | P1 |
 | PB-27 | Sleep/wake recovery | `missing` | `not-a-visual-row` | Add Windows power lifecycle design and proof. | P1 |
@@ -294,36 +311,36 @@ Evidence: upstream `src/modules/ui/settings/SettingsScreenStateController.ts`,
 
 | ID | Upstream setting/capability | Desktop status | Visual status | Gap / acceptance needed | Priority |
 | --- | --- | --- | --- | --- | --- |
-| ST-01 | Two-pane category rail/detail navigation | `partial` | `local-match` | Desktop has three different categories, not upstream's five-category product surface. | P1 |
-| ST-02 | DTS Passthrough | `missing` | `missing` | Add only with proven native audio path/capability. | P1 |
-| ST-03 | Direct Play Audio Fallback | `missing` | `missing` | Connect to stream policy and persistence. | P1 |
-| ST-04 | Subtitle Mode: Off/Direct/Standard/Full | `missing` | `missing` | Required to make PB-21 user-controllable. | P0 |
-| ST-05 | Preferred Subtitle Language | `missing` | `missing` | Auth metadata exists, but no Desktop preference or selection consumer. | P1 |
-| ST-06 | Prefer Forced Subtitles | `missing` | `missing` | Policy has forced behavior but no user preference. | P1 |
-| ST-07 | Keep Playback Running in Settings | `missing` | `missing` | Define native-video/overlay behavior and persist it. | P2 |
-| ST-08 | HDR Fallback: Off/Prefer HDR10/Force HLS | `missing` | `missing` | Required to expose PB-24 behavior safely. | P0 |
-| ST-09 | Transcode Quality | `missing` | `missing` | Add resolver/transcode parameter consumption and persistence. | P1 |
-| ST-10 | Transcode Compatibility Mode | `missing` | `missing` | Add only with live Plex proof and safe diagnostics. | P2 |
-| ST-11 | Library Tabs | `missing` | `missing` | Required for EPG-08. | P1 |
-| ST-12 | Now Watching Banner | `missing` | `missing` | Banner exists; preference is absent. | P1 |
-| ST-13 | Aggressive Guide Preload | `missing` | `missing` | Requires EPG virtualization/preload design. | P2 |
-| ST-14 | Guide Density: Detailed 2h/Wide 3h | `partial` | `local-match` | Desktop comfortable/compact controls row density, not the upstream time window. | P1 |
-| ST-15 | Guide Layout: Overlay/Classic PIP | `missing` | `missing` | Required for EPG-10. | P1 |
-| ST-16 | Past Items window | `missing` | `missing` | Required for EPG-12. | P2 |
-| ST-17 | Info Box Background | `missing` | `missing` | Add with artwork-safe presentation design. | P2 |
-| ST-18 | Theme selection | `missing` | `partial` | Desktop has fixed styling/theme hooks, not a persisted user choice. | P2 |
-| ST-19 | Cinematic Now Playing | `missing` | `missing` | Add only with safe artwork and current player metadata. | P2 |
-| ST-20 | Use Clear Logos | `missing` | `missing` | Requires safe logo artwork projection. | P2 |
-| ST-21 | Now Playing Auto-Hide / Persistent | `missing` | `missing` | Desktop timers are fixed rather than user-configurable. | P2 |
-| ST-22 | Show Profile Picker on Startup | `missing` | `missing` | Profile switching exists, but preference/startup consumption is absent. | P1 |
-| ST-23 | Switch Profile action below category rail | `missing` | `missing` | Route to existing safe profile flow. | P1 |
-| ST-24 | Debug Logging | `missing` | `missing` | Desktop diagnostics exist, but not this user preference. | P2 |
-| ST-25 | Subtitle Debug Logging | `missing` | `missing` | Add only with redacted logs and track diagnostics. | P2 |
-| ST-26 | Desktop launch mode: windowed/fullscreen | `desktop-addition` | `desktop-specific` | Persisted and consumed; Windows proof remains. | P2 |
-| ST-27 | Preview badges | `desktop-addition` | `desktop-specific` | Verify every claimed consumer; do not count as upstream Appearance parity. | P3 |
-| ST-28 | Setup reminder and recovery summary | `desktop-addition` | `desktop-specific` | Useful Desktop recovery affordance. | P2 |
-| ST-29 | Support bundle export | `desktop-addition` | `desktop-specific` | Windows UI/export/redaction proof remains. | P1 |
-| ST-30 | Persistence failure, revision conflict, corrupt/unsupported recovery | `live-local` | `partial` | Local tests/relaunch proof exist; Windows product observation remains. | P1 |
+| ST-01 | Two-pane category rail/detail navigation | `live-local` | `partial` | Seven-category rail/detail, viewport repair `77d09ad`, and final enabled-detail focus repair `87662b5` pass local visibility/focus proof; current-upstream paired proof remains `WS3-PROOF-06`. | P1 |
+| ST-02 | DTS Passthrough | `partial` | `partial` | Contract, persistence, capability-disabled control, and private setup contribution landed; native support/application remains `WS3-PROOF-02`, and `PB-23` stays WS2-owned/open. | P1 |
+| ST-03 | Direct Play Audio Fallback | `partial` | `partial` | Persisted control and stream-policy consumption landed; representative native/live effect remains `WS3-PROOF-02`, and `PB-23` stays WS2-owned/open. | P1 |
+| ST-04 | Subtitle Mode: Off/Direct/Standard/Full | `partial` | `partial` | Persisted control and policy input landed without promoting subtitle delivery; live/native behavior remains `WS3-PROOF-02`. | P0 |
+| ST-05 | Preferred Subtitle Language | `partial` | `partial` | Persisted allowlisted preference and selection-policy contribution landed; representative media proof remains `WS3-PROOF-02`. | P1 |
+| ST-06 | Prefer Forced Subtitles | `partial` | `partial` | Persisted control and automatic-selection filtering landed; native/live subtitle proof remains `WS3-PROOF-02`. | P1 |
+| ST-07 | Keep Playback Running in Settings | `live-local` | `partial` | Request-bound renderer pause/resume and persistence landed; paired visual and Windows native-video continuity remain `WS3-PROOF-06`. | P2 |
+| ST-08 | HDR Fallback: Off/Prefer HDR10/Force HLS | `partial` | `partial` | Persisted capability-disabled control and resolver input landed without promoting HDR/transcode; `WS3-PROOF-02` and WS2-owned `PB-24` remain open. | P0 |
+| ST-09 | Transcode Quality | `partial` | `partial` | Persisted closed quality values and resolver projection landed only for already-authorized transcode; live proof remains `WS3-PROOF-02`. | P1 |
+| ST-10 | Transcode Compatibility Mode | `partial` | `partial` | Persisted capability-disabled control and resolver projection landed; live transcode and safe diagnostic proof remain `WS3-PROOF-02`. | P2 |
+| ST-11 | Library Tabs | `partial` | `partial` | Contract, migration, persistence, and control landed; real Guide consumption remains `WS3-CONTRIBUTION-WS5`. | P1 |
+| ST-12 | Now Watching Banner | `partial` | `partial` | Contract, migration, persistence, and control landed; real Guide consumption remains `WS3-CONTRIBUTION-WS5`. | P1 |
+| ST-13 | Aggressive Guide Preload | `partial` | `partial` | Contract, migration, persistence, and control landed; virtualization/preload consumption remains `WS3-CONTRIBUTION-WS5`. | P2 |
+| ST-14 | Guide Density: Detailed 2h/Wide 3h | `partial` | `partial` | Persisted Detailed/Wide control landed; actual Guide time-window consumption remains `WS3-CONTRIBUTION-WS5`. | P1 |
+| ST-15 | Guide Layout: Overlay/Classic PIP | `partial` | `partial` | Contract, migration, persistence, and control landed; Guide layout consumption remains `WS3-CONTRIBUTION-WS5`. | P1 |
+| ST-16 | Past Items window | `partial` | `partial` | Contract, migration, persistence, and control landed; Guide past-window consumption remains `WS3-CONTRIBUTION-WS5`. | P2 |
+| ST-17 | Info Box Background | `partial` | `partial` | Control and persistence landed with artwork choices honestly disabled; safe artwork enablement/live proof remains `WS3-PROOF-03`. | P2 |
+| ST-18 | Theme selection | `live-local` | `partial` | Five persisted renderer themes landed; current-upstream paired viewport, reduced-motion, and forced-colors proof remains `WS3-PROOF-06`. | P2 |
+| ST-19 | Cinematic Now Playing | `partial` | `partial` | Persisted control is visible but disabled without safe artwork; enablement/live proof remains `WS3-PROOF-03`. | P2 |
+| ST-20 | Use Clear Logos | `partial` | `partial` | Persisted control is visible but disabled without safe logo projection; enablement/live proof remains `WS3-PROOF-03`. | P2 |
+| ST-21 | Now Playing Auto-Hide / Persistent | `live-local` | `partial` | Closed persisted durations including Persistent now drive renderer overlay timers; paired/native-video proof remains `WS3-PROOF-06`. | P2 |
+| ST-22 | Show Profile Picker on Startup | `live-local` | `partial` | Once-per-launch renderer consumption landed; live profile lifecycle contribution remains `WS3-CONTRIBUTION-WS8`. | P1 |
+| ST-23 | Switch Profile action below category rail | `live-local` | `partial` | Persistent safe profile action and reviewed viewport visibility/focus repair landed; WS8 still owns live lifecycle contribution to `ON-08`. | P1 |
+| ST-24 | Debug Logging | `live-local` | `partial` | Persisted control now gates a production fixed-schema Settings producer; paired/Windows support proof remains in the WS3 packet. | P2 |
+| ST-25 | Subtitle Debug Logging | `partial` | `partial` | Persisted control now gates a production fixed-schema subtitle-policy producer; Windows subtitle/support-bundle redaction proof remains `WS3-PROOF-04`. | P2 |
+| ST-26 | Desktop launch mode: windowed/fullscreen | `desktop-addition` | `desktop-specific` | Persisted and consumed; Windows relaunch observation remains `WS3-PROOF-05`. | P2 |
+| ST-27 | Preview badges | `desktop-addition` | `desktop-specific` | Persisted value and existing consumers retained; do not count as upstream Appearance parity. | P3 |
+| ST-28 | Setup reminder and recovery summary | `desktop-addition` | `desktop-specific` | Persisted value and product recovery summary retained; current paired Recovery proof remains open. | P2 |
+| ST-29 | Support bundle export | `desktop-addition` | `desktop-specific` | Existing action remains renderer-safe; Windows UI/export/redaction proof remains `WS3-PROOF-04`. | P1 |
+| ST-30 | Persistence failure, revision conflict, corrupt/unsupported recovery | `live-local` | `partial` | Version-2 migration/conflict/failure tests landed; Windows ACL/temp/relaunch/product recovery remains `WS3-PROOF-05`. | P1 |
 
 ## 8. Navigation, focus, lifecycle, accessibility, and packaging
 
@@ -410,7 +427,7 @@ a matching shell screenshot from closing missing controls or runtime behavior.
 | UI-11 | `profile-pin` / Profile PIN modal | `live-local` | `local-match` | `reference:profile-pin` / `capture:profile-pin` | ON-07 |
 | UI-12 | `server-select` / Server selection | `live-local` | `local-match` | `reference:server-select` / `capture:server-select` | ON-09, ON-10 |
 | UI-13 | `server-error` / Server error | `partial` | `local-match` | `reference:server-error` / `capture:server-error` | ON-11, ON-16–ON-18 |
-| UI-14 | `audio-setup` / Audio setup | `missing` | `missing` | `reference:audio-setup` / `capture:audio-setup` (omission target) | ON-12, WIN-02 |
+| UI-14 | `audio-setup` / Audio setup | `partial` | `partial` | First-run safe System Default/opaque-output and injected unavailable-saved-output surface landed; `WS3-PROOF-01` real Windows journey and `WS3-PROOF-06` paired visual remain open. | ON-12, WIN-02 |
 | UI-15 | `setup-account` / Desktop account stage | `desktop-addition` | `desktop-specific` | `reference:setup-account` / `capture:setup-account` | ON-02–ON-08 |
 | UI-16 | `setup-server` / Desktop server stage | `desktop-addition` | `desktop-specific` | `reference:setup-server` / `capture:setup-server` | ON-09–ON-11 |
 | UI-17 | `setup-library` / Library selection | `live-local` | `partial` | WS1 UI landed; current paired visual manifest remains open. | LIB-01, CB-01–CB-02 |
@@ -424,13 +441,13 @@ a matching shell screenshot from closing missing controls or runtime behavior.
 | UI-25 | `custom-list` / Custom channel list | `desktop-addition` | `desktop-specific` | `reference:custom-list` / `capture:custom-list` | CC-01, CC-04, CC-06–CC-07 |
 | UI-26 | `custom-edit` / Custom channel editor | `partial` | `desktop-specific` | `reference:custom-edit` / `capture:custom-edit` | CC-02–CC-03, CC-08–CC-09 |
 | UI-27 | `custom-delete-confirm` / Delete confirmation | `desktop-addition` | `desktop-specific` | `reference:custom-delete-confirm` / `capture:custom-delete-confirm` | CC-06 |
-| UI-28 | `settings-audio-subtitles` / Audio & subtitles | `missing` | `missing` | `reference:settings-audio-subtitles` / `capture:settings-audio-subtitles` (omission target) | ST-02–ST-06 |
-| UI-29 | `settings-playback-hdr` / Playback & HDR | `missing` | `missing` | `reference:settings-playback-hdr` / `capture:settings-playback-hdr` (omission target) | ST-07–ST-10 |
-| UI-30 | `settings-appearance` / Appearance | `partial` | `local-match` | `reference:settings-appearance` / `capture:settings-appearance` | ST-17–ST-21, ST-26–ST-27 |
-| UI-31 | `settings-account` / Account | `missing` | `missing` | `reference:settings-account` / `capture:settings-account` (omission target) | ST-22–ST-23 |
-| UI-32 | `settings-developer` / Developer | `partial` | `desktop-specific` | `reference:settings-developer` / `capture:settings-developer` | ST-24–ST-25, ST-29 |
-| UI-33 | `settings-guide` / Guide | `partial` | `local-match` | `reference:settings-guide` / `capture:settings-guide` | ST-11–ST-16 |
-| UI-34 | `settings-recovery` / Recovery | `desktop-addition` | `desktop-specific` | `reference:settings-recovery` / `capture:settings-recovery` | ST-28, ST-30 |
+| UI-28 | `settings-audio-subtitles` / Audio & subtitles | `partial` | `partial` | Honest capability-gated surface landed; native/live effects and current-upstream paired visual remain `WS3-PROOF-02`/`WS3-PROOF-06`. | ST-02–ST-06 |
+| UI-29 | `settings-playback-hdr` / Playback & HDR | `partial` | `partial` | Persisted controls and guarded lifecycle landed without capability promotion; native/live and paired proof remain `WS3-PROOF-02`/`WS3-PROOF-06`. | ST-07–ST-10 |
+| UI-30 | `settings-appearance` / Appearance | `partial` | `partial` | Theme/timer controls landed while artwork choices remain disabled; artwork and paired proof remain `WS3-PROOF-03`/`WS3-PROOF-06`. | ST-17–ST-21, ST-26–ST-27 |
+| UI-31 | `settings-account` / Account | `live-local` | `partial` | Startup preference and persistent Switch Profile pass local viewport/focus proof; WS8 live lifecycle and current-upstream paired visual proof remain open. | ST-22–ST-23 |
+| UI-32 | `settings-developer` / Developer | `partial` | `partial` | Fixed-schema debug controls and safe export action landed; Windows redaction and paired proof remain `WS3-PROOF-04`/`WS3-PROOF-06`. | ST-24–ST-25, ST-29 |
+| UI-33 | `settings-guide` / Guide | `partial` | `partial` | Values/controls landed; WS5 Guide consumers and current-upstream paired proof remain open. | ST-11–ST-16 |
+| UI-34 | `settings-recovery` / Recovery | `desktop-addition` | `desktop-specific` | Recovery/additive controls and local Switch Profile visibility pass; Windows recovery and paired proof remain open. | ST-28, ST-30 |
 | UI-35 | `guide-loading` / Guide loading | `desktop-addition` | `desktop-specific` | `reference:guide-loading` / `capture:guide-loading` | EPG-14 |
 | UI-36 | `guide-ready` / Guide schedule | `partial` | `local-match` | `reference:guide-ready` / `capture:guide-ready` | EPG-01–EPG-13 |
 | UI-37 | `guide-empty-channels` / No channels | `live-local` | `local-match` | `reference:guide-empty-channels` / `capture:guide-empty-channels` | EPG-14 |
@@ -477,7 +494,7 @@ product opportunities.
 | ID | Native gain | Current state | Required next proof/design |
 | --- | --- | --- | --- |
 | WIN-01 | libmpv codec/container breadth and hardware decoding | `partial` | Conservative profile unchanged; capability observation or promotion remains `WS2-POST-VALIDATION-01`. |
-| WIN-02 | Native audio-device selection | `missing` | Use a main/helper-owned device list and replace upstream Web Audio setup with a Windows-appropriate first-run/settings flow. |
+| WIN-02 | Native audio-device selection | `partial` | Main/helper-owned query/application, opaque renderer rows, and injected missing-row fallback presentation landed; real Windows enumeration, disappearance/relaunch, fallback observation, and playback application remain `WS3-PROOF-01`. |
 | WIN-03 | Windows media keys / System Media Transport Controls | `missing` | Route play/pause/seek/stop without global-secret or focus-boundary leakage. |
 | WIN-04 | Power request while playing plus sleep/resume recovery | `missing` | Add explicit main-owned lifecycle, cleanup, diagnostics, and soak proof. |
 | WIN-05 | Multi-monitor/DPI/fullscreen restore | `partial` | Existing window controller needs production native-video observation across displays/scales. |
@@ -495,14 +512,22 @@ product opportunities.
    implementation gate is closed at published `d2f1e97`; Package 2D made no
    capability edit, and `WS2-POST-VALIDATION-01` carries nonblocking
    Windows/native proof without promoting support.
-3. **WS3 through WS9:** not started or authorized by WS2 closeout. WS3 is only
-   the next unopened freshness-planning target. Their Settings, input/overlay, Guide,
-   fresh UI, credential/lifecycle, package/soak, and remaining ordered scopes
-   retain their current conservative rows until separately entered.
-4. **RD-27/RD-28:** remain later. RD-27 waits for WS1–WS8 plus WS9 prerequisite
-   hardening and a refreshed Windows proof plan; RD-28 follows RD-27
-   observation. Windows observation cannot implement or waive missing product
-   behavior.
+3. **WS3 through WS9:** proceed in order through complete Tier 3 quality loops.
+   WS3's final product source is `87662b5`; `5f368d4` is prior Unit 3C-D,
+   `77d09ad` the viewport repair, and `f0e2817` test-only harness proof. WS4
+   targeted scope-load/planning is active after accepted Unit 3D, while
+   product/test/package/config edits require its own decision-complete plan and
+   fresh approval of an exact first unit; WS5–WS9 remain unopened.
+   Each entry reuses this accepted audit and validates only
+   its assigned rows, affected owners, and direct dependencies. Do not repeat
+   the 227-row audit or recompute unrelated rows at every workstream.
+4. **Consolidated platform proof and final audit:** Windows/native/manual/live/
+   package evidence may remain explicitly proof-open while WS3–WS8 and WS9
+   prerequisite implementation/hardening advance through local review and
+   verification. Afterward, one consolidated campaign runs accumulated proof,
+   RD-27 observation/soak, RD-28 package lifecycle, and the final 227-row
+   program audit. Windows observation cannot implement or waive missing product
+   behavior, and absent proof cannot advance a row.
 
 ## 13. Maintenance gate
 

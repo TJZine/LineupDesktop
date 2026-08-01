@@ -1,10 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DEFAULT_DESKTOP_SETTINGS_VALUES, desktopSettingsFailure, desktopSettingsSuccess } from '../../contracts/settings.js';
+import {
+  CONSERVATIVE_DESKTOP_SETTINGS_CAPABILITIES,
+  DEFAULT_DESKTOP_SETTINGS_VALUES,
+  createDesktopSettingsView,
+  desktopSettingsFailure,
+  desktopSettingsSuccess,
+  normalizeDesktopSettingsReplaceValues,
+} from '../../contracts/settings.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import { createSettingsRuntime, type SettingsRuntimeState } from '../../renderer/settings/settingsRuntime.js';
 import { deferred } from '../helpers/deferred.js';
+
+const getAudioOutputs: LineupDesktopPreloadApi['settings']['getAudioOutputs'] =
+  async ({ requestId }) => desktopSettingsSuccess(requestId, {
+    status: 'unavailable',
+    reason: 'platform-unsupported',
+    outputs: [{ kind: 'system-default', id: 'system-default', label: 'System default' }],
+  });
 
 test('settings runtime loads before presentation, applies launch intent, and persists whole snapshots', async () => {
   const replaceInputs: unknown[] = [];
@@ -12,10 +26,14 @@ test('settings runtime loads before presentation, applies launch intent, and per
   const states: SettingsRuntimeState[] = [];
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(4, { launchMode: 'fullscreen' })),
       replace: async (input) => {
         replaceInputs.push(input);
-        return desktopSettingsSuccess(input.requestId, { schemaVersion: 1, revision: 5, status: 'ready', values: input.values });
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          5,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: windowBridge(fullscreen),
@@ -23,12 +41,35 @@ test('settings runtime loads before presentation, applies launch intent, and per
   });
   await runtime.initialize();
   assert.deepEqual(fullscreen, [true]);
-  await runtime.applyAction('cycleGuideDensity');
+  await runtime.applyAction('toggleKeepPlaybackRunning');
   assert.deepEqual(replaceInputs[0], {
     requestId: 'settings-replace-1', expectedRevision: 4,
-    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, launchMode: 'fullscreen', guideDensity: 'compact' },
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, launchMode: 'fullscreen', keepPlaybackRunningInSettings: true },
   });
   assert.equal(states.at(-1)?.snapshot?.revision, 5);
+  assert.deepEqual(states.at(-1)?.capabilities, CONSERVATIVE_DESKTOP_SETTINGS_CAPABILITIES);
+});
+
+test('settings runtime refuses capability-gated and pending Guide mutations', async () => {
+  let replacements = 0;
+  const runtime = createSettingsRuntime({
+    settings: {
+      getAudioOutputs,
+      getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
+      replace: async (input) => {
+        replacements += 1;
+        return desktopSettingsSuccess(input.requestId, snapshot(2));
+      },
+    },
+    windowBridge: windowBridge([]),
+    onStateChanged: () => undefined,
+  });
+  await runtime.initialize();
+  await runtime.applyAction('toggleDtsPassthrough');
+  await runtime.applyAction('cycleGuideDensity');
+  assert.equal(replacements, 0);
+  assert.equal(runtime.getState().values.dtsPassthroughEnabled, false);
+  assert.equal(runtime.getState().values.guideDensity, 'comfortable');
 });
 
 test('settings runtime serializes a user launch change behind pending startup fullscreen', async () => {
@@ -37,22 +78,22 @@ test('settings runtime serializes a user launch change behind pending startup fu
   const windowedCorrection = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['window']['setFullscreen']>>>();
   const correctionCalled = deferred<void>();
   const fullscreenCalls: boolean[] = [];
-  const replacements: Array<{
-    requestId: string;
-    expectedRevision: number;
-    values: typeof DEFAULT_DESKTOP_SETTINGS_VALUES;
-  }> = [];
+  const replacements: Array<Parameters<LineupDesktopPreloadApi['settings']['replace']>[0]> = [];
   let activeIntents = 0;
   let maximumActiveIntents = 0;
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(
         requestId,
         snapshot(3, { launchMode: 'fullscreen' }),
       ),
       replace: async (input) => {
         replacements.push(input);
-        return desktopSettingsSuccess(input.requestId, snapshot(4, input.values));
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          4,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: {
@@ -109,23 +150,27 @@ test('settings runtime coalesces latest desired values and rebases once after re
   let gets = 0;
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, gets++ === 0 ? snapshot(1) : snapshot(8)),
       replace: async (input) => {
         inputs.push(input);
         if (inputs.length === 1) return first.promise;
-        return desktopSettingsSuccess(input.requestId, { schemaVersion: 1, revision: 9, status: 'ready', values: input.values });
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          9,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: windowBridge([]), onStateChanged: () => undefined,
   });
   await runtime.initialize();
-  const compact = runtime.applyAction('cycleGuideDensity');
+  const compact = runtime.applyAction('toggleKeepPlaybackRunning');
   const hidden = runtime.applyAction('togglePreviewBadges');
   first.resolve(desktopSettingsFailure('settings-replace-1', 'revision-conflict'));
   await Promise.all([compact, hidden]);
   assert.equal(inputs.length, 2);
   assert.equal(inputs[1]?.expectedRevision, 8);
-  assert.equal(inputs[1]?.values.guideDensity, 'compact');
+  assert.equal(inputs[1]?.values.keepPlaybackRunningInSettings, true);
   assert.equal(inputs[1]?.values.previewBadgesEnabled, false);
 });
 
@@ -141,6 +186,7 @@ test('settings runtime synchronizes a rebased launch mode before retrying persis
   let gets = 0;
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(
         requestId,
         gets++ === 0 ? snapshot(1) : snapshot(8),
@@ -148,7 +194,10 @@ test('settings runtime synchronizes a rebased launch mode before retrying persis
       replace: async (input) => {
         inputs.push(input);
         if (inputs.length === 1) return firstReplace.promise;
-        return desktopSettingsSuccess(input.requestId, snapshot(9, input.values));
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          9,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: {
@@ -163,7 +212,7 @@ test('settings runtime synchronizes a rebased launch mode before retrying persis
   });
 
   await runtime.initialize();
-  const density = runtime.applyAction('cycleGuideDensity');
+  const density = runtime.applyAction('toggleKeepPlaybackRunning');
   const launch = runtime.applyAction('cycleLaunchMode');
   firstReplace.resolve(desktopSettingsFailure('settings-replace-1', 'revision-conflict'));
   await fullscreenRetryCalled.promise;
@@ -177,18 +226,22 @@ test('settings runtime synchronizes a rebased launch mode before retrying persis
   assert.equal(inputs.length, 2);
   assert.equal(inputs[1]?.expectedRevision, 8);
   assert.equal(inputs[1]?.values.launchMode, 'fullscreen');
-  assert.equal(inputs[1]?.values.guideDensity, 'compact');
+  assert.equal(inputs[1]?.values.keepPlaybackRunningInSettings, true);
 });
 
 test('settings runtime keeps newer whole-snapshot intent behind pending fullscreen', async () => {
   const fullscreen = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['window']['setFullscreen']>>>();
-  const inputs: Array<{ values: typeof DEFAULT_DESKTOP_SETTINGS_VALUES }> = [];
+  const inputs: Array<Parameters<LineupDesktopPreloadApi['settings']['replace']>[0]> = [];
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         inputs.push(input);
-        return desktopSettingsSuccess(input.requestId, { schemaVersion: 1, revision: 2, status: 'ready', values: input.values });
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          2,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: { setFullscreen: async (enabled) => enabled
@@ -213,6 +266,7 @@ test('settings runtime rolls optimistic values and fullscreen intent back on sav
   const fullscreen: boolean[] = [];
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(2)),
       replace: async (input) => desktopSettingsFailure(input.requestId, 'operation-failed'),
     },
@@ -229,7 +283,7 @@ test('settings runtime cleanup invalidates late responses without rendering', as
   const pending = deferred<ReturnType<typeof desktopSettingsSuccess<ReturnType<typeof snapshot>>>>();
   const states: SettingsRuntimeState[] = [];
   const runtime = createSettingsRuntime({
-    settings: { getSnapshot: async () => pending.promise, replace: async (input) => desktopSettingsFailure(input.requestId, 'operation-failed') },
+    settings: { getAudioOutputs, getSnapshot: async () => pending.promise, replace: async (input) => desktopSettingsFailure(input.requestId, 'operation-failed') },
     windowBridge: windowBridge([]), onStateChanged: (state) => states.push(state),
   });
   const initializing = runtime.initialize();
@@ -247,10 +301,14 @@ test('settings runtime cleanup invalidates a late fullscreen consumer continuati
   let replacements = 0;
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         replacements += 1;
-        return desktopSettingsSuccess(input.requestId, snapshot(2, input.values));
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          2,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: {
@@ -275,16 +333,20 @@ test('settings runtime serializes rapid launch intents and persists only the lat
   const disable = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['window']['setFullscreen']>>>();
   const disableCalled = deferred<void>();
   const fullscreenCalls: boolean[] = [];
-  const replacements: Array<{ values: typeof DEFAULT_DESKTOP_SETTINGS_VALUES }> = [];
+  const replacements: Array<Parameters<LineupDesktopPreloadApi['settings']['replace']>[0]> = [];
   let activeIntents = 0;
   let maximumActiveIntents = 0;
   let initialized = false;
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         replacements.push(input);
-        return desktopSettingsSuccess(input.requestId, snapshot(2, input.values));
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          2,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: {
@@ -321,10 +383,14 @@ test('settings runtime treats a successful but mismatched fullscreen result as a
   let replacements = 0;
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         replacements += 1;
-        return desktopSettingsSuccess(input.requestId, snapshot(2, input.values));
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          2,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: {
@@ -345,26 +411,30 @@ test('settings runtime treats a successful but mismatched fullscreen result as a
 
 test('settings runtime preserves newer nonlaunch intent after an older replace fails', async () => {
   const firstReplace = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['settings']['replace']>>>();
-  const inputs: Array<{ values: typeof DEFAULT_DESKTOP_SETTINGS_VALUES }> = [];
+  const inputs: Array<Parameters<LineupDesktopPreloadApi['settings']['replace']>[0]> = [];
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         inputs.push(input);
         if (inputs.length === 1) return firstReplace.promise;
-        return desktopSettingsSuccess(input.requestId, snapshot(2, input.values));
+        return desktopSettingsSuccess(input.requestId, snapshot(
+          2,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
       },
     },
     windowBridge: windowBridge([]),
     onStateChanged: () => undefined,
   });
   await runtime.initialize();
-  const density = runtime.applyAction('cycleGuideDensity');
+  const density = runtime.applyAction('toggleKeepPlaybackRunning');
   const badges = runtime.applyAction('togglePreviewBadges');
   firstReplace.resolve(desktopSettingsFailure('settings-replace-1', 'operation-failed'));
   await Promise.all([density, badges]);
   assert.equal(inputs.length, 2);
-  assert.equal(inputs[1]?.values.guideDensity, 'compact');
+  assert.equal(inputs[1]?.values.keepPlaybackRunningInSettings, true);
   assert.equal(inputs[1]?.values.previewBadgesEnabled, false);
   assert.equal(runtime.getState().snapshot?.revision, 2);
 });
@@ -374,6 +444,7 @@ test('settings runtime stops after one failed conflict rebase and restores accep
   let replacements = 0;
   const runtime = createSettingsRuntime({
     settings: {
+      getAudioOutputs,
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, gets++ === 0 ? snapshot(1) : snapshot(7)),
       replace: async (input) => {
         replacements += 1;
@@ -384,16 +455,21 @@ test('settings runtime stops after one failed conflict rebase and restores accep
     onStateChanged: () => undefined,
   });
   await runtime.initialize();
-  await runtime.applyAction('cycleGuideDensity');
+  await runtime.applyAction('toggleKeepPlaybackRunning');
   assert.equal(gets, 2);
   assert.equal(replacements, 2);
-  assert.equal(runtime.getState().values.guideDensity, 'comfortable');
+  assert.equal(runtime.getState().values.keepPlaybackRunningInSettings, false);
   assert.equal(runtime.getState().snapshot?.revision, 7);
   assert.equal(runtime.getState().errorCode, 'revision-conflict');
 });
 
 function snapshot(revision: number, overrides: Partial<typeof DEFAULT_DESKTOP_SETTINGS_VALUES> = {}) {
-  return { schemaVersion: 1 as const, revision, status: 'ready' as const, values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, ...overrides } };
+  return createDesktopSettingsView({
+    schemaVersion: 2,
+    revision,
+    status: 'ready',
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, ...overrides },
+  });
 }
 
 function windowBridge(calls: boolean[]): LineupDesktopPreloadApi['window'] {

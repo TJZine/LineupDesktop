@@ -23,7 +23,7 @@ export interface NavigationLifecycleOptions {
   scrollFocusedIntoView(): void;
   handleGuideDirection?(direction: 'up' | 'down' | 'left' | 'right'): boolean;
   handlePlayerInput?(input: DesktopInputButton): boolean;
-  activateRoute(route: AppRouteId): void;
+  activateRoute(route: AppRouteId): boolean | void;
   isProfileModalActive(): boolean;
   closeProfileModal(): void;
   handleChannelSetupBack(): Promise<boolean>;
@@ -107,11 +107,6 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
     options.render();
   };
 
-  const rememberCurrentFocus = (): void => {
-    const state = options.getFocusState();
-    routeFocusMemory.set(state.activeRoute, state.activeId);
-  };
-
   const openExit = (): void => {
     exitInvoker = options.getFocusState().activeId;
     options.setShellState(openExitConfirm(options.getShellState()));
@@ -133,8 +128,10 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
 
   const navigate = (route: AppRouteId): void => {
     if (options.getRoute() === route) return;
-    rememberCurrentFocus();
-    options.activateRoute(route);
+    const previousFocus = options.getFocusState();
+    const accepted = options.activateRoute(route);
+    if (accepted === false || options.getRoute() !== route) return;
+    routeFocusMemory.set(previousFocus.activeRoute, previousFocus.activeId);
     focusRoute(route, routeFocusMemory.get(route));
   };
 

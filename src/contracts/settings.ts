@@ -1,4 +1,21 @@
-export const SETTINGS_SCHEMA_VERSION = 1 as const;
+import {
+  AUDIO_OUTPUT_DEVICE_ID_PATTERN,
+  SETTINGS_SCHEMA_VERSION,
+  isSharedDesktopAudioOutputList,
+  type DESKTOP_AUDIO_OUTPUT_LIST_REASONS,
+  type DESKTOP_AUDIO_OUTPUT_LIST_STATUSES,
+} from './settingsAudioValidation.js';
+
+export {
+  AUDIO_OUTPUT_DEVICE_ID_PATTERN,
+  DESKTOP_AUDIO_OUTPUT_LIST_REASONS,
+  DESKTOP_AUDIO_OUTPUT_LIST_STATUSES,
+  DESKTOP_AUDIO_OUTPUT_MAX_DEVICE_COUNT,
+  DESKTOP_AUDIO_OUTPUT_MAX_LABEL_LENGTH,
+  SETTINGS_SCHEMA_VERSION,
+  isDesktopAudioOutputStatusReason,
+  sanitizeAudioOutputLabel,
+} from './settingsAudioValidation.js';
 
 export const DESKTOP_SETTINGS_LOAD_STATUSES = [
   'ready',
@@ -27,13 +44,125 @@ export const DESKTOP_SETTINGS_ERROR_MESSAGES = {
 
 export const SETTINGS_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/u;
 export const SETTINGS_INVALID_REQUEST_ID = 'settings-invalid-request' as const;
+export type DesktopAudioOutputDeviceId = `audio_${string}`;
+
+export const DESKTOP_SETTINGS_VALUE_KEYS = [
+  'launchMode',
+  'audioSetupCompleted',
+  'audioOutputDeviceId',
+  'dtsPassthroughEnabled',
+  'directPlayAudioFallbackEnabled',
+  'subtitleMode',
+  'preferredSubtitleLanguage',
+  'preferForcedSubtitlesEnabled',
+  'keepPlaybackRunningInSettings',
+  'hdrFallbackMode',
+  'transcodeQuality',
+  'transcodeCompatibilityModeEnabled',
+  'libraryTabsEnabled',
+  'nowWatchingBannerEnabled',
+  'aggressiveGuidePreloadEnabled',
+  'guideDensity',
+  'guideLayout',
+  'pastItemsWindow',
+  'infoBoxBackgroundMode',
+  'theme',
+  'cinematicNowPlayingEnabled',
+  'preferClearLogosEnabled',
+  'nowPlayingAutoHideMs',
+  'showProfilePickerOnStartup',
+  'debugLoggingEnabled',
+  'subtitleDebugLoggingEnabled',
+  'previewBadgesEnabled',
+  'setupReminderEnabled',
+] as const satisfies readonly (keyof DesktopSettingsValues)[];
 
 export interface DesktopSettingsValues {
   launchMode: 'windowed' | 'fullscreen';
+  audioSetupCompleted: boolean;
+  audioOutputDeviceId: DesktopAudioOutputDeviceId | null;
+  dtsPassthroughEnabled: boolean;
+  directPlayAudioFallbackEnabled: boolean;
+  subtitleMode: 'off' | 'direct' | 'standard' | 'full';
+  preferredSubtitleLanguage: 'en' | 'es' | 'fr' | 'de' | 'it' | 'pt' | 'ru' | 'ja' | 'ko' | 'zh' | null;
+  preferForcedSubtitlesEnabled: boolean;
+  keepPlaybackRunningInSettings: boolean;
+  hdrFallbackMode: 'off' | 'prefer-hdr10' | 'force-hls';
+  transcodeQuality: 'default' | '12000-1080p' | '8000-1080p' | '4000-720p' | '2000-720p' | '1500-480p';
+  transcodeCompatibilityModeEnabled: boolean;
+  libraryTabsEnabled: boolean;
+  nowWatchingBannerEnabled: boolean;
+  aggressiveGuidePreloadEnabled: boolean;
   guideDensity: 'comfortable' | 'compact';
+  guideLayout: 'overlay' | 'classic';
+  pastItemsWindow: 'auto' | '0' | '15' | '30';
+  infoBoxBackgroundMode: 'artwork-bleed' | 'artwork' | 'theme-default';
+  theme: 'ember-steel' | 'slate-pine' | 'swiss' | 'directv' | 'glass';
+  cinematicNowPlayingEnabled: boolean;
+  preferClearLogosEnabled: boolean;
+  nowPlayingAutoHideMs: 0 | 5000 | 10000 | 15000 | 30000 | 60000 | 120000;
+  showProfilePickerOnStartup: boolean;
+  debugLoggingEnabled: boolean;
+  subtitleDebugLoggingEnabled: boolean;
   previewBadgesEnabled: boolean;
   setupReminderEnabled: boolean;
 }
+
+type MissingDesktopSettingsValueKey =
+  Exclude<keyof DesktopSettingsValues, (typeof DESKTOP_SETTINGS_VALUE_KEYS)[number]>;
+const DESKTOP_SETTINGS_VALUE_KEYS_ARE_EXHAUSTIVE:
+  MissingDesktopSettingsValueKey extends never ? true : never = true;
+void DESKTOP_SETTINGS_VALUE_KEYS_ARE_EXHAUSTIVE;
+
+export type DesktopSettingsReplaceValues = Omit<DesktopSettingsValues, 'audioOutputDeviceId'> & {
+  audioOutputDeviceId: DesktopSettingsValues['audioOutputDeviceId'] | 'system-default';
+};
+
+export const DESKTOP_SETTINGS_CAPABILITY_STATUSES = [
+  'supported',
+  'unsupported',
+  'unproven',
+] as const;
+
+export const DESKTOP_SETTINGS_CAPABILITY_REASONS = [
+  'available',
+  'platform-unsupported',
+  'helper-unavailable',
+  'native-proof-required',
+  'production-capability-unsupported',
+  'safe-artwork-unavailable',
+] as const;
+
+export type DesktopSettingsCapabilityStatus =
+  (typeof DESKTOP_SETTINGS_CAPABILITY_STATUSES)[number];
+export type DesktopSettingsCapabilityReason =
+  (typeof DESKTOP_SETTINGS_CAPABILITY_REASONS)[number];
+
+export interface DesktopSettingsCapabilityEntry {
+  status: DesktopSettingsCapabilityStatus;
+  reason: DesktopSettingsCapabilityReason;
+}
+
+export interface DesktopSettingsCapabilityProjection {
+  audioOutputSelection: DesktopSettingsCapabilityEntry;
+  dtsPassthrough: DesktopSettingsCapabilityEntry;
+  directPlayAudioFallback: DesktopSettingsCapabilityEntry;
+  subtitleSelection: DesktopSettingsCapabilityEntry;
+  hdrFallback: DesktopSettingsCapabilityEntry;
+  transcode: DesktopSettingsCapabilityEntry;
+  artworkPresentation: DesktopSettingsCapabilityEntry;
+}
+
+export const CONSERVATIVE_DESKTOP_SETTINGS_CAPABILITIES: Readonly<DesktopSettingsCapabilityProjection> =
+  Object.freeze({
+    audioOutputSelection: Object.freeze({ status: 'unproven', reason: 'native-proof-required' }),
+    dtsPassthrough: Object.freeze({ status: 'unproven', reason: 'native-proof-required' }),
+    directPlayAudioFallback: Object.freeze({ status: 'supported', reason: 'available' }),
+    subtitleSelection: Object.freeze({ status: 'unsupported', reason: 'production-capability-unsupported' }),
+    hdrFallback: Object.freeze({ status: 'unsupported', reason: 'production-capability-unsupported' }),
+    transcode: Object.freeze({ status: 'unsupported', reason: 'production-capability-unsupported' }),
+    artworkPresentation: Object.freeze({ status: 'unsupported', reason: 'safe-artwork-unavailable' }),
+  });
 
 export type DesktopSettingsLoadStatus = (typeof DESKTOP_SETTINGS_LOAD_STATUSES)[number];
 export type DesktopSettingsErrorCode = (typeof DESKTOP_SETTINGS_ERROR_CODES)[number];
@@ -45,6 +174,11 @@ export interface DesktopSettingsSnapshot {
   values: DesktopSettingsValues;
 }
 
+export interface DesktopSettingsView {
+  snapshot: DesktopSettingsSnapshot;
+  capabilities: DesktopSettingsCapabilityProjection;
+}
+
 export interface DesktopSettingsGetSnapshotRequest {
   requestId: string;
 }
@@ -52,7 +186,21 @@ export interface DesktopSettingsGetSnapshotRequest {
 export interface DesktopSettingsReplaceRequest {
   requestId: string;
   expectedRevision: number;
-  values: DesktopSettingsValues;
+  values: DesktopSettingsReplaceValues;
+}
+
+export interface DesktopSettingsGetAudioOutputsRequest {
+  requestId: string;
+}
+
+export type DesktopAudioOutputRow =
+  | { kind: 'system-default'; id: 'system-default'; label: 'System default' }
+  | { kind: 'device'; id: DesktopAudioOutputDeviceId; label: string };
+
+export interface DesktopAudioOutputList {
+  status: (typeof DESKTOP_AUDIO_OUTPUT_LIST_STATUSES)[number];
+  reason: (typeof DESKTOP_AUDIO_OUTPUT_LIST_REASONS)[number];
+  outputs: DesktopAudioOutputRow[];
 }
 
 export type DesktopSettingsIpcResult<T> =
@@ -65,13 +213,87 @@ export type DesktopSettingsIpcResult<T> =
 
 export const DEFAULT_DESKTOP_SETTINGS_VALUES: Readonly<DesktopSettingsValues> = Object.freeze({
   launchMode: 'windowed',
+  audioSetupCompleted: false,
+  audioOutputDeviceId: null,
+  dtsPassthroughEnabled: false,
+  directPlayAudioFallbackEnabled: false,
+  subtitleMode: 'full',
+  preferredSubtitleLanguage: null,
+  preferForcedSubtitlesEnabled: false,
+  keepPlaybackRunningInSettings: false,
+  hdrFallbackMode: 'off',
+  transcodeQuality: 'default',
+  transcodeCompatibilityModeEnabled: false,
+  libraryTabsEnabled: true,
+  nowWatchingBannerEnabled: true,
+  aggressiveGuidePreloadEnabled: false,
   guideDensity: 'comfortable',
+  guideLayout: 'classic',
+  pastItemsWindow: 'auto',
+  infoBoxBackgroundMode: 'theme-default',
+  theme: 'ember-steel',
+  cinematicNowPlayingEnabled: false,
+  preferClearLogosEnabled: false,
+  nowPlayingAutoHideMs: 0,
+  showProfilePickerOnStartup: false,
+  debugLoggingEnabled: false,
+  subtitleDebugLoggingEnabled: false,
   previewBadgesEnabled: true,
   setupReminderEnabled: true,
 });
 
 export function createDefaultDesktopSettingsValues(): DesktopSettingsValues {
   return { ...DEFAULT_DESKTOP_SETTINGS_VALUES };
+}
+
+export function cloneDesktopSettingsValues(values: DesktopSettingsValues): DesktopSettingsValues {
+  return { ...values };
+}
+
+export function desktopSettingsValuesEqual(
+  left: DesktopSettingsValues,
+  right: DesktopSettingsValues,
+): boolean {
+  return DESKTOP_SETTINGS_VALUE_KEYS.every((key) => left[key] === right[key]);
+}
+
+export function cloneDesktopSettingsCapabilities(
+  capabilities: DesktopSettingsCapabilityProjection,
+): DesktopSettingsCapabilityProjection {
+  return {
+    audioOutputSelection: { ...capabilities.audioOutputSelection },
+    dtsPassthrough: { ...capabilities.dtsPassthrough },
+    directPlayAudioFallback: { ...capabilities.directPlayAudioFallback },
+    subtitleSelection: { ...capabilities.subtitleSelection },
+    hdrFallback: { ...capabilities.hdrFallback },
+    transcode: { ...capabilities.transcode },
+    artworkPresentation: { ...capabilities.artworkPresentation },
+  };
+}
+
+export function createConservativeDesktopSettingsCapabilities(): DesktopSettingsCapabilityProjection {
+  return cloneDesktopSettingsCapabilities(CONSERVATIVE_DESKTOP_SETTINGS_CAPABILITIES);
+}
+
+export function createDesktopSettingsView(snapshot: DesktopSettingsSnapshot): DesktopSettingsView {
+  return {
+    snapshot: {
+      ...snapshot,
+      values: cloneDesktopSettingsValues(snapshot.values),
+    },
+    capabilities: createConservativeDesktopSettingsCapabilities(),
+  };
+}
+
+export function normalizeDesktopSettingsReplaceValues(
+  values: DesktopSettingsReplaceValues,
+): DesktopSettingsValues {
+  return {
+    ...values,
+    audioOutputDeviceId: values.audioOutputDeviceId === 'system-default'
+      ? null
+      : values.audioOutputDeviceId,
+  };
 }
 
 export function isDesktopSettingsRequestId(value: unknown): value is string {
@@ -86,12 +308,11 @@ export function readDesktopSettingsRequestId(value: unknown): string {
 }
 
 export function isDesktopSettingsValues(value: unknown): value is DesktopSettingsValues {
-  return isPlainRecord(value) &&
-    hasOnlyKeys(value, ['launchMode', 'guideDensity', 'previewBadgesEnabled', 'setupReminderEnabled']) &&
-    (value.launchMode === 'windowed' || value.launchMode === 'fullscreen') &&
-    (value.guideDensity === 'comfortable' || value.guideDensity === 'compact') &&
-    typeof value.previewBadgesEnabled === 'boolean' &&
-    typeof value.setupReminderEnabled === 'boolean';
+  return isSettingsValues(value, false);
+}
+
+export function isDesktopSettingsReplaceValues(value: unknown): value is DesktopSettingsReplaceValues {
+  return isSettingsValues(value, true);
 }
 
 export function isDesktopSettingsGetSnapshotRequest(
@@ -109,7 +330,17 @@ export function isDesktopSettingsReplaceRequest(
     hasOnlyKeys(value, ['requestId', 'expectedRevision', 'values']) &&
     isDesktopSettingsRequestId(value.requestId) &&
     isSafeRevision(value.expectedRevision) &&
-    isDesktopSettingsValues(value.values);
+    isDesktopSettingsReplaceValues(value.values);
+}
+
+export function isDesktopSettingsGetAudioOutputsRequest(
+  value: unknown,
+): value is DesktopSettingsGetAudioOutputsRequest {
+  return isDesktopSettingsGetSnapshotRequest(value);
+}
+
+export function isDesktopAudioOutputList(value: unknown): value is DesktopAudioOutputList {
+  return isSharedDesktopAudioOutputList(value);
 }
 
 export function isDesktopSettingsSnapshot(value: unknown): value is DesktopSettingsSnapshot {
@@ -119,6 +350,56 @@ export function isDesktopSettingsSnapshot(value: unknown): value is DesktopSetti
     isSafeRevision(value.revision) &&
     DESKTOP_SETTINGS_LOAD_STATUSES.includes(value.status as DesktopSettingsLoadStatus) &&
     isDesktopSettingsValues(value.values);
+}
+
+export function isDesktopSettingsCapabilityEntry(
+  value: unknown,
+): value is DesktopSettingsCapabilityEntry {
+  if (!isPlainRecord(value) || !hasOnlyKeys(value, ['status', 'reason'])) {
+    return false;
+  }
+  switch (value.status) {
+    case 'supported':
+      return value.reason === 'available';
+    case 'unsupported':
+      return value.reason === 'platform-unsupported' ||
+        value.reason === 'helper-unavailable' ||
+        value.reason === 'production-capability-unsupported' ||
+        value.reason === 'safe-artwork-unavailable';
+    case 'unproven':
+      return value.reason === 'native-proof-required';
+    default:
+      return false;
+  }
+}
+
+export function isDesktopSettingsCapabilityProjection(
+  value: unknown,
+): value is DesktopSettingsCapabilityProjection {
+  return isPlainRecord(value) &&
+    hasOnlyKeys(value, [
+      'audioOutputSelection',
+      'dtsPassthrough',
+      'directPlayAudioFallback',
+      'subtitleSelection',
+      'hdrFallback',
+      'transcode',
+      'artworkPresentation',
+    ]) &&
+    isDesktopSettingsCapabilityEntry(value.audioOutputSelection) &&
+    isDesktopSettingsCapabilityEntry(value.dtsPassthrough) &&
+    isDesktopSettingsCapabilityEntry(value.directPlayAudioFallback) &&
+    isDesktopSettingsCapabilityEntry(value.subtitleSelection) &&
+    isDesktopSettingsCapabilityEntry(value.hdrFallback) &&
+    isDesktopSettingsCapabilityEntry(value.transcode) &&
+    isDesktopSettingsCapabilityEntry(value.artworkPresentation);
+}
+
+export function isDesktopSettingsView(value: unknown): value is DesktopSettingsView {
+  return isPlainRecord(value) &&
+    hasOnlyKeys(value, ['snapshot', 'capabilities']) &&
+    isDesktopSettingsSnapshot(value.snapshot) &&
+    isDesktopSettingsCapabilityProjection(value.capabilities);
 }
 
 export function isDesktopSettingsIpcResult<T>(
@@ -162,6 +443,48 @@ export function desktopSettingsFailure<T>(
 
 export function isSafeRevision(value: unknown): value is number {
   return Number.isSafeInteger(value) && typeof value === 'number' && value >= 0;
+}
+
+function isSettingsValues(value: unknown, allowSystemDefault: boolean): boolean {
+  return isPlainRecord(value) &&
+    hasOnlyKeys(value, DESKTOP_SETTINGS_VALUE_KEYS) &&
+    (value.launchMode === 'windowed' || value.launchMode === 'fullscreen') &&
+    typeof value.audioSetupCompleted === 'boolean' &&
+    isAudioOutputDeviceId(value.audioOutputDeviceId, allowSystemDefault) &&
+    typeof value.dtsPassthroughEnabled === 'boolean' &&
+    typeof value.directPlayAudioFallbackEnabled === 'boolean' &&
+    ['off', 'direct', 'standard', 'full'].includes(value.subtitleMode as string) &&
+    (value.preferredSubtitleLanguage === null ||
+      ['en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'ja', 'ko', 'zh'].includes(value.preferredSubtitleLanguage as string)) &&
+    typeof value.preferForcedSubtitlesEnabled === 'boolean' &&
+    typeof value.keepPlaybackRunningInSettings === 'boolean' &&
+    ['off', 'prefer-hdr10', 'force-hls'].includes(value.hdrFallbackMode as string) &&
+    ['default', '12000-1080p', '8000-1080p', '4000-720p', '2000-720p', '1500-480p'].includes(value.transcodeQuality as string) &&
+    typeof value.transcodeCompatibilityModeEnabled === 'boolean' &&
+    typeof value.libraryTabsEnabled === 'boolean' &&
+    typeof value.nowWatchingBannerEnabled === 'boolean' &&
+    typeof value.aggressiveGuidePreloadEnabled === 'boolean' &&
+    (value.guideDensity === 'comfortable' || value.guideDensity === 'compact') &&
+    (value.guideLayout === 'overlay' || value.guideLayout === 'classic') &&
+    ['auto', '0', '15', '30'].includes(value.pastItemsWindow as string) &&
+    ['artwork-bleed', 'artwork', 'theme-default'].includes(value.infoBoxBackgroundMode as string) &&
+    ['ember-steel', 'slate-pine', 'swiss', 'directv', 'glass'].includes(value.theme as string) &&
+    typeof value.cinematicNowPlayingEnabled === 'boolean' &&
+    typeof value.preferClearLogosEnabled === 'boolean' &&
+    [0, 5000, 10000, 15000, 30000, 60000, 120000].includes(value.nowPlayingAutoHideMs as number) &&
+    typeof value.showProfilePickerOnStartup === 'boolean' &&
+    typeof value.debugLoggingEnabled === 'boolean' &&
+    typeof value.subtitleDebugLoggingEnabled === 'boolean' &&
+    typeof value.previewBadgesEnabled === 'boolean' &&
+    typeof value.setupReminderEnabled === 'boolean';
+}
+
+function isAudioOutputDeviceId(value: unknown, allowSystemDefault: boolean): boolean {
+  if (value === null) return true;
+  if (allowSystemDefault && value === 'system-default') return true;
+  return typeof value === 'string' &&
+    value === value.trim() &&
+    AUDIO_OUTPUT_DEVICE_ID_PATTERN.test(value);
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

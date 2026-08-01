@@ -2,6 +2,11 @@ import type { PlayerRequestId } from '../../contracts/player.js';
 import type { IChannelScheduler, ScheduledProgram } from '../../domain/scheduler/index.js';
 import type { PlexStreamResolverInput, PlexStreamResolverResult } from '../plex/streamResolver.js';
 import type { DesktopStreamCapabilityProfile } from './streamPolicy/types.js';
+import type {
+  DesktopPlaybackSettingsPreferences,
+} from '../settings/desktopSettingsPolicy.js';
+import type { DesktopSettingsCapabilityProjection } from '../../contracts/settings.js';
+import type { ResolvedAudioOutput } from '../settings/settingsAudioOutputOwner.js';
 import {
   PlexPlaybackRuntimeCandidateResolutionError,
   isSamePlexPlaybackScheduleSelection,
@@ -24,6 +29,11 @@ export interface PlexPlaybackBridgeOptions {
     | (() => DesktopStreamCapabilityProfile | Promise<DesktopStreamCapabilityProfile>);
   createRequestId?: (prefix: string) => PlayerRequestId;
   autoplay?: boolean;
+  settingsPreferences?: () => DesktopPlaybackSettingsPreferences | Promise<DesktopPlaybackSettingsPreferences>;
+  settingsCapabilities?: () => DesktopSettingsCapabilityProjection;
+  resolveAudioOutput?: (
+    selectedId: DesktopPlaybackSettingsPreferences['audioOutputDeviceId'],
+  ) => Promise<ResolvedAudioOutput>;
 }
 
 export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, PlexPlaybackRuntimeChannelPort {
@@ -34,6 +44,9 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
     | (() => DesktopStreamCapabilityProfile | Promise<DesktopStreamCapabilityProfile>);
   readonly #createRequestId: (prefix: string) => PlayerRequestId;
   readonly #autoplay: boolean;
+  readonly #settingsPreferences?: PlexPlaybackBridgeOptions['settingsPreferences'];
+  readonly #settingsCapabilities?: PlexPlaybackBridgeOptions['settingsCapabilities'];
+  readonly #resolveAudioOutput?: PlexPlaybackBridgeOptions['resolveAudioOutput'];
   #requestCounter = 0;
 
   constructor(options: PlexPlaybackBridgeOptions) {
@@ -47,6 +60,9 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
         return `${prefix}-bridge-${this.#requestCounter}`;
       });
     this.#autoplay = options.autoplay ?? true;
+    this.#settingsPreferences = options.settingsPreferences;
+    this.#settingsCapabilities = options.settingsCapabilities;
+    this.#resolveAudioOutput = options.resolveAudioOutput;
   }
 
   async getCurrentPlayback(_input?: {
@@ -86,12 +102,23 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
     }
 
     const requestId = this.#createRequestId('plex-playback');
+    const settingsPreferences = await this.#readSettingsPreferences(requestId);
+    const resolveAudioOutput = this.#resolveAudioOutput;
+    const privateAudioSetup =
+      settingsPreferences !== undefined && resolveAudioOutput !== undefined
+        ? await this.#resolvePrivateAudioSetup(
+          requestId,
+          settingsPreferences,
+          resolveAudioOutput,
+        )
+        : undefined;
     const resolverInput: PlexStreamResolverInput = {
       requestId,
       mediaId: program.item.ratingKey,
       capabilityProfile: await this.#resolveCapabilityProfile(),
       autoplay: this.#autoplay,
       startPositionMs: program.elapsedMs,
+      ...(settingsPreferences !== undefined ? { settingsPreferences } : {}),
     };
 
     const result = await this.#resolver.resolve(resolverInput);
@@ -99,11 +126,24 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
       throw new PlexPlaybackRuntimeCandidateResolutionError(result.error);
     }
 
+    let privatePlayback = result.privatePlayback;
+    if (settingsPreferences !== undefined && privateAudioSetup !== undefined) {
+      privatePlayback = {
+        ...privatePlayback,
+        setup: {
+          ...privatePlayback.setup,
+          audioOutputNativeKey: privateAudioSetup.resolvedOutput.audioOutputNativeKey,
+          dtsPassthroughEnabled:
+            settingsPreferences.dtsPassthroughEnabled && privateAudioSetup.dtsSupported,
+        },
+      };
+    }
+
     return {
       requestId,
       load: result.load,
       pmsSession: result.pmsSession,
-      privatePlayback: result.privatePlayback,
+      privatePlayback,
     };
   }
 
@@ -152,12 +192,54 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
     }
     return this.#capabilityProfile;
   }
+
+  async #readSettingsPreferences(
+    requestId: PlayerRequestId,
+  ): Promise<DesktopPlaybackSettingsPreferences | undefined> {
+    try {
+      return await this.#settingsPreferences?.();
+    } catch {
+      throw new PlexPlaybackRuntimeCandidateResolutionError(createBridgeError({
+        code: 'PLEX_PLAYBACK_SETTINGS_UNAVAILABLE',
+        requestId,
+        category: 'source',
+        operation: 'settings.read',
+        reason: 'settings preferences unavailable',
+        retryable: true,
+      }));
+    }
+  }
+
+  async #resolvePrivateAudioSetup(
+    requestId: PlayerRequestId,
+    settingsPreferences: DesktopPlaybackSettingsPreferences,
+    resolveAudioOutput: NonNullable<PlexPlaybackBridgeOptions['resolveAudioOutput']>,
+  ): Promise<{ resolvedOutput: ResolvedAudioOutput; dtsSupported: boolean }> {
+    try {
+      const resolvedOutput = await resolveAudioOutput(
+        settingsPreferences.audioOutputDeviceId,
+      );
+      const dtsSupported =
+        this.#settingsCapabilities?.().dtsPassthrough.status === 'supported';
+      return { resolvedOutput, dtsSupported };
+    } catch {
+      throw new PlexPlaybackRuntimeCandidateResolutionError(createBridgeError({
+        code: 'PLEX_PLAYBACK_AUDIO_SETUP_UNAVAILABLE',
+        requestId,
+        category: 'source',
+        operation: 'settings.audio.resolve',
+        reason: 'private audio setup unavailable',
+        retryable: true,
+      }));
+    }
+  }
 }
 
 function createBridgeError(input: {
   code: string;
   requestId: PlayerRequestId | undefined;
   category: 'stale-request' | 'source';
+  operation?: 'schedule.map' | 'settings.read' | 'settings.audio.resolve';
   reason: string;
   retryable: boolean;
 }) {
@@ -170,7 +252,7 @@ function createBridgeError(input: {
     ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
     diagnostic: {
       component: 'plex-playback-bridge',
-      operation: 'schedule.map',
+      operation: input.operation ?? 'schedule.map',
       status: 'ignored',
       reason: input.reason,
     },

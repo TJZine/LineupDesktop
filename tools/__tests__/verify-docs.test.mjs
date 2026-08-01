@@ -7,9 +7,12 @@ import path from 'node:path';
 import {
   ACTIVE_PLAN_HEADINGS,
   ACTIVE_PLAN_VERIFICATION_MARKERS,
+  containsRetiredWorkerRole,
   LAUNCHER_WRAPPERS,
+  readActivePlanLiveHandoff,
   REQUIRED_FILES,
   REQUIRED_IGNORE_MARKERS,
+  REQUIRED_ROLE_DEFAULTS,
   REQUIRED_ROLES,
   REQUIRED_SCRIPTS,
   REQUIRED_SKILLS,
@@ -48,10 +51,21 @@ const TEST_REQUIRED_ROLES = {
   docs_researcher: 'agents/docs-researcher.toml',
   planner: 'agents/planner.toml',
   worker: 'agents/worker.toml',
-  worker_sol_low: 'agents/worker-sol-low.toml',
   worker_luna: 'agents/worker-luna.toml',
   monitor: 'agents/monitor.toml',
   monitor_fallback: 'agents/monitor-fallback.toml',
+};
+
+const TEST_REQUIRED_ROLE_DEFAULTS = {
+  explorer: { model: 'gpt-5.6-luna', effort: 'max' },
+  explorer_fallback: { model: 'gpt-5.6-luna', effort: 'xhigh' },
+  reviewer: { model: 'gpt-5.6-sol', effort: 'high' },
+  docs_researcher: { model: 'gpt-5.6-luna', effort: 'high' },
+  planner: { model: 'gpt-5.6-sol', effort: 'high' },
+  worker: { model: 'gpt-5.6-sol', effort: 'medium' },
+  worker_luna: { model: 'gpt-5.6-luna', effort: 'max' },
+  monitor: { model: 'gpt-5.3-codex-spark', effort: 'low' },
+  monitor_fallback: { model: 'gpt-5.6-luna', effort: 'low' },
 };
 
 const TEST_REQUIRED_SKILLS = [
@@ -159,6 +173,7 @@ test.afterEach(() => {
 test('exported verifier policy matches the independent test canon', () => {
   assert.deepEqual(REQUIRED_FILES, TEST_REQUIRED_FILES);
   assert.deepEqual(REQUIRED_ROLES, TEST_REQUIRED_ROLES);
+  assert.deepEqual(REQUIRED_ROLE_DEFAULTS, TEST_REQUIRED_ROLE_DEFAULTS);
   assert.deepEqual(REQUIRED_SKILLS, TEST_REQUIRED_SKILLS);
   assert.deepEqual(REQUIRED_SCRIPTS, TEST_REQUIRED_SCRIPTS);
   assert.deepEqual(REQUIRED_IGNORE_MARKERS, TEST_REQUIRED_IGNORE_MARKERS);
@@ -215,6 +230,19 @@ test('role wiring and concurrency limits are checked', () => {
   assert(errors.some((error) => error.includes('Role worker must reference agents/worker.toml')));
 });
 
+test('configured role defaults enforce the reviewed Luna and Sol routing', () => {
+  const root = makeFixture();
+  const lunaPath = path.join(root, '.codex/agents/worker-luna.toml');
+  fs.writeFileSync(lunaPath, fs.readFileSync(lunaPath, 'utf8')
+    .replace('model_reasoning_effort = "max"', 'model_reasoning_effort = "high"'));
+  const explorerPath = path.join(root, '.codex/agents/explorer.toml');
+  fs.writeFileSync(explorerPath, fs.readFileSync(explorerPath, 'utf8')
+    .replace('model = "gpt-5.6-luna"', 'model = "gpt-5.6-sol"'));
+  const errors = verifyDocs(root);
+  assert(errors.some((error) => error.includes('worker-luna.toml must keep model_reasoning_effort = "max"')));
+  assert(errors.some((error) => error.includes('explorer.toml must keep model = "gpt-5.6-luna"')));
+});
+
 test('role documentation must resolve config_file mappings instead of synthesizing paths', () => {
   const root = makeFixture();
   const workflowPath = path.join(root, 'docs/AGENTIC_DEV_WORKFLOW.md');
@@ -225,7 +253,7 @@ test('role documentation must resolve config_file mappings instead of synthesizi
 test('read-only roles must remain sandboxed', () => {
   const root = makeFixture();
   const reviewerPath = path.join(root, '.codex/agents/reviewer.toml');
-  fs.writeFileSync(reviewerPath, roleToml(false));
+  fs.writeFileSync(reviewerPath, roleToml('reviewer', false));
   assert(verifyDocs(root).some((error) => error.includes('reviewer.toml must keep sandbox_mode')));
 });
 
@@ -312,6 +340,19 @@ test('active plans require exactly one verification marker in the verification s
   assert(verifyDocs(root).some((error) => error.includes('exactly one verification classification marker')));
 });
 
+test('active plan live handoffs reject retired worker roles but historical sections may retain them', () => {
+  const root = makeFixture();
+  const planPath = path.join(root, 'docs/plans/active.md');
+  const content = activePlanContent()
+    .replace('# Active', '# Active\n\nHistorical package used worker_sol_low.');
+  fs.writeFileSync(planPath, content);
+  assert.equal(containsRetiredWorkerRole(readActivePlanLiveHandoff(content)), false);
+  assert.deepEqual(verifyDocs(root), []);
+
+  fs.writeFileSync(planPath, content.replace('IMPLEMENTER: worker_luna', 'IMPLEMENTER: worker_sol_low'));
+  assert(verifyDocs(root).some((error) => error.includes('live handoff references retired worker role')));
+});
+
 test('required scripts must be real commands', () => {
   const root = makeFixture();
   const packagePath = path.join(root, 'package.json');
@@ -342,7 +383,7 @@ function makeFixture() {
   for (const [role, configFile] of Object.entries(TEST_REQUIRED_ROLES)) {
     const rolePath = path.join(root, '.codex', configFile);
     fs.mkdirSync(path.dirname(rolePath), { recursive: true });
-    fs.writeFileSync(rolePath, roleToml(['explorer', 'explorer_fallback', 'reviewer', 'docs_researcher', 'monitor', 'monitor_fallback'].includes(role)));
+    fs.writeFileSync(rolePath, roleToml(role, ['explorer', 'explorer_fallback', 'reviewer', 'docs_researcher', 'monitor', 'monitor_fallback'].includes(role)));
   }
 
   for (const { launcher } of Object.values(TEST_LAUNCHER_WRAPPERS)) {
@@ -377,6 +418,9 @@ function activePlanContent() {
       lines.push('**Verification classification:** existing coverage sufficient');
     }
   }
+  lines.push('**Controller next action:** implement the approved unit.');
+  lines.push('NEXT_SESSION_HANDOFF');
+  lines.push('IMPLEMENTER: worker_luna');
   return `${lines.join('\n')}\n`;
 }
 
@@ -418,10 +462,11 @@ function configToml() {
   ].join('\n');
 }
 
-function roleToml(readOnly) {
+function roleToml(role, readOnly) {
+  const defaults = TEST_REQUIRED_ROLE_DEFAULTS[role];
   return [
-    'model = "fixture-model"',
-    'model_reasoning_effort = "medium"',
+    `model = "${defaults.model}"`,
+    `model_reasoning_effort = "${defaults.effort}"`,
     ...(readOnly ? ['sandbox_mode = "read-only"'] : []),
     'developer_instructions = "fixture"',
     '',

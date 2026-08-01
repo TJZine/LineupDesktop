@@ -70,6 +70,7 @@ import { createShellWindowController } from './window/shellWindowController.js';
 import { resolveDesktopSettingsFilePath } from './persistence/appDataPaths.js';
 import { DesktopSettingsStore } from './persistence/desktopSettingsStore.js';
 import { registerSettingsIpcHandlers, type SettingsIpcTeardown } from './settings/settingsIpc.js';
+import { createSettingsNativeHostComposition } from './settings/settingsNativeHostComposition.js';
 import { SmokeBootstrapOwner } from './smokeBootstrapOwner.js';
 import { SingleInstanceOwner } from './singleInstanceOwner.js';
 import { ChannelPersistenceBootstrapOwner } from './persistence/channelPersistenceBootstrapOwner.js';
@@ -244,10 +245,47 @@ async function startApplication(): Promise<void> {
     registerLineupProtocolHandler(rendererRoot);
     configurePermissionContainment();
     registerShellIpcHandlers();
+    const settingsStore = new DesktopSettingsStore({
+      settingsFilePath: resolveDesktopSettingsFilePath(app),
+      migrationEventSink: (event) => {
+        diagnosticEventStore.record({
+          surface: 'main',
+          category: 'lifecycle',
+          severity: event.status === 'succeeded' ? 'info' : 'error',
+          status: event.status,
+          operation: 'settings.migration',
+          message: 'Desktop settings migration completed.',
+          result: event.status === 'succeeded' ? 'success' : 'failure',
+          context: {
+            fromVersion: event.fromVersion,
+            toVersion: event.toVersion,
+            status: event.status,
+            revision: event.revision,
+          },
+        });
+      },
+    });
+    const initialSettingsSnapshot = await settingsStore.loadSnapshot();
+    const productionNativeHostFactory = shellMode === 'production'
+      ? createProductionNativeHostFactory({ diagnosticEventStore })
+      : null;
+    const settingsNativeHostComposition = createSettingsNativeHostComposition({
+      shellMode,
+      platform: process.platform,
+      initialSnapshot: initialSettingsSnapshot,
+      createProductionNativeHost: () => productionNativeHostFactory?.() ?? null,
+      createRequestId,
+      diagnosticEventStore,
+    });
+    const {
+      nativeHost: productionNativeHost,
+      settingsPolicy,
+      settingsAudioOutputOwner,
+    } = settingsNativeHostComposition;
     teardownSettingsIpc = registerSettingsIpcHandlers({
-      store: new DesktopSettingsStore({
-        settingsFilePath: resolveDesktopSettingsFilePath(app),
-      }),
+      store: settingsStore,
+      policy: settingsPolicy,
+      audioOutputOwner: settingsAudioOutputOwner,
       isAuthorizedEvent,
       ipcMain,
     });
@@ -258,9 +296,6 @@ async function startApplication(): Promise<void> {
       createRequestId,
       getShellWindow: () => getShellWindowController().getWindow(),
       appVersion: app.getVersion(),
-    });
-    const nativeHostFactory = createProductionNativeHostFactory({
-      diagnosticEventStore,
     });
     const eventRouter = createPlaybackEventRouter({
       getRuntime: () => playbackRuntime,
@@ -275,7 +310,7 @@ async function startApplication(): Promise<void> {
       createRequestId,
       reportDiagnostic: reportMainProcessDiagnostic,
       diagnosticEventStore,
-      nativeHostFactory: nativeHostFactory ?? undefined,
+      nativeHost: productionNativeHost,
       onNativeHostLifecycleFailure: () => {
         const transitionOwner = playbackProgramTransitionOwner;
         const runtime = playbackRuntime;
@@ -332,6 +367,8 @@ async function startApplication(): Promise<void> {
       },
       diagnosticEventStore,
       plexRuntime: plexComposition.runtime,
+      settingsPolicy,
+      settingsAudioOutputOwner,
     });
     playbackRuntime = playbackRuntimeComposition.runtime;
     const transitionOwner = new PlaybackProgramTransitionOwner({

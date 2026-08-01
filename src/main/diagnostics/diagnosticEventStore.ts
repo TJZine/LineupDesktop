@@ -75,6 +75,8 @@ export class DiagnosticEventStore {
   #lastExportStatus: DiagnosticsSummary['lastExportStatus'] = null;
   #redactionFailureCount = 0;
   #fallbackIdCounter = 0;
+  #debugLoggingEnabled = false;
+  #subtitleDebugLoggingEnabled = false;
 
   public constructor(options: DiagnosticEventStoreOptions = {}) {
     this.#maxRecords = Math.max(
@@ -117,6 +119,24 @@ export class DiagnosticEventStore {
       this.#records = this.#records.slice(this.#records.length - this.#maxRecords);
     }
     return cloneDiagnosticRecord(record);
+  }
+
+  public setSettingsAdmission(input: {
+    debugLoggingEnabled: boolean;
+    subtitleDebugLoggingEnabled: boolean;
+  }): void {
+    this.#debugLoggingEnabled = input.debugLoggingEnabled;
+    this.#subtitleDebugLoggingEnabled = input.subtitleDebugLoggingEnabled;
+  }
+
+  public recordSettingsDebug(input: DiagnosticEventInput): DiagnosticRecord | null {
+    return this.#debugLoggingEnabled ? this.record(input) : null;
+  }
+
+  public recordSubtitleDebug(input: DiagnosticEventInput): DiagnosticRecord | null {
+    return this.#debugLoggingEnabled && this.#subtitleDebugLoggingEnabled
+      ? this.record(input)
+      : null;
   }
 
   public getRecords(limit: number = DIAGNOSTIC_TRUNCATION_LIMITS.exportRecords): readonly DiagnosticRecord[] {

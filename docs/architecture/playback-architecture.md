@@ -3,7 +3,9 @@
 Lineup Desktop runtime playback is code complete and reviewed, with
 Windows/manual product proof still pending. WS2 now closes the current
 platform-neutral playback implementation gate without promoting the
-conservative production profile. RD-25 implements the production
+conservative production profile. WS3 now adds locally verified Settings
+preference/control contributions and request-bound Settings pause/resume
+without promoting that profile. RD-25 implements the production
 native playback MVP, replacing the fake playback bootstrap with a
 production-shaped, main/helper-owned native playback path for live Plex-backed
 scheduled media. A main-only privileged load context propagates the private
@@ -26,10 +28,12 @@ media behavior. It must not become production architecture.
 
 ## RD-05 External mpv POC Observations
 
-RD-05 created a dev-only external `mpv` POC under
-`tools/mpv-poc/rd-05-external-mpv-poc.mjs`. It is quarantined as a disposable
-tool with no package script, dependency, product IPC, renderer, preload, main,
-native-helper, Plex, scheduler, or adapter ownership.
+RD-05 created a dev-only external `mpv` POC with no package script, dependency,
+product IPC, renderer, preload, main, native-helper, Plex, scheduler, or adapter
+ownership. Its disposable source and dedicated test were removed after the
+observations below were preserved. The reviewed main/helper-owned native
+architecture—not the POC—now owns the production direction; Windows/manual
+proof remains pending.
 
 Redacted local evidence under ignored
 `docs/runs/rd-05-external-mpv-poc/` observed:
@@ -302,6 +306,53 @@ build, live libmpv ERROR/EOF, representative-media, native-video/focus/input,
 manual/soak, track-delivery/switching, HDR/display/hardware-capability, and
 helper-replacement observation. This is nonblocking post-WS2 debt, not a
 support claim or capability promotion.
+
+## WS3 Settings Contributions To Playback
+
+WS3 checkpoints `11dd704` and `1540de3` add the playback-adjacent Settings
+consumers while preserving main/helper custody. `DesktopSettingsPolicy`
+projects renderer-safe audio, subtitle, HDR, and transcode preferences into
+the stream policy and resolver per playback request. Those preferences may
+narrow or select only behavior already allowed by the authoritative capability
+profile; they never turn `unsupported` or `unproven` into support.
+
+Main constructs at most one production native host and shares it between
+player IPC and `SettingsAudioOutputOwner`. Private correlated audio queries,
+raw device keys, missing-device fallback, and selected-output/DTS setup remain
+inside main/helper custody. Renderer sees only opaque audio ids, bounded labels,
+fixed list status/reasons, and the conservative capability projection.
+Test-only checkpoint `f0e2817` updates the smoke source-shape proof to require
+the one production factory/host invocation and both same-binding consumer
+injections while retaining development/smoke fallback assertions. It changes
+no playback or Settings runtime source and does not promote capability state.
+Prior Unit 3C-D checkpoint `5f368d4` gives the live
+`PlexStreamResolver` one optional narrow subtitle-diagnostic port backed by the
+existing main-owned diagnostic store. It emits only the reviewed fixed-schema,
+bounded policy summary when both Settings admissions allow it; a throwing
+recorder cannot change resolver settlement. This makes the local `ST-25`
+producer real without claiming Windows subtitle delivery, support-bundle
+observation, or a capability promotion.
+Final WS3 product checkpoint `87662b5` changes only renderer focus derivation;
+it does not alter playback ownership, policy, settlement, or capability state.
+Unit 3D acceptance changes only workstream status; all playback proof and
+capability gates below remain unchanged.
+
+Renderer-owned Settings lifecycle dispatches exact
+`player.pauseIfCurrent`/`player.playIfCurrent` intents with the observed
+snapshot request id. `rendererIntentMapping.ts` maps them to the existing empty
+internal pause/play command plus nonforwarded expected identity;
+`DesktopPlayerAdapter` rejects stale identity before request custody or host
+submission and preserves same-turn submission for a matching request. Existing
+empty-payload play/pause, `PlayerCommand`, player IPC, privileged dispatch
+context, and helper command vocabulary are unchanged.
+
+`PB-22`–`PB-24` remain WS2-owned/open. WS3 has supplied their preference and
+control contribution, but `WS3-PROOF-02` and the separate
+`WS2-POST-VALIDATION-01` native/live obligations remain open. MP4/H.264/AAC
+Direct Play remains the only supported production media path; DTS, subtitle
+delivery/switching, HDR/Dolby Vision, Direct Stream, and transcode remain
+unsupported or unproven until later reviewed evidence changes the capability
+provider.
 
 ## RD-25 Production Native Playback MVP
 

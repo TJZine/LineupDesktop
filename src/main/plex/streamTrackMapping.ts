@@ -84,14 +84,3 @@ export function buildPlaybackTrackMap(
     subtitle: subtitleMap,
   };
 }
-
-export function findPrivateIdFromMap(
-  publicTrackId: PlayerTrackId | null,
-  map: readonly TrackMappingItem[],
-): string | null {
-  if (publicTrackId === null) {
-    return null;
-  }
-  const item = map.find((x) => x.publicTrackId === publicTrackId);
-  return item?.privateTrackId ?? null;
-}

@@ -42,6 +42,7 @@ import {
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
   LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
+  LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL,
   LINEUP_SETTINGS_REPLACE_CHANNEL,
   LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
   LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL,
@@ -90,6 +91,10 @@ import {
   PLAYER_RECOVERY_ACTIONS,
   SHELL_STATUS_VALUES,
 } from '../../contracts/shell.js';
+import {
+  DEFAULT_DESKTOP_SETTINGS_VALUES,
+  createConservativeDesktopSettingsCapabilities,
+} from '../../contracts/settings.js';
 
 const preloadSourceUrl = new URL('../../preload/index.cts', import.meta.url);
 const preloadSourceText = readFileSync(preloadSourceUrl, 'utf8');
@@ -115,6 +120,10 @@ const playerRecoveryBridgeSourceText = readFileSync(
 );
 const settingsGuardSourceUrl = new URL('../../preload/settingsBridgeGuards.cts', import.meta.url);
 const settingsGuardSourceText = readFileSync(settingsGuardSourceUrl, 'utf8');
+const settingsAudioValidationSourceText = readFileSync(
+  new URL('../../contracts/settingsAudioValidation.ts', import.meta.url),
+  'utf8',
+);
 const settingsBridgeSourceUrl = new URL('../../preload/settingsBridge.cts', import.meta.url);
 const settingsBridgeSourceText = readFileSync(settingsBridgeSourceUrl, 'utf8');
 const preloadBundleToolSourceText = readFileSync(
@@ -389,6 +398,17 @@ function evaluatePlayerRecoveryBridgeModule(): Record<string, unknown> {
 }
 
 function evaluateSettingsGuardModule(): Record<string, unknown> {
+  const sharedExports = {};
+  const sharedModule = { exports: sharedExports };
+  const compiledShared = ts.transpileModule(settingsAudioValidationSourceText, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    fileName: 'src/contracts/settingsAudioValidation.ts',
+  }).outputText;
+  new Function('require', 'exports', 'module', compiledShared)(
+    (moduleName: string) => assert.fail(`unexpected settings audio validation require ${moduleName}`),
+    sharedExports,
+    sharedModule,
+  );
   const exportsObject = {};
   const moduleObject = { exports: exportsObject };
   const compiled = ts.transpileModule(settingsGuardSourceText, {
@@ -396,7 +416,12 @@ function evaluateSettingsGuardModule(): Record<string, unknown> {
     fileName: 'src/preload/settingsBridgeGuards.cts',
   }).outputText;
   new Function('require', 'exports', 'module', compiled)(
-    (moduleName: string) => assert.fail(`unexpected settings guard require ${moduleName}`),
+    (moduleName: string) => {
+      if (moduleName === '../contracts/settingsAudioValidation.js') {
+        return sharedModule.exports;
+      }
+      return assert.fail(`unexpected settings guard require ${moduleName}`);
+    },
     exportsObject,
     moduleObject,
   );
@@ -650,6 +675,7 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
   LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
+  LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL,
   LINEUP_SETTINGS_REPLACE_CHANNEL,
 } as const;
 
@@ -1714,6 +1740,28 @@ test('preload player dispatch validates invoke results before returning them', a
   assert.equal((result as { ok: boolean }).ok, true);
 });
 
+test('preload player dispatch forwards guarded lifecycle intent envelopes unchanged', async () => {
+  const snapshot = createSafePlayerSnapshot();
+  const harness = createPreloadHarness((_channel, request, input) => {
+    assert.ok(isPreloadInvokeRequest(request));
+    return input({
+      ok: true,
+      requestId: request.requestId,
+      value: { accepted: true, events: [], snapshot },
+    });
+  });
+  const envelope = {
+    intent: 'player.pauseIfCurrent',
+    requestId: 'settings-pause-1',
+    payload: { snapshotRequestId: 'player-load-1' },
+  };
+
+  const result = await harness.api.player.dispatch(harness.input(envelope));
+
+  assert.equal((result as { ok: boolean }).ok, true);
+  assert.deepEqual(harness.calls, [{ channel: LINEUP_PLAYER_COMMAND_CHANNEL, request: envelope }]);
+});
+
 test('preload player dispatch converts malformed or privileged invoke results to local validation failures', async () => {
   const harness = createPreloadHarness((_channel, request, input) => {
     assert.ok(isPreloadInvokeRequest(request));
@@ -2500,45 +2548,86 @@ test('preload channel constants match approved IPC contract exports', () => {
   }
 });
 
-test('preload settings bridge exposes two total guarded methods with exact request-id behavior', async () => {
+test('preload settings bridge exposes three total guarded methods with exact request-id behavior', async () => {
   const bridgeExports = evaluateSettingsBridgeModule(evaluateSettingsGuardModule());
   const createBridge = bridgeExports.createSettingsBridge as (
     invoke: (channel: string, input: unknown) => Promise<unknown>,
-    channels: { getSnapshot: string; replace: string },
+    channels: { getSnapshot: string; replace: string; getAudioOutputs: string },
   ) => Record<string, (input: unknown) => Promise<unknown>>;
   const calls: Array<{ channel: string; input: unknown }> = [];
   const bridge = createBridge(async (channel, input) => {
     calls.push({ channel, input });
     const requestId = (input as { requestId: string }).requestId;
+    if (channel === LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL) {
+      return {
+        ok: true,
+        requestId,
+        value: {
+          status: 'unavailable',
+          reason: 'platform-unsupported',
+          outputs: [{ kind: 'system-default', id: 'system-default', label: 'System default' }],
+        },
+      };
+    }
     return {
       ok: true,
       requestId,
       value: {
-        schemaVersion: 1,
-        revision: channel === LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL ? 2 : 3,
-        status: 'ready',
-        values: {
-          launchMode: 'windowed', guideDensity: 'comfortable',
-          previewBadgesEnabled: true, setupReminderEnabled: true,
+        snapshot: {
+          schemaVersion: 2,
+          revision: channel === LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL ? 2 : 3,
+          status: 'ready',
+          values: DEFAULT_DESKTOP_SETTINGS_VALUES,
         },
+        capabilities: createConservativeDesktopSettingsCapabilities(),
       },
     };
-  }, { getSnapshot: LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, replace: LINEUP_SETTINGS_REPLACE_CHANNEL });
-  assert.deepEqual(Object.keys(bridge).sort(), ['getSnapshot', 'replace']);
+  }, {
+    getSnapshot: LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
+    replace: LINEUP_SETTINGS_REPLACE_CHANNEL,
+    getAudioOutputs: LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL,
+  });
+  assert.deepEqual(Object.keys(bridge).sort(), ['getAudioOutputs', 'getSnapshot', 'replace']);
   assert.equal((await bridge.getSnapshot?.({ requestId: 'settings-get-1' }) as { ok: boolean }).ok, true);
+  assert.equal((await bridge.replace?.({
+    requestId: 'settings-replace-1',
+    expectedRevision: 2,
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, audioOutputDeviceId: 'system-default' },
+  }) as { ok: boolean }).ok, true);
+  assert.equal((await bridge.getAudioOutputs?.({
+    requestId: 'settings-audio-1',
+  }) as { ok: boolean }).ok, true);
+  assert.equal((await bridge.replace?.({
+    requestId: 'settings-replace-2',
+    expectedRevision: 3,
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, audioOutputDeviceId: `audio_${'Q'.repeat(43)}` },
+  }) as { ok: boolean }).ok, true);
+  for (const audioOutputDeviceId of [' system-default', `audio_${'Q'.repeat(42)}`, 'native-output']) {
+    const rejected = await bridge.replace?.({
+      requestId: 'settings-replace-invalid-audio',
+      expectedRevision: 3,
+      values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, audioOutputDeviceId },
+    }) as { ok: boolean; error: { code: string } };
+    assert.equal(rejected.ok, false);
+    assert.equal(rejected.error.code, 'validation-failed');
+  }
   const invalid = await bridge.replace?.({ requestId: 'bad id' }) as { ok: boolean; requestId: string; error: { code: string } };
   assert.equal(invalid.ok, false);
   assert.equal(invalid.requestId, 'settings-invalid-request');
   assert.equal(invalid.error.code, 'validation-failed');
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 4);
 });
 
 test('preload settings bridge maps invoke rejection and mismatched results without rejecting', async () => {
   const createBridge = evaluateSettingsBridgeModule(evaluateSettingsGuardModule()).createSettingsBridge as (
     invoke: (channel: string, input: unknown) => Promise<unknown>,
-    channels: { getSnapshot: string; replace: string },
+    channels: { getSnapshot: string; replace: string; getAudioOutputs: string },
   ) => Record<string, (input: unknown) => Promise<unknown>>;
-  const channels = { getSnapshot: LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, replace: LINEUP_SETTINGS_REPLACE_CHANNEL };
+  const channels = {
+    getSnapshot: LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
+    replace: LINEUP_SETTINGS_REPLACE_CHANNEL,
+    getAudioOutputs: LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL,
+  };
   const rejected = createBridge(async () => { throw new Error('raw invoke detail'); }, channels);
   const rejection = await rejected.getSnapshot?.({ requestId: 'settings-get-2' }) as { error: { code: string; message: string } };
   assert.equal(rejection.error.code, 'operation-failed');
@@ -2549,6 +2638,109 @@ test('preload settings bridge maps invoke rejection and mismatched results witho
   const mismatch = await mismatched.getSnapshot?.({ requestId: 'settings-get-3' }) as { requestId: string; error: { code: string } };
   assert.equal(mismatch.requestId, 'settings-get-3');
   assert.equal(mismatch.error.code, 'validation-failed');
+});
+
+test('preload settings guards reject persisted system-default, invalid capability pairs, and extra keys', () => {
+  const guards = evaluateSettingsGuardModule();
+  const isSettingsResult = guards.isSettingsResult as (value: unknown, requestId: string) => boolean;
+  const base = {
+    ok: true,
+    requestId: 'settings-get-strict',
+    value: {
+      snapshot: {
+        schemaVersion: 2,
+        revision: 1,
+        status: 'ready',
+        values: DEFAULT_DESKTOP_SETTINGS_VALUES,
+      },
+      capabilities: createConservativeDesktopSettingsCapabilities(),
+    },
+  };
+  assert.equal(isSettingsResult(base, base.requestId), true);
+  assert.equal(isSettingsResult({
+    ...base,
+    value: {
+      ...base.value,
+      snapshot: {
+        ...base.value.snapshot,
+        values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, audioOutputDeviceId: 'system-default' },
+      },
+    },
+  }, base.requestId), false);
+  assert.equal(isSettingsResult({
+    ...base,
+    value: {
+      ...base.value,
+      capabilities: {
+        ...base.value.capabilities,
+        transcode: { status: 'supported', reason: 'native-proof-required' },
+      },
+    },
+  }, base.requestId), false);
+  assert.equal(isSettingsResult({
+    ...base,
+    value: { ...base.value, extra: true },
+  }, base.requestId), false);
+});
+
+test('preload settings audio guards reject unsafe, unordered, duplicate, and mismatched results', () => {
+  const guards = evaluateSettingsGuardModule();
+  const isAudioResult = guards.isSettingsAudioOutputResult as (
+    value: unknown,
+    requestId: string,
+  ) => boolean;
+  const requestId = 'settings-audio-strict';
+  const system = { kind: 'system-default', id: 'system-default', label: 'System default' };
+  const device = {
+    kind: 'device',
+    id: `audio_${'A'.repeat(43)}`,
+    label: 'Speakers',
+  };
+  const base = {
+    ok: true,
+    requestId,
+    value: { status: 'ready', reason: 'available', outputs: [system, device] },
+  };
+  assert.equal(isAudioResult(base, requestId), true);
+  assert.equal(isAudioResult({ ...base, requestId: 'settings-audio-other' }, requestId), false);
+  assert.equal(isAudioResult({
+    ...base,
+    value: { ...base.value, outputs: [device, system] },
+  }, requestId), false);
+  assert.equal(isAudioResult({
+    ...base,
+    value: { ...base.value, outputs: [system, device, device] },
+  }, requestId), false);
+  assert.equal(isAudioResult({
+    ...base,
+    value: {
+      status: 'unavailable',
+      reason: 'helper-unavailable',
+      outputs: [system, device],
+    },
+  }, requestId), false);
+  assert.equal(isAudioResult({
+    ...base,
+    value: {
+      status: 'partial',
+      reason: 'device-list-sanitized',
+      outputs: [system],
+    },
+  }, requestId), false);
+  assert.equal(isAudioResult({
+    ...base,
+    value: {
+      ...base.value,
+      outputs: [system, { ...device, label: 'unsafe\u0007label' }],
+    },
+  }, requestId), false);
+  assert.equal(isAudioResult({
+    ...base,
+    value: {
+      ...base.value,
+      outputs: [system, { ...device, label: 'unsafe\u202Elabel' }],
+    },
+  }, requestId), false);
 });
 
 test('preload bridge guard rejects Electron value imports while allowing type imports', () => {

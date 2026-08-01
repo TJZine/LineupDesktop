@@ -78,7 +78,7 @@ export class DesktopPlayerAdapter {
       const events = this.#emitBoundaryError(commandResult.error);
       return this.#result(false, null, events);
     }
-    const { command } = commandResult;
+    const { command, expectedSnapshotRequestId } = commandResult;
     if (this.#requestCustody.has(command.requestId)) {
       const events = this.#emitBoundaryError(duplicateRequestError(command.requestId));
       return this.#result(false, command, events);
@@ -99,6 +99,25 @@ export class DesktopPlayerAdapter {
           operation: 'load',
           status: 'rejected',
           reason: 'renderer load command blocked',
+        },
+      });
+      const events = this.#emitBoundaryError(error);
+      return this.#result(false, command, events);
+    }
+    if (
+      expectedSnapshotRequestId !== undefined
+      && expectedSnapshotRequestId !== this.#snapshot.requestId
+    ) {
+      const error = createPlayerError({
+        code: 'PLAYER_VALIDATION_FAILED',
+        category: 'stale-request',
+        message: 'Player lifecycle command targeted a stale player snapshot.',
+        requestId: command.requestId,
+        diagnostic: {
+          component: 'desktop-player-adapter',
+          operation: command.command,
+          status: 'rejected',
+          reason: 'snapshot request mismatch',
         },
       });
       const events = this.#emitBoundaryError(error);

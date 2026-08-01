@@ -24,6 +24,7 @@ import {
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
   LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
+  LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL,
   LINEUP_SETTINGS_REPLACE_CHANNEL,
   LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
   LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL,
@@ -506,7 +507,9 @@ test('player renderer intents are closed and separate from shell window intents'
   assert.deepEqual([...PLAYER_RENDERER_INTENTS], [
     'player.load',
     'player.play',
+    'player.playIfCurrent',
     'player.pause',
+    'player.pauseIfCurrent',
     'player.stop',
     'player.seekAbsolute',
     'player.seekRelative',
@@ -656,6 +659,7 @@ test('shell IPC channel vocabulary uses the approved literals', () => {
   assert.equal(LINEUP_WINDOW_INTENT_CHANNEL, 'lineup:window:intent');
   assert.equal(LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, 'lineup:settings:getSnapshot');
   assert.equal(LINEUP_SETTINGS_REPLACE_CHANNEL, 'lineup:settings:replace');
+  assert.equal(LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL, 'lineup:settings:getAudioOutputs');
   assert.equal(LINEUP_SHELL_STATUS_CHANGED_CHANNEL, 'lineup:shell:statusChanged');
   assert.equal(LINEUP_PLAYER_COMMAND_CHANNEL, 'lineup:player:command');
   assert.equal(LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL, 'lineup:player:getSnapshot');

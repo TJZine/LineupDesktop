@@ -18,9 +18,15 @@ export interface NativeHelperCleanupMessage {
   requestId: PlayerRequestId | null;
 }
 
+export interface NativeHelperAudioOutputQueryMessage {
+  type: 'audio-output.query';
+  requestId: PlayerRequestId;
+}
+
 export type NativeHelperInputMessage =
   | NativeHelperCommandMessage
-  | NativeHelperCleanupMessage;
+  | NativeHelperCleanupMessage
+  | NativeHelperAudioOutputQueryMessage;
 
 export type NativeHelperOutputMessage =
   | {
@@ -33,7 +39,7 @@ export type NativeHelperOutputMessage =
       type: 'result';
       requestId: PlayerRequestId;
       ok: false;
-      error?: {
+      error: {
         code: string;
         message: string;
         category?: string;
@@ -44,6 +50,18 @@ export type NativeHelperOutputMessage =
   | {
       type: 'event';
       event: unknown;
+    }
+  | {
+      type: 'audio-output.result';
+      requestId: PlayerRequestId;
+      ok: true;
+      outputs: { nativeKey: string; label: string }[];
+    }
+  | {
+      type: 'audio-output.result';
+      requestId: PlayerRequestId;
+      ok: false;
+      error: unknown;
     };
 
 export function validateHelperMessageSize(messageStr: string): void {

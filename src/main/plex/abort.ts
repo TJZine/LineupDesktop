@@ -1,4 +1,4 @@
-import { clearTimeout, setTimeout } from 'node:timers';
+import { setTimeout as delay } from 'node:timers/promises';
 
 export function throwIfPlexRequestAborted(
   signal: AbortSignal | null | undefined,
@@ -9,26 +9,18 @@ export function throwIfPlexRequestAborted(
   }
 }
 
-export function sleepWithPlexAbort(
+export async function sleepWithPlexAbort(
   durationMs: number,
   signal: AbortSignal | null | undefined,
   createError: () => Error,
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
+  throwIfPlexRequestAborted(signal, createError);
+  try {
+    await delay(durationMs, undefined, signal === null || signal === undefined ? undefined : { signal });
+  } catch (error) {
     if (signal?.aborted) {
-      reject(createError());
-      return;
+      throw createError();
     }
-
-    const onAbort = () => {
-      clearTimeout(timeout);
-      signal?.removeEventListener('abort', onAbort);
-      reject(createError());
-    };
-    const timeout = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, durationMs);
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
+    throw error;
+  }
 }

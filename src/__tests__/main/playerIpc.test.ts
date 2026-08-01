@@ -8,11 +8,11 @@ import {
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
 } from '../../contracts/ipc.js';
 import {
-  PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
   type PlayerCommand,
   type PlayerEvent,
   type PlayerLoadCommandPayload,
 } from '../../contracts/player.js';
+import { assertPublicSafe } from './player/playerPublicSafetyAssertions.js';
 import { registerPlayerIpcHandlers } from '../../main/player/playerIpc.js';
 import type { PrivilegedPlaybackDispatchContext } from '../../main/player/privilegedPlaybackDispatchContext.js';
 import { redactMainProcessError } from '../../main/redactedDiagnostics.js';
@@ -59,6 +59,10 @@ class ConfigurableNativeHost implements NativePlayerHostPort {
       throw this.cleanupError;
     }
     return undefined;
+  }
+
+  async queryAudioOutputs() {
+    return { ok: true as const, outputs: [] };
   }
 }
 
@@ -224,6 +228,8 @@ function privilegedPlaybackContext(requestId: string): PrivilegedPlaybackDispatc
         selectedTrackIds: { video: null, audio: null, subtitle: null },
         selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
         trackMap: { video: [], audio: [], subtitle: [] },
+        audioOutputNativeKey: null,
+        dtsPassthroughEnabled: false,
       },
     },
   };
@@ -240,27 +246,7 @@ function helperFailure(): NativePlayerHostFailure {
 }
 
 function assertNoForbiddenKeys(value: unknown): void {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      assertNoForbiddenKeys(item);
-    }
-    return;
-  }
-
-  if (value === null || typeof value !== 'object') {
-    return;
-  }
-
-  for (const [key, child] of Object.entries(value)) {
-    assert.equal(
-      PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS.includes(
-        key as (typeof PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS)[number],
-      ),
-      false,
-      `renderer-facing player IPC value contains forbidden key ${key}`,
-    );
-    assertNoForbiddenKeys(child);
-  }
+  assertPublicSafe(value, []);
 }
 
 test('player IPC registers closed handlers and tears them down', async () => {
@@ -828,20 +814,16 @@ test('production player IPC returns unsupported failures and does not activate f
   assertNoForbiddenKeys(events);
 });
 
-test('production player IPC with nativeHostFactory instantiates adapter but rejects renderer loads', async () => {
+test('production player IPC with an injected native host instantiates adapter but rejects renderer loads', async () => {
   const ipcMain = new FakeIpcMain();
   const events: PlayerEvent[] = [];
-  let nativeHostCreated = false;
   const host = new ConfigurableNativeHost();
   const teardown = registerPlayerIpcHandlers({
     shellMode: 'production',
     isAuthorizedEvent,
     ...playerEventSinks(events),
     createRequestId,
-    nativeHostFactory: () => {
-      nativeHostCreated = true;
-      return host;
-    },
+    nativeHost: host,
     ipcMain,
   });
 
@@ -851,7 +833,6 @@ test('production player IPC with nativeHostFactory instantiates adapter but reje
     loadEnvelope('player-prod-2'),
   );
 
-  assert.equal(nativeHostCreated, true);
   assert.equal((commandResult as { ok: boolean }).ok, false);
   assert.equal(
     (commandResult as { error: { category: string; code: string } }).error.code,
@@ -889,7 +870,7 @@ test('player IPC registers adapter lifecycle handling before main and unsubscrib
     isAuthorizedEvent,
     ...playerEventSinks(),
     createRequestId,
-    nativeHostFactory: () => host,
+    nativeHost: host,
     onNativeHostLifecycleFailure: mainListener,
     ipcMain,
   });
@@ -897,6 +878,12 @@ test('player IPC registers adapter lifecycle handling before main and unsubscrib
     requestId: null,
     error: helperFailure(),
   };
+  const activeLoad = runtimeLoadCommand('player-active-lifecycle');
+  const activeResult = await teardown.adapter?.dispatchRuntimeCommand(
+    activeLoad,
+    privilegedPlaybackContext(activeLoad.requestId),
+  );
+  assert.equal(activeResult?.accepted, true);
 
   host.emitLifecycleFailure(failure);
 

@@ -25,6 +25,7 @@ import {
   createPlexOnboardingFlow,
   resolveChannelSetupEntryStage,
   resolveInitialChannelSetupStage,
+  supportsStartupProfilePicker,
 } from '../../renderer/onboarding/plexOnboardingFlow.js';
 import type { PlexRuntimeController } from '../../renderer/plexRuntimeActions.js';
 
@@ -89,6 +90,19 @@ test('static channel setup markup preserves onboarding and hosts the isolated Pa
     /data-setup-section="account"|data-setup-section="server"|plex-home-pin|plex-clear-server|Sign out|Clear Saved Server|Fake channel setup controls|data-setup-steps|data-channel-commit-action|plex-stage-metadata|4\. Result|Optional media preview|data-channel-draft-list|data-setup-validation|draft channel|fake blocks|debug|smoke|transport/u,
   );
   assert.doesNotMatch(channelSetupMarkup, /https?:|token|serverUri/u);
+});
+
+test('startup profile picker requires a signed-in account with loaded Home users', () => {
+  const empty = createPlexRuntimeRendererState();
+  assert.equal(supportsStartupProfilePicker(empty), false);
+  assert.equal(supportsStartupProfilePicker({ ...empty, snapshot: snapshotSignedIn() }), true);
+  assert.equal(supportsStartupProfilePicker({
+    ...empty,
+    snapshot: {
+      ...snapshotSignedIn(),
+      auth: { ...snapshotSignedIn().auth, homeUsers: [] },
+    },
+  }), false);
 });
 
 test('channel setup live selection ignores stale library item and search state', () => {
@@ -527,6 +541,7 @@ test('onboarding flow restores before refresh and applies exact renderer-local f
     },
     restoreSelectedServer: async () => { calls.push('restore'); },
     refreshServers: async () => { calls.push('refresh'); },
+    getHomeUsers: async () => { calls.push('home-users'); },
     selectServer: async (serverId: string) => {
       calls.push(`select:${serverId}`);
       rendererState = { ...rendererState, selectedServerId: serverId };
@@ -568,6 +583,9 @@ test('onboarding flow restores before refresh and applies exact renderer-local f
   focusState = flow.applyFocusIntent(registry, focusState);
   assert.equal(stage, 'profile');
   assert.equal(focusState.activeId, 'btn-profile-profile-2');
+  await flow.openProfileSelection();
+  assert.deepEqual(calls.slice(-4), ['invalidate', 'render:profile', 'home-users', 'render:profile']);
+  assert.equal(clearErrorFlags.at(-1), true);
 
   stage = 'server';
   rendererState = { ...rendererState, errorText: 'Safe server failure' };

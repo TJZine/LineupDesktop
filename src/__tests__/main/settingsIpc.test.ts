@@ -3,13 +3,19 @@ import assert from 'node:assert/strict';
 
 import {
   LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
+  LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL,
   LINEUP_SETTINGS_REPLACE_CHANNEL,
 } from '../../contracts/ipc.js';
-import { DEFAULT_DESKTOP_SETTINGS_VALUES } from '../../contracts/settings.js';
+import {
+  DEFAULT_DESKTOP_SETTINGS_VALUES,
+  createDesktopSettingsView,
+} from '../../contracts/settings.js';
 import { DesktopSettingsStoreError } from '../../main/persistence/desktopSettingsStore.js';
 import { registerSettingsIpcHandlers } from '../../main/settings/settingsIpc.js';
 
-test('settings IPC authorizes, validates, echoes request ids, and registers exactly two handlers', async () => {
+type SuccessfulSettingsView = { value: ReturnType<typeof view> };
+
+test('settings IPC authorizes, validates, echoes request ids, and registers exactly three handlers', async () => {
   const handlers = new Map<string, (event: unknown, payload: unknown) => unknown>();
   const removed: string[] = [];
   let writes = 0;
@@ -18,17 +24,29 @@ test('settings IPC authorizes, validates, echoes request ids, and registers exac
       loadSnapshot: async () => snapshot(3),
       replace: async (_revision, values) => { writes++; return { ...snapshot(4), values }; },
     },
+    audioOutputOwner: {
+      getAudioOutputs: async () => ({
+        status: 'unavailable',
+        reason: 'platform-unsupported',
+        outputs: [{ kind: 'system-default', id: 'system-default', label: 'System default' }],
+      }),
+    },
     isAuthorizedEvent: (event) => (event as unknown) === 'authorized',
     ipcMain: {
       handle: (channel, handler) => handlers.set(channel, handler as never),
       removeHandler: (channel) => { removed.push(channel); },
     },
   });
-  assert.deepEqual([...handlers.keys()], [LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, LINEUP_SETTINGS_REPLACE_CHANNEL]);
+  assert.deepEqual([...handlers.keys()], [
+    LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
+    LINEUP_SETTINGS_REPLACE_CHANNEL,
+    LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL,
+  ]);
   const get = handlers.get(LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL)!;
   const replace = handlers.get(LINEUP_SETTINGS_REPLACE_CHANNEL)!;
+  const getAudioOutputs = handlers.get(LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL)!;
   assert.deepEqual(await get('authorized', { requestId: 'settings-get-1' }), {
-    ok: true, requestId: 'settings-get-1', value: snapshot(3),
+    ok: true, requestId: 'settings-get-1', value: view(3),
   });
   const unauthorized = await get('other', { requestId: 'settings-get-2' }) as { error: { code: string } };
   assert.equal(unauthorized.error.code, 'unauthorized');
@@ -36,8 +54,138 @@ test('settings IPC authorizes, validates, echoes request ids, and registers exac
   assert.equal(invalid.requestId, 'settings-invalid-request');
   assert.equal(invalid.error.code, 'validation-failed');
   assert.equal(writes, 0);
+  assert.deepEqual(await getAudioOutputs('authorized', { requestId: 'settings-audio-1' }), {
+    ok: true,
+    requestId: 'settings-audio-1',
+    value: {
+      status: 'unavailable',
+      reason: 'platform-unsupported',
+      outputs: [{ kind: 'system-default', id: 'system-default', label: 'System default' }],
+    },
+  });
   teardown();
-  assert.deepEqual(removed, [LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, LINEUP_SETTINGS_REPLACE_CHANNEL]);
+  assert.deepEqual(removed, [
+    LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
+    LINEUP_SETTINGS_REPLACE_CHANNEL,
+    LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL,
+  ]);
+});
+
+test('settings IPC synchronizes policy only after a successful committed replacement', async () => {
+  const handlers = new Map<string, (event: unknown, payload: unknown) => unknown>();
+  const accepted: unknown[] = [];
+  registerSettingsIpcHandlers({
+    store: {
+      loadSnapshot: async () => snapshot(2),
+      replace: async (_revision, values) => ({ ...snapshot(3), values }),
+    },
+    policy: {
+      acceptSnapshot: (value) => accepted.push(value),
+      getCapabilityProjection: () => ({
+        ...createDesktopSettingsView(snapshot(2)).capabilities,
+        audioOutputSelection: { status: 'unsupported', reason: 'platform-unsupported' },
+      }),
+    },
+    isAuthorizedEvent: () => true,
+    ipcMain: {
+      handle: (channel, handler) => handlers.set(channel, handler as never),
+      removeHandler: () => undefined,
+    },
+  });
+  const get = handlers.get(LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL)!;
+  const replace = handlers.get(LINEUP_SETTINGS_REPLACE_CHANNEL)!;
+  const loaded = await get({}, { requestId: 'settings-get-policy' }) as SuccessfulSettingsView;
+  assert.deepEqual(loaded.value.capabilities.audioOutputSelection, {
+    status: 'unsupported',
+    reason: 'platform-unsupported',
+  });
+  assert.deepEqual(accepted, []);
+  await replace({}, {
+    requestId: 'settings-replace-policy',
+    expectedRevision: 2,
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, debugLoggingEnabled: true },
+  });
+  assert.equal(accepted.length, 1);
+  assert.equal((accepted[0] as ReturnType<typeof snapshot>).values.debugLoggingEnabled, true);
+});
+
+test('settings IPC reports a committed replacement as success when policy refresh fails', async () => {
+  const handlers = new Map<string, (event: unknown, payload: unknown) => unknown>();
+  registerSettingsIpcHandlers({
+    store: {
+      loadSnapshot: async () => snapshot(2),
+      replace: async (_revision, values) => ({ ...snapshot(3), values }),
+    },
+    policy: {
+      acceptSnapshot() {
+        throw new Error('policy refresh failed');
+      },
+      getCapabilityProjection: () => createDesktopSettingsView(snapshot(3)).capabilities,
+    },
+    isAuthorizedEvent: () => true,
+    ipcMain: {
+      handle: (channel, handler) => handlers.set(channel, handler as never),
+      removeHandler: () => undefined,
+    },
+  });
+
+  const result = await handlers.get(LINEUP_SETTINGS_REPLACE_CHANNEL)?.({}, {
+    requestId: 'settings-replace-policy-failure',
+    expectedRevision: 2,
+    values: DEFAULT_DESKTOP_SETTINGS_VALUES,
+  }) as SuccessfulSettingsView & { ok: true };
+
+  assert.equal(result.ok, true);
+  assert.equal(result.value.snapshot.revision, 3);
+});
+
+test('settings IPC canonicalizes only exact system-default and clones capabilities per response', async () => {
+  const handlers = new Map<string, (event: unknown, payload: unknown) => unknown>();
+  const storedValues: unknown[] = [];
+  registerSettingsIpcHandlers({
+    store: {
+      loadSnapshot: async () => snapshot(2),
+      replace: async (_revision, values) => {
+        storedValues.push(values);
+        return { ...snapshot(3), values };
+      },
+    },
+    isAuthorizedEvent: () => true,
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler as never), removeHandler: () => undefined },
+  });
+  const get = handlers.get(LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL)!;
+  const replace = handlers.get(LINEUP_SETTINGS_REPLACE_CHANNEL)!;
+  const first = await get({}, { requestId: 'settings-get-capabilities-1' }) as SuccessfulSettingsView;
+  const second = await get({}, { requestId: 'settings-get-capabilities-2' }) as SuccessfulSettingsView;
+  assert.deepEqual(first.value.capabilities, second.value.capabilities);
+  assert.notEqual(first.value.capabilities, second.value.capabilities);
+  assert.notEqual(first.value.capabilities.audioOutputSelection, second.value.capabilities.audioOutputSelection);
+
+  const systemDefault = await replace({}, {
+    requestId: 'settings-replace-system',
+    expectedRevision: 2,
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, audioOutputDeviceId: 'system-default' },
+  }) as SuccessfulSettingsView;
+  assert.equal((storedValues[0] as { audioOutputDeviceId: unknown }).audioOutputDeviceId, null);
+  assert.equal(systemDefault.value.snapshot.values.audioOutputDeviceId, null);
+
+  const opaqueId = `audio_${'z'.repeat(43)}`;
+  await replace({}, {
+    requestId: 'settings-replace-device',
+    expectedRevision: 3,
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, audioOutputDeviceId: opaqueId },
+  });
+  assert.equal((storedValues[1] as { audioOutputDeviceId: unknown }).audioOutputDeviceId, opaqueId);
+
+  for (const audioOutputDeviceId of [` ${opaqueId}`, `${opaqueId} `, ' system-default', 'native-device']) {
+    const result = await replace({}, {
+      requestId: 'settings-replace-invalid-audio',
+      expectedRevision: 3,
+      values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, audioOutputDeviceId },
+    }) as { ok: false; error: { code: string } };
+    assert.equal(result.error.code, 'validation-failed');
+  }
+  assert.equal(storedValues.length, 2);
 });
 
 test('settings IPC maps every store failure to fixed renderer-safe results and never rejects', async () => {
@@ -129,5 +277,9 @@ test('settings IPC maps unexpected handler exceptions to a fixed operation failu
 });
 
 function snapshot(revision: number) {
-  return { schemaVersion: 1 as const, revision, status: 'ready' as const, values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES } };
+  return { schemaVersion: 2 as const, revision, status: 'ready' as const, values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES } };
+}
+
+function view(revision: number) {
+  return createDesktopSettingsView(snapshot(revision));
 }

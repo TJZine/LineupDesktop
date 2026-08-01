@@ -12,10 +12,13 @@ import {
   type PlexStreamResolverAuthHeader,
   type PlexStreamResolverPmsSessionStartInput,
   type PlexStreamResolverResult,
+  type PlexStreamResolverSubtitleDiagnosticPort,
 } from '../../main/plex/streamResolver.js';
+import { DiagnosticEventStore, type DiagnosticEventInput } from '../../main/diagnostics/diagnosticEventStore.js';
 import type { PlexConnection } from '../../main/plex/discovery/types.js';
 import type { PlexMediaItem } from '../../main/plex/library/types.js';
 import type { DesktopStreamCapabilityProfile } from '../../main/player/streamPolicy/types.js';
+import type { DesktopPlaybackSettingsPreferences } from '../../main/settings/desktopSettingsPolicy.js';
 
 const PUBLIC_FORBIDDEN_KEYS = [
   'uri',
@@ -46,6 +49,23 @@ const RAW_PLEX_PRIVATE_VALUES = [
   'subtitle-rich-default-srt',
 ] as const;
 const SECRET_SHAPED_THROWN_TEXT = 'sk_live_like_1234567890abcdef';
+const SUBTITLE_DIAGNOSTIC_FORBIDDEN_KEYS = [
+  'mediaId',
+  'title',
+  'candidateId',
+  'trackId',
+  'label',
+  'preferredSubtitleLanguage',
+  'connection',
+  'auth',
+  'url',
+  'header',
+  'path',
+  'native',
+  'raw',
+  'diagnostics',
+  'error',
+] as const;
 
 function assertPublicSafe(value: unknown, path = 'value'): void {
   assert.equal(hasPlayerForbiddenPrivilegedField(value), false, `${path} has player privileged fields`);
@@ -104,6 +124,25 @@ function assertFailureSafe(result: Extract<PlexStreamResolverResult, { ok: false
   if (result.decision !== undefined) {
     assertPublicSafe(result.decision, 'decision');
     assertPublicOutputDoesNotContain(result.decision, RAW_PLEX_PRIVATE_VALUES, 'decision');
+  }
+}
+
+function assertNoSubtitleDiagnosticForbiddenField(value: unknown, path = 'event'): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertNoSubtitleDiagnosticForbiddenField(item, `${path}[${index}]`));
+    return;
+  }
+  if (value === null || typeof value !== 'object') {
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    assert.equal(
+      SUBTITLE_DIAGNOSTIC_FORBIDDEN_KEYS.some((forbidden) =>
+        key.toLowerCase() === forbidden.toLowerCase()),
+      false,
+      `${path} exposes forbidden key ${key}`,
+    );
+    assertNoSubtitleDiagnosticForbiddenField(child, `${path}.${key}`);
   }
 }
 
@@ -181,6 +220,194 @@ test('plex stream resolver projects transcode without leaking private descriptor
   assert.equal(result.decision.reasonCodes.includes('transcode-video'), true);
   assert.match(result.privatePlayback.playbackUrl, /transcode\/universal\/start/u);
   assertPublicProjectionSafe(result);
+});
+
+test('plex stream resolver applies only allowlisted quality parameters to an allowed transcode', async () => {
+  const mediaDetail = createMediaDetail({ videoCodec: 'vp9' });
+  const qualityResult = await createResolver({ mediaDetail }).resolve({
+    requestId: 'request-transcode-quality',
+    mediaId: 'media-input-transcode-quality',
+    capabilityProfile: directPlayProfile,
+    preferredSubtitleTrackId: null,
+    settingsPreferences: settingsPreferences({
+      transcodeQuality: '4000-720p',
+    }),
+  });
+  assertResolved(qualityResult, 'transcode');
+  const qualityUrl = new URL(qualityResult.privatePlayback.playbackUrl);
+  assert.equal(qualityUrl.searchParams.get('videoBitrate'), '4000');
+  assert.equal(qualityUrl.searchParams.get('videoResolution'), '720p');
+
+  const compatibilityResult = await createResolver({ mediaDetail }).resolve({
+    requestId: 'request-transcode-compatibility',
+    mediaId: 'media-input-transcode-compatibility',
+    capabilityProfile: directPlayProfile,
+    preferredSubtitleTrackId: null,
+    settingsPreferences: settingsPreferences({
+      transcodeQuality: '4000-720p',
+      transcodeCompatibilityModeEnabled: true,
+    }),
+  });
+  assertResolved(compatibilityResult, 'transcode');
+  const compatibilityUrl = new URL(compatibilityResult.privatePlayback.playbackUrl);
+  assert.equal(compatibilityUrl.searchParams.has('videoBitrate'), false);
+  assert.equal(compatibilityUrl.searchParams.has('videoResolution'), false);
+  assert.equal(compatibilityUrl.searchParams.get('protocol'), 'hls');
+});
+
+test('plex stream resolver prefers an HDR10 candidate only when the setting requests it', async () => {
+  const mediaDetail = createHdrChoiceMediaDetail();
+  const sourceOrderResult = await createResolver({ mediaDetail }).resolve({
+    requestId: 'request-hdr-source-order',
+    mediaId: 'media-input-hdr-source-order',
+    capabilityProfile: directPlayProfile,
+    settingsPreferences: settingsPreferences(),
+  });
+  assertResolved(sourceOrderResult, 'direct-play');
+  assert.equal(sourceOrderResult.decision.summary.dynamicRange, 'sdr');
+
+  const preferredHdrResult = await createResolver({ mediaDetail }).resolve({
+    requestId: 'request-hdr-preferred',
+    mediaId: 'media-input-hdr-preferred',
+    capabilityProfile: directPlayProfile,
+    settingsPreferences: settingsPreferences({ hdrFallbackMode: 'prefer-hdr10' }),
+  });
+  assertResolved(preferredHdrResult, 'direct-play');
+  assert.equal(preferredHdrResult.decision.summary.dynamicRange, 'hdr10');
+});
+
+test('plex stream resolver subtitle diagnostics require both admissions and use the unconfigured sentinel', async () => {
+  const diagnostics = new DiagnosticEventStore({
+    clock: () => 1_000,
+    idGenerator: () => 'subtitle-policy-event',
+  });
+  const resolver = createResolver({
+    mediaDetail: createMediaDetail(),
+    subtitleDiagnostics: diagnostics,
+  });
+  const resolve = (requestId: string) => resolver.resolve({
+    requestId,
+    mediaId: 'media-input-subtitle-diagnostic',
+    capabilityProfile: directPlayProfile,
+  });
+
+  await resolve('request-subtitle-off');
+  diagnostics.setSettingsAdmission({
+    debugLoggingEnabled: true,
+    subtitleDebugLoggingEnabled: false,
+  });
+  await resolve('request-subtitle-general-only');
+  diagnostics.setSettingsAdmission({
+    debugLoggingEnabled: true,
+    subtitleDebugLoggingEnabled: true,
+  });
+  await resolve('request-subtitle-both');
+
+  const records = diagnostics.getRecords();
+  assert.equal(records.length, 1);
+  const [record] = records;
+  assert.ok(record);
+  assert.deepEqual(
+    {
+      surface: record.surface,
+      category: record.category,
+      severity: record.severity,
+      status: record.status,
+      operation: record.operation,
+      message: record.message,
+      result: record.result,
+      context: record.context,
+    },
+    {
+      surface: 'main',
+      category: 'playback',
+      severity: 'debug',
+      status: 'observed',
+      operation: 'settings.subtitle-policy',
+      message: 'Subtitle policy evaluation recorded.',
+      result: 'success',
+      context: {
+        candidateCount: 1,
+        subtitleTrackCount: 1,
+        subtitleSelected: true,
+        subtitleMode: 'unconfigured',
+        decisionKind: 'direct-play',
+        reasonCodeCount: 1,
+        reasonCodes: 'direct-play-supported',
+      },
+    },
+  );
+  assert.deepEqual(Object.keys(record.context ?? {}), [
+    'candidateCount',
+    'subtitleTrackCount',
+    'subtitleSelected',
+    'subtitleMode',
+    'decisionKind',
+    'reasonCodeCount',
+    'reasonCodes',
+  ]);
+  assertNoSubtitleDiagnosticForbiddenField(record);
+  assertPublicOutputDoesNotContain(record, RAW_PLEX_PRIVATE_VALUES, 'subtitleDiagnostic');
+});
+
+test('plex stream resolver bounds counts and encodes closed reason codes in subtitle diagnostics', async () => {
+  const mediaDetail = createMediaDetail();
+  const variant = mediaDetail.media[0]!;
+  mediaDetail.media = Array.from({ length: 1_001 }, () => ({
+    ...variant,
+    parts: variant.parts.map((part) => ({
+      ...part,
+      streams: part.streams.map((stream) => ({ ...stream })),
+    })),
+  }));
+  const events: DiagnosticEventInput[] = [];
+  const result = await createResolver({
+    mediaDetail,
+    subtitleDiagnostics: {
+      recordSubtitleDebug(input) {
+        events.push(input);
+      },
+    },
+  }).resolve({
+    requestId: 'request-bounded-subtitle-diagnostic',
+    mediaId: 'media-input-bounded-subtitle-diagnostic',
+    capabilityProfile: directPlayProfile,
+    settingsPreferences: settingsPreferences({ subtitleMode: 'standard' }),
+  });
+
+  assert.equal(events.length, 1);
+  assert.ok(result.decision);
+  assert.deepEqual(events[0]?.context, {
+    candidateCount: 999,
+    subtitleTrackCount: 999,
+    subtitleSelected: true,
+    subtitleMode: 'standard',
+    decisionKind: 'direct-play',
+    reasonCodeCount: 1,
+    reasonCodes: 'direct-play-supported',
+  });
+});
+
+test('plex stream resolver ignores subtitle diagnostic failures without changing playback settlement', async () => {
+  const input = {
+    requestId: 'request-diagnostic-failure',
+    mediaId: 'media-input-diagnostic-failure',
+    capabilityProfile: directPlayProfile,
+    settingsPreferences: settingsPreferences(),
+  } as const;
+  const baseline = await createResolver({
+    mediaDetail: createMediaDetail(),
+  }).resolve(input);
+  const withDiagnosticFailure = await createResolver({
+    mediaDetail: createMediaDetail(),
+    subtitleDiagnostics: {
+      recordSubtitleDebug() {
+        throw new Error('diagnostic failure');
+      },
+    },
+  }).resolve(input);
+
+  assert.deepEqual(withDiagnosticFailure, baseline);
 });
 
 test('plex stream resolver normalizes unsupported policy without private playback output', async () => {
@@ -477,6 +704,7 @@ function createResolver(options: {
   mediaDetail: PlexMediaItem | null;
   mediaDetailError?: Error;
   pmsStarts?: PlexStreamResolverPmsSessionStartInput[];
+  subtitleDiagnostics?: PlexStreamResolverSubtitleDiagnosticPort;
 }): PlexStreamResolver {
   const pmsStarts = options.pmsStarts ?? [];
   return new PlexStreamResolver({
@@ -510,6 +738,7 @@ function createResolver(options: {
         return { id: `lease-${input.requestId}`, requestId: input.requestId };
       },
     },
+    subtitleDiagnostics: options.subtitleDiagnostics,
   });
 }
 
@@ -552,6 +781,23 @@ function assertPrivateCarriesPrivilegedSetup(
     descriptor.setup.selectedPrivateTrackIds.subtitle,
     expected.subtitlePrivateTrackId === undefined ? 'subtitle-main-embedded' : expected.subtitlePrivateTrackId,
   );
+}
+
+function settingsPreferences(
+  overrides: Partial<DesktopPlaybackSettingsPreferences> = {},
+): DesktopPlaybackSettingsPreferences {
+  return {
+    audioOutputDeviceId: null,
+    dtsPassthroughEnabled: false,
+    directPlayAudioFallbackEnabled: true,
+    subtitleMode: 'direct',
+    preferredSubtitleLanguage: null,
+    preferForcedSubtitlesEnabled: false,
+    hdrFallbackMode: 'off',
+    transcodeQuality: 'default',
+    transcodeCompatibilityModeEnabled: false,
+    ...overrides,
+  };
 }
 
 function createMediaDetail(options: {
@@ -630,6 +876,37 @@ function createMediaDetail(options: {
               },
             ]
           : [],
+      },
+    ],
+  };
+}
+
+function createHdrChoiceMediaDetail(): PlexMediaItem {
+  const source = createMediaDetail();
+  const sourceVariant = source.media[0]!;
+  const sourcePart = sourceVariant.parts[0]!;
+  const hdrPart = {
+    ...sourcePart,
+    id: 'part-hdr10',
+    key: '/library/parts/hdr10',
+    file: 'hdr10.mkv',
+    streams: sourcePart.streams.map((stream) =>
+      stream.streamType === 1
+        ? {
+            ...stream,
+            id: 'video-hdr10',
+            dynamicRange: 'hdr10',
+          }
+        : stream),
+  };
+  return {
+    ...source,
+    media: [
+      sourceVariant,
+      {
+        ...sourceVariant,
+        id: 'variant-hdr10',
+        parts: [hdrPart],
       },
     ],
   };

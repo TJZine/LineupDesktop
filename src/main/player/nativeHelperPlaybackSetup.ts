@@ -17,4 +17,6 @@ export interface NativeHelperPlaybackSetup {
     subtitle: string | null;
   };
   trackMap: PlaybackTrackMap;
+  audioOutputNativeKey: string | null;
+  dtsPassthroughEnabled: boolean;
 }

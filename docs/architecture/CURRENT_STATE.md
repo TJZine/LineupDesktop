@@ -7,9 +7,17 @@
 > `docs/product/lineup-product-parity-matrix.md` reopens parity work, including
 > deferred Channel Builder proof plus Settings, Guide, input/lifecycle, and
 > production playback capability gaps. WS2's platform-neutral implementation
-> gate is closed, while RD-27 Windows observation and
-> `WS2-POST-VALIDATION-01` native proof remain required, while neither is the
-> next catch-all step and neither can close missing code.
+> gate is closed. WS3's final product source is Unit 3C-F checkpoint
+> `87662b5`; prior Unit 3C-D `5f368d4`, viewport repair `77d09ad`, test-only
+> harness checkpoint `f0e2817`, and focus-plan amendment `c59124a` remain
+> accepted history.
+> Windows/native/live/manual/current-upstream proof remains open.
+> Unit 3D is accepted and WS3's local gate is closed. WS4 targeted
+> scope-load/planning is active; product work requires its own
+> decision-complete plan and fresh approval of an exact first unit.
+> RD-27 Windows observation, `WS2-POST-VALIDATION-01` native proof, and other
+> environment-specific evidence remain required but are accumulated for the
+> final consolidated Windows campaign; none can close missing code.
 > Established 2026-05-07. This is the canonical current-state architecture
 > document for Lineup Desktop.
 
@@ -30,9 +38,27 @@ behavior and conservative production capability gates. The local visual-proof
 run is closed; feature/UI parity is reopened. The active nine-workstream
 parity-correction plan has landed and reviewed WS1 Channel Builder
 implementation, while WS1 remains open for deferred proof and performance debt.
-WS2 Packages 2A and 2B are published and cleanly reviewed, and Package 2D is a
-reviewed conservative no-op. This does not close WS1 or start WS3 through WS9;
-WS3 is only the next unopened freshness-planning target.
+WS2 Packages 2A and 2B are published and cleanly reviewed, Package 2D is a
+reviewed conservative no-op, and `358e8de` adds post-closeout recovery and
+teardown lifecycle hardening. This does not close WS1. WS3 Units 3A, 3A-R, 3B,
+and 3C are committed at `81bc0b7`, `e8445e5`, `11dd704`, and `1540de3`;
+their planned product scope is present without promoting the conservative
+production profile. A controller-observed narrow-viewport Settings rail defect
+returned Unit 3C to implementation-revise; reviewed repair `77d09ad` closes the
+local visibility/focus gate after clean focused/full verification and repeated
+Unit 3C-D adds production fixed-schema Settings/subtitle diagnostic producers
+and honest missing-output fallback presentation without changing public
+contracts, persistence, capability state, or stable-row classification.
+Unit 3C-F then repaired category-Right focus derivation inside two files and is
+accepted at final product checkpoint `87662b5` after focused 17/17, aggregate
+265/265, and clean implementation review. Unit 3D's final verification,
+authority review, and docs gates passed; WS3's local gate is closed. WS4
+targeted scope-load/planning is active, while product work requires its own
+decision-complete plan and fresh approval of an exact first unit; WS5 through
+WS9 remain unopened.
+The accepted 227-row audit remains the program baseline, so WS3 entry validates
+only its assigned rows and affected current owners rather than repeating the
+program-wide audit.
 There is no installer
 implementation, public release/signing pipeline, production native-helper media
 binary redistribution, or Windows-observed production playback closeout proof
@@ -41,9 +67,10 @@ later RD notes supersede earlier "unsupported", "not wired", or "in progress"
 statements where they describe completed code but not completed Windows product
 proof.
 RD-04 adds documentation and harness ownership for upstream behavior guardrails
-only; it does not import product runtime code. RD-05 adds a disposable
-dev-only external `mpv` POC tool and ignored redacted local evidence only; it
-does not create production playback architecture. RD-06 adds dev-only Windows
+only; it does not import product runtime code. RD-05 produced disposable,
+dev-only external `mpv` POC observations and ignored redacted local evidence
+only; its superseded source/test harness has since been removed and it does not
+create production playback architecture. RD-06 adds dev-only Windows
 native libmpv WID, render API, and app-owned native presentation spike modes
 with ignored redacted local evidence only. The spike must use dummy visual
 media, active-playback overlay/focus/fullscreen checks, and libmpv client API
@@ -437,19 +464,21 @@ The watch-list owners that remain over 500 lines are reported by
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
 | Import provenance | `docs/architecture/import-ledger.md` | Current copied/adapted upstream source ledger, including the exact Package 7 overlay presentation slice at pinned `4bdb0e1b3370e7893a582ec80226557727832d0b` and observed-current `a1a7ea7dcb1cfc8aee7cfcf88cf5a1dac718bf30` |
 | Original Lineup compatibility | `docs/architecture/original-lineup-reference-compatibility-matrix.md` and `docs/architecture/original-lineup-divergence-register.md` | Current copied/adapted/reference/proof-context memory, including Package 7 overlay presentation and the reviewed Package 6 Info-precedence divergence |
-| Product parity and MVP roadmap | `docs/product/lineup-product-parity-matrix.md`, `docs/development/windows-ui-proof-plan.md`, `docs/plans/2026-07-22-tier3-parity-correction-plan.md`, and `docs/roadmap/desktop-port-roadmap.md` | WS1 implementation/review landed but proof remains deferred/open. WS2's platform-neutral implementation gate is closed at published `d2f1e97`; `WS2-POST-VALIDATION-01` remains nonblocking native/Windows debt. WS3–WS9 are unopened, with WS3 only the next freshness-planning target. RD-27 remains later. |
+| Product parity and MVP roadmap | `docs/product/lineup-product-parity-matrix.md`, `docs/development/windows-ui-proof-plan.md`, `docs/plans/2026-07-22-tier3-parity-correction-plan.md`, and `docs/roadmap/desktop-port-roadmap.md` | WS1 implementation/review landed but proof remains deferred/open. WS2's platform-neutral implementation gate is closed at published `d2f1e97`, with lifecycle hardening at `358e8de`; `WS2-POST-VALIDATION-01` remains native/Windows debt. WS3's local gate is accepted/closed at final product source `87662b5`; prior Unit 3C-D `5f368d4`, viewport repair `77d09ad`, and test-only harness proof `f0e2817` remain accepted history, while the consolidated proof packet remains open. WS4 targeted scope-load/planning is active; product/test/package/config edits require its own decision-complete plan and fresh approval of an exact first unit. WS5–WS9 remain unopened. Environment-specific proof accumulates for the final Windows campaign before RD-27/RD-28/program closeout. |
 | File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size evidence, cohesion-based dispositions, fresh hotspot review triggers, and Tier 3 file-shape verification |
 | Electron main shell | `src/main/index.ts`, `src/main/applicationStartupCleanup.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with smoke-only assertion ownership split out of the startup/composition entrypoint, independently guarded startup-rollback ownership, plus RD-14 Unit 2 main-owned BrowserWindow/fullscreen/display/restore controller and Unit 3 foreground app-command controller while `src/main/index.ts` remains composition and IPC wiring |
-| Preload bridge | `src/preload/index.cts`, `src/preload/channels.cts`, `src/preload/playerRecoveryBridge.cts`, `src/preload/channelSetupBridge.cts`, `src/preload/channelBridgeGuards.cts`, and `src/preload/diagnosticsBridgeGuards.cts` | Narrow shell/window/player/diagnostics/Plex/channel bridge with runtime payload guards. WS2 exposes only the closed validated Retry-current/Skip-next recovery operation through `playerRecoveryBridge.cts`; renderer remains unprivileged. WS1 exposes exactly five validated Channel Builder operations—`getStatus`, `startReview`, `startApply`, `getOperation`, and `cancel`—without privileged payload custody. RD-22B exposes only validated `window.lineupDesktop.plex` operations while rejecting malformed or privileged Plex results locally. ARCH-02 keeps the sandbox-compatible entrypoint as the only `contextBridge`/`ipcRenderer` value owner. |
-| Renderer shell and Channel Builder flow | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md), `src/renderer/index.ts`, `src/renderer/playerErrorRecoveryController.ts`, `src/renderer/channelSetup/builderConfigState.ts`, `src/renderer/workflow.ts`, `src/renderer/domBindings.ts`, and `src/renderer/styles/workflow-screens.css` | Unprivileged runtime-backed app shell with live Plex onboarding/library, persisted setup/Settings, scheduler-backed Guide, safe Player/overlay projection, deterministic focus/input, and WS1 Channel Builder configuration, pre-build review, progress, result, recovery, and cancellation presentation. WS2's renderer recovery controller owns only Retry/Skip request generations, busy/error settlement, and focus restoration; main remains authoritative. Paired visual manifests and the named Windows/manual input/accessibility states remain open; `index.ts` remains composition wiring. |
+| Preload bridge | `src/preload/index.cts`, `src/preload/channels.cts`, `src/preload/settingsBridge.cts`, `src/preload/settingsBridgeGuards.cts`, `src/preload/playerRecoveryBridge.cts`, `src/preload/channelSetupBridge.cts`, `src/preload/channelBridgeGuards.cts`, and `src/preload/diagnosticsBridgeGuards.cts` | Narrow shell/window/player/diagnostics/Plex/channel/Settings bridge with runtime payload guards. WS3 exposes exactly three validated Settings operations and adds only the closed `player.pauseIfCurrent`/`player.playIfCurrent` intent literals to the existing player channel; snapshot custody remains in main. WS2 exposes only the closed validated Retry-current/Skip-next recovery operation through `playerRecoveryBridge.cts`; renderer remains unprivileged. WS1 exposes exactly five validated Channel Builder operations—`getStatus`, `startReview`, `startApply`, `getOperation`, and `cancel`—without privileged payload custody. RD-22B exposes only validated `window.lineupDesktop.plex` operations while rejecting malformed or privileged Plex results locally. ARCH-02 keeps the sandbox-compatible entrypoint as the only `contextBridge`/`ipcRenderer` value owner. |
+| Renderer shell, Settings, and Channel Builder flow | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md), `src/renderer/index.ts`, `src/renderer/settings/**`, `src/renderer/settingsSetup.ts`, `src/renderer/playerErrorRecoveryController.ts`, `src/renderer/channelSetup/builderConfigState.ts`, `src/renderer/workflow.ts`, `src/renderer/domBindings.ts`, and `src/renderer/styles/workflow-screens.css` | Unprivileged runtime-backed app shell with live Plex onboarding/library, version-2 persisted seven-category Settings, first-run audio setup, persistent Switch Profile, scheduler-backed Guide, safe Player/overlay projection, deterministic focus/input, and WS1 Channel Builder configuration, pre-build review, progress, result, recovery, and cancellation presentation. WS3's renderer owns route-scoped guarded pause/resume, Settings focus/state, capability-disabled presentation, themes, and overlay-duration injection without native/Plex privilege. WS2's renderer recovery controller owns only Retry/Skip request generations, busy/error settlement, and focus restoration; main remains authoritative. New paired Settings visuals and the named Windows/manual/native/accessibility states remain open; `index.ts` remains composition wiring. |
 | Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window/player bridge contract |
+| Settings contract vocabulary | `src/contracts/settings.ts` and `src/contracts/settingsAudioValidation.ts` | WS3 version-2 renderer-safe values, defaults, normalization, capability projection, opaque audio-output rows, centralized strict audio-list/label validation, three-operation request/result vocabulary, migration-compatible snapshots, and fixed safe failures. Conservative capabilities remain authoritative until later reviewed native/live proof. |
+| Main Settings policy and audio owner | `src/main/settings/desktopSettingsPolicy.ts`, `src/main/settings/settingsAudioOutputOwner.ts`, `src/main/settings/settingsNativeHostComposition.ts`, and `src/main/settings/settingsIpc.ts` | Main-owned Settings snapshot projection, authorized IPC, stream/resolver/diagnostic/private-helper preference consumers, opaque audio-device identity, and raw native-key custody. The injectable composition factory creates the production host once, hydrates Settings policy, and shares the same host binding with the audio owner and player IPC; development/smoke do not invoke the production factory. Renderer never receives raw device keys or promotes capability support. |
 | Player contract vocabulary | `src/contracts/player.ts` | Renderer-safe player command, state, event, request id, capability profile, opaque track, error, diagnostic, IPC result, and runtime event-guard contract |
 | IPC contract vocabulary | `src/contracts/ipc.ts` | Shell/window/player/diagnostics/Plex IPC literals plus renderer-safe player intent and forbidden-field vocabulary |
 | Persistence contract vocabulary | `src/contracts/persistence.ts` | Renderer-safe account, credential-handle, selected-server, storage-status, diagnostic, and persistence forbidden-field vocabulary |
 | Plex contract vocabulary | `src/contracts/plex.ts` | Renderer-safe Plex profile, home-user, server, health, selection, library, media, collection, playlist, tag-directory, runtime operation, snapshot, and sanitized error summaries plus recursive forbidden-field checks for raw credentials, headers, URI-like fields, raw payloads, filesystem paths, and image keys |
 | Diagnostics contract vocabulary | `src/contracts/diagnostics.ts` | Renderer-safe RD-17 diagnostic schema, result/error, summary, support-bundle export, redaction-scan, renderer-event, truncation, and sanitizer vocabulary |
 | Main diagnostics and support bundle | `src/main/diagnostics/*` | Main-owned RD-17 diagnostic event store, support-bundle target/path creation, export assembly, redaction scanning, IPC authorization, renderer-event validation, and safe support-bundle result/failure envelopes; renderer never receives absolute export paths or raw diagnostic material |
-| Desktop player adapter boundary | `src/main/player/desktopPlayerAdapter.ts`, `src/main/player/playerAdapterRequestCustody.ts`, `src/main/player/nativePlayerHostPort.ts`, `src/main/player/nativePlayerHostProcess.ts`, `src/main/player/playerIpc.ts`, `src/main/player/productionNativeHostFactory.ts`, `src/main/player/nativeHelperProtocol.ts`, and `src/main/player/nativeHelperPlaybackSetup.ts` | Main-owned adapter core, request-custody helper, native-host process seam, NDJSON helper protocol, and player IPC owner. RD-25 wires the production native host factory and native helper process launch; ARCH-02 keeps request id membership and native process/protocol framing outside the adapter composition owner. |
+| Desktop player adapter boundary | `src/main/player/desktopPlayerAdapter.ts`, `src/main/player/rendererIntentMapping.ts`, `src/main/player/playerAdapterRequestCustody.ts`, `src/main/player/nativePlayerHostPort.ts`, `src/main/player/nativePlayerHostProcess.ts`, `src/main/player/playerIpc.ts`, `src/main/player/productionNativeHostFactory.ts`, `src/main/player/nativeHelperProtocol.ts`, and `src/main/player/nativeHelperPlaybackSetup.ts` | Main-owned adapter core, renderer-intent validation/mapping, request-custody helper, shared native-host process seam, NDJSON helper protocol, and player IPC owner. WS3 maps guarded Settings pause/resume to existing internal play/pause commands plus nonforwarded expected snapshot identity and rejects stale identity before custody/host submission. It also correlates private audio-output queries and applies raw selected-device/DTS setup only inside main/helper custody. RD-25 wires the production native host factory and native helper process launch; ARCH-02 keeps request id membership and native process/protocol framing outside the adapter composition owner. |
 | Desktop stream policy | `src/main/player/streamPolicy/desktopStreamPolicy.ts` and `src/main/player/streamPolicy/types.ts` | Main/player-owned deterministic capability policy for direct play, direct stream, transcode, unsupported decisions, subtitle/audio fallback, burn-in/conversion, dynamic-range handling, stable reason codes, explicit unknowns, and safe outputs. `src/main/plex/streamResolver.ts` calls `decideDesktopStreamPolicy`; production capabilities remain deliberately conservative, so richer policy branches do not imply enabled Windows production support. |
 | Plex stream resolver boundary | `src/main/plex/streamResolver.ts`, `src/main/plex/streamResolverComposition.ts`, `src/main/plex/playbackMediaDetailPort.ts`, and `src/main/plex/pmsPlaybackSessionPort.ts` | Main-owned resolver and live composition. RD-25 resolves Plex media details, calls the Desktop stream policy, and manages PMS session leases with request-scoped start/release ports while retaining private playback custody. |
 | Channel Builder pure domain and planner | `src/domain/channelBuilder/**` | Pure deterministic WS1 configuration normalization, facet/candidate strategy construction, semantic identity, priority/cap planning, alternate/ordering variants, warnings, estimates, and safe plan projection. No Electron, Plex transport, raw payload, persistence, or renderer custody. |
@@ -458,7 +487,7 @@ The watch-list owners that remain over 500 lines are reported by
 | Channel Builder persistence and startup | `src/main/persistence/desktopChannelPersistenceStore.ts`, `src/main/persistence/channelPersistenceBootstrapOwner.ts`, `src/main/persistence/channelPersistenceStartupOwner.ts`, and `src/main/channel/channelPublicReferenceOwner.ts` | Main-owned versioned aggregate persistence, atomic mutation/recovery, startup restoration, and renderer-safe builder status. Packaged ACL proof remains open. |
 | Plex playback runtime boundary | `src/main/player/plexPlaybackRuntime.ts`, `src/main/player/playbackProgramTransitionOwner.ts`, `src/main/player/playerRecoveryIpc.ts`, `src/main/player/plexPlaybackRuntimeCleanup.ts`, `src/main/player/plexPlaybackCleanupWiring.ts`, `src/main/player/plexPlaybackBridge.ts`, `src/main/player/plexPlaybackComposition.ts`, `src/main/player/playbackRuntimeBootstrap.ts`, and `src/main/player/privilegedPlaybackDispatchContext.ts` | Main-owned runtime, bounded recovery, authoritative Retry-current/Skip-next transition owner, closed recovery IPC, cleanup sequencing owners, and scheduler/channel bridge. Exact schedule identity, retry budget, transition serialization, cleanup custody, and privileged playback state remain main-owned. |
 | Product native helper | `src/native-helper/Lineup.NativePlayerHost/**` | C#/.NET native player host executable source that instantiates libmpv and speaks the NDJSON protocol over stdin/stdout. Built binaries are untracked. |
-| Desktop persistence boundary | `src/main/persistence/appDataPaths.ts`, `src/main/persistence/secureStorageCodec.ts`, `src/main/persistence/desktopPersistenceStore.ts`, `src/main/persistence/desktopChannelPersistenceStore.ts`, `src/main/persistence/channelPersistenceBootstrapOwner.ts`, and `src/main/persistence/channelPersistenceStartupOwner.ts` | Main-owned app-data paths, Electron safeStorage codec, encrypted Plex credentials, selected-server state, fail-closed recovery, and versioned channel aggregate persistence/startup. RD-22B composes credential and server restoration; WS1 composes atomic lineup/config persistence and startup recovery. Backup/restore remains unimplemented. |
+| Desktop persistence boundary | `src/main/persistence/appDataPaths.ts`, `src/main/persistence/secureStorageCodec.ts`, `src/main/persistence/desktopPersistenceStore.ts`, `src/main/persistence/desktopSettingsStore.ts`, `src/main/persistence/desktopChannelPersistenceStore.ts`, `src/main/persistence/channelPersistenceBootstrapOwner.ts`, and `src/main/persistence/channelPersistenceStartupOwner.ts` | Main-owned app-data paths, Electron safeStorage codec, encrypted Plex credentials, selected-server state, fail-closed recovery, version-2 normalized Settings compare-and-swap/migration, and versioned channel aggregate persistence/startup. WS3 Settings storage is separate and non-secret; renderer receives only values, capability projection, safe audio rows, revisions, and fixed errors. RD-22B composes credential and server restoration; WS1 composes atomic lineup/config persistence and startup recovery. Backup/restore remains unimplemented. |
 | Desktop Plex runtime | `src/main/plex/desktopPlexRuntime.ts`, `src/main/plex/plexRuntimeOperationOwner.ts`, `src/main/plex/desktopPlexLibraryOperationExecutor.ts`, `src/main/plex/desktopPlexRuntimeSupport.ts`, `src/main/plex/livePlexTransport.ts`, `src/main/plex/plexComposition.ts`, and `src/main/plex/plexIpc.ts` | Main-owned RD-22B live Plex onboarding/library runtime and IPC composition for auth/PIN, credential restore status, Plex Home/profile switching, selected-server restore, server discovery/selection, library sections/items/search/metadata, stale/cancel/error normalization, and renderer-safe snapshots while retaining tokens, selected connections, transport details, raw payloads, endpoint URLs, and app paths in main custody. ARCH-02 gives stale/cancel/error operation custody and library browse/search/metadata dedicated owners under the main Plex runtime boundary. |
 | Desktop Plex library domain | `src/main/plex/library/*` | Main-owned RD-10 imported/adapted Plex library parser/domain owner for library sections, media metadata, seasons, collections, playlists, tag directories, search hubs, pagination, request intent, and renderer-safe summaries; RD-22B uses these seams through main-owned live runtime composition, with image URL construction, stream resolver runtime, and playback URL setup still out of scope |
 | Desktop Plex auth domain | `src/main/plex/auth/*` | Main-owned RD-10 imported/adapted Plex auth owner for PIN/profile/token validation, Plex Home users, profile switching, injected auth transport, sanitized errors, Desktop identity metadata, and RD-09 credential storage adapter; RD-22B wires live auth/PIN, Plex Home/profile switching, credential restore status, and protected-user PIN failure handling through main/preload/renderer-safe runtime composition |
@@ -468,12 +497,52 @@ The watch-list owners that remain over 500 lines are reported by
 | Channel and content domain | `src/domain/channel/**` | Pure RD-11 imported/adapted channel authoring, import/export normalization, content resolution through injected domain-safe library ports, stale fallback, source/channel resolution caches, retry scheduling, lineup navigation, and channel persistence port owner; no raw Plex payload, tokenized URL, auth header, Electron, Node, browser storage, preload, renderer, or live network ownership |
 | Channel persistence adapter | `src/main/persistence/desktopChannelPersistenceStore.ts` | Main-owned versioned aggregate adapter behind injected paths and filesystem seams, with temp-file replacement, mode hardening, recovery, and typed domain storage. Its RD-11/RD-23 origin is now composed through WS1 bootstrap/startup and mutation owners; backup/restore remains unimplemented. |
 | Redaction contract vocabulary | `src/contracts/redaction.ts` | RD-17 redaction boundary and forbidden diagnostic field vocabulary shared by diagnostics contracts, scanner, and tests |
-| External `mpv` POC tool | `tools/mpv-poc/rd-05-external-mpv-poc.mjs` | Dev-only disposable RD-05 evidence harness |
 | Native libmpv spike tool | `tools/libmpv-spike/rd-06-native-libmpv-host-spike.mjs` | Dev-only disposable RD-06 Windows WID/render API evidence harness |
 | Internal Windows package tooling | `tools/package-windows-internal.mjs`, `tools/verify-windows-internal-package.mjs`, and `tools/__tests__/package-windows-internal.test.mjs` | RD-18 Unit 1 owner for internal Windows x64 unpacked package staging, provenance, checksums, internal notices, blocked native-helper/media-binary markers, and verifier coverage; generated artifacts stay ignored under `out/rd-18-windows-internal/**`, and public signing/update/native media redistribution remain blocked |
 | Docs verifier | `tools/verify-docs.mjs` | Active |
 | Redaction verifier | `tools/verify-redaction.mjs` | Active RD-17-aware scanner for secret-shaped values, raw auth/header material, privileged diagnostic fields, raw filesystem paths, process data, native handles, and raw IPC frames |
 | RD-17 diagnostics smoke | `tools/rd17-diagnostics-smoke.mjs` | Windows-only ignored-evidence proof for diagnostics crash recovery and support-bundle redaction closeout |
+
+## WS3 Settings Implementation Gate
+
+WS3 closes its local gate through Unit 3A `81bc0b7`, Unit 3A-R `e8445e5`,
+Unit 3B `11dd704`, Unit 3C `1540de3`, reviewed viewport repair `77d09ad`,
+Unit 3C-D closeout repair `5f368d4`, and Unit 3C-F focus repair `87662b5`.
+Test-only checkpoint `f0e2817` aligns the smoke harness with Unit 3B's shared
+production-host wiring and restores full verification; it changes no runtime
+owner, product source, capability, or row classification.
+Unit 3C-D makes the persisted Debug Logging and Subtitle Debug Logging controls
+drive fixed-schema production events and keeps diagnostic failure
+nonauthoritative. Injected local proof now distinguishes an unavailable saved
+audio output, visibly uses System Default, retains the saved opaque id until
+explicit completion, and presents honest summary copy. Real Windows
+enumeration, disappearance/relaunch, playback application, and support-bundle
+observation remain consolidated proof.
+The current path has one
+version-2 main-owned Settings store, a focused main policy and audio-output
+owner, three authorized and validated preload operations, a seven-category
+renderer Settings surface, first-run System Default audio completion, a
+persistent Switch Profile action, renderer-owned request-bound Settings
+pause/resume, and capability-gated disabled states. The controller's first
+approximately 900×700 inspection found that Recovery Down focuses Switch
+Profile while the non-scrolling rail leaves most of the button below the
+visible viewport. Reviewed repair `77d09ad` makes the Settings rail scrollable
+and restricts nearest-scroll behavior to Settings-owned elements. It passed
+16/16 focused and 261/261 complete Unit 3C tests, the named build/static gates,
+clean re-review, and repeated local inspection at 1280×720 and approximately
+900×700, including full Switch Profile/focus-ring visibility and the return
+edge to Recovery.
+
+This is local implementation authority, not platform completion. MP4/H.264/AAC
+Direct Play remains the only supported production media path. Audio output
+selection, DTS, subtitles, HDR, Direct Stream/transcode, and artwork-backed
+Settings remain unsupported or unproven where the capability projection says
+so. `PB-22`–`PB-24` stay WS2-owned/open; `ST-11`–`ST-16` stay WS3-owned/open
+through WS5; `ST-23` does not close WS8 `ON-08`. `WS3-PROOF-01` through
+`WS3-PROOF-06`, both WS3 contribution packets, WS1 debt,
+`WS1-PERF-01`, `WS2-POST-VALIDATION-01`, RD-27, and RD-28 remain open.
+No upstream source was copied or adapted; `0258dbe` was reference-only and the
+import ledger is unchanged.
 
 ## Local UI Proof Bundle Closeout
 
@@ -498,6 +567,10 @@ readiness, sleep/wake, or soak behavior.
 - Production Plex-to-native-helper playback setup using the private RD-12 playback descriptor (code implemented, manual proof pending)
 - Windows manual proof pending: production renderer-to-Plex/player playback
   wiring
+- Windows/native/live proof pending: Settings audio enumeration/application,
+  media preference effects, diagnostics/recovery, and first-run behavior
+- current-upstream paired Settings viewport/state inspection and later
+  Windows/native-video continuity proof pending
 - preload, contract, and product IPC Windows/manual playback proof beyond the
   RD-17 local diagnostics and RD-22B Plex onboarding/library surfaces
 - encrypted credential backup/restore implementation
@@ -523,9 +596,10 @@ playback resolver for deterministic proof. In production mode, player IPC uses
 the production native host factory when a Windows helper binary is available and
 otherwise fails closed with renderer-safe unsupported-capability results.
 RD-25/RD-26 historical slices are complete and reviewed only at their recorded
-scope. WS2's current platform-neutral implementation gate is closed; Windows/
-native/manual proof remains `WS2-POST-VALIDATION-01` and RD-27 work as
-applicable.
+scope. WS2's current platform-neutral implementation gate and WS3's local
+Settings gate through `87662b5` are closed.
+Windows/native/manual proof remains `WS2-POST-VALIDATION-01`, the WS3
+consolidated packet, and RD-27 work as applicable.
 Fullscreen requests map to the existing
 `window.enterFullscreen` and `window.exitFullscreen` renderer intents.
 RD-17 also exposes `window.lineupDesktop.diagnostics.recordRendererEvent()`,
@@ -545,6 +619,12 @@ parity-correction plan owns that sequence. WS1 implementation and review
 landed, but WS1 remains open for deferred proof and `WS1-PERF-01` (2,690.61 ms
 against the unchanged 2,000 ms target). WS2 has since closed its platform-neutral
 implementation gate without advancing WS1 stable IDs or evidence
-classifications; WS3 through WS9 remain unopened, with WS3 only the next
-freshness-planning target. RD-27 remains later and
-is not authorized to implement those gaps silently.
+classifications. WS3's product source is `87662b5`; `5f368d4` remains prior
+Unit 3C-D, `77d09ad` the viewport repair, and `f0e2817` test-only harness
+proof. Unit 3D is accepted and WS3's local gate is closed. WS4 targeted
+scope-load/planning is active; no product/test/package/config edit begins
+before its own decision-complete plan and fresh approval of an exact first
+unit. WS5 through WS9 remain unopened. RD-27 remains later and is not
+authorized to implement those gaps silently. The final consolidated Windows
+campaign owns accumulated environment-specific proof, not another
+implementation audit.

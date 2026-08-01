@@ -9,9 +9,9 @@ import { setImmediate } from 'node:timers';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import {
-  PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
   type PlayerCommand,
 } from '../../../contracts/player.js';
+import { assertPublicSafe } from './playerPublicSafetyAssertions.js';
 import {
   NativePlayerHostProcess,
   type NativePlayerHostChildProcess,
@@ -85,32 +85,22 @@ const loadCommand: PlayerCommand = {
   },
 };
 
+async function completeActiveLoad(
+  host: NativePlayerHostProcess,
+  child: FakeHostChildProcess,
+): Promise<void> {
+  const load = host.execute(loadCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.send({ type: 'result', requestId: loadCommand.requestId, ok: true, events: [] });
+  assert.equal((await load).ok, true);
+}
+
 function assertNoForbiddenKeys(value: unknown): void {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      assertNoForbiddenKeys(item);
-    }
-    return;
-  }
-
-  if (value === null || typeof value !== 'object') {
-    return;
-  }
-
-  for (const [key, child] of Object.entries(value)) {
-    assert.equal(
-      PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS.includes(
-        key as (typeof PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS)[number],
-      ),
-      false,
-      `native host process value contains forbidden key ${key}`,
-    );
-    assertNoForbiddenKeys(child);
-  }
+  assertPublicSafe(value, []);
 }
 
 function assertTextAbsent(value: unknown, text: string): void {
-  assert.equal(JSON.stringify(value).includes(text), false, `unexpected renderer-facing text ${text}`);
+  assertPublicSafe(value, [text]);
 }
 
 function spawnNodeHost(script: string): SpawnedNativeHostChildProcess {
@@ -223,6 +213,228 @@ test('native host process translates commands and returns safe host events', asy
   assert.equal(result.ok && Array.isArray(result.events) ? result.events.length : 0, 2);
   assertNoForbiddenKeys(child.writes);
   assertNoForbiddenKeys(result);
+});
+
+test('native host process correlates bounded audio output queries on the shared helper', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+
+  const pending = host.queryAudioOutputs('audio-output-1');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(child.writes[0], {
+    type: 'audio-output.query',
+    requestId: 'audio-output-1',
+  });
+  child.send({
+    type: 'audio-output.result',
+    requestId: 'audio-output-1',
+    ok: true,
+    outputs: [
+      { nativeKey: 'wasapi/default', label: 'Speakers' },
+      { nativeKey: 'wasapi/headphones', label: 'Headphones' },
+    ],
+  });
+
+  assert.deepEqual(await pending, {
+    ok: true,
+    outputs: [
+      { nativeKey: 'wasapi/default', label: 'Speakers' },
+      { nativeKey: 'wasapi/headphones', label: 'Headphones' },
+    ],
+  });
+  assert.equal(child.killed, false);
+});
+
+test('native host process reports one lifecycle failure when an active-playback audio query crashes', async () => {
+  const child = new FakeHostChildProcess();
+  const lifecycleFailures: NativePlayerHostLifecycleFailure[] = [];
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+  host.onLifecycleFailure((failure) => lifecycleFailures.push(failure));
+
+  await completeActiveLoad(host, child);
+
+  const query = host.queryAudioOutputs('audio-output-active-crash');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.emit('close', 1, null);
+
+  const result = await query;
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? null : result.error.code, 'PLAYER_HELPER_EXITED');
+  assert.equal(lifecycleFailures.length, 1);
+  assert.equal(lifecycleFailures[0]?.requestId, null);
+  assert.equal(lifecycleFailures[0]?.error.code, 'PLAYER_HELPER_EXITED');
+});
+
+test('native host process reports one lifecycle failure when an audio query times out', async () => {
+  const child = new FakeHostChildProcess();
+  const lifecycleFailures: NativePlayerHostLifecycleFailure[] = [];
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 5,
+  });
+  host.onLifecycleFailure((failure) => lifecycleFailures.push(failure));
+
+  await completeActiveLoad(host, child);
+  const result = await host.queryAudioOutputs('audio-output-timeout');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? null : result.error.code, 'PLAYER_HELPER_TIMEOUT');
+  assert.equal(child.killed, true);
+  assert.equal(lifecycleFailures.length, 1);
+  assert.equal(lifecycleFailures[0]?.requestId, null);
+  assert.equal(lifecycleFailures[0]?.error.code, 'PLAYER_HELPER_TIMEOUT');
+});
+
+test('native host process quarantines inexact or privileged audio result envelopes once', async () => {
+  const malformedResults = [
+    {
+      type: 'audio-output.result',
+      requestId: 'audio-output-malformed',
+      ok: true,
+      outputs: [],
+      extra: true,
+    },
+    {
+      type: 'audio-output.result',
+      requestId: 'audio-output-malformed',
+      ok: false,
+      error: {},
+      extra: true,
+    },
+    {
+      type: 'audio-output.result',
+      requestId: 'audio-output-malformed',
+      ok: true,
+      outputs: [],
+      tokenizedUrl: 'private-audio-url',
+    },
+    {
+      type: 'audio-output.result',
+      requestId: 'audio-output-malformed',
+      ok: false,
+    },
+  ];
+
+  for (const malformed of malformedResults) {
+    const child = new FakeHostChildProcess();
+    const lifecycleFailures: NativePlayerHostLifecycleFailure[] = [];
+    const host = new NativePlayerHostProcess({
+      spawnHostProcess: () => child,
+      requestTimeoutMs: 100,
+    });
+    host.onLifecycleFailure((failure) => lifecycleFailures.push(failure));
+
+    await completeActiveLoad(host, child);
+    const pending = host.queryAudioOutputs('audio-output-malformed');
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    child.send(malformed);
+
+    const result = await pending;
+    assert.equal(result.ok, false);
+    assert.equal(result.ok ? null : result.error.code, 'PLAYER_HELPER_MALFORMED_OUTPUT');
+    assert.equal(child.killed, true);
+    assert.equal(lifecycleFailures.length, 1);
+    assert.equal(lifecycleFailures[0]?.error.code, 'PLAYER_HELPER_MALFORMED_OUTPUT');
+    assertNoForbiddenKeys(lifecycleFailures);
+  }
+});
+
+test('native host process keeps concurrent command failures on results with one audio-owned lifecycle callback', async () => {
+  const child = new FakeHostChildProcess();
+  const lifecycleFailures: NativePlayerHostLifecycleFailure[] = [];
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+  host.onLifecycleFailure((failure) => lifecycleFailures.push(failure));
+
+  await completeActiveLoad(host, child);
+  const command = host.execute({
+    command: 'pause',
+    requestId: 'native-pause-concurrent-crash',
+    payload: {},
+  });
+  const audio = host.queryAudioOutputs('audio-output-concurrent-crash');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(child.writes.length, 3);
+  child.emit('close', 1, null);
+
+  const [commandResult, audioResult] = await Promise.all([command, audio]);
+  assert.equal(commandResult.ok, false);
+  assert.equal(commandResult.ok ? null : commandResult.error.code, 'PLAYER_HELPER_EXITED');
+  assert.equal(audioResult.ok, false);
+  assert.equal(audioResult.ok ? null : audioResult.error.code, 'PLAYER_HELPER_EXITED');
+  assert.equal(lifecycleFailures.length, 1);
+  assert.equal(lifecycleFailures[0]?.requestId, null);
+  assert.equal(lifecycleFailures[0]?.error.code, 'PLAYER_HELPER_EXITED');
+});
+
+test('native host process quarantines command/audio result type mismatches', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+
+  const pending = host.queryAudioOutputs('audio-output-mismatch');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.send({
+    type: 'result',
+    requestId: 'audio-output-mismatch',
+    ok: true,
+    events: [],
+  });
+
+  const result = await pending;
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? null : result.error.code, 'PLAYER_HELPER_MALFORMED_OUTPUT');
+  assert.equal(child.killed, true);
+});
+
+test('native host process ignores late audio output results with fixed diagnostics', async () => {
+  const child = new FakeHostChildProcess();
+  const diagnostics = new DiagnosticEventStore({
+    clock: () => 1_000,
+    idGenerator: () => 'late-audio-result',
+  });
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+    diagnosticEventStore: diagnostics,
+  });
+
+  const pending = host.queryAudioOutputs('audio-output-late');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.send({
+    type: 'audio-output.result',
+    requestId: 'audio-output-late',
+    ok: true,
+    outputs: [],
+  });
+  assert.equal((await pending).ok, true);
+
+  child.send({
+    type: 'audio-output.result',
+    requestId: 'audio-output-late',
+    ok: true,
+    outputs: [{ nativeKey: 'private-late-key', label: 'Private late label' }],
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  const record = diagnostics.getRecords().find(
+    (candidate) => candidate.operation === 'helper.late-result',
+  );
+  assert.deepEqual(record?.context, { count: 1 });
+  assertTextAbsent(diagnostics.getRecords(), 'private-late-key');
+  assertTextAbsent(diagnostics.getRecords(), 'Private late label');
 });
 
 test('native host process transports opaque helper event payloads to the adapter seam', async () => {
@@ -901,6 +1113,8 @@ test('native host process serializes private playback details correctly', async 
         selectedTrackIds: { video: null, audio: null, subtitle: null },
         selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
         trackMap: { video: [], audio: [], subtitle: [] },
+        audioOutputNativeKey: null,
+        dtsPassthroughEnabled: false,
       },
       selectedConnection: {
         protocol: 'https' as const,

@@ -4,6 +4,7 @@ import {
   PmsPlaybackSessionPort,
   type PmsPlaybackSessionRuntimePort,
 } from '../../main/plex/pmsPlaybackSessionPort.js';
+import { LivePlexTransportError } from '../../main/plex/livePlexTransportError.js';
 
 test('PmsPlaybackSessionPort startSession returns lease and stores details', async () => {
   const connection = {
@@ -46,7 +47,10 @@ test('PmsPlaybackSessionPort startSession returns null if token is missing', asy
       _operation: Parameters<PmsPlaybackSessionRuntimePort['withActivePlexToken']>[0],
       _run: (token: string) => Promise<T>,
     ): Promise<T> {
-      throw new Error('missing token');
+      throw new LivePlexTransportError(
+        'auth-required',
+        'startPlayback requires Plex authentication',
+      );
     },
   });
 
@@ -67,6 +71,35 @@ test('PmsPlaybackSessionPort startSession returns null if token is missing', asy
   });
 
   assert.equal(lease, null);
+});
+
+test('PmsPlaybackSessionPort startSession rethrows unexpected credential failures', async () => {
+  const unexpectedFailure = new Error('unexpected credential runtime failure');
+  const mockRuntime = createRuntimePort({
+    async withActivePlexToken<T>(): Promise<T> {
+      throw unexpectedFailure;
+    },
+  });
+
+  const port = new PmsPlaybackSessionPort(mockRuntime);
+
+  await assert.rejects(
+    () => port.startSession({
+      requestId: 'req-unexpected-credential-failure',
+      media: { id: 'media-1', title: 'Test' },
+      decisionKind: 'transcode',
+      connection: {
+        uri: 'https://plex.local',
+        protocol: 'https',
+        address: 'plex.local',
+        port: 32400,
+        local: true,
+        relay: false,
+        latencyMs: null,
+      },
+    }),
+    (error: unknown) => error === unexpectedFailure,
+  );
 });
 
 test('PmsPlaybackSessionPort startSession returns null for invalid input connection', async () => {

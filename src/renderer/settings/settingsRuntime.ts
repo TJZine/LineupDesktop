@@ -1,12 +1,24 @@
 import type {
+  DesktopSettingsCapabilityProjection,
   DesktopSettingsErrorCode,
   DesktopSettingsIpcResult,
   DesktopSettingsSnapshot,
   DesktopSettingsValues,
+  DesktopSettingsView,
+} from '../../contracts/settings.js';
+import {
+  SETTINGS_SCHEMA_VERSION,
+  cloneDesktopSettingsCapabilities,
+  createDefaultDesktopSettingsValues,
+  desktopSettingsValuesEqual,
 } from '../../contracts/settings.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
+import {
+  isPersistedSettingsActionEnabled,
+  nextDesktopSettingsValues,
+  type PersistedSettingsActionId,
+} from '../settingsSetup.js';
 
-const SETTINGS_SCHEMA_VERSION = 1 as const;
 const DESKTOP_SETTINGS_ERROR_MESSAGES: Record<DesktopSettingsErrorCode, string> = {
   unauthorized: 'Desktop settings request was not authorized.',
   'validation-failed': 'Desktop settings request or response was invalid.',
@@ -16,22 +28,10 @@ const DESKTOP_SETTINGS_ERROR_MESSAGES: Record<DesktopSettingsErrorCode, string> 
   'operation-failed': 'Desktop settings operation failed.',
 };
 
-function createDefaultDesktopSettingsValues(): DesktopSettingsValues {
-  return {
-    launchMode: 'windowed', guideDensity: 'comfortable',
-    previewBadgesEnabled: true, setupReminderEnabled: true,
-  };
-}
-
-export type PersistedSettingsActionId =
-  | 'cycleLaunchMode'
-  | 'cycleGuideDensity'
-  | 'togglePreviewBadges'
-  | 'toggleSetupReminder';
-
 export interface SettingsRuntimeState {
   values: DesktopSettingsValues;
   snapshot: DesktopSettingsSnapshot | null;
+  capabilities: DesktopSettingsCapabilityProjection | null;
   loading: boolean;
   saving: boolean;
   errorCode: DesktopSettingsErrorCode | null;
@@ -47,6 +47,7 @@ export interface SettingsRuntimeOptions {
 export interface SettingsRuntimeController {
   initialize(): Promise<void>;
   applyAction(action: PersistedSettingsActionId): Promise<void>;
+  replaceValues(transform: (values: DesktopSettingsValues) => DesktopSettingsValues): Promise<void>;
   getState(): SettingsRuntimeState;
   cleanup(): void;
 }
@@ -59,6 +60,7 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
   let currentGetRequestId: string | null = null;
   let currentReplaceRequestId: string | null = null;
   let lastAccepted: DesktopSettingsSnapshot | null = null;
+  let capabilities: DesktopSettingsCapabilityProjection | null = null;
   let visibleValues = createDefaultDesktopSettingsValues();
   let pendingDesired: DesktopSettingsValues | null = null;
   let pendingDesiredRequiresPersistence = false;
@@ -73,6 +75,7 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
   const publish = (): void => options.onStateChanged({
     values: { ...visibleValues },
     snapshot: lastAccepted === null ? null : cloneSnapshot(lastAccepted),
+    capabilities: capabilities === null ? null : cloneDesktopSettingsCapabilities(capabilities),
     loading,
     saving: replacementInFlight || fullscreenIntentInFlight,
     errorCode,
@@ -86,7 +89,7 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
 
   const readPendingDesired = (): DesktopSettingsValues | null => pendingDesired;
 
-  const invokeGet = async (operationGeneration: number): Promise<DesktopSettingsIpcResult<DesktopSettingsSnapshot>> => {
+  const invokeGet = async (operationGeneration: number): Promise<DesktopSettingsIpcResult<DesktopSettingsView>> => {
     const requestId = `settings-get-${String(++getCounter)}`;
     currentGetRequestId = requestId;
     try {
@@ -104,7 +107,7 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
     operationGeneration: number,
     expectedRevision: number,
     values: DesktopSettingsValues,
-  ): Promise<DesktopSettingsIpcResult<DesktopSettingsSnapshot>> => {
+  ): Promise<DesktopSettingsIpcResult<DesktopSettingsView>> => {
     const requestId = `settings-replace-${String(++replaceCounter)}`;
     currentReplaceRequestId = requestId;
     try {
@@ -238,7 +241,8 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
         const refreshed = await invokeGet(operationGeneration);
         if (!active || operationGeneration !== generation) return;
         if (refreshed.ok) {
-          lastAccepted = cloneSnapshot(refreshed.value);
+          lastAccepted = cloneSnapshot(refreshed.value.snapshot);
+          capabilities = cloneDesktopSettingsCapabilities(refreshed.value.capabilities);
           desired = { ...(pendingDesired ?? desired) };
           pendingDesired = null;
           pendingDesiredRequiresPersistence = false;
@@ -256,7 +260,7 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
           if (pendingDesired !== null) continue;
           replacementInFlight = true;
           publish();
-          result = await invokeReplace(operationGeneration, refreshed.value.revision, desired);
+          result = await invokeReplace(operationGeneration, refreshed.value.snapshot.revision, desired);
           replacementInFlight = false;
           if (!active || operationGeneration !== generation) return;
         } else {
@@ -267,8 +271,9 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
       }
 
       if (result.ok) {
-        lastAccepted = cloneSnapshot(result.value);
-        if (pendingDesired === null) visibleValues = { ...result.value.values };
+        lastAccepted = cloneSnapshot(result.value.snapshot);
+        capabilities = cloneDesktopSettingsCapabilities(result.value.capabilities);
+        if (pendingDesired === null) visibleValues = { ...result.value.snapshot.values };
         if (!preserveOperationFailure) setError(null);
         continue;
       }
@@ -315,10 +320,11 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
         publish();
         return;
       }
-      lastAccepted = cloneSnapshot(result.value);
-      visibleValues = { ...result.value.values };
+      lastAccepted = cloneSnapshot(result.value.snapshot);
+      capabilities = cloneDesktopSettingsCapabilities(result.value.capabilities);
+      visibleValues = { ...result.value.snapshot.values };
       setError(null);
-      pendingDesired = { ...result.value.values };
+      pendingDesired = { ...result.value.snapshot.values };
       pendingDesiredRequiresPersistence = false;
       await drainMutations();
       if (!active || operationGeneration !== generation) return;
@@ -327,7 +333,18 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
     },
     applyAction: async (action) => {
       if (!active || lastAccepted === null) return;
-      const desired = nextValues(visibleValues, action);
+      if (!isPersistedSettingsActionEnabled(action, capabilities)) return;
+      const desired = nextDesktopSettingsValues(visibleValues, action);
+      visibleValues = desired;
+      pendingDesired = { ...desired };
+      pendingDesiredRequiresPersistence = true;
+      setError(null);
+      publish();
+      await drainMutations();
+    },
+    replaceValues: async (transform) => {
+      if (!active || lastAccepted === null) return;
+      const desired = transform({ ...visibleValues });
       visibleValues = desired;
       pendingDesired = { ...desired };
       pendingDesiredRequiresPersistence = true;
@@ -338,6 +355,7 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
     getState: () => ({
       values: { ...visibleValues },
       snapshot: lastAccepted === null ? null : cloneSnapshot(lastAccepted),
+      capabilities: capabilities === null ? null : cloneDesktopSettingsCapabilities(capabilities),
       loading,
       saving: replacementInFlight || fullscreenIntentInFlight,
       errorCode,
@@ -357,23 +375,7 @@ export function createSettingsRuntime(options: SettingsRuntimeOptions): Settings
   };
 }
 
-function nextValues(
-  values: DesktopSettingsValues,
-  action: PersistedSettingsActionId,
-): DesktopSettingsValues {
-  switch (action) {
-    case 'cycleLaunchMode':
-      return { ...values, launchMode: values.launchMode === 'windowed' ? 'fullscreen' : 'windowed' };
-    case 'cycleGuideDensity':
-      return { ...values, guideDensity: values.guideDensity === 'comfortable' ? 'compact' : 'comfortable' };
-    case 'togglePreviewBadges':
-      return { ...values, previewBadgesEnabled: !values.previewBadgesEnabled };
-    case 'toggleSetupReminder':
-      return { ...values, setupReminderEnabled: !values.setupReminderEnabled };
-  }
-}
-
-function operationFailure(requestId: string): DesktopSettingsIpcResult<DesktopSettingsSnapshot> {
+function operationFailure(requestId: string): DesktopSettingsIpcResult<DesktopSettingsView> {
   return {
     ok: false,
     requestId,
@@ -394,7 +396,5 @@ function cloneSnapshot(snapshot: DesktopSettingsSnapshot): DesktopSettingsSnapsh
 }
 
 function settingsEqual(left: DesktopSettingsValues, right: DesktopSettingsValues): boolean {
-  return left.launchMode === right.launchMode && left.guideDensity === right.guideDensity &&
-    left.previewBadgesEnabled === right.previewBadgesEnabled &&
-    left.setupReminderEnabled === right.setupReminderEnabled;
+  return desktopSettingsValuesEqual(left, right);
 }

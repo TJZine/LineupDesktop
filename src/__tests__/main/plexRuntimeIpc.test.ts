@@ -43,9 +43,33 @@ import {
   mapRuntimeError,
 } from '../../main/plex/desktopPlexRuntimeSupport.js';
 import { registerPlexIpcHandlers } from '../../main/plex/plexIpc.js';
+import { ChannelBuilderFacetTransportUnavailableError } from '../../main/plex/channelBuilderFacetSession.js';
 
 const placeholderAccountToken = ['placeholder', 'account', 'value'].join('-');
 const placeholderManagedToken = ['placeholder', 'managed', 'value'].join('-');
+
+test('desktop Plex runtime does not fall back to the library transport for builder facets', async () => {
+  const fixture = createRuntimeFixture();
+
+  await assert.rejects(
+    fixture.runtime.withChannelBuilderFacetSession(
+      {
+        expectedContext: {
+          profileBinding: 'profile-binding:test',
+          serverBinding: 'server-binding:test',
+          librarySetBinding: 'library-set-binding:test',
+          contextEpoch: 1,
+        },
+        selectedLibraryIds: ['library'],
+        deadlineAtMs: 100_100,
+        signal: new AbortController().signal,
+      },
+      async () => undefined,
+    ),
+    ChannelBuilderFacetTransportUnavailableError,
+  );
+  assert.equal(fixture.libraryTransport.listItemsRequests.length, 0);
+});
 
 class FakeAuthTransport implements DesktopPlexAuthTransport {
   public readonly requests: DesktopPlexAuthTransportRequest[] = [];

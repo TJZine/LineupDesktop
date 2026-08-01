@@ -1,6 +1,6 @@
 #screen-settings .screen__content { width: 100%; max-width: 100%; height: 100%; padding: 0; gap: 0; }
 .settings-shell { display: grid; grid-template-columns: 300px minmax(0, 1fr); width: 100%; height: 100%; padding: 0; gap: 0; box-sizing: border-box; }
-.settings-rail { display: flex; flex-direction: column; height: 100%; padding: var(--space-8); border-right: 1px solid rgba(255, 255, 255, 0.12); background: rgba(0, 0, 0, 0.34); box-sizing: border-box; }
+.settings-rail { display: flex; flex-direction: column; min-height: 0; height: 100%; padding: var(--space-8); overflow-y: auto; overscroll-behavior-y: contain; border-right: 1px solid rgba(255, 255, 255, 0.12); background: rgba(0, 0, 0, 0.34); box-sizing: border-box; }
 .settings-profile-row { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-6); padding: var(--space-4); border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
 .settings-profile-avatar { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--color-primary); color: var(--color-inverse-text); font-weight: 800; }
 .settings-profile-name { color: var(--color-text); font-size: var(--text-sm); font-weight: 650; }
@@ -25,12 +25,24 @@
 #screen-settings .settings-control-row:hover { border-color: rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.09); }
 #screen-settings .settings-control-row.is-focused { border-color: var(--focus-color); background: rgba(255, 255, 255, 0.13); box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-color); }
 #screen-settings .settings-control-row:disabled { opacity: 0.64; cursor: progress; }
+#screen-settings .settings-control-row[data-disabled-reason] { cursor: not-allowed; }
 .settings-control-row__label-container, .settings-info-row__label-container { display: grid; gap: 2px; }
 .settings-control-row__label-container strong, .settings-info-row__label-container strong { font-size: var(--text-md); font-weight: 700; }
 .settings-control-row__label-container p, .settings-info-row__label-container p { margin: 0; color: var(--color-text-muted); font-size: var(--text-xs); }
 .settings-control-row__value, .settings-info-row__value { padding: var(--space-2) var(--space-4); border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.06); color: var(--color-primary); font-size: var(--text-sm); font-weight: 750; }
 .setup-reminder { position: absolute; right: var(--space-8); bottom: var(--space-8); display: flex; align-items: center; gap: var(--space-4); padding: var(--space-4) var(--space-5); border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); background: rgba(0, 0, 0, 0.82); }
 .setup-reminder[hidden] { display: none; }
+.audio-setup-shell { width: min(760px, 92vw); }
+.audio-output-list { display: grid; gap: var(--space-3); width: 100%; }
+.audio-output-row { display: grid; gap: var(--space-2); width: 100%; padding: var(--space-5); text-align: left; }
+.audio-output-row[aria-pressed="true"] { border-color: var(--color-focus); background: var(--color-focus-surface); }
+.audio-output-row span { color: var(--color-text-muted); }
+
+:root[data-theme="ember-steel"] { --color-primary: #e8994a; --color-primary-rgb: 232 153 74; --color-focus: #79c7ff; --color-app-bg: #101820; --color-app-bg-elevated: #1b2732; --color-surface: rgba(27, 39, 50, 0.94); --color-text: #fffaf4; --color-text-muted: #d4c8bb; }
+:root[data-theme="slate-pine"] { --color-primary: #63c29b; --color-primary-rgb: 99 194 155; --color-focus: #a7f3d0; --color-app-bg: #101917; --color-app-bg-elevated: #1b2926; --color-surface: rgba(27, 41, 38, 0.94); --color-text: #f2fff9; --color-text-muted: #b8d2c7; }
+:root[data-theme="swiss"] { --color-primary: #ff4d3d; --color-primary-rgb: 255 77 61; --color-focus: #ffb0a8; --color-app-bg: #171717; --color-app-bg-elevated: #262626; --color-surface: rgba(38, 38, 38, 0.96); --color-text: #ffffff; --color-text-muted: #d1d1d1; }
+:root[data-theme="directv"] { --color-primary: #21a7ff; --color-primary-rgb: 33 167 255; --color-focus: #8bd4ff; --color-app-bg: #031526; --color-app-bg-elevated: #082743; --color-surface: rgba(8, 39, 67, 0.95); --color-text: #f4fbff; --color-text-muted: #b8d8ed; }
+:root[data-theme="glass"] { --color-primary: #b49cff; --color-primary-rgb: 180 156 255; --color-focus: #ddcfff; --color-app-bg: #10121d; --color-app-bg-elevated: #24283b; --color-surface: rgba(36, 40, 59, 0.82); --color-text: #fbfaff; --color-text-muted: #cbc7dc; }
 @media (max-width: 880px) { .settings-shell { grid-template-columns: 220px minmax(0, 1fr); } .settings-detail-pane { padding: var(--space-7); } }
 @media (prefers-reduced-motion: reduce) { .settings-cat-btn, .settings-control-row { transition: none; } }
 @media (forced-colors: active) { .settings-rail, .settings-control-row, .settings-info-row, .setup-reminder { border: 1px solid CanvasText; } .settings-cat-btn.is-focused, .settings-control-row.is-focused { outline: 2px solid Highlight; } }

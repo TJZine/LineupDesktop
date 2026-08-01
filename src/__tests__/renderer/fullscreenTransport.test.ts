@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DEFAULT_DESKTOP_SETTINGS_VALUES, desktopSettingsSuccess } from '../../contracts/settings.js';
+import {
+  DEFAULT_DESKTOP_SETTINGS_VALUES,
+  createDesktopSettingsView,
+  desktopSettingsSuccess,
+  normalizeDesktopSettingsReplaceValues,
+} from '../../contracts/settings.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import { createFullscreenTransportCoordinator } from '../../renderer/fullscreenTransport.js';
 import { createSettingsRuntime } from '../../renderer/settings/settingsRuntime.js';
@@ -43,18 +48,23 @@ test('fullscreen coordinator serializes settings and stale shell intents while r
 
   const settings = createSettingsRuntime({
     settings: {
-      getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, {
-        schemaVersion: 1,
+      getAudioOutputs: async ({ requestId }) => desktopSettingsSuccess(requestId, {
+        status: 'unavailable',
+        reason: 'platform-unsupported',
+        outputs: [{ kind: 'system-default', id: 'system-default', label: 'System default' }],
+      }),
+      getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, createDesktopSettingsView({
+        schemaVersion: 2,
         revision: 1,
         status: 'ready',
         values: DEFAULT_DESKTOP_SETTINGS_VALUES,
-      }),
-      replace: async ({ requestId, values }) => desktopSettingsSuccess(requestId, {
-        schemaVersion: 1,
+      })),
+      replace: async ({ requestId, values }) => desktopSettingsSuccess(requestId, createDesktopSettingsView({
+        schemaVersion: 2,
         revision: 2,
         status: 'ready',
-        values,
-      }),
+        values: normalizeDesktopSettingsReplaceValues(values),
+      })),
     },
     windowBridge: transport,
     onStateChanged: () => undefined,

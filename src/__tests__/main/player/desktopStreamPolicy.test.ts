@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS } from '../../../contracts/player.js';
 import { decideDesktopStreamPolicy } from '../../../main/player/streamPolicy/desktopStreamPolicy.js';
+import { assertPublicSafe } from './playerPublicSafetyAssertions.js';
 import type {
   DesktopStreamPolicyDecision,
   DesktopStreamPolicyDecisionKind,
+  DesktopStreamPolicyInput,
   DesktopStreamPolicyReasonCode,
   DesktopStreamPolicyUnknownCode,
 } from '../../../main/player/streamPolicy/types.js';
@@ -50,9 +51,29 @@ const RD08_FORBIDDEN_TEXT = [
   'Bearer ',
 ] as const;
 
+type DesktopStreamPolicyPreferences =
+  NonNullable<DesktopStreamPolicyInput['preferences']>;
+
+function preferences(
+  overrides: Partial<DesktopStreamPolicyPreferences> = {},
+): DesktopStreamPolicyPreferences {
+  return {
+    directPlayAudioFallbackEnabled: true,
+    subtitleMode: 'full',
+    preferredSubtitleLanguage: null,
+    preferForcedSubtitlesEnabled: false,
+    ...overrides,
+  };
+}
+
 function assertNoForbiddenFields(value: unknown, path = 'value'): void {
+  assertPublicSafe(value, []);
+  assertNoRd08ForbiddenFields(value, path);
+}
+
+function assertNoRd08ForbiddenFields(value: unknown, path: string): void {
   if (Array.isArray(value)) {
-    value.forEach((item, index) => assertNoForbiddenFields(item, `${path}[${index}]`));
+    value.forEach((item, index) => assertNoRd08ForbiddenFields(item, `${path}[${index}]`));
     return;
   }
   if (value === null || typeof value !== 'object') {
@@ -61,26 +82,16 @@ function assertNoForbiddenFields(value: unknown, path = 'value'): void {
 
   for (const [key, child] of Object.entries(value)) {
     assert.equal(
-      PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS.includes(
-        key as (typeof PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS)[number],
-      ),
-      false,
-      `${path} contains player forbidden field ${key}`,
-    );
-    assert.equal(
       RD08_FORBIDDEN_FIELD_KEYS.includes(key as (typeof RD08_FORBIDDEN_FIELD_KEYS)[number]),
       false,
       `${path} contains RD-08 forbidden field ${key}`,
     );
-    assertNoForbiddenFields(child, `${path}.${key}`);
+    assertNoRd08ForbiddenFields(child, `${path}.${key}`);
   }
 }
 
 function assertNoForbiddenText(value: unknown): void {
-  const serialized = JSON.stringify(value);
-  for (const text of RD08_FORBIDDEN_TEXT) {
-    assert.equal(serialized.includes(text), false, `RD-08 value contains forbidden text ${text}`);
-  }
+  assertPublicSafe(value, RD08_FORBIDDEN_TEXT);
 }
 
 function decideFixture(name: keyof typeof desktopStreamPolicyInputs): DesktopStreamPolicyDecision {
@@ -182,6 +193,20 @@ test('desktop stream policy records audio fallback without exposing internals', 
   ]);
 });
 
+test('desktop stream policy does not select an alternate audio track when fallback is disabled', () => {
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.audioFallback,
+    preferences: preferences({
+      directPlayAudioFallbackEnabled: false,
+      subtitleMode: 'direct',
+    }),
+  });
+
+  assert.equal(decision.selectedTrackIds.audio, 'audio-track-requested-flac');
+  assert.equal(decision.reasonCodes.includes('audio-fallback-selected'), false);
+  assert.equal(decision.reasonCodes.includes('direct-stream-audio-fallback'), false);
+});
+
 test('desktop stream policy falls back when requested audio exists but is incompatible', () => {
   const decision = decideDesktopStreamPolicy({
     ...desktopStreamPolicyInputs.audioFallback,
@@ -223,6 +248,188 @@ test('desktop stream policy prefers forced subtitles over default subtitles with
     'direct-play-supported',
     'forced-subtitle-selected',
   ]);
+});
+
+test('desktop stream policy subtitle off preference selects no subtitle', () => {
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.forcedSubtitle,
+    preferences: preferences({
+      subtitleMode: 'off',
+      preferredSubtitleLanguage: 'es',
+      preferForcedSubtitlesEnabled: true,
+    }),
+  });
+
+  assert.equal(decision.selectedTrackIds.subtitle, null);
+  assert.equal(decision.reasonCodes.includes('no-subtitle-selected'), true);
+  assert.equal(decision.reasonCodes.includes('forced-subtitle-selected'), false);
+});
+
+test('desktop stream policy preserves an explicit supported subtitle when automatic mode is off', () => {
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.forcedSubtitle,
+    preferredSubtitleTrackId: 'subtitle-track-en-default',
+    preferences: preferences({
+      subtitleMode: 'off',
+      preferredSubtitleLanguage: 'es',
+      preferForcedSubtitlesEnabled: true,
+    }),
+  });
+
+  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-en-default');
+  assert.equal(decision.reasonCodes.includes('no-subtitle-selected'), false);
+  assert.equal(decision.reasonCodes.includes('forced-subtitle-selected'), false);
+});
+
+test('desktop stream policy preserves an explicit convertible subtitle when automatic mode is off', () => {
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.subtitleConversion,
+    preferences: preferences({
+      subtitleMode: 'off',
+    }),
+  });
+
+  assert.equal(decision.kind, 'direct-stream');
+  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-image-burn');
+  assert.equal(decision.summary.subtitleDelivery, 'burn-in');
+  assert.deepEqual(decision.reasonCodes, ['direct-stream-subtitle-conversion']);
+});
+
+test('desktop stream policy prefers a forced subtitle in the configured language', () => {
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.forcedSubtitle,
+    preferences: preferences({
+      subtitleMode: 'standard',
+      preferredSubtitleLanguage: 'es',
+      preferForcedSubtitlesEnabled: true,
+    }),
+  });
+
+  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-es-forced');
+  assert.equal(decision.reasonCodes.includes('forced-subtitle-selected'), true);
+});
+
+test('desktop stream policy selects the default subtitle when automatic forced subtitles are disabled', () => {
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.forcedSubtitle,
+    preferences: preferences(),
+  });
+
+  assert.equal(decision.kind, 'direct-play');
+  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-en-default');
+  assert.equal(decision.summary.subtitleLanguage, 'en');
+  assert.deepEqual(decision.reasonCodes, ['direct-play-supported']);
+});
+
+test('desktop stream policy ignores a selected forced subtitle when automatic forced subtitles are disabled', () => {
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.forcedSubtitle,
+    candidates: [
+      {
+        ...forcedSubtitleCandidate,
+        subtitleTracks: [
+          {
+            ...forcedSubtitleCandidate.subtitleTracks[1]!,
+            selected: true,
+          },
+          forcedSubtitleCandidate.subtitleTracks[0]!,
+        ],
+      },
+    ],
+    preferences: preferences(),
+  });
+
+  assert.equal(decision.kind, 'direct-play');
+  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-en-default');
+  assert.deepEqual(decision.reasonCodes, ['direct-play-supported']);
+});
+
+test('desktop stream policy ignores a default forced subtitle when automatic forced subtitles are disabled', () => {
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.forcedSubtitle,
+    candidates: [
+      {
+        ...forcedSubtitleCandidate,
+        subtitleTracks: [
+          {
+            ...forcedSubtitleCandidate.subtitleTracks[1]!,
+            default: true,
+          },
+          forcedSubtitleCandidate.subtitleTracks[0]!,
+        ],
+      },
+    ],
+    preferences: preferences(),
+  });
+
+  assert.equal(decision.kind, 'direct-play');
+  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-en-default');
+  assert.deepEqual(decision.reasonCodes, ['direct-play-supported']);
+});
+
+test('desktop stream policy selects no automatic subtitle when only forced tracks are eligible', () => {
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.forcedSubtitle,
+    candidates: [
+      {
+        ...forcedSubtitleCandidate,
+        subtitleTracks: [forcedSubtitleCandidate.subtitleTracks[1]!],
+      },
+    ],
+    preferences: preferences(),
+  });
+
+  assert.equal(decision.kind, 'direct-play');
+  assert.equal(decision.selectedTrackIds.subtitle, null);
+  assert.deepEqual(decision.reasonCodes, [
+    'direct-play-supported',
+    'no-subtitle-selected',
+  ]);
+});
+
+test('desktop stream policy preserves an explicitly selected forced subtitle when automation is disabled', () => {
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.forcedSubtitle,
+    preferredSubtitleTrackId: 'subtitle-track-es-forced',
+    preferences: preferences(),
+  });
+
+  assert.equal(decision.kind, 'direct-play');
+  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-es-forced');
+  assert.deepEqual(decision.reasonCodes, ['direct-play-supported']);
+});
+
+test('desktop stream policy ignores unknown delivery on an ineligible forced automatic track', () => {
+  const subtitleConversionCandidate = desktopStreamPolicyInputs.subtitleConversion.candidates[0]!;
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.subtitleConversion,
+    candidates: [
+      {
+        ...subtitleConversionCandidate,
+        subtitleTracks: [
+          {
+            id: 'subtitle-track-forced-unknown',
+            label: 'Forced Unknown',
+            language: 'en',
+            delivery: 'unknown',
+            forced: true,
+          },
+          subtitleConversionCandidate.subtitleTracks[0]!,
+        ],
+      },
+    ],
+    preferredSubtitleTrackId: undefined,
+    preferences: preferences(),
+  });
+
+  assert.equal(decision.kind, 'direct-stream');
+  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-image-burn');
+  assert.equal(decision.summary.subtitleDelivery, 'burn-in');
+  assert.deepEqual(decision.reasonCodes, [
+    'direct-stream-subtitle-conversion',
+    'no-subtitle-compatible',
+  ]);
+  assert.equal(decision.unknowns.includes('candidate-subtitle-delivery-unknown'), false);
 });
 
 test('desktop stream policy preserves selected subtitles before forced fallback', () => {
@@ -272,21 +479,23 @@ test('desktop stream policy does not use language mismatch alone to replace requ
   assert.deepEqual(decision.reasonCodes, ['direct-play-supported']);
 });
 
-test('desktop stream policy falls back when requested subtitle exists but has unsupported delivery', () => {
+test('desktop stream policy transcodes an explicit subtitle when direct conversion is unsupported', () => {
   const decision = decideDesktopStreamPolicy({
     ...desktopStreamPolicyInputs.subtitleFallback,
+    capabilityProfile: {
+      ...desktopStreamPolicyInputs.subtitleFallback.capabilityProfile,
+      directStream: {
+        ...desktopStreamPolicyInputs.subtitleFallback.capabilityProfile.directStream,
+        subtitleConversion: 'unsupported',
+      },
+    },
     preferredSubtitleTrackId: 'subtitle-track-requested-burn',
   });
 
-  assert.equal(decision.kind, 'direct-stream');
-  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-sidecar');
-  assert.equal(decision.summary.subtitleDelivery, 'sidecar');
-  assert.deepEqual(decision.reasonCodes, [
-    'direct-stream-subtitle-fallback',
-    'subtitle-fallback-selected',
-  ]);
-  assert.equal(decision.reasonCodes.includes('direct-stream-subtitle-conversion'), false);
-  assert.equal(decision.reasonCodes.includes('requested-subtitle-unavailable'), false);
+  assert.equal(decision.kind, 'transcode');
+  assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-requested-burn');
+  assert.equal(decision.summary.subtitleDelivery, 'burn-in');
+  assert.deepEqual(decision.reasonCodes, ['transcode-subtitle']);
 });
 
 test('desktop stream policy converts requested incompatible subtitles when conversion is supported', () => {

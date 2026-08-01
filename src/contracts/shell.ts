@@ -58,10 +58,12 @@ import type {
   CustomChannelVisibilityRequest,
 } from './customChannels.js';
 import type {
+  DesktopAudioOutputList,
+  DesktopSettingsGetAudioOutputsRequest,
   DesktopSettingsGetSnapshotRequest,
   DesktopSettingsIpcResult,
   DesktopSettingsReplaceRequest,
-  DesktopSettingsSnapshot,
+  DesktopSettingsView,
 } from './settings.js';
 
 export const LINEUP_PROTOCOL_ORIGIN = 'lineup://shell' as const;
@@ -151,10 +153,13 @@ export interface LineupDesktopPreloadApi {
   settings: {
     getSnapshot: (
       input: DesktopSettingsGetSnapshotRequest,
-    ) => Promise<DesktopSettingsIpcResult<DesktopSettingsSnapshot>>;
+    ) => Promise<DesktopSettingsIpcResult<DesktopSettingsView>>;
     replace: (
       input: DesktopSettingsReplaceRequest,
-    ) => Promise<DesktopSettingsIpcResult<DesktopSettingsSnapshot>>;
+    ) => Promise<DesktopSettingsIpcResult<DesktopSettingsView>>;
+    getAudioOutputs: (
+      input: DesktopSettingsGetAudioOutputsRequest,
+    ) => Promise<DesktopSettingsIpcResult<DesktopAudioOutputList>>;
   };
   player: {
     dispatch: (

@@ -11,6 +11,7 @@ import {
 function createHarness(
   handleGuideDirection: NavigationLifecycleOptions['handleGuideDirection'],
   handlePlayerInput?: NavigationLifecycleOptions['handlePlayerInput'],
+  routeActivationAllowed = true,
 ) {
   const registry = new FocusRegistry();
   registry.register({ id: 'player-guide', route: 'player', order: 0 });
@@ -51,7 +52,11 @@ function createHarness(
     scrollFocusedIntoView: () => undefined,
     handleGuideDirection,
     handlePlayerInput,
-    activateRoute: (nextRoute) => { route = nextRoute as 'player' | 'guide'; },
+    activateRoute: (nextRoute) => {
+      if (!routeActivationAllowed) return false;
+      route = nextRoute as 'player' | 'guide';
+      return true;
+    },
     isProfileModalActive: () => false,
     closeProfileModal: () => undefined,
     handleChannelSetupBack: async () => false,
@@ -103,6 +108,20 @@ test('Guide shortcut preserves an explicitly unfocused Player return', async () 
   await harness.lifecycle.handleInput('back');
   assert.equal(harness.getRoute(), 'player');
   assert.equal(harness.getFocus().activeId, null);
+});
+
+test('rejected route activation preserves the current route and focus', async () => {
+  const harness = createHarness(() => false, undefined, false);
+  harness.setRoute('player');
+  harness.setFocus({ activeRoute: 'player', activeId: 'player-settings' });
+
+  await harness.lifecycle.handleInput('guide');
+
+  assert.equal(harness.getRoute(), 'player');
+  assert.deepEqual(harness.getFocus(), {
+    activeRoute: 'player',
+    activeId: 'player-settings',
+  });
 });
 
 test('Guide Back falls back only for absent memory or a disappeared invoker', async () => {

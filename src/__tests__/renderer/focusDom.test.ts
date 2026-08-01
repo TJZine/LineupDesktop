@@ -15,6 +15,8 @@ class FocusElementDouble {
   className = '';
   tabIndex = -1;
   focusCount = 0;
+  scrollIntoViewCount = 0;
+  scrollIntoViewOptions: ScrollIntoViewOptions | null = null;
   clickCount = 0;
   disabled = false;
   readonly dataset: Record<string, string> = {};
@@ -81,6 +83,11 @@ class FocusElementDouble {
     documentDouble.activeElement = this;
   }
 
+  scrollIntoView(options?: boolean | ScrollIntoViewOptions): void {
+    this.scrollIntoViewCount += 1;
+    this.scrollIntoViewOptions = typeof options === 'object' ? options : null;
+  }
+
   click(): void {
     this.clickCount += 1;
   }
@@ -88,14 +95,29 @@ class FocusElementDouble {
 
 const documentDouble: { activeElement: unknown } = { activeElement: null };
 
-test('renderer focus suppresses browser focus and tab stops inside hidden trees', () => {
+function withDocument(stub: unknown, run: () => void): void {
   const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   Object.defineProperty(globalThis, 'document', {
-    value: documentDouble,
+    value: stub,
     configurable: true,
   });
-
   try {
+    run();
+  } finally {
+    documentDouble.activeElement = null;
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, 'document');
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        configurable: true,
+      });
+    }
+  }
+}
+
+test('renderer focus suppresses browser focus and tab stops inside hidden trees', () => {
+  withDocument(documentDouble, () => {
     const hiddenActive = new FocusElementDouble('guide-hidden-action', true);
     const visibleInactive = new FocusElementDouble('player-fullscreen');
     const visibleActive = new FocusElementDouble('guide-window-next');
@@ -114,22 +136,46 @@ test('renderer focus suppresses browser focus and tab stops inside hidden trees'
     assert.equal(hiddenActive.tabIndex, -1);
     assert.equal(visibleActive.tabIndex, 0);
     assert.equal(visibleActive.focusCount, 1);
+    assert.equal(visibleActive.scrollIntoViewCount, 0);
     assert.equal(documentDouble.activeElement, visibleActive);
-  } finally {
-    documentDouble.activeElement = null;
-    if (originalDocument === undefined) {
-      Reflect.deleteProperty(globalThis, 'document');
-    } else {
-      Object.defineProperty(globalThis, 'document', {
-        value: originalDocument,
-        configurable: true,
-      });
-    }
-  }
+  });
+});
+
+test('Settings active focus requests nearest scrolling without changing browser focus behavior', () => {
+  withDocument(documentDouble, () => {
+    const switchProfile = new FocusElementDouble('settings-switch-profile', false, 'settings');
+    const dom = createFocusDomBindings([switchProfile]);
+
+    renderRendererFocus(
+      { activeRoute: 'settings', activeId: 'settings-switch-profile' },
+      dom,
+    );
+
+    assert.equal(switchProfile.focusCount, 1);
+    assert.equal(switchProfile.scrollIntoViewCount, 1);
+    assert.deepEqual(switchProfile.scrollIntoViewOptions, {
+      block: 'nearest',
+      inline: 'nearest',
+    });
+  });
+});
+
+test('global shell focus over Settings does not request route scrolling', () => {
+  withDocument(documentDouble, () => {
+    const dismiss = new FocusElementDouble('shell-inline-dismiss');
+    const dom = createFocusDomBindings([dismiss]);
+
+    renderRendererFocus(
+      { activeRoute: 'settings', activeId: 'shell-inline-dismiss' },
+      dom,
+    );
+
+    assert.equal(dismiss.focusCount, 1);
+    assert.equal(dismiss.scrollIntoViewCount, 0);
+  });
 });
 
 test('focus sync excludes controls inside inactive hidden setup sections', () => {
-  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   const visibleStage = new FocusElementDouble('setup-stage-account');
   const visibleServerControl = new FocusElementDouble('plex-restore-server');
   const hiddenServerControl = new FocusElementDouble('plex-restore-server', true);
@@ -138,12 +184,7 @@ test('focus sync excludes controls inside inactive hidden setup sections', () =>
     querySelectorAll: () => queryElements,
     activeElement: null,
   };
-  Object.defineProperty(globalThis, 'document', {
-    value: documentWithFocusableQuery,
-    configurable: true,
-  });
-
-  try {
+  withDocument(documentWithFocusableQuery, () => {
     const registry = new FocusRegistry();
     const dom = createFocusDomBindings([]);
 
@@ -170,27 +211,127 @@ test('focus sync excludes controls inside inactive hidden setup sections', () =>
       activeRoute: 'channelSetup',
       activeId: 'setup-stage-account',
     });
-  } finally {
-    if (originalDocument === undefined) {
-      Reflect.deleteProperty(globalThis, 'document');
-    } else {
-      Object.defineProperty(globalThis, 'document', {
-        value: originalDocument,
-        configurable: true,
-      });
-    }
-  }
+  });
+});
+
+test('Settings focus excludes inactive detail controls and connects Recovery to Switch Profile', () => {
+  const recovery = new FocusElementDouble('settings-category-recovery', false, 'settings');
+  const switchProfile = new FocusElementDouble('settings-switch-profile', false, 'settings');
+  const activeControl = new FocusElementDouble('settings-setup-reminder', false, 'settings');
+  const inactiveControl = new FocusElementDouble('settings-theme', true, 'settings');
+  withDocument({
+    querySelectorAll: () => [recovery, switchProfile, activeControl, inactiveControl],
+    activeElement: null,
+  }, () => {
+    const registry = new FocusRegistry();
+    const dom = createFocusDomBindings([]);
+    syncRendererFocusTargets(registry, dom);
+    assert.equal(dom.focusableElements.includes(inactiveControl as unknown as HTMLElement), false);
+    const recoveryState = registry.focusTarget(
+      registry.createInitialState('settings'),
+      'settings-category-recovery',
+    ).state;
+    const switchState = registry.move(recoveryState, 'down').state;
+    assert.equal(switchState.activeId, 'settings-switch-profile');
+    assert.equal(registry.move(switchState, 'up').state.activeId, 'settings-category-recovery');
+    assert.equal(registry.move(recoveryState, 'right').state.activeId, 'settings-setup-reminder');
+  });
+});
+
+test('Settings category entry uses present detail controls and preserves route containment', () => {
+  const audioCategory = new FocusElementDouble(
+    'settings-category-audio-subtitles',
+    false,
+    'settings',
+  );
+  const audioFallback = new FocusElementDouble(
+    'settings-direct-play-audio-fallback',
+    false,
+    'settings',
+  );
+  const playbackCategory = new FocusElementDouble(
+    'settings-category-playback-hdr',
+    false,
+    'settings',
+  );
+  const playbackFirst = new FocusElementDouble(
+    'settings-keep-playback-running',
+    false,
+    'settings',
+  );
+  const guideCategory = new FocusElementDouble('settings-category-guide', false, 'settings');
+  const globalDismiss = new FocusElementDouble('shell-inline-dismiss');
+  withDocument({
+    querySelectorAll: () => [
+      audioCategory,
+      audioFallback,
+      playbackCategory,
+      playbackFirst,
+      guideCategory,
+      globalDismiss,
+    ],
+    activeElement: null,
+  }, () => {
+    const registry = new FocusRegistry();
+    syncRendererFocusTargets(registry, createFocusDomBindings([]));
+
+    const audioState = registry.focusTarget(
+      registry.createInitialState('settings'),
+      'settings-category-audio-subtitles',
+    ).state;
+    assert.deepEqual(registry.move(audioState, 'up'), {
+      state: audioState,
+      changed: false,
+    });
+    const audioDetailState = registry.move(audioState, 'right').state;
+    assert.equal(audioDetailState.activeId, 'settings-direct-play-audio-fallback');
+    assert.equal(registry.move(audioDetailState, 'left').state.activeId, audioState.activeId);
+
+    const playbackState = registry.focusTarget(
+      audioState,
+      'settings-category-playback-hdr',
+    ).state;
+    assert.equal(
+      registry.move(playbackState, 'right').state.activeId,
+      'settings-keep-playback-running',
+    );
+
+    const guideState = registry.focusTarget(audioState, 'settings-category-guide').state;
+    assert.equal(registry.move(guideState, 'right').state.activeId, guideState.activeId);
+
+    assert.equal(
+      registry.focusTarget(audioState, 'shell-inline-dismiss').state.activeId,
+      'shell-inline-dismiss',
+    );
+  });
+});
+
+test('direct audio setup focus and invalid fallback use the complete action', () => {
+  const output = new FocusElementDouble('audio-output-system-default', false, 'audioSetup');
+  const complete = new FocusElementDouble('audio-setup-complete', false, 'audioSetup');
+  withDocument({
+    querySelectorAll: () => [output, complete],
+    activeElement: null,
+  }, () => {
+    const registry = new FocusRegistry();
+    const dom = createFocusDomBindings([]);
+    syncRendererFocusTargets(registry, dom);
+    const initial = registry.createInitialState('audioSetup');
+    assert.equal(initial.activeId, 'audio-setup-complete');
+    assert.equal(
+      registry.focusTarget({ activeRoute: 'audioSetup', activeId: 'missing' }, 'missing').state.activeId,
+      'audio-setup-complete',
+    );
+  });
 });
 
 test('focus sync registers and removes dynamic Guide program identities', () => {
-  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   const guideCell = new FocusElementDouble('guide-program-channel--program', false, 'guide');
   let queryElements = [guideCell];
-  Object.defineProperty(globalThis, 'document', {
-    value: { querySelectorAll: () => queryElements, activeElement: null },
-    configurable: true,
-  });
-  try {
+  withDocument({
+    querySelectorAll: () => queryElements,
+    activeElement: null,
+  }, () => {
     const registry = new FocusRegistry();
     const dom = createFocusDomBindings([]);
     syncRendererFocusTargets(registry, dom);
@@ -198,10 +339,7 @@ test('focus sync registers and removes dynamic Guide program identities', () => 
     queryElements = [];
     syncRendererFocusTargets(registry, dom);
     assert.equal(registry.createInitialState('guide').activeId, null);
-  } finally {
-    if (originalDocument === undefined) Reflect.deleteProperty(globalThis, 'document');
-    else Object.defineProperty(globalThis, 'document', { value: originalDocument, configurable: true });
-  }
+  });
 });
 
 test('channel setup initial focus starts on onboarding controls with no global route rail', () => {

@@ -26,23 +26,50 @@ export function copyRendererAssets(sourceDirectory, targetDirectory) {
   });
 }
 
+export function copyRendererSettingsRuntime(
+  compiledContractsDirectory,
+  targetRendererDirectory,
+) {
+  const targetDirectory = path.join(targetRendererDirectory, 'contracts');
+  copyCompiledModuleClosure({
+    sourceDirectory: compiledContractsDirectory,
+    targetDirectory,
+    entryFileName: 'settings.js',
+    ownerLabel: 'Renderer Settings runtime',
+  });
+}
+
 export function copyRendererChannelBuilderRuntime(
   compiledChannelBuilderDirectory,
   targetRendererDirectory,
 ) {
-  const sourceRoot = fs.realpathSync(path.resolve(compiledChannelBuilderDirectory));
   const targetDirectory = path.join(
     targetRendererDirectory,
     'domain',
     'channelBuilder',
   );
-  fs.mkdirSync(targetDirectory, { recursive: true });
+  copyCompiledModuleClosure({
+    sourceDirectory: compiledChannelBuilderDirectory,
+    targetDirectory,
+    entryFileName: 'config.js',
+    ownerLabel: 'Renderer Channel Builder runtime',
+  });
+}
 
+function copyCompiledModuleClosure({
+  sourceDirectory,
+  targetDirectory,
+  entryFileName,
+  ownerLabel,
+}) {
+  const sourceRoot = fs.realpathSync(path.resolve(sourceDirectory));
+  fs.rmSync(targetDirectory, { recursive: true, force: true });
+  fs.mkdirSync(targetDirectory, { recursive: true });
   const pendingFiles = [
     {
-      fileName: 'config.js',
+      fileName: entryFileName,
       importedBy: null,
-      specifier: 'config.js',
+      specifier: entryFileName,
     },
   ];
   const runtimeFiles = new Map();
@@ -51,27 +78,27 @@ export function copyRendererChannelBuilderRuntime(
     if (runtimeFiles.has(fileName)) continue;
 
     const sourcePath = path.resolve(sourceRoot, fileName);
-    assertPathInsideDirectory(sourcePath, sourceRoot, specifier);
+    assertPathInsideDirectory(sourcePath, sourceRoot, specifier, ownerLabel);
     if (!fs.existsSync(sourcePath)) {
       const dependencyContext =
         importedBy === null
           ? `entry module ${JSON.stringify(specifier)}`
           : `${JSON.stringify(specifier)} imported by ${JSON.stringify(importedBy)}`;
       throw new Error(
-        `Renderer Channel Builder runtime dependency could not be resolved: ${dependencyContext}`,
+        `${ownerLabel} dependency could not be resolved: ${dependencyContext}`,
       );
     }
     const canonicalSourcePath = fs.realpathSync(sourcePath);
-    assertPathInsideDirectory(canonicalSourcePath, sourceRoot, specifier);
+    assertPathInsideDirectory(canonicalSourcePath, sourceRoot, specifier, ownerLabel);
     const source = fs.readFileSync(canonicalSourcePath, 'utf8');
     runtimeFiles.set(fileName, canonicalSourcePath);
 
     for (const dependencySpecifier of findRelativeModuleSpecifiers(source)) {
       const dependencyPath = path.resolve(path.dirname(sourcePath), dependencySpecifier);
-      assertPathInsideDirectory(dependencyPath, sourceRoot, dependencySpecifier);
+      assertPathInsideDirectory(dependencyPath, sourceRoot, dependencySpecifier, ownerLabel);
       if (path.extname(dependencyPath) !== '.js') {
         throw new Error(
-          `Renderer Channel Builder runtime dependency must be JavaScript: ${dependencySpecifier}`,
+          `${ownerLabel} dependency must be JavaScript: ${dependencySpecifier}`,
         );
       }
       pendingFiles.push({
@@ -98,7 +125,7 @@ function findRelativeModuleSpecifiers(source) {
   return specifiers;
 }
 
-function assertPathInsideDirectory(filePath, directory, specifier) {
+function assertPathInsideDirectory(filePath, directory, specifier, ownerLabel) {
   const relativePath = path.relative(directory, filePath);
   if (
     relativePath === '' ||
@@ -107,13 +134,14 @@ function assertPathInsideDirectory(filePath, directory, specifier) {
     path.isAbsolute(relativePath)
   ) {
     throw new Error(
-      `Renderer Channel Builder runtime dependency escapes its allowed directory: ${specifier}`,
+      `${ownerLabel} dependency escapes its allowed directory: ${specifier}`,
     );
   }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   copyRendererAssets(sourceRoot, targetRoot);
+  copyRendererSettingsRuntime(path.join(repoRoot, 'dist', 'contracts'), targetRoot);
   copyRendererChannelBuilderRuntime(
     path.join(repoRoot, 'dist', 'domain', 'channelBuilder'),
     targetRoot,

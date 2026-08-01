@@ -46,3 +46,4 @@ export const LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL =
   'lineup:customChannels:setChannelVisibility';
 export const LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL = 'lineup:settings:getSnapshot';
 export const LINEUP_SETTINGS_REPLACE_CHANNEL = 'lineup:settings:replace';
+export const LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL = 'lineup:settings:getAudioOutputs';

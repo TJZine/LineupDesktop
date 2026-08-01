@@ -29,6 +29,14 @@
 }
 
 @media (forced-colors: active) {
+  :root[data-theme] {
+    --color-app-bg: Canvas;
+    --color-app-bg-elevated: Canvas;
+    --color-surface: Canvas;
+    --color-text: CanvasText;
+    --color-text-muted: CanvasText;
+    --color-focus: Highlight;
+  }
   :root {
     --color-app-bg: Canvas;
     --color-app-bg-elevated: Canvas;

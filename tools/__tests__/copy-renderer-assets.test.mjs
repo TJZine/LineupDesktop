@@ -8,6 +8,7 @@ import test from 'node:test';
 import {
   copyRendererAssets,
   copyRendererChannelBuilderRuntime,
+  copyRendererSettingsRuntime,
 } from '../copy-renderer-assets.mjs';
 
 test('renderer asset copy preserves recursive files and exact binary hashes', () => {
@@ -41,6 +42,54 @@ test('renderer asset copy preserves recursive files and exact binary hashes', ()
   }
 });
 
+test('renderer settings runtime copy resets and stages the exact compiled dependency closure', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-renderer-settings-runtime-'));
+  const compiled = path.join(root, 'dist', 'contracts');
+  const renderer = path.join(root, 'dist', 'renderer');
+  try {
+    fs.mkdirSync(path.join(compiled, 'nested'), { recursive: true });
+    fs.writeFileSync(
+      path.join(compiled, 'settings.js'),
+      "import './settingsAudioValidation.js';\nexport const settings = true;\n",
+    );
+    fs.writeFileSync(
+      path.join(compiled, 'settingsAudioValidation.js'),
+      'export const validation = true;\n',
+    );
+    fs.writeFileSync(path.join(compiled, 'settings.js.map'), new Uint8Array([1]));
+    fs.writeFileSync(path.join(compiled, 'shell.js'), new Uint8Array([2]));
+    fs.writeFileSync(path.join(compiled, 'nested', 'other.js'), new Uint8Array([3]));
+    fs.mkdirSync(path.join(renderer, 'contracts'), { recursive: true });
+    fs.writeFileSync(path.join(renderer, 'contracts', 'obsolete.js'), 'stale');
+
+    copyRendererSettingsRuntime(compiled, renderer);
+
+    const servedContracts = path.join(renderer, 'contracts');
+    const servedSettings = path.join(servedContracts, 'settings.js');
+    assert.equal(sha256(servedSettings), sha256(path.join(compiled, 'settings.js')));
+    assert.equal(
+      sha256(path.join(servedContracts, 'settingsAudioValidation.js')),
+      sha256(path.join(compiled, 'settingsAudioValidation.js')),
+    );
+    assert.deepEqual(fs.readdirSync(renderer), ['contracts']);
+    assert.deepEqual(
+      fs.readdirSync(servedContracts).sort(),
+      ['settings.js', 'settingsAudioValidation.js'],
+    );
+    for (const relativePath of [
+      'obsolete.js',
+      'settings.js.map',
+      'shell.js',
+      path.join('nested', 'other.js'),
+    ]) {
+      assert.equal(fs.existsSync(path.join(servedContracts, relativePath)), false, relativePath);
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  assert.equal(fs.existsSync(root), false);
+});
+
 test('renderer runtime copy includes the byte-exact relative dependency closure for config', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-renderer-runtime-'));
   const compiled = path.join(root, 'dist', 'domain', 'channelBuilder');
@@ -50,10 +99,11 @@ test('renderer runtime copy includes the byte-exact relative dependency closure 
     for (const [fileName, source] of [
       [
         'config.js',
-        "import './constants.js';\nexport { exact } from './exactRecord.js';\nvoid import('./lazy.js');\n",
+        "import './constants.js';\nexport { exact } from './exactRecord.js';\nexport * as futureOwner from './futureOwner.js';\nvoid import('./lazy.js');\n",
       ],
       ['constants.js', 'export const maximum = 500;\n'],
       ['exactRecord.js', "import { helper } from './recordHelper.js';\nexport const exact = helper;\n"],
+      ['futureOwner.js', 'export const future = true;\n'],
       ['recordHelper.js', 'export const helper = true;\n'],
       ['lazy.js', 'export const lazy = true;\n'],
       ['config.js.map', new Uint8Array([9])],
@@ -70,6 +120,7 @@ test('renderer runtime copy includes the byte-exact relative dependency closure 
       'config.js',
       'constants.js',
       'exactRecord.js',
+      'futureOwner.js',
       'lazy.js',
       'recordHelper.js',
     ]) {
@@ -86,6 +137,7 @@ test('renderer runtime copy includes the byte-exact relative dependency closure 
       'config.js',
       'constants.js',
       'exactRecord.js',
+      'futureOwner.js',
       'lazy.js',
       'recordHelper.js',
     ]);

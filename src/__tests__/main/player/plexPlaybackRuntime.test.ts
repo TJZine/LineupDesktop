@@ -19,11 +19,11 @@ import { createPlaybackEventRouter } from '../../../main/player/playbackEventRou
 import { DiagnosticEventStore } from '../../../main/diagnostics/diagnosticEventStore.js';
 import {
   isRendererSafePlayerEvent,
-  PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
   type PlayerCommand,
   type PlayerEvent,
   type PlayerLoadCommandPayload,
 } from '../../../contracts/player.js';
+import { assertPublicSafe } from './playerPublicSafetyAssertions.js';
 
 const selection: PlexPlaybackScheduleSelection = {
   channelId: 'channel-1',
@@ -47,6 +47,36 @@ const loadPayload: PlayerLoadCommandPayload = {
   },
   capabilityProfileId: 'desktop-safe',
 };
+
+function privilegedDescriptor(
+  requestId: string,
+): NonNullable<PlexPlaybackRuntimeCandidate['privatePlayback']> {
+  return {
+    requestId,
+    decisionKind: 'direct-play',
+    playbackUrl: 'https://plex.example.invalid/private.mp4',
+    credentialHeader: { name: 'X-Plex-Token', value: 'private-token' },
+    selectedConnection: {
+      protocol: 'https',
+      address: 'plex.example.invalid',
+      port: 443,
+      local: true,
+      relay: false,
+    },
+    media: { id: loadPayload.media.id, title: loadPayload.media.title },
+    setup: {
+      playbackMode: 'direct-play',
+      mediaPath: '/library/metadata/1',
+      variantId: 'variant-1',
+      partPath: '/library/parts/1/file.mp4',
+      selectedTrackIds: { video: null, audio: null, subtitle: null },
+      selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+      trackMap: { video: [], audio: [], subtitle: [] },
+      audioOutputNativeKey: null,
+      dtsPassthroughEnabled: false,
+    },
+  };
+}
 
 class FakeSchedulerPort implements PlexPlaybackRuntimeSchedulerPort {
   current: PlexPlaybackScheduleSelection | null = selection;
@@ -220,29 +250,11 @@ function createRuntime(): {
 }
 
 function assertNoForbiddenKeys(value: unknown): void {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      assertNoForbiddenKeys(item);
-    }
-    return;
-  }
-  if (value === null || typeof value !== 'object') {
-    return;
-  }
-  for (const [key, child] of Object.entries(value)) {
-    assert.equal(
-      PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS.includes(
-        key as (typeof PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS)[number],
-      ),
-      false,
-      `renderer-facing runtime value contains forbidden key ${key}`,
-    );
-    assertNoForbiddenKeys(child);
-  }
+  assertPublicSafe(value, []);
 }
 
 function assertTextAbsent(value: unknown, text: string): void {
-  assert.equal(JSON.stringify(value).includes(text), false, `unexpected renderer-facing text ${text}`);
+  assertPublicSafe(value, [text]);
 }
 
 function assertRendererSafePlayerEvents(events: readonly PlayerEvent[]): void {
@@ -665,57 +677,53 @@ test('playback runtime cleanup custody blocks every start path through nested PM
 });
 
 test('RD-25 plex playback runtime rejects invalid privileged descriptors before player dispatch', async () => {
-  const { runtime, channel, player, pms, emitted } = createRuntime();
-  channel.candidate = {
-    requestId: 'request-privileged',
-    load: loadPayload,
-    pmsSession: { id: 'pms-privileged', requestId: 'request-privileged' },
-    privatePlayback: {
-      requestId: 'wrong-request',
-      decisionKind: 'direct-play',
-      playbackUrl: 'https://plex.example.invalid/private.mp4',
-      credentialHeader: { name: 'X-Plex-Token', value: 'private-token' },
-      selectedConnection: {
-        protocol: 'https',
-        address: 'plex.example.invalid',
-        port: 443,
-        local: true,
-        relay: false,
-      },
-      media: { id: loadPayload.media.id, title: loadPayload.media.title },
-      setup: {
-        playbackMode: 'direct-play',
-        mediaPath: '/library/metadata/1',
-        variantId: 'variant-1',
-        partPath: '/library/parts/1/file.mp4',
-        selectedTrackIds: { video: null, audio: null, subtitle: null },
-        selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
-        trackMap: { video: [], audio: [], subtitle: [] },
-      },
-    },
-  };
-
-  const result = await runtime.startCurrentPlayback('startup');
-
-  assert.equal(result.accepted, false);
-  assert.equal(player.commands.length, 0);
-  assert.deepEqual(pms.releases, [
+  const validDescriptor = privilegedDescriptor('request-privileged');
+  const invalidDescriptors = [
+    { ...validDescriptor, requestId: 'wrong-request' },
     {
-      session: { id: 'pms-privileged', requestId: 'request-privileged' },
-      reason: 'stale',
-      requestId: 'request-privileged',
+      ...validDescriptor,
+      setup: { ...validDescriptor.setup, audioOutputNativeKey: '' },
     },
-  ]);
-  assert.equal(result.events.some((event) => (
-    event.event === 'error' &&
-    event.error.code === 'PLAYER_PRIVILEGED_DESCRIPTOR_INVALID'
-  )), true);
-  assertNoForbiddenKeys(result);
-  assertNoForbiddenKeys(emitted);
-  assertTextAbsent(result, 'private-token');
-  assertTextAbsent(emitted, 'private-token');
-  assertRendererSafePlayerEvents(result.events);
-  assertRendererSafePlayerEvents(emitted);
+    {
+      ...validDescriptor,
+      setup: {
+        ...validDescriptor.setup,
+        dtsPassthroughEnabled: 'enabled' as unknown as boolean,
+      },
+    },
+  ];
+
+  for (const privatePlayback of invalidDescriptors) {
+    const { runtime, channel, player, pms, emitted } = createRuntime();
+    channel.candidate = {
+      requestId: 'request-privileged',
+      load: loadPayload,
+      pmsSession: { id: 'pms-privileged', requestId: 'request-privileged' },
+      privatePlayback,
+    };
+
+    const result = await runtime.startCurrentPlayback('startup');
+
+    assert.equal(result.accepted, false);
+    assert.equal(player.commands.length, 0);
+    assert.deepEqual(pms.releases, [
+      {
+        session: { id: 'pms-privileged', requestId: 'request-privileged' },
+        reason: 'stale',
+        requestId: 'request-privileged',
+      },
+    ]);
+    assert.equal(result.events.some((event) => (
+      event.event === 'error' &&
+      event.error.code === 'PLAYER_PRIVILEGED_DESCRIPTOR_INVALID'
+    )), true);
+    assertNoForbiddenKeys(result);
+    assertNoForbiddenKeys(emitted);
+    assertTextAbsent(result, 'private-token');
+    assertTextAbsent(emitted, 'private-token');
+    assertRendererSafePlayerEvents(result.events);
+    assertRendererSafePlayerEvents(emitted);
+  }
 });
 
 test('RD-12 plex playback runtime cleans PMS and player state for every cleanup input', async () => {

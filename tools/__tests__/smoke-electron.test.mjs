@@ -29,7 +29,6 @@ test('smoke composition keeps synchronous and asynchronous player delivery in di
     'onAsynchronousAdapterEvents: eventRouter.route',
     'onEvents: options.onAsynchronousAdapterEvents',
     'options.sendSynchronousPlayerEvent(event)',
-    'nativeHostFactory: nativeHostFactory ?? undefined',
     'cleanupFailedApplicationStartup(',
   ]) {
     assert.ok(
@@ -37,8 +36,6 @@ test('smoke composition keeps synchronous and asynchronous player delivery in di
       `missing required playback wiring symbol: ${symbol}`,
     );
   }
-  assert.equal(mainSource.includes('originalNativeHostFactory'), false);
-
   assertSymbolsInOrder(
     sliceBetween(mainSource, 'onNativeHostLifecycleFailure:', 'wirePlexPlaybackCleanup({'),
     [
