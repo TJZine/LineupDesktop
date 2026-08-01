@@ -27,6 +27,12 @@ export interface ShellAppCommandRegistration {
 
 const APP_COMMAND_KEY_CODES = {
   'browser-backward': 'Escape',
+  'media-play': 'MediaPlay',
+  'media-pause': 'MediaPause',
+  'media-play-pause': 'MediaPlayPause',
+  'media-rewind': 'MediaRewind',
+  'media-fast-forward': 'MediaFastForward',
+  'media-stop': 'MediaStop',
 } as const satisfies Readonly<Record<string, string>>;
 
 export function registerShellAppCommandController(
@@ -42,9 +48,15 @@ export function registerShellAppCommandController(
       return;
     }
 
-    event.preventDefault();
+    const isBrowserBackward = command === 'browser-backward';
+    if (isBrowserBackward) {
+      event.preventDefault();
+    }
     if (!canForwardToRenderer(window)) {
       return;
+    }
+    if (!isBrowserBackward) {
+      event.preventDefault();
     }
 
     try {
