@@ -7198,6 +7198,19 @@ exact boundary.
 
 ##### Unit 4D — sleep timer and OSD parity
 
+**Observed stop/replan adjudication:** the first Unit 4D implementation review
+rejected the preserved partial worktree because `src/renderer/index.ts` routes
+sleep expiry through
+`playerInputCommandController.handleInput('mediaPause')`, while the accepted
+Unit 4A input API returns `true` for a recognized direct input when any direct
+command is already pending even though it starts no new dispatch. Sleep can
+therefore publish `expired` while a pending play, seek, or stop prevents the
+pause and playback continues. This is a truthful internal-owner seam gap, not
+permission to weaken serialization, retry, or broaden the public player
+boundary. Preserve the partial Unit 4D worktree. Resume implementation only
+after a fresh independent `lineup-desktop-feature-review` approves this narrow
+amendment with no unresolved material finding.
+
 **Outcome:** add the independent renderer sleep-timer lifecycle and the exact
 Subtitles/Sleep/Audio OSD surface, including preset cycle, deadline countdown,
 one-minute warning, Off/cancel, guarded pause-on-expiry, accessibility,
@@ -7210,11 +7223,13 @@ track-option behavior.
 `src/renderer/playerOverlayDom.ts`,
 `src/renderer/playerOverlayPresentation.ts`, `src/renderer/domBindings.ts`,
 `src/renderer/rendererActionRegistration.ts`, sensitive wiring only in
-`src/renderer/index.ts`, and only the necessary rules in the three named
+`src/renderer/index.ts`, the accepted Unit 4A owner
+`src/renderer/playerInputCommandController.ts` only for the internal guarded
+sleep-expiry pause seam below, and only the necessary rules in the three named
 player-overlay stylesheets. `focusDom.ts` is no-touch unless direct evidence
 proves DOM-order registration cannot satisfy the exact graph; that evidence
 requires a plan-revise review before adding it. Affected tests are limited to
-new `sleepTimerController.test.ts`, `overlays.test.ts`,
+`playerInputCommandController.test.ts`, new `sleepTimerController.test.ts`, `overlays.test.ts`,
 `playerOverlayController.test.ts`, `playerOverlayPresentation.test.ts`,
 `rendererActionRegistration.test.ts`, `routeDom.test.ts`,
 `rendererRuntimeOwners.test.ts`, and DOM/style source assertions required for
@@ -7230,18 +7245,50 @@ equivalent, has a stable focus id and accessible name, preserves invoking focus
 across playback options, and never adds play/seek/stop buttons. `UI-47` and
 production capabilities remain unchanged.
 
+The existing renderer-local `PlayerInputCommandController` adds exactly one
+internal `pauseCurrent(snapshotRequestId): boolean` method. It reads the current
+safe snapshot at invocation and returns `false` without dispatch when disposed,
+when any direct command is pending, when the supplied request id is not the
+exact current non-null request id, or when the current status/playing pair is
+inconsistent or not exactly playing. It returns `true` only when it actually
+starts the existing serialized `player.pauseIfCurrent` dispatch for that exact
+request through Unit 4A's guarded path. It owns no timer state. Its existing
+`handleInput`, direct-input recognition/consumption behavior, pending-command
+serialization, timeout/settlement correlation, safe diagnostics, cleanup, and
+closed intent/payload vocabulary remain unchanged; no second dispatcher,
+unguarded pause, queue, retry, or compatibility overload is allowed.
+
+`sleepTimerController` calls only this truthful internal seam. A synchronous
+`false` projects the existing bounded failed UI and sleep-timer diagnostic once,
+with no retry. Once `pauseCurrent` returns `true`, later dispatch rejection,
+timeout, failure, or settlement remains owned by the direct-command
+controller's existing bounded diagnostic and release behavior and must not
+mutate, retry, resurrect, or otherwise rewrite sleep-timer state. The
+compositional regression must prove pending play, seek, and stop collisions;
+stale versus exact-current request identity; paused and inconsistent playback;
+cleanup/disposal; exactly one guarded pause dispatch with no extra request or
+custody on acceptance; and inert late settlement after the timer has ended.
+No contract, main, preload, native/helper, dependency, or public schema changes
+are authorized.
+
 **Verification classification:** broader integration/manual proof required.
 
 **Focused automated proof:** run and observe:
 
 ```text
-node --import tsx --test src/__tests__/renderer/sleepTimerController.test.ts src/__tests__/renderer/overlays.test.ts src/__tests__/renderer/playerOverlayController.test.ts src/__tests__/renderer/playerOverlayPresentation.test.ts src/__tests__/renderer/rendererActionRegistration.test.ts src/__tests__/renderer/routeDom.test.ts src/__tests__/renderer/rendererRuntimeOwners.test.ts
+node --import tsx --test src/__tests__/renderer/playerInputCommandController.test.ts src/__tests__/renderer/sleepTimerController.test.ts src/__tests__/renderer/overlays.test.ts src/__tests__/renderer/playerOverlayController.test.ts src/__tests__/renderer/playerOverlayPresentation.test.ts src/__tests__/renderer/rendererActionRegistration.test.ts src/__tests__/renderer/routeDom.test.ts src/__tests__/renderer/rendererRuntimeOwners.test.ts
 npm run typecheck
 npm run verify:architecture
 npm run smoke:electron
 npm run verify:redaction
 git diff --check
 ```
+
+Expected: all eight focused files pass, including the compositional collision,
+identity, eligibility, disposal, single-dispatch, no-extra-custody, and late-
+settlement cases above; typecheck, architecture, Electron smoke, redaction, and
+diff checks are clean. A fresh material-only implementation review must approve
+the complete Unit 4D diff before checkpoint acceptance.
 
 **Local interaction/visual proof:** create and run the ignored controller-owned
 `node docs/runs/ws4-input-overlay-quality-loop/ws4-local-proof.mjs`. The
@@ -7259,8 +7306,10 @@ Windows, hardware-input, or native-video observation.
 
 **Rollback/checkpoint:** timer/UI changes are one reversible Unit 4D checkpoint;
 cleanup must run before rollback so no process remains. Reverting 4D leaves
-accepted 4A–4C input behavior intact. Commit after clean review and local proof,
-for example `feat(overlays): add guarded sleep timer`.
+accepted 4A–4C input behavior intact, including removal of only the internal
+`pauseCurrent` method and its Unit 4D regressions without reverting Unit 4A's
+public guarded intents or ordinary direct-input path. Commit after clean review
+and local proof, for example `feat(overlays): add guarded sleep timer`.
 
 **Stop/replan:** timer correctness requires persistence, app lifecycle/power,
 main timing, any public contract beyond Unit 4A's accepted correction,
@@ -7268,7 +7317,14 @@ unguarded pause/stop, or additional player-main changes;
 OSD cannot remain reachable without capability promotion; focus requires
 unreviewed `focusDom.ts` policy; the overlay/controller hotspot grows rather
 than shedding distinct lifecycle; or required local visual/interaction proof
-cannot be made deterministic and redaction-safe.
+cannot be made deterministic and redaction-safe. Also stop if truthful pause
+acceptance requires changing existing `handleInput` semantics, allowing more
+than one pending direct command, adding a queue/retry/second dispatcher,
+mutating sleep state from async player settlement, editing any contract/main/
+preload/native/helper/dependency/configuration owner, touching another product
+or test file beyond the exact Unit 4D boundary, weakening any focused/smoke/
+static gate, or a required failure cannot be resolved inside this exact
+amendment.
 
 ##### Unit 4E — integrated verification, proof debt, and authority closeout
 
