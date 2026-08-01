@@ -223,6 +223,21 @@ export function moveEpgSelection(
   };
 }
 
+export function pageEpgSelection(
+  state: EpgState,
+  offset: -5 | 5,
+  presentation: EpgPresentationSource,
+): EpgDirectionResult {
+  if (state.presentationState !== 'ready') {
+    return { state, handled: false, windowChanged: false };
+  }
+  return {
+    state: selectNearestProgramOnAdjacentChannel(state, offset, presentation),
+    handled: true,
+    windowChanged: false,
+  };
+}
+
 export function setEpgPresentationState(
   state: EpgState,
   presentationState: EpgPresentationState,

@@ -515,6 +515,7 @@ export class DesktopPlayerAdapter {
       status: 'loading',
       media: command.payload.media,
       capabilityProfileId: command.payload.capabilityProfileId ?? null,
+      seekSupport: command.payload.seekSupport,
       positionMs: command.payload.policy.startPositionMs ?? 0,
       durationMs: command.payload.media.durationMs ?? null,
       selectedAudioTrackId: command.payload.policy.preferredAudioTrackId ?? null,

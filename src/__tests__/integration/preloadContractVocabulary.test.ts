@@ -600,6 +600,7 @@ function createSafePlayerSnapshot(): Record<string, unknown> {
     status: 'playing',
     media: { id: 'media-1', title: 'Episode 1' },
     capabilityProfileId: 'profile-1',
+    seekSupport: 'supported',
     positionMs: 1,
     durationMs: null,
     bufferedRanges: [],
@@ -1750,16 +1751,32 @@ test('preload player dispatch forwards guarded lifecycle intent envelopes unchan
       value: { accepted: true, events: [], snapshot },
     });
   });
-  const envelope = {
-    intent: 'player.pauseIfCurrent',
-    requestId: 'settings-pause-1',
-    payload: { snapshotRequestId: 'player-load-1' },
-  };
+  const envelopes = [
+    {
+      intent: 'player.pauseIfCurrent',
+      requestId: 'settings-pause-1',
+      payload: { snapshotRequestId: 'player-load-1' },
+    },
+    {
+      intent: 'player.stopIfCurrent',
+      requestId: 'input-stop-1',
+      payload: { snapshotRequestId: 'player-load-1' },
+    },
+    {
+      intent: 'player.seekRelativeIfCurrent',
+      requestId: 'input-seek-1',
+      payload: { snapshotRequestId: 'player-load-1', deltaMs: -10_000 },
+    },
+  ];
 
-  const result = await harness.api.player.dispatch(harness.input(envelope));
-
-  assert.equal((result as { ok: boolean }).ok, true);
-  assert.deepEqual(harness.calls, [{ channel: LINEUP_PLAYER_COMMAND_CHANNEL, request: envelope }]);
+  for (const envelope of envelopes) {
+    const result = await harness.api.player.dispatch(harness.input(envelope));
+    assert.equal((result as { ok: boolean }).ok, true);
+  }
+  assert.deepEqual(harness.calls, envelopes.map((request) => ({
+    channel: LINEUP_PLAYER_COMMAND_CHANNEL,
+    request,
+  })));
 });
 
 test('preload player dispatch converts malformed or privileged invoke results to local validation failures', async () => {

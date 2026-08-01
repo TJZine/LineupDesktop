@@ -45,6 +45,7 @@ const loadPayload: PlayerLoadCommandPayload = {
     preferredAudioTrackId: 'audio-ui-1',
     preferredSubtitleTrackId: null,
   },
+  seekSupport: 'supported',
   capabilityProfileId: 'desktop-safe',
 };
 

@@ -146,6 +146,7 @@ function loadEnvelope(requestId = 'request-load-1'): RendererIntentEnvelope<unkn
         preferredAudioTrackId: 'audio-ui-1',
         preferredSubtitleTrackId: null,
       },
+      seekSupport: 'supported',
       capabilityProfileId: 'desktop-adapter-safe',
     },
   };
@@ -326,6 +327,24 @@ test('desktop player adapter maps guarded lifecycle intents without forwarding s
     payload: {},
   });
   assert.equal(Object.hasOwn(host.commands.at(-1) ?? {}, 'expectedSnapshotRequestId'), false);
+
+  const stop = await adapter.dispatchRendererIntent({
+    intent: 'player.stopIfCurrent',
+    requestId: 'request-stop-current',
+    payload: { snapshotRequestId: 'request-load-current' },
+  });
+  const seek = await adapter.dispatchRendererIntent({
+    intent: 'player.seekRelativeIfCurrent',
+    requestId: 'request-seek-current',
+    payload: { snapshotRequestId: 'request-load-current', deltaMs: 10_000 },
+  });
+  assert.equal(stop.accepted, true);
+  assert.equal(seek.accepted, true);
+  assert.deepEqual(host.commands.slice(-2), [
+    { command: 'stop', requestId: 'request-stop-current', payload: {} },
+    { command: 'seek.relative', requestId: 'request-seek-current', payload: { deltaMs: 10_000 } },
+  ]);
+  assert.equal(JSON.stringify(host.commands.slice(-2)).includes('snapshotRequestId'), false);
 });
 
 test('desktop player adapter rejects stale or malformed guarded lifecycle intents before custody and host', async () => {
@@ -341,6 +360,28 @@ test('desktop player adapter rejects stale or malformed guarded lifecycle intent
     requestId: 'request-play-stale',
     payload: { snapshotRequestId: 'request-load-replaced' },
   });
+  const staleStop = await adapter.dispatchRendererIntent({
+    intent: 'player.stopIfCurrent',
+    requestId: 'request-stop-stale',
+    payload: { snapshotRequestId: 'request-load-replaced' },
+  });
+  assert.equal(staleStop.accepted, false);
+  assert.equal(staleStop.command?.command, 'stop');
+  assert.deepEqual(adapter.getSnapshot(), snapshotBefore);
+  assert.equal(adapter.getPendingRequestCount(), 0);
+  assert.equal(host.commands.length, commandCountBefore);
+
+  const staleSeek = await adapter.dispatchRendererIntent({
+    intent: 'player.seekRelativeIfCurrent',
+    requestId: 'request-seek-stale',
+    payload: { snapshotRequestId: 'request-load-replaced', deltaMs: 10_000 },
+  });
+  assert.equal(staleSeek.accepted, false);
+  assert.equal(staleSeek.command?.command, 'seek.relative');
+  assert.deepEqual(adapter.getSnapshot(), snapshotBefore);
+  assert.equal(adapter.getPendingRequestCount(), 0);
+  assert.equal(host.commands.length, commandCountBefore);
+
   const ordinaryWithGuardedPayload = await adapter.dispatchRendererIntent({
     intent: 'player.play',
     requestId: 'request-play-not-guarded',
@@ -354,6 +395,19 @@ test('desktop player adapter rejects stale or malformed guarded lifecycle intent
     const malformed = await adapter.dispatchRendererIntent({
       intent: 'player.pauseIfCurrent',
       requestId: `request-pause-malformed-${String(Object.keys(payload).length)}`,
+      payload,
+    });
+    assert.equal(malformed.accepted, false);
+  }
+  for (const [intent, payload] of [
+    ['player.stopIfCurrent', { snapshotRequestId: 'request-load-current', extra: true }],
+    ['player.seekRelativeIfCurrent', { snapshotRequestId: 'request-load-current' }],
+    ['player.seekRelativeIfCurrent', { snapshotRequestId: 'request-load-current', deltaMs: Number.NaN }],
+    ['player.seekRelativeIfCurrent', { snapshotRequestId: 'request-load-current', deltaMs: 10_000, extra: true }],
+  ] as const) {
+    const malformed = await adapter.dispatchRendererIntent({
+      intent,
+      requestId: `request-malformed-${intent}-${String(Object.keys(payload).length)}`,
       payload,
     });
     assert.equal(malformed.accepted, false);
@@ -383,6 +437,21 @@ test('desktop player adapter rejects stale or malformed guarded lifecycle intent
       reason: 'snapshot request mismatch',
     });
   }
+});
+
+test('desktop player adapter requires exact safe seek support on load payloads', async () => {
+  const host = new FakeNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  const base = loadEnvelope('request-seek-support') as RendererIntentEnvelope<Record<string, unknown>>;
+  for (const payload of [
+    { ...base.payload, seekSupport: undefined },
+    { ...base.payload, seekSupport: 'SUPPORTED' },
+    { ...base.payload, seekSupport: 'supported', extra: true },
+  ]) {
+    const result = await adapter.dispatchRendererIntent({ ...base, payload });
+    assert.equal(result.accepted, false);
+  }
+  assert.equal(host.commands.length, 0);
 });
 
 test('desktop player adapter submits a matching guarded command before a later load in the same turn', async () => {
@@ -471,6 +540,7 @@ test('desktop player adapter emits renderer-safe snapshots and host events', asy
   assert.equal(result.accepted, true);
   assert.equal(result.snapshot.status, 'playing');
   assert.equal(result.snapshot.playing, true);
+  assert.equal(result.snapshot.seekSupport, 'supported');
   assert.equal(result.snapshot.positionMs, 12_000);
   assert.equal(result.snapshot.selectedAudioTrackId, 'audio-ui-1');
   assert.equal(result.events.some((event) => event.event === 'media.loaded'), true);

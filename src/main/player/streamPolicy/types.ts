@@ -76,6 +76,7 @@ export interface DesktopStreamCapabilityProfile {
   directPlayAudioCodecs: readonly string[];
   subtitleDeliveryModes: readonly PlayerSubtitleDeliveryMode[];
   headerAuthSetup: PlayerCapabilitySupport;
+  seek: PlayerCapabilitySupport;
   audioTrackSwitching: PlayerCapabilitySupport;
   subtitleTrackSwitching: PlayerCapabilitySupport;
   hdr: PlayerCapabilitySupport;

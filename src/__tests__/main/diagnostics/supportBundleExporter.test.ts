@@ -139,6 +139,12 @@ test('support bundle exporter creates required files under a new child directory
   assert.equal(manifest.explicitOmissions.includes('absolute paths'), true);
   const diagnostics = await fs.readFile(path.join(bundleDirectory, 'diagnostics.ndjson'), 'utf8');
   assert.equal(diagnostics.split('\n').filter(Boolean).length, 1);
+  const playerSnapshot = JSON.parse(
+    await fs.readFile(path.join(bundleDirectory, 'player-snapshot.json'), 'utf8'),
+  ) as Record<string, unknown>;
+  assert.equal(playerSnapshot.seekSupport, 'unknown');
+  assert.equal(Object.hasOwn(playerSnapshot, 'credential'), false);
+  assert.equal(Object.hasOwn(playerSnapshot, 'nativeHandle'), false);
   for (const fileName of ['crash-recovery.json', 'environment.json', 'player-snapshot.json']) {
     const content = await fs.readFile(path.join(bundleDirectory, fileName), 'utf8');
     assert.equal(content.includes('12345'), false);
@@ -425,6 +431,7 @@ function createUnsafePlayerSnapshot() {
     status: 'idle',
     media: null,
     capabilityProfileId: null,
+    seekSupport: 'unknown',
     positionMs: 0,
     durationMs: null,
     bufferedRanges: [],

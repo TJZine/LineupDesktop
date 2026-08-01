@@ -22,7 +22,9 @@ export interface NavigationLifecycleOptions {
   onFocusChanged(focusId: string | null): void;
   scrollFocusedIntoView(): void;
   handleGuideDirection?(direction: 'up' | 'down' | 'left' | 'right'): boolean;
+  handleGuidePage?(offset: -5 | 5): boolean;
   handlePlayerInput?(input: DesktopInputButton): boolean;
+  openInfoRecovery(): void;
   activateRoute(route: AppRouteId): boolean | void;
   isProfileModalActive(): boolean;
   closeProfileModal(): void;
@@ -40,6 +42,15 @@ export interface NavigationLifecycle {
   closeApplication(): void;
   routeChanged(previousRoute: AppRouteId, nextRoute: AppRouteId): void;
   cleanup(): void;
+}
+
+export function activateInfoRecovery(
+  activateChannelSetup: () => boolean,
+  openSelectedStage: () => void,
+): boolean {
+  if (!activateChannelSetup()) return false;
+  openSelectedStage();
+  return true;
 }
 
 export interface NavigationInputRuntimeOptions {
@@ -161,6 +172,13 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
         return;
       }
 
+      if (options.isProfileModalActive()) {
+        if (input === 'back') options.closeProfileModal();
+        else if (input === 'up' || input === 'down' || input === 'left' || input === 'right') moveFocus(input);
+        else if (input === 'ok') clickFocusedRendererElement(options.getFocusState(), options.dom);
+        return;
+      }
+
       if (options.getRoute() === 'player' && options.handlePlayerInput?.(input) === true) {
         return;
       }
@@ -172,6 +190,12 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
       }
       if (input === 'ok') {
         clickFocusedRendererElement(options.getFocusState(), options.dom);
+        return;
+      }
+      if (input === 'pageUp' || input === 'pageDown') {
+        if (options.getRoute() === 'guide') {
+          options.handleGuidePage?.(input === 'pageUp' ? -5 : 5);
+        }
         return;
       }
       if (input === 'back') {
@@ -188,11 +212,15 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
         return;
       }
       if (input === 'guide') {
-        navigate('guide');
+        navigate(options.getRoute() === 'guide' ? 'player' : 'guide');
         return;
       }
       if (input === 'settings') {
         navigate('settings');
+        return;
+      }
+      if (input === 'info') {
+        options.openInfoRecovery();
         return;
       }
       if (input === 'fullscreen' && options.getRoute() === 'player') {

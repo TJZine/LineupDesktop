@@ -47,6 +47,8 @@ test('text input bypass ignores TV shortcuts while editing', () => {
   assert.equal(shouldBypassDesktopInput(childOfCombobox), true);
   assert.equal(shouldBypassDesktopInput(button), false);
   assert.equal(mapDesktopKeyboardEvent({ key: 'ArrowDown', target: textarea }), null);
+  assert.equal(mapDesktopKeyboardEvent({ key: 'F1', target: textarea }), null);
+  assert.equal(mapDesktopKeyboardEvent({ key: 'MediaStop', target: textarea }), null);
   assert.equal(mapDesktopKeyboardEvent({ key: 'ArrowDown', target: button }), 'down');
 });
 
@@ -129,12 +131,22 @@ test('fullscreen dispatch maps keyboard shortcut through the desktop input owner
   assert.deepEqual(dispatched, ['fullscreen']);
 });
 
-test('Player keyboard vocabulary keeps OK and Space distinct and maps Info, pages, and digits', () => {
+test('Player keyboard vocabulary maps semantic function, page, media, and digit keys exactly', () => {
   assert.equal(mapDesktopKeyEvent({ key: 'Enter' }), 'ok');
   assert.equal(mapDesktopKeyEvent({ key: ' ' }), 'space');
   assert.equal(mapDesktopKeyEvent({ key: 'i' }), 'info');
+  assert.equal(mapDesktopKeyEvent({ key: 'F1' }), 'nowPlaying');
+  assert.equal(mapDesktopKeyEvent({ key: 'F2' }), 'guide');
+  assert.equal(mapDesktopKeyEvent({ key: 'F3' }), 'settings');
+  assert.equal(mapDesktopKeyEvent({ key: 'F4' }), 'info');
   assert.equal(mapDesktopKeyEvent({ key: 'PageUp' }), 'pageUp');
   assert.equal(mapDesktopKeyEvent({ key: 'PageDown' }), 'pageDown');
+  assert.equal(mapDesktopKeyEvent({ key: 'MediaPlay' }), 'mediaPlay');
+  assert.equal(mapDesktopKeyEvent({ key: 'MediaPause' }), 'mediaPause');
+  assert.equal(mapDesktopKeyEvent({ key: 'MediaPlayPause' }), 'mediaPlayPause');
+  assert.equal(mapDesktopKeyEvent({ key: 'MediaRewind' }), 'mediaRewind');
+  assert.equal(mapDesktopKeyEvent({ key: 'MediaFastForward' }), 'mediaFastForward');
+  assert.equal(mapDesktopKeyEvent({ key: 'MediaStop' }), 'mediaStop');
   assert.equal(mapDesktopKeyEvent({ key: '0' }), 'digit0');
   assert.equal(mapDesktopKeyEvent({ key: '9' }), 'digit9');
 });

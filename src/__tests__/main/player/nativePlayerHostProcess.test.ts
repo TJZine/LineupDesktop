@@ -65,7 +65,7 @@ class FakeHostChildProcess extends EventEmitter implements NativePlayerHostChild
   }
 }
 
-const loadCommand: PlayerCommand = {
+const loadCommand: Extract<PlayerCommand, { command: 'load' }> = {
   command: 'load',
   requestId: 'native-load-1',
   payload: {
@@ -81,6 +81,7 @@ const loadCommand: PlayerCommand = {
       preferredAudioTrackId: null,
       preferredSubtitleTrackId: null,
     },
+    seekSupport: 'supported',
     capabilityProfileId: 'native-process-test',
   },
 };

@@ -131,6 +131,7 @@ function createEmptySnapshot(): PlayerSnapshot {
     status: 'idle',
     media: null,
     capabilityProfileId: null,
+    seekSupport: 'unknown',
     positionMs: 0,
     durationMs: null,
     bufferedRanges: [],

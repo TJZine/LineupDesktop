@@ -7,8 +7,10 @@ export type RendererIntent =
   | 'player.pause'
   | 'player.pauseIfCurrent'
   | 'player.stop'
+  | 'player.stopIfCurrent'
   | 'player.seekAbsolute'
   | 'player.seekRelative'
+  | 'player.seekRelativeIfCurrent'
   | 'player.setVolume'
   | 'player.setMute'
   | 'player.selectAudio'
@@ -28,8 +30,10 @@ export const PLAYER_RENDERER_INTENTS = [
   'player.pause',
   'player.pauseIfCurrent',
   'player.stop',
+  'player.stopIfCurrent',
   'player.seekAbsolute',
   'player.seekRelative',
+  'player.seekRelativeIfCurrent',
   'player.setVolume',
   'player.setMute',
   'player.selectAudio',

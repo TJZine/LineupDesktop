@@ -135,6 +135,7 @@ export interface PlayerLoadPolicy {
 export interface PlayerLoadCommandPayload {
   media: PlayerMediaSummary;
   policy: PlayerLoadPolicy;
+  seekSupport: PlayerCapabilitySupport;
   capabilityProfileId?: string;
 }
 
@@ -265,6 +266,7 @@ export interface PlayerSnapshot {
   status: PlayerStatus;
   media: PlayerMediaSummary | null;
   capabilityProfileId: string | null;
+  seekSupport: PlayerCapabilitySupport;
   positionMs: number;
   durationMs: number | null;
   bufferedRanges: readonly PlayerTimeRange[];
@@ -522,6 +524,7 @@ function isRendererSafePlayerSnapshot(value: unknown): value is PlayerSnapshot {
       'status',
       'media',
       'capabilityProfileId',
+      'seekSupport',
       'positionMs',
       'durationMs',
       'bufferedRanges',
@@ -540,6 +543,7 @@ function isRendererSafePlayerSnapshot(value: unknown): value is PlayerSnapshot {
     isStringInSet(value.status, PLAYER_STATUS_VALUES) &&
     (value.media === null || isRendererSafeMediaSummary(value.media)) &&
     (value.capabilityProfileId === null || isNonEmptyString(value.capabilityProfileId)) &&
+    isPlayerCapabilitySupport(value.seekSupport) &&
     isFiniteNonNegativeNumber(value.positionMs) &&
     isNullableFiniteNonNegativeNumber(value.durationMs) &&
     isRendererSafeTimeRanges(value.bufferedRanges) &&
@@ -554,6 +558,10 @@ function isRendererSafePlayerSnapshot(value: unknown): value is PlayerSnapshot {
     isRendererSafePlayerPlaybackQualitySummary(value.quality) &&
     (value.lastError === null || isRendererSafePlayerError(value.lastError))
   );
+}
+
+function isPlayerCapabilitySupport(value: unknown): value is PlayerCapabilitySupport {
+  return value === 'supported' || value === 'unsupported' || value === 'unknown' || value === 'unproven';
 }
 
 function isRendererSafeMediaSummary(value: unknown): value is PlayerMediaSummary {

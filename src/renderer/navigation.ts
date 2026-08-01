@@ -8,6 +8,7 @@ export type DesktopInputButton =
   | FocusDirection
   | 'ok'
   | 'space'
+  | 'nowPlaying'
   | 'info'
   | 'pageUp'
   | 'pageDown'
@@ -15,6 +16,12 @@ export type DesktopInputButton =
   | 'back'
   | 'guide'
   | 'settings'
+  | 'mediaPlay'
+  | 'mediaPause'
+  | 'mediaPlayPause'
+  | 'mediaRewind'
+  | 'mediaFastForward'
+  | 'mediaStop'
   | 'fullscreen';
 
 export interface DesktopKeyEventLike {

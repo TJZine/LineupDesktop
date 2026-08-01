@@ -167,6 +167,8 @@ test('plex stream resolver projects direct play to safe load payload and private
   assert.equal(result.load.policy.preferredAudioTrackId, 'plex-track-audio-1-1-1');
   assert.equal(result.load.policy.preferredSubtitleTrackId, 'plex-track-subtitle-1-1-1');
   assert.equal(result.load.capabilityProfileId, directPlayProfile.id);
+  assert.equal(result.load.seekSupport, 'supported');
+  assert.equal(Object.hasOwn(result.load, 'capabilityProfile'), false);
   assertPrivateCarriesPrivilegedSetup(result.privatePlayback);
   assertPublicProjectionSafe(result);
   assert.equal(result.pmsSession?.id, 'lease-request-direct-play');
@@ -1018,6 +1020,7 @@ const directPlayProfile: DesktopStreamCapabilityProfile = {
   directPlayAudioCodecs: ['aac', 'opus'],
   subtitleDeliveryModes: ['embedded', 'sidecar', 'external', 'none'],
   headerAuthSetup: 'supported',
+  seek: 'supported',
   audioTrackSwitching: 'supported',
   subtitleTrackSwitching: 'supported',
   hdr: 'supported',

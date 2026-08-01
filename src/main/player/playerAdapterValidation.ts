@@ -30,7 +30,7 @@ export const PLAYER_TRACK_DELIVERY_TYPES = [
 export function validateLoadPayload(
   value: unknown,
 ): { value: PlayerLoadCommandPayload } | { error: string } {
-  const payload = validateObjectPayload(value, ['media', 'policy'], ['capabilityProfileId']);
+  const payload = validateObjectPayload(value, ['media', 'policy', 'seekSupport'], ['capabilityProfileId']);
   if ('error' in payload) {
     return payload;
   }
@@ -45,13 +45,21 @@ export function validateLoadPayload(
   ) {
     return { error: 'load payload capabilityProfileId must be a string when present' };
   }
+  if (!isPlayerCapabilitySupport(payload.value.seekSupport)) {
+    return { error: 'load payload seekSupport must be a supported capability value' };
+  }
   return {
     value: {
       media: media.value,
       policy: policy.value,
+      seekSupport: payload.value.seekSupport,
       capabilityProfileId: payload.value.capabilityProfileId,
     },
   };
+}
+
+function isPlayerCapabilitySupport(value: unknown): value is PlayerLoadCommandPayload['seekSupport'] {
+  return value === 'supported' || value === 'unsupported' || value === 'unknown' || value === 'unproven';
 }
 
 export function validateLoadPolicy(

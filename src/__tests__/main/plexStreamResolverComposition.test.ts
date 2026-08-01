@@ -93,6 +93,8 @@ test('createLivePlexStreamResolverComposition injects the existing diagnostic st
   });
 
   assert.equal(result.ok, true);
+  assert.equal(result.ok ? result.load.seekSupport : null, 'supported');
+  assert.equal(result.ok ? Object.hasOwn(result.load, 'capabilityProfile') : true, false);
   assert.deepEqual(result.ok ? result.privatePlayback.credentialHeader : null, {
     name: 'X-Plex-Token',
     value: 'private-token',
@@ -184,6 +186,7 @@ const directPlayProfile: DesktopStreamCapabilityProfile = {
   directPlayAudioCodecs: ['aac'],
   subtitleDeliveryModes: ['embedded'],
   headerAuthSetup: 'supported',
+  seek: 'supported',
   audioTrackSwitching: 'supported',
   subtitleTrackSwitching: 'supported',
   hdr: 'supported',

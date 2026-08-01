@@ -54,7 +54,7 @@ export interface PlayerOverlayController {
   skip(): boolean;
   openOptions(family: 'audio' | 'subtitle'): boolean;
   selectTrack(family: 'audio' | 'subtitle', trackId: string | null, focusId: string): Promise<void>;
-  tune(channelId: string, invoker: 'miniGuide' | 'number'): Promise<void>;
+  tune(channelId: string, invoker: 'miniGuide' | 'number' | 'page'): Promise<void>;
   handlePlayerEvent(event: PlayerEvent): void;
   reconcileSnapshot(snapshot: PlayerSnapshot, authoritative: boolean, explicitTrackList?: boolean): void;
   closeTop(): boolean;
@@ -66,7 +66,7 @@ export interface PlayerOverlayController {
 interface PendingCommand {
   requestId: string;
   command: PlayerCommandName;
-  kind: 'space' | 'track';
+  kind: 'track';
   snapshotRequestId: string | null;
   focusId: string | null;
   trackId: string | null;
@@ -206,9 +206,7 @@ export function createPlayerOverlayController(
       if (pending?.requestId !== requestId) return;
       failPendingCommand(
         requestId,
-        pending.kind === 'track'
-          ? 'Track selection timed out.'
-          : 'Player command timed out.',
+        'Track selection timed out.',
       );
     }, PLAYER_BRIDGE_REQUEST_TIMEOUT_MS);
   };
@@ -366,41 +364,6 @@ export function createPlayerOverlayController(
     options.focus(null);
   };
 
-  const dispatchSpace = (): boolean => {
-    const snapshot = options.getPresentation().playerSnapshot;
-    if (pendingCommand !== null || options.getState().activeOverlayId === 'playbackOptions') return true;
-    let intent: 'player.play' | 'player.pause' | null = null;
-    let command: 'play' | 'pause' | null = null;
-    if (snapshot.status === 'playing' && snapshot.playing) {
-      intent = 'player.pause'; command = 'pause';
-    } else if ((snapshot.status === 'ready' || snapshot.status === 'paused') && !snapshot.playing) {
-      intent = 'player.play'; command = 'play';
-    } else if (
-      (snapshot.status === 'playing' && !snapshot.playing) ||
-      ((snapshot.status === 'ready' || snapshot.status === 'paused') && snapshot.playing)
-    ) {
-      options.recordDiagnostic('player.space', 'Inconsistent player state ignored.');
-    }
-    if (intent === null || command === null) return true;
-    const requestId = `renderer-${command}-${++sequence}`;
-    pendingCommand = { requestId, command, kind: 'space', snapshotRequestId: snapshot.requestId, focusId: null, trackId: null, family: null };
-    armPendingCommandTimer(requestId);
-    void withBridgeRequestTimeout(
-      `command:${requestId}`,
-      options.player.dispatch({ intent, requestId, payload: {} }),
-    ).then((result) => {
-      if (disposed || pendingCommand?.requestId !== requestId) return;
-      if (!result.ok || !result.value.accepted) failPendingCommand(requestId, result.ok ? 'Player command was not accepted.' : result.error.message);
-      else for (const event of result.value.events) if (event.event === 'command.settled') settleCommand(event);
-    }).catch((error: unknown) => failPendingCommand(
-      requestId,
-      error instanceof PlayerBridgeRequestTimeoutError
-        ? 'Player command timed out.'
-        : 'Player command failed.',
-    ));
-    return true;
-  };
-
   const selectTrack = async (
     family: 'audio' | 'subtitle',
     trackId: string | null,
@@ -444,7 +407,7 @@ export function createPlayerOverlayController(
 
   const tune = async (
     channelId: string,
-    invoker: 'miniGuide' | 'number',
+    invoker: 'miniGuide' | 'number' | 'page',
   ): Promise<void> => {
     if (disposed || !options.getPresentation().channels.some((channel) => channel.id === channelId)) return;
     const state = options.getState();
@@ -518,7 +481,7 @@ export function createPlayerOverlayController(
 
   const failTune = (
     generation: number,
-    invoker: 'miniGuide' | 'number',
+    invoker: 'miniGuide' | 'number' | 'page',
     message: string,
   ): void => {
     if (generation !== tuneGeneration || disposed) return;
@@ -540,6 +503,24 @@ export function createPlayerOverlayController(
     });
     if (invoker === 'miniGuide' && invokerOwnedAtSettlement) focusActive();
     if (invoker === 'number' && invokerOwnedAtSettlement) numberTimer = options.host.setTimeout(closeNumber, NUMBER_RESULT_MS);
+    if (invoker === 'page') options.recordDiagnostic('player.page-tune', safe);
+  };
+
+  const tuneAdjacentChannel = (offset: -1 | 1): boolean => {
+    const state = options.getState();
+    if (state.activeOverlayId !== null || state.pendingTuneChannelId !== null) return true;
+    const presentation = options.getPresentation();
+    if (presentation.currentChannelId === null || presentation.channels.length === 0) return true;
+    const currentIndex = presentation.channels.findIndex(
+      (channel) => channel.id === presentation.currentChannelId,
+    );
+    if (currentIndex < 0) return true;
+    const nextIndex = (currentIndex + offset + presentation.channels.length) % presentation.channels.length;
+    const nextChannel = presentation.channels[nextIndex];
+    if (nextChannel !== undefined && nextChannel.id !== presentation.currentChannelId) {
+      void tune(nextChannel.id, 'page');
+    }
+    return true;
   };
 
   const settleCommand = (event: Extract<PlayerEvent, { event: 'command.settled' }>): void => {
@@ -557,10 +538,6 @@ export function createPlayerOverlayController(
     if (disposed || pendingCommand?.requestId !== requestId) return;
     const pending = releasePendingCommand();
     if (pending === null) return;
-    if (pending.kind === 'space') {
-      options.recordDiagnostic('player.space', safeMessage(message, 'Player command failed.'));
-      return;
-    }
     setOptionsFailure(pending.focusId, safeMessage(message, 'Track selection failed.'));
   };
 
@@ -656,9 +633,6 @@ export function createPlayerOverlayController(
       focusActive();
       return;
     }
-    if (pendingCommand?.kind === 'space' && authoritative && isInconsistentPlaybackPair(snapshot)) {
-      failPendingCommand(pendingCommand.requestId, 'Inconsistent player state ignored.');
-    }
     if (authoritative || snapshot.status === 'ended') update((state) => reconcileSnapshotState(state, snapshot));
     if (authoritative && previousAuthoritativeStatus !== 'playing' && snapshot.status === 'playing' &&
       options.getState().activeOverlayId === 'playerOsd') armOsdTimer();
@@ -693,8 +667,7 @@ export function createPlayerOverlayController(
   const handleInput = (input: DesktopInputButton, shellBlocked = false): boolean => {
     if (disposed) return false;
     const state = options.getState();
-    if (input === 'space') return dispatchSpace();
-    if (input === 'info') return requestNowPlaying(shellBlocked);
+    if (input === 'nowPlaying') return requestNowPlaying(shellBlocked);
     if (input.startsWith('digit')) {
       if (state.activeOverlayId === 'playbackOptions' || ['loading', 'buffering', 'seeking', 'stalled', 'error', 'destroyed'].includes(options.getPresentation().playerSnapshot.status)) return true;
       if (state.channelNumberStatus === 'pending' || state.channelNumberStatus === 'completed' || state.channelNumberStatus === 'error') return true;
@@ -723,6 +696,9 @@ export function createPlayerOverlayController(
       if (input === 'ok' && state.miniGuideSelectedChannelId !== null) {
         return activateMiniGuideChannel(state.miniGuideSelectedChannelId);
       }
+    }
+    if (input === 'pageUp' || input === 'pageDown') {
+      return tuneAdjacentChannel(input === 'pageUp' ? -1 : 1);
     }
     if (input === 'up' && state.activeOverlayId === null) return requestMiniGuide();
     if (input === 'ok' && state.activeOverlayId === null &&
@@ -810,9 +786,4 @@ function isRecoveryActive(state: PlayerOverlayState): boolean {
     state.recoveryPendingAction !== null ||
     state.retryTransitionActive
   );
-}
-
-function isInconsistentPlaybackPair(snapshot: PlayerSnapshot): boolean {
-  return (snapshot.status === 'playing' && !snapshot.playing) ||
-    ((snapshot.status === 'ready' || snapshot.status === 'paused') && snapshot.playing);
 }

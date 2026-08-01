@@ -208,6 +208,7 @@ export async function runSmokeAssertions(
             preferredSubtitleTrackId: null,
           },
           capabilityProfileId: 'smoke-fake-host',
+          seekSupport: 'supported',
         },
       });
       const invalidPlayerResult = await bridge.player.dispatch({

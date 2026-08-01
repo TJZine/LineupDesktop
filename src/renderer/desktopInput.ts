@@ -87,6 +87,14 @@ export function mapDesktopKeyEvent(event: DesktopKeyEventLike): DesktopInputButt
       return 'ok';
     case ' ':
       return 'space';
+    case 'F1':
+      return 'nowPlaying';
+    case 'F2':
+      return 'guide';
+    case 'F3':
+      return 'settings';
+    case 'F4':
+      return 'info';
     case 'Escape':
     case 'Backspace':
       return 'back';
@@ -100,6 +108,18 @@ export function mapDesktopKeyEvent(event: DesktopKeyEventLike): DesktopInputButt
       return 'pageUp';
     case 'PageDown':
       return 'pageDown';
+    case 'MediaPlay':
+      return 'mediaPlay';
+    case 'MediaPause':
+      return 'mediaPause';
+    case 'MediaPlayPause':
+      return 'mediaPlayPause';
+    case 'MediaRewind':
+      return 'mediaRewind';
+    case 'MediaFastForward':
+      return 'mediaFastForward';
+    case 'MediaStop':
+      return 'mediaStop';
     case ',':
     case 's':
     case 'S':

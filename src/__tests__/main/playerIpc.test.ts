@@ -188,6 +188,7 @@ function loadEnvelope(requestId = 'player-load-1'): unknown {
         preferredAudioTrackId: null,
         preferredSubtitleTrackId: null,
       },
+      seekSupport: 'supported',
       capabilityProfileId: 'desktop-ipc-test',
     },
   };

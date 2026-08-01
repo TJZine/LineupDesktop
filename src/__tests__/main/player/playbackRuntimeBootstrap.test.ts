@@ -16,6 +16,7 @@ test('production playback capability profile advertises only proven conservative
   assert.deepEqual(profile.directPlayAudioCodecs, ['aac']);
   assert.deepEqual(profile.subtitleDeliveryModes, ['none']);
   assert.equal(profile.headerAuthSetup, 'supported');
+  assert.equal(profile.seek, 'supported');
   assert.equal(profile.audioTrackSwitching, 'unsupported');
   assert.equal(profile.subtitleTrackSwitching, 'unsupported');
   assert.equal(profile.hdr, 'unsupported');

@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import { FocusRegistry, type FocusState } from '../../renderer/navigation.js';
-import { createNavigationLifecycle, type NavigationLifecycleOptions } from '../../renderer/shell/navigationLifecycle.js';
+import {
+  activateInfoRecovery,
+  createNavigationLifecycle,
+  type NavigationLifecycleOptions,
+} from '../../renderer/shell/navigationLifecycle.js';
 import {
   createRendererShellState,
   type RendererShellState,
@@ -12,6 +16,7 @@ function createHarness(
   handleGuideDirection: NavigationLifecycleOptions['handleGuideDirection'],
   handlePlayerInput?: NavigationLifecycleOptions['handlePlayerInput'],
   routeActivationAllowed = true,
+  handleGuidePage?: NavigationLifecycleOptions['handleGuidePage'],
 ) {
   const registry = new FocusRegistry();
   registry.register({ id: 'player-guide', route: 'player', order: 0 });
@@ -25,6 +30,8 @@ function createHarness(
     bootstrap: 'ready',
   };
   let playerPresentationFocusCount = 0;
+  let profileModalActive = false;
+  let infoRecoveryCount = 0;
   const dom = {
     focusableElements: [],
     routeActionButtons: [],
@@ -51,14 +58,16 @@ function createHarness(
     onFocusChanged: () => undefined,
     scrollFocusedIntoView: () => undefined,
     handleGuideDirection,
+    handleGuidePage,
     handlePlayerInput,
     activateRoute: (nextRoute) => {
       if (!routeActivationAllowed) return false;
       route = nextRoute as 'player' | 'guide';
       return true;
     },
-    isProfileModalActive: () => false,
-    closeProfileModal: () => undefined,
+    isProfileModalActive: () => profileModalActive,
+    closeProfileModal: () => { profileModalActive = false; },
+    openInfoRecovery: () => { infoRecoveryCount += 1; },
     handleChannelSetupBack: async () => false,
     dismissInlineError: () => undefined,
     requestFullscreen: async () => undefined,
@@ -73,6 +82,8 @@ function createHarness(
     setRoute: (nextRoute: 'player' | 'guide') => { route = nextRoute; },
     getPlayerPresentationFocusCount: () => playerPresentationFocusCount,
     unregister: (focusId: string) => registry.unregister(focusId),
+    setProfileModalActive: (active: boolean) => { profileModalActive = active; },
+    getInfoRecoveryCount: () => infoRecoveryCount,
   };
 }
 
@@ -86,6 +97,56 @@ test('Guide directional first refusal runs before generic focus movement', async
   const fallback = createHarness(() => false);
   await fallback.lifecycle.handleInput('right');
   assert.equal(fallback.getFocus().activeId, 'guide-program-one--next');
+});
+
+test('Info recovery enters exactly one selected stage only after route activation succeeds', () => {
+  const stages: string[] = [];
+  let activationCount = 0;
+  assert.equal(activateInfoRecovery(
+    () => { activationCount += 1; return false; },
+    () => { stages.push('account'); },
+  ), false);
+  assert.equal(activationCount, 1);
+  assert.equal(stages.length, 0);
+
+  assert.equal(activateInfoRecovery(
+    () => { activationCount += 1; return true; },
+    () => { stages.push('account'); },
+  ), true);
+  assert.equal(activationCount, 2);
+  assert.deepEqual(stages, ['account']);
+
+  assert.equal(activateInfoRecovery(
+    () => { activationCount += 1; return true; },
+    () => { stages.push('server'); },
+  ), true);
+  assert.equal(activationCount, 3);
+  assert.deepEqual(stages, ['account', 'server']);
+});
+
+test('Guide pages by five through its owner and protected profile state suppresses Info and Player input', async () => {
+  const pageOffsets: number[] = [];
+  const playerInputs: string[] = [];
+  const harness = createHarness(
+    () => false,
+    (input) => { playerInputs.push(input); return input === 'space'; },
+    true,
+    (offset) => { pageOffsets.push(offset); return true; },
+  );
+  await harness.lifecycle.handleInput('pageDown');
+  await harness.lifecycle.handleInput('pageUp');
+  assert.deepEqual(pageOffsets, [5, -5]);
+
+  harness.setRoute('player');
+  harness.setProfileModalActive(true);
+  await harness.lifecycle.handleInput('info');
+  await harness.lifecycle.handleInput('space');
+  assert.equal(harness.getInfoRecoveryCount(), 0);
+  assert.deepEqual(playerInputs, []);
+  harness.setProfileModalActive(false);
+  await harness.lifecycle.handleInput('info');
+  assert.equal(harness.getInfoRecoveryCount(), 1);
+  assert.deepEqual(playerInputs, ['info']);
 });
 
 test('Guide Back restores the exact reachable Player invoker', async () => {

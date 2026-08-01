@@ -42,6 +42,7 @@ test('presentation does not create placeholder channels when runtime data is abs
     playerSnapshot: createEmptyPlayerSnapshot(), channelSummary: null, guidePresentation: null, nowMs: 0,
   });
   assert.deepEqual(presentation.channels, []);
+  assert.equal(presentation.playerSnapshot.seekSupport, 'unknown');
   assert.equal(presentation.currentChannelId, null);
 });
 

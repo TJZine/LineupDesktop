@@ -253,6 +253,12 @@ const PLAYER_COMMAND_VALUES = [
   'track.audio.select',
   'track.subtitle.select',
 ] as const;
+const PLAYER_CAPABILITY_SUPPORT_VALUES = [
+  'supported',
+  'unsupported',
+  'unknown',
+  'unproven',
+] as const;
 const PLAYER_RENDERER_INTENT_VALUES = [
   'player.load',
   'player.play',
@@ -260,8 +266,10 @@ const PLAYER_RENDERER_INTENT_VALUES = [
   'player.pause',
   'player.pauseIfCurrent',
   'player.stop',
+  'player.stopIfCurrent',
   'player.seekAbsolute',
   'player.seekRelative',
+  'player.seekRelativeIfCurrent',
   'player.setVolume',
   'player.setMute',
   'player.selectAudio',
@@ -417,6 +425,7 @@ function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
       'status',
       'media',
       'capabilityProfileId',
+      'seekSupport',
       'positionMs',
       'durationMs',
       'bufferedRanges',
@@ -435,6 +444,7 @@ function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
     isStringInSet(value.status, PLAYER_STATUS_VALUES) &&
     (value.media === null || isPlayerMediaSummary(value.media)) &&
     (value.capabilityProfileId === null || isNonEmptyString(value.capabilityProfileId)) &&
+    isStringInSet(value.seekSupport, PLAYER_CAPABILITY_SUPPORT_VALUES) &&
     isFiniteNonNegativeNumber(value.positionMs) &&
     isNullableFiniteNonNegativeNumber(value.durationMs) &&
     isTimeRanges(value.bufferedRanges) &&
