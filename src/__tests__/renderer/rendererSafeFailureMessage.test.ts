@@ -30,10 +30,35 @@ test('renderer-safe failure messages fail closed for locations, URLs, and creden
     ['Failed at ', '\\', '\\', 'server', '\\', 'share'].join(''),
     ['Authentication ', 'token was rejected'].join(''),
     ['Credential ', 'header was rejected'].join(''),
+    ['Author', 'ization', ': Bear', 'er ', ['abc', '123', 'XYZ'].join('')].join(''),
+    ['Bear', 'er ', ['abc', '123', 'XYZ'].join('')].join(''),
+    ['X-Api', '-Key=', ['abc', '123', 'XYZ'].join('')].join(''),
+    ['pass', 'word=', ['hunter', '2'].join('')].join(''),
+    [
+      ['eyJ', 'hbGciOiJIUzI1NiJ9'].join(''),
+      ['eyJ', 'zdWIiOiIxMjM0NTY3ODkwIn0'].join(''),
+      ['sig', 'nature12-'].join(''),
+    ].join('.'),
+    ['Failed at ', '.', '/', 'private', '/', 'media.mkv'].join(''),
+    ['Failed at ', '.', '.', '/', 'private', '/', 'media.mkv'].join(''),
+    ['Failed at ', '.', '\\', 'private', '\\', 'media.mkv'].join(''),
+    ['Failed at ', '.', '.', '\\', 'private', '\\', 'media.mkv'].join(''),
+    ['Failed at `', '.', '/', 'private', '/', 'media.mkv', '`'].join(''),
+    ['Failed at [', '.', '/', 'private', '/', 'media.mkv', ']'].join(''),
+    ['Failed at {', '.', '.', '/', 'private', '/', 'media.mkv', '}'].join(''),
+    ['Failed at,', '.', '/', 'private', '/', 'media.mkv'].join(''),
+    ['Failed at \u201c', '.', '/', 'private', '/', 'media.mkv', '\u201d'].join(''),
     '   ',
   ];
 
   for (const message of sensitiveMessages) {
     assert.equal(toRendererSafeFailureMessage(message, FALLBACK), FALLBACK, message);
   }
+});
+
+test('renderer-safe failure messages preserve benign slash text', () => {
+  assert.equal(
+    toRendererSafeFailureMessage('Choose audio/video settings.', FALLBACK),
+    'Choose audio/video settings.',
+  );
 });
