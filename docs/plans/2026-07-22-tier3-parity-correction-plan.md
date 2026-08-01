@@ -6267,8 +6267,8 @@ fresh approval of an exact first unit.
 
 MODEL_SUGGESTION
 PLANNER: configured `planner` role
-IMPLEMENTER: resolve `worker_luna` by default or the Sol `worker` escalation role
-at dispatch from the approved unit through `.codex/config.toml`
+IMPLEMENTER: resolve `worker_luna` by default or the `worker` escalation role at
+dispatch from the approved unit through `.codex/config.toml`
 REVIEWER: configured `reviewer` role
 WHY: WS4 is Tier 3 input/overlay work spanning renderer focus and presentation,
 main-owned window/app-command/player seams, platform proof, and multiple current
@@ -6280,10 +6280,11 @@ TASK: Complete WS4 Input And Overlay Through The Tier 3 Feature Quality Loop
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: committed WS3 authority checkpoint `7506bb1`, including final WS3
-product source `87662b5`, accepted WS3 local classification, and its open
-consolidated-proof packet; this active canonical plan now routes WS4 from
-targeted scope-load through closeout
+ARTIFACT: this reviewed handoff update, based on role-routing authority
+`6172efc` and WS3 authority checkpoint `7506bb1`, including final WS3 product
+source `87662b5`, accepted WS3 local classification, and its open
+consolidated-proof packet; this active canonical plan routes WS4 from targeted
+scope-load through closeout
 FILES:
 - docs/plans/2026-07-22-tier3-parity-correction-plan.md
 - docs/product/lineup-product-parity-matrix.md
