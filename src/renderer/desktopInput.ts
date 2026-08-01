@@ -53,16 +53,38 @@ export interface DesktopGamepadRuntimeHost {
   cancelAnimationFrame: (handle: number) => void;
 }
 
+export interface DesktopBackHoldTimerPort {
+  setTimeout: (callback: () => void, delayMs: number) => number;
+  clearTimeout: (handle: number) => void;
+}
+
+export interface DesktopBackHoldRuntimeOptions {
+  dispatchShortBack: () => void | Promise<void>;
+  dispatchLongBack: () => void | Promise<void>;
+  timers: DesktopBackHoldTimerPort;
+  holdDelayMs?: number;
+}
+
+export interface DesktopBackHoldRuntime {
+  press(source: string): void;
+  release(source: string): boolean;
+  cancel(): void;
+}
+
 export interface DesktopGamepadRuntimeOptions {
   host: DesktopGamepadRuntimeHost;
   getGamepads: () => ReadonlyArray<DesktopGamepadLike | null | undefined>;
-  dispatch: (button: DesktopInputButton) => void | Promise<void>;
+  dispatch: (button: DesktopInputButton, sourceKey?: string) => void | Promise<void>;
+  onPress?: (button: DesktopInputButton, sourceKey?: string) => void;
+  onRelease?: (button: DesktopInputButton, sourceKey?: string) => void;
   nowMs?: () => number;
   repeat?: DesktopGamepadRepeatConfig;
 }
 
 export interface DesktopInputCleanup {
   cleanup: () => void;
+  pause?: () => void;
+  resume?: () => void;
 }
 
 const TEXT_ENTRY_ROLES = new Set(['combobox', 'searchbox', 'spinbutton', 'textbox']);
@@ -151,8 +173,13 @@ export function mapDesktopKeyboardEvent(event: DesktopKeyboardEventLike): Deskto
   return mapDesktopKeyEvent(event);
 }
 
+export interface DesktopKeyboardInputListenerOptions {
+  onBackPress?: (sourceKey: string) => void;
+}
+
 export function createDesktopKeyboardInputListener(
   dispatch: (button: DesktopInputButton) => void | Promise<void>,
+  options: DesktopKeyboardInputListenerOptions = {},
 ): (event: DesktopKeyboardEventLike) => void {
   return (event): void => {
     const input = mapDesktopKeyboardEvent(event);
@@ -160,7 +187,108 @@ export function createDesktopKeyboardInputListener(
       return;
     }
     event.preventDefault?.();
-    void dispatch(input);
+    if (input === 'back' && options.onBackPress !== undefined) {
+      options.onBackPress(getDesktopBackSourceKey(event));
+    } else {
+      void dispatch(input);
+    }
+  };
+}
+
+export function createDesktopKeyboardInputReleaseListener(
+  onBackRelease: (sourceKey: string) => void,
+): (event: DesktopKeyboardEventLike) => void {
+  return (event): void => {
+    if (event.key === 'Escape' || event.key === 'Backspace' || event.code === 'BrowserBack') {
+      onBackRelease(getDesktopBackSourceKey(event));
+    }
+  };
+}
+
+function getDesktopBackSourceKey(event: DesktopKeyboardEventLike): string {
+  if (event.code === 'BrowserBack') return 'keyboard:BrowserBack';
+  if (event.key === 'Escape') return 'keyboard:Escape';
+  if (event.key === 'Backspace') return 'keyboard:Backspace';
+  return `keyboard:${event.code ?? event.key}`;
+}
+
+export function createDesktopBackHoldRuntime(
+  options: DesktopBackHoldRuntimeOptions,
+): DesktopBackHoldRuntime {
+  const holdDelayMs = options.holdDelayMs ?? 500;
+  const pressedSources = new Set<string>();
+  let holdTimer: number | null = null;
+  let generation = 0;
+  let shortBackSettled = true;
+  let longBackPending = false;
+
+  const dispatchLongBackIfReady = (currentGeneration: number): void => {
+    if (!longBackPending || !shortBackSettled || currentGeneration !== generation || pressedSources.size === 0) {
+      return;
+    }
+    longBackPending = false;
+    void options.dispatchLongBack();
+  };
+
+  const clearHoldTimer = (): void => {
+    if (holdTimer !== null) {
+      options.timers.clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+  };
+
+  const press = (source: string): void => {
+    if (pressedSources.has(source)) return;
+    const wasPressed = pressedSources.size > 0;
+    pressedSources.add(source);
+    if (wasPressed) return;
+
+    const currentGeneration = ++generation;
+    shortBackSettled = false;
+    longBackPending = false;
+    holdTimer = options.timers.setTimeout(() => {
+      holdTimer = null;
+      if (currentGeneration !== generation || pressedSources.size === 0) return;
+      longBackPending = true;
+      dispatchLongBackIfReady(currentGeneration);
+    }, holdDelayMs);
+    const shortBackResult = options.dispatchShortBack();
+    if (shortBackResult === undefined) {
+      shortBackSettled = true;
+      return;
+    }
+    void shortBackResult.then(
+      () => {
+        if (currentGeneration !== generation) return;
+        shortBackSettled = true;
+        dispatchLongBackIfReady(currentGeneration);
+      },
+      () => {
+        if (currentGeneration !== generation) return;
+        shortBackSettled = true;
+        dispatchLongBackIfReady(currentGeneration);
+      },
+    );
+  };
+
+  const release = (source: string): boolean => {
+    if (!pressedSources.delete(source)) return false;
+    if (pressedSources.size > 0) return false;
+    generation += 1;
+    longBackPending = false;
+    clearHoldTimer();
+    return true;
+  };
+
+  return {
+    press,
+    release,
+    cancel: (): void => {
+      pressedSources.clear();
+      generation += 1;
+      longBackPending = false;
+      clearHoldTimer();
+    },
   };
 }
 
@@ -222,6 +350,7 @@ export class DesktopGamepadInputPolicy {
   readonly #repeatIntervalMs: number;
   readonly #connectedIndexes = new Set<number>();
   readonly #states = new Map<string, GamepadSourceState>();
+  #suspended = false;
 
   constructor(config: DesktopGamepadRepeatConfig = {}) {
     this.#axisThreshold = config.axisThreshold ?? DEFAULT_AXIS_THRESHOLD;
@@ -233,31 +362,75 @@ export class DesktopGamepadInputPolicy {
     this.#connectedIndexes.add(index);
   }
 
-  disconnect(index: number): void {
+  disconnect(
+    index: number,
+    onRelease?: (button: DesktopInputButton, sourceKey: string) => void,
+  ): void {
     this.#connectedIndexes.delete(index);
     for (const sourceKey of [...this.#states.keys()]) {
       if (sourceKey.startsWith(`${index}:`)) {
+        const state = this.#states.get(sourceKey);
+        if (state !== undefined) {
+          onRelease?.(state.button, sourceKey);
+        }
         this.#states.delete(sourceKey);
       }
     }
   }
 
-  reset(): void {
+  reset(onRelease?: (button: DesktopInputButton, sourceKey: string) => void): void {
+    if (onRelease !== undefined) {
+      for (const [sourceKey, state] of this.#states) {
+        onRelease(state.button, sourceKey);
+      }
+    }
     this.#connectedIndexes.clear();
     this.#states.clear();
+    this.#suspended = false;
+  }
+
+  suspend(onRelease?: (button: DesktopInputButton, sourceKey: string) => void): void {
+    if (onRelease !== undefined) {
+      for (const [sourceKey, state] of this.#states) {
+        onRelease(state.button, sourceKey);
+      }
+    }
+    this.#states.clear();
+    this.#suspended = true;
   }
 
   hasConnectedGamepads(): boolean {
     return this.#connectedIndexes.size > 0;
   }
 
-  poll(snapshots: ReadonlyArray<DesktopGamepadSnapshot>, nowMs: number): DesktopInputButton[] {
+  poll(
+    snapshots: ReadonlyArray<DesktopGamepadSnapshot>,
+    nowMs: number,
+    onRelease?: (button: DesktopInputButton, sourceKey: string) => void,
+    onEmit?: (button: DesktopInputButton, sourceKey: string) => void,
+    onPress?: (button: DesktopInputButton, sourceKey: string) => void,
+  ): DesktopInputButton[] {
     const activeSourceKeys = new Set<string>();
     const emitted = new Set<DesktopInputButton>();
 
+    if (this.#suspended) {
+      for (const snapshot of snapshots) {
+        if (!snapshot.connected) {
+          this.disconnect(snapshot.index, onRelease);
+          continue;
+        }
+        this.connect(snapshot.index);
+        if (mapGamepadSnapshot(snapshot, this.#axisThreshold).length > 0) {
+          activeSourceKeys.add(`${snapshot.index}:active`);
+        }
+      }
+      if (activeSourceKeys.size === 0) this.#suspended = false;
+      return [];
+    }
+
     for (const snapshot of snapshots) {
       if (!snapshot.connected) {
-        this.disconnect(snapshot.index);
+        this.disconnect(snapshot.index, onRelease);
         continue;
       }
 
@@ -271,19 +444,30 @@ export class DesktopGamepadInputPolicy {
             pressed: true,
             nextRepeatAtMs: nowMs + this.#repeatDelayMs,
           });
-          emitted.add(source.button);
+          onPress?.(source.button, source.key);
+          if (!emitted.has(source.button)) {
+            emitted.add(source.button);
+            onEmit?.(source.button, source.key);
+          }
           continue;
         }
 
         if (nowMs >= state.nextRepeatAtMs) {
           state.nextRepeatAtMs = nowMs + this.#repeatIntervalMs;
-          emitted.add(source.button);
+          if (!emitted.has(source.button)) {
+            emitted.add(source.button);
+            onEmit?.(source.button, source.key);
+          }
         }
       }
     }
 
     for (const sourceKey of [...this.#states.keys()]) {
       if (!activeSourceKeys.has(sourceKey)) {
+        const state = this.#states.get(sourceKey);
+        if (state !== undefined) {
+          onRelease?.(state.button, sourceKey);
+        }
         this.#states.delete(sourceKey);
       }
     }
@@ -299,10 +483,11 @@ export function startDesktopGamepadRuntime(
   const nowMs = options.nowMs ?? (() => Date.now());
   let frameHandle: number | null = null;
   let stopped = false;
+  let paused = false;
 
   const poll = (): void => {
     frameHandle = null;
-    if (stopped) {
+    if (stopped || paused) {
       return;
     }
 
@@ -311,9 +496,13 @@ export function startDesktopGamepadRuntime(
       .filter((gamepad): gamepad is DesktopGamepadLike => gamepad !== null && gamepad !== undefined)
       .map(createDesktopGamepadSnapshot);
 
-    for (const button of policy.poll(snapshots, nowMs())) {
-      void options.dispatch(button);
-    }
+    policy.poll(
+      snapshots,
+      nowMs(),
+      options.onRelease,
+      (button, sourceKey) => { void options.dispatch(button, sourceKey); },
+      options.onPress,
+    );
 
     if (policy.hasConnectedGamepads()) {
       schedulePoll();
@@ -330,14 +519,14 @@ export function startDesktopGamepadRuntime(
     const gamepadIndex = readGamepadIndex(event);
     if (gamepadIndex !== null) {
       policy.connect(gamepadIndex);
-      schedulePoll();
+      if (!paused) schedulePoll();
     }
   };
 
   const handleDisconnected = (event: Event): void => {
     const gamepadIndex = readGamepadIndex(event);
     if (gamepadIndex !== null) {
-      policy.disconnect(gamepadIndex);
+      policy.disconnect(gamepadIndex, options.onRelease);
     }
   };
 
@@ -354,15 +543,30 @@ export function startDesktopGamepadRuntime(
   }
 
   return {
+    pause: (): void => {
+      if (stopped || paused) return;
+      paused = true;
+      if (frameHandle !== null) {
+        options.host.cancelAnimationFrame(frameHandle);
+        frameHandle = null;
+      }
+      policy.suspend(options.onRelease);
+    },
+    resume: (): void => {
+      if (stopped || !paused) return;
+      paused = false;
+      if (policy.hasConnectedGamepads()) schedulePoll();
+    },
     cleanup: (): void => {
       stopped = true;
+      paused = false;
       options.host.removeEventListener('gamepadconnected', handleConnected);
       options.host.removeEventListener('gamepaddisconnected', handleDisconnected);
       if (frameHandle !== null) {
         options.host.cancelAnimationFrame(frameHandle);
         frameHandle = null;
       }
-      policy.reset();
+      policy.reset(options.onRelease);
     },
   };
 }

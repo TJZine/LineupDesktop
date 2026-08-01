@@ -3,12 +3,15 @@ import assert from 'node:assert/strict';
 
 import {
   DesktopGamepadInputPolicy,
+  createDesktopBackHoldRuntime,
   createDesktopGamepadSnapshot,
   createDesktopKeyboardInputListener,
+  createDesktopKeyboardInputReleaseListener,
   mapDesktopKeyboardEvent,
   mapDesktopKeyEvent,
   shouldBypassDesktopInput,
   startDesktopGamepadRuntime,
+  type DesktopBackHoldTimerPort,
   type DesktopGamepadLike,
 } from '../../renderer/desktopInput.js';
 import type { DesktopInputButton } from '../../renderer/navigation.js';
@@ -29,6 +32,122 @@ test('desktop input dispatches mapped keyboard events and prevents browser defau
 
   assert.deepEqual(dispatched, ['right']);
   assert.equal(prevented, true);
+});
+
+test('Back hold keeps one short press, fires once at 500 ms, and releases cleanly', () => {
+  const timers = new FakeBackHoldTimerPort();
+  const events: string[] = [];
+  const runtime = createDesktopBackHoldRuntime({
+    dispatchShortBack: () => { events.push('short'); },
+    dispatchLongBack: () => { events.push('long'); },
+    timers,
+  });
+
+  runtime.press('keyboard');
+  runtime.press('keyboard');
+  assert.deepEqual(events, ['short']);
+  timers.advanceTo(499);
+  assert.deepEqual(events, ['short']);
+  timers.advanceTo(500);
+  assert.deepEqual(events, ['short', 'long']);
+  runtime.press('keyboard');
+  timers.advanceTo(1000);
+  assert.deepEqual(events, ['short', 'long']);
+
+  assert.equal(runtime.release('keyboard'), true);
+  assert.equal(timers.pendingCount(), 0);
+  runtime.press('keyboard');
+  assert.deepEqual(events, ['short', 'long', 'short']);
+  runtime.release('keyboard');
+  timers.advanceTo(2000);
+  assert.deepEqual(events, ['short', 'long', 'short']);
+});
+
+test('Back hold spans keyboard/gamepad device transitions and cleanup cancels pending work', () => {
+  const timers = new FakeBackHoldTimerPort();
+  const events: string[] = [];
+  const runtime = createDesktopBackHoldRuntime({
+    dispatchShortBack: () => { events.push('short'); },
+    dispatchLongBack: () => { events.push('long'); },
+    timers,
+  });
+
+  runtime.press('keyboard');
+  runtime.press('gamepad');
+  assert.deepEqual(events, ['short']);
+  assert.equal(runtime.release('keyboard'), false);
+  timers.advanceTo(500);
+  assert.deepEqual(events, ['short', 'long']);
+  assert.equal(runtime.release('gamepad'), true);
+
+  runtime.press('keyboard');
+  runtime.cancel();
+  assert.equal(timers.pendingCount(), 0);
+  timers.advanceTo(1000);
+  assert.deepEqual(events, ['short', 'long', 'short']);
+});
+
+test('Back hold keeps simultaneous physical aliases held until each releases', () => {
+  const timers = new FakeBackHoldTimerPort();
+  const events: string[] = [];
+  const runtime = createDesktopBackHoldRuntime({
+    dispatchShortBack: () => { events.push('short'); },
+    dispatchLongBack: () => { events.push('long'); },
+    timers,
+  });
+
+  runtime.press('keyboard:Escape');
+  runtime.press('keyboard:Backspace');
+  assert.deepEqual(events, ['short']);
+  assert.equal(runtime.release('keyboard:Escape'), false);
+  timers.advanceTo(500);
+  assert.deepEqual(events, ['short', 'long']);
+  assert.equal(runtime.release('keyboard:Backspace'), true);
+});
+
+test('Back hold waits for an async short action before the 500 ms long action', async () => {
+  const timers = new FakeBackHoldTimerPort();
+  const events: string[] = [];
+  let settleShort: (() => void) | undefined;
+  const runtime = createDesktopBackHoldRuntime({
+    dispatchShortBack: () => {
+      events.push('short');
+      return new Promise<void>((resolve) => { settleShort = resolve; });
+    },
+    dispatchLongBack: () => { events.push('long'); },
+    timers,
+  });
+
+  runtime.press('keyboard:Escape');
+  timers.advanceTo(500);
+  assert.deepEqual(events, ['short']);
+  settleShort?.();
+  await Promise.resolve();
+  assert.deepEqual(events, ['short', 'long']);
+  runtime.release('keyboard:Escape');
+});
+
+test('keyboard Back hooks separate press/release from ordinary input dispatch', () => {
+  const dispatched: DesktopInputButton[] = [];
+  const pressed: string[] = [];
+  const released: string[] = [];
+  const keydown = createDesktopKeyboardInputListener(
+    (button) => { dispatched.push(button); },
+    { onBackPress: (sourceKey) => { pressed.push(sourceKey); } },
+  );
+  const keyup = createDesktopKeyboardInputReleaseListener((sourceKey) => { released.push(sourceKey); });
+
+  keydown({ key: 'Escape', preventDefault: () => undefined });
+  keydown({ key: 'Backspace', preventDefault: () => undefined });
+  keydown({ key: 'BrowserBack', code: 'BrowserBack', preventDefault: () => undefined });
+  keydown({ key: 'ArrowRight', preventDefault: () => undefined });
+  keyup({ key: 'Escape' });
+  keyup({ key: 'Backspace' });
+  keyup({ key: 'BrowserBack', code: 'BrowserBack' });
+
+  assert.deepEqual(pressed, ['keyboard:Escape', 'keyboard:Backspace', 'keyboard:BrowserBack']);
+  assert.deepEqual(released, ['keyboard:Escape', 'keyboard:Backspace', 'keyboard:BrowserBack']);
+  assert.deepEqual(dispatched, ['right']);
 });
 
 test('text input bypass ignores TV shortcuts while editing', () => {
@@ -118,6 +237,64 @@ test('gamepad runtime connects, polls, disconnects, and cleans up listeners', ()
   assert.equal(host.listenerCount('gamepadconnected'), 0);
   assert.equal(host.listenerCount('gamepaddisconnected'), 0);
   assert.equal(host.hasPendingFrame(), false);
+});
+
+test('gamepad runtime reports Back release on snapshot release and disconnect', () => {
+  const host = new FakeGamepadHost();
+  const released: Array<{ button: DesktopInputButton; sourceKey?: string }> = [];
+  let currentGamepads: Array<DesktopGamepadLike | null> = [];
+  const runtime = startDesktopGamepadRuntime({
+    host,
+    getGamepads: () => currentGamepads,
+    dispatch: () => undefined,
+    onRelease: (button, sourceKey) => {
+      released.push({ button, sourceKey });
+    },
+  });
+
+  currentGamepads = [{ index: 0, connected: true, buttons: buttons({ 1: true }), axes: [0, 0] }];
+  host.emitGamepad('gamepadconnected', 0);
+  host.flushFrame();
+  currentGamepads = [{ index: 0, connected: true, buttons: buttons({}), axes: [0, 0] }];
+  host.flushFrame();
+  assert.deepEqual(released, [{ button: 'back', sourceKey: '0:button:1' }]);
+
+  currentGamepads = [{ index: 0, connected: true, buttons: buttons({ 1: true }), axes: [0, 0] }];
+  host.flushFrame();
+  host.emitGamepad('gamepaddisconnected', 0);
+  assert.deepEqual(released, [
+    { button: 'back', sourceKey: '0:button:1' },
+    { button: 'back', sourceKey: '0:button:1' },
+  ]);
+  runtime.cleanup();
+});
+
+test('gamepad Back aliases preserve physical source release before semantic deduplication', () => {
+  const policy = new DesktopGamepadInputPolicy();
+  const pressed: string[] = [];
+  const emitted: string[] = [];
+  const released: string[] = [];
+  const onRelease = (_button: DesktopInputButton, sourceKey: string): void => {
+    released.push(sourceKey);
+  };
+  const onEmit = (_button: DesktopInputButton, sourceKey: string): void => {
+    emitted.push(sourceKey);
+  };
+  const onPress = (_button: DesktopInputButton, sourceKey: string): void => {
+    pressed.push(sourceKey);
+  };
+
+  policy.poll([
+    snapshot({ index: 0, connected: true, buttons: buttons({ 1: true, 8: true }) }),
+  ], 0, onRelease, onEmit, onPress);
+  policy.poll([
+    snapshot({ index: 0, connected: true, buttons: buttons({ 8: true }) }),
+  ], 1, onRelease, onEmit, onPress);
+  policy.poll([], 2, onRelease, onEmit, onPress);
+
+  assert.deepEqual(pressed, ['0:button:1', '0:button:8']);
+  assert.deepEqual(emitted, ['0:button:1']);
+  assert.deepEqual(released, ['0:button:1', '0:button:8']);
 });
 
 test('fullscreen dispatch maps keyboard shortcut through the desktop input owner', () => {
@@ -245,5 +422,36 @@ class FakeGamepadHost {
 
   listenerCount(type: string): number {
     return this.#listeners.get(type)?.size ?? 0;
+  }
+}
+
+class FakeBackHoldTimerPort implements DesktopBackHoldTimerPort {
+  #nextHandle = 1;
+  #now = 0;
+  readonly #callbacks = new Map<number, { callback: () => void; dueAt: number }>();
+
+  setTimeout(callback: () => void, delayMs: number): number {
+    const handle = this.#nextHandle;
+    this.#nextHandle += 1;
+    this.#callbacks.set(handle, { callback, dueAt: this.#now + delayMs });
+    return handle;
+  }
+
+  clearTimeout(handle: number): void {
+    this.#callbacks.delete(handle);
+  }
+
+  advanceTo(now: number): void {
+    this.#now = now;
+    for (const [handle, timer] of [...this.#callbacks.entries()]) {
+      if (timer.dueAt <= now) {
+        this.#callbacks.delete(handle);
+        timer.callback();
+      }
+    }
+  }
+
+  pendingCount(): number {
+    return this.#callbacks.size;
   }
 }

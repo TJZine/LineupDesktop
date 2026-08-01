@@ -224,6 +224,10 @@ const navigationLifecycle = createNavigationLifecycle({
       input,
       overlayState.activeOverlayId === 'playbackOptions',
     ),
+  handlePlayerRouteLeave: () => {
+    playerOverlayController.routeLeave();
+    playerInputCommandController.routeLeave();
+  },
   activateRoute,
   isProfileModalActive: isProfilePinModalActive,
   closeProfileModal: () => closeProfilePinModal(),

@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
+import type { DesktopGamepadLike } from '../../renderer/desktopInput.js';
 import { FocusRegistry, type FocusState } from '../../renderer/navigation.js';
 import {
   activateInfoRecovery,
+  attachNavigationInputRuntime,
   createNavigationLifecycle,
+  type NavigationLifecycle,
   type NavigationLifecycleOptions,
 } from '../../renderer/shell/navigationLifecycle.js';
 import {
@@ -17,6 +20,7 @@ function createHarness(
   handlePlayerInput?: NavigationLifecycleOptions['handlePlayerInput'],
   routeActivationAllowed = true,
   handleGuidePage?: NavigationLifecycleOptions['handleGuidePage'],
+  handlePlayerRouteLeave?: NavigationLifecycleOptions['handlePlayerRouteLeave'],
 ) {
   const registry = new FocusRegistry();
   registry.register({ id: 'player-guide', route: 'player', order: 0 });
@@ -30,6 +34,7 @@ function createHarness(
     bootstrap: 'ready',
   };
   let playerPresentationFocusCount = 0;
+  let playerRouteLeaveCount = 0;
   let profileModalActive = false;
   let infoRecoveryCount = 0;
   const dom = {
@@ -60,6 +65,10 @@ function createHarness(
     handleGuideDirection,
     handleGuidePage,
     handlePlayerInput,
+    handlePlayerRouteLeave: () => {
+      playerRouteLeaveCount += 1;
+      handlePlayerRouteLeave?.();
+    },
     activateRoute: (nextRoute) => {
       if (!routeActivationAllowed) return false;
       route = nextRoute as 'player' | 'guide';
@@ -80,7 +89,10 @@ function createHarness(
     setFocus: (state: FocusState) => { focus = state; },
     getRoute: () => route,
     setRoute: (nextRoute: 'player' | 'guide') => { route = nextRoute; },
+    setShell: (nextState: RendererShellState) => { shellState = nextState; },
+    getShell: () => shellState,
     getPlayerPresentationFocusCount: () => playerPresentationFocusCount,
+    getPlayerRouteLeaveCount: () => playerRouteLeaveCount,
     unregister: (focusId: string) => registry.unregister(focusId),
     setProfileModalActive: (active: boolean) => { profileModalActive = active; },
     getInfoRecoveryCount: () => infoRecoveryCount,
@@ -209,6 +221,169 @@ test('cleanup makes later Guide input inert', async () => {
   assert.equal(calls, 0);
 });
 
+test('Back hold closes player overlays and returns with presentation focus', async () => {
+  const harness = createHarness(() => false, undefined, true, undefined, () => undefined);
+  harness.setRoute('guide');
+  harness.setFocus({ activeRoute: 'guide', activeId: 'guide-program-one--next' });
+
+  await harness.lifecycle.handleBackPress();
+  assert.equal(harness.getRoute(), 'player');
+  await harness.lifecycle.handleBackHold();
+
+  assert.equal(harness.getPlayerRouteLeaveCount(), 1);
+  assert.deepEqual(harness.getFocus(), { activeRoute: 'player', activeId: null });
+  assert.equal(harness.getPlayerPresentationFocusCount(), 1);
+});
+
+test('Back hold consumes protected bootstrap, error, and profile owners', async () => {
+  const protectedStates = [
+    { bootstrap: 'loading' as const },
+    { bootstrap: 'error' as const, blockingErrorMessage: 'Lineup could not start.' },
+    { inlineError: { desiredFullscreen: true, message: 'Fullscreen failed.' } },
+  ];
+
+  for (const patch of protectedStates) {
+    const protectedHarness = createHarness(() => false);
+    protectedHarness.setRoute('guide');
+    protectedHarness.setShell({ ...createRendererShellState(), bootstrap: 'ready', ...patch });
+    await protectedHarness.lifecycle.handleBackPress();
+    await protectedHarness.lifecycle.handleBackHold();
+    assert.equal(protectedHarness.getRoute(), 'guide');
+    assert.equal(protectedHarness.getPlayerRouteLeaveCount(), 0);
+  }
+
+  const profileHarness = createHarness(() => false);
+  profileHarness.setRoute('guide');
+  profileHarness.setProfileModalActive(true);
+  await profileHarness.lifecycle.handleBackPress();
+  await profileHarness.lifecycle.handleBackHold();
+  assert.equal(profileHarness.getRoute(), 'guide');
+  assert.equal(profileHarness.getPlayerRouteLeaveCount(), 0);
+});
+
+test('Back hold unwinds the Player exit modal without restoring stale focus', async () => {
+  const harness = createHarness(() => false, () => false, true, undefined, () => undefined);
+  harness.setRoute('player');
+  harness.setFocus({ activeRoute: 'player', activeId: 'player-settings' });
+
+  await harness.lifecycle.handleBackPress();
+  assert.equal(harness.getShell().exitConfirmOpen, true);
+  await harness.lifecycle.handleBackHold();
+
+  assert.equal(harness.getShell().exitConfirmOpen, false);
+  assert.deepEqual(harness.getFocus(), { activeRoute: 'player', activeId: null });
+  assert.equal(harness.getPlayerPresentationFocusCount(), 1);
+});
+
+test('attached Back input cancels on keyup/blur and removes listeners on unload', async () => {
+  const host = new FakeNavigationInputHost();
+  const timers = new FakeNavigationTimerPort();
+  const root = createNavigationInputRoot();
+  const calls: string[] = [];
+  const originalWindow = Reflect.get(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', { value: host, configurable: true });
+  const lifecycle: NavigationLifecycle = {
+    handleInput: async () => undefined,
+    handleBackPress: async () => { calls.push('short'); },
+    handleBackHold: async () => { calls.push('long'); },
+    cancelBackHold: () => { calls.push('cancel'); },
+    cancelExit: () => undefined,
+    confirmExit: () => undefined,
+    closeApplication: () => undefined,
+    routeChanged: () => undefined,
+    cleanup: () => { calls.push('cleanup'); },
+  };
+
+  attachNavigationInputRuntime(lifecycle, {
+    host: host as unknown as Window,
+    root: root as unknown as HTMLElement,
+    timers,
+    onBeforeUnload: () => { calls.push('unload'); },
+  });
+
+  host.emit('keydown', { key: 'Escape', preventDefault: () => undefined });
+  assert.deepEqual(calls, ['short']);
+  timers.advanceTo(499);
+  assert.deepEqual(calls, ['short']);
+  host.emit('keyup', { key: 'Escape' });
+  timers.advanceTo(500);
+  assert.deepEqual(calls, ['short', 'cancel']);
+
+  host.emit('keydown', { key: 'Escape', preventDefault: () => undefined });
+  timers.advanceTo(1000);
+  await Promise.resolve();
+  assert.deepEqual(calls, ['short', 'cancel', 'short', 'long']);
+  host.emit('blur', {});
+  assert.deepEqual(calls, ['short', 'cancel', 'short', 'long', 'cancel']);
+
+  host.emit('keydown', { key: 'Escape', preventDefault: () => undefined });
+  host.emit('beforeunload', {});
+  timers.advanceTo(2000);
+  assert.deepEqual(calls, [
+    'short', 'cancel', 'short', 'long', 'cancel', 'short', 'cancel', 'cleanup', 'unload',
+  ]);
+  assert.equal(host.listenerCount('keydown'), 0);
+  assert.equal(host.listenerCount('keyup'), 0);
+  assert.equal(host.listenerCount('blur'), 0);
+  assert.equal(host.listenerCount('focus'), 0);
+  assert.equal(host.listenerCount('beforeunload'), 0);
+  if (originalWindow === undefined) Reflect.deleteProperty(globalThis, 'window');
+  else Object.defineProperty(globalThis, 'window', { value: originalWindow, configurable: true });
+});
+
+test('held gamepad Back is quiesced on blur and resumes after a fresh release/press', () => {
+  const host = new FakeNavigationInputHost();
+  const timers = new FakeNavigationTimerPort();
+  const root = createNavigationInputRoot();
+  const calls: string[] = [];
+  const originalWindow = Reflect.get(globalThis, 'window');
+  const gamepad = createBackGamepad(true);
+  host.setGamepads([gamepad]);
+  Object.defineProperty(globalThis, 'window', { value: host, configurable: true });
+  const lifecycle: NavigationLifecycle = {
+    handleInput: async () => undefined,
+    handleBackPress: async () => { calls.push('short'); },
+    handleBackHold: async () => { calls.push('long'); },
+    cancelBackHold: () => { calls.push('cancel'); },
+    cancelExit: () => undefined,
+    confirmExit: () => undefined,
+    closeApplication: () => undefined,
+    routeChanged: () => undefined,
+    cleanup: () => { calls.push('cleanup'); },
+  };
+
+  attachNavigationInputRuntime(lifecycle, {
+    host: host as unknown as Window,
+    root: root as unknown as HTMLElement,
+    timers,
+    onBeforeUnload: () => { calls.push('unload'); },
+  });
+  host.emit('gamepadconnected', { gamepad: { index: 0 } });
+  host.flushFrame();
+  assert.deepEqual(calls, ['short']);
+
+  host.emit('blur');
+  timers.advanceTo(500);
+  host.flushFrame();
+  assert.deepEqual(calls, ['short', 'cancel']);
+
+  host.emit('focus');
+  host.flushFrame();
+  timers.advanceTo(1000);
+  assert.deepEqual(calls, ['short', 'cancel']);
+
+  const gamepadButtons = gamepad.buttons as Array<{ pressed: boolean; value: number }>;
+  gamepadButtons[1] = { pressed: false, value: 0 };
+  host.flushFrame();
+  gamepadButtons[1] = { pressed: true, value: 1 };
+  host.flushFrame();
+  assert.deepEqual(calls, ['short', 'cancel', 'short']);
+
+  host.emit('beforeunload');
+  if (originalWindow === undefined) Reflect.deleteProperty(globalThis, 'window');
+  else Object.defineProperty(globalThis, 'window', { value: originalWindow, configurable: true });
+});
+
 test('canceling exit restores the unfocused Player presentation surface', async () => {
   const harness = createHarness(() => false, () => false);
   harness.setRoute('player');
@@ -232,3 +407,117 @@ test('Player first refusal runs before generic focus, OK, Back, and route shortc
   assert.deepEqual(inputs, ['up', 'ok', 'back', 'info', 'digit4', 'space']);
   assert.equal(harness.getRoute(), 'player');
 });
+
+function createNavigationInputRoot(): { dataset: Record<string, string>; classList: { toggle: (name: string, force?: boolean) => boolean } } {
+  const classes = new Set<string>();
+  return {
+    dataset: {},
+    classList: {
+      toggle: (name, force) => {
+        const next = force ?? !classes.has(name);
+        if (next) classes.add(name);
+        else classes.delete(name);
+        return next;
+      },
+    },
+  };
+}
+
+class FakeNavigationInputHost {
+  #gamepads: Array<DesktopGamepadLike> = [];
+  readonly navigator = { getGamepads: (): ReadonlyArray<DesktopGamepadLike> => this.#gamepads };
+  readonly #listeners = new Map<string, Set<EventListener>>();
+  #nextTimer = 1;
+  readonly #timers = new Set<number>();
+  #nextFrame = 1;
+  readonly #frames = new Map<number, FrameRequestCallback>();
+
+  addEventListener(type: string, listener: EventListener): void {
+    const listeners = this.#listeners.get(type) ?? new Set<EventListener>();
+    listeners.add(listener);
+    this.#listeners.set(type, listeners);
+  }
+
+  removeEventListener(type: string, listener: EventListener): void {
+    this.#listeners.get(type)?.delete(listener);
+  }
+
+  setTimeout(_callback: TimerHandler, _delayMs?: number): number {
+    const handle = this.#nextTimer++;
+    this.#timers.add(handle);
+    return handle;
+  }
+
+  clearTimeout(handle: number): void {
+    this.#timers.delete(handle);
+  }
+
+  requestAnimationFrame(callback: FrameRequestCallback): number {
+    const handle = this.#nextFrame++;
+    this.#frames.set(handle, callback);
+    return handle;
+  }
+
+  cancelAnimationFrame(handle: number): void {
+    this.#frames.delete(handle);
+  }
+
+  setGamepads(gamepads: Array<DesktopGamepadLike>): void {
+    this.#gamepads = gamepads;
+  }
+
+  flushFrame(): void {
+    const [handle, callback] = this.#frames.entries().next().value ?? [];
+    if (handle === undefined || callback === undefined) return;
+    this.#frames.delete(handle);
+    callback(0);
+  }
+
+  emit(type: string, event: unknown = {}): void {
+    for (const listener of this.#listeners.get(type) ?? []) {
+      listener(event as Event);
+    }
+  }
+
+  listenerCount(type: string): number {
+    return this.#listeners.get(type)?.size ?? 0;
+  }
+}
+
+function createBackGamepad(pressed: boolean): DesktopGamepadLike {
+  return {
+    index: 0,
+    connected: true,
+    buttons: Array.from({ length: 16 }, (_, index) => ({
+      pressed: index === 1 ? pressed : false,
+      value: index === 1 && pressed ? 1 : 0,
+    })),
+    axes: [0, 0],
+  };
+}
+
+class FakeNavigationTimerPort {
+  #now = 0;
+  #nextHandle = 1;
+  readonly #callbacks = new Map<number, { callback: () => void; dueAt: number }>();
+
+  setTimeout(callback: () => void, delayMs: number): number {
+    const handle = this.#nextHandle++;
+    this.#callbacks.set(handle, { callback, dueAt: this.#now + delayMs });
+    return handle;
+  }
+
+  clearTimeout(handle: number): void {
+    this.#callbacks.delete(handle);
+  }
+
+  advanceTo(now: number): void {
+    this.#now = now;
+    for (const [handle, timer] of [...this.#callbacks.entries()]) {
+      if (timer.dueAt <= now) {
+        this.#callbacks.delete(handle);
+        timer.callback();
+      }
+    }
+  }
+}
