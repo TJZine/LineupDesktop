@@ -1,6 +1,7 @@
 import {
   PLAYER_ERROR_CATEGORIES,
   PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
+  isPlayerCapabilitySupport,
   isRendererSafePlayerPlaybackQualitySummary,
   type PlayerErrorCategory,
   type PlayerLoadCommandPayload,
@@ -56,10 +57,6 @@ export function validateLoadPayload(
       capabilityProfileId: payload.value.capabilityProfileId,
     },
   };
-}
-
-function isPlayerCapabilitySupport(value: unknown): value is PlayerLoadCommandPayload['seekSupport'] {
-  return value === 'supported' || value === 'unsupported' || value === 'unknown' || value === 'unproven';
 }
 
 export function validateLoadPolicy(

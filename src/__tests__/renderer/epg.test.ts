@@ -148,6 +148,10 @@ test('Guide paging moves five eligible channel rows while preserving focused tim
   assert.equal(next.handled, true);
   assert.equal(next.state.selectedChannelId, 'channel-6');
   assert.equal(next.state.selectedProgramId, 'program-6');
+  const clamped = pageEpgSelection(next.state, 5, source);
+  assert.equal(clamped.handled, true);
+  assert.equal(clamped.state.selectedChannelId, 'channel-7');
+  assert.equal(clamped.state.selectedProgramId, 'program-7');
   assert.equal(pageEpgSelection(next.state, -5, source).state.selectedChannelId, 'channel-1');
 });
 

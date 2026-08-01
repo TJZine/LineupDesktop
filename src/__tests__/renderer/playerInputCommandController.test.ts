@@ -22,29 +22,24 @@ test('direct input dispatches only guarded current-request commands with exact p
 
   assert.equal(harness.controller.handleInput('space'), true);
   await flush();
-  assert.deepEqual(harness.envelopes[0], {
-    intent: 'player.pauseIfCurrent',
-    requestId: 'renderer-input-pause-1',
-    payload: { snapshotRequestId: 'playback-1' },
+  assertEnvelope(harness.envelopes[0], 'player.pauseIfCurrent', {
+    snapshotRequestId: 'playback-1',
   });
   settleCurrent(harness, 'pause');
 
   harness.setSnapshot({ ...playingSnapshot(), status: 'paused', playing: false });
   harness.controller.handleInput('mediaPlayPause');
   await flush();
-  assert.deepEqual(harness.envelopes[1], {
-    intent: 'player.playIfCurrent',
-    requestId: 'renderer-input-play-2',
-    payload: { snapshotRequestId: 'playback-1' },
+  assertEnvelope(harness.envelopes[1], 'player.playIfCurrent', {
+    snapshotRequestId: 'playback-1',
   });
   settleCurrent(harness, 'play');
 
   harness.controller.handleInput('mediaRewind');
   await flush();
-  assert.deepEqual(harness.envelopes[2], {
-    intent: 'player.seekRelativeIfCurrent',
-    requestId: 'renderer-input-seek-relative-3',
-    payload: { snapshotRequestId: 'playback-1', deltaMs: -10_000 },
+  assertEnvelope(harness.envelopes[2], 'player.seekRelativeIfCurrent', {
+    snapshotRequestId: 'playback-1',
+    deltaMs: -10_000,
   });
   settleCurrent(harness, 'seek.relative');
 
@@ -58,10 +53,8 @@ test('direct input dispatches only guarded current-request commands with exact p
 
   harness.controller.handleInput('mediaStop');
   await flush();
-  assert.deepEqual(harness.envelopes[4], {
-    intent: 'player.stopIfCurrent',
-    requestId: 'renderer-input-stop-5',
-    payload: { snapshotRequestId: 'playback-1' },
+  assertEnvelope(harness.envelopes[4], 'player.stopIfCurrent', {
+    snapshotRequestId: 'playback-1',
   });
   assert.equal(harness.envelopes.some((envelope) =>
     envelope.intent === 'player.stop' || envelope.intent === 'player.seekRelative'), false);
@@ -156,30 +149,63 @@ test('inconsistent authoritative playback state fails safely without mutating se
 
 test('pauseCurrent starts exactly one guarded pause only for the exact current playing request', async () => {
   const harness = createHarness(playingSnapshot(), { settleInDispatch: false });
-  assert.equal(harness.controller.pauseCurrent('stale-request'), false);
-  assert.equal(harness.controller.pauseCurrent('playback-1'), true);
-  assert.equal(harness.controller.pauseCurrent('playback-1'), false);
+  assert.equal(harness.controller.pauseCurrent('stale-request'), 'rejected');
+  assert.equal(harness.controller.pauseCurrent('playback-1'), 'started');
+  assert.equal(harness.controller.pauseCurrent('playback-1'), 'rejected');
   await flush();
-  assert.deepEqual(harness.envelopes, [{
-    intent: 'player.pauseIfCurrent',
-    requestId: 'renderer-input-pause-1',
-    payload: { snapshotRequestId: 'playback-1' },
-  }]);
+  assertEnvelope(harness.envelopes[0], 'player.pauseIfCurrent', {
+    snapshotRequestId: 'playback-1',
+  });
 
   settleCurrent(harness, 'pause');
   harness.setSnapshot({ ...playingSnapshot(), status: 'paused', playing: false });
-  assert.equal(harness.controller.pauseCurrent('playback-1'), false);
+  assert.equal(harness.controller.pauseCurrent('playback-1'), 'rejected');
   harness.setSnapshot({ ...playingSnapshot(), playing: false });
-  assert.equal(harness.controller.pauseCurrent('playback-1'), false);
+  assert.equal(harness.controller.pauseCurrent('playback-1'), 'rejected');
   harness.setSnapshot({ ...playingSnapshot(), requestId: null });
-  assert.equal(harness.controller.pauseCurrent('playback-1'), false);
+  assert.equal(harness.controller.pauseCurrent('playback-1'), 'rejected');
   harness.controller.cleanup();
   harness.setSnapshot(playingSnapshot());
-  assert.equal(harness.controller.pauseCurrent('playback-1'), false);
+  assert.equal(harness.controller.pauseCurrent('playback-1'), 'rejected');
   assert.equal(harness.envelopes.length, 1);
 });
 
-test('sleep expiry fails once behind pending play, seek, or stop and late settlement is timer-inert', async () => {
+test('sleep expiry defers once behind play or seek and pauses after settlement', async () => {
+  for (const pending of ['play', 'seek'] as const) {
+    const harness = createHarness(playingSnapshot(), { settleInDispatch: false });
+    const sleep = createSleepHarness(harness);
+    sleep.controller.cyclePreset();
+    harness.timers.advance(15 * 60_000 - 1_000);
+
+    if (pending === 'play') {
+      harness.setSnapshot({ ...playingSnapshot(), status: 'paused', playing: false });
+      harness.controller.handleInput('mediaPlay');
+      harness.setSnapshot(playingSnapshot());
+    } else {
+      harness.controller.handleInput('mediaFastForward');
+    }
+    await flush();
+    assert.equal(harness.envelopes.length, 1, `${pending} initial custody`);
+
+    harness.timers.advance(1_000);
+    assert.equal(sleep.projection().status, 'expiring', `${pending} expiry status`);
+    assert.deepEqual(sleep.diagnostics(), []);
+
+    settleCurrent(harness, pending === 'play' ? 'play' : 'seek.relative');
+    await flush();
+    assert.equal(sleep.projection().status, 'expired', `${pending} settled expiry`);
+    assert.equal(harness.envelopes.length, 2, `${pending} issued one deferred pause`);
+    assertEnvelope(harness.envelopes[1], 'player.pauseIfCurrent', {
+      snapshotRequestId: 'playback-1',
+    });
+
+    settleCurrent(harness, 'pause');
+    await flush();
+    assert.equal(harness.envelopes.length, 2, `${pending} pause was not retried`);
+  }
+});
+
+test('sleep expiry rejects pending stop and invalidates deferred pause on route leave', async () => {
   for (const pending of ['play', 'seek', 'stop'] as const) {
     const harness = createHarness(playingSnapshot(), { settleInDispatch: false });
     const sleep = createSleepHarness(harness);
@@ -197,18 +223,43 @@ test('sleep expiry fails once behind pending play, seek, or stop and late settle
     assert.equal(harness.envelopes.length, 1, `${pending} initial custody`);
 
     harness.timers.advance(1_000);
-    assert.equal(sleep.projection().status, 'failed', `${pending} expiry status`);
-    assert.equal(harness.envelopes.length, 1, `${pending} no extra pause custody`);
-    assert.deepEqual(sleep.diagnostics(), ['Sleep timer pause was not accepted.']);
-
-    settleCurrent(
-      harness,
-      pending === 'play' ? 'play' : pending === 'seek' ? 'seek.relative' : 'stop',
+    assert.equal(
+      sleep.projection().status,
+      pending === 'stop' ? 'failed' : 'expiring',
+      `${pending} expiry status`,
     );
+    assert.equal(harness.envelopes.length, 1, `${pending} no extra pause custody`);
+    assert.deepEqual(
+      sleep.diagnostics(),
+      pending === 'stop' ? ['Sleep timer pause was not accepted.'] : [],
+    );
+
+    if (pending === 'stop') {
+      settleCurrent(harness, 'stop');
+    } else {
+      harness.controller.routeLeave();
+    }
     await flush();
     assert.equal(sleep.projection().status, 'failed', `${pending} late settlement`);
     assert.equal(harness.envelopes.length, 1, `${pending} no late retry`);
   }
+});
+
+test('canceling an expiring sleep timer prevents a later pause after command settlement', async () => {
+  const harness = createHarness(playingSnapshot(), { settleInDispatch: false });
+  const sleep = createSleepHarness(harness);
+  sleep.controller.cyclePreset();
+  harness.timers.advance(15 * 60_000 - 1_000);
+  harness.controller.handleInput('mediaFastForward');
+  await flush();
+  harness.timers.advance(1_000);
+  assert.equal(sleep.projection().status, 'expiring');
+
+  sleep.controller.cancel();
+  settleCurrent(harness, 'seek.relative');
+  await flush();
+  assert.equal(sleep.projection().status, 'off');
+  assert.equal(harness.envelopes.length, 1);
 });
 
 interface Harness {
@@ -230,10 +281,14 @@ function createHarness(
   const timers = new FakeTimers();
   const dispatch: LineupDesktopPreloadApi['player']['dispatch'] = async (envelope) => {
     envelopes.push(envelope);
-    const command = envelope.intent.includes('seekRelative') ? 'seek.relative'
-      : envelope.intent.includes('pause') ? 'pause'
-        : envelope.intent.includes('play') ? 'play'
-          : 'stop';
+    const commandByIntent = {
+      'player.playIfCurrent': 'play',
+      'player.pauseIfCurrent': 'pause',
+      'player.stopIfCurrent': 'stop',
+      'player.seekRelativeIfCurrent': 'seek.relative',
+    } as const;
+    const command = commandByIntent[envelope.intent as keyof typeof commandByIntent];
+    assert.ok(command, `unexpected direct input intent: ${envelope.intent}`);
     const events: PlayerEvent[] = options.settleInDispatch === false ? [] : [{
       event: 'command.settled',
       requestId: envelope.requestId,
@@ -276,7 +331,9 @@ function createSleepHarness(harness: Harness) {
     setProjection: (next) => { projection = next; },
     render: () => undefined,
     getCurrentPlayback: () => harness.snapshot(),
-    pauseCurrent: (requestId) => harness.controller.pauseCurrent(requestId),
+    pauseCurrent: (requestId, onDeferredResolved) =>
+      harness.controller.pauseCurrent(requestId, onDeferredResolved),
+    cancelDeferredPause: () => harness.controller.cancelDeferredPause(),
     recordDiagnostic: (_operation, message) => { diagnostics.push(message); },
   });
   return { controller, projection: () => projection, diagnostics: () => diagnostics };
@@ -289,6 +346,17 @@ function settleCurrent(
   const requestId = harness.envelopes.at(-1)?.requestId;
   assert.ok(requestId);
   harness.controller.handlePlayerEvent({ event: 'command.settled', requestId, command, ok: true });
+}
+
+function assertEnvelope(
+  envelope: PlayerRendererIntentEnvelope<unknown> | undefined,
+  intent: PlayerRendererIntentEnvelope<unknown>['intent'],
+  payload: unknown,
+): void {
+  assert.ok(envelope);
+  assert.equal(envelope.intent, intent);
+  assert.deepEqual(envelope.payload, payload);
+  assert.match(envelope.requestId, /^renderer-input-/u);
 }
 
 function playingSnapshot(): PlayerSnapshot {
@@ -334,12 +402,18 @@ class FakeTimers implements PlayerInputCommandTimerHost {
   }
 
   advance(deltaMs: number): void {
-    this.#now += deltaMs;
-    for (const [id, entry] of [...this.#entries].sort((left, right) => left[1].due - right[1].due)) {
-      if (entry.due > this.#now) continue;
+    const target = this.#now + deltaMs;
+    while (true) {
+      const next = [...this.#entries.entries()]
+        .filter(([, entry]) => entry.due <= target)
+        .sort((left, right) => left[1].due - right[1].due)[0];
+      if (next === undefined) break;
+      const [id, entry] = next;
+      this.#now = entry.due;
       this.#entries.delete(id);
       entry.callback();
     }
+    this.#now = target;
   }
 }
 

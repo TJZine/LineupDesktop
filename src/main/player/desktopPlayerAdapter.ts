@@ -123,6 +123,26 @@ export class DesktopPlayerAdapter {
       const events = this.#emitBoundaryError(error);
       return this.#result(false, command, events);
     }
+    if (
+      command.command === 'seek.relative'
+      && expectedSnapshotRequestId !== undefined
+      && this.#snapshot.seekSupport !== 'supported'
+    ) {
+      const error = createPlayerError({
+        code: 'PLAYER_UNSUPPORTED_CAPABILITY',
+        category: 'unsupported-capability',
+        message: 'Seeking is not supported for the current player snapshot.',
+        requestId: command.requestId,
+        diagnostic: {
+          component: 'desktop-player-adapter',
+          operation: command.command,
+          status: 'rejected',
+          reason: 'snapshot seek capability unsupported',
+        },
+      });
+      const events = this.#emitBoundaryError(error);
+      return this.#result(false, command, events);
+    }
     this.#requestCustody.begin(command);
     const events: PlayerEvent[] = [];
     const snapshotBeforeLoad = this.#captureLoadRollbackSnapshot(command);

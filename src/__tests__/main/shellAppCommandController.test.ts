@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { KeyboardInputEvent } from 'electron';
+import type { ShellMediaInput } from '../../contracts/shell.js';
 
 import {
   registerShellAppCommandController,
@@ -11,7 +12,7 @@ import {
 
 test('shell app-command controller maps browser-backward to renderer back input', () => {
   const fakeWindow = new FakeAppCommandWindow();
-  registerShellAppCommandController(fakeWindow.asWindow());
+  register(fakeWindow);
 
   const event = fakeWindow.emitAppCommand('browser-backward');
 
@@ -24,7 +25,7 @@ test('shell app-command controller maps browser-backward to renderer back input'
 
 test('shell app-command controller observes browser-forward but intentionally ignores it', () => {
   const fakeWindow = new FakeAppCommandWindow();
-  registerShellAppCommandController(fakeWindow.asWindow());
+  register(fakeWindow);
 
   const event = fakeWindow.emitAppCommand('browser-forward');
 
@@ -32,16 +33,12 @@ test('shell app-command controller observes browser-forward but intentionally ig
   assert.deepEqual(fakeWindow.inputEvents, []);
 });
 
-test('shell app-command controller maps each supported media command to one renderer key pair', () => {
+test('shell app-command controller maps only valid accelerator media commands to key pairs', () => {
   const fakeWindow = new FakeAppCommandWindow();
-  registerShellAppCommandController(fakeWindow.asWindow());
+  register(fakeWindow);
 
   const commands = [
-    ['media-play', 'MediaPlay'],
-    ['media-pause', 'MediaPause'],
     ['media-play-pause', 'MediaPlayPause'],
-    ['media-rewind', 'MediaRewind'],
-    ['media-fast-forward', 'MediaFastForward'],
     ['media-stop', 'MediaStop'],
   ] as const;
 
@@ -57,19 +54,43 @@ test('shell app-command controller maps each supported media command to one rend
       command,
     );
   }
+  assert.deepEqual(fakeWindow.mediaInputs, []);
+});
+
+test('shell app-command controller forwards distinct media actions semantically', () => {
+  const fakeWindow = new FakeAppCommandWindow();
+  register(fakeWindow);
+
+  for (const command of [
+    'media-play',
+    'media-pause',
+    'media-rewind',
+    'media-fast-forward',
+  ]) {
+    const event = fakeWindow.emitAppCommand(command);
+    assert.equal(event.prevented, true, command);
+  }
+
+  assert.deepEqual(fakeWindow.inputEvents, []);
+  assert.deepEqual(fakeWindow.mediaInputs, [
+    'mediaPlay',
+    'mediaPause',
+    'mediaRewind',
+    'mediaFastForward',
+  ]);
 });
 
 test('shell app-command controller does not forward for destroyed or unfocused windows', () => {
   const destroyedWindow = new FakeAppCommandWindow({ destroyed: true });
-  registerShellAppCommandController(destroyedWindow.asWindow());
+  register(destroyedWindow);
   const destroyedEvent = destroyedWindow.emitAppCommand('browser-backward');
 
   const unfocusedWindow = new FakeAppCommandWindow({ focused: false });
-  registerShellAppCommandController(unfocusedWindow.asWindow());
+  register(unfocusedWindow);
   const unfocusedEvent = unfocusedWindow.emitAppCommand('browser-backward');
 
   const destroyedWebContentsWindow = new FakeAppCommandWindow({ webContentsDestroyed: true });
-  registerShellAppCommandController(destroyedWebContentsWindow.asWindow());
+  register(destroyedWebContentsWindow);
   const destroyedWebContentsEvent =
     destroyedWebContentsWindow.emitAppCommand('browser-backward');
 
@@ -83,15 +104,15 @@ test('shell app-command controller does not forward for destroyed or unfocused w
 
 test('shell app-command controller leaves unsafe media commands unhandled', () => {
   const destroyedWindow = new FakeAppCommandWindow({ destroyed: true });
-  registerShellAppCommandController(destroyedWindow.asWindow());
+  register(destroyedWindow);
   const destroyedEvent = destroyedWindow.emitAppCommand('media-play');
 
   const unfocusedWindow = new FakeAppCommandWindow({ focused: false });
-  registerShellAppCommandController(unfocusedWindow.asWindow());
+  register(unfocusedWindow);
   const unfocusedEvent = unfocusedWindow.emitAppCommand('media-pause');
 
   const destroyedWebContentsWindow = new FakeAppCommandWindow({ webContentsDestroyed: true });
-  registerShellAppCommandController(destroyedWebContentsWindow.asWindow());
+  register(destroyedWebContentsWindow);
   const destroyedWebContentsEvent = destroyedWebContentsWindow.emitAppCommand('media-stop');
 
   assert.equal(destroyedEvent.prevented, false);
@@ -100,11 +121,14 @@ test('shell app-command controller leaves unsafe media commands unhandled', () =
   assert.deepEqual(destroyedWindow.inputEvents, []);
   assert.deepEqual(unfocusedWindow.inputEvents, []);
   assert.deepEqual(destroyedWebContentsWindow.inputEvents, []);
+  assert.deepEqual(destroyedWindow.mediaInputs, []);
+  assert.deepEqual(unfocusedWindow.mediaInputs, []);
+  assert.deepEqual(destroyedWebContentsWindow.mediaInputs, []);
 });
 
 test('shell app-command controller leaves next/previous-track and unknown commands unhandled', () => {
   const fakeWindow = new FakeAppCommandWindow();
-  registerShellAppCommandController(fakeWindow.asWindow());
+  register(fakeWindow);
 
   const nextEvent = fakeWindow.emitAppCommand('media-nexttrack');
   const previousEvent = fakeWindow.emitAppCommand('media-previoustrack');
@@ -120,6 +144,7 @@ test('shell app-command controller reports renderer forwarding errors without th
   const fakeWindow = new FakeAppCommandWindow({ sendInputError: new Error('send failed') });
   const diagnostics: Array<{ message: string; error: unknown }> = [];
   registerShellAppCommandController(fakeWindow.asWindow(), {
+    sendMediaInput: (input) => fakeWindow.mediaInputs.push(input),
     reportDiagnostic: (message, error) => diagnostics.push({ message, error }),
   });
 
@@ -136,7 +161,7 @@ test('shell app-command controller reports renderer forwarding errors without th
 
 test('shell app-command controller unregisters its BrowserWindow listener', () => {
   const fakeWindow = new FakeAppCommandWindow();
-  const registration = registerShellAppCommandController(fakeWindow.asWindow());
+  const registration = register(fakeWindow);
 
   registration.teardown();
   fakeWindow.emitAppCommand('browser-backward');
@@ -156,6 +181,7 @@ interface FakeAppCommandWindowOptions {
 
 class FakeAppCommandWindow {
   readonly inputEvents: KeyboardInputEvent[] = [];
+  readonly mediaInputs: ShellMediaInput[] = [];
   listenerOnCalls = 0;
   listenerOffCalls = 0;
   destroyed: boolean;
@@ -204,6 +230,12 @@ class FakeAppCommandWindow {
     }
     return event;
   }
+}
+
+function register(fakeWindow: FakeAppCommandWindow) {
+  return registerShellAppCommandController(fakeWindow.asWindow(), {
+    sendMediaInput: (input) => fakeWindow.mediaInputs.push(input),
+  });
 }
 
 class FakeAppCommandEvent implements ShellAppCommandEvent {

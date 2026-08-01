@@ -347,6 +347,34 @@ test('desktop player adapter maps guarded lifecycle intents without forwarding s
   assert.equal(JSON.stringify(host.commands.slice(-2)).includes('snapshotRequestId'), false);
 });
 
+test('desktop player adapter rejects guarded seek when current capability is not supported', async () => {
+  for (const seekSupport of ['unsupported', 'unknown', 'unproven'] as const) {
+    const host = new FakeNativePlayerHost();
+    host.executeResult = { ok: true, events: loadedPlayingBatch(`load-${seekSupport}`) };
+    const adapter = new DesktopPlayerAdapter(host);
+    const load = loadEnvelope(`load-${seekSupport}`);
+    await adapter.dispatchRendererIntent({
+      ...load,
+      payload: { ...(load.payload as PlayerLoadCommandPayload), seekSupport },
+    });
+    const snapshotBefore = adapter.getSnapshot();
+    const commandCountBefore = host.commands.length;
+
+    const result = await adapter.dispatchRendererIntent({
+      intent: 'player.seekRelativeIfCurrent',
+      requestId: `seek-${seekSupport}`,
+      payload: { snapshotRequestId: `load-${seekSupport}`, deltaMs: 10_000 },
+    });
+
+    assert.equal(result.accepted, false, seekSupport);
+    assert.equal(host.commands.length, commandCountBefore, seekSupport);
+    assert.equal(adapter.getPendingRequestCount(), 0, seekSupport);
+    assert.deepEqual(adapter.getSnapshot(), snapshotBefore, seekSupport);
+    const error = result.events.find((event) => event.event === 'error');
+    assert.equal(error?.event === 'error' ? error.error.category : null, 'unsupported-capability');
+  }
+});
+
 test('desktop player adapter rejects stale or malformed guarded lifecycle intents before custody and host', async () => {
   const host = new FakeNativePlayerHost();
   host.executeResult = { ok: true, events: loadedPlayingBatch('request-load-current') };

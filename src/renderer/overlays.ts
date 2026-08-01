@@ -3,6 +3,7 @@ import {
   isAudioControlEligible,
   isSleepControlEligible,
   isSubtitleControlEligible,
+  OSD_ACTIVE_STATUSES,
   type PlayerOverlayPresentationSource,
 } from './playerOverlayPresentation.js';
 import {
@@ -101,7 +102,9 @@ export function openOsd(
   state: PlayerOverlayState,
   snapshot: PlayerSnapshot,
 ): PlayerOverlayState {
-  if (!['ready', 'playing', 'paused'].includes(snapshot.status)) return state;
+  if (!OSD_ACTIVE_STATUSES.includes(
+    snapshot.status as (typeof OSD_ACTIVE_STATUSES)[number],
+  )) return state;
   if (state.activeOverlayId === 'playbackOptions' ||
     state.activeOverlayId === 'nowPlaying' || state.activeOverlayId === 'miniGuide') return state;
   if (

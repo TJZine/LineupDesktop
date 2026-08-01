@@ -2,6 +2,34 @@ import electron, { type BrowserWindow } from 'electron';
 
 const { app } = electron;
 
+export const RENDERER_CLOSE_LIFECYCLE_SCRIPT = `
+  (async () => {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      window.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Escape', bubbles: true, cancelable: true
+      }));
+      window.dispatchEvent(new KeyboardEvent('keyup', {
+        key: 'Escape', bubbles: true, cancelable: true
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const candidate = document.querySelector('[data-shell-action="confirm-exit"]');
+      if (candidate instanceof HTMLButtonElement && !candidate.closest('[hidden]')) break;
+    }
+    const confirm = document.querySelector('[data-shell-action="confirm-exit"]');
+    if (!(confirm instanceof HTMLButtonElement) || confirm.closest('[hidden]')) {
+      return {
+        invoked: false,
+        route: document.documentElement.dataset.activeRoute,
+        activeFocus: document.activeElement instanceof HTMLElement
+          ? document.activeElement.dataset.focusId ?? null : null,
+        overlay: document.documentElement.dataset.activeOverlay,
+      };
+    }
+    confirm.click();
+    return { invoked: true };
+  })();
+`;
+
 const FOCUS_TIMEOUT_MS = 1000;
 const FULLSCREEN_TRANSITION_TIMEOUT_MS = 5000;
 const FULLSCREEN_STATE_POLL_MS = 25;
@@ -113,33 +141,9 @@ export async function assertRendererCloseLifecycle(
 
   let rendererResult: unknown = null;
   try {
-    rendererResult = await window.webContents.executeJavaScript(`
-      (async () => {
-        for (let attempt = 0; attempt < 8; attempt += 1) {
-          window.dispatchEvent(new KeyboardEvent('keydown', {
-            key: 'Escape', bubbles: true, cancelable: true
-          }));
-          window.dispatchEvent(new KeyboardEvent('keyup', {
-            key: 'Escape', bubbles: true, cancelable: true
-          }));
-          await new Promise((resolve) => setTimeout(resolve, 0));
-          const candidate = document.querySelector('[data-shell-action="confirm-exit"]');
-          if (candidate instanceof HTMLButtonElement && !candidate.closest('[hidden]')) break;
-        }
-        const confirm = document.querySelector('[data-shell-action="confirm-exit"]');
-        if (!(confirm instanceof HTMLButtonElement) || confirm.closest('[hidden]')) {
-          return {
-            invoked: false,
-            route: document.documentElement.dataset.activeRoute,
-            activeFocus: document.activeElement instanceof HTMLElement
-              ? document.activeElement.dataset.focusId ?? null : null,
-            overlay: document.documentElement.dataset.activeOverlay,
-          };
-        }
-        confirm.click();
-        return { invoked: true };
-      })();
-    `);
+    rendererResult = await window.webContents.executeJavaScript(
+      RENDERER_CLOSE_LIFECYCLE_SCRIPT,
+    );
   } catch {
     // BrowserWindow destruction may reject evaluation after the synchronous close.
   }

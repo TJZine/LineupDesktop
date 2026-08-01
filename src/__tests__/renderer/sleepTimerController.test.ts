@@ -6,6 +6,10 @@ import {
   createSleepTimerProjection,
   type SleepTimerProjection,
 } from '../../renderer/sleepTimerController.js';
+import type {
+  DeferredPauseResult,
+  PauseCurrentResult,
+} from '../../renderer/playerInputCommandController.js';
 
 test('sleep presets cycle Off through 15/30/60/120 and back to Off', () => {
   const harness = createHarness();
@@ -65,12 +69,25 @@ test('stale or already-paused playback is never paused at expiry', () => {
 });
 
 test('rejected guarded pause reports bounded feedback without retry or timer resurrection', () => {
-  const harness = createHarness(undefined, false);
+  const harness = createHarness(undefined, 'rejected');
   harness.controller.cyclePreset();
   harness.advance(15 * 60_000);
   assert.equal(harness.projection().status, 'failed');
   assert.deepEqual(harness.diagnostics(), ['player.sleep-timer:Sleep timer pause was not accepted.']);
   assert.equal(harness.pendingTimers(), 0);
+});
+
+test('deferred guarded pause remains pending and ignores a resolution after cancellation', () => {
+  const harness = createHarness(undefined, 'deferred');
+  harness.controller.cyclePreset();
+  harness.advance(15 * 60_000);
+  assert.equal(harness.projection().status, 'expiring');
+  assert.deepEqual(harness.diagnostics(), []);
+
+  harness.controller.cancel();
+  harness.resolveDeferred('started');
+  assert.equal(harness.projection().status, 'off');
+  assert.deepEqual(harness.diagnostics(), []);
 });
 
 test('cancel and cleanup remove the owned timeout and cleanup is terminal', () => {
@@ -90,7 +107,7 @@ function createHarness(
   playback: Pick<PlayerSnapshot, 'requestId' | 'status' | 'playing'> = {
     requestId: 'request-one', status: 'playing', playing: true,
   },
-  pauseAccepted = true,
+  pauseResult: PauseCurrentResult = 'started',
 ) {
   let nowMs = 1_000_000;
   let projection: SleepTimerProjection = createSleepTimerProjection();
@@ -98,6 +115,7 @@ function createHarness(
   const timers = new Map<number, { callback: () => void; dueAt: number }>();
   const pauses: string[] = [];
   const diagnostics: string[] = [];
+  let deferredResolution: ((result: DeferredPauseResult) => void) | null = null;
   let renderCount = 0;
   const controller = createSleepTimerController({
     host: {
@@ -113,20 +131,19 @@ function createHarness(
     setProjection: (next) => { projection = next; },
     render: () => { renderCount += 1; },
     getCurrentPlayback: () => playback,
-    pauseCurrent: (requestId) => { pauses.push(requestId); return pauseAccepted; },
+    pauseCurrent: (requestId, onDeferredResolved) => {
+      pauses.push(requestId);
+      if (pauseResult === 'deferred') {
+        assert.ok(onDeferredResolved);
+        deferredResolution = onDeferredResolved;
+      }
+      return pauseResult;
+    },
+    cancelDeferredPause: () => {
+      deferredResolution = null;
+    },
     recordDiagnostic: (operation, message) => { diagnostics.push(`${operation}:${message}`); },
   });
-
-  const fireDue = (): void => {
-    while (true) {
-      const due = [...timers.entries()]
-        .filter(([, item]) => item.dueAt <= nowMs)
-        .sort((left, right) => left[1].dueAt - right[1].dueAt)[0];
-      if (due === undefined) return;
-      timers.delete(due[0]);
-      due[1].callback();
-    }
-  };
 
   return {
     controller,
@@ -144,6 +161,23 @@ function createHarness(
         next[1].callback();
       }
     },
-    advance: (deltaMs: number) => { nowMs += deltaMs; fireDue(); },
+    resolveDeferred: (result: DeferredPauseResult) => {
+      const resolve = deferredResolution;
+      deferredResolution = null;
+      resolve?.(result);
+    },
+    advance: (deltaMs: number) => {
+      const target = nowMs + deltaMs;
+      while (true) {
+        const next = [...timers.entries()]
+          .filter(([, item]) => item.dueAt <= target)
+          .sort((left, right) => left[1].dueAt - right[1].dueAt)[0];
+        if (next === undefined) break;
+        nowMs = next[1].dueAt;
+        timers.delete(next[0]);
+        next[1].callback();
+      }
+      nowMs = target;
+    },
   };
 }

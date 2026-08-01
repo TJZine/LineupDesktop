@@ -21,6 +21,7 @@ import {
   LINEUP_PLEX_SELECT_SERVER_CHANNEL,
   LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL,
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
+  LINEUP_SHELL_MEDIA_INPUT_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
   LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
@@ -661,6 +662,7 @@ test('player error taxonomy and diagnostics stay renderer-safe', () => {
 
 test('shell IPC channel vocabulary uses the approved literals', () => {
   assert.equal(LINEUP_SHELL_GET_CAPABILITIES_CHANNEL, 'lineup:shell:getCapabilities');
+  assert.equal(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, 'lineup:shell:mediaInput');
   assert.equal(LINEUP_WINDOW_INTENT_CHANNEL, 'lineup:window:intent');
   assert.equal(LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, 'lineup:settings:getSnapshot');
   assert.equal(LINEUP_SETTINGS_REPLACE_CHANNEL, 'lineup:settings:replace');
@@ -859,6 +861,7 @@ test('preload API contract exposes shell, window, player, diagnostics, plex, and
   const shellKeys: Array<keyof LineupDesktopPreloadApi['shell']> = [
     'getCapabilities',
     'onStatusChanged',
+    'onMediaInput',
   ];
   const windowKeys: Array<keyof LineupDesktopPreloadApi['window']> = ['setFullscreen'];
   const playerKeys: Array<keyof LineupDesktopPreloadApi['player']> = [
@@ -897,7 +900,7 @@ test('preload API contract exposes shell, window, player, diagnostics, plex, and
   ];
 
   assert.deepEqual(apiKeys, ['shell', 'window', 'player', 'diagnostics', 'plex', 'channelSetup']);
-  assert.deepEqual(shellKeys, ['getCapabilities', 'onStatusChanged']);
+  assert.deepEqual(shellKeys, ['getCapabilities', 'onStatusChanged', 'onMediaInput']);
   assert.deepEqual(windowKeys, ['setFullscreen']);
   assert.deepEqual(playerKeys, ['dispatch', 'getSnapshot', 'cleanup', 'recover', 'onEvent']);
   assert.deepEqual(diagnosticsKeys, [

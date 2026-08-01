@@ -194,8 +194,9 @@ const sleepTimerController = createSleepTimerController({
   setProjection: (sleepTimer) => { overlayState = { ...overlayState, sleepTimer }; },
   render: renderApp,
   getCurrentPlayback: () => playerSnapshot,
-  pauseCurrent: (snapshotRequestId) =>
-    playerInputCommandController.pauseCurrent(snapshotRequestId),
+  pauseCurrent: (snapshotRequestId, onDeferredResolved) =>
+    playerInputCommandController.pauseCurrent(snapshotRequestId, onDeferredResolved),
+  cancelDeferredPause: () => playerInputCommandController.cancelDeferredPause(),
   recordDiagnostic: (operation, message) => recordRendererBridgeFailure(
     window.lineupDesktop.diagnostics.recordRendererEvent,
     'player.dispatch',
@@ -269,6 +270,9 @@ shellDom.exitCancelButton?.addEventListener('click', navigationLifecycle.cancelE
 shellDom.exitButton?.addEventListener('click', navigationLifecycle.confirmExit);
 
 const unsubscribeShellStatus = window.lineupDesktop.shell.onStatusChanged(renderStatus);
+const unsubscribeShellMediaInput = window.lineupDesktop.shell.onMediaInput((input) => {
+  void navigationLifecycle.handleInput(input);
+});
 const playerBridgeSubscription = subscribePlayerBridge({
   player: window.lineupDesktop.player,
   diagnostics: window.lineupDesktop.diagnostics,
@@ -346,6 +350,7 @@ attachNavigationInputRuntime(navigationLifecycle, {
   root: document.documentElement,
   onBeforeUnload: () => {
     unsubscribeShellStatus();
+    unsubscribeShellMediaInput();
     playerBridgeSubscription.unsubscribe();
     playerInputCommandController.cleanup();
     sleepTimerController.cleanup();

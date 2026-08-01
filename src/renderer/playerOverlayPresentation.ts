@@ -1,4 +1,8 @@
-import type { PlayerSnapshot, PlayerTrackSummary } from '../contracts/player.js';
+import type {
+  PlayerSnapshot,
+  PlayerStatus,
+  PlayerTrackSummary,
+} from '../contracts/player.js';
 import type { ChannelSetupSummary } from '../contracts/channel.js';
 import type { EpgPresentationSource, EpgProgramViewModel } from './epg.js';
 
@@ -32,6 +36,12 @@ export interface PlayerOverlayPresentationInput {
   guidePresentation: EpgPresentationSource | null;
   nowMs?: number;
 }
+
+export const OSD_ACTIVE_STATUSES = [
+  'ready',
+  'playing',
+  'paused',
+] as const satisfies readonly PlayerStatus[];
 
 export function createEmptyPlayerSnapshot(): PlayerSnapshot {
   return {
@@ -117,7 +127,9 @@ export function isSubtitleControlEligible(snapshot: PlayerSnapshot): boolean {
 }
 
 export function isSleepControlEligible(snapshot: PlayerSnapshot): boolean {
-  return snapshot.requestId !== null && ['ready', 'playing', 'paused'].includes(snapshot.status);
+  return snapshot.requestId !== null && OSD_ACTIVE_STATUSES.includes(
+    snapshot.status as (typeof OSD_ACTIVE_STATUSES)[number],
+  );
 }
 
 export function firstEligibleOsdFocusId(snapshot: PlayerSnapshot): string | null {

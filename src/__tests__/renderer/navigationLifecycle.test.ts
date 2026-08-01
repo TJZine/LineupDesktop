@@ -282,6 +282,7 @@ test('attached Back input cancels on keyup/blur and removes listeners on unload'
   const calls: string[] = [];
   const originalWindow = Reflect.get(globalThis, 'window');
   Object.defineProperty(globalThis, 'window', { value: host, configurable: true });
+  try {
   const lifecycle: NavigationLifecycle = {
     handleInput: async () => undefined,
     handleBackPress: async () => { calls.push('short'); },
@@ -327,8 +328,10 @@ test('attached Back input cancels on keyup/blur and removes listeners on unload'
   assert.equal(host.listenerCount('blur'), 0);
   assert.equal(host.listenerCount('focus'), 0);
   assert.equal(host.listenerCount('beforeunload'), 0);
-  if (originalWindow === undefined) Reflect.deleteProperty(globalThis, 'window');
-  else Object.defineProperty(globalThis, 'window', { value: originalWindow, configurable: true });
+  } finally {
+    if (originalWindow === undefined) Reflect.deleteProperty(globalThis, 'window');
+    else Object.defineProperty(globalThis, 'window', { value: originalWindow, configurable: true });
+  }
 });
 
 test('held gamepad Back is quiesced on blur and resumes after a fresh release/press', () => {
@@ -340,6 +343,7 @@ test('held gamepad Back is quiesced on blur and resumes after a fresh release/pr
   const gamepad = createBackGamepad(true);
   host.setGamepads([gamepad]);
   Object.defineProperty(globalThis, 'window', { value: host, configurable: true });
+  try {
   const lifecycle: NavigationLifecycle = {
     handleInput: async () => undefined,
     handleBackPress: async () => { calls.push('short'); },
@@ -380,8 +384,10 @@ test('held gamepad Back is quiesced on blur and resumes after a fresh release/pr
   assert.deepEqual(calls, ['short', 'cancel', 'short']);
 
   host.emit('beforeunload');
-  if (originalWindow === undefined) Reflect.deleteProperty(globalThis, 'window');
-  else Object.defineProperty(globalThis, 'window', { value: originalWindow, configurable: true });
+  } finally {
+    if (originalWindow === undefined) Reflect.deleteProperty(globalThis, 'window');
+    else Object.defineProperty(globalThis, 'window', { value: originalWindow, configurable: true });
+  }
 });
 
 test('canceling exit restores the unfocused Player presentation surface', async () => {

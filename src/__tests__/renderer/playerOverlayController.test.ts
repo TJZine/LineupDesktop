@@ -141,7 +141,22 @@ test('different tune target supersedes stale completion and only current success
   assert.equal(harness.state().lastTuneChannelId, 'two');
 });
 
-test('Player Page keys tune circular adjacent channels without bypassing overlay or pending-tune custody', async () => {
+test('Player Page keys tune circular adjacent channels in both directions', async () => {
+  const tuned: string[] = [];
+  const tuneChannel = async ({ channelId }: { channelId: string }) => {
+    tuned.push(channelId);
+    return { ok: true as const, value: undefined as never, requestId: `tune-${channelId}` };
+  };
+  const fromOne = createHarness(playingSnapshot(), { tuneChannel, currentChannelId: 'one' });
+  assert.equal(fromOne.controller.handleInput('pageUp'), true);
+  await flushPromiseQueue();
+  const fromTwo = createHarness(playingSnapshot(), { tuneChannel, currentChannelId: 'two' });
+  assert.equal(fromTwo.controller.handleInput('pageDown'), true);
+  await flushPromiseQueue();
+  assert.deepEqual(tuned, ['two', 'one']);
+});
+
+test('Player Page keys do not bypass overlay or pending-tune custody', async () => {
   const pendingTune = deferred<{ ok: true; value: never; requestId: string }>();
   const tuned: string[] = [];
   const harness = createHarness(playingSnapshot(), {
@@ -635,10 +650,11 @@ function createHarness(snapshot: PlayerSnapshot, overrides: Partial<{
   refreshChannelStatus: () => Promise<void>;
   refreshGuidePresentation: () => Promise<void>;
   recovery: PlayerErrorRecoveryController;
+  currentChannelId: 'one' | 'two';
   nowPlayingAutoHideMs: 0 | 5000 | 10000 | 15000 | 30000 | 60000 | 120000;
 }> = {}) {
   let playerSnapshot = snapshot;
-  let state = createPlayerOverlayState(presentation(snapshot));
+  let state = createPlayerOverlayState(presentation(snapshot, overrides.currentChannelId));
   const timers = new FakeTimers();
   const focus: Array<string | null> = [];
   const diagnostics: string[] = [];
@@ -650,7 +666,7 @@ function createHarness(snapshot: PlayerSnapshot, overrides: Partial<{
     host: timers,
     getState: () => state,
     setState: (next) => { state = next; },
-    getPresentation: () => presentation(playerSnapshot),
+    getPresentation: () => presentation(playerSnapshot, overrides.currentChannelId),
     render: () => undefined,
     focus: (id) => { focus.push(id); },
     openGuide: () => undefined,
@@ -702,9 +718,12 @@ function playingSnapshot(): PlayerSnapshot {
   };
 }
 
-function presentation(playerSnapshot: PlayerSnapshot): PlayerOverlayPresentationSource {
+function presentation(
+  playerSnapshot: PlayerSnapshot,
+  currentChannelId: 'one' | 'two' = 'one',
+): PlayerOverlayPresentationSource {
   return {
-    playerSnapshot, currentChannelId: 'one', nowMs: 1,
+    playerSnapshot, currentChannelId, nowMs: 1,
     channels: [
       { id: 'one', number: '1', name: 'One', currentProgram: { id: 'p1', title: 'One now', startsAtMs: 0, endsAtMs: 2 } },
       { id: 'two', number: '2', name: 'Two', currentProgram: { id: 'p2', title: 'Two now', startsAtMs: 0, endsAtMs: 2 } },

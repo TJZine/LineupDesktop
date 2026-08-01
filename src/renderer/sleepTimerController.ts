@@ -1,8 +1,12 @@
 import type { PlayerSnapshot } from '../contracts/player.js';
+import type {
+  DeferredPauseResult,
+  PauseCurrentResult,
+} from './playerInputCommandController.js';
 
 export type SleepTimerPresetMinutes = 15 | 30 | 60 | 120;
 
-export type SleepTimerStatus = 'off' | 'active' | 'warning' | 'expired' | 'failed';
+export type SleepTimerStatus = 'off' | 'active' | 'warning' | 'expiring' | 'expired' | 'failed';
 
 export interface SleepTimerProjection {
   presetMinutes: SleepTimerPresetMinutes | null;
@@ -23,7 +27,11 @@ export interface SleepTimerControllerOptions {
   setProjection(projection: SleepTimerProjection): void;
   render(): void;
   getCurrentPlayback(): Pick<PlayerSnapshot, 'requestId' | 'status' | 'playing'>;
-  pauseCurrent(snapshotRequestId: string): boolean;
+  pauseCurrent(
+    snapshotRequestId: string,
+    onDeferredResolved?: (result: DeferredPauseResult) => void,
+  ): PauseCurrentResult;
+  cancelDeferredPause(): void;
   recordDiagnostic(operation: string, message: string): void;
 }
 
@@ -70,6 +78,7 @@ export function createSleepTimerController(
     options.render();
   };
 
+  // Never increase the visible countdown if the host clock moves backward.
   const remainingAt = (nowMs: number): number => {
     if (deadlineMs === null) return 0;
     return Math.min(lastRemainingMs, Math.max(0, deadlineMs - nowMs));
@@ -89,20 +98,23 @@ export function createSleepTimerController(
     clearTimer();
     deadlineMs = null;
     lastRemainingMs = 0;
-    publish({
-      presetMinutes: null,
-      remainingMs: 0,
-      status: 'expired',
-      message: 'Sleep timer ended',
-    });
-
     const playback = options.getCurrentPlayback();
     if (
       playback.requestId !== null &&
       playback.status === 'playing' &&
       playback.playing
     ) {
-      if (!options.pauseCurrent(playback.requestId)) {
+      const onDeferredResolved = (result: DeferredPauseResult): void => {
+        if (disposed || activeGeneration !== generation) return;
+        if (result === 'started') {
+          publish({
+            presetMinutes: null,
+            remainingMs: 0,
+            status: 'expired',
+            message: 'Sleep timer ended',
+          });
+          return;
+        }
         publish({
           presetMinutes: null,
           remainingMs: 0,
@@ -110,8 +122,28 @@ export function createSleepTimerController(
           message: 'Sleep timer ended; playback could not be paused',
         });
         options.recordDiagnostic('player.sleep-timer', 'Sleep timer pause was not accepted.');
+      };
+      const pauseResult = options.pauseCurrent(playback.requestId, onDeferredResolved);
+      if (pauseResult === 'started') {
+        onDeferredResolved('started');
+      } else if (pauseResult === 'deferred') {
+        publish({
+          presetMinutes: null,
+          remainingMs: 0,
+          status: 'expiring',
+          message: 'Sleep timer ended; pause pending',
+        });
+      } else {
+        onDeferredResolved('rejected');
       }
+      return;
     }
+    publish({
+      presetMinutes: null,
+      remainingMs: 0,
+      status: 'expired',
+      message: 'Sleep timer ended',
+    });
   };
 
   const tick = (activeGeneration: number): void => {
@@ -136,6 +168,7 @@ export function createSleepTimerController(
 
   const cancel = (): void => {
     ++generation;
+    options.cancelDeferredPause();
     clearTimer();
     deadlineMs = null;
     lastRemainingMs = 0;
@@ -154,6 +187,7 @@ export function createSleepTimerController(
     }
 
     const activeGeneration = ++generation;
+    options.cancelDeferredPause();
     clearTimer();
     warningIssued = false;
     lastRemainingMs = next * 60_000;
@@ -174,6 +208,7 @@ export function createSleepTimerController(
     cleanup() {
       if (disposed) return;
       ++generation;
+      options.cancelDeferredPause();
       clearTimer();
       deadlineMs = null;
       lastRemainingMs = 0;

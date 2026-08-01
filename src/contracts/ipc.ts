@@ -70,6 +70,9 @@ export const LINEUP_WINDOW_INTENT_CHANNEL = 'lineup:window:intent' as const;
 export const LINEUP_SHELL_STATUS_CHANGED_CHANNEL =
   'lineup:shell:statusChanged' as const;
 
+export const LINEUP_SHELL_MEDIA_INPUT_CHANNEL =
+  'lineup:shell:mediaInput' as const;
+
 export const LINEUP_PLAYER_COMMAND_CHANNEL = 'lineup:player:command' as const;
 
 export const LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL =

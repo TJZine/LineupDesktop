@@ -268,10 +268,6 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
       return;
     }
     if (input === 'back') {
-      if (options.isProfileModalActive()) {
-        options.closeProfileModal();
-        return;
-      }
       if (options.getRoute() === 'channelSetup' && await options.handleChannelSetupBack()) return;
       if (options.getRoute() === 'player') {
         openExit();

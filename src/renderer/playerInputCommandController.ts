@@ -5,6 +5,7 @@ import type {
 } from '../contracts/player.js';
 import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
 import type { DesktopInputButton } from './navigation.js';
+import { toRendererSafeFailureMessage } from './rendererSafeFailureMessage.js';
 
 export interface PlayerInputCommandTimerHost {
   setTimeout(callback: () => void, delayMs: number): number;
@@ -20,17 +21,29 @@ export interface PlayerInputCommandControllerOptions {
 
 export interface PlayerInputCommandController {
   handleInput(input: DesktopInputButton, blocked?: boolean): boolean;
-  pauseCurrent(snapshotRequestId: string): boolean;
+  pauseCurrent(
+    snapshotRequestId: string,
+    onDeferredResolved?: (result: DeferredPauseResult) => void,
+  ): PauseCurrentResult;
+  cancelDeferredPause(): void;
   handlePlayerEvent(event: PlayerEvent): void;
   reconcileSnapshot(snapshot: PlayerSnapshot, authoritative: boolean): void;
   routeLeave(): void;
   cleanup(): void;
 }
 
+export type PauseCurrentResult = 'started' | 'deferred' | 'rejected';
+export type DeferredPauseResult = Exclude<PauseCurrentResult, 'deferred'>;
+
 interface PendingDirectCommand {
   requestId: string;
   command: PlayerCommandName;
   snapshotRequestId: string;
+}
+
+interface DeferredPause {
+  snapshotRequestId: string;
+  resolve(result: DeferredPauseResult): void;
 }
 
 const COMMAND_TIMEOUT_MS = 30_000;
@@ -42,6 +55,7 @@ export function createPlayerInputCommandController(
   let timer: number | null = null;
   let sequence = 0;
   let disposed = false;
+  let deferredPause: DeferredPause | null = null;
 
   const release = (): PendingDirectCommand | null => {
     const released = pending;
@@ -53,21 +67,48 @@ export function createPlayerInputCommandController(
     return released;
   };
 
+  const resolveDeferredPause = (result: DeferredPauseResult): void => {
+    const deferred = deferredPause;
+    deferredPause = null;
+    deferred?.resolve(result);
+  };
+
   const fail = (requestId: string, message: string): void => {
     if (disposed || pending?.requestId !== requestId) return;
     const failed = release();
     if (failed !== null) {
-      options.recordDiagnostic(`player.${failed.command}`, safeMessage(message));
+      options.recordDiagnostic(
+        `player.${failed.command}`,
+        toRendererSafeFailureMessage(message, 'Player command failed.'),
+      );
     }
+    resolveDeferredPause('rejected');
   };
 
   const settle = (event: Extract<PlayerEvent, { event: 'command.settled' }>): void => {
     if (pending?.requestId !== event.requestId || pending.command !== event.command) return;
-    if (!event.ok) {
-      fail(event.requestId, event.error?.message ?? 'Player command failed.');
+    const settled = release();
+    if (!event.ok && settled !== null) {
+      options.recordDiagnostic(
+        `player.${settled.command}`,
+        toRendererSafeFailureMessage(
+          event.error?.message ?? 'Player command failed.',
+          'Player command failed.',
+        ),
+      );
+    }
+    if (
+      settled !== null
+      && (settled.command === 'play' || settled.command === 'seek.relative')
+      && deferredPause !== null
+    ) {
+      const deferred = deferredPause;
+      deferredPause = null;
+      const result = pauseCurrent(deferred.snapshotRequestId);
+      deferred.resolve(result === 'started' ? 'started' : 'rejected');
       return;
     }
-    release();
+    resolveDeferredPause('rejected');
   };
 
   const dispatch = (
@@ -140,8 +181,22 @@ export function createPlayerInputCommandController(
     return true;
   };
 
-  const pauseCurrent = (snapshotRequestId: string): boolean => {
-    if (disposed || pending !== null) return false;
+  const pauseCurrent = (
+    snapshotRequestId: string,
+    onDeferredResolved?: (result: DeferredPauseResult) => void,
+  ): PauseCurrentResult => {
+    if (disposed) return 'rejected';
+    if (pending !== null) {
+      if (
+        deferredPause === null
+        && onDeferredResolved !== undefined
+        && (pending.command === 'play' || pending.command === 'seek.relative')
+      ) {
+        deferredPause = { snapshotRequestId, resolve: onDeferredResolved };
+        return 'deferred';
+      }
+      return 'rejected';
+    }
     const snapshot = options.getSnapshot();
     if (
       snapshot.requestId === null ||
@@ -149,14 +204,17 @@ export function createPlayerInputCommandController(
       snapshot.status !== 'playing' ||
       !snapshot.playing ||
       isInconsistentPlaybackPair(snapshot)
-    ) return false;
+    ) return 'rejected';
     dispatch('pause', 'player.pauseIfCurrent', snapshot.requestId);
-    return true;
+    return 'started';
   };
 
   return {
     handleInput,
     pauseCurrent,
+    cancelDeferredPause() {
+      resolveDeferredPause('rejected');
+    },
     handlePlayerEvent(event) {
       if (event.event === 'command.settled') settle(event);
       else if (event.event === 'error' && event.requestId !== null && pending?.requestId === event.requestId) {
@@ -167,16 +225,19 @@ export function createPlayerInputCommandController(
       if (!authoritative || pending === null) return;
       if (snapshot.requestId !== pending.snapshotRequestId) {
         release();
+        resolveDeferredPause('rejected');
       } else if (isInconsistentPlaybackPair(snapshot)) {
         fail(pending.requestId, 'Inconsistent player state ignored.');
       }
     },
     routeLeave() {
       release();
+      resolveDeferredPause('rejected');
     },
     cleanup() {
       if (disposed) return;
       release();
+      resolveDeferredPause('rejected');
       disposed = true;
     },
   };
@@ -197,12 +258,4 @@ function deriveToggle(snapshot: PlayerSnapshot): 'play' | 'pause' | null {
 function isInconsistentPlaybackPair(snapshot: PlayerSnapshot): boolean {
   return (snapshot.status === 'playing' && !snapshot.playing) ||
     ((snapshot.status === 'ready' || snapshot.status === 'paused') && snapshot.playing);
-}
-
-function safeMessage(message: string): string {
-  const compact = message.replace(/\p{Cc}/gu, ' ').replace(/\s+/gu, ' ').trim();
-  if (compact.length === 0 || /(?:https?:\/\/|token|credential|secret|header|\\\\|\/Users\/|[A-Za-z]:\\)/iu.test(compact)) {
-    return 'Player command failed.';
-  }
-  return compact.slice(0, 180);
 }

@@ -23,6 +23,7 @@ import {
 } from './playerOverlayPresentation.js';
 import type { PlayerErrorRecoveryController } from './playerErrorRecoveryController.js';
 import { createPlayerOverlayView } from './overlayViewModels.js';
+import { toRendererSafeFailureMessage } from './rendererSafeFailureMessage.js';
 
 export interface PlayerOverlayTimerHost {
   setTimeout(callback: () => void, delayMs: number): number;
@@ -487,7 +488,7 @@ export function createPlayerOverlayController(
   ): void => {
     if (generation !== tuneGeneration || disposed) return;
     transitionTimer = clearTimer(transitionTimer);
-    const safe = safeMessage(message, 'Channel tune failed.');
+    const safe = toRendererSafeFailureMessage(message, 'Channel tune failed.');
     let invokerOwnedAtSettlement = false;
     update((state) => {
       const invokerOverlay = invoker === 'miniGuide' ? 'miniGuide' : invoker === 'number' ? 'channelNumber' : null;
@@ -539,7 +540,10 @@ export function createPlayerOverlayController(
     if (disposed || pendingCommand?.requestId !== requestId) return;
     const pending = releasePendingCommand();
     if (pending === null) return;
-    setOptionsFailure(pending.focusId, safeMessage(message, 'Track selection failed.'));
+    setOptionsFailure(
+      pending.focusId,
+      toRendererSafeFailureMessage(message, 'Track selection failed.'),
+    );
   };
 
   const setOptionsFailure = (focusId: string | null, message: string): void => {
@@ -723,7 +727,7 @@ export function createPlayerOverlayController(
       } else if (event.event === 'warning' || event.event === 'error') {
         options.recordDiagnostic(
           `player.${event.event}`,
-          safeMessage(
+          toRendererSafeFailureMessage(
             event.event === 'warning' ? event.warning.message : event.error.message,
             event.event === 'warning' ? 'Player warning.' : 'Player error.',
           ),
@@ -767,14 +771,6 @@ function firstOptionFocus(
   if (family === 'subtitle') return 'overlay-subtitle-track-off';
   const first = availableTracks(snapshot, 'audio')[0];
   return first === undefined ? null : `overlay-audio-track-${first.id}`;
-}
-
-function safeMessage(message: string, fallback: string): string {
-  const compact = message.replace(/\p{Cc}/gu, ' ').replace(/\s+/gu, ' ').trim();
-  if (compact.length === 0 || /(?:https?:\/\/|token|credential|secret|header|\\\\|\/Users\/|[A-Za-z]:\\)/iu.test(compact)) {
-    return fallback;
-  }
-  return compact.slice(0, 180);
 }
 
 function isRecoveryActive(state: PlayerOverlayState): boolean {

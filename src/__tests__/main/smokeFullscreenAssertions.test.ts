@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
+import { runInNewContext } from 'node:vm';
 
 import {
+  RENDERER_CLOSE_LIFECYCLE_SCRIPT,
   waitForFullscreenState,
   type FullscreenObservationScheduler,
   type FullscreenObservationWindow,
@@ -122,18 +123,43 @@ test('fullscreen deadline reconciles a valid transition after the last interval 
   assertClean(window, scheduler);
 });
 
-test('renderer close lifecycle releases each synthetic Escape press', () => {
-  const source = fs.readFileSync(
-    new URL('../../main/smokeFullscreenAssertions.ts', import.meta.url),
-    'utf8',
-  );
-  const loopStart = source.indexOf('for (let attempt = 0; attempt < 8; attempt += 1)');
-  const loopEnd = source.indexOf("const confirm = document.querySelector('[data-shell-action=\"confirm-exit\"]')");
-  assert.ok(loopStart >= 0 && loopEnd > loopStart);
-  const loop = source.slice(loopStart, loopEnd);
-  assert.match(loop, /KeyboardEvent\('keydown', \{\s*key: 'Escape', bubbles: true, cancelable: true\s*\}\)\);\s*window\.dispatchEvent\(new KeyboardEvent\('keyup', \{\s*key: 'Escape', bubbles: true, cancelable: true\s*\}\)\);\s*await/u);
-  assert.equal((loop.match(/KeyboardEvent\('keydown'/gu) ?? []).length, 1);
-  assert.equal((loop.match(/KeyboardEvent\('keyup'/gu) ?? []).length, 1);
+test('renderer close lifecycle releases Escape and invokes the visible confirmation', async () => {
+  const events: Array<{ type: string; key: string }> = [];
+  let clicked = 0;
+  class FakeElement {
+    readonly dataset: Record<string, string> = {};
+  }
+  class FakeButton extends FakeElement {
+    closest(): null { return null; }
+    click(): void { clicked += 1; }
+  }
+  class FakeKeyboardEvent {
+    constructor(readonly type: string, readonly init: { key: string }) {}
+  }
+  const confirm = new FakeButton();
+  const result = await runInNewContext(RENDERER_CLOSE_LIFECYCLE_SCRIPT, {
+    window: {
+      dispatchEvent: (event: FakeKeyboardEvent) => {
+        events.push({ type: event.type, key: event.init.key });
+      },
+    },
+    document: {
+      querySelector: () => confirm,
+      documentElement: { dataset: {} },
+      activeElement: null,
+    },
+    KeyboardEvent: FakeKeyboardEvent,
+    HTMLButtonElement: FakeButton,
+    HTMLElement: FakeElement,
+    setTimeout: (callback: () => void) => { callback(); },
+  }) as { invoked: boolean };
+
+  assert.deepEqual(events, [
+    { type: 'keydown', key: 'Escape' },
+    { type: 'keyup', key: 'Escape' },
+  ]);
+  assert.equal(clicked, 1);
+  assert.equal(result.invoked, true);
 });
 
 function assertClean(window: FakeFullscreenWindow, scheduler: FakeScheduler): void {

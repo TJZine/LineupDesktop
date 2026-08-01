@@ -45,7 +45,20 @@ export type PlayerTrackDeliveryType =
   | 'burned-in'
   | 'unknown';
 
-export type PlayerCapabilitySupport = 'supported' | 'unsupported' | 'unknown' | 'unproven';
+export const PLAYER_CAPABILITY_SUPPORT_VALUES = [
+  'supported',
+  'unsupported',
+  'unknown',
+  'unproven',
+] as const;
+
+export type PlayerCapabilitySupport = (typeof PLAYER_CAPABILITY_SUPPORT_VALUES)[number];
+
+export function isPlayerCapabilitySupport(value: unknown): value is PlayerCapabilitySupport {
+  return typeof value === 'string' && PLAYER_CAPABILITY_SUPPORT_VALUES.includes(
+    value as PlayerCapabilitySupport,
+  );
+}
 
 export type PlayerSubtitleDeliveryMode =
   | 'embedded'
@@ -558,10 +571,6 @@ function isRendererSafePlayerSnapshot(value: unknown): value is PlayerSnapshot {
     isRendererSafePlayerPlaybackQualitySummary(value.quality) &&
     (value.lastError === null || isRendererSafePlayerError(value.lastError))
   );
-}
-
-function isPlayerCapabilitySupport(value: unknown): value is PlayerCapabilitySupport {
-  return value === 'supported' || value === 'unsupported' || value === 'unknown' || value === 'unproven';
 }
 
 function isRendererSafeMediaSummary(value: unknown): value is PlayerMediaSummary {

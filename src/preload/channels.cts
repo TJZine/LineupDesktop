@@ -1,6 +1,7 @@
 export const LINEUP_SHELL_GET_CAPABILITIES_CHANNEL = 'lineup:shell:getCapabilities';
 export const LINEUP_WINDOW_INTENT_CHANNEL = 'lineup:window:intent';
 export const LINEUP_SHELL_STATUS_CHANGED_CHANNEL = 'lineup:shell:statusChanged';
+export const LINEUP_SHELL_MEDIA_INPUT_CHANNEL = 'lineup:shell:mediaInput';
 export const LINEUP_PLAYER_COMMAND_CHANNEL = 'lineup:player:command';
 export const LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL = 'lineup:player:getSnapshot';
 export const LINEUP_PLAYER_CLEANUP_CHANNEL = 'lineup:player:cleanup';

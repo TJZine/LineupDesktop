@@ -363,6 +363,7 @@ test('shell controller rejects stale capabilities and exposes recoverable safe s
         return request.promise;
       },
       onStatusChanged: () => () => undefined,
+      onMediaInput: () => () => undefined,
     },
     windowBridge: { setFullscreen: async () => { throw new Error('unused'); } },
     host: { setTimeout: () => 1, clearTimeout: () => undefined },
@@ -394,6 +395,7 @@ test('shell controller rejects stale capabilities and exposes recoverable safe s
     shell: {
       getCapabilities: async () => { throw new Error('private bridge detail'); },
       onStatusChanged: () => () => undefined,
+      onMediaInput: () => () => undefined,
     },
     windowBridge: { setFullscreen: async () => { throw new Error('unused'); } },
     host: { setTimeout: () => 1, clearTimeout: () => undefined },
@@ -420,6 +422,7 @@ test('shell controller forwards fullscreen focus intent and owns 5000/200/1500 t
     shell: {
       getCapabilities: async () => { throw new Error('unused'); },
       onStatusChanged: () => () => undefined,
+      onMediaInput: () => () => undefined,
     },
     windowBridge: {
       setFullscreen: async (desired) => ({
@@ -509,7 +512,11 @@ test('fullscreen transport preserves a live visible overlay focus target through
     });
     let shellState: RendererShellState = { ...createRendererShellState(), bootstrap: 'ready' };
     const controller = createShellController({
-      shell: { getCapabilities: async () => { throw new Error('unused'); }, onStatusChanged: () => () => undefined },
+      shell: {
+        getCapabilities: async () => { throw new Error('unused'); },
+        onStatusChanged: () => () => undefined,
+        onMediaInput: () => () => undefined,
+      },
       windowBridge: transport,
       host: { setTimeout: () => 1, clearTimeout: () => undefined },
       getState: () => shellState,
@@ -540,7 +547,11 @@ test('shell fullscreen mutex survives UI invalidation until transport settlement
   let state: RendererShellState = { ...createRendererShellState(), bootstrap: 'ready' };
   let calls = 0;
   const controller = createShellController({
-    shell: { getCapabilities: async () => { throw new Error('unused'); }, onStatusChanged: () => () => undefined },
+    shell: {
+      getCapabilities: async () => { throw new Error('unused'); },
+      onStatusChanged: () => () => undefined,
+      onMediaInput: () => () => undefined,
+    },
     windowBridge: {
       setFullscreen: async (desired) => {
         calls += 1;
@@ -581,6 +592,7 @@ test('fullscreen retry keeps inline owner pending and restores retry focus after
     shell: {
       getCapabilities: async () => { throw new Error('unused'); },
       onStatusChanged: () => () => undefined,
+      onMediaInput: () => () => undefined,
     },
     windowBridge: {
       setFullscreen: () => {

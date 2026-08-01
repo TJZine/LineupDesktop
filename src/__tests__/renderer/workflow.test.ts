@@ -12,7 +12,7 @@ import {
   createWorkflowState,
   getRouteWorkflowView,
 } from '../../renderer/workflow.js';
-import { createEpgState, type EpgPresentationSource } from '../../renderer/epg.js';
+import type { EpgPresentationSource } from '../../renderer/epg.js';
 import {
   createStagedSetupController,
   dispatchStagedSetupAction,
@@ -51,14 +51,21 @@ test('workflow keeps Guide page selection inside the EPG owner', () => {
     nowWatching: null,
     nowMs: 1,
   };
-  const initial = {
-    ...createWorkflowState('guide'),
-    guidePresentation,
-    epg: createEpgState(guidePresentation),
-  };
+  const initial = createWorkflowState('guide', guidePresentation);
   const paged = applyWorkflowEpgPage(initial, 5);
   assert.equal(paged.result.handled, true);
   assert.equal(paged.workflowState.epg.selectedChannelId, 'channel-5');
+});
+
+test('workflow preserves the exact Guide presentation while it remains non-ready', () => {
+  const guidePresentation: EpgPresentationSource = {
+    channels: [],
+    nowWatching: null,
+    nowMs: 1,
+  };
+  const initial = createWorkflowState('guide', guidePresentation);
+  assert.equal(initial.guidePresentation, guidePresentation);
+  assert.notEqual(initial.epg.presentationState, 'ready');
 });
 
 test('workflow projects persisted setup status without legacy commit availability', () => {

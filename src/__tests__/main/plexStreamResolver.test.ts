@@ -176,6 +176,22 @@ test('plex stream resolver projects direct play to safe load payload and private
   assert.deepEqual(pmsStarts.map((start) => start.connection), [selectedConnection]);
 });
 
+test('plex stream resolver preserves unsupported seek capability in a playable safe load', async () => {
+  const result = await createResolver({
+    mediaDetail: createMediaDetail(),
+  }).resolve({
+    requestId: 'request-direct-play-no-seek',
+    mediaId: 'media-input-direct-play-no-seek',
+    capabilityProfile: seekUnsupportedProfile,
+  });
+
+  assertResolved(result, 'direct-play');
+  assert.equal(result.load.seekSupport, 'unsupported');
+  assert.equal(result.load.capabilityProfileId, seekUnsupportedProfile.id);
+  assert.equal(Object.hasOwn(result.load, 'capabilityProfile'), false);
+  assertPublicProjectionSafe(result);
+});
+
 test('plex stream resolver projects direct stream when policy requires remux', async () => {
   const directPlay = await createResolver({
     mediaDetail: createMediaDetail(),
@@ -1057,4 +1073,10 @@ const unsupportedProfile: DesktopStreamCapabilityProfile = {
     subtitles: 'unsupported',
     hdr: 'unsupported',
   },
+};
+
+const seekUnsupportedProfile: DesktopStreamCapabilityProfile = {
+  ...directPlayProfile,
+  id: 'resolver-seek-unsupported-profile',
+  seek: 'unsupported',
 };
