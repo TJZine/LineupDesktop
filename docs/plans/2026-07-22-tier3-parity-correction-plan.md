@@ -7270,6 +7270,18 @@ custody on acceptance; and inert late settlement after the timer has ended.
 No contract, main, preload, native/helper, dependency, or public schema changes
 are authorized.
 
+**Post-closeout review correction `1f815f3` (2026-08-01):** later adjudication found that
+the synchronous-failure rule could leave playback running when expiry collided
+with an in-flight play or relative seek. The superseding implementation permits
+exactly one sleep-specific deferred pause behind those two commands. On their
+settlement it rereads the safe snapshot and starts one guarded pause only for
+the same non-null request in a consistent playing state. Stop custody,
+dispatch rejection, timeout, route leave, cleanup, request replacement, or
+failed revalidation rejects the deferral. Once pause dispatch starts, no retry
+is allowed. This is not a general queue and does not broaden renderer-to-main
+command vocabulary. The same correction also enforces safe seek capability in
+the main adapter before custody and centralizes renderer-safe failure text.
+
 **Verification classification:** broader integration/manual proof required.
 
 **Focused automated proof:** run and observe:
@@ -7489,6 +7501,13 @@ real Windows media keys/SMTC, physical device behavior, production native
 video, operator-assisted fullscreen, current-upstream paired inspection, live
 playback, packaged close, RD-27, or RD-28 evidence. Any required command failure
 is reported as failure, not hidden behind another passing gate.
+
+Historical clarification: this record does not preserve enough evidence to
+identify the exact worktree-isolation mechanism used for every earlier
+baseline. No retrospective isolation claim is made. Any reopened correction
+must use a detached temporary worktree at the reviewed baseline, apply only the
+reviewed correction there, record pre/post status, and leave the primary
+partially implemented worktree untouched.
 
 #### WS4 Consolidated-Proof Debt Packet
 

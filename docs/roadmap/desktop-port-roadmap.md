@@ -354,7 +354,11 @@ later workstream. Unit 4A `f4570df` owns guarded semantic/direct commands, Unit
 surface and timer. Final local proof passed 36/36 and controller visual
 inspection; `npm run verify` passed 1,110 with one intentional skip and
 harness/docs passed 177/177. Physical Windows command/input proof remains
-`WS4-PROOF-01`/`02`, paired/current-upstream and production-native overlay proof
+`WS4-PROOF-01`/`02`. Post-closeout review correction `1f815f3` adds closed semantic
+delivery for distinct Windows media actions, main-side guarded-seek
+enforcement, and one sleep-specific deferred pause behind play/relative-seek
+custody without claiming native proof. Paired/current-upstream and
+production-native overlay proof
 remains `WS4-PROOF-03`, and packaged exit/teardown remains `WS4-PROOF-04`.
 `UI-47` stays partial; conservative capabilities, earlier debt, later gates,
 RD-27, and RD-28 are unchanged. Exact `0258dbe` was reference-only, so the

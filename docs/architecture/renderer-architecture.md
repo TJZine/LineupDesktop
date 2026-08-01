@@ -83,8 +83,13 @@ stop dispatch, and a session-only sleep timer. `playerInputCommandController.ts`
 owns current-safe-snapshot eligibility, one pending direct command, settlement,
 timeout, diagnostics, and cleanup. `sleepTimerController.ts` owns preset,
 deadline/countdown, warning, guarded pause-on-expiry, failure, and cleanup
-without persistence. `shell/navigationLifecycle.ts` retains precedence and
-protected-owner routing. `index.ts` only composes these owners.
+without persistence. If expiry collides with an in-flight play or relative
+seek, the input owner retains one sleep-specific deferred pause, revalidates
+the same playing snapshot after settlement, and starts at most one guarded
+pause. Stop custody, timeout, invalidation, cleanup, or failed revalidation
+rejects the deferred pause; a started pause is never retried.
+`shell/navigationLifecycle.ts` retains precedence and protected-owner routing.
+`index.ts` only composes these owners.
 
 Renderer code must remain unprivileged. It must not import Electron, Node, main,
 preload, native-helper, Plex transport, persisted secrets, raw auth headers,
@@ -157,6 +162,11 @@ short/long protected-owner behavior. Unit 4D `3258511` adds the Subtitles/Sleep/
 Audio OSD and session timer. Unit 4B `a78228b` remains main-owned foreground
 app-command translation, and `c4dadcf` only repairs synthetic smoke press/
 release fidelity.
+
+The post-closeout review correction `1f815f3` keeps valid `MediaPlayPause` and
+`MediaStop` accelerators on Electron's input path, while distinct play, pause,
+rewind, and fast-forward actions cross preload as a closed semantic media-input
+event. Raw Windows app-command strings never enter the renderer.
 
 Final local production-build proof passed 36/36 scenarios at 1280x720,
 1920x1080, and approximately 900x700 with keyboard, simulated D-pad/gamepad,
