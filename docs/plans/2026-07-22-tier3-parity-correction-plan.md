@@ -6424,9 +6424,13 @@ consolidated-proof policy.
 review rejected Unit 4A on two material player-boundary gaps: seek eligibility
 was not renderer-observable, and stop/relative-seek intents were not bound to
 the snapshot they targeted. A later Unit 4A implementation correctly stopped
-with partial uncommitted edits when typecheck exposed one omitted diagnostics-
-owned inert snapshot producer and its exact test fixture. The narrow correction
-below now includes that seam. Preserve the partial product worktree unchanged;
+with partial uncommitted edits when typecheck exposed omitted typed consumers.
+The controller-observed full typecheck now consolidates the complete additions:
+the diagnostics-owned inert snapshot producer/test fixture, one playback-event-
+router load fixture, and one navigation lifecycle options fixture. The narrow
+correction below includes only those seams. Preserve the partial product
+worktree unchanged. All other reported type errors are in already-authorized
+Unit 4A tests awaiting worker completion and do not broaden this plan;
 all further product/test/package/configuration edits remain blocked until a
 fresh independent `lineup-desktop-feature-review` reports no unresolved
 material finding and explicitly re-approves revised Unit 4A. This amendment
@@ -6796,6 +6800,13 @@ replan.
   only to add required `seekSupport: 'unknown'` to its typed/unsafe snapshot
   fixture and, if needed, one narrow assertion that the safe enum remains in
   `player-snapshot.json` while existing forbidden fields remain absent/redacted.
+  `src/__tests__/main/player/playbackEventRouter.test.ts` is authorized only to
+  add required `seekSupport` to its `candidate.load` fixture and a narrow
+  projection/dispatch assertion if needed.
+  `src/__tests__/renderer/navigation.test.ts` is authorized only to provide the
+  required `openInfoRecovery` lifecycle callback and assert its Info routing/
+  precedence; it may not weaken the option to optional or supply a production
+  default.
 - Ignored/local WS4 run-bundle evidence under
   `docs/runs/ws4-input-overlay-quality-loop/**`. Raw screenshots, traces,
   manifests, hashes, and operator notes remain local and redaction-safe.
@@ -6880,6 +6891,7 @@ correction boundary is `src/contracts/ipc.ts`, `src/contracts/player.ts`,
 `seekSupport: 'unknown'` to `createInertPlayerSnapshot()`. Renderer behavior
 tests are limited to
 `src/__tests__/renderer/desktopInput.test.ts`,
+`src/__tests__/renderer/navigation.test.ts`,
 `src/__tests__/renderer/navigationLifecycle.test.ts`,
 `src/__tests__/renderer/playerOverlayController.test.ts`,
 `src/__tests__/renderer/playerOverlayPresentation.test.ts`,
@@ -6889,7 +6901,9 @@ tests are limited to
 `src/__tests__/renderer/playerInputCommandController.test.ts`. Contract/main
 test edits are limited to the exact files listed in WS4 Files In Scope,
 including only the required fixture/shape proof in
-`src/__tests__/main/diagnostics/supportBundleExporter.test.ts`. No other main,
+`src/__tests__/main/diagnostics/supportBundleExporter.test.ts` and the required
+load-fixture/projection proof in
+`src/__tests__/main/player/playbackEventRouter.test.ts`. No other main,
 diagnostics, contract, preload, renderer presentation, DOM, CSS, or authority
 doc edit is allowed.
 
@@ -6918,9 +6932,9 @@ forwarding-only layer.
 **Focused proof:** run and observe:
 
 ```text
-node --import tsx --test src/__tests__/contracts/contracts.test.ts src/__tests__/integration/preloadContractVocabulary.test.ts src/__tests__/main/player/desktopPlayerAdapter.test.ts src/__tests__/main/player/nativePlayerHostProcess.test.ts src/__tests__/main/player/playbackProgramTransitionIntegration.test.ts src/__tests__/main/player/playerRecoveryIpc.test.ts src/__tests__/main/player/plexPlaybackBridge.test.ts src/__tests__/main/player/plexPlaybackComposition.test.ts src/__tests__/main/player/plexPlaybackRecoveryOwner.test.ts src/__tests__/main/player/plexPlaybackRuntime.test.ts src/__tests__/main/player/playbackRuntimeBootstrap.test.ts src/__tests__/main/playerIpc.test.ts src/__tests__/main/plexStreamResolver.test.ts src/__tests__/main/plexStreamResolverComposition.test.ts
+node --import tsx --test src/__tests__/contracts/contracts.test.ts src/__tests__/integration/preloadContractVocabulary.test.ts src/__tests__/main/player/desktopPlayerAdapter.test.ts src/__tests__/main/player/nativePlayerHostProcess.test.ts src/__tests__/main/player/playbackEventRouter.test.ts src/__tests__/main/player/playbackProgramTransitionIntegration.test.ts src/__tests__/main/player/playerRecoveryIpc.test.ts src/__tests__/main/player/plexPlaybackBridge.test.ts src/__tests__/main/player/plexPlaybackComposition.test.ts src/__tests__/main/player/plexPlaybackRecoveryOwner.test.ts src/__tests__/main/player/plexPlaybackRuntime.test.ts src/__tests__/main/player/playbackRuntimeBootstrap.test.ts src/__tests__/main/playerIpc.test.ts src/__tests__/main/plexStreamResolver.test.ts src/__tests__/main/plexStreamResolverComposition.test.ts
 node --import tsx --test src/__tests__/main/diagnostics/supportBundleExporter.test.ts
-node --import tsx --test src/__tests__/renderer/desktopInput.test.ts src/__tests__/renderer/navigationLifecycle.test.ts src/__tests__/renderer/playerOverlayController.test.ts src/__tests__/renderer/playerOverlayPresentation.test.ts src/__tests__/renderer/epg.test.ts src/__tests__/renderer/workflow.test.ts src/__tests__/renderer/rendererRuntimeOwners.test.ts src/__tests__/renderer/playerInputCommandController.test.ts
+node --import tsx --test src/__tests__/renderer/desktopInput.test.ts src/__tests__/renderer/navigation.test.ts src/__tests__/renderer/navigationLifecycle.test.ts src/__tests__/renderer/playerOverlayController.test.ts src/__tests__/renderer/playerOverlayPresentation.test.ts src/__tests__/renderer/epg.test.ts src/__tests__/renderer/workflow.test.ts src/__tests__/renderer/rendererRuntimeOwners.test.ts src/__tests__/renderer/playerInputCommandController.test.ts
 npm run test:contracts
 npm run typecheck
 npm run build:electron
@@ -6941,6 +6955,13 @@ typed/unsafe provider fixture carry safe `seekSupport: 'unknown'`; the safe enum
 may appear in `player-snapshot.json`, while existing forbidden keys/values stay
 absent or redacted and file count, manifest, serialization, scanner, cleanup,
 and export outcomes remain unchanged.
+`playbackEventRouter.test.ts` proves its complete candidate load carries the
+required safe seek value through the existing runtime dispatch without changing
+event deferral, FIFO, stale-runtime, or custody behavior. `navigation.test.ts`
+proves the required `openInfoRecovery` callback receives eligible Info input,
+while inline error, exit, protected/profile, editable, and route precedence
+remain authoritative; the options contract stays required with no optional
+callback or silent default.
 Exact key aliases, editable bypass, modal suppression, Page context, 10-second
 deltas, seek eligibility, single pending command, timeout/cleanup/stale
 settlement, focus preservation, and source-owner shape are asserted;
@@ -6969,7 +6990,10 @@ cohesively from the overlay hotspot; production profile evidence contradicting
 redaction proof outside this boundary; or the diagnostics fallback requires
 anything beyond one inert field plus fixture/shape proof, including sanitizer,
 serialization, manifest, export, filesystem, provider, or redaction-policy
-changes.
+changes. Also stop if `openInfoRecovery` would need to become optional/defaulted
+for test compatibility, or either newly authorized test exposes a production-
+owner or behavior change rather than the exact required typed fixture and
+focused assertion.
 
 ##### Unit 4B — focused Windows BrowserWindow app-command routing
 
@@ -7480,7 +7504,8 @@ PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
 ARTIFACT: revised Whole-WS4 Input And Overlay execution plan amendment dated
 2026-08-01, resolving the first review's seek-eligibility and stale stop/seek
 blockers plus the implementation-stop discovery of the diagnostics-owned inert
-snapshot/test seam
+snapshot/test seam and the controller-observed consolidated typecheck additions
+for playback-event-router and navigation lifecycle test fixtures
 FILES:
 - docs/plans/2026-07-22-tier3-parity-correction-plan.md
 - docs/product/lineup-product-parity-matrix.md
@@ -7505,6 +7530,9 @@ the host; required `seekSupport` projection from the main-owned selected
 profile through safe load/snapshot; strict preload/main/runtime/recovery guards;
 the exact `supportBundleExporter.ts` inert `seekSupport: 'unknown'` propagation
 and fixture/redaction proof with no diagnostics behavior change;
+the exact `playbackEventRouter.test.ts` candidate-load fixture/projection proof;
+the exact `navigation.test.ts` required `openInfoRecovery` callback and
+precedence proof with no optional/defaulted compatibility weakening;
 atomic no-migration compatibility posture; exact owner/write and no-touch
 boundaries; conservative capability/proof preservation; test files and focused
 proof; hotspot/cohesion dispositions; rollback/checkpoint; and replan triggers.
