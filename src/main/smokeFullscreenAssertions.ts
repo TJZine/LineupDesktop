@@ -119,6 +119,9 @@ export async function assertRendererCloseLifecycle(
           window.dispatchEvent(new KeyboardEvent('keydown', {
             key: 'Escape', bubbles: true, cancelable: true
           }));
+          window.dispatchEvent(new KeyboardEvent('keyup', {
+            key: 'Escape', bubbles: true, cancelable: true
+          }));
           await new Promise((resolve) => setTimeout(resolve, 0));
           const candidate = document.querySelector('[data-shell-action="confirm-exit"]');
           if (candidate instanceof HTMLButtonElement && !candidate.closest('[hidden]')) break;

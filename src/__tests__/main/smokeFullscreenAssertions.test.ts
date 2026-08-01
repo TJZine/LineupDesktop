@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import {
   waitForFullscreenState,
@@ -119,6 +120,20 @@ test('fullscreen deadline reconciles a valid transition after the last interval 
 
   assert.equal(await observation, true);
   assertClean(window, scheduler);
+});
+
+test('renderer close lifecycle releases each synthetic Escape press', () => {
+  const source = fs.readFileSync(
+    new URL('../../main/smokeFullscreenAssertions.ts', import.meta.url),
+    'utf8',
+  );
+  const loopStart = source.indexOf('for (let attempt = 0; attempt < 8; attempt += 1)');
+  const loopEnd = source.indexOf("const confirm = document.querySelector('[data-shell-action=\"confirm-exit\"]')");
+  assert.ok(loopStart >= 0 && loopEnd > loopStart);
+  const loop = source.slice(loopStart, loopEnd);
+  assert.match(loop, /KeyboardEvent\('keydown', \{\s*key: 'Escape', bubbles: true, cancelable: true\s*\}\)\);\s*window\.dispatchEvent\(new KeyboardEvent\('keyup', \{\s*key: 'Escape', bubbles: true, cancelable: true\s*\}\)\);\s*await/u);
+  assert.equal((loop.match(/KeyboardEvent\('keydown'/gu) ?? []).length, 1);
+  assert.equal((loop.match(/KeyboardEvent\('keyup'/gu) ?? []).length, 1);
 });
 
 function assertClean(window: FakeFullscreenWindow, scheduler: FakeScheduler): void {

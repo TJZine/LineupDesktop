@@ -61,6 +61,7 @@ export async function runSmokeAssertions(
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }));
         await new Promise((resolve) => setTimeout(resolve, 0));
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        document.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', bubbles: true }));
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
       try {
@@ -394,11 +395,13 @@ export async function runSmokeAssertions(
 
       ${CHANNEL_BUILDER_FLOW_ASSERTIONS_SOURCE}
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 100));
       if (document.documentElement.dataset.activeRoute !== 'player') {
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true }));
         await new Promise((resolve) => setTimeout(resolve, 0));
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        document.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', bubbles: true }));
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
       const playerScreen = document.querySelector('[data-screen="player"]');
@@ -495,6 +498,7 @@ export async function runSmokeAssertions(
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));
     })();
   `);
