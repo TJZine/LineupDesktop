@@ -11,6 +11,11 @@ import {
   createPlayerInputCommandController,
   type PlayerInputCommandTimerHost,
 } from '../../renderer/playerInputCommandController.js';
+import {
+  createSleepTimerController,
+  createSleepTimerProjection,
+  type SleepTimerProjection,
+} from '../../renderer/sleepTimerController.js';
 
 test('direct input dispatches only guarded current-request commands with exact payloads', async () => {
   const harness = createHarness(playingSnapshot());
@@ -149,11 +154,69 @@ test('inconsistent authoritative playback state fails safely without mutating se
   assert.deepEqual(harness.diagnostics, ['Inconsistent player state ignored.']);
 });
 
+test('pauseCurrent starts exactly one guarded pause only for the exact current playing request', async () => {
+  const harness = createHarness(playingSnapshot(), { settleInDispatch: false });
+  assert.equal(harness.controller.pauseCurrent('stale-request'), false);
+  assert.equal(harness.controller.pauseCurrent('playback-1'), true);
+  assert.equal(harness.controller.pauseCurrent('playback-1'), false);
+  await flush();
+  assert.deepEqual(harness.envelopes, [{
+    intent: 'player.pauseIfCurrent',
+    requestId: 'renderer-input-pause-1',
+    payload: { snapshotRequestId: 'playback-1' },
+  }]);
+
+  settleCurrent(harness, 'pause');
+  harness.setSnapshot({ ...playingSnapshot(), status: 'paused', playing: false });
+  assert.equal(harness.controller.pauseCurrent('playback-1'), false);
+  harness.setSnapshot({ ...playingSnapshot(), playing: false });
+  assert.equal(harness.controller.pauseCurrent('playback-1'), false);
+  harness.setSnapshot({ ...playingSnapshot(), requestId: null });
+  assert.equal(harness.controller.pauseCurrent('playback-1'), false);
+  harness.controller.cleanup();
+  harness.setSnapshot(playingSnapshot());
+  assert.equal(harness.controller.pauseCurrent('playback-1'), false);
+  assert.equal(harness.envelopes.length, 1);
+});
+
+test('sleep expiry fails once behind pending play, seek, or stop and late settlement is timer-inert', async () => {
+  for (const pending of ['play', 'seek', 'stop'] as const) {
+    const harness = createHarness(playingSnapshot(), { settleInDispatch: false });
+    const sleep = createSleepHarness(harness);
+    sleep.controller.cyclePreset();
+    harness.timers.advance(15 * 60_000 - 1_000);
+
+    if (pending === 'play') {
+      harness.setSnapshot({ ...playingSnapshot(), status: 'paused', playing: false });
+      harness.controller.handleInput('mediaPlay');
+      harness.setSnapshot(playingSnapshot());
+    } else {
+      harness.controller.handleInput(pending === 'seek' ? 'mediaFastForward' : 'mediaStop');
+    }
+    await flush();
+    assert.equal(harness.envelopes.length, 1, `${pending} initial custody`);
+
+    harness.timers.advance(1_000);
+    assert.equal(sleep.projection().status, 'failed', `${pending} expiry status`);
+    assert.equal(harness.envelopes.length, 1, `${pending} no extra pause custody`);
+    assert.deepEqual(sleep.diagnostics(), ['Sleep timer pause was not accepted.']);
+
+    settleCurrent(
+      harness,
+      pending === 'play' ? 'play' : pending === 'seek' ? 'seek.relative' : 'stop',
+    );
+    await flush();
+    assert.equal(sleep.projection().status, 'failed', `${pending} late settlement`);
+    assert.equal(harness.envelopes.length, 1, `${pending} no late retry`);
+  }
+});
+
 interface Harness {
   controller: ReturnType<typeof createPlayerInputCommandController>;
   envelopes: PlayerRendererIntentEnvelope<unknown>[];
   diagnostics: string[];
   timers: FakeTimers;
+  snapshot(): PlayerSnapshot;
   setSnapshot(snapshot: PlayerSnapshot): void;
 }
 
@@ -198,8 +261,25 @@ function createHarness(
     envelopes,
     diagnostics,
     timers,
+    snapshot: () => snapshot,
     setSnapshot(next) { snapshot = next; },
   };
+}
+
+function createSleepHarness(harness: Harness) {
+  let projection: SleepTimerProjection = createSleepTimerProjection();
+  const diagnostics: string[] = [];
+  const controller = createSleepTimerController({
+    host: harness.timers,
+    now: () => harness.timers.nowMs(),
+    getProjection: () => projection,
+    setProjection: (next) => { projection = next; },
+    render: () => undefined,
+    getCurrentPlayback: () => harness.snapshot(),
+    pauseCurrent: (requestId) => harness.controller.pauseCurrent(requestId),
+    recordDiagnostic: (_operation, message) => { diagnostics.push(message); },
+  });
+  return { controller, projection: () => projection, diagnostics: () => diagnostics };
 }
 
 function settleCurrent(
@@ -247,6 +327,10 @@ class FakeTimers implements PlayerInputCommandTimerHost {
 
   clearTimeout(handle: number): void {
     this.#entries.delete(handle);
+  }
+
+  nowMs(): number {
+    return this.#now;
   }
 
   advance(deltaMs: number): void {

@@ -8,6 +8,33 @@ test('renderer action registration keeps one DOM/Document/handler entrypoint', (
   assert.equal(registerRendererActions.length, 3);
 });
 
+test('Sleep pointer activation uses the same closed overlay action as focused OK', () => {
+  const sleep = new TestElement();
+  sleep.dataset.overlayAction = 'cycleSleepTimer';
+  const actions: string[] = [];
+  registerRendererActions(
+    {
+      ...createActionDomBindings(),
+      overlayActionButtons: [sleep],
+    } as unknown as RendererDomBindings,
+    { getElementById: () => null, addEventListener: () => undefined } as unknown as Document,
+    {
+      activateRoute: () => undefined, applyRouteAction: () => undefined,
+      applySettingsAction: () => undefined, applyChannelSetupAction: () => undefined,
+      applyEpgAction: () => undefined, applyOverlayAction: (action) => { actions.push(action); },
+      applyPlexRuntimeAction: () => undefined, setPlexHomeUserPin: () => undefined,
+      setPlexSearchQuery: () => undefined, selectPlexHomeUser: () => undefined,
+      selectPlexServer: () => undefined, selectPlexSection: () => undefined,
+      openPlexMetadata: () => undefined, focusElement: () => undefined,
+      toggleFullscreen: () => undefined, selectAudioTrack: () => undefined,
+      selectSubtitleTrack: () => undefined,
+    },
+  );
+
+  sleep.emit('click', sleep);
+  assert.deepEqual(actions, ['cycleSleepTimer']);
+});
+
 test('delegated builder controls accept only the closed strategy action vocabulary', () => {
   assert.equal(readStagedSetupFlowActionId('strategyToggle:genres'), 'strategyToggle:genres');
   assert.equal(readStagedSetupFlowActionId('strategyPriorityUp:actors'), 'strategyPriorityUp:actors');

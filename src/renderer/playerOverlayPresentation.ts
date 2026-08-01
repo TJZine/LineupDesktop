@@ -116,6 +116,17 @@ export function isSubtitleControlEligible(snapshot: PlayerSnapshot): boolean {
   return snapshot.selectedSubtitleTrackId !== null || availableTracks(snapshot, 'subtitle').length > 0;
 }
 
+export function isSleepControlEligible(snapshot: PlayerSnapshot): boolean {
+  return snapshot.requestId !== null && ['ready', 'playing', 'paused'].includes(snapshot.status);
+}
+
+export function firstEligibleOsdFocusId(snapshot: PlayerSnapshot): string | null {
+  if (isSubtitleControlEligible(snapshot)) return 'overlay-osd-subtitles';
+  if (isSleepControlEligible(snapshot)) return 'overlay-osd-sleep';
+  if (isAudioControlEligible(snapshot)) return 'overlay-osd-audio';
+  return null;
+}
+
 export function resolveRetryChannelId(
   presentation: PlayerOverlayPresentationSource,
   lastTuneChannelId: string | null,

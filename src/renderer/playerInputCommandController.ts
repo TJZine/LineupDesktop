@@ -20,6 +20,7 @@ export interface PlayerInputCommandControllerOptions {
 
 export interface PlayerInputCommandController {
   handleInput(input: DesktopInputButton, blocked?: boolean): boolean;
+  pauseCurrent(snapshotRequestId: string): boolean;
   handlePlayerEvent(event: PlayerEvent): void;
   reconcileSnapshot(snapshot: PlayerSnapshot, authoritative: boolean): void;
   routeLeave(): void;
@@ -139,8 +140,23 @@ export function createPlayerInputCommandController(
     return true;
   };
 
+  const pauseCurrent = (snapshotRequestId: string): boolean => {
+    if (disposed || pending !== null) return false;
+    const snapshot = options.getSnapshot();
+    if (
+      snapshot.requestId === null ||
+      snapshot.requestId !== snapshotRequestId ||
+      snapshot.status !== 'playing' ||
+      !snapshot.playing ||
+      isInconsistentPlaybackPair(snapshot)
+    ) return false;
+    dispatch('pause', 'player.pauseIfCurrent', snapshot.requestId);
+    return true;
+  };
+
   return {
     handleInput,
+    pauseCurrent,
     handlePlayerEvent(event) {
       if (event.event === 'command.settled') settle(event);
       else if (event.event === 'error' && event.requestId !== null && pending?.requestId === event.requestId) {

@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createEmptyPlayerSnapshot, createPlayerOverlayPresentation } from '../../renderer/playerOverlayPresentation.js';
+import {
+  createEmptyPlayerSnapshot,
+  createPlayerOverlayPresentation,
+  firstEligibleOsdFocusId,
+  isSleepControlEligible,
+} from '../../renderer/playerOverlayPresentation.js';
 
 test('presentation joins persisted channels to scheduler programs and omits missing data', () => {
   const presentation = createPlayerOverlayPresentation({
@@ -44,6 +49,28 @@ test('presentation does not create placeholder channels when runtime data is abs
   assert.deepEqual(presentation.channels, []);
   assert.equal(presentation.playerSnapshot.seekSupport, 'unknown');
   assert.equal(presentation.currentChannelId, null);
+});
+
+test('OSD focus projection keeps Sleep request-bound and orders Subtitles, Sleep, Audio', () => {
+  const empty = createEmptyPlayerSnapshot();
+  const ready = { ...empty, requestId: 'request-one', status: 'ready' as const };
+  assert.equal(isSleepControlEligible(empty), false);
+  assert.equal(isSleepControlEligible(ready), true);
+  assert.equal(firstEligibleOsdFocusId(ready), 'overlay-osd-sleep');
+  assert.equal(firstEligibleOsdFocusId({
+    ...ready,
+    tracks: [{ id: 'subtitle-one', kind: 'subtitle', label: 'English', selected: false, available: true }],
+  }), 'overlay-osd-subtitles');
+  assert.equal(firstEligibleOsdFocusId({
+    ...empty,
+    status: 'playing',
+    playing: true,
+    tracks: [
+      { id: 'audio-one', kind: 'audio', label: 'Main', selected: true, available: true },
+      { id: 'audio-two', kind: 'audio', label: 'Alt', selected: false, available: true },
+    ],
+    selectedAudioTrackId: 'audio-one',
+  }), 'overlay-osd-audio');
 });
 
 function program(id: string, title: string, startsAtMs: number, endsAtMs: number) {

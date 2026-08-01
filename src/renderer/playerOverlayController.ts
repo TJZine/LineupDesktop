@@ -16,6 +16,7 @@ import {
 } from './overlays.js';
 import {
   availableTracks,
+  firstEligibleOsdFocusId,
   isAudioControlEligible,
   isSubtitleControlEligible,
   type PlayerOverlayPresentationSource,
@@ -562,11 +563,7 @@ export function createPlayerOverlayController(
     const statusEligible = ['ready', 'playing', 'paused', 'seeking'].includes(snapshot.status);
     const fallback = !restoreOsd || !statusEligible ? null : exactEligible
       ? `overlay-osd-${invoker}`
-      : isAudioControlEligible(snapshot)
-        ? 'overlay-osd-audio'
-        : isSubtitleControlEligible(snapshot)
-          ? 'overlay-osd-subtitles'
-          : null;
+      : firstEligibleOsdFocusId(snapshot);
     update((current) => ({
       ...current,
       activeOverlayId: fallback === null ? null : 'playerOsd',

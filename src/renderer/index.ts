@@ -28,6 +28,7 @@ import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowEpgAction, app
 import { createEmptyPlayerSnapshot, createPlayerOverlayPresentation } from './playerOverlayPresentation.js';
 import { createPlayerOverlayController } from './playerOverlayController.js';
 import { createPlayerInputCommandController } from './playerInputCommandController.js';
+import { createSleepTimerController } from './sleepTimerController.js';
 import { createPlayerErrorRecoveryController } from './playerErrorRecoveryController.js';
 import { recordRendererBridgeFailure } from './rendererBridgeFailures.js';
 import { findEpgProgramCell, setEpgPresentationState, setEpgTuneError, updateEpgState } from './epg.js';
@@ -186,6 +187,22 @@ const playerInputCommandController = createPlayerInputCommandController({
     { operation, route: workflowState.routeState.activeRoute },
   ),
 });
+const sleepTimerController = createSleepTimerController({
+  host: window,
+  now: () => Date.now(),
+  getProjection: () => overlayState.sleepTimer,
+  setProjection: (sleepTimer) => { overlayState = { ...overlayState, sleepTimer }; },
+  render: renderApp,
+  getCurrentPlayback: () => playerSnapshot,
+  pauseCurrent: (snapshotRequestId) =>
+    playerInputCommandController.pauseCurrent(snapshotRequestId),
+  recordDiagnostic: (operation, message) => recordRendererBridgeFailure(
+    window.lineupDesktop.diagnostics.recordRendererEvent,
+    'player.dispatch',
+    message,
+    { operation, route: workflowState.routeState.activeRoute },
+  ),
+});
 const settingsPlaybackLifecycle = createSettingsPlaybackLifecycle({ player: window.lineupDesktop.player, getSnapshot: () => playerSnapshot });
 const audioSetupRuntime = createAudioSetupRuntime({
   settings: window.lineupDesktop.settings, getSettingsValues: () => settingsRuntime.getState().values,
@@ -331,6 +348,7 @@ attachNavigationInputRuntime(navigationLifecycle, {
     unsubscribeShellStatus();
     playerBridgeSubscription.unsubscribe();
     playerInputCommandController.cleanup();
+    sleepTimerController.cleanup();
     guidePresentationPolling.stop();
     guideTuneController.stop();
     playerOverlayController.dispose();
@@ -635,6 +653,11 @@ function applyOverlayAction(action: PlayerOverlayActionId): void {
     case 'openMiniGuide': playerOverlayController.requestMiniGuide(); return;
     case 'openAudioOptions': playerOverlayController.openOptions('audio'); return;
     case 'openSubtitleOptions': playerOverlayController.openOptions('subtitle'); return;
+    case 'cycleSleepTimer':
+      sleepTimerController.cyclePreset();
+      playerOverlayController.requestOsd();
+      restoreFocusTarget('overlay-osd-sleep');
+      return;
     case 'retryPlayer': playerOverlayController.retry(); return;
     case 'skipPlayer': playerOverlayController.skip(); return;
     case 'miniGuidePrevious': playerOverlayController.handleInput('up'); return;

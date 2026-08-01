@@ -1,9 +1,14 @@
 import type { PlayerSnapshot } from '../contracts/player.js';
 import {
   isAudioControlEligible,
+  isSleepControlEligible,
   isSubtitleControlEligible,
   type PlayerOverlayPresentationSource,
 } from './playerOverlayPresentation.js';
+import {
+  createSleepTimerProjection,
+  type SleepTimerProjection,
+} from './sleepTimerController.js';
 
 export { createPlayerOverlayView, activeOverlayId } from './overlayViewModels.js';
 export type {
@@ -33,6 +38,7 @@ export type PlayerOverlayActionId =
   | 'openMiniGuide'
   | 'openAudioOptions'
   | 'openSubtitleOptions'
+  | 'cycleSleepTimer'
   | 'retryPlayer'
   | 'skipPlayer'
   | 'miniGuidePrevious'
@@ -61,6 +67,7 @@ export interface PlayerOverlayState {
   recoveryPendingAction: 'retry-current' | 'skip-next' | null;
   retryTransitionActive: boolean;
   lastTuneChannelId: string | null;
+  sleepTimer: SleepTimerProjection;
 }
 
 export function createPlayerOverlayState(
@@ -86,6 +93,7 @@ export function createPlayerOverlayState(
     recoveryPendingAction: null,
     retryTransitionActive: false,
     lastTuneChannelId: null,
+    sleepTimer: createSleepTimerProjection(),
   };
 }
 
@@ -96,7 +104,11 @@ export function openOsd(
   if (!['ready', 'playing', 'paused'].includes(snapshot.status)) return state;
   if (state.activeOverlayId === 'playbackOptions' ||
     state.activeOverlayId === 'nowPlaying' || state.activeOverlayId === 'miniGuide') return state;
-  if (!isAudioControlEligible(snapshot) && !isSubtitleControlEligible(snapshot)) return closeActive(state);
+  if (
+    !isSleepControlEligible(snapshot) &&
+    !isAudioControlEligible(snapshot) &&
+    !isSubtitleControlEligible(snapshot)
+  ) return closeActive(state);
   return { ...closeActive(state), activeOverlayId: 'playerOsd' };
 }
 
@@ -194,6 +206,7 @@ export function closeAllPlayerOverlays(state: PlayerOverlayState): PlayerOverlay
     retryPending: state.retryPending,
     recoveryPendingAction: state.recoveryPendingAction,
     retryTransitionActive: state.retryTransitionActive,
+    sleepTimer: state.sleepTimer,
   };
 }
 

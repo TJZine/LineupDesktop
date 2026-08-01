@@ -256,7 +256,7 @@ test('playback request replacement invalidates track generations without stale U
   assert.equal(dispatches.length, 1);
 });
 
-test('subtitle Off completion restores native surface when its invoking OSD control disappears', async () => {
+test('subtitle Off completion restores OSD Sleep focus when its invoking control disappears', async () => {
   const selectedSubtitle = {
     ...playingSnapshot(),
     selectedAudioTrackId: 'audio-main',
@@ -278,8 +278,8 @@ test('subtitle Off completion restores native surface when its invoking OSD cont
   harness.controller.handlePlayerEvent({
     event: 'command.settled', requestId: 'renderer-select-subtitle-1', command: 'track.subtitle.select', ok: true,
   });
-  assert.equal(harness.state().activeOverlayId, null);
-  assert.equal(harness.focus.at(-1), null);
+  assert.equal(harness.state().activeOverlayId, 'playerOsd');
+  assert.equal(harness.focus.at(-1), 'overlay-osd-sleep');
 });
 
 test('terminal states refuse Info and mini-guide while recovery success suppresses the old error owner', () => {
@@ -555,8 +555,8 @@ test('options contain Space, membership loss closes an ineligible family, and tu
     ...playingSnapshot(),
     tracks: [{ id: 'audio-main', kind: 'audio', label: 'Main', selected: true, available: true }],
   });
-  assert.equal(optionsHarness.state().activeOverlayId, null);
-  assert.equal(optionsHarness.focus.at(-1), null);
+  assert.equal(optionsHarness.state().activeOverlayId, 'playerOsd');
+  assert.equal(optionsHarness.focus.at(-1), 'overlay-osd-sleep');
 
   const refresh = deferred<void>();
   const retryHarness = createHarness({ ...playingSnapshot(), status: 'error', playing: false, lastError: safeError() }, {

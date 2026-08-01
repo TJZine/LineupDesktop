@@ -1,7 +1,9 @@
 import type { PlayerSnapshot, PlayerStatus } from '../contracts/player.js';
 import {
   availableTracks,
+  firstEligibleOsdFocusId,
   isAudioControlEligible,
+  isSleepControlEligible,
   isSubtitleControlEligible,
   type OverlayChannelViewModel,
   type PlayerOverlayPresentationSource,
@@ -59,8 +61,12 @@ export interface PlayerOverlayViewModel {
     bufferedPercent: number;
     audioEligible: boolean;
     subtitleEligible: boolean;
+    sleepEligible: boolean;
     audioLabel?: string;
     subtitleLabel?: string;
+    sleepLabel: string;
+    sleepStatus: string;
+    sleepAccessibleLabel: string;
   };
   miniGuideChannels: readonly (OverlayChannelViewModel & { selected: boolean; busy: boolean })[];
   miniGuideError: string | null;
@@ -165,8 +171,15 @@ export function createPlayerOverlayView(
       bufferedPercent: durationMs === 0 ? 0 : Math.min(100, Math.round((bufferEnd / durationMs) * 100)),
       audioEligible: isAudioControlEligible(snapshot),
       subtitleEligible: isSubtitleControlEligible(snapshot),
+      sleepEligible: isSleepControlEligible(snapshot),
       ...(selectedTrackLabel(snapshot, 'audio') === undefined ? {} : { audioLabel: selectedTrackLabel(snapshot, 'audio') }),
       ...(selectedTrackLabel(snapshot, 'subtitle') === undefined ? {} : { subtitleLabel: selectedTrackLabel(snapshot, 'subtitle') }),
+      sleepLabel: formatSleepLabel(state.sleepTimer.remainingMs, state.sleepTimer.presetMinutes),
+      sleepStatus: state.sleepTimer.message,
+      sleepAccessibleLabel: formatSleepAccessibleLabel(
+        state.sleepTimer.remainingMs,
+        state.sleepTimer.presetMinutes,
+      ),
     },
     miniGuideChannels: fiveCircularRows(presentation.channels, selectedChannel?.id ?? null).map((channel) => ({
       ...channel,
@@ -260,8 +273,7 @@ function focusIdFor(
   guideVisible: boolean,
 ): string | null {
   if (active === 'playerOsd') {
-    if (isAudioControlEligible(snapshot)) return 'overlay-osd-audio';
-    if (isSubtitleControlEligible(snapshot)) return 'overlay-osd-subtitles';
+    return firstEligibleOsdFocusId(snapshot);
   }
   if (active === 'miniGuide') return state.miniGuideSelectedChannelId === null
     ? null
@@ -271,6 +283,23 @@ function focusIdFor(
   if (active === 'playerError' && skipVisible) return 'overlay-player-skip';
   if (active === 'playerError' && guideVisible) return 'overlay-player-guide';
   return null;
+}
+
+function formatSleepLabel(remainingMs: number, presetMinutes: number | null): string {
+  if (presetMinutes === null || remainingMs <= 0) return 'Off';
+  const totalSeconds = Math.max(1, Math.ceil(remainingMs / 1_000));
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0
+    ? `${String(hours)}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+    : `${String(minutes)}:${String(seconds).padStart(2, '0')}`;
+}
+
+function formatSleepAccessibleLabel(remainingMs: number, presetMinutes: number | null): string {
+  if (presetMinutes === null || remainingMs <= 0) return 'Sleep timer, Off';
+  const remainingMinutes = Math.max(1, Math.ceil(remainingMs / 60_000));
+  return `Sleep timer, ${String(remainingMinutes)} minute${remainingMinutes === 1 ? '' : 's'} remaining`;
 }
 
 function fiveCircularRows(
