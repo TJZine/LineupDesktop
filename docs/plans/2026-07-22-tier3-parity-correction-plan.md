@@ -3854,9 +3854,9 @@ review, and landed at `87662b5`
 (`fix(settings): keep enabled detail controls reachable`). `87662b5` is the
 final WS3 product source; `5f368d4` is the prior Unit 3C-D checkpoint,
 `77d09ad` is the earlier viewport repair, and `f0e2817` remains test-only
-harness proof. WS4 targeted scope-load/planning is active. No WS4
-product/test/package/config edit is authorized until its own decision-complete
-plan receives fresh approval for an exact first unit.
+harness proof. At this historical WS3 closeout checkpoint, WS4 targeted
+scope-load/planning was next and its product edits remained gated; the later
+Whole-WS4 section and 2026-08-01 closeout now supersede that execution status.
 
 **WS3 task family:** feature/design.
 
@@ -6221,8 +6221,9 @@ and explicitly approved the checkpoint. Focused 7/7, harness/docs 181/181,
 full `npm run verify`, and diff check passed. `f0e2817` remains test-only
 harness proof. Later Unit 3C-D checkpoint `5f368d4` is the final product
 source before Unit 3C-F. Accepted `87662b5` is now the final product source.
-Unit 3D authority closeout is accepted; WS4 targeted scope-load/planning is
-active.
+Unit 3D authority closeout is accepted. The following WS4 handoff records the
+historical state at WS3 closeout and is superseded by the later Whole-WS4
+section and 2026-08-01 local closeout.
 
 #### WS3 authority classification and targeted WS4 handoff
 
@@ -6420,21 +6421,19 @@ consolidated-proof policy.
 
 ### Whole-WS4 Input And Overlay execution plan (2026-08-01)
 
-**WS4 plan state:** targeted planning was revised after the first independent
-review rejected Unit 4A on two material player-boundary gaps: seek eligibility
-was not renderer-observable, and stop/relative-seek intents were not bound to
-the snapshot they targeted. A later Unit 4A implementation correctly stopped
-with partial uncommitted edits when typecheck exposed omitted typed consumers.
-The controller-observed full typecheck now consolidates the complete additions:
-the diagnostics-owned inert snapshot producer/test fixture, one playback-event-
-router load fixture, and one navigation lifecycle options fixture. The narrow
-correction below includes only those seams. Preserve the partial product
-worktree unchanged. All other reported type errors are in already-authorized
-Unit 4A tests awaiting worker completion and do not broaden this plan;
-all further product/test/package/configuration edits remain blocked until a
-fresh independent `lineup-desktop-feature-review` reports no unresolved
-material finding and explicitly re-approves revised Unit 4A. This amendment
-authorizes re-review, not implementation.
+**WS4 plan state:** the local implementation gate is complete and the canonical
+plan remains active for later workstreams and consolidated proof. Accepted
+checkpoints are Unit 4A `f4570df`, Unit 4B `a78228b`, Unit 4C `a654cdd`, the
+synthetic Escape smoke-harness correction `c4dadcf`, and Unit 4D `3258511`.
+The controller observed final production-build local proof passing 36/36
+viewport, interaction, reduced-motion, and forced-colors scenarios and visually
+accepted hierarchy, clipping, focus, contrast, countdown, and modal precedence.
+Final `npm run verify` passed 1,110 tests with one intentional skip; harness/docs
+passed 177/177 and all required typecheck, build, smoke, architecture,
+maintainability, redaction, docs, and diff gates passed. This closes local
+implementation only. `WS4-PROOF-01` through `WS4-PROOF-04` retain every
+Windows-machine, physical-device, production-native, operator-assisted, live,
+paired-visual, and package-lifecycle obligation without promoting support.
 
 **WS4 task family:** feature/design.
 
@@ -7534,6 +7533,47 @@ their native playback/video, Settings, and live scenarios instead of
 duplicating them. A proof failure never authorizes implementation inside the
 proof run.
 
+#### WS4 Local Implementation Closeout (2026-08-01)
+
+The controller accepted the serial product checkpoints Unit 4A `f4570df`, Unit
+4B `a78228b`, Unit 4C `a654cdd`, isolated smoke-harness correction `c4dadcf`,
+and Unit 4D `3258511`. No copied or adapted upstream source landed; exact
+upstream commit `0258dbe` remained reference-only and the import ledger is
+unchanged. The final local product checkpoint passed the complete focused
+surface, production-build local proof 36/36 with controller visual inspection,
+`npm run verify` at 1,110 pass with one intentional skip, harness/docs at
+177/177, and every required static/build/smoke/redaction gate.
+
+The 35 assigned rows reconcile only as follows:
+
+| Local disposition | Exact WS4 rows |
+| --- | --- |
+| Missing/partial implementation corrected to a locally verified product path; Windows/native/physical/paired proof remains the named packet | `PB-09`–`PB-11`, `PB-25`, `NAV-02`–`NAV-08`, `UI-44`, `UI-51` |
+| Foreground Windows contribution implemented locally but platform status remains partial | `WIN-03`, `WIN-09` |
+| Existing local implementation freshly regression-proved without a support promotion | `PB-15`–`PB-18`, `NAV-01`, `NAV-09`–`NAV-16`, `UI-45`, `UI-46`, `UI-48`–`UI-50`, `UI-52` |
+| Capability-limited surface deliberately remains partial | `UI-47`, through WS2-owned/open `PB-19`–`PB-24`, `WS2-POST-VALIDATION-01`, and applicable WS3 proof |
+
+No row is program-complete. `WS4-PROOF-01` retains physical Windows media-key,
+SMTC/app-command, production-playback, eligibility, focus, cleanup, and
+redaction observation for `PB-09`–`PB-11`, `NAV-08`, `WIN-03`, and `WIN-09`.
+`WS4-PROOF-02` retains real Windows keyboard/numpad/mouse/gamepad/remote-like,
+500 ms Back-hold, editable-bypass, shortcut, page-routing, focus, and cursor
+observation for `NAV-01`–`NAV-07`, `NAV-09`–`NAV-12`, and `WIN-09`.
+`WS4-PROOF-03` retains paired-current-upstream plus Windows production-native-
+video, operator-assisted Package 6, viewport/DPI, timing, focus, motion,
+forced-colors, cursor, and sleep-expiry observation for `PB-15`–`PB-18`,
+`PB-25`, `NAV-10`, `NAV-12`–`NAV-15`, and `UI-44`–`UI-51`; it cannot advance
+`UI-47`. `WS4-PROOF-04` retains packaged Windows exit/close/teardown proof for
+`NAV-16` and `UI-52`, while `LC-02` remains WS8-owned and final package
+lifecycle remains RD-28.
+
+WS1 proof and `WS1-PERF-01`, `WS2-POST-VALIDATION-01`, WS2 ownership/open state
+for `PB-22`–`PB-24`, every WS3 proof and WS5/WS8 contribution packet,
+conservative production playback capabilities, WS6–WS9 gates, RD-27, and RD-28
+remain open. This authority reconciliation is the Unit 4E review surface; no
+WS5 product/test/package/config work starts before the handoff below completes
+targeted scope-load, planning, and fresh first-unit plan approval.
+
 #### WS4 Acceptance Criteria
 
 - Unit 4A received explicit clean plan approval before the first product edit;
@@ -7643,63 +7683,120 @@ replan trigger when and only when its exact `WS4-PROOF-*` row is complete and no
 support/classification promotion occurs. Evidence that demonstrates defective
 or missing product behavior is a replan/remediation trigger.
 
-#### WS4 Plan-Review Handoff
+#### WS5 Feature-Quality-Loop Handoff
 
 MODEL_SUGGESTION
 PLANNER: configured `planner` role
-IMPLEMENTER: resolve at dispatch from the approved unit through
-`.codex/config.toml`; `worker_luna` is the default and `worker` is the settled-
-unit escalation role
+IMPLEMENTER: resolve `worker_luna` by default or the `worker` escalation role at
+dispatch from the approved unit through `.codex/config.toml`
 REVIEWER: configured `reviewer` role
-WHY: WS4 is Tier 3 foreground input/overlay work spanning renderer input,
-navigation, focus, overlay presentation, the main BrowserWindow app-command
-owner, a narrow guarded player-contract correction, platform proof, and
-multiple hotspots; exact model and reasoning settings remain role-TOML-owned.
+WHY: WS5 is Tier 3 Guide work spanning renderer layout/focus/virtualization,
+main-owned scheduler/Guide presentation, persisted WS3 Settings contributions,
+preload-safe projection, performance, and platform proof; exact model and
+reasoning settings remain role-TOML-owned.
 
 NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
-TASK: Review Whole-WS4 Input And Overlay Plan And Approve Unit 4A
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
+TASK: Complete WS5 Guide Through The Tier 3 Feature Quality Loop
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: revised Whole-WS4 Input And Overlay execution plan amendment dated
-2026-08-01, resolving the first review's seek-eligibility and stale stop/seek
-blockers plus the implementation-stop discovery of the diagnostics-owned inert
-snapshot/test seam and the controller-observed consolidated typecheck additions
-for playback-event-router and navigation lifecycle test fixtures
+ARTIFACT: reviewed WS4 local-closeout authority reconciliation based on product
+checkpoints `f4570df`, `a78228b`, `a654cdd`, smoke-harness correction `c4dadcf`,
+and final WS4 product checkpoint `3258511`, with local 36/36 production-build
+proof and open `WS4-PROOF-01`–`WS4-PROOF-04`
 FILES:
 - docs/plans/2026-07-22-tier3-parity-correction-plan.md
 - docs/product/lineup-product-parity-matrix.md
 - docs/architecture/CURRENT_STATE.md
-- docs/architecture/file-shape-guardrails.md
 - docs/architecture/renderer-architecture.md
 - docs/architecture/playback-architecture.md
 - docs/roadmap/desktop-port-roadmap.md
 - docs/development/windows-ui-proof-plan.md
-BLOCKERS: none for read-only plan review. Partial Unit 4A product edits remain
-uncommitted and must be preserved without extension; all further product/test/
-package/config edits remain blocked until review explicitly re-approves Unit 4A
-with no unresolved material finding.
+- src/contracts/guide.ts
+- src/contracts/settings.ts
+- src/main/channel/guideRuntime.ts
+- src/main/settings/desktopSettingsPolicy.ts
+- src/main/settings/settingsIpc.ts
+- src/preload/guideBridge.cts
+- src/preload/settingsBridge.cts
+- src/renderer/epg.ts
+- src/renderer/epg/guideDom.ts
+- src/renderer/guidePresentation.ts
+- src/renderer/guidePresentationPolling.ts
+- src/renderer/guideTuneController.ts
+- src/renderer/workflow.ts
+- src/renderer/domBindings.ts
+- src/renderer/focusDom.ts
+- src/renderer/index.ts
+- src/renderer/styles/guide-epg.css
+- src/__tests__/main/guideRuntime.test.ts
+- src/__tests__/renderer/epg.test.ts
+- src/__tests__/renderer/epg/guideDom.test.ts
+- src/__tests__/renderer/epgStateUpdate.test.ts
+- src/__tests__/renderer/guideTuneController.test.ts
+BLOCKERS: none for WS5 targeted scope-load, planning, or plan review. Every WS5
+product/test/package/config edit remains gated until one decision-complete
+whole-WS5 plan freezes owner/write boundaries, contracts, performance and
+platform proof, rollback, and replan triggers and receives fresh independent
+`lineup-desktop-feature-review` approval for its first execution unit.
 MESSAGE:
-Use `lineup-desktop-feature-review` for a fresh read-only material review of the
-revised 2026-08-01 Whole-WS4 section only. Validate exact 35-row scope, upstream
-`0258dbe` behavior, and all preserved Unit 4B–4E decisions. For revised Unit 4A,
-explicitly validate: the additive `player.stopIfCurrent` and
-`player.seekRelativeIfCurrent` literals and exact payloads; reuse of the
-adapter's existing pre-custody identity guard without forwarding identity to
-the host; required `seekSupport` projection from the main-owned selected
-profile through safe load/snapshot; strict preload/main/runtime/recovery guards;
-the exact `supportBundleExporter.ts` inert `seekSupport: 'unknown'` propagation
-and fixture/redaction proof with no diagnostics behavior change;
-the exact `playbackEventRouter.test.ts` candidate-load fixture/projection proof;
-the exact `navigation.test.ts` required `openInfoRecovery` callback and
-precedence proof with no optional/defaulted compatibility weakening;
-atomic no-migration compatibility posture; exact owner/write and no-touch
-boundaries; conservative capability/proof preservation; test files and focused
-proof; hotspot/cohesion dispositions; rollback/checkpoint; and replan triggers.
-Also validate extraction readiness, serial Unit 4A–4E shape, accessibility/
-interaction acceptance, focused/full/local/manual proof, consolidated proof
-debt, cross-workstream preservation, and WS5 handoff intent. Cite material
-findings with exact plan/source lines. Explicitly state whether revised Unit 4A
-is approved to resume from the preserved partial worktree. Return material findings to
-planning; do not spend a loop on cosmetic wording and do not edit files.
+Own all of WS5 Guide through the Tier 3 feature-quality loop; do not stop after
+planning. Reuse the accepted 227-row audit and target only the exact 21 WS5
+rows: `EPG-01`–`EPG-15` and `UI-35`–`UI-40`, plus the direct
+`WS3-CONTRIBUTION-WS5` consumption gate for WS3-owned `ST-11`–`ST-16` and
+`UI-33`. Do not repeat the program audit, reopen accepted WS1–WS4 product work,
+take registry ownership from WS3, or begin WS6–WS9.
+
+Preflight by fetching/reconciling the tracked `initial-build`, proving this
+handoff is an ancestor, recording `git status --short --branch`, and preserving
+unrelated work. Freshness-read the exact WS5 rows and contribution table; the
+seven authorities above; current Guide contracts, main runtime, Settings
+policy/IPC, preload bridges, renderer presentation/polling/tune/focus/style
+owners and focused tests listed above; and the exact Guide/EPG/Settings behavior
+at upstream commit `0258dbe`. Use Codanna only when its current targeted index
+resolves a real symbol/impact ambiguity; otherwise record direct `rg`, history,
+and exact reads as the less noisy path.
+
+Use `lineup-desktop-feature-plan` through the tracked planner to create one
+decision-complete whole-WS5 amendment, then obtain fresh independent
+`lineup-desktop-feature-review` approval of its first unit before product edit.
+Freeze the smallest serial vertical units for: focused detail/art/live state and
+Play-to-now; persisted library tabs; Now Watching preference; Overlay versus
+Classic/PIP layout; Detailed 2h versus Wide 3h density; past-item policy; and
+large-guide virtualization/aggressive preload. Preserve current day rollover,
+number ordering, tune custody, polling/currentness cancellation, loading/empty/
+error recovery, Page routing contributed by WS4, and WS3's exact persisted
+setting vocabulary unless reviewed evidence requires a narrow replan.
+
+Keep renderer unprivileged; main owns schedule/channel truth and safe Guide
+projection, preload owns only strict renderer-safe validation, Settings remain
+main-persisted/WS3-owned, and `index.ts` remains composition. The source list in
+this handoff is freshness/read authority, not blanket write authorization: the
+reviewed WS5 plan must freeze exact sensitive files, no-touch owners, focus/
+accessibility behavior, row/cell virtualization and preload performance budgets,
+test fixtures, local visual proof, Windows/live/soak/paired debt, rollback, and
+stop conditions. Add no dependency, public schema, IPC/preload operation,
+privilege change, or copied/adapted upstream source without a reviewed replan;
+ledger any later approved adaptation before or with its import.
+
+Run one clean full `npm run verify` baseline before the first WS5 product edit,
+focused unit proof plus fresh material-only review at every checkpoint, local
+production-build Guide proof at 1280x720, 1920x1080, and approximately 900x700
+with keyboard/D-pad/simulated gamepad/pointer, reduced motion, forced colors,
+loading/empty/error/ready/detail/layout/density/tab/past-window/large-guide
+states, and one clean full local `npm run verify` closeout. Record unavailable
+Windows-machine, live Plex/large-lineup/day-rollover/DST/soak, physical-device,
+production-native-video/PIP, current-upstream paired, operator-assisted, and
+package obligations in an exact consolidated-proof packet without promoting
+support or closing their rows.
+
+Stop and replan on a contradiction in the assigned rows/current owners/WS3
+contribution contracts/upstream behavior, a need for an owner outside the
+reviewed unit, a new public contract or privilege/dependency/import, a weaker
+proof surface, or a required focused/build/architecture/full gate failure that
+cannot be resolved inside the unit. Close WS5's local gate only after all
+reviewed units, observed local verification, contribution/matrix/architecture/
+roadmap/Windows-proof reconciliation, and clean closeout review. Keep this
+canonical plan active and end with the complete WS6 feature-quality-loop
+handoff under the same targeted-audit and consolidated-proof policy.

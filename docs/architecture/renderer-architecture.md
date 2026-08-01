@@ -9,12 +9,14 @@ product checkpoint `87662b5`; prior Unit 3C-D `5f368d4`, viewport repair
 `77d09ad`, test-only harness checkpoint `f0e2817`, and reviewed focus plan
 `c59124a` remain accepted history. Unit 3C-D adds honest
 missing-output presentation without a public contract or persistence change.
-Unit 3D is accepted and WS3's local renderer gate is closed. WS4 targeted
-scope-load/planning is active; product/test/package/config edits require its own
-decision-complete plan and fresh approval of an exact first unit. Windows operational proof, including
-the mandatory three-row Package 6 operator-assisted fullscreen audit, remains
-pending. Historical completed units below describe their bounded
-implementation history only.
+Unit 3D is accepted and WS3's local renderer gate is closed. WS4's local input/
+overlay gate closes through final product checkpoint `3258511`, with final
+production-build proof 36/36 and controller visual inspection passed. WS5
+targeted scope-load/planning is next and requires its own decision-complete plan
+plus fresh first-unit approval before product edit. Windows operational proof,
+including `WS4-PROOF-01`–`WS4-PROOF-04` and the mandatory three-row Package 6
+operator-assisted fullscreen audit, remains pending. Historical completed units
+below describe their bounded implementation history only.
 
 This document owns the detailed renderer shell breakdown referenced by
 [`CURRENT_STATE.md`](./CURRENT_STATE.md). Keep the current-state table concise;
@@ -51,6 +53,9 @@ The renderer shell currently spans:
 - `src/renderer/guideTuneController.ts`
 - `src/renderer/desktopInput.ts`
 - `src/renderer/desktopCursor.ts`
+- `src/renderer/playerInputCommandController.ts`
+- `src/renderer/shell/navigationLifecycle.ts`
+- `src/renderer/sleepTimerController.ts`
 
 ## Current Behavior
 
@@ -71,6 +76,15 @@ hierarchy and dynamic menu rows, while the shared, information, and menu
 stylesheets own their separate visual families. Reduced-motion, forced-colors,
 exact viewport, focus, and local fullscreen continuity proof passed at Package 8
 closeout.
+
+WS4 preserves this ownership while adding semantic input aliases, context Page
+routing, a source-aware 500 ms Back hold, serialized guarded play/pause/seek/
+stop dispatch, and a session-only sleep timer. `playerInputCommandController.ts`
+owns current-safe-snapshot eligibility, one pending direct command, settlement,
+timeout, diagnostics, and cleanup. `sleepTimerController.ts` owns preset,
+deadline/countdown, warning, guarded pause-on-expiry, failure, and cleanup
+without persistence. `shell/navigationLifecycle.ts` retains precedence and
+protected-owner routing. `index.ts` only composes these owners.
 
 Renderer code must remain unprivileged. It must not import Electron, Node, main,
 preload, native-helper, Plex transport, persisted secrets, raw auth headers,
@@ -133,6 +147,26 @@ baseline from 264/264 to expected 265/265.
 No current-upstream paired Settings visual inspection has passed. The local
 viewport proof does not close paired-visual rows; Windows/native-video
 continuity remains `WS3-PROOF-06`.
+
+## WS4 Input And Overlay Renderer Ownership
+
+Unit 4A `f4570df` separates renderer direct-command custody from the overlay
+hotspot, adds exact F1/F2/F3/F4 and media aliases, and consumes only required
+safe `seekSupport`. Unit 4C `a654cdd` owns the 500 ms Back lifecycle and exact
+short/long protected-owner behavior. Unit 4D `3258511` adds the Subtitles/Sleep/
+Audio OSD and session timer. Unit 4B `a78228b` remains main-owned foreground
+app-command translation, and `c4dadcf` only repairs synthetic smoke press/
+release fidelity.
+
+Final local production-build proof passed 36/36 scenarios at 1280x720,
+1920x1080, and approximately 900x700 with keyboard, simulated D-pad/gamepad,
+pointer/cursor, focus, reduced motion, forced colors, overlay/sleep states, and
+exit. Controller visual inspection accepted hierarchy, clipping, focus rings,
+contrast, motion, countdown, and precedence. This does not prove physical
+Windows input, current-upstream paired parity, production native video, the
+Package 6 operator protocol, or packaged teardown; those remain
+`WS4-PROOF-01`–`WS4-PROOF-04`. Playback options `UI-47` remains capability-
+partial. No upstream source was copied or adapted.
 
 ## ARCH-01 Renderer Units
 

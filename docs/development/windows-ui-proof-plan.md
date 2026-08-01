@@ -14,9 +14,12 @@ product behavior or any platform claim. Unit 3C-D locally proves injected
 missing-output presentation and production fixed-schema ST-24/ST-25 producers;
 real Windows audio disappearance/relaunch/application, subtitle behavior, and
 support-bundle observation remain open. Unit 3D is accepted and WS3's local
-gate is closed. WS4 targeted scope-load/planning is active; no
-product/test/package/config edit starts before its own decision-complete plan
-and fresh approval of an exact first unit. RD-27
+gate is closed. WS4's local implementation gate closes through final product
+checkpoint `3258511`; its local production-build proof passed 36/36 with
+controller visual inspection, while `WS4-PROOF-01`–`WS4-PROOF-04` retain every
+Windows/native/device/paired/package obligation. WS5 targeted scope-load/
+planning is next and its product edits require a decision-complete plan plus
+fresh first-unit approval. RD-27
 is not the next implementation target. It begins one consolidated
 Windows proof campaign after WS3–WS8 and WS9 prerequisite implementation/
 hardening. Windows-required matrix rows remain blocked until observed proof.
@@ -164,6 +167,32 @@ The packet preserves WS1 proof debt, `WS1-PERF-01`,
 `WS2-POST-VALIDATION-01`, conservative production capabilities, later
 contribution gates, RD-27, and RD-28. A packet failure routes to the smallest
 reviewed implementation owner; the proof run never implements a fix.
+
+## WS4 Consolidated-Proof Packet
+
+WS4 local source is Unit 4A `f4570df`, Unit 4B `a78228b`, Unit 4C `a654cdd`,
+smoke-harness correction `c4dadcf`, and final product checkpoint `3258511`.
+The final local production-build packet passed 36/36 viewport, interaction,
+reduced-motion, and forced-colors scenarios with controller visual inspection.
+Final `npm run verify` passed 1,110 tests with one intentional skip and harness/
+docs passed 177/177. None of that local evidence substitutes for the rows
+below or promotes platform/playback support:
+
+| Debt id | Stable ids | Missing scenario, prerequisites, and final owner |
+| --- | --- | --- |
+| `WS4-PROOF-01` | `PB-09`–`PB-11`, `NAV-08`, `WIN-03`, `WIN-09` | On a Windows machine with production helper/libmpv, representative safe live media, and physical media-command/SMTC-capable input, observe focused and unfocused Play/Pause/Rewind/Fast Forward/Stop, exact ±10-second supported seek, inert unsupported/stale/busy paths, focus/cursor continuity, cleanup, and no global interception or forbidden diagnostics. Source checkpoint: clean `3258511`. Expected: only focused eligible commands reach existing guarded custody. Forbidden: background capture, stale mutation, capability promotion, raw platform/native/Plex material, or implementation during proof. Final owner: consolidated Windows/native campaign with failure routed to the smallest WS4 renderer or main app-command owner. |
+| `WS4-PROOF-02` | `NAV-01`–`NAV-07`, `NAV-09`–`NAV-12`, `WIN-09` | On Windows with keyboard, numpad, mouse, physical gamepad and available remote-like input, observe arrows/OK, editable bypass, shortcuts, 500 ms long-Back, repeats/releases/disconnect/blur, mixed focus/cursor, and Player/Mini Guide/Guide Page routing. Source checkpoint: clean `3258511`; cross-reference rather than duplicate WS8 live auth/profile/server proof. Expected: current protected-owner and focus precedence. Forbidden: stale focus, duplicate hold, privileged input leakage, support promotion, or product repair inside proof. Final owner: consolidated Windows input campaign, routing a failure to the smallest WS4 input/navigation owner. |
+| `WS4-PROOF-03` | `PB-15`–`PB-18`, `PB-25`, `NAV-10`, `NAV-12`–`NAV-15`, `UI-44`–`UI-51` | Pair current `0258dbe` overlay states with clean `3258511` and observe Windows production-native-video OSD, Now Playing, Mini Guide, options, badge, number, transition, sleep countdown/expiry, responsive DPI/viewports, focus, cursor, motion, and high contrast. Requires the exact operator-assisted Package 6 three-row fullscreen protocol below. Expected: renderer-safe presentation and guarded pause; forbidden: screenshots in tracked docs, native/secret leakage, inferred capability, or closing `UI-47`. Final owner: WS7 paired comparison plus consolidated Windows/native-video campaign. |
+| `WS4-PROOF-04` | `NAV-16`, `UI-52`; contribution-only `LC-02` | From a clean `3258511` packaged Windows build after WS9 prerequisites, observe exit confirmation, cancel/confirm focus, window close, renderer/main cleanup, persistence flush disposition, and no blocked data loss. Expected: deterministic teardown through current owners. Forbidden: treating local Electron smoke as package proof, taking `LC-02` from WS8, weakening cleanup, or advancing release readiness. Final owner: WS9/RD-28 package lifecycle with WS8 contribution cross-reference. |
+
+Allowed tracked evidence remains limited to sanitized platform/build identity,
+scenario/status, counts/hashes, and short renderer-safe outcomes after redaction.
+Raw screenshots, manifests, logs, support bundles, device details, media/account/
+server data, package trees, and local paths remain ignored. A failed row routes
+to the smallest reviewed owner and triggers implementation replanning; the proof
+campaign never edits product source. `UI-47`, `PB-22`–`PB-24`,
+`WS2-POST-VALIDATION-01`, all WS3 debt/contributions, conservative capability
+state, RD-27, and RD-28 remain open.
 
 ## Blocking Package 6 Three-Row Protocol
 

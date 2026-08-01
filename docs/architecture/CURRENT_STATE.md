@@ -12,9 +12,12 @@
 > harness checkpoint `f0e2817`, and focus-plan amendment `c59124a` remain
 > accepted history.
 > Windows/native/live/manual/current-upstream proof remains open.
-> Unit 3D is accepted and WS3's local gate is closed. WS4 targeted
-> scope-load/planning is active; product work requires its own
-> decision-complete plan and fresh approval of an exact first unit.
+> Unit 3D is accepted and WS3's local gate is closed. WS4's local input and
+> overlay implementation gate closes through final product checkpoint
+> `3258511`; Windows/native/physical-device/paired/package proof remains
+> `WS4-PROOF-01` through `WS4-PROOF-04`. WS5 targeted scope-load/planning is
+> next, and its product work requires a decision-complete plan plus fresh first-
+> unit approval.
 > RD-27 Windows observation, `WS2-POST-VALIDATION-01` native proof, and other
 > environment-specific evidence remain required but are accumulated for the
 > final consolidated Windows campaign; none can close missing code.
@@ -52,10 +55,15 @@ contracts, persistence, capability state, or stable-row classification.
 Unit 3C-F then repaired category-Right focus derivation inside two files and is
 accepted at final product checkpoint `87662b5` after focused 17/17, aggregate
 265/265, and clean implementation review. Unit 3D's final verification,
-authority review, and docs gates passed; WS3's local gate is closed. WS4
-targeted scope-load/planning is active, while product work requires its own
-decision-complete plan and fresh approval of an exact first unit; WS5 through
-WS9 remain unopened.
+authority review, and docs gates passed; WS3's local gate is closed. WS4 Units
+4A–4D and its isolated smoke correction land at `f4570df`, `a78228b`,
+`a654cdd`, `c4dadcf`, and `3258511`. Its local production-build proof passed
+36/36 with controller visual inspection, and final full verification passed
+1,110 tests with one intentional skip plus 177/177 harness/docs. This closes
+the local implementation gate only; `WS4-PROOF-01`–`WS4-PROOF-04` remain open.
+WS5 targeted scope-load/planning is next; WS5 product edits require its own
+decision-complete plan and fresh first-unit approval, while WS6–WS9 remain
+unopened.
 The accepted 227-row audit remains the program baseline, so WS3 entry validates
 only its assigned rows and affected current owners rather than repeating the
 program-wide audit.
@@ -464,11 +472,11 @@ The watch-list owners that remain over 500 lines are reported by
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
 | Import provenance | `docs/architecture/import-ledger.md` | Current copied/adapted upstream source ledger, including the exact Package 7 overlay presentation slice at pinned `4bdb0e1b3370e7893a582ec80226557727832d0b` and observed-current `a1a7ea7dcb1cfc8aee7cfcf88cf5a1dac718bf30` |
 | Original Lineup compatibility | `docs/architecture/original-lineup-reference-compatibility-matrix.md` and `docs/architecture/original-lineup-divergence-register.md` | Current copied/adapted/reference/proof-context memory, including Package 7 overlay presentation and the reviewed Package 6 Info-precedence divergence |
-| Product parity and MVP roadmap | `docs/product/lineup-product-parity-matrix.md`, `docs/development/windows-ui-proof-plan.md`, `docs/plans/2026-07-22-tier3-parity-correction-plan.md`, and `docs/roadmap/desktop-port-roadmap.md` | WS1 implementation/review landed but proof remains deferred/open. WS2's platform-neutral implementation gate is closed at published `d2f1e97`, with lifecycle hardening at `358e8de`; `WS2-POST-VALIDATION-01` remains native/Windows debt. WS3's local gate is accepted/closed at final product source `87662b5`; prior Unit 3C-D `5f368d4`, viewport repair `77d09ad`, and test-only harness proof `f0e2817` remain accepted history, while the consolidated proof packet remains open. WS4 targeted scope-load/planning is active; product/test/package/config edits require its own decision-complete plan and fresh approval of an exact first unit. WS5–WS9 remain unopened. Environment-specific proof accumulates for the final Windows campaign before RD-27/RD-28/program closeout. |
+| Product parity and MVP roadmap | `docs/product/lineup-product-parity-matrix.md`, `docs/development/windows-ui-proof-plan.md`, `docs/plans/2026-07-22-tier3-parity-correction-plan.md`, and `docs/roadmap/desktop-port-roadmap.md` | WS1 implementation/review landed but proof remains deferred/open. WS2's platform-neutral implementation gate is closed at published `d2f1e97`, with lifecycle hardening at `358e8de`; `WS2-POST-VALIDATION-01` remains native/Windows debt. WS3's local gate is accepted/closed at `87662b5` with its proof/contribution packet open. WS4's local implementation gate closes at `3258511` with `WS4-PROOF-01`–`WS4-PROOF-04` open. WS5 targeted scope-load/planning is next; WS5 product edits require a decision-complete plan and fresh first-unit approval. WS6–WS9 remain unopened. Environment-specific proof accumulates for the final Windows campaign before RD-27/RD-28/program closeout. |
 | File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size evidence, cohesion-based dispositions, fresh hotspot review triggers, and Tier 3 file-shape verification |
-| Electron main shell | `src/main/index.ts`, `src/main/applicationStartupCleanup.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with smoke-only assertion ownership split out of the startup/composition entrypoint, independently guarded startup-rollback ownership, plus RD-14 Unit 2 main-owned BrowserWindow/fullscreen/display/restore controller and Unit 3 foreground app-command controller while `src/main/index.ts` remains composition and IPC wiring |
-| Preload bridge | `src/preload/index.cts`, `src/preload/channels.cts`, `src/preload/settingsBridge.cts`, `src/preload/settingsBridgeGuards.cts`, `src/preload/playerRecoveryBridge.cts`, `src/preload/channelSetupBridge.cts`, `src/preload/channelBridgeGuards.cts`, and `src/preload/diagnosticsBridgeGuards.cts` | Narrow shell/window/player/diagnostics/Plex/channel/Settings bridge with runtime payload guards. WS3 exposes exactly three validated Settings operations and adds only the closed `player.pauseIfCurrent`/`player.playIfCurrent` intent literals to the existing player channel; snapshot custody remains in main. WS2 exposes only the closed validated Retry-current/Skip-next recovery operation through `playerRecoveryBridge.cts`; renderer remains unprivileged. WS1 exposes exactly five validated Channel Builder operations—`getStatus`, `startReview`, `startApply`, `getOperation`, and `cancel`—without privileged payload custody. RD-22B exposes only validated `window.lineupDesktop.plex` operations while rejecting malformed or privileged Plex results locally. ARCH-02 keeps the sandbox-compatible entrypoint as the only `contextBridge`/`ipcRenderer` value owner. |
-| Renderer shell, Settings, and Channel Builder flow | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md), `src/renderer/index.ts`, `src/renderer/settings/**`, `src/renderer/settingsSetup.ts`, `src/renderer/playerErrorRecoveryController.ts`, `src/renderer/channelSetup/builderConfigState.ts`, `src/renderer/workflow.ts`, `src/renderer/domBindings.ts`, and `src/renderer/styles/workflow-screens.css` | Unprivileged runtime-backed app shell with live Plex onboarding/library, version-2 persisted seven-category Settings, first-run audio setup, persistent Switch Profile, scheduler-backed Guide, safe Player/overlay projection, deterministic focus/input, and WS1 Channel Builder configuration, pre-build review, progress, result, recovery, and cancellation presentation. WS3's renderer owns route-scoped guarded pause/resume, Settings focus/state, capability-disabled presentation, themes, and overlay-duration injection without native/Plex privilege. WS2's renderer recovery controller owns only Retry/Skip request generations, busy/error settlement, and focus restoration; main remains authoritative. New paired Settings visuals and the named Windows/manual/native/accessibility states remain open; `index.ts` remains composition wiring. |
+| Electron main shell | `src/main/index.ts`, `src/main/applicationStartupCleanup.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with split smoke/startup owners plus main-owned BrowserWindow/fullscreen/display/restore and foreground app-command custody. WS4 maps six reviewed focused media commands into the existing renderer input path, ignores unknown/next/previous commands, and never installs `globalShortcut`; `src/main/index.ts` remains composition and IPC wiring. |
+| Preload bridge | `src/preload/index.cts`, `src/preload/channels.cts`, `src/preload/settingsBridge.cts`, `src/preload/settingsBridgeGuards.cts`, `src/preload/playerRecoveryBridge.cts`, `src/preload/channelSetupBridge.cts`, `src/preload/channelBridgeGuards.cts`, and `src/preload/diagnosticsBridgeGuards.cts` | Narrow shell/window/player/diagnostics/Plex/channel/Settings bridge with runtime payload guards. WS3 exposes three Settings operations and guarded play/pause; WS4 adds only the closed `player.stopIfCurrent`/`player.seekRelativeIfCurrent` intent literals plus required safe `seekSupport`, with snapshot identity stripped before host dispatch. WS2 recovery and WS1 Channel Builder operations remain unchanged; renderer stays unprivileged and the sandbox-compatible entrypoint remains the sole `contextBridge`/`ipcRenderer` value owner. |
+| Renderer shell, Settings, Channel Builder, input, and overlays | [`docs/architecture/renderer-architecture.md`](./renderer-architecture.md), `src/renderer/index.ts`, `src/renderer/settings/**`, `src/renderer/settingsSetup.ts`, `src/renderer/playerErrorRecoveryController.ts`, `src/renderer/playerInputCommandController.ts`, `src/renderer/sleepTimerController.ts`, `src/renderer/desktopInput.ts`, `src/renderer/shell/navigationLifecycle.ts`, `src/renderer/channelSetup/builderConfigState.ts`, `src/renderer/workflow.ts`, and overlay/DOM/style owners | Unprivileged runtime-backed shell with WS1 Channel Builder, WS3 Settings, scheduler-backed Guide, and safe Player/overlay projection. WS4 adds semantic input aliases, context paging, source-aware 500 ms Back hold, serialized guarded direct commands, Subtitles/Sleep/Audio OSD, and session sleep-timer lifecycle. Main remains authoritative; `index.ts` is composition wiring. Local 36/36 production-build proof passed, while paired/Windows/native/device/package evidence remains `WS4-PROOF-01`–`WS4-PROOF-04`. |
 | Shell contract vocabulary | `src/contracts/shell.ts` | Renderer-safe shell/window/player bridge contract |
 | Settings contract vocabulary | `src/contracts/settings.ts` and `src/contracts/settingsAudioValidation.ts` | WS3 version-2 renderer-safe values, defaults, normalization, capability projection, opaque audio-output rows, centralized strict audio-list/label validation, three-operation request/result vocabulary, migration-compatible snapshots, and fixed safe failures. Conservative capabilities remain authoritative until later reviewed native/live proof. |
 | Main Settings policy and audio owner | `src/main/settings/desktopSettingsPolicy.ts`, `src/main/settings/settingsAudioOutputOwner.ts`, `src/main/settings/settingsNativeHostComposition.ts`, and `src/main/settings/settingsIpc.ts` | Main-owned Settings snapshot projection, authorized IPC, stream/resolver/diagnostic/private-helper preference consumers, opaque audio-device identity, and raw native-key custody. The injectable composition factory creates the production host once, hydrates Settings policy, and shares the same host binding with the audio owner and player IPC; development/smoke do not invoke the production factory. Renderer never receives raw device keys or promotes capability support. |
@@ -544,6 +552,39 @@ through WS5; `ST-23` does not close WS8 `ON-08`. `WS3-PROOF-01` through
 No upstream source was copied or adapted; `0258dbe` was reference-only and the
 import ledger is unchanged.
 
+## WS4 Input And Overlay Implementation Gate
+
+WS4 closes its local implementation gate through Unit 4A `f4570df`, Unit 4B
+`a78228b`, Unit 4C `a654cdd`, isolated smoke-harness correction `c4dadcf`, and
+Unit 4D `3258511`. The renderer now owns exact semantic keyboard/remote-like/
+gamepad aliases, Page context, one source-aware 500 ms Back hold, serialized
+guarded direct commands, and the session-only sleep timer. Main's existing
+`shellAppCommandController.ts` remains the sole foreground BrowserWindow
+app-command owner. The OSD exposes Subtitles/Sleep/Audio without adding play,
+seek, or stop buttons.
+
+Guarded stop and relative-seek add only their two closed renderer intent
+literals. Required safe `seekSupport` projects from the main-owned selected
+capability profile through load/snapshot validation; exact `supported` alone
+enables seek. Snapshot identity is compared before request custody and never
+reaches the host. Sleep expiry uses the same serialized current-request pause
+path, records bounded failure, never retries, and owns no persistence or power
+lifecycle. Conservative production capabilities and main/preload/native/Plex
+custody otherwise remain unchanged.
+
+Final production-build local proof passed 36/36 scenarios at 1280x720,
+1920x1080, and approximately 900x700 across keyboard, simulated D-pad/gamepad,
+pointer/cursor, focus, reduced motion, forced colors, overlays, sleep states,
+and exit; controller visual inspection passed. Final `npm run verify` passed
+1,110 tests with one intentional skip and harness/docs passed 177/177, with all
+required static gates clean. This is local proof only. `WS4-PROOF-01` retains
+physical Windows media/app-command and production playback evidence;
+`WS4-PROOF-02` retains real mixed-device navigation/focus evidence;
+`WS4-PROOF-03` retains paired/current-upstream and Windows production-native-
+video/Package 6 evidence; `WS4-PROOF-04` retains packaged close/teardown.
+`UI-47` remains partial, `PB-22`–`PB-24` remain WS2-owned/open, and no upstream
+source was copied or adapted.
+
 ## Local UI Proof Bundle Closeout
 
 The 2026-07-10 reopen corrected the earlier 2026-06-12 visual claim. Packages
@@ -596,10 +637,10 @@ playback resolver for deterministic proof. In production mode, player IPC uses
 the production native host factory when a Windows helper binary is available and
 otherwise fails closed with renderer-safe unsupported-capability results.
 RD-25/RD-26 historical slices are complete and reviewed only at their recorded
-scope. WS2's current platform-neutral implementation gate and WS3's local
-Settings gate through `87662b5` are closed.
-Windows/native/manual proof remains `WS2-POST-VALIDATION-01`, the WS3
-consolidated packet, and RD-27 work as applicable.
+scope. WS2's platform-neutral gate, WS3's local Settings gate through
+`87662b5`, and WS4's local input/overlay gate through `3258511` are closed.
+Windows/native/manual proof remains `WS2-POST-VALIDATION-01`, the WS3 and WS4
+consolidated packets, and RD-27 work as applicable.
 Fullscreen requests map to the existing
 `window.enterFullscreen` and `window.exitFullscreen` renderer intents.
 RD-17 also exposes `window.lineupDesktop.diagnostics.recordRendererEvent()`,
@@ -621,10 +662,11 @@ against the unchanged 2,000 ms target). WS2 has since closed its platform-neutra
 implementation gate without advancing WS1 stable IDs or evidence
 classifications. WS3's product source is `87662b5`; `5f368d4` remains prior
 Unit 3C-D, `77d09ad` the viewport repair, and `f0e2817` test-only harness
-proof. Unit 3D is accepted and WS3's local gate is closed. WS4 targeted
-scope-load/planning is active; no product/test/package/config edit begins
-before its own decision-complete plan and fresh approval of an exact first
-unit. WS5 through WS9 remain unopened. RD-27 remains later and is not
+proof. Unit 3D is accepted and WS3's local gate is closed. WS4's local gate
+closes through `3258511`; `WS4-PROOF-01`–`WS4-PROOF-04` remain open. WS5
+targeted scope-load/planning is next; no WS5 product/test/package/config edit
+begins before its decision-complete plan and fresh approval of an exact first
+unit. WS6 through WS9 remain unopened. RD-27 remains later and is not
 authorized to implement those gaps silently. The final consolidated Windows
 campaign owns accumulated environment-specific proof, not another
 implementation audit.

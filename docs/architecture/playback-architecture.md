@@ -5,7 +5,10 @@ Windows/manual product proof still pending. WS2 now closes the current
 platform-neutral playback implementation gate without promoting the
 conservative production profile. WS3 now adds locally verified Settings
 preference/control contributions and request-bound Settings pause/resume
-without promoting that profile. RD-25 implements the production
+without promoting that profile. WS4 adds locally verified guarded stop/
+relative-seek input, foreground media-command contribution, and guarded sleep-
+expiry pause without promoting that profile; `WS4-PROOF-01` and
+`WS4-PROOF-03` retain production Windows/native observation. RD-25 implements the production
 native playback MVP, replacing the fake playback bootstrap with a
 production-shaped, main/helper-owned native playback path for live Plex-backed
 scheduled media. A main-only privileged load context propagates the private
@@ -353,6 +356,34 @@ Direct Play remains the only supported production media path; DTS, subtitle
 delivery/switching, HDR/Dolby Vision, Direct Stream, and transcode remain
 unsupported or unproven until later reviewed evidence changes the capability
 provider.
+
+## WS4 Guarded Input And Sleep Contributions To Playback
+
+WS4 Unit 4A `f4570df` adds only the closed renderer intents
+`player.stopIfCurrent` and `player.seekRelativeIfCurrent`, plus required safe
+`seekSupport` on load/snapshot projection. The selected main-owned capability
+profile remains authoritative; renderer seek is inert unless support is exactly
+`supported`. Renderer snapshot identity is validator-checked and mapped only to
+the adapter's existing pre-custody expected-identity comparison, never to
+`PlayerCommand` or the helper. A stale request creates no custody, host call, or
+snapshot mutation. Existing unguarded internal commands and native-helper
+protocol remain unchanged.
+
+Unit 4D `3258511` reuses guarded `player.pauseIfCurrent` through the serialized
+renderer direct-command owner for sleep expiry. It starts a pause only for the
+exact current consistent playing snapshot and no pending command; synchronous
+ineligibility yields bounded UI/diagnostic failure, asynchronous failure remains
+diagnostic-only, and neither path retries or resurrects timer state. The timer
+is session-only and adds no main timing, persistence, power, or lifecycle owner.
+
+Final local proof and full verification pass only the platform-neutral input/
+overlay implementation gate. MP4/H.264/AAC Direct Play remains the sole
+supported production media path; Direct Stream, transcode, subtitles, DTS,
+track switching, HDR/Dolby Vision, and wider seek/native claims remain
+unsupported or unproven. `PB-22`–`PB-24` remain WS2-owned/open,
+`WS2-POST-VALIDATION-01` and WS3 proof remain separate, `UI-47` remains partial,
+and real physical Windows command plus production-native sleep/overlay proof is
+`WS4-PROOF-01`/`WS4-PROOF-03`. No upstream source was copied or adapted.
 
 ## RD-25 Production Native Playback MVP
 
