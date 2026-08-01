@@ -369,12 +369,19 @@ the adapter's existing pre-custody expected-identity comparison, never to
 snapshot mutation. Existing unguarded internal commands and native-helper
 protocol remain unchanged.
 
-Unit 4D `3258511` reuses guarded `player.pauseIfCurrent` through the serialized
-renderer direct-command owner for sleep expiry. It starts a pause only for the
-exact current consistent playing snapshot and no pending command; synchronous
-ineligibility yields bounded UI/diagnostic failure, asynchronous failure remains
-diagnostic-only, and neither path retries or resurrects timer state. The timer
-is session-only and adds no main timing, persistence, power, or lifecycle owner.
+Unit 4D `3258511`, with post-closeout correction `1f815f3`, reuses guarded
+`player.pauseIfCurrent` through the serialized renderer direct-command owner for
+sleep expiry. It starts a pause only for the exact current consistent playing
+snapshot. When a play or relative-seek command is in flight, the owner retains
+exactly one sleep-specific deferred pause, then rereads the safe snapshot and
+validates the same request and playing state before dispatch. An in-flight stop
+is immediately ineligible. For an accepted deferral, rejection or timeout of the
+in-flight play/seek command, route leave, cleanup, request replacement, or failed
+fresh validation resolves it as rejected. Immediate ineligibility or deferral
+rejection yields bounded UI/diagnostic failure. Once pause dispatch starts, its
+settlement remains direct-command-owned; later pause rejection, timeout, or
+failure is diagnostic-only, and no outcome retries the pause. The timer remains
+session-only and adds no main timing, persistence, power, or lifecycle owner.
 
 Final local proof and full verification pass only the platform-neutral input/
 overlay implementation gate. MP4/H.264/AAC Direct Play remains the sole

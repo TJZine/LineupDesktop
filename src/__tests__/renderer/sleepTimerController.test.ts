@@ -85,9 +85,22 @@ test('deferred guarded pause remains pending and ignores a resolution after canc
   assert.deepEqual(harness.diagnostics(), []);
 
   harness.controller.cancel();
-  harness.resolveDeferred('started');
+  harness.invokeRetainedDeferred('started');
   assert.equal(harness.projection().status, 'off');
   assert.deepEqual(harness.diagnostics(), []);
+});
+
+test('cleanup ignores a retained deferred pause resolution after disposal', () => {
+  const harness = createHarness(undefined, 'deferred');
+  harness.controller.cyclePreset();
+  harness.advance(15 * 60_000);
+  assert.equal(harness.projection().status, 'expiring');
+
+  harness.controller.cleanup();
+  harness.invokeRetainedDeferred('started');
+  assert.equal(harness.projection().status, 'off');
+  assert.deepEqual(harness.diagnostics(), []);
+  assert.equal(harness.pendingTimers(), 0);
 });
 
 test('cancel and cleanup remove the owned timeout and cleanup is terminal', () => {
@@ -115,7 +128,8 @@ function createHarness(
   const timers = new Map<number, { callback: () => void; dueAt: number }>();
   const pauses: string[] = [];
   const diagnostics: string[] = [];
-  let deferredResolution: ((result: DeferredPauseResult) => void) | null = null;
+  let activeDeferredResolution: ((result: DeferredPauseResult) => void) | null = null;
+  let retainedDeferredResolution: ((result: DeferredPauseResult) => void) | null = null;
   let renderCount = 0;
   const controller = createSleepTimerController({
     host: {
@@ -135,12 +149,15 @@ function createHarness(
       pauses.push(requestId);
       if (pauseResult === 'deferred') {
         assert.ok(onDeferredResolved);
-        deferredResolution = onDeferredResolved;
+        activeDeferredResolution = onDeferredResolved;
+        retainedDeferredResolution = onDeferredResolved;
       }
       return pauseResult;
     },
     cancelDeferredPause: () => {
-      deferredResolution = null;
+      const resolve = activeDeferredResolution;
+      activeDeferredResolution = null;
+      resolve?.('rejected');
     },
     recordDiagnostic: (operation, message) => { diagnostics.push(`${operation}:${message}`); },
   });
@@ -161,10 +178,11 @@ function createHarness(
         next[1].callback();
       }
     },
-    resolveDeferred: (result: DeferredPauseResult) => {
-      const resolve = deferredResolution;
-      deferredResolution = null;
-      resolve?.(result);
+    invokeRetainedDeferred: (result: DeferredPauseResult) => {
+      const resolve = retainedDeferredResolution;
+      retainedDeferredResolution = null;
+      assert.ok(resolve, 'expected a retained deferred-pause callback');
+      resolve(result);
     },
     advance: (deltaMs: number) => {
       const target = nowMs + deltaMs;
