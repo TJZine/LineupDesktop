@@ -512,6 +512,197 @@ test('route DOM suppresses now-playing chrome and summary when ready data has no
   }
 });
 
+test('Guide Now Watching setting projects exactly one layout-owned status without disturbing the grid', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    createElement: (tagName: string) => new ElementDouble(tagName),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const grid = new ElementDouble();
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.epgGridElement = grid as unknown as HTMLElement;
+    const maxSafeTitle = 'T'.repeat(2_000);
+    const maxSafeChannelNumber = '9'.repeat(120);
+    const maxSafeChannelName = 'C'.repeat(2_000);
+    const maxSafeChannelLabel = `${maxSafeChannelNumber} - ${maxSafeChannelName}`;
+    const base = createWorkflowState('guide', {
+      ...GUIDE_PRESENTATION,
+      channels: GUIDE_PRESENTATION.channels.map((channel) => ({
+        ...channel,
+        number: maxSafeChannelNumber,
+        name: maxSafeChannelName,
+      })),
+      nowWatching: { ...GUIDE_PRESENTATION.nowWatching!, title: maxSafeTitle },
+    });
+    const render = (enabled: boolean, layout: 'classic' | 'overlay', route: 'guide' | 'player' = 'guide') => {
+      const state = route === 'guide' ? base : createWorkflowState('player', base.guidePresentation);
+      renderWorkflowDom(
+        {
+          ...state,
+          settingsDraft: {
+            ...state.settingsDraft,
+            nowWatchingBannerEnabled: enabled,
+            guideLayout: layout,
+          },
+        },
+        createPlayerOverlayState(),
+        createRendererSafePlayerSnapshot(),
+        dom,
+      );
+    };
+
+    render(true, 'classic');
+    const classic = findElementsByClassName(grid, 'epg-classic-now-playing');
+    assert.equal(classic.length, 1);
+    assert.equal(findElementsByClassName(grid, 'epg-now-watching-banner').length, 0);
+    assert.equal(classic[0]?.getAttribute('role'), 'status');
+    assert.equal(classic[0]?.getAttribute('aria-live'), 'polite');
+    assert.equal(classic[0]?.getAttribute('aria-atomic'), 'true');
+    assert.equal(classic[0]?.dataset.focusId, undefined);
+    const classicChannel = findElementsByClassName(classic[0]!, 'epg-classic-now-playing-channel');
+    assert.equal(classicChannel[0]?.textContent, maxSafeChannelLabel);
+    const classicFocusIds = findFocusIds(grid);
+    assert.ok(classicFocusIds.some((focusId) => focusId.startsWith('guide-program-')));
+
+    render(true, 'overlay');
+    const overlay = findElementsByClassName(grid, 'epg-now-watching-banner');
+    assert.equal(findElementsByClassName(grid, 'epg-classic-now-playing').length, 0);
+    assert.equal(overlay.length, 1);
+    assert.equal(overlay[0]?.getAttribute('role'), 'status');
+    assert.equal(overlay[0]?.getAttribute('aria-live'), 'polite');
+    assert.equal(overlay[0]?.getAttribute('aria-atomic'), 'true');
+    assert.equal(overlay[0]?.dataset.focusId, undefined);
+    const overlayChannel = findElementsByClassName(overlay[0]!, 'epg-now-watching-channel');
+    const overlayProgram = findElementsByClassName(overlay[0]!, 'epg-now-watching-program');
+    assert.equal(overlayChannel.length, 1);
+    assert.equal(overlayChannel[0]?.textContent, maxSafeChannelLabel);
+    assert.equal(overlayChannel[0]?.children.length, 0);
+    assert.equal(overlayProgram.length, 1);
+    assert.equal(overlayProgram[0]?.textContent, maxSafeTitle);
+    assert.equal(overlayProgram[0]?.children.length, 0);
+    assert.equal(collectText(overlay[0]!).includes(maxSafeTitle), true);
+    assert.deepEqual(findFocusIds(grid), classicFocusIds);
+    assert.equal(findElementsByRole(grid, 'gridcell').length, 1);
+
+    for (const layout of ['classic', 'overlay'] as const) {
+      render(false, layout);
+      assert.equal(findElementsByClassName(grid, 'epg-classic-now-playing').length, 0);
+      assert.equal(findElementsByClassName(grid, 'epg-now-watching-banner').length, 0);
+      assert.deepEqual(findFocusIds(grid), classicFocusIds);
+    }
+
+    render(true, 'overlay', 'player');
+    assert.equal(findElementsByClassName(grid, 'epg-classic-now-playing').length, 0);
+    assert.equal(findElementsByClassName(grid, 'epg-now-watching-banner').length, 0);
+
+    render(true, 'classic');
+    assert.equal(findElementsByClassName(grid, 'epg-classic-now-playing').length, 1);
+    assert.equal(findElementsByClassName(grid, 'epg-now-watching-banner').length, 0);
+    assert.deepEqual(findFocusIds(grid), classicFocusIds);
+  } finally {
+    restoreDocument(originalDocument);
+  }
+});
+
+test('Guide clears stale Now Watching surfaces for every non-ready presentation state in both layouts', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    createElement: (tagName: string) => new ElementDouble(tagName),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const grid = new ElementDouble();
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.epgGridElement = grid as unknown as HTMLElement;
+    const base = createWorkflowState('guide');
+    assert.notEqual(base.guidePresentation.nowWatching, null);
+    const render = (layout: 'classic' | 'overlay', presentationState: 'ready' | 'loading' | 'empty-channels' | 'empty-programs' | 'error') => {
+      renderWorkflowDom(
+        {
+          ...base,
+          epg: setEpgPresentationState(base.epg, presentationState),
+          settingsDraft: {
+            ...base.settingsDraft,
+            nowWatchingBannerEnabled: true,
+            guideLayout: layout,
+          },
+        },
+        createPlayerOverlayState(),
+        createRendererSafePlayerSnapshot(),
+        dom,
+      );
+    };
+
+    for (const layout of ['classic', 'overlay'] as const) {
+      const activeClass = layout === 'classic'
+        ? 'epg-classic-now-playing'
+        : 'epg-now-watching-banner';
+      for (const presentationState of ['loading', 'empty-channels', 'empty-programs', 'error'] as const) {
+        render(layout, 'ready');
+        assert.equal(findElementsByClassName(grid, activeClass).length, 1);
+
+        render(layout, presentationState);
+        assert.equal(grid.getAttribute('role'), null);
+        assert.equal(findElementsByClassName(grid, 'epg-classic-now-playing').length, 0);
+        assert.equal(findElementsByClassName(grid, 'epg-now-watching-banner').length, 0);
+        assert.doesNotMatch(collectText(grid), /NOW PLAYING/u);
+      }
+    }
+  } finally {
+    restoreDocument(originalDocument);
+  }
+});
+
+test('Guide Now Watching surfaces explicitly honor reduced motion and forced colors', () => {
+  const processValue = Reflect.get(globalThis, 'process') as {
+    getBuiltinModule(name: string): { readFileSync(path: URL, encoding: 'utf8'): string };
+  };
+  const css = processValue.getBuiltinModule('node:fs').readFileSync(
+    new URL('../../renderer/styles/guide-epg.css', import.meta.url),
+    'utf8',
+  );
+  const bannerStart = css.indexOf('.epg-now-watching-banner {');
+  const statePanelStart = css.indexOf('.epg-state-panel {', bannerStart);
+  assert.ok(bannerStart >= 0);
+  assert.ok(statePanelStart > bannerStart);
+  const banner = css.slice(bannerStart, statePanelStart);
+  assert.match(banner, /grid-template-columns:\s*minmax\(0, max-content\)\s*minmax\(0, 1fr\)\s*minmax\(0, 2fr\)\s*minmax\(0, max-content\);/u);
+  assert.match(banner, /overflow: hidden;/u);
+  assert.match(banner, /> \* \{\s*min-width: 0;/u);
+  assert.match(css, /\.epg-now-watching-live,\s*\.epg-now-watching-channel,\s*\.epg-now-watching-program,\s*\.epg-now-watching-time \{\s*overflow: hidden;\s*text-overflow: ellipsis;\s*white-space: nowrap;/u);
+  const reducedStart = css.indexOf('@media (prefers-reduced-motion: reduce)');
+  const forcedStart = css.indexOf('@media (forced-colors: active)');
+  assert.ok(reducedStart >= 0);
+  assert.ok(forcedStart > reducedStart);
+  const reduced = css.slice(reducedStart, forcedStart);
+  assert.match(reduced, /\.epg-classic-now-playing,[\s\S]*\.epg-now-watching-banner[\s\S]*animation: none !important;/u);
+  assert.match(reduced, /transition: none !important;/u);
+  const forced = css.slice(forcedStart);
+  assert.match(forced, /\.epg-classic-now-playing,[\s\S]*\.epg-now-watching-banner[\s\S]*color: CanvasText;/u);
+  assert.match(forced, /\.epg-now-watching-banner[\s\S]*border-color: CanvasText;/u);
+});
+
 test('route DOM renders player OSD fields and playback option rows', () => {
   const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
   const documentDouble = {
@@ -1200,6 +1391,20 @@ function findElementsByRole(element: ElementDouble, role: string): ElementDouble
   return [
     ...(element.getAttribute('role') === role ? [element] : []),
     ...element.children.flatMap((child) => findElementsByRole(child, role)),
+  ];
+}
+
+function findElementsByClassName(element: ElementDouble, className: string): ElementDouble[] {
+  return [
+    ...(element.className.split(' ').includes(className) ? [element] : []),
+    ...element.children.flatMap((child) => findElementsByClassName(child, className)),
+  ];
+}
+
+function findFocusIds(element: ElementDouble): string[] {
+  return [
+    ...(element.dataset.focusId === undefined ? [] : [element.dataset.focusId]),
+    ...element.children.flatMap(findFocusIds),
   ];
 }
 

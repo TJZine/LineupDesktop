@@ -108,13 +108,22 @@
 
 .epg-now-watching-banner {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns:
+    minmax(0, max-content)
+    minmax(0, 1fr)
+    minmax(0, 2fr)
+    minmax(0, max-content);
   align-items: center;
   gap: var(--space-4);
+  overflow: hidden;
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-control);
   background: rgba(0, 0, 0, 0.52);
+}
+
+.epg-now-watching-banner > * {
+  min-width: 0;
 }
 
 .epg-state-panel {
@@ -134,6 +143,15 @@
 .epg-now-watching-live,
 .epg-now-watching-program {
   color: var(--color-text-subtle);
+}
+
+.epg-now-watching-live,
+.epg-now-watching-channel,
+.epg-now-watching-program,
+.epg-now-watching-time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .epg-now-watching-live {
@@ -495,6 +513,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .epg-classic-now-playing,
+  .epg-now-watching-banner {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+
   .epg-grid__program[data-selected-program="true"] .epg-cell-title {
     animation: none !important;
     transform: none !important;
@@ -582,6 +607,15 @@
 }
 
 @media (forced-colors: active) {
+  .epg-classic-now-playing,
+  .epg-now-watching-banner {
+    color: CanvasText;
+  }
+
+  .epg-now-watching-banner {
+    border-color: CanvasText;
+  }
+
   [data-epg-detail-artwork] {
     border-color: CanvasText;
     outline: 1px solid CanvasText;

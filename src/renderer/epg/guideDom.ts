@@ -215,10 +215,14 @@ export function renderEpgGuideDom(
   settings: Pick<DesktopSettingsValues,
     'guideDensity' |
     'previewBadgesEnabled' |
-    'libraryTabsEnabled'> = {
+    'libraryTabsEnabled' |
+    'nowWatchingBannerEnabled' |
+    'guideLayout'> = {
     guideDensity: 'comfortable',
     previewBadgesEnabled: true,
     libraryTabsEnabled: true,
+    nowWatchingBannerEnabled: true,
+    guideLayout: 'classic',
   },
 ): void {
   const selectedRow = view.guide.selectedProgram === null
@@ -275,9 +279,18 @@ export function renderEpgGuideDom(
   headerBrand.append(brand);
 
   const shellNowWatching = view.guide.shell.nowWatching;
-  const nowPlaying = shellNowWatching === null ? null : document.createElement('div');
+  const showNowWatching = view.route === 'guide' &&
+    view.guide.presentationState === 'ready' &&
+    settings.nowWatchingBannerEnabled &&
+    shellNowWatching !== null;
+  const nowPlaying = !showNowWatching || settings.guideLayout !== 'classic'
+    ? null
+    : document.createElement('div');
   if (nowPlaying !== null) {
     nowPlaying.className = 'epg-classic-now-playing';
+    nowPlaying.setAttribute('role', 'status');
+    nowPlaying.setAttribute('aria-live', 'polite');
+    nowPlaying.setAttribute('aria-atomic', 'true');
     const nowLabel = document.createElement('span');
     nowLabel.className = 'epg-classic-now-playing-label';
     nowLabel.textContent = 'NOW PLAYING';
@@ -302,10 +315,14 @@ export function renderEpgGuideDom(
   if (nowPlaying !== null) classicHeader.append(nowPlaying);
   classicHeader.append(focusHint);
 
-  const nowWatching = shellNowWatching === null ? null : document.createElement('div');
+  const nowWatching = !showNowWatching || settings.guideLayout !== 'overlay'
+    ? null
+    : document.createElement('div');
   if (nowWatching !== null && shellNowWatching !== null) {
     nowWatching.className = 'epg-now-watching-banner';
+    nowWatching.setAttribute('role', 'status');
     nowWatching.setAttribute('aria-live', 'polite');
+    nowWatching.setAttribute('aria-atomic', 'true');
     const nowBannerLabel = document.createElement('span');
     nowBannerLabel.className = 'epg-now-watching-live';
     nowBannerLabel.textContent = 'NOW PLAYING';
