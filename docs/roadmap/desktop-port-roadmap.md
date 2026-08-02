@@ -20,10 +20,10 @@ WS3's final product source is Unit 3C-F checkpoint `87662b5`; Unit 3C-D
 remain accepted history. Unit 3D is accepted and WS3's local gate is closed.
 WS4's local implementation gate closes through `f4570df`, `a78228b`,
 `a654cdd`, `c4dadcf`, and final product checkpoint `3258511`;
-`WS4-PROOF-01`–`WS4-PROOF-04` remain open. WS5 targeted scope-load/planning is
-next; no WS5 product/test/package/config edit begins before its own decision-
-complete plan and fresh approval of an exact first unit. WS6–WS9 remain
-unopened.
+`WS4-PROOF-01`–`WS4-PROOF-04` remain open. WS5's decision-complete plan is
+frozen at `73ce570`; Units 5A–5C land at `46acf1f`, `6180815`, and `beeb5ef`.
+Production Unit 5D is the next authorized coding package, with its Windows
+composition proof deferred to 5H. WS6–WS9 remain unopened.
 Locally verifiable implementation advances in order before one consolidated
 Windows/native/manual/live/package campaign. Windows proof cannot implement or
 waive code gaps, and absent proof cannot promote a row.
@@ -47,9 +47,10 @@ durable completion summary.
       platform-neutral implementation gate is closed; WS3 product checkpoints
       through final product checkpoint `87662b5` plus test-only harness proof
       `f0e2817` are closed; Unit 3D is accepted; WS4's local gate closes through
-      `3258511` with `WS4-PROOF-01`–`WS4-PROOF-04` open; and WS5 targeted
-      scope-load/planning is next. WS5 product/test/package/config edits require
-      a decision-complete plan and fresh approval of an exact first unit;
+      `3258511` with `WS4-PROOF-01`–`WS4-PROOF-04` open; WS5's plan is frozen at
+      `73ce570`, Units 5A–5C land at `46acf1f`, `6180815`, and `beeb5ef`, and
+      production Unit 5D is the next authorized coding package with Windows
+      composition proof deferred to 5H;
       WS6–WS9 remain unopened.
 - [x] Workflow, skills, launchers, role config, docs verifier, redaction
   verifier, and architecture lint scaffolded.
@@ -344,7 +345,7 @@ live integration blockers delay the complete Desktop skeleton.
 | Production playback controls and playback-state presentation over native video | RD-25 | Preserve the upstream playback interaction feel where it fits Desktop native-helper boundaries; renderer stays free of raw playback descriptors, URLs, headers, and native handles. |
 | Subtitle/audio/HDR option UI and playback-quality controls | RD-26 | Import or adapt upstream media-option presentation and interaction patterns only after runtime media-option behavior is real and renderer-safe. |
 | Historical WebOS-informed local renderer regression bundle | Complete WebOS UI Parity Reopen, proof bundle closed 2026-07-16 | Packages 0–8 are locally captured at exact viewports; the 2026-07-22 master matrix supersedes any full feature/UI parity interpretation. |
-| Current-upstream feature/UI parity correction | Active reviewed nine-workstream parity-correction plan | WS1 implementation/review landed but deferred proof remains open. WS2's platform-neutral implementation gate is closed at `d2f1e97`, lifecycle hardening landed at `358e8de`, and `WS2-POST-VALIDATION-01` remains open. WS3's local gate closes through `87662b5` with its consolidated proof/contribution packet open. WS4's local gate closes through `f4570df`, `a78228b`, `a654cdd`, smoke correction `c4dadcf`, and final product `3258511`; 36/36 production-build local proof and final full verification passed, while `WS4-PROOF-01`–`WS4-PROOF-04` remain open without capability promotion. WS5 targeted scope-load/planning is next and requires a decision-complete plan plus fresh first-unit approval before product edit. WS6–WS9 remain unopened. Do not bury implementation inside RD-27 observation. |
+| Current-upstream feature/UI parity correction | Active reviewed nine-workstream parity-correction plan | WS1 implementation/review landed but deferred proof remains open. WS2's platform-neutral implementation gate is closed at `d2f1e97`, lifecycle hardening landed at `358e8de`, and `WS2-POST-VALIDATION-01` remains open. WS3's local gate closes through `87662b5` with its consolidated proof/contribution packet open. WS4's local gate closes through `f4570df`, `a78228b`, `a654cdd`, smoke correction `c4dadcf`, and final product `3258511`; 36/36 production-build local proof and final full verification passed, while `WS4-PROOF-01`–`WS4-PROOF-04` remain open without capability promotion. WS5's plan is frozen at `73ce570`; Units 5A–5C land at `46acf1f`, `6180815`, and `beeb5ef`, and production Unit 5D is next with Windows composition proof deferred to 5H. WS6–WS9 remain unopened. Do not bury implementation inside RD-27 observation. |
 | Full MVP Windows behavior proof | Consolidated campaign beginning with RD-27 after WS3–WS8 and WS9 prerequisite implementation/hardening | Run accumulated redaction-safe Windows/native/manual/live proof across implemented surfaces, including WS1 debt, `WS2-POST-VALIDATION-01`, and the mandatory fresh three-row Package 6 audit. RD-28 package lifecycle and the final 227-row program audit follow. |
 
 WS4's local closeout covers exactly its 35 assigned input/overlay rows and no
@@ -363,6 +364,22 @@ remains `WS4-PROOF-03`, and packaged exit/teardown remains `WS4-PROOF-04`.
 `UI-47` stays partial; conservative capabilities, earlier debt, later gates,
 RD-27, and RD-28 are unchanged. Exact `0258dbe` was reference-only, so the
 import ledger is unchanged.
+
+WS5 execution is locally complete through Unit 5C. The frozen plan checkpoint
+is `73ce570`; Unit 5A `46acf1f` owns secure expiring Guide artwork references,
+main-only Plex transport, focused-detail presentation, and Play-to-now; Unit 5B
+`6180815` owns versioned persisted library filters, strict preload/IPC
+vocabulary, bounded Guide pages, and focus-safe paging; Unit 5C `beeb5ef` owns
+the Settings-controlled, layout-specific Now Watching surface. Each checkpoint
+typechecks independently; the focused Unit 5B suite passed 36/36, the Unit 5C
+renderer suite passed 17/17, and cumulative `npm run verify` passed 1,209 of
+1,210 contract tests with one intentional skip plus 177/177 harness/docs tests.
+No Unit 5D product code is included in those checkpoints. Production Unit 5D
+is the next authorized package; it uses the configured `worker` implementer
+role because it crosses Electron view/window,
+IPC/currentness, shared helper, Win32 presentation, DPI, and renderer seams.
+Its wider Windows composition proof remains deferred to 5H and cannot be
+claimed from this macOS closeout.
 
 Each owning slice must record copied or adapted upstream UI source, CSS, copy,
 assets, or tests in the import ledger before or with the import. Exact DOM or
@@ -1859,9 +1876,9 @@ gate is closed while `WS2-POST-VALIDATION-01` remains proof debt; WS3 is the
 final product source is `87662b5`; `5f368d4` remains prior Unit 3C-D,
 `77d09ad` the viewport repair, and `f0e2817` test-only harness proof. WS4's
 local gate closes through `3258511` with `WS4-PROOF-01`–`WS4-PROOF-04` open.
-WS5 targeted scope-load/planning is next; its product/test/package/config edits
-require a decision-complete plan and fresh approval of an exact first unit;
-WS6 through WS9 remain unopened. RD-27 begins the
+WS5's plan is frozen at `73ce570`; Units 5A–5C land at `46acf1f`, `6180815`,
+and `beeb5ef`, and production Unit 5D is next with Windows composition proof
+deferred to 5H. WS6 through WS9 remain unopened. RD-27 begins the
 final consolidated Windows observation/soak campaign; it is not canceled.
 
 Depends on:
