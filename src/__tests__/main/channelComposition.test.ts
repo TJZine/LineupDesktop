@@ -30,6 +30,18 @@ class FakeIpcMain {
   }
 }
 
+const guideArtworkSessionGenerationOwner = {
+  subscribe: () => () => undefined,
+  captureCurrent: () => null,
+  isCurrent: () => false,
+  invalidateTransition: () => undefined,
+  beginTransition: () => ({ settle: () => undefined }),
+} as never;
+
+const guideArtworkTransport = {
+  fetchGuideArtwork: async () => assert.fail('unexpected artwork fetch'),
+} as never;
+
 test('channel diagnostic sanitization redacts string primitives inside arrays', () => {
   const tokenQueryUrl = [
     'https://plex.example.invalid/library',
@@ -95,6 +107,8 @@ test('channel composition injects a clock into the active channel scheduler', as
         subscribeBuilderContextForMain: () => () => undefined,
         withChannelBuilderFacetSession: async () => assert.fail('unexpected builder session'),
       } as never,
+      guideArtworkSessionGenerationOwner,
+      guideArtworkTransport,
     });
     const registration = registerChannelCompositionIpc(composition, {
       shellMode: 'smoke',
@@ -156,6 +170,8 @@ test('channel composition refreshes active scheduler after custom channel save',
         subscribeBuilderContextForMain: () => () => undefined,
         withChannelBuilderFacetSession: async () => assert.fail('unexpected builder session'),
       } as never,
+      guideArtworkSessionGenerationOwner,
+      guideArtworkTransport,
     });
     const registration = registerChannelCompositionIpc(composition, {
       shellMode: 'smoke',

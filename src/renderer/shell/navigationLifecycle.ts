@@ -29,6 +29,7 @@ export interface NavigationLifecycleOptions {
   scrollFocusedIntoView(): void;
   handleGuideDirection?(direction: 'up' | 'down' | 'left' | 'right'): boolean;
   handleGuidePage?(offset: -5 | 5): boolean;
+  handleGuideMediaPlay?(): boolean;
   handlePlayerInput?(input: DesktopInputButton): boolean;
   handlePlayerRouteLeave?(): void;
   openInfoRecovery(): void;
@@ -251,6 +252,12 @@ export function createNavigationLifecycle(options: NavigationLifecycleOptions): 
     if (options.getRoute() === 'player' && options.handlePlayerInput?.(input) === true) {
       return;
     }
+
+    if (
+      options.getRoute() === 'guide' &&
+      input === 'mediaPlay' &&
+      options.handleGuideMediaPlay?.() === true
+    ) return;
 
     if (input === 'up' || input === 'down' || input === 'left' || input === 'right') {
       if (options.getRoute() === 'guide' && options.handleGuideDirection?.(input) === true) return;

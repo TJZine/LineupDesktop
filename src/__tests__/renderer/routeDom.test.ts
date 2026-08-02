@@ -45,6 +45,7 @@ const GUIDE_PRESENTATION: EpgPresentationSource = {
       description: 'Archive description.', showTitle: 'The Midnight Archive', episodeLabel: 'S2 E4',
       rating: 'TV-14', quality: ['HD'], genres: ['Drama'],
       startsAtMs: GUIDE_BASE, endsAtMs: GUIDE_BASE + 60 * 60 * 1000,
+      artwork: null,
     }],
   }],
   nowWatching: {
@@ -1284,6 +1285,10 @@ function createOverlayDomBindings({
     epgDetailChannelElement: null,
     epgDetailTitleElement: null,
     epgDetailTimeElement: null,
+    epgDetailDescriptionElement: null,
+    epgDetailArtworkElement: null,
+    epgDetailPosterElement: null,
+    epgDetailArtworkPlaceholderElement: null,
     settingsSourceElement: null,
     settingsChannelsElement: null,
     settingsStateElement: null,

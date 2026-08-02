@@ -6,6 +6,7 @@ import {
   type EpgPresentationStateViewModel,
   type EpgShellViewModel,
 } from './guidePresentation.js';
+import type { ArtworkRef } from '../contracts/artwork.js';
 
 export type EpgActionId =
   | 'previousWindow'
@@ -29,6 +30,7 @@ export interface EpgProgramViewModel {
   genres: readonly string[];
   startsAtMs: number;
   endsAtMs: number;
+  artwork: ArtworkRef | null;
 }
 
 export interface EpgChannelViewModel {
@@ -238,6 +240,25 @@ export function pageEpgSelection(
   };
 }
 
+export function focusEpgNow(
+  state: EpgState,
+  presentation: EpgPresentationSource,
+  nowMs: number,
+): EpgState {
+  if (state.presentationState !== 'ready' || !isValidTime(nowMs)) return state;
+  const windowStartMs = snapWindowStartMs(nowMs);
+  const focusedChannel = findChannel(state.selectedChannelId, presentation);
+  const currentProgram = focusedChannel?.programs.find((program) =>
+    isEpgProgramPlayable(program, nowMs));
+  return normalizeEpgSelection({
+    ...state,
+    windowStartMs,
+    selectedChannelId: focusedChannel?.id ?? state.selectedChannelId,
+    selectedProgramId: currentProgram?.id ?? state.selectedProgramId,
+    tuneError: null,
+  }, presentation, false);
+}
+
 export function setEpgPresentationState(
   state: EpgState,
   presentationState: EpgPresentationState,
@@ -424,9 +445,13 @@ function classifyPresentation(presentation: EpgPresentationSource, windowStartMs
     : 'empty-programs';
 }
 
-function normalizeEpgSelection(state: EpgState, presentation: EpgPresentationSource): EpgState {
+function normalizeEpgSelection(
+  state: EpgState,
+  presentation: EpgPresentationSource,
+  clampWindow = true,
+): EpgState {
   if (state.presentationState !== 'ready') return state;
-  const windowStartMs = clampWindowStartMs(state.windowStartMs, presentation);
+  const windowStartMs = clampWindow ? clampWindowStartMs(state.windowStartMs, presentation) : state.windowStartMs;
   const selectedChannel = findChannel(state.selectedChannelId, presentation);
   const channel = selectedChannel !== undefined && visibleProgramsForChannel(selectedChannel, windowStartMs).length > 0
     ? selectedChannel

@@ -5,6 +5,7 @@ import {
   formatEpgTimeWindow,
   type EpgProgramCellViewModel,
 } from '../epg.js';
+import { isSafeArtworkRefId } from '../../contracts/artwork.js';
 
 export interface CellPosition {
   left: number;
@@ -14,6 +15,11 @@ export interface CellPosition {
 }
 
 const GUIDE_TRACK_UNITS = 1000;
+const failedArtwork = new WeakMap<HTMLImageElement, Readonly<{
+  presentationGeneration: number;
+  refId: string;
+}>>();
+const pendingArtwork = new WeakMap<HTMLImageElement, object>();
 
 export function guideCellPosition(
   startsAtMs: number,
@@ -167,7 +173,8 @@ export function renderEpgGuideDom(
       selectedRow === undefined ? '' : `${selectedRow.number} - ${selectedRow.name}`;
   }
   if (dom.epgDetailTitleElement) {
-    dom.epgDetailTitleElement.textContent = view.guide.infoPanel?.title ?? view.guide.state.label;
+    dom.epgDetailTitleElement.textContent =
+      (view.guide.infoPanel?.title ?? view.guide.state.label).slice(0, 160);
   }
   if (dom.epgDetailTimeElement) {
     dom.epgDetailTimeElement.textContent = view.guide.infoPanel === null ? view.guide.state.detail : [
@@ -176,9 +183,13 @@ export function renderEpgGuideDom(
       view.guide.infoPanel.timeLabel,
       settings.previewBadgesEnabled ? view.guide.infoPanel.badges.join(' / ') : '',
       view.guide.infoPanel.genres,
-      view.guide.infoPanel.description,
     ].filter(Boolean).join(' - ');
   }
+  if (dom.epgDetailDescriptionElement) {
+    dom.epgDetailDescriptionElement.textContent =
+      (view.guide.infoPanel?.description ?? '').slice(0, 600);
+  }
+  renderGuideDetailArtwork(view, dom);
 
   if (!dom.epgGridElement) {
     return;
@@ -301,6 +312,120 @@ export function renderEpgGuideDom(
     shell.append(...readyGuideGridDom(view, trackWidth, settings.previewBadgesEnabled));
   }
   dom.epgGridElement.replaceChildren(shell);
+}
+
+export function renderGuideDetailArtwork(
+  view: RouteWorkflowViewModel,
+  dom: Pick<RendererDomBindings,
+    'epgDetailArtworkElement' |
+    'epgDetailPosterElement' |
+    'epgDetailArtworkPlaceholderElement'>,
+): void {
+  const figure = dom.epgDetailArtworkElement;
+  const image = dom.epgDetailPosterElement;
+  const placeholder = dom.epgDetailArtworkPlaceholderElement;
+  if (figure === null || image === null || placeholder === null) return;
+  placeholder.textContent = 'Artwork unavailable';
+  placeholder.setAttribute('aria-hidden', 'true');
+  const info = view.guide.infoPanel;
+  const artwork = info?.artwork ?? null;
+  const nowMs = view.guide.nowMs;
+  if (
+    info === null ||
+    artwork === null ||
+    artwork.status === 'placeholder' ||
+    artwork.expiresAtMs <= nowMs ||
+    artwork.kind !== 'poster' ||
+    !isSafeArtworkRefId(artwork.id)
+  ) {
+    clearGuideArtworkImage(image);
+    failedArtwork.delete(image);
+    setArtworkState(figure, image, placeholder, 'missing');
+    return;
+  }
+  const failed = failedArtwork.get(image);
+  if (
+    failed?.presentationGeneration === info.presentationGeneration &&
+    failed.refId === artwork.id
+  ) {
+    clearGuideArtworkImage(image);
+    setArtworkState(figure, image, placeholder, 'error');
+    return;
+  }
+  const generationText = String(info.presentationGeneration);
+  if (
+    image.dataset.artworkRefId === artwork.id &&
+    image.dataset.artworkGeneration === generationText &&
+    image.getAttribute('src') !== null
+  ) return;
+  image.onload = null;
+  image.onerror = null;
+  image.dataset.artworkRefId = artwork.id;
+  image.dataset.artworkGeneration = generationText;
+  image.alt = clampArtworkAlt(
+    artwork.altText.length > 0 ? artwork.altText : `Poster for ${info.title}`,
+  );
+  image.decoding = 'async';
+  image.draggable = false;
+  setArtworkState(figure, image, placeholder, 'loading');
+  const request = Object.freeze({ refId: artwork.id, generationText });
+  const artworkUrl = `lineup://shell/artwork/${encodeURIComponent(artwork.id)}`;
+  pendingArtwork.set(image, request);
+  image.onload = () => {
+    if (!isPendingArtwork(image, request, artwork.id, generationText, artworkUrl)) return;
+    pendingArtwork.delete(image);
+    image.onload = null;
+    image.onerror = null;
+    setArtworkState(figure, image, placeholder, 'available');
+  };
+  image.onerror = () => {
+    if (!isPendingArtwork(image, request, artwork.id, generationText, artworkUrl)) return;
+    failedArtwork.set(image, {
+      presentationGeneration: info.presentationGeneration,
+      refId: artwork.id,
+    });
+    clearGuideArtworkImage(image);
+    setArtworkState(figure, image, placeholder, 'error');
+  };
+  image.src = artworkUrl;
+}
+
+function isPendingArtwork(
+  image: HTMLImageElement,
+  request: object,
+  refId: string,
+  generationText: string,
+  artworkUrl: string,
+): boolean {
+  return pendingArtwork.get(image) === request &&
+    image.dataset.artworkRefId === refId &&
+    image.dataset.artworkGeneration === generationText &&
+    image.getAttribute('src') === artworkUrl;
+}
+
+function clearGuideArtworkImage(image: HTMLImageElement): void {
+  pendingArtwork.delete(image);
+  image.onload = null;
+  image.onerror = null;
+  image.removeAttribute('src');
+  image.alt = '';
+  delete image.dataset.artworkRefId;
+  delete image.dataset.artworkGeneration;
+}
+
+function setArtworkState(
+  figure: HTMLElement,
+  image: HTMLImageElement,
+  placeholder: HTMLElement,
+  state: 'missing' | 'loading' | 'available' | 'error',
+): void {
+  figure.dataset.artworkState = state;
+  image.hidden = state !== 'available';
+  placeholder.hidden = state === 'available';
+}
+
+function clampArtworkAlt(value: string): string {
+  return value.slice(0, 160);
 }
 
 function readyGuideGridDom(

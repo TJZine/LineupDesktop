@@ -35,6 +35,10 @@ export interface RendererDomBindings {
   epgDetailChannelElement: HTMLElement | null;
   epgDetailTitleElement: HTMLElement | null;
   epgDetailTimeElement: HTMLElement | null;
+  epgDetailDescriptionElement: HTMLElement | null;
+  epgDetailArtworkElement: HTMLElement | null;
+  epgDetailPosterElement: HTMLImageElement | null;
+  epgDetailArtworkPlaceholderElement: HTMLElement | null;
   settingsSourceElement: HTMLElement | null;
   settingsChannelsElement: HTMLElement | null;
   settingsStateElement: HTMLElement | null;
@@ -154,6 +158,10 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     epgDetailChannelElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-channel]'),
     epgDetailTitleElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-title]'),
     epgDetailTimeElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-time]'),
+    epgDetailDescriptionElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-description]'),
+    epgDetailArtworkElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-artwork]'),
+    epgDetailPosterElement: documentRef.querySelector<HTMLImageElement>('[data-epg-detail-poster]'),
+    epgDetailArtworkPlaceholderElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-artwork-placeholder]'),
     settingsSourceElement: documentRef.querySelector<HTMLElement>('[data-settings-source]'),
     settingsChannelsElement: documentRef.querySelector<HTMLElement>('[data-settings-channels]'),
     settingsStateElement: documentRef.querySelector<HTMLElement>('[data-settings-state]'),

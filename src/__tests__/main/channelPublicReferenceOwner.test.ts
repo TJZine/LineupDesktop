@@ -57,6 +57,7 @@ test('projects program references and resolves only current generation channel r
         genres: [],
         startsAtMs: 1,
         endsAtMs: 2,
+        artwork: null,
       }],
     }],
     nowWatching: null,
@@ -67,6 +68,40 @@ test('projects program references and resolves only current generation channel r
   assert.equal(presentation.channels[0]?.name, 'Untitled channel');
   assert.match(presentation.channels[0]?.programs[0]?.id ?? '', /^guide-program-[a-f0-9]{64}-0$/u);
   assert.equal(presentation.channels[0]?.programs[0]?.title, 'Untitled program');
+});
+
+test('owns and sanitizes artwork alt text without retaining hostile scheduled content', () => {
+  const owner = new ChannelPublicReferenceOwner();
+  const aggregate = createAggregate([channel('channel-1', 1, false, null)]);
+  const generation = owner.createGeneration(aggregate);
+  const sourceArtwork = Object.freeze({
+    id: 'artwork-ABCDEFGHIJKLMNOP',
+    kind: 'poster' as const,
+    expiresAtMs: 10_000,
+    altText: 'Bearer secret https://private.invalid/<poster>\u0000'.repeat(8),
+    status: 'available' as const,
+  });
+  const projected = owner.projectPresentation(generation, {
+    channels: [{
+      id: 'channel-1', number: '1', name: 'One', programs: [{
+        id: 'raw-program',
+        title: 'Bearer secret https://private.invalid/<title>\u0000'.repeat(8),
+        subtitle: '', description: '', showTitle: '', episodeLabel: '', rating: '',
+        quality: [], genres: [], startsAtMs: 1, endsAtMs: 2, artwork: sourceArtwork,
+      }],
+    }],
+    nowWatching: null,
+  });
+  const program = projected.channels[0]!.programs[0]!;
+
+  assert.equal(program.title, '[redacted]');
+  assert.equal(program.artwork?.altText, '[redacted]');
+  assert.notEqual(program.artwork, sourceArtwork);
+  assert.equal(Object.isFrozen(program.artwork), true);
+  assert.deepEqual(sourceArtwork, {
+    id: 'artwork-ABCDEFGHIJKLMNOP', kind: 'poster', expiresAtMs: 10_000,
+    altText: 'Bearer secret https://private.invalid/<poster>\u0000'.repeat(8), status: 'available',
+  });
 });
 
 test('rejects duplicate raw channel ids and hidden Guide references', () => {

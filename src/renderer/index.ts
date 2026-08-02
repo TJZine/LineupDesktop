@@ -31,7 +31,7 @@ import { createPlayerInputCommandController } from './playerInputCommandControll
 import { createSleepTimerController } from './sleepTimerController.js';
 import { createPlayerErrorRecoveryController } from './playerErrorRecoveryController.js';
 import { recordRendererBridgeFailure } from './rendererBridgeFailures.js';
-import { findEpgProgramCell, setEpgPresentationState, setEpgTuneError, updateEpgState } from './epg.js';
+import { findEpgProgramCell, focusEpgNow, setEpgPresentationState, setEpgTuneError, updateEpgState } from './epg.js';
 import { registerRendererActions, type GuideActionId, type GuideProgramActionTarget } from './rendererActionRegistration.js';
 import { subscribePlayerBridge } from './playerBridgeSubscription.js';
 import { createGuidePresentationPolling } from './guidePresentationPolling.js';
@@ -237,6 +237,7 @@ const navigationLifecycle = createNavigationLifecycle({
   scrollFocusedIntoView: scrollFocusedSetupControlIntoView,
   handleGuideDirection,
   handleGuidePage,
+  handleGuideMediaPlay,
   handlePlayerInput: (input) => playerOverlayController.handleInput(input) ||
     playerInputCommandController.handleInput(
       input,
@@ -600,6 +601,22 @@ function handleGuidePage(offset: -5 | 5): boolean {
   renderApp();
   const selectedFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId;
   if (selectedFocusId !== undefined) restoreFocusTarget(selectedFocusId);
+  return true;
+}
+
+function handleGuideMediaPlay(): boolean {
+  if (workflowState.routeState.activeRoute !== 'guide') return false;
+  const previousWindowStartMs = workflowState.epg.windowStartMs;
+  const nextEpg = focusEpgNow(workflowState.epg, workflowState.guidePresentation, Date.now());
+  if (nextEpg === workflowState.epg) return false;
+  workflowState = { ...workflowState, epg: nextEpg };
+  renderApp();
+  if (nextEpg.windowStartMs !== previousWindowStartMs) {
+    void guidePresentationPolling.refresh('guide-media-play-now', { showLoading: true });
+  } else {
+    const selectedFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId;
+    if (selectedFocusId !== undefined) restoreFocusTarget(selectedFocusId);
+  }
   return true;
 }
 

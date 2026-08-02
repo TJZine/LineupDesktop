@@ -16,6 +16,7 @@ import type {
 import type { ResolvedContentItem as ChannelContentItem } from '../../domain/channel/types.js';
 import type { ChannelConfig } from '../../domain/channel/types.js';
 import type { PlexLibraryMinimalAdapter } from './plexLibraryMinimalAdapter.js';
+import type { GuideArtworkOwner } from './guideArtworkOwner.js';
 
 export class GuideRuntime {
   private readonly repository: ChannelRepository;
@@ -24,6 +25,8 @@ export class GuideRuntime {
   private readonly clock: ChannelClock;
   private readonly onChannelTuned?: (channelId: string) => void | Promise<void>;
   private readonly logger: ChannelLogger;
+  private readonly guideArtworkOwner: GuideArtworkOwner | null;
+  private readonly loadLineupRevision: (() => Promise<number>) | null;
 
   constructor(input: {
     repository: ChannelRepository;
@@ -32,6 +35,8 @@ export class GuideRuntime {
     clock?: ChannelClock;
     onChannelTuned?: (channelId: string) => void | Promise<void>;
     logger?: ChannelLogger;
+    guideArtworkOwner?: GuideArtworkOwner;
+    loadLineupRevision?: () => Promise<number>;
   }) {
     this.repository = input.repository;
     this.clock = input.clock ?? { now: () => Date.now() };
@@ -43,12 +48,17 @@ export class GuideRuntime {
     this.activeChannelScheduler = input.activeChannelScheduler;
     this.onChannelTuned = input.onChannelTuned;
     this.logger = input.logger ?? { warn: () => undefined, error: () => undefined };
+    this.guideArtworkOwner = input.guideArtworkOwner ?? null;
+    this.loadLineupRevision = input.loadLineupRevision ?? null;
   }
 
   async getPresentation(
     startTimeMs: number,
     durationMs: number,
   ): Promise<EpgPresentationSource> {
+    const lineupRevision = this.guideArtworkOwner === null || this.loadLineupRevision === null
+      ? null
+      : await this.loadLineupRevision();
     const loaded = await this.repository.loadNormalized();
     const visibleChannels = loaded?.data.channels.filter(isVisibleChannel) ?? [];
     if (!loaded || visibleChannels.length === 0) {
@@ -79,7 +89,13 @@ export class GuideRuntime {
         const scheduler = createSchedulerForChannel(channel, channelItems, this.clock);
         const window = scheduler.getScheduleWindow(startTimeMs, startTimeMs + durationMs);
         const programs = window.programs.map((prog) =>
-          mapScheduledProgramToViewModel(prog, channel.id, channelItems),
+          mapScheduledProgramToViewModel(
+            prog,
+            channel.id,
+            channelItems,
+            this.guideArtworkOwner,
+            lineupRevision,
+          ),
         );
 
         return {
@@ -288,6 +304,8 @@ function mapScheduledProgramToViewModel(
   prog: ScheduledProgram,
   channelId: string,
   originalItems: ChannelContentItem[],
+  guideArtworkOwner: GuideArtworkOwner | null,
+  lineupRevision: number | null,
 ): EpgProgramViewModel {
   const original = originalItems.find((item) => item.scheduledIndex === prog.item.scheduledIndex) || prog.item;
   const id = `${channelId}-${prog.scheduledStartTime}`;
@@ -327,7 +345,24 @@ function mapScheduledProgramToViewModel(
     genres: ('genres' in original ? original.genres : null) || [],
     startsAtMs: prog.scheduledStartTime,
     endsAtMs: prog.scheduledEndTime,
+    artwork: createProgramArtworkRef(original, guideArtworkOwner, lineupRevision),
   };
+}
+
+function createProgramArtworkRef(
+  item: ChannelContentItem | SchedulerContentItem,
+  guideArtworkOwner: GuideArtworkOwner | null,
+  lineupRevision: number | null,
+) {
+  if (guideArtworkOwner === null || lineupRevision === null) return null;
+  const thumb = typeof item.thumb === 'string' && item.thumb.length > 0 ? item.thumb : null;
+  const showThumb = 'showThumb' in item && typeof item.showThumb === 'string' && item.showThumb.length > 0
+    ? item.showThumb
+    : null;
+  const locator = thumb ?? showThumb;
+  if (locator === null) return null;
+  const title = ('showTitle' in item ? item.showTitle : null) || item.title;
+  return guideArtworkOwner.createRef({ locator, altText: title, lineupRevision });
 }
 
 function mapCurrentProgram(

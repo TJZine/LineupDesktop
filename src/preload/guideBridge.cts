@@ -1,5 +1,6 @@
 import type { EpgPresentationSource, GuideIpcResult } from '../contracts/guide.js';
 import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
+import { isSafeArtworkRefId, type ArtworkRef } from '../contracts/artwork.js';
 
 export type GuideBridgeInvoke = (
   channel: string,
@@ -164,11 +165,12 @@ function isEpgProgramViewModel(value: unknown): boolean {
       'genres',
       'startsAtMs',
       'endsAtMs',
+      'artwork',
     ]) &&
     isSafeString(value.id) &&
-    isSafeDisplayString(value.title) &&
+    isBoundedSafeDisplayString(value.title, 160) &&
     isSafeDisplayString(value.subtitle) &&
-    isSafeDisplayString(value.description) &&
+    isBoundedSafeDisplayString(value.description, 600) &&
     isSafeDisplayString(value.showTitle) &&
     isSafeDisplayString(value.episodeLabel) &&
     isSafeDisplayString(value.rating) &&
@@ -178,7 +180,8 @@ function isEpgProgramViewModel(value: unknown): boolean {
     value.genres.every(isSafeDisplayString) &&
     isFiniteNonNegativeNumber(value.startsAtMs) &&
     isFiniteNonNegativeNumber(value.endsAtMs) &&
-    value.endsAtMs > value.startsAtMs
+    value.endsAtMs > value.startsAtMs &&
+    (value.artwork === null || isArtworkRef(value.artwork))
   );
 }
 
@@ -233,11 +236,26 @@ function isSafeString(value: unknown): value is string {
 }
 
 function isSafeDisplayString(value: unknown): value is string {
+  return isBoundedSafeDisplayString(value, 2000);
+}
+
+function isBoundedSafeDisplayString(value: unknown, maximum: number): value is string {
   return typeof value === 'string' &&
-    value.length <= 2000 &&
+    value.length <= maximum &&
     !/[<>]/u.test(value) &&
     !/https?:\/\//iu.test(value) &&
     !/\b(?:bearer|token|authorization|headers?)\s*[:=]/iu.test(value);
+}
+
+function isArtworkRef(value: unknown): value is ArtworkRef {
+  return isPlainRecord(value) &&
+    hasOnlyKeys(value, ['id', 'kind', 'expiresAtMs', 'altText', 'status']) &&
+    isSafeArtworkRefId(value.id) &&
+    value.kind === 'poster' &&
+    isFiniteNonNegativeNumber(value.expiresAtMs) &&
+    Number.isSafeInteger(value.expiresAtMs) &&
+    isBoundedSafeDisplayString(value.altText, 160) &&
+    (value.status === 'available' || value.status === 'placeholder');
 }
 
 function isFiniteNonNegativeNumber(value: unknown): value is number {

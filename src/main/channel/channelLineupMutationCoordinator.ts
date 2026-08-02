@@ -4,21 +4,30 @@ import {
   type ChannelPersistenceStore,
 } from '../../domain/channel/channelPersistenceStore.js';
 import { cloneChannelForOwnership } from '../../domain/channel/channelDomainClone.js';
+import type { GuideArtworkSessionGenerationOwner } from '../plex/guideArtworkSessionGenerationOwner.js';
 
 export class ChannelLineupMutationCoordinator {
-  public constructor(private readonly store: ChannelPersistenceStore) {}
+  public constructor(
+    private readonly store: ChannelPersistenceStore,
+    private readonly guideArtworkSessionGenerationOwner?: GuideArtworkSessionGenerationOwner,
+  ) {}
 
-  public mutateBuilderLineup(input: Readonly<{
+  public async mutateBuilderLineup(input: Readonly<{
     expectedLineupRevision: number;
     mutate: (current: Readonly<ChannelAggregate>) => ChannelAggregate;
     onCommitBarrier: () => 'proceed' | 'cancel';
   }>): Promise<ChannelAggregateMutationResult> {
-    return this.store.mutateChannelAggregate({
-      kind: 'builder-lineup',
-      expectedLineupRevision: input.expectedLineupRevision,
-      mutate: input.mutate,
-      onCommitBarrier: input.onCommitBarrier,
-    });
+    const lease = this.guideArtworkSessionGenerationOwner?.beginTransition('lineup-transition');
+    try {
+      return await this.store.mutateChannelAggregate({
+        kind: 'builder-lineup',
+        expectedLineupRevision: input.expectedLineupRevision,
+        mutate: input.mutate,
+        onCommitBarrier: input.onCommitBarrier,
+      });
+    } finally {
+      lease?.settle();
+    }
   }
 
   public async mutateCustomLineup(input: Readonly<{
@@ -28,17 +37,22 @@ export class ChannelLineupMutationCoordinator {
     | Readonly<{ status: 'committed'; aggregate: ChannelAggregate }>
     | Readonly<{ status: 'rejected' }>
   > {
-    const result = await this.store.mutateChannelAggregate({
-      kind: 'custom-lineup',
-      expectedLineupRevision: null,
-      mutate: input.mutate,
-      onCommitBarrier: () => input.shouldCommit?.() === false ? 'cancel' : 'proceed',
-    });
-    if (result.status === 'canceled') return { status: 'rejected' };
-    if (result.status !== 'committed') {
-      throw new Error('Custom channel aggregate mutation did not commit.');
+    const lease = this.guideArtworkSessionGenerationOwner?.beginTransition('lineup-transition');
+    try {
+      const result = await this.store.mutateChannelAggregate({
+        kind: 'custom-lineup',
+        expectedLineupRevision: null,
+        mutate: input.mutate,
+        onCommitBarrier: () => input.shouldCommit?.() === false ? 'cancel' : 'proceed',
+      });
+      if (result.status === 'canceled') return { status: 'rejected' };
+      if (result.status !== 'committed') {
+        throw new Error('Custom channel aggregate mutation did not commit.');
+      }
+      return result;
+    } finally {
+      lease?.settle();
     }
-    return result;
   }
 
   public async setCurrentChannel(input: Readonly<{

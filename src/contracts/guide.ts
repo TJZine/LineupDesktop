@@ -1,3 +1,5 @@
+import type { ArtworkRef } from './artwork.js';
+
 export interface EpgProgramViewModel {
   id: string;
   title: string;
@@ -10,6 +12,7 @@ export interface EpgProgramViewModel {
   genres: readonly string[];
   startsAtMs: number;
   endsAtMs: number;
+  artwork: ArtworkRef | null;
 }
 
 export interface EpgChannelViewModel {

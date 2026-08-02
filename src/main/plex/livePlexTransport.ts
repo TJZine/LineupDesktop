@@ -110,16 +110,36 @@ export interface LivePlexChannelBuilderFacetTransport {
   listTagDirectoryPage(input: LivePlexListTagDirectoryPageRequest): Promise<PlexResponsePayload>;
 }
 
+export type GuideArtworkMimeType = 'image/jpeg' | 'image/png' | 'image/webp';
+
+export interface LivePlexGuideArtworkRequest extends LivePlexLibraryRequest {
+  locator: string;
+}
+
+export interface LivePlexGuideArtworkResponse {
+  bytes: Uint8Array;
+  mimeType: GuideArtworkMimeType;
+}
+
+export interface LivePlexGuideArtworkTransport {
+  fetchGuideArtwork(input: LivePlexGuideArtworkRequest): Promise<LivePlexGuideArtworkResponse>;
+}
+
 const DEFAULT_TIMEOUT_MS = 20_000;
+const GUIDE_ARTWORK_TIMEOUT_MS = 5_000;
+const GUIDE_ARTWORK_MAX_BYTES = 1_500_000;
 const PLEX_TV_ORIGIN = 'https://plex.tv';
-const PLEX_TOKEN_HEADER_NAME = ['X-Plex', 'Token'].join('-');
+export const PLEX_TOKEN_HEADER_NAME = ['X-Plex', 'Token'].join('-');
+const GUIDE_ARTWORK_LOCATOR_PATTERN =
+  /^\/library\/metadata\/[0-9]{1,20}\/thumb(?:\/[0-9]{1,20})?$/u;
 
 export class LivePlexTransport
   implements
     DesktopPlexAuthTransport,
     DesktopPlexDiscoveryTransport,
     LivePlexLibraryTransport,
-    LivePlexChannelBuilderFacetTransport
+    LivePlexChannelBuilderFacetTransport,
+    LivePlexGuideArtworkTransport
 {
   private readonly authConfig: PlexAuthConfig | undefined;
   private readonly fetchImpl: typeof globalThis.fetch;
@@ -300,6 +320,62 @@ export class LivePlexTransport
     await this.fetchPmsUrlPayload(url, input.token, input.signal ?? null).catch(() => {
       // Ignore stop failures per plan
     });
+  }
+
+  async fetchGuideArtwork(
+    input: LivePlexGuideArtworkRequest,
+  ): Promise<LivePlexGuideArtworkResponse> {
+    const locator = normalizeGuideArtworkLocator(input.locator);
+    const url = buildContainedGuideArtworkUrl(input.connection.uri, locator);
+    const timeoutController = new AbortController();
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      timeoutController.abort();
+    }, GUIDE_ARTWORK_TIMEOUT_MS);
+    const onAbort = () => timeoutController.abort(input.signal?.reason);
+    if (input.signal?.aborted) onAbort();
+    else input.signal?.addEventListener('abort', onAbort, { once: true });
+    try {
+      const response = await this.fetchImpl(url, {
+        method: 'GET',
+        redirect: 'error',
+        headers: this.buildPlexRequestHeaders(input.token),
+        signal: timeoutController.signal,
+      });
+      throwForHttpStatus(response.status);
+      const mimeType = normalizeGuideArtworkMimeType(response.headers.get('content-type'));
+      const contentLength = readContentLength(response.headers.get('content-length'));
+      if (contentLength !== null && contentLength > GUIDE_ARTWORK_MAX_BYTES) {
+        throw guideArtworkError('parse-error');
+      }
+      return {
+        bytes: await readBoundedGuideArtworkBytes(response, GUIDE_ARTWORK_MAX_BYTES),
+        mimeType,
+      };
+    } catch (error) {
+      if (input.signal?.aborted) {
+        throw new LivePlexTransportError('aborted', 'Plex artwork request was aborted', undefined, {
+          cause: error,
+        });
+      }
+      if (timedOut) {
+        throw new LivePlexTransportError('timeout', 'Plex artwork request timed out', undefined, {
+          retryable: true,
+          cause: error,
+        });
+      }
+      if (error instanceof LivePlexTransportError) throw error;
+      throw new LivePlexTransportError(
+        'server-unreachable',
+        'Plex artwork request failed',
+        undefined,
+        { retryable: true, cause: error },
+      );
+    } finally {
+      clearTimeout(timeout);
+      input.signal?.removeEventListener('abort', onAbort);
+    }
   }
 
   private buildAuthRequest(input: DesktopPlexAuthTransportRequest): {
@@ -545,8 +621,112 @@ async function defaultWaitMs(delayMs: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
-function normalizeBaseUri(uri: string): string {
+export function normalizeBaseUri(uri: string): string {
   return uri.endsWith('/') ? uri : `${uri}/`;
+}
+
+export function normalizeGuideArtworkLocator(locator: string): string {
+  const characterCodes = Array.from(locator, (character) => character.charCodeAt(0));
+  if (
+    locator.length < 1 ||
+    locator.length > 512 ||
+    locator !== locator.trim() ||
+    characterCodes.some((code) => code > 0x7f) ||
+    characterCodes.some((code) => code <= 0x20 || code === 0x7f) ||
+    [...'\\%?#'].some((character) => locator.includes(character)) ||
+    !GUIDE_ARTWORK_LOCATOR_PATTERN.test(locator)
+  ) {
+    throw guideArtworkError('validation');
+  }
+  const segments = locator.split('/');
+  if (segments.some((segment, index) => index > 0 && (segment === '' || segment === '.' || segment === '..'))) {
+    throw guideArtworkError('validation');
+  }
+  return locator;
+}
+
+function buildContainedGuideArtworkUrl(connectionUri: string, locator: string): URL {
+  try {
+    const base = new URL(normalizeBaseUri(connectionUri));
+    const url = new URL(locator, base);
+    if (
+      url.protocol !== base.protocol ||
+      url.hostname !== base.hostname ||
+      effectivePort(url) !== effectivePort(base) ||
+      url.username !== '' ||
+      url.password !== '' ||
+      url.search !== '' ||
+      url.hash !== '' ||
+      url.pathname !== locator
+    ) {
+      throw guideArtworkError('validation');
+    }
+    return url;
+  } catch (error) {
+    if (error instanceof LivePlexTransportError) throw error;
+    throw guideArtworkError('validation');
+  }
+}
+
+function effectivePort(url: URL): string {
+  if (url.port !== '') return url.port;
+  if (url.protocol === 'http:') return '80';
+  if (url.protocol === 'https:') return '443';
+  return '';
+}
+
+function normalizeGuideArtworkMimeType(value: string | null): GuideArtworkMimeType {
+  const normalized = value?.split(';', 1)[0]?.trim().toLowerCase();
+  if (normalized === 'image/jpeg' || normalized === 'image/png' || normalized === 'image/webp') {
+    return normalized;
+  }
+  throw guideArtworkError('parse-error');
+}
+
+function readContentLength(value: string | null): number | null {
+  if (value === null || !/^[0-9]+$/u.test(value)) return null;
+  const result = Number(value);
+  return Number.isSafeInteger(result) ? result : null;
+}
+
+async function readBoundedGuideArtworkBytes(
+  response: Response,
+  maximumBytes: number,
+): Promise<Uint8Array> {
+  if (response.body === null) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      total += result.value.byteLength;
+      if (total > maximumBytes) {
+        await reader.cancel();
+        throw guideArtworkError('parse-error');
+      }
+      chunks.push(result.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+function guideArtworkError(code: 'validation' | 'parse-error'): LivePlexTransportError {
+  return new LivePlexTransportError(
+    code === 'validation' ? 'parse-error' : code,
+    code === 'validation'
+      ? 'Plex artwork locator is invalid'
+      : 'Plex artwork response is invalid',
+  );
 }
 
 function homeUsersPath(endpointVersion: 'v2' | 'v1' | undefined): string {

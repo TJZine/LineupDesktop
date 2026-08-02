@@ -1,10 +1,6 @@
 import type { PlexCancelPinValue, PlexGetHomeUsersValue, PlexGetMetadataValue, PlexIpcResult, PlexListLibraryItemsValue, PlexListLibrarySectionsValue, PlexPollPinValue, PlexRefreshServersValue, PlexRequestPinValue, PlexRestoreSelectedServerValue, PlexRuntimeError, PlexRuntimeOperation, PlexRuntimeSnapshot, PlexSearchLibraryValue, PlexSelectServerValue, PlexServerSelectionSummary, PlexSwitchHomeUserValue } from '../../contracts/plex.js';
 import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.js';
-import {
-  createLibrarySetBinding,
-  createProfileBinding,
-  createServerBinding,
-} from '../../domain/channelBuilder/index.js';
+import { createLibrarySetBinding, createProfileBinding, createServerBinding } from '../../domain/channelBuilder/index.js';
 import type { DesktopPlexAuthService } from './auth/index.js';
 import type { DesktopPlexCredentialStore } from './auth/desktopPlexCredentialStore.js';
 import type { DesktopPlexServerDiscovery } from './discovery/index.js';
@@ -17,18 +13,13 @@ import {
   type ChannelBuilderFacetAccessInput,
   type ChannelBuilderFacetSession,
 } from './channelBuilderFacetSession.js';
-import {
-  DesktopPlexContextNotifications,
-  type DesktopPlexBuilderContextListener,
-  type DesktopPlexBuilderContextResult,
-  type DesktopPlexBuilderContextUnsubscribe,
-  type DesktopPlexBuilderLibraryPair,
-} from './desktopPlexContextNotifications.js';
+import { DesktopPlexContextNotifications, type DesktopPlexBuilderContextListener, type DesktopPlexBuilderContextResult, type DesktopPlexBuilderContextUnsubscribe, type DesktopPlexBuilderLibraryPair } from './desktopPlexContextNotifications.js';
 import { isSafeLibraryFilter, isSafeSearchLimit, isSafeSearchTypes, normalizeLibraryPagination, type PlexLibrarySection, type PlexMediaType } from './library/index.js';
 import { applyFailureSnapshot, applyServerSelectionSnapshot, authRequiredError, cloneRuntimeSnapshot, createInitialSnapshot, failureResult, isOptionalShortString, mapCredentialStatus, recordRuntimeDiagnostic, storageError, stripPinSecretFields, success, validatePositiveInteger, validationError } from './desktopPlexRuntimeSupport.js';
 import { DesktopPlexLibraryOperationExecutor } from './desktopPlexLibraryOperationExecutor.js';
 import { LivePlexTransportError, type LivePlexChannelBuilderFacetTransport, type LivePlexLibraryTransport } from './livePlexTransport.js';
 import { PlexRuntimeOperationOwner, type PlexRuntimeSnapshotCommit } from './plexRuntimeOperationOwner.js';
+import type { GuideArtworkSessionGenerationOwner } from './guideArtworkSessionGenerationOwner.js';
 
 export interface DesktopPlexRuntimeOptions {
   authService: DesktopPlexAuthService;
@@ -36,6 +27,7 @@ export interface DesktopPlexRuntimeOptions {
   serverDiscovery: DesktopPlexServerDiscovery;
   libraryTransport: LivePlexLibraryTransport;
   channelBuilderFacetTransport?: LivePlexChannelBuilderFacetTransport;
+  guideArtworkSessionGenerationOwner: GuideArtworkSessionGenerationOwner;
   diagnosticEventStore?: DiagnosticEventStore;
   nowMs?: () => number;
 }
@@ -55,6 +47,7 @@ export class DesktopPlexRuntime {
   private readonly libraryOperations: DesktopPlexLibraryOperationExecutor;
   private readonly builderContextNotifications = new DesktopPlexContextNotifications();
   private readonly operationOwner: PlexRuntimeOperationOwner;
+  private readonly guideArtworkSessionGenerationOwner: GuideArtworkSessionGenerationOwner;
   private readonly diagnosticEventStore?: DiagnosticEventStore;
   private readonly nowMs: () => number;
   private snapshot: PlexRuntimeSnapshot;
@@ -66,6 +59,7 @@ export class DesktopPlexRuntime {
     this.serverDiscovery = options.serverDiscovery;
     this.libraryTransport = options.libraryTransport;
     this.channelBuilderFacetTransport = options.channelBuilderFacetTransport ?? null;
+    this.guideArtworkSessionGenerationOwner = options.guideArtworkSessionGenerationOwner;
     this.libraryOperations = new DesktopPlexLibraryOperationExecutor(options.libraryTransport);
     this.diagnosticEventStore = options.diagnosticEventStore;
     this.nowMs = options.nowMs ?? Date.now;
@@ -196,7 +190,8 @@ export class DesktopPlexRuntime {
     if (validation !== null) {
       return this.fail(requestId, validation);
     }
-    return this.operationOwner.run(requestId, `pollPin:${pinId}`, async ({ signal, commit }) => {
+    return this.runGuideArtworkTransition('poll-pin', () =>
+      this.operationOwner.run(requestId, `pollPin:${pinId}`, async ({ signal, commit }) => {
       const result = await this.authService.pollForPin(pinId, { signal });
       const pin = stripPinSecretFields(result.pin);
       commit((snapshot) => ({
@@ -212,7 +207,7 @@ export class DesktopPlexRuntime {
         updatedAtMs: this.nowMs(),
       }));
       return { pin, profile: result.profile, snapshot: this.cloneSnapshot() };
-    });
+      }));
   }
 
   async cancelPin(requestId: string, pinId: number): Promise<PlexIpcResult<PlexCancelPinValue>> {
@@ -238,7 +233,8 @@ export class DesktopPlexRuntime {
   }
 
   async getHomeUsers(requestId: string): Promise<PlexIpcResult<PlexGetHomeUsersValue>> {
-    return this.operationOwner.run(requestId, 'getHomeUsers', async ({ signal, commit }) => {
+    return this.runGuideArtworkTransition('get-home-users', () =>
+      this.operationOwner.run(requestId, 'getHomeUsers', async ({ signal, commit }) => {
       await this.ensureAccountToken(signal, commit);
       const users = await this.authService.getHomeUsers({ signal });
       commit((snapshot) => ({
@@ -248,7 +244,7 @@ export class DesktopPlexRuntime {
         updatedAtMs: this.nowMs(),
       }));
       return { users, snapshot: this.cloneSnapshot() };
-    });
+      }));
   }
 
   async switchHomeUser(
@@ -259,7 +255,8 @@ export class DesktopPlexRuntime {
     if (userId.length === 0 || !isOptionalShortString(input.pin)) {
       return this.fail(requestId, validationError('switchHomeUser'));
     }
-    return this.operationOwner.run(requestId, 'switchHomeUser', async ({ signal, commit }) => {
+    return this.runGuideArtworkTransition('switch-home-user', () =>
+      this.operationOwner.run(requestId, 'switchHomeUser', async ({ signal, commit }) => {
       await this.ensureAccountToken(signal, commit);
       const result = await this.authService.switchHomeUser(userId, {
         pin: input.pin ?? null,
@@ -293,11 +290,12 @@ export class DesktopPlexRuntime {
       }));
       this.clearAndPublishBuilderContext();
       return { profile: result.activeProfile, snapshot: this.cloneSnapshot() };
-    });
+      }));
   }
 
   async restoreSelectedServer(requestId: string): Promise<PlexIpcResult<PlexRestoreSelectedServerValue>> {
-    return this.operationOwner.run(requestId, 'restoreSelectedServer', async ({ signal, commit }) => {
+    return this.runGuideArtworkTransition('restore-selected-server', () =>
+      this.operationOwner.run(requestId, 'restoreSelectedServer', async ({ signal, commit }) => {
       const token = await this.requireActiveToken(signal, commit, 'restoreSelectedServer');
       const profileId = this.requireActiveProfileId('restoreSelectedServer');
       const previousServerId =
@@ -310,11 +308,12 @@ export class DesktopPlexRuntime {
       this.applyServerSelection(selection, commit);
       this.clearBuilderContextIfServerChanged(previousServerId);
       return { selection, snapshot: this.cloneSnapshot() };
-    });
+      }));
   }
 
   async refreshServers(requestId: string): Promise<PlexIpcResult<PlexRefreshServersValue>> {
-    return this.operationOwner.run(requestId, 'refreshServers', async ({ signal, commit }) => {
+    return this.runGuideArtworkTransition('refresh-servers', () =>
+      this.operationOwner.run(requestId, 'refreshServers', async ({ signal, commit }) => {
       const token = await this.requireActiveToken(signal, commit, 'refreshServers');
       const previousServerId =
         this.serverDiscovery.getSelectedServerSummary()?.serverId ?? null;
@@ -333,7 +332,7 @@ export class DesktopPlexRuntime {
       }));
       this.clearBuilderContextIfServerChanged(previousServerId);
       return { servers, snapshot: this.cloneSnapshot() };
-    });
+      }));
   }
 
   async selectServer(
@@ -344,7 +343,8 @@ export class DesktopPlexRuntime {
     if (normalizedServerId.length === 0) {
       return this.fail(requestId, validationError('selectServer'));
     }
-    return this.operationOwner.run(requestId, 'selectServer', async ({ signal, commit }) => {
+    return this.runGuideArtworkTransition('select-server', () =>
+      this.operationOwner.run(requestId, 'selectServer', async ({ signal, commit }) => {
       const token = await this.requireActiveToken(signal, commit, 'selectServer');
       const profileId = this.requireActiveProfileId('selectServer');
       const previousServerId =
@@ -362,7 +362,7 @@ export class DesktopPlexRuntime {
       this.applyServerSelection(selection, commit);
       this.clearBuilderContextIfServerChanged(previousServerId);
       return { selection, snapshot: this.cloneSnapshot() };
-    });
+      }));
   }
 
   async listLibrarySections(requestId: string): Promise<PlexIpcResult<PlexListLibrarySectionsValue>> {
@@ -530,6 +530,7 @@ export class DesktopPlexRuntime {
   }
 
   async shutdown(): Promise<void> {
+    this.guideArtworkSessionGenerationOwner.dispose();
     this.operationOwner.shutdown();
   }
 
@@ -541,27 +542,44 @@ export class DesktopPlexRuntime {
     if (existingToken !== null) {
       return existingToken;
     }
-    const read = await this.credentialStore.readDefaultAccountCredentialSecret();
-    if (read.status !== 'present') {
+    const lease = this.guideArtworkSessionGenerationOwner.beginTransition('restore-account-token');
+    try {
+      const read = await this.credentialStore.readDefaultAccountCredentialSecret();
+      if (read.status !== 'present') {
+        commit((snapshot) => ({
+          ...snapshot,
+          auth: { ...snapshot.auth, credentialStatus: mapCredentialStatus(read.status) },
+          updatedAtMs: this.nowMs(),
+        }));
+        throw storageError(read.status);
+      }
+      const restoredProfile = await this.authService.restoreAccountToken(read.secretValue, { signal });
       commit((snapshot) => ({
         ...snapshot,
-        auth: { ...snapshot.auth, credentialStatus: mapCredentialStatus(read.status) },
+        auth: {
+          ...snapshot.auth,
+          state: 'signed-in',
+          profile: restoredProfile,
+          credentialStatus: 'present',
+        },
         updatedAtMs: this.nowMs(),
       }));
-      throw storageError(read.status);
+      return read.secretValue;
+    } finally {
+      lease.settle();
     }
-    const restoredProfile = await this.authService.restoreAccountToken(read.secretValue, { signal });
-    commit((snapshot) => ({
-      ...snapshot,
-      auth: {
-        ...snapshot.auth,
-        state: 'signed-in',
-        profile: restoredProfile,
-        credentialStatus: 'present',
-      },
-      updatedAtMs: this.nowMs(),
-    }));
-    return read.secretValue;
+  }
+
+  private async runGuideArtworkTransition<T>(
+    reason: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const lease = this.guideArtworkSessionGenerationOwner.beginTransition(reason);
+    try {
+      return await operation();
+    } finally {
+      lease.settle();
+    }
   }
 
   private async requireActiveToken(

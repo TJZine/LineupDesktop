@@ -19,6 +19,7 @@ import { readOrCreateDesktopPlexClientIdentifier } from './desktopPlexClientIden
 import { DesktopPlexRuntime } from './desktopPlexRuntime.js';
 import { LivePlexTransport } from './livePlexTransport.js';
 import { registerPlexIpcHandlers, type PlexIpcTeardown } from './plexIpc.js';
+import { GuideArtworkSessionGenerationOwner } from './guideArtworkSessionGenerationOwner.js';
 
 export interface CreatePlexCompositionOptions {
   app: Pick<App, 'getPath' | 'getVersion'>;
@@ -34,11 +35,15 @@ export interface RegisterPlexCompositionIpcOptions {
 
 export interface PlexComposition {
   runtime: DesktopPlexRuntime;
+  guideArtworkSessionGenerationOwner: GuideArtworkSessionGenerationOwner;
+  liveTransport: LivePlexTransport;
   teardown: () => Promise<void>;
 }
 
 export interface PlexCompositionRegistration {
   runtime: DesktopPlexRuntime;
+  guideArtworkSessionGenerationOwner: GuideArtworkSessionGenerationOwner;
+  liveTransport: LivePlexTransport;
   teardown: () => Promise<void>;
 }
 
@@ -75,12 +80,17 @@ export async function createPlexComposition(
     transport: liveTransport,
     selectedServerStore,
   });
+  const guideArtworkSessionGenerationOwner = new GuideArtworkSessionGenerationOwner(
+    authService,
+    serverDiscovery,
+  );
   const runtime = new DesktopPlexRuntime({
     authService,
     credentialStore,
     serverDiscovery,
     libraryTransport: liveTransport,
     channelBuilderFacetTransport: liveTransport,
+    guideArtworkSessionGenerationOwner,
     diagnosticEventStore: options.diagnosticEventStore,
   });
   const state: PlexCompositionState = {
@@ -89,6 +99,8 @@ export async function createPlexComposition(
   };
   const composition: PlexComposition = {
     runtime,
+    guideArtworkSessionGenerationOwner,
+    liveTransport,
     teardown: () => teardownComposition(runtime, state),
   };
   compositionStates.set(composition, state);
@@ -129,6 +141,8 @@ export function registerPlexCompositionIpc(
 
   return {
     runtime: composition.runtime,
+    guideArtworkSessionGenerationOwner: composition.guideArtworkSessionGenerationOwner,
+    liveTransport: composition.liveTransport,
     teardown: () => teardownComposition(composition.runtime, state),
   };
 }

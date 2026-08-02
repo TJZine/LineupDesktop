@@ -1,4 +1,4 @@
-import type { IpcMainInvokeEvent } from 'electron';
+import type { IpcMainInvokeEvent, WebContents } from 'electron';
 import { randomBytes } from 'node:crypto';
 
 import { redactDiagnosticText } from '../../contracts/diagnostics.js';
@@ -28,6 +28,9 @@ import { ChannelScheduler } from '../../domain/scheduler/channelScheduler.js';
 import { GuideRuntime } from './guideRuntime.js';
 import type { ChannelClock, ChannelLogger } from '../../domain/channel/interfaces.js';
 import { ChannelPublicReferenceOwner } from './channelPublicReferenceOwner.js';
+import { GuideArtworkOwner } from './guideArtworkOwner.js';
+import type { GuideArtworkSessionGenerationOwner } from '../plex/guideArtworkSessionGenerationOwner.js';
+import type { LivePlexGuideArtworkTransport } from '../plex/livePlexTransport.js';
 
 export interface CreateChannelCompositionOptions {
   persistence:
@@ -43,6 +46,8 @@ export interface CreateChannelCompositionOptions {
   onChannelTuned?: (channelId: string) => void | Promise<void>;
   diagnosticEventStore?: DiagnosticEventStore;
   channelBuilderContextSource?: ChannelBuilderPlexContextSource;
+  guideArtworkSessionGenerationOwner: GuideArtworkSessionGenerationOwner;
+  guideArtworkTransport: LivePlexGuideArtworkTransport;
 }
 
 export interface RegisterChannelCompositionIpcOptions {
@@ -58,10 +63,18 @@ export interface ChannelComposition {
   runtime: ChannelRuntime;
   guideRuntime: GuideRuntime;
   activeChannelScheduler: ChannelScheduler;
+  guideArtworkOwner: GuideArtworkOwner;
   teardown: ChannelCompositionTeardown;
 }
 
 export interface ChannelCompositionRegistration extends ChannelComposition {}
+
+export function bindGuideArtworkOwnerToWebContents(
+  webContents: Pick<WebContents, 'once'>,
+  guideArtworkOwner: Pick<GuideArtworkOwner, 'dispose'>,
+): void {
+  webContents.once('destroyed', () => guideArtworkOwner.dispose());
+}
 
 type ChannelCompositionState = {
   customChannelRuntime: CustomChannelRuntime;
@@ -70,6 +83,7 @@ type ChannelCompositionState = {
   customIpcTeardown: CustomChannelIpcTeardown | null;
   teardownPromise: Promise<void> | null;
   publicReferenceOwner: ChannelPublicReferenceOwner;
+  guideArtworkOwner: GuideArtworkOwner;
 };
 
 const compositionStates = new WeakMap<ChannelComposition, ChannelCompositionState>();
@@ -91,6 +105,10 @@ export function createChannelComposition(
   });
   const activeChannelScheduler = new ChannelScheduler({ clock });
   const guideLogger = createGuideRuntimeLogger(options.diagnosticEventStore);
+  const guideArtworkOwner = new GuideArtworkOwner(
+    options.guideArtworkSessionGenerationOwner,
+    options.guideArtworkTransport,
+  );
   let guideRuntime: GuideRuntime | null = null;
   const contextOwner = new ChannelBuilderContextEpochOwner(
     options.channelBuilderContextSource ?? options.plexRuntime,
@@ -100,7 +118,10 @@ export function createChannelComposition(
     randomHex128: () => randomBytes(16).toString('hex'),
     releasePlan: (planId) => contextOwner.release(planId),
   });
-  const mutationCoordinator = new ChannelLineupMutationCoordinator(persistenceStore);
+  const mutationCoordinator = new ChannelLineupMutationCoordinator(
+    persistenceStore,
+    options.guideArtworkSessionGenerationOwner,
+  );
   const publicReferenceOwner = new ChannelPublicReferenceOwner();
   const builderRuntime = new ChannelBuilderRuntime({
     store: persistenceStore,
@@ -129,6 +150,9 @@ export function createChannelComposition(
     clock,
     onChannelTuned: typeof options.onChannelTuned === 'function' ? options.onChannelTuned : undefined,
     logger: guideLogger,
+    guideArtworkOwner,
+    loadLineupRevision: async () =>
+      (await runtime.loadPublicReferenceGeneration()).lineupRevision,
   });
   const customChannelRuntime = new CustomChannelRuntime({
     storage: sharedChannelStore,
@@ -147,11 +171,13 @@ export function createChannelComposition(
     customIpcTeardown: null,
     teardownPromise: null,
     publicReferenceOwner,
+    guideArtworkOwner,
   };
   const composition: ChannelComposition = {
     runtime,
     guideRuntime,
     activeChannelScheduler,
+    guideArtworkOwner,
     teardown: () => teardownChannelComposition(runtime, state),
   };
   compositionStates.set(composition, state);
@@ -209,6 +235,7 @@ function teardownChannelComposition(
   state.teardownPromise ??= (async () => {
     await state.customIpcTeardown?.();
     await state.channelIpcTeardown?.();
+    state.guideArtworkOwner.dispose();
     runtime.shutdown();
   })();
   return state.teardownPromise;

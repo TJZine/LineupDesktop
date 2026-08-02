@@ -46,6 +46,7 @@ test('workflow keeps Guide page selection inside the EPG owner', () => {
         genres: [],
         startsAtMs: 0,
         endsAtMs: 10_000,
+        artwork: null,
       }],
     })),
     nowWatching: null,

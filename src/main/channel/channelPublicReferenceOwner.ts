@@ -29,6 +29,7 @@ type ReferenceMapping = Readonly<{
   rawToPublicChannel: ReadonlyMap<string, string>;
   publicToRawChannel: ReadonlyMap<string, string>;
   rawToPublicLibrary: ReadonlyMap<string, string>;
+  publicToRawLibrary: ReadonlyMap<string, string>;
 }>;
 
 export class ChannelPublicReferenceConsistencyError extends Error {
@@ -58,6 +59,7 @@ export class ChannelPublicReferenceOwner {
         channel.id,
         channel.hidden === true,
         channel.sourceLibraryId ?? null,
+        channel.contentSource,
       ]),
       aggregate.currentChannelId,
     ];
@@ -204,14 +206,29 @@ export class ChannelPublicReferenceOwner {
     return this.mappingFor(generation).publicToRawChannel.get(publicChannelId) ?? null;
   }
 
+  public projectChannelReference(generation: ChannelPublicReferenceGeneration, rawChannelId: string): string {
+    return requireConsistentMapped(this.mappingFor(generation).rawToPublicChannel, rawChannelId);
+  }
+
+  public projectLibraryReference(generation: ChannelPublicReferenceGeneration, rawLibraryId: string): string {
+    return requireConsistentMapped(this.mappingFor(generation).rawToPublicLibrary, rawLibraryId);
+  }
+
+  public projectLibraryName(rawName: string): string {
+    return display(rawName, 'Library', 160);
+  }
+
+  public resolveLibrary(generation: ChannelPublicReferenceGeneration, publicLibraryId: string): string | null {
+    return this.mappingFor(generation).publicToRawLibrary.get(publicLibraryId) ?? null;
+  }
+
   private mappingFor(generation: ChannelPublicReferenceGeneration): ReferenceMapping {
     if (this.cached?.fingerprint === generation.fingerprint) return this.cached.mapping;
     const channelValues = generation.channels.map((channel) => channel.id);
-    const libraryValues = generation.channels.flatMap((channel) =>
-      channel.sourceLibraryId === null || channel.sourceLibraryId === undefined
-        ? []
-        : [channel.sourceLibraryId],
-    );
+    const libraryValues = generation.channels.flatMap((channel) => [
+      ...(channel.sourceLibraryId === null || channel.sourceLibraryId === undefined ? [] : [channel.sourceLibraryId]),
+      ...libraryIdsFromSource(channel.contentSource),
+    ]);
     const allSafe = new Set(
       [...channelValues, ...libraryValues].filter(isSafeReference),
     );
@@ -235,10 +252,19 @@ export class ChannelPublicReferenceOwner {
         [...rawToPublicChannel].map(([raw, publicValue]) => [publicValue, raw]),
       ),
       rawToPublicLibrary,
+      publicToRawLibrary: new Map(
+        [...rawToPublicLibrary].map(([raw, publicValue]) => [publicValue, raw]),
+      ),
     });
     this.cached = { fingerprint: generation.fingerprint, mapping };
     return mapping;
   }
+}
+
+function libraryIdsFromSource(source: ChannelConfig['contentSource']): string[] {
+  if (source.type === 'library') return [source.libraryId];
+  if (source.type === 'mixed') return source.sources.flatMap(libraryIdsFromSource);
+  return [];
 }
 
 function allocateReferences(
@@ -304,11 +330,15 @@ function groupBy<T>(values: readonly T[], keyOf: (value: T) => string): Map<stri
 }
 
 function projectProgram(program: EpgProgramViewModel, id: string): EpgProgramViewModel {
+  const title = display(program.title, 'Untitled program', 160);
+  const artworkFallback = `Poster for ${title}`.length <= 160
+    ? `Poster for ${title}`
+    : 'Program poster';
   return {
     id,
-    title: display(program.title, 'Untitled program', 2_000),
+    title,
     subtitle: display(program.subtitle, '', 2_000),
-    description: display(program.description, '', 2_000),
+    description: display(program.description, '', 600),
     showTitle: display(program.showTitle, '', 2_000),
     episodeLabel: display(program.episodeLabel, '', 2_000),
     rating: display(program.rating, '', 2_000),
@@ -316,6 +346,15 @@ function projectProgram(program: EpgProgramViewModel, id: string): EpgProgramVie
     genres: program.genres.map((value) => display(value, '', 2_000)).slice(0, 20),
     startsAtMs: program.startsAtMs,
     endsAtMs: program.endsAtMs,
+    artwork: program.artwork === null
+      ? null
+      : Object.freeze({
+          id: program.artwork.id,
+          kind: program.artwork.kind,
+          expiresAtMs: program.artwork.expiresAtMs,
+          altText: display(program.artwork.altText, artworkFallback, 160),
+          status: program.artwork.status,
+        }),
   };
 }
 

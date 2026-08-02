@@ -4,6 +4,7 @@ import type {
   EpgPresentationState,
   EpgProgramCellViewModel,
 } from './epg.js';
+import type { ArtworkRef } from '../contracts/artwork.js';
 
 export interface ProgramSummaryViewModel {
   title: string;
@@ -30,6 +31,8 @@ export interface EpgInfoPanelViewModel {
   description: string;
   badges: readonly string[];
   genres: string;
+  artwork: ArtworkRef | null;
+  presentationGeneration: number;
 }
 
 export interface EpgPresentationStateViewModel {
@@ -74,6 +77,8 @@ export function createInfoPanelView(program: EpgProgramCellViewModel): EpgInfoPa
     description: program.description,
     badges: [program.rating, ...program.quality],
     genres: program.genres.join(' - '),
+    artwork: program.artwork,
+    presentationGeneration: program.presentationGeneration,
   };
 }
 

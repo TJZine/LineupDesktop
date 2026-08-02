@@ -502,16 +502,56 @@
     white-space: nowrap;
     overflow: hidden;
   }
+
+  [data-epg-detail-artwork],
+  [data-epg-detail-poster] {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 .guide-detail {
   display: grid;
-  gap: var(--space-1);
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: var(--space-4);
   min-width: 0;
   padding: var(--space-5);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-control);
   background: rgba(121, 199, 255, 0.1);
+}
+
+.guide-detail__copy {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+[data-epg-detail-artwork] {
+  display: grid;
+  place-items: center;
+  width: 112px;
+  height: 168px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: rgba(0, 0, 0, 0.32);
+}
+
+[data-epg-detail-poster] {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+[data-epg-detail-artwork-placeholder] {
+  padding: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: center;
 }
 
 .guide-detail strong,
@@ -521,6 +561,10 @@
 }
 
 .guide-detail h3 {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   font-size: 19px;
   line-height: 1.15;
 }
@@ -528,6 +572,25 @@
 .guide-detail p {
   color: var(--color-text-muted);
   font-size: 14px;
+}
+
+[data-epg-detail-description] {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+}
+
+@media (forced-colors: active) {
+  [data-epg-detail-artwork] {
+    border-color: CanvasText;
+    outline: 1px solid CanvasText;
+    background: Canvas;
+  }
+
+  [data-epg-detail-artwork-placeholder] {
+    color: CanvasText;
+  }
 }
 
 .workflow-actions button {

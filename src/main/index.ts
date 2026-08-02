@@ -42,6 +42,7 @@ import { createProductionNativeHostFactory } from './player/productionNativeHost
 import { DiagnosticEventStore } from './diagnostics/diagnosticEventStore.js';
 import { registerDiagnosticsIpcHandlers, type DiagnosticsIpcTeardown } from './diagnostics/supportBundleIpc.js';
 import {
+  bindGuideArtworkOwnerToWebContents,
   createChannelComposition,
   registerChannelCompositionIpc,
   type ChannelCompositionRegistration,
@@ -226,6 +227,8 @@ async function startApplication(): Promise<void> {
   const channelCreated = createChannelComposition({
     persistence,
     plexRuntime: plexCreated.runtime,
+    guideArtworkSessionGenerationOwner: plexCreated.guideArtworkSessionGenerationOwner,
+    guideArtworkTransport: plexCreated.liveTransport,
     channelBuilderContextSource: smokeFixture?.contextSource,
     diagnosticEventStore,
   });
@@ -243,7 +246,7 @@ async function startApplication(): Promise<void> {
     diagnosticEventStore,
   });
 
-    registerLineupProtocolHandler(rendererRoot);
+    registerLineupProtocolHandler(rendererRoot, channelCreated.guideArtworkOwner);
     configurePermissionContainment();
     registerShellIpcHandlers();
     const settingsStore = new DesktopSettingsStore({
@@ -389,6 +392,7 @@ async function startApplication(): Promise<void> {
         reportMainProcessDiagnostic('Guide runtime active channel initialization failed', error);
       });
     const shellWindow = getShellWindowController().createWindow();
+    bindGuideArtworkOwnerToWebContents(shellWindow.webContents, channelCreated.guideArtworkOwner);
     registerShellAppCommandController(shellWindow, {
       sendMediaInput: (input) => sendToShellWindow(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, input),
       reportDiagnostic: reportMainProcessDiagnostic,
@@ -433,6 +437,7 @@ function registerApplicationLifecycleHandlers(): void {
       channelComposition = null;
       const teardownPlex = plexComposition?.teardown ?? null;
       plexComposition = null;
+      localChannelComposition?.guideArtworkOwner.dispose();
       localPlaybackEventRouter?.dispose();
       void (async () => {
         await localPlaybackRuntime?.teardown();
@@ -456,6 +461,7 @@ function registerApplicationLifecycleHandlers(): void {
     plexComposition = null;
     const localChannelComposition = channelComposition;
     channelComposition = null;
+    localChannelComposition?.guideArtworkOwner.dispose();
     playerIpcQuitTeardownInProgress = true;
     const localPlaybackRuntime = playbackRuntime;
     playbackRuntime = null;
@@ -549,21 +555,24 @@ function registerShellIpcHandlers(): void {
 }
 
 function isAuthorizedEvent(event: IpcMainInvokeEvent): boolean {
-  const shellWindow = getShellWindowController().getWindow();
-  if (shellWindow === null) {
+  try {
+    const shellWindow = getShellWindowController().getWindow();
+    if (shellWindow === null || event.sender !== shellWindow.webContents || event.sender.isDestroyed()) {
+      return false;
+    }
+    const senderFrame = event.senderFrame;
+    if (senderFrame === null) return false;
+    const details: ShellIpcAuthorizationDetails = {
+      senderMatchesShell: true,
+      senderDestroyed: false,
+      senderUrl: event.sender.getURL(),
+      frameUrl: senderFrame.url,
+      frameIsMainFrame: senderFrame === event.sender.mainFrame,
+    };
+    return isAuthorizedShellIpcRequest(details);
+  } catch {
     return false;
   }
-  if (event.senderFrame === null) {
-    return false;
-  }
-  const details: ShellIpcAuthorizationDetails = {
-    senderMatchesShell: event.sender === shellWindow.webContents,
-    senderDestroyed: event.sender.isDestroyed(),
-    senderUrl: event.sender.getURL(),
-    frameUrl: event.senderFrame.url,
-    frameIsMainFrame: event.senderFrame === event.sender.mainFrame,
-  };
-  return isAuthorizedShellIpcRequest(details);
 }
 
 function getShellCapabilities(): ShellCapabilities {
