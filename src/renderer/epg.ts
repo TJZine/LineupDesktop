@@ -7,6 +7,7 @@ import {
   type EpgShellViewModel,
 } from './guidePresentation.js';
 import type { ArtworkRef } from '../contracts/artwork.js';
+import type { GuideLibraryFilterState } from '../contracts/guide.js';
 
 export type EpgActionId =
   | 'previousWindow'
@@ -99,12 +100,16 @@ export interface EpgGuideViewModel {
   shell: EpgShellViewModel;
   infoPanel: EpgInfoPanelViewModel | null;
   state: EpgPresentationStateViewModel;
+  channelWindow: { offset: number; total: number };
+  libraryFilter: GuideLibraryFilterState | null;
 }
 
 export interface EpgPresentationSource {
   channels: readonly EpgChannelViewModel[];
   nowWatching: EpgCurrentProgramViewModel | null;
   nowMs?: number;
+  channelWindow?: { offset: number; total: number };
+  libraryFilter?: GuideLibraryFilterState;
 }
 
 export interface NormalizedEpgPresentationSource extends Omit<EpgPresentationSource, 'nowMs'> {
@@ -336,6 +341,92 @@ export function createEpgGuideView(
     shell: createEpgShellView(presentation.channels, presentationForRender.nowWatching),
     infoPanel: selectedProgram === null ? null : createInfoPanelView(selectedProgram),
     state: createEpgPresentationStates()[normalizedState.presentationState],
+    channelWindow: presentation.channelWindow ?? { offset: 0, total: presentation.channels.length },
+    libraryFilter: presentation.libraryFilter ?? null,
+  };
+}
+
+export function selectEpgPageTarget(
+  state: EpgState,
+  targetLocalIndex: number,
+  presentation: EpgPresentationSource,
+): EpgState {
+  if (state.presentationState !== 'ready') return state;
+  const currentIndex = presentation.channels.findIndex((channel) => channel.id === state.selectedChannelId);
+  if (currentIndex < 0) return state;
+  return selectNearestProgramOnAdjacentChannel(state, targetLocalIndex - currentIndex, presentation);
+}
+
+export interface EpgPageNavigationIntent {
+  targetGlobalIndex: number;
+  sourceLocalIndex: number;
+  channelOffset: number;
+  targetLocalIndex: number | null;
+  fetchRequired: boolean;
+  boundaryClamped: boolean;
+}
+
+export interface EpgPresentationSettlement {
+  state: EpgState;
+  pendingFocusId: string | null | undefined;
+}
+
+export function settleEpgPresentation(
+  state: EpgState,
+  presentation: EpgPresentationSource,
+  generation: number,
+  pagingTargetGlobalIndex: number | null | undefined,
+  restoreSelectedProgramFocus: boolean,
+): EpgPresentationSettlement {
+  let next = updateEpgState(state, presentation, generation);
+  if (typeof pagingTargetGlobalIndex === 'number') {
+    const window = presentation.channelWindow;
+    if (window !== undefined) {
+      next = selectEpgPageTarget(next, pagingTargetGlobalIndex - window.offset, presentation);
+    }
+  }
+  const pendingFocusId = pagingTargetGlobalIndex === null
+    ? null
+    : typeof pagingTargetGlobalIndex === 'number' || restoreSelectedProgramFocus
+      ? createEpgGuideView(next, presentation).selectedProgram?.focusId ?? null
+      : undefined;
+  return { state: next, pendingFocusId };
+}
+
+export function settleEpgPresentationFailure(
+  state: EpgState,
+  message: string,
+  generation: number,
+  retainLastValid: boolean,
+): EpgState {
+  return retainLastValid
+    ? setEpgTuneError(state, message)
+    : setEpgPresentationState(state, 'error', generation);
+}
+
+export function resolveEpgPageNavigation(
+  state: EpgState,
+  presentation: EpgPresentationSource,
+  offset: -5 | 5,
+  pendingTargetGlobalIndex: number | null = null,
+  channelLimit = 9,
+): EpgPageNavigationIntent | null {
+  const sourceLocalIndex = presentation.channels.findIndex((channel) => channel.id === state.selectedChannelId);
+  const window = presentation.channelWindow ?? { offset: 0, total: presentation.channels.length };
+  if (sourceLocalIndex < 0 || window.total === 0) return null;
+  const base = pendingTargetGlobalIndex ?? window.offset + sourceLocalIndex;
+  const targetGlobalIndex = clamp(base + offset, 0, window.total - 1);
+  const boundaryClamped = targetGlobalIndex === base;
+  const pageEnd = window.offset + presentation.channels.length;
+  const inside = targetGlobalIndex >= window.offset && targetGlobalIndex < pageEnd;
+  const maximumOffset = Math.max(0, window.total - channelLimit);
+  return {
+    targetGlobalIndex,
+    sourceLocalIndex,
+    channelOffset: inside || boundaryClamped ? window.offset : clamp(targetGlobalIndex - sourceLocalIndex, 0, maximumOffset),
+    targetLocalIndex: inside ? targetGlobalIndex - window.offset : null,
+    fetchRequired: !inside && !boundaryClamped,
+    boundaryClamped,
   };
 }
 

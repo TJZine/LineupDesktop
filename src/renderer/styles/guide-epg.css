@@ -598,3 +598,32 @@
   color: var(--color-inverse-text);
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
+.epg-library-tabs {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.25rem 0;
+}
+
+.epg-library-tab {
+  border: 1px solid var(--lineup-border, #667085);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  padding: 0.4rem 0.85rem;
+  white-space: nowrap;
+}
+
+.epg-library-tab[aria-selected="true"] {
+  background: var(--lineup-accent, #7c3aed);
+  color: Canvas;
+}
+
+.epg-library-tab:focus-visible {
+  outline: 3px solid Highlight;
+  outline-offset: 2px;
+}
+
+.epg-library-tab[aria-busy="true"] {
+  opacity: 0.65;
+}

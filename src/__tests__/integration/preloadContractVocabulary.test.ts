@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import ts from 'typescript';
+import { isSafeArtworkRefId } from '../../contracts/artwork.js';
 
 import {
   LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL,
@@ -19,6 +20,7 @@ import {
   LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_VALIDATE_DRAFT_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
   LINEUP_PLAYER_CLEANUP_CHANNEL,
   LINEUP_PLAYER_COMMAND_CHANNEL,
@@ -350,6 +352,7 @@ function evaluateGuideBridgeModule(): Record<string, unknown> {
     fileName: 'src/preload/guideBridge.cts',
   }).outputText;
   const requireGuide = (moduleName: string) => {
+    if (moduleName === '../contracts/artwork.js') return { isSafeArtworkRefId };
     assert.fail(`unexpected guide bridge require ${moduleName}`);
   };
   const evaluateGuide = new Function('require', 'exports', 'module', compiled);
@@ -676,6 +679,7 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
   LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
   LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL,
@@ -721,6 +725,7 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL',
     'LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL',
     'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
+    'LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL',
     'LINEUP_PLAYER_TUNE_CHANNEL',
   ]),
   on: new Set([
@@ -1825,7 +1830,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
   const guideBridgeExports = evaluateGuideBridgeModule();
   const createGuideBridge = guideBridgeExports.createGuideBridge as (
     invoke: (channel: string, request: { requestId: string; payload: unknown }) => Promise<unknown>,
-    channels: { getPresentation: string; tuneChannel: string },
+    channels: { getPresentation: string; setLibraryFilter: string; tuneChannel: string },
     createRequestId: (prefix: string) => string,
   ) => { getPresentation: (input: { startTimeMs: number; durationMs: number }) => Promise<unknown> };
   const validPresentation = {
@@ -1847,6 +1852,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
             genres: ['Drama'],
             startsAtMs: 1,
             endsAtMs: 2,
+            artwork: null,
           },
         ],
       },
@@ -1858,6 +1864,8 @@ test('guide bridge validates presentation request ranges and result envelopes', 
       startsAtMs: 1,
       endsAtMs: 2,
     },
+    channelWindow: { offset: 0, total: 1 },
+    libraryFilter: { scopeToken: 'scope-1', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'missing' },
   };
 
   let invoked = false;
@@ -1872,6 +1880,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
     },
     {
       getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      setLibraryFilter: LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
       tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
     },
     () => 'guide-request-1',
@@ -1892,6 +1901,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
     }),
     {
       getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      setLibraryFilter: LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
       tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
     },
     () => 'guide-request-2',
@@ -1910,6 +1920,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
     }),
     {
       getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      setLibraryFilter: LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
       tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
     },
     () => 'guide-request-3',
@@ -3160,6 +3171,7 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
 
   assert.deepEqual(collectCreateGuideBridgeChannelArguments().sort(), [
     'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
+    'LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL',
     'LINEUP_PLAYER_TUNE_CHANNEL',
   ]);
 

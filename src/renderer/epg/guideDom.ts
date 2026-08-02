@@ -6,6 +6,7 @@ import {
   type EpgProgramCellViewModel,
 } from '../epg.js';
 import { isSafeArtworkRefId } from '../../contracts/artwork.js';
+import type { GuideLibraryFilterState } from '../../contracts/guide.js';
 
 export interface CellPosition {
   left: number;
@@ -157,12 +158,67 @@ export function guideCellDom(
   return cell;
 }
 
+export function guideLibraryTabsDom(filter: GuideLibraryFilterState): HTMLElement {
+  const tabs = document.createElement('nav');
+  tabs.className = 'epg-library-tabs';
+  tabs.setAttribute('role', 'tablist');
+  tabs.setAttribute('aria-label', 'Guide libraries');
+  const choices = [{ id: null, name: 'All' }, ...filter.libraries.map((library) => ({ id: library.id, name: library.name }))];
+  for (const choice of choices) {
+    const selected = choice.id === filter.selectedLibraryId;
+    const tab = document.createElement('button');
+    tab.setAttribute('type', 'button');
+    tab.className = 'epg-library-tab';
+    tab.dataset.guideLibraryId = choice.id ?? '';
+    tab.dataset.focusId = guideLibraryFocusId(choice.id);
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    tab.textContent = choice.name;
+    tabs.append(tab);
+  }
+  return tabs;
+}
+
+export function guideLibraryFocusId(libraryId: string | null): string {
+  if (libraryId === null) return 'guide-library-choice-all';
+  let encoded = '';
+  for (let index = 0; index < libraryId.length; index += 1) {
+    encoded += libraryId.charCodeAt(index).toString(16).padStart(4, '0');
+  }
+  return `guide-library-choice-id-${encoded}`;
+}
+
+export function shouldRenderGuideLibraryTabs(
+  enabled: boolean,
+  filter: GuideLibraryFilterState | null | undefined,
+): filter is GuideLibraryFilterState {
+  return enabled && (filter?.libraries.length ?? 0) > 1;
+}
+
+export function projectGuideLibraryTabsPending(root: HTMLElement | null, pending: boolean): void {
+  for (const tab of Array.from(root?.querySelectorAll<HTMLButtonElement>('[data-guide-library-id]') ?? [])) {
+    tab.setAttribute('aria-disabled', String(pending));
+    if (pending) {
+      tab.dataset.overlayBusyFocusCustody = 'true';
+      tab.setAttribute('aria-busy', 'true');
+    } else {
+      delete tab.dataset.overlayBusyFocusCustody;
+      tab.removeAttribute('aria-busy');
+    }
+  }
+}
+
 export function renderEpgGuideDom(
   view: RouteWorkflowViewModel,
   dom: RendererDomBindings,
-  settings: Pick<DesktopSettingsValues, 'guideDensity' | 'previewBadgesEnabled'> = {
+  settings: Pick<DesktopSettingsValues,
+    'guideDensity' |
+    'previewBadgesEnabled' |
+    'libraryTabsEnabled'> = {
     guideDensity: 'comfortable',
     previewBadgesEnabled: true,
+    libraryTabsEnabled: true,
   },
 ): void {
   const selectedRow = view.guide.selectedProgram === null
@@ -296,6 +352,9 @@ export function renderEpgGuideDom(
 
   shell.append(classicHeader);
   if (nowWatching !== null) shell.append(nowWatching);
+  if (shouldRenderGuideLibraryTabs(settings.libraryTabsEnabled, view.guide.libraryFilter)) {
+    shell.append(guideLibraryTabsDom(view.guide.libraryFilter!));
+  }
   shell.append(stateElement);
   if (view.guide.presentationState === 'ready') {
     stateElement.hidden = true;

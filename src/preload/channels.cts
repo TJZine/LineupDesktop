@@ -32,6 +32,7 @@ export const LINEUP_CHANNEL_SETUP_START_APPLY_CHANNEL = 'lineup:channelSetup:sta
 export const LINEUP_CHANNEL_SETUP_GET_OPERATION_CHANNEL = 'lineup:channelSetup:getOperation';
 export const LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL = 'lineup:channelSetup:cancel';
 export const LINEUP_GUIDE_GET_PRESENTATION_CHANNEL = 'lineup:guide:getPresentation';
+export const LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL = 'lineup:guide:setLibraryFilter';
 export const LINEUP_PLAYER_TUNE_CHANNEL = 'lineup:player:tuneChannel';
 export const LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL = 'lineup:customChannels:getSnapshot';
 export const LINEUP_CUSTOM_CHANNEL_LIST_MEDIA_CHANNEL = 'lineup:customChannels:listMedia';

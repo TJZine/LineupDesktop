@@ -5,6 +5,9 @@ import type {
   EpgProgramCellViewModel,
 } from './epg.js';
 import type { ArtworkRef } from '../contracts/artwork.js';
+import type { GuideLibraryFilterState } from '../contracts/guide.js';
+import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
+import type { AppRouteId } from './navigation.js';
 
 export interface ProgramSummaryViewModel {
   title: string;
@@ -39,6 +42,76 @@ export interface EpgPresentationStateViewModel {
   state: EpgPresentationState;
   label: string;
   detail: string;
+}
+
+export interface GuideLibraryFilterController {
+  select(libraryId: string | null): boolean;
+  cancel(): void;
+  isPending(): boolean;
+}
+
+export function createGuideLibraryFilterController(options: {
+  guide: LineupDesktopPreloadApi['guide'];
+  getActiveRoute(): AppRouteId;
+  getFilter(): GuideLibraryFilterState | null;
+  applyFilter(filter: GuideLibraryFilterState): void;
+  refresh(): void;
+  cancelPage(): void;
+  handleFailure(message: string): void;
+  onPendingChanged(): void;
+}): GuideLibraryFilterController {
+  let operationGeneration = 0;
+  let pending = false;
+
+  const cancel = (): void => {
+    operationGeneration += 1;
+    if (!pending) return;
+    pending = false;
+    options.onPendingChanged();
+  };
+
+  return {
+    select(libraryId) {
+      const filter = options.getFilter();
+      if (pending || options.getActiveRoute() !== 'guide' || filter === null ||
+        (libraryId !== null && !filter.libraries.some((library) => library.id === libraryId))) return false;
+      const generation = ++operationGeneration;
+      const scopeToken = filter.scopeToken;
+      pending = true;
+      options.cancelPage();
+      options.onPendingChanged();
+      void options.guide.setLibraryFilter({
+        expectedScopeToken: scopeToken,
+        expectedRevision: filter.revision,
+        libraryId,
+      }).then((result) => {
+        if (generation !== operationGeneration) return;
+        pending = false;
+        if (options.getActiveRoute() !== 'guide' || options.getFilter()?.scopeToken !== scopeToken) {
+          options.onPendingChanged();
+          return;
+        }
+        if (!result.ok) {
+          options.handleFailure(result.error.message);
+          options.onPendingChanged();
+          return;
+        }
+        options.applyFilter(result.value);
+        options.onPendingChanged();
+        options.refresh();
+      }, () => {
+        if (generation !== operationGeneration) return;
+        pending = false;
+        if (options.getActiveRoute() === 'guide' && options.getFilter()?.scopeToken === scopeToken) {
+          options.handleFailure('Guide preferences could not be saved.');
+        }
+        options.onPendingChanged();
+      });
+      return true;
+    },
+    cancel,
+    isPending: () => pending,
+  };
 }
 
 export function createEpgShellView(

@@ -148,6 +148,9 @@ export const LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL =
 export const LINEUP_GUIDE_GET_PRESENTATION_CHANNEL =
   'lineup:guide:getPresentation' as const;
 
+export const LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL =
+  'lineup:guide:setLibraryFilter' as const;
+
 export const LINEUP_PLAYER_TUNE_CHANNEL = 'lineup:player:tuneChannel' as const;
 
 export const LINEUP_CUSTOM_CHANNEL_GET_SNAPSHOT_CHANNEL =

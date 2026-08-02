@@ -95,19 +95,16 @@ test('Guide presentation retries consistency failures but maps projection failur
         },
       } as never,
       guideRuntime: {
-        getPresentation: async () => {
+        isPreferenceScopeCurrent: () => true,
+        getPagedPresentation: async () => {
           presentationLoads += 1;
-          return { channels: [], nowWatching: null };
-        },
-      } as never,
-      publicReferenceOwner: {
-        projectPresentation: () => {
           if (scenario === 'consistency') {
             throw new ChannelPublicReferenceConsistencyError();
           }
           throw new Error('genuine projection failure');
         },
       } as never,
+      publicReferenceOwner: {} as never,
       isAuthorizedEvent: () => true,
       createRequestId: () => 'fallback',
       ipcMain: {
@@ -132,7 +129,7 @@ test('Guide presentation retries consistency failures but maps projection failur
         : 'GUIDE_PRESENTATION_FAILED',
     );
     assert.equal(presentationLoads, scenario === 'consistency' ? 3 : 1);
-    assert.equal(generationLoads, scenario === 'consistency' ? 6 : 2);
+    assert.equal(generationLoads, scenario === 'consistency' ? 3 : 1);
   }
 });
 

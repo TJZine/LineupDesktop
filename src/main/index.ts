@@ -69,7 +69,7 @@ import {
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
 import { registerShellAppCommandController } from './window/shellAppCommandController.js';
 import { createShellWindowController } from './window/shellWindowController.js';
-import { resolveDesktopSettingsFilePath } from './persistence/appDataPaths.js';
+import { resolveDesktopGuidePreferencesFilePath, resolveDesktopSettingsFilePath } from './persistence/appDataPaths.js';
 import { DesktopSettingsStore } from './persistence/desktopSettingsStore.js';
 import { registerSettingsIpcHandlers, type SettingsIpcTeardown } from './settings/settingsIpc.js';
 import { createSettingsNativeHostComposition } from './settings/settingsNativeHostComposition.js';
@@ -224,6 +224,17 @@ async function startApplication(): Promise<void> {
     smokeMode,
     publishShellStatus,
   });
+  const settingsStore = new DesktopSettingsStore({
+    settingsFilePath: resolveDesktopSettingsFilePath(app),
+    migrationEventSink: (event) => {
+      diagnosticEventStore.record({
+        surface: 'main', category: 'lifecycle', severity: event.status === 'succeeded' ? 'info' : 'error',
+        status: event.status, operation: 'settings.migration', message: 'Desktop settings migration completed.',
+        result: event.status === 'succeeded' ? 'success' : 'failure',
+        context: { fromVersion: event.fromVersion, toVersion: event.toVersion, status: event.status, revision: event.revision },
+      });
+    },
+  });
   const channelCreated = createChannelComposition({
     persistence,
     plexRuntime: plexCreated.runtime,
@@ -231,6 +242,8 @@ async function startApplication(): Promise<void> {
     guideArtworkTransport: plexCreated.liveTransport,
     channelBuilderContextSource: smokeFixture?.contextSource,
     diagnosticEventStore,
+    guidePreferencesFilePath: resolveDesktopGuidePreferencesFilePath(app),
+    getLibraryTabsEnabled: async () => (await settingsStore.loadSnapshot()).values.libraryTabsEnabled,
   });
   channelComposition = channelCreated;
   plexComposition = registerPlexCompositionIpc(plexCreated, {
@@ -249,26 +262,6 @@ async function startApplication(): Promise<void> {
     registerLineupProtocolHandler(rendererRoot, channelCreated.guideArtworkOwner);
     configurePermissionContainment();
     registerShellIpcHandlers();
-    const settingsStore = new DesktopSettingsStore({
-      settingsFilePath: resolveDesktopSettingsFilePath(app),
-      migrationEventSink: (event) => {
-        diagnosticEventStore.record({
-          surface: 'main',
-          category: 'lifecycle',
-          severity: event.status === 'succeeded' ? 'info' : 'error',
-          status: event.status,
-          operation: 'settings.migration',
-          message: 'Desktop settings migration completed.',
-          result: event.status === 'succeeded' ? 'success' : 'failure',
-          context: {
-            fromVersion: event.fromVersion,
-            toVersion: event.toVersion,
-            status: event.status,
-            revision: event.revision,
-          },
-        });
-      },
-    });
     const initialSettingsSnapshot = await settingsStore.loadSnapshot();
     const productionNativeHostFactory = shellMode === 'production'
       ? createProductionNativeHostFactory({ diagnosticEventStore })

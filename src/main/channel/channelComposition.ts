@@ -31,6 +31,7 @@ import { ChannelPublicReferenceOwner } from './channelPublicReferenceOwner.js';
 import { GuideArtworkOwner } from './guideArtworkOwner.js';
 import type { GuideArtworkSessionGenerationOwner } from '../plex/guideArtworkSessionGenerationOwner.js';
 import type { LivePlexGuideArtworkTransport } from '../plex/livePlexTransport.js';
+import { DesktopGuidePreferencesStore } from './desktopGuidePreferencesStore.js';
 
 export interface CreateChannelCompositionOptions {
   persistence:
@@ -48,6 +49,8 @@ export interface CreateChannelCompositionOptions {
   channelBuilderContextSource?: ChannelBuilderPlexContextSource;
   guideArtworkSessionGenerationOwner: GuideArtworkSessionGenerationOwner;
   guideArtworkTransport: LivePlexGuideArtworkTransport;
+  guidePreferencesFilePath?: string;
+  getLibraryTabsEnabled?: () => boolean | Promise<boolean>;
 }
 
 export interface RegisterChannelCompositionIpcOptions {
@@ -84,6 +87,7 @@ type ChannelCompositionState = {
   teardownPromise: Promise<void> | null;
   publicReferenceOwner: ChannelPublicReferenceOwner;
   guideArtworkOwner: GuideArtworkOwner;
+  unsubscribeGuidePreferenceScope: (() => void) | null;
 };
 
 const compositionStates = new WeakMap<ChannelComposition, ChannelCompositionState>();
@@ -109,6 +113,9 @@ export function createChannelComposition(
     options.guideArtworkSessionGenerationOwner,
     options.guideArtworkTransport,
   );
+  const guidePreferencesStore = options.guidePreferencesFilePath === undefined
+    ? null
+    : new DesktopGuidePreferencesStore(options.guidePreferencesFilePath);
   let guideRuntime: GuideRuntime | null = null;
   const contextOwner = new ChannelBuilderContextEpochOwner(
     options.channelBuilderContextSource ?? options.plexRuntime,
@@ -153,7 +160,15 @@ export function createChannelComposition(
     guideArtworkOwner,
     loadLineupRevision: async () =>
       (await runtime.loadPublicReferenceGeneration()).lineupRevision,
+    ...(guidePreferencesStore === null ? {} : {
+      preferencesStore: guidePreferencesStore,
+      guideContextSource: options.plexRuntime,
+      getLibraryTabsEnabled: options.getLibraryTabsEnabled,
+    }),
   });
+  const unsubscribeGuidePreferenceScope = guidePreferencesStore === null
+    ? null
+    : options.guideArtworkSessionGenerationOwner.subscribe(() => guideRuntime?.invalidatePreferenceScope());
   const customChannelRuntime = new CustomChannelRuntime({
     storage: sharedChannelStore,
     mutationCoordinator,
@@ -172,6 +187,7 @@ export function createChannelComposition(
     teardownPromise: null,
     publicReferenceOwner,
     guideArtworkOwner,
+    unsubscribeGuidePreferenceScope,
   };
   const composition: ChannelComposition = {
     runtime,
@@ -236,6 +252,7 @@ function teardownChannelComposition(
     await state.customIpcTeardown?.();
     await state.channelIpcTeardown?.();
     state.guideArtworkOwner.dispose();
+    state.unsubscribeGuidePreferenceScope?.();
     runtime.shutdown();
   })();
   return state.teardownPromise;

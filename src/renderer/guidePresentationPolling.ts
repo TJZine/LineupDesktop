@@ -4,6 +4,9 @@ import {
   EPG_SLOT_DURATION_MS,
   EPG_WINDOW_DURATION_MS,
   normalizeEpgPresentation,
+  resolveEpgPageNavigation,
+  type EpgPresentationSource,
+  type EpgState,
 } from './epg.js';
 import { summarizeRendererBridgeError } from './rendererBridgeFailures.js';
 
@@ -16,13 +19,16 @@ export interface GuidePresentationPollingOptions {
   host: Window;
   getActiveRoute(): AppRouteId;
   getWindowStartMs(): number;
+  getChannelOffset?(): number;
   getNowMs?(): number;
   setLoading(generation: number): void;
   applyPresentation(
     presentation: ReturnType<typeof normalizeEpgPresentation>,
     generation: number,
+    pagingTargetGlobalIndex: number | null | undefined,
   ): void;
-  handleFailure(source: string, message: string, generation: number): void;
+  handleFailure(source: string, message: string, generation: number, retainLastValid: boolean): void;
+  setPagingBusy?(busy: boolean): void;
   applyPlayerPresentation?(
     presentation: ReturnType<typeof normalizeEpgPresentation>,
     generation: number,
@@ -35,6 +41,10 @@ export interface GuidePresentationPollingController {
   start(): void;
   stop(): void;
   refresh(source: string, options?: GuidePresentationRefreshOptions): Promise<void>;
+  requestPage(input: GuidePageRefreshRequest): Promise<void>;
+  navigatePage(input: GuidePageNavigationRequest): GuidePageNavigationResult;
+  cancelPage(): void;
+  getPendingPageTarget(): number | null;
   getGeneration(): number;
   getLastValidPresentation(): ReturnType<typeof normalizeEpgPresentation> | null;
 }
@@ -42,27 +52,51 @@ export interface GuidePresentationPollingController {
 export interface GuidePresentationRefreshOptions {
   showLoading?: boolean;
   allowPlayerRoute?: boolean;
+  channelOffset?: number;
+}
+
+export interface GuidePageRefreshRequest {
+  targetGlobalIndex: number;
+  sourceLocalIndex: number;
+  scopeToken: string | null;
+  channelOffset: number;
+}
+
+export interface GuidePageNavigationRequest {
+  state: EpgState;
+  presentation: EpgPresentationSource;
+  offset: -5 | 5;
+  scopeToken: string | null;
+}
+
+export interface GuidePageNavigationResult {
+  handled: boolean;
+  targetLocalIndex: number | null;
 }
 
 interface GuidePresentationRefreshIntent {
+  requestSequence: number;
   source: string;
   generation: number;
   lifecycleGeneration: number;
   advanceGenerationOnStart: boolean;
   playerRefresh: boolean;
   windowStartMs: number;
+  channelOffset: number;
   readonly abortController: AbortController;
   readonly promise: Promise<void>;
   settle(): void;
 }
 
 function createRefreshIntent(
+  requestSequence: number,
   source: string,
   generation: number,
   lifecycleGeneration: number,
   advanceGenerationOnStart: boolean,
   playerRefresh: boolean,
   windowStartMs: number,
+  channelOffset: number,
 ): GuidePresentationRefreshIntent {
   let settled = false;
   let resolvePromise: () => void = () => undefined;
@@ -70,12 +104,14 @@ function createRefreshIntent(
     resolvePromise = resolve;
   });
   return {
+    requestSequence,
     source,
     generation,
     lifecycleGeneration,
     advanceGenerationOnStart,
     playerRefresh,
     windowStartMs,
+    channelOffset,
     abortController: new AbortController(),
     promise,
     settle: () => {
@@ -95,8 +131,24 @@ export function createGuidePresentationPolling(
   let lastValidPresentation: ReturnType<typeof normalizeEpgPresentation> | null = null;
   let activeRefresh: GuidePresentationRefreshIntent | null = null;
   let trailingRefresh: GuidePresentationRefreshIntent | null = null;
+  let refreshRequestSequence = 0;
+  let pendingPage: Readonly<GuidePageRefreshRequest & { requestSequence: number }> | null = null;
+
+  const cancelPage = (): void => {
+    if (pendingPage === null) return;
+    pendingPage = null;
+    if (trailingRefresh?.source === 'guide-page-change') {
+      const cancelledTrailingPage = trailingRefresh;
+      trailingRefresh = null;
+      cancelledTrailingPage.settle();
+    }
+    guidePresentationLifecycleGeneration += 1;
+    guidePresentationGeneration += 1;
+    options.setPagingBusy?.(false);
+  };
 
   const stop = (): void => {
+    cancelPage();
     if (guidePollTimer !== null) {
       options.host.clearInterval(guidePollTimer);
       guidePollTimer = null;
@@ -117,62 +169,112 @@ export function createGuidePresentationPolling(
     stoppedTrailing?.settle();
   };
 
-  const refresh = (
+  const queueRefresh = (
     source: string,
     refreshOptions: GuidePresentationRefreshOptions = {},
-  ): Promise<void> => {
+  ): Readonly<{ promise: Promise<void>; requestSequence: number }> => {
     const playerRefresh = options.getActiveRoute() === 'player' && refreshOptions.allowPlayerRoute === true;
     if (options.getActiveRoute() !== 'guide' && !playerRefresh) {
-      return Promise.resolve();
+      return { promise: Promise.resolve(), requestSequence: 0 };
     }
     const windowStartMs = playerRefresh
       ? Math.floor((options.getNowMs?.() ?? Date.now()) / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS
       : options.getWindowStartMs();
     const latestIntent = trailingRefresh ?? activeRefresh;
+    const channelOffset = refreshOptions.channelOffset ?? options.getChannelOffset?.() ?? 0;
     const coalescedInterval = source === 'poll-interval'
       && latestIntent !== null
       && latestIntent.lifecycleGeneration === guidePresentationLifecycleGeneration
       && latestIntent.playerRefresh === playerRefresh
-      && latestIntent.windowStartMs === windowStartMs;
+      && latestIntent.windowStartMs === windowStartMs
+      && latestIntent.channelOffset === channelOffset;
     const generation = coalescedInterval
       ? guidePresentationGeneration
       : ++guidePresentationGeneration;
     if (!coalescedInterval) guidePresentationLifecycleGeneration += 1;
     if (refreshOptions.showLoading === true) options.setLoading(generation);
+    const requestSequence = ++refreshRequestSequence;
 
     if (activeRefresh === null) {
       const intent = createRefreshIntent(
+        requestSequence,
         source,
         generation,
         guidePresentationLifecycleGeneration,
         false,
         playerRefresh,
         windowStartMs,
+        channelOffset,
       );
       startRefresh(intent);
-      return intent.promise;
+      return { promise: intent.promise, requestSequence };
     }
 
     if (trailingRefresh === null) {
       trailingRefresh = createRefreshIntent(
+        requestSequence,
         source,
         generation,
         guidePresentationLifecycleGeneration,
         coalescedInterval,
         playerRefresh,
         windowStartMs,
+        channelOffset,
       );
     } else {
+      trailingRefresh.requestSequence = requestSequence;
       trailingRefresh.source = source;
       trailingRefresh.playerRefresh = playerRefresh;
       trailingRefresh.windowStartMs = windowStartMs;
+      trailingRefresh.channelOffset = channelOffset;
       if (!coalescedInterval) {
         trailingRefresh.generation = generation;
         trailingRefresh.lifecycleGeneration = guidePresentationLifecycleGeneration;
         trailingRefresh.advanceGenerationOnStart = false;
       }
     }
-    return trailingRefresh.promise;
+    return { promise: trailingRefresh.promise, requestSequence };
+  };
+
+  const refresh = (
+    source: string,
+    refreshOptions: GuidePresentationRefreshOptions = {},
+  ): Promise<void> => {
+    cancelPage();
+    return queueRefresh(source, refreshOptions).promise;
+  };
+
+  const requestPage = (input: GuidePageRefreshRequest): Promise<void> => {
+    const queued = queueRefresh('guide-page-change', {
+      channelOffset: input.channelOffset,
+      showLoading: false,
+    });
+    if (queued.requestSequence === 0) return queued.promise;
+    pendingPage = Object.freeze({ ...input, requestSequence: queued.requestSequence });
+    options.setPagingBusy?.(true);
+    return queued.promise;
+  };
+
+  const navigatePage = (input: GuidePageNavigationRequest): GuidePageNavigationResult => {
+    const decision = resolveEpgPageNavigation(
+      input.state,
+      input.presentation,
+      input.offset,
+      pendingPage?.targetGlobalIndex ?? null,
+    );
+    if (decision === null) return { handled: false, targetLocalIndex: null };
+    if (decision.boundaryClamped) return { handled: true, targetLocalIndex: null };
+    if (!decision.fetchRequired) {
+      cancelPage();
+      return { handled: true, targetLocalIndex: decision.targetLocalIndex };
+    }
+    void requestPage({
+      targetGlobalIndex: decision.targetGlobalIndex,
+      sourceLocalIndex: decision.sourceLocalIndex,
+      scopeToken: input.scopeToken,
+      channelOffset: decision.channelOffset,
+    });
+    return { handled: true, targetLocalIndex: null };
   };
 
   const startRefresh = (intent: GuidePresentationRefreshIntent): void => {
@@ -193,6 +295,8 @@ export function createGuidePresentationPolling(
           options.guide.getPresentation({
             startTimeMs: intent.windowStartMs,
             durationMs: EPG_WINDOW_DURATION_MS,
+            channelOffset: intent.channelOffset,
+            channelLimit: 9,
           }),
           intent.abortController,
           options.host,
@@ -205,7 +309,7 @@ export function createGuidePresentationPolling(
           if (intent.playerRefresh) {
             options.handlePlayerFailure?.(intent.source, message, intent.generation);
           } else {
-            options.handleFailure(intent.source, message, intent.generation);
+            options.handleFailure(intent.source, message, intent.generation, settlePagingFailure(intent));
           }
         }
         return;
@@ -214,11 +318,20 @@ export function createGuidePresentationPolling(
       if (isCurrent(intent)) {
         if (!result.ok) {
           if (intent.playerRefresh) options.handlePlayerFailure?.(intent.source, result.error.message, intent.generation);
-          else options.handleFailure(intent.source, result.error.message, intent.generation);
+          else options.handleFailure(
+            intent.source,
+            result.error.message,
+            intent.generation,
+            settlePagingFailure(intent),
+          );
         } else {
           lastValidPresentation = normalizeEpgPresentation(result.value);
           if (intent.playerRefresh) options.applyPlayerPresentation?.(lastValidPresentation, intent.generation);
-          else options.applyPresentation(lastValidPresentation, intent.generation);
+          else options.applyPresentation(
+            lastValidPresentation,
+            intent.generation,
+            settlePagingSuccess(intent, lastValidPresentation),
+          );
         }
       }
     } finally {
@@ -229,6 +342,30 @@ export function createGuidePresentationPolling(
   const isCurrent = (intent: GuidePresentationRefreshIntent): boolean => intent === activeRefresh
     && intent.lifecycleGeneration === guidePresentationLifecycleGeneration
     && options.getActiveRoute() === (intent.playerRefresh ? 'player' : 'guide');
+
+  const settlePagingFailure = (intent: GuidePresentationRefreshIntent): boolean => {
+    if (pendingPage?.requestSequence !== intent.requestSequence) return false;
+    pendingPage = null;
+    options.setPagingBusy?.(false);
+    return true;
+  };
+
+  const settlePagingSuccess = (
+    intent: GuidePresentationRefreshIntent,
+    presentation: ReturnType<typeof normalizeEpgPresentation>,
+  ): number | null | undefined => {
+    const page = pendingPage;
+    if (page?.requestSequence !== intent.requestSequence) return undefined;
+    pendingPage = null;
+    options.setPagingBusy?.(false);
+    const window = presentation.channelWindow;
+    const scopeToken = presentation.libraryFilter?.scopeToken ?? null;
+    return window !== undefined && page.scopeToken === scopeToken &&
+      page.targetGlobalIndex >= window.offset &&
+      page.targetGlobalIndex < window.offset + presentation.channels.length
+      ? page.targetGlobalIndex
+      : null;
+  };
 
   const completeRefresh = (intent: GuidePresentationRefreshIntent): void => {
     intent.settle();
@@ -263,6 +400,10 @@ export function createGuidePresentationPolling(
     start,
     stop,
     refresh,
+    requestPage,
+    navigatePage,
+    cancelPage,
+    getPendingPageTarget: () => pendingPage?.targetGlobalIndex ?? null,
     getGeneration: () => guidePresentationGeneration,
     getLastValidPresentation: () => lastValidPresentation,
   };

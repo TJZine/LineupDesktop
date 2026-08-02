@@ -21,7 +21,8 @@ import type {
   PlayerSnapshot,
 } from './player.js';
 import type {
-  EpgPresentationSource,
+  GuideLibraryFilterState,
+  GuidePresentationSource,
   GuideIpcResult,
 } from './guide.js';
 import type {
@@ -267,7 +268,14 @@ export interface LineupDesktopPreloadApi {
     getPresentation: (input: {
       startTimeMs: number;
       durationMs: number;
-    }) => Promise<GuideIpcResult<EpgPresentationSource>>;
+      channelOffset?: number;
+      channelLimit?: number;
+    }) => Promise<GuideIpcResult<GuidePresentationSource>>;
+    setLibraryFilter: (input: {
+      expectedScopeToken: string;
+      expectedRevision: number;
+      libraryId: string | null;
+    }) => Promise<GuideIpcResult<GuideLibraryFilterState>>;
   };
 }
 

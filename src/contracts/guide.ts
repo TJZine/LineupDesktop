@@ -35,11 +35,44 @@ export interface EpgPresentationSource {
   nowWatching: EpgCurrentProgramViewModel | null;
 }
 
+export type GuideLibraryContentKind = 'show' | 'movie' | 'mixed';
+export type GuideLibraryPersistenceStatus = 'ready' | 'missing' | 'corrupt' | 'unsupported-version';
+
+export interface GuideLibraryFilterOption {
+  id: string;
+  name: string;
+  contentKind: GuideLibraryContentKind;
+}
+
+export interface GuideLibraryFilterState {
+  scopeToken: string;
+  revision: number;
+  libraries: readonly GuideLibraryFilterOption[];
+  selectedLibraryId: string | null;
+  persistenceStatus: GuideLibraryPersistenceStatus;
+}
+
+export interface GuidePresentationSource extends EpgPresentationSource {
+  channelWindow: { offset: number; total: number };
+  libraryFilter: GuideLibraryFilterState;
+}
+
 export interface GuideGetPresentationRequest {
   requestId: string;
   payload: {
     startTimeMs: number;
     durationMs: number;
+    channelOffset?: number;
+    channelLimit?: number;
+  };
+}
+
+export interface GuideSetLibraryFilterRequest {
+  requestId: string;
+  payload: {
+    expectedScopeToken: string;
+    expectedRevision: number;
+    libraryId: string | null;
   };
 }
 
