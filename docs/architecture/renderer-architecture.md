@@ -12,8 +12,8 @@ missing-output presentation without a public contract or persistence change.
 Unit 3D is accepted and WS3's local renderer gate is closed. WS4's local input/
 overlay gate closes through final product checkpoint `3258511`, with final
 production-build proof 36/36 and controller visual inspection passed. WS5
-targeted scope-load/planning is next and requires its own decision-complete plan
-plus fresh first-unit approval before product edit. Windows operational proof,
+Units 5A–5D now land through native-presentation checkpoint `81cf42c`; Unit 5E
+is next. Windows operational proof,
 including `WS4-PROOF-01`–`WS4-PROOF-04` and the mandatory three-row Package 6
 operator-assisted fullscreen audit, remains pending. Historical completed units
 below describe their bounded implementation history only.
@@ -90,6 +90,15 @@ pause. Stop custody, timeout, invalidation, cleanup, or failed revalidation
 rejects the deferred pause; a started pause is never retried.
 `shell/navigationLifecycle.ts` retains precedence and protected-owner routing.
 `index.ts` only composes these owners.
+
+WS5 Unit 5D adds `player/nativePlayerPresentationController.ts` as the sole
+renderer owner for native presentation intent, document epoch negotiation,
+one-active/one-latest dispatch, normalized Classic geometry, synchronous opaque
+fallback, and two-phase aperture opening only after a current `applied` ACK.
+Player and Overlay use the full client area; Classic exposes a playing-only PIP
+and reserves no empty PIP when hidden. The renderer still receives no HWND,
+native path, DPI/display record, helper protocol material, or privileged media
+descriptor. Windows composition proof remains deferred to 5H.
 
 Renderer code must remain unprivileged. It must not import Electron, Node, main,
 preload, native-helper, Plex transport, persisted secrets, raw auth headers,

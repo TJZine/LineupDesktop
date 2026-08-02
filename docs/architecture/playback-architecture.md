@@ -20,6 +20,14 @@ player IPC events. Manual proof of running native playback on Windows is
 deferred to RD-27 and remains pending; the WS2-specific native/live subset is
 also carried as nonblocking `WS2-POST-VALIDATION-01`.
 
+WS5 Unit 5D checkpoint `81cf42c` adds the production app-owned native
+presentation path: one exact renderer/preload/main contract, epoch/revision
+currentness, hide-before-load/switch/cleanup barriers, and a Win32 child HWND
+owned by the existing shared native helper. Host-owned monotonic operation IDs
+reject replay in constant space, and context-wrong post-send ACKs quarantine the
+shared helper. Windows compilation and live composition proof remain deferred
+to Unit 5H; this local checkpoint does not promote capabilities or close WS5.
+
 ## Current Hypothesis
 
 The production hypothesis is Electron plus a helper-hosted native libmpv path.
