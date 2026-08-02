@@ -21,6 +21,10 @@ import {
   createPlayerRecoveryBridge,
   type PlayerRecoveryBridgeInvoke,
 } from './playerRecoveryBridge.cjs';
+import {
+  createPlayerPresentationBridge,
+  type PlayerPresentationBridgeInvoke,
+} from './playerPresentationBridge.cjs';
 import { createSettingsBridge, type SettingsBridgeInvoke } from './settingsBridge.cjs';
 import {
   LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL,
@@ -47,6 +51,7 @@ import {
   LINEUP_PLAYER_EVENT_CHANNEL,
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
   LINEUP_PLAYER_RECOVERY_CHANNEL,
+  LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
   LINEUP_PLEX_CANCEL_PIN_CHANNEL,
   LINEUP_PLEX_GET_HOME_USERS_CHANNEL,
@@ -1592,6 +1597,12 @@ const playerRecoveryBridge = createPlayerRecoveryBridge(
     hasForbiddenField: hasForbiddenPrivilegedField,
   },
 );
+const invokePlayerPresentation: PlayerPresentationBridgeInvoke = (channel, input) =>
+  ipcRenderer.invoke(channel, input);
+const updatePlayerPresentation = createPlayerPresentationBridge(
+  invokePlayerPresentation,
+  LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL,
+);
 const invokeSettings: SettingsBridgeInvoke = (channel, input) => ipcRenderer.invoke(channel, input);
 
 const lineupDesktop: LineupDesktopPreloadApi = {
@@ -1670,6 +1681,7 @@ const lineupDesktop: LineupDesktopPreloadApi = {
     },
     getSnapshot: playerSnapshotBridge.getSnapshot,
     cleanup: playerSnapshotBridge.cleanup,
+    updatePresentation: updatePlayerPresentation,
     tuneChannel: createPlayerTuneBridge(
       invokeGuide,
       LINEUP_PLAYER_TUNE_CHANNEL,

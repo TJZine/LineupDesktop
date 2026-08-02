@@ -26,7 +26,7 @@ export function copyRendererAssets(sourceDirectory, targetDirectory) {
   });
 }
 
-export function copyRendererSettingsRuntime(
+export function copyRendererContractsRuntime(
   compiledContractsDirectory,
   targetRendererDirectory,
 ) {
@@ -34,8 +34,8 @@ export function copyRendererSettingsRuntime(
   copyCompiledModuleClosure({
     sourceDirectory: compiledContractsDirectory,
     targetDirectory,
-    entryFileName: 'settings.js',
-    ownerLabel: 'Renderer Settings runtime',
+    entryFileNames: ['artwork.js', 'settings.js'],
+    ownerLabel: 'Renderer contracts runtime',
   });
 }
 
@@ -51,7 +51,7 @@ export function copyRendererChannelBuilderRuntime(
   copyCompiledModuleClosure({
     sourceDirectory: compiledChannelBuilderDirectory,
     targetDirectory,
-    entryFileName: 'config.js',
+    entryFileNames: ['config.js'],
     ownerLabel: 'Renderer Channel Builder runtime',
   });
 }
@@ -59,19 +59,17 @@ export function copyRendererChannelBuilderRuntime(
 function copyCompiledModuleClosure({
   sourceDirectory,
   targetDirectory,
-  entryFileName,
+  entryFileNames,
   ownerLabel,
 }) {
   const sourceRoot = fs.realpathSync(path.resolve(sourceDirectory));
   fs.rmSync(targetDirectory, { recursive: true, force: true });
   fs.mkdirSync(targetDirectory, { recursive: true });
-  const pendingFiles = [
-    {
-      fileName: entryFileName,
-      importedBy: null,
-      specifier: entryFileName,
-    },
-  ];
+  const pendingFiles = entryFileNames.map((entryFileName) => ({
+    fileName: entryFileName,
+    importedBy: null,
+    specifier: entryFileName,
+  }));
   const runtimeFiles = new Map();
   while (pendingFiles.length > 0) {
     const { fileName, importedBy, specifier } = pendingFiles.pop();
@@ -141,7 +139,7 @@ function assertPathInsideDirectory(filePath, directory, specifier, ownerLabel) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   copyRendererAssets(sourceRoot, targetRoot);
-  copyRendererSettingsRuntime(path.join(repoRoot, 'dist', 'contracts'), targetRoot);
+  copyRendererContractsRuntime(path.join(repoRoot, 'dist', 'contracts'), targetRoot);
   copyRendererChannelBuilderRuntime(
     path.join(repoRoot, 'dist', 'domain', 'channelBuilder'),
     targetRoot,

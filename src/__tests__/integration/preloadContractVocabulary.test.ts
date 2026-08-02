@@ -27,6 +27,7 @@ import {
   LINEUP_PLAYER_EVENT_CHANNEL,
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
   LINEUP_PLAYER_RECOVERY_CHANNEL,
+  LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL,
   LINEUP_PLEX_CANCEL_PIN_CHANNEL,
   LINEUP_PLEX_GET_HOME_USERS_CHANNEL,
   LINEUP_PLEX_GET_METADATA_CHANNEL,
@@ -119,6 +120,10 @@ const playerBridgeSourceUrl = new URL('../../preload/playerBridge.cts', import.m
 const playerBridgeSourceText = readFileSync(playerBridgeSourceUrl, 'utf8');
 const playerRecoveryBridgeSourceText = readFileSync(
   new URL('../../preload/playerRecoveryBridge.cts', import.meta.url),
+  'utf8',
+);
+const playerPresentationBridgeSourceText = readFileSync(
+  new URL('../../preload/playerPresentationBridge.cts', import.meta.url),
   'utf8',
 );
 const settingsGuardSourceUrl = new URL('../../preload/settingsBridgeGuards.cts', import.meta.url);
@@ -450,6 +455,16 @@ function evaluateSettingsBridgeModule(guards: Record<string, unknown>): Record<s
   return moduleObject.exports as Record<string, unknown>;
 }
 
+function evaluatePlayerPresentationBridgeModule(): Record<string, unknown> {
+  const moduleObject = { exports: {} as Record<string, unknown> };
+  const compiled = ts.transpileModule(playerPresentationBridgeSourceText, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    fileName: 'src/preload/playerPresentationBridge.cts',
+  }).outputText;
+  new Function('exports', 'module', compiled)(moduleObject.exports, moduleObject);
+  return moduleObject.exports;
+}
+
 function createPreloadHarness(
   invoke: (
     channel: string,
@@ -473,6 +488,7 @@ function createPreloadHarness(
   const guideBridgeExports = evaluateGuideBridgeModule();
   const playerBridgeExports = evaluatePlayerBridgeModule();
   const playerRecoveryBridgeExports = evaluatePlayerRecoveryBridgeModule();
+  const playerPresentationBridgeExports = evaluatePlayerPresentationBridgeModule();
   const settingsBridgeExports = evaluateSettingsBridgeModule(evaluateSettingsGuardModule());
   const compiled = ts.transpileModule(preloadSourceText, {
     compilerOptions: {
@@ -505,6 +521,9 @@ function createPreloadHarness(
     }
     if (moduleName === './playerRecoveryBridge.cjs') {
       return playerRecoveryBridgeExports;
+    }
+    if (moduleName === './playerPresentationBridge.cjs') {
+      return playerPresentationBridgeExports;
     }
     if (moduleName === './settingsBridge.cjs') {
       return settingsBridgeExports;
@@ -648,6 +667,7 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_PLAYER_CLEANUP_CHANNEL,
   LINEUP_PLAYER_EVENT_CHANNEL,
   LINEUP_PLAYER_RECOVERY_CHANNEL,
+  LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL,
   LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL,
   LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL,
   LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
@@ -694,6 +714,7 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL',
     'LINEUP_PLAYER_CLEANUP_CHANNEL',
     'LINEUP_PLAYER_RECOVERY_CHANNEL',
+    'LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL',
     'LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL',
     'LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL',
     'LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL',
@@ -1229,6 +1250,16 @@ function isInvokePlayerRecoveryChannelParameter(node: ts.Identifier): boolean {
     ) {
       return true;
     }
+    current = current.parent;
+  }
+  return false;
+}
+
+function isInvokePlayerPresentationChannelParameter(node: ts.Identifier): boolean {
+  if (node.text !== 'channel') return false;
+  let current: ts.Node | undefined = node;
+  while (current !== undefined && !ts.isSourceFile(current)) {
+    if (ts.isVariableDeclaration(current) && ts.isIdentifier(current.name) && current.name.text === 'invokePlayerPresentation') return true;
     current = current.parent;
   }
   return false;
@@ -3017,6 +3048,12 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
         return;
       }
 
+      if (isInvokePlayerPresentationChannelParameter(channelExpression)) {
+        observedCalls.push(`${methodName}:invokePlayerPresentation.channel`);
+        ts.forEachChild(node, visit);
+        return;
+      }
+
       if (isInvokeSettingsChannelParameter(channelExpression)) {
         observedCalls.push(`${methodName}:invokeSettings.channel`);
         ts.forEachChild(node, visit);
@@ -3050,6 +3087,7 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
     'invoke:invokeChannelSetup.channel',
     'invoke:invokeCustomChannels.channel',
     'invoke:invokeGuide.channel',
+    'invoke:invokePlayerPresentation.channel',
     'invoke:invokePlayerRecovery.channel',
     'invoke:invokePlayerSnapshot.channel',
     'invoke:invokePlex.channel',

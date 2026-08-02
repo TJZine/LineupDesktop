@@ -216,6 +216,306 @@ test('native host process translates commands and returns safe host events', asy
   assertNoForbiddenKeys(result);
 });
 
+test('native host process correlates presentation execution on the shared helper', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({ spawnHostProcess: () => child, requestTimeoutMs: 100 });
+  const update = {
+    documentEpoch: 2, revision: 3,
+    parentHwnd: '42', parentPid: 9, loadedRequestId: 'native-load-1',
+    mode: 'player-full' as const, bounds: { x: 0, y: 0, width: 1, height: 1 },
+  };
+  const pending = host.updatePresentation(update);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const sent = child.writes[0] as typeof update & { type: string; version: number };
+  assert.deepEqual(sent, { type: 'presentation.update', version: 1, operationId: 'presentation-1', ...update });
+  child.send({ type: 'presentation.result', version: 1, operationId: sent.operationId, documentEpoch: 2, revision: 3, status: 'applied' });
+  assert.deepEqual(await pending, { ok: true, status: 'applied' });
+  const cleanup = host.cleanup(null);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const hidden = child.writes[1] as { operationId: string };
+  child.send({ type: 'presentation.result', version: 1, operationId: hidden.operationId, documentEpoch: 2, revision: 3, status: 'hidden' });
+  await cleanup;
+  assert.deepEqual(child.writes[2], { type: 'cleanup', requestId: null });
+});
+
+test('native host process assigns monotonic presentation ids beyond the former retention cap', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({ spawnHostProcess: () => child, requestTimeoutMs: 100 });
+
+  for (let sequence = 1; sequence <= 300; sequence += 1) {
+    const pending = host.updatePresentation({
+      documentEpoch: 2, revision: sequence,
+      parentHwnd: '42', parentPid: 9, loadedRequestId: 'native-load-1',
+      mode: 'hidden', bounds: null,
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const sent = child.writes.at(-1) as {
+      operationId: string; documentEpoch: number; revision: number;
+    };
+    assert.equal(sent.operationId, `presentation-${sequence}`);
+    child.send({
+      type: 'presentation.result', version: 1, operationId: sent.operationId,
+      documentEpoch: sent.documentEpoch, revision: sent.revision, status: 'hidden',
+    });
+    assert.deepEqual(await pending, { ok: true, status: 'hidden' });
+  }
+  assert.equal(child.writes.length, 300);
+});
+
+test('native host process rejects invalid presentation updates before spawning or writing', async () => {
+  let spawns = 0;
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => { spawns += 1; return new FakeHostChildProcess(); },
+    requestTimeoutMs: 100,
+  });
+  const result = await host.updatePresentation({
+    documentEpoch: 2, revision: 3,
+    parentHwnd: '0', parentPid: 9, loadedRequestId: 'native-load-1',
+    mode: 'player-full', bounds: { x: 0, y: 0, width: 1, height: 1 },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? null : result.classification, 'pre-send-rejected');
+  assert.equal(spawns, 0);
+});
+
+test('native host process hides the exact current loaded request before a replacement load', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({ spawnHostProcess: () => child, requestTimeoutMs: 100 });
+  const presentation = host.updatePresentation({
+    documentEpoch: 2, revision: 3,
+    parentHwnd: '42', parentPid: 9, loadedRequestId: 'native-load-1',
+    mode: 'player-full', bounds: { x: 0, y: 0, width: 1, height: 1 },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const sent = child.writes[0] as { operationId: string };
+  child.send({ type: 'presentation.result', version: 1, operationId: sent.operationId, documentEpoch: 2, revision: 3, status: 'applied' });
+  assert.equal((await presentation).ok, true);
+
+  const replacementCommand = { ...loadCommand, requestId: 'native-load-2' };
+  const replacement = host.execute(replacementCommand);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const hidden = child.writes[1] as {
+    operationId: string; documentEpoch: number; revision: number; loadedRequestId: string; mode: string;
+  };
+  assert.equal(hidden.mode, 'hidden');
+  assert.equal(hidden.loadedRequestId, 'native-load-1');
+  assert.equal(child.writes.length, 2);
+  child.send({
+    type: 'presentation.result', version: 1, operationId: hidden.operationId,
+    documentEpoch: hidden.documentEpoch, revision: hidden.revision, status: 'hidden',
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(child.writes[2], {
+    type: 'command', requestId: 'native-load-2', command: 'load', payload: loadCommand.payload,
+  });
+  child.send({ type: 'result', requestId: 'native-load-2', ok: true, events: [] });
+  assert.equal((await replacement).ok, true);
+});
+
+test('native host process accepts a stale active presentation ACK and sends the replacement load', async () => {
+  const child = new FakeHostChildProcess();
+  const lifecycle: NativePlayerHostLifecycleFailure[] = [];
+  const host = new NativePlayerHostProcess({ spawnHostProcess: () => child, requestTimeoutMs: 100 });
+  host.onLifecycleFailure((failure) => lifecycle.push(failure));
+  const presentation = host.updatePresentation({
+    documentEpoch: 2, revision: 3,
+    parentHwnd: '42', parentPid: 9, loadedRequestId: 'native-load-1',
+    mode: 'player-full', bounds: { x: 0, y: 0, width: 1, height: 1 },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const shown = child.writes[0] as { operationId: string };
+  const replacement = host.execute({ ...loadCommand, requestId: 'native-load-after-stale-hide' });
+  child.send({
+    type: 'presentation.result', version: 1, operationId: shown.operationId,
+    documentEpoch: 2, revision: 3, status: 'stale',
+  });
+  assert.deepEqual(await presentation, { ok: true, status: 'stale' });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(child.writes[1], {
+    type: 'command', requestId: 'native-load-after-stale-hide', command: 'load', payload: loadCommand.payload,
+  });
+  assert.equal(child.killed, false);
+  assert.equal(lifecycle.length, 0);
+  child.send({ type: 'result', requestId: 'native-load-after-stale-hide', ok: true, events: [] });
+  assert.equal((await replacement).ok, true);
+});
+
+test('native host process drains a pending presentation and excludes new shows across the hide-to-load boundary', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({ spawnHostProcess: () => child, requestTimeoutMs: 100 });
+  const current = {
+    documentEpoch: 4, revision: 6,
+    parentHwnd: '42', parentPid: 9, loadedRequestId: 'native-load-1',
+    mode: 'player-full' as const, bounds: { x: 0, y: 0, width: 1, height: 1 },
+  };
+  const pendingShow = host.updatePresentation(current);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(child.writes.length, 1);
+
+  const replacement = host.execute({ ...loadCommand, requestId: 'native-load-after-pending-show' });
+  const excludedShow = await host.updatePresentation({
+    ...current, revision: 7,
+  });
+  assert.equal(excludedShow.ok, false);
+  assert.equal(excludedShow.ok ? null : excludedShow.classification, 'pre-send-rejected');
+  assert.equal(child.writes.length, 1);
+
+  child.send({
+    type: 'presentation.result', version: 1, operationId: (child.writes[0] as { operationId: string }).operationId,
+    documentEpoch: current.documentEpoch, revision: current.revision, status: 'applied',
+  });
+  assert.equal((await pendingShow).ok, true);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(child.writes.length, 2);
+  const hidden = child.writes[1] as { operationId: string; documentEpoch: number; revision: number; mode: string };
+  assert.equal(hidden.mode, 'hidden');
+
+  child.send({
+    type: 'presentation.result', version: 1, operationId: hidden.operationId,
+    documentEpoch: hidden.documentEpoch, revision: hidden.revision, status: 'hidden',
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(child.writes.length, 3);
+  assert.deepEqual(child.writes[2], {
+    type: 'command', requestId: 'native-load-after-pending-show', command: 'load', payload: loadCommand.payload,
+  });
+  child.send({ type: 'result', requestId: 'native-load-after-pending-show', ok: true, events: [] });
+  assert.equal((await replacement).ok, true);
+});
+
+test('native host process drains and hides a pending presentation before cleanup', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({ spawnHostProcess: () => child, requestTimeoutMs: 100 });
+  const current = {
+    documentEpoch: 5, revision: 8,
+    parentHwnd: '42', parentPid: 9, loadedRequestId: 'native-load-1',
+    mode: 'player-full' as const, bounds: { x: 0, y: 0, width: 1, height: 1 },
+  };
+  const pendingShow = host.updatePresentation(current);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const cleanup = host.cleanup('native-load-1');
+  const excluded = await host.updatePresentation({ ...current, revision: 9 });
+  assert.equal(excluded.ok, false);
+  assert.equal(child.writes.length, 1);
+
+  child.send({
+    type: 'presentation.result', version: 1, operationId: (child.writes[0] as { operationId: string }).operationId,
+    documentEpoch: current.documentEpoch, revision: current.revision, status: 'applied',
+  });
+  await pendingShow;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const hidden = child.writes[1] as { operationId: string; documentEpoch: number; revision: number; mode: string };
+  assert.equal(hidden.mode, 'hidden');
+  child.send({
+    type: 'presentation.result', version: 1, operationId: hidden.operationId,
+    documentEpoch: hidden.documentEpoch, revision: hidden.revision, status: 'hidden',
+  });
+  await cleanup;
+  assert.deepEqual(child.writes[2], { type: 'cleanup', requestId: 'native-load-1' });
+});
+
+test('native host process accepts a stale hide ACK and sends cleanup without quarantine', async () => {
+  const child = new FakeHostChildProcess();
+  const lifecycle: NativePlayerHostLifecycleFailure[] = [];
+  const host = new NativePlayerHostProcess({ spawnHostProcess: () => child, requestTimeoutMs: 100 });
+  host.onLifecycleFailure((failure) => lifecycle.push(failure));
+  const presentation = host.updatePresentation({
+    documentEpoch: 2, revision: 3,
+    parentHwnd: '42', parentPid: 9, loadedRequestId: 'native-load-1',
+    mode: 'player-full', bounds: { x: 0, y: 0, width: 1, height: 1 },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const shown = child.writes[0] as { operationId: string };
+  child.send({
+    type: 'presentation.result', version: 1, operationId: shown.operationId,
+    documentEpoch: 2, revision: 3, status: 'applied',
+  });
+  await presentation;
+
+  const cleanup = host.cleanup('native-load-1');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const hidden = child.writes[1] as { operationId: string; documentEpoch: number; revision: number };
+  child.send({
+    type: 'presentation.result', version: 1, operationId: hidden.operationId,
+    documentEpoch: hidden.documentEpoch, revision: hidden.revision, status: 'stale',
+  });
+  await cleanup;
+  assert.deepEqual(child.writes[2], { type: 'cleanup', requestId: 'native-load-1' });
+  assert.equal(lifecycle.length, 0);
+});
+
+test('native host process quarantines an applied ACK for a replacement-load hide barrier', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({ spawnHostProcess: () => child, requestTimeoutMs: 100 });
+  const presentation = host.updatePresentation({
+    documentEpoch: 2, revision: 3,
+    parentHwnd: '42', parentPid: 9, loadedRequestId: 'native-load-1',
+    mode: 'player-full', bounds: { x: 0, y: 0, width: 1, height: 1 },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.send({ type: 'presentation.result', version: 1, operationId: (child.writes[0] as { operationId: string }).operationId, documentEpoch: 2, revision: 3, status: 'applied' });
+  await presentation;
+  const replacement = host.execute({ ...loadCommand, requestId: 'native-load-blocked' });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const hidden = child.writes[1] as { operationId: string; documentEpoch: number; revision: number };
+  child.send({
+    type: 'presentation.result', version: 1, operationId: hidden.operationId,
+    documentEpoch: hidden.documentEpoch, revision: hidden.revision, status: 'applied',
+  });
+  const result = await replacement;
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? null : result.error.code, 'PLAYER_HELPER_MALFORMED_OUTPUT');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(child.writes.length, 2);
+  assert.equal(child.killed, true);
+});
+
+test('native host process quarantines an applied ACK for a cleanup hide barrier', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({ spawnHostProcess: () => child, requestTimeoutMs: 100 });
+  const presentation = host.updatePresentation({
+    documentEpoch: 2, revision: 3,
+    parentHwnd: '42', parentPid: 9, loadedRequestId: 'native-load-1',
+    mode: 'player-full', bounds: { x: 0, y: 0, width: 1, height: 1 },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const shown = child.writes[0] as { operationId: string };
+  child.send({
+    type: 'presentation.result', version: 1, operationId: shown.operationId,
+    documentEpoch: 2, revision: 3, status: 'applied',
+  });
+  await presentation;
+
+  const cleanup = host.cleanup('native-load-1');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const hidden = child.writes[1] as { operationId: string; documentEpoch: number; revision: number };
+  child.send({
+    type: 'presentation.result', version: 1, operationId: hidden.operationId,
+    documentEpoch: hidden.documentEpoch, revision: hidden.revision, status: 'applied',
+  });
+  await assert.rejects(cleanup, /Native player presentation could not be hidden/u);
+  assert.equal(child.writes.length, 2);
+  assert.equal(child.killed, true);
+});
+
+test('native host process quarantines a post-send presentation rejection', async () => {
+  const child = new FakeHostChildProcess();
+  const lifecycle: NativePlayerHostLifecycleFailure[] = [];
+  const host = new NativePlayerHostProcess({ spawnHostProcess: () => child, requestTimeoutMs: 100 });
+  host.onLifecycleFailure((failure) => lifecycle.push(failure));
+  const pending = host.updatePresentation({
+    documentEpoch: 2, revision: 4,
+    parentHwnd: '42', parentPid: 9, loadedRequestId: 'native-load-1',
+    mode: 'hidden', bounds: null,
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.send({ type: 'presentation.result', version: 1, operationId: (child.writes[0] as { operationId: string }).operationId, documentEpoch: 2, revision: 4, status: 'rejected' });
+  assert.equal((await pending).ok, false);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(child.killed, true);
+  assert.equal(lifecycle.length, 1);
+});
+
 test('native host process correlates bounded audio output queries on the shared helper', async () => {
   const child = new FakeHostChildProcess();
   const host = new NativePlayerHostProcess({

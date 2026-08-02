@@ -6,6 +6,7 @@ export const LINEUP_PLAYER_COMMAND_CHANNEL = 'lineup:player:command';
 export const LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL = 'lineup:player:getSnapshot';
 export const LINEUP_PLAYER_CLEANUP_CHANNEL = 'lineup:player:cleanup';
 export const LINEUP_PLAYER_EVENT_CHANNEL = 'lineup:player:event';
+export const LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL = 'lineup:player:updatePresentation';
 export const LINEUP_PLAYER_RECOVERY_CHANNEL = 'lineup:player:recovery';
 export const LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL =
   'lineup:diagnostics:recordRendererEvent';

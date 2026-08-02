@@ -18,6 +18,8 @@ import type {
   PlayerError,
   PlayerEvent,
   PlayerIpcResult,
+  PlayerPresentationRequest,
+  PlayerPresentationResult,
   PlayerSnapshot,
 } from './player.js';
 import type {
@@ -177,6 +179,9 @@ export interface LineupDesktopPreloadApi {
     ) => Promise<PlayerIpcResult<PlayerDispatchResult>>;
     getSnapshot: () => Promise<PlayerIpcResult<PlayerSnapshot>>;
     cleanup: () => Promise<PlayerIpcResult<PlayerSnapshot>>;
+    updatePresentation: (
+      input: PlayerPresentationRequest,
+    ) => Promise<PlayerPresentationResult>;
     tuneChannel: (input: { channelId: string }) => Promise<GuideIpcResult<never>>;
     recover: (input: { action: PlayerRecoveryAction }) => Promise<PlayerRecoveryIpcResult>;
     onEvent: (listener: (event: PlayerEvent) => void) => () => void;

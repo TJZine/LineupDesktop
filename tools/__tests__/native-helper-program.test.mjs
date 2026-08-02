@@ -161,7 +161,7 @@ test('native helper gates runtime control results and formats seek values invari
   assert.doesNotMatch(source, /Marshal\.StructureToPtr\(value,\s*data/u);
 });
 
-test('native helper checks essential property observation registration before starting threads', async () => {
+test('native helper checks essential property observation registration before starting event delivery', async () => {
   const source = await readFile(programPath, 'utf8');
 
   assert.match(
@@ -170,7 +170,7 @@ test('native helper checks essential property observation registration before st
   );
   assert.match(
     source,
-    /ObserveProperty\(mpvContext,\s*1,\s*"time-pos",\s*MpvFormatDouble\)[\s\S]*?ObserveProperty\(mpvContext,\s*10,\s*"audio-codec",\s*MpvFormatString\)[\s\S]*?renderThread\.Start\(\)/u,
+    /ObserveProperty\(mpvContext,\s*1,\s*"time-pos",\s*MpvFormatDouble\)[\s\S]*?ObserveProperty\(mpvContext,\s*10,\s*"audio-codec",\s*MpvFormatString\)[\s\S]*?eventThread\.Start\(\)/u,
   );
   assert.match(
     source,
@@ -217,4 +217,75 @@ test('native helper classifies official end-file reasons without exposing raw mp
     /\["message"\]\s*=\s*"Native playback ended with a player engine error\."/u,
   );
   assert.doesNotMatch(source, /\["(?:reason|error)"\]\s*=\s*endFile\./u);
+});
+
+test('native presentation uses one bounded owner thread and a disabled nonactivating child', async () => {
+  const source = await readFile(programPath, 'utf8');
+  const manifest = await readFile(path.join(path.dirname(programPath), 'app.manifest'), 'utf8');
+  assert.match(source, /BlockingCollection<PresentationWork>\(16\)/u);
+  assert.match(source, /Name = "LineupPresentationRenderLoop"/u);
+  assert.match(source, /0x4E000000/u);
+  assert.match(source, /0x08000004/u);
+  assert.match(source, /HwndBottom/u);
+  assert.match(source, /WM_MOUSEACTIVATE \/ MA_NOACTIVATE/u);
+  assert.match(source, /WM_GETOBJECT: no native accessibility provider/u);
+  assert.match(source, /AreDpiAwarenessContextsEqual/u);
+  assert.match(source, /Math\.Floor\(bounds\.x/u);
+  assert.match(source, /Math\.Ceiling\(\(bounds\.x \+ bounds\.width\)/u);
+  assert.doesNotMatch(source, /HWND_TOPMOST|HwndTopmost|WS_POPUP/u);
+  assert.match(manifest, />PerMonitorV2</u);
+});
+
+test('native presentation validates exact input grammar before queueing and rejects duplicate operations', async () => {
+  const source = await readFile(programPath, 'utf8');
+
+  assert.match(source, /if \(!HasExactPresentationKeys\(document\.RootElement\)\)\s*\{\s*WritePresentationResult\(message, "rejected"\)/su);
+  assert.match(source, /count != 10 \|\| expected\.Count != 0/u);
+  assert.match(source, /IsPositiveSafeInteger\(documentEpoch\)/u);
+  assert.match(source, /IsNonZeroDecimal\(root\.GetProperty\("parentHwnd"\)\.GetString\(\)\)/u);
+  assert.match(source, /mode != "hidden" && loadedRequest\.ValueKind == JsonValueKind\.Null/u);
+  assert.match(source, /boundCount != 4 \|\| boundKeys\.Count != 0/u);
+  assert.match(source, /width <= 0 \|\| height <= 0 \|\| x \+ width > 1 \|\| y \+ height > 1/u);
+  assert.match(source, /if \(!TryAdvancePresentationOperationSequence\(message\.operationId\)\)\s*\{\s*WritePresentationResult\(message, "rejected"\);\s*return;\s*\}/su);
+});
+
+test('native presentation currentness is epoch, revision, and loaded-request exact', async () => {
+  const source = await readFile(programPath, 'utf8');
+
+  assert.match(source, /message\.documentEpoch < latestPresentationEpoch/u);
+  assert.match(source, /message\.documentEpoch == latestPresentationEpoch && message\.revision < latestPresentationRevision/u);
+  assert.match(source, /!String\.Equals\(latestPresentationLoadedRequestId, message\.loadedRequestId, StringComparison\.Ordinal\)/u);
+  assert.match(source, /if \(message\.mode == "hidden"\)\s*\{\s*if \(!HidePresentationSurface\(\)\) return "rejected";\s*if \(stalePair\) return "stale";/su);
+  assert.match(source, /message\.loadedRequestId == null \|\| message\.loadedRequestId != currentRequestId/u);
+  assert.match(source, /exactTuple && latestPresentationHidden && message\.mode != "hidden"/u);
+  assert.match(source, /latestPresentationHidden = true;\s*return "hidden";/su);
+  assert.match(source, /latestPresentationHidden = false;\s*return "applied";/su);
+});
+
+test('native presentation SetWindowPos outcomes control visibility and acknowledgements', async () => {
+  const source = await readFile(programPath, 'utf8');
+
+  assert.match(source, /public bool Show\(\)\s*\{\s*bool shown = NativeMethods\.SetWindowPos[\s\S]*?if \(shown\) Visible = true;\s*return shown;\s*\}/u);
+  assert.match(source, /public bool Hide\(\)\s*\{\s*bool hidden = NativeMethods\.SetWindowPos[\s\S]*?if \(hidden\) Visible = false;\s*return hidden;\s*\}/u);
+  assert.match(source, /if \(!renderSurface\.Show\(\)\)\s*\{\s*DestroyPresentationResources\(\);\s*return "rejected";\s*\}[\s\S]*?return "applied";/u);
+  assert.match(source, /if \(renderSurface == null \|\| renderSurface\.Hide\(\)\) return true;\s*DestroyPresentationResources\(\);\s*return false;/u);
+  assert.match(source, /if \(!HidePresentationSurface\(\)\) return "rejected";\s*if \(stalePair\) return "stale";/u);
+});
+
+test('native presentation operation ids reject every replay and nonincreasing sequence', async () => {
+  const source = await readFile(programPath, 'utf8');
+
+  assert.match(source, /private static BigInteger latestPresentationOperationSequence = BigInteger\.Zero;/u);
+  assert.match(source, /private static bool TryAdvancePresentationOperationSequence\(string operationId\)/u);
+  assert.match(source, /const string prefix = "presentation-";/u);
+  assert.match(source, /!operationId\.StartsWith\(prefix, StringComparison\.Ordinal\)/u);
+  assert.match(source, /!BigInteger\.TryParse\(operationId\.Substring\(prefix\.Length\), NumberStyles\.None, CultureInfo\.InvariantCulture, out BigInteger sequence\)/u);
+  assert.match(source, /sequence <= latestPresentationOperationSequence\)\s*\{\s*return false;\s*\}\s*latestPresentationOperationSequence = sequence;\s*return true;/su);
+});
+
+test('native presentation duplicate custody is constant-space with no finite retention cap', async () => {
+  const source = await readFile(programPath, 'utf8');
+
+  assert.doesNotMatch(source, /PresentationOperationIds|PresentationOperationIdOrder|PresentationOperationIdCapacity/u);
+  assert.equal(source.match(/latestPresentationOperationSequence/gu)?.length, 3);
 });

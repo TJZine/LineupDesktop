@@ -4,9 +4,7 @@ import { PLAYER_OVERLAY_MARKUP } from './playerOverlayDom.js';
 
 const STATIC_SCREEN_MARKUP = `
 <section class="screen-stack" aria-live="polite" data-static-screens-mounted>
-  <div class="player-presentation" data-player-presentation-surface data-overlay-action="openOsd" tabindex="-1" aria-label="Player presentation surface">
-    <div class="player-surface" aria-hidden="true"></div>
-  </div>
+  <div class="player-presentation" data-player-presentation-surface data-native-presentation-aperture="opaque" aria-hidden="true" inert></div>
   <section id="screen-player" class="screen screen--active screen--player" data-screen="player" data-style-surface="screen" aria-label="Player">
       ${PLAYER_OVERLAY_MARKUP}
       <aside class="setup-reminder" data-setup-reminder="player" aria-label="Channel setup reminder" hidden><span>No channels are ready yet.</span><button type="button" data-route-action="openChannelSetup">Set up channels</button></aside>

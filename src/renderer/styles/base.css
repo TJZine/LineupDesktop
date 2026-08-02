@@ -100,6 +100,10 @@
   --z-toast: 9000;
   --z-max: 10000;
 
+  --native-pip-inset: 16px;
+  --native-pip-width: min(42vw, 640px);
+  --native-pip-height: min(42vh, 360px);
+
   /* =========================================
      OSD / Pills
      ========================================= */
@@ -234,6 +238,35 @@ h2 {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  pointer-events: none;
+  background: var(--color-surface);
+  transition: none;
+}
+
+.player-presentation[data-native-presentation-mode="guide-classic-pip"] {
+  position: absolute;
+  inset: var(--native-pip-inset) var(--native-pip-inset) auto auto;
+  width: var(--native-pip-width);
+  height: var(--native-pip-height);
+  aspect-ratio: 16 / 9;
+}
+
+.player-presentation[data-native-presentation-aperture="open"] {
+  background: transparent;
+}
+
+:root[data-native-presentation-aperture="open"],
+:root[data-native-presentation-aperture="open"] body,
+:root[data-native-presentation-aperture="open"] .app-shell,
+:root[data-native-presentation-aperture="open"] [data-static-screen-root],
+:root[data-native-presentation-aperture="open"] .screen-stack {
+  background: transparent;
+}
+
+:root[data-native-presentation-aperture="open"][data-native-presentation-mode="player-full"] .screen[data-screen="player"],
+:root[data-native-presentation-aperture="open"][data-native-presentation-mode="guide-overlay-full"] .screen[data-screen="guide"],
+:root[data-native-presentation-aperture="open"][data-native-presentation-mode="guide-classic-pip"] .screen[data-screen="guide"] {
+  background: transparent;
 }
 
 .screen-stack > .screen {

@@ -35,7 +35,8 @@ import { findEpgProgramCell, focusEpgNow, selectEpgPageTarget, settleEpgPresenta
 import { registerRendererActions, type GuideActionId, type GuideProgramActionTarget } from './rendererActionRegistration.js';
 import { subscribePlayerBridge } from './playerBridgeSubscription.js';
 import { createGuidePresentationPolling } from './guidePresentationPolling.js';
-import { createGuideLibraryFilterController } from './guidePresentation.js';
+import { createGuideLibraryFilterController, projectNativePlayerPresentationMode } from './guidePresentation.js';
+import { createNativePlayerPresentationController } from './player/nativePlayerPresentationController.js';
 import { projectGuideLibraryTabsPending } from './epg/guideDom.js';
 import { dispatchPlexRuntimeAction } from './plexRuntimeActionDispatch.js';
 import { initializeProfilePinModal, openProfilePinModal, isProfilePinModalActive, closeProfilePinModal } from './profilePinModal.js';
@@ -227,6 +228,27 @@ const shellController = createShellController({
   },
   restoreFocus: restoreFocusTarget,
 });
+const playerPresentationElement = dom.playerPresentationElement;
+const nativePlayerPresentationController = playerPresentationElement === null || playerPresentationElement === undefined
+  ? null
+  : createNativePlayerPresentationController({
+      element: playerPresentationElement,
+      compositionElement: document.documentElement,
+      updatePresentation: window.lineupDesktop.player.updatePresentation,
+      getIntent: () => ({
+        mode: projectNativePlayerPresentationMode({
+          route: workflowState.routeState.activeRoute,
+          guideLayout: workflowState.settingsDraft.guideLayout,
+          snapshot: playerSnapshot,
+          shell: shellState,
+        }),
+        requestId: playerSnapshot.requestId,
+      }),
+      viewport: () => ({
+        width: document.documentElement.clientWidth,
+        height: document.documentElement.clientHeight,
+      }),
+    });
 const navigationLifecycle = createNavigationLifecycle({
   getRoute: () => workflowState.routeState.activeRoute,
   getFocusState: () => focusState,
@@ -389,6 +411,7 @@ attachNavigationInputRuntime(navigationLifecycle, {
     guideTuneController.stop();
     playerOverlayController.dispose();
     shellController.cleanup();
+    void nativePlayerPresentationController?.teardown();
     settingsRuntime.cleanup();
     settingsPlaybackLifecycle.cleanup();
     audioSetupRuntime.cleanup();
@@ -948,6 +971,7 @@ function renderApp(): void {
   renderChannelSetupResult(dom, stagedSetupController.getState().result);
   projectChannelBuildCancellation(channelController.getState());
   renderShellDom(shellState, shellDom, dom.screens);
+  nativePlayerPresentationController?.reconcile();
   syncRendererFocusTargets(focusRegistry, dom);
   if (workflowState.routeState.activeRoute === 'channelSetup') {
     focusState = onboardingFlow.applyFocusIntent(focusRegistry, focusState); focusState = stagedSetupController.applyFocusIntent(focusRegistry, focusState);

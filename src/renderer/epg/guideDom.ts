@@ -265,7 +265,7 @@ export function renderEpgGuideDom(
 
   const shell = document.createElement('section');
   shell.className = 'epg-shell';
-  shell.dataset.epgLayout = view.guide.shell.layoutMode;
+  shell.dataset.epgLayout = settings.guideLayout;
   shell.dataset.guideDensity = settings.guideDensity;
   dom.epgGridElement.dataset.guideDensity = settings.guideDensity;
 

@@ -1,4 +1,5 @@
-import electron, { type BrowserWindow } from 'electron';
+import electron from 'electron';
+import type { ShellWindow } from './window/shellWindowController.js';
 
 const { app } = electron;
 
@@ -57,7 +58,7 @@ interface FullscreenTransitionResult {
 }
 
 export async function assertFullscreenContinuity(
-  window: BrowserWindow,
+  window: ShellWindow,
   failures: string[],
 ): Promise<void> {
   try {
@@ -99,7 +100,7 @@ export async function assertFullscreenContinuity(
     `) as { failures: string[] };
     failures.push(...fullscreenResult.failures);
     if (!fullscreenOn.observed && window.isFullScreenable() && window.isFocused()) {
-      failures.push('fullscreen enter BrowserWindow state ' + JSON.stringify(getFullscreenDiagnostics(window)));
+      failures.push('fullscreen enter BaseWindow state ' + JSON.stringify(getFullscreenDiagnostics(window)));
     }
   } catch (error) {
     failures.push('fullscreen continuity ' + formatSmokeError(error));
@@ -113,13 +114,13 @@ export async function assertFullscreenContinuity(
       failures.push('fullscreen off ' + formatSmokeError(error));
     }
     if (isFullscreenState(window, true) && !(await waitForFullscreenState(window, false, fullscreenObservationScheduler))) {
-      failures.push('fullscreen leave BrowserWindow state');
+      failures.push('fullscreen leave BaseWindow state');
     }
   }
 }
 
 export async function assertRendererCloseLifecycle(
-  window: BrowserWindow,
+  window: ShellWindow,
   failures: string[],
 ): Promise<void> {
   const observed = {
@@ -137,24 +138,26 @@ export async function assertRendererCloseLifecycle(
     app.once('before-quit', () => { observed.beforeQuit = true; check(); });
     app.once('will-quit', () => { observed.willQuit = true; check(); });
   });
-  const timeout = new Promise<void>((resolve) => { setTimeout(resolve, 5000); });
+  let timeoutHandle: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timeoutHandle = globalThis.setTimeout(resolve, 5000);
+  });
 
-  let rendererResult: unknown = null;
-  try {
-    rendererResult = await window.webContents.executeJavaScript(
-      RENDERER_CLOSE_LIFECYCLE_SCRIPT,
-    );
-  } catch {
-    // BrowserWindow destruction may reject evaluation after the synchronous close.
-  }
-
+  const rendererEvaluation = window.webContents.executeJavaScript(
+    RENDERER_CLOSE_LIFECYCLE_SCRIPT,
+  ).catch(() => null);
+  const rendererResult: unknown = await Promise.race([
+    rendererEvaluation,
+    timeout.then(() => null),
+  ]);
   await Promise.race([waitForLifecycle, timeout]);
+  if (timeoutHandle !== undefined) globalThis.clearTimeout(timeoutHandle);
   if (!Object.values(observed).every(Boolean)) {
     failures.push('renderer close lifecycle ' + JSON.stringify({ observed, rendererResult }));
   }
 }
 
-function ensureVisibleForFullscreen(window: BrowserWindow): Promise<void> {
+function ensureVisibleForFullscreen(window: ShellWindow): Promise<void> {
   if (window.isDestroyed() || window.isVisible()) {
     return focusSmokeWindow(window);
   }
@@ -173,7 +176,7 @@ function ensureVisibleForFullscreen(window: BrowserWindow): Promise<void> {
   });
 }
 
-async function focusSmokeWindow(window: BrowserWindow): Promise<void> {
+async function focusSmokeWindow(window: ShellWindow): Promise<void> {
   if (window.isDestroyed()) {
     return;
   }
@@ -196,14 +199,14 @@ async function focusSmokeWindow(window: BrowserWindow): Promise<void> {
   });
 }
 
-async function setRendererFullscreen(window: BrowserWindow, enabled: boolean): Promise<unknown> {
+async function setRendererFullscreen(window: ShellWindow, enabled: boolean): Promise<unknown> {
   return window.webContents.executeJavaScript(
     `window.lineupDesktop.window.setFullscreen(${JSON.stringify(enabled)});`,
   ) as Promise<unknown>;
 }
 
 async function setRendererFullscreenAndWait(
-  window: BrowserWindow,
+  window: ShellWindow,
   enabled: boolean,
 ): Promise<FullscreenTransitionResult> {
   const transition = waitForFullscreenState(window, enabled, fullscreenObservationScheduler);
@@ -274,7 +277,7 @@ function isFullscreenState(window: Pick<FullscreenObservationWindow, 'isFullScre
   return window.isFullScreen() === enabled;
 }
 
-function getFullscreenDiagnostics(window: BrowserWindow): Record<string, unknown> {
+function getFullscreenDiagnostics(window: ShellWindow): Record<string, unknown> {
   return {
     fullscreenable: window.isFullScreenable(),
     fullscreen: window.isFullScreen(),

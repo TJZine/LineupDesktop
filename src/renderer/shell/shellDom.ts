@@ -135,16 +135,14 @@ export function renderShellDom(
   setPending(bindings.retryStartupButton, state.bootstrap === 'loading');
   setPending(bindings.inlineRetryButton, state.fullscreenPending);
 
-  const playerRouteVisible = screens.some((screen) => screen.dataset.screen === 'player' && !screen.hidden);
-  const presentationVisible = !blockingOwner && !state.exitConfirmOpen && playerRouteVisible;
+  const presentationRouteVisible = screens.some((screen) =>
+    (screen.dataset.screen === 'player' || screen.dataset.screen === 'guide') && !screen.hidden);
+  const presentationVisible = !blockingOwner && !state.exitConfirmOpen && presentationRouteVisible;
   const backgroundInteractive = state.inlineError === null;
   if (bindings.playerPresentation) {
     bindings.playerPresentation.hidden = !presentationVisible;
-    setInteractive(
-      bindings.playerPresentation,
-      presentationVisible && backgroundInteractive,
-      !presentationVisible || !backgroundInteractive,
-    );
+    bindings.playerPresentation.inert = true;
+    bindings.playerPresentation.setAttribute('aria-hidden', 'true');
   }
   for (const screen of screens) {
     const routeVisible = !screen.hidden;

@@ -8,6 +8,26 @@ import type { ArtworkRef } from '../contracts/artwork.js';
 import type { GuideLibraryFilterState } from '../contracts/guide.js';
 import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
 import type { AppRouteId } from './navigation.js';
+import type { PlayerPresentationMode, PlayerSnapshot } from '../contracts/player.js';
+import type { DesktopSettingsValues } from '../contracts/settings.js';
+import type { RendererShellState } from './shell/shellState.js';
+
+export function projectNativePlayerPresentationMode(input: {
+  route: AppRouteId;
+  guideLayout: DesktopSettingsValues['guideLayout'];
+  snapshot: PlayerSnapshot;
+  shell: RendererShellState;
+}): PlayerPresentationMode {
+  const blocked = input.shell.bootstrap !== 'ready' || input.shell.exitConfirmOpen ||
+    input.shell.inlineError !== null || input.snapshot.lastError !== null;
+  const presentable = input.snapshot.requestId !== null &&
+    ['ready', 'buffering', 'playing', 'paused', 'seeking', 'stalled'].includes(input.snapshot.status);
+  if (blocked || !presentable) return 'hidden';
+  if (input.route === 'player') return 'player-full';
+  if (input.route !== 'guide') return 'hidden';
+  if (input.guideLayout === 'overlay') return 'guide-overlay-full';
+  return input.snapshot.playing ? 'guide-classic-pip' : 'hidden';
+}
 
 export interface ProgramSummaryViewModel {
   title: string;

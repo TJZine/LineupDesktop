@@ -82,6 +82,9 @@ export const LINEUP_PLAYER_CLEANUP_CHANNEL = 'lineup:player:cleanup' as const;
 
 export const LINEUP_PLAYER_EVENT_CHANNEL = 'lineup:player:event' as const;
 
+export const LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL =
+  'lineup:player:updatePresentation' as const;
+
 export const LINEUP_PLAYER_RECOVERY_CHANNEL = 'lineup:player:recovery' as const;
 
 export const LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL =

@@ -105,6 +105,24 @@ export type NativePlayerHostAudioOutputResult =
   | { ok: true; outputs: NativeAudioOutput[] }
   | { ok: false; error: NativePlayerHostFailure };
 
+export interface NativePlayerPresentationUpdate {
+  documentEpoch: number;
+  revision: number;
+  parentHwnd: string;
+  parentPid: number;
+  loadedRequestId: PlayerRequestId | null;
+  mode: 'hidden' | 'player-full' | 'guide-overlay-full' | 'guide-classic-pip';
+  bounds: { x: number; y: number; width: number; height: number } | null;
+}
+
+export type NativePlayerPresentationResult =
+  | { ok: true; status: 'applied' | 'hidden' | 'stale' }
+  | {
+      ok: false;
+      classification: 'pre-send-rejected' | 'shared-host-failure';
+      error: NativePlayerHostFailure;
+    };
+
 import type { PrivilegedPlaybackDispatchContext } from './privilegedPlaybackDispatchContext.js';
 
 export interface NativePlayerHostPort {
@@ -113,6 +131,9 @@ export interface NativePlayerHostPort {
     context?: PrivilegedPlaybackDispatchContext | null,
   ): Promise<NativePlayerHostCommandResult>;
   queryAudioOutputs(requestId: PlayerRequestId): Promise<NativePlayerHostAudioOutputResult>;
+  updatePresentation?(
+    update: NativePlayerPresentationUpdate,
+  ): Promise<NativePlayerPresentationResult>;
   cleanup(requestId: PlayerRequestId | null): Promise<void>;
   onLifecycleFailure?(
     listener: (failure: NativePlayerHostLifecycleFailure) => void,

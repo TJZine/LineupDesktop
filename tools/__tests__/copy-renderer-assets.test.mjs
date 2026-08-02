@@ -8,7 +8,7 @@ import test from 'node:test';
 import {
   copyRendererAssets,
   copyRendererChannelBuilderRuntime,
-  copyRendererSettingsRuntime,
+  copyRendererContractsRuntime,
 } from '../copy-renderer-assets.mjs';
 
 test('renderer asset copy preserves recursive files and exact binary hashes', () => {
@@ -42,7 +42,7 @@ test('renderer asset copy preserves recursive files and exact binary hashes', ()
   }
 });
 
-test('renderer settings runtime copy resets and stages the exact compiled dependency closure', () => {
+test('renderer contracts runtime copy resets and stages only the byte-exact artwork and settings closures', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-renderer-settings-runtime-'));
   const compiled = path.join(root, 'dist', 'contracts');
   const renderer = path.join(root, 'dist', 'renderer');
@@ -56,17 +56,25 @@ test('renderer settings runtime copy resets and stages the exact compiled depend
       path.join(compiled, 'settingsAudioValidation.js'),
       'export const validation = true;\n',
     );
+    fs.writeFileSync(
+      path.join(compiled, 'artwork.js'),
+      'export const artwork = true;\n',
+    );
     fs.writeFileSync(path.join(compiled, 'settings.js.map'), new Uint8Array([1]));
     fs.writeFileSync(path.join(compiled, 'shell.js'), new Uint8Array([2]));
     fs.writeFileSync(path.join(compiled, 'nested', 'other.js'), new Uint8Array([3]));
     fs.mkdirSync(path.join(renderer, 'contracts'), { recursive: true });
     fs.writeFileSync(path.join(renderer, 'contracts', 'obsolete.js'), 'stale');
 
-    copyRendererSettingsRuntime(compiled, renderer);
+    copyRendererContractsRuntime(compiled, renderer);
 
     const servedContracts = path.join(renderer, 'contracts');
     const servedSettings = path.join(servedContracts, 'settings.js');
     assert.equal(sha256(servedSettings), sha256(path.join(compiled, 'settings.js')));
+    assert.equal(
+      sha256(path.join(servedContracts, 'artwork.js')),
+      sha256(path.join(compiled, 'artwork.js')),
+    );
     assert.equal(
       sha256(path.join(servedContracts, 'settingsAudioValidation.js')),
       sha256(path.join(compiled, 'settingsAudioValidation.js')),
@@ -74,7 +82,7 @@ test('renderer settings runtime copy resets and stages the exact compiled depend
     assert.deepEqual(fs.readdirSync(renderer), ['contracts']);
     assert.deepEqual(
       fs.readdirSync(servedContracts).sort(),
-      ['settings.js', 'settingsAudioValidation.js'],
+      ['artwork.js', 'settings.js', 'settingsAudioValidation.js'],
     );
     for (const relativePath of [
       'obsolete.js',

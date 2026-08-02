@@ -6,6 +6,7 @@ import {
   LINEUP_PLAYER_CLEANUP_CHANNEL,
   LINEUP_PLAYER_COMMAND_CHANNEL,
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
+  LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL,
 } from '../../contracts/ipc.js';
 import {
   type PlayerCommand,
@@ -264,6 +265,7 @@ test('player IPC registers closed handlers and tears them down', async () => {
     LINEUP_PLAYER_CLEANUP_CHANNEL,
     LINEUP_PLAYER_COMMAND_CHANNEL,
     LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
+    LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL,
   ]);
 
   await teardown.teardown();
@@ -353,6 +355,7 @@ test('player IPC reports cleanup failures and still removes handlers', async () 
     LINEUP_PLAYER_CLEANUP_CHANNEL,
     LINEUP_PLAYER_COMMAND_CHANNEL,
     LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
+    LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL,
   ]);
 
   await teardown.teardown();

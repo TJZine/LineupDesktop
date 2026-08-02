@@ -4,7 +4,8 @@ import fs from 'node:fs/promises';
 
 import {
   app,
-  BrowserWindow,
+  BaseWindow,
+  WebContentsView,
   ipcMain,
   screen,
   type IpcMainInvokeEvent,
@@ -39,6 +40,7 @@ import {
 } from './shellSecurity.js';
 import { registerPlayerIpcHandlers, type PlayerIpcTeardown } from './player/playerIpc.js';
 import { createProductionNativeHostFactory } from './player/productionNativeHostFactory.js';
+import { NativePlayerPresentationOwner } from './player/nativePlayerPresentationOwner.js';
 import { DiagnosticEventStore } from './diagnostics/diagnosticEventStore.js';
 import { registerDiagnosticsIpcHandlers, type DiagnosticsIpcTeardown } from './diagnostics/supportBundleIpc.js';
 import {
@@ -68,7 +70,7 @@ import {
 } from './plex/plexComposition.js';
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
 import { registerShellAppCommandController } from './window/shellAppCommandController.js';
-import { createShellWindowController } from './window/shellWindowController.js';
+import { createShellWindowController, type ShellWindow } from './window/shellWindowController.js';
 import { resolveDesktopGuidePreferencesFilePath, resolveDesktopSettingsFilePath } from './persistence/appDataPaths.js';
 import { DesktopSettingsStore } from './persistence/desktopSettingsStore.js';
 import { registerSettingsIpcHandlers, type SettingsIpcTeardown } from './settings/settingsIpc.js';
@@ -102,6 +104,7 @@ let playbackProgramTransitionOwner: PlaybackProgramTransitionOwner | null = null
 let teardownPlayerRecoveryIpc: PlayerRecoveryIpcTeardown | null = null;
 let playerIpcQuitTeardownInProgress = false;
 let playerIpcQuitTeardownComplete = false;
+let nativePlayerPresentationOwner: NativePlayerPresentationOwner | null = null;
 let singleInstanceOwner: SingleInstanceOwner | null = null;
 let containmentCounters: ShellContainmentCounters = {
   navigationDenied: 0,
@@ -113,6 +116,14 @@ let containmentCounters: ShellContainmentCounters = {
 app.commandLine.appendSwitch('disable-gpu');
 
 void startApplication().catch(async (error: unknown) => {
+  const failedShellController = shellWindowController;
+  shellWindowController = null;
+  try {
+    await failedShellController?.dispose();
+  } catch (cleanupError: unknown) {
+    reportMainProcessDiagnostic('Shell cleanup after startup failure failed', cleanupError);
+  }
+  nativePlayerPresentationOwner = null;
   const cleanupSettingsIpc = teardownSettingsIpc;
   teardownSettingsIpc = null;
   const cleanupDiagnosticsIpc = teardownDiagnosticsIpc;
@@ -218,11 +229,14 @@ async function startApplication(): Promise<void> {
   }
   await app.whenReady();
   shellWindowController = createShellWindowController({
-    createBrowserWindow: (options) => new BrowserWindow(options),
+    createBaseWindow: (options) => new BaseWindow(options),
+    createWebContentsView: (options) => new WebContentsView(options),
     screen,
     preloadPath,
     smokeMode,
     publishShellStatus,
+    invalidatePresentationDocument: () => nativePlayerPresentationOwner?.invalidateDocument(),
+    hidePresentation: () => nativePlayerPresentationOwner?.hide() ?? Promise.resolve(),
   });
   const settingsStore = new DesktopSettingsStore({
     settingsFilePath: resolveDesktopSettingsFilePath(app),
@@ -279,6 +293,12 @@ async function startApplication(): Promise<void> {
       settingsPolicy,
       settingsAudioOutputOwner,
     } = settingsNativeHostComposition;
+    nativePlayerPresentationOwner = new NativePlayerPresentationOwner({
+      platform: process.platform,
+      host: productionNativeHost,
+      getSnapshot: () => teardownPlayerIpc?.adapter?.getSnapshot() ?? null,
+      getParentIdentity: () => getShellWindowController().getNativeParentIdentity(),
+    });
     teardownSettingsIpc = registerSettingsIpcHandlers({
       store: settingsStore,
       policy: settingsPolicy,
@@ -291,7 +311,7 @@ async function startApplication(): Promise<void> {
       shellMode,
       isAuthorizedEvent,
       createRequestId,
-      getShellWindow: () => getShellWindowController().getWindow(),
+      getShellWindow: () => getShellWindowController().getBaseWindow(),
       appVersion: app.getVersion(),
     });
     const eventRouter = createPlaybackEventRouter({
@@ -308,6 +328,7 @@ async function startApplication(): Promise<void> {
       reportDiagnostic: reportMainProcessDiagnostic,
       diagnosticEventStore,
       nativeHost: productionNativeHost,
+      presentationOwner: nativePlayerPresentationOwner,
       onNativeHostLifecycleFailure: () => {
         const transitionOwner = playbackProgramTransitionOwner;
         const runtime = playbackRuntime;
@@ -384,7 +405,7 @@ async function startApplication(): Promise<void> {
       .catch((error) => {
         reportMainProcessDiagnostic('Guide runtime active channel initialization failed', error);
       });
-    const shellWindow = getShellWindowController().createWindow();
+    const shellWindow = await getShellWindowController().createWindow();
     bindGuideArtworkOwnerToWebContents(shellWindow.webContents, channelCreated.guideArtworkOwner);
     registerShellAppCommandController(shellWindow, {
       sendMediaInput: (input) => sendToShellWindow(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, input),
@@ -396,6 +417,7 @@ async function startApplication(): Promise<void> {
       throw new Error('Renderer loaded an unexpected URL.');
     }
     publishShellStatus('ready');
+    getShellWindowController().showWindow();
     if (smokeMode) {
       await runSmokeAssertions(shellWindow, containmentCounters);
       app.exit(0);
@@ -460,7 +482,13 @@ function registerApplicationLifecycleHandlers(): void {
     playbackRuntime = null;
     const localPlaybackEventRouter = playbackEventRouter;
     playbackEventRouter = null;
+    const localShellWindowController = shellWindowController;
+    const localPresentationOwner = nativePlayerPresentationOwner;
     (async () => {
+      await localShellWindowController?.dispose();
+      await localPresentationOwner?.dispose();
+      if (shellWindowController === localShellWindowController) shellWindowController = null;
+      if (nativePlayerPresentationOwner === localPresentationOwner) nativePlayerPresentationOwner = null;
       await teardown.teardown();
       localPlaybackEventRouter?.dispose();
       await localPlaybackRuntime?.teardown();
@@ -480,7 +508,7 @@ function registerApplicationLifecycleHandlers(): void {
   });
 }
 
-function attachContainmentHandlers(window: BrowserWindow): void {
+function attachContainmentHandlers(window: ShellWindow): void {
   window.webContents.setWindowOpenHandler(() => {
     containmentCounters.windowOpenDenied += 1;
     return { action: 'deny' };
