@@ -7819,3 +7819,2259 @@ reviewed units, observed local verification, contribution/matrix/architecture/
 roadmap/Windows-proof reconciliation, and clean closeout review. Keep this
 canonical plan active and end with the complete WS6 feature-quality-loop
 handoff under the same targeted-audit and consolidated-proof policy.
+
+### Whole-WS5 Decision-Complete Amendment — Guide
+
+This amendment is the reviewed replan vehicle required by the WS5 handoff. It
+supersedes the earlier WS5 package outline wherever the two differ; it does not
+change accepted WS1–WS4 conclusions or authorize WS6–WS9. The target remains
+exactly `EPG-01`–`EPG-15`, `UI-35`–`UI-40`, and direct Guide consumption proof
+for WS3-owned `ST-11`–`ST-16` and `UI-33` under
+`WS3-CONTRIBUTION-WS5`. Settings registry ownership stays with WS3.
+
+Planning freshness was established against Desktop checkpoint
+`830a16929e5f0d24c749df494a6366ede09f2e15`, which matches tracked
+`origin/initial-build`. Checkpoints `3258511`, `f4570df`, `a78228b`,
+`a654cdd`, and `c4dadcf` are ancestors. The worktree was clean when this
+amendment began. Targeted direct reads, `rg`, and history were less noisy than
+Codanna because the handoff names the exact rows, owners, tests, and upstream
+pin. Upstream behavior was read from sibling commit `0258dbe` without checking
+out or changing the sibling worktree.
+
+#### WS5 Review Adjudication
+
+All eight fresh plan-review findings are accepted and block Unit 5A until this
+amendment receives another independent review. Observed source evidence fixes
+the owner boundaries as follows: the existing builder-context notifications
+deduplicate equal values and are insufficient for artwork credential/session
+currentness; `ChannelPublicReferenceGeneration` owns the persisted lineup
+revision; `staticDom.ts` and `domBindings.ts` own the fixed Guide detail
+elements; navigation receives the one-shot `mediaPlay` command but no repeat
+metadata; gamepad policy does not map Play; and
+`ChannelPublicReferenceOwner` intentionally passes byte-for-byte values that
+already satisfy its safe-reference validator while remapping unsafe values.
+
+The accepted corrections are: immutable artwork session-generation custody; complete detail
+DOM ownership and behavior; Desktop-native one-shot Play-to-now; accurate safe-
+reference language; filter/sort/page-before-resolution and fair aggregate caps;
+an exact v1 preference record and recovery contract; an explicit reviewed
+Desktop artwork divergence from upstream `0258dbe`; and unconditional named
+Unit 5A tests. No finding authorizes product edits, reopens WS1, changes Settings
+ownership, removes the real-art requirement, or changes the 21-row assignment.
+
+| Finding | Evidence classification and verdict | Blocking fix/proof |
+| --- | --- | --- |
+| 1 — immutable artwork session | Observed current Plex context and lineup-generation owners; **accept**. | Blocks 5A until the immutable session generation, three checks, abort matrix, bearer custody, and owner/composition/protocol tests below are independently approved. |
+| 2 — complete detail DOM scope | Observed fixed markup/bindings in `staticDom.ts`/`domBindings.ts`; **accept**. | Add both files to 5A and freeze/test exact poster, placeholder, text, error, motion, and forced-color behavior. |
+| 3 — Desktop Play input | Observed one-shot `mediaPlay`, no navigation repeat metadata, and no gamepad Play mapping; **accept**. | Remove upstream stop-repeat behavior; add only Guide `mediaPlay` handling and exact inert-command/regression tests. |
+| 4 — WS1 safe-reference passthrough | Observed `ChannelPublicReferenceOwner.allocateReferences`; **accept**. | Preserve validated byte-for-byte passthrough and prohibit only unsafe/unvalidated/private identifiers and secret material. |
+| 5 — query ordering/fair cap | Observed current all-row resolution and reviewed target caps; **accept**. | Freeze filter/sort/page-before-resolution, round-robin 1,000 cap, and instrumented 300-channel call-count/fairness proof. |
+| 6 — preference v1 completeness | Observed Desktop atomic-store precedent; new Guide schema is planned evidence; **accept**. | Freeze exact JSON, bounds, revision/tombstone/CAS/corruption/queue/atomic failure rules and focused store tests before 5B. |
+| 7 — artwork divergence | Observed current Desktop `thumb`/`showThumb` fields and pinned upstream `0258dbe`; **accept**. | Record source/display divergence across 5A/5D and prohibit an exact-upstream-parity claim. |
+| 8 — unconditional verification | Observed existing test inventory and missing dedicated protocol/session/DOM/input tests; **accept**. | Require every exact new and existing Unit 5A path/command below, including maintainability. |
+
+**Re-review adjudication — 2026-08-01:** all four fresh findings are accepted
+and block implementation until another independent feature-plan review.
+
+| Fresh finding | Evidence classification and verdict | Blocking repair |
+| --- | --- | --- |
+| Dedicated artwork session generation | Observed value dedupe in `DesktopPlexContextNotifications`, current token/connection mutation entrypoints, and shutdown ordering; **accept**. | Replace notification reliance with the exact non-deduplicating main-only session owner, transition hooks, immutable captured credentials, three generation checks, abort notification, and tests below. |
+| Bearer semantics | The narrow route/ref contract is planned security policy; reviewer ambiguity is valid; **accept**. | Define `ArtworkRef` only as a fixed-route GET delivery bearer and prohibit source-locator, credential, or generic Plex authority wording everywhere. |
+| 5A/5D layout proof | Observed current Classic-only Guide and later 5D Overlay ownership; **accept**. | Prove only Classic placement in 5A and move mandatory both-layout placement/semantics to 5D. |
+| 5B paging activation | Observed paged data activation in 5B with cross-page Page behavior previously deferred to 5G; **accept**. | Land ±5 cross-page PageUp/PageDown, boundaries, loading/cancellation, focus restoration, files, and tests atomically in 5B; 5G only refines virtualization navigation/accessibility. |
+
+**Artwork-locator re-review adjudication — 2026-08-01:** the fresh finding is
+accepted and blocks Unit 5A until another independent feature-plan review.
+Observed source evidence shows `livePlexTransport.ts` already owns
+`normalizeBaseUri`, URL construction, Plex-token header construction, fetch
+policy, and the injected transport test seam; the previous phrase “allowed
+relative artwork path” did not define an enforceable allowlist. Unit 5A now
+owns the exact anchored locator grammar, byte-preserving origin containment,
+redirect prohibition, and mandatory positive/negative vectors below. This
+repair does not admit a broader Plex path, renderer input, or generic fetch
+surface.
+
+**Unit 5B implementation-stop adjudication — 2026-08-01:** the fresh preload-
+literal ownership finding is accepted and blocks further Unit 5B product edits
+until a fresh independent feature-plan review approves the narrow repair.
+Observed source evidence shows the sandboxed preload architecture owns runtime
+IPC literals in `src/preload/channels.cts`; `src/preload/index.cts` already
+imports `LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL` from that owner, while
+`src/contracts/ipc.ts` already owns the same typed main/contract literal.
+Importing the runtime IPC value from the shared contract into preload is
+intentionally disallowed. Partial 5B edits are present in the worktree,
+including the contract, Guide bridge, and preload-index wiring, but
+`src/preload/channels.cts` remains untouched pending this review. The accepted
+repair adds only the exact sandbox-local mirror and parity/boundary proof below;
+it does not reopen 5A, alter 5B schema or persistence limits, or authorize 5C+.
+
+**Unit 5D P0 re-adjudication — 2026-08-01:** the prior renderer-only amendment is
+rejected and superseded. Unit 5D product edits remain stopped until a fresh
+independent feature-plan architecture review approves the complete native
+presentation seam below. Current source truth is that
+`[data-player-presentation-surface]` is an empty renderer geometry proxy, while
+the C# helper alone creates an unparented, fixed `960x540`, visible popup at
+`(80,80)` and forces it `HWND_TOPMOST`; helper spawn receives no shell HWND or
+bounds and the private protocol has no presentation control. A CSS/DOM-only
+change therefore cannot complete `EPG-10` or `UI-36`, and the existing popup
+would remain detached from shell layout, z-order, focus, DPI, minimization, and
+lifecycle. The smallest honest repair is the reviewed cross-boundary,
+Windows-only child-HWND composition seam frozen below. No Unit 5D product edit
+has started, `src/renderer/shell/shellDom.ts` remains observed unchanged, and
+existing earlier-unit worktree changes must be preserved. Settings schema and
+persistence, Plex/playback command policy, artwork authorization/retry, input,
+and Units 5E–5G remain outside this amendment.
+
+**Unit 5D architecture/security re-adjudication — 2026-08-02 (production
+decisions retained; proof-first ordering superseded):** all ten architecture,
+security, currentness, lifecycle, and contract findings remain accepted. The
+later coding-first adjudication changes only when the Windows proof package
+runs; it authorizes production implementation before that broader campaign.
+
+| Finding | Verdict | Blocking correction |
+| --- | --- | --- |
+| P0-1 — executable real-host proof ingress | **Accept.** Existing smoke ends at a fake native host and cannot load safe local media through privileged playback. | Add the branded, sentinel-authorized, Windows-only proof bootstrap/composition below. It uses the real production helper and one canonical locally authorized fixture, rejects every partial/default-production marker, and tears down the file capability, player, helper, view/window, and proof root. |
+| P0-2 — native thread affinity | **Accept.** Current command/render teardown crosses HWND/WGL thread ownership. | One dedicated helper presentation/render thread creates, mutates, pumps, renders, hides, and destroys HWND/WGL resources from a bounded work queue. ACK follows execution; destroy occurs on that thread before it is joined. |
+| P0-3 — DPI conversion/manifest | **Accept.** Electron `screen.dipToScreenRect` cannot authorize a cross-process child rectangle. | Main validates normalized geometry only. Helper validates parent/process/DPI context, reads the physical parent client rectangle, performs the frozen rounding, and fails hidden on mismatch/unstable DPI. Extract and verify the embedded Release PerMonitorV2 manifest. |
+| P0-4 — shared-helper health | **Accept.** A written presentation operation shares the helper transport and cannot time out independently. | Any post-send helper-rejected ACK, write/output/framing/ACK-timeout failure hides by quarantine, marks the shared helper unhealthy, emits the existing lifecycle failure, and runs existing playback crash cleanup. Only rejection before a byte is sent is presentation-only. |
+| P0-5 — two-phase currentness | **Accept.** Native show and renderer transparency require one matching acknowledgement barrier. | Opaque HTML closes first. Show/resize remains opaque until main and renderer revalidate an applied ACK for the current document epoch, media request, and revision. Every load/switch/cleanup first completes native hidden or fails. |
+| P0-6 — exact Windows feasibility | **Accept with sequencing modification.** The Electron-42/native-child premise remains unproved with GPU disabled. | Deferred 5H Unit 5D-0 uses an ignored Windows spike for the exact topology and minimum 100%-DPI observation after coding. Failure returns the implemented checkpoint to remediation/replan; no parity row or WS5 closeout proceeds without it. |
+| P1-7 — bounded main currentness queue | **Accept.** Revision alone does not bound concurrent renderer churn. | Main owns a positive document epoch and exactly one active plus one latest trailing presentation operation, settles replaced work deterministically as main-stale/superseded, and proves constant memory/no log amplification. |
+| P1-8 — shell teardown | **Accept.** `WebContentsView` content and native hiding need explicit disposal order. | Freeze content bounds/listeners, native hide/quarantine, `view.webContents.close()`, view removal, and `BaseWindow.destroy()` for normal close, partial startup, crash, and repeated cleanup. |
+| P1-9 — pointer/accessibility proof | **Accept.** `HTTRANSPARENT` is not a cross-process security boundary. | Rely on actual `WS_DISABLED`, nonactivation, z-order, and HTML ownership; remove hit-test reliance and require observed pointer/focus plus UIA/MSAA enumeration proof. |
+| P1-10 — exact public mapping | **Accept.** The earlier acknowledgement vocabulary did not distinguish currentness from transport health. | Freeze the exact success/failure union and preload key/literal parity for deferred, unsupported, main-stale, helper-stale, rejected, timeout, and lifecycle-failure. |
+
+**Unit 5D narrow custody/bootstrap re-adjudication — 2026-08-02 (deferred 5H
+proof package):** the latest review reject is accepted for the eventual proof
+package, but no longer blocks production coding. The topology,
+two-phase currentness, helper thread, shared-host health, and DPI conversion
+decisions above stay closed; only these six repairs supersede their earlier text:
+
+| Finding | Verdict | Exact repair |
+| --- | --- | --- |
+| 1 — ignored 5D-0 custody/review | **Accept.** Ignored files cannot rely on ordinary git diff for review. | Put the complete disposable source, test, build output, and evidence closure under existing ignored `docs/runs/ws5-native-presentation-feasibility/`; require exact-set enumeration plus raw read/syntax/build/test commands; remove `bin/obj` before review and retain source/evidence only through disposition. No `.gitignore` edit. |
+| 2 — smoke/proof startup ambiguity | **Accept.** Current `SmokeBootstrapOwner` treats proof-style `--user-data-dir` as partial smoke. | Add one pre-side-effect bootstrap decision owner: no markers is normal; exactly one complete family validates only that family; partial, duplicate, user-data-only, or mixed families fail one fixed envelope before either family owner or other app owner runs. Complete proof bypasses smoke only after this rejection pass. |
+| 3 — exact rebuilt helper binding | **Accept.** Proof cannot use packaged/Debug/fallback resolution. | Clean/rebuild the one canonical repo Release executable; bind its canonical path and SHA-256 in the branded proof capability; inspect and spawn that same unchanged digest; reject path/digest mutation and disable all factory fallbacks in proof mode. |
+| 4 — malformed request correlation | **Accept.** Malformed input may not contain usable epoch/revision values. | Keep one resolved result union: success correlation is nonnull; every failure has nullable `documentEpoch`/`revision`, echoing each independently only when it is already valid and otherwise null. Preload returns local rejected without IPC for malformed input. |
+| 5 — Windows ACL policy | **Accept.** “User-only protection” needs executable authorization semantics. | Add one main Windows ACL inspector using a fixed stdin-driven PowerShell/.NET AccessControl script and a strict SID/write policy below; store only its boolean admission in the proof capability. Any unknown, parse, timeout, ACL, owner, reparse, or policy result fails before helper/shell creation. |
+| 6 — fail-closed Release/manifest proof | **Accept.** Ad-hoc shell lines can reuse stale output or ignore native failure. | Add the exact PowerShell proof entrypoint below with `ErrorActionPreference = 'Stop'`, explicit native exit checks, clean/no-incremental rebuild, canonical Release resolution, `mt.exe` resource extraction, exactly one PerMonitorV2 node, digest equality before inspection/spawn/after exit, and no fallback. |
+
+**Unit 5D coding-first sequencing adjudication — 2026-08-02:** the user has
+reaffirmed the program-wide rule that implementation completes before the
+broader Windows campaign. This direction supersedes only the earlier
+`5D-0-before-product` ordering; it does not weaken or reopen the reviewed native
+topology, trust boundaries, two-phase currentness, helper-thread ownership,
+DPI validation, bounded queues, lifecycle cleanup, result contracts, rollback,
+or proof requirements. The reviewers' remaining findings concern only custody
+and execution of the disposable Windows feasibility/proof harness. They are
+**deferred** to the post-coding 5H proof package and do not block production
+Unit 5D implementation. Unit 5D now starts with the frozen production seam and
+local automated proof. After independent implementation review, Units 5E–5G
+may continue serially. `EPG-10` and `UI-36` remain open, no native composition
+claim is made from macOS/local automation, and 5H must run the exact Windows
+feasibility plus real-host campaign before WS5 closeout. Any observed Windows
+failure returns the completed code to remediation/replan; unavailable proof
+remains explicit debt rather than retroactively erasing implemented work.
+
+#### WS5 Goal
+
+Deliver a production-shaped Guide that preserves the main/preload/renderer
+trust split while adding focused details with genuine product artwork,
+Play-to-now, persisted library tabs, Now Watching and layout preferences, exact
+two-/three-hour density behavior, past-item policy, and bounded large-guide
+virtualization/preload. Finish with observed local product proof, exact
+consolidated external proof debt, authority reconciliation, and independent
+closeout review.
+
+#### WS5 Non-Goals
+
+- Do not repeat the accepted 227-row audit, reopen accepted WS1–WS4 product
+  work, take Settings ownership, or begin WS6–WS9.
+- Do not expose a Plex token, header, machine identifier, unvalidated/unsafe or
+  private raw library/channel identifier, filesystem path, or upstream artwork
+  URL to preload or renderer. Preserve WS1's byte-for-byte passthrough for a
+  source identifier that already satisfies the public safe-reference validator;
+  do not invent a second opaque remap merely because the safe value originated
+  in main.
+- Do not put schedule, persistence, artwork authorization/fetch, or playback
+  policy in renderer or preload. Do not add a generic Plex request bridge.
+- Do not copy the Custom Channel artwork owner merely for reuse, claim a
+  placeholder as live artwork, or defer the whole artwork path to live proof.
+- Do not mutate the six WS3 Settings keys or their defaults, labels, value
+  domains, persistence owner, or IPC vocabulary. Library-tab selection is a
+  separate Guide preference, not a seventh Settings key.
+- Do not add a dependency, privilege, global/background media-key owner,
+  `globalShortcut`, Media Session/SMTC metadata policy, playback command,
+  package-script change, compatibility shim, or upstream import. Unit 5D may
+  add only its versioned private native-presentation message and the exact
+  public presentation-update operation below; neither is playback authority.
+- Do not turn `src/main/index.ts`, `src/main/channel/channelComposition.ts`, or
+  `src/renderer/index.ts` into policy owners. They remain composition roots.
+
+#### WS5 Architecture And Invariants
+
+**Owner and trust split**
+
+- Main continues to own the selected Plex server/profile/lineup session generation,
+  schedule/channel truth, numeric channel ordering, library identity,
+  preference persistence, artwork authorization/fetch/cache, and renderer-safe
+  Guide projection. Preload exposes exact operations and strict input/result
+  validation. Renderer owns view state, focus, bounded caches, virtualization,
+  presentation, and self-origin image elements.
+- Existing tune custody is unchanged: OK tunes only a currently airing program
+  through the existing tune controller; a future item may be focused and shown
+  in detail but cannot tune. Existing request generation, active-plus-one-
+  trailing polling, route/player eligibility, cancellation, last-valid-state,
+  and loading/empty/error recovery stay intact.
+- Main sorts channels by numeric channel number with stable public channel ID as
+  the tie-break before paging. Day rollover, DST-safe slot math, currentness,
+  focus identity, WS4 Page movement, pointer behavior, and current-channel
+  highlighting remain stable across a refreshed window.
+- Renderer artwork URLs are constructed only as
+  `lineup://shell/artwork/<encoded-opaque-ref-id>` after validation of a public
+  `ArtworkRef`. Renderer never accepts or derives an arbitrary scheme, host,
+  path, or upstream URL. Missing, expired, failed, or unsupported artwork uses
+  a deterministic non-live placeholder and bounded text; image failure cannot
+  loop or reveal its source.
+
+**Public Guide projection and bounded query**
+
+- Extend an EPG program with `artwork: ArtworkRef | null`. Reuse the existing
+  opaque, time-bounded `ArtworkRef`. It is a narrow unguessable delivery bearer
+  capability authorizing only GET on
+  `lineup://shell/artwork/<opaque-ref-id>` while its main-owned session and TTL
+  remain current. It is not a source locator, raw upstream reference, reusable
+  Plex credential, or generic Plex fetch authority and carries no source URL.
+- Extend the existing Guide presentation request, not a second read operation,
+  with `channelOffset` and `channelLimit`. Defaults are `0` and `9`; main and
+  preload accept integer offsets at or above zero and limits from `1` through
+  `24`. Extend the result with `channelWindow: { offset, total }` and the Guide
+  library-filter state below. Main returns at most 24 channels, 200 programs
+  per channel, and 1,000 program tuples total. Existing string caps remain.
+- The result exposes only public library references:
+  `GuideLibraryFilterState = { scopeToken, revision, libraries,
+  selectedLibraryId, persistenceStatus }`. `scopeToken` is a new opaque public
+  token in the existing request-ID-safe shape (at most 120 characters), issued
+  on each server/profile/lineup scope change and never a raw identifier.
+  Libraries contain exactly `{ id, name, contentKind }`, using the already-safe
+  public library ID, bounded display name, and `show | movie | mixed` kind
+  derived in main from current channel content-source truth; conflicting or
+  non-library source membership is `mixed`. Selection is a public ID or `null`
+  for All; revision is a nonnegative safe integer. `persistenceStatus` is
+  exactly `ready | missing | corrupt |
+  unsupported-version`. The WS1 reference invariant remains: values already
+  matching `SAFE_REFERENCE` may cross byte-for-byte as public references;
+  unsafe values are deterministically remapped. No unvalidated/unsafe/private
+  identifier, secret, Plex locator, credential, or tokenized material crosses.
+- Add exactly one mutation, `guide.setLibraryFilter`, with request
+  `{ expectedScopeToken, expectedRevision, libraryId: string | null }` and
+  result `GuideLibraryFilterState`. It uses existing Guide sender
+  authorization, exact preload validation, and compare-and-set semantics. A
+  stale token/revision, unknown public library, or closed window fails closed
+  with renderer-safe text and makes no write.
+- Its sole operation channel literal is
+  `lineup:guide:setLibraryFilter`. `src/contracts/ipc.ts` exports the typed
+  `LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL` for contract/main ownership, while
+  sandbox-local `src/preload/channels.cts` exports the same named constant with
+  exactly the same literal for preload runtime use. This intentional byte-for-
+  byte mirror is not a second operation or alternate literal:
+  `src/preload/index.cts` imports it only from `./channels.cjs` and never imports
+  the shared contract runtime value. Add only the corresponding shell method
+  and Guide-bridge method; preload index wires that local constant and main
+  channel IPC registers/removes the handler. Preserve `GUIDE_UNAUTHORIZED` and
+  `GUIDE_VALIDATION_FAILED`; add exact safe failures
+  `GUIDE_FILTER_SCOPE_STALE`, `GUIDE_FILTER_REVISION_CONFLICT`,
+  `GUIDE_FILTER_STORAGE_UNAVAILABLE`, and
+  `GUIDE_FILTER_UNSUPPORTED_VERSION`, plus the invariant-only
+  `GUIDE_FILTER_REVISION_EXHAUSTED`. Scope/revision/storage failures are
+  recoverable; unsupported version and exhausted revision are not. No failure
+  includes an identifier, path, value, or underlying exception text.
+- These public contract, operation, and protocol-route expansions are explicit
+  review gates. No implementation begins until an independent
+  `lineup-desktop-feature-review` approves Unit 5A and this boundary.
+
+**5B/5G main query sequence and fair caps**
+
+- For every presentation read, main performs this sequence exactly: capture one
+  current `ChannelPublicReferenceGeneration` and Guide preference scope token;
+  derive the generation's validated public channel/library references and
+  main-only membership; apply hidden-channel and selected-library filtering;
+  sort numeric channel number ascending with safe public channel reference as
+  stable tie-break; clamp `channelOffset` and page to `channelLimit`; resolve
+  content only for those returned/preload rows; project programs/art refs under
+  the captured generation/scope; then enforce per-channel and aggregate result
+  caps. Re-read generation/scope after resolution and return the existing stale
+  safe failure rather than mix generations/scopes.
+- Main must not resolve all matching channels and slice later. A 300-channel
+  fixture instruments the Plex adapter/scheduler boundary and proves each
+  request resolves no more than its requested limit (including 5B's `9`, `21`,
+  and absolute `24` boundary cases) while still returning the correct
+  `channelWindow.total` and clamped offset. Renderer preloads another bounded
+  page only through another generation-cancelable request under the existing
+  one-active/one-trailing rule. Unit 5G selects `12` for the default Desktop
+  profile and `24` for the opt-in aggressive Desktop profile without widening
+  the already-implemented `1..24` bridge/main contract.
+- Within each returned channel, sort overlapping projected programs by
+  `startsAtMs`, then `endsAtMs`, then safe projected program ID and retain at
+  most 200. Enforce the aggregate 1,000-program cap by deterministic round-robin
+  in already-sorted channel order: take program index zero from every nonempty
+  row, then index one from every eligible row, and continue until 1,000 or
+  exhaustion. Preserve every paged channel row even when its program list is
+  empty/truncated, preserve chronological order within each row, and never let
+  an earlier high-volume channel starve a later visible/focused row. Normal UI
+  windows must contain the focused program; if a refresh legitimately removes
+  it, use the frozen same-channel/nearest-row focus fallback rather than keeping
+  an out-of-generation cell.
+
+**Real artwork delivery**
+
+- Add a focused `GuideArtworkOwner`; do not force Guide through
+  `CustomChannelArtworkProxy` unless review proves identical authorization and
+  source lifecycle. It resolves a main-only source locator to an opaque ref,
+  authorizes it against the immutable session generation below, and owns a memory-only byte
+  cache. Reference TTL is 15 minutes; fetch timeout is 5 seconds; maximum
+  response is 1.5 MB; only normalized JPEG, PNG, or WebP is served. Redirects,
+  SVG, HTML, active content, missing/ambiguous MIME, over-limit bodies, and
+  expired refs fail closed.
+- Add `src/main/plex/guideArtworkSessionGenerationOwner.ts` with the dedicated
+  main-only `GuideArtworkSessionGenerationOwner`. It replaces builder-context
+  notification use for artwork currentness; it is not a wrapper around
+  `DesktopPlexContextNotifications` and never value-deduplicates a transition.
+  `createPlexComposition` constructs it, injects it into `DesktopPlexRuntime`,
+  and exposes only its main-only capture/currentness/subscription seam to
+  `createChannelComposition` and `GuideArtworkOwner` through explicit
+  composition wiring.
+- Its immutable private snapshot is exactly
+  `{ generationId, status, profileBinding, serverBinding, connection, token,
+  lineupRevision }`. `generationId` is a monotonically increasing positive safe
+  integer and private session ID. `status` is `ready | unavailable | disposed`.
+  A ready snapshot has nonnull existing `createProfileBinding(activeProfileId)`,
+  existing `createServerBinding(selectedServerId)`, captured active token,
+  safe-integer lineup revision, and a frozen clone of every selected
+  `PlexConnection` field: `uri`, `protocol`, `address`, `port`, `local`, `relay`,
+  and `latencyMs`. Unavailable/disposed snapshots retain the new generation ID
+  and status but set bindings, connection, token, and lineup revision to null.
+  Nothing in this snapshot is serialized, logged, projected, or exposed through
+  preload.
+- `invalidateTransition(reason)` always increments `generationId`, publishes an
+  `unavailable` snapshot, and notifies every subscriber even when the next or
+  previous profile, server, token, connection fields, and lineup revision are
+  byte-for-byte equal. The first later `captureCurrent(lineupRevision)` reads
+  only current in-memory `authService.getActiveUserId()`,
+  `authService.getActiveTokenForMain()`, selected server summary, and
+  `serverDiscovery.getSelectedConnectionForMain()`—it never restores or reads a
+  credential store—then increments again, publishes one frozen ready snapshot,
+  and notifies. Further capture returns that same ready snapshot only while all
+  inputs and lineup revision still match; any missed mismatch first performs a
+  non-deduplicating invalidation and fresh capture. Overflow permanently
+  disposes the owner and fails closed.
+- `DesktopPlexRuntime` calls `invalidateTransition` synchronously after public
+  input validation but before `operationOwner.run` for `pollPin` (because it may
+  establish auth), `getHomeUsers`, `switchHomeUser`, `restoreSelectedServer`,
+  `refreshServers`, and `selectServer`. Additionally, `ensureAccountToken`
+  invalidates immediately before credential-store read/`restoreAccountToken`
+  whenever no account token is resident. These conservative hooks cover
+  rotation or replacement of a same-profile token and same-server connection-field
+  replacement without equality checks. If any async transition fails or is
+  canceled after invalidation, the old generation stays invalid and status
+  stays unavailable until an explicit fresh capture succeeds; never roll back a
+  generation.
+- Any current or later main-owned logout/profile/token clear calls
+  `invalidateTransition('logout')` before clearing auth state; no renderer IPC
+  or new logout feature is added by 5A. `ChannelLineupMutationCoordinator`
+  receives the same owner and calls `invalidateTransition('lineup-transition')`
+  before both builder-lineup replacement and custom-lineup mutation enter the
+  persistence queue. Failed/conflicted/canceled mutations keep the old
+  generation invalid; a successful mutation can be captured only with the new
+  `ChannelRuntime.loadPublicReferenceGeneration().lineupRevision`.
+- `DesktopPlexRuntime.shutdown()` calls owner `dispose()` before
+  `operationOwner.shutdown()`. Dispose increments once, publishes/notifies the
+  immutable `disposed` snapshot, aborts all subscribers' work, and permanently
+  rejects capture; repeat shutdown is idempotent. Plex composition teardown,
+  IPC teardown, authorized shell/webContents destruction, channel composition
+  teardown, window teardown, and app teardown retain their existing ownership
+  and synchronously dispose/revoke the appropriate runtime or Guide artwork
+  owner before releasing references.
+- Each authorization record binds `{ refId, locator, expiresAtMs, session }` and
+  each cache entry and in-flight/queued request retains that exact ready session
+  snapshot.
+  `refId` is exactly `artwork-` plus `randomBytes(18).toString('base64url')`,
+  matching `ARTWORK_REF_ID_PATTERN` with 144 bits of entropy; collisions retry
+  before insertion and never replace a live authorization.
+  Compare only `GuideArtworkSessionGenerationOwner.isCurrent(generationId)`
+  before enqueue, immediately before transport fetch, and after fetch before
+  cache insertion or any response, including a cache hit. Generation
+  notification synchronously aborts queued/in-flight work, revokes refs, and
+  clears bytes. Fetch uses only the old session's captured token and frozen
+  connection after the first two checks; it never calls runtime capture,
+  credential restore, token access, or selected-connection access. A new
+  current session may invalidate an old ref but must never provide token,
+  connection, or authority to service it. Late completion cannot cache or serve.
+- Cap authorization at 6,000 live refs; cap fetched bytes at 32 LRU entries and
+  24 MB total, whichever is reached first; coalesce one in-flight fetch per ref
+  and allow at most four artwork fetches concurrently. Eviction revokes the
+  ref's delivery until a later presentation mints a current ref. Abort/timeout
+  releases its queue slot and stores no partial bytes.
+- The locator candidate comes only from the already captured, main-owned
+  scheduled content item: select its nonempty `thumb`, otherwise its nonempty
+  `showThumb`; a present but rejected candidate produces no ref and does not
+  fall through to any caller value or arbitrary connection-relative path. The
+  public ref is kind `poster`, uses bounded program-title `altText`, and is
+  `null` when no admissible locator exists. No renderer-provided value enters
+  selection or resolution.
+- Unit 5A adds the exact `normalizeGuideArtworkLocator` contract in
+  `src/main/plex/livePlexTransport.ts`, cohesive with that file's existing
+  `normalizeBaseUri`, URL, header, and fetch policy. Before URL construction,
+  the selected string must already equal its `.trim()` value, contain 1 through
+  512 UTF-16 code units, be ASCII-only, and contain no ASCII control/space,
+  backslash, percent sign or escape, `?`, `#`, credentials, scheme, authority,
+  empty path segment, or `.`/`..` segment. It must then match exactly the
+  anchored Plex poster grammar
+  `^/library/metadata/[0-9]{1,20}/thumb(?:/[0-9]{1,20})?$`. This accepts
+  `/library/metadata/1/thumb` and
+  `/library/metadata/123/thumb/1700000000`; it rejects `art`, `banner`, and
+  `clearLogo`, nonnumeric rating/version segments, extra segments or slashes,
+  `//`, relative/no-leading-slash input, encoded input including `%2e`, `%2f`,
+  and `%5c`, absolute/protocol-relative URLs, whitespace/control input,
+  query/fragment input, and input longer than 512 code units. This grammar is
+  the whole allowlist; there is no fallback path grammar.
+- After that validation, construct the request URL only as
+  `new URL(validatedPath, normalizeBaseUri(capturedSession.connection.uri))`.
+  Parse the normalized captured connection as the comparison base and require
+  the result's protocol, hostname, and effective port to equal that base
+  exactly, where effective port is the explicit port or `80` for `http:` and
+  `443` for `https:` when omitted; require empty `username`, `password`,
+  `search`, and `hash`; and
+  require `url.pathname === validatedPath`. Reject before fetch when base
+  parsing fails, any containment/origin check fails, or URL parsing/
+  canonicalization changes any byte of the validated path. A captured base URI
+  path never prefixes or widens the rooted poster path.
+- Add a narrow `LivePlexGuideArtworkTransport` behind the main Plex runtime.
+  Input is a main-only locator plus current session custody; it cannot expose
+  arbitrary method, host, path, or headers. It always sends GET with
+  `redirect: 'error'`, delegates captured-session credential header creation to
+  the existing `buildPlexRequestHeaders` owner, and never places that credential
+  in query parameters.
+  It never accepts renderer input or a caller-supplied host, method, or header.
+  Tokens and locators stay in main. Logs and renderer-visible failures are
+  redacted categorical messages.
+- Extend the existing `lineup` protocol handler with exactly GET
+  `lineup://shell/artwork/<opaque-ref-id>`. Reject non-GET, query/fragment,
+  empty/invalid/multi-segment IDs, traversal, unknown/expired/wrong-scope refs,
+  and disallowed content. Success sets exact image MIME,
+  `Cache-Control: no-store`, and `X-Content-Type-Options: nosniff`; errors reveal
+  no source detail. Static routing stays fail closed. Retain CSP `img-src
+  'self'` unless review identifies an Electron fact requiring a narrow change.
+- Authorization is narrow delivery-capability custody, not a claim that
+  Electron's protocol `Request` supplies a trustworthy `webContents` ID. The
+  ref ID is an unguessable 144-bit bearer issued only in a Guide response after
+  existing IPC sender authorization and authorizes only GET on the fixed secure
+  self-origin `lineup://shell/artwork/<opaque-ref-id>` route while session/TTL
+  checks pass. It never identifies the upstream source and cannot be reused as
+  a Plex token, connection credential, arbitrary path, header, method, or
+  generic fetch grant. The current authorized shell
+  `webContents` is the only ref recipient and its destruction revokes the
+  owner. A second renderer/session/window, navigable untrusted content, or a
+  requirement to authorize protocol requests by caller identity is a stop/
+  replan trigger rather than a referrer-header substitute.
+- A failed fetch is not cached as available. Guide does not broaden the existing
+  renderer-facing Settings/media-picker artwork capability. Settings
+  `artworkPresentation` remains `unsupported/safe-artwork-unavailable` because
+  it gates general Now Playing/logo/background controls, not this narrower
+  Guide-authorized program image. Changing that meaning is a replan.
+
+**Desktop artwork DOM and reviewed upstream divergence**
+
+- `src/renderer/staticDom.ts` owns the fixed detail structure. Unit 5A adds a
+  `figure[data-epg-detail-artwork][data-artwork-state]` containing exactly one
+  `img[data-epg-detail-poster]` and one noninteractive
+  `[data-epg-detail-artwork-placeholder]`, plus distinct existing/new bindings
+  for channel, title, time/badges, and
+  `[data-epg-detail-description]`. `src/renderer/domBindings.ts` owns and queries
+  those typed nodes; `guideDom.ts` owns their state updates. Do not rebuild this
+  fixed shell subtree during Guide grid reconciliation.
+- `null`, an unexpired ref with `status: placeholder`, or a ref expired at
+  render is `missing`: remove `src`, hide the image, set image `alt` to empty,
+  show the placeholder, and set `data-artwork-state="missing"`. An unexpired
+  `available` ref begins as `loading` with placeholder visible, uses only the
+  fixed self-origin URL, `decoding="async"`, and non-draggable image. On load,
+  show the image, hide the placeholder, and set `available`. Its alt text is
+  the validated/truncated `ArtworkRef.altText` when nonempty, otherwise
+  `Poster for <bounded program title>`; the final alt is at most 160 UTF-16
+  units.
+- On image error, remove `src`, detach load/error callbacks for that element,
+  hide it, empty alt, show the placeholder, and set `error`. Remember the failed
+  `{ presentationGeneration, refId }` and do not request it again during a
+  rerender; only a different ref ID or later presentation generation may retry.
+  Missing/error placeholder copy is exactly `Artwork unavailable`, is not a
+  focus target, and is `aria-hidden="true"` because the adjacent program title
+  supplies the accessible identity. No status claims that a placeholder is
+  live artwork.
+- Main projection clamps focused program title to 160 UTF-16 units and
+  description to 600 before preload; preload enforces the same maxima. DOM uses
+  text content only. CSS clamps title to two visual lines and description to
+  five with overflow hidden; do not put unclamped copy into `title`, `aria-*`,
+  data attributes, or image URLs. Available/missing/error geometry is stable.
+  Reduced motion has no poster transition/ticker; forced colors preserves a
+  system-color outline, placeholder text, live state, and focus separation.
+- Upstream `0258dbe` prefers a cached episode poster before `showThumb`, and its
+  visible Guide posters are Overlay-only. Desktop does not have that upstream
+  poster-cache owner: its reviewed safe source is current scheduled content
+  `thumb` first, then `showThumb`, through the session-bound transport above.
+  Unit 5A deliberately shows the focused poster/placeholder in Desktop's
+  current fixed Classic detail so the real-art path is locally usable. When 5D
+  adds layouts, Classic retains that fixed detail poster and Overlay places the
+  same available/missing/error poster state in its focused overlay detail card;
+  the layout changes placement, never authorization or fallback semantics.
+  Record this as a Desktop adaptation/divergence, not exact upstream visual
+  parity, and keep the import ledger at no copied/adapted source unless code or
+  assets are actually taken later.
+
+**Exact contributed preference behavior**
+
+- `libraryTabsEnabled`: show All plus one tab per library only when enabled and
+  more than one library exists. Selected library filters by main-projected safe
+  membership. Disabled or zero/one library renders no redundant strip and acts
+  as All.
+- Main orders library entries by case-folded display name with public ID as a
+  stable tie-break. All includes library and non-library/custom visible
+  channels. A selected library excludes channels outside that raw membership.
+  `channelWindow.total` counts the filtered visible channels; main clamps an
+  out-of-range offset to the last valid page start and returns the actual
+  offset. The request paging fields are optional only for compatibility with
+  the existing call site; omission has the frozen `0`/`9` defaults and renderer
+  supplies them after 5B.
+- Persist library selection in a focused main-owned Guide store at
+  `userData/lineup-desktop-guide-preferences.json`, with its resolver in the
+  existing app-data-path owner. The exact root is
+  `{ "schemaVersion": 1, "scopes": GuidePreferenceScopeV1[] }`; each entry is
+  exactly `{ "serverId": string, "profileId": string,
+  "selectedLibraryId": string | null, "revision": number }`. Reject unknown or
+  missing keys, duplicate server/profile pairs, more than 128 entries, more
+  than 1 MiB UTF-8 input, a non-safe-integer revision, a persisted revision
+  below 1 or above `Number.MAX_SAFE_INTEGER`, and a noncanonical identifier.
+- Each stored identifier is NFC-normalized and trimmed, 1–512 UTF-16 units, and
+  matches existing identity input policy
+  `/^[^\u0000-\u001f\u007f]{1,512}$/u`; only `selectedLibraryId` may be `null`.
+  These values stay main-only and are never logged/projected. Serialize entries
+  deterministically by normalized server ID then profile ID using UTF-16 code-
+  unit comparison. There is no pre-v1 migration.
+- A missing file gives current scope All/revision `0`/status `missing`; a valid
+  file with no current-scope entry gives All/revision `0`/status `ready`.
+  Malformed/over-limit/duplicate v1 gives All/revision `0`/status `corrupt` and
+  no automatic write. A future schema gives All/revision `0`/status
+  `unsupported-version` and blocks every write. The first explicitly authorized
+  and otherwise valid `guide.setLibraryFilter` CAS with the current scope token
+  and expected revision `0` is permission to replace a corrupt document; it
+  writes only the current scope as revision `1`. No background read or render
+  silently replaces corruption.
+- Every accepted same-scope setter, including an idempotent selection or All,
+  increments revision exactly once. All is a persisted tombstone with
+  `selectedLibraryId: null`, never deletion, so a stale same-scope CAS cannot
+  regain revision `0`. If a ready stored selection becomes invalid/removed, or
+  tabs become disabled/zero-or-one-library, enqueue one owner-driven
+  normalization that verifies the same scope/revision again, increments once,
+  and writes the null tombstone. Revision overflow fails with exact safe code
+  `GUIDE_FILTER_REVISION_EXHAUSTED`, nonretryable/nonrecoverable, and preserves
+  the prior document.
+- One FIFO promise chain owns load, recovery replacement, normalization, and
+  setter writes. Validate `expectedScopeToken` and `expectedRevision` again
+  when the operation reaches the queue head, and again at the pre-rename commit
+  barrier; a changed scope returns `GUIDE_FILTER_SCOPE_STALE`, a changed
+  same-scope revision returns `GUIDE_FILTER_REVISION_CONFLICT`, and neither
+  renames a temp file. A successful mutation returns `ready` only after rename.
+- Atomic write rules match current Desktop persistence: create the parent
+  recursively; write exact UTF-8 JSON to
+  `<destination>.<processId>.<monotonicCounter>.tmp` with mode `0o600`; chmod the
+  temp to `0o600`; reject serialized output above 1 MiB before write; perform
+  the final scope/revision commit-barrier check; rename over destination; and
+  best-effort unlink temp on any failure. Never unlink or truncate the prior
+  destination first. Read/mkdir/write/chmod/rename or output-limit failures map
+  only to `GUIDE_FILTER_STORAGE_UNAVAILABLE` with no path/cause text.
+  Scope-token change cancels queued work and reloads independently; logout
+  clears in-memory state, not another scope's stored tombstone.
+- `nowWatchingBannerEnabled`: false hides both surfaces. True uses the top rail
+  in Classic and lower banner in Overlay, never both.
+- `guideLayout`: Overlay preserves the real native video over the full content
+  area beneath transparent Guide HTML, with no synthetic PIP. Classic presents
+  that same helper-owned render HWND in the measured PIP rectangle only while
+  the exact current renderer-safe snapshot reports `playing === true`;
+  otherwise it hides the native child and renders no empty/fake PIP.
+- Unit 5D's closed renderer projection is exactly `hidden | player-full |
+  guide-overlay-full | guide-classic-pip`. `guidePresentation.ts` derives it
+  only from the current visible route, existing `guideLayout`, current validated
+  `PlayerSnapshot`, and shell blocker/exit/error state. Player uses
+  `player-full` only for a current native-presentable request; Guide Overlay uses
+  `guide-overlay-full` for that same set; Guide Classic uses
+  `guide-classic-pip` only for the same request with `playing === true`; every
+  other combination is `hidden`. The main owner independently revalidates the
+  request identity and lifecycle before native visibility, so renderer state is
+  geometry intent rather than native authority.
+- Native visibility and HTML transparency are a two-phase commit over
+  `{ documentEpoch, requestId, revision }`. Hidden/route/blocker/error/exit makes
+  the geometry aperture opaque synchronously before requesting native hidden.
+  Show or resize keeps it opaque until the exact applied ACK remains current in
+  both main and renderer; only then may the aperture become transparent. Any
+  stale, superseded, rejected, unsupported, timeout, lifecycle failure, reload,
+  or teardown result leaves/returns HTML opaque and native hidden.
+- `guideDensity`: `comfortable` is Detailed, four 30-minute slots/two hours;
+  `compact` is Wide, six slots/three hours. It is not a row-height-only change.
+  A change preserves selection when present and safely recenters/refetches.
+- `pastItemsWindow`: explicit `0`, `15`, and `30` are minutes. `auto` is zero
+  only for show-only selected scope and 15 for All, movie, mixed, or unknown.
+  Snap start to the existing slot and clamp to local midnight. Left navigation
+  cannot fetch or focus before the bound. DST tests avoid fixed-day assumptions.
+- For Auto, a selected library is show-only only when its public `contentKind`
+  is `show`; All is show-only only when every current visible channel belongs
+  to a `show` library and there is no custom, mixed, movie, or unknown source.
+  The initial no-state request uses the conservative 15-minute window and
+  performs one bounded corrective refetch if the returned state proves
+  show-only. No untrusted type label controls main library membership.
+
+**Focus, input, accessibility, and large-guide budgets**
+
+- Desktop's Guide action is only the existing one-shot `mediaPlay` command.
+  When Guide is visible and no shell error/exit/profile modal or Mini Guide owns
+  input, navigation consumes one `mediaPlay`, returns temporal offset to now,
+  and focuses the current program on the focused channel when present;
+  otherwise it renders the now window with deterministic fallback focus. It
+  never starts/resumes media. `mediaPlayPause` and `mediaPause` retain current
+  behavior and remain inert on Guide unless later pinned evidence causes a
+  reviewed replan. Player-route media commands remain unchanged.
+- Add one optional `handleGuideMediaPlay` callback to the existing navigation
+  lifecycle, wired from renderer composition to the EPG owner. Do not edit
+  `desktopInput.ts`, add repeat metadata/cancellation, or add a gamepad Play
+  mapping: navigation receives no repeat metadata and current
+  `DesktopGamepadInputPolicy` has no Play command. Existing WS4 Page movement by
+  five channels and shell/modal/Mini Guide precedence remain.
+- Tabs, cells, and transitions have stable IDs and visible focus. Removed
+  virtual cells are unregistered. Fallback is same channel, nearest visible
+  channel, then first cell. Pointer and keyboard/D-pad/simulated-gamepad share
+  commands. Reduced motion disables nonessential ticker/scroll animation;
+  forced colors preserves boundaries, focus, current/live, and disabled state.
+- Derive visible rows from the actual scroll viewport and current row outer
+  size; do not freeze upstream's five-row television viewport as Desktop
+  truth. Render every intersecting row plus three buffered rows above and below,
+  capped at 24 mounted program-row elements and 400 live program cells. Use a
+  120-minute time buffer on each side. A focus-pinned row/cell counts against
+  the caps, and a cap conflict evicts the farthest nonfocused buffer before any
+  visible or focused row.
+- One Guide-owned pure range projector consumes injected `scrollTop`, viewport
+  height, row outer size, density, and window bounds. The DOM owner samples and
+  caches those metrics outside row/cell mutation loops, invalidates them on
+  Guide entry, resize, layout, and density change, and coalesces scroll/resize
+  reconciliation to one latest `requestAnimationFrame`; teardown cancels it.
+  Focus reveal may force one immediate range calculation, but no cell loop may
+  call layout measurement. Deterministic tests inject metrics and do not infer
+  layout from the test DOM.
+- The default Desktop data preload/cache profile covers 12 channel rows, a
+  120-minute time buffer, six page/window entries, and 6,000 program records.
+  The opt-in aggressive Desktop profile covers 24 channel rows, a 360-minute
+  time buffer, 12 entries, and 12,000 records. Aggressive warming prioritizes
+  the focused page, then the immediately adjacent channel pages in navigation
+  order, then adjacent time windows; it remains idle-scheduled and bounded by
+  the same one-active/one-trailing request rule. LRU eviction protects focused/
+  current state until a replacement exists. Route exit, scope/settings/lineup
+  change, cancellation, and teardown clear stale entries.
+- A synthetic 300-channel by 48-program production-build fixture keeps the
+  one-active/one-trailing request bound, 24-channel/1,000-program response cap,
+  viewport-derived 24-row/400-cell DOM caps, and both Desktop cache profiles.
+  Across three warmed runs, 100 same-buffer reconciles have p95 at or below 50
+  ms and max at or below 100 ms;
+  same-cell focus movement has p95 at or below 16 ms and max at or below 32 ms;
+  first visible reconcile after a bridge result is at or below 100 ms. Record
+  ignored raw timings and machine context. A miss is a finding, not permission
+  to weaken the budget.
+
+#### WS5 Files In Scope
+
+This is the whole-WS5 candidate boundary, not blanket authorization. Each unit
+may edit only its listed subset after freshness comparison and required review.
+
+- Contracts/bridges: `src/contracts/guide.ts`, `src/contracts/ipc.ts`,
+  `src/contracts/player.ts`, `src/contracts/shell.ts`, existing
+  `src/contracts/artwork.ts` only if reuse is impossible without a narrow
+  reviewed correction, `src/preload/guideBridge.cts`,
+  `src/preload/channels.cts` for Unit 5B's exact sandbox-local channel and Unit
+  5D's exact `lineup:player:updatePresentation` mirror,
+  `src/preload/playerPresentationBridge.cts`, `src/preload/index.cts` for wiring
+  only, and focused contract/preload integration tests.
+- Main Guide/artwork/persistence: `src/main/channel/guideRuntime.ts`, new
+  `src/main/channel/guideArtworkOwner.ts`, new
+  `src/main/channel/desktopGuidePreferencesStore.ts`,
+  `src/main/channel/channelComposition.ts`,
+  `src/main/channel/channelLineupMutationCoordinator.ts`,
+  `src/main/channel/channelIpc.ts`,
+  `src/main/channel/channelPublicReferenceOwner.ts` only for proven missing
+  safe public-library lookup, `src/main/plex/livePlexTransport.ts`,
+  new `src/main/plex/guideArtworkSessionGenerationOwner.ts`,
+  `src/main/plex/desktopPlexRuntime.ts`, `src/main/plex/plexComposition.ts`,
+  `src/main/protocol.ts`,
+  `src/main/rendererProtocolPolicy.ts`,
+  `src/main/persistence/appDataPaths.ts`, and `src/main/index.ts` for wiring and
+  lifecycle only.
+- Renderer: `src/renderer/epg.ts`, `src/renderer/epg/guideDom.ts`,
+  `src/renderer/guidePresentation.ts`,
+  new `src/renderer/player/nativePlayerPresentationController.ts`,
+  `src/renderer/guidePresentationPolling.ts`,
+  `src/renderer/guideTuneController.ts` only if preserving tune/currentness
+  requires a correction, `src/renderer/focusDom.ts`,
+  `src/renderer/shell/navigationLifecycle.ts`, `src/renderer/workflow.ts`,
+  `src/renderer/shell/shellDom.ts` only for Unit 5D's final real-player-
+  presentation visibility/inertness projection,
+  `src/renderer/staticDom.ts`, `src/renderer/domBindings.ts`,
+  `src/renderer/styles/base.css`, `src/renderer/styles/player-overlays.css`,
+  `src/renderer/styles/guide-epg.css`, and `src/renderer/index.ts` for
+  composition only.
+- Unit 5D native presentation: `src/main/window/shellWindowController.ts`, new
+  `src/main/player/nativePlayerPresentationOwner.ts`,
+  `src/main/player/playerIpc.ts`, `src/main/player/desktopPlayerAdapter.ts`,
+  `src/main/player/privilegedPlaybackDispatchContext.ts`,
+  `src/main/player/nativePlayerHostPort.ts`,
+  `src/main/player/nativeHelperProtocol.ts`,
+  `src/main/player/nativeHelperProtocolCodec.ts`,
+  `src/main/player/nativePlayerHostProcess.ts`,
+  `src/main/player/productionNativeHostFactory.ts`, `src/main/index.ts` for
+  wiring only, `src/main/diagnostics/supportBundleIpc.ts` solely to accept the
+  existing `BaseWindow` dialog parent, `src/main/shellSecurity.ts` solely to
+  keep its sender-ownership description accurate,
+  `src/main/smokeAssertions.ts`, `src/main/smokeFullscreenAssertions.ts`,
+  `src/native-helper/Lineup.NativePlayerHost/Program.cs`,
+  `src/native-helper/Lineup.NativePlayerHost/Lineup.NativePlayerHost.csproj`,
+  and new `src/native-helper/Lineup.NativePlayerHost/app.manifest`. These are the
+  complete permitted shell-consumer type/wiring edits; `singleInstanceOwner.ts`
+  and `shellAppCommandController.ts` already consume sufficient structural
+  ports and are no-touch. No product policy moves into a shell consumer.
+- Deferred 5H Windows proof uses the already ignored, disposable Unit 5D-0 root
+  `docs/runs/ws5-native-presentation-feasibility/`. Its complete source closure
+  is exactly `index.mjs`, `shell.html`,
+  `Lineup.NativePresentationFeasibility/Program.cs`,
+  `Lineup.NativePresentationFeasibility/Lineup.NativePresentationFeasibility.csproj`,
+  `Lineup.NativePresentationFeasibility/app.manifest`, and
+  `ws5-native-presentation-feasibility.test.mjs`; only `bin/**`, `obj/**`, and
+  `evidence/**` may additionally exist during build/run. It may not touch
+  `.gitignore`, `tools/**`, `src/**`, contracts, preload, package scripts, or the
+  product helper.
+- During 5H, after Units 5D–5G finish coding, the executable product proof
+  ingress may additionally add
+  `src/main/player/nativePresentationProofBootstrapOwner.ts`,
+  `src/main/player/nativePresentationProofComposition.ts`,
+  `src/main/player/nativePresentationProofAssertions.ts`,
+  `src/main/bootstrapModeDecisionOwner.ts`,
+  `src/main/security/windowsProofAclInspector.ts`,
+  `tools/ws5-native-guide-presentation-proof.ps1`,
+  `tools/ws5-native-guide-presentation-proof.mjs`, and
+  `tools/__tests__/ws5-native-guide-presentation-proof.test.mjs`, and
+  `tools/__tests__/ws5-native-guide-presentation-proof-script.test.mjs`. These files
+  are proof-only custody/orchestration; no proof marker, local path, or control
+  becomes a preload/renderer contract.
+- Focused tests under `src/__tests__/contracts`, `src/__tests__/integration`,
+  `src/__tests__/main`, and `src/__tests__/renderer`; any deterministic fixture
+  follows existing test-fixture convention and contains synthetic safe data.
+- Closeout authorities only after observed behavior makes them stale:
+  `docs/product/lineup-product-parity-matrix.md`,
+  `docs/architecture/CURRENT_STATE.md`,
+  `docs/architecture/renderer-architecture.md`,
+  `docs/architecture/playback-architecture.md`,
+  `docs/roadmap/desktop-port-roadmap.md`,
+  `docs/development/windows-ui-proof-plan.md`, and
+  `docs/architecture/import-ledger.md` for a no-import disposition or later
+  reviewed adaptation.
+
+#### WS5 Files Out Of Scope
+
+- `src/contracts/settings.ts`, `src/main/settings/**`,
+  `src/preload/settingsBridge.cts`, and Settings renderer owners are read-only;
+  WS5 consumes their existing projection.
+- Player command/session/recovery/track/quality policy, channel registry
+  mutation, auth/discovery policy, packaging/release configuration outside the
+  helper DPI manifest, dependencies and lockfile, Electron privileges, global
+  input, Custom Channels behavior, and WS6–WS9 are out. Unit 5D's listed native
+  files are the only exception for presentation attachment, geometry, z-order,
+  DPI, resize, hide/show, and teardown; they may not promote playback support.
+- `src/main/channel/customChannelArtworkProxy.ts` is read-only reference unless
+  review proves a shared owner has identical current authorization, lifecycle,
+  and source semantics. Reuse that changes Custom Channels requires replan.
+- The upstream sibling is read-only. No source or asset is copied/adapted under
+  this plan. If implementation crosses that line, update the import ledger
+  before or with the import and obtain fresh review.
+
+#### WS5 Execution Packages
+
+Packages are serial. Each ends with focused proof, inspected diff, and
+material-only independent review before the next. A reviewer may approve
+no-change continuation when the completed diff does not alter the next frozen
+boundary.
+
+| Assigned rows | Owning WS5 unit and closure rule |
+| --- | --- |
+| `EPG-04`, `EPG-06`, `UI-40` | 5A implements detail/art/live and Play-to-now; 5H supplies local visual/input proof. |
+| `EPG-02`, `EPG-07`, `EPG-08` | 5B atomically activates numeric sort/paging, cross-page ±5 Page behavior, tabs, safe filter projection, and scoped persistence; external Windows/large-lineup proof remains `WS5-PROOF-03`. |
+| `EPG-09` | 5C consumes the Now Watching setting. |
+| `EPG-10` | 5D implements the production child-HWND Overlay/Classic seam first and closes its local coding gate through focused/full automation plus independent implementation review. The post-coding 5H Windows feasibility/real-host campaign is still required before the row can close; unsupported DPI/multi-monitor variants remain open in `WS5-PROOF-04`, and no renderer-only/fake-host state can close the row. |
+| `EPG-11` | 5E implements exact two-/three-hour density. |
+| `EPG-12` | 5F implements exact past-window policy. |
+| `EPG-13` | 5G adds virtualization/aggressive preload and refines focus/navigation accessibility without deferring paging correctness; external large-lineup proof remains `WS5-PROOF-03`. |
+| `EPG-01`, `EPG-03`, `EPG-05`, `EPG-14`, `EPG-15` | Every affected unit protects existing contracts/tests; 5H proves local behavior and records exact live/Windows/day/DST/soak debt without unnecessary product rewrite. |
+| `UI-35`, `UI-37`, `UI-38`, `UI-39` | 5H re-proves deterministic loading/empty/error/recovery surfaces; live recovery remains `WS5-PROOF-05`. |
+| `UI-36` | 5B–5G contribute ready-state variants; 5H owns the cross-variant local visual proof and `WS5-PROOF-03`, `-04`, `-06` remain external. |
+| `ST-11`–`ST-16`, `UI-33` | 5B–5G record direct `WS3-CONTRIBUTION-WS5` consumer proof only; registry and Settings implementation ownership remain WS3. |
+
+**Unit 5A — first independently reviewable unit: focused detail, genuine art,
+live/current state, and Play-to-now**
+
+Outcome: extend detail presentation with optional safe real artwork; deliver it
+through the exact main-owned self-origin path; preserve live/current/selected
+state and long-copy bounds; and add the exact Guide Play command without
+changing playback: specifically one-shot `mediaPlay`, not a new command. This
+is the first product-edit gate.
+
+Allowed product files are only `src/contracts/guide.ts`, new
+`src/main/channel/guideArtworkOwner.ts`, `src/main/channel/guideRuntime.ts`,
+new `src/main/plex/guideArtworkSessionGenerationOwner.ts`,
+`src/main/plex/livePlexTransport.ts`, `src/main/plex/desktopPlexRuntime.ts`,
+`src/main/plex/plexComposition.ts`, `src/main/channel/channelComposition.ts`,
+`src/main/channel/channelLineupMutationCoordinator.ts`, `src/main/protocol.ts`,
+`src/main/channel/channelPublicReferenceOwner.ts`,
+`src/main/rendererProtocolPolicy.ts`, `src/main/index.ts` for wiring,
+`src/preload/guideBridge.cts`, `src/renderer/epg.ts`,
+`src/renderer/guidePresentation.ts`, `src/renderer/epg/guideDom.ts`,
+`src/renderer/shell/navigationLifecycle.ts`, `src/renderer/focusDom.ts`,
+`src/renderer/staticDom.ts`, `src/renderer/domBindings.ts`,
+`src/renderer/styles/guide-epg.css`, and `src/renderer/index.ts` for wiring,
+plus focused tests. `src/renderer/desktopInput.ts` is explicitly no-touch. No
+new IPC operation belongs in 5A.
+
+Acceptance for 5A: available fixtures produce a validated ref, a self-origin
+GET returns only allowed bytes/headers, and detail renders the real image;
+missing/expired/wrong-scope/oversize/timeout/bad-MIME/query/fragment/non-GET/
+traversal and every rejected `normalizeGuideArtworkLocator` vector fail closed
+to the placeholder without secrets or a transport call. Validated poster paths
+stay byte-identical and on the captured normalized Plex origin, redirects fail
+closed, and the captured token appears only in the redacted header. Scope and
+teardown invalidate refs/cache and abort queued/in-flight work. Tests force
+server, profile, lineup, logout/unavailable, token/connection, webContents, and
+runtime/app teardown changes before queue, before fetch, and after fetch; no old
+ref is served or cached under a new session generation. Available/missing/error DOM, alt,
+clamps, failure cleanup/no-loop, reduced-motion, forced-color, and Classic
+divergence behavior match this plan. Live/current/future remain distinguishable.
+Exactly one eligible Guide `mediaPlay` performs Play-to-now and produces no
+playback command; Guide `mediaPause`/`mediaPlayPause`, player media behavior,
+current-only OK tune, Page, and `desktopInput.ts` remain unchanged. Review must
+explicitly approve the session-generation/ref custody, `ArtworkRef` projection, route,
+exact `normalizeGuideArtworkLocator` grammar/origin/canonicalization algorithm,
+narrow live transport, DOM ownership, composition/lifecycle, CSP conclusion,
+Desktop/upstream divergence, and cohesion before edit.
+
+Rollback 5A as one checkpoint: remove the optional field, focused owner,
+transport port, route, renderer art/detail treatment, `mediaPlay` hook, and tests
+together. Never leave a route without authorization or a ref without delivery.
+
+**Unit 5B — persisted library tabs**
+
+Implement the exact Guide-scoped persistence, public filter state, paged
+request/result, and `guide.setLibraryFilter` CAS operation; render accessible
+All/per-library tabs and filter without unsafe/private identity. Paging
+activation is atomic in 5B: existing PageUp/PageDown remains exactly ±5 global
+channels across loaded-page boundaries and cannot wait for 5G.
+
+Given current local row `i`, compute global target
+`clamp(channelWindow.offset + i ± 5, 0, channelWindow.total - 1)`. If it remains
+inside the loaded page, move focus without a fetch. Otherwise request one page
+at `clamp(target - i, 0, max(0, total - channelLimit))`, retain the last valid
+grid and current focus while setting the grid `aria-busy="true"`, then focus
+the target global row after the matching generation/scope result. First/last
+boundary commands clamp in place and make no request. Failure clears busy,
+retains the prior page/focus, and uses the existing safe retryable Guide error;
+route/scope/generation change cancels the intent. While active, one trailing
+Page command may replace the pending global target under the existing one-
+active/one-trailing request rule; stale results never move focus.
+
+Exact 5B product files are `src/contracts/guide.ts`, `src/contracts/ipc.ts`,
+`src/contracts/shell.ts`, `src/main/channel/desktopGuidePreferencesStore.ts`,
+`src/main/persistence/appDataPaths.ts`, `src/main/channel/guideRuntime.ts`,
+`src/main/channel/channelIpc.ts`, `src/main/channel/channelComposition.ts`,
+`src/main/channel/channelPublicReferenceOwner.ts`,
+`src/preload/guideBridge.cts`, `src/preload/channels.cts` solely to add
+`LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL =
+'lineup:guide:setLibraryFilter'`, `src/preload/index.cts`,
+`src/renderer/epg.ts`, `src/renderer/guidePresentation.ts`,
+`src/renderer/guidePresentationPolling.ts`, `src/renderer/epg/guideDom.ts`,
+`src/renderer/focusDom.ts`, `src/renderer/shell/navigationLifecycle.ts`,
+`src/renderer/styles/guide-epg.css`, and `src/renderer/index.ts` for wiring.
+Settings stays no-touch. Prove absent-v1, atomic
+write/recovery, scope isolation, stale revision/scope, invalid/removed library,
+disabled/single-library, sender/preload validation, focus fallback, and
+redaction, including every exact JSON/revision/tombstone/corruption/queue rule
+and filter/sort/page-before-resolution sequence above. Required focused new
+tests are `src/__tests__/main/desktopGuidePreferencesStore.test.ts`,
+`src/__tests__/main/guideLibraryFilterIpc.test.ts`, and
+`src/__tests__/main/guidePresentationPaging.test.ts`, plus
+`src/__tests__/renderer/guideLibraryTabs.test.ts` and
+`src/__tests__/renderer/guidePagingNavigation.test.ts`. The paging tests prove
+±5 within/cross page, first/last clamps without fetch, loading/last-valid state,
+one trailing target, failure retention, route/scope cancellation, focus after
+success, numeric tie-break, page-before-resolution, and that a 300-channel
+fixture resolves no more than the requested 9/21/24 rows.
+
+Unit 5B also updates existing
+`src/__tests__/integration/preloadContractVocabulary.test.ts` and exact focused
+`src/__tests__/preload/guideBridge.test.ts`. Vocabulary proof must establish
+that the contract and sandbox-local constants have the one exact byte value;
+the local constant is one top-level `const` in `src/preload/channels.cts`;
+`src/preload/index.cts` supplies it as the exact `setLibraryFilter` binding to
+`createGuideBridge`; the approved invoke vocabulary gains only that constant;
+and the channel inventory gains no other operation or literal. It must retain
+the existing sandbox proof: `channels.cts` and bridge modules gain no Electron
+value import, the new preload runtime literal has no import from
+`src/contracts/ipc.ts` or another shared runtime module, the index retains its
+single approved Electron binding, and the built preload remains bundled with
+no local preload requires. `guideBridge.test.ts` and the new 5B tests prove only
+the already-frozen request/result validation, exact mutation channel use, and
+5B behavior; they may not compensate with an inline second literal. All v1
+schema, 1 MiB UTF-8 read/write caps, revision/tombstone/CAS/corruption/queue
+rules, paging behavior, and every other 5B/5C+ file boundary remain unchanged.
+
+**Unit 5C — Now Watching preference**
+
+Consume only `nowWatchingBannerEnabled`: false renders neither surface; true
+renders Classic rail or Overlay banner, never both. Limit edits to Guide
+presentation/DOM/style and tests unless a stale Settings read is proven.
+
+**Unit 5D — Overlay versus Classic/PIP**
+
+Outcome: compose the helper's one real
+libmpv render surface as an app-owned Windows child HWND beneath shell HTML for
+Player-full, Guide Overlay-full, and Guide Classic playing-PIP. The renderer
+node remains one geometry/aperture anchor only; it never becomes video, a clone,
+canvas/capture/shared texture, or a support claim. No passing Windows gate means
+5D's parity rows remain open after coding, not downgraded to DOM-only completion.
+
+**Deferred Unit 5D-0 — post-coding Windows feasibility package owned by 5H.**
+After Units 5D–5G complete their local coding/review gates, implement the exact ignored
+`docs/runs/ws5-native-presentation-feasibility/` closure listed above. Existing
+`.gitignore` already ignores it; no ignore rule changes. It launches the
+repository's Electron 42 binary with the same `disable-gpu` switch, creates one
+framed/opaque `BaseWindow`, one transparent sandboxed `WebContentsView`, and one
+disabled/nonactivating child HWND at bottom child z-order. Its small C# helper
+owns an animated WGL color/checker surface on one dedicated thread; it does not
+use Plex, libmpv, the product helper/protocol, public IPC, preload, renderer
+owners, or `src/**`. The HTML view places opaque text/focus controls and a
+translucent overlay over a transparent aperture so actual changing child pixels
+and HTML stacking are observable in the same desktop frame.
+
+Run 5D-0 on Windows at 100% DPI with the repository GPU-disabled setting and
+observe: moving active pixels under HTML; no pixels outside the aperture;
+pointer/keyboard focus remains in the view; child never activates or becomes
+topmost; resize/maximize/fullscreen/minimize/restore recomputes/clips correctly;
+and close destroys the child/helper/view/window with no orphan. Capture ignored
+external desktop frames, focus traces, and categorical lifecycle results; do
+not use `webContents.capturePage`, merge native/renderer sources, or infer video
+from a black rectangle. Unit 5D-0 has its own focused static/lifecycle test and
+independent review. A pass authorizes the already-reviewed production packages
+below; a fail stops, records the exact Electron/Win32/GPU symptom, rolls back the
+ignored spike if necessary, and returns to architecture planning. It closes no
+parity row. It does not block Unit 5D–5G coding, but WS5 closeout and the
+`EPG-10`/`UI-36` proof conclusions remain blocked until its implementation,
+observed proof, and review pass. Before review,
+run `dotnet clean`, remove every generated `bin/` and `obj/`, and assert the
+remaining regular-file set is exactly the six source/test files plus bounded
+`evidence/**`. The review command below enumerates and prints every source file
+raw, checks JS syntax, rebuilds/tests/runs, then cleans `bin/obj` again; ordinary
+`git diff`/status is expressly insufficient for ignored-source review. Retain
+the ignored source/evidence only until the reviewer records a disposition, then
+delete the whole run root after its sanitized durable conclusion is recorded.
+
+**Production shell and native ownership for Unit 5D.** Refactor the shell owner
+to the same proved topology: one framed, resizable, opaque `BaseWindow` plus one
+sandboxed transparent `WebContentsView` filling its content area. The view keeps
+the current preload, context isolation, sandbox, web security, navigation
+denial, permission policy, and GPU-disabled process setting. The top-level is
+never transparent/frameless. Main alone reads/decodes the nonzero pointer-width
+HWND, converts it to a bounded decimal string inside the private message, and
+sends its PID. HWND/PID never enter public contracts, preload, renderer, logs,
+errors, diagnostics, result files, or screenshots.
+
+The helper creates no popup at startup. One dedicated presentation/render
+thread exclusively creates, mutates, pumps messages for, renders into, hides,
+and destroys the child HWND, device context, WGL context, FBO storage, and mpv
+render context. Command/event threads never call HWND/WGL APIs or dispose those
+objects. They submit typed work to one capacity-16 FIFO; show/resize may
+coalesce only before execution to the latest revision, while attach, hide,
+render-start, render-stop, and destroy are never dropped/reordered. Queue-full
+fails hidden and returns a valid rejected ACK. An ACK is emitted only after the
+presentation thread completes the requested mutation. Cleanup enqueues hide,
+stops/frees render state on that same thread, calls `DestroyWindow` there,
+signals thread exit, then joins it before mpv/process cleanup returns. Startup,
+partial-create, command EOF, exception, and repeated cleanup use the same
+idempotent destroy-then-join path.
+
+The child is exactly `WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN |
+WS_DISABLED` with `WS_EX_NOACTIVATE | WS_EX_NOPARENTNOTIFY`, explicit
+show/hide, and `SetWindowPos(HWND_BOTTOM, ..., SWP_NOACTIVATE)`. There is no
+`WS_POPUP`, `WS_VISIBLE` at construction, tool window, or topmost operation.
+`WM_MOUSEACTIVATE` returns `MA_NOACTIVATE` and `WM_GETOBJECT` supplies no native
+control provider. Do not use or claim `HTTRANSPARENT`: its cross-process sibling
+behavior is not a boundary. Actual disabled/nonactivation/z-order plus the HTML
+view own input; Windows proof must observe pointer/focus continuity and UIA/MSAA
+enumeration with no focusable/control/content native player element.
+
+**DPI and normalized geometry.** Main validates only normalized, parent-relative
+geometry; it does not call Electron `screen.dipToScreenRect`, infer physical
+pixels, or send screen/display coordinates. Before `CreateWindowEx`, the helper
+verifies `IsWindow`, parent PID, and
+`AreDpiAwarenessContextsEqual(GetWindowDpiAwarenessContext(parent),
+GetThreadDpiAwarenessContext())`. Mismatch fails hidden before child creation.
+For every show/resize, the presentation thread rechecks those values, reads the
+parent's physical `GetClientRect`, reads `GetDpiForWindow` before and after, and
+rejects hidden if handle/PID/context/DPI/client size changes during the sample.
+It computes left/top with floor and right/bottom with ceiling, clamps all four
+edges to `[0, clientWidth|clientHeight]`, and derives child size from the clamped
+edges; exact full bounds always become `(0,0,clientWidth,clientHeight)`. Classic
+must additionally be at least `160x90` physical pixels, no more than half the
+physical client width/height, and respect the normalized equivalent of the CSS
+16-DIP inset; failure remains hidden. A straddling window uses the parent HWND's
+current OS-selected DPI as one unit—never per-edge monitor conversion—and hides/
+resamples when that DPI changes. The helper project embeds PerMonitorV2; the
+Windows gate extracts the manifest from the actual Release executable resource
+and rejects a sidecar-only, missing, or different awareness declaration.
+
+**Authorized executable real-host proof ingress.** Smoke/fake-host proof remains
+useful regression coverage but cannot satisfy Unit 5D. The Windows proof driver
+creates a unique nonce root strictly beneath the canonical OS temp directory,
+copies the user-supplied nonsecret MP4 to the fixed
+`fixture/presentation.mp4`, and exclusively writes
+`.lineup-native-presentation-proof-sentinel` under the strict inspected Windows
+ACL policy below with exactly mode
+`lineup-native-presentation-proof-v1`, the 64-hex nonce, fixed relative media
+path, bounded byte length, media SHA-256, and canonical rebuilt Release-helper
+SHA-256. It launches the built Electron entry with
+the exact root/user-data arguments, `NODE_ENV=production`,
+`LINEUP_NATIVE_PRESENTATION_PROOF=1`, and matching nonce.
+
+Before single-instance acquisition, `app.whenReady`, path/store/protocol/window/
+helper creation, or any write, new `BootstrapModeDecisionOwner` counts exact
+marker families from raw argv/environment. Smoke-family unique markers are
+`LINEUP_DESKTOP_SMOKE`, `LINEUP_DESKTOP_SMOKE_NONCE`, and exactly one
+`--lineup-smoke-root`; proof-family unique markers are
+`LINEUP_NATIVE_PRESENTATION_PROOF`,
+`LINEUP_NATIVE_PRESENTATION_PROOF_NONCE`, and exactly one
+`--lineup-native-presentation-proof-root`; exactly one `--user-data-dir` is the
+required shared marker for either family. Decision order is closed: no family or
+shared marker means normal; markers from both families, shared-only, any partial
+family, duplicate marker/argument, or unknown second family value returns fixed
+`DESKTOP_BOOTSTRAP_INVALID` / `Desktop bootstrap validation failed.` and calls
+neither validator nor any downstream owner; exactly one complete smoke family
+calls only existing `SmokeBootstrapOwner`; exactly one complete proof family
+calls only `NativePresentationProofBootstrapOwner`. Proof therefore bypasses
+smoke parsing only after mixed/partial/duplicate rejection. Family validation
+failure maps to the same fixed outer failure. Table tests assert decision,
+validator call counts/order, and zero side-effect-owner calls for normal, every
+single partial, every duplicate, mixed complete/partial, complete smoke, and
+complete proof.
+
+New main-only `NativePresentationProofBootstrapOwner` accepts the capability
+only on Windows when the decision owner selected complete proof, the canonical root
+equals app userData but not normal userData, root/media are strict nonsymlinked
+temp descendants, the sentinel is a regular nonlink/reparse file with exact
+keys/values, media is the one fixed regular MP4 within the size cap, and observed
+length/digest match. Beneath the canonical app root it independently resolves
+exactly repo-relative
+`src/native-helper/Lineup.NativePlayerHost/bin/Release/net8.0/Lineup.NativePlayerHost.exe`,
+rejects any missing/nonregular/reparse/outside/different canonical path, hashes
+it, and requires the sentinel digest. Proof capability stores that canonical
+path, digest, and ACL-policy-passed boolean under an unexported brand. Any lone/duplicate/unknown,
+mismatched, normal-production, non-Windows, path-escape, link/reparse, bad ACL,
+changed-file, missing-helper, or stale marker fails startup with one fixed
+redacted error before shell/helper creation. Default production with no markers
+does not construct or recognize the capability.
+
+`WindowsProofAclInspector` owns ACL admission for the canonical proof root,
+sentinel, fixture, and Release helper. It spawns Windows PowerShell with only
+fixed `-NoLogo -NoProfile -NonInteractive -Command -` arguments, writes a fixed
+script plus JSON request over stdin, enforces a 5-second timeout/zero exit/empty
+stderr, and parses one exact JSON boolean result; paths, SIDs, ACEs, and errors
+are never stdout/log/public result. The script uses
+`WindowsIdentity.GetCurrent().User`, `File.GetAttributes`, and
+`System.Security.AccessControl` APIs. Admission is true only when no inspected
+path or root-to-file segment has `ReparsePoint`; the proof root/sentinel/fixture
+owner SID equals the current user SID; current user has effective Modify or
+FullControl with no applicable deny of write/delete/change-permissions/take-
+ownership; and every allow ACE granting write/create/append/delete/write-
+attributes/change-permissions/take-ownership/Modify/FullControl names exactly
+current user, LocalSystem (`S-1-5-18`), or Builtin Administrators
+(`S-1-5-32-544`). SYSTEM/Administrators are allowed but not required. Inherited
+and explicit ACEs use the same allowlist; any write-capable Everyone,
+Authenticated Users, Builtin Users, Interactive, Guests, Anonymous, other SID,
+unresolved identity, or unknown right fails. Read/execute ACEs for other
+principals are permitted. The helper must be nonreparse and non-broad-writable;
+its owner may be current user, SYSTEM, or Administrators and current user must
+have effective ReadAndExecute. Unit tests inject exact
+ACL records for all branches. Real Windows tests create a positive user-owned
+tree, allowed explicit SYSTEM/Admin writes, explicit and inherited Everyone/
+Users write negatives, a junction/reparse negative, mutation after inspection,
+and fixed failure for PowerShell timeout/nonzero/stderr/malformed/extra output.
+
+The branded capability is held only by new main proof composition. It creates a
+proof-only privileged dispatch context for that exact canonical file and one
+main-generated request ID, invokes the same `DesktopPlayerAdapter` load/play
+path and the same single `NativePlayerHostPort`/Release helper used by normal
+production, then drives existing renderer route/setting actions through the
+authorized product webContents. `PrivilegedPlaybackDispatchContext` accepts
+this local file only when the unforgeable in-process proof brand and request ID
+match; normal Plex descriptors and all renderer commands remain unable to name
+a file/local URL. No renderer/preload IPC or argv/env/helper argv contains the
+path. Helper receives it only in the existing private stdin load envelope. The
+proof composition passes the branded canonical helper path/digest into an
+explicit required-helper factory branch; that branch rehashes immediately
+before spawn and after child exit, refuses packaged/Debug/dev discovery or any
+fallback, and returns fixed failure on mismatch/mutation before reusing the
+host. Normal production retains its existing discovery but can never receive a
+proof capability. The private ignored result includes only categorical proof
+fields plus `helperSha256`; driver, manifest inspection, capability, pre-spawn,
+post-exit, and result digests must all be byte-identical. Tests mutate/replace
+the executable between bootstrap/factory/spawn and reject wrong digest, symlink/
+reparse, packaged-only, Debug-only, and missing Release without spawning. The
+composition emits one bounded categorical result at a fixed file inside the
+ignored root, then forces opaque/hidden, stops/cleans the adapter/helper, closes
+webContents/window, removes signal listeners, deletes the fixture/sentinel, and
+fails if the helper or Electron child does not reap. After child exit, the driver
+reads only that exact safe result, moves selected sanitized evidence to the
+separate ignored `--output` directory, and deletes the whole proof root in a
+`finally` path; root-cleanup failure fails the command. Tests cover success plus
+every negative/default-production case and teardown after failure at each stage.
+
+Tracked `tools/ws5-native-guide-presentation-proof.ps1` is the only supported
+real-host entrypoint. It sets `$ErrorActionPreference = 'Stop'`, rejects an
+existing/stale manifest/result target, runs `dotnet clean` and checks
+`$LASTEXITCODE`, removes only the resolved Release `bin`/`obj` subtrees after
+asserting they are strict children of the helper project, runs `dotnet build
+--configuration Release --no-incremental` and checks exit, resolves the one exact
+repo Release EXE and rejects Debug/resources/packaged alternatives, computes
+SHA-256, runs `npm run build:electron` and checks exit, resolves `mt.exe`,
+extracts resource `#1` to a newly exclusive temp
+file and checks native exit, parses XML, and requires exactly one element with
+local-name `dpiAwareness` whose trimmed value is exactly `PerMonitorV2`. It
+rehashes the unchanged EXE, invokes the Node proof driver and checks exit, reads
+the exact safe result, requires result/spawn digest equal to both prior hashes,
+rehashes once more after process exit, then cleans temp manifest/proof root in
+`finally`; any failed cmdlet, native exit, missing/extra manifest node, stale
+file, digest mismatch, cleanup failure, or missing result throws and returns
+nonzero. The Node driver does not build/select a helper and accepts no helper
+path override. Static tests read the whole PowerShell source and exercised
+Windows tests force each native command/mismatch failure; documentation must
+invoke this script, never an equivalent ad-hoc command sequence.
+
+**Exact public request/result.** Add only sandbox-local/main contract literal
+`lineup:player:updatePresentation`. Request exact keys are
+`{ documentEpoch, revision, requestId, mode, rect }`. `documentEpoch` may be
+null only on that document's first presentation request and otherwise is the
+positive safe integer returned by main; `revision` is a positive safe integer monotonically
+owned per document by the renderer controller; request ID is current validated
+`PlayerRequestId` or null; mode is `hidden | player-full |
+guide-overlay-full | guide-classic-pip`; rect is null for hidden, exact
+`{x:0,y:0,width:1,height:1}` for full, or a finite normalized nonempty Classic
+rectangle wholly in `[0,1]`. Preload rejects unknown/missing keys, nonfinite or
+unsafe values and bad mode/rect/request shape before invoke; main rejects a null
+epoch after the first request or a nonnull value it did not mint.
+
+The exact renderer-safe result is this discriminated union, with no optional or
+additional keys:
+
+- success: `{ ok: true, status: 'applied' | 'hidden' | 'deferred' |
+  'unsupported', documentEpoch: number, revision: number }`, with both positive
+  safe integers;
+- failure: `{ ok: false, status: 'main-stale' | 'helper-stale' | 'rejected' |
+  'timeout' | 'lifecycle-failure', documentEpoch: number | null,
+  revision: number | null, error }`, where
+  `error` has exactly `{ code, message, recoverable, retryable }`.
+
+All bridge calls resolve this union; malformed input never throws/rejects the
+promise and never invokes IPC. For any failure, preload/main echoes the supplied
+`documentEpoch` only when it is null or a positive safe integer, otherwise
+returns null; it echoes `revision` only when it is a positive safe integer,
+otherwise returns null. After IPC, preload requires both correlations to equal
+the individually validated request values; a bad result becomes local rejected
+with those same echo/null rules. Required malformed vectors are undefined,
+null, array/nonplain object, missing/extra key, zero/negative/fractional/unsafe/
+NaN/Infinity/string epoch or revision, oversized/bad request ID, unknown mode,
+wrong null rect, extra/missing/nonfinite/out-of-range/empty rect, invoke throw,
+and malformed success/failure envelope. Every local case returns exact rejected
+code/message/flags below and proves zero invoke calls.
+
+`deferred` means only that main returned the newly minted epoch for a first
+nonhidden request without touching native state. `unsupported` means non-Windows
+and preserves opaque/hidden. `main-stale` maps wrong/expired epoch, nonincreasing
+revision, noncurrent request/snapshot, or deterministic supersession to fixed
+code `PLAYER_PRESENTATION_MAIN_STALE`; `helper-stale` maps a valid executed ACK
+whose loaded request/epoch/revision is no longer current to
+`PLAYER_PRESENTATION_HELPER_STALE`; `rejected` maps only preload/main pre-send
+validation, before a byte reaches the shared helper, to
+`PLAYER_PRESENTATION_REJECTED`; `timeout` maps only a post-send ACK deadline to
+`PLAYER_PRESENTATION_TIMEOUT`; `lifecycle-failure` maps write/output/framing/
+exit/quarantine/cleanup failure to `PLAYER_PRESENTATION_LIFECYCLE_FAILURE`.
+Messages are exactly, respectively, `Player presentation request is stale.`,
+`Native presentation request is stale.`, `Player presentation request was
+rejected.`, `Native presentation request timed out.`, and `Native presentation
+is unavailable.` Stale/rejected are recoverable true/retryable false; timeout/
+lifecycle are recoverable true/retryable true. No result exposes HWND,
+PID, path, normalized/physical bounds, DPI/display, native reason, operation ID,
+or protocol material. Contract/preload validators prove exact keys, literal
+parity, and every positive/negative mapping.
+
+**Main queue and two-phase currentness.** Main increments one positive safe
+`documentEpoch` on every main-frame navigation/reload and renderer-process loss;
+overflow fails closed and recreates the shell rather than wraps. A first
+nonhidden request with null epoch receives `deferred` plus the new epoch and no
+native mutation; a first hidden request with null epoch executes/retains hidden
+and returns `hidden` plus the new epoch. Hidden always wins. For
+the current epoch, main owns exactly one active helper update and one latest
+trailing request. A newer valid revision immediately settles/replaces an older
+trailing promise as `main-stale`/superseded without diagnostic emission; active
+settles once and then dispatches only the latest trailing. Older/equal revisions
+settle main-stale. Thus renderer churn holds at most two operations and two
+timers regardless of volume. A 10,000-update test proves constant pending/listener
+counts, latest-only execution, deterministic settlement, and no per-supersede
+log/diagnostic amplification.
+
+Eligibility remains main-owned: full modes require the exact current non-null
+request in `ready|buffering|playing|paused|seeking|stalled`; Classic also
+requires `playing === true`; every blocker/error/ended/destroyed mismatch hides.
+Before every native load, request switch, or cleanup, `NativePlayerHostProcess`
+executes and ACKs a hidden presentation operation for the prior/current loaded
+request. The load/switch/cleanup envelope is not written until that succeeds.
+If hidden cannot be executed, the load/switch/cleanup fails and the shared host
+is quarantined/cleaned through existing playback crash ownership. Helper tracks
+the actually loaded request and shows only an operation with matching nonnull
+request, epoch, and latest revision; no cached desired show crosses load/restart.
+
+Renderer makes the aperture opaque synchronously before hidden/route/blocker/
+error/exit and then sends hidden. For show/resize it measures after final DOM,
+keeps the aperture opaque, and reveals it only after an `applied` ACK still
+matches current local route/layout/snapshot, main-owned epoch, media request,
+and revision. Main performs the same revalidation after helper ACK before
+returning applied. Any revalidation failure dispatches/retains hidden and maps
+main-stale or helper-stale. Stale/fail/teardown never opens transparency.
+
+**Private protocol and shared-helper health.** New strict version-1
+`presentation.update` carries bounded operation ID, document epoch, revision,
+parent HWND decimal/PID, loaded request or null, closed mode, and normalized
+bounds or null. Executed `presentation.result` echoes only version/operation/
+epoch/revision and `applied|hidden|stale|rejected`; ACK is written only after
+the presentation thread mutation. Operation ID uses the existing request-ID
+shape/cap and each serialized presentation input/output is capped at 4,096
+characters inside the broader helper line cap. Codec rejects extra keys, version/range/
+decimal/bounds errors, oversize NDJSON, duplicate operation IDs, and unexpected
+results. A helper-stale ACK is an executed hidden currentness result. A request
+rejected before serialization/write is the only presentation-only failure. Once
+any byte is written, a helper-rejected ACK, stdin write failure, malformed or
+unexpected stdout, oversize/framing failure, ACK timeout, helper exit, or output
+stream failure marks the shared helper unhealthy and maps to timeout or
+lifecycle-failure: main keeps HTML opaque,
+quarantines/kills the process so Windows destroys its child, rejects all pending
+player/audio/presentation work, emits exactly one existing native-host lifecycle
+failure, and invokes existing playback helper-crash cleanup/recovery. It never
+pretends presentation alone failed while playback continues on that process.
+
+**Shell lifecycle and composition-root order.** After `app.whenReady`, main
+creates the hidden shell BaseWindow/view, constructs the existing single
+production native host through Settings composition, constructs the presentation
+owner with a late getter for the one IPC adapter, registers player/presentation
+IPC, binds current artwork/security/app-command owners to the view's one
+webContents, loads `lineup://shell`, and only then publishes ready/shows. Proof
+composition is constructed only from a validated proof capability and receives
+that same host/adapter/window; no second helper/factory call.
+
+The shell owner explicitly sets/updates view bounds from `BaseWindow` content
+bounds and owns listeners for resize/move/minimize/restore/show/hide/enter- and
+leave-fullscreen/closed, relevant screen display-metrics/removal, and view
+`did-start-navigation`, `did-finish-load`, `render-process-gone`, `destroyed`.
+Resize/fullscreen/DPI transitions first close the aperture/hide, then require a
+fresh normalized update/ACK. Normal close and partial startup failure remove all
+listeners, request hidden or quarantine on failure, dispose presentation/IPC,
+call `view.webContents.close()`, remove the view from contentView, then destroy
+BaseWindow. Renderer crash follows the same native-hide/epoch invalidation and
+webContents path. Every step is idempotent; repeated close/cleanup is a no-op
+after first ownership release. Tests cover failure after each construction step,
+normal close, window close before ready, renderer crash, startup load failure,
+native hide failure/quarantine, and repeated disposal with no listener/window/
+view/helper residue.
+
+**Renderer composition and non-Windows.** `guidePresentation.ts` owns pure mode
+projection. New `nativePlayerPresentationController.ts` owns epoch negotiation,
+revision, post-render normalized measurement, renderer-side one-active/one-
+latest invoke, two-phase aperture state, ResizeObserver, stale settlement, and
+teardown hidden. `renderer/index.ts` wires it after `renderShellDom` runs last.
+`shellDom.ts` remains HTML visibility/inertness authority; Guide video is
+aria-hidden/inert/noninteractive and never registered for focus/OSD. CSS is
+opaque by default and opens only the ACK-authorized aperture; Classic renders no
+black fake. The one artwork subtree moves without clone or 5A lifecycle change.
+On non-Windows, main never reads/sends a native handle and returns unsupported;
+Guide remains opaque with no fake video/support claim.
+
+Exact 5D tests are the corresponding existing contract/preload/main/process/
+factory/window/smoke/renderer/helper tests plus new
+`playerPresentationBridge.test.ts`, `nativePlayerPresentationOwner.test.ts`,
+`nativePresentationProofBootstrapOwner.test.ts`,
+`nativePresentationProofComposition.test.ts`,
+`nativePlayerPresentationController.test.ts`, both named proof-tool tests, and
+static/Release helper-manifest proof. Automated proof covers all exact union/
+literal/key vectors, unauthorized sender, default/negative proof bootstrap,
+private path/handle redaction, queue bounds, two-phase currentness, pre-load
+hide, thread/ACK ordering, shared-host quarantine, DPI/rounding/straddling,
+lifecycle idempotency, disabled/nonactivation/accessibility rules, and same-host
+production-index wiring. Existing fake-host smoke remains required regression
+proof but is never the real-host gate.
+
+After production implementation/review and Units 5E–5G coding are clean, the mandatory
+Windows driver builds/extracts the actual Release helper manifest, launches the
+production entry through the exact proof sentinel, loads/plays the authorized
+local fixture through the real adapter/helper, and captures one external desktop
+composition. Minimum gate: active Player full, Guide Overlay full, Classic
+playing PIP, paused/ended hidden with opaque/no fake; applied-ACK transparency;
+rapid churn/latest settlement; resize/maximize/fullscreen/minimize/restore;
+pointer/keyboard focus; UIA/MSAA enumeration; no cross-app/topmost bleed; and
+full teardown/root deletion/no orphan. Run at 100% DPI; retain unavailable 125%/
+150% and multi-monitor rows in `WS5-PROOF-04`. DOM, fake host, helper-only,
+RD-06, macOS, black proxy, or merged captures cannot substitute.
+
+Rollback is staged. A failing deferred 5D-0 removes only its ignored tool package/evidence
+and returns the implemented production checkpoint to remediation/replan. Production 5D rolls
+back atomically to pre-5D BrowserWindow/route-only behavior: remove public
+contract/bridge/controller, proof capability/composition, shell/main owner,
+private protocol/queue/thread/child/DPI manifest, renderer transparency/layout,
+driver, and tests together while preserving 5A–5C. Never leave a local-file
+proof capability, public bridge without main owner, load without hidden barrier,
+protocol half, transparent aperture without matching ACK custody, helper thread/
+HWND, or partial BaseWindow/WebContentsView migration.
+
+**Unit 5E — Detailed two-hour versus Wide three-hour density**
+
+Unit 5E is paused only until production Unit 5D has a complete independently
+reviewed implementation and passing local automated/production-index proof.
+This serial stop also applies to Units 5F and 5G. The deferred Windows
+feasibility/real-host campaign remains mandatory in 5H before WS5 closeout, but
+does not block completing the remaining coding units.
+
+Make four versus six 30-minute slots the semantic density change, preserving
+focus/currentness and readable geometry; remove density-as-row-height. Limit
+edits to EPG state, presentation/DOM/style, polling only for bounded refetch,
+and tests.
+
+**Unit 5F — past-item policy**
+
+Consume exact Auto/0/15/30 policy, library type, slot snap, local-midnight
+clamp, and left-navigation bound. Limit edits to Guide main query/public
+projection and EPG/polling plus tests. Prove show-only, movie, mixed/All/
+unknown, midnight, spring-forward, fall-back, setting change, and stale request.
+
+**Unit 5G — large-guide virtualization and aggressive preload**
+
+**Desktop performance adjudication — 2026-08-02:** upstream `0258dbe` is a
+behavior/reference source, not the performance authority for this Windows-first
+Electron app. Its fixed five visible rows, two-row buffer, 60-minute buffer, and
+200-element ceiling come from the same upstream whose EPG performance campaign
+is explicitly validated on an LG C3 plus a lower-spec webOS device. Unit 5G
+therefore implements the viewport-derived Desktop DOM
+budget and the larger default/aggressive cache profiles frozen above. It does
+not copy an LG/webOS hardware profile, add television feature detection, or use
+macOS results to claim Windows performance. Keeping virtualization, finite DOM
+and response caps, LRU eviction, cancellation, and one-active/one-trailing
+custody is intentional responsiveness and correctness engineering on a PC—not
+a television-resource concession. Local production-build fixtures close the
+coding gate; 5H records the later Windows x64 machine context, resource use, and
+large-live-lineup proof without delaying Unit 5G implementation.
+
+Implement the exact response, DOM, rendered-row, cache, concurrency, eviction,
+and timing budgets using the read operation extended in 5B. Limit edits to
+Guide runtime/bridge, EPG/presentation/polling/DOM/focus, styles, and focused
+performance/contract fixtures. Preserve 5B's already-working cross-page
+behavior; 5G may refine virtual-row focus reveal, registration cleanup, and
+accessibility but may not first make paging functional. Do not add a worker
+thread, dependency, generic virtual-list layer, or unbounded pool. Required
+focused new tests are `src/__tests__/main/guidePresentationCaps.test.ts` for
+fair 1,000-program truncation and
+`src/__tests__/renderer/guideVirtualization.test.ts` for DOM/cache/focus/timing
+bounds; both use the synthetic 300-by-48 fixture and rerun 5B's paging tests.
+
+**Unit 5H — local product proof and authority reconciliation**
+
+Run a production build and capture ignored, redaction-safe evidence at
+1280x720, 1920x1080, and approximately 900x700 using keyboard, D-pad,
+simulated gamepad, and pointer. Exercise loading, empty, error, recovery, ready,
+detail, available/missing art, live/future, tabs, both layouts/densities, every
+past policy, large guide, Page, one-shot `mediaPlay`, reduced motion, and forced
+colors. Simulated gamepad proves only its existing mapped Guide commands; inject
+`mediaPlay` through the existing keyboard/app-command path, not a new mapping.
+Reconcile only observed conclusions in matrix, architecture, roadmap, Windows
+proof plan, and import ledger. Keep externally blocked rows open.
+
+**Unit 5I — closeout and next handoff**
+
+Run clean full verification, inspect status/diff/history, obtain independent
+whole-WS5 review, resolve material findings, and record the proof packet. Only
+then may the controller close the local WS5 gate and write the WS6 handoff.
+
+#### WS5 File-Shape And Cohesion Disposition
+
+- Existing attention owners `src/main/plex/livePlexTransport.ts`,
+  `src/main/plex/desktopPlexRuntime.ts`, `src/renderer/epg.ts`,
+  `src/renderer/epg/guideDom.ts`, `src/renderer/focusDom.ts`, and
+  `src/renderer/workflow.ts` receive only cohesive changes to their present
+  responsibility. Artwork authorization/cache is extracted because it is a new
+  trust/lifecycle owner; Guide preference persistence is extracted because it
+  is a new durable-state owner.
+- Hotspots/composition roots `src/main/index.ts`, `src/renderer/index.ts`, and
+  preload/main composition surfaces receive wiring only. The Guide bridge owns
+  validation, never policy. Each touched production file above 500 lines gets
+  explicit reviewer cohesion disposition; growth above 800 lines, policy in a
+  composition root, or forwarding-only extraction stops for architecture
+  review.
+- Unit 5D-0 is deliberately tool-local and disposable; its Electron harness and
+  C# WGL helper prove topology only and share no module with production. Unit 5D
+  then adds focused lifecycle/trust owners rather than growing hotspots:
+  renderer `nativePlayerPresentationController.ts` owns measurement/revision/
+  epoch/two-phase invoke lifecycle; main `nativePlayerPresentationOwner.ts` owns
+  the private HWND metadata, one-active/one-trailing currentness, native update,
+  and shell overrides; `bootstrapModeDecisionOwner.ts` owns only pre-side-effect
+  marker-family selection; proof bootstrap/composition/assertions own only
+  branded fixture/helper authority and executable proof teardown; and
+  `windowsProofAclInspector.ts` owns only fixed boolean ACL admission. The product helper's one
+  presentation/render thread is the sole HWND/WGL/render-context lifecycle
+  owner; command/event threads remain protocol/playback owners.
+  `shellWindowController.ts` owns only the `BaseWindow`/`WebContentsView` host;
+  `shellDom.ts` remains final HTML visibility/inertness; `guidePresentation.ts`
+  remains pure projection; `guideDom.ts`/Guide CSS retain layout/art; protocol,
+  codec, process, factory, privileged dispatch context, helper, and ports extend
+  their existing boundaries.
+  The 1,062-line `renderer/index.ts` and 639-line `main/index.ts` receive exact
+  construction/event/disposal wiring only. Every touched production file above
+  500 lines needs explicit reviewer disposition; any presentation policy in an
+  index, forwarding-only abstraction, second view/window, or helper ownership of
+  renderer/shell policy stops for re-review.
+- Do not create generic repository/service/adapter abstractions, a second art
+  contract, speculative compatibility code, or a one-implementation interface
+  without trust-boundary need. The narrow live-art transport is justified only
+  by token/host/path custody across Plex and artwork owners.
+
+#### WS5 Verification Commands
+
+new regression/contract test required
+
+Before the first product edit, from a clean reconciled worktree:
+
+```bash
+git status --short --branch
+npm run verify
+```
+
+Unit 5A must at minimum run:
+
+```bash
+node --import tsx --test src/__tests__/contracts/contracts.test.ts src/__tests__/integration/preloadContractVocabulary.test.ts src/__tests__/preload/guideBridge.test.ts src/__tests__/main/guideArtworkSessionGenerationOwner.test.ts src/__tests__/main/desktopPlexGuideArtworkSession.test.ts src/__tests__/main/guideArtworkOwner.test.ts src/__tests__/main/livePlexGuideArtworkTransport.test.ts src/__tests__/main/guideArtworkProtocol.test.ts src/__tests__/main/guideArtworkComposition.test.ts src/__tests__/main/guideRuntime.test.ts src/__tests__/main/rendererProtocolPolicy.test.ts src/__tests__/main/channelRuntimeIpc.test.ts src/__tests__/main/channelComposition.test.ts src/__tests__/main/plexComposition.test.ts src/__tests__/main/shellSecurity.test.ts src/__tests__/main/shellWindowController.test.ts src/__tests__/renderer/epg.test.ts src/__tests__/renderer/epgStateUpdate.test.ts src/__tests__/renderer/epg/guideDom.test.ts src/__tests__/renderer/guideDetailArtworkDom.test.ts src/__tests__/renderer/navigationLifecycle.test.ts src/__tests__/renderer/desktopInput.test.ts src/__tests__/renderer/guidePlayToNowInput.test.ts
+npm run typecheck
+npm run test:contracts
+npm run build:electron
+npm run verify:architecture
+npm run verify:maintainability
+npm run verify:redaction
+git diff --check
+git status --short
+```
+
+The following are exact required new files, not conditional discovery:
+`src/__tests__/preload/guideBridge.test.ts` owns strict artwork result
+validation;
+`src/__tests__/main/guideArtworkSessionGenerationOwner.test.ts` owns monotonic
+non-deduplicating unavailable/ready/disposed generations, same-valued token and
+connection replacement, subscriber notification, failed-transition freshness,
+overflow, and permanent disposal;
+`src/__tests__/main/desktopPlexGuideArtworkSession.test.ts` owns every named
+runtime entrypoint, ensure-token restoration, exact connection-field capture,
+shutdown-before-operation-owner ordering, three-gate invalidation, and proof
+that old-ref fetch never reacquires credentials or current connection;
+`src/__tests__/main/guideArtworkOwner.test.ts` owns ref/session/cache/queue
+limits, generation notification abort, and three-point currentness checks;
+`src/__tests__/main/livePlexGuideArtworkTransport.test.ts` owns the exact
+`normalizeGuideArtworkLocator` and transport seam. Mandatory positive vectors
+are `/library/metadata/1/thumb` and
+`/library/metadata/123/thumb/1700000000`. Mandatory negative vectors cover
+`art`/`banner`/`clearLogo`, nonnumeric rating/version segments, extra segments/
+slashes, `//`, relative/no-leading-slash input, `%2e`/`%2f`/`%5c` and every
+percent-containing input, absolute/protocol-relative URLs, leading/trailing/
+embedded whitespace, ASCII control and non-ASCII input, backslash, query,
+fragment, credentials/scheme/authority shapes, empty/dot segments, empty input,
+and 513-code-unit input. The same test owns base-URI path and explicit/default
+effective-port containment, bracketed IPv6 containment supported by the
+current URL normalization, pathname byte identity, `redirect: 'error'`, GET,
+captured-session credential under the existing `PLEX_TOKEN_HEADER_NAME`
+constant with no query credential, timeout, MIME, size, abort, and redaction.
+Its injected fetch spy must remain untouched for every rejected locator or
+failed pre-fetch containment/canonicalization check;
+`src/__tests__/main/guideArtworkProtocol.test.ts` owns the registered Electron
+handler's route/method/path/header/CSP/bearer outcomes;
+`src/__tests__/main/guideArtworkComposition.test.ts` owns production wiring,
+session-generation subscription, builder/custom lineup invalidation,
+webContents/window/app teardown, disposal, and late-fetch cancellation;
+`src/__tests__/renderer/guideDetailArtworkDom.test.ts` owns fixed static DOM/
+bindings, Classic-only available/missing/error placement, alt/clamps,
+cleanup/no-loop, reduced motion, and forced colors; later 5D's exact
+`src/__tests__/renderer/guideLayoutArtworkDom.test.ts` owns mandatory Classic
+and Overlay placement parity; and
+`src/__tests__/renderer/guidePlayToNowInput.test.ts` owns one-shot Guide
+`mediaPlay`, protected-surface precedence, inert Guide `mediaPause`/
+`mediaPlayPause`, no playback dispatch, and unchanged Page/tune behavior. Every
+other test path in the command was observed in this checkout and remains an
+exact regression surface; do not replace any named test with a conditional
+search or omit it because a new test overlaps existing coverage.
+
+Units 5B–5G each run exact affected contract/main/preload/renderer tests,
+`npm run typecheck`, `npm run build:electron`, `npm run verify:architecture`,
+`npm run verify:maintainability`, `npm run verify:redaction`, and
+`git diff --check`. Persistence tests use temporary app paths and prove atomic
+failure/recovery and scope isolation. Performance tests assert all structural
+caps and record production-build timings. Unit 5H uses its exact visual/
+interaction matrix.
+
+Unit 5B remains stopped until the dated preload-literal amendment receives
+fresh review. After approval and completion, its minimum exact verification is:
+
+```bash
+npm run typecheck
+npm run test:contracts
+npm run build:electron
+node --import tsx --test src/__tests__/contracts/contracts.test.ts src/__tests__/integration/preloadContractVocabulary.test.ts src/__tests__/preload/guideBridge.test.ts src/__tests__/main/desktopGuidePreferencesStore.test.ts src/__tests__/main/guideLibraryFilterIpc.test.ts src/__tests__/main/guidePresentationPaging.test.ts src/__tests__/main/guideRuntime.test.ts src/__tests__/main/channelRuntimeIpc.test.ts src/__tests__/main/channelComposition.test.ts src/__tests__/renderer/epg.test.ts src/__tests__/renderer/epgStateUpdate.test.ts src/__tests__/renderer/epg/guideDom.test.ts src/__tests__/renderer/navigationLifecycle.test.ts src/__tests__/renderer/focusDom.test.ts src/__tests__/renderer/guideLibraryTabs.test.ts src/__tests__/renderer/guidePagingNavigation.test.ts
+npm run verify:architecture
+npm run verify:maintainability
+npm run verify:redaction
+git diff --check
+git status --short
+```
+
+Running the integration vocabulary test after `build:electron` is mandatory so
+its existing bundle assertion proves the sandboxed output has no local preload
+requires. No conditional omission or inline-literal substitute is accepted.
+
+Unit 5D production implementation is the next authorized coding package under
+the dated coding-first adjudication. The following Unit 5D-0 command remains a
+deferred 5H Windows-proof design surface; its outstanding PowerShell cleanup/
+closure details must be corrected and reviewed before 5H executes it, but they
+do not block Unit 5D–5G product coding:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$feasibilityRoot = (Resolve-Path 'docs/runs/ws5-native-presentation-feasibility').Path
+$feasibilitySources = @('index.mjs', 'shell.html', 'Lineup.NativePresentationFeasibility/Program.cs', 'Lineup.NativePresentationFeasibility/Lineup.NativePresentationFeasibility.csproj', 'Lineup.NativePresentationFeasibility/app.manifest', 'ws5-native-presentation-feasibility.test.mjs')
+$feasibilityProject = Join-Path $feasibilityRoot 'Lineup.NativePresentationFeasibility/Lineup.NativePresentationFeasibility.csproj'
+dotnet clean $feasibilityProject --configuration Release; if ($LASTEXITCODE -ne 0) { throw '5D-0 clean failed.' }
+Get-ChildItem -LiteralPath $feasibilityRoot -Directory -Recurse | Where-Object Name -in @('bin', 'obj') | Remove-Item -Recurse -Force
+$actualSources = Get-ChildItem -LiteralPath $feasibilityRoot -File -Recurse | ForEach-Object { [IO.Path]::GetRelativePath($feasibilityRoot, $_.FullName).Replace('\', '/') } | Where-Object { $_ -notmatch '^evidence/' } | Sort-Object
+if (Compare-Object ($feasibilitySources | Sort-Object) $actualSources) { throw '5D-0 source closure differs.' }
+foreach ($source in $feasibilitySources) { $sourcePath = Join-Path $feasibilityRoot $source; Get-Content -Raw -LiteralPath $sourcePath | Out-Host; git check-ignore -q -- $sourcePath; if ($LASTEXITCODE -ne 0) { throw '5D-0 source is not ignored.' } }
+node --check (Join-Path $feasibilityRoot 'index.mjs'); if ($LASTEXITCODE -ne 0) { throw '5D-0 syntax failed.' }
+node --test (Join-Path $feasibilityRoot 'ws5-native-presentation-feasibility.test.mjs'); if ($LASTEXITCODE -ne 0) { throw '5D-0 tests failed.' }
+dotnet build $feasibilityProject --configuration Release --no-incremental; if ($LASTEXITCODE -ne 0) { throw '5D-0 build failed.' }
+node (Join-Path $feasibilityRoot 'index.mjs') --output (Join-Path $feasibilityRoot 'evidence'); if ($LASTEXITCODE -ne 0) { throw '5D-0 proof failed.' }
+dotnet clean $feasibilityProject --configuration Release; if ($LASTEXITCODE -ne 0) { throw '5D-0 final clean failed.' }
+Get-ChildItem -LiteralPath $feasibilityRoot -Directory -Recurse | Where-Object Name -in @('bin', 'obj') | Remove-Item -Recurse -Force
+git diff --check
+```
+
+The enumerated raw output is the review surface; `git diff` is not. Expected
+Deferred 5D-0 proof is the exact Electron 42/GPU-disabled topology, changing WGL
+pixels visibly below HTML in one external desktop frame, correct aperture clip/
+z-order/focus and resize/fullscreen/minimize/restore, and complete child/helper/
+view/window teardown at 100% DPI. Review the tool diff and ignored evidence
+independently. Failure returns the implemented checkpoint to remediation/replan;
+success closes no product row by itself.
+
+Production 5D's minimum local implementation verification is:
+
+```bash
+node --import tsx --test src/__tests__/contracts/contracts.test.ts src/__tests__/integration/preloadContractVocabulary.test.ts src/__tests__/preload/playerPresentationBridge.test.ts src/__tests__/main/player/desktopPlayerAdapter.test.ts src/__tests__/main/player/nativePlayerPresentationOwner.test.ts src/__tests__/main/player/nativePlayerHostProcess.test.ts src/__tests__/main/player/productionNativeHostFactory.test.ts src/__tests__/main/playerIpc.test.ts src/__tests__/main/shellWindowController.test.ts src/__tests__/main/settingsNativeHostComposition.test.ts src/__tests__/main/smokeBootstrapOwner.test.ts src/__tests__/main/smokeFullscreenAssertions.test.ts src/__tests__/renderer/nativePlayerPresentationController.test.ts src/__tests__/renderer/guideLayoutArtworkDom.test.ts src/__tests__/renderer/guideDetailArtworkDom.test.ts src/__tests__/renderer/epg/guideDom.test.ts src/__tests__/renderer/routeDom.test.ts src/__tests__/renderer/playerOverlayPresentation.test.ts src/__tests__/renderer/navigationLifecycle.test.ts src/__tests__/renderer/focusDom.test.ts src/__tests__/renderer/workflow.test.ts
+node --test tools/__tests__/native-helper-program.test.mjs tools/__tests__/smoke-electron.test.mjs
+npm run typecheck
+npm run build:electron
+npm run smoke:electron
+npm run verify:architecture
+npm run verify:maintainability
+npm run verify:redaction
+git diff --check
+git status --short
+```
+
+During post-coding 5H on Windows, before WS5 closeout, additionally run from a
+Visual Studio Developer PowerShell with Windows SDK `mt.exe` available:
+
+```powershell
+& tools/ws5-native-guide-presentation-proof.ps1 -Media <local-safe-video> -Output <ignored-directory>
+if ($LASTEXITCODE -ne 0) { throw 'Unit 5D real-host proof failed.' }
+```
+
+Expected focused proof is strict positive Windows ACL admission, one identical
+canonical clean-rebuilt Release SHA-256 at manifest/capability/spawn/result/
+post-exit, the embedded exact-one PerMonitorV2 resource, and one real child HWND
+through the authorized sentinel/local-fixture/privileged adapter/production-helper path; exact epoch/request/revision ACK transparency and shell
+precedence; no popup/topmost/focus/input/UIA/MSAA exposure; helper-side physical
+bounds/thread affinity; default/negative proof rejection; full root/helper/view/
+window teardown; unchanged artwork/playback custody; and zero regression in
+route/overlay/focus/host-process tests. Smoke still proves production-index
+wiring into a fake host but cannot satisfy this gate; the Windows run must prove
+actual composed product pixels and native lifecycle through the real host.
+Unit 5H owns the later whole-Guide visual packet but cannot substitute for this
+5D minimum gate. `WS5-PROOF-04` closes only its observed rows; unavailable 125%/
+150% DPI or second-display variants remain explicit open debt.
+
+Authority-document changes run:
+
+```bash
+npm run verify:docs
+```
+
+Final closeout runs:
+
+```bash
+npm run verify
+git diff --check
+git status --short --branch
+```
+
+Expected result is zero failures, no secret or unvalidated/private-identifier leakage, no
+unrelated file, no unledgered import, and no tracked proof artifact. Diagnose
+failures inside the active unit; do not weaken a gate or expand ownership.
+
+#### WS5 Acceptance Criteria
+
+- All seven behavior units match this amendment's exact semantics, trust
+  boundaries, limits, focus/input, accessibility, and lifecycle cleanup, with
+  focused automated and observed local product proof.
+- `EPG-01`–`EPG-15` and `UI-35`–`UI-40` have honest evidence-backed states.
+  WS3-owned `ST-11`–`ST-16` and `UI-33` retain their registry owner and receive
+  only direct `WS3-CONTRIBUTION-WS5` consumption evidence.
+- Renderer receives only validated safe public references (including accepted
+  WS1 byte-for-byte passthrough), bounded strings, categorical state, and opaque
+  art refs. It cannot select an upstream target, send credentials,
+  reach filesystem paths, or bypass main authorization.
+- Main accepts artwork source locators only through the frozen anchored Plex
+  poster grammar and byte-preserving captured-origin algorithm; every reject
+  happens before fetch, and neither redirects nor arbitrary connection-relative
+  fallback can widen it.
+- Existing tune, Page, polling/currentness, day/DST behavior, channel order,
+  recovery, focus custody, and lifecycle cancellation do not regress.
+- Guide Overlay and Classic compose the helper's one real child-HWND player
+  presentation beneath the transparent shell view in the production Unit 5D
+  code, and matching epoch/request/revision applied ACK completes the opaque-
+  to-transparent commit. One helper presentation thread owns every HWND/WGL
+  mutation/destruction; load/switch/cleanup cannot outrun hidden; post-send
+  presentation transport failure quarantines the shared helper and runs existing
+  playback crash cleanup. Shell lifecycle/blockers/exit remain authoritative;
+  Guide video cannot focus, accept input, expose UIA/MSAA control content, or
+  float topmost; Classic never fabricates PIP; artwork keeps 5A custody. Actual
+  authorized-real-host Windows proof—not DOM/fake geometry—is required before
+  `EPG-10`, `UI-36`, or WS5 can close; it does not block the coding-first Unit
+  5D–5G sequence.
+- 5D-0 review reads the exact ignored source closure and leaves no `bin/obj`;
+  startup selects normal/one complete smoke/one complete proof before side
+  effects and rejects all partial/duplicate/mixed markers; proof inspects strict
+  Windows ACL policy and binds the exact clean-rebuilt canonical Release helper
+  digest through manifest inspection and spawn with no fallback; malformed
+  presentation input resolves the exact nullable-correlation rejected union with
+  zero IPC; and the single fail-closed PowerShell entrypoint proves every native
+  exit, one embedded PerMonitorV2 node, digest equality, and cleanup.
+- Large-guide proof meets every response/DOM/cache/concurrency/timing cap. Local
+  proof covers all named sizes, inputs, states, settings, and accessibility
+  modes; raw evidence is ignored and redaction-safe.
+- Architecture, roadmap, proof plan, matrix, and ledger describe only observed
+  truth. One clean `npm run verify` and independent whole-WS5 review pass.
+  External evidence stays in the open packet; no support is inferred.
+
+#### WS5 Rollback And Checkpoints
+
+Use one conventional, independently reviewable checkpoint per Unit 5A–5G;
+documentation reconciliation and closeout stay separate. Never checkpoint a
+half-contract across main/preload/renderer. Roll back the latest unit's product
+files, tests, and authority claims together while preserving earlier accepted
+units and unrelated work. Persistence v1 has only All/valid-selection semantics
+and needs no down-migration; removing 5B removes its operation/store together
+without touching WS3 Settings. Clear memory caches and restart before rollback
+proof.
+
+Unit 5D now has one production coding checkpoint followed later by a 5H Windows
+proof checkpoint. The production checkpoint atomically spans public contract/
+preload, shell host, main epoch/queue owner, native host/protocol/presentation
+thread/helper, Guide two-phase composition, production-index smoke, and focused
+tests. Roll back that entire product checkpoint if ACK currentness, shared-host
+failure cleanup, local automated composition, or child-HWND lifecycle cannot be
+implemented coherently; never preserve renderer transparency while reverting
+native custody. After independent implementation review, Units 5E–5G may
+continue. The deferred 5H checkpoint owns the ignored 5D-0 closure, branded
+proof ingress, bootstrap proof branch, ACL inspector, required-helper proof
+selection, PowerShell/Node proof entrypoints, sentinel/digest result schema,
+Windows evidence, and their focused tests. If Windows proof later exposes a
+product defect, return the production checkpoint to remediation/replan without
+discarding unrelated accepted Units 5A–5G.
+
+#### WS5 Consolidated Proof Debt
+
+- `WS5-PROOF-01` — `EPG-01`, `EPG-03`, `EPG-15`: live selected-server/profile/
+  lineup changes, local-midnight rollover, both DST transitions, and soak
+  currentness/cancellation.
+- `WS5-PROOF-02` — `EPG-04`, `UI-40`: live Plex available/missing/expired art,
+  current-upstream paired detail, cache invalidation, and credential/URL/error
+  redaction.
+- `WS5-PROOF-03` — `EPG-02`, `EPG-05`, `EPG-07`, `EPG-08`, `EPG-13`,
+  `UI-36`, `UI-40`: Windows large live lineup with keyboard, pointer, physical
+  remote media-Play, gamepad navigation/Page, focus restoration, and resource
+  observation; do not infer a gamepad Play mapping.
+- `WS5-PROOF-04` — `EPG-10`, `UI-36`: after Unit 5D–5G coding, deferred 5D-0
+  proves Electron-42/GPU-disabled child composition at 100% DPI without closing
+  a row. Production 5D then passes
+  the sentinel-authorized canonical local fixture through the real privileged
+  adapter/Release helper for Player/Classic/Overlay, ACK transparency,
+  fullscreen/lifecycle/focus/UIA/MSAA/z-order/cleanup, and extracted embedded
+  PerMonitorV2 manifest. The gate also records passing strict ACL admission and
+  one identical clean-rebuilt canonical Release SHA-256 across manifest,
+  capability, spawn, result, and post-exit. Debt then retains only unavailable 125%/150% DPI,
+  multi-monitor, and broader operator rows; none may be inferred from DOM,
+  fake-host, helper-only, black-proxy, or merged captures.
+- `WS5-PROOF-05` — `EPG-14`, `UI-35`, `UI-37`, `UI-38`, `UI-39`: live loading/
+  empty/error/timeout/recovery and stale-last-valid behavior.
+- `WS5-PROOF-06` — `UI-35`–`UI-40`: paired current-upstream visual comparison
+  for tabs, layout, density, past window, detail, reduced motion, forced colors,
+  and all required viewport sizes.
+
+Each item records environment, build/checkpoint, exact row, steps, expected and
+observed result, artifact locator, redaction check, blocker owner, and replay
+command. Unavailable external proof is not a local failure when its entry is
+complete, but cannot close or promote the affected row.
+
+#### WS5 Replan Triggers
+
+Stop before further edit and return to planning/review if:
+
+- review does not explicitly approve Unit 5A's public artwork field,
+  immutable authorization session generation and three-point checks, exact
+  `normalizeGuideArtworkLocator` grammar/origin/canonicalization checks, bearer/
+  self-origin route, main transport/authorization/composition, DOM states,
+  Desktop/upstream divergence, one-shot `mediaPlay`, CSP/lifecycle, exact tests,
+  or the whole-WS5 filter mutation and paged-presentation boundary;
+- a required Plex artwork source falls outside the anchored poster grammar,
+  needs path rewriting/canonicalization, redirect following, query-token
+  authorization, a caller-selected host/method/header, or any fallback broader
+  than the frozen captured-origin algorithm;
+- Electron protocol behavior cannot safely serve the fixed self-origin image
+  route under the current scheme/CSP, real art needs a raw URL/credential
+  outside main, Guide cannot authorize the selected session, protocol custody
+  needs an unavailable trustworthy caller identity, or another renderer/window
+  must receive bearer refs;
+- library identity cannot map between a validated public reference and the
+  main-only persisted source ID under server/profile scope, or persistence needs Settings mutation,
+  migration beyond absent-v1, a record shape/recovery policy outside the frozen
+  v1 contract, cross-profile fallback, or renderer filesystem;
+- Play needs global/background ownership, repeat metadata/gamepad/
+  `desktopInput.ts`, Page precedence changes, or tuning a non-current program
+  becomes possible;
+- Unit 5D needs a transparent/frameless top-level window, second shell view/
+  window, native addon, renderer-visible HWND/PID/absolute physical bounds,
+  screen/texture capture, shared texture, playback command/snapshot mutation,
+  Settings schema/persistence change, dependency/package-script/privilege,
+  interactive or accessibility-visible native video, popup/topmost surface,
+  helper ownership of Guide/shell policy, or file outside the exact boundary;
+- During deferred 5H proof, 5D-0 touches `src/**`/product protocol/helper, cannot show active child pixels
+  beneath HTML with the exact Electron-42/GPU-disabled topology at 100% DPI,
+  loses focus/z-order/fullscreen/resize/teardown, uses merged or webContents-only
+  capture, changes `.gitignore`, lives outside the exact ignored run root/source
+  closure, retains `bin/obj`, relies on git diff instead of raw exact-set review,
+  or does not receive independent implementation/proof review;
+- bootstrap selection runs after any side effect, treats user-data-only as
+  normal, calls both/neither wrong family validator, permits partial/duplicate/
+  mixed markers, or complete proof bypasses smoke before the fixed rejection
+  decision and exact call-count/order tests;
+- real-host proof needs a renderer/preload path/file capability, a normal
+  production marker, media outside the exact canonical nonce root/fixed MP4/
+  digest/size/ACL rules, an unbranded local-file dispatch, a second helper, or
+  cannot prove all partial/negative/default-production rejection and teardown;
+- proof selects packaged/Debug/discovered fallback, does not clean/rebuild and
+  canonicalize the exact repo Release EXE, omits the private SHA-256 from
+  capability/result, spawns a digest different from manifest inspection, or
+  cannot reject mismatch/replacement/mutation immediately before/after spawn;
+- ACL inspection uses localized `icacls` text, path/script in argv, accepts
+  reparse/unknown/unresolved output, lacks current-user ownership/effective
+  control, permits any inherited/explicit write-capable SID outside current
+  user/SYSTEM/Administrators, forbids the explicitly allowed SYSTEM/Admin policy,
+  or lacks real Windows positive/explicit/inherited/reparse/mutation negatives;
+- any HWND/DC/WGL/FBO/mpv-render create/mutate/pump/render/destroy happens off the
+  dedicated presentation thread, its queue is unbounded or reorders mandatory
+  work, ACK precedes execution, or destruction/join order differs from frozen;
+- main performs physical/DIP/display conversion, helper cannot validate parent
+  PID and equal DPI-awareness contexts before creation/update, client/DPI reads
+  are unstable, rounding/straddling differs, or the Release executable lacks an
+  extracted embedded PerMonitorV2 manifest;
+- a post-send helper reject/write/output/framing/timeout/exit failure remains
+  presentation-only, does not opaque/hide by quarantine, omits the one lifecycle
+  failure/existing playback helper-crash cleanup, or rejects other pending work;
+- any show/resize opens HTML before a matching current epoch/request/revision
+  applied ACK, any hide/route/blocker closes native before HTML becomes opaque,
+  any load/switch/cleanup is sent before hidden ACK, or helper can show a request
+  other than its actually loaded current request;
+- main or renderer pending presentation work exceeds one active/one latest,
+  document epoch/revision can wrap/reuse, superseded settlement is ambiguous, or
+  high-volume churn grows memory/listeners/timers/logs/diagnostics;
+- close/startup failure/crash omits listener removal, native hide/quarantine,
+  `view.webContents.close()`, view removal, BaseWindow destruction, same-thread
+  helper destroy/join, or idempotent repeated-cleanup proof; native input safety
+  relies on `HTTRANSPARENT` instead of disabled/nonactivation plus observed
+  pointer/focus and UIA/MSAA proof;
+- public request/result/preload literal or exact-key validation differs from the
+  frozen deferred/unsupported/main-stale/helper-stale/rejected/timeout/lifecycle-
+  failure mapping, malformed input throws/rejects or invokes IPC, failure
+  correlations are nonnullable or fail independent echo/null rules, exposes
+  private material, or grants playback authority;
+- real-host documentation bypasses the one PowerShell entrypoint, it omits Stop
+  preference/native exit checks/strict safe cleanup/no-incremental Release
+  rebuild/exact path, accepts stale extraction/result, parses zero/multiple/non-
+  exact PerMonitorV2 nodes, or fails to compare the same digest before manifest,
+  at spawn/result, and after exit;
+- production-index fake-host smoke cannot prove its named local seam; during 5H
+  the real-host proof ingress or minimum external Windows composition cannot
+  prove their distinct named seams, the minimum gate fails, or WS5 closeout/
+  `EPG-10`/`UI-36` claims advance while 5D-0 or real-host proof is unavailable,
+  using DOM/helper/fake-host/RD-06/black-proxy/merged-source evidence;
+- paging/virtualization needs a generic second bridge, higher response/DOM/cache
+  limits, weaker cancellation, an unbounded collection, dependency/worker
+  thread, resolving the full lineup before paging, unfair program starvation,
+  or relaxed timing budget without evidence-backed replan;
+- During Unit 5B, `src/preload/channels.cts` needs any change beyond the one exact
+  `LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL` declaration, any preload runtime
+  import of the IPC literal from `src/contracts/ipc.ts` or another shared
+  runtime module, an inline/alternate channel string, an additional operation,
+  or a weakened Electron/sandbox/bundle vocabulary assertion;
+- an assigned row, upstream pin, owner, WS3 contribution, or accepted WS1–WS4
+  invariant materially contradicts this plan;
+- implementation needs a file/owner outside the unit, dependency, privilege,
+  package/config/lockfile change other than 5D's frozen helper DPI manifest,
+  public operation/schema beyond those frozen,
+  upstream import, or Custom Channel behavior change;
+- an attention owner lacks a cohesive disposition, hotspot gains policy or
+  grows without architecture review, or extraction is generic/forwarding; or
+- any focused, typecheck, build, architecture, maintainability, redaction,
+  docs, visual, performance, or full gate cannot be corrected in-unit, or
+  review finds a material security, privacy, correctness, accessibility,
+  product, lifecycle, rollback, or proof defect.
+
+Unavailable Windows proof does not block Unit 5D–5G coding under the coding-
+first directive. It does block 5H/5I WS5 closeout and closure of every affected
+parity row. Unavailable additional DPI, second-display, physical-device, live
+Plex, paired-upstream, day/DST/soak, operator, or package rows are not themselves
+replans only when the exact `WS5-PROOF-*` entry is complete and every affected
+row remains open. Evidence of defective/missing behavior is a remediation/
+replan trigger.
+
+#### WS5 First-Unit Feature-Review Handoff
+
+MODEL_SUGGESTION
+PLANNER: configured `planner` role
+IMPLEMENTER: resolve the bounded implementation role at dispatch from the
+approved Unit 5A through `.codex/config.toml`
+REVIEWER: configured `reviewer` role
+WHY: Unit 5A crosses the Guide projection, main-only Plex/artwork trust
+boundary, custom protocol authorization, renderer lifecycle/focus, and input
+precedence. Exact model and reasoning settings remain role-TOML-owned.
+
+NEXT_SESSION_HANDOFF
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
+TASK: Review The Whole-WS5 Amendment And Approve Or Reject Unit 5A
+TASK_FAMILY: feature/design review
+TIER: Tier 3
+PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
+ARTIFACT: Whole-WS5 Decision-Complete Amendment — Guide, especially Unit 5A
+FILES:
+- docs/plans/2026-07-22-tier3-parity-correction-plan.md
+- docs/product/lineup-product-parity-matrix.md
+- docs/architecture/CURRENT_STATE.md
+- docs/architecture/renderer-architecture.md
+- docs/architecture/playback-architecture.md
+- docs/roadmap/desktop-port-roadmap.md
+- docs/development/windows-ui-proof-plan.md
+- src/contracts/artwork.ts
+- src/contracts/guide.ts
+- src/contracts/ipc.ts
+- src/contracts/shell.ts
+- src/main/channel/customChannelArtworkProxy.ts
+- src/main/channel/channelBuilderContextEpochOwner.ts
+- src/main/channel/channelLineupMutationCoordinator.ts
+- src/main/channel/channelRuntime.ts
+- src/main/channel/guideRuntime.ts
+- src/main/channel/channelComposition.ts
+- src/main/channel/channelPublicReferenceOwner.ts
+- src/main/plex/desktopPlexContextNotifications.ts
+- src/main/plex/guideArtworkSessionGenerationOwner.ts
+- src/main/plex/livePlexTransport.ts
+- src/main/plex/desktopPlexRuntime.ts
+- src/main/plex/plexComposition.ts
+- src/main/protocol.ts
+- src/main/rendererProtocolPolicy.ts
+- src/main/index.ts
+- src/preload/guideBridge.cts
+- src/preload/index.cts
+- src/renderer/epg.ts
+- src/renderer/epg/guideDom.ts
+- src/renderer/guidePresentation.ts
+- src/renderer/shell/navigationLifecycle.ts
+- src/renderer/desktopInput.ts
+- src/renderer/focusDom.ts
+- src/renderer/staticDom.ts
+- src/renderer/domBindings.ts
+- src/renderer/index.ts
+- src/renderer/styles/guide-epg.css
+- src/__tests__/contracts/contracts.test.ts
+- src/__tests__/integration/preloadContractVocabulary.test.ts
+- src/__tests__/preload/guideBridge.test.ts
+- src/__tests__/main/guideArtworkSessionGenerationOwner.test.ts
+- src/__tests__/main/desktopPlexGuideArtworkSession.test.ts
+- src/__tests__/main/guideArtworkOwner.test.ts
+- src/__tests__/main/livePlexGuideArtworkTransport.test.ts
+- src/__tests__/main/guideArtworkProtocol.test.ts
+- src/__tests__/main/guideArtworkComposition.test.ts
+- src/__tests__/main/guideRuntime.test.ts
+- src/__tests__/main/rendererProtocolPolicy.test.ts
+- src/__tests__/main/channelRuntimeIpc.test.ts
+- src/__tests__/main/channelComposition.test.ts
+- src/__tests__/main/plexComposition.test.ts
+- src/__tests__/main/shellSecurity.test.ts
+- src/__tests__/main/shellWindowController.test.ts
+- src/__tests__/renderer/epg.test.ts
+- src/__tests__/renderer/epgStateUpdate.test.ts
+- src/__tests__/renderer/epg/guideDom.test.ts
+- src/__tests__/renderer/guideDetailArtworkDom.test.ts
+- src/__tests__/renderer/navigationLifecycle.test.ts
+- src/__tests__/renderer/desktopInput.test.ts
+- src/__tests__/renderer/guidePlayToNowInput.test.ts
+BLOCKERS: none for read-only review. Unit 5A product editing stays blocked until
+review explicitly approves all adjudicated corrections: immutable session generation,
+the exact anchored `normalizeGuideArtworkLocator` allowlist/origin algorithm,
+fixed DOM, one-shot `mediaPlay`, WS1 safe-reference passthrough, atomic 5B
+cross-page paging plus page-before-resolution/fair caps, exact v1 persistence,
+Desktop/upstream art divergence, narrow fixed-GET bearer semantics, and
+unconditional tests, plus the write boundary, rollback, and stops.
+MESSAGE:
+Review the whole amendment adversarially, then explicitly approve or return
+findings for Unit 5A before product edit. Confirm all accepted findings and the
+dated re-review repairs are now decision-complete: refs, cache, queue, captured
+token/connection, and late results share one immutable non-deduplicating
+server/profile/lineup session generation with checks before queue/fetch and
+after fetch and no credential reacquisition; `normalizeGuideArtworkLocator`
+accepts only the exact anchored poster grammar and byte-preserving captured-
+origin algorithm, rejects every named vector before fetch, prohibits redirects,
+and sends the captured token only in the existing redacted header; the
+unguessable ref is only a fixed-route GET delivery bearer issued to the
+authorized shell and revoked on every named lifecycle; 5A proves fixed Classic
+available/missing/error/alt/clamp/no-loop behavior and 5D owns both-layout
+parity; only one-shot Guide `mediaPlay` means Play-to-now; WS1 safe public-
+reference passthrough remains intact; 5B atomically owns cross-page ±5 behavior
+and filters/sorts/pages before resolving, while 5G preserves that paging and
+adds fair 1,000-program truncation/virtualization; persistence v1 and
+corruption/tombstone/CAS/atomic-write policy are exact; and every named new/
+existing test is mandatory.
+Confirm the explicit Desktop divergence from upstream `0258dbe` does not claim
+exact visual parity. Reject if work needs broader public/Plex ownership,
+Settings mutation, a raw unsafe renderer capability, new privilege/dependency/
+import, `desktopInput.ts`/repeat/gamepad changes, composition-root policy,
+weaker proof, conditional tests, or an owner outside the reviewed unit. Do not
+implement, repeat the audit, reopen WS1–WS4, claim external proof, or begin
+WS6–WS9.
+
+#### WS5 Unit 5B Implementation-Stop Feature-Review Handoff
+
+MODEL_SUGGESTION
+PLANNER: configured `planner` role
+IMPLEMENTER: resolve the bounded implementation role at dispatch through
+`.codex/config.toml` only after approval
+REVIEWER: configured `reviewer` role
+WHY: the stop concerns the sandboxed preload runtime-literal owner and bundle
+boundary, not a new public operation or a broader 5B redesign.
+
+NEXT_SESSION_HANDOFF
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
+TASK: Review And Approve Or Reject The Unit 5B Preload Channel-Owner Amendment
+TASK_FAMILY: feature/design review
+TIER: Tier 3
+PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
+ARTIFACT: Whole-WS5 Decision-Complete Amendment — Unit 5B implementation stop
+FILES:
+- docs/plans/2026-07-22-tier3-parity-correction-plan.md
+- src/contracts/ipc.ts
+- src/preload/channels.cts
+- src/preload/index.cts
+- src/preload/guideBridge.cts
+- src/__tests__/integration/preloadContractVocabulary.test.ts
+- src/__tests__/preload/guideBridge.test.ts
+- src/__tests__/main/desktopGuidePreferencesStore.test.ts
+- src/__tests__/main/guideLibraryFilterIpc.test.ts
+- src/__tests__/main/guidePresentationPaging.test.ts
+- src/__tests__/renderer/guideLibraryTabs.test.ts
+- src/__tests__/renderer/guidePagingNavigation.test.ts
+BLOCKERS: Unit 5B implementation is stopped. Partial 5B edits already exist in
+the worktree, including `src/contracts/ipc.ts`, `src/preload/guideBridge.cts`,
+and `src/preload/index.cts`; `src/preload/channels.cts` is observed untouched
+and must remain so until this amendment is approved. This planner amendment
+changes no product or test file.
+MESSAGE:
+Review only the dated Unit 5B implementation-stop adjudication and its effects
+on the existing 5B boundary. Approve resumption only if
+`src/preload/channels.cts` is the sandbox-local owner of exactly
+`LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL =
+'lineup:guide:setLibraryFilter'`, matching `src/contracts/ipc.ts` byte-for-byte;
+`src/preload/index.cts` imports that constant only from `./channels.cjs` and
+passes it as the sole new `createGuideBridge` channel binding; and the named
+vocabulary/bridge tests prove exact parity, one added invoke constant, no
+inline/alternate literal, no shared-runtime IPC-value or Electron import, and
+the unchanged bundled sandbox boundary. Confirm the new file permission does
+not alter the Guide schema, v1 persistence or 1 MiB rules, paging, any other 5B
+owner, Unit 5A, or Unit 5C+. Reject broader preload ownership, a second
+operation/literal, weakened bundle proof, or implementation outside the exact
+listed seam. Do not implement or continue partial 5B work during this review.
+
+#### Historical Superseded WS5 Unit 5D-0/5D Proof-First Review Handoff
+
+MODEL_SUGGESTION
+PLANNER: configured role `planner`; `gpt-5.6-sol`, reasoning `high`
+IMPLEMENTER: configured role `worker`; `gpt-5.6-sol`, reasoning `medium`
+REVIEWER: configured role `reviewer`; `gpt-5.6-sol`, reasoning `high`
+WHY: 5D-0 is a bounded but native/Electron feasibility implementation; later 5D
+crosses proof capability custody, public IPC, window/view lifecycle, currentness,
+shared helper health, Win32 DPI/thread/z-order, and renderer transparency. Both
+need material implementation judgment and adversarial security/correctness proof.
+
+NEXT_SESSION_HANDOFF
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
+TASK: Independently Review And Approve Or Reject The Staged Unit 5D-0 And Unit
+5D Windows Native Presentation Architecture
+TASK_FAMILY: feature/design review
+TIER: Tier 3
+PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
+ARTIFACT: Whole-WS5 Decision-Complete Amendment — Unit 5D narrow custody/
+bootstrap re-adjudication
+PRIMARY_RANGES: latest six-finding adjudication; ignored 5D-0 custody; startup
+decision; Release helper digest/ACL/proof script; malformed result correlation;
+exact scope; verification; acceptance/rollback/proof; stops; this handoff
+FILES:
+- docs/plans/2026-07-22-tier3-parity-correction-plan.md
+- AGENTS.md
+- docs/AGENTIC_DEV_WORKFLOW.md
+- docs/architecture/CURRENT_STATE.md
+- docs/architecture/playback-architecture.md
+- docs/architecture/renderer-architecture.md
+- docs/architecture/security-and-secret-flow.md
+- docs/architecture/file-shape-guardrails.md
+- docs/development/windows-ui-proof-plan.md
+- src/contracts/ipc.ts
+- src/contracts/player.ts
+- src/contracts/shell.ts
+- src/preload/channels.cts
+- src/preload/index.cts
+- src/main/index.ts
+- planned src/main/bootstrapModeDecisionOwner.ts
+- planned src/main/security/windowsProofAclInspector.ts
+- src/main/window/shellWindowController.ts
+- src/main/diagnostics/supportBundleIpc.ts
+- src/main/shellSecurity.ts
+- src/main/smokeAssertions.ts
+- src/main/smokeFullscreenAssertions.ts
+- src/main/player/playerIpc.ts
+- src/main/player/desktopPlayerAdapter.ts
+- src/main/player/privilegedPlaybackDispatchContext.ts
+- src/main/player/nativePlayerHostPort.ts
+- src/main/player/nativeHelperProtocol.ts
+- src/main/player/nativeHelperProtocolCodec.ts
+- src/main/player/nativePlayerHostProcess.ts
+- src/main/player/productionNativeHostFactory.ts
+- src/main/settings/settingsNativeHostComposition.ts
+- src/native-helper/Lineup.NativePlayerHost/Program.cs
+- src/native-helper/Lineup.NativePlayerHost/Lineup.NativePlayerHost.csproj
+- src/renderer/guidePresentation.ts
+- src/renderer/epg/guideDom.ts
+- src/renderer/shell/shellDom.ts
+- src/renderer/index.ts
+- src/renderer/styles/base.css
+- src/renderer/styles/player-overlays.css
+- src/renderer/styles/guide-epg.css
+- src/__tests__/main/player/desktopPlayerAdapter.test.ts
+- src/__tests__/main/player/nativePlayerHostProcess.test.ts
+- src/__tests__/main/player/productionNativeHostFactory.test.ts
+- src/__tests__/main/playerIpc.test.ts
+- src/__tests__/main/shellWindowController.test.ts
+- src/__tests__/main/settingsNativeHostComposition.test.ts
+- src/__tests__/main/smokeFullscreenAssertions.test.ts
+- src/__tests__/renderer/guideLayoutArtworkDom.test.ts
+- src/__tests__/renderer/routeDom.test.ts
+- src/__tests__/renderer/playerOverlayPresentation.test.ts
+- tools/smoke-electron.mjs
+- tools/__tests__/native-helper-program.test.mjs
+- tools/__tests__/smoke-electron.test.mjs
+- planned ignored docs/runs/ws5-native-presentation-feasibility/index.mjs
+- planned ignored docs/runs/ws5-native-presentation-feasibility/shell.html
+- planned ignored docs/runs/ws5-native-presentation-feasibility/Lineup.NativePresentationFeasibility/Program.cs
+- planned ignored docs/runs/ws5-native-presentation-feasibility/Lineup.NativePresentationFeasibility/Lineup.NativePresentationFeasibility.csproj
+- planned ignored docs/runs/ws5-native-presentation-feasibility/Lineup.NativePresentationFeasibility/app.manifest
+- planned ignored docs/runs/ws5-native-presentation-feasibility/ws5-native-presentation-feasibility.test.mjs
+- planned src/main/player/nativePlayerPresentationOwner.ts
+- planned src/main/player/nativePresentationProofBootstrapOwner.ts
+- planned src/main/player/nativePresentationProofComposition.ts
+- planned src/main/player/nativePresentationProofAssertions.ts
+- planned src/renderer/player/nativePlayerPresentationController.ts
+- planned src/preload/playerPresentationBridge.cts
+- planned src/native-helper/Lineup.NativePlayerHost/app.manifest
+- planned tools/ws5-native-guide-presentation-proof.ps1
+- planned tools/ws5-native-guide-presentation-proof.mjs
+- planned src/__tests__/preload/playerPresentationBridge.test.ts
+- planned src/__tests__/main/player/nativePlayerPresentationOwner.test.ts
+- planned src/__tests__/main/player/nativePresentationProofBootstrapOwner.test.ts
+- planned src/__tests__/main/player/nativePresentationProofComposition.test.ts
+- planned src/__tests__/main/bootstrapModeDecisionOwner.test.ts
+- planned src/__tests__/main/security/windowsProofAclInspector.test.ts
+- planned src/__tests__/renderer/nativePlayerPresentationController.test.ts
+- planned tools/__tests__/ws5-native-guide-presentation-proof.test.mjs
+- planned tools/__tests__/ws5-native-guide-presentation-proof-script.test.mjs
+BLOCKERS: Historical only. The authoritative coding-first handoff below
+supersedes this proof-first stop.
+The latest narrow custody/security replan received reject and is superseded.
+`src/renderer/shell/shellDom.ts` remains observed untouched; preserve every
+existing earlier-unit worktree change. This planner amendment changes no product
+or test file. Approval authorizes only the exact ignored 5D-0 package first.
+Production/public 5D, Units 5E–5G, `EPG-10`, and `UI-36` stay paused until their
+serial gates pass.
+MESSAGE:
+Review the latest six-finding adjudication without reopening accepted topology,
+currentness, or native-thread decisions. Approve only if 5D-0 is the exact six-
+file source/test closure under already ignored
+`docs/runs/ws5-native-presentation-feasibility/`, with only bin/obj/evidence
+extras, no `.gitignore`/tracked/product edit, raw exact-set source review rather
+than git diff, bin/obj cleanup, and root deletion after disposition. Confirm its
+100%-DPI proof precedes product edit, failure replans, and success closes no row.
+
+Then review the already-frozen production architecture: sentinel capability
+accepts only the exact canonical temp/userData/fixed MP4/digest/ACL markers on
+Windows, feeds one branded local file through the real privileged adapter and
+single production helper, rejects every partial/default-production case, never
+exposes path/control to renderer/preload/argv/log, and completely tears down.
+Confirm one helper presentation/render thread exclusively owns bounded HWND/WGL/
+render work and same-thread destroy-before-join; ACK follows execution. Confirm
+helper—not Electron screen APIs—validates parent PID/equal DPI contexts, physical
+GetClientRect stability, exact floor/ceil/clamp/straddling rules, and embedded
+Release PerMonitorV2 resource. Confirm any post-send reject/write/output/framing/
+timeout/exit failure quarantines the shared helper, emits lifecycle failure, and
+runs existing playback crash cleanup; only pre-send rejection is presentation-
+only. Confirm hidden-before-load/switch/cleanup and opaque-before-hide plus
+matching epoch/request/revision applied-ACK-before-transparency in both main and
+renderer. Confirm main one-active/one-latest queue, deterministic supersession,
+constant-memory/no-log churn, exact result union/preload keys, explicit shell/
+view/listener/native teardown, and disabled/nonactivation plus pointer/focus/
+UIA/MSAA proof without `HTTRANSPARENT` reliance.
+
+Explicitly confirm the new pre-side-effect bootstrap decision selects normal,
+exactly one complete smoke, or exactly one complete proof and rejects shared-
+only/partial/duplicate/mixed before either validator/downstream owner. Confirm
+proof resolves only the canonical clean-rebuilt repo Release helper, binds its
+private SHA-256 through capability/manifest/spawn/result/post-exit, and cannot
+fall back to packaged/Debug or survive mutation. Confirm ACL admission uses the
+fixed stdin PowerShell/.NET policy: no reparse, current-user proof ownership/
+effective control, only current-user/SYSTEM/Administrators write ACEs whether
+explicit/inherited, no broad/unknown write, allowed SYSTEM/Admin behavior, and
+real Windows positives/negatives. Confirm malformed public input resolves local
+rejected with independently echoed-valid-or-null epoch/revision and zero IPC.
+Confirm the single tracked PowerShell entrypoint fails closed on stale output,
+every native exit, clean/no-incremental rebuild, exact path, exact-one embedded
+PerMonitorV2 node, every digest comparison, and cleanup.
+
+Reject a public/product edit before 5D-0, fake-host proof substitution, generic
+local-file authority, second helper/window/view, renderer handle/path, main DIP/
+physical conversion, cross-thread native mutation, pre-execution ACK, unbounded
+pending work, presentation-only post-send failure, stale transparency, load
+without hidden ACK, partial cleanup/rollback, missing manifest extraction, or
+Unit 5E–5G continuation. Also reject ordinary git-diff review of ignored source,
+ambiguous smoke/proof selection, vague ACLs, helper fallback/digest drift,
+nonnullable malformed correlations, or ad-hoc manifest commands. Do not
+implement during this read-only review.
+
+#### WS5 Unit 5D Coding-First Implementation Handoff — Authoritative 2026-08-02
+
+This handoff supersedes the preceding 5D-0-first review handoff only for
+execution order. The reviewed production architecture and invariants remain
+authoritative. The disposable 5D-0 package, proof bootstrap/capability, ACL
+inspector, proof entrypoints, Release-digest evidence, and Windows observation
+are deferred to 5H and are explicitly out of scope for this implementation.
+
+MODEL_SUGGESTION
+PLANNER: no further planning is required for the frozen production seam
+IMPLEMENTER: resolve the configured `worker` role through `.codex/config.toml`
+REVIEWER: configured `reviewer` role after the implementation diff is complete
+WHY: production Unit 5D crosses Electron shell/view ownership, public IPC,
+main currentness/backpressure, shared native-helper lifecycle, Win32 thread/DPI/
+z-order behavior, and renderer transparency. The decisions are frozen, but the
+implementation needs material cross-boundary judgment.
+
+NEXT_SESSION_HANDOFF
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-implement
+TASK: Implement WS5 Unit 5D Production Native Guide Presentation
+TASK_FAMILY: feature/design
+TIER: Tier 3
+PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
+ARTIFACT: approved Units 5A–5C cumulative worktree plus the coding-first Unit
+5D adjudication
+FILES:
+- src/contracts/ipc.ts
+- src/contracts/player.ts
+- src/contracts/shell.ts
+- src/preload/channels.cts
+- src/preload/index.cts
+- src/preload/playerPresentationBridge.cts
+- src/main/index.ts
+- src/main/window/shellWindowController.ts
+- src/main/diagnostics/supportBundleIpc.ts
+- src/main/shellSecurity.ts
+- src/main/smokeAssertions.ts
+- src/main/smokeFullscreenAssertions.ts
+- src/main/player/playerIpc.ts
+- src/main/player/desktopPlayerAdapter.ts
+- src/main/player/privilegedPlaybackDispatchContext.ts
+- src/main/player/nativePlayerHostPort.ts
+- src/main/player/nativeHelperProtocol.ts
+- src/main/player/nativeHelperProtocolCodec.ts
+- src/main/player/nativePlayerHostProcess.ts
+- src/main/player/productionNativeHostFactory.ts
+- src/main/player/nativePlayerPresentationOwner.ts
+- src/main/settings/settingsNativeHostComposition.ts
+- src/native-helper/Lineup.NativePlayerHost/Program.cs
+- src/native-helper/Lineup.NativePlayerHost/Lineup.NativePlayerHost.csproj
+- src/native-helper/Lineup.NativePlayerHost/app.manifest
+- src/renderer/guidePresentation.ts
+- src/renderer/epg/guideDom.ts
+- src/renderer/player/nativePlayerPresentationController.ts
+- src/renderer/shell/shellDom.ts
+- src/renderer/index.ts
+- src/renderer/styles/base.css
+- src/renderer/styles/player-overlays.css
+- src/renderer/styles/guide-epg.css
+- focused contract, preload, main, native-helper, and renderer tests named by
+  the production Unit 5D verification command
+BLOCKERS: none for production implementation. Windows composition remains
+unproven and all affected parity rows stay open until deferred 5H proof.
+MESSAGE:
+Implement only the frozen production Unit 5D seam. Replace the detached fixed
+topmost helper popup with the one app-owned disabled/nonactivating child HWND
+under the framed opaque BaseWindow and transparent sandboxed WebContentsView.
+Preserve one dedicated helper presentation/render thread; helper-owned parent/
+PID/DPI-context/physical-client validation and rounding; main-owned document
+epoch, one-active/one-latest queue, revision/currentness, and lifecycle; exact
+public/preload result validation; two-phase opaque/hidden/applied-ACK behavior;
+same-host quarantine/playback cleanup; explicit view/native/window teardown;
+and renderer-only safe mode/geometry intent. Implement Classic playing-only PIP
+and Overlay/full-player modes without a fake/second surface, topmost/popup,
+renderer handle, capture, playback-policy change, Settings mutation, dependency,
+or new privilege. Do not implement 5D-0, proof bootstrap/capability, ACL
+inspection, local-file proof authority, proof scripts, or Windows evidence in
+this unit. Run the exact local Unit 5D command, protected Units 5A–5C suites,
+`npm run verify`, and `git diff --check`; then request independent implementation
+review. A local pass closes only the coding gate and authorizes Unit 5E; it does
+not close `EPG-10`, `UI-36`, `WS5-PROOF-04`, or WS5.
