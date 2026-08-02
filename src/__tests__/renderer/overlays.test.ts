@@ -4,6 +4,7 @@ import test from 'node:test';
 import type { PlayerSnapshot } from '../../contracts/player.js';
 import {
   appendChannelDigit,
+  closeAllPlayerOverlays,
   closeTopOverlay,
   createPlayerOverlayState,
   moveMiniGuide,
@@ -47,20 +48,23 @@ test('status projection exhaustively maps loading, native, seeking retention, an
   }
 });
 
-test('OSD refuses zero controls and focuses the one/two eligible controls', () => {
+test('OSD remains reachable for Sleep and follows Subtitles, Sleep, Audio focus order', () => {
   const base = createPlayerOverlayState();
-  assert.equal(openOsd(base, snapshot('playing')).activeOverlayId, null);
+  assert.equal(openOsd(base, { ...snapshot('ready'), requestId: null }).activeOverlayId, null);
+  const sleepOnly = openOsd(base, snapshot('playing'));
+  assert.equal(sleepOnly.activeOverlayId, 'playerOsd');
+  assert.equal(createPlayerOverlayView(sleepOnly, source(snapshot('playing'))).activeFocusId, 'overlay-osd-sleep');
 
   const audio = snapshot('playing', [track('a1', 'audio', true), track('a2', 'audio')]);
   const audioState = openOsd(base, audio);
-  assert.equal(createPlayerOverlayView(audioState, source(audio)).activeFocusId, 'overlay-osd-audio');
+  assert.equal(createPlayerOverlayView(audioState, source(audio)).activeFocusId, 'overlay-osd-sleep');
 
   const subtitle = snapshot('paused', [track('s1', 'subtitle')]);
   const subtitleState = openOsd(base, subtitle);
   assert.equal(createPlayerOverlayView(subtitleState, source(subtitle)).activeFocusId, 'overlay-osd-subtitles');
 
   const both = snapshot('ready', [track('a1', 'audio', true), track('a2', 'audio'), track('s1', 'subtitle')]);
-  assert.equal(createPlayerOverlayView(openOsd(base, both), source(both)).activeFocusId, 'overlay-osd-audio');
+  assert.equal(createPlayerOverlayView(openOsd(base, both), source(both)).activeFocusId, 'overlay-osd-subtitles');
 });
 
 test('Info requires a real current program, replaces lower owners, and refuses over options', () => {
@@ -70,6 +74,20 @@ test('Info requires a real current program, replaces lower owners, and refuses o
   assert.equal(openNowPlaying(mini, false, false), mini);
   const options = { ...mini, activeOverlayId: 'playbackOptions' as const };
   assert.equal(openNowPlaying(options, true, false), options);
+});
+
+test('overlay and route closure preserve the independent session sleep projection', () => {
+  const state = {
+    ...openOsd(createPlayerOverlayState(), snapshot('playing')),
+    sleepTimer: {
+      presetMinutes: 30 as const,
+      remainingMs: 1_200_000,
+      status: 'active' as const,
+      message: 'Sleep timer active',
+    },
+  };
+  assert.deepEqual(closeTopOverlay(state).sleepTimer, state.sleepTimer);
+  assert.deepEqual(closeAllPlayerOverlays(state).sleepTimer, state.sleepTimer);
 });
 
 test('mini-guide projects exactly five circular rows and page movement wraps', () => {

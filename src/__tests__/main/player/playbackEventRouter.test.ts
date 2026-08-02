@@ -52,6 +52,7 @@ function createRuntime(
           load: {
             media: { id: 'media-1', title: 'Episode 1' },
             policy: { autoplay: true },
+            seekSupport: 'supported',
           },
         };
       },

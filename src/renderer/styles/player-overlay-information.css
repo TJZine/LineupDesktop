@@ -83,6 +83,36 @@
   max-width: min(42vw, 620px);
 }
 
+.player-osd__sleep-action {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.player-osd__sleep-action strong {
+  color: var(--color-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.player-osd__sleep-action:focus-visible strong,
+.player-osd__sleep-action.is-focused strong {
+  color: currentColor;
+}
+
+.player-osd__sleep-status {
+  flex-basis: 100%;
+  min-height: 18px;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .player-osd__up-next {
   flex-basis: 100%;
   color: var(--color-text-muted);
@@ -241,6 +271,28 @@
   to { opacity: 1; transform: translateX(0); }
 }
 
+@media (max-width: 960px), (max-height: 720px) {
+  .player-osd__content-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .player-osd__content,
+  .player-osd__actions {
+    max-width: 100%;
+  }
+
+  .player-osd__actions {
+    justify-content: flex-start;
+  }
+
+  .player-osd__sleep-status,
+  .player-osd__up-next {
+    text-align: left;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .osd-overlay,
   .now-playing-overlay {
@@ -274,5 +326,20 @@
   .player-osd__bar-played,
   .overlay-progress::before {
     background: Highlight;
+  }
+
+  .player-osd__sleep-action strong,
+  .player-osd__sleep-status {
+    color: CanvasText;
+  }
+
+  .player-osd__sleep-action:focus-visible span,
+  .player-osd__sleep-action:focus-visible strong,
+  .player-osd__sleep-action.is-focused span,
+  .player-osd__sleep-action.is-focused strong {
+    forced-color-adjust: none;
+    background: transparent;
+    color: HighlightText;
+    -webkit-text-fill-color: HighlightText;
   }
 }

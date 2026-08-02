@@ -45,7 +45,20 @@ export type PlayerTrackDeliveryType =
   | 'burned-in'
   | 'unknown';
 
-export type PlayerCapabilitySupport = 'supported' | 'unsupported' | 'unknown' | 'unproven';
+export const PLAYER_CAPABILITY_SUPPORT_VALUES = [
+  'supported',
+  'unsupported',
+  'unknown',
+  'unproven',
+] as const;
+
+export type PlayerCapabilitySupport = (typeof PLAYER_CAPABILITY_SUPPORT_VALUES)[number];
+
+export function isPlayerCapabilitySupport(value: unknown): value is PlayerCapabilitySupport {
+  return typeof value === 'string' && PLAYER_CAPABILITY_SUPPORT_VALUES.includes(
+    value as PlayerCapabilitySupport,
+  );
+}
 
 export type PlayerSubtitleDeliveryMode =
   | 'embedded'
@@ -135,6 +148,7 @@ export interface PlayerLoadPolicy {
 export interface PlayerLoadCommandPayload {
   media: PlayerMediaSummary;
   policy: PlayerLoadPolicy;
+  seekSupport: PlayerCapabilitySupport;
   capabilityProfileId?: string;
 }
 
@@ -265,6 +279,7 @@ export interface PlayerSnapshot {
   status: PlayerStatus;
   media: PlayerMediaSummary | null;
   capabilityProfileId: string | null;
+  seekSupport: PlayerCapabilitySupport;
   positionMs: number;
   durationMs: number | null;
   bufferedRanges: readonly PlayerTimeRange[];
@@ -522,6 +537,7 @@ function isRendererSafePlayerSnapshot(value: unknown): value is PlayerSnapshot {
       'status',
       'media',
       'capabilityProfileId',
+      'seekSupport',
       'positionMs',
       'durationMs',
       'bufferedRanges',
@@ -540,6 +556,7 @@ function isRendererSafePlayerSnapshot(value: unknown): value is PlayerSnapshot {
     isStringInSet(value.status, PLAYER_STATUS_VALUES) &&
     (value.media === null || isRendererSafeMediaSummary(value.media)) &&
     (value.capabilityProfileId === null || isNonEmptyString(value.capabilityProfileId)) &&
+    isPlayerCapabilitySupport(value.seekSupport) &&
     isFiniteNonNegativeNumber(value.positionMs) &&
     isNullableFiniteNonNegativeNumber(value.durationMs) &&
     isRendererSafeTimeRanges(value.bufferedRanges) &&

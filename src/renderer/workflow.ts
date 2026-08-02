@@ -9,6 +9,7 @@ import {
   createEpgState,
   EMPTY_EPG_PRESENTATION_SOURCE,
   moveEpgSelection,
+  pageEpgSelection,
   selectEpgProgram,
   type EpgDirection,
   type EpgDirectionResult,
@@ -484,6 +485,17 @@ export function applyWorkflowEpgDirection(
   direction: EpgDirection,
 ): { workflowState: WorkflowState; result: EpgDirectionResult } {
   const result = moveEpgSelection(state.epg, direction, state.guidePresentation);
+  return {
+    workflowState: result.state === state.epg ? state : { ...state, epg: result.state },
+    result,
+  };
+}
+
+export function applyWorkflowEpgPage(
+  state: WorkflowState,
+  offset: -5 | 5,
+): { workflowState: WorkflowState; result: EpgDirectionResult } {
+  const result = pageEpgSelection(state.epg, offset, state.guidePresentation);
   return {
     workflowState: result.state === state.epg ? state : { ...state, epg: result.state },
     result,

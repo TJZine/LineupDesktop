@@ -84,6 +84,14 @@ export type ShellMode = (typeof SHELL_MODES)[number];
 export type ShellStatusValue = (typeof SHELL_STATUS_VALUES)[number];
 export type ShellErrorCode = (typeof SHELL_ERROR_CODES)[number];
 
+export const SHELL_MEDIA_INPUTS = [
+  'mediaPlay',
+  'mediaPause',
+  'mediaRewind',
+  'mediaFastForward',
+] as const;
+export type ShellMediaInput = (typeof SHELL_MEDIA_INPUTS)[number];
+
 export interface ShellCapabilities {
   appName: typeof LINEUP_APP_NAME;
   appVersion: string;
@@ -144,6 +152,7 @@ export interface LineupDesktopPreloadApi {
   shell: {
     getCapabilities: () => Promise<ShellIpcResult<ShellCapabilities>>;
     onStatusChanged: (listener: (event: ShellStatusEvent) => void) => () => void;
+    onMediaInput: (listener: (input: ShellMediaInput) => void) => () => void;
   };
   window: {
     setFullscreen: (

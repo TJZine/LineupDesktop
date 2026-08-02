@@ -21,6 +21,7 @@ import {
   LINEUP_PLEX_SELECT_SERVER_CHANNEL,
   LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL,
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
+  LINEUP_SHELL_MEDIA_INPUT_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
   LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
@@ -460,6 +461,7 @@ test('player command, event, and snapshot contracts carry request ids', () => {
         preferredAudioTrackId: 'audio-ui-1',
         preferredSubtitleTrackId: null,
       },
+      seekSupport: 'supported',
       capabilityProfileId: 'profile-contract-safe',
     },
   };
@@ -473,6 +475,7 @@ test('player command, event, and snapshot contracts carry request ids', () => {
     status: 'playing',
     media: loadCommand.payload.media,
     capabilityProfileId: 'profile-contract-safe',
+    seekSupport: 'supported',
     positionMs: 60_000,
     durationMs: 1_800_000,
     bufferedRanges: [{ startMs: 0, endMs: 120_000 }],
@@ -511,8 +514,10 @@ test('player renderer intents are closed and separate from shell window intents'
     'player.pause',
     'player.pauseIfCurrent',
     'player.stop',
+    'player.stopIfCurrent',
     'player.seekAbsolute',
     'player.seekRelative',
+    'player.seekRelativeIfCurrent',
     'player.setVolume',
     'player.setMute',
     'player.selectAudio',
@@ -527,6 +532,7 @@ test('player events make stale updates identifiable without engine state', () =>
     status: 'playing',
     media: { id: 'media-current', title: 'Current' },
     capabilityProfileId: 'profile-contract-safe',
+    seekSupport: 'supported',
     positionMs: 2_000,
     durationMs: null,
     bufferedRanges: [],
@@ -656,6 +662,7 @@ test('player error taxonomy and diagnostics stay renderer-safe', () => {
 
 test('shell IPC channel vocabulary uses the approved literals', () => {
   assert.equal(LINEUP_SHELL_GET_CAPABILITIES_CHANNEL, 'lineup:shell:getCapabilities');
+  assert.equal(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, 'lineup:shell:mediaInput');
   assert.equal(LINEUP_WINDOW_INTENT_CHANNEL, 'lineup:window:intent');
   assert.equal(LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, 'lineup:settings:getSnapshot');
   assert.equal(LINEUP_SETTINGS_REPLACE_CHANNEL, 'lineup:settings:replace');
@@ -854,6 +861,7 @@ test('preload API contract exposes shell, window, player, diagnostics, plex, and
   const shellKeys: Array<keyof LineupDesktopPreloadApi['shell']> = [
     'getCapabilities',
     'onStatusChanged',
+    'onMediaInput',
   ];
   const windowKeys: Array<keyof LineupDesktopPreloadApi['window']> = ['setFullscreen'];
   const playerKeys: Array<keyof LineupDesktopPreloadApi['player']> = [
@@ -892,7 +900,7 @@ test('preload API contract exposes shell, window, player, diagnostics, plex, and
   ];
 
   assert.deepEqual(apiKeys, ['shell', 'window', 'player', 'diagnostics', 'plex', 'channelSetup']);
-  assert.deepEqual(shellKeys, ['getCapabilities', 'onStatusChanged']);
+  assert.deepEqual(shellKeys, ['getCapabilities', 'onStatusChanged', 'onMediaInput']);
   assert.deepEqual(windowKeys, ['setFullscreen']);
   assert.deepEqual(playerKeys, ['dispatch', 'getSnapshot', 'cleanup', 'recover', 'onEvent']);
   assert.deepEqual(diagnosticsKeys, [
@@ -930,6 +938,7 @@ test('player IPC result and dispatch contracts stay renderer-safe', () => {
     status: 'playing',
     media: { id: 'media-1', title: 'Episode 1' },
     capabilityProfileId: 'profile-contract-safe',
+    seekSupport: 'supported',
     positionMs: 1,
     durationMs: null,
     bufferedRanges: [],
@@ -980,6 +989,7 @@ test('player event runtime guard rejects unsafe renderer-facing payloads', () =>
     status: 'playing',
     media: { id: 'media-1', title: 'Episode 1' },
     capabilityProfileId: 'profile-contract-safe',
+    seekSupport: 'supported',
     positionMs: 1,
     durationMs: null,
     bufferedRanges: [],
@@ -1003,6 +1013,25 @@ test('player event runtime guard rejects unsafe renderer-facing payloads', () =>
     }),
     true,
   );
+  for (const seekSupport of ['supported', 'unsupported', 'unknown', 'unproven'] as const) {
+    assert.equal(isRendererSafePlayerEvent({
+      event: 'state.changed',
+      requestId: 'player-request-1',
+      snapshot: { ...snapshot, seekSupport },
+    }), true);
+  }
+  const missingSeekSupport = { ...snapshot } as Record<string, unknown>;
+  delete missingSeekSupport.seekSupport;
+  assert.equal(isRendererSafePlayerEvent({
+    event: 'state.changed',
+    requestId: 'player-request-1',
+    snapshot: missingSeekSupport,
+  }), false);
+  assert.equal(isRendererSafePlayerEvent({
+    event: 'state.changed',
+    requestId: 'player-request-1',
+    snapshot: { ...snapshot, seekSupport: 'SUPPORTED' },
+  }), false);
   assert.equal(
     isRendererSafePlayerEvent({
       event: 'state.changed',

@@ -12,6 +12,7 @@ import {
   formatEpgTimeWindow,
   isEpgProgramPlayable,
   moveEpgSelection,
+  pageEpgSelection,
   normalizeEpgPresentation,
   setEpgPresentationState,
   updateEpgState,
@@ -125,6 +126,33 @@ test('directional navigation uses adjacent programs and nearest overlap on adjac
   assert.equal(down.state.selectedChannelId, 'channel/b');
   assert.equal(down.state.selectedProgramId, 'b-wide');
   assert.equal(moveEpgSelection(down.state, 'up', source).state.selectedProgramId, 'a-current');
+});
+
+test('Guide paging moves five eligible channel rows while preserving focused time overlap', () => {
+  const source: EpgPresentationSource = {
+    ...presentation(),
+    channels: Array.from({ length: 8 }, (_, index) => ({
+      id: `channel-${String(index)}`,
+      number: String(100 + index),
+      name: `Channel ${String(index)}`,
+      programs: [program(`program-${String(index)}`, 1, 3)],
+    })),
+    nowWatching: null,
+  };
+  const initial = {
+    ...createEpgState(source),
+    selectedChannelId: 'channel-1',
+    selectedProgramId: 'program-1',
+  };
+  const next = pageEpgSelection(initial, 5, source);
+  assert.equal(next.handled, true);
+  assert.equal(next.state.selectedChannelId, 'channel-6');
+  assert.equal(next.state.selectedProgramId, 'program-6');
+  const clamped = pageEpgSelection(next.state, 5, source);
+  assert.equal(clamped.handled, true);
+  assert.equal(clamped.state.selectedChannelId, 'channel-7');
+  assert.equal(clamped.state.selectedProgramId, 'program-7');
+  assert.equal(pageEpgSelection(next.state, -5, source).state.selectedChannelId, 'channel-1');
 });
 
 test('left and right edge navigation requests exactly one adjacent slot beyond bounded response extrema', () => {

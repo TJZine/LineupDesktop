@@ -8,9 +8,11 @@ import {
 } from '../../renderer/channelRuntimeState.js';
 import {
   applyWorkflowAction,
+  applyWorkflowEpgPage,
   createWorkflowState,
   getRouteWorkflowView,
 } from '../../renderer/workflow.js';
+import type { EpgPresentationSource } from '../../renderer/epg.js';
 import {
   createStagedSetupController,
   dispatchStagedSetupAction,
@@ -24,6 +26,46 @@ test('workflow starts on player and routes to Guide through renderer-local state
   const guide = applyWorkflowAction(initial, 'openGuide');
   assert.equal(getRouteWorkflowView(guide).route, 'guide');
   assert.equal(guide.routeState.previousRoute, 'player');
+});
+
+test('workflow keeps Guide page selection inside the EPG owner', () => {
+  const guidePresentation: EpgPresentationSource = {
+    channels: Array.from({ length: 6 }, (_, index) => ({
+      id: `channel-${String(index)}`,
+      number: String(index + 1),
+      name: `Channel ${String(index + 1)}`,
+      programs: [{
+        id: `program-${String(index)}`,
+        title: 'Program',
+        subtitle: '',
+        description: '',
+        showTitle: '',
+        episodeLabel: '',
+        rating: '',
+        quality: [],
+        genres: [],
+        startsAtMs: 0,
+        endsAtMs: 10_000,
+      }],
+    })),
+    nowWatching: null,
+    nowMs: 1,
+  };
+  const initial = createWorkflowState('guide', guidePresentation);
+  const paged = applyWorkflowEpgPage(initial, 5);
+  assert.equal(paged.result.handled, true);
+  assert.equal(paged.workflowState.epg.selectedChannelId, 'channel-5');
+});
+
+test('workflow preserves the exact Guide presentation while it remains non-ready', () => {
+  const guidePresentation: EpgPresentationSource = {
+    channels: [],
+    nowWatching: null,
+    nowMs: 1,
+  };
+  const initial = createWorkflowState('guide', guidePresentation);
+  assert.equal(initial.guidePresentation, guidePresentation);
+  assert.notEqual(initial.epg.presentationState, 'ready');
 });
 
 test('workflow projects persisted setup status without legacy commit availability', () => {

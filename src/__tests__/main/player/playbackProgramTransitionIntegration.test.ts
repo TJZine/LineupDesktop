@@ -181,6 +181,7 @@ test('completed helper cleanup can Retry only the canonical current program thro
               preferredAudioTrackId: null,
               preferredSubtitleTrackId: null,
             },
+            seekSupport: 'supported',
             capabilityProfileId: 'desktop-safe',
           },
           pmsSession: { id: `pms-${requestId}`, requestId },

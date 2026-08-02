@@ -69,6 +69,7 @@ function playingEvent(requestId = 'request-1'): PlayerEvent {
     status: 'playing',
     media: { id: 'media-1', title: 'Episode 1' },
     capabilityProfileId: 'desktop-test',
+    seekSupport: 'supported',
     positionMs: 0,
     durationMs: 60_000,
     bufferedRanges: [],

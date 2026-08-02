@@ -4,6 +4,7 @@ import type {
   PlayerRecoveryAction,
 } from '../contracts/shell.js';
 import type { PlayerOverlayState } from './overlays.js';
+import { toRendererSafeFailureMessage } from './rendererSafeFailureMessage.js';
 
 export interface PlayerErrorRecoveryTimerHost {
   setTimeout(callback: () => void, delayMs: number): number;
@@ -85,7 +86,7 @@ export function createPlayerErrorRecoveryController(
       retryPending: false,
       recoveryPendingAction: null,
       retryTransitionActive: false,
-      retryError: safeMessage(message),
+      retryError: toRendererSafeFailureMessage(message, 'Player recovery failed.'),
     }));
     options.focus(
       action === 'retry-current'
@@ -175,22 +176,6 @@ export function createPlayerErrorRecoveryController(
       disposed = true;
     },
   };
-}
-
-function safeMessage(message: string): string {
-  const compact = message
-    .replace(/\p{Cc}/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim();
-  if (
-    compact.length === 0 ||
-    /(?:https?:\/\/|token|credential|secret|header|\\\\|\/Users\/|[A-Za-z]:\\)/iu.test(
-      compact,
-    )
-  ) {
-    return 'Player recovery failed.';
-  }
-  return compact.slice(0, 180);
 }
 
 function nextGeneration(current: number): number {

@@ -45,8 +45,13 @@ export const PLAYER_OVERLAY_MARKUP = `
         </div>
       </div>
       <div class="player-osd__actions">
-        <button type="button" data-overlay-action="openAudioOptions" data-focus-id="overlay-osd-audio">Audio</button>
         <button type="button" data-overlay-action="openSubtitleOptions" data-focus-id="overlay-osd-subtitles">Subtitles</button>
+        <button type="button" class="player-osd__sleep-action" data-overlay-action="cycleSleepTimer" data-focus-id="overlay-osd-sleep" aria-label="Sleep timer, Off">
+          <span>Sleep</span>
+          <strong data-osd-sleep>Off</strong>
+        </button>
+        <button type="button" data-overlay-action="openAudioOptions" data-focus-id="overlay-osd-audio">Audio</button>
+        <div class="player-osd__sleep-status" data-osd-sleep-status role="status" aria-live="polite"></div>
         <div class="player-osd__up-next" data-osd-up-next></div>
       </div>
     </div>
@@ -123,12 +128,14 @@ export function renderPlayerOverlaysDom(
     button.disabled = !isPlayerRoute ||
       (action === 'openAudioOptions' && !view.playerOsd.audioEligible) ||
       (action === 'openSubtitleOptions' && !view.playerOsd.subtitleEligible) ||
+      (action === 'cycleSleepTimer' && !view.playerOsd.sleepEligible) ||
       (action === 'retryPlayer' && !view.retryVisible) ||
       (action === 'skipPlayer' && !view.skipVisible);
     button.hidden = (action === 'retryPlayer' && !view.retryVisible) ||
       (action === 'skipPlayer' && !view.skipVisible) ||
       (action === 'openAudioOptions' && !view.playerOsd.audioEligible) ||
       (action === 'openSubtitleOptions' && !view.playerOsd.subtitleEligible);
+    if (action === 'cycleSleepTimer') button.hidden = false;
   }
   if (dom.overlayPlayerRetryButton) projectBusyFocusCustody(dom.overlayPlayerRetryButton, view.retryBusy);
   if (dom.overlayPlayerSkipButton) projectBusyFocusCustody(dom.overlayPlayerSkipButton, view.skipBusy);
@@ -208,6 +215,9 @@ function setOsdContent(
   setElementText(dom.osdSubtitleElement, view.playerOsd.subtitle ?? '');
   setElementText(dom.osdAudioElement, view.playerOsd.audioLabel === undefined ? '' : `Audio: ${view.playerOsd.audioLabel}`);
   setElementText(dom.osdSubtitlesElement, view.playerOsd.subtitleLabel === undefined ? '' : `Subs: ${view.playerOsd.subtitleLabel}`);
+  setElementText(dom.osdSleepElement, view.playerOsd.sleepLabel);
+  setElementText(dom.osdSleepStatusElement, view.playerOsd.sleepStatus);
+  dom.osdSleepButton?.setAttribute('aria-label', view.playerOsd.sleepAccessibleLabel);
   setElementText(dom.osdUpNextElement, view.nowPlaying.upNextText ?? '');
   setElementText(dom.osdTimecodeElement, view.playerOsd.timecode);
   setElementText(dom.osdEndsAtElement, '');

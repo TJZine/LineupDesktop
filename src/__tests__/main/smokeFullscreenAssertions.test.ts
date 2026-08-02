@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { runInNewContext } from 'node:vm';
 
 import {
+  RENDERER_CLOSE_LIFECYCLE_SCRIPT,
   waitForFullscreenState,
   type FullscreenObservationScheduler,
   type FullscreenObservationWindow,
@@ -119,6 +121,45 @@ test('fullscreen deadline reconciles a valid transition after the last interval 
 
   assert.equal(await observation, true);
   assertClean(window, scheduler);
+});
+
+test('renderer close lifecycle releases Escape and invokes the visible confirmation', async () => {
+  const events: Array<{ type: string; key: string }> = [];
+  let clicked = 0;
+  class FakeElement {
+    readonly dataset: Record<string, string> = {};
+  }
+  class FakeButton extends FakeElement {
+    closest(): null { return null; }
+    click(): void { clicked += 1; }
+  }
+  class FakeKeyboardEvent {
+    constructor(readonly type: string, readonly init: { key: string }) {}
+  }
+  const confirm = new FakeButton();
+  const result = await runInNewContext(RENDERER_CLOSE_LIFECYCLE_SCRIPT, {
+    window: {
+      dispatchEvent: (event: FakeKeyboardEvent) => {
+        events.push({ type: event.type, key: event.init.key });
+      },
+    },
+    document: {
+      querySelector: () => confirm,
+      documentElement: { dataset: {} },
+      activeElement: null,
+    },
+    KeyboardEvent: FakeKeyboardEvent,
+    HTMLButtonElement: FakeButton,
+    HTMLElement: FakeElement,
+    setTimeout: (callback: () => void) => { callback(); },
+  }) as { invoked: boolean };
+
+  assert.deepEqual(events, [
+    { type: 'keydown', key: 'Escape' },
+    { type: 'keyup', key: 'Escape' },
+  ]);
+  assert.equal(clicked, 1);
+  assert.equal(result.invoked, true);
 });
 
 function assertClean(window: FakeFullscreenWindow, scheduler: FakeScheduler): void {

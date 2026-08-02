@@ -2,6 +2,7 @@ import { clearTimeout, setTimeout } from 'node:timers';
 
 import {
   hasPlayerForbiddenPrivilegedField,
+  isPlayerCapabilitySupport,
   type PlayerError,
   type PlayerCommand,
   type PlayerEvent,
@@ -670,10 +671,11 @@ function isSafeLoadPayload(value: unknown): value is PlayerLoadCommandPayload {
     return false;
   }
   return (
-    hasOnlyKeys(value, ['media', 'policy'], ['capabilityProfileId']) &&
+    hasOnlyKeys(value, ['media', 'policy', 'seekSupport'], ['capabilityProfileId']) &&
     isSafeMediaSummary(value.media) &&
     isSafeLoadPolicy(value.policy) &&
-    (value.capabilityProfileId === undefined || isNonEmptyString(value.capabilityProfileId))
+    (value.capabilityProfileId === undefined || isNonEmptyString(value.capabilityProfileId)) &&
+    isPlayerCapabilitySupport(value.seekSupport)
   );
 }
 function isSafeMediaSummary(value: unknown): value is PlayerMediaSummary {

@@ -7,8 +7,10 @@ export type RendererIntent =
   | 'player.pause'
   | 'player.pauseIfCurrent'
   | 'player.stop'
+  | 'player.stopIfCurrent'
   | 'player.seekAbsolute'
   | 'player.seekRelative'
+  | 'player.seekRelativeIfCurrent'
   | 'player.setVolume'
   | 'player.setMute'
   | 'player.selectAudio'
@@ -28,8 +30,10 @@ export const PLAYER_RENDERER_INTENTS = [
   'player.pause',
   'player.pauseIfCurrent',
   'player.stop',
+  'player.stopIfCurrent',
   'player.seekAbsolute',
   'player.seekRelative',
+  'player.seekRelativeIfCurrent',
   'player.setVolume',
   'player.setMute',
   'player.selectAudio',
@@ -65,6 +69,9 @@ export const LINEUP_WINDOW_INTENT_CHANNEL = 'lineup:window:intent' as const;
 
 export const LINEUP_SHELL_STATUS_CHANGED_CHANNEL =
   'lineup:shell:statusChanged' as const;
+
+export const LINEUP_SHELL_MEDIA_INPUT_CHANNEL =
+  'lineup:shell:mediaInput' as const;
 
 export const LINEUP_PLAYER_COMMAND_CHANNEL = 'lineup:player:command' as const;
 

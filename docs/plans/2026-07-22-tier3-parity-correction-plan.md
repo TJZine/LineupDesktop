@@ -3854,9 +3854,9 @@ review, and landed at `87662b5`
 (`fix(settings): keep enabled detail controls reachable`). `87662b5` is the
 final WS3 product source; `5f368d4` is the prior Unit 3C-D checkpoint,
 `77d09ad` is the earlier viewport repair, and `f0e2817` remains test-only
-harness proof. WS4 targeted scope-load/planning is active. No WS4
-product/test/package/config edit is authorized until its own decision-complete
-plan receives fresh approval for an exact first unit.
+harness proof. At this historical WS3 closeout checkpoint, WS4 targeted
+scope-load/planning was next and its product edits remained gated; the later
+Whole-WS4 section and 2026-08-01 closeout now supersede that execution status.
 
 **WS3 task family:** feature/design.
 
@@ -6221,8 +6221,9 @@ and explicitly approved the checkpoint. Focused 7/7, harness/docs 181/181,
 full `npm run verify`, and diff check passed. `f0e2817` remains test-only
 harness proof. Later Unit 3C-D checkpoint `5f368d4` is the final product
 source before Unit 3C-F. Accepted `87662b5` is now the final product source.
-Unit 3D authority closeout is accepted; WS4 targeted scope-load/planning is
-active.
+Unit 3D authority closeout is accepted. The following WS4 handoff records the
+historical state at WS3 closeout and is superseded by the later Whole-WS4
+section and 2026-08-01 local closeout.
 
 #### WS3 authority classification and targeted WS4 handoff
 
@@ -6417,3 +6418,1404 @@ for the final consolidated campaign. Do not begin WS5–WS9 product work inside
 WS4. End by keeping this canonical plan active and issuing a complete WS5
 feature-quality-loop handoff under the same targeted-audit and
 consolidated-proof policy.
+
+### Whole-WS4 Input And Overlay execution plan (2026-08-01)
+
+**WS4 plan state:** the local implementation gate is complete and the canonical
+plan remains active for later workstreams and consolidated proof. Accepted
+checkpoints are Unit 4A `f4570df`, Unit 4B `a78228b`, Unit 4C `a654cdd`, the
+synthetic Escape smoke-harness correction `c4dadcf`, and Unit 4D `3258511`.
+The controller observed final production-build local proof passing 36/36
+viewport, interaction, reduced-motion, and forced-colors scenarios and visually
+accepted hierarchy, clipping, focus, contrast, countdown, and modal precedence.
+Final `npm run verify` passed 1,110 tests with one intentional skip; harness/docs
+passed 177/177 and all required typecheck, build, smoke, architecture,
+maintainability, redaction, docs, and diff gates passed. This closes local
+implementation only. `WS4-PROOF-01` through `WS4-PROOF-04` retain every
+Windows-machine, physical-device, production-native, operator-assisted, live,
+paired-visual, and package-lifecycle obligation without promoting support.
+
+**WS4 task family:** feature/design.
+
+**WS4 tier:** Tier 3.
+
+**WS4 execution posture:** execute Units 4A through 4E serially. The units share
+renderer input, navigation, overlay, focus, and composition proof, so no product
+parallelism is approved. At each dispatch the controller resolves the selected
+implementation role from `.codex/config.toml`; `worker_luna` is the default
+when the reviewed unit remains settled, while material cross-boundary diagnosis
+or proof interpretation may justify `worker`. Product behavior, ownership,
+public-contract, architecture, or proof-depth uncertainty returns to planning.
+
+#### WS4 Goal
+
+Complete the local implementation and local regression gate for exactly these
+35 WS4 registry rows:
+
+- `PB-09`, `PB-10`, `PB-11`, `PB-15`–`PB-18`, and `PB-25`;
+- `NAV-01`–`NAV-16`;
+- `WIN-03` and `WIN-09`; and
+- `UI-44`–`UI-52`.
+
+The user journey is one coherent foreground-input and Player-overlay path:
+keyboard, remote-like, gamepad, pointer, and focused Windows app-command input
+route through one precedence policy; current guarded play/pause plus the narrow
+guarded stop/relative-seek additions perform renderer-safe direct commands;
+topmost Back and long-Back remain deterministic; and the OSD gains an upstream-
+shaped sleep action with preset, countdown, cancel, expiry, focus, and cleanup
+behavior. Existing overlay, navigation, exit, viewport, motion, contrast, and
+mixed-input behavior receives fresh local regression proof. Unavailable
+Windows/native/manual/live/paired or package evidence is recorded, never
+inferred.
+
+#### WS4 Targeted Evidence And Freshness
+
+- Controller preflight reconciled `initial-build` with its tracked remote at
+  clean baseline `f933658`; `git status --short --branch` showed no pre-existing
+  changes, and handoff authorities `6172efc` and `7506bb1` are ancestors of the
+  branch. This planner re-observed `f933658`, branch `initial-build`, and the
+  clean status before editing this plan.
+- Codanna was not invoked. The accepted registry, handoff, architecture docs,
+  and exact current owners already named a smaller search surface, so targeted
+  `rg`, direct reads, file line counts, and path-limited history were the less
+  noisy discovery route. A future unit uses Codanna only if a current indexed
+  symbol or impact query would resolve an actual ambiguity.
+- The exact matrix rows were freshness-read. The accepted split is five missing
+  implementation targets (`PB-25`, `NAV-05`, `NAV-08`, `WIN-03`, `UI-51`),
+  eleven partial corrections (`PB-09`–`PB-11`, `NAV-02`–`NAV-04`, `NAV-06`,
+  `NAV-07`, `WIN-09`, `UI-44`, `UI-47`), and nineteen implemented/additive rows
+  whose remaining obligation is local regression or platform/visual proof
+  (`PB-15`–`PB-18`, `NAV-01`, `NAV-09`–`NAV-16`, `UI-45`, `UI-46`,
+  `UI-48`–`UI-50`, `UI-52`). Classification is not closure.
+- The WS3 cross-workstream classification and consolidated-proof packet were
+  freshness-read. `PB-22`–`PB-24` stay WS2-owned/open;
+  `WS3-PROOF-01`–`WS3-PROOF-06`, `WS3-CONTRIBUTION-WS5`, and
+  `WS3-CONTRIBUTION-WS8` remain open. WS4 neither reclassifies those rows nor
+  duplicates their native/live scenarios.
+- `CURRENT_STATE.md`, `renderer-architecture.md`,
+  `playback-architecture.md`, `desktop-port-roadmap.md`,
+  `windows-ui-proof-plan.md`, and `file-shape-guardrails.md` confirm the current
+  seams: renderer owns input/focus/route/overlay presentation and timers; main
+  owns the focused BrowserWindow app-command controller and authoritative
+  player state; existing player contracts expose player intents but the safe
+  snapshot exposes only `capabilityProfileId`, and only guarded play/pause
+  mapping currently supplies `expectedSnapshotRequestId` to the adapter's
+  generic pre-custody identity check. Existing stop and relative-seek mapping
+  can therefore mutate a replacement request. Preload remains a narrow
+  validated bridge, and the Package 6 three-row Windows proof stays mandatory.
+- Current source/test reads covered `desktopInput.ts`, `navigation.ts`,
+  `shell/navigationLifecycle.ts`, `epg.ts`, `workflow.ts`,
+  `playerOverlayController.ts`, `overlays.ts`, `playerOverlayDom.ts`,
+  `playerOverlayPresentation.ts`, `focusDom.ts`, `rendererActionRegistration.ts`,
+  `index.ts`, `shellAppCommandController.ts`, `rendererIntentMapping.ts`,
+  `desktopPlayerAdapter.ts`, `playerAdapterValidation.ts`,
+  `playerAdapterSnapshot.ts`, `playbackRuntimeBootstrap.ts`,
+  `streamPolicy/types.ts`, `plexPlaybackRuntime.ts`, `streamResolver.ts`,
+  player IPC/recovery inert snapshots, `contracts/player.ts`,
+  `contracts/ipc.ts`, both preload snapshot/intent guards, and their focused
+  contract/main/preload/renderer tests. The smallest correction is an atomic
+  safe-contract addition inside Unit 4A; no helper, native protocol,
+  persistence, diagnostics, package, or dependency gap was found.
+- Reference-only upstream reads used exact commit `0258dbe`, not the upstream
+  worktree head: `docs/user-guide/remote-keys.md`, platform key mapping,
+  navigation key-mode/long-Back behavior, EPG and mini-guide paging,
+  `SleepTimerManager`, sleep presets, and Player OSD sleep presentation. The
+  frozen semantics below use those observations without copying or adapting
+  source text.
+- Upstream `0258dbe` establishes a 500 ms long-Back threshold, Page Up/Down
+  paging by five visible channels, a 10-second default relative seek,
+  sleep presets `15`, `30`, `60`, `120`, then Off, one-minute warning/countdown,
+  and pause-on-expiry. Its OSD has Subtitles, Sleep, and Audio actions but no
+  separate play/pause, seek, or stop buttons.
+- Electron's installed type authority documents BrowserWindow `app-command` as
+  Windows/Linux media-key or browser-command input and confirms normalized
+  lower-case command strings. Existing source tests already reserve
+  `media-play-pause`, `media-nexttrack`, and `media-previoustrack` as unhandled
+  future behavior; WS4 changes only the reviewed foreground media commands
+  named below.
+
+#### WS4 Non-Goals
+
+- Do not begin WS5 Guide product behavior, WS6 Custom Channels, WS7 broad fresh
+  UI comparison, WS8 credentials/lifecycle, WS9 packaging/soak, RD-27, or RD-28
+  implementation. WS4 may add only the bounded Page Up/Down input contribution
+  to the existing Guide state owner.
+- Do not change the stable registry or repeat the 227-row audit. Unit 4E
+  reconciles only WS4's 35 rows and directly affected contribution/proof gates.
+- Do not add play/pause, rewind, fast-forward, or stop buttons to the OSD.
+  Their parity owner is direct keyboard/remote/media input. Only the upstream
+  Sleep action is added to the OSD action strip.
+- Do not add `globalShortcut`, renderer Media Session/SMTC ownership, background
+  media interception, a second BrowserWindow input owner, raw OS command
+  payloads, or a broad main-to-renderer event/RPC bridge. Foreground app-command
+  input is accepted only for the focused shell window.
+- Outside revised Unit 4A's exact guarded-intent and seek-support projection,
+  do not add or change player, IPC, preload, helper, native protocol, settings,
+  persistence, Plex, diagnostics, package, dependency, lockfile, or public
+  schema. Unit 4A adds no IPC channel or preload method and exposes no profile,
+  native, Plex, or privileged value.
+- Do not make `media-nexttrack` or `media-previoustrack` mean seek or channel
+  change. They remain unhandled because next/previous-track semantics are not
+  the reviewed WS4 behavior.
+- Do not promote production playback, seek, native-video, input-device, SMTC,
+  packaging, or platform support from local tests, synthetic Electron input,
+  dev/smoke fixtures, or local captures.
+- Do not modify WS1–WS3 product implementation or erase WS1 proof/performance
+  debt, `WS2-POST-VALIDATION-01`, WS3 proof/contribution debt, conservative
+  playback capabilities, later-workstream gates, RD-27, or RD-28.
+- Do not copy or adapt upstream source, CSS, tests, or assets. The planned
+  implementation is independent against observed behavior, so the import
+  ledger remains unchanged. A later need to copy/adapt is a reviewed replan and
+  requires an import-ledger entry before or with the import.
+
+#### WS4 Architecture And Invariants
+
+1. **Renderer input seam.** `desktopInput.ts` remains the renderer-owned
+   keyboard/gamepad mapping and press/repeat/cleanup owner.
+   `shell/navigationLifecycle.ts` remains the top-level precedence and route
+   dispatcher. It may consume current renderer-safe Plex/auth projection only
+   to choose the existing server-selection or sign-in recovery journey; it may
+   not contact Plex or own authentication state.
+2. **Direct player-command seam.** Unit 4A extracts the current Space-command
+   lifecycle plus the new direct play/pause/seek/stop behavior from the
+   818-line `playerOverlayController.ts` into one focused renderer owner,
+   `playerInputCommandController.ts`. That owner has one present responsibility:
+   validate renderer-safe snapshot eligibility, serialize one pending direct
+   command, dispatch current-request-bound player intents, correlate
+   settlement/timeout, emit safe diagnostics, and clean up. Play/pause keep
+   using `player.playIfCurrent`/`player.pauseIfCurrent`; stop and relative seek
+   use the new `player.stopIfCurrent`/`player.seekRelativeIfCurrent` literals.
+   The controller must never dispatch the existing unguarded stop or relative-
+   seek literals. It owns no overlay DOM, main state, capability promotion, or
+   playback setup.
+3. **Player and privilege seam.** Main remains authoritative for player state,
+   request custody, player command validation, native/helper dispatch, Plex
+   cleanup, and diagnostics. Unit 4A adds exactly two guarded literals to the
+   closed renderer-intent vocabulary. Their main validator accepts only exact
+   payloads: stop `{ snapshotRequestId }` and relative seek
+   `{ snapshotRequestId, deltaMs }`, with non-empty opaque identity and finite
+   delta. Mapping strips `snapshotRequestId`, returns it only as
+   `expectedSnapshotRequestId`, and reuses the adapter's existing comparison
+   before request custody and host execution. A mismatch yields the current
+   renderer-safe stale-request failure, creates no pending custody, mutates no
+   snapshot, and executes no host command. Renderer direct input sees only safe
+   snapshots and existing bridge results. No native handle, raw URL, header,
+   token, Plex payload, helper output, Electron object, or raw platform command
+   crosses to renderer state.
+4. **Foreground Windows command seam.** `shellAppCommandController.ts` remains
+   the sole app-command owner. It may translate only reviewed recognized
+   foreground commands into synthetic key down/up pairs for the existing
+   renderer input path. Media commands are consumed only when the shell window
+   and web contents are live and the window is focused; unfocused, destroyed,
+   unknown, next-track, and previous-track commands are not forwarded and are
+   not stolen from another application. No `globalShortcut` is allowed.
+5. **Focus and overlay seam.** Existing shell/bootstrap/error/profile/exit
+   precedence remains above route/player input. Existing playback options,
+   now-playing, mini-guide, OSD, badge/number/transition, loading, and error
+   precedence remains unchanged except for the explicit Sleep action within
+   OSD. Hidden/inert owners never retain active focus. Pointer click and OK/Enter
+   invoke the same visible enabled action.
+6. **Long-Back seam.** The renderer input runtime observes Back/Escape/
+   BrowserBack and gamepad Back press lifecycle. Initial Back keeps the current
+   short-press behavior; one 500 ms hold event then closes non-protected
+   overlays/modals and returns to the Player with no stale semantic focus. A
+   protected bootstrap/error/profile-PIN owner consumes the hold without route
+   escape. Keyup, disconnect, blur/unload, and cleanup cancel pending hold state;
+   repeats never fire a second long-Back.
+7. **Sleep-timer seam.** Unit 4D creates one renderer-owned
+   `sleepTimerController.ts` because preset/deadline/tick/warning/expiry/cleanup
+   is a distinct lifecycle and must not grow `playerOverlayController.ts` or
+   `index.ts`. It owns no persistence and survives OSD hide and route changes
+   during the current app session. Presets cycle `15 -> 30 -> 60 -> 120 -> Off`;
+   Off cancels; the displayed countdown is deadline-derived, never decremented
+   state drift; warning occurs once in the last minute; cleanup cancels all
+   timers. Expiry uses existing `player.pauseIfCurrent` against the current
+   renderer-safe snapshot request id, matching upstream pause behavior and
+   preventing stale-request mutation. Failure produces bounded safe UI/
+   diagnostic feedback with no retry and no privilege expansion.
+8. **Guide/channel context.** Page Up means previous and Page Down next. On
+   Player with no blocking modal they tune the previous/next current channel;
+   in Mini Guide they move five circular channel rows; in Guide they move five
+   eligible channel rows while preserving the focused time; playback options,
+   now-playing, protected shell/profile owners, and nonapplicable routes suppress
+   background channel paging. Guide paging changes only selection/input state,
+   not Guide layout, data, virtualization, settings consumption, or WS5 row
+   ownership.
+9. **Direct-key behavior.** The accepted local semantics are:
+
+   | Input | Accepted behavior |
+   | --- | --- |
+   | F1 / Red-equivalent | Toggle Now Playing on Player when current program and precedence permit; it no longer shares the Info action. |
+   | `G` / F2 / Guide-equivalent | Enter or toggle the current Guide route through existing route/focus memory; protected owners suppress it. |
+   | `S`, `,`, or F3 / Yellow-equivalent | Enter current Settings through existing route/focus memory; protected owners suppress it. |
+   | `I` or F4 / Blue-equivalent | Use current renderer-safe auth state: open existing server selection for an authenticated session, otherwise open existing sign-in recovery. It does not open Now Playing. |
+   | Space | Preserve Player-route toggle behavior only; it is not a global text-entry shortcut. |
+   | Media Play, Pause, or Play/Pause | Dispatch the matching existing command (or snapshot-derived toggle) while the app is foreground and shell precedence permits, without changing semantic focus. |
+   | Media Rewind / Fast Forward | Dispatch one `player.seekRelativeIfCurrent` with the current snapshot request id and exactly `-10_000` / `10_000` ms only when `seekSupport` is exactly `supported`; `unsupported`, `unknown`, and `unproven` are inert. |
+   | Media Stop | Dispatch `player.stopIfCurrent` with the current snapshot request id only for a current non-idle, nondestroyed playback request. |
+   | Page Up / Page Down | Apply the context routing in invariant 8. |
+
+   Mapped keyboard input still bypasses `input`, `textarea`, `select`,
+   contenteditable, and textbox/searchbox/combobox/spinbutton roles. Media keys
+   do not create focus, open the OSD off Player, or expose a stale failure after
+   their owner is cleaned up. On Player, accepted commands may refresh existing
+   OSD status/timing without adding new control buttons.
+10. **Accessibility and presentation.** OSD action order is Subtitles, Sleep,
+    Audio when those actions are eligible; Sleep remains independently eligible
+    for ready/playing/paused playback so OSD is reachable even when audio and
+    subtitle switching are unavailable. The Sleep button has a stable accessible
+    name and visible Off/preset/countdown/status text. Timer updates do not steal
+    focus, restart decorative motion, or announce every second as an assertive
+    live region. Existing reduced-motion, forced-colors, exact viewport,
+    responsive, fullscreen-continuity, and cursor rules remain binding.
+11. **Capability and contribution integrity.** `UI-47` remains functionally
+    partial while WS2-owned `PB-19`–`PB-24` capability/native proof is open.
+    WS4 proves only options-overlay precedence/focus/input regression and does
+    not promote audio, subtitle, HDR, Direct Stream, or transcode support.
+    F2/Guide and Settings/server-selection shortcuts contribute input routing
+    only; they do not close WS5 or WS8 rows.
+12. **Seek-support projection.** Add required
+    `seekSupport: PlayerCapabilitySupport` to the renderer-safe
+    `PlayerLoadCommandPayload` and `PlayerSnapshot`. Extend the existing
+    main-owned `DesktopStreamCapabilityProfile` with required `seek`; current
+    development, production-conservative, desktop-policy, and Windows-native
+    profiles set it to `supported`, consistent with the existing main/helper
+    seek command and RD-07 capability fact. The Plex resolver and smoke fake
+    resolver copy only that enum into the safe load payload; the adapter copies
+    it into the active snapshot. Idle/inert/recovery fallback snapshots use
+    `unknown`. Strict contract, preload, runtime, and recovery guards accept
+    only `supported | unsupported | unknown | unproven`; missing, extra, or
+    invalid values fail closed. Renderer behavior permits seeking only for
+    exact `supported`. This projection neither exposes the profile nor promotes
+    container, codec, track, HDR, direct-stream, transcode, native-video, or
+    Windows proof claims.
+13. **Compatibility and migration posture.** The guarded intent literals are
+    additive; existing unguarded `player.stop` and `player.seekRelative` remain
+    unchanged for current trusted/runtime and test callers, but receive no new
+    renderer direct-input use. `seekSupport` is required rather than optional:
+    main, preload, renderer fallbacks, smoke fixtures, and tests change in the
+    same build, so a missing field is a boundary failure rather than a silent
+    compatibility default. Player IPC state is ephemeral and no persisted
+    record, storage version, migration, dual-read, alias, or compatibility shim
+    is needed. Old compiled output is replaced by the normal Electron build.
+14. **Source and process discipline.** No dependency, IPC channel, preload
+    method, helper/native protocol, persistence schema, import, compatibility
+    shim, broad helper, one-implementation interface, or old upstream path
+    mirror is planned. `index.ts` remains composition wiring. Units commit
+    independently, are buildable and reversible, and receive a fresh
+    material-only implementation review before checkpoint acceptance.
+
+##### WS4 Local-Closure Classification
+
+| Classification after WS4 local closeout | Rows |
+| --- | --- |
+| Missing/partial implementation corrected locally, then eligible for WS4 authority reconciliation while platform proof stays open where named | `PB-09`–`PB-11`, `PB-25`, `NAV-02`–`NAV-08`, `UI-51` |
+| Foreground Windows integration contribution implemented locally but row remains Windows/mixed-device proof-open | `WIN-03`, `WIN-09` |
+| Existing behavior retained and freshly regression-proved locally; current-upstream/Windows/native/manual/package evidence remains consolidated debt | `PB-15`–`PB-18`, `NAV-01`, `NAV-09`–`NAV-16`, `UI-44`–`UI-50`, `UI-52` |
+| Cross-workstream capability rows explicitly unchanged | `UI-47` stays partial through WS2-owned/open `PB-19`–`PB-24`; `LC-02` stays WS8-owned despite `UI-52` close-window regression proof |
+
+This is an execution-acceptance classification, not permission to claim any
+stable ID program-complete. Unit 4E owns the only WS4 matrix/authority update.
+
+#### WS4 Files In Scope
+
+The union below is the maximum WS4 owner/write boundary. Each unit has a
+smaller boundary. Exact production files are frozen for composition roots,
+hotspots, and sensitive main/player surfaces; affected focused test files may
+be discovered inside the named test owners. Any other production owner requires
+replan.
+
+- Renderer input/navigation: `src/renderer/navigation.ts`,
+  `src/renderer/desktopInput.ts`, `src/renderer/shell/navigationLifecycle.ts`,
+  the new `src/renderer/playerInputCommandController.ts`,
+  `src/renderer/epg.ts`, and `src/renderer/workflow.ts`.
+- Renderer overlay/timer presentation: the new
+  `src/renderer/sleepTimerController.ts`, `src/renderer/overlays.ts`,
+  `src/renderer/overlayViewModels.ts`, `src/renderer/playerOverlayController.ts`,
+  `src/renderer/playerOverlayDom.ts`, `src/renderer/playerOverlayPresentation.ts`,
+  `src/renderer/domBindings.ts`, `src/renderer/rendererActionRegistration.ts`,
+  and only the existing `src/renderer/styles/player-overlays.css`,
+  `src/renderer/styles/player-overlay-information.css`, or
+  `src/renderer/styles/player-overlay-menus.css` rules required by the reviewed
+  Sleep/OSD surface.
+- Sensitive renderer composition: exactly `src/renderer/index.ts`; wiring and
+  lifecycle injection only, with no new product policy.
+- Main foreground command owner: exactly
+  `src/main/window/shellAppCommandController.ts`.
+- Unit 4A safe player contract and preload boundary: exactly
+  `src/contracts/ipc.ts`, `src/contracts/player.ts`,
+  `src/preload/index.cts`, and `src/preload/playerRecoveryBridge.cts`.
+- Unit 4A main-owned guarded-command and seek-projection path: exactly
+  `src/main/player/rendererIntentMapping.ts`,
+  `src/main/player/desktopPlayerAdapter.ts`,
+  `src/main/player/playerAdapterValidation.ts`,
+  `src/main/player/playerAdapterSnapshot.ts`,
+  `src/main/player/streamPolicy/types.ts`,
+  `src/main/player/playbackRuntimeBootstrap.ts`,
+  `src/main/player/plexPlaybackRuntime.ts`, `src/main/player/playerIpc.ts`,
+  `src/main/player/playerRecoveryIpc.ts`, `src/main/plex/streamResolver.ts`, and
+  `src/main/smokeAssertions.ts`. These files may change only for the two
+  guarded mappings, required safe seek enum, its strict validation/projection,
+  and required inert/smoke snapshot/load literals; no host command, native
+  protocol, Plex private descriptor, diagnostic, recovery behavior, or stream-
+  decision policy change is allowed.
+- Unit 4A renderer safe-snapshot fallback: exactly
+  `src/renderer/playerOverlayPresentation.ts`, adding only the required inert
+  `seekSupport: 'unknown'` field; presentation policy remains no-touch.
+- Unit 4A diagnostics-owned safe-snapshot fallback: exactly
+  `src/main/diagnostics/supportBundleExporter.ts`, adding only required
+  `seekSupport: 'unknown'` to `createInertPlayerSnapshot()`. No exporter,
+  provider, sanitization, serialization, manifest, filesystem, redaction, or
+  diagnostics policy behavior may change.
+- Focus owner only if fresh Unit 4D evidence proves the existing DOM-order
+  registration cannot express the reviewed Subtitles/Sleep/Audio graph:
+  exactly `src/renderer/focusDom.ts`. Otherwise it is no-touch.
+- Focused renderer tests under `src/__tests__/renderer/**` only for the owners
+  above, including a new direct-input command test and new sleep-timer test;
+  exactly `src/__tests__/main/shellAppCommandController.test.ts` for main app
+  commands. Unit 4A contract/projection tests are exactly
+  `src/__tests__/contracts/contracts.test.ts`,
+  `src/__tests__/integration/preloadContractVocabulary.test.ts`,
+  `src/__tests__/main/player/desktopPlayerAdapter.test.ts`,
+  `src/__tests__/main/player/nativePlayerHostProcess.test.ts`,
+  `src/__tests__/main/player/playbackProgramTransitionIntegration.test.ts`,
+  `src/__tests__/main/player/playerRecoveryIpc.test.ts`,
+  `src/__tests__/main/player/plexPlaybackBridge.test.ts`,
+  `src/__tests__/main/player/plexPlaybackComposition.test.ts`,
+  `src/__tests__/main/player/plexPlaybackRecoveryOwner.test.ts`,
+  `src/__tests__/main/player/plexPlaybackRuntime.test.ts`,
+  `src/__tests__/main/player/playbackRuntimeBootstrap.test.ts`, plus
+  `src/__tests__/main/playerIpc.test.ts` and
+  `src/__tests__/main/plexStreamResolver.test.ts`,
+  `src/__tests__/main/plexStreamResolverComposition.test.ts`, and capability-fixture file
+  `src/__tests__/main/player/fixtures/desktopStreamPolicyFixtures.ts`. Unit 4A
+  may also add the inert field only in
+  `src/__tests__/renderer/playerOverlayPresentation.test.ts`. Only fixture-
+  shape updates and focused assertions for the reviewed contract are allowed
+  outside the adapter/resolver/bootstrap tests;
+  `plexStreamResolverComposition.test.ts` is authorized only for its required
+  typed capability-profile fixture and seek-projection assertions.
+  `src/__tests__/main/diagnostics/supportBundleExporter.test.ts` is authorized
+  only to add required `seekSupport: 'unknown'` to its typed/unsafe snapshot
+  fixture and, if needed, one narrow assertion that the safe enum remains in
+  `player-snapshot.json` while existing forbidden fields remain absent/redacted.
+  `src/__tests__/main/player/playbackEventRouter.test.ts` is authorized only to
+  add required `seekSupport` to its `candidate.load` fixture and a narrow
+  projection/dispatch assertion if needed.
+  `src/__tests__/renderer/navigation.test.ts` is authorized only to provide the
+  required `openInfoRecovery` lifecycle callback and assert its Info routing/
+  precedence; it may not weaken the option to optional or supply a production
+  default.
+- Ignored/local WS4 run-bundle evidence under
+  `docs/runs/ws4-input-overlay-quality-loop/**`. Raw screenshots, traces,
+  manifests, hashes, and operator notes remain local and redaction-safe.
+- Unit 4E authority docs only:
+  `docs/plans/2026-07-22-tier3-parity-correction-plan.md`,
+  `docs/product/lineup-product-parity-matrix.md`,
+  `docs/architecture/CURRENT_STATE.md`,
+  `docs/architecture/renderer-architecture.md`,
+  `docs/architecture/playback-architecture.md`,
+  `docs/roadmap/desktop-port-roadmap.md`, and
+  `docs/development/windows-ui-proof-plan.md`.
+
+#### WS4 Files Out Of Scope
+
+- All `src/contracts/**`, `src/preload/**`, `src/main/player/**`, and
+  `src/main/plex/**` files except the exact Unit 4A files above;
+  `src/native-helper/**`, `src/main/settings/**`,
+  `src/main/persistence/**`, all `src/main/diagnostics/**` files except the
+  exact inert fallback above, and every other public IPC or preload vocabulary
+  owner.
+- `src/main/index.ts`, `src/main/window/shellWindowController.ts`, other main
+  lifecycle/window owners, and `globalShortcut` or background OS integration.
+- Guide data, layout, virtualization, polling, Settings consumption, and WS5
+  product owners beyond the exact input-selection contribution in
+  `epg.ts`/`workflow.ts`.
+- Player capability profile, stream policy, Plex resolver, IPC/recovery, and
+  preload behavior outside Unit 4A's exact required `seek`/`seekSupport`
+  projection, guarded mappings, strict guards, and inert literals; all native
+  helper, audio/subtitle/HDR/quality, and WS2 contribution owners.
+- Settings schema/persistence/audio output, Plex credential/profile/server
+  transport, lifecycle/power, package, installer, signing, update, dependency,
+  lockfile, and public-release owners.
+- WS1–WS3 implementation and WS5–WS9 product work; historical proof bundles
+  except read-only reference; raw Windows/native/live/package evidence in
+  tracked docs; and `docs/architecture/import-ledger.md` unless a reviewed
+  import replan first authorizes copied/adapted source.
+
+#### WS4 Execution Packages
+
+Before every unit the controller freshness-reads only that unit section, its
+current exact owners/tests, affected authority, relevant `0258dbe` slice, and
+current worktree. It records phase, active/completed/remaining units, files and
+commit, observed verification, review status, proof debt, exact next action,
+and active/closeout/blocked state. A checkpoint is accepted only after a fresh
+material-only implementation review has no unresolved material finding.
+
+##### Unit 4A — renderer semantic input and direct player commands
+
+**Status:** implementation stopped with partial uncommitted edits after the
+required snapshot field exposed the omitted diagnostics fallback/test seam.
+Preserve those edits without extending them. Resume Unit 4A only after a fresh
+review explicitly approves this revision with no unresolved material finding.
+This remains the first execution unit and has no accepted checkpoint yet.
+
+**Outcome:** implement F1/F2/F3/F4 and distinct Info/Now Playing semantics,
+context Page Up/Down, standard DOM media-key mapping, and renderer-safe direct
+play/pause/10-second seek/stop commands. Add only the guarded stop/relative-
+seek intent pair and required safe seek-support projection necessary to make
+those commands current-request-bound and capability-driven. Extract direct-
+command lifecycle from the overlay hotspot.
+
+**Owner/write boundary:** exact production files
+`src/renderer/navigation.ts`, `src/renderer/desktopInput.ts`,
+`src/renderer/shell/navigationLifecycle.ts`, new
+`src/renderer/playerInputCommandController.ts`,
+`src/renderer/playerOverlayController.ts`, `src/renderer/epg.ts`,
+`src/renderer/workflow.ts`, and sensitive composition file
+`src/renderer/index.ts`; `src/renderer/playerOverlayPresentation.ts` may add
+only its required inert snapshot field. The exact public/preload/main
+correction boundary is `src/contracts/ipc.ts`, `src/contracts/player.ts`,
+`src/preload/index.cts`, `src/preload/playerRecoveryBridge.cts`,
+`src/main/player/rendererIntentMapping.ts`,
+`src/main/player/desktopPlayerAdapter.ts`,
+`src/main/player/playerAdapterValidation.ts`,
+`src/main/player/playerAdapterSnapshot.ts`,
+`src/main/player/streamPolicy/types.ts`,
+`src/main/player/playbackRuntimeBootstrap.ts`,
+`src/main/player/plexPlaybackRuntime.ts`, `src/main/player/playerIpc.ts`,
+`src/main/player/playerRecoveryIpc.ts`, `src/main/plex/streamResolver.ts`, and
+`src/main/smokeAssertions.ts`; exact diagnostics exception
+`src/main/diagnostics/supportBundleExporter.ts` may add only
+`seekSupport: 'unknown'` to `createInertPlayerSnapshot()`. Renderer behavior
+tests are limited to
+`src/__tests__/renderer/desktopInput.test.ts`,
+`src/__tests__/renderer/navigation.test.ts`,
+`src/__tests__/renderer/navigationLifecycle.test.ts`,
+`src/__tests__/renderer/playerOverlayController.test.ts`,
+`src/__tests__/renderer/playerOverlayPresentation.test.ts`,
+`src/__tests__/renderer/epg.test.ts`,
+`src/__tests__/renderer/workflow.test.ts`,
+`src/__tests__/renderer/rendererRuntimeOwners.test.ts`, and new
+`src/__tests__/renderer/playerInputCommandController.test.ts`. Contract/main
+test edits are limited to the exact files listed in WS4 Files In Scope,
+including only the required fixture/shape proof in
+`src/__tests__/main/diagnostics/supportBundleExporter.test.ts` and the required
+load-fixture/projection proof in
+`src/__tests__/main/player/playbackEventRouter.test.ts`. No other main,
+diagnostics, contract, preload, renderer presentation, DOM, CSS, or authority
+doc edit is allowed.
+
+**Contracts and acceptance:** apply invariants 1–3 and 5–14 exactly.
+Protected owners and editable controls win before shortcuts. Info opens current
+safe server/sign-in recovery while F1 opens Now Playing. Guide pages by five
+channels, Mini Guide retains circular ±5, and Player Page keys tune previous/
+next without bypassing modal or pending-tune custody. One pending direct command
+is serialized. Play/pause use the current guarded variants. Stop dispatches
+only `player.stopIfCurrent` with exact `{ snapshotRequestId }`; seek dispatches
+only `player.seekRelativeIfCurrent` with exact
+`{ snapshotRequestId, deltaMs }`. Preload accepts only the two new closed
+literals and the existing outer non-empty-request/payload envelope; main owns
+strict exact-key/type/forbidden-field validation. Mapping must not forward the
+snapshot identity to `PlayerCommand` or the host. Matching identities execute
+the existing `stop`/`seek.relative` commands; stale/malformed identities fail
+before custody/host with no mutation. Load and snapshot shapes carry required
+`seekSupport`; only exact `supported` enables renderer seek. Request/settlement
+mismatch, timeout, cleanup, inconsistent snapshot state, unsupported/unknown/
+unproven seek, invalid safe projection, and stale results fail safely. The
+extraction must reduce or preserve the overlay hotspot and introduce no
+forwarding-only layer.
+
+**Verification classification:** new regression/contract test required.
+
+**Focused proof:** run and observe:
+
+```text
+node --import tsx --test src/__tests__/contracts/contracts.test.ts src/__tests__/integration/preloadContractVocabulary.test.ts src/__tests__/main/player/desktopPlayerAdapter.test.ts src/__tests__/main/player/nativePlayerHostProcess.test.ts src/__tests__/main/player/playbackEventRouter.test.ts src/__tests__/main/player/playbackProgramTransitionIntegration.test.ts src/__tests__/main/player/playerRecoveryIpc.test.ts src/__tests__/main/player/plexPlaybackBridge.test.ts src/__tests__/main/player/plexPlaybackComposition.test.ts src/__tests__/main/player/plexPlaybackRecoveryOwner.test.ts src/__tests__/main/player/plexPlaybackRuntime.test.ts src/__tests__/main/player/playbackRuntimeBootstrap.test.ts src/__tests__/main/playerIpc.test.ts src/__tests__/main/plexStreamResolver.test.ts src/__tests__/main/plexStreamResolverComposition.test.ts
+node --import tsx --test src/__tests__/main/diagnostics/supportBundleExporter.test.ts
+node --import tsx --test src/__tests__/renderer/desktopInput.test.ts src/__tests__/renderer/navigation.test.ts src/__tests__/renderer/navigationLifecycle.test.ts src/__tests__/renderer/playerOverlayController.test.ts src/__tests__/renderer/playerOverlayPresentation.test.ts src/__tests__/renderer/epg.test.ts src/__tests__/renderer/workflow.test.ts src/__tests__/renderer/rendererRuntimeOwners.test.ts src/__tests__/renderer/playerInputCommandController.test.ts
+npm run test:contracts
+npm run typecheck
+npm run build:electron
+npm run verify:architecture
+npm run verify:redaction
+git diff --check
+```
+
+Expected: all named tests pass; the shared/preload intent vocabularies match;
+required safe load/snapshot fields accept only the four support values and
+forbidden data stays rejected; all production and inert snapshot/load producers
+carry the field; selected main-owned profiles project it without exposing the
+profile; matching guarded stop/seek map to unchanged host commands without the
+snapshot identity; stale/malformed/extra-key payloads cause no custody, host
+call, or snapshot mutation; and existing unguarded callers remain unchanged.
+The diagnostics-focused test proves the inert support-bundle snapshot and its
+typed/unsafe provider fixture carry safe `seekSupport: 'unknown'`; the safe enum
+may appear in `player-snapshot.json`, while existing forbidden keys/values stay
+absent or redacted and file count, manifest, serialization, scanner, cleanup,
+and export outcomes remain unchanged.
+`playbackEventRouter.test.ts` proves its complete candidate load carries the
+required safe seek value through the existing runtime dispatch without changing
+event deferral, FIFO, stale-runtime, or custody behavior. `navigation.test.ts`
+proves the required `openInfoRecovery` callback receives eligible Info input,
+while inline error, exit, protected/profile, editable, and route precedence
+remain authoritative; the options contract stays required with no optional
+callback or silent default.
+Exact key aliases, editable bypass, modal suppression, Page context, 10-second
+deltas, seek eligibility, single pending command, timeout/cleanup/stale
+settlement, focus preservation, and source-owner shape are asserted;
+typecheck/build/lint/maintainability/redaction/diff checks are clean.
+
+**Rollback/checkpoint:** Unit 4A is one atomic checkpoint: the two guarded
+literals, required load/snapshot seek projection, all validators/producers,
+renderer use, extraction, and focused tests land or revert together. Never
+leave a required field or closed vocabulary half-updated. Revert only Unit 4A
+if guarded dispatch, profile projection, settlement, overlay precedence, Guide
+ownership, or current server-selection behavior changes incorrectly. No data
+migration or cleanup is required. After focused proof and clean review, commit
+one conventional checkpoint such as
+`feat(input): guard renderer media commands`.
+
+**Stop/replan:** any public intent, payload field, snapshot/load field, preload
+behavior, main owner, profile value, or test beyond the exact correction above;
+need to remove/rename existing unguarded intents; need for an optional/defaulted
+seek field, new channel/method, adapter-specific capability lookup, host/native
+protocol change, profile-object exposure, persistence/migration, or renderer
+capability inference from profile id; inability to express server/sign-in
+recovery through current safe renderer state; Page routing that requires WS5
+layout/virtualization; direct-command policy that cannot be separated
+cohesively from the overlay hotspot; production profile evidence contradicting
+`seek: 'supported'`; or failed contract/build/architecture/maintainability/
+redaction proof outside this boundary; or the diagnostics fallback requires
+anything beyond one inert field plus fixture/shape proof, including sanitizer,
+serialization, manifest, export, filesystem, provider, or redaction-policy
+changes. Also stop if `openInfoRecovery` would need to become optional/defaulted
+for test compatibility, or either newly authorized test exposes a production-
+owner or behavior change rather than the exact required typed fixture and
+focused assertion.
+
+##### Unit 4B — focused Windows BrowserWindow app-command routing
+
+**Outcome:** map foreground Windows app commands for Play, Pause, Play/Pause,
+Rewind, Fast Forward, and Stop into Unit 4A's standard renderer media-key path
+without a new bridge. Preserve browser-backward behavior and leave
+next/previous-track and unknown commands unhandled.
+
+**Owner/write boundary:** exactly
+`src/main/window/shellAppCommandController.ts` and
+`src/__tests__/main/shellAppCommandController.test.ts`. Read Unit 4A mapping
+tests, but do not edit renderer, main composition, player, contracts, preload,
+package, or docs.
+
+**Contracts and acceptance:** apply invariant 4. Recognized exact app commands
+are `media-play`, `media-pause`, `media-play-pause`, `media-rewind`,
+`media-fast-forward`, and `media-stop`; each forwards one keyDown/keyUp pair
+only from a live focused shell window. `media-nexttrack`,
+`media-previoustrack`, unknown, destroyed, and unfocused cases forward nothing;
+media commands are not prevented when they cannot be safely forwarded. Teardown
+removes the one listener. No raw command is sent through IPC or diagnostics.
+
+**Verification classification:** new regression/contract test required.
+
+**Focused proof:** run and observe:
+
+```text
+node --import tsx --test src/__tests__/main/shellAppCommandController.test.ts src/__tests__/renderer/desktopInput.test.ts
+npm run typecheck
+npm run smoke:electron
+npm run verify:architecture
+npm run verify:redaction
+git diff --check
+```
+
+Expected: every exact command and noncommand case passes, smoke reaches the
+shell, no global/background input or renderer privilege appears, architecture
+and redaction stay clean. This is synthetic/local proof only; hardware Windows
+media-key/SMTC evidence becomes `WS4-PROOF-01`.
+
+**Rollback/checkpoint:** revert only the Unit 4B controller/test checkpoint;
+Unit 4A keyboard behavior remains independently usable. Commit after clean
+review, for example `feat(input): route foreground windows media commands`.
+
+**Stop/replan:** Electron emits materially different current command strings;
+safe routing requires `globalShortcut`, Media Session, new IPC/preload/public
+schema, background ownership, player-main changes, or package configuration;
+or focused-window consumption cannot be proved without stealing unfocused
+input.
+
+##### Unit 4C — long-Back and mixed-input lifecycle
+
+**Outcome:** add one 500 ms Back hold event for keyboard/BrowserBack and
+gamepad input, with exact topmost/protected-owner behavior, short-Back
+preservation, repeat suppression, focus restoration, and cleanup.
+
+**Owner/write boundary:** exact production files
+`src/renderer/desktopInput.ts`, `src/renderer/navigation.ts`,
+`src/renderer/shell/navigationLifecycle.ts`, and sensitive wiring only in
+`src/renderer/index.ts`; affected tests are limited to
+`desktopInput.test.ts`, `navigationLifecycle.test.ts`, `navigation.test.ts`,
+`profilePinModal.test.ts`, `desktopCursor.test.ts`, and
+`rendererRuntimeOwners.test.ts`. `playerOverlayController.ts` may be read but
+not edited; its existing close/route-leave operations are consumed through
+Unit 4A's reviewed seam.
+
+**Contracts and acceptance:** apply invariant 6. A quick tap produces only the
+existing short Back. A held press first performs that short behavior, then once
+at 500 ms closes nonprotected overlay/modal state and returns Player; key repeat
+does not duplicate either semantic action. Profile PIN/bootstrap/blocking error
+does not escape. Keyboard keyup, gamepad release/disconnect, window blur,
+beforeunload, and cleanup cancel timers and pressed state. Pointer/cursor and
+semantic focus remain coherent when switching immediately between devices.
+
+**Verification classification:** new regression/contract test required.
+
+**Focused proof:** run and observe:
+
+```text
+node --import tsx --test src/__tests__/renderer/desktopInput.test.ts src/__tests__/renderer/navigation.test.ts src/__tests__/renderer/navigationLifecycle.test.ts src/__tests__/renderer/profilePinModal.test.ts src/__tests__/renderer/desktopCursor.test.ts src/__tests__/renderer/rendererRuntimeOwners.test.ts
+npm run typecheck
+npm run verify:architecture
+git diff --check
+```
+
+Expected: deterministic injected-time proof covers 499/500 ms, quick release,
+one-shot hold, repeat, gamepad release/disconnect, protected owner, overlay and
+route unwind, device transition, and cleanup without live timers/listeners.
+
+**Rollback/checkpoint:** revert Unit 4C without touching accepted 4A/4B input
+mapping. Commit after clean review, for example
+`feat(navigation): add bounded long-back routing`.
+
+**Stop/replan:** correct behavior requires closing a protected owner, changing
+profile/auth ownership, adding main timing/IPC, weakening editable bypass, or
+introducing an input abstraction without a second present consumer.
+
+##### Unit 4C-H — synthetic Escape smoke lifecycle correction
+
+**Observed stop/replan evidence:** accepted Unit 4C checkpoint `a654cdd`
+correctly retains the `keyboard:Escape` press source until its matching keyup so
+repeat keydowns cannot emit duplicate short-Back or long-Back behavior. During
+the preserved partial Unit 4D worktree, the first `npm run smoke:electron`
+failed only the `player route activation`, `player screen visible`, and
+`player overlay stack visible` assertions. Exact source inspection found four
+synthetic Escape presses in `src/main/smokeAssertions.ts`—the first-run route
+normalization, the post-Channel-Builder player return, the Guide fallback
+return, and the pre-close lifecycle normalization—and every one emitted
+`keydown` without a matching `keyup`. The reviewed first correction paired all
+four. Its focused tests passed 2/2; typecheck, architecture, maintainability,
+redaction, line-count, and diff checks passed; and smoke then passed all prior
+route/player/overlay assertions.
+
+The next exact smoke stop was confined to `assertRendererCloseLifecycle`: all
+four lifecycle flags remained false and its renderer result reported
+`invoked: false` on route `player`. `src/main/smokeFullscreenAssertions.ts`
+lines 113–118 own an existing loop of up to eight synthetic Escape attempts
+that can successively unwind visible state until exit confirmation appears.
+Each attempt emitted only `keydown`. Unit 4C therefore correctly retains the
+source after the first attempt and suppresses later attempts rather than
+treating repeated keydown as new physical presses. This is the same smoke
+harness-fidelity contradiction, not a product defect or weaker-proof request:
+each simulated attempt must include release, while the accepted repeat-
+suppression and 500 ms hold lifecycle must remain unchanged. The current four-
+keyup `smokeAssertions.ts` diff and the partial Unit 4D product/test/style
+worktree remain paused and preserved while this exact expansion is reviewed
+and landed.
+
+**Outcome and owner/write boundary:** the complete correction may change only
+the already authorized existing `src/main/smokeAssertions.ts`, plus exactly
+existing `src/main/smokeFullscreenAssertions.ts` and its directly affected
+existing test `src/__tests__/main/smokeFullscreenAssertions.test.ts`.
+`smokeAssertions.ts` retains exactly its four adjacent matching bubbling Escape
+keyups. In the fullscreen owner, pair every attempt's current Escape `keydown`
+with an adjacent matching Escape `keyup` using the same `bubbles: true` and
+`cancelable: true` semantics before the existing wait. The test may add only
+focused source/behavior proof that the close-lifecycle attempt is a matched
+keydown/keyup press and retains the existing attempt/wait/assertion semantics.
+Direct inspection of `src/__tests__/main/smokeChannelBuilderAssertions.test.ts`
+found no assertion whose contract must change; it remains read/run-only. Do not
+change the eight-attempt cap, wait, selector, confirm click, renderer result,
+lifecycle flags, timeout, assertions, failure vocabulary, routes, renderer
+production code, accepted Unit 4C files, partial Unit 4D files, or any other
+smoke behavior. No fourth production/test/harness file and no package,
+configuration, dependency, lockfile, public contract, IPC/preload,
+native/helper, architecture-authority, or import-ledger file is authorized.
+
+**Architecture and proof invariants:** `smokeAssertions.ts` remains the
+existing main-owned smoke orchestration owner and stays below its historical
+554-line cap. `smokeFullscreenAssertions.ts` remains the existing main-owned
+fullscreen/close smoke owner. Neither gains renderer input policy, a helper
+abstraction, or a production responsibility. Every synthetic sequence models
+physical press/release lifecycle rather than bypassing, disabling, shortening,
+or otherwise weakening Unit 4C repeat, hold, protected-owner, or cleanup
+behavior. Electron smoke retains the same assertions, attempt count, and
+timing, so a pass proves the existing route/player/overlay and close-lifecycle
+checks under faithful input instead of waiving them. No dependency, contract,
+privilege boundary, product owner, or upstream import changes.
+
+**Verification classification:** new regression/contract test required.
+
+Run and observe the isolated harness correction with the preserved Unit 4D
+worktree present:
+
+```text
+node --import tsx --test src/__tests__/main/smokeChannelBuilderAssertions.test.ts src/__tests__/main/smokeFullscreenAssertions.test.ts
+npm run typecheck
+npm run verify:architecture
+npm run smoke:electron
+npm run verify:maintainability
+npm run verify:redaction
+wc -l src/main/smokeAssertions.ts
+git diff --check
+npm run verify
+```
+
+Expected: the focused smoke-owner tests and clean full local gate pass;
+typecheck, architecture, maintainability, redaction, and diff checks are clean;
+Electron smoke passes without removing or weakening any assertion; source
+review shows exactly four matched synthetic Escape down/up pairs in
+`smokeAssertions.ts`, a matched bubbling/cancelable down/up pair within every
+close-lifecycle loop attempt, no remaining synthetic Escape keydown-only press
+in either owner, the unchanged eight-attempt/wait/assertion behavior, and
+`smokeAssertions.ts` below 554 lines.
+A fresh material-only `lineup-desktop-feature-review` must approve this
+expanded amendment before the additional harness/test edits and approve the
+exact isolated three-file harness diff before checkpoint acceptance. After
+those gates, commit only the two smoke owners and directly affected fullscreen
+test, for example `test(smoke): pair synthetic escape presses`, leave the
+preserved Unit 4D worktree uncommitted, and resume Unit 4D at its existing
+reviewed boundary.
+
+**Rollback and stop/replan:** the three-file harness checkpoint reverts
+independently by removing only the matched keyups and their focused regression
+assertion; rollback never changes Unit 4C product behavior or discards the
+preserved Unit 4D worktree. Stop and return to planning if smoke still fails
+after faithful press/release pairing, any attempt/wait/assertion/lifecycle
+expectation must be weakened, the correction needs renderer/Unit 4C/Unit 4D
+product edits, another harness/test file, a helper abstraction, a contract/
+dependency/configuration change, or any proof gate above fails outside this
+exact boundary.
+
+##### Unit 4D — sleep timer and OSD parity
+
+**Observed stop/replan adjudication:** the first Unit 4D implementation review
+rejected the preserved partial worktree because `src/renderer/index.ts` routes
+sleep expiry through
+`playerInputCommandController.handleInput('mediaPause')`, while the accepted
+Unit 4A input API returns `true` for a recognized direct input when any direct
+command is already pending even though it starts no new dispatch. Sleep can
+therefore publish `expired` while a pending play, seek, or stop prevents the
+pause and playback continues. This is a truthful internal-owner seam gap, not
+permission to weaken serialization, retry, or broaden the public player
+boundary. Preserve the partial Unit 4D worktree. Resume implementation only
+after a fresh independent `lineup-desktop-feature-review` approves this narrow
+amendment with no unresolved material finding.
+
+**Outcome:** add the independent renderer sleep-timer lifecycle and the exact
+Subtitles/Sleep/Audio OSD surface, including preset cycle, deadline countdown,
+one-minute warning, Off/cancel, guarded pause-on-expiry, accessibility,
+responsive styling, and cleanup. Preserve all other overlay precedence and
+track-option behavior.
+
+**Owner/write boundary:** exact production files new
+`src/renderer/sleepTimerController.ts`, `src/renderer/overlays.ts`,
+`src/renderer/overlayViewModels.ts`, `src/renderer/playerOverlayController.ts`,
+`src/renderer/playerOverlayDom.ts`,
+`src/renderer/playerOverlayPresentation.ts`, `src/renderer/domBindings.ts`,
+`src/renderer/rendererActionRegistration.ts`, sensitive wiring only in
+`src/renderer/index.ts`, the accepted Unit 4A owner
+`src/renderer/playerInputCommandController.ts` only for the internal guarded
+sleep-expiry pause seam below, and only the necessary rules in the three named
+player-overlay stylesheets. `focusDom.ts` is no-touch unless direct evidence
+proves DOM-order registration cannot satisfy the exact graph; that evidence
+requires a plan-revise review before adding it. Affected tests are limited to
+`playerInputCommandController.test.ts`, new `sleepTimerController.test.ts`, `overlays.test.ts`,
+`playerOverlayController.test.ts`, `playerOverlayPresentation.test.ts`,
+`rendererActionRegistration.test.ts`, `routeDom.test.ts`,
+`rendererRuntimeOwners.test.ts`, and DOM/style source assertions required for
+the reviewed surface.
+
+**Contracts and acceptance:** apply invariants 5, 7, and 10–12. Timer state is
+session-only and remains active while OSD/routes hide; preset replacement resets
+the deadline; Off/cancel and cleanup leave no interval/timeout; countdown is
+monotonic from injected time; expiry pauses at most the current safe request;
+late dispatch settlement cannot resurrect state. OSD is reachable for Sleep
+even when track switching is unsupported. The Sleep action is pointer/OK
+equivalent, has a stable focus id and accessible name, preserves invoking focus
+across playback options, and never adds play/seek/stop buttons. `UI-47` and
+production capabilities remain unchanged.
+
+The existing renderer-local `PlayerInputCommandController` adds exactly one
+internal `pauseCurrent(snapshotRequestId): boolean` method. It reads the current
+safe snapshot at invocation and returns `false` without dispatch when disposed,
+when any direct command is pending, when the supplied request id is not the
+exact current non-null request id, or when the current status/playing pair is
+inconsistent or not exactly playing. It returns `true` only when it actually
+starts the existing serialized `player.pauseIfCurrent` dispatch for that exact
+request through Unit 4A's guarded path. It owns no timer state. Its existing
+`handleInput`, direct-input recognition/consumption behavior, pending-command
+serialization, timeout/settlement correlation, safe diagnostics, cleanup, and
+closed intent/payload vocabulary remain unchanged; no second dispatcher,
+unguarded pause, queue, retry, or compatibility overload is allowed.
+
+`sleepTimerController` calls only this truthful internal seam. A synchronous
+`false` projects the existing bounded failed UI and sleep-timer diagnostic once,
+with no retry. Once `pauseCurrent` returns `true`, later dispatch rejection,
+timeout, failure, or settlement remains owned by the direct-command
+controller's existing bounded diagnostic and release behavior and must not
+mutate, retry, resurrect, or otherwise rewrite sleep-timer state. The
+compositional regression must prove pending play, seek, and stop collisions;
+stale versus exact-current request identity; paused and inconsistent playback;
+cleanup/disposal; exactly one guarded pause dispatch with no extra request or
+custody on acceptance; and inert late settlement after the timer has ended.
+No contract, main, preload, native/helper, dependency, or public schema changes
+are authorized.
+
+**Post-closeout review correction `1f815f3` (2026-08-01):** later adjudication found that
+the synchronous-failure rule could leave playback running when expiry collided
+with an in-flight play or relative seek. The superseding implementation permits
+exactly one sleep-specific deferred pause behind those two commands. On their
+settlement it rereads the safe snapshot and starts one guarded pause only for
+the same non-null request in a consistent playing state. Stop custody,
+dispatch rejection, timeout, route leave, cleanup, request replacement, or
+failed revalidation rejects the deferral. Once pause dispatch starts, no retry
+is allowed. This is not a general queue and does not broaden renderer-to-main
+command vocabulary. The same correction also enforces safe seek capability in
+the main adapter before custody and centralizes renderer-safe failure text.
+
+**Verification classification:** broader integration/manual proof required.
+
+**Focused automated proof:** run and observe:
+
+```text
+node --import tsx --test src/__tests__/renderer/playerInputCommandController.test.ts src/__tests__/renderer/sleepTimerController.test.ts src/__tests__/renderer/overlays.test.ts src/__tests__/renderer/playerOverlayController.test.ts src/__tests__/renderer/playerOverlayPresentation.test.ts src/__tests__/renderer/rendererActionRegistration.test.ts src/__tests__/renderer/routeDom.test.ts src/__tests__/renderer/rendererRuntimeOwners.test.ts
+npm run typecheck
+npm run verify:architecture
+npm run smoke:electron
+npm run verify:redaction
+git diff --check
+```
+
+Expected: all eight focused files pass, including the compositional collision,
+identity, eligibility, disposal, single-dispatch, no-extra-custody, and late-
+settlement cases above; typecheck, architecture, Electron smoke, redaction, and
+diff checks are clean. A fresh material-only implementation review must approve
+the complete Unit 4D diff before checkpoint acceptance.
+
+**Local interaction/visual proof:** create and run the ignored controller-owned
+`node docs/runs/ws4-input-overlay-quality-loop/ws4-local-proof.mjs`. The
+manifest must prove production-build renderer states for OSD, Now Playing,
+Mini Guide, playback options, badge, number, transition, Sleep Off, Sleep 15m,
+last-minute countdown, and exit confirmation at DPR 1 and CSS viewports
+1280x720, 1920x1080, and approximately 900x700. It must also exercise keyboard
+and simulated D-pad/gamepad entry/back/focus, pointer equivalence/cursor
+transition, reduced motion, forced colors, timer focus stability, and absence of
+play/seek/stop OSD buttons. The controller visually inspects hierarchy,
+typography, spacing, clipping, focus ring, contrast, motion, countdown legibility,
+and modal precedence. Raw captures/manifests stay ignored and must pass the
+redaction scan. This local proof does not substitute for paired-upstream,
+Windows, hardware-input, or native-video observation.
+
+**Rollback/checkpoint:** timer/UI changes are one reversible Unit 4D checkpoint;
+cleanup must run before rollback so no process remains. Reverting 4D leaves
+accepted 4A–4C input behavior intact, including removal of only the internal
+`pauseCurrent` method and its Unit 4D regressions without reverting Unit 4A's
+public guarded intents or ordinary direct-input path. Commit after clean review
+and local proof, for example `feat(overlays): add guarded sleep timer`.
+
+**Stop/replan:** timer correctness requires persistence, app lifecycle/power,
+main timing, any public contract beyond Unit 4A's accepted correction,
+unguarded pause/stop, or additional player-main changes;
+OSD cannot remain reachable without capability promotion; focus requires
+unreviewed `focusDom.ts` policy; the overlay/controller hotspot grows rather
+than shedding distinct lifecycle; or required local visual/interaction proof
+cannot be made deterministic and redaction-safe. Also stop if truthful pause
+acceptance requires changing existing `handleInput` semantics, allowing more
+than one pending direct command, adding a queue/retry/second dispatcher,
+mutating sleep state from async player settlement, editing any contract/main/
+preload/native/helper/dependency/configuration owner, touching another product
+or test file beyond the exact Unit 4D boundary, weakening any focused/smoke/
+static gate, or a required failure cannot be resolved inside this exact
+amendment.
+
+##### Unit 4E — integrated verification, proof debt, and authority closeout
+
+**Outcome:** run the complete WS4 focused/local/full gate from a clean tree,
+adjudicate a fresh closeout review, reconcile only WS4 authority/docs, record
+the exact consolidated-proof packet, keep proof-dependent rows open, and issue
+the complete WS5 quality-loop handoff. Unit 4E makes no product/test/package/
+config behavior decision.
+
+**Owner/write boundary:** no product, test, package, config, harness, dependency,
+or lockfile edit. Write only the seven authority docs named in WS4 Files In
+Scope. Read `docs/architecture/import-ledger.md` and registry markers; edit the
+ledger only after a separately reviewed import replan, which is not expected.
+
+**Contracts and acceptance:** compare accepted checkpoints with the 35-row
+classification table; preserve every earlier/later gate; name exact source
+commits in all proof debt; report no program-complete row; and update current
+architecture/renderer/playback/roadmap/Windows proof wording only to observed
+facts. The matrix may advance missing/partial local implementation wording only
+where focused/full proof and clean review support it. `WIN-03`, `WIN-09`,
+Windows/native/manual/paired/package rows, `UI-47` capability limits, and all
+cross-workstream contributions stay open as specified.
+
+**Verification classification:** broader integration/manual proof required.
+
+**Closeout proof:** from a clean worktree run and observe the complete Unit 4A
+through 4D focused suite, then:
+
+```text
+npm run build:electron
+npm run smoke:electron
+npm run verify:architecture
+npm run verify:maintainability
+npm run verify:redaction
+npm run verify
+npm run verify:docs
+git diff --check
+```
+
+Run the ignored WS4 local proof once more against the final product checkpoint
+and verify its scenario/capture manifest, hashes/counts, reduced-motion,
+forced-colors, keyboard/D-pad/gamepad, pointer, viewport, focus, interaction,
+and redaction results. Obtain one fresh material-only closeout review of the
+complete WS4 diff, authority classification, proof debt, import disposition,
+and WS5 handoff; no material finding may remain.
+
+**Rollback/checkpoint:** docs classification is independently reversible and
+must not rewrite accepted product checkpoints. Commit the reviewed authority
+closeout separately, for example `docs(parity): close ws4 local input gate`.
+If classification or proof debt is wrong, revert/fix only Unit 4E docs and
+repeat review; do not revert accepted product units without a product finding.
+
+**Stop/replan:** any full/focused/docs/redaction/build/smoke failure that cannot
+be resolved inside an already approved unit; a row needs unimplemented product
+behavior; a proof-dependent row would need promotion without evidence; import
+ledger or architecture ownership differs from plan; or reviewer finds a
+material scope, capability, security, accessibility, proof, or classification
+defect.
+
+#### WS4 Hotspot And Cohesion Dispositions
+
+Apply `docs/architecture/file-shape-guardrails.md` before and after every
+production unit:
+
+- **Owner:** `src/renderer/playerOverlayController.ts` (818 lines at planning).
+  **Existing responsibility:** overlay precedence, overlay-specific async tune/
+  track/recovery settlement, focus return, presentation timers, and cleanup.
+  **New behavior:** only consume reviewed direct-command and sleep-owner results
+  needed for overlay feedback. **Decision:** extract, then cohesive preservation.
+  Unit 4A moves direct input-command lifecycle to
+  `playerInputCommandController.ts`; Unit 4D keeps timer lifecycle in
+  `sleepTimerController.ts`. No net hotspot growth is accepted without replan.
+- **Owner:** `src/renderer/index.ts` (913 lines; named composition root).
+  **Existing responsibility:** renderer construction/wiring and lifecycle
+  coordination. **New behavior:** inject Unit 4A/4C/4D owners and callbacks.
+  **Decision:** cohesive wiring only; no input, timer, seek, paging, or auth
+  policy may land here. Fresh reviewer architecture attention is mandatory.
+- **Owner:** `src/renderer/focusDom.ts` (526 lines at planning).
+  **Existing responsibility:** current DOM focus registry and neighbor
+  projection. **New behavior:** none planned because OSD actions already use
+  ordered visible DOM registration. **Decision:** no-touch. Contrary evidence
+  triggers reviewed plan revision before edit.
+- **Owner:** `src/renderer/desktopInput.ts` (401 lines at planning).
+  **Existing responsibility:** key/gamepad mapping, repeat, runtime listener,
+  and cleanup. **New behavior:** exact media/color aliases and one Back press
+  lifecycle. **Decision:** cohesive growth; line count is attention only. If
+  implementation exposes a distinct reusable press owner rather than one
+  bounded Back lifecycle, stop and replan instead of adding a generic input
+  framework.
+- **Owner:** `src/main/window/shellAppCommandController.ts` (73 lines at
+  planning). **Existing responsibility:** focused shell BrowserWindow
+  app-command translation/cleanup. **New behavior:** the six reviewed media
+  commands. **Decision:** cohesive growth inside the existing privilege owner.
+- **Owner:** `src/preload/index.cts` (1883 lines; named composition root).
+  **Existing responsibility:** closed preload API composition plus outer player
+  intent/snapshot/event validation. **New behavior:** add the two exact intent
+  literals and required `seekSupport` snapshot enum only. **Decision:** cohesive
+  vocabulary/guard update; no channel, method, inner command policy, player
+  state, or profile interpretation. Fresh architecture/security review is
+  mandatory.
+- **Owner:** `src/contracts/player.ts` (726 lines; named review surface).
+  **Existing responsibility:** renderer-safe player vocabulary and strict
+  recursive guards. **New behavior:** one required safe seek enum on load and
+  snapshot plus its exact guard. **Decision:** cohesive contract update; no
+  privileged field, new command, diagnostics policy, helper type, or generic
+  capability bag. Extraction would split one closed vocabulary and is not
+  authorized by this unit.
+- **Owner:** `src/main/player/desktopPlayerAdapter.ts` (659 lines; named review
+  surface). **Existing responsibility:** renderer/runtime dispatch boundary,
+  snapshot owner, request custody, and host submission. **New behavior:** copy
+  required `seekSupport` from validated load to snapshot. The existing generic
+  `expectedSnapshotRequestId` comparison remains unchanged and is reused by
+  mapping metadata for guarded stop/seek. **Decision:** cohesive bounded
+  contract projection; no new branch after custody, runtime-command behavior,
+  host command, or native protocol. Fresh playback/architecture review is
+  mandatory.
+- **Owner:** `src/main/player/plexPlaybackRuntime.ts` (782 lines; named review
+  surface). **Existing responsibility:** playback transition/recovery runtime
+  and safe candidate/load validation. **New behavior:** require and validate
+  the one `seekSupport` enum on safe load input. **Decision:** strict boundary
+  update only; no transition, recovery, retry, PMS, or scheduling behavior.
+- **Owner:** `src/main/plex/streamResolver.ts` (749 lines; named review surface).
+  **Existing responsibility:** privileged Plex resolution and separate safe
+  load projection. **New behavior:** copy only `capabilityProfile.seek` into
+  the safe load payload. **Decision:** cohesive projection; no stream-policy
+  decision, private descriptor, credential, connection, PMS, or diagnostic
+  change.
+- **Owner:** `src/main/diagnostics/supportBundleExporter.ts` (429 lines at the
+  stop). **Existing responsibility:** bounded, sanitized support-bundle export
+  with an inert player fallback. **New behavior:** add only required
+  `seekSupport: 'unknown'` to that fallback. **Decision:** required typed-literal
+  propagation, not diagnostics behavior; no sanitizer, serialization, manifest,
+  scanner, filesystem, provider, redaction policy, or exporter branch changes.
+
+Every unit that touches a named hotspot/composition root runs
+`npm run verify:maintainability` directly or through
+`npm run verify:architecture` and receives a fresh architecture-aware reviewer
+pass. Extraction is accepted only for the distinct current responsibilities
+above; no forwarding wrapper, generic service layer, compatibility seam, or
+speculative interface is allowed.
+
+#### WS4 Verification Commands
+
+**WS4 verification classification:** broader integration/manual proof required.
+
+Before the first WS4 product edit, after plan review approves Unit 4A, the
+controller runs and observes one clean full baseline:
+
+```text
+npm run verify
+git status --short --branch
+```
+
+The status must show only the reviewed plan amendment before implementation;
+the full verifier must pass. Each unit then runs its exact focused gate above,
+`npm run verify:maintainability` whenever production shape changes, and a fresh
+material-only implementation review before checkpoint acceptance. Do not rerun
+the full suite after every micro-step; Unit 4E owns one clean final full
+`npm run verify` from the final product checkpoint.
+
+The ignored local proof is required for UI/input acceptance but cannot replace
+real Windows media keys/SMTC, physical device behavior, production native
+video, operator-assisted fullscreen, current-upstream paired inspection, live
+playback, packaged close, RD-27, or RD-28 evidence. Any required command failure
+is reported as failure, not hidden behind another passing gate.
+
+Historical clarification: this record does not preserve enough evidence to
+identify the exact worktree-isolation mechanism used for every earlier
+baseline. No retrospective isolation claim is made. Any reopened correction
+must use a detached temporary worktree at the reviewed baseline, apply only the
+reviewed correction there, record pre/post status, and leave the primary
+partially implemented worktree untouched.
+
+#### WS4 Consolidated-Proof Debt Packet
+
+For every unavailable obligation, create one exact row in the ignored WS4 run
+bundle and reconcile its sanitized summary into the Windows proof plan during
+Unit 4E. Each row records: debt id and stable ids; observable user journey; why
+local automation is insufficient; OS/machine/input device/helper/libmpv/Plex/
+media/display/package/operator prerequisites; exact source checkpoint and
+clean-tree requirement; entry action, expected renderer-safe result, forbidden
+result; capability/classification before and after with no automatic promotion;
+allowed evidence filenames and hash/count-only/redaction rules; final owner and
+fields that may change after reviewed proof; and smallest-owner failure routing.
+
+At minimum the packet contains:
+
+- `WS4-PROOF-01` — `PB-09`–`PB-11`, `NAV-08`, `WIN-03`, `WIN-09`: real
+  Windows foreground physical media Play/Pause/Rewind/Fast Forward/Stop and
+  app-command/SMTC observation against production playback; focused/unfocused
+  transitions; no global interception; exact 10-second seek; eligibility,
+  failure, focus, cursor, cleanup, and redaction. Local synthetic app-command
+  proof does not close this debt.
+- `WS4-PROOF-02` — `NAV-01`–`NAV-07`, `NAV-09`–`NAV-12`, and `WIN-09`: real
+  Windows keyboard, numpad, mouse, physical gamepad/remote-like input, 500 ms
+  long-Back, editable bypass, mixed-device focus/cursor transitions, Guide/
+  Settings/server-selection shortcuts, and Player/Mini Guide/Guide Page routing.
+  Cross-reference rather than duplicate WS8 live auth/profile/server proof.
+- `WS4-PROOF-03` — `PB-15`–`PB-18`, `PB-25`, `NAV-10`, `NAV-12`–`NAV-15`,
+  `UI-44`–`UI-51`: current-`0258dbe` paired overlay inspection plus Windows
+  production-native-video viewports, timing, focus, reduced motion, forced
+  colors/high contrast, cursor, countdown/expiry, and mixed interaction. It
+  includes the mandatory fresh Package 6 OSD, Mini Guide, and playback-options
+  operator-assisted fullscreen three-row protocol; Mac/local captures satisfy
+  none of those Windows rows. `UI-47` remains capability-partial through
+  WS2-owned rows regardless of visual success.
+- `WS4-PROOF-04` — `NAV-16`, `UI-52`: packaged Windows exit-confirm/window
+  close and teardown observation with renderer focus, main cleanup, and no
+  blocked persistence loss. Final package lifecycle remains RD-28 and `LC-02`
+  remains WS8-owned.
+
+`WS2-POST-VALIDATION-01` and WS3 proof rows remain separate; cross-reference
+their native playback/video, Settings, and live scenarios instead of
+duplicating them. A proof failure never authorizes implementation inside the
+proof run.
+
+#### WS4 Local Implementation Closeout (2026-08-01)
+
+The controller accepted the serial product checkpoints Unit 4A `f4570df`, Unit
+4B `a78228b`, Unit 4C `a654cdd`, isolated smoke-harness correction `c4dadcf`,
+and Unit 4D `3258511`. No copied or adapted upstream source landed; exact
+upstream commit `0258dbe` remained reference-only and the import ledger is
+unchanged. The final local product checkpoint passed the complete focused
+surface, production-build local proof 36/36 with controller visual inspection,
+`npm run verify` at 1,110 pass with one intentional skip, harness/docs at
+177/177, and every required static/build/smoke/redaction gate.
+
+The 35 assigned rows reconcile only as follows:
+
+| Local disposition | Exact WS4 rows |
+| --- | --- |
+| Missing/partial implementation corrected to a locally verified product path; Windows/native/physical/paired proof remains the named packet | `PB-09`–`PB-11`, `PB-25`, `NAV-02`–`NAV-08`, `UI-44`, `UI-51` |
+| Foreground Windows contribution implemented locally but platform status remains partial | `WIN-03`, `WIN-09` |
+| Existing local implementation freshly regression-proved without a support promotion | `PB-15`–`PB-18`, `NAV-01`, `NAV-09`–`NAV-16`, `UI-45`, `UI-46`, `UI-48`–`UI-50`, `UI-52` |
+| Capability-limited surface deliberately remains partial | `UI-47`, through WS2-owned/open `PB-19`–`PB-24`, `WS2-POST-VALIDATION-01`, and applicable WS3 proof |
+
+No row is program-complete. `WS4-PROOF-01` retains physical Windows media-key,
+SMTC/app-command, production-playback, eligibility, focus, cleanup, and
+redaction observation for `PB-09`–`PB-11`, `NAV-08`, `WIN-03`, and `WIN-09`.
+`WS4-PROOF-02` retains real Windows keyboard/numpad/mouse/gamepad/remote-like,
+500 ms Back-hold, editable-bypass, shortcut, page-routing, focus, and cursor
+observation for `NAV-01`–`NAV-07`, `NAV-09`–`NAV-12`, and `WIN-09`.
+`WS4-PROOF-03` retains paired-current-upstream plus Windows production-native-
+video, operator-assisted Package 6, viewport/DPI, timing, focus, motion,
+forced-colors, cursor, and sleep-expiry observation for `PB-15`–`PB-18`,
+`PB-25`, `NAV-10`, `NAV-12`–`NAV-15`, and `UI-44`–`UI-51`; it cannot advance
+`UI-47`. `WS4-PROOF-04` retains packaged Windows exit/close/teardown proof for
+`NAV-16` and `UI-52`, while `LC-02` remains WS8-owned and final package
+lifecycle remains RD-28.
+
+WS1 proof and `WS1-PERF-01`, `WS2-POST-VALIDATION-01`, WS2 ownership/open state
+for `PB-22`–`PB-24`, every WS3 proof and WS5/WS8 contribution packet,
+conservative production playback capabilities, WS6–WS9 gates, RD-27, and RD-28
+remain open. This authority reconciliation is the Unit 4E review surface; no
+WS5 product/test/package/config work starts before the handoff below completes
+targeted scope-load, planning, and fresh first-unit plan approval.
+
+#### WS4 Acceptance Criteria
+
+- Unit 4A received explicit clean plan approval before the first product edit;
+  Units 4A–4E then completed serially, each with observed focused proof, clean
+  material-only review, reversible checkpoint, and no out-of-boundary edit.
+- The exact 35 rows reconcile under the WS4 local-closure table. No registry
+  count/owner changes and no program-complete claim occur.
+- F1/F2/F3/F4, `G`, `S`/`,`, `I`, Page Up/Down, Space, DOM media keys,
+  keyboard/gamepad Back hold, and focused BrowserWindow app commands implement
+  the exact behavior and precedence above with editable/protected-owner bypass,
+  cleanup, safe failure, and stable focus.
+- The closed renderer intent vocabulary adds exactly
+  `player.stopIfCurrent` and `player.seekRelativeIfCurrent`; Unit 4A renderer
+  input uses them and never the unguarded stop/relative-seek variants. Exact
+  payload validation, pre-custody stale rejection, no host forwarding of
+  snapshot identity, and no snapshot mutation/host call on rejection are
+  proved. Existing unguarded intents and host commands remain unchanged.
+- Required `seekSupport` is carried from the selected main-owned capability
+  profile through safe load and snapshot contracts. All strict contract,
+  preload, runtime, IPC/recovery, inert, smoke, and test producers agree on the
+  shape; only exact `supported` enables renderer seek. No whole profile or
+  privileged value crosses the boundary. The existing conservative profile's
+  other fields and all playback/platform proof classifications remain
+  unchanged.
+- Sleep presets, deadline countdown, warning, Off/cancel, current-request
+  guarded pause-on-expiry, route/OSD independence, cleanup, pointer/OK parity,
+  accessible name/status, and Subtitles/Sleep/Audio focus order pass automated
+  and local visual/interaction proof. No play/seek/stop OSD buttons appear.
+- Existing OSD/program/progress/timecode/buffer/ends-at, Now Playing, Mini
+  Guide, channel badge/number/transition, playback options, exit confirmation,
+  focus restore/trapping/inertness, motion, forced colors, and viewport behavior
+  remains regression-green. `UI-47`, `PB-19`–`PB-24`, and all other capability
+  claims stay unchanged.
+- Final local proof includes 1280x720, 1920x1080, and approximately 900x700,
+  keyboard/D-pad/simulated gamepad, pointer/cursor, focus, reduced motion,
+  forced colors, and all named interaction states. Raw evidence stays ignored
+  and redaction-safe.
+- One clean pre-edit `npm run verify` baseline and one clean final
+  `npm run verify` are observed. Every named focused/build/smoke/architecture/
+  maintainability/docs/redaction/diff gate passes, and the final closeout review
+  has no unresolved material finding.
+- Unit 4E reconciles the canonical plan, matrix, current/renderer/playback
+  architecture, roadmap, and Windows proof authority to observed facts. The
+  import ledger remains unchanged because `0258dbe` was reference-only.
+- WS1 proof/performance debt, `WS2-POST-VALIDATION-01`, WS2-owned/open
+  `PB-22`–`PB-24`, all WS3 proof/contribution debt, WS5/WS8 gates,
+  conservative capabilities, later-workstream gates, RD-27, and RD-28 remain
+  explicit and open.
+- `WS4-PROOF-01`–`WS4-PROOF-04` contain exact source checkpoints, prerequisites,
+  expected/forbidden results, no-promotion rules, redaction/evidence handling,
+  closure owners, and failure routing. Missing Windows/native/manual/paired/
+  package proof does not block the next local workstream only because the active
+  consolidated-proof sequence permits its exact recorded deferral.
+- The canonical plan remains active and ends WS4 with one complete WS5
+  feature-quality-loop handoff; no WS5–WS9 product edit occurs inside WS4.
+
+#### WS4 Rollback And Commit Policy
+
+- Preserve unrelated/pre-existing changes and never combine them with WS4.
+  Recheck `git status --short --branch` before every unit and commit.
+- One reviewed conventional checkpoint per unit is the default. Never publish
+  a checkpoint that fails its focused gate or leaves a public/architecture seam
+  half-migrated.
+- Unit 4A's required public shape, validators/producers, guarded mapping,
+  renderer extraction, and behavior are atomic. Unit 4B main mapping can
+  revert independently. Unit 4C long-Back can revert without changing accepted
+  key aliases. Unit 4D timer/OSD can revert without changing 4A–4C. Unit 4E
+  docs classification can revert without reverting accepted product
+  checkpoints.
+- If an accepted unit later causes a local regression, return to that smallest
+  reviewed unit. If evidence contradicts the plan's owner or public behavior,
+  stop for plan revision rather than stacking a compatibility fix.
+- No destructive history rewrite, broad cleanup, unrelated refactor, or
+  rollback of accepted WS1–WS3 product commits is authorized.
+
+#### WS4 Replan Triggers
+
+Stop and obtain a revised decision-complete plan plus fresh material review if:
+
+- any assigned row, upstream `0258dbe` behavior, current owner/test, focus/
+  overlay precedence, route behavior, player state/capability, app-command
+  behavior, or cross-workstream classification materially contradicts this
+  plan;
+- an approved unit needs a product owner outside its boundary, `focusDom.ts`
+  contrary to Unit 4D's no-touch rule, any public contract/preload/player
+  change beyond Unit 4A's exact two literals and required seek projection, a
+  new IPC channel/preload method/helper message, raw platform value, privilege
+  change, dependency/package/config/lockfile change, upstream import,
+  compatibility seam, or weaker proof;
+- safe Info/server recovery cannot use the existing renderer-safe state, Guide
+  Page routing requires WS5 layout/data/virtualization changes, or Sleep requires
+  persistence/main lifecycle/power policy;
+- Windows media input requires background/global ownership, `globalShortcut`,
+  Media Session/SMTC metadata state, player-main mutation, or command aliases
+  beyond the six reviewed app commands;
+- a named hotspot grows without the reviewed cohesion outcome, a composition
+  root gains policy, or extraction produces a forwarding-only/generic layer;
+- any required focused, typecheck, build, smoke, architecture,
+  maintainability, redaction, docs, local visual/interaction, or full gate fails
+  and cannot be resolved within the active unit; or
+- review finds a material security, ownership, accessibility, product,
+  lifecycle, proof, classification, rollback, or later-workstream defect.
+
+Unavailable Windows-machine, physical-device, production-native,
+operator-assisted, live, paired-visual, soak, or package evidence is not a
+replan trigger when and only when its exact `WS4-PROOF-*` row is complete and no
+support/classification promotion occurs. Evidence that demonstrates defective
+or missing product behavior is a replan/remediation trigger.
+
+#### WS5 Feature-Quality-Loop Handoff
+
+MODEL_SUGGESTION
+PLANNER: configured `planner` role
+IMPLEMENTER: resolve `worker_luna` by default or the `worker` escalation role at
+dispatch from the approved unit through `.codex/config.toml`
+REVIEWER: configured `reviewer` role
+WHY: WS5 is Tier 3 Guide work spanning renderer layout/focus/virtualization,
+main-owned scheduler/Guide presentation, persisted WS3 Settings contributions,
+preload-safe projection, performance, and platform proof; exact model and
+reasoning settings remain role-TOML-owned.
+
+NEXT_SESSION_HANDOFF
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-quality-loop
+TASK: Complete WS5 Guide Through The Tier 3 Feature Quality Loop
+TASK_FAMILY: feature/design
+TIER: Tier 3
+PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
+ARTIFACT: reviewed WS4 local-closeout authority reconciliation based on product
+checkpoints `f4570df`, `a78228b`, `a654cdd`, smoke-harness correction `c4dadcf`,
+and final WS4 product checkpoint `3258511`, with local 36/36 production-build
+proof and open `WS4-PROOF-01`–`WS4-PROOF-04`
+FILES:
+- docs/plans/2026-07-22-tier3-parity-correction-plan.md
+- docs/product/lineup-product-parity-matrix.md
+- docs/architecture/CURRENT_STATE.md
+- docs/architecture/renderer-architecture.md
+- docs/architecture/playback-architecture.md
+- docs/roadmap/desktop-port-roadmap.md
+- docs/development/windows-ui-proof-plan.md
+- src/contracts/guide.ts
+- src/contracts/settings.ts
+- src/main/channel/guideRuntime.ts
+- src/main/settings/desktopSettingsPolicy.ts
+- src/main/settings/settingsIpc.ts
+- src/preload/guideBridge.cts
+- src/preload/settingsBridge.cts
+- src/renderer/epg.ts
+- src/renderer/epg/guideDom.ts
+- src/renderer/guidePresentation.ts
+- src/renderer/guidePresentationPolling.ts
+- src/renderer/guideTuneController.ts
+- src/renderer/workflow.ts
+- src/renderer/domBindings.ts
+- src/renderer/focusDom.ts
+- src/renderer/index.ts
+- src/renderer/styles/guide-epg.css
+- src/__tests__/main/guideRuntime.test.ts
+- src/__tests__/renderer/epg.test.ts
+- src/__tests__/renderer/epg/guideDom.test.ts
+- src/__tests__/renderer/epgStateUpdate.test.ts
+- src/__tests__/renderer/guideTuneController.test.ts
+BLOCKERS: none for WS5 targeted scope-load, planning, or plan review. Every WS5
+product/test/package/config edit remains gated until one decision-complete
+whole-WS5 plan freezes owner/write boundaries, contracts, performance and
+platform proof, rollback, and replan triggers and receives fresh independent
+`lineup-desktop-feature-review` approval for its first execution unit.
+MESSAGE:
+Own all of WS5 Guide through the Tier 3 feature-quality loop; do not stop after
+planning. Reuse the accepted 227-row audit and target only the exact 21 WS5
+rows: `EPG-01`–`EPG-15` and `UI-35`–`UI-40`, plus the direct
+`WS3-CONTRIBUTION-WS5` consumption gate for WS3-owned `ST-11`–`ST-16` and
+`UI-33`. Do not repeat the program audit, reopen accepted WS1–WS4 product work,
+take registry ownership from WS3, or begin WS6–WS9.
+
+Preflight by fetching/reconciling the tracked `initial-build`, proving this
+handoff is an ancestor, recording `git status --short --branch`, and preserving
+unrelated work. Freshness-read the exact WS5 rows and contribution table; the
+seven authorities above; current Guide contracts, main runtime, Settings
+policy/IPC, preload bridges, renderer presentation/polling/tune/focus/style
+owners and focused tests listed above; and the exact Guide/EPG/Settings behavior
+at upstream commit `0258dbe`. Use Codanna only when its current targeted index
+resolves a real symbol/impact ambiguity; otherwise record direct `rg`, history,
+and exact reads as the less noisy path.
+
+Use `lineup-desktop-feature-plan` through the tracked planner to create one
+decision-complete whole-WS5 amendment, then obtain fresh independent
+`lineup-desktop-feature-review` approval of its first unit before product edit.
+Freeze the smallest serial vertical units for: focused detail/art/live state and
+Play-to-now; persisted library tabs; Now Watching preference; Overlay versus
+Classic/PIP layout; Detailed 2h versus Wide 3h density; past-item policy; and
+large-guide virtualization/aggressive preload. Preserve current day rollover,
+number ordering, tune custody, polling/currentness cancellation, loading/empty/
+error recovery, Page routing contributed by WS4, and WS3's exact persisted
+setting vocabulary unless reviewed evidence requires a narrow replan.
+
+Keep renderer unprivileged; main owns schedule/channel truth and safe Guide
+projection, preload owns only strict renderer-safe validation, Settings remain
+main-persisted/WS3-owned, and `index.ts` remains composition. The source list in
+this handoff is freshness/read authority, not blanket write authorization: the
+reviewed WS5 plan must freeze exact sensitive files, no-touch owners, focus/
+accessibility behavior, row/cell virtualization and preload performance budgets,
+test fixtures, local visual proof, Windows/live/soak/paired debt, rollback, and
+stop conditions. Add no dependency, public schema, IPC/preload operation,
+privilege change, or copied/adapted upstream source without a reviewed replan;
+ledger any later approved adaptation before or with its import.
+
+Run one clean full `npm run verify` baseline before the first WS5 product edit,
+focused unit proof plus fresh material-only review at every checkpoint, local
+production-build Guide proof at 1280x720, 1920x1080, and approximately 900x700
+with keyboard/D-pad/simulated gamepad/pointer, reduced motion, forced colors,
+loading/empty/error/ready/detail/layout/density/tab/past-window/large-guide
+states, and one clean full local `npm run verify` closeout. Record unavailable
+Windows-machine, live Plex/large-lineup/day-rollover/DST/soak, physical-device,
+production-native-video/PIP, current-upstream paired, operator-assisted, and
+package obligations in an exact consolidated-proof packet without promoting
+support or closing their rows.
+
+Stop and replan on a contradiction in the assigned rows/current owners/WS3
+contribution contracts/upstream behavior, a need for an owner outside the
+reviewed unit, a new public contract or privilege/dependency/import, a weaker
+proof surface, or a required focused/build/architecture/full gate failure that
+cannot be resolved inside the unit. Close WS5's local gate only after all
+reviewed units, observed local verification, contribution/matrix/architecture/
+roadmap/Windows-proof reconciliation, and clean closeout review. Keep this
+canonical plan active and end with the complete WS6 feature-quality-loop
+handoff under the same targeted-audit and consolidated-proof policy.

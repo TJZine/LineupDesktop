@@ -1,6 +1,7 @@
 import {
   PLAYER_ERROR_CATEGORIES,
   PLAYER_FORBIDDEN_PRIVILEGED_FIELD_KEYS,
+  isPlayerCapabilitySupport,
   isRendererSafePlayerPlaybackQualitySummary,
   type PlayerErrorCategory,
   type PlayerLoadCommandPayload,
@@ -30,7 +31,7 @@ export const PLAYER_TRACK_DELIVERY_TYPES = [
 export function validateLoadPayload(
   value: unknown,
 ): { value: PlayerLoadCommandPayload } | { error: string } {
-  const payload = validateObjectPayload(value, ['media', 'policy'], ['capabilityProfileId']);
+  const payload = validateObjectPayload(value, ['media', 'policy', 'seekSupport'], ['capabilityProfileId']);
   if ('error' in payload) {
     return payload;
   }
@@ -45,10 +46,14 @@ export function validateLoadPayload(
   ) {
     return { error: 'load payload capabilityProfileId must be a string when present' };
   }
+  if (!isPlayerCapabilitySupport(payload.value.seekSupport)) {
+    return { error: 'load payload seekSupport must be a supported capability value' };
+  }
   return {
     value: {
       media: media.value,
       policy: policy.value,
+      seekSupport: payload.value.seekSupport,
       capabilityProfileId: payload.value.capabilityProfileId,
     },
   };

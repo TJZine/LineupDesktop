@@ -41,6 +41,7 @@ const capabilityProfile: DesktopStreamCapabilityProfile = {
   directPlayAudioCodecs: ['aac'],
   subtitleDeliveryModes: ['embedded', 'none'],
   headerAuthSetup: 'supported',
+  seek: 'supported',
   audioTrackSwitching: 'supported',
   subtitleTrackSwitching: 'supported',
   hdr: 'supported',
@@ -72,6 +73,7 @@ const loadPayload: PlayerLoadCommandPayload = {
     preferredAudioTrackId: 'plex-track-audio-1',
     preferredSubtitleTrackId: null,
   },
+  seekSupport: 'supported',
   capabilityProfileId: capabilityProfile.id,
 };
 

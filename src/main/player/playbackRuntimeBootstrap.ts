@@ -210,7 +210,8 @@ function createFakeResolver() {
           preferredAudioTrackId: null,
           preferredSubtitleTrackId: null,
         },
-        capabilityProfileId: input.capabilityProfile?.id || 'desktop-default-profile',
+        capabilityProfileId: input.capabilityProfile.id,
+        seekSupport: input.capabilityProfile.seek,
       };
       return {
         ok: true,
@@ -276,6 +277,7 @@ function getDevelopmentCapabilityProfile(): DesktopStreamCapabilityProfile {
     directPlayAudioCodecs: ['aac'],
     subtitleDeliveryModes: ['embedded', 'sidecar', 'none'],
     headerAuthSetup: 'supported',
+    seek: 'supported',
     audioTrackSwitching: 'supported',
     subtitleTrackSwitching: 'supported',
     hdr: 'supported',
@@ -302,6 +304,7 @@ export function getProductionCapabilityProfile(): DesktopStreamCapabilityProfile
     directPlayAudioCodecs: ['aac'],
     subtitleDeliveryModes: ['none'],
     headerAuthSetup: 'supported',
+    seek: 'supported',
     audioTrackSwitching: 'unsupported',
     subtitleTrackSwitching: 'unsupported',
     hdr: 'unsupported',

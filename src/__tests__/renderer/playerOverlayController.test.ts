@@ -63,72 +63,8 @@ test('OSD requests preserve higher overlay owners, including pending playback op
   assert.deepEqual(pendingOptions.state(), pendingOptionsState);
 });
 
-test('Space selects play/pause, suppresses duplicates, and settles by command request', async () => {
-  const dispatches: string[] = [];
-  const harness = createHarness(playingSnapshot(), {
-    dispatch: async (envelope) => {
-      dispatches.push(envelope.intent);
-      return accepted(envelope.requestId);
-    },
-  });
-  harness.controller.handleInput('space');
-  harness.controller.handleInput('space');
-  assert.deepEqual(dispatches, ['player.pause']);
-  harness.controller.handlePlayerEvent({ event: 'command.settled', requestId: 'unmatched', command: 'pause', ok: true });
-  harness.controller.handlePlayerEvent({ event: 'command.settled', requestId: 'renderer-pause-1', command: 'pause', ok: true });
-  harness.controller.handleInput('space');
-  assert.deepEqual(dispatches, ['player.pause', 'player.pause']);
-
-  harness.setSnapshot({ ...playingSnapshot(), status: 'paused', playing: false });
-  harness.controller.handlePlayerEvent({ event: 'command.settled', requestId: 'renderer-pause-2', command: 'pause', ok: true });
-  harness.controller.handleInput('space');
-  assert.equal(dispatches.at(-1), 'player.play');
-});
-
-test('late rejected Space dispatch cannot clear a newer pending command after route invalidation', async () => {
-  const first = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['player']['dispatch']>>>();
-  const requestIds: string[] = [];
-  const harness = createHarness(playingSnapshot(), {
-    dispatch: async (envelope) => {
-      requestIds.push(envelope.requestId);
-      return requestIds.length === 1 ? first.promise : accepted(envelope.requestId);
-    },
-  });
-
-  harness.controller.handleInput('space');
-  harness.controller.routeLeave();
-  harness.controller.handleInput('space');
-  first.reject(new Error('late private failure'));
-  await flushPromiseQueue();
-
-  harness.controller.handleInput('space');
-  assert.equal(requestIds.length, 2);
-  harness.controller.handlePlayerEvent({
-    event: 'command.settled', requestId: requestIds[1] ?? '', command: 'pause', ok: true,
-  });
-  harness.controller.handleInput('space');
-  assert.equal(requestIds.length, 3);
-});
-
-test('bridge request timeouts clear tune and command ownership through normal failure paths', async () => {
+test('bridge request timeouts clear tune and track ownership through normal failure paths', async () => {
   const never = new Promise<never>(() => undefined);
-  let dispatchCount = 0;
-  const command = createHarness(playingSnapshot(), {
-    dispatch: async () => {
-      dispatchCount += 1;
-      return never;
-    },
-  });
-  command.controller.handleInput('space');
-  command.timers.advance(29_999);
-  await flushPromiseQueue();
-  assert.deepEqual(command.diagnostics, []);
-  command.timers.advance(1);
-  await flushPromiseQueue();
-  assert.deepEqual(command.diagnostics, ['Player command timed out.']);
-  command.controller.handleInput('space');
-  assert.equal(dispatchCount, 2);
-
   const track = createHarness(playingSnapshot(), {
     dispatch: async () => never,
   });
@@ -157,44 +93,7 @@ test('bridge request timeouts clear tune and command ownership through normal fa
   assert.equal(tune.state().miniGuideError, 'Channel tune timed out.');
 });
 
-test('accepted commands retain a settlement deadline and release it on matching settlement', async () => {
-  let unresolvedDispatches = 0;
-  const unresolved = createHarness(playingSnapshot(), {
-    dispatch: async (envelope) => {
-      unresolvedDispatches += 1;
-      return accepted(envelope.requestId);
-    },
-  });
-  unresolved.controller.handleInput('space');
-  await flushPromiseQueue();
-  unresolved.timers.advance(29_999);
-  assert.deepEqual(unresolved.diagnostics, []);
-  unresolved.timers.advance(1);
-  await flushPromiseQueue();
-  assert.deepEqual(unresolved.diagnostics, ['Player command timed out.']);
-  unresolved.controller.handleInput('space');
-  assert.equal(unresolvedDispatches, 2);
-
-  let settledDispatches = 0;
-  const settled = createHarness(playingSnapshot(), {
-    dispatch: async (envelope) => {
-      settledDispatches += 1;
-      return accepted(envelope.requestId);
-    },
-  });
-  settled.controller.handleInput('space');
-  await flushPromiseQueue();
-  settled.controller.handlePlayerEvent({
-    event: 'command.settled',
-    requestId: 'renderer-pause-1',
-    command: 'pause',
-    ok: true,
-  });
-  settled.timers.advance(30_000);
-  assert.deepEqual(settled.diagnostics, []);
-  settled.controller.handleInput('space');
-  assert.equal(settledDispatches, 2);
-
+test('accepted track commands retain a settlement deadline', async () => {
   const track = createHarness(playingSnapshot());
   track.controller.requestOsd();
   track.controller.openOptions('audio');
@@ -208,25 +107,9 @@ test('accepted commands retain a settlement deadline and release it on matching 
   assert.equal(track.state().playbackOptionsError, 'Track selection timed out.');
 });
 
-test('route leave and dispose cancel owned bridge deadlines without late failures', async () => {
-  const never = new Promise<never>(() => undefined);
-  const routeLeave = createHarness(playingSnapshot(), {
-    dispatch: async () => never,
-  });
-  routeLeave.controller.handleInput('space');
-  routeLeave.controller.routeLeave();
-  await flushPromiseQueue();
-  routeLeave.timers.advance(30_000);
-  assert.deepEqual(routeLeave.diagnostics, []);
-
-  const dispose = createHarness(playingSnapshot(), {
-    dispatch: async () => never,
-  });
-  dispose.controller.handleInput('space');
+test('dispose makes later overlay input inert', () => {
+  const dispose = createHarness(playingSnapshot());
   dispose.controller.dispose();
-  await flushPromiseQueue();
-  dispose.timers.advance(30_000);
-  assert.deepEqual(dispose.diagnostics, []);
   assert.equal(dispose.controller.handleInput('space'), false);
 });
 
@@ -256,6 +139,43 @@ test('different tune target supersedes stale completion and only current success
   assert.equal(statusRefresh, 1);
   assert.equal(guideRefresh, 1);
   assert.equal(harness.state().lastTuneChannelId, 'two');
+});
+
+test('Player Page keys tune circular adjacent channels in both directions', async () => {
+  const tuned: string[] = [];
+  const tuneChannel = async ({ channelId }: { channelId: string }) => {
+    tuned.push(channelId);
+    return { ok: true as const, value: undefined as never, requestId: `tune-${channelId}` };
+  };
+  const fromOne = createHarness(playingSnapshot(), { tuneChannel, currentChannelId: 'one' });
+  assert.equal(fromOne.controller.handleInput('pageUp'), true);
+  await flushPromiseQueue();
+  const fromTwo = createHarness(playingSnapshot(), { tuneChannel, currentChannelId: 'two' });
+  assert.equal(fromTwo.controller.handleInput('pageDown'), true);
+  await flushPromiseQueue();
+  assert.deepEqual(tuned, ['two', 'one']);
+});
+
+test('Player Page keys do not bypass overlay or pending-tune custody', async () => {
+  const pendingTune = deferred<{ ok: true; value: never; requestId: string }>();
+  const tuned: string[] = [];
+  const harness = createHarness(playingSnapshot(), {
+    tuneChannel: async ({ channelId }) => {
+      tuned.push(channelId);
+      return pendingTune.promise;
+    },
+  });
+
+  assert.equal(harness.controller.handleInput('pageUp'), true);
+  assert.deepEqual(tuned, ['two']);
+  assert.equal(harness.controller.handleInput('pageDown'), true);
+  assert.deepEqual(tuned, ['two']);
+  pendingTune.resolve({ ok: true, value: undefined as never, requestId: 'page-tune' });
+  await flushPromiseQueue();
+
+  harness.controller.requestNowPlaying();
+  assert.equal(harness.controller.handleInput('pageDown'), true);
+  assert.deepEqual(tuned, ['two']);
 });
 
 test('track selection waits for matching settlement and keeps exact focus on local failure', async () => {
@@ -327,34 +247,7 @@ test('authoritative terminal state and route/dispose invalidate overlays and lat
   assert.equal(harness.controller.handleInput('up'), false);
 });
 
-test('all Space status/playing pairs dispatch only the three frozen consistent intents', () => {
-  const statuses: PlayerSnapshot['status'][] = [
-    'idle', 'loading', 'ready', 'playing', 'paused', 'buffering', 'seeking', 'stalled', 'ended', 'error', 'destroyed',
-  ];
-  for (const status of statuses) {
-    for (const playing of [false, true]) {
-      const intents: string[] = [];
-      const harness = createHarness({ ...playingSnapshot(), status, playing }, {
-        dispatch: async (envelope) => {
-          intents.push(envelope.intent);
-          return accepted(envelope.requestId);
-        },
-      });
-      assert.equal(harness.controller.handleInput('space'), true);
-      const expected = status === 'playing' && playing
-        ? ['player.pause']
-        : (status === 'ready' || status === 'paused') && !playing
-          ? ['player.play']
-          : [];
-      assert.deepEqual(intents, expected, `${status}/${String(playing)}`);
-      const inconsistent = (status === 'playing' && !playing) ||
-        ((status === 'ready' || status === 'paused') && playing);
-      assert.equal(harness.diagnostics.length, inconsistent ? 1 : 0, `${status}/${String(playing)} diagnostics`);
-    }
-  }
-});
-
-test('playback request replacement invalidates Space and track generations without stale UI', async () => {
+test('playback request replacement invalidates track generations without stale UI', async () => {
   const dispatches: string[] = [];
   const harness = createHarness(playingSnapshot(), {
     dispatch: async (envelope) => {
@@ -375,14 +268,10 @@ test('playback request replacement invalidates Space and track generations witho
   });
   assert.equal(harness.state().playbackOptionsError, null);
 
-  harness.controller.handleInput('space');
-  harness.setSnapshot({ ...playingSnapshot(), requestId: 'playback-3' });
-  harness.controller.handlePlayerEvent({ event: 'command.settled', requestId: dispatches[1] ?? '', command: 'pause', ok: true });
-  harness.controller.handleInput('space');
-  assert.equal(dispatches.length, 3);
+  assert.equal(dispatches.length, 1);
 });
 
-test('subtitle Off completion restores native surface when its invoking OSD control disappears', async () => {
+test('subtitle Off completion restores OSD Sleep focus when its invoking control disappears', async () => {
   const selectedSubtitle = {
     ...playingSnapshot(),
     selectedAudioTrackId: 'audio-main',
@@ -404,8 +293,8 @@ test('subtitle Off completion restores native surface when its invoking OSD cont
   harness.controller.handlePlayerEvent({
     event: 'command.settled', requestId: 'renderer-select-subtitle-1', command: 'track.subtitle.select', ok: true,
   });
-  assert.equal(harness.state().activeOverlayId, null);
-  assert.equal(harness.focus.at(-1), null);
+  assert.equal(harness.state().activeOverlayId, 'playerOsd');
+  assert.equal(harness.focus.at(-1), 'overlay-osd-sleep');
 });
 
 test('terminal states refuse Info and mini-guide while recovery success suppresses the old error owner', () => {
@@ -681,8 +570,8 @@ test('options contain Space, membership loss closes an ineligible family, and tu
     ...playingSnapshot(),
     tracks: [{ id: 'audio-main', kind: 'audio', label: 'Main', selected: true, available: true }],
   });
-  assert.equal(optionsHarness.state().activeOverlayId, null);
-  assert.equal(optionsHarness.focus.at(-1), null);
+  assert.equal(optionsHarness.state().activeOverlayId, 'playerOsd');
+  assert.equal(optionsHarness.focus.at(-1), 'overlay-osd-sleep');
 
   const refresh = deferred<void>();
   const retryHarness = createHarness({ ...playingSnapshot(), status: 'error', playing: false, lastError: safeError() }, {
@@ -761,10 +650,11 @@ function createHarness(snapshot: PlayerSnapshot, overrides: Partial<{
   refreshChannelStatus: () => Promise<void>;
   refreshGuidePresentation: () => Promise<void>;
   recovery: PlayerErrorRecoveryController;
+  currentChannelId: 'one' | 'two';
   nowPlayingAutoHideMs: 0 | 5000 | 10000 | 15000 | 30000 | 60000 | 120000;
 }> = {}) {
   let playerSnapshot = snapshot;
-  let state = createPlayerOverlayState(presentation(snapshot));
+  let state = createPlayerOverlayState(presentation(snapshot, overrides.currentChannelId));
   const timers = new FakeTimers();
   const focus: Array<string | null> = [];
   const diagnostics: string[] = [];
@@ -776,7 +666,7 @@ function createHarness(snapshot: PlayerSnapshot, overrides: Partial<{
     host: timers,
     getState: () => state,
     setState: (next) => { state = next; },
-    getPresentation: () => presentation(playerSnapshot),
+    getPresentation: () => presentation(playerSnapshot, overrides.currentChannelId),
     render: () => undefined,
     focus: (id) => { focus.push(id); },
     openGuide: () => undefined,
@@ -828,9 +718,12 @@ function playingSnapshot(): PlayerSnapshot {
   };
 }
 
-function presentation(playerSnapshot: PlayerSnapshot): PlayerOverlayPresentationSource {
+function presentation(
+  playerSnapshot: PlayerSnapshot,
+  currentChannelId: 'one' | 'two' = 'one',
+): PlayerOverlayPresentationSource {
   return {
-    playerSnapshot, currentChannelId: 'one', nowMs: 1,
+    playerSnapshot, currentChannelId, nowMs: 1,
     channels: [
       { id: 'one', number: '1', name: 'One', currentProgram: { id: 'p1', title: 'One now', startsAtMs: 0, endsAtMs: 2 } },
       { id: 'two', number: '2', name: 'Two', currentProgram: { id: 'p2', title: 'Two now', startsAtMs: 0, endsAtMs: 2 } },

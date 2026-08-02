@@ -1,4 +1,8 @@
-import type { PlayerSnapshot, PlayerTrackSummary } from '../contracts/player.js';
+import type {
+  PlayerSnapshot,
+  PlayerStatus,
+  PlayerTrackSummary,
+} from '../contracts/player.js';
 import type { ChannelSetupSummary } from '../contracts/channel.js';
 import type { EpgPresentationSource, EpgProgramViewModel } from './epg.js';
 
@@ -33,12 +37,19 @@ export interface PlayerOverlayPresentationInput {
   nowMs?: number;
 }
 
+export const OSD_ACTIVE_STATUSES = [
+  'ready',
+  'playing',
+  'paused',
+] as const satisfies readonly PlayerStatus[];
+
 export function createEmptyPlayerSnapshot(): PlayerSnapshot {
   return {
     requestId: null,
     status: 'idle',
     media: null,
     capabilityProfileId: null,
+    seekSupport: 'unknown',
     positionMs: 0,
     durationMs: null,
     bufferedRanges: [],
@@ -113,6 +124,19 @@ export function isAudioControlEligible(snapshot: PlayerSnapshot): boolean {
 
 export function isSubtitleControlEligible(snapshot: PlayerSnapshot): boolean {
   return snapshot.selectedSubtitleTrackId !== null || availableTracks(snapshot, 'subtitle').length > 0;
+}
+
+export function isSleepControlEligible(snapshot: PlayerSnapshot): boolean {
+  return snapshot.requestId !== null && OSD_ACTIVE_STATUSES.includes(
+    snapshot.status as (typeof OSD_ACTIVE_STATUSES)[number],
+  );
+}
+
+export function firstEligibleOsdFocusId(snapshot: PlayerSnapshot): string | null {
+  if (isSubtitleControlEligible(snapshot)) return 'overlay-osd-subtitles';
+  if (isSleepControlEligible(snapshot)) return 'overlay-osd-sleep';
+  if (isAudioControlEligible(snapshot)) return 'overlay-osd-audio';
+  return null;
 }
 
 export function resolveRetryChannelId(

@@ -251,6 +251,7 @@ export class PlexStreamResolver {
       candidate: selected,
       decision,
       capabilityProfileId: input.capabilityProfile.id,
+      seekSupport: input.capabilityProfile.seek,
       autoplay: input.autoplay ?? true,
       startPositionMs: input.startPositionMs,
     });
@@ -413,6 +414,7 @@ function projectPlayerLoadPayload(input: {
   candidate: DesktopStreamMediaCandidate;
   decision: DesktopStreamPolicyDecision;
   capabilityProfileId: string;
+  seekSupport: PlayerLoadCommandPayload['seekSupport'];
   autoplay: boolean;
   startPositionMs?: number;
 }): PlayerLoadCommandPayload {
@@ -428,6 +430,7 @@ function projectPlayerLoadPayload(input: {
     media: input.candidate.media,
     policy,
     capabilityProfileId: input.capabilityProfileId,
+    seekSupport: input.seekSupport,
   };
 }
 

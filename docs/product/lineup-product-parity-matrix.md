@@ -1,8 +1,8 @@
 # Lineup WebOS to Desktop Master Parity Matrix
 
 Last audited: 2026-07-28
-Execution authority updated: 2026-07-29. This sequencing update does not repeat
-or replace the accepted one-by-one audit.
+Execution authority updated: 2026-08-01. This WS4 targeted reconciliation does
+not repeat or replace the accepted one-by-one audit.
 
 This is the single authoritative feature and UI parity ledger for the Windows
 Desktop port. It replaces the former 14-row RD-21 summary, which was too coarse
@@ -34,6 +34,16 @@ file owns the one-by-one parity disposition.
   shared production-host wiring and restores full verification. It does not
   change the final WS3 product source (`87662b5`), capability state, visual
   evidence, ownership, or any stable-ID classification.
+- WS4's local implementation gate closes through Unit 4A `f4570df`, Unit 4B
+  `a78228b`, Unit 4C `a654cdd`, smoke-harness correction `c4dadcf`, and Unit 4D
+  `3258511`. Final production-build local proof passed 36/36 viewport,
+  interaction, reduced-motion, and forced-colors scenarios with controller
+  visual inspection; final `npm run verify` passed 1,110 tests with one
+  intentional skip and harness/docs passed 177/177. This targeted 35-row
+  reconciliation records local implementation only. `WS4-PROOF-01` through
+  `WS4-PROOF-04` retain Windows, physical-device, production-native, paired,
+  operator-assisted, live, and package-lifecycle proof without promoting
+  support; no upstream source was copied or adapted.
 - The existing visual bundle was initially captured against upstream
   `6ef20801019e1d1aae2a0158128eba9142d0d008`. Later target/freshness evidence
   used `196a54765c0c6f782ef78c52382de92f1ca1bfd2` for Package 1,
@@ -97,10 +107,13 @@ are:
    native/live media behavior, artwork, current-upstream paired visuals,
    Windows recovery, and paired proof remain open; conservative
    capability-disabled controls are not support claims.
-4. **P1 — Input/player-control parity is incomplete.** Desktop handles
-   navigation, Guide, Settings, Info, digits, fullscreen, and Space play/pause,
-   but does not route upstream-style media play/pause, rewind, fast-forward, or
-   stop keys. Sleep timer is absent.
+4. **P1 — Input/player-control implementation is locally closed, while platform
+   proof remains open.** WS4 adds guarded media play/pause, rewind,
+   fast-forward, Stop, semantic shortcuts, 500 ms long-Back, foreground
+   BrowserWindow app-command routing, and the session sleep timer. Physical
+   Windows input, production-native playback, paired overlay, and packaged
+   teardown evidence remains `WS4-PROOF-01` through `WS4-PROOF-04`; `UI-47`
+   remains partial and conservative playback capabilities are unchanged.
 5. **P1 — The visual parity claim is stale and narrower than it sounds.** The
    54-surface matrix and 138 captures are valuable, but 18 surface dispositions
    are Desktop divergences, several captures represent omitted controls, and
@@ -281,23 +294,23 @@ player contracts/tests, and Windows spike evidence.
 | PB-06 | Plex transcode session start/stop | `partial` | `not-a-visual-row` | PMS lifecycle exists, but transcode families remain unsupported; observation or promotion remains `WS2-POST-VALIDATION-01`. | P0 |
 | PB-07 | Native libmpv helper discovery, spawn, load, render, cleanup | `partial` | `proof-only` | WS2 source/non-packaged-helper contribution is locally complete; native build/live proof remains `WS2-POST-VALIDATION-01`, while packaged helper/libmpv proof remains WS9/RD-28. | P0 |
 | PB-08 | Windowed/fullscreen native video with renderer UI over it | `partial` | `local-match` | Local presentation gate is complete; Windows production video and the three-row audit remain `WS2-POST-VALIDATION-01`/RD-27 as applicable. | P0 |
-| PB-09 | Play/pause | `partial` | `partial` | Space dispatch exists; upstream remote media play/pause key mapping is absent. The upstream OSD action strip does not add a separate play/pause button. | P1 |
-| PB-10 | Seek/rewind/fast-forward | `partial` | `missing` | Main/helper contracts support relative/absolute seek, but renderer remote/media-key routing does not expose upstream behavior; upstream has no separate OSD seek action. | P1 |
-| PB-11 | Stop playback | `partial` | `missing` | Main runtime supports stop/cleanup; renderer remote/media-key routing lacks upstream Stop behavior, not an OSD button. | P1 |
+| PB-09 | Play/pause | `live-local` | `local-match` | WS4 guarded Space/media Play/Pause/PlayPause routing is locally verified without an OSD button; real Windows physical-command and production-playback observation remains `WS4-PROOF-01`. | P1 |
+| PB-10 | Seek/rewind/fast-forward | `live-local` | `not-a-visual-row` | WS4 maps rewind/fast-forward to exact guarded current-request ±10-second seeks only when safe seek support is `supported`; production Windows observation remains `WS4-PROOF-01` and no capability is promoted. | P1 |
+| PB-11 | Stop playback | `live-local` | `not-a-visual-row` | WS4 maps Stop through the guarded current-request path with no OSD stop button; real Windows production-playback cleanup remains `WS4-PROOF-01`. | P1 |
 | PB-12 | Loading, buffering, seeking, stalled, ended, and error states | `live-local` | `local-match` | Local state/error gate is complete; real-media/network Windows states remain `WS2-POST-VALIDATION-01`. | P1 |
 | PB-13 | Retry/recovery after media failure | `partial` | `local-match` | Bounded 1/2/4 recovery plus explicit Retry/Skip/Guide fallback is implemented and reviewed; live ERROR/EOF/recovery observation remains `WS2-POST-VALIDATION-01`, so status does not advance. | P1 |
 | PB-14 | Helper crash detection, cleanup, and restart | `live-local` | `not-a-visual-row` | Local crash/cleanup/restart gate is complete; native media and soak remain `WS2-POST-VALIDATION-01`. | P1 |
-| PB-15 | OSD program info, progress, timecode, buffer, ends-at | `live-local` | `local-match` | Current-upstream freshness and Windows native-video proof. | P1 |
-| PB-16 | Now Playing information, progress, up-next | `live-local` | `local-match` | Metadata/art richness and Windows proof remain. | P2 |
-| PB-17 | Mini Guide | `live-local` | `local-match` | Windows focus/paging/tune proof. | P1 |
-| PB-18 | Channel badge and transition overlay | `live-local` | `local-match` | Windows timing/native-video proof. | P2 |
+| PB-15 | OSD program info, progress, timecode, buffer, ends-at | `live-local` | `local-match` | WS4 local production-build regression proof passed; paired-current-upstream and Windows production-native-video proof remains `WS4-PROOF-03`. | P1 |
+| PB-16 | Now Playing information, progress, up-next | `live-local` | `local-match` | WS4 local regression proof passed; metadata/art richness plus paired and Windows native-video observation remains `WS4-PROOF-03`. | P2 |
+| PB-17 | Mini Guide | `live-local` | `local-match` | WS4 local paging/focus regression proof passed; physical-input and Windows production-native-video proof remains `WS4-PROOF-02`/`WS4-PROOF-03`. | P1 |
+| PB-18 | Channel badge and transition overlay | `live-local` | `local-match` | WS4 local timing/presentation regression proof passed; paired and Windows production-native-video proof remains `WS4-PROOF-03`. | P2 |
 | PB-19 | Audio track list and selection | `partial` | `local-match` | UI/helper paths remain, but switching is unsupported; observation or promotion remains `WS2-POST-VALIDATION-01`. | P0 |
 | PB-20 | Subtitle off/list/selection | `partial` | `local-match` | Delivery remains `none` and switching unsupported; observation or promotion remains `WS2-POST-VALIDATION-01`. | P0 |
 | PB-21 | Subtitle direct/extract/burn-in fallback pipeline | `partial` | `partial` | Policy paths remain, but conversion/transcode are unsupported; representative native samples remain `WS2-POST-VALIDATION-01`. | P0 |
 | PB-22 | Forced/default/preferred-language subtitle auto-selection | `partial` | `partial` | WS2 remains the owner; WS3's preference/control contribution landed, while native/live proof remains `WS2-POST-VALIDATION-01` plus `WS3-PROOF-02`. | P1 |
 | PB-23 | Audio fallback and DTS passthrough | `partial` | `partial` | WS2 remains the owner; WS3's fallback/DTS preference-control contribution landed, while native/live proof remains `WS2-POST-VALIDATION-01` plus `WS3-PROOF-02`. | P1 |
 | PB-24 | HDR10/HLG/Dolby Vision detection and fallback | `partial` | `partial` | WS2 remains the owner; WS3's HDR preference/control contribution landed without capability promotion, while native/live proof remains `WS2-POST-VALIDATION-01` plus `WS3-PROOF-02`. | P0 |
-| PB-25 | Sleep timer cycles, countdown, expiry, and stop | `missing` | `missing` | Implement or explicitly obtain product approval to diverge. | P1 |
+| PB-25 | Sleep timer cycles, countdown, expiry and pause | `live-local` | `local-match` | WS4 session-only 15/30/60/120/Off cycling, deadline countdown, one-minute warning, cleanup, expiry and guarded current-request pause-on-expiry are locally verified; paired/Windows production-native expiry remains `WS4-PROOF-03`. | P1 |
 | PB-26 | Keepalive and long-playback continuity | `proof-only` | `not-a-visual-row` | Real long-playback soak remains missing. | P1 |
 | PB-27 | Sleep/wake recovery | `missing` | `not-a-visual-row` | Add Windows power lifecycle design and proof. | P1 |
 | PB-28 | Multi-monitor, DPI, move-between-display, fullscreen restore | `partial` | `proof-only` | Window controller exists; production video/product soak remains. | P1 |
@@ -352,22 +365,22 @@ packaging tools.
 
 | ID | Capability/state | Desktop status | Visual status | Gap / acceptance needed | Priority |
 | --- | --- | --- | --- | --- | --- |
-| NAV-01 | D-pad/arrows and OK/Enter | `live-local` | `local-match` | Windows keyboard/gamepad focus proof remains. | P1 |
-| NAV-02 | Back/Escape closes topmost owner and long-back returns Player | `partial` | `local-match` | Topmost close exists; upstream long-press Back semantics are not proven. | P1 |
-| NAV-03 | Guide shortcut (`G`, remote Guide/Green fallback) | `partial` | `partial` | `G`/Guide exists; upstream F2/Green mapping is absent. | P2 |
-| NAV-04 | Settings shortcut (Yellow/F3) | `partial` | `partial` | Desktop maps `S`/`,`; upstream F3/Yellow parity is absent. | P2 |
-| NAV-05 | Now Playing shortcut (Red/F1) | `missing` | `missing` | Desktop has Info behavior, but no upstream F1/Red mapping. | P2 |
-| NAV-06 | Info/Blue opens server selection or sign-in recovery | `partial` | `partial` | `I` exists; F4/Blue mapping is absent and Desktop overlay policy diverges. | P2 |
-| NAV-07 | CH+/CH- and PageUp/PageDown context routing | `live-local` | `partial` | Prove player/mini-guide/EPG context behavior on Windows. | P1 |
-| NAV-08 | Media play/pause, rewind, fast-forward, stop keys | `missing` | `missing` | Add renderer/main mapping to existing player intents with eligibility/focus rules. | P1 |
-| NAV-09 | Gamepad D-pad/OK/Back/Settings/Guide/fullscreen | `live-local` | `not-a-visual-row` | Windows device proof and repeat behavior remain. | P2 |
-| NAV-10 | Pointer/mouse click equivalence and cursor auto-hide | `live-local` | `local-match` | Windows native-video overlay proof remains. | P2 |
-| NAV-11 | Editable-control shortcut bypass | `live-local` | `not-a-visual-row` | Maintain focused tests as settings/builder controls expand. | P1 |
-| NAV-12 | Focus restore, modal trapping, hidden-owner inertness | `live-local` | `local-match` | Mandatory Package 6 Windows audit remains. | P0 |
-| NAV-13 | Reduced motion | `live-local` | `local-match` | Eight local rows; revalidate new/current-upstream surfaces. | P2 |
-| NAV-14 | Forced colors / high contrast | `live-local` | `local-match` | Twelve local rows; Windows high-contrast product proof remains. | P2 |
-| NAV-15 | 1280x720 and 1920x1080 responsive layout | `proof-only` | `local-match` | 69 captures at each viewport; current-upstream freshness and real window-resize states remain. | P1 |
-| NAV-16 | Exit confirmation and window close | `live-local` | `local-match` | Packaged Windows behavior proof. | P2 |
+| NAV-01 | D-pad/arrows and OK/Enter | `live-local` | `local-match` | WS4 local focus/interaction regression proof passed; real Windows keyboard/gamepad proof remains `WS4-PROOF-02`. | P1 |
+| NAV-02 | Back/Escape closes topmost owner and long-back returns Player | `live-local` | `local-match` | WS4 adds one 500 ms source-aware long-Back while preserving protected-owner/topmost precedence and cleanup; physical Windows proof remains `WS4-PROOF-02`. | P1 |
+| NAV-03 | Guide shortcut (`G`, remote Guide/Green fallback) | `live-local` | `local-match` | WS4 locally verifies `G`, F2, and Guide/Green-equivalent routing under protected/editable precedence; physical-device proof remains `WS4-PROOF-02`. | P2 |
+| NAV-04 | Settings shortcut (Yellow/F3) | `live-local` | `local-match` | WS4 locally verifies `S`, `,`, F3, and Yellow-equivalent routing under protected/editable precedence; physical-device proof remains `WS4-PROOF-02`. | P2 |
+| NAV-05 | Now Playing shortcut (Red/F1) | `live-local` | `local-match` | WS4 separates F1/Red-equivalent Now Playing from Info and proves local precedence/focus; physical-device proof remains `WS4-PROOF-02`. | P2 |
+| NAV-06 | Info/Blue opens server selection or sign-in recovery | `live-local` | `local-match` | WS4 routes `I`, F4, and Blue-equivalent through current renderer-safe auth state to server selection or sign-in recovery; live/profile and physical-device proof remains `WS4-PROOF-02` with WS8 ownership preserved. | P2 |
+| NAV-07 | CH+/CH- and PageUp/PageDown context routing | `live-local` | `local-match` | WS4 locally verifies Player previous/next and circular Mini Guide/Guide ±5 context routing; physical Windows continuity remains `WS4-PROOF-02`. | P1 |
+| NAV-08 | Media play/pause, rewind, fast-forward, stop keys | `live-local` | `not-a-visual-row` | WS4 locally verifies guarded renderer input and focused BrowserWindow app-command routing without global interception; real Windows physical-command and production-playback proof remains `WS4-PROOF-01`. | P1 |
+| NAV-09 | Gamepad D-pad/OK/Back/Settings/Guide/fullscreen | `live-local` | `not-a-visual-row` | WS4 simulated gamepad/repeat/hold cleanup proof passed; real Windows device proof remains `WS4-PROOF-02`. | P2 |
+| NAV-10 | Pointer/mouse click equivalence and cursor auto-hide | `live-local` | `local-match` | WS4 local pointer/cursor equivalence passed; Windows production-native-video mixed-input proof remains `WS4-PROOF-02`/`WS4-PROOF-03`. | P2 |
+| NAV-11 | Editable-control shortcut bypass | `live-local` | `not-a-visual-row` | WS4 focused regression proof preserves editable bypass; physical Windows mixed-input proof remains `WS4-PROOF-02`. | P1 |
+| NAV-12 | Focus restore, modal trapping, hidden-owner inertness | `live-local` | `local-match` | WS4 local overlay/focus regression proof passed; mandatory Package 6 Windows audit remains `WS4-PROOF-02`/`WS4-PROOF-03`. | P0 |
+| NAV-13 | Reduced motion | `live-local` | `local-match` | WS4 final production-build proof includes its new surfaces; current-upstream paired and Windows proof remains `WS4-PROOF-03`. | P2 |
+| NAV-14 | Forced colors / high contrast | `live-local` | `local-match` | WS4 final production-build proof includes forced-colors states; Windows high-contrast/native-video proof remains `WS4-PROOF-03`. | P2 |
+| NAV-15 | 1280x720 and 1920x1080 responsive layout | `proof-only` | `local-match` | WS4 added final production-build proof at 1280x720, 1920x1080, and approximately 900x700; paired freshness and real Windows resize/DPI remain `WS4-PROOF-03`. | P1 |
+| NAV-16 | Exit confirmation and window close | `live-local` | `local-match` | WS4 local exit/close regression proof passed; packaged Windows teardown remains `WS4-PROOF-04`. | P2 |
 | PKG-01 | Internal unpacked Windows x64 package | `proof-only` | `not-a-visual-row` | Tooling proof exists; helper/media binaries are deliberately blocked from artifact. | P1 |
 | PKG-02 | Native helper and libmpv included with provenance/licenses | `missing` | `not-a-visual-row` | Required for a usable packaged native player. | P0 |
 | PKG-03 | Installer, install/uninstall/delete, signing, updates | `missing` | `not-a-visual-row` | RD-28 must not be treated as mere proof if implementation is absent. | P1 |
@@ -402,7 +415,7 @@ reduced-motion rows, 12 forced-colors rows, and 3 local-fullscreen rows.
 | Settings | Desktop Appearance and Guide rows | upstream Audio/Subtitles, Playback/HDR, Account, and Developer controls are missing; Desktop Recovery is additive | `partial`; screenshots of category shells must not imply control parity |
 | Guide | ready, empty channels/programs, focused detail | loading/error are additive honest states; library tabs and alternate layouts are not captured because they are missing | `partial` |
 | Player | idle, loading, error | production video behavior is not proven by renderer capture | `partial` |
-| Overlays | OSD, now playing, mini guide, options, badge, number, transition | sleep timer missing | `partial`; Package 6 Windows audit pending |
+| Overlays | OSD, now playing, mini guide, options, badge, number, transition, sleep timer | capability-limited playback options remain partial | `partial`; WS4 local production-build proof passed, while paired/current-upstream and Package 6 Windows native-video audit remain `WS4-PROOF-03` |
 
 ### One-by-one canonical visual states
 
@@ -457,15 +470,15 @@ a matching shell screenshot from closing missing controls or runtime behavior.
 | UI-41 | `player-idle` / Player idle | `live-local` | `local-match` | Local idle/runtime gate complete; Windows native observation remains `WS2-POST-VALIDATION-01`. | PB-01–PB-03 |
 | UI-42 | `player-loading` / Loading transition | `live-local` | `local-match` | Local loading-transition gate complete; Windows observation remains `WS2-POST-VALIDATION-01`. | PB-12 |
 | UI-43 | `player-error` / Player error | `partial` | `local-match` | Reviewed Retry/Skip error actions landed; Windows live recovery remains `WS2-POST-VALIDATION-01`. | PB-12–PB-13 |
-| UI-44 | `overlay-osd` / Player OSD | `partial` | `local-match` | `reference:overlay-osd` / `capture:overlay-osd` | PB-09–PB-15 |
-| UI-45 | `overlay-now-playing` / Now Playing | `live-local` | `local-match` | `reference:overlay-now-playing` / `capture:overlay-now-playing` | PB-16 |
-| UI-46 | `overlay-mini-guide` / Mini Guide | `live-local` | `local-match` | `reference:overlay-mini-guide` / `capture:overlay-mini-guide` | PB-02, PB-17 |
-| UI-47 | `overlay-options` / Playback options | `partial` | `local-match` | `reference:overlay-options` / `capture:overlay-options` | PB-19–PB-24 |
-| UI-48 | `overlay-badge` / Channel badge | `live-local` | `local-match` | `reference:overlay-badge` / `capture:overlay-badge` | PB-18 |
-| UI-49 | `overlay-number` / Number entry | `live-local` | `local-match` | `reference:overlay-number` / `capture:overlay-number` | PB-03 |
-| UI-50 | `overlay-transition` / Channel transition | `live-local` | `local-match` | `reference:overlay-transition` / `capture:overlay-transition` | PB-18 |
-| UI-51 | `overlay-sleep-timer` / Sleep timer | `missing` | `missing` | `reference:overlay-sleep-timer` / `capture:overlay-sleep-timer` (omission target) | PB-25 |
-| UI-52 | `exit-confirm` / Exit confirmation | `live-local` | `local-match` | `reference:exit-confirm` / `capture:exit-confirm` | NAV-16, LC-02 |
+| UI-44 | `overlay-osd` / Player OSD | `live-local` | `local-match` | WS4 locally verifies the Subtitles/Sleep/Audio action strip and existing program/progress/time presentation; paired/Windows/native-video proof remains `WS4-PROOF-03`. | PB-09–PB-15 |
+| UI-45 | `overlay-now-playing` / Now Playing | `live-local` | `local-match` | WS4 final production-build regression proof passed; paired/Windows/native-video proof remains `WS4-PROOF-03`. | PB-16 |
+| UI-46 | `overlay-mini-guide` / Mini Guide | `live-local` | `local-match` | WS4 final production-build paging/focus proof passed; paired/Windows/native-video proof remains `WS4-PROOF-03`. | PB-02, PB-17 |
+| UI-47 | `overlay-options` / Playback options | `partial` | `local-match` | WS4 regression proof passed but capability-dependent switching remains partial through WS2-owned/open `PB-19`–`PB-24`, `WS2-POST-VALIDATION-01`, and the applicable WS3 proof contribution; `WS4-PROOF-03` adds paired/Windows presentation proof only. | PB-19–PB-24 |
+| UI-48 | `overlay-badge` / Channel badge | `live-local` | `local-match` | WS4 final production-build regression proof passed; paired/Windows timing/native-video proof remains `WS4-PROOF-03`. | PB-18 |
+| UI-49 | `overlay-number` / Number entry | `live-local` | `local-match` | WS4 final production-build regression proof passed; Windows keyboard/numpad observation remains `WS4-PROOF-02`. | PB-03 |
+| UI-50 | `overlay-transition` / Channel transition | `live-local` | `local-match` | WS4 final production-build regression proof passed; paired/Windows timing/native-video proof remains `WS4-PROOF-03`. | PB-18 |
+| UI-51 | `overlay-sleep-timer` / Sleep timer | `live-local` | `local-match` | WS4 locally verifies Off, 15-minute, last-minute, failed-expiry, focus, and cleanup states; paired/Windows production-native expiry remains `WS4-PROOF-03`. | PB-25 |
+| UI-52 | `exit-confirm` / Exit confirmation | `live-local` | `local-match` | WS4 final production-build regression proof passed; packaged Windows close/teardown remains `WS4-PROOF-04` and `LC-02` remains WS8-owned. | NAV-16, LC-02 |
 | UI-53 | `home` / Separate Home route | `intentional-divergence` | `desktop-specific` | `reference:home` / `capture:home` (Player mapping) | PB-01 |
 | UI-54 | `channel-edit` / Persisted channel edit | `missing` | `missing` | `reference:channel-edit` / `capture:channel-edit` (additive target) | CC-05, CC-08–CC-09 |
 
@@ -495,13 +508,13 @@ product opportunities.
 | --- | --- | --- | --- |
 | WIN-01 | libmpv codec/container breadth and hardware decoding | `partial` | Conservative profile unchanged; capability observation or promotion remains `WS2-POST-VALIDATION-01`. |
 | WIN-02 | Native audio-device selection | `partial` | Main/helper-owned query/application, opaque renderer rows, and injected missing-row fallback presentation landed; real Windows enumeration, disappearance/relaunch, fallback observation, and playback application remain `WS3-PROOF-01`. |
-| WIN-03 | Windows media keys / System Media Transport Controls | `missing` | Route play/pause/seek/stop without global-secret or focus-boundary leakage. |
+| WIN-03 | Windows media keys / System Media Transport Controls | `partial` | WS4 focused BrowserWindow app-command and guarded input mapping is locally implemented without `globalShortcut`; real Windows physical media-key/SMTC and production-playback observation remains `WS4-PROOF-01`. |
 | WIN-04 | Power request while playing plus sleep/resume recovery | `missing` | Add explicit main-owned lifecycle, cleanup, diagnostics, and soak proof. |
 | WIN-05 | Multi-monitor/DPI/fullscreen restore | `partial` | Existing window controller needs production native-video observation across displays/scales. |
 | WIN-06 | Hardware/HDR capability diagnostics and safe fallback | `partial` | No privileged diagnostic expansion occurred; hardware/display/HDR facts remain `WS2-POST-VALIDATION-01` or require a future reviewed replan. |
 | WIN-07 | Crash-isolated native playback helper and support bundle | `live-local` | WS2's crash-isolation contribution is locally complete; native observation remains `WS2-POST-VALIDATION-01`, while packaged replacement-helper proof remains WS9/RD-28. |
 | WIN-08 | Windowed/fullscreen launch choice | `live-local` | Preserve as a Desktop addition and verify packaged relaunch behavior. |
-| WIN-09 | Keyboard, mouse, numpad, and gamepad alongside TV-style focus | `partial` | Complete media keys and validate mixed-input focus/cursor transitions. |
+| WIN-09 | Keyboard, mouse, numpad, and gamepad alongside TV-style focus | `partial` | WS4 local keyboard, simulated D-pad/gamepad, pointer/cursor, long-Back, and app-command proof passed; real Windows physical-device/mixed-input observation remains `WS4-PROOF-01`/`WS4-PROOF-02`. |
 
 ## 12. Execution order
 
@@ -514,10 +527,12 @@ product opportunities.
    Windows/native proof without promoting support.
 3. **WS3 through WS9:** proceed in order through complete Tier 3 quality loops.
    WS3's final product source is `87662b5`; `5f368d4` is prior Unit 3C-D,
-   `77d09ad` the viewport repair, and `f0e2817` test-only harness proof. WS4
-   targeted scope-load/planning is active after accepted Unit 3D, while
-   product/test/package/config edits require its own decision-complete plan and
-   fresh approval of an exact first unit; WS5–WS9 remain unopened.
+   `77d09ad` the viewport repair, and `f0e2817` test-only harness proof. WS4's
+   local implementation gate closes through `f4570df`, `a78228b`, `a654cdd`,
+   `c4dadcf`, and `3258511`; `WS4-PROOF-01`–`WS4-PROOF-04` remain open without
+   capability promotion. WS5 targeted scope-load/planning is next; WS5 product/
+   test/package/config edits require a decision-complete whole-WS5 plan and
+   fresh approval of its exact first unit. WS6–WS9 remain unopened.
    Each entry reuses this accepted audit and validates only
    its assigned rows, affected owners, and direct dependencies. Do not repeat
    the 227-row audit or recompute unrelated rows at every workstream.

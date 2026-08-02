@@ -39,6 +39,7 @@ import {
   LINEUP_PLEX_SELECT_SERVER_CHANNEL,
   LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL,
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
+  LINEUP_SHELL_MEDIA_INPUT_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
   LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
@@ -600,6 +601,7 @@ function createSafePlayerSnapshot(): Record<string, unknown> {
     status: 'playing',
     media: { id: 'media-1', title: 'Episode 1' },
     capabilityProfileId: 'profile-1',
+    seekSupport: 'supported',
     positionMs: 1,
     durationMs: null,
     bufferedRanges: [],
@@ -635,6 +637,7 @@ function createSafeCustomChannelSnapshot(): Record<string, unknown> {
 
 const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
+  LINEUP_SHELL_MEDIA_INPUT_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_PLAYER_COMMAND_CHANNEL,
@@ -720,9 +723,14 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
     'LINEUP_PLAYER_TUNE_CHANNEL',
   ]),
-  on: new Set(['LINEUP_SHELL_STATUS_CHANGED_CHANNEL', 'LINEUP_PLAYER_EVENT_CHANNEL']),
+  on: new Set([
+    'LINEUP_SHELL_STATUS_CHANGED_CHANNEL',
+    'LINEUP_SHELL_MEDIA_INPUT_CHANNEL',
+    'LINEUP_PLAYER_EVENT_CHANNEL',
+  ]),
   removeListener: new Set([
     'LINEUP_SHELL_STATUS_CHANGED_CHANNEL',
+    'LINEUP_SHELL_MEDIA_INPUT_CHANNEL',
     'LINEUP_PLAYER_EVENT_CHANNEL',
   ]),
 } as const;
@@ -1750,16 +1758,32 @@ test('preload player dispatch forwards guarded lifecycle intent envelopes unchan
       value: { accepted: true, events: [], snapshot },
     });
   });
-  const envelope = {
-    intent: 'player.pauseIfCurrent',
-    requestId: 'settings-pause-1',
-    payload: { snapshotRequestId: 'player-load-1' },
-  };
+  const envelopes = [
+    {
+      intent: 'player.pauseIfCurrent',
+      requestId: 'settings-pause-1',
+      payload: { snapshotRequestId: 'player-load-1' },
+    },
+    {
+      intent: 'player.stopIfCurrent',
+      requestId: 'input-stop-1',
+      payload: { snapshotRequestId: 'player-load-1' },
+    },
+    {
+      intent: 'player.seekRelativeIfCurrent',
+      requestId: 'input-seek-1',
+      payload: { snapshotRequestId: 'player-load-1', deltaMs: -10_000 },
+    },
+  ];
 
-  const result = await harness.api.player.dispatch(harness.input(envelope));
-
-  assert.equal((result as { ok: boolean }).ok, true);
-  assert.deepEqual(harness.calls, [{ channel: LINEUP_PLAYER_COMMAND_CHANNEL, request: envelope }]);
+  for (const envelope of envelopes) {
+    const result = await harness.api.player.dispatch(harness.input(envelope));
+    assert.equal((result as { ok: boolean }).ok, true);
+  }
+  assert.deepEqual(harness.calls, envelopes.map((request) => ({
+    channel: LINEUP_PLAYER_COMMAND_CHANNEL,
+    request,
+  })));
 });
 
 test('preload player dispatch converts malformed or privileged invoke results to local validation failures', async () => {
@@ -3020,8 +3044,10 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
     'invoke:invokePlex.channel',
     'invoke:invokeSettings.channel',
     'on:LINEUP_PLAYER_EVENT_CHANNEL',
+    'on:LINEUP_SHELL_MEDIA_INPUT_CHANNEL',
     'on:LINEUP_SHELL_STATUS_CHANGED_CHANNEL',
     'removeListener:LINEUP_PLAYER_EVENT_CHANNEL',
+    'removeListener:LINEUP_SHELL_MEDIA_INPUT_CHANNEL',
     'removeListener:LINEUP_SHELL_STATUS_CHANGED_CHANNEL',
   ]);
   assert.deepEqual(collectInvokePlexChannelArguments().sort(), [

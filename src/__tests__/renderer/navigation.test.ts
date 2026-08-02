@@ -69,6 +69,7 @@ test('navigation lifecycle preserves shortcuts, route focus memory, exit restore
   let shell = createRendererShellState();
   shell = { ...shell, bootstrap: 'ready' };
   let closed = 0;
+  let infoRecoveryCount = 0;
   const lifecycle = createNavigationLifecycle({
     getRoute: () => route,
     getFocusState: () => focus,
@@ -83,12 +84,16 @@ test('navigation lifecycle preserves shortcuts, route focus memory, exit restore
     activateRoute: (nextRoute) => { route = nextRoute; },
     isProfileModalActive: () => false,
     closeProfileModal: () => undefined,
+    openInfoRecovery: () => { infoRecoveryCount += 1; },
     handleChannelSetupBack: async () => false,
     dismissInlineError: () => { shell = { ...shell, inlineError: null }; focus = { ...focus, activeId: 'player-fullscreen' }; },
     requestFullscreen: async () => undefined,
     invalidateFullscreenRequest: () => undefined,
     closeWindow: () => { closed += 1; },
   });
+
+  await lifecycle.handleInput('info');
+  assert.equal(infoRecoveryCount, 1);
 
   await lifecycle.handleInput('guide');
   assert.equal(route, 'guide');
@@ -116,6 +121,8 @@ test('navigation lifecycle preserves shortcuts, route focus memory, exit restore
   assert.equal(closed, 1);
 
   shell = rejectFullscreenRequest({ ...shell, exitConfirmOpen: false }, true);
+  await lifecycle.handleInput('info');
+  assert.equal(infoRecoveryCount, 1);
   await lifecycle.handleInput('back');
   assert.equal(shell.inlineError, null);
   assert.equal(focus.activeId, 'player-fullscreen');

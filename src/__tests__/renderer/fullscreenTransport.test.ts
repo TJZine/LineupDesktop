@@ -75,7 +75,11 @@ test('fullscreen coordinator serializes settings and stale shell intents while r
 
   let shellState = createRendererShellState();
   const shell = createShellController({
-    shell: { getCapabilities: async () => { throw new Error('not used'); }, onStatusChanged: () => () => undefined },
+    shell: {
+      getCapabilities: async () => { throw new Error('not used'); },
+      onStatusChanged: () => () => undefined,
+      onMediaInput: () => () => undefined,
+    },
     windowBridge: transport,
     host: { setTimeout: () => 1, clearTimeout: () => undefined },
     getState: () => shellState,

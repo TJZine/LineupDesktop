@@ -167,11 +167,29 @@ test('plex stream resolver projects direct play to safe load payload and private
   assert.equal(result.load.policy.preferredAudioTrackId, 'plex-track-audio-1-1-1');
   assert.equal(result.load.policy.preferredSubtitleTrackId, 'plex-track-subtitle-1-1-1');
   assert.equal(result.load.capabilityProfileId, directPlayProfile.id);
+  assert.equal(result.load.seekSupport, 'supported');
+  assert.equal(Object.hasOwn(result.load, 'capabilityProfile'), false);
   assertPrivateCarriesPrivilegedSetup(result.privatePlayback);
   assertPublicProjectionSafe(result);
   assert.equal(result.pmsSession?.id, 'lease-request-direct-play');
   assert.deepEqual(pmsStarts.map((start) => start.decisionKind), ['direct-play']);
   assert.deepEqual(pmsStarts.map((start) => start.connection), [selectedConnection]);
+});
+
+test('plex stream resolver preserves unsupported seek capability in a playable safe load', async () => {
+  const result = await createResolver({
+    mediaDetail: createMediaDetail(),
+  }).resolve({
+    requestId: 'request-direct-play-no-seek',
+    mediaId: 'media-input-direct-play-no-seek',
+    capabilityProfile: seekUnsupportedProfile,
+  });
+
+  assertResolved(result, 'direct-play');
+  assert.equal(result.load.seekSupport, 'unsupported');
+  assert.equal(result.load.capabilityProfileId, seekUnsupportedProfile.id);
+  assert.equal(Object.hasOwn(result.load, 'capabilityProfile'), false);
+  assertPublicProjectionSafe(result);
 });
 
 test('plex stream resolver projects direct stream when policy requires remux', async () => {
@@ -1018,6 +1036,7 @@ const directPlayProfile: DesktopStreamCapabilityProfile = {
   directPlayAudioCodecs: ['aac', 'opus'],
   subtitleDeliveryModes: ['embedded', 'sidecar', 'external', 'none'],
   headerAuthSetup: 'supported',
+  seek: 'supported',
   audioTrackSwitching: 'supported',
   subtitleTrackSwitching: 'supported',
   hdr: 'supported',
@@ -1054,4 +1073,10 @@ const unsupportedProfile: DesktopStreamCapabilityProfile = {
     subtitles: 'unsupported',
     hdr: 'unsupported',
   },
+};
+
+const seekUnsupportedProfile: DesktopStreamCapabilityProfile = {
+  ...directPlayProfile,
+  id: 'resolver-seek-unsupported-profile',
+  seek: 'unsupported',
 };

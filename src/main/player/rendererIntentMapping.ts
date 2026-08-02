@@ -31,8 +31,10 @@ const PLAYER_INTENT_TO_COMMAND = {
   'player.pause': 'pause',
   'player.pauseIfCurrent': 'pause',
   'player.stop': 'stop',
+  'player.stopIfCurrent': 'stop',
   'player.seekAbsolute': 'seek.absolute',
   'player.seekRelative': 'seek.relative',
+  'player.seekRelativeIfCurrent': 'seek.relative',
   'player.setVolume': 'volume.set',
   'player.setMute': 'mute.set',
   'player.selectAudio': 'track.audio.select',
@@ -65,6 +67,37 @@ export function mapRendererIntentToCommand(envelope: unknown): CommandMappingRes
     }
     return {
       command: { command: guardedCommandName, requestId, payload: EMPTY_PAYLOAD },
+      expectedSnapshotRequestId: payload.value.snapshotRequestId,
+    };
+  }
+  if (envelope.intent === 'player.stopIfCurrent') {
+    const payload = validateObjectPayload(envelope.payload, ['snapshotRequestId']);
+    if ('error' in payload || !isNonEmptyString(payload.value.snapshotRequestId)) {
+      return validationFailure(requestId, 'stop if-current payload must include snapshotRequestId');
+    }
+    return {
+      command: { command: 'stop', requestId, payload: EMPTY_PAYLOAD },
+      expectedSnapshotRequestId: payload.value.snapshotRequestId,
+    };
+  }
+  if (envelope.intent === 'player.seekRelativeIfCurrent') {
+    const payload = validateObjectPayload(envelope.payload, ['snapshotRequestId', 'deltaMs']);
+    if (
+      'error' in payload ||
+      !isNonEmptyString(payload.value.snapshotRequestId) ||
+      !isFiniteNumber(payload.value.deltaMs)
+    ) {
+      return validationFailure(
+        requestId,
+        'seek relative if-current payload must include snapshotRequestId and deltaMs',
+      );
+    }
+    return {
+      command: {
+        command: 'seek.relative',
+        requestId,
+        payload: { deltaMs: payload.value.deltaMs },
+      },
       expectedSnapshotRequestId: payload.value.snapshotRequestId,
     };
   }

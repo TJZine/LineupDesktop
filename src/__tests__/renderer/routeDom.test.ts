@@ -534,6 +534,9 @@ test('route DOM renders player OSD fields and playback option rows', () => {
     dom.osdSubtitleElement = new ElementDouble() as unknown as HTMLElement;
     dom.osdAudioElement = new ElementDouble() as unknown as HTMLElement;
     dom.osdSubtitlesElement = new ElementDouble() as unknown as HTMLElement;
+    dom.osdSleepElement = new ElementDouble() as unknown as HTMLElement;
+    dom.osdSleepStatusElement = new ElementDouble() as unknown as HTMLElement;
+    dom.osdSleepButton = new ElementDouble() as unknown as HTMLButtonElement;
     dom.osdUpNextElement = new ElementDouble() as unknown as HTMLElement;
     dom.osdTimecodeElement = new ElementDouble() as unknown as HTMLElement;
     dom.osdEndsAtElement = new ElementDouble() as unknown as HTMLElement;
@@ -611,6 +614,8 @@ test('route DOM renders player OSD fields and playback option rows', () => {
       dom.osdSubtitleElement,
       dom.osdAudioElement,
       dom.osdSubtitlesElement,
+      dom.osdSleepElement,
+      dom.osdSleepStatusElement,
       dom.osdUpNextElement,
       dom.osdTimecodeElement,
       dom.osdEndsAtElement,
@@ -626,6 +631,9 @@ test('route DOM renders player OSD fields and playback option rows', () => {
     assert.match(osdText, /Signal Lost/u);
     assert.match(osdText, /Audio: Main/u);
     assert.match(osdText, /Subs: Off/u);
+    assert.match(osdText, /Off/u);
+    assert.match(osdText, /Sleep timer off/u);
+    assert.equal(dom.osdSleepButton?.getAttribute('aria-label'), 'Sleep timer, Off');
     assert.match(osdText, /12:00 \/ 60:00/u);
     assert.match(osdText, /Runtime next/u);
     assert.match(optionsText, /Audio tracks/u);
@@ -1134,8 +1142,18 @@ test('static player DOM keeps native presentation beside the route-owned overlay
   assert.match(root.innerHTML, /data-overlay-player-loading-label/u);
   assert.doesNotMatch(
     root.innerHTML,
-    /poster-placeholder|clear-logo-placeholder|icon-placeholder|player-quick-actions|Sleep|Volume|Playback rate|Quality/u,
+    /poster-placeholder|clear-logo-placeholder|icon-placeholder|player-quick-actions|Volume|Playback rate|Quality/u,
   );
+  const subtitleAction = root.innerHTML.indexOf('data-overlay-action="openSubtitleOptions"');
+  const sleepAction = root.innerHTML.indexOf('data-overlay-action="cycleSleepTimer"');
+  const audioAction = root.innerHTML.indexOf('data-overlay-action="openAudioOptions"');
+  assert.ok(subtitleAction >= 0 && sleepAction > subtitleAction && audioAction > sleepAction);
+  assert.match(root.innerHTML, /data-focus-id="overlay-osd-sleep"[^>]*aria-label="Sleep timer, Off"/u);
+  assert.match(
+    root.innerHTML,
+    /class="player-osd__sleep-action"[^>]*>[\s\S]*?<span>Sleep<\/span>[\s\S]*?<strong data-osd-sleep>Off<\/strong>[\s\S]*?<\/button>/u,
+  );
+  assert.doesNotMatch(root.innerHTML, /data-overlay-action="(?:play|pause|seek|stop)/u);
   assert.equal((root.innerHTML.match(/class="playback-options__section"/gu) ?? []).length, 1);
 });
 

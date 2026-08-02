@@ -14,6 +14,7 @@ import {
 import {
   LINEUP_PLAYER_EVENT_CHANNEL,
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
+  LINEUP_SHELL_MEDIA_INPUT_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_WINDOW_INTENT_CHANNEL,
 } from '../contracts/ipc.js';
@@ -389,6 +390,7 @@ async function startApplication(): Promise<void> {
       });
     const shellWindow = getShellWindowController().createWindow();
     registerShellAppCommandController(shellWindow, {
+      sendMediaInput: (input) => sendToShellWindow(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, input),
       reportDiagnostic: reportMainProcessDiagnostic,
     });
     attachContainmentHandlers(shellWindow);

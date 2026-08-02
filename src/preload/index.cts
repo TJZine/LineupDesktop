@@ -61,6 +61,7 @@ import {
   LINEUP_PLEX_SELECT_SERVER_CHANNEL,
   LINEUP_PLEX_SWITCH_HOME_USER_CHANNEL,
   LINEUP_SHELL_GET_CAPABILITIES_CHANNEL,
+  LINEUP_SHELL_MEDIA_INPUT_CHANNEL,
   LINEUP_SHELL_STATUS_CHANGED_CHANNEL,
   LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL,
   LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL, LINEUP_SETTINGS_REPLACE_CHANNEL,
@@ -84,6 +85,7 @@ import type {
   LineupDesktopPreloadApi,
   ShellCapabilities,
   ShellIpcResult,
+  ShellMediaInput,
   ShellStatusEvent,
   WindowFullscreenState,
 } from '../contracts/shell.js';
@@ -122,6 +124,13 @@ import type {
 } from '../contracts/plex.js';
 
 const { contextBridge, ipcRenderer } = require('electron') as typeof Electron;
+
+const SHELL_MEDIA_INPUTS = new Set<ShellMediaInput>([
+  'mediaPlay',
+  'mediaPause',
+  'mediaRewind',
+  'mediaFastForward',
+]);
 
 const PLEX_REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,120}$/u;
 const PLEX_DEFAULT_PAGE_SIZE = 100;
@@ -253,6 +262,12 @@ const PLAYER_COMMAND_VALUES = [
   'track.audio.select',
   'track.subtitle.select',
 ] as const;
+const PLAYER_CAPABILITY_SUPPORT_VALUES = [
+  'supported',
+  'unsupported',
+  'unknown',
+  'unproven',
+] as const;
 const PLAYER_RENDERER_INTENT_VALUES = [
   'player.load',
   'player.play',
@@ -260,8 +275,10 @@ const PLAYER_RENDERER_INTENT_VALUES = [
   'player.pause',
   'player.pauseIfCurrent',
   'player.stop',
+  'player.stopIfCurrent',
   'player.seekAbsolute',
   'player.seekRelative',
+  'player.seekRelativeIfCurrent',
   'player.setVolume',
   'player.setMute',
   'player.selectAudio',
@@ -417,6 +434,7 @@ function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
       'status',
       'media',
       'capabilityProfileId',
+      'seekSupport',
       'positionMs',
       'durationMs',
       'bufferedRanges',
@@ -435,6 +453,7 @@ function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
     isStringInSet(value.status, PLAYER_STATUS_VALUES) &&
     (value.media === null || isPlayerMediaSummary(value.media)) &&
     (value.capabilityProfileId === null || isNonEmptyString(value.capabilityProfileId)) &&
+    isStringInSet(value.seekSupport, PLAYER_CAPABILITY_SUPPORT_VALUES) &&
     isFiniteNonNegativeNumber(value.positionMs) &&
     isNullableFiniteNonNegativeNumber(value.durationMs) &&
     isTimeRanges(value.bufferedRanges) &&
@@ -1594,6 +1613,22 @@ const lineupDesktop: LineupDesktopPreloadApi = {
       ipcRenderer.on(LINEUP_SHELL_STATUS_CHANGED_CHANNEL, safeListener);
       return () => {
         ipcRenderer.removeListener(LINEUP_SHELL_STATUS_CHANGED_CHANNEL, safeListener);
+      };
+    },
+    onMediaInput: (listener) => {
+      if (typeof listener !== 'function') {
+        throw new TypeError('Media input listener must be a function.');
+      }
+
+      const safeListener = (_event: IpcRendererEvent, payload: unknown): void => {
+        if (typeof payload === 'string' && SHELL_MEDIA_INPUTS.has(payload as ShellMediaInput)) {
+          listener(payload as ShellMediaInput);
+        }
+      };
+
+      ipcRenderer.on(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, safeListener);
+      return () => {
+        ipcRenderer.removeListener(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, safeListener);
       };
     },
   },

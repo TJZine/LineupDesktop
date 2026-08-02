@@ -24,9 +24,11 @@ import { createCustomChannelController, type CustomChannelActionId } from './cus
 import { dispatchCustomChannelAction } from './customChannels/actionDispatch.js';
 import { renderCustomChannelWorkspace } from './customChannels/dom.js';
 import { readPlexOnboardingState, renderPlexRuntimeDom } from './plexRuntimeDom.js';
-import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowEpgAction, applyWorkflowEpgDirection, applyWorkflowSettingsAction, applyWorkflowSettingsValues, createWorkflowState, getRouteWorkflowView, selectWorkflowEpgProgram, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
+import { activateWorkflowRoute, applyWorkflowAction, applyWorkflowEpgAction, applyWorkflowEpgDirection, applyWorkflowEpgPage, applyWorkflowSettingsAction, applyWorkflowSettingsValues, createWorkflowState, getRouteWorkflowView, selectWorkflowEpgProgram, type EpgActionId, type RouteWorkflowActionId, type SettingsActionId } from './workflow.js';
 import { createEmptyPlayerSnapshot, createPlayerOverlayPresentation } from './playerOverlayPresentation.js';
 import { createPlayerOverlayController } from './playerOverlayController.js';
+import { createPlayerInputCommandController } from './playerInputCommandController.js';
+import { createSleepTimerController } from './sleepTimerController.js';
 import { createPlayerErrorRecoveryController } from './playerErrorRecoveryController.js';
 import { recordRendererBridgeFailure } from './rendererBridgeFailures.js';
 import { findEpgProgramCell, setEpgPresentationState, setEpgTuneError, updateEpgState } from './epg.js';
@@ -39,7 +41,7 @@ import { SETTINGS_SECTION_IDS, isPersistedSettingsActionEnabled, type SettingsSe
 import { queryShellDom, renderShellDom } from './shell/shellDom.js';
 import { createRendererShellState, type RendererShellState } from './shell/shellState.js';
 import { createShellController } from './shell/shellController.js';
-import { attachNavigationInputRuntime, createNavigationLifecycle } from './shell/navigationLifecycle.js';
+import { activateInfoRecovery, attachNavigationInputRuntime, createNavigationLifecycle } from './shell/navigationLifecycle.js';
 import {
   createPlexOnboardingFlow,
   resolveChannelSetupEntryStage,
@@ -174,6 +176,34 @@ const playerOverlayController = createPlayerOverlayController({
   recovery: playerErrorRecoveryController,
   nowPlayingAutoHideMs: workflowState.settingsDraft.nowPlayingAutoHideMs,
 });
+const playerInputCommandController = createPlayerInputCommandController({
+  player: window.lineupDesktop.player,
+  host: window,
+  getSnapshot: () => playerSnapshot,
+  recordDiagnostic: (operation, message) => recordRendererBridgeFailure(
+    window.lineupDesktop.diagnostics.recordRendererEvent,
+    'player.dispatch',
+    message,
+    { operation, route: workflowState.routeState.activeRoute },
+  ),
+});
+const sleepTimerController = createSleepTimerController({
+  host: window,
+  now: () => Date.now(),
+  getProjection: () => overlayState.sleepTimer,
+  setProjection: (sleepTimer) => { overlayState = { ...overlayState, sleepTimer }; },
+  render: renderApp,
+  getCurrentPlayback: () => playerSnapshot,
+  pauseCurrent: (snapshotRequestId, onDeferredResolved) =>
+    playerInputCommandController.pauseCurrent(snapshotRequestId, onDeferredResolved),
+  cancelDeferredPause: () => playerInputCommandController.cancelDeferredPause(),
+  recordDiagnostic: (operation, message) => recordRendererBridgeFailure(
+    window.lineupDesktop.diagnostics.recordRendererEvent,
+    'player.dispatch',
+    message,
+    { operation, route: workflowState.routeState.activeRoute },
+  ),
+});
 const settingsPlaybackLifecycle = createSettingsPlaybackLifecycle({ player: window.lineupDesktop.player, getSnapshot: () => playerSnapshot });
 const audioSetupRuntime = createAudioSetupRuntime({
   settings: window.lineupDesktop.settings, getSettingsValues: () => settingsRuntime.getState().values,
@@ -206,10 +236,26 @@ const navigationLifecycle = createNavigationLifecycle({
   onFocusChanged: updateActiveFromFocus,
   scrollFocusedIntoView: scrollFocusedSetupControlIntoView,
   handleGuideDirection,
-  handlePlayerInput: (input) => playerOverlayController.handleInput(input),
+  handleGuidePage,
+  handlePlayerInput: (input) => playerOverlayController.handleInput(input) ||
+    playerInputCommandController.handleInput(
+      input,
+      overlayState.activeOverlayId === 'playbackOptions',
+    ),
+  handlePlayerRouteLeave: () => {
+    playerOverlayController.routeLeave();
+    playerInputCommandController.routeLeave();
+  },
   activateRoute,
   isProfileModalActive: isProfilePinModalActive,
   closeProfileModal: () => closeProfilePinModal(),
+  openInfoRecovery: () => {
+    const stage = plexController.getState().snapshot?.auth.state === 'signed-in' ? 'server' : 'account';
+    activateInfoRecovery(
+      () => activateRoute('channelSetup', false),
+      () => { void onboardingFlow.changeStage(stage); },
+    );
+  },
   handleChannelSetupBack,
   dismissInlineError: shellController.dismissFullscreenError,
   requestFullscreen: (acceptedFocusId) => shellController.requestFullscreen(!fullscreenEnabled, acceptedFocusId),
@@ -224,6 +270,9 @@ shellDom.exitCancelButton?.addEventListener('click', navigationLifecycle.cancelE
 shellDom.exitButton?.addEventListener('click', navigationLifecycle.confirmExit);
 
 const unsubscribeShellStatus = window.lineupDesktop.shell.onStatusChanged(renderStatus);
+const unsubscribeShellMediaInput = window.lineupDesktop.shell.onMediaInput((input) => {
+  void navigationLifecycle.handleInput(input);
+});
 const playerBridgeSubscription = subscribePlayerBridge({
   player: window.lineupDesktop.player,
   diagnostics: window.lineupDesktop.diagnostics,
@@ -232,8 +281,14 @@ const playerBridgeSubscription = subscribePlayerBridge({
     playerSnapshot = snapshot;
     settingsPlaybackLifecycle.observeSnapshot(snapshot);
   },
-  onSnapshot: playerOverlayController.reconcileSnapshot,
-  onEvent: playerOverlayController.handlePlayerEvent,
+  onSnapshot: (snapshot, authoritative, explicitTrackList) => {
+    playerOverlayController.reconcileSnapshot(snapshot, authoritative, explicitTrackList);
+    playerInputCommandController.reconcileSnapshot(snapshot, authoritative);
+  },
+  onEvent: (event) => {
+    playerOverlayController.handlePlayerEvent(event);
+    playerInputCommandController.handlePlayerEvent(event);
+  },
   render: renderApp,
 });
 guidePresentationPolling = createGuidePresentationPolling({
@@ -295,7 +350,10 @@ attachNavigationInputRuntime(navigationLifecycle, {
   root: document.documentElement,
   onBeforeUnload: () => {
     unsubscribeShellStatus();
+    unsubscribeShellMediaInput();
     playerBridgeSubscription.unsubscribe();
+    playerInputCommandController.cleanup();
+    sleepTimerController.cleanup();
     guidePresentationPolling.stop();
     guideTuneController.stop();
     playerOverlayController.dispose();
@@ -407,14 +465,17 @@ function renderStatus(event: ShellStatusEvent): void {
   }
 }
 
-function activateRoute(route: AppRouteId): boolean {
+function activateRoute(route: AppRouteId, enterChannelSetup = true): boolean {
   const previousRoute = workflowState.routeState.activeRoute;
   if (!canActivateRouteDuringAudioSetup(
     previousRoute,
     audioSetupRuntime.getState().status,
     route,
   )) return false;
-  if (previousRoute === 'player' && route !== 'player') playerOverlayController.routeLeave();
+  if (previousRoute === 'player' && route !== 'player') {
+    playerOverlayController.routeLeave();
+    playerInputCommandController.routeLeave();
+  }
   if (previousRoute === 'channelSetup' && route !== 'channelSetup') {
     plexController.invalidateOnboardingOperations();
   }
@@ -429,7 +490,7 @@ function activateRoute(route: AppRouteId): boolean {
   guidePresentationPolling.reconcile(previousRoute, workflowState.routeState.activeRoute);
   focusState = focusRegistry.focusRoute(focusState, route).state;
   renderApp();
-  if (previousRoute !== route && route === 'channelSetup') {
+  if (enterChannelSetup && previousRoute !== route && route === 'channelSetup') {
     void onboardingFlow.changeStage(resolveChannelSetupEntryStage(plexController.getState()));
   }
   return true;
@@ -457,7 +518,10 @@ async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
   }
   workflowState = nextWorkflowState;
   if (previousRoute !== nextRoute) {
-    if (previousRoute === 'player' && nextRoute !== 'player') playerOverlayController.routeLeave();
+    if (previousRoute === 'player' && nextRoute !== 'player') {
+      playerOverlayController.routeLeave();
+      playerInputCommandController.routeLeave();
+    }
     cleanupPlexRuntimeForRouteChange(previousRoute, nextRoute);
     if (previousRoute === 'guide' && nextRoute !== 'guide') guideTuneController.stop();
     guidePresentationPolling.reconcile(previousRoute, nextRoute);
@@ -525,6 +589,20 @@ function handleGuideDirection(direction: 'up' | 'down' | 'left' | 'right'): bool
   return true;
 }
 
+function handleGuidePage(offset: -5 | 5): boolean {
+  if (workflowState.routeState.activeRoute !== 'guide' ||
+      !focusState.activeId?.startsWith('guide-program-')) {
+    return false;
+  }
+  const movement = applyWorkflowEpgPage(workflowState, offset);
+  if (!movement.result.handled) return false;
+  workflowState = movement.workflowState;
+  renderApp();
+  const selectedFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId;
+  if (selectedFocusId !== undefined) restoreFocusTarget(selectedFocusId);
+  return true;
+}
+
 function applyGuideAction(action: GuideActionId): void {
   switch (action) {
     case 'back':
@@ -580,6 +658,11 @@ function applyOverlayAction(action: PlayerOverlayActionId): void {
     case 'openMiniGuide': playerOverlayController.requestMiniGuide(); return;
     case 'openAudioOptions': playerOverlayController.openOptions('audio'); return;
     case 'openSubtitleOptions': playerOverlayController.openOptions('subtitle'); return;
+    case 'cycleSleepTimer':
+      sleepTimerController.cyclePreset();
+      playerOverlayController.requestOsd();
+      restoreFocusTarget('overlay-osd-sleep');
+      return;
     case 'retryPlayer': playerOverlayController.retry(); return;
     case 'skipPlayer': playerOverlayController.skip(); return;
     case 'miniGuidePrevious': playerOverlayController.handleInput('up'); return;

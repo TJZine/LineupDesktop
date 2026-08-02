@@ -110,6 +110,9 @@ export interface RendererDomBindings {
   osdSubtitleElement: HTMLElement | null;
   osdAudioElement: HTMLElement | null;
   osdSubtitlesElement: HTMLElement | null;
+  osdSleepElement?: HTMLElement | null;
+  osdSleepStatusElement?: HTMLElement | null;
+  osdSleepButton?: HTMLButtonElement | null;
   osdUpNextElement: HTMLElement | null;
   osdTimecodeElement: HTMLElement | null;
   osdEndsAtElement: HTMLElement | null;
@@ -272,6 +275,9 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     osdSubtitleElement: documentRef.querySelector<HTMLElement>('[data-osd-subtitle]'),
     osdAudioElement: documentRef.querySelector<HTMLElement>('[data-osd-audio]'),
     osdSubtitlesElement: documentRef.querySelector<HTMLElement>('[data-osd-subtitles]'),
+    osdSleepElement: documentRef.querySelector<HTMLElement>('[data-osd-sleep]'),
+    osdSleepStatusElement: documentRef.querySelector<HTMLElement>('[data-osd-sleep-status]'),
+    osdSleepButton: documentRef.querySelector<HTMLButtonElement>('[data-focus-id="overlay-osd-sleep"]'),
     osdUpNextElement: documentRef.querySelector<HTMLElement>('[data-osd-up-next]'),
     osdTimecodeElement: documentRef.querySelector<HTMLElement>('[data-osd-timecode]'),
     osdEndsAtElement: documentRef.querySelector<HTMLElement>('[data-osd-ends-at]'),
@@ -407,6 +413,7 @@ export function readOverlayActionId(value: string | undefined): PlayerOverlayAct
     case 'openMiniGuide':
     case 'openAudioOptions':
     case 'openSubtitleOptions':
+    case 'cycleSleepTimer':
     case 'retryPlayer':
     case 'skipPlayer':
     case 'miniGuidePrevious':

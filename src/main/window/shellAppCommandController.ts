@@ -1,4 +1,5 @@
 import type { KeyboardInputEvent } from 'electron';
+import type { ShellMediaInput } from '../../contracts/shell.js';
 
 export interface ShellAppCommandEvent {
   preventDefault(): void;
@@ -18,6 +19,7 @@ export interface ShellAppCommandWindow {
 }
 
 export interface ShellAppCommandControllerOptions {
+  sendMediaInput(input: ShellMediaInput): void;
   reportDiagnostic?: (message: string, error: unknown) => void;
 }
 
@@ -27,28 +29,48 @@ export interface ShellAppCommandRegistration {
 
 const APP_COMMAND_KEY_CODES = {
   'browser-backward': 'Escape',
+  'media-play-pause': 'MediaPlayPause',
+  'media-stop': 'MediaStop',
 } as const satisfies Readonly<Record<string, string>>;
+
+const APP_COMMAND_MEDIA_INPUTS = {
+  'media-play': 'mediaPlay',
+  'media-pause': 'mediaPause',
+  'media-rewind': 'mediaRewind',
+  'media-fast-forward': 'mediaFastForward',
+} as const satisfies Readonly<Record<string, ShellMediaInput>>;
 
 export function registerShellAppCommandController(
   window: ShellAppCommandWindow,
-  options: ShellAppCommandControllerOptions = {},
+  options: ShellAppCommandControllerOptions,
 ): ShellAppCommandRegistration {
   const onAppCommand = (event: ShellAppCommandEvent, command: string): void => {
     const keyCode = APP_COMMAND_KEY_CODES[command as keyof typeof APP_COMMAND_KEY_CODES];
-    if (keyCode === undefined) {
+    const mediaInput = APP_COMMAND_MEDIA_INPUTS[command as keyof typeof APP_COMMAND_MEDIA_INPUTS];
+    if (keyCode === undefined && mediaInput === undefined) {
       if (command === 'browser-forward') {
         event.preventDefault();
       }
       return;
     }
 
-    event.preventDefault();
+    const isBrowserBackward = command === 'browser-backward';
+    if (isBrowserBackward) {
+      event.preventDefault();
+    }
     if (!canForwardToRenderer(window)) {
       return;
     }
+    if (!isBrowserBackward) {
+      event.preventDefault();
+    }
 
     try {
-      sendSyntheticKey(window.webContents, keyCode);
+      if (mediaInput === undefined) {
+        sendSyntheticKey(window.webContents, keyCode);
+      } else {
+        options.sendMediaInput(mediaInput);
+      }
     } catch (error) {
       options.reportDiagnostic?.('Shell app-command forwarding failed', error);
     }
