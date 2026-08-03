@@ -14,6 +14,11 @@ function methodBody(source, signature) {
   assert.notEqual(bodyStart, -1, `missing method body: ${signature}`);
   let depth = 0;
   for (let index = bodyStart; index < source.length; index += 1) {
+    const skippedTo = skipCSharpCommentOrLiteral(source, index);
+    if (skippedTo !== null) {
+      index = skippedTo - 1;
+      continue;
+    }
     if (source[index] === '{') depth += 1;
     if (source[index] === '}') depth -= 1;
     if (depth === 0) return source.slice(bodyStart + 1, index);
@@ -21,13 +26,136 @@ function methodBody(source, signature) {
   assert.fail(`unterminated method body: ${signature}`);
 }
 
-function assertOrdered(source, earlier, later) {
-  const earlierIndex = source.indexOf(earlier);
-  const laterIndex = source.indexOf(later);
-  assert.notEqual(earlierIndex, -1, `missing earlier statement: ${earlier}`);
-  assert.notEqual(laterIndex, -1, `missing later statement: ${later}`);
-  assert.ok(earlierIndex < laterIndex, `expected ${earlier} before ${later}`);
+function skipCSharpCommentOrLiteral(source, index) {
+  const current = source[index];
+  const next = source[index + 1];
+  if (current === '/' && next === '/') {
+    const newline = source.indexOf('\n', index + 2);
+    return newline === -1 ? source.length : newline + 1;
+  }
+  if (current === '/' && next === '*') {
+    const end = source.indexOf('*/', index + 2);
+    assert.notEqual(end, -1, 'unterminated C# block comment');
+    return end + 2;
+  }
+  if (current === "'") return skipCSharpQuotedLiteral(source, index, "'", false);
+  if (current !== '"') return null;
+
+  let quoteCount = 1;
+  while (source[index + quoteCount] === '"') quoteCount += 1;
+  if (quoteCount >= 3) {
+    const delimiter = '"'.repeat(quoteCount);
+    const end = source.indexOf(delimiter, index + quoteCount);
+    assert.notEqual(end, -1, 'unterminated C# raw string literal');
+    return end + quoteCount;
+  }
+  const prefix = source.slice(Math.max(0, index - 2), index);
+  const verbatim = prefix.endsWith('@') || prefix === '@$';
+  const interpolated = prefix.endsWith('$') || prefix === '$@';
+  return interpolated
+    ? skipCSharpInterpolatedString(source, index, verbatim)
+    : skipCSharpQuotedLiteral(source, index, '"', verbatim);
 }
+
+function skipCSharpQuotedLiteral(source, start, quote, verbatim) {
+  for (let index = start + 1; index < source.length; index += 1) {
+    if (verbatim && source[index] === quote && source[index + 1] === quote) {
+      index += 1;
+      continue;
+    }
+    if (!verbatim && source[index] === '\\') {
+      index += 1;
+      continue;
+    }
+    if (source[index] === quote) return index + 1;
+  }
+  assert.fail(`unterminated C# ${quote === "'" ? 'character' : 'string'} literal`);
+}
+
+function skipCSharpInterpolatedString(source, start, verbatim) {
+  for (let index = start + 1; index < source.length; index += 1) {
+    if (verbatim && source[index] === '"' && source[index + 1] === '"') {
+      index += 1;
+      continue;
+    }
+    if (!verbatim && source[index] === '\\') {
+      index += 1;
+      continue;
+    }
+    if (source[index] === '{' && source[index + 1] === '{') {
+      index += 1;
+      continue;
+    }
+    if (source[index] === '}' && source[index + 1] === '}') {
+      index += 1;
+      continue;
+    }
+    if (source[index] === '{') {
+      index = skipCSharpInterpolationExpression(source, index + 1) - 1;
+      continue;
+    }
+    if (source[index] === '"') return index + 1;
+  }
+  assert.fail('unterminated C# interpolated string literal');
+}
+
+function skipCSharpInterpolationExpression(source, start) {
+  let depth = 1;
+  for (let index = start; index < source.length; index += 1) {
+    const skippedTo = skipCSharpCommentOrLiteral(source, index);
+    if (skippedTo !== null) {
+      index = skippedTo - 1;
+      continue;
+    }
+    if (source[index] === '{') depth += 1;
+    if (source[index] === '}') depth -= 1;
+    if (depth === 0) return index + 1;
+  }
+  assert.fail('unterminated C# interpolation expression');
+}
+
+function assertUniqueOrdered(source, earlier, later) {
+  const earlierIndexes = findOccurrences(source, earlier);
+  const laterIndexes = findOccurrences(source, later);
+  assert.equal(earlierIndexes.length, 1, `expected exactly one earlier statement: ${earlier}`);
+  assert.equal(laterIndexes.length, 1, `expected exactly one later statement: ${later}`);
+  assert.ok(earlierIndexes[0] < laterIndexes[0], `expected ${earlier} before ${later}`);
+}
+
+function findOccurrences(source, value) {
+  const indexes = [];
+  let index = source.indexOf(value);
+  while (index !== -1) {
+    indexes.push(index);
+    index = source.indexOf(value, index + value.length);
+  }
+  return indexes;
+}
+
+test('native helper source inspection ignores braces in C# literals and comments', () => {
+  const source = String.raw`
+private static void Example()
+{
+    string normal = "}";
+    string escaped = "\\\"}";
+    string verbatim = @"}""{";
+    string raw = """ } """;
+    string interpolated = $"{Format("}")}";
+    char brace = '}';
+    // }
+    /* { } */
+    if (true) { Run(); }
+    Finish();
+}
+`;
+  const body = methodBody(source, 'private static void Example()');
+  assert.match(body, /Finish\(\);/u);
+  assertUniqueOrdered(body, 'Run()', 'Finish()');
+  assert.throws(
+    () => assertUniqueOrdered(`${body}\nRun();`, 'Run()', 'Finish()'),
+    /expected exactly one earlier statement/u,
+  );
+});
 
 test('native helper resolves libmpv from helper directory or explicit override', async () => {
   const source = await readFile(programPath, 'utf8');
@@ -277,8 +405,8 @@ test('native helper applies the presentation cap only after parsing the message 
 
   assert.match(source, /private const int MAX_HELPER_MESSAGE_SIZE = 1024 \* 1024;/u);
   assert.match(source, /private const int MAX_PRESENTATION_MESSAGE_SIZE = 4096;/u);
-  assertOrdered(commandLoop, 'line.Length > MAX_HELPER_MESSAGE_SIZE', 'JsonDocument.Parse(line)');
-  assertOrdered(commandLoop, 'JsonDocument.Parse(line)', 'message.type == "presentation.update" && line.Length > MAX_PRESENTATION_MESSAGE_SIZE');
+  assertUniqueOrdered(commandLoop, 'line.Length > MAX_HELPER_MESSAGE_SIZE', 'JsonDocument.Parse(line)');
+  assertUniqueOrdered(commandLoop, 'JsonDocument.Parse(line)', 'message.type == "presentation.update" && line.Length > MAX_PRESENTATION_MESSAGE_SIZE');
   assert.doesNotMatch(commandLoop, /Contains\("\\"presentation\.update\\""/u);
 });
 
@@ -316,7 +444,7 @@ test('native presentation contains rejected work and fails the shared lifecycle 
   assert.match(presentationLoop, /catch\s*\{\s*ContainPresentationFailure\(\);\s*work\.Status = "rejected";\s*\}\s*finally\s*\{\s*work\.Completed\.Set\(\);/u);
   assert.match(presentationLoop, /try\s*\{\s*RenderFrame\(\);\s*PumpWindowMessages\(\);\s*\}\s*catch\s*\{\s*FailPresentationLifecycle\(\);\s*return;/u);
   assert.match(failureContainment, /try\s*\{\s*HidePresentationSurface\(\);\s*\}\s*catch\s*\{\s*\}\s*DestroyPresentationResources\(\);\s*latestPresentationHidden = true;/u);
-  assertOrdered(lifecycleFailure, 'ContainPresentationFailure()', 'Environment.Exit(1)');
+  assertUniqueOrdered(lifecycleFailure, 'ContainPresentationFailure()', 'Environment.Exit(1)');
   assert.match(renderFrame, /if \(!renderSurface\.MakeCurrent\(\)\) throw new InvalidOperationException\(\);/u);
   assert.match(renderFrame, /if \(!NativeMethods\.SwapBuffers\(renderSurface\.DeviceContext\)\) throw new InvalidOperationException\(\);/u);
 });
@@ -328,8 +456,8 @@ test('native presentation resources are destroyed by their owner before mpv tear
   const command = methodBody(source, 'private static void HandleCommand(InputMessage msg)');
 
   assert.doesNotMatch(teardown, /renderContext|renderSurface|DestroyPresentationResources/u);
-  assertOrdered(cleanup, 'DestroyPresentationOnOwnerThread()', 'TeardownMpvContext()');
-  assertOrdered(command, 'DestroyPresentationOnOwnerThread()', 'InitializeMpv(msg)');
+  assertUniqueOrdered(cleanup, 'DestroyPresentationOnOwnerThread()', 'TeardownMpvContext()');
+  assertUniqueOrdered(command, 'DestroyPresentationOnOwnerThread()', 'InitializeMpv(msg)');
 });
 
 test('native presentation operation ids reject every replay and nonincreasing sequence', async () => {
