@@ -261,8 +261,7 @@
 }
 
 @media (forced-colors: active) {
-  .player-presentation .player-surface,
-  .player-surface {
+  [data-player-presentation-surface] {
     background: Canvas;
   }
 

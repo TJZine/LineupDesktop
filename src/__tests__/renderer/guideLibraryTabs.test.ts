@@ -130,7 +130,7 @@ test('Guide library filter controller owns exact CAS, pending exclusion, success
   let activeRoute: 'guide' | 'player' = 'guide';
   let refreshes = 0;
   let pageCancels = 0;
-  let pendingChanges = 0;
+  const pendingStates: boolean[] = [];
   const failures: string[] = [];
   const controller = createGuideLibraryFilterController({
     guide: {
@@ -146,10 +146,11 @@ test('Guide library filter controller owns exact CAS, pending exclusion, success
     refresh: () => { refreshes += 1; },
     cancelPage: () => { pageCancels += 1; },
     handleFailure: (message) => failures.push(message),
-    onPendingChanged: () => { pendingChanges += 1; },
+    onPendingChanged: () => { pendingStates.push(controller.isPending()); },
   });
   assert.equal(controller.select('library-b'), true);
   assert.equal(controller.isPending(), true);
+  assert.deepEqual(pendingStates, [true]);
   assert.equal(controller.select(null), false);
   assert.deepEqual(requests[0]?.input, { expectedScopeToken: 'scope', expectedRevision: 3, libraryId: 'library-b' });
   assert.equal(pageCancels, 1);
@@ -161,6 +162,7 @@ test('Guide library filter controller owns exact CAS, pending exclusion, success
   });
   await settle();
   assert.equal(controller.isPending(), false);
+  assert.deepEqual(pendingStates.at(-1), false);
   assert.deepEqual(failures, ['Guide filter changed. Refresh and try again.']);
   assert.equal(refreshes, 0);
 
@@ -170,7 +172,7 @@ test('Guide library filter controller owns exact CAS, pending exclusion, success
   await settle();
   assert.equal(filter.selectedLibraryId, 'library-b');
   assert.equal(refreshes, 1);
-  assert.equal(pendingChanges, 4);
+  assert.deepEqual(pendingStates.slice(-2), [true, false]);
 
   assert.equal(controller.select(null), true);
   filter = { ...filter, scopeToken: 'replacement-scope' };
@@ -178,6 +180,7 @@ test('Guide library filter controller owns exact CAS, pending exclusion, success
   await settle();
   assert.equal(filter.scopeToken, 'replacement-scope');
   assert.equal(refreshes, 1);
+  assert.deepEqual(pendingStates.slice(-2), [true, false]);
 
   assert.equal(controller.select(null), true);
   activeRoute = 'player';
@@ -186,6 +189,7 @@ test('Guide library filter controller owns exact CAS, pending exclusion, success
   await settle();
   assert.equal(filter.selectedLibraryId, 'library-b');
   assert.equal(refreshes, 1);
+  assert.deepEqual(pendingStates.slice(-2), [true, false]);
 });
 
 test('Guide pending tabs retain focus custody while blocking repeat activation', () => {

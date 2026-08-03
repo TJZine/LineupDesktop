@@ -586,6 +586,7 @@ async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
     if (previousRoute === 'guide' && nextRoute !== 'guide') {
       guideTuneController.stop();
       guideFilterController?.cancel();
+      pendingGuideFocusId = null;
     }
     guidePresentationPolling.reconcile(previousRoute, nextRoute);
     focusState = focusRegistry.focusRoute(focusState, nextRoute).state;

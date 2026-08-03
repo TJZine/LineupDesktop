@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createEpgState, resolveEpgPageNavigation, selectEpgPageTarget, updateEpgState, type EpgPresentationSource } from '../../renderer/epg.js';
+import { createEpgState, resolveEpgPageNavigation, selectEpgPageTarget, updateEpgState } from '../../renderer/epg.js';
 import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
 import type { GuideIpcResult, GuidePresentationSource } from '../../contracts/guide.js';
 
@@ -137,6 +137,46 @@ test('Guide paging owner keeps one active/one trailing target and rejects time-r
   assert.deepEqual(targets, [22, undefined]);
 });
 
+test('Guide interval supersession clears a queued page through its existing settlement path', async () => {
+  const requests: Array<Deferred<GuideIpcResult<GuidePresentationSource>>> = [];
+  const busy: boolean[] = [];
+  const appliedTargets: Array<number | null | undefined> = [];
+  const polling = createGuidePresentationPolling({
+    guide: { getPresentation: async () => {
+      const deferred = createDeferred<GuideIpcResult<GuidePresentationSource>>();
+      requests.push(deferred);
+      return deferred.promise;
+    } } as never,
+    host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
+    setLoading: () => undefined,
+    setPagingBusy: (value) => busy.push(value),
+    applyPresentation: (_value, _generation, target) => appliedTargets.push(target),
+    handleFailure: () => undefined,
+  });
+
+  const active = polling.refresh('initial');
+  const queuedPage = polling.requestPage({
+    targetGlobalIndex: 12,
+    sourceLocalIndex: 2,
+    scopeToken: 'scope',
+    channelOffset: 10,
+  });
+  assert.equal(polling.getPendingPageTarget(), 12);
+  const interval = polling.refresh('poll-interval');
+  await queuedPage;
+  assert.equal(polling.getPendingPageTarget(), null);
+  assert.equal(busy.at(-1), false);
+
+  requests[0]?.resolve(okPresentation(9, 0, 30, 'scope'));
+  await active;
+  assert.equal(requests.length, 2);
+  requests[1]?.resolve(okPresentation(9, 0, 30, 'scope'));
+  await interval;
+  assert.equal(polling.getPendingPageTarget(), null);
+  assert.equal(busy.at(-1), false);
+  assert.deepEqual(appliedTargets, [undefined]);
+});
+
 test('Guide page cancellation rejects late success and failure without replacing last-valid presentation', async () => {
   const requests: Array<Deferred<GuideIpcResult<GuidePresentationSource>>> = [];
   const applied: number[] = [];
@@ -223,9 +263,8 @@ test('Guide +5,+5,-5,-5 reversal discards its queued page and focuses the loaded
   assert.deepEqual(applied, []);
 });
 
-function presentation(count: number, offset: number, total: number): EpgPresentationSource {
+function presentation(count: number, offset: number, total: number): GuidePresentationSource {
   return {
-    nowMs: 1,
     nowWatching: null,
     channelWindow: { offset, total },
     libraryFilter: { scopeToken: 'scope', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'missing' },
@@ -240,7 +279,7 @@ function presentation(count: number, offset: number, total: number): EpgPresenta
 }
 
 function okPresentation(count: number, offset: number, total: number, scopeToken: string): GuideIpcResult<GuidePresentationSource> {
-  const value = presentation(count, offset, total) as GuidePresentationSource;
+  const value = presentation(count, offset, total);
   return {
     ok: true,
     requestId: 'request',

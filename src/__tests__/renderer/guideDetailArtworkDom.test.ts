@@ -7,6 +7,7 @@ import { renderEpgGuideDom, renderGuideDetailArtwork } from '../../renderer/epg/
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
 import type { RouteWorkflowViewModel } from '../../renderer/workflow.js';
+import { cssDeclaration, extractCssRule, normalizeCss } from './cssTestUtils.js';
 
 class FakeElement {
   readonly dataset: Record<string, string> = {};
@@ -63,6 +64,7 @@ test('detail poster owns loading, available, error, and same-generation no-loop 
   };
   const harness = render(artwork);
   assert.equal(harness.figure.dataset.artworkState, 'loading');
+  assert.equal(harness.placeholder.textContent, 'Loading artwork…');
   assert.equal(harness.image.src, 'lineup://shell/artwork/artwork-ABCDEFGHIJKLMNOP');
   assert.equal(harness.image.alt, 'Poster for Program One');
   harness.image.onload?.();
@@ -71,6 +73,7 @@ test('detail poster owns loading, available, error, and same-generation no-loop 
   const failed = render(artwork);
   failed.image.onerror?.();
   assert.equal(failed.figure.dataset.artworkState, 'error');
+  assert.equal(failed.placeholder.textContent, 'Artwork unavailable');
   assert.equal(failed.image.getAttribute('src'), null);
   renderGuideDetailArtwork(failed.view, failed.dom);
   assert.equal(failed.figure.dataset.artworkState, 'error');
@@ -142,15 +145,21 @@ test('detail copy is clamped at its renderer boundary', () => {
 });
 
 test('null, placeholder, and expired artwork render the fixed missing state', () => {
-  assert.equal(render(null).figure.dataset.artworkState, 'missing');
-  assert.equal(render({
+  const missing = render(null);
+  assert.equal(missing.figure.dataset.artworkState, 'missing');
+  assert.equal(missing.placeholder.textContent, 'Artwork unavailable');
+  const placeholder = render({
     id: 'artwork-ABCDEFGHIJKLMNOP', kind: 'poster', expiresAtMs: 2_000,
     altText: '', status: 'placeholder',
-  }).figure.dataset.artworkState, 'missing');
-  assert.equal(render({
+  });
+  assert.equal(placeholder.figure.dataset.artworkState, 'missing');
+  assert.equal(placeholder.placeholder.textContent, 'Artwork unavailable');
+  const expired = render({
     id: 'artwork-ABCDEFGHIJKLMNOP', kind: 'poster', expiresAtMs: 999,
     altText: '', status: 'available',
-  }).figure.dataset.artworkState, 'missing');
+  });
+  assert.equal(expired.figure.dataset.artworkState, 'missing');
+  assert.equal(expired.placeholder.textContent, 'Artwork unavailable');
 });
 
 test('fixed Classic markup owns exactly one poster, placeholder, copy, and description surface', () => {
@@ -178,16 +187,26 @@ test('artwork accessibility styles disable motion and preserve forced-color boun
     new URL('../../renderer/styles/guide-epg.css', import.meta.url),
     'utf8',
   );
-  const reducedStart = css.indexOf('@media (prefers-reduced-motion: reduce)');
-  const reducedEnd = css.indexOf('\n}\n\n.guide-detail', reducedStart);
-  const reduced = css.slice(reducedStart, reducedEnd);
-  assert.ok(reducedStart >= 0 && reducedEnd > reducedStart);
-  assert.match(reduced, /\[data-epg-detail-artwork\],\s*\[data-epg-detail-poster\]\s*\{[^}]*animation: none !important;[^}]*transition: none !important;/su);
+  const normalized = normalizeCss(css);
+  const reducedArtwork = extractCssRule(normalized, '[data-epg-detail-artwork]', {
+    atRule: '@media (prefers-reduced-motion: reduce)',
+  });
+  const reducedPoster = extractCssRule(normalized, '[data-epg-detail-poster]', {
+    atRule: '@media (prefers-reduced-motion: reduce)',
+  });
+  assert.equal(cssDeclaration(reducedArtwork, 'animation'), 'none !important');
+  assert.equal(cssDeclaration(reducedArtwork, 'transition'), 'none !important');
+  assert.equal(cssDeclaration(reducedPoster, 'animation'), 'none !important');
+  assert.equal(cssDeclaration(reducedPoster, 'transition'), 'none !important');
 
-  const forcedStart = css.indexOf('@media (forced-colors: active)');
-  const forcedEnd = css.indexOf('\n}\n\n.workflow-actions', forcedStart);
-  const forced = css.slice(forcedStart, forcedEnd);
-  assert.ok(forcedStart >= 0 && forcedEnd > forcedStart);
-  assert.match(forced, /\[data-epg-detail-artwork\]\s*\{[^}]*border-color: CanvasText;[^}]*outline: 1px solid CanvasText;[^}]*background: Canvas;/su);
-  assert.match(forced, /\[data-epg-detail-artwork-placeholder\]\s*\{[^}]*color: CanvasText;/su);
+  const forcedArtwork = extractCssRule(normalized, '[data-epg-detail-artwork]', {
+    atRule: '@media (forced-colors: active)',
+  });
+  const forcedPlaceholder = extractCssRule(normalized, '[data-epg-detail-artwork-placeholder]', {
+    atRule: '@media (forced-colors: active)',
+  });
+  assert.equal(cssDeclaration(forcedArtwork, 'border-color'), 'CanvasText');
+  assert.equal(cssDeclaration(forcedArtwork, 'outline'), '1px solid CanvasText');
+  assert.equal(cssDeclaration(forcedArtwork, 'background'), 'Canvas');
+  assert.equal(cssDeclaration(forcedPlaceholder, 'color'), 'CanvasText');
 });

@@ -1,6 +1,7 @@
 import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
 import type { AppRouteId } from './navigation.js';
 import {
+  EPG_CHANNEL_PAGE_SIZE,
   EPG_SLOT_DURATION_MS,
   EPG_WINDOW_DURATION_MS,
   normalizeEpgPresentation,
@@ -296,7 +297,7 @@ export function createGuidePresentationPolling(
             startTimeMs: intent.windowStartMs,
             durationMs: EPG_WINDOW_DURATION_MS,
             channelOffset: intent.channelOffset,
-            channelLimit: 9,
+            channelLimit: EPG_CHANNEL_PAGE_SIZE,
           }),
           intent.abortController,
           options.host,

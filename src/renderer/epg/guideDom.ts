@@ -369,8 +369,9 @@ export function renderEpgGuideDom(
 
   shell.append(classicHeader);
   if (nowWatching !== null) shell.append(nowWatching);
-  if (shouldRenderGuideLibraryTabs(settings.libraryTabsEnabled, view.guide.libraryFilter)) {
-    shell.append(guideLibraryTabsDom(view.guide.libraryFilter!));
+  const libraryFilter = view.guide.libraryFilter;
+  if (shouldRenderGuideLibraryTabs(settings.libraryTabsEnabled, libraryFilter)) {
+    shell.append(guideLibraryTabsDom(libraryFilter));
   }
   shell.append(stateElement);
   if (view.guide.presentationState === 'ready') {
@@ -401,7 +402,6 @@ export function renderGuideDetailArtwork(
   const image = dom.epgDetailPosterElement;
   const placeholder = dom.epgDetailArtworkPlaceholderElement;
   if (figure === null || image === null || placeholder === null) return;
-  placeholder.textContent = 'Artwork unavailable';
   placeholder.setAttribute('aria-hidden', 'true');
   const info = view.guide.infoPanel;
   const artwork = info?.artwork ?? null;
@@ -414,6 +414,7 @@ export function renderGuideDetailArtwork(
     artwork.kind !== 'poster' ||
     !isSafeArtworkRefId(artwork.id)
   ) {
+    placeholder.textContent = 'Artwork unavailable';
     clearGuideArtworkImage(image);
     failedArtwork.delete(image);
     setArtworkState(figure, image, placeholder, 'missing');
@@ -424,6 +425,7 @@ export function renderGuideDetailArtwork(
     failed?.presentationGeneration === info.presentationGeneration &&
     failed.refId === artwork.id
   ) {
+    placeholder.textContent = 'Artwork unavailable';
     clearGuideArtworkImage(image);
     setArtworkState(figure, image, placeholder, 'error');
     return;
@@ -443,6 +445,7 @@ export function renderGuideDetailArtwork(
   );
   image.decoding = 'async';
   image.draggable = false;
+  placeholder.textContent = 'Loading artwork…';
   setArtworkState(figure, image, placeholder, 'loading');
   const request = Object.freeze({ refId: artwork.id, generationText });
   const artworkUrl = `lineup://shell/artwork/${encodeURIComponent(artwork.id)}`;
@@ -460,6 +463,7 @@ export function renderGuideDetailArtwork(
       presentationGeneration: info.presentationGeneration,
       refId: artwork.id,
     });
+    placeholder.textContent = 'Artwork unavailable';
     clearGuideArtworkImage(image);
     setArtworkState(figure, image, placeholder, 'error');
   };

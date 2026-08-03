@@ -50,7 +50,7 @@ test('renderer contracts runtime copy resets and stages only the byte-exact artw
     fs.mkdirSync(path.join(compiled, 'nested'), { recursive: true });
     fs.writeFileSync(
       path.join(compiled, 'settings.js'),
-      "import './settingsAudioValidation.js';\nexport const settings = true;\n",
+      "import './settingsAudioValidation.js';\nimport './shared.js';\nexport const settings = true;\n",
     );
     fs.writeFileSync(
       path.join(compiled, 'settingsAudioValidation.js'),
@@ -58,8 +58,9 @@ test('renderer contracts runtime copy resets and stages only the byte-exact artw
     );
     fs.writeFileSync(
       path.join(compiled, 'artwork.js'),
-      'export const artwork = true;\n',
+      "import './shared.js';\nexport const artwork = true;\n",
     );
+    fs.writeFileSync(path.join(compiled, 'shared.js'), 'export const shared = true;\n');
     fs.writeFileSync(path.join(compiled, 'settings.js.map'), new Uint8Array([1]));
     fs.writeFileSync(path.join(compiled, 'shell.js'), new Uint8Array([2]));
     fs.writeFileSync(path.join(compiled, 'nested', 'other.js'), new Uint8Array([3]));
@@ -82,7 +83,7 @@ test('renderer contracts runtime copy resets and stages only the byte-exact artw
     assert.deepEqual(fs.readdirSync(renderer), ['contracts']);
     assert.deepEqual(
       fs.readdirSync(servedContracts).sort(),
-      ['artwork.js', 'settings.js', 'settingsAudioValidation.js'],
+      ['artwork.js', 'settings.js', 'settingsAudioValidation.js', 'shared.js'],
     );
     for (const relativePath of [
       'obsolete.js',
@@ -96,6 +97,30 @@ test('renderer contracts runtime copy resets and stages only the byte-exact artw
     fs.rmSync(root, { recursive: true, force: true });
   }
   assert.equal(fs.existsSync(root), false);
+});
+
+test('renderer contracts runtime copy reports a missing artwork entry module', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lineup-renderer-contracts-missing-artwork-'));
+  const compiled = path.join(root, 'dist', 'contracts');
+  const renderer = path.join(root, 'dist', 'renderer');
+  try {
+    fs.mkdirSync(compiled, { recursive: true });
+    fs.writeFileSync(path.join(compiled, 'settings.js'), 'export const settings = true;\n');
+
+    assert.throws(
+      () => copyRendererContractsRuntime(compiled, renderer),
+      (error) => {
+        assert.equal(
+          error.message,
+          'Renderer contracts runtime dependency could not be resolved: entry module "artwork.js"',
+        );
+        assert.equal(error.message.includes(root), false);
+        return true;
+      },
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('renderer runtime copy includes the byte-exact relative dependency closure for config', () => {

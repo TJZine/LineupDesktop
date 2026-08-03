@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { containsPlexForbiddenRendererField } from '../../contracts/plex.js';
 import {
+  EPG_CHANNEL_PAGE_SIZE,
   EPG_SLOT_DURATION_MS,
   EPG_WINDOW_DURATION_MS,
   calculateProgramSpan,
@@ -130,6 +131,7 @@ test('directional navigation uses adjacent programs and nearest overlap on adjac
 });
 
 test('Guide paging moves five eligible channel rows while preserving focused time overlap', () => {
+  assert.equal(EPG_CHANNEL_PAGE_SIZE, 9);
   const source: EpgPresentationSource = {
     ...presentation(),
     channels: Array.from({ length: 8 }, (_, index) => ({

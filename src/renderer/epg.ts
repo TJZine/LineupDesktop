@@ -133,6 +133,7 @@ export interface EpgDirectionResult {
 export const EPG_SLOT_DURATION_MS = 30 * 60 * 1000;
 export const EPG_VISIBLE_SLOT_COUNT = 6;
 export const EPG_WINDOW_DURATION_MS = EPG_SLOT_DURATION_MS * EPG_VISIBLE_SLOT_COUNT;
+export const EPG_CHANNEL_PAGE_SIZE = 9;
 
 /** An honest startup value. Product Guide rows arrive only from the scheduler bridge. */
 export const EMPTY_EPG_PRESENTATION_SOURCE: EpgPresentationSource = {
@@ -409,7 +410,7 @@ export function resolveEpgPageNavigation(
   presentation: EpgPresentationSource,
   offset: -5 | 5,
   pendingTargetGlobalIndex: number | null = null,
-  channelLimit = 9,
+  channelLimit = EPG_CHANNEL_PAGE_SIZE,
 ): EpgPageNavigationIntent | null {
   const sourceLocalIndex = presentation.channels.findIndex((channel) => channel.id === state.selectedChannelId);
   const window = presentation.channelWindow ?? { offset: 0, total: presentation.channels.length };
