@@ -59,6 +59,7 @@ export interface NativePlayerHostChildProcess extends EventEmitter {
 }
 export interface NativePlayerHostProcessOptions {
   spawnHostProcess(): NativePlayerHostChildProcess;
+  encodeMessage?(message: unknown): string;
   requestTimeoutMs?: number;
   cleanupGraceMs?: number;
   diagnosticEventStore?: DiagnosticEventStore;
@@ -72,6 +73,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
   readonly #requestTimeoutMs: number;
   readonly #cleanupGraceMs: number;
   readonly #diagnosticEventStore?: DiagnosticEventStore;
+  readonly #encodeMessage: (message: unknown) => string;
   #child: NativePlayerHostChildProcess | null = null;
   #playbackPending = new Map<PlayerRequestId, PendingPlaybackCommand>();
   #presentationPending = new Map<PlayerRequestId, PendingPresentation>();
@@ -88,6 +90,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     this.#requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.#cleanupGraceMs = options.cleanupGraceMs ?? DEFAULT_CLEANUP_GRACE_MS;
     this.#diagnosticEventStore = options.diagnosticEventStore;
+    this.#encodeMessage = options.encodeMessage ?? encodeNativeHelperMessage;
   }
   async execute(
     command: PlayerCommand,
@@ -145,7 +148,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       this.#playbackPending.set(command.requestId, pending);
       try {
         const procCmd = toNativeHelperCommand(command, context);
-        const serialized = JSON.stringify(procCmd);
+        const serialized = this.#encodeMessage(procCmd);
         validateHelperMessageSize(serialized);
         activeChild.stdin.write(`${serialized}\n`, (error) => {
           if (error !== null && error !== undefined) {
@@ -204,7 +207,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
         events: [],
       });
       try {
-        const serialized = JSON.stringify(toNativeHelperAudioOutputQuery(requestId));
+        const serialized = this.#encodeMessage(toNativeHelperAudioOutputQuery(requestId));
         validateHelperMessageSize(serialized);
         activeChild.stdin.write(`${serialized}\n`, (error) => {
           if (error !== null && error !== undefined) {
@@ -235,7 +238,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     const sequencedUpdate = this.#assignPresentationOperationId(update);
     let serialized: string;
     try {
-      serialized = JSON.stringify(toNativeHelperPresentationUpdate(sequencedUpdate));
+      serialized = this.#encodeMessage(toNativeHelperPresentationUpdate(sequencedUpdate));
       if (serialized.length > MAX_PRESENTATION_MESSAGE_SIZE) throw new Error('presentation message too large');
     } catch {
       return {
@@ -303,7 +306,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       if (child === null) return;
       let writeError: unknown;
       try {
-        child.stdin.write(`${JSON.stringify(toNativeHelperCleanupMessage(requestId))}\n`, () => undefined);
+        child.stdin.write(`${this.#encodeMessage(toNativeHelperCleanupMessage(requestId))}\n`, () => undefined);
       } catch (error: unknown) {
         writeError = error;
       }
@@ -581,7 +584,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
         mode: 'hidden',
         bounds: null,
       });
-      serialized = JSON.stringify(toNativeHelperPresentationUpdate(update));
+      serialized = this.#encodeMessage(toNativeHelperPresentationUpdate(update));
       if (serialized.length > MAX_PRESENTATION_MESSAGE_SIZE) throw new Error('presentation message too large');
     } catch {
       return {
@@ -761,6 +764,12 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       }
     });
   }
+}
+
+function encodeNativeHelperMessage(message: unknown): string {
+  const encoded = JSON.stringify(message);
+  if (encoded === undefined) throw new TypeError('Native helper message could not be encoded.');
+  return encoded;
 }
 
 function readHelperEventRequestId(event: unknown): PlayerRequestId | null {

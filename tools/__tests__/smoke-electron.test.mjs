@@ -75,14 +75,34 @@ test('smoke composition keeps synchronous and asynchronous player delivery in di
     'unconditional diagnostics teardown',
   );
   assertSymbolsInOrder(
-    quitFlow,
+    sliceBetween(quitFlow, 'if (playerIpcQuitTeardownComplete)', 'if (playerIpcQuitTeardownInProgress)'),
     [
-      'await cleanupShellAndNativePresentation()',
-      'await teardown?.teardown()',
-      'localPlaybackEventRouter?.dispose()',
-      'await localPlaybackRuntime?.teardown()',
+      'Guide artwork cleanup failed during quit',
+      'Shell and presentation cleanup failed during quit',
+      'Playback event cleanup failed during quit',
+      'Playback runtime cleanup failed during quit',
+      'Plex cleanup failed during quit',
+      'Channel cleanup failed during quit',
+    ],
+    'completed quit cleanup',
+  );
+  assertSymbolsInOrder(
+    sliceBetween(quitFlow, 'playerIpcQuitTeardownInProgress = true', '.finally(() =>'),
+    [
+      'Guide artwork cleanup failed during quit',
+      'Shell and presentation cleanup failed during quit',
+      'Player IPC cleanup failed during quit',
+      'Playback event cleanup failed during quit',
+      'Playback runtime cleanup failed during quit',
+      'Plex cleanup failed during quit',
+      'Channel cleanup failed during quit',
     ],
     'deferred quit cleanup',
+  );
+  assertSymbolsInOrder(
+    sliceBetween(mainSource, 'async function runQuitCleanupStep(', 'function attachContainmentHandlers'),
+    ['await cleanup()', 'reportMainProcessDiagnostic(failureMessage, error)'],
+    'independent quit cleanup failure containment',
   );
   assertSymbolsInOrder(
     sliceBetween(mainSource, 'function cleanupShellAndNativePresentation()', 'function configurePermissionContainment'),

@@ -317,6 +317,33 @@ test('startup load failure remains bounded and caller disposal releases the shel
   assert.deepEqual(order, ['hide', 'hide', 'view-close', 'remove-view', 'window-destroy']);
 });
 
+test('startup navigation times out a stalled presentation hide before loading renderer content', async () => {
+  const order: string[] = [];
+  const fakeWindow = new FakeBaseWindow();
+  fakeWindow.order = order;
+  const fakeView = new FakeView(order);
+  let hideCalls = 0;
+  const controller = createShellWindowController({
+    createBaseWindow: () => fakeWindow.value,
+    createWebContentsView: () => fakeView.value,
+    screen: fakeScreen(), preloadPath: '/preload', smokeMode: true, publishShellStatus: () => undefined,
+    hidePresentation: () => {
+      hideCalls += 1;
+      return hideCalls === 1 ? new Promise<never>(() => undefined) : Promise.resolve();
+    },
+    presentationHideTimeoutMs: 1,
+    invalidatePresentationDocument: () => true,
+  });
+  const shell = await controller.createWindow();
+
+  await assert.rejects(shell.loadURL('lineup://shell/index.html'), /hide timed out/u);
+  assert.deepEqual(fakeView.loadedUrls, []);
+
+  await controller.dispose();
+  assert.equal(hideCalls, 2);
+  assert.deepEqual(order, ['view-close', 'remove-view', 'window-destroy']);
+});
+
 test('an exhausted document epoch during navigation fails closed and disposes the shell', async () => {
   const order: string[] = [];
   const fakeWindow = new FakeBaseWindow();
@@ -368,10 +395,12 @@ class FakeView {
   throwOnBounds = false;
   emitNavigationOnLoad = false;
   loadError: Error | null = null;
+  readonly loadedUrls: string[] = [];
   readonly webContents = Object.assign(new EventEmitter(), {
     isDestroyed: () => this.destroyed,
     close: () => { this.destroyed = true; this.order.push('view-close'); },
-    loadURL: async (_url: string) => {
+    loadURL: async (url: string) => {
+      this.loadedUrls.push(url);
       if (this.emitNavigationOnLoad) this.webContents.emit('did-start-navigation', { isMainFrame: true });
       if (this.loadError !== null) throw this.loadError;
     },

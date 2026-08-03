@@ -104,6 +104,12 @@ function assertTextAbsent(value: unknown, text: string): void {
   assertPublicSafe(value, [text]);
 }
 
+function isHiddenPresentationMessage(value: unknown): boolean {
+  return typeof value === 'object' && value !== null &&
+    Reflect.get(value, 'type') === 'presentation.update' &&
+    Reflect.get(value, 'mode') === 'hidden';
+}
+
 function spawnNodeHost(script: string): SpawnedNativeHostChildProcess {
   return spawn(process.execPath, ['-e', script], {
     stdio: 'pipe',
@@ -345,7 +351,19 @@ test('native host process hides the exact current loaded request before a replac
 
 test('native host process returns a typed failure when hide-boundary serialization fails', async () => {
   const child = new FakeHostChildProcess();
-  const host = new NativePlayerHostProcess({ spawnHostProcess: () => child, requestTimeoutMs: 100 });
+  let rejectHiddenPresentation = false;
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+    encodeMessage: (message) => {
+      if (rejectHiddenPresentation && isHiddenPresentationMessage(message)) {
+        throw new Error('serialization failed');
+      }
+      const encoded = JSON.stringify(message);
+      if (encoded === undefined) throw new Error('message was not serializable');
+      return encoded;
+    },
+  });
   const presentation = host.updatePresentation({
     documentEpoch: 2,
     revision: 3,
@@ -366,23 +384,18 @@ test('native host process returns a typed failure when hide-boundary serializati
   });
   assert.equal((await presentation).ok, true);
 
-  const stringify = JSON.stringify;
-  try {
-    JSON.stringify = () => { throw new Error('serialization failed'); };
-    const replacement = await host.execute({ ...loadCommand, requestId: 'native-load-2' });
-    assert.deepEqual(replacement, {
-      ok: false,
-      error: {
-        code: 'PLAYER_HELPER_PRESENTATION_REJECTED',
-        message: 'The player helper failed while handling the command.',
-        category: 'helper-failure',
-        recoverable: true,
-        retryable: false,
-      },
-    });
-  } finally {
-    JSON.stringify = stringify;
-  }
+  rejectHiddenPresentation = true;
+  const replacement = await host.execute({ ...loadCommand, requestId: 'native-load-2' });
+  assert.deepEqual(replacement, {
+    ok: false,
+    error: {
+      code: 'PLAYER_HELPER_PRESENTATION_REJECTED',
+      message: 'The player helper failed while handling the command.',
+      category: 'helper-failure',
+      recoverable: true,
+      retryable: false,
+    },
+  });
   assert.equal(child.writes.length, 1);
   assert.equal(child.killed, false);
 });

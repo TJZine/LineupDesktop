@@ -136,7 +136,8 @@ export class NativePlayerPresentationOwner {
   }
 
   async #execute(request: PlayerPresentationRequest & { documentEpoch: number }): Promise<PlayerPresentationResult> {
-    if (request.documentEpoch !== this.#documentEpoch || request.revision < this.#latestRevision && request.mode !== 'hidden') {
+    if (request.documentEpoch !== this.#documentEpoch ||
+      (request.revision < this.#latestRevision && request.mode !== 'hidden')) {
       return failure('main-stale', request.documentEpoch, request.revision);
     }
     if (this.#options.platform !== 'win32') {

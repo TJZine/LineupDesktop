@@ -462,18 +462,33 @@ function registerApplicationLifecycleHandlers(): void {
       channelComposition = null;
       const teardownPlex = plexComposition?.teardown ?? null;
       plexComposition = null;
-      localChannelComposition?.guideArtworkOwner.dispose();
-      localPlaybackEventRouter?.dispose();
       void (async () => {
-        await cleanupShellAndNativePresentation();
-        await localPlaybackRuntime?.teardown();
+        await runQuitCleanupStep(
+          'Guide artwork cleanup failed during quit',
+          () => localChannelComposition?.guideArtworkOwner.dispose(),
+        );
+        await runQuitCleanupStep(
+          'Shell and presentation cleanup failed during quit',
+          cleanupShellAndNativePresentation,
+        );
+        await runQuitCleanupStep(
+          'Playback event cleanup failed during quit',
+          () => localPlaybackEventRouter?.dispose(),
+        );
+        await runQuitCleanupStep(
+          'Playback runtime cleanup failed during quit',
+          () => localPlaybackRuntime?.teardown(),
+        );
         await Promise.all([
-          teardownPlex?.() ?? Promise.resolve(),
-          localChannelComposition?.teardown() ?? Promise.resolve(),
+          runQuitCleanupStep('Plex cleanup failed during quit', () => teardownPlex?.()),
+          runQuitCleanupStep(
+            'Channel cleanup failed during quit',
+            () => localChannelComposition?.teardown(),
+          ),
         ]);
       })().catch((error: unknown) => {
-          reportMainProcessDiagnostic('Runtime composition cleanup failed during quit', error);
-        });
+        reportMainProcessDiagnostic('Runtime composition cleanup failed during quit', error);
+      });
       return;
     }
     if (playerIpcQuitTeardownInProgress) {
@@ -487,24 +502,35 @@ function registerApplicationLifecycleHandlers(): void {
     plexComposition = null;
     const localChannelComposition = channelComposition;
     channelComposition = null;
-    localChannelComposition?.guideArtworkOwner.dispose();
     playerIpcQuitTeardownInProgress = true;
     const localPlaybackRuntime = playbackRuntime;
     playbackRuntime = null;
     const localPlaybackEventRouter = playbackEventRouter;
     playbackEventRouter = null;
     (async () => {
-      try {
-        await cleanupShellAndNativePresentation();
-      } catch (error: unknown) {
-        reportMainProcessDiagnostic('Shell and presentation cleanup failed during quit', error);
-      }
-      await teardown?.teardown();
-      localPlaybackEventRouter?.dispose();
-      await localPlaybackRuntime?.teardown();
+      await runQuitCleanupStep(
+        'Guide artwork cleanup failed during quit',
+        () => localChannelComposition?.guideArtworkOwner.dispose(),
+      );
+      await runQuitCleanupStep(
+        'Shell and presentation cleanup failed during quit',
+        cleanupShellAndNativePresentation,
+      );
+      await runQuitCleanupStep('Player IPC cleanup failed during quit', () => teardown?.teardown());
+      await runQuitCleanupStep(
+        'Playback event cleanup failed during quit',
+        () => localPlaybackEventRouter?.dispose(),
+      );
+      await runQuitCleanupStep(
+        'Playback runtime cleanup failed during quit',
+        () => localPlaybackRuntime?.teardown(),
+      );
       await Promise.all([
-        teardownPlex?.() ?? Promise.resolve(),
-        localChannelComposition?.teardown() ?? Promise.resolve(),
+        runQuitCleanupStep('Plex cleanup failed during quit', () => teardownPlex?.()),
+        runQuitCleanupStep(
+          'Channel cleanup failed during quit',
+          () => localChannelComposition?.teardown(),
+        ),
       ]);
     })()
       .catch((error: unknown) => {
@@ -516,6 +542,17 @@ function registerApplicationLifecycleHandlers(): void {
         app.quit();
       });
   });
+}
+
+async function runQuitCleanupStep(
+  failureMessage: string,
+  cleanup: () => unknown | Promise<unknown>,
+): Promise<void> {
+  try {
+    await cleanup();
+  } catch (error: unknown) {
+    reportMainProcessDiagnostic(failureMessage, error);
+  }
 }
 
 function attachContainmentHandlers(window: ShellWindow): void {

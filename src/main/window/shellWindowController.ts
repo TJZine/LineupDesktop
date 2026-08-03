@@ -129,7 +129,7 @@ export function createShellWindowController(options: ShellWindowControllerOption
 
       let controlledNavigationPending = false;
       const loadURL = async (url: string): Promise<void> => {
-        await requestPresentationHide();
+        await awaitPresentationHideForRelease();
         if (options.invalidatePresentationDocument?.() === false) {
           await dispose().catch(() => undefined);
           throw new Error('Shell presentation epoch is unavailable.');
