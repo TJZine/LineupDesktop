@@ -61,12 +61,13 @@ export async function assertFullscreenContinuity(
   window: ShellWindow,
   failures: string[],
 ): Promise<void> {
+  const baseWindow = window.baseWindow;
   try {
     await ensureVisibleForFullscreen(window);
     const fullscreenOn = await setRendererFullscreenAndWait(window, true);
     if (
       !isExpectedFullscreenResult(fullscreenOn.result, true)
-      || (!fullscreenOn.observed && window.isFullScreenable() && window.isFocused())
+      || (!fullscreenOn.observed && baseWindow.isFullScreenable() && baseWindow.isFocused())
     ) {
       failures.push('fullscreen on ' + JSON.stringify({
         result: fullscreenOn.result,
@@ -99,7 +100,7 @@ export async function assertFullscreenContinuity(
       })();
     `) as { failures: string[] };
     failures.push(...fullscreenResult.failures);
-    if (!fullscreenOn.observed && window.isFullScreenable() && window.isFocused()) {
+    if (!fullscreenOn.observed && baseWindow.isFullScreenable() && baseWindow.isFocused()) {
       failures.push('fullscreen enter BaseWindow state ' + JSON.stringify(getFullscreenDiagnostics(window)));
     }
   } catch (error) {
@@ -113,7 +114,10 @@ export async function assertFullscreenContinuity(
     } catch (error) {
       failures.push('fullscreen off ' + formatSmokeError(error));
     }
-    if (isFullscreenState(window, true) && !(await waitForFullscreenState(window, false, fullscreenObservationScheduler))) {
+    if (
+      isFullscreenState(window.baseWindow, true)
+      && !(await waitForFullscreenState(window.baseWindow, false, fullscreenObservationScheduler))
+    ) {
       failures.push('fullscreen leave BaseWindow state');
     }
   }
@@ -133,7 +137,7 @@ export async function assertRendererCloseLifecycle(
     const check = (): void => {
       if (Object.values(observed).every(Boolean)) resolve();
     };
-    window.once('closed', () => { observed.browserWindowClosed = true; check(); });
+    window.baseWindow.once('closed', () => { observed.browserWindowClosed = true; check(); });
     app.once('window-all-closed', () => { observed.windowAllClosed = true; check(); });
     app.once('before-quit', () => { observed.beforeQuit = true; check(); });
     app.once('will-quit', () => { observed.willQuit = true; check(); });
@@ -158,7 +162,8 @@ export async function assertRendererCloseLifecycle(
 }
 
 function ensureVisibleForFullscreen(window: ShellWindow): Promise<void> {
-  if (window.isDestroyed() || window.isVisible()) {
+  const baseWindow = window.baseWindow;
+  if (baseWindow.isDestroyed() || baseWindow.isVisible()) {
     return focusSmokeWindow(window);
   }
   return new Promise((resolve) => {
@@ -167,22 +172,23 @@ function ensureVisibleForFullscreen(window: ShellWindow): Promise<void> {
       if (completed) return;
       completed = true;
       globalThis.clearTimeout(timeout);
-      window.off('show', finish);
+      baseWindow.off('show', finish);
       void focusSmokeWindow(window).then(resolve);
     };
     const timeout = setTimeout(finish, 1000);
-    window.once('show', finish);
-    window.show();
+    baseWindow.once('show', finish);
+    baseWindow.show();
   });
 }
 
 async function focusSmokeWindow(window: ShellWindow): Promise<void> {
-  if (window.isDestroyed()) {
+  const baseWindow = window.baseWindow;
+  if (baseWindow.isDestroyed()) {
     return;
   }
   app.focus({ steal: true });
-  window.focus();
-  if (window.isFocused()) {
+  baseWindow.focus();
+  if (baseWindow.isFocused()) {
     return;
   }
   await new Promise<void>((resolve) => {
@@ -191,11 +197,11 @@ async function focusSmokeWindow(window: ShellWindow): Promise<void> {
       if (completed) return;
       completed = true;
       globalThis.clearTimeout(timeout);
-      window.off('focus', finish);
+      baseWindow.off('focus', finish);
       resolve();
     };
     const timeout = setTimeout(finish, FOCUS_TIMEOUT_MS);
-    window.once('focus', finish);
+    baseWindow.once('focus', finish);
   });
 }
 
@@ -209,7 +215,7 @@ async function setRendererFullscreenAndWait(
   window: ShellWindow,
   enabled: boolean,
 ): Promise<FullscreenTransitionResult> {
-  const transition = waitForFullscreenState(window, enabled, fullscreenObservationScheduler);
+  const transition = waitForFullscreenState(window.baseWindow, enabled, fullscreenObservationScheduler);
   const result = await setRendererFullscreen(window, enabled);
   const observed = await transition;
   return { result, observed };
@@ -278,12 +284,13 @@ function isFullscreenState(window: Pick<FullscreenObservationWindow, 'isFullScre
 }
 
 function getFullscreenDiagnostics(window: ShellWindow): Record<string, unknown> {
+  const baseWindow = window.baseWindow;
   return {
-    fullscreenable: window.isFullScreenable(),
-    fullscreen: window.isFullScreen(),
-    visible: window.isVisible(),
-    focused: window.isFocused(),
-    minimized: window.isMinimized(),
-    bounds: window.getBounds(),
+    fullscreenable: baseWindow.isFullScreenable(),
+    fullscreen: baseWindow.isFullScreen(),
+    visible: baseWindow.isVisible(),
+    focused: baseWindow.isFocused(),
+    minimized: baseWindow.isMinimized(),
+    bounds: baseWindow.getBounds(),
   };
 }

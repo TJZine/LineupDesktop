@@ -70,14 +70,29 @@ test('smoke composition keeps synchronous and asynchronous player delivery in di
     quitFlow,
     [
       'teardownDiagnosticsIpc?.()',
-      'playerIpcQuitTeardownComplete || teardown === null',
+      'if (playerIpcQuitTeardownComplete)',
     ],
     'unconditional diagnostics teardown',
   );
   assertSymbolsInOrder(
     quitFlow,
-    ['teardown.teardown()', 'localPlaybackEventRouter?.dispose()', 'localPlaybackRuntime?.teardown()'],
+    [
+      'await cleanupShellAndNativePresentation()',
+      'await teardown?.teardown()',
+      'localPlaybackEventRouter?.dispose()',
+      'await localPlaybackRuntime?.teardown()',
+    ],
     'deferred quit cleanup',
+  );
+  assertSymbolsInOrder(
+    sliceBetween(mainSource, 'function cleanupShellAndNativePresentation()', 'function configurePermissionContainment'),
+    [
+      'await controller?.dispose()',
+      'await presentationOwner?.dispose()',
+      'shellWindowController === controller',
+      'nativePlayerPresentationOwner === presentationOwner',
+    ],
+    'shell and presentation cleanup ownership',
   );
   assertSymbolsInOrder(
     mainSource,

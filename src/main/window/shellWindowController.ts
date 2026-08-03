@@ -16,10 +16,11 @@ export interface ShellWindowScreenPort {
   off?(event: 'display-metrics-changed' | 'display-removed', listener: (...args: unknown[]) => void): void;
 }
 
-export type ShellWindow = BaseWindow & {
+export interface ShellWindow {
+  readonly baseWindow: BaseWindow;
   readonly webContents: WebContents;
   loadURL(url: string): Promise<void>;
-};
+}
 
 export interface ShellWindowControllerOptions {
   createBaseWindow(options: BaseWindowConstructorOptions): BaseWindow;
@@ -30,6 +31,7 @@ export interface ShellWindowControllerOptions {
   publishShellStatus(status: 'booting'): void;
   invalidatePresentationDocument?(): boolean | void;
   hidePresentation?(): Promise<unknown>;
+  presentationHideTimeoutMs?: number;
 }
 
 interface NormalWindowPlacement { bounds: Rectangle; displayId: number; }
@@ -58,7 +60,9 @@ export function createShellWindowController(options: ShellWindowControllerOption
   let stableFullscreen = false;
   let fullscreenIntent: boolean | null = null;
   let disposed = false;
+  let disposePromise: Promise<void> | null = null;
   const removers: Array<() => void> = [];
+  const presentationHideTimeoutMs = options.presentationHideTimeoutMs ?? 5_000;
 
   const closePresentationForTransition = (): void => {
     void requestPresentationHide().catch(() => undefined);
@@ -69,6 +73,20 @@ export function createShellWindowController(options: ShellWindowControllerOption
       return options.hidePresentation?.() ?? Promise.resolve();
     } catch (error: unknown) {
       return Promise.reject(error instanceof Error ? error : new Error('Native presentation hide failed.'));
+    }
+  };
+
+  const awaitPresentationHideForRelease = async (): Promise<unknown> => {
+    let timeoutHandle: ReturnType<typeof globalThis.setTimeout> | null = null;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timeoutHandle = globalThis.setTimeout(() => {
+        reject(new Error('Native presentation hide timed out.'));
+      }, presentationHideTimeoutMs);
+    });
+    try {
+      return await Promise.race([requestPresentationHide(), timeout]);
+    } finally {
+      if (timeoutHandle !== null) globalThis.clearTimeout(timeoutHandle);
     }
   };
 
@@ -123,11 +141,11 @@ export function createShellWindowController(options: ShellWindowControllerOption
           controlledNavigationPending = false;
         }
       };
-      Object.defineProperties(createdBase, {
-        webContents: { configurable: true, value: createdContents },
-        loadURL: { configurable: true, value: loadURL },
-      });
-      const createdWindow = createdBase as ShellWindow;
+      const createdWindow: ShellWindow = {
+        baseWindow: createdBase,
+        webContents: createdContents,
+        loadURL,
+      };
       shellWindow = createdWindow;
       stableFullscreen = createdBase.isFullScreen();
 
@@ -178,7 +196,7 @@ export function createShellWindowController(options: ShellWindowControllerOption
       const resources = captureOwnedResources();
       const constructionError = error instanceof Error ? error : new Error('Shell window construction failed.');
       try {
-        await requestPresentationHide();
+        await awaitPresentationHideForRelease();
       } catch (hideError: unknown) {
         const normalizedHideError = hideError instanceof Error ? hideError : new Error('Native presentation hide failed.');
         throw new AggregateError(
@@ -219,15 +237,19 @@ export function createShellWindowController(options: ShellWindowControllerOption
     return { enabled: false };
   };
 
-  const dispose = async (): Promise<void> => {
-    if (disposed) return;
+  const dispose = (): Promise<void> => {
+    if (disposePromise !== null) return disposePromise;
+    if (disposed) return Promise.resolve();
     disposed = true;
     const resources = captureOwnedResources();
-    try {
-      await requestPresentationHide();
-    } finally {
-      releaseOwnedResources(resources);
-    }
+    disposePromise = (async () => {
+      try {
+        await awaitPresentationHideForRelease();
+      } finally {
+        releaseOwnedResources(resources);
+      }
+    })();
+    return disposePromise;
   };
 
   const captureOwnedResources = (): OwnedShellResources => {

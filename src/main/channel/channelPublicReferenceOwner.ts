@@ -15,6 +15,7 @@ import {
   projectChannelBuilderSafeDisplayString,
 } from '../../domain/channelBuilder/index.js';
 import type { ChannelAggregate } from '../../domain/channel/channelPersistenceStore.js';
+import { libraryIdsFromContentSource } from './channelLibraryIds.js';
 
 const SAFE_REFERENCE = /^[A-Za-z0-9._-]{1,120}$/u;
 
@@ -227,7 +228,7 @@ export class ChannelPublicReferenceOwner {
     const channelValues = generation.channels.map((channel) => channel.id);
     const libraryValues = generation.channels.flatMap((channel) => [
       ...(channel.sourceLibraryId === null || channel.sourceLibraryId === undefined ? [] : [channel.sourceLibraryId]),
-      ...libraryIdsFromSource(channel.contentSource),
+      ...libraryIdsFromContentSource(channel.contentSource),
     ]);
     const allSafe = new Set(
       [...channelValues, ...libraryValues].filter(isSafeReference),
@@ -259,12 +260,6 @@ export class ChannelPublicReferenceOwner {
     this.cached = { fingerprint: generation.fingerprint, mapping };
     return mapping;
   }
-}
-
-function libraryIdsFromSource(source: ChannelConfig['contentSource']): string[] {
-  if (source.type === 'library') return [source.libraryId];
-  if (source.type === 'mixed') return source.sources.flatMap(libraryIdsFromSource);
-  return [];
 }
 
 function allocateReferences(

@@ -37,6 +37,7 @@ export class NativePlayerPresentationOwner {
   #active: PendingUpdate | null = null;
   #trailing: PendingUpdate | null = null;
   #disposed = false;
+  #disposePromise: Promise<void> | null = null;
   #epochExhausted = false;
 
   constructor(options: NativePlayerPresentationOwnerOptions) {
@@ -45,7 +46,7 @@ export class NativePlayerPresentationOwner {
   }
 
   invalidateDocument(): boolean {
-    if (this.#disposed || this.#epochExhausted) return false;
+    if (this.#disposed || this.#disposePromise !== null || this.#epochExhausted) return false;
     this.#settlePendingAsStale(true);
     if (this.#documentEpoch === Number.MAX_SAFE_INTEGER) {
       this.#epochExhausted = true;
@@ -59,7 +60,7 @@ export class NativePlayerPresentationOwner {
 
   update(value: unknown): Promise<PlayerPresentationResult> {
     const correlation = readCorrelation(value);
-    if (this.#disposed || this.#epochExhausted || !isPresentationRequest(value)) {
+    if (this.#disposed || this.#disposePromise !== null || this.#epochExhausted || !isPresentationRequest(value)) {
       return Promise.resolve(failure('rejected', correlation.documentEpoch, correlation.revision));
     }
     if (value.documentEpoch === null) {
@@ -90,8 +91,13 @@ export class NativePlayerPresentationOwner {
     });
   }
 
-  async dispose(): Promise<void> {
-    if (this.#disposed) return;
+  dispose(): Promise<void> {
+    if (this.#disposePromise !== null) return this.#disposePromise;
+    this.#disposePromise = this.#dispose();
+    return this.#disposePromise;
+  }
+
+  async #dispose(): Promise<void> {
     try {
       await this.hide();
     } finally {
@@ -102,7 +108,7 @@ export class NativePlayerPresentationOwner {
 
   #enqueue(request: PlayerPresentationRequest & { documentEpoch: number }): Promise<PlayerPresentationResult> {
     return new Promise((resolve) => {
-      const pending = { request, resolve };
+      const pending = { request: copyRequest(request), resolve };
       if (this.#active === null) {
         this.#active = pending;
         void this.#executeActive();
@@ -232,6 +238,9 @@ function isPresentationRequest(value: unknown): value is PlayerPresentationReque
 function readCorrelation(value: unknown): { documentEpoch: number | null; revision: number | null } {
   if (!isRecord(value)) return { documentEpoch: null, revision: null };
   return { documentEpoch: value.documentEpoch === null || positive(value.documentEpoch) ? value.documentEpoch : null, revision: positive(value.revision) ? value.revision : null };
+}
+function copyRequest(request: PlayerPresentationRequest & { documentEpoch: number }): PlayerPresentationRequest & { documentEpoch: number } {
+  return { ...request, rect: request.rect === null ? null : { ...request.rect } };
 }
 function positive(value: unknown): value is number { return typeof value === 'number' && Number.isSafeInteger(value) && value > 0; }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype; }

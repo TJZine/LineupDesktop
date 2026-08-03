@@ -11,11 +11,13 @@ export interface ShellAppCommandWebContents {
 }
 
 export interface ShellAppCommandWindow {
-  isDestroyed(): boolean;
-  isFocused(): boolean;
+  baseWindow: {
+    isDestroyed(): boolean;
+    isFocused(): boolean;
+    on(event: 'app-command', listener: (event: ShellAppCommandEvent, command: string) => void): unknown;
+    off(event: 'app-command', listener: (event: ShellAppCommandEvent, command: string) => void): unknown;
+  };
   webContents: ShellAppCommandWebContents;
-  on(event: 'app-command', listener: (event: ShellAppCommandEvent, command: string) => void): this;
-  off(event: 'app-command', listener: (event: ShellAppCommandEvent, command: string) => void): this;
 }
 
 export interface ShellAppCommandControllerOptions {
@@ -76,17 +78,17 @@ export function registerShellAppCommandController(
     }
   };
 
-  window.on('app-command', onAppCommand);
+  window.baseWindow.on('app-command', onAppCommand);
 
   return {
     teardown: () => {
-      window.off('app-command', onAppCommand);
+      window.baseWindow.off('app-command', onAppCommand);
     },
   };
 }
 
 function canForwardToRenderer(window: ShellAppCommandWindow): boolean {
-  return !window.isDestroyed() && window.isFocused() && !window.webContents.isDestroyed();
+  return !window.baseWindow.isDestroyed() && window.baseWindow.isFocused() && !window.webContents.isDestroyed();
 }
 
 function sendSyntheticKey(webContents: ShellAppCommandWebContents, keyCode: string): void {

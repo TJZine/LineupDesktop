@@ -37,6 +37,8 @@ namespace Lineup.NativePlayerHost
         private const int SwpShowWindow = 0x0040;
         private const int SwpHideWindow = 0x0080;
         private const int SwpNoActivate = 0x0010;
+        private const int MAX_HELPER_MESSAGE_SIZE = 1024 * 1024;
+        private const int MAX_PRESENTATION_MESSAGE_SIZE = 4096;
         private static readonly IntPtr HwndBottom = new IntPtr(1);
         private static readonly object MpvLock = new object();
 
@@ -301,16 +303,23 @@ namespace Lineup.NativePlayerHost
                     continue;
                 }
 
-                if (line.Length > 4096 && line.Contains("\"presentation.update\"", StringComparison.Ordinal))
+                if (line.Length > MAX_HELPER_MESSAGE_SIZE)
                 {
                     break;
                 }
 
                 try
                 {
-                    InputMessage? message = JsonSerializer.Deserialize<InputMessage>(line);
+                    using JsonDocument document = JsonDocument.Parse(line);
+                    InputMessage? message = document.RootElement.Deserialize<InputMessage>();
                     if (message == null)
                     {
+                        continue;
+                    }
+
+                    if (message.type == "presentation.update" && line.Length > MAX_PRESENTATION_MESSAGE_SIZE)
+                    {
+                        WritePresentationResult(message, "rejected");
                         continue;
                     }
 
@@ -328,7 +337,6 @@ namespace Lineup.NativePlayerHost
 
                     if (message.type == "presentation.update")
                     {
-                        using JsonDocument document = JsonDocument.Parse(line);
                         if (!HasExactPresentationKeys(document.RootElement))
                         {
                             WritePresentationResult(message, "rejected");
@@ -1000,12 +1008,30 @@ namespace Lineup.NativePlayerHost
             {
                 if (PresentationQueue.TryTake(out PresentationWork? work, 16))
                 {
-                    try { work.Status = ExecutePresentationWork(work.Message); }
-                    catch { HidePresentationSurface(); work.Status = "rejected"; }
-                    finally { work.Completed.Set(); }
+                    try
+                    {
+                        work.Status = ExecutePresentationWork(work.Message);
+                    }
+                    catch
+                    {
+                        ContainPresentationFailure();
+                        work.Status = "rejected";
+                    }
+                    finally
+                    {
+                        work.Completed.Set();
+                    }
                 }
-                RenderFrame();
-                PumpWindowMessages();
+                try
+                {
+                    RenderFrame();
+                    PumpWindowMessages();
+                }
+                catch
+                {
+                    FailPresentationLifecycle();
+                    return;
+                }
             }
             DestroyPresentationResources();
         }
@@ -1020,19 +1046,20 @@ namespace Lineup.NativePlayerHost
             bool exactTuple = message.documentEpoch == latestPresentationEpoch &&
                 message.revision == latestPresentationRevision &&
                 String.Equals(latestPresentationLoadedRequestId, message.loadedRequestId, StringComparison.Ordinal);
-            bool stalePair = message.documentEpoch < latestPresentationEpoch ||
-                message.documentEpoch == latestPresentationEpoch && message.revision < latestPresentationRevision ||
+            bool staleRevision = message.documentEpoch < latestPresentationEpoch ||
+                message.documentEpoch == latestPresentationEpoch && message.revision < latestPresentationRevision;
+            bool stalePair = staleRevision ||
                 message.documentEpoch == latestPresentationEpoch && message.revision == latestPresentationRevision &&
                     !String.Equals(latestPresentationLoadedRequestId, message.loadedRequestId, StringComparison.Ordinal) ||
                 exactTuple && latestPresentationHidden && message.mode != "hidden";
             if (message.mode == "hidden")
             {
                 if (!HidePresentationSurface()) return "rejected";
-                if (stalePair) return "stale";
+                latestPresentationHidden = true;
+                if (staleRevision) return "stale";
                 latestPresentationEpoch = message.documentEpoch;
                 latestPresentationRevision = message.revision;
                 latestPresentationLoadedRequestId = message.loadedRequestId;
-                latestPresentationHidden = true;
                 return "hidden";
             }
             if (stalePair)
@@ -1092,7 +1119,7 @@ namespace Lineup.NativePlayerHost
             IntPtr initParamArray = AllocRenderParams(new MpvRenderParam { type = 1, data = apiType }, new MpvRenderParam { type = 2, data = initParamsPtr });
             try
             {
-                renderSurface.MakeCurrent();
+                if (!renderSurface.MakeCurrent()) throw new InvalidOperationException();
                 if (NativeMethods.mpv_render_context_create(out renderContext, mpvContext, initParamArray) < 0) renderContext = IntPtr.Zero;
                 NativeMethods.wglMakeCurrent(IntPtr.Zero, IntPtr.Zero);
             }
@@ -1106,19 +1133,55 @@ namespace Lineup.NativePlayerHost
         private static void RenderFrame()
         {
             if (renderContext == IntPtr.Zero || renderSurface == null || !renderSurface.Visible) return;
-            renderSurface.MakeCurrent();
+            if (!renderSurface.MakeCurrent()) throw new InvalidOperationException();
             NativeMethods.glViewport(0, 0, renderSurface.Width, renderSurface.Height);
             NativeMethods.glClearColor(0, 0, 0, 1); NativeMethods.glClear(GlColorBufferBit);
             IntPtr renderParams = AllocRenderParams(new MpvRenderParam { type = 3, data = renderSurface.FboParam }, new MpvRenderParam { type = 4, data = renderSurface.FlipYParam });
             try { NativeMethods.mpv_render_context_update(renderContext); NativeMethods.mpv_render_context_render(renderContext, renderParams); }
             finally { Marshal.FreeHGlobal(renderParams); }
-            NativeMethods.SwapBuffers(renderSurface.DeviceContext);
+            if (!NativeMethods.SwapBuffers(renderSurface.DeviceContext)) throw new InvalidOperationException();
         }
 
         private static void DestroyPresentationResources()
         {
-            if (renderContext != IntPtr.Zero) { NativeMethods.mpv_render_context_free(renderContext); renderContext = IntPtr.Zero; }
-            renderSurface?.Dispose(); renderSurface = null;
+            IntPtr context = renderContext;
+            renderContext = IntPtr.Zero;
+            try
+            {
+                if (context != IntPtr.Zero) NativeMethods.mpv_render_context_free(context);
+            }
+            catch
+            {
+            }
+
+            RenderSurface? surface = renderSurface;
+            renderSurface = null;
+            try
+            {
+                surface?.Dispose();
+            }
+            catch
+            {
+            }
+        }
+
+        private static void ContainPresentationFailure()
+        {
+            try
+            {
+                HidePresentationSurface();
+            }
+            catch
+            {
+            }
+            DestroyPresentationResources();
+            latestPresentationHidden = true;
+        }
+
+        private static void FailPresentationLifecycle()
+        {
+            ContainPresentationFailure();
+            Environment.Exit(1);
         }
 
         private static void WritePresentationResult(InputMessage message, string status)
@@ -1142,7 +1205,11 @@ namespace Lineup.NativePlayerHost
         private static void DestroyPresentationOnOwnerThread()
         {
             PresentationWork destroy = new PresentationWork { Message = new InputMessage { type = "presentation.destroy", operationId = "cleanup", documentEpoch = 1, revision = 1, mode = "hidden" } };
-            if (PresentationQueue.TryAdd(destroy)) destroy.Completed.Wait();
+            if (!PresentationQueue.TryAdd(destroy))
+            {
+                throw new InvalidOperationException("Native presentation cleanup could not be queued.");
+            }
+            destroy.Completed.Wait();
         }
 
         private static void ConfigureLibmpvPath(string[] args)
@@ -1174,12 +1241,6 @@ namespace Lineup.NativePlayerHost
 
         private static void TeardownMpvContext()
         {
-            if (renderContext != IntPtr.Zero)
-            {
-                NativeMethods.mpv_render_context_free(renderContext);
-                renderContext = IntPtr.Zero;
-            }
-
             if (mpvContext != IntPtr.Zero)
             {
                 NativeMethods.mpv_terminate_destroy(mpvContext);
@@ -1191,12 +1252,6 @@ namespace Lineup.NativePlayerHost
                 eventThread.Join();
             }
             eventThread = null;
-
-            if (renderSurface != null)
-            {
-                renderSurface.Dispose();
-                renderSurface = null;
-            }
 
             currentRequestId = null;
             currentMediaId = null;
@@ -1662,9 +1717,9 @@ namespace Lineup.NativePlayerHost
                 return hidden;
             }
 
-            public void MakeCurrent()
+            public bool MakeCurrent()
             {
-                NativeMethods.wglMakeCurrent(DeviceContext, renderingContext);
+                return NativeMethods.wglMakeCurrent(DeviceContext, renderingContext);
             }
 
             public void Dispose()

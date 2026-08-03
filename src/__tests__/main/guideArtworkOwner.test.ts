@@ -113,6 +113,21 @@ test('createRef reclaims expired authorizations at capacity and rejects their la
   assert.equal(await owner.get(refs[0]!.id), null);
 });
 
+test('createRef scans for expired authorizations only after reaching capacity', () => {
+  let clockReads = 0;
+  let refCounter = 0;
+  const ready = session();
+  const owner = new GuideArtworkOwner(
+    { subscribe: () => () => undefined, captureCurrent: () => ready, isCurrent: () => true } as never,
+    { fetchGuideArtwork: async () => ({ bytes: new Uint8Array([1]), mimeType: 'image/jpeg' }) },
+    () => { clockReads += 1; return 1_000; },
+    () => `artwork-${String(++refCounter).padStart(24, 'a')}`,
+  );
+  assert.ok(owner.createRef({ locator: '/library/metadata/1/thumb', altText: 'One', lineupRevision: 4 }));
+  assert.ok(owner.createRef({ locator: '/library/metadata/2/thumb', altText: 'Two', lineupRevision: 4 }));
+  assert.equal(clockReads, 2);
+});
+
 test('queue allows four fetches, coalesces by ref, and releases a slot', async () => {
   const pending: Array<ReturnType<typeof deferred<{ bytes: Uint8Array; mimeType: 'image/jpeg' }>>> = [];
   let active = 0;
@@ -166,18 +181,23 @@ test('generation notification revokes refs and aborts queued and in-flight work'
 });
 
 test('currentness is checked before queue, before fetch, and after fetch', async () => {
-  const checks: boolean[] = [true, true, true, false];
+  let current = true;
   let fetches = 0;
+  const fetch = deferred<{ bytes: Uint8Array; mimeType: 'image/jpeg' }>();
   const { owner } = fixture({
-    current: () => checks.shift() ?? false,
+    current: () => current,
     fetchGuideArtwork: async () => {
       fetches += 1;
-      return { bytes: new Uint8Array([1]), mimeType: 'image/jpeg' };
+      return fetch.promise;
     },
   });
   const ref = owner.createRef({ locator: '/library/metadata/1/thumb', altText: 'Poster', lineupRevision: 4 });
   assert.ok(ref);
-  assert.equal(await owner.get(ref.id), null);
+  const pending = owner.get(ref.id);
+  await waitForImmediate();
   assert.equal(fetches, 1);
+  current = false;
+  fetch.resolve({ bytes: new Uint8Array([1]), mimeType: 'image/jpeg' });
+  assert.equal(await pending, null);
   assert.equal(await owner.get(ref.id), null);
 });

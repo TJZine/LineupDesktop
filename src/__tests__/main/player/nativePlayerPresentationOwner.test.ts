@@ -37,6 +37,39 @@ test('presentation owner keeps one active and only the latest trailing update', 
   assert.equal((await latest).status, 'applied');
 });
 
+test('presentation owner copies trailing geometry before later caller mutation', async () => {
+  const updates: NativePlayerPresentationUpdate[] = [];
+  const resolvers: Array<(value: { ok: true; status: 'applied' | 'hidden' }) => void> = [];
+  const host = {
+    updatePresentation: (update: NativePlayerPresentationUpdate) => {
+      updates.push(update);
+      return new Promise<{ ok: true; status: 'applied' | 'hidden' }>((resolve) => resolvers.push(resolve));
+    },
+  } as NativePlayerHostPort;
+  const owner = createOwner(host);
+  await owner.update(request(null, 1));
+  const active = owner.update(request(1, 2));
+  const rect = { x: 0.5, y: 0.5, width: 0.25, height: 0.25 };
+  const trailing = owner.update({
+    documentEpoch: 1,
+    revision: 3,
+    requestId: 'media-1',
+    mode: 'guide-classic-pip',
+    rect,
+  });
+  rect.x = -1;
+  rect.width = 2;
+
+  resolvers[0]?.({ ok: true, status: 'applied' });
+  await new Promise((resolve) => setImmediate(resolve));
+  resolvers[1]?.({ ok: true, status: 'hidden' });
+  assert.equal((await active).status, 'helper-stale');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(updates[2]?.bounds, { x: 0.5, y: 0.5, width: 0.25, height: 0.25 });
+  resolvers[2]?.({ ok: true, status: 'applied' });
+  assert.equal((await trailing).status, 'applied');
+});
+
 test('presentation owner keeps non-Windows opaque and unsupported', async () => {
   const owner = createOwner(null, 'darwin');
   await owner.update(request(null, 1));
@@ -188,6 +221,29 @@ test('presentation owner treats an applied ACK for hidden as an unhealthy post-s
     documentEpoch: null, revision: 1, requestId: null, mode: 'hidden', rect: null,
   });
   assert.equal(result.status, 'lifecycle-failure');
+});
+
+test('presentation owner shares concurrent disposal and rejects updates and invalidation while hiding', async () => {
+  const updates: NativePlayerPresentationUpdate[] = [];
+  const resolvers: Array<(value: { ok: true; status: 'hidden' }) => void> = [];
+  const owner = createOwner({
+    updatePresentation: (update: NativePlayerPresentationUpdate) => {
+      updates.push(update);
+      return new Promise<{ ok: true; status: 'hidden' }>((resolve) => resolvers.push(resolve));
+    },
+  });
+
+  const disposal = owner.dispose();
+  assert.equal(owner.dispose(), disposal);
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0]?.mode, 'hidden');
+  assert.equal((await owner.update(request(null, 1))).status, 'rejected');
+  assert.equal(owner.invalidateDocument(), false);
+
+  resolvers[0]?.({ ok: true, status: 'hidden' });
+  await disposal;
+  assert.equal((await owner.hide()).status, 'lifecycle-failure');
+  assert.equal(updates.length, 1);
 });
 
 function createOwner(

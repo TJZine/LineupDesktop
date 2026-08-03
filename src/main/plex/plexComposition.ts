@@ -17,13 +17,14 @@ import { DesktopPlexSelectedServerStore } from './discovery/desktopPlexSelectedS
 import { DesktopPlexServerDiscovery } from './discovery/desktopPlexServerDiscovery.js';
 import { readOrCreateDesktopPlexClientIdentifier } from './desktopPlexClientIdentity.js';
 import { DesktopPlexRuntime } from './desktopPlexRuntime.js';
-import { LivePlexTransport } from './livePlexTransport.js';
+import { LivePlexTransport, type LivePlexGuideArtworkTransport } from './livePlexTransport.js';
 import { registerPlexIpcHandlers, type PlexIpcTeardown } from './plexIpc.js';
 import { GuideArtworkSessionGenerationOwner } from './guideArtworkSessionGenerationOwner.js';
 
 export interface CreatePlexCompositionOptions {
   app: Pick<App, 'getPath' | 'getVersion'>;
   diagnosticEventStore?: DiagnosticEventStore;
+  createTransport?: (authConfig: ReturnType<typeof createDesktopPlexAuthConfig>) => LivePlexTransport;
 }
 
 export interface RegisterPlexCompositionIpcOptions {
@@ -36,14 +37,13 @@ export interface RegisterPlexCompositionIpcOptions {
 export interface PlexComposition {
   runtime: DesktopPlexRuntime;
   guideArtworkSessionGenerationOwner: GuideArtworkSessionGenerationOwner;
-  liveTransport: LivePlexTransport;
+  guideArtworkTransport: LivePlexGuideArtworkTransport;
   teardown: () => Promise<void>;
 }
 
 export interface PlexCompositionRegistration {
   runtime: DesktopPlexRuntime;
   guideArtworkSessionGenerationOwner: GuideArtworkSessionGenerationOwner;
-  liveTransport: LivePlexTransport;
   teardown: () => Promise<void>;
 }
 
@@ -70,7 +70,7 @@ export async function createPlexComposition(
     platformVersion: os.release(),
     deviceName: 'Lineup Desktop',
   });
-  const liveTransport = new LivePlexTransport({ authConfig });
+  const liveTransport = options.createTransport?.(authConfig) ?? new LivePlexTransport({ authConfig });
   const authService = new DesktopPlexAuthService({
     config: authConfig,
     transport: liveTransport,
@@ -100,7 +100,7 @@ export async function createPlexComposition(
   const composition: PlexComposition = {
     runtime,
     guideArtworkSessionGenerationOwner,
-    liveTransport,
+    guideArtworkTransport: liveTransport,
     teardown: () => teardownComposition(runtime, state),
   };
   compositionStates.set(composition, state);
@@ -142,7 +142,6 @@ export function registerPlexCompositionIpc(
   return {
     runtime: composition.runtime,
     guideArtworkSessionGenerationOwner: composition.guideArtworkSessionGenerationOwner,
-    liveTransport: composition.liveTransport,
     teardown: () => teardownComposition(composition.runtime, state),
   };
 }

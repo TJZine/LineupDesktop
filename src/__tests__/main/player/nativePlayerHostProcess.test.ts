@@ -238,6 +238,37 @@ test('native host process correlates presentation execution on the shared helper
   assert.deepEqual(child.writes[2], { type: 'cleanup', requestId: null });
 });
 
+test('native host process settles colliding command and presentation identifiers independently', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({ spawnHostProcess: () => child, requestTimeoutMs: 100 });
+  const command = host.execute({ command: 'play', requestId: 'presentation-1', payload: {} });
+  const presentation = host.updatePresentation({
+    documentEpoch: 2,
+    revision: 3,
+    parentHwnd: '42',
+    parentPid: 9,
+    loadedRequestId: 'presentation-1',
+    mode: 'player-full',
+    bounds: { x: 0, y: 0, width: 1, height: 1 },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.equal(child.writes.length, 2);
+  child.send({
+    type: 'presentation.result',
+    version: 1,
+    operationId: 'presentation-1',
+    documentEpoch: 2,
+    revision: 3,
+    status: 'applied',
+  });
+  assert.deepEqual(await presentation, { ok: true, status: 'applied' });
+
+  child.send({ type: 'result', requestId: 'presentation-1', ok: true, events: [] });
+  assert.equal((await command).ok, true);
+  assert.equal(child.killed, false);
+});
+
 test('native host process assigns monotonic presentation ids beyond the former retention cap', async () => {
   const child = new FakeHostChildProcess();
   const host = new NativePlayerHostProcess({ spawnHostProcess: () => child, requestTimeoutMs: 100 });
@@ -310,6 +341,50 @@ test('native host process hides the exact current loaded request before a replac
   });
   child.send({ type: 'result', requestId: 'native-load-2', ok: true, events: [] });
   assert.equal((await replacement).ok, true);
+});
+
+test('native host process returns a typed failure when hide-boundary serialization fails', async () => {
+  const child = new FakeHostChildProcess();
+  const host = new NativePlayerHostProcess({ spawnHostProcess: () => child, requestTimeoutMs: 100 });
+  const presentation = host.updatePresentation({
+    documentEpoch: 2,
+    revision: 3,
+    parentHwnd: '42',
+    parentPid: 9,
+    loadedRequestId: 'native-load-1',
+    mode: 'player-full',
+    bounds: { x: 0, y: 0, width: 1, height: 1 },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.send({
+    type: 'presentation.result',
+    version: 1,
+    operationId: 'presentation-1',
+    documentEpoch: 2,
+    revision: 3,
+    status: 'applied',
+  });
+  assert.equal((await presentation).ok, true);
+
+  const stringify = JSON.stringify;
+  try {
+    JSON.stringify = () => { throw new Error('serialization failed'); };
+    const replacement = await host.execute({ ...loadCommand, requestId: 'native-load-2' });
+    assert.deepEqual(replacement, {
+      ok: false,
+      error: {
+        code: 'PLAYER_HELPER_PRESENTATION_REJECTED',
+        message: 'The player helper failed while handling the command.',
+        category: 'helper-failure',
+        recoverable: true,
+        retryable: false,
+      },
+    });
+  } finally {
+    JSON.stringify = stringify;
+  }
+  assert.equal(child.writes.length, 1);
+  assert.equal(child.killed, false);
 });
 
 test('native host process accepts a stale active presentation ACK and sends the replacement load', async () => {
@@ -904,6 +979,42 @@ test('native host process reports idle helper lifecycle failures to subscribers'
   assert.equal(diagnostics.getRecords().some((record) => record.operation === 'helper.lifecycle'), true);
   assertNoForbiddenKeys(lifecycleFailures);
   unsubscribe();
+});
+
+test('native host process reports helper exit after an applied presentation with no pending operation', async () => {
+  const child = new FakeHostChildProcess();
+  const lifecycleFailures: NativePlayerHostLifecycleFailure[] = [];
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => child,
+    requestTimeoutMs: 100,
+  });
+  host.onLifecycleFailure((failure) => lifecycleFailures.push(failure));
+  await completeActiveLoad(host, child);
+
+  const presentation = host.updatePresentation({
+    documentEpoch: 2,
+    revision: 3,
+    parentHwnd: '42',
+    parentPid: 9,
+    loadedRequestId: 'native-load-1',
+    mode: 'player-full',
+    bounds: { x: 0, y: 0, width: 1, height: 1 },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  child.send({
+    type: 'presentation.result',
+    version: 1,
+    operationId: 'presentation-1',
+    documentEpoch: 2,
+    revision: 3,
+    status: 'applied',
+  });
+  assert.deepEqual(await presentation, { ok: true, status: 'applied' });
+
+  child.emit('close', 1, null);
+  assert.equal(lifecycleFailures.length, 1);
+  assert.equal(lifecycleFailures[0]?.requestId, null);
+  assert.equal(lifecycleFailures[0]?.error.code, 'PLAYER_HELPER_EXITED');
 });
 
 test('native host process clears partial frames after child error and close before replacement', async () => {

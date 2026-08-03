@@ -15,6 +15,7 @@ import { createPlexApiResource, type PlexConnection } from '../../main/plex/disc
 import type { ChannelAggregate, ChannelAggregateMutationRequest, ChannelPersistenceStoragePort } from '../../domain/channel/channelPersistenceStore.js';
 import type { CreatePlexCompositionOptions, PlexComposition } from '../../main/plex/plexComposition.js';
 import type { ChannelComposition, CreateChannelCompositionOptions } from '../../main/channel/channelComposition.js';
+import { LivePlexTransport } from '../../main/plex/livePlexTransport.js';
 
 function sessionFixture() {
   const auth = {
@@ -117,11 +118,13 @@ test('production Plex and channel compositions deliver protocol artwork and canc
         owner: ChannelComposition['guideArtworkOwner'],
       ): Promise<Response>;
     };
+    const transport = new LivePlexTransport();
     const plex = await createPlexComposition({
       app: { getPath: () => appData, getVersion: () => '0.0.0-test' } as never,
+      createTransport: () => transport,
     });
     const token = 'account-token-value';
-    plex.liveTransport.request = async (input) => {
+    transport.request = async (input) => {
       if (input.action === 'request-pin') return {
         status: 201, payload: { kind: 'json', data: { id: 7, code: 'ABCD', expiresAt: '2099-01-01T00:00:00.000Z' } },
       };
@@ -137,10 +140,10 @@ test('production Plex and channel compositions deliver protocol artwork and canc
       uri: 'https://server.invalid:32400', protocol: 'https', address: 'server.invalid',
       port: 32400, local: true, relay: false, latencyMs: 5,
     };
-    plex.liveTransport.discoverResources = async () => [createPlexApiResource({
+    transport.discoverResources = async () => [createPlexApiResource({
       clientIdentifier: 'server-1', name: 'Server', connections: [connection],
     })];
-    plex.liveTransport.probeConnection = async () => ({ outcome: 'reachable', latencyMs: 5 });
+    transport.probeConnection = async () => ({ outcome: 'reachable', latencyMs: 5 });
     assert.equal((await plex.runtime.requestPin('pin')).ok, true);
     const polled = await plex.runtime.pollPin('poll', 7);
     assert.equal(polled.ok, true, JSON.stringify(polled));
@@ -149,7 +152,7 @@ test('production Plex and channel compositions deliver protocol artwork and canc
 
     const fetches: Array<ReturnType<typeof deferred<{ bytes: Uint8Array; mimeType: 'image/jpeg' }>>> = [];
     const signals: AbortSignal[] = [];
-    plex.liveTransport.fetchGuideArtwork = async (request) => {
+    transport.fetchGuideArtwork = async (request) => {
       signals.push(request.signal ?? new AbortController().signal);
       const gate = deferred<{ bytes: Uint8Array; mimeType: 'image/jpeg' }>();
       fetches.push(gate);
@@ -159,7 +162,7 @@ test('production Plex and channel compositions deliver protocol artwork and canc
       persistence: { kind: 'memory', storage: memoryStorage() },
       plexRuntime: plex.runtime,
       guideArtworkSessionGenerationOwner: plex.guideArtworkSessionGenerationOwner,
-      guideArtworkTransport: plex.liveTransport,
+      guideArtworkTransport: plex.guideArtworkTransport,
     });
     const first = channel.guideArtworkOwner.createRef({
       locator: '/library/metadata/1/thumb', altText: 'Poster', lineupRevision: 0,
@@ -195,7 +198,7 @@ test('production Plex and channel compositions deliver protocol artwork and canc
     plex.guideArtworkSessionGenerationOwner.subscribe((snapshot) => {
       if (snapshot.status === 'disposed') trace.push('session-disposed');
     });
-    plex.liveTransport.request = async (input) => {
+    transport.request = async (input) => {
       if (input.action !== 'get-home-users') return { status: 200, payload: { kind: 'json', data: [] } };
       return new Promise((_resolve, reject) => {
         const abort = () => { trace.push('transport-aborted'); reject(new Error('aborted')); };

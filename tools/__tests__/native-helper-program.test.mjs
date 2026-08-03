@@ -7,6 +7,28 @@ import path from 'node:path';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const programPath = path.join(repoRoot, 'src/native-helper/Lineup.NativePlayerHost/Program.cs');
 
+function methodBody(source, signature) {
+  const signatureIndex = source.indexOf(signature);
+  assert.notEqual(signatureIndex, -1, `missing method: ${signature}`);
+  const bodyStart = source.indexOf('{', signatureIndex + signature.length);
+  assert.notEqual(bodyStart, -1, `missing method body: ${signature}`);
+  let depth = 0;
+  for (let index = bodyStart; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1;
+    if (source[index] === '}') depth -= 1;
+    if (depth === 0) return source.slice(bodyStart + 1, index);
+  }
+  assert.fail(`unterminated method body: ${signature}`);
+}
+
+function assertOrdered(source, earlier, later) {
+  const earlierIndex = source.indexOf(earlier);
+  const laterIndex = source.indexOf(later);
+  assert.notEqual(earlierIndex, -1, `missing earlier statement: ${earlier}`);
+  assert.notEqual(laterIndex, -1, `missing later statement: ${later}`);
+  assert.ok(earlierIndex < laterIndex, `expected ${earlier} before ${later}`);
+}
+
 test('native helper resolves libmpv from helper directory or explicit override', async () => {
   const source = await readFile(programPath, 'utf8');
 
@@ -249,17 +271,29 @@ test('native presentation validates exact input grammar before queueing and reje
   assert.match(source, /if \(!TryAdvancePresentationOperationSequence\(message\.operationId\)\)\s*\{\s*WritePresentationResult\(message, "rejected"\);\s*return;\s*\}/su);
 });
 
+test('native helper applies the presentation cap only after parsing the message type', async () => {
+  const source = await readFile(programPath, 'utf8');
+  const commandLoop = methodBody(source, 'private static void CommandLoop()');
+
+  assert.match(source, /private const int MAX_HELPER_MESSAGE_SIZE = 1024 \* 1024;/u);
+  assert.match(source, /private const int MAX_PRESENTATION_MESSAGE_SIZE = 4096;/u);
+  assertOrdered(commandLoop, 'line.Length > MAX_HELPER_MESSAGE_SIZE', 'JsonDocument.Parse(line)');
+  assertOrdered(commandLoop, 'JsonDocument.Parse(line)', 'message.type == "presentation.update" && line.Length > MAX_PRESENTATION_MESSAGE_SIZE');
+  assert.doesNotMatch(commandLoop, /Contains\("\\"presentation\.update\\""/u);
+});
+
 test('native presentation currentness is epoch, revision, and loaded-request exact', async () => {
   const source = await readFile(programPath, 'utf8');
+  const executeWork = methodBody(source, 'private static string ExecutePresentationWork(InputMessage message)');
 
   assert.match(source, /message\.documentEpoch < latestPresentationEpoch/u);
   assert.match(source, /message\.documentEpoch == latestPresentationEpoch && message\.revision < latestPresentationRevision/u);
   assert.match(source, /!String\.Equals\(latestPresentationLoadedRequestId, message\.loadedRequestId, StringComparison\.Ordinal\)/u);
-  assert.match(source, /if \(message\.mode == "hidden"\)\s*\{\s*if \(!HidePresentationSurface\(\)\) return "rejected";\s*if \(stalePair\) return "stale";/su);
+  assert.match(executeWork, /if \(message\.mode == "hidden"\)[\s\S]*?HidePresentationSurface\(\)[\s\S]*?latestPresentationHidden = true;[\s\S]*?if \(staleRevision\) return "stale";[\s\S]*?return "hidden";/u);
+  assert.doesNotMatch(executeWork, /if \(message\.mode == "hidden"\)[\s\S]*?if \(stalePair\) return "stale";/u);
   assert.match(source, /message\.loadedRequestId == null \|\| message\.loadedRequestId != currentRequestId/u);
   assert.match(source, /exactTuple && latestPresentationHidden && message\.mode != "hidden"/u);
-  assert.match(source, /latestPresentationHidden = true;\s*return "hidden";/su);
-  assert.match(source, /latestPresentationHidden = false;\s*return "applied";/su);
+  assert.match(executeWork, /latestPresentationHidden = false;\s*return "applied";/u);
 });
 
 test('native presentation SetWindowPos outcomes control visibility and acknowledgements', async () => {
@@ -269,7 +303,33 @@ test('native presentation SetWindowPos outcomes control visibility and acknowled
   assert.match(source, /public bool Hide\(\)\s*\{\s*bool hidden = NativeMethods\.SetWindowPos[\s\S]*?if \(hidden\) Visible = false;\s*return hidden;\s*\}/u);
   assert.match(source, /if \(!renderSurface\.Show\(\)\)\s*\{\s*DestroyPresentationResources\(\);\s*return "rejected";\s*\}[\s\S]*?return "applied";/u);
   assert.match(source, /if \(renderSurface == null \|\| renderSurface\.Hide\(\)\) return true;\s*DestroyPresentationResources\(\);\s*return false;/u);
-  assert.match(source, /if \(!HidePresentationSurface\(\)\) return "rejected";\s*if \(stalePair\) return "stale";/u);
+  assert.match(source, /if \(!HidePresentationSurface\(\)\) return "rejected";\s*latestPresentationHidden = true;\s*if \(staleRevision\) return "stale";/u);
+});
+
+test('native presentation contains rejected work and fails the shared lifecycle on asynchronous rendering errors', async () => {
+  const source = await readFile(programPath, 'utf8');
+  const presentationLoop = methodBody(source, 'private static void PresentationLoop()');
+  const failureContainment = methodBody(source, 'private static void ContainPresentationFailure()');
+  const lifecycleFailure = methodBody(source, 'private static void FailPresentationLifecycle()');
+  const renderFrame = methodBody(source, 'private static void RenderFrame()');
+
+  assert.match(presentationLoop, /catch\s*\{\s*ContainPresentationFailure\(\);\s*work\.Status = "rejected";\s*\}\s*finally\s*\{\s*work\.Completed\.Set\(\);/u);
+  assert.match(presentationLoop, /try\s*\{\s*RenderFrame\(\);\s*PumpWindowMessages\(\);\s*\}\s*catch\s*\{\s*FailPresentationLifecycle\(\);\s*return;/u);
+  assert.match(failureContainment, /try\s*\{\s*HidePresentationSurface\(\);\s*\}\s*catch\s*\{\s*\}\s*DestroyPresentationResources\(\);\s*latestPresentationHidden = true;/u);
+  assertOrdered(lifecycleFailure, 'ContainPresentationFailure()', 'Environment.Exit(1)');
+  assert.match(renderFrame, /if \(!renderSurface\.MakeCurrent\(\)\) throw new InvalidOperationException\(\);/u);
+  assert.match(renderFrame, /if \(!NativeMethods\.SwapBuffers\(renderSurface\.DeviceContext\)\) throw new InvalidOperationException\(\);/u);
+});
+
+test('native presentation resources are destroyed by their owner before mpv teardown', async () => {
+  const source = await readFile(programPath, 'utf8');
+  const teardown = methodBody(source, 'private static void TeardownMpvContext()');
+  const cleanup = methodBody(source, 'private static void HandleCleanup(string? requestId)');
+  const command = methodBody(source, 'private static void HandleCommand(InputMessage msg)');
+
+  assert.doesNotMatch(teardown, /renderContext|renderSurface|DestroyPresentationResources/u);
+  assertOrdered(cleanup, 'DestroyPresentationOnOwnerThread()', 'TeardownMpvContext()');
+  assertOrdered(command, 'DestroyPresentationOnOwnerThread()', 'InitializeMpv(msg)');
 });
 
 test('native presentation operation ids reject every replay and nonincreasing sequence', async () => {
@@ -285,7 +345,10 @@ test('native presentation operation ids reject every replay and nonincreasing se
 
 test('native presentation duplicate custody is constant-space with no finite retention cap', async () => {
   const source = await readFile(programPath, 'utf8');
+  const advanceSequence = methodBody(source, 'private static bool TryAdvancePresentationOperationSequence(string operationId)');
 
   assert.doesNotMatch(source, /PresentationOperationIds|PresentationOperationIdOrder|PresentationOperationIdCapacity/u);
-  assert.equal(source.match(/latestPresentationOperationSequence/gu)?.length, 3);
+  assert.match(advanceSequence, /sequence <= latestPresentationOperationSequence/u);
+  assert.match(advanceSequence, /latestPresentationOperationSequence = sequence;/u);
+  assert.doesNotMatch(advanceSequence, /HashSet|Queue|Dictionary|List/u);
 });

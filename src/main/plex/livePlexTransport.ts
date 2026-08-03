@@ -27,6 +27,7 @@ export interface LivePlexTransportOptions {
   authConfig?: PlexAuthConfig;
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
+  guideArtworkTimeoutMs?: number;
   nowMs?: () => number;
   discoveryWaitMs?: (delayMs: number) => Promise<void>;
 }
@@ -144,6 +145,7 @@ export class LivePlexTransport
   private readonly authConfig: PlexAuthConfig | undefined;
   private readonly fetchImpl: typeof globalThis.fetch;
   private readonly timeoutMs: number;
+  private readonly guideArtworkTimeoutMs: number;
   private readonly nowMs: () => number;
   private readonly discoveryWaitMs: (delayMs: number) => Promise<void>;
 
@@ -151,6 +153,7 @@ export class LivePlexTransport
     this.authConfig = options.authConfig;
     this.fetchImpl = options.fetch ?? globalThis.fetch;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.guideArtworkTimeoutMs = options.guideArtworkTimeoutMs ?? GUIDE_ARTWORK_TIMEOUT_MS;
     this.nowMs = options.nowMs ?? Date.now;
     this.discoveryWaitMs = options.discoveryWaitMs ?? defaultWaitMs;
   }
@@ -332,7 +335,7 @@ export class LivePlexTransport
     const timeout = setTimeout(() => {
       timedOut = true;
       timeoutController.abort();
-    }, GUIDE_ARTWORK_TIMEOUT_MS);
+    }, this.guideArtworkTimeoutMs);
     const onAbort = () => timeoutController.abort(input.signal?.reason);
     if (input.signal?.aborted) onAbort();
     else input.signal?.addEventListener('abort', onAbort, { once: true });
@@ -343,10 +346,22 @@ export class LivePlexTransport
         headers: this.buildPlexRequestHeaders(input.token),
         signal: timeoutController.signal,
       });
-      throwForHttpStatus(response.status);
-      const mimeType = normalizeGuideArtworkMimeType(response.headers.get('content-type'));
+      try {
+        throwForHttpStatus(response.status);
+      } catch (error) {
+        await cancelGuideArtworkResponseBody(response);
+        throw error;
+      }
+      let mimeType: GuideArtworkMimeType;
+      try {
+        mimeType = normalizeGuideArtworkMimeType(response.headers.get('content-type'));
+      } catch (error) {
+        await cancelGuideArtworkResponseBody(response);
+        throw error;
+      }
       const contentLength = readContentLength(response.headers.get('content-length'));
       if (contentLength !== null && contentLength > GUIDE_ARTWORK_MAX_BYTES) {
+        await cancelGuideArtworkResponseBody(response);
         throw guideArtworkError('parse-error');
       }
       return {
@@ -718,6 +733,15 @@ async function readBoundedGuideArtworkBytes(
     offset += chunk.byteLength;
   }
   return bytes;
+}
+
+async function cancelGuideArtworkResponseBody(response: Response): Promise<void> {
+  if (response.body === null) return;
+  try {
+    await response.body.cancel();
+  } catch {
+    // Best-effort network resource release must not replace the fixed transport failure.
+  }
 }
 
 function guideArtworkError(code: 'validation' | 'parse-error'): LivePlexTransportError {

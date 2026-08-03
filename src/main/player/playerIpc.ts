@@ -14,6 +14,7 @@ import type {
   PlayerError,
   PlayerEvent,
   PlayerIpcResult,
+  PlayerPresentationResult,
   PlayerRequestId,
   PlayerSnapshot,
 } from '../../contracts/player.js';
@@ -42,7 +43,7 @@ export interface RegisterPlayerIpcHandlersOptions {
   nativeHost?: NativePlayerHostPort | null;
   nativeHostFactory?: NativePlayerHostFactory;
   onNativeHostLifecycleFailure?(failure: NativePlayerHostLifecycleFailure): void;
-  presentationOwner?: NativePlayerPresentationOwner | null;
+  presentationOwner?: Pick<NativePlayerPresentationOwner, 'update'> | null;
   ipcMain?: PlayerIpcMain;
 }
 
@@ -153,21 +154,12 @@ export function registerPlayerIpcHandlers(
 
   ipcMain.handle(LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL, async (event, payload: unknown) => {
     if (!options.isAuthorizedEvent(event)) {
-      return options.presentationOwner?.update(undefined) ?? {
-        ok: false,
-        status: 'rejected',
-        documentEpoch: null,
-        revision: null,
-        error: { code: 'PLAYER_PRESENTATION_REJECTED', message: 'Player presentation request was rejected.', recoverable: true, retryable: false },
-      };
+      return presentationRejected(null, null);
     }
-    return options.presentationOwner?.update(payload) ?? {
-      ok: false,
-      status: 'rejected',
-      documentEpoch: getNullablePositiveInteger(payload, 'documentEpoch'),
-      revision: getPositiveInteger(payload, 'revision'),
-      error: { code: 'PLAYER_PRESENTATION_REJECTED', message: 'Player presentation request was rejected.', recoverable: true, retryable: false },
-    };
+    return options.presentationOwner?.update(payload) ?? presentationRejected(
+      getNullablePositiveInteger(payload, 'documentEpoch'),
+      getPositiveInteger(payload, 'revision'),
+    );
   });
 
   return {
@@ -212,6 +204,24 @@ function getNullablePositiveInteger(value: unknown, key: string): number | null 
   if (typeof value !== 'object' || value === null || Array.isArray(value) || !(key in value)) return null;
   const candidate = (value as Record<string, unknown>)[key];
   return candidate === null ? null : getPositiveInteger(value, key);
+}
+
+function presentationRejected(
+  documentEpoch: number | null,
+  revision: number | null,
+): PlayerPresentationResult {
+  return {
+    ok: false as const,
+    status: 'rejected' as const,
+    documentEpoch,
+    revision,
+    error: {
+      code: 'PLAYER_PRESENTATION_REJECTED' as const,
+      message: 'Player presentation request was rejected.' as const,
+      recoverable: true as const,
+      retryable: false as const,
+    },
+  };
 }
 
 function recordPlayerIpcDiagnostic(

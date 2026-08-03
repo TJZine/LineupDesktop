@@ -7,7 +7,12 @@ import path from 'node:path';
 import type { ChannelConfig } from '../../domain/channel/types.js';
 import { ChannelScheduler } from '../../domain/scheduler/channelScheduler.js';
 import { ChannelPublicReferenceOwner, type ChannelPublicReferenceGeneration } from '../../main/channel/channelPublicReferenceOwner.js';
-import { DesktopGuidePreferencesStore } from '../../main/channel/desktopGuidePreferencesStore.js';
+import {
+  DesktopGuidePreferencesStore,
+  DesktopGuidePreferencesStoreError,
+  type DesktopGuidePreferencesFileSystem,
+} from '../../main/channel/desktopGuidePreferencesStore.js';
+import { deferred } from '../helpers/deferred.js';
 import { GuideRuntime } from '../../main/channel/guideRuntime.js';
 
 test('Guide pages numeric order before resolving across 300 channels at 9, 21, and 24 rows', async (t) => {
@@ -77,6 +82,7 @@ test('Guide filtering uses raw membership, includes custom channels only in All,
   const selected = await runtime.setLibraryFilter({
     generation, publicReferenceOwner: owner, expectedScopeToken: all.libraryFilter.scopeToken,
     expectedRevision: all.libraryFilter.revision, libraryId: libraryA.id,
+    loadCurrentGeneration: async () => generation,
   });
   assert.equal(selected.selectedLibraryId, libraryA.id);
   const filtered = await page(runtime, generation, owner, 0, 24);
@@ -138,7 +144,7 @@ test('Guide disabled and single-library states act as All and persist one normal
   const selectedId = initial.libraryFilter.libraries[0]!.id;
   await enabled.setLibraryFilter({
     generation, publicReferenceOwner: owner, expectedScopeToken: initial.libraryFilter.scopeToken,
-    expectedRevision: 0, libraryId: selectedId,
+    expectedRevision: 0, libraryId: selectedId, loadCurrentGeneration: async () => generation,
   });
   const disabled = createRuntime(channels, adapter, store, false);
   const disabledResult = await page(disabled, generation, owner, 0, 24);
@@ -152,12 +158,62 @@ test('Guide disabled and single-library states act as All and persist one normal
   await singleEnabled.setLibraryFilter({
     generation, publicReferenceOwner: owner, expectedScopeToken: singleInitial.libraryFilter.scopeToken,
     expectedRevision: 0, libraryId: singleInitial.libraryFilter.libraries[0]!.id,
+    loadCurrentGeneration: async () => generation,
   });
   const oneChannel = channels.slice(0, 1);
   const singleResult = await page(singleEnabled, generationFor(oneChannel, 'generation-single'), owner, 0, 24);
   assert.equal(singleResult.libraryFilter.selectedLibraryId, null);
   assert.equal(singleResult.libraryFilter.revision, 2);
   assert.equal(singleResult.channels.length, 1);
+});
+
+test('Guide filter commit barrier rejects stale lineup generation and preference scope before rename', async () => {
+  const channels = [channel('channel-a', 1, 'library-a'), channel('channel-b', 2, 'library-b')];
+  const adapter = {
+    getLibraryItems: async () => [], getCollectionItems: async () => [], getShowEpisodes: async () => [],
+    getPlaylistItems: async () => [], getItem: async () => null,
+  };
+  const owner = new ChannelPublicReferenceOwner();
+  const generation = generationFor(channels, 'generation-current');
+
+  for (const staleKind of ['generation', 'scope'] as const) {
+    let renames = 0;
+    let unlinks = 0;
+    const fileSystem: DesktopGuidePreferencesFileSystem = {
+      readFile: async () => { throw Object.assign(new Error('missing'), { code: 'ENOENT' }); },
+      mkdir: async () => undefined,
+      writeFile: async () => undefined,
+      chmod: async () => undefined,
+      rename: async () => { renames += 1; },
+      unlink: async () => { unlinks += 1; },
+    };
+    const runtime = createRuntime(channels, adapter, new DesktopGuidePreferencesStore('guide.json', { fileSystem }));
+    const initial = await page(runtime, generation, owner, 0, 24);
+    const selectedId = initial.libraryFilter.libraries[0]!.id;
+    const barrier = deferred<void>();
+    const barrierStarted = deferred<void>();
+    const pending = runtime.setLibraryFilter({
+      generation,
+      publicReferenceOwner: owner,
+      expectedScopeToken: initial.libraryFilter.scopeToken,
+      expectedRevision: 0,
+      libraryId: selectedId,
+      loadCurrentGeneration: async () => {
+        barrierStarted.resolve();
+        await barrier.promise;
+        return staleKind === 'generation'
+          ? generationFor(channels, 'generation-stale')
+          : generation;
+      },
+    });
+    await barrierStarted.promise;
+    if (staleKind === 'scope') runtime.invalidatePreferenceScope();
+    barrier.resolve();
+    await assert.rejects(pending, (error: unknown) =>
+      error instanceof DesktopGuidePreferencesStoreError && error.code === 'GUIDE_FILTER_SCOPE_STALE');
+    assert.equal(renames, 0, staleKind);
+    assert.equal(unlinks, 1, staleKind);
+  }
 });
 
 function channel(id: string, number: number, libraryId = `library-${id}`): ChannelConfig {

@@ -23,6 +23,8 @@ import type { PlexLibraryMinimalAdapter } from './plexLibraryMinimalAdapter.js';
 import type { GuideArtworkOwner } from './guideArtworkOwner.js';
 import type { ChannelPublicReferenceGeneration, ChannelPublicReferenceOwner } from './channelPublicReferenceOwner.js';
 import type { DesktopGuidePreferencesStore } from './desktopGuidePreferencesStore.js';
+import { DesktopGuidePreferencesStoreError } from './desktopGuidePreferencesStore.js';
+import { channelLibraryIds, libraryIdsFromContentSource } from './channelLibraryIds.js';
 
 type GuideContextResult = Readonly<{ ok: true; snapshot: Readonly<{ activeProfileId: string; selectedServerId: string }> }> |
   Readonly<{ ok: false }> | null;
@@ -151,7 +153,8 @@ export class GuideRuntime {
     expectedScopeToken: string;
     expectedRevision: number;
     libraryId: string | null;
-    isCommitCurrent?: () => boolean;
+    loadCurrentGeneration: () => Promise<ChannelPublicReferenceGeneration>;
+    isCommitCurrent?: () => boolean | Promise<boolean>;
   }): Promise<GuideLibraryFilterState> {
     if (this.preferencesStore === null) throw new Error('Guide preferences are unavailable.');
     await this.activatePreferenceScope(input.generation);
@@ -161,7 +164,23 @@ export class GuideRuntime {
       throw new Error('Guide library is unavailable.');
     }
     const snapshot = await this.preferencesStore.setLibraryFilter(
-      input.expectedScopeToken, input.expectedRevision, rawLibraryId, input.isCommitCurrent,
+      input.expectedScopeToken,
+      input.expectedRevision,
+      rawLibraryId,
+      async () => {
+        if (!(await (input.isCommitCurrent?.() ?? true))) return false;
+        let currentGeneration: ChannelPublicReferenceGeneration;
+        try {
+          currentGeneration = await input.loadCurrentGeneration();
+        } catch {
+          throw new DesktopGuidePreferencesStoreError('GUIDE_FILTER_SCOPE_STALE');
+        }
+        if (currentGeneration.fingerprint !== input.generation.fingerprint ||
+          this.activeScopeToken !== input.expectedScopeToken) {
+          throw new DesktopGuidePreferencesStoreError('GUIDE_FILTER_SCOPE_STALE');
+        }
+        return await (input.isCommitCurrent?.() ?? true);
+      },
     );
     return {
       scopeToken: snapshot.scopeToken,
@@ -428,24 +447,10 @@ function deriveLibraries(
   }).sort((left, right) => compareUtf16(left.name.toLowerCase(), right.name.toLowerCase()) || compareUtf16(left.id, right.id));
 }
 
-function channelLibraryIds(channel: ChannelConfig): string[] {
-  const values = channel.contentSource.type === 'mixed'
-    ? channel.contentSource.sources.flatMap(libraryIdsFromSource)
-    : libraryIdsFromSource(channel.contentSource);
-  if (channel.sourceLibraryId !== undefined) values.push(channel.sourceLibraryId);
-  return [...new Set(values)];
-}
-
-function libraryIdsFromSource(source: ChannelConfig['contentSource']): string[] {
-  if (source.type === 'library') return [source.libraryId];
-  if (source.type === 'mixed') return source.sources.flatMap(libraryIdsFromSource);
-  return [];
-}
-
 function contentKindForLibrary(source: ChannelConfig['contentSource'], rawId: string): 'show' | 'movie' | 'mixed' {
   if (source.type === 'library') return source.libraryId === rawId ? source.libraryType : 'mixed';
   if (source.type !== 'mixed') return 'mixed';
-  const matching = source.sources.filter((child) => libraryIdsFromSource(child).includes(rawId));
+  const matching = source.sources.filter((child) => libraryIdsFromContentSource(child).includes(rawId));
   if (matching.length !== 1 || source.sources.length !== 1) return 'mixed';
   return contentKindForLibrary(matching[0]!, rawId);
 }

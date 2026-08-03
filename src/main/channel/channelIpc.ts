@@ -194,13 +194,9 @@ export function registerChannelIpcHandlers(
           expectedScopeToken: request.payload.expectedScopeToken,
           expectedRevision: request.payload.expectedRevision,
           libraryId: request.payload.libraryId,
+          loadCurrentGeneration: () => options.runtime.loadPublicReferenceGeneration(),
           isCommitCurrent: () => isAuthorizedChannelEvent(options, event),
         });
-        const currentGeneration = await options.runtime.loadPublicReferenceGeneration();
-        if (currentGeneration.fingerprint !== generation.fingerprint ||
-          !guideRuntime.isPreferenceScopeCurrent(value.scopeToken)) {
-          return { ok: false, requestId: request.requestId, error: mapGuideFilterCode('GUIDE_FILTER_SCOPE_STALE') };
-        }
         return { ok: true, value, requestId: request.requestId };
       } catch (error: unknown) {
         return error instanceof DesktopGuidePreferencesCommitCurrentnessError

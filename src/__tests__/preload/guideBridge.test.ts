@@ -149,6 +149,24 @@ test('guide bridge invokes the one filter channel with exact CAS payload and val
   }
 });
 
+test('guide bridge rejects invalid channel paging before invocation', async () => {
+  let calls = 0;
+  const bridge = createGuideBridge(async () => { calls += 1; return {}; },
+    { getPresentation: 'guide:get', setLibraryFilter: 'guide:set', tuneChannel: 'player:tune' }, () => 'guide-request');
+  const invalid = [
+    { channelOffset: -1 }, { channelOffset: 1.5 }, { channelOffset: Number.MAX_SAFE_INTEGER + 1 },
+    { channelLimit: 0 }, { channelLimit: 25 }, { channelLimit: 1.5 },
+  ];
+  for (const paging of invalid) {
+    const result = await bridge.getPresentation({ startTimeMs: 0, durationMs: 1, ...paging }) as {
+      ok: boolean; error?: { code: string };
+    };
+    assert.equal(result.ok, false);
+    assert.equal(result.error?.code, 'GUIDE_VALIDATION_FAILED');
+  }
+  assert.equal(calls, 0);
+});
+
 test('guide bridge rejects mismatched filter success and nonclosed error code-operation pairs', async () => {
   const call = async (value: unknown) => {
     const bridge = createGuideBridge(async (_channel, request) => ({ ...(value as object), requestId: request.requestId }),

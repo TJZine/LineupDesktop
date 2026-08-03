@@ -44,6 +44,8 @@ test('Guide filter IPC maps public libraries into the real store and enforces ge
   const filePath = path.join(directory, 'lineup-desktop-guide-preferences.json');
   const channels: ChannelConfig[] = [guideChannel('channel-a', 1, 'unsafe/library-a'), guideChannel('channel-b', 2, 'library-b')];
   let fingerprint = 'generation-a';
+  let staleAtCommit = false;
+  let staleLoadCount = 0;
   const generation = () => ({ lineupRevision: 1, channels, currentChannelId: null, fingerprint });
   const owner = new ChannelPublicReferenceOwner();
   const guideRuntime = new GuideRuntime({
@@ -60,7 +62,10 @@ test('Guide filter IPC maps public libraries into the real store and enforces ge
   const handlers = new Map<string, (event: object, payload: unknown) => Promise<unknown>>();
   const authorized = {};
   registerChannelIpcHandlers({
-    runtime: { loadPublicReferenceGeneration: async () => generation() } as never,
+    runtime: { loadPublicReferenceGeneration: async () => {
+      if (staleAtCommit && staleLoadCount++ === 1) fingerprint = 'generation-b';
+      return generation();
+    } } as never,
     guideRuntime, publicReferenceOwner: owner,
     isAuthorizedEvent: (event) => event === authorized, createRequestId: () => 'fallback',
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler as never), removeHandler: () => undefined },
@@ -94,12 +99,9 @@ test('Guide filter IPC maps public libraries into the real store and enforces ge
   const refreshed = await handlers.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL)!(authorized, {
     requestId: 'presentation-2', payload: { startTimeMs: 0, durationMs: 60_000 },
   }) as { ok: true; value: { libraryFilter: { scopeToken: string; revision: number } } };
-  const originalSet = guideRuntime.setLibraryFilter.bind(guideRuntime);
-  guideRuntime.setLibraryFilter = async (input) => {
-    const value = await originalSet(input);
-    fingerprint = 'generation-b';
-    return value;
-  };
+  staleAtCommit = true;
+  staleLoadCount = 0;
+  const beforeStale = await fs.readFile(filePath, 'utf8');
   const stale = await handlers.get(LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL)!(authorized, {
     requestId: 'stale-filter', payload: {
       expectedScopeToken: refreshed.value.libraryFilter.scopeToken,
@@ -108,6 +110,7 @@ test('Guide filter IPC maps public libraries into the real store and enforces ge
     },
   }) as { ok: false; error: { code: string } };
   assert.equal(stale.error.code, 'GUIDE_FILTER_SCOPE_STALE');
+  assert.equal(await fs.readFile(filePath, 'utf8'), beforeStale);
 });
 
 test('Guide filter IPC maps every store error and rejects unknown public libraries without a write', async () => {

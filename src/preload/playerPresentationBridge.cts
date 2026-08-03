@@ -1,8 +1,10 @@
 import type {
   PlayerPresentationError,
+  PlayerPresentationMode,
   PlayerPresentationRequest,
   PlayerPresentationResult,
 } from '../contracts/player.js';
+import { PLAYER_PRESENTATION_MODES } from '../contracts/player.js';
 
 export type PlayerPresentationBridgeInvoke = (
   channel: string,
@@ -10,7 +12,7 @@ export type PlayerPresentationBridgeInvoke = (
 ) => Promise<unknown>;
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,120}$/u;
-const MODES = new Set(['hidden', 'player-full', 'guide-overlay-full', 'guide-classic-pip']);
+const MODES: ReadonlySet<string> = new Set<PlayerPresentationMode>(PLAYER_PRESENTATION_MODES);
 const SUCCESS_STATUSES = new Set(['applied', 'hidden', 'deferred', 'unsupported']);
 const FAILURE_STATUSES = new Set(['main-stale', 'helper-stale', 'rejected', 'timeout', 'lifecycle-failure']);
 const ERROR_BY_STATUS = {
@@ -36,16 +38,26 @@ export function createPlayerPresentationBridge(
     } catch {
       return rejected(input.documentEpoch, input.revision);
     }
-    if (!isPlayerPresentationResult(result) || result.revision !== input.revision ||
-      (input.documentEpoch === null
-        ? !result.ok && result.documentEpoch !== null
-        : result.documentEpoch !== input.documentEpoch) ||
-      (result.ok && input.documentEpoch === null && result.status !== 'deferred' && result.status !== 'hidden') ||
-      (result.ok && input.documentEpoch !== null && result.status === 'deferred')) {
+    if (!isMatchingPlayerPresentationResult(result, input)) {
       return rejected(input.documentEpoch, input.revision);
     }
     return result;
   };
+}
+
+function isMatchingPlayerPresentationResult(
+  value: unknown,
+  input: PlayerPresentationRequest,
+): value is PlayerPresentationResult {
+  if (!isPlayerPresentationResult(value)) return false;
+  const revisionMatches = value.revision === input.revision;
+  const epochMatches = input.documentEpoch === null
+    ? value.ok || value.documentEpoch === null
+    : value.documentEpoch === input.documentEpoch;
+  const negotiationStatusIsValid = !value.ok || (input.documentEpoch === null
+    ? value.status === 'deferred' || value.status === 'hidden'
+    : value.status !== 'deferred');
+  return revisionMatches && epochMatches && negotiationStatusIsValid;
 }
 
 export function isPlayerPresentationRequest(value: unknown): value is PlayerPresentationRequest {

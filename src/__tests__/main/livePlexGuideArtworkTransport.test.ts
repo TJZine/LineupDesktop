@@ -138,8 +138,9 @@ test('rejected locator and failed pre-fetch base parsing never touch fetch', asy
   assert.equal(calls, 0);
 });
 
-test('guide artwork timeout is bounded and its failure remains redacted', { timeout: 6_000 }, async () => {
+test('guide artwork timeout is injectable, fast, and its failure remains redacted', { timeout: 1_000 }, async () => {
   const transport = new LivePlexTransport({
+    guideArtworkTimeoutMs: 20,
     fetch: async (_input, init) => new Promise<Response>((_resolve, reject) => {
       init?.signal?.addEventListener('abort', () => reject(new Error('upstream aborted')), { once: true });
     }),
@@ -154,6 +155,29 @@ test('guide artwork timeout is bounded and its failure remains redacted', { time
     assert.doesNotMatch(error.message, /captured|credential|plex\.invalid|library\/metadata/u);
     return true;
   });
+});
+
+test('guide artwork transport cancels response bodies before early HTTP, MIME, and length failures', async () => {
+  const canceled: string[] = [];
+  const response = (label: string, status: number, headers: Record<string, string>) => new Response(
+    new ReadableStream<Uint8Array>({
+      pull() { /* keep the body open until the transport cancels it */ },
+      cancel() { canceled.push(label); },
+    }),
+    { status, headers },
+  );
+  const responses = [
+    response('http', 500, { 'content-type': 'image/png' }),
+    response('mime', 200, { 'content-type': 'text/html' }),
+    response('length', 200, { 'content-type': 'image/jpeg', 'content-length': '1500001' }),
+  ];
+  const transport = new LivePlexTransport({ fetch: async () => responses.shift()! });
+  for (const locator of ['/library/metadata/1/thumb', '/library/metadata/2/thumb', '/library/metadata/3/thumb']) {
+    await assert.rejects(transport.fetchGuideArtwork({
+      connection: connection(), token: capturedCredential, locator,
+    }), LivePlexTransportError);
+  }
+  assert.deepEqual(canceled, ['http', 'mime', 'length']);
 });
 
 test('guide artwork transport rejects MIME and size violations and honors abort', async () => {

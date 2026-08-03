@@ -2,17 +2,20 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import ts from 'typescript';
+import { ARTWORK_REF_ID_PATTERN } from '../../contracts/artwork.js';
 
 type ProtocolModule = {
   LINEUP_CSP: string;
   registerLineupProtocolHandler(
     rendererRoot: string,
     owner?: { get(refId: string): Promise<{ bytes: Uint8Array; mimeType: string } | null> },
+    diagnostics?: { recordDeliveryFailure(): void },
   ): void;
   serveLineupProtocolRequest(
     request: { url: string; method: string },
     rendererRoot: string,
     owner?: { get(refId: string): Promise<{ bytes: Uint8Array; mimeType: string } | null> },
+    diagnostics?: { recordDeliveryFailure(): void },
   ): Promise<Response>;
 };
 
@@ -38,7 +41,7 @@ async function loadProtocolModule(onHandle?: (handler: (request: Request) => Pro
         return { resolveRendererProtocolRequest: () => ({ ok: false }) };
       }
       if (moduleName === '../contracts/artwork.js') {
-        return { ARTWORK_REF_ID_PATTERN: /^artwork-[A-Za-z0-9_-]{16,96}$/u };
+        return { ARTWORK_REF_ID_PATTERN };
       }
       return assert.fail(`unexpected require ${moduleName}`);
     },
@@ -111,4 +114,18 @@ test('method, query, fragment, traversal, invalid segments, and unknown refs fai
   );
   assert.equal(unknown.status, 404);
   assert.equal(calls, 1);
+});
+
+test('owner rejection records one fixed zero-argument diagnostic and retains 404', async () => {
+  const { serveLineupProtocolRequest } = await loadProtocolModule();
+  const diagnosticArguments: unknown[][] = [];
+  const response = await serveLineupProtocolRequest(
+    { url: `lineup://shell/artwork/${refId}`, method: 'GET' },
+    '/unused',
+    { get: async () => { throw new Error('private locator and host'); } },
+    { recordDeliveryFailure: (...args: unknown[]) => { diagnosticArguments.push(args); } },
+  );
+  assert.equal(response.status, 404);
+  assert.equal(await response.text(), 'Not found.');
+  assert.deepEqual(diagnosticArguments, [[]]);
 });

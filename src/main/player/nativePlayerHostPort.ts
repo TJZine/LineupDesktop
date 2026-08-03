@@ -3,6 +3,8 @@ import type {
   PlayerError,
   PlayerErrorCategory,
   PlayerMediaSummary,
+  PlayerPresentationMode,
+  PlayerPresentationRect,
   PlayerRequestId,
   PlayerStatus,
   PlayerTimeRange,
@@ -111,8 +113,8 @@ export interface NativePlayerPresentationUpdate {
   parentHwnd: string;
   parentPid: number;
   loadedRequestId: PlayerRequestId | null;
-  mode: 'hidden' | 'player-full' | 'guide-overlay-full' | 'guide-classic-pip';
-  bounds: { x: number; y: number; width: number; height: number } | null;
+  mode: PlayerPresentationMode;
+  bounds: PlayerPresentationRect | null;
 }
 
 export type NativePlayerPresentationResult =

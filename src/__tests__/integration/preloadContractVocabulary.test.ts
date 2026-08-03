@@ -53,6 +53,7 @@ import {
   LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL,
   PLAYER_RENDERER_INTENTS,
 } from '../../contracts/ipc.js';
+import { PLAYER_PRESENTATION_MODES } from '../../contracts/player.js';
 import {
   CHANNEL_SETUP_ERROR_CODES,
   CHANNEL_SETUP_BUILD_MODES,
@@ -461,7 +462,14 @@ function evaluatePlayerPresentationBridgeModule(): Record<string, unknown> {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
     fileName: 'src/preload/playerPresentationBridge.cts',
   }).outputText;
-  new Function('exports', 'module', compiled)(moduleObject.exports, moduleObject);
+  new Function('require', 'exports', 'module', compiled)(
+    (moduleName: string) => {
+      if (moduleName === '../contracts/player.js') return { PLAYER_PRESENTATION_MODES };
+      return assert.fail(`unexpected player presentation bridge require ${moduleName}`);
+    },
+    moduleObject.exports,
+    moduleObject,
+  );
   return moduleObject.exports;
 }
 

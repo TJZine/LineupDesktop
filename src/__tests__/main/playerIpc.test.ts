@@ -195,6 +195,83 @@ function loadEnvelope(requestId = 'player-load-1'): unknown {
   };
 }
 
+test('player presentation IPC rejects unauthorized senders without consulting the owner', async () => {
+  const ipcMain = new FakeIpcMain();
+  let ownerCalls = 0;
+  registerPlayerIpcHandlers({
+    shellMode: 'production',
+    isAuthorizedEvent,
+    ...playerEventSinks(),
+    createRequestId,
+    presentationOwner: {
+      update: async () => {
+        ownerCalls += 1;
+        return {
+          ok: true,
+          status: 'applied',
+          documentEpoch: 4,
+          revision: 7,
+        };
+      },
+    },
+    ipcMain,
+  });
+
+  const payload = {
+    documentEpoch: 4,
+    revision: 7,
+    requestId: 'media-1',
+    mode: 'player-full',
+    rect: { x: 0, y: 0, width: 1, height: 1 },
+  };
+  assert.deepEqual(await ipcMain.invoke(
+    LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL,
+    unauthorizedEvent(),
+    payload,
+  ), {
+    ok: false,
+    status: 'rejected',
+    documentEpoch: null,
+    revision: null,
+    error: {
+      code: 'PLAYER_PRESENTATION_REJECTED',
+      message: 'Player presentation request was rejected.',
+      recoverable: true,
+      retryable: false,
+    },
+  });
+  assert.equal(ownerCalls, 0);
+});
+
+test('player presentation IPC keeps authorized no-owner rejection correlations distinct', async () => {
+  const ipcMain = new FakeIpcMain();
+  registerPlayerIpcHandlers({
+    shellMode: 'production',
+    isAuthorizedEvent,
+    ...playerEventSinks(),
+    createRequestId,
+    ipcMain,
+  });
+
+  const result = await ipcMain.invoke(
+    LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL,
+    authorizedEvent(),
+    { documentEpoch: 4, revision: 7 },
+  );
+  assert.deepEqual(result, {
+    ok: false,
+    status: 'rejected',
+    documentEpoch: 4,
+    revision: 7,
+    error: {
+      code: 'PLAYER_PRESENTATION_REJECTED',
+      message: 'Player presentation request was rejected.',
+      recoverable: true,
+      retryable: false,
+    },
+  });
+});
+
 function runtimeLoadCommand(requestId: string): PlayerCommand {
   const envelope = loadEnvelope(requestId) as { payload: PlayerLoadCommandPayload };
   return {

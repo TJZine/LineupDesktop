@@ -20,11 +20,19 @@ test('shell window controller composes one hidden opaque BaseWindow and transpar
     publishShellStatus: () => undefined,
   });
   const shell = await controller.createWindow();
+  assert.equal(shell.baseWindow, fakeWindow.value);
   assert.equal(shell.webContents, fakeView.webContents);
   assert.deepEqual(windowOptions, [{ width: 1280, height: 720, show: false, backgroundColor: '#111318', frame: true, resizable: true }]);
-  assert.equal(viewOptions[0]?.webPreferences?.sandbox, true);
-  assert.equal(viewOptions[0]?.webPreferences?.contextIsolation, true);
-  assert.equal(viewOptions[0]?.webPreferences?.nodeIntegration, false);
+  assert.deepEqual(viewOptions[0]?.webPreferences, {
+    preload: '/dist/preload/index.cjs',
+    nodeIntegration: false,
+    contextIsolation: true,
+    sandbox: true,
+    webSecurity: true,
+    allowRunningInsecureContent: false,
+    experimentalFeatures: false,
+    webviewTag: false,
+  });
   assert.equal(fakeView.background, '#00000000');
   assert.deepEqual(fakeView.bounds, { x: 0, y: 0, width: 1280, height: 720 });
   controller.showWindow();
@@ -216,6 +224,49 @@ test('failed final hide still releases captured shell resources and reports the 
   await assert.rejects(controller.dispose(), /hide failed/u);
   assert.deepEqual(order, ['hide', 'view-close', 'remove-view', 'window-destroy']);
   assert.equal(controller.getWindow(), null);
+});
+
+test('never-settling final hide times out, releases resources once, and remains idempotent', async () => {
+  const order: string[] = [];
+  const fakeWindow = new FakeBaseWindow();
+  fakeWindow.order = order;
+  const fakeView = new FakeView(order);
+  let hideCalls = 0;
+  const controller = createShellWindowController({
+    createBaseWindow: () => fakeWindow.value,
+    createWebContentsView: () => fakeView.value,
+    screen: fakeScreen(), preloadPath: '/preload', smokeMode: true, publishShellStatus: () => undefined,
+    hidePresentation: () => { hideCalls += 1; return new Promise<never>(() => undefined); },
+    presentationHideTimeoutMs: 1,
+  });
+  await controller.createWindow();
+  const firstDisposal = controller.dispose();
+  assert.equal(controller.dispose(), firstDisposal);
+  await assert.rejects(firstDisposal, /hide timed out/u);
+  assert.equal(hideCalls, 1);
+  assert.deepEqual(order, ['view-close', 'remove-view', 'window-destroy']);
+  assert.equal(controller.getWindow(), null);
+});
+
+test('presentation hide rejection after the disposal timeout remains handled', async () => {
+  const fakeWindow = new FakeBaseWindow();
+  const fakeView = new FakeView();
+  const pendingHide: { reject?: (error: Error) => void } = {};
+  const controller = createShellWindowController({
+    createBaseWindow: () => fakeWindow.value,
+    createWebContentsView: () => fakeView.value,
+    screen: fakeScreen(), preloadPath: '/preload', smokeMode: true, publishShellStatus: () => undefined,
+    hidePresentation: () => new Promise<never>((_resolve, reject) => { pendingHide.reject = reject; }),
+    presentationHideTimeoutMs: 1,
+  });
+  await controller.createWindow();
+  await assert.rejects(controller.dispose(), /hide timed out/u);
+  const rejectLateHide = pendingHide.reject;
+  if (rejectLateHide === undefined) throw new Error('Expected a pending presentation hide.');
+  rejectLateHide(new Error('late hide rejection'));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(fakeWindow.destroyed, true);
+  assert.equal(fakeView.destroyed, true);
 });
 
 test('window close and renderer crash each run bounded shell disposal without leaking resources', async (t) => {

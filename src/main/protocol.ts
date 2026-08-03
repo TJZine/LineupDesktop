@@ -5,7 +5,11 @@ import { pathToFileURL } from 'node:url';
 
 import { resolveRendererProtocolRequest } from './rendererProtocolPolicy.js';
 import { ARTWORK_REF_ID_PATTERN } from '../contracts/artwork.js';
-import type { GuideArtworkOwner } from './channel/guideArtworkOwner.js';
+import type { GuideArtworkDelivery, GuideArtworkOwner } from './channel/guideArtworkOwner.js';
+
+export interface GuideArtworkProtocolDiagnosticPort {
+  recordDeliveryFailure(): void;
+}
 
 export const LINEUP_CSP =
   "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none';";
@@ -25,18 +29,20 @@ export function registerLineupProtocolScheme(): void {
 export function registerLineupProtocolHandler(
   rendererRoot: string,
   guideArtworkOwner?: Pick<GuideArtworkOwner, 'get'>,
+  diagnosticPort?: GuideArtworkProtocolDiagnosticPort,
 ): void {
   protocol.handle('lineup', async (request) =>
-    serveLineupProtocolRequest(request, rendererRoot, guideArtworkOwner));
+    serveLineupProtocolRequest(request, rendererRoot, guideArtworkOwner, diagnosticPort));
 }
 
 export async function serveLineupProtocolRequest(
   request: Pick<Request, 'url' | 'method'>,
   rendererRoot: string,
   guideArtworkOwner?: Pick<GuideArtworkOwner, 'get'>,
+  diagnosticPort?: GuideArtworkProtocolDiagnosticPort,
 ): Promise<Response> {
   if (isArtworkRoute(request.url)) {
-    return serveGuideArtwork(request, guideArtworkOwner);
+    return serveGuideArtwork(request, guideArtworkOwner, diagnosticPort);
   }
   if (request.method !== 'GET') return textResponse('Not found.', 404);
   return serveRendererFile(request.url, rendererRoot);
@@ -96,13 +102,20 @@ function textResponse(text: string, status: number): Response {
 async function serveGuideArtwork(
   request: Pick<Request, 'url' | 'method'>,
   guideArtworkOwner: Pick<GuideArtworkOwner, 'get'> | undefined,
+  diagnosticPort: GuideArtworkProtocolDiagnosticPort | undefined,
 ): Promise<Response> {
   if (request.method !== 'GET') return textResponse('Not found.', 404);
   const refId = readArtworkRefId(request.url);
   if (refId === null || guideArtworkOwner === undefined) {
     return textResponse('Not found.', 404);
   }
-  const delivery = await guideArtworkOwner.get(refId).catch(() => null);
+  let delivery: GuideArtworkDelivery | null;
+  try {
+    delivery = await guideArtworkOwner.get(refId);
+  } catch {
+    try { diagnosticPort?.recordDeliveryFailure(); } catch { /* diagnostics are best-effort */ }
+    return textResponse('Not found.', 404);
+  }
   if (delivery === null) return textResponse('Not found.', 404);
   return new Response(new Uint8Array(delivery.bytes).buffer, {
     status: 200,

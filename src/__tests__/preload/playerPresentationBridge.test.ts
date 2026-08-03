@@ -62,7 +62,18 @@ test('player presentation bridge rejects the complete malformed request matrix w
 
 test('player presentation bridge maps invoke rejection and malformed envelopes to local rejected', async () => {
   const throwing = createPlayerPresentationBridge(async () => { throw new Error('nativeHandle=private'); }, 'channel');
-  assert.equal((await throwing(full)).ok, false);
+  assert.deepEqual(await throwing(full), {
+    ok: false,
+    status: 'rejected',
+    documentEpoch: 4,
+    revision: 7,
+    error: {
+      code: 'PLAYER_PRESENTATION_REJECTED',
+      message: 'Player presentation request was rejected.',
+      recoverable: true,
+      retryable: false,
+    },
+  });
   const malformed = createPlayerPresentationBridge(async () => ({ ok: true, status: 'applied', documentEpoch: 4, revision: 8 }), 'channel');
   assert.equal((await malformed(full)).ok, false);
 });

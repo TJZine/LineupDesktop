@@ -105,6 +105,7 @@ let teardownPlayerRecoveryIpc: PlayerRecoveryIpcTeardown | null = null;
 let playerIpcQuitTeardownInProgress = false;
 let playerIpcQuitTeardownComplete = false;
 let nativePlayerPresentationOwner: NativePlayerPresentationOwner | null = null;
+let shellPresentationCleanupInProgress: Promise<void> | null = null;
 let singleInstanceOwner: SingleInstanceOwner | null = null;
 let containmentCounters: ShellContainmentCounters = {
   navigationDenied: 0,
@@ -116,14 +117,11 @@ let containmentCounters: ShellContainmentCounters = {
 app.commandLine.appendSwitch('disable-gpu');
 
 void startApplication().catch(async (error: unknown) => {
-  const failedShellController = shellWindowController;
-  shellWindowController = null;
   try {
-    await failedShellController?.dispose();
+    await cleanupShellAndNativePresentation();
   } catch (cleanupError: unknown) {
-    reportMainProcessDiagnostic('Shell cleanup after startup failure failed', cleanupError);
+    reportMainProcessDiagnostic('Shell and presentation cleanup after startup failure failed', cleanupError);
   }
-  nativePlayerPresentationOwner = null;
   const cleanupSettingsIpc = teardownSettingsIpc;
   teardownSettingsIpc = null;
   const cleanupDiagnosticsIpc = teardownDiagnosticsIpc;
@@ -182,7 +180,7 @@ async function startApplication(): Promise<void> {
   const smokeMode = shellMode === 'smoke';
   singleInstanceOwner = new SingleInstanceOwner({
     app,
-    getWindow: () => shellWindowController?.getWindow() ?? null,
+    getWindow: () => shellWindowController?.getWindow()?.baseWindow ?? null,
   });
   if (!singleInstanceOwner.acquire().primary) return;
   registerApplicationLifecycleHandlers();
@@ -253,7 +251,7 @@ async function startApplication(): Promise<void> {
     persistence,
     plexRuntime: plexCreated.runtime,
     guideArtworkSessionGenerationOwner: plexCreated.guideArtworkSessionGenerationOwner,
-    guideArtworkTransport: plexCreated.liveTransport,
+    guideArtworkTransport: plexCreated.guideArtworkTransport,
     channelBuilderContextSource: smokeFixture?.contextSource,
     diagnosticEventStore,
     guidePreferencesFilePath: resolveDesktopGuidePreferencesFilePath(app),
@@ -273,7 +271,19 @@ async function startApplication(): Promise<void> {
     diagnosticEventStore,
   });
 
-    registerLineupProtocolHandler(rendererRoot, channelCreated.guideArtworkOwner);
+    registerLineupProtocolHandler(rendererRoot, channelCreated.guideArtworkOwner, {
+      recordDeliveryFailure: () => {
+        diagnosticEventStore.record({
+          surface: 'main',
+          category: 'ipc',
+          severity: 'warning',
+          status: 'failed',
+          operation: 'guide.artwork.delivery',
+          message: 'Guide artwork delivery failed.',
+          result: 'failure',
+        });
+      },
+    });
     configurePermissionContainment();
     registerShellIpcHandlers();
     const initialSettingsSnapshot = await settingsStore.loadSnapshot();
@@ -443,7 +453,7 @@ function registerApplicationLifecycleHandlers(): void {
     playbackProgramTransitionOwner = null;
     localPlaybackProgramTransitionOwner?.dispose();
     const teardown = teardownPlayerIpc;
-    if (playerIpcQuitTeardownComplete || teardown === null) {
+    if (playerIpcQuitTeardownComplete) {
       const localPlaybackEventRouter = playbackEventRouter;
       playbackEventRouter = null;
       const localPlaybackRuntime = playbackRuntime;
@@ -455,6 +465,7 @@ function registerApplicationLifecycleHandlers(): void {
       localChannelComposition?.guideArtworkOwner.dispose();
       localPlaybackEventRouter?.dispose();
       void (async () => {
+        await cleanupShellAndNativePresentation();
         await localPlaybackRuntime?.teardown();
         await Promise.all([
           teardownPlex?.() ?? Promise.resolve(),
@@ -482,14 +493,13 @@ function registerApplicationLifecycleHandlers(): void {
     playbackRuntime = null;
     const localPlaybackEventRouter = playbackEventRouter;
     playbackEventRouter = null;
-    const localShellWindowController = shellWindowController;
-    const localPresentationOwner = nativePlayerPresentationOwner;
     (async () => {
-      await localShellWindowController?.dispose();
-      await localPresentationOwner?.dispose();
-      if (shellWindowController === localShellWindowController) shellWindowController = null;
-      if (nativePlayerPresentationOwner === localPresentationOwner) nativePlayerPresentationOwner = null;
-      await teardown.teardown();
+      try {
+        await cleanupShellAndNativePresentation();
+      } catch (error: unknown) {
+        reportMainProcessDiagnostic('Shell and presentation cleanup failed during quit', error);
+      }
+      await teardown?.teardown();
       localPlaybackEventRouter?.dispose();
       await localPlaybackRuntime?.teardown();
       await Promise.all([
@@ -531,6 +541,36 @@ function attachContainmentHandlers(window: ShellWindow): void {
       window.webContents.stop();
     }
   });
+}
+
+function cleanupShellAndNativePresentation(): Promise<void> {
+  if (shellPresentationCleanupInProgress !== null) return shellPresentationCleanupInProgress;
+  const controller = shellWindowController;
+  const presentationOwner = nativePlayerPresentationOwner;
+  const cleanup = (async (): Promise<void> => {
+    const errors: Error[] = [];
+    try {
+      await controller?.dispose();
+    } catch (error: unknown) {
+      errors.push(error instanceof Error ? error : new Error('Shell window cleanup failed.'));
+    }
+    try {
+      await presentationOwner?.dispose();
+    } catch (error: unknown) {
+      errors.push(error instanceof Error ? error : new Error('Native presentation cleanup failed.'));
+    } finally {
+      if (shellWindowController === controller) shellWindowController = null;
+      if (nativePlayerPresentationOwner === presentationOwner) nativePlayerPresentationOwner = null;
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) {
+      throw new AggregateError(errors, 'Shell and native presentation cleanup failed.');
+    }
+  })();
+  shellPresentationCleanupInProgress = cleanup.finally(() => {
+    shellPresentationCleanupInProgress = null;
+  });
+  return shellPresentationCleanupInProgress;
 }
 
 function configurePermissionContainment(): void {
@@ -622,8 +662,8 @@ function sendPlayerEvent(event: PlayerEvent): void {
 }
 
 function sendToShellWindow(channel: string, payload: unknown): void {
-  const window = getShellWindowController().getWindow();
-  if (window === null || window.isDestroyed()) {
+  const window = shellWindowController?.getWindow() ?? null;
+  if (window === null || window.baseWindow.isDestroyed()) {
     return;
   }
 

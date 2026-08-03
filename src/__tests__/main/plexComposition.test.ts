@@ -19,6 +19,9 @@ test('Plex composition separates construction from IPC registration', () => {
   assert.match(source, /export function registerPlexCompositionIpc/u);
   assert.match(source, /channelBuilderFacetTransport: liveTransport/u);
   assert.match(source, /libraryTransport: liveTransport/u);
+  assert.match(source, /const liveTransport = options\.createTransport\?\.\(authConfig\) \?\? new LivePlexTransport/u);
+  assert.match(source, /guideArtworkTransport: LivePlexGuideArtworkTransport/u);
+  assert.doesNotMatch(source, /\bliveTransport:\s*LivePlexTransport;/u);
   assert.match(
     source,
     /if \(state\.registrationTeardown === null\) \{\s*await runtime\.shutdown\(\);\s*return;\s*\}\s*await state\.registrationTeardown\(\);/u,

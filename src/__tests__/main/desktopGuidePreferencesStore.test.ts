@@ -3,6 +3,7 @@ import test from 'node:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { setImmediate as waitForImmediate } from 'node:timers/promises';
 
 import {
   DesktopGuidePreferencesStore,
@@ -94,6 +95,100 @@ test('Guide preferences v1 rechecks scope at the commit barrier and removes its 
     error instanceof DesktopGuidePreferencesStoreError && error.code === 'GUIDE_FILTER_SCOPE_STALE');
   assert.equal(renamed, false);
   assert.equal(unlinked, true);
+});
+
+test('Guide preferences v1 awaits asynchronous commit validation before rename', async () => {
+  let releaseValidation!: () => void;
+  const validationGate = new Promise<void>((resolve) => { releaseValidation = resolve; });
+  let validationStarted!: () => void;
+  const started = new Promise<void>((resolve) => { validationStarted = resolve; });
+  let renamed = false;
+  const fileSystem: DesktopGuidePreferencesFileSystem = {
+    readFile: async () => { throw Object.assign(new Error('missing'), { code: 'ENOENT' }); },
+    mkdir: async () => undefined,
+    writeFile: async () => undefined,
+    chmod: async () => undefined,
+    rename: async () => { renamed = true; },
+    unlink: async () => undefined,
+  };
+  const store = new DesktopGuidePreferencesStore('guide-preferences.json', { fileSystem });
+  await store.activateScope({ serverId: 'server', profileId: 'profile', scopeToken: 'scope' });
+  const pending = store.setLibraryFilter('scope', 0, 'library', async () => {
+    validationStarted();
+    await validationGate;
+    return true;
+  });
+  await started;
+  assert.equal(renamed, false);
+  releaseValidation();
+  await pending;
+  assert.equal(renamed, true);
+});
+
+test('Guide preferences v1 rechecks scope after asynchronous commit validation', async () => {
+  let releaseValidation!: () => void;
+  const validationGate = new Promise<void>((resolve) => { releaseValidation = resolve; });
+  let validationStarted!: () => void;
+  const started = new Promise<void>((resolve) => { validationStarted = resolve; });
+  let renamed = false;
+  const fileSystem: DesktopGuidePreferencesFileSystem = {
+    readFile: async () => { throw Object.assign(new Error('missing'), { code: 'ENOENT' }); },
+    mkdir: async () => undefined,
+    writeFile: async () => undefined,
+    chmod: async () => undefined,
+    rename: async () => { renamed = true; },
+    unlink: async () => undefined,
+  };
+  const store = new DesktopGuidePreferencesStore('guide-preferences.json', { fileSystem });
+  await store.activateScope({ serverId: 'server-a', profileId: 'profile', scopeToken: 'scope-a' });
+  const write = store.setLibraryFilter('scope-a', 0, 'library', async () => {
+    validationStarted();
+    await validationGate;
+    return true;
+  });
+  await started;
+  const nextActivation = store.activateScope({
+    serverId: 'server-b', profileId: 'profile', scopeToken: 'scope-b',
+  });
+  releaseValidation();
+  await assert.rejects(
+    write,
+    (error) => error instanceof DesktopGuidePreferencesStoreError && error.code === 'GUIDE_FILTER_SCOPE_STALE',
+  );
+  assert.equal(renamed, false);
+  assert.equal((await nextActivation).scopeToken, 'scope-b');
+});
+
+test('same-scope activation remains serialized behind an in-progress write', async () => {
+  let releaseRename!: () => void;
+  const renameGate = new Promise<void>((resolve) => { releaseRename = resolve; });
+  let renameStarted!: () => void;
+  const started = new Promise<void>((resolve) => { renameStarted = resolve; });
+  const fileSystem: DesktopGuidePreferencesFileSystem = {
+    readFile: async () => { throw Object.assign(new Error('missing'), { code: 'ENOENT' }); },
+    mkdir: async () => undefined,
+    writeFile: async () => undefined,
+    chmod: async () => undefined,
+    rename: async () => { renameStarted(); await renameGate; },
+    unlink: async () => undefined,
+  };
+  const scope = { serverId: 'server', profileId: 'profile', scopeToken: 'scope' };
+  const store = new DesktopGuidePreferencesStore('guide-preferences.json', { fileSystem });
+  await store.activateScope(scope);
+  const write = store.setLibraryFilter('scope', 0, 'library');
+  await started;
+  let activationSettled = false;
+  const activation = store.activateScope(scope).then((snapshot) => {
+    activationSettled = true;
+    return snapshot;
+  });
+  await waitForImmediate();
+  assert.equal(activationSettled, false);
+  releaseRename();
+  await write;
+  assert.deepEqual(await activation, {
+    scopeToken: 'scope', revision: 1, selectedLibraryId: 'library', persistenceStatus: 'ready',
+  });
 });
 
 test('Guide preferences v1 preserves the prior destination when atomic rename fails', async (t) => {

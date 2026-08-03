@@ -65,8 +65,10 @@ export class GuideArtworkOwner {
     lineupRevision: number;
   }>): ArtworkRef | null {
     if (this.disposed) return null;
-    this.reclaimExpiredAuthorizations();
-    if (this.authorizations.size >= MAX_LIVE_REFS) return null;
+    if (this.authorizations.size >= MAX_LIVE_REFS) {
+      this.reclaimExpiredAuthorizations();
+      if (this.authorizations.size >= MAX_LIVE_REFS) return null;
+    }
     let locator: string;
     try {
       locator = normalizeGuideArtworkLocator(input.locator);

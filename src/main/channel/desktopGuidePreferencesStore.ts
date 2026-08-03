@@ -96,7 +96,15 @@ export class DesktopGuidePreferencesStore {
     const normalized = normalizeScope(scope);
     if (this.activeScope?.scopeToken === normalized.scopeToken &&
       this.activeScope.serverId === normalized.serverId && this.activeScope.profileId === normalized.profileId &&
-      this.activeSnapshot !== null) return Promise.resolve(this.activeSnapshot);
+      this.activeSnapshot !== null) {
+      const epoch = this.scopeEpoch;
+      return this.enqueue(async () => {
+        if (epoch !== this.scopeEpoch || this.activeSnapshot === null) {
+          throw new DesktopGuidePreferencesStoreError('GUIDE_FILTER_SCOPE_STALE');
+        }
+        return this.activeSnapshot;
+      });
+    }
     this.scopeEpoch += 1;
     const epoch = this.scopeEpoch;
     this.activeScope = normalized;
@@ -122,7 +130,7 @@ export class DesktopGuidePreferencesStore {
     expectedScopeToken: string,
     expectedRevision: number,
     libraryId: string | null,
-    isCommitCurrent: () => boolean = () => true,
+    isCommitCurrent: () => boolean | Promise<boolean> = () => true,
   ): Promise<GuidePreferenceSnapshot> {
     const selectedLibraryId = libraryId === null ? null : normalizeIdentifier(libraryId);
     const epoch = this.scopeEpoch;
@@ -150,9 +158,10 @@ export class DesktopGuidePreferencesStore {
       if (document.scopes.length > MAX_SCOPES) {
         throw new DesktopGuidePreferencesStoreError('GUIDE_FILTER_STORAGE_UNAVAILABLE');
       }
-      await this.writeDocument(document, () => {
+      await this.writeDocument(document, async () => {
         this.requireExpected(epoch, expectedScopeToken, expectedRevision);
-        if (!isCommitCurrent()) throw new DesktopGuidePreferencesCommitCurrentnessError();
+        if (!(await isCommitCurrent())) throw new DesktopGuidePreferencesCommitCurrentnessError();
+        this.requireExpected(epoch, expectedScopeToken, expectedRevision);
       });
       const next: GuidePreferenceSnapshot = Object.freeze({
         scopeToken: scope.scopeToken,
@@ -217,7 +226,7 @@ export class DesktopGuidePreferencesStore {
       : { status: 'corrupt', document: null };
   }
 
-  private async writeDocument(document: GuidePreferencesV1, commitBarrier: () => void): Promise<void> {
+  private async writeDocument(document: GuidePreferencesV1, commitBarrier: () => void | Promise<void>): Promise<void> {
     const content = JSON.stringify(document);
     if (Buffer.byteLength(content, 'utf8') > MAX_BYTES) {
       throw new DesktopGuidePreferencesStoreError('GUIDE_FILTER_STORAGE_UNAVAILABLE');
@@ -229,7 +238,7 @@ export class DesktopGuidePreferencesStore {
       temporaryCreated = true;
       await this.fileSystem.writeFile(temporaryPath, content, { encoding: 'utf8', mode: 0o600 });
       await this.fileSystem.chmod(temporaryPath, 0o600);
-      commitBarrier();
+      await commitBarrier();
       await this.fileSystem.rename(temporaryPath, this.filePath);
     } catch (error: unknown) {
       if (temporaryCreated) {
