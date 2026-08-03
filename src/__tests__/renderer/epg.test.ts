@@ -131,10 +131,10 @@ test('directional navigation uses adjacent programs and nearest overlap on adjac
 });
 
 test('Guide paging moves five eligible channel rows while preserving focused time overlap', () => {
-  assert.equal(EPG_CHANNEL_PAGE_SIZE, 9);
+  const localChannelCount = EPG_CHANNEL_PAGE_SIZE - 1;
   const source: EpgPresentationSource = {
     ...presentation(),
-    channels: Array.from({ length: 8 }, (_, index) => ({
+    channels: Array.from({ length: localChannelCount }, (_, index) => ({
       id: `channel-${String(index)}`,
       number: String(100 + index),
       name: `Channel ${String(index)}`,
@@ -153,8 +153,8 @@ test('Guide paging moves five eligible channel rows while preserving focused tim
   assert.equal(next.state.selectedProgramId, 'program-6');
   const clamped = pageEpgSelection(next.state, 5, source);
   assert.equal(clamped.handled, true);
-  assert.equal(clamped.state.selectedChannelId, 'channel-7');
-  assert.equal(clamped.state.selectedProgramId, 'program-7');
+  assert.equal(clamped.state.selectedChannelId, `channel-${String(localChannelCount - 1)}`);
+  assert.equal(clamped.state.selectedProgramId, `program-${String(localChannelCount - 1)}`);
   assert.equal(pageEpgSelection(next.state, -5, source).state.selectedChannelId, 'channel-1');
 });
 

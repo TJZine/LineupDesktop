@@ -1,45 +1,54 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createEpgState, resolveEpgPageNavigation, selectEpgPageTarget, updateEpgState } from '../../renderer/epg.js';
+import {
+  EPG_CHANNEL_PAGE_SIZE,
+  createEpgState,
+  resolveEpgPageNavigation,
+  selectEpgPageTarget,
+  updateEpgState,
+} from '../../renderer/epg.js';
 import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
 import type { GuideIpcResult, GuidePresentationSource } from '../../contracts/guide.js';
 
 test('Guide Page navigation keeps ±5 local, crosses pages, replaces one target, and clamps boundaries', () => {
-  const page = presentation(9, 10, 30);
-  let state = { ...createEpgState(page), selectedChannelId: 'channel-12', selectedProgramId: 'program-12' };
+  const pageOffset = 10;
+  const total = pageOffset + EPG_CHANNEL_PAGE_SIZE * 3;
+  const page = presentation(EPG_CHANNEL_PAGE_SIZE, pageOffset, total);
+  let state = { ...createEpgState(page), selectedChannelId: `channel-${String(pageOffset + 2)}`, selectedProgramId: `program-${String(pageOffset + 2)}` };
   const inside = resolveEpgPageNavigation(state, page, 5);
   assert.deepEqual(inside, {
-    targetGlobalIndex: 17, sourceLocalIndex: 2, channelOffset: 10, targetLocalIndex: 7,
+    targetGlobalIndex: pageOffset + 7, sourceLocalIndex: 2, channelOffset: pageOffset, targetLocalIndex: 7,
     fetchRequired: false, boundaryClamped: false,
   });
   state = selectEpgPageTarget(state, inside!.targetLocalIndex!, page);
-  assert.equal(state.selectedChannelId, 'channel-17');
+  assert.equal(state.selectedChannelId, `channel-${String(pageOffset + 7)}`);
 
   const cross = resolveEpgPageNavigation(state, page, 5);
   assert.equal(cross?.fetchRequired, true);
-  assert.equal(cross?.targetGlobalIndex, 22);
-  assert.equal(cross?.channelOffset, 15);
+  assert.equal(cross?.targetGlobalIndex, pageOffset + 12);
+  assert.equal(cross?.channelOffset, pageOffset + 5);
   const trailing = resolveEpgPageNavigation(state, page, 5, cross!.targetGlobalIndex);
-  assert.equal(trailing?.targetGlobalIndex, 27);
-  assert.equal(trailing?.channelOffset, 20);
+  assert.equal(trailing?.targetGlobalIndex, pageOffset + 17);
+  assert.equal(trailing?.channelOffset, pageOffset + 10);
 
-  const first = presentation(9, 0, 30);
+  const first = presentation(EPG_CHANNEL_PAGE_SIZE, 0, total);
   const firstState = { ...createEpgState(first), selectedChannelId: 'channel-0', selectedProgramId: 'program-0' };
   const clamped = resolveEpgPageNavigation(firstState, first, -5);
   assert.equal(clamped?.boundaryClamped, true);
   assert.equal(clamped?.fetchRequired, false);
 
-  const last = presentation(3, 27, 30);
-  const lastState = { ...createEpgState(last), selectedChannelId: 'channel-29', selectedProgramId: 'program-29' };
+  const last = presentation(3, total - 3, total);
+  const lastState = { ...createEpgState(last), selectedChannelId: `channel-${String(total - 1)}`, selectedProgramId: `program-${String(total - 1)}` };
   const lastClamped = resolveEpgPageNavigation(lastState, last, 5);
-  assert.equal(lastClamped?.targetGlobalIndex, 29);
+  assert.equal(lastClamped?.targetGlobalIndex, total - 1);
   assert.equal(lastClamped?.boundaryClamped, true);
   assert.equal(lastClamped?.fetchRequired, false);
 });
 
 test('Guide paging owner binds focus to its exact request and retains last valid state on failure', async () => {
   const requests: Array<Deferred<GuideIpcResult<GuidePresentationSource>>> = [];
+  const channelLimits: Array<number | undefined> = [];
   const applied: Array<{ offset: number; target: number | null }> = [];
   const failures: Array<{ message: string; retain: boolean }> = [];
   const busy: boolean[] = [];
@@ -48,7 +57,8 @@ test('Guide paging owner binds focus to its exact request and retains last valid
   let route: 'guide' | 'settings' = 'guide';
   const polling = createGuidePresentationPolling({
     guide: {
-      getPresentation: async () => {
+      getPresentation: async (input: { channelLimit?: number }) => {
+        channelLimits.push(input.channelLimit);
         const deferred = createDeferred<GuideIpcResult<GuidePresentationSource>>();
         requests.push(deferred);
         return deferred.promise;
@@ -69,7 +79,8 @@ test('Guide paging owner binds focus to its exact request and retains last valid
   });
   const success = polling.requestPage({ targetGlobalIndex: 12, sourceLocalIndex: 2, scopeToken: 'scope', channelOffset: 10 });
   assert.deepEqual(busy, [true]);
-  requests[0]?.resolve(okPresentation(9, 10, 30, 'scope'));
+  assert.deepEqual(channelLimits, [EPG_CHANNEL_PAGE_SIZE]);
+  requests[0]?.resolve(okPresentation(EPG_CHANNEL_PAGE_SIZE, 10, 30, 'scope'));
   await success;
   assert.deepEqual(applied, [{ offset: 10, target: 12 }]);
   assert.equal(focusedAfterPaging, 'channel-12');
@@ -217,6 +228,45 @@ test('Guide page cancellation rejects late success and failure without replacing
   assert.deepEqual(failures, []);
   assert.equal(polling.getLastValidPresentation(), lastValid);
   assert.deepEqual(busy, [true, false, true, false]);
+});
+
+test('Guide page cancellation releases the active request before starting the latest page', async () => {
+  const requests: Array<Deferred<GuideIpcResult<GuidePresentationSource>>> = [];
+  const applied: number[] = [];
+  const busy: boolean[] = [];
+  const polling = createGuidePresentationPolling({
+    guide: { getPresentation: async () => {
+      const deferred = createDeferred<GuideIpcResult<GuidePresentationSource>>();
+      requests.push(deferred);
+      return deferred.promise;
+    } } as never,
+    host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
+    setLoading: () => undefined, setPagingBusy: (value) => busy.push(value),
+    applyPresentation: (value) => applied.push(value.channelWindow?.offset ?? -1),
+    handleFailure: () => undefined,
+  });
+
+  const cancelled = polling.requestPage({
+    targetGlobalIndex: 12, sourceLocalIndex: 2, scopeToken: 'scope', channelOffset: 10,
+  });
+  assert.equal(requests.length, 1);
+  polling.cancelPage();
+  const latest = polling.requestPage({
+    targetGlobalIndex: 17, sourceLocalIndex: 2, scopeToken: 'scope', channelOffset: 15,
+  });
+
+  await settle();
+  assert.equal(requests.length, 2);
+  assert.deepEqual(busy, [true, false, true]);
+  requests[1]?.resolve(okPresentation(EPG_CHANNEL_PAGE_SIZE, 15, 30, 'scope'));
+  await Promise.all([cancelled, latest]);
+  assert.deepEqual(applied, [15]);
+  assert.equal(busy.at(-1), false);
+
+  requests[0]?.resolve(okPresentation(EPG_CHANNEL_PAGE_SIZE, 10, 30, 'scope'));
+  await settle();
+  assert.deepEqual(applied, [15]);
+  assert.equal(busy.at(-1), false);
 });
 
 test('Guide +5,+5,-5,-5 reversal discards its queued page and focuses the loaded row without fetching', async () => {

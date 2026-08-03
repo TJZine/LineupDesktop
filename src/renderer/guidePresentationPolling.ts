@@ -138,6 +138,9 @@ export function createGuidePresentationPolling(
   const cancelPage = (): void => {
     if (pendingPage === null) return;
     pendingPage = null;
+    const cancelledActivePage = activeRefresh?.source === 'guide-page-change'
+      ? activeRefresh
+      : null;
     if (trailingRefresh?.source === 'guide-page-change') {
       const cancelledTrailingPage = trailingRefresh;
       trailingRefresh = null;
@@ -145,6 +148,9 @@ export function createGuidePresentationPolling(
     }
     guidePresentationLifecycleGeneration += 1;
     guidePresentationGeneration += 1;
+    cancelledActivePage?.abortController.abort(
+      createGuideRefreshError('Guide page refresh cancelled.', 'AbortError'),
+    );
     options.setPagingBusy?.(false);
   };
 
