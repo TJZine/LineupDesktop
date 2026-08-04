@@ -41,6 +41,15 @@ function skipCSharpCommentOrLiteral(source, index) {
   if (current === "'") return skipCSharpQuotedLiteral(source, index, "'", false);
   if (current !== '"') return null;
 
+  const prefix = source.slice(Math.max(0, index - 2), index);
+  const verbatim = prefix.endsWith('@') || prefix === '@$';
+  const interpolated = prefix.endsWith('$') || prefix === '$@';
+  if (verbatim) {
+    return interpolated
+      ? skipCSharpInterpolatedString(source, index, true)
+      : skipCSharpQuotedLiteral(source, index, '"', true);
+  }
+
   let quoteCount = 1;
   while (source[index + quoteCount] === '"') quoteCount += 1;
   if (quoteCount >= 3) {
@@ -49,12 +58,9 @@ function skipCSharpCommentOrLiteral(source, index) {
     assert.notEqual(end, -1, 'unterminated C# raw string literal');
     return end + quoteCount;
   }
-  const prefix = source.slice(Math.max(0, index - 2), index);
-  const verbatim = prefix.endsWith('@') || prefix === '@$';
-  const interpolated = prefix.endsWith('$') || prefix === '$@';
   return interpolated
-    ? skipCSharpInterpolatedString(source, index, verbatim)
-    : skipCSharpQuotedLiteral(source, index, '"', verbatim);
+    ? skipCSharpInterpolatedString(source, index, false)
+    : skipCSharpQuotedLiteral(source, index, '"', false);
 }
 
 function skipCSharpQuotedLiteral(source, start, quote, verbatim) {
@@ -139,12 +145,19 @@ private static void Example()
     string normal = "}";
     string escaped = "\\\"}";
     string verbatim = @"}""{";
-    string raw = """ } """;
+    string verbatimLeadingQuote = @"""{";
+    string interpolatedVerbatimDollarAt = $@"{Format(new[] { "}" })}";
+    string interpolatedVerbatimAtDollar = @$"{Format(new[] { "}" })}";
+    if (true)
+    {
+        string raw = """ } """;
+        string interpolatedRaw = $""" {Format(new[] { "}" })} """;
+        Run();
+    }
     string interpolated = $"{Format("}")}";
     char brace = '}';
     // }
     /* { } */
-    if (true) { Run(); }
     Finish();
 }
 `;

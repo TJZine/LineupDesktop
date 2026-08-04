@@ -8,7 +8,10 @@ import {
   selectEpgPageTarget,
   updateEpgState,
 } from '../../renderer/epg.js';
-import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
+import {
+  createGuidePresentationPolling,
+  type GuidePresentationPollingOptions,
+} from '../../renderer/guidePresentationPolling.js';
 import type { GuideIpcResult, GuidePresentationSource } from '../../contracts/guide.js';
 
 test('Guide Page navigation keeps ±5 local, crosses pages, replaces one target, and clamps boundaries', () => {
@@ -57,13 +60,16 @@ test('Guide paging owner binds focus to its exact request and retains last valid
   let route: 'guide' | 'settings' = 'guide';
   const polling = createGuidePresentationPolling({
     guide: {
-      getPresentation: async (input: { channelLimit?: number }) => {
+      getPresentation: async (input) => {
         channelLimits.push(input.channelLimit);
         const deferred = createDeferred<GuideIpcResult<GuidePresentationSource>>();
         requests.push(deferred);
         return deferred.promise;
       },
-    } as never,
+      setLibraryFilter: async (_input) => {
+        throw new Error('Unexpected Guide library-filter request.');
+      },
+    } satisfies GuidePresentationPollingOptions['guide'],
     host: timerHost(), getActiveRoute: () => route, getWindowStartMs: () => 0,
     setLoading: () => undefined,
     setPagingBusy: (value) => busy.push(value),
@@ -114,11 +120,16 @@ test('Guide paging owner keeps one active/one trailing target and rejects time-r
   const targets: Array<number | null | undefined> = [];
   const busy: boolean[] = [];
   const polling = createGuidePresentationPolling({
-    guide: { getPresentation: async () => {
-      const deferred = createDeferred<GuideIpcResult<GuidePresentationSource>>();
-      requests.push(deferred);
-      return deferred.promise;
-    } } as never,
+    guide: {
+      getPresentation: async (_input) => {
+        const deferred = createDeferred<GuideIpcResult<GuidePresentationSource>>();
+        requests.push(deferred);
+        return deferred.promise;
+      },
+      setLibraryFilter: async (_input) => {
+        throw new Error('Unexpected Guide library-filter request.');
+      },
+    } satisfies GuidePresentationPollingOptions['guide'],
     host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
     setLoading: () => undefined, setPagingBusy: (value) => busy.push(value),
     applyPresentation: (_value, _generation, target) => targets.push(target), handleFailure: () => undefined,
@@ -153,11 +164,16 @@ test('Guide interval supersession clears a queued page through its existing sett
   const busy: boolean[] = [];
   const appliedTargets: Array<number | null | undefined> = [];
   const polling = createGuidePresentationPolling({
-    guide: { getPresentation: async () => {
-      const deferred = createDeferred<GuideIpcResult<GuidePresentationSource>>();
-      requests.push(deferred);
-      return deferred.promise;
-    } } as never,
+    guide: {
+      getPresentation: async (_input) => {
+        const deferred = createDeferred<GuideIpcResult<GuidePresentationSource>>();
+        requests.push(deferred);
+        return deferred.promise;
+      },
+      setLibraryFilter: async (_input) => {
+        throw new Error('Unexpected Guide library-filter request.');
+      },
+    } satisfies GuidePresentationPollingOptions['guide'],
     host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
     setLoading: () => undefined,
     setPagingBusy: (value) => busy.push(value),
@@ -194,11 +210,16 @@ test('Guide page cancellation rejects late success and failure without replacing
   const failures: string[] = [];
   const busy: boolean[] = [];
   const polling = createGuidePresentationPolling({
-    guide: { getPresentation: async () => {
-      const deferred = createDeferred<GuideIpcResult<GuidePresentationSource>>();
-      requests.push(deferred);
-      return deferred.promise;
-    } } as never,
+    guide: {
+      getPresentation: async (_input) => {
+        const deferred = createDeferred<GuideIpcResult<GuidePresentationSource>>();
+        requests.push(deferred);
+        return deferred.promise;
+      },
+      setLibraryFilter: async (_input) => {
+        throw new Error('Unexpected Guide library-filter request.');
+      },
+    } satisfies GuidePresentationPollingOptions['guide'],
     host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
     setLoading: () => undefined, setPagingBusy: (value) => busy.push(value),
     applyPresentation: (value) => applied.push(value.channelWindow?.offset ?? -1),
@@ -235,11 +256,16 @@ test('Guide page cancellation releases the active request before starting the la
   const applied: number[] = [];
   const busy: boolean[] = [];
   const polling = createGuidePresentationPolling({
-    guide: { getPresentation: async () => {
-      const deferred = createDeferred<GuideIpcResult<GuidePresentationSource>>();
-      requests.push(deferred);
-      return deferred.promise;
-    } } as never,
+    guide: {
+      getPresentation: async (_input) => {
+        const deferred = createDeferred<GuideIpcResult<GuidePresentationSource>>();
+        requests.push(deferred);
+        return deferred.promise;
+      },
+      setLibraryFilter: async (_input) => {
+        throw new Error('Unexpected Guide library-filter request.');
+      },
+    } satisfies GuidePresentationPollingOptions['guide'],
     host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
     setLoading: () => undefined, setPagingBusy: (value) => busy.push(value),
     applyPresentation: (value) => applied.push(value.channelWindow?.offset ?? -1),
@@ -276,11 +302,16 @@ test('Guide +5,+5,-5,-5 reversal discards its queued page and focuses the loaded
   const current = presentation(9, 10, 30);
   let state = { ...createEpgState(current), selectedChannelId: 'channel-17', selectedProgramId: 'program-17' };
   const polling = createGuidePresentationPolling({
-    guide: { getPresentation: async () => {
-      const deferred = createDeferred<GuideIpcResult<GuidePresentationSource>>();
-      requests.push(deferred);
-      return deferred.promise;
-    } } as never,
+    guide: {
+      getPresentation: async (_input) => {
+        const deferred = createDeferred<GuideIpcResult<GuidePresentationSource>>();
+        requests.push(deferred);
+        return deferred.promise;
+      },
+      setLibraryFilter: async (_input) => {
+        throw new Error('Unexpected Guide library-filter request.');
+      },
+    } satisfies GuidePresentationPollingOptions['guide'],
     host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
     setLoading: () => undefined, setPagingBusy: (value) => busy.push(value),
     applyPresentation: (value) => applied.push(value.channelWindow?.offset ?? -1),
