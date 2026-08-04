@@ -65,30 +65,32 @@ test('smoke composition keeps synchronous and asynchronous player delivery in di
     ['unsubscribe?.()', 'runtime.adapter?.cleanup()'],
     'player teardown',
   );
-  const quitFlow = sliceBetween(mainSource, "app.on('before-quit'", 'function attachContainmentHandlers');
+  const quitFlow = sliceBetween(
+    mainSource,
+    "app.on('before-quit'",
+    'async function cleanupApplicationRuntimeForQuit()',
+  );
   assertSymbolsInOrder(
     quitFlow,
     [
-      'teardownDiagnosticsIpc?.()',
-      'if (playerIpcQuitTeardownComplete)',
+      "publishShellStatus('closing')",
+      'quitLifecycleOwner.handleBeforeQuit(event)',
     ],
-    'unconditional diagnostics teardown',
+    'quit lifecycle delegation',
+  );
+  const quitCleanup = sliceBetween(
+    mainSource,
+    'async function cleanupApplicationRuntimeForQuit()',
+    'async function runQuitCleanupStep(',
   );
   assertSymbolsInOrder(
-    sliceBetween(quitFlow, 'if (playerIpcQuitTeardownComplete)', 'if (playerIpcQuitTeardownInProgress)'),
+    quitCleanup,
     [
-      'Guide artwork cleanup failed during quit',
-      'Shell and presentation cleanup failed during quit',
-      'Playback event cleanup failed during quit',
-      'Playback runtime cleanup failed during quit',
-      'Plex cleanup failed during quit',
-      'Channel cleanup failed during quit',
-    ],
-    'completed quit cleanup',
-  );
-  assertSymbolsInOrder(
-    sliceBetween(quitFlow, 'playerIpcQuitTeardownInProgress = true', '.finally(() =>'),
-    [
+      'Single-instance cleanup failed during quit',
+      'Settings IPC cleanup failed during quit',
+      'Diagnostics IPC cleanup failed during quit',
+      'Player recovery IPC cleanup failed during quit',
+      'Playback transition cleanup failed during quit',
       'Guide artwork cleanup failed during quit',
       'Shell and presentation cleanup failed during quit',
       'Player IPC cleanup failed during quit',
@@ -97,7 +99,7 @@ test('smoke composition keeps synchronous and asynchronous player delivery in di
       'Plex cleanup failed during quit',
       'Channel cleanup failed during quit',
     ],
-    'deferred quit cleanup',
+    'application quit cleanup',
   );
   assertSymbolsInOrder(
     sliceBetween(mainSource, 'async function runQuitCleanupStep(', 'function attachContainmentHandlers'),

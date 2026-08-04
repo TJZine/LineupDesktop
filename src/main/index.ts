@@ -82,6 +82,7 @@ import { ChannelPersistenceStartupOwner } from './persistence/channelPersistence
 import { DesktopChannelPersistenceStore } from './persistence/desktopChannelPersistenceStore.js';
 import { createChannelBuilderSmokeFixture } from './channel/channelBuilderSmokeFixture.js';
 import { cleanupFailedApplicationStartup } from './applicationStartupCleanup.js';
+import { ApplicationQuitLifecycleOwner } from './applicationQuitLifecycleOwner.js';
 
 registerLineupProtocolScheme();
 
@@ -102,11 +103,11 @@ let playbackRuntime: PlexPlaybackRuntime | null = null;
 let playbackEventRouter: PlaybackEventRouter | null = null;
 let playbackProgramTransitionOwner: PlaybackProgramTransitionOwner | null = null;
 let teardownPlayerRecoveryIpc: PlayerRecoveryIpcTeardown | null = null;
-let playerIpcQuitTeardownInProgress = false;
-let playerIpcQuitTeardownComplete = false;
 let nativePlayerPresentationOwner: NativePlayerPresentationOwner | null = null;
 let shellPresentationCleanupInProgress: Promise<void> | null = null;
 let singleInstanceOwner: SingleInstanceOwner | null = null;
+let applicationQuitLifecycleOwner: ApplicationQuitLifecycleOwner | null = null;
+let applicationStartupSettled: Promise<void> = Promise.resolve();
 let containmentCounters: ShellContainmentCounters = {
   navigationDenied: 0,
   windowOpenDenied: 0,
@@ -116,7 +117,13 @@ let containmentCounters: ShellContainmentCounters = {
 
 app.commandLine.appendSwitch('disable-gpu');
 
-void startApplication().catch(async (error: unknown) => {
+const applicationStartup = startApplication();
+applicationStartupSettled = applicationStartup.then(
+  () => undefined,
+  () => undefined,
+);
+void applicationStartup.catch(async (error: unknown) => {
+  if (applicationQuitLifecycleOwner?.isQuitRequested() === true) return;
   try {
     await cleanupShellAndNativePresentation();
   } catch (cleanupError: unknown) {
@@ -183,7 +190,14 @@ async function startApplication(): Promise<void> {
     getWindow: () => shellWindowController?.getWindow()?.baseWindow ?? null,
   });
   if (!singleInstanceOwner.acquire().primary) return;
-  registerApplicationLifecycleHandlers();
+  const quitLifecycleOwner = new ApplicationQuitLifecycleOwner({
+    cleanupCurrentOwners: cleanupApplicationRuntimeForQuit,
+    waitForStartupSettlement: () => applicationStartupSettled,
+    quit: () => app.quit(),
+    reportDiagnostic: reportMainProcessDiagnostic,
+  });
+  applicationQuitLifecycleOwner = quitLifecycleOwner;
+  registerApplicationLifecycleHandlers(quitLifecycleOwner);
 
   const smokeFixture =
     smokeBootstrap.status === 'smoke'
@@ -206,6 +220,7 @@ async function startApplication(): Promise<void> {
         },
       },
     }).bootstrap();
+    if (quitLifecycleOwner.isQuitRequested()) return;
     if (bootstrap.status !== 'ready') throw new Error(bootstrap.error.message);
     channelStartupStore = new DesktopChannelPersistenceStore({
       readyCapability: bootstrap.capability,
@@ -217,15 +232,21 @@ async function startApplication(): Promise<void> {
     app,
     diagnosticEventStore,
   });
+  if (quitLifecycleOwner.isQuitRequested()) {
+    await runQuitCleanupStep('Plex cleanup failed during quit', () => plexCreated.teardown());
+    return;
+  }
   plexComposition = plexCreated;
   if (channelStartupStore !== null) {
     const startup = await new ChannelPersistenceStartupOwner({
       store: channelStartupStore,
       clock: { now: () => Date.now() },
     }).loadAndRepair();
+    if (quitLifecycleOwner.isQuitRequested()) return;
     if (!startup.ok) throw new Error(startup.error.message);
   }
   await app.whenReady();
+  if (quitLifecycleOwner.isQuitRequested()) return;
   shellWindowController = createShellWindowController({
     createBaseWindow: (options) => new BaseWindow(options),
     createWebContentsView: (options) => new WebContentsView(options),
@@ -287,6 +308,7 @@ async function startApplication(): Promise<void> {
     configurePermissionContainment();
     registerShellIpcHandlers();
     const initialSettingsSnapshot = await settingsStore.loadSnapshot();
+    if (quitLifecycleOwner.isQuitRequested()) return;
     const productionNativeHostFactory = shellMode === 'production'
       ? createProductionNativeHostFactory({ diagnosticEventStore })
       : null;
@@ -416,6 +438,7 @@ async function startApplication(): Promise<void> {
         reportMainProcessDiagnostic('Guide runtime active channel initialization failed', error);
       });
     const shellWindow = await getShellWindowController().createWindow();
+    if (quitLifecycleOwner.isQuitRequested()) return;
     bindGuideArtworkOwnerToWebContents(shellWindow.webContents, channelCreated.guideArtworkOwner);
     registerShellAppCommandController(shellWindow, {
       sendMediaInput: (input) => sendToShellWindow(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, input),
@@ -423,6 +446,7 @@ async function startApplication(): Promise<void> {
     });
     attachContainmentHandlers(shellWindow);
     await shellWindow.loadURL(LINEUP_SHELL_URL);
+    if (quitLifecycleOwner.isQuitRequested()) return;
     if (!isAllowedShellUrl(shellWindow.webContents.getURL())) {
       throw new Error('Renderer loaded an unexpected URL.');
     }
@@ -430,118 +454,90 @@ async function startApplication(): Promise<void> {
     getShellWindowController().showWindow();
     if (smokeMode) {
       await runSmokeAssertions(shellWindow, containmentCounters);
+      if (quitLifecycleOwner.isQuitRequested()) return;
       app.exit(0);
     }
 }
 
-function registerApplicationLifecycleHandlers(): void {
+function registerApplicationLifecycleHandlers(
+  quitLifecycleOwner: ApplicationQuitLifecycleOwner,
+): void {
   app.on('window-all-closed', () => {
     app.quit();
   });
 
   app.on('before-quit', (event) => {
-    singleInstanceOwner?.teardown();
-    singleInstanceOwner = null;
-    publishShellStatus('closing');
-    teardownSettingsIpc?.();
-    teardownSettingsIpc = null;
-    teardownDiagnosticsIpc?.();
-    teardownDiagnosticsIpc = null;
-    teardownPlayerRecoveryIpc?.();
-    teardownPlayerRecoveryIpc = null;
-    const localPlaybackProgramTransitionOwner = playbackProgramTransitionOwner;
-    playbackProgramTransitionOwner = null;
-    localPlaybackProgramTransitionOwner?.dispose();
-    const teardown = teardownPlayerIpc;
-    if (playerIpcQuitTeardownComplete) {
-      const localPlaybackEventRouter = playbackEventRouter;
-      playbackEventRouter = null;
-      const localPlaybackRuntime = playbackRuntime;
-      playbackRuntime = null;
-      const localChannelComposition = channelComposition;
-      channelComposition = null;
-      const teardownPlex = plexComposition?.teardown ?? null;
-      plexComposition = null;
-      void (async () => {
-        await runQuitCleanupStep(
-          'Guide artwork cleanup failed during quit',
-          () => localChannelComposition?.guideArtworkOwner.dispose(),
-        );
-        await runQuitCleanupStep(
-          'Shell and presentation cleanup failed during quit',
-          cleanupShellAndNativePresentation,
-        );
-        await runQuitCleanupStep(
-          'Playback event cleanup failed during quit',
-          () => localPlaybackEventRouter?.dispose(),
-        );
-        await runQuitCleanupStep(
-          'Playback runtime cleanup failed during quit',
-          () => localPlaybackRuntime?.teardown(),
-        );
-        await Promise.all([
-          runQuitCleanupStep('Plex cleanup failed during quit', () => teardownPlex?.()),
-          runQuitCleanupStep(
-            'Channel cleanup failed during quit',
-            () => localChannelComposition?.teardown(),
-          ),
-        ]);
-      })().catch((error: unknown) => {
-        reportMainProcessDiagnostic('Runtime composition cleanup failed during quit', error);
-      });
-      return;
+    if (!quitLifecycleOwner.isQuitRequested()) {
+      try {
+        publishShellStatus('closing');
+      } catch (error: unknown) {
+        reportMainProcessDiagnostic('Shell closing status publication failed', error);
+      }
     }
-    if (playerIpcQuitTeardownInProgress) {
-      event.preventDefault();
-      return;
-    }
-
-    event.preventDefault();
-    teardownPlayerIpc = null;
-    const teardownPlex = plexComposition?.teardown ?? null;
-    plexComposition = null;
-    const localChannelComposition = channelComposition;
-    channelComposition = null;
-    playerIpcQuitTeardownInProgress = true;
-    const localPlaybackRuntime = playbackRuntime;
-    playbackRuntime = null;
-    const localPlaybackEventRouter = playbackEventRouter;
-    playbackEventRouter = null;
-    (async () => {
-      await runQuitCleanupStep(
-        'Guide artwork cleanup failed during quit',
-        () => localChannelComposition?.guideArtworkOwner.dispose(),
-      );
-      await runQuitCleanupStep(
-        'Shell and presentation cleanup failed during quit',
-        cleanupShellAndNativePresentation,
-      );
-      await runQuitCleanupStep('Player IPC cleanup failed during quit', () => teardown?.teardown());
-      await runQuitCleanupStep(
-        'Playback event cleanup failed during quit',
-        () => localPlaybackEventRouter?.dispose(),
-      );
-      await runQuitCleanupStep(
-        'Playback runtime cleanup failed during quit',
-        () => localPlaybackRuntime?.teardown(),
-      );
-      await Promise.all([
-        runQuitCleanupStep('Plex cleanup failed during quit', () => teardownPlex?.()),
-        runQuitCleanupStep(
-          'Channel cleanup failed during quit',
-          () => localChannelComposition?.teardown(),
-        ),
-      ]);
-    })()
-      .catch((error: unknown) => {
-        reportMainProcessDiagnostic('Player IPC cleanup failed during quit', error);
-      })
-      .finally(() => {
-        playerIpcQuitTeardownComplete = true;
-        playerIpcQuitTeardownInProgress = false;
-        app.quit();
-      });
+    quitLifecycleOwner.handleBeforeQuit(event);
   });
+}
+
+async function cleanupApplicationRuntimeForQuit(): Promise<void> {
+  const cleanupSingleInstanceOwner = singleInstanceOwner;
+  singleInstanceOwner = null;
+  const cleanupSettingsIpc = teardownSettingsIpc;
+  teardownSettingsIpc = null;
+  const cleanupDiagnosticsIpc = teardownDiagnosticsIpc;
+  teardownDiagnosticsIpc = null;
+  const cleanupPlayerRecoveryIpc = teardownPlayerRecoveryIpc;
+  teardownPlayerRecoveryIpc = null;
+  const cleanupPlaybackProgramTransitionOwner = playbackProgramTransitionOwner;
+  playbackProgramTransitionOwner = null;
+  const cleanupPlayerIpc = teardownPlayerIpc;
+  teardownPlayerIpc = null;
+  const cleanupPlaybackEventRouter = playbackEventRouter;
+  playbackEventRouter = null;
+  const cleanupPlaybackRuntime = playbackRuntime;
+  playbackRuntime = null;
+  const cleanupChannelComposition = channelComposition;
+  channelComposition = null;
+  const cleanupPlexComposition = plexComposition;
+  plexComposition = null;
+
+  await runQuitCleanupStep(
+    'Single-instance cleanup failed during quit',
+    () => cleanupSingleInstanceOwner?.teardown(),
+  );
+  await runQuitCleanupStep('Settings IPC cleanup failed during quit', () => cleanupSettingsIpc?.());
+  await runQuitCleanupStep('Diagnostics IPC cleanup failed during quit', () => cleanupDiagnosticsIpc?.());
+  await runQuitCleanupStep(
+    'Player recovery IPC cleanup failed during quit',
+    () => cleanupPlayerRecoveryIpc?.(),
+  );
+  await runQuitCleanupStep(
+    'Playback transition cleanup failed during quit',
+    () => cleanupPlaybackProgramTransitionOwner?.dispose(),
+  );
+  await runQuitCleanupStep(
+    'Guide artwork cleanup failed during quit',
+    () => cleanupChannelComposition?.guideArtworkOwner.dispose(),
+  );
+  await runQuitCleanupStep(
+    'Shell and presentation cleanup failed during quit',
+    cleanupShellAndNativePresentation,
+  );
+  await runQuitCleanupStep('Player IPC cleanup failed during quit', () => cleanupPlayerIpc?.teardown());
+  await runQuitCleanupStep(
+    'Playback event cleanup failed during quit',
+    () => cleanupPlaybackEventRouter?.dispose(),
+  );
+  await runQuitCleanupStep(
+    'Playback runtime cleanup failed during quit',
+    () => cleanupPlaybackRuntime?.teardown(),
+  );
+  await Promise.all([
+    runQuitCleanupStep('Plex cleanup failed during quit', () => cleanupPlexComposition?.teardown()),
+    runQuitCleanupStep(
+      'Channel cleanup failed during quit',
+      () => cleanupChannelComposition?.teardown(),
+    ),
+  ]);
 }
 
 async function runQuitCleanupStep(

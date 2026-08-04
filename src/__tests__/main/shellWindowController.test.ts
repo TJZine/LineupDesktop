@@ -344,6 +344,37 @@ test('startup navigation times out a stalled presentation hide before loading re
   assert.deepEqual(order, ['view-close', 'remove-view', 'window-destroy']);
 });
 
+test('startup navigation rejects a fulfilled presentation hide failure before loading renderer content', async () => {
+  const order: string[] = [];
+  const fakeWindow = new FakeBaseWindow();
+  fakeWindow.order = order;
+  const fakeView = new FakeView(order);
+  let hideCalls = 0;
+  const controller = createShellWindowController({
+    createBaseWindow: () => fakeWindow.value,
+    createWebContentsView: () => fakeView.value,
+    screen: fakeScreen(), preloadPath: '/preload', smokeMode: true, publishShellStatus: () => undefined,
+    hidePresentation: async () => {
+      hideCalls += 1;
+      return hideCalls === 1
+        ? { ok: false, error: { message: 'Native presentation is unavailable.' } }
+        : undefined;
+    },
+    invalidatePresentationDocument: () => true,
+  });
+  const shell = await controller.createWindow();
+
+  await assert.rejects(
+    shell.loadURL('lineup://shell/index.html'),
+    /Native presentation is unavailable/u,
+  );
+  assert.deepEqual(fakeView.loadedUrls, []);
+
+  await controller.dispose();
+  assert.equal(hideCalls, 2);
+  assert.deepEqual(order, ['view-close', 'remove-view', 'window-destroy']);
+});
+
 test('an exhausted document epoch during navigation fails closed and disposes the shell', async () => {
   const order: string[] = [];
   const fakeWindow = new FakeBaseWindow();

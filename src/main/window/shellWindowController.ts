@@ -30,9 +30,13 @@ export interface ShellWindowControllerOptions {
   smokeMode: boolean;
   publishShellStatus(status: 'booting'): void;
   invalidatePresentationDocument?(): boolean | void;
-  hidePresentation?(): Promise<unknown>;
+  hidePresentation?(): Promise<ShellPresentationHideResult | void>;
   presentationHideTimeoutMs?: number;
 }
+
+type ShellPresentationHideResult =
+  | Readonly<{ ok: true }>
+  | Readonly<{ ok: false; error: Readonly<{ message: string }> }>;
 
 interface NormalWindowPlacement { bounds: Rectangle; displayId: number; }
 interface OwnedShellResources {
@@ -68,15 +72,16 @@ export function createShellWindowController(options: ShellWindowControllerOption
     void requestPresentationHide().catch(() => undefined);
   };
 
-  const requestPresentationHide = (): Promise<unknown> => {
+  const requestPresentationHide = async (): Promise<void> => {
     try {
-      return options.hidePresentation?.() ?? Promise.resolve();
+      const result = await options.hidePresentation?.();
+      if (result?.ok === false) throw new Error(result.error.message);
     } catch (error: unknown) {
-      return Promise.reject(error instanceof Error ? error : new Error('Native presentation hide failed.'));
+      throw error instanceof Error ? error : new Error('Native presentation hide failed.');
     }
   };
 
-  const awaitPresentationHideForRelease = async (): Promise<unknown> => {
+  const awaitPresentationHideForRelease = async (): Promise<void> => {
     let timeoutHandle: ReturnType<typeof globalThis.setTimeout> | null = null;
     const timeout = new Promise<never>((_resolve, reject) => {
       timeoutHandle = globalThis.setTimeout(() => {
@@ -84,7 +89,7 @@ export function createShellWindowController(options: ShellWindowControllerOption
       }, presentationHideTimeoutMs);
     });
     try {
-      return await Promise.race([requestPresentationHide(), timeout]);
+      await Promise.race([requestPresentationHide(), timeout]);
     } finally {
       if (timeoutHandle !== null) globalThis.clearTimeout(timeoutHandle);
     }
