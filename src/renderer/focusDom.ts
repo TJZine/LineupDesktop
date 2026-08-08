@@ -163,6 +163,16 @@ export function captureGuideProgramFocusIntent(
   return activeFocusId?.startsWith('guide-program-') === true ? activeFocusId : null;
 }
 
+export function advanceGuideProgramFocusIntent(
+  state: FocusState,
+  selectedFocusId: string | undefined,
+): FocusState {
+  if (state.activeRoute !== 'guide' || selectedFocusId?.startsWith('guide-program-') !== true) {
+    return state;
+  }
+  return { ...state, activeId: selectedFocusId };
+}
+
 function getGuideFocusNeighbors(
   elements: readonly HTMLElement[],
 ): ReadonlyMap<string, Partial<Record<FocusDirection, string>>> {

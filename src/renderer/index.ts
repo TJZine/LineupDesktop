@@ -1,6 +1,6 @@
 import type { ShellStatusEvent } from '../contracts/shell.js';
 import { queryRendererDom, type PlexRuntimeActionId } from './domBindings.js';
-import { captureGuideProgramFocusIntent, focusRendererTarget, renderRendererFocus, shouldYieldGuideProgramDirectionToFocusGraph, syncRendererFocusTargets } from './focusDom.js';
+import { advanceGuideProgramFocusIntent, captureGuideProgramFocusIntent, focusRendererTarget, renderRendererFocus, shouldYieldGuideProgramDirectionToFocusGraph, syncRendererFocusTargets } from './focusDom.js';
 import { FocusRegistry, type AppRouteId, type FocusState } from './navigation.js';
 import { createPlayerOverlayState, type PlayerOverlayActionId } from './overlays.js';
 import {
@@ -736,11 +736,12 @@ function handleGuideDirection(direction: 'up' | 'down' | 'left' | 'right'): bool
   const movement = applyWorkflowEpgDirection(workflowState, direction);
   if (!movement.result.handled) return false;
   workflowState = movement.workflowState;
+  const selectedFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId;
+  focusState = advanceGuideProgramFocusIntent(focusState, selectedFocusId);
   renderApp();
   if (movement.result.windowChanged) {
     void guidePresentationPolling.refresh('epg-window-change', { showLoading: true });
   } else {
-    const selectedFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId;
     if (selectedFocusId !== undefined) restoreFocusTarget(selectedFocusId);
   }
   return true;
@@ -759,12 +760,14 @@ function handleGuidePage(offset: -5 | 5): boolean {
   });
   if (!result.handled) return false;
   if (result.targetLocalIndex !== null) {
+    const nextEpg = selectEpgPageTarget(workflowState.epg, result.targetLocalIndex, workflowState.guidePresentation);
     workflowState = {
       ...workflowState,
-      epg: selectEpgPageTarget(workflowState.epg, result.targetLocalIndex, workflowState.guidePresentation),
+      epg: nextEpg,
     };
-    renderApp();
     const selectedFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId;
+    focusState = advanceGuideProgramFocusIntent(focusState, selectedFocusId);
+    renderApp();
     if (selectedFocusId !== undefined) restoreFocusTarget(selectedFocusId);
   }
   return true;
@@ -776,11 +779,12 @@ function handleGuideMediaPlay(): boolean {
   const nextEpg = focusEpgNow(workflowState.epg, workflowState.guidePresentation, Date.now());
   if (nextEpg === workflowState.epg) return false;
   workflowState = { ...workflowState, epg: nextEpg };
+  const selectedFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId;
+  focusState = advanceGuideProgramFocusIntent(focusState, selectedFocusId);
   renderApp();
   if (nextEpg.windowStartMs !== previousWindowStartMs) {
     void guidePresentationPolling.refresh('guide-media-play-now', { showLoading: true });
   } else {
-    const selectedFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId;
     if (selectedFocusId !== undefined) restoreFocusTarget(selectedFocusId);
   }
   return true;

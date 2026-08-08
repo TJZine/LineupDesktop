@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import {
+  advanceGuideProgramFocusIntent,
   clickFocusedRendererElement,
   focusRendererTarget,
   registerRendererFocusTargets,
@@ -187,6 +188,44 @@ test('Guide program focus reveals an offscreen row and retains keyboard focus', 
     assert.equal(guideScrollTop, 8 * 124);
     assert.equal(documentDouble.activeElement, offscreen);
     assert.equal(visible.scrollIntoViewCount, 0);
+  });
+});
+
+test('Guide page selection advances semantic focus before the next render projects browser focus', () => {
+  withDocument(documentDouble, () => {
+    const previous = new FocusElementDouble('guide-program-channel-0--program', false, 'guide');
+    const selected = new FocusElementDouble('guide-program-channel-5--program', false, 'guide');
+    const dom = createFocusDomBindings([previous, selected]);
+    const state = advanceGuideProgramFocusIntent(
+      { activeRoute: 'guide', activeId: previous.focusId },
+      selected.focusId,
+    );
+
+    renderRendererFocus(state, dom);
+
+    assert.equal(state.activeId, selected.focusId);
+    assert.equal(previous.focusCount, 0);
+    assert.equal(selected.focusCount, 1);
+    assert.equal(documentDouble.activeElement, selected);
+  });
+});
+
+test('Guide play-to-now selection advances semantic focus before the next render projects browser focus', () => {
+  withDocument(documentDouble, () => {
+    const future = new FocusElementDouble('guide-program-channel-0--future', false, 'guide');
+    const current = new FocusElementDouble('guide-program-channel-0--current', false, 'guide');
+    const dom = createFocusDomBindings([future, current]);
+    const state = advanceGuideProgramFocusIntent(
+      { activeRoute: 'guide', activeId: future.focusId },
+      current.focusId,
+    );
+
+    renderRendererFocus(state, dom);
+
+    assert.equal(state.activeId, current.focusId);
+    assert.equal(future.focusCount, 0);
+    assert.equal(current.focusCount, 1);
+    assert.equal(documentDouble.activeElement, current);
   });
 });
 
