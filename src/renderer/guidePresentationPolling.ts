@@ -1,7 +1,6 @@
 import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
 import type { AppRouteId } from './navigation.js';
 import {
-  EPG_CHANNEL_PAGE_SIZE,
   EPG_SLOT_DURATION_MS,
   getEpgWindowDurationMs,
   normalizeEpgPresentation,
@@ -11,6 +10,13 @@ import {
   type EpgState,
 } from './epg.js';
 import { summarizeRendererBridgeError } from './rendererBridgeFailures.js';
+import {
+  AGGRESSIVE_GUIDE_PRELOAD_PROFILE,
+  DEFAULT_GUIDE_PRELOAD_PROFILE,
+  GuidePresentationLru,
+  guideCacheKey,
+  type GuidePreloadProfile,
+} from './guideVirtualization.js';
 
 const GUIDE_POLL_INTERVAL_MS = 15_000;
 const GUIDE_REQUEST_TIMEOUT_MS = 30_000;
@@ -22,6 +28,9 @@ export interface GuidePresentationPollingOptions {
   getActiveRoute(): AppRouteId;
   getWindowStartMs(): number;
   getGuideDensity(): EpgGuideDensity;
+  getAggressivePreloadEnabled?(): boolean;
+  getCacheIdentity?(): string | null;
+  getCacheScopeToken?(): string | null;
   getChannelOffset?(): number;
   getNowMs?(): number;
   setLoading(generation: number): void;
@@ -66,6 +75,8 @@ export interface GuidePresentationRefreshOptions {
   showLoading?: boolean;
   allowPlayerRoute?: boolean;
   channelOffset?: number;
+  windowStartMs?: number;
+  warmOnly?: boolean;
 }
 
 export interface GuidePageRefreshRequest {
@@ -97,6 +108,10 @@ interface GuidePresentationRefreshIntent {
   windowStartMs: number;
   requestedDurationMs: number;
   channelOffset: number;
+  channelLimit: 12 | 24;
+  timeBufferMs: number;
+  warmOnly: boolean;
+  cacheIdentity: string | null;
   pastItemsWindowGeneration: number;
   readonly abortController: AbortController;
   readonly promise: Promise<void>;
@@ -113,6 +128,10 @@ function createRefreshIntent(
   windowStartMs: number,
   requestedDurationMs: number,
   channelOffset: number,
+  channelLimit: 12 | 24,
+  timeBufferMs: number,
+  warmOnly: boolean,
+  cacheIdentity: string | null,
   pastItemsWindowGeneration: number,
 ): GuidePresentationRefreshIntent {
   let settled = false;
@@ -130,6 +149,10 @@ function createRefreshIntent(
     windowStartMs,
     requestedDurationMs,
     channelOffset,
+    channelLimit,
+    timeBufferMs,
+    warmOnly,
+    cacheIdentity,
     pastItemsWindowGeneration,
     abortController: new AbortController(),
     promise,
@@ -154,11 +177,34 @@ export function createGuidePresentationPolling(
   let pendingPage: Readonly<GuidePageRefreshRequest & { requestSequence: number }> | null = null;
   let pastItemsWindowGeneration = 0;
   let pastItemsWindowSettlementPending = false;
+  let cacheProfile: GuidePreloadProfile = getProfile();
+  let presentationCache = new GuidePresentationLru<ReturnType<typeof normalizeEpgPresentation>>(cacheProfile);
+  let warmCandidates: Array<{ windowStartMs: number; channelOffset: number }> = [];
+  let warmIdleHandle: number | null = null;
+  let cachedScopeToken: string | null = null;
 
   const getRequestedDurationMs = (): number => getEpgWindowDurationMs(options.getGuideDensity());
 
+  function getProfile(): GuidePreloadProfile {
+    return options.getAggressivePreloadEnabled?.() === true
+      ? AGGRESSIVE_GUIDE_PRELOAD_PROFILE
+      : DEFAULT_GUIDE_PRELOAD_PROFILE;
+  }
+
+  const refreshProfile = (): GuidePreloadProfile => {
+    const next = getProfile();
+    if (next !== cacheProfile) {
+      cacheProfile = next;
+      presentationCache.clear();
+      presentationCache = new GuidePresentationLru(next);
+    }
+    return next;
+  };
+
   const cancelPage = (): void => {
     if (pendingPage === null) return;
+    presentationCache.clear();
+    cachedScopeToken = null;
     pendingPage = null;
     const cancelledActivePage = activeRefresh?.source === 'guide-page-change'
       ? activeRefresh
@@ -196,20 +242,31 @@ export function createGuidePresentationPolling(
     );
     stoppedActive?.settle();
     stoppedTrailing?.settle();
+    presentationCache.clear();
+    warmCandidates = [];
+    cachedScopeToken = null;
+    if (warmIdleHandle !== null && 'cancelIdleCallback' in options.host) options.host.cancelIdleCallback(warmIdleHandle);
+    warmIdleHandle = null;
   };
 
   const queueRefresh = (
     source: string,
     refreshOptions: GuidePresentationRefreshOptions = {},
   ): Readonly<{ promise: Promise<void>; requestSequence: number }> => {
+    if (['guide-density-change', 'guide-aggressive-preload-change', 'guide-library-filter', 'custom-channel-change'].includes(source) ||
+      source.startsWith('guide-past-items-window')) {
+      presentationCache.clear();
+      warmCandidates = [];
+    }
     const playerRefresh = options.getActiveRoute() === 'player' && refreshOptions.allowPlayerRoute === true;
     if (options.getActiveRoute() !== 'guide' && !playerRefresh) {
       return { promise: Promise.resolve(), requestSequence: 0 };
     }
-    const windowStartMs = playerRefresh
+    const windowStartMs = refreshOptions.windowStartMs ?? (playerRefresh
       ? Math.floor((options.getNowMs?.() ?? Date.now()) / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS
-      : options.getWindowStartMs();
+      : options.getWindowStartMs());
     const requestedDurationMs = getRequestedDurationMs();
+    const profile = refreshProfile();
     const latestIntent = trailingRefresh ?? activeRefresh;
     const channelOffset = refreshOptions.channelOffset ?? options.getChannelOffset?.() ?? 0;
     const coalescedInterval = source === 'poll-interval'
@@ -237,6 +294,10 @@ export function createGuidePresentationPolling(
         windowStartMs,
         requestedDurationMs,
         channelOffset,
+        profile.channelLimit,
+        profile.timeBufferMs,
+        refreshOptions.warmOnly === true,
+        options.getCacheIdentity?.() ?? null,
         pastItemsWindowGeneration,
       );
       startRefresh(intent);
@@ -254,6 +315,10 @@ export function createGuidePresentationPolling(
         windowStartMs,
         requestedDurationMs,
         channelOffset,
+        profile.channelLimit,
+        profile.timeBufferMs,
+        refreshOptions.warmOnly === true,
+        options.getCacheIdentity?.() ?? null,
         pastItemsWindowGeneration,
       );
     } else {
@@ -263,6 +328,10 @@ export function createGuidePresentationPolling(
       trailingRefresh.windowStartMs = windowStartMs;
       trailingRefresh.requestedDurationMs = requestedDurationMs;
       trailingRefresh.channelOffset = channelOffset;
+      trailingRefresh.channelLimit = profile.channelLimit;
+      trailingRefresh.timeBufferMs = profile.timeBufferMs;
+      trailingRefresh.warmOnly = refreshOptions.warmOnly === true;
+      trailingRefresh.cacheIdentity = options.getCacheIdentity?.() ?? null;
       trailingRefresh.pastItemsWindowGeneration = pastItemsWindowGeneration;
       if (!coalescedInterval) {
         trailingRefresh.generation = generation;
@@ -298,6 +367,7 @@ export function createGuidePresentationPolling(
       input.presentation,
       input.offset,
       pendingPage?.targetGlobalIndex ?? null,
+      refreshProfile().channelLimit,
     );
     if (decision === null) return { handled: false, targetLocalIndex: null };
     if (decision.boundaryClamped) return { handled: true, targetLocalIndex: null };
@@ -326,14 +396,37 @@ export function createGuidePresentationPolling(
 
   const executeRefresh = async (intent: GuidePresentationRefreshIntent): Promise<void> => {
     try {
+      const baseKey = guideCacheKey(
+        Math.max(0, intent.windowStartMs - intent.timeBufferMs),
+        intent.requestedDurationMs + intent.timeBufferMs * 2,
+        intent.channelOffset,
+        intent.channelLimit,
+      );
+      const key = intent.cacheIdentity === null ? null : `${intent.cacheIdentity}:${baseKey}`;
+      const cacheEligibleSource = intent.source === 'guide-page-change' || intent.source === 'epg-window-change';
+      const cached = key !== null && cacheEligibleSource && intent.cacheIdentity === options.getCacheIdentity?.()
+        ? presentationCache.get(key, { focused: true, current: true })
+        : null;
+      if (cached !== null) await Promise.resolve();
+      if (cached !== null && isCurrent(intent)) {
+        lastValidPresentation = cached;
+        options.applyPresentation(
+          cached,
+          intent.generation,
+          settlePagingSuccess(intent, cached),
+          Math.max(intent.windowStartMs, cached.minimumStartTimeMs ?? intent.windowStartMs),
+        );
+        queueAggressiveWarming(intent, cached);
+        return;
+      }
       let result: Awaited<ReturnType<typeof options.guide.getPresentation>>;
       try {
         result = await waitForGuidePresentation(
           options.guide.getPresentation({
-            startTimeMs: intent.windowStartMs,
-            durationMs: intent.requestedDurationMs,
+            startTimeMs: Math.max(0, intent.windowStartMs - intent.timeBufferMs),
+            durationMs: intent.requestedDurationMs + intent.timeBufferMs * 2,
             channelOffset: intent.channelOffset,
-            channelLimit: EPG_CHANNEL_PAGE_SIZE,
+            channelLimit: intent.channelLimit,
           }),
           intent.abortController,
           options.host,
@@ -362,7 +455,28 @@ export function createGuidePresentationPolling(
             settlePagingFailure(intent),
           );
         } else {
-          lastValidPresentation = normalizeEpgPresentation(result.value);
+          const normalized = normalizeEpgPresentation(result.value);
+          const nextScopeToken = normalized.libraryFilter?.scopeToken ?? null;
+          if (cachedScopeToken !== null && nextScopeToken !== cachedScopeToken) {
+            presentationCache.clear();
+            warmCandidates = [];
+          }
+          cachedScopeToken = nextScopeToken;
+          const scopeMatches = nextScopeToken === (options.getCacheScopeToken?.() ?? null);
+          if (key !== null && intent.cacheIdentity === options.getCacheIdentity?.() && scopeMatches) {
+            presentationCache.set({
+              key,
+              value: normalized,
+              programCount: normalized.channels.reduce((count, channel) => count + channel.programs.length, 0),
+              focused: !intent.warmOnly,
+              current: !intent.warmOnly && normalized.channels.some((channel) => channel.programs.some((program) =>
+                program.startsAtMs <= normalized.nowMs && normalized.nowMs < program.endsAtMs)),
+            });
+          } else if (intent.warmOnly) {
+            return;
+          }
+          if (intent.warmOnly) return;
+          lastValidPresentation = normalized;
           const effectiveStartTimeMs = Math.max(
             intent.windowStartMs,
             lastValidPresentation.minimumStartTimeMs ?? intent.windowStartMs,
@@ -374,6 +488,7 @@ export function createGuidePresentationPolling(
             settlePagingSuccess(intent, lastValidPresentation),
             effectiveStartTimeMs,
           );
+          queueAggressiveWarming(intent, lastValidPresentation);
         }
       }
     } finally {
@@ -385,8 +500,8 @@ export function createGuidePresentationPolling(
     && intent.lifecycleGeneration === guidePresentationLifecycleGeneration
     && intent.requestedDurationMs === getRequestedDurationMs()
     && intent.pastItemsWindowGeneration === pastItemsWindowGeneration
+    && intent.cacheIdentity === (options.getCacheIdentity?.() ?? null)
     && options.getActiveRoute() === (intent.playerRefresh ? 'player' : 'guide');
-
   const settlePagingFailure = (intent: GuidePresentationRefreshIntent): boolean => {
     if (pendingPage?.requestSequence !== intent.requestSequence) return false;
     pendingPage = null;
@@ -418,6 +533,36 @@ export function createGuidePresentationPolling(
     const next = trailingRefresh;
     trailingRefresh = null;
     if (next !== null) startRefresh(next);
+    else scheduleNextWarm();
+  };
+
+  const queueAggressiveWarming = (
+    intent: GuidePresentationRefreshIntent,
+    presentation: ReturnType<typeof normalizeEpgPresentation>,
+  ): void => {
+    if (cacheProfile !== AGGRESSIVE_GUIDE_PRELOAD_PROFILE || intent.playerRefresh || intent.warmOnly) return;
+    const total = presentation.channelWindow?.total ?? presentation.channels.length;
+    const maximumOffset = Math.max(0, total - intent.channelLimit);
+    const nextOffset = Math.min(maximumOffset, intent.channelOffset + intent.channelLimit);
+    const previousOffset = Math.max(0, intent.channelOffset - intent.channelLimit);
+    warmCandidates = [
+      ...(nextOffset === intent.channelOffset ? [] : [{ windowStartMs: intent.windowStartMs, channelOffset: nextOffset }]),
+      ...(previousOffset === intent.channelOffset ? [] : [{ windowStartMs: intent.windowStartMs, channelOffset: previousOffset }]),
+      { windowStartMs: intent.windowStartMs + EPG_SLOT_DURATION_MS, channelOffset: intent.channelOffset },
+      { windowStartMs: Math.max(0, intent.windowStartMs - EPG_SLOT_DURATION_MS), channelOffset: intent.channelOffset },
+    ];
+  };
+
+  const scheduleNextWarm = (): void => {
+    if (activeRefresh !== null || trailingRefresh !== null || warmCandidates.length === 0 || warmIdleHandle !== null) return;
+    if (!('requestIdleCallback' in options.host)) return;
+    warmIdleHandle = options.host.requestIdleCallback(() => {
+      warmIdleHandle = null;
+      if (activeRefresh !== null || trailingRefresh !== null) return;
+      const candidate = warmCandidates.shift();
+      if (candidate === undefined || options.getActiveRoute() !== 'guide') return;
+      void queueRefresh('guide-aggressive-warm', { ...candidate, warmOnly: true }).promise;
+    }, { timeout: 250 });
   };
 
   const start = (): void => {
@@ -453,6 +598,9 @@ export function createGuidePresentationPolling(
     notePastItemsWindowChange() {
       pastItemsWindowGeneration += 1;
       pastItemsWindowSettlementPending = true;
+      presentationCache.clear();
+      warmCandidates = [];
+      cachedScopeToken = null;
     },
     settlePastItemsWindow({ currentValue, acceptedValue, saving }) {
       if (!pastItemsWindowSettlementPending || saving || acceptedValue === null || currentValue !== acceptedValue) return;

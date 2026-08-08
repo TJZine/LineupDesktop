@@ -103,7 +103,8 @@ test('Guide directional first refusal runs before generic focus movement', async
   const directions: string[] = [];
   const intercepted = createHarness((direction) => { directions.push(direction); return true; });
   await intercepted.lifecycle.handleInput('right');
-  assert.deepEqual(directions, ['right']);
+  await intercepted.lifecycle.handleInput('down');
+  assert.deepEqual(directions, ['right', 'down']);
   assert.equal(intercepted.getFocus().activeId, 'guide-program-one--current');
 
   const fallback = createHarness(() => false);

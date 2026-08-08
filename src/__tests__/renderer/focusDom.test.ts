@@ -5,6 +5,7 @@ import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import {
   clickFocusedRendererElement,
   focusRendererTarget,
+  registerRendererFocusTargets,
   renderRendererFocus,
   syncRendererFocusTargets,
 } from '../../renderer/focusDom.js';
@@ -17,6 +18,7 @@ class FocusElementDouble {
   focusCount = 0;
   scrollIntoViewCount = 0;
   scrollIntoViewOptions: ScrollIntoViewOptions | null = null;
+  onScrollIntoView: (() => void) | null = null;
   clickCount = 0;
   disabled = false;
   readonly dataset: Record<string, string> = {};
@@ -86,6 +88,7 @@ class FocusElementDouble {
   scrollIntoView(options?: boolean | ScrollIntoViewOptions): void {
     this.scrollIntoViewCount += 1;
     this.scrollIntoViewOptions = typeof options === 'object' ? options : null;
+    this.onScrollIntoView?.();
   }
 
   click(): void {
@@ -157,6 +160,56 @@ test('Settings active focus requests nearest scrolling without changing browser 
       block: 'nearest',
       inline: 'nearest',
     });
+  });
+});
+
+test('Guide program focus reveals an offscreen row and retains keyboard focus', () => {
+  withDocument(documentDouble, () => {
+    const visible = new FocusElementDouble('guide-program-channel-1--program', false, 'guide');
+    const offscreen = new FocusElementDouble('guide-program-channel-8--program', false, 'guide');
+    let guideScrollTop = 0;
+    offscreen.onScrollIntoView = () => { guideScrollTop = 8 * 124; };
+    const dom = createFocusDomBindings([visible, offscreen]);
+    const registry = new FocusRegistry();
+    registerRendererFocusTargets(registry, dom);
+
+    const focused = focusRendererTarget(
+      registry,
+      { activeRoute: 'guide', activeId: visible.focusId },
+      offscreen.focusId,
+      dom,
+    );
+
+    assert.equal(focused.activeId, offscreen.focusId);
+    assert.equal(offscreen.focusCount, 1);
+    assert.equal(offscreen.scrollIntoViewCount, 1);
+    assert.deepEqual(offscreen.scrollIntoViewOptions, { block: 'nearest', inline: 'nearest' });
+    assert.equal(guideScrollTop, 8 * 124);
+    assert.equal(documentDouble.activeElement, offscreen);
+    assert.equal(visible.scrollIntoViewCount, 0);
+  });
+});
+
+test('ordinary Guide render preserves wheel position while explicit restore reveals once', () => {
+  withDocument(documentDouble, () => {
+    const active = new FocusElementDouble('guide-program-channel-8--program', false, 'guide');
+    let guideScrollTop = 400;
+    active.onScrollIntoView = () => { guideScrollTop = 8 * 124; };
+    const dom = createFocusDomBindings([active]);
+    const state = { activeRoute: 'guide' as const, activeId: active.focusId };
+
+    renderRendererFocus(state, dom);
+    renderRendererFocus(state, dom);
+    assert.equal(active.scrollIntoViewCount, 0);
+    assert.equal(guideScrollTop, 400, 'ordinary scroll/RAF reconciliation does not snap to semantic focus');
+
+    renderRendererFocus(state, dom, { revealGuideProgram: true });
+    assert.equal(active.scrollIntoViewCount, 1);
+    assert.equal(guideScrollTop, 8 * 124);
+    assert.equal(documentDouble.activeElement, active);
+
+    renderRendererFocus(state, dom);
+    assert.equal(active.scrollIntoViewCount, 1, 'later ordinary reconciliation does not repeat the reveal');
   });
 });
 

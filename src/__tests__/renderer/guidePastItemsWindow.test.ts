@@ -166,10 +166,10 @@ test('polling adopts the main-clamped effective start and full duration without 
   const refresh = polling.refresh('past-window');
   await Promise.resolve();
   assert.deepEqual(requests, [{
-    startTimeMs: BASE - EPG_SLOT_DURATION_MS,
-    durationMs: 3 * 60 * 60 * 1_000,
+    startTimeMs: BASE - EPG_SLOT_DURATION_MS - 120 * 60_000,
+    durationMs: 7 * 60 * 60 * 1_000,
     channelOffset: 0,
-    channelLimit: 9,
+    channelLimit: 12,
   }]);
   pending.resolve({
     ok: true,
@@ -216,7 +216,7 @@ test('sequential polling settlements advance the bound and retain a program cros
   await polling.refresh('poll-slot-two');
   assert.equal(state.minimumStartTimeMs, secondBound);
   assert.equal(state.windowStartMs, secondBound);
-  assert.deepEqual(requests, [firstBound, firstBound]);
+  assert.deepEqual(requests, [firstBound - 120 * 60_000, firstBound - 120 * 60_000]);
   assert.deepEqual(renderedProgramIds, ['program-1', 'program-1']);
   await Promise.resolve();
   assert.equal(requests.length, 2);

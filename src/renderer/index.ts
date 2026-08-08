@@ -35,10 +35,11 @@ import { findEpgProgramCell, focusEpgNow, selectEpgPageTarget, settleEpgPresenta
 import { registerRendererActions, type GuideActionId, type GuideProgramActionTarget } from './rendererActionRegistration.js';
 import { subscribePlayerBridge } from './playerBridgeSubscription.js';
 import { createGuidePresentationPolling } from './guidePresentationPolling.js';
+import { projectGuideCacheIdentity } from './guideVirtualization.js';
 import { createGuideDensityRefreshLatch } from './guideDensityRefresh.js';
 import { createGuideLibraryFilterController, projectNativePlayerPresentationMode } from './guidePresentation.js';
 import { createNativePlayerPresentationController } from './player/nativePlayerPresentationController.js';
-import { projectGuideLibraryTabsPending } from './epg/guideDom.js';
+import { invalidateGuideLayoutMetrics, projectGuideLibraryTabsPending } from './epg/guideDom.js';
 import { dispatchPlexRuntimeAction } from './plexRuntimeActionDispatch.js';
 import { initializeProfilePinModal, openProfilePinModal, isProfilePinModalActive, closeProfilePinModal } from './profilePinModal.js';
 import { SETTINGS_SECTION_IDS, isPersistedSettingsActionEnabled, type SettingsSectionId } from './settingsSetup.js';
@@ -65,6 +66,21 @@ import { createFullscreenTransportCoordinator } from './fullscreenTransport.js';
 import { createGuideTuneController, type GuideTuneTarget } from './guideTuneController.js';
 mountStaticRendererDom();
 const dom = queryRendererDom();
+let guideVirtualFrame: number | null = null;
+const scheduleGuideVirtualReconcile = (): void => {
+  if (workflowState.routeState.activeRoute !== 'guide') return;
+  if (guideVirtualFrame !== null) window.cancelAnimationFrame(guideVirtualFrame);
+  guideVirtualFrame = window.requestAnimationFrame(() => {
+    guideVirtualFrame = null;
+    renderApp();
+  });
+};
+const handleGuideResize = (): void => {
+  invalidateGuideLayoutMetrics(dom.epgGridElement);
+  scheduleGuideVirtualReconcile();
+};
+dom.epgGridElement?.addEventListener('scroll', scheduleGuideVirtualReconcile, { passive: true });
+window.addEventListener('resize', handleGuideResize);
 const shellDom = queryShellDom();
 let fullscreenEnabled = false, shellState: RendererShellState = createRendererShellState();
 const fullscreenTransport = createFullscreenTransportCoordinator({
@@ -88,12 +104,15 @@ const settingsRuntime = createSettingsRuntime({
   settings: window.lineupDesktop.settings, windowBridge: fullscreenTransport,
   onStateChanged: (state) => {
     const densityChanged = state.values.guideDensity !== workflowState.settingsDraft.guideDensity;
+    const layoutChanged = state.values.guideLayout !== workflowState.settingsDraft.guideLayout;
+    const aggressivePreloadChanged = state.values.aggressiveGuidePreloadEnabled !== workflowState.settingsDraft.aggressiveGuidePreloadEnabled;
     const pastItemsWindowChanged = state.values.pastItemsWindow !== workflowState.settingsDraft.pastItemsWindow;
     const densityRefreshWasPending = guideDensityRefreshLatch.hasPending();
     if (densityChanged) {
       guideDensityRefreshLatch.noteChange();
       retainGuideProgramFocusIntent();
     }
+    if (densityChanged || layoutChanged) invalidateGuideLayoutMetrics(dom.epgGridElement);
     if (pastItemsWindowChanged) {
       guidePresentationPolling?.notePastItemsWindowChange();
       retainGuideProgramFocusIntent();
@@ -111,6 +130,12 @@ const settingsRuntime = createSettingsRuntime({
       if (densityChanged || densityRefreshWasPending) restorePendingGuideFocus();
       if (shouldRefreshDensity && guidePresentationPolling !== undefined) {
         void guidePresentationPolling.refresh('guide-density-change', {
+          showLoading: activeRoute === 'guide',
+          allowPlayerRoute: activeRoute === 'player',
+        });
+      }
+      if (aggressivePreloadChanged && guidePresentationPolling !== undefined && (activeRoute === 'guide' || activeRoute === 'player')) {
+        void guidePresentationPolling.refresh('guide-aggressive-preload-change', {
           showLoading: activeRoute === 'guide',
           allowPlayerRoute: activeRoute === 'player',
         });
@@ -352,6 +377,19 @@ guidePresentationPolling = createGuidePresentationPolling({
   getActiveRoute: () => workflowState.routeState.activeRoute,
   getWindowStartMs: () => workflowState.epg.windowStartMs,
   getGuideDensity: () => workflowState.settingsDraft.guideDensity,
+  getAggressivePreloadEnabled: () => workflowState.settingsDraft.aggressiveGuidePreloadEnabled,
+  getCacheScopeToken: () => workflowState.guidePresentation.libraryFilter?.scopeToken ?? null,
+  getCacheIdentity: () => {
+    const filter = workflowState.guidePresentation.libraryFilter;
+    return filter === undefined ? null : projectGuideCacheIdentity({
+      scopeToken: filter.scopeToken,
+      revision: filter.revision,
+      selectedLibraryId: filter.selectedLibraryId,
+      pastItemsWindow: workflowState.settingsDraft.pastItemsWindow,
+      guideDensity: workflowState.settingsDraft.guideDensity,
+      aggressivePreload: workflowState.settingsDraft.aggressiveGuidePreloadEnabled,
+    });
+  },
   getChannelOffset: () => workflowState.guidePresentation.channelWindow?.offset ?? 0,
   setLoading: (generation) => {
     retainGuideProgramFocusIntent();
@@ -453,6 +491,10 @@ attachNavigationInputRuntime(navigationLifecycle, {
     playerInputCommandController.cleanup();
     sleepTimerController.cleanup();
     guidePresentationPolling.stop();
+    if (guideVirtualFrame !== null) window.cancelAnimationFrame(guideVirtualFrame);
+    guideVirtualFrame = null;
+    dom.epgGridElement?.removeEventListener('scroll', scheduleGuideVirtualReconcile);
+    window.removeEventListener('resize', handleGuideResize);
     guideTuneController.stop();
     playerOverlayController.dispose();
     shellController.cleanup();
@@ -584,6 +626,9 @@ function activateRoute(route: AppRouteId, enterChannelSetup = true): boolean {
     plexController.invalidateOnboardingOperations();
   }
   workflowState = activateWorkflowRoute(workflowState, route);
+  if (previousRoute !== 'guide' && workflowState.routeState.activeRoute === 'guide') {
+    invalidateGuideLayoutMetrics(dom.epgGridElement);
+  }
   void settingsPlaybackLifecycle.routeChanged(previousRoute, route, workflowState.settingsDraft.keepPlaybackRunningInSettings);
   navigationLifecycle?.routeChanged(previousRoute, workflowState.routeState.activeRoute);
   cleanupPlexRuntimeForRouteChange(previousRoute, workflowState.routeState.activeRoute);
@@ -1064,7 +1109,7 @@ async function selectPlexHomeUser(homeUserId: string): Promise<void> {
 function restoreFocusTarget(focusId: string): void {
   syncRendererFocusTargets(focusRegistry, dom);
   focusState = focusRegistry.focusTarget(focusState, focusId).state;
-  renderRendererFocus(focusState, dom);
+  renderRendererFocus(focusState, dom, { revealGuideProgram: true });
 }
 
 function restorePendingGuideFocus(): void {

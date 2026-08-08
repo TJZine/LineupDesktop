@@ -8,6 +8,7 @@ import {
 } from './guidePresentation.js';
 import type { ArtworkRef } from '../contracts/artwork.js';
 import type { GuideLibraryFilterState } from '../contracts/guide.js';
+import { GUIDE_DOM_TIME_BUFFER_MS } from './guideVirtualization.js';
 
 export type EpgActionId =
   | 'previousWindow'
@@ -336,7 +337,7 @@ export function createEpgGuideView(
       number: channel.number,
       name: channel.name,
       isSelected: channel.id === normalizedState.selectedChannelId,
-      programs: visibleProgramsForChannel(channel, normalizedState.windowStartMs, normalizedState.guideDensity).map((program) => createProgramCell(
+      programs: renderProgramsForChannel(channel, normalizedState.windowStartMs, normalizedState.guideDensity).map((program) => createProgramCell(
         program,
         channel.id,
         normalizedState,
@@ -595,8 +596,10 @@ function createProgramCell(
   windowEndMs: number,
   nowMs: number,
 ): EpgProgramCellViewModel {
-  const span = calculateProgramSpan(program, state.windowStartMs, windowEndMs);
-  if (span === null) throw new Error(`Visible EPG program ${program.id} did not produce a span`);
+  const span = calculateProgramSpan(program, state.windowStartMs, windowEndMs) ?? {
+    columnStart: program.endsAtMs <= state.windowStartMs ? 0 : getEpgVisibleSlotCount(state.guideDensity) + 1,
+    columnSpan: 1,
+  };
   return {
     ...program,
     channelId,
@@ -731,6 +734,21 @@ function visibleProgramsForChannel(
 ): readonly EpgProgramViewModel[] {
   const windowEndMs = windowStartMs + getEpgWindowDurationMs(guideDensity);
   return channel.programs.filter((program) => isProgramVisible(program, windowStartMs, windowEndMs));
+}
+
+function renderProgramsForChannel(
+  channel: EpgChannelViewModel,
+  windowStartMs: number,
+  guideDensity: EpgGuideDensity,
+): readonly EpgProgramViewModel[] {
+  const windowEndMs = windowStartMs + getEpgWindowDurationMs(guideDensity);
+  const buffered = channel.programs.filter((program) =>
+    program.startsAtMs < windowEndMs + GUIDE_DOM_TIME_BUFFER_MS &&
+    program.endsAtMs > windowStartMs - GUIDE_DOM_TIME_BUFFER_MS);
+  return [
+    ...buffered.filter((program) => isProgramVisible(program, windowStartMs, windowEndMs)),
+    ...buffered.filter((program) => !isProgramVisible(program, windowStartMs, windowEndMs)),
+  ];
 }
 
 function isProgramVisible(program: EpgProgramViewModel, windowStartMs: number, windowEndMs: number): boolean {

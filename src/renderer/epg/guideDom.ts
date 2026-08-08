@@ -7,6 +7,7 @@ import {
 } from '../epg.js';
 import { isSafeArtworkRefId } from '../../contracts/artwork.js';
 import type { GuideLibraryFilterState } from '../../contracts/guide.js';
+import { projectGuideVirtualRange, type GuideVirtualRange } from '../guideVirtualization.js';
 
 export interface CellPosition {
   left: number;
@@ -21,6 +22,17 @@ const failedArtwork = new WeakMap<HTMLImageElement, Readonly<{
   refId: string;
 }>>();
 const pendingArtwork = new WeakMap<HTMLImageElement, object>();
+const guideLayoutMetrics = new WeakMap<HTMLElement, {
+  key: string;
+  rowOuterSize: number;
+  rowGapSize: number;
+  rowStartOffset: number;
+  measured: boolean;
+}>();
+
+export function invalidateGuideLayoutMetrics(grid: HTMLElement | null): void {
+  if (grid !== null) guideLayoutMetrics.delete(grid);
+}
 
 export function guideCellPosition(
   startsAtMs: number,
@@ -259,6 +271,7 @@ export function renderEpgGuideDom(
     dom.epgGridElement.setAttribute('role', 'grid');
   } else {
     dom.epgGridElement.removeAttribute('role');
+    dom.epgGridElement.dataset.guideVisibleRowsClamped = 'false';
   }
 
   const trackWidth = GUIDE_TRACK_UNITS;
@@ -386,7 +399,71 @@ export function renderEpgGuideDom(
       actionError.textContent = view.guide.tuneError;
       shell.append(actionError);
     }
-    shell.append(...readyGuideGridDom(view, trackWidth, settings.previewBadgesEnabled));
+    const metricsKey = `${settings.guideDensity}:${settings.guideLayout}`;
+    const cachedMetrics = guideLayoutMetrics.get(dom.epgGridElement);
+    const canReuse = cachedMetrics?.key === metricsKey && cachedMetrics.measured;
+    const measuredRows = !canReuse && typeof dom.epgGridElement.querySelectorAll === 'function'
+      ? Array.from(dom.epgGridElement.querySelectorAll<HTMLElement>('.epg-grid__row'))
+      : [];
+    const rowElement = measuredRows[0] ?? null;
+    const rowRect = rowElement?.getBoundingClientRect?.();
+    const measuredRow = rowRect?.height;
+    const hasMeasurement = Number.isFinite(measuredRow) && (measuredRow ?? 0) > 0;
+    const representedRowIndex = parseGuideRowIndex(rowElement?.dataset.guideRowIndex);
+    const consecutiveRow = representedRowIndex === null
+      ? undefined
+      : measuredRows.find((row) => parseGuideRowIndex(row.dataset.guideRowIndex) === representedRowIndex + 1);
+    const consecutiveRect = consecutiveRow?.getBoundingClientRect();
+    const measuredStride = rowRect === undefined || consecutiveRect === undefined
+      ? null
+      : consecutiveRect.top - rowRect.top;
+    const computedGap = rowElement === null ? null : readGuideRowGap(rowElement);
+    const rowOuterSize = canReuse
+      ? cachedMetrics.rowOuterSize
+      : measuredStride !== null && Number.isFinite(measuredStride) && measuredStride > 0
+        ? measuredStride
+        : hasMeasurement && computedGap !== null
+          ? (measuredRow ?? 0) + computedGap
+          : 120;
+    const rowGapSize = canReuse
+      ? cachedMetrics.rowGapSize
+      : hasMeasurement ? Math.max(0, rowOuterSize - (measuredRow ?? rowOuterSize)) : 0;
+    const gridTop = rowElement === null ? 0 : dom.epgGridElement.getBoundingClientRect().top;
+    const rowStartOffset = canReuse
+      ? cachedMetrics.rowStartOffset
+      : rowRect === undefined || representedRowIndex === null
+        ? 0
+        : Math.max(0, rowRect.top - gridTop + dom.epgGridElement.scrollTop - representedRowIndex * rowOuterSize);
+    guideLayoutMetrics.set(dom.epgGridElement, {
+      key: metricsKey,
+      rowOuterSize,
+      rowGapSize,
+      rowStartOffset,
+      measured: canReuse || hasMeasurement,
+    });
+    const focusedRowIndex = view.guide.selectedProgram === null
+      ? -1
+      : view.guide.rows.findIndex((row) => row.id === view.guide.selectedProgram?.channelId);
+    const virtualRange = projectGuideVirtualRange({
+      rows: view.guide.rows,
+      scrollTop: dom.epgGridElement.scrollTop,
+      viewportHeight: dom.epgGridElement.clientHeight || rowOuterSize * 6,
+      rowOuterSize,
+      rowStartOffset,
+      windowStartMs: view.guide.windowStartMs,
+      windowEndMs: view.guide.windowEndMs,
+      focusedRowIndex,
+      focusedProgramId: view.guide.selectedProgram?.id ?? null,
+    });
+    dom.epgGridElement.dataset.guideVisibleRowsClamped = String(virtualRange.visibleRowsClamped);
+    shell.append(...readyGuideGridDom(
+      view,
+      trackWidth,
+      settings.previewBadgesEnabled,
+      virtualRange,
+      rowOuterSize,
+      rowGapSize,
+    ));
   }
   dom.epgGridElement.replaceChildren(shell);
 }
@@ -512,6 +589,9 @@ function readyGuideGridDom(
   view: RouteWorkflowViewModel,
   trackWidth: number,
   previewBadgesEnabled: boolean,
+  virtualRange: GuideVirtualRange,
+  rowOuterSize: number,
+  rowGapSize: number,
 ): HTMLElement[] {
   const header = document.createElement('div');
   header.className = 'epg-time-header';
@@ -556,9 +636,17 @@ function readyGuideGridDom(
 
   header.append(slotTrack);
 
-  const rows = view.guide.rows.map((row) => {
+  const rows: HTMLElement[] = [];
+  for (const placement of virtualRange.rowPlacements) {
+    if (placement.gapBefore > 0) {
+      rows.push(guideRowSpacer(placement.gapBefore * rowOuterSize - rowGapSize));
+    }
+    const rowIndex = placement.rowIndex;
+    const row = view.guide.rows[rowIndex];
+    if (row === undefined) continue;
     const rowElement = document.createElement('section');
     rowElement.className = 'epg-grid__row';
+    rowElement.dataset.guideRowIndex = String(rowIndex);
     rowElement.setAttribute('role', 'row');
     rowElement.dataset.selectedChannel = String(row.isSelected);
     const channel = document.createElement('div');
@@ -575,6 +663,7 @@ function readyGuideGridDom(
     programs.className = 'epg-grid__programs';
 
     for (const program of row.programs) {
+      if (!virtualRange.programIds.has(program.id)) continue;
       const cell = guideCellDom(
         program,
         windowStartMs,
@@ -582,6 +671,9 @@ function readyGuideGridDom(
         trackWidth,
         previewBadgesEnabled,
       );
+      if (program.endsAtMs <= windowStartMs || program.startsAtMs >= windowEndMs) {
+        projectBufferedGuideCell(cell, program.endsAtMs <= windowStartMs ? 'before' : 'after');
+      }
       programs.append(cell);
     }
 
@@ -593,10 +685,48 @@ function readyGuideGridDom(
     }
 
     rowElement.append(programs);
-    return rowElement;
-  });
+    rows.push(rowElement);
+  }
+  if (virtualRange.trailingRows > 0) {
+    rows.push(guideRowSpacer(virtualRange.trailingRows * rowOuterSize - rowGapSize));
+  }
 
   return [header, ...rows];
+}
+
+function projectBufferedGuideCell(cell: HTMLElement, side: 'before' | 'after'): void {
+  delete cell.dataset.guideProgramAction;
+  delete cell.dataset.focusId;
+  cell.dataset.guideBufferedProgram = side;
+  cell.tabIndex = -1;
+  cell.setAttribute('aria-hidden', 'true');
+  cell.removeAttribute('role');
+  (cell as HTMLButtonElement).disabled = true;
+  cell.style.left = side === 'before' ? '-1px' : '100%';
+  cell.style.width = '0px';
+}
+
+function parseGuideRowIndex(value: string | undefined): number | null {
+  if (value === undefined || !/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function readGuideRowGap(row: HTMLElement): number | null {
+  const parent = row.parentElement;
+  const view = row.ownerDocument?.defaultView;
+  if (parent === null || parent === undefined || view === null || view === undefined) return null;
+  const value = Number.parseFloat(view.getComputedStyle(parent).rowGap);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function guideRowSpacer(height: number): HTMLElement {
+  const spacer = document.createElement('div');
+  spacer.className = 'epg-grid__row-spacer';
+  spacer.dataset.epgVirtualSpacer = '';
+  spacer.setAttribute('aria-hidden', 'true');
+  spacer.style.height = `${String(Math.max(0, height))}px`;
+  return spacer;
 }
 
 function stateActionsFor(
