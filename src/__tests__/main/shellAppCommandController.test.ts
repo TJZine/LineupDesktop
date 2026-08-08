@@ -199,8 +199,18 @@ class FakeAppCommandWindow {
 
   asWindow(): ShellAppCommandWindow {
     return {
-      isDestroyed: () => this.destroyed,
-      isFocused: () => this.focused,
+      baseWindow: {
+        isDestroyed: () => this.destroyed,
+        isFocused: () => this.focused,
+        on: (_event, listener) => {
+          this.listenerOnCalls += 1;
+          this.#listeners.add(listener);
+        },
+        off: (_event, listener) => {
+          this.listenerOffCalls += 1;
+          this.#listeners.delete(listener);
+        },
+      },
       webContents: {
         isDestroyed: () => this.webContentsDestroyed,
         sendInputEvent: (inputEvent) => {
@@ -209,16 +219,6 @@ class FakeAppCommandWindow {
           }
           this.inputEvents.push(inputEvent);
         },
-      },
-      on: (_event, listener) => {
-        this.listenerOnCalls += 1;
-        this.#listeners.add(listener);
-        return this.asWindow();
-      },
-      off: (_event, listener) => {
-        this.listenerOffCalls += 1;
-        this.#listeners.delete(listener);
-        return this.asWindow();
       },
     };
   }

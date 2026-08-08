@@ -3,7 +3,11 @@ import type {
   EpgCurrentProgramViewModel,
   EpgPresentationSource,
   EpgProgramViewModel,
+  GuideLibraryFilterOption,
+  GuideLibraryFilterState,
+  GuidePresentationSource,
 } from '../../contracts/guide.js';
+import { randomBytes } from 'node:crypto';
 import type { ChannelClock, ChannelLogger } from '../../domain/channel/interfaces.js';
 import { ContentResolver } from '../../domain/channel/contentResolver.js';
 import type { ChannelRepository } from '../../domain/channel/channelRepository.js';
@@ -16,6 +20,14 @@ import type {
 import type { ResolvedContentItem as ChannelContentItem } from '../../domain/channel/types.js';
 import type { ChannelConfig } from '../../domain/channel/types.js';
 import type { PlexLibraryMinimalAdapter } from './plexLibraryMinimalAdapter.js';
+import type { GuideArtworkOwner } from './guideArtworkOwner.js';
+import type { ChannelPublicReferenceGeneration, ChannelPublicReferenceOwner } from './channelPublicReferenceOwner.js';
+import type { DesktopGuidePreferencesStore } from './desktopGuidePreferencesStore.js';
+import { DesktopGuidePreferencesStoreError } from './desktopGuidePreferencesStore.js';
+import { channelLibraryIds, libraryIdsFromContentSource } from './channelLibraryIds.js';
+
+type GuideContextResult = Readonly<{ ok: true; snapshot: Readonly<{ activeProfileId: string; selectedServerId: string }> }> |
+  Readonly<{ ok: false }> | null;
 
 export class GuideRuntime {
   private readonly repository: ChannelRepository;
@@ -24,6 +36,14 @@ export class GuideRuntime {
   private readonly clock: ChannelClock;
   private readonly onChannelTuned?: (channelId: string) => void | Promise<void>;
   private readonly logger: ChannelLogger;
+  private readonly guideArtworkOwner: GuideArtworkOwner | null;
+  private readonly loadLineupRevision: (() => Promise<number>) | null;
+  private readonly preferencesStore: DesktopGuidePreferencesStore | null;
+  private readonly guideContextSource: Readonly<{ getBuilderContextForMain(): GuideContextResult }> | null;
+  private readonly getLibraryTabsEnabled: () => boolean | Promise<boolean>;
+  private readonly createScopeToken: () => string;
+  private activeScopeKey: string | null = null;
+  private activeScopeToken: string | null = null;
 
   constructor(input: {
     repository: ChannelRepository;
@@ -32,6 +52,12 @@ export class GuideRuntime {
     clock?: ChannelClock;
     onChannelTuned?: (channelId: string) => void | Promise<void>;
     logger?: ChannelLogger;
+    guideArtworkOwner?: GuideArtworkOwner;
+    loadLineupRevision?: () => Promise<number>;
+    preferencesStore?: DesktopGuidePreferencesStore;
+    guideContextSource?: Readonly<{ getBuilderContextForMain(): GuideContextResult }>;
+    getLibraryTabsEnabled?: () => boolean | Promise<boolean>;
+    createScopeToken?: () => string;
   }) {
     this.repository = input.repository;
     this.clock = input.clock ?? { now: () => Date.now() };
@@ -43,12 +69,170 @@ export class GuideRuntime {
     this.activeChannelScheduler = input.activeChannelScheduler;
     this.onChannelTuned = input.onChannelTuned;
     this.logger = input.logger ?? { warn: () => undefined, error: () => undefined };
+    this.guideArtworkOwner = input.guideArtworkOwner ?? null;
+    this.loadLineupRevision = input.loadLineupRevision ?? null;
+    this.preferencesStore = input.preferencesStore ?? null;
+    this.guideContextSource = input.guideContextSource ?? null;
+    this.getLibraryTabsEnabled = input.getLibraryTabsEnabled ?? (() => true);
+    this.createScopeToken = input.createScopeToken ?? (() => `guide-scope-${randomBytes(16).toString('hex')}`);
+  }
+
+  async getPagedPresentation(input: {
+    startTimeMs: number;
+    durationMs: number;
+    channelOffset: number;
+    channelLimit: number;
+    generation: ChannelPublicReferenceGeneration;
+    publicReferenceOwner: ChannelPublicReferenceOwner;
+  }): Promise<GuidePresentationSource> {
+    if (this.preferencesStore === null || this.guideContextSource === null) {
+      throw new Error('Guide preferences are unavailable.');
+    }
+    let preference = await this.activatePreferenceScope(input.generation);
+    const libraryRows = deriveLibraries(input.generation, input.publicReferenceOwner);
+    const tabsEnabled = await this.getLibraryTabsEnabled() && libraryRows.length > 1;
+    const validSelection = preference.selectedLibraryId === null ||
+      libraryRows.some((library) => library.rawId === preference.selectedLibraryId);
+    if ((!tabsEnabled || !validSelection) && preference.selectedLibraryId !== null) {
+      preference = await this.preferencesStore.normalizeSelection(preference.scopeToken, preference.revision);
+    }
+    const selectedRawLibraryId = tabsEnabled ? preference.selectedLibraryId : null;
+    const eligible = input.generation.channels
+      .filter((channel) => channel.hidden !== true)
+      .filter((channel) => selectedRawLibraryId === null || channelLibraryIds(channel).includes(selectedRawLibraryId))
+      .map((channel) => ({
+        channel,
+        publicId: input.publicReferenceOwner.projectChannelReference(input.generation, channel.id),
+      }))
+      .sort((left, right) => left.channel.number - right.channel.number || compareUtf16(left.publicId, right.publicId));
+    const total = eligible.length;
+    const maximumOffset = Math.max(0, total - input.channelLimit);
+    const offset = Math.min(input.channelOffset, maximumOffset);
+    const page = eligible.slice(offset, offset + input.channelLimit);
+    const resolved = await Promise.all(page.map(async ({ channel }) => {
+      let items: ChannelContentItem[] = [];
+      try { items = await this.contentResolver.resolveSource(channel.contentSource); }
+      catch (error) { this.logContentResolutionFailure('GuideRuntime.getPagedPresentation.channel', channel, error); }
+      if (items.length === 0) return { channel, items, programs: [] as EpgProgramViewModel[] };
+      const scheduler = createSchedulerForChannel(channel, items, this.clock);
+      const programs = scheduler.getScheduleWindow(input.startTimeMs, input.startTimeMs + input.durationMs).programs
+        .map((program) => mapScheduledProgramToViewModel(
+          program, channel.id, items, this.guideArtworkOwner, input.generation.lineupRevision,
+        ))
+        .sort(compareProgram)
+        .slice(0, 200);
+      return { channel, items, programs };
+    }));
+    const raw: EpgPresentationSource = {
+      channels: resolved.map(({ channel, programs }) => ({
+        id: channel.id,
+        number: String(channel.number),
+        name: channel.name,
+        programs,
+      })),
+      nowWatching: this.projectNowWatchingForPage(resolved),
+    };
+    const projected = input.publicReferenceOwner.projectPresentation(input.generation, raw);
+    const channels = applyFairProgramCap(projected.channels, 1_000);
+    const libraries: GuideLibraryFilterOption[] = libraryRows.map(({ rawId: _rawId, ...library }) => library);
+    const libraryFilter: GuideLibraryFilterState = {
+      scopeToken: preference.scopeToken,
+      revision: preference.revision,
+      libraries,
+      selectedLibraryId: tabsEnabled && preference.selectedLibraryId !== null
+        ? input.publicReferenceOwner.projectLibraryReference(input.generation, preference.selectedLibraryId)
+        : null,
+      persistenceStatus: preference.persistenceStatus,
+    };
+    return { ...projected, channels, channelWindow: { offset, total }, libraryFilter };
+  }
+
+  async setLibraryFilter(input: {
+    generation: ChannelPublicReferenceGeneration;
+    publicReferenceOwner: ChannelPublicReferenceOwner;
+    expectedScopeToken: string;
+    expectedRevision: number;
+    libraryId: string | null;
+    loadCurrentGeneration: () => Promise<ChannelPublicReferenceGeneration>;
+    isCommitCurrent?: () => boolean | Promise<boolean>;
+  }): Promise<GuideLibraryFilterState> {
+    if (this.preferencesStore === null) throw new Error('Guide preferences are unavailable.');
+    await this.activatePreferenceScope(input.generation);
+    const libraries = deriveLibraries(input.generation, input.publicReferenceOwner);
+    const rawLibraryId = input.libraryId === null ? null : input.publicReferenceOwner.resolveLibrary(input.generation, input.libraryId);
+    if (input.libraryId !== null && (rawLibraryId === null || !libraries.some((library) => library.rawId === rawLibraryId))) {
+      throw new Error('Guide library is unavailable.');
+    }
+    const snapshot = await this.preferencesStore.setLibraryFilter(
+      input.expectedScopeToken,
+      input.expectedRevision,
+      rawLibraryId,
+      async () => {
+        if (!(await (input.isCommitCurrent?.() ?? true))) return false;
+        let currentGeneration: ChannelPublicReferenceGeneration;
+        try {
+          currentGeneration = await input.loadCurrentGeneration();
+        } catch {
+          throw new DesktopGuidePreferencesStoreError('GUIDE_FILTER_SCOPE_STALE');
+        }
+        if (currentGeneration.fingerprint !== input.generation.fingerprint ||
+          this.activeScopeToken !== input.expectedScopeToken) {
+          throw new DesktopGuidePreferencesStoreError('GUIDE_FILTER_SCOPE_STALE');
+        }
+        return await (input.isCommitCurrent?.() ?? true);
+      },
+    );
+    return {
+      scopeToken: snapshot.scopeToken,
+      revision: snapshot.revision,
+      libraries: libraries.map(({ rawId: _rawId, ...library }) => library),
+      selectedLibraryId: rawLibraryId === null ? null : input.publicReferenceOwner.projectLibraryReference(input.generation, rawLibraryId),
+      persistenceStatus: snapshot.persistenceStatus,
+    };
+  }
+
+  invalidatePreferenceScope(): void {
+    this.activeScopeKey = null;
+    this.activeScopeToken = null;
+    this.preferencesStore?.clearActiveScope();
+  }
+
+  isPreferenceScopeCurrent(scopeToken: string): boolean {
+    return this.activeScopeToken === scopeToken;
+  }
+
+  private async activatePreferenceScope(generation: ChannelPublicReferenceGeneration) {
+    if (this.preferencesStore === null || this.guideContextSource === null) throw new Error('Guide preferences are unavailable.');
+    const context = this.guideContextSource.getBuilderContextForMain();
+    if (context === null || !context.ok) throw new Error('Guide scope is unavailable.');
+    const scopeKey = JSON.stringify([context.snapshot.selectedServerId, context.snapshot.activeProfileId, generation.fingerprint]);
+    if (scopeKey !== this.activeScopeKey || this.activeScopeToken === null) {
+      this.activeScopeKey = scopeKey;
+      this.activeScopeToken = this.createScopeToken();
+    }
+    return this.preferencesStore.activateScope({
+      serverId: context.snapshot.selectedServerId,
+      profileId: context.snapshot.activeProfileId,
+      scopeToken: this.activeScopeToken,
+    });
+  }
+
+  private projectNowWatchingForPage(
+    resolved: readonly { channel: ChannelConfig; items: readonly ChannelContentItem[]; programs: readonly EpgProgramViewModel[] }[],
+  ): EpgCurrentProgramViewModel | null {
+    const state = this.activeChannelScheduler.getState();
+    if (!state.isActive || state.currentProgram === null) return null;
+    const row = resolved.find(({ channel }) => channel.id === state.channelId);
+    return row === undefined ? null : mapCurrentProgram(state.currentProgram, row.channel.id, [...row.items]);
   }
 
   async getPresentation(
     startTimeMs: number,
     durationMs: number,
   ): Promise<EpgPresentationSource> {
+    const lineupRevision = this.guideArtworkOwner === null || this.loadLineupRevision === null
+      ? null
+      : await this.loadLineupRevision();
     const loaded = await this.repository.loadNormalized();
     const visibleChannels = loaded?.data.channels.filter(isVisibleChannel) ?? [];
     if (!loaded || visibleChannels.length === 0) {
@@ -79,7 +263,13 @@ export class GuideRuntime {
         const scheduler = createSchedulerForChannel(channel, channelItems, this.clock);
         const window = scheduler.getScheduleWindow(startTimeMs, startTimeMs + durationMs);
         const programs = window.programs.map((prog) =>
-          mapScheduledProgramToViewModel(prog, channel.id, channelItems),
+          mapScheduledProgramToViewModel(
+            prog,
+            channel.id,
+            channelItems,
+            this.guideArtworkOwner,
+            lineupRevision,
+          ),
         );
 
         return {
@@ -233,6 +423,71 @@ function isVisibleChannel(channel: ChannelConfig): boolean {
   return channel.hidden !== true;
 }
 
+function deriveLibraries(
+  generation: ChannelPublicReferenceGeneration,
+  owner: ChannelPublicReferenceOwner,
+): Array<GuideLibraryFilterOption & { rawId: string }> {
+  const accumulated = new Map<string, { names: string[]; kinds: Set<'show' | 'movie' | 'mixed'> }>();
+  for (const channel of generation.channels.filter(isVisibleChannel)) {
+    for (const rawId of channelLibraryIds(channel)) {
+      const value = accumulated.get(rawId) ?? { names: [], kinds: new Set() };
+      if (channel.sourceLibraryId === rawId && channel.sourceLibraryName) value.names.push(channel.sourceLibraryName);
+      value.kinds.add(contentKindForLibrary(channel.contentSource, rawId));
+      accumulated.set(rawId, value);
+    }
+  }
+  return [...accumulated].map(([rawId, value]) => {
+    const distinctKinds = [...value.kinds];
+    return {
+      rawId,
+      id: owner.projectLibraryReference(generation, rawId),
+      name: owner.projectLibraryName(value.names[0] ?? 'Library'),
+      contentKind: distinctKinds.length === 1 ? distinctKinds[0]! : 'mixed',
+    };
+  }).sort((left, right) => compareUtf16(left.name.toLowerCase(), right.name.toLowerCase()) || compareUtf16(left.id, right.id));
+}
+
+function contentKindForLibrary(source: ChannelConfig['contentSource'], rawId: string): 'show' | 'movie' | 'mixed' {
+  if (source.type === 'library') return source.libraryId === rawId ? source.libraryType : 'mixed';
+  if (source.type !== 'mixed') return 'mixed';
+  const matching = source.sources.filter((child) => libraryIdsFromContentSource(child).includes(rawId));
+  if (matching.length !== 1 || source.sources.length !== 1) return 'mixed';
+  return contentKindForLibrary(matching[0]!, rawId);
+}
+
+function compareProgram(left: EpgProgramViewModel, right: EpgProgramViewModel): number {
+  return left.startsAtMs - right.startsAtMs || left.endsAtMs - right.endsAtMs || compareUtf16(left.id, right.id);
+}
+
+function applyFairProgramCap(
+  channels: readonly EpgChannelViewModel[],
+  cap: number,
+): readonly EpgChannelViewModel[] {
+  const retained = channels.map(() => 0);
+  let total = 0;
+  for (let index = 0; total < cap; index += 1) {
+    let admitted = false;
+    channels.forEach((channel, channelIndex) => {
+      if (total < cap && channel.programs[index] !== undefined) {
+        retained[channelIndex] = index + 1;
+        total += 1;
+        admitted = true;
+      }
+    });
+    if (!admitted) break;
+  }
+  return channels.map((channel, index) => ({ ...channel, programs: channel.programs.slice(0, retained[index]) }));
+}
+
+function compareUtf16(left: string, right: string): number {
+  const length = Math.min(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const difference = left.charCodeAt(index) - right.charCodeAt(index);
+    if (difference !== 0) return difference;
+  }
+  return left.length - right.length;
+}
+
 function createSchedulerForChannel(
   channel: ChannelConfig,
   items: readonly ChannelContentItem[],
@@ -288,6 +543,8 @@ function mapScheduledProgramToViewModel(
   prog: ScheduledProgram,
   channelId: string,
   originalItems: ChannelContentItem[],
+  guideArtworkOwner: GuideArtworkOwner | null,
+  lineupRevision: number | null,
 ): EpgProgramViewModel {
   const original = originalItems.find((item) => item.scheduledIndex === prog.item.scheduledIndex) || prog.item;
   const id = `${channelId}-${prog.scheduledStartTime}`;
@@ -327,7 +584,24 @@ function mapScheduledProgramToViewModel(
     genres: ('genres' in original ? original.genres : null) || [],
     startsAtMs: prog.scheduledStartTime,
     endsAtMs: prog.scheduledEndTime,
+    artwork: createProgramArtworkRef(original, guideArtworkOwner, lineupRevision),
   };
+}
+
+function createProgramArtworkRef(
+  item: ChannelContentItem | SchedulerContentItem,
+  guideArtworkOwner: GuideArtworkOwner | null,
+  lineupRevision: number | null,
+) {
+  if (guideArtworkOwner === null || lineupRevision === null) return null;
+  const thumb = typeof item.thumb === 'string' && item.thumb.length > 0 ? item.thumb : null;
+  const showThumb = 'showThumb' in item && typeof item.showThumb === 'string' && item.showThumb.length > 0
+    ? item.showThumb
+    : null;
+  const locator = thumb ?? showThumb;
+  if (locator === null) return null;
+  const title = ('showTitle' in item ? item.showTitle : null) || item.title;
+  return guideArtworkOwner.createRef({ locator, altText: title, lineupRevision });
 }
 
 function mapCurrentProgram(

@@ -5,6 +5,8 @@ import {
   formatEpgTimeWindow,
   type EpgProgramCellViewModel,
 } from '../epg.js';
+import { isSafeArtworkRefId } from '../../contracts/artwork.js';
+import type { GuideLibraryFilterState } from '../../contracts/guide.js';
 
 export interface CellPosition {
   left: number;
@@ -14,6 +16,11 @@ export interface CellPosition {
 }
 
 const GUIDE_TRACK_UNITS = 1000;
+const failedArtwork = new WeakMap<HTMLImageElement, Readonly<{
+  presentationGeneration: number;
+  refId: string;
+}>>();
+const pendingArtwork = new WeakMap<HTMLImageElement, object>();
 
 export function guideCellPosition(
   startsAtMs: number,
@@ -151,12 +158,71 @@ export function guideCellDom(
   return cell;
 }
 
+export function guideLibraryTabsDom(filter: GuideLibraryFilterState): HTMLElement {
+  const tabs = document.createElement('nav');
+  tabs.className = 'epg-library-tabs';
+  tabs.setAttribute('role', 'tablist');
+  tabs.setAttribute('aria-label', 'Guide libraries');
+  const choices = [{ id: null, name: 'All' }, ...filter.libraries.map((library) => ({ id: library.id, name: library.name }))];
+  for (const choice of choices) {
+    const selected = choice.id === filter.selectedLibraryId;
+    const tab = document.createElement('button');
+    tab.setAttribute('type', 'button');
+    tab.className = 'epg-library-tab';
+    tab.dataset.guideLibraryId = choice.id ?? '';
+    tab.dataset.focusId = guideLibraryFocusId(choice.id);
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    tab.textContent = choice.name;
+    tabs.append(tab);
+  }
+  return tabs;
+}
+
+export function guideLibraryFocusId(libraryId: string | null): string {
+  if (libraryId === null) return 'guide-library-choice-all';
+  let encoded = '';
+  for (let index = 0; index < libraryId.length; index += 1) {
+    encoded += libraryId.charCodeAt(index).toString(16).padStart(4, '0');
+  }
+  return `guide-library-choice-id-${encoded}`;
+}
+
+export function shouldRenderGuideLibraryTabs(
+  enabled: boolean,
+  filter: GuideLibraryFilterState | null | undefined,
+): filter is GuideLibraryFilterState {
+  return enabled && (filter?.libraries.length ?? 0) > 1;
+}
+
+export function projectGuideLibraryTabsPending(root: HTMLElement | null, pending: boolean): void {
+  for (const tab of Array.from(root?.querySelectorAll<HTMLButtonElement>('[data-guide-library-id]') ?? [])) {
+    tab.setAttribute('aria-disabled', String(pending));
+    if (pending) {
+      tab.dataset.overlayBusyFocusCustody = 'true';
+      tab.setAttribute('aria-busy', 'true');
+    } else {
+      delete tab.dataset.overlayBusyFocusCustody;
+      tab.removeAttribute('aria-busy');
+    }
+  }
+}
+
 export function renderEpgGuideDom(
   view: RouteWorkflowViewModel,
   dom: RendererDomBindings,
-  settings: Pick<DesktopSettingsValues, 'guideDensity' | 'previewBadgesEnabled'> = {
+  settings: Pick<DesktopSettingsValues,
+    'guideDensity' |
+    'previewBadgesEnabled' |
+    'libraryTabsEnabled' |
+    'nowWatchingBannerEnabled' |
+    'guideLayout'> = {
     guideDensity: 'comfortable',
     previewBadgesEnabled: true,
+    libraryTabsEnabled: true,
+    nowWatchingBannerEnabled: true,
+    guideLayout: 'classic',
   },
 ): void {
   const selectedRow = view.guide.selectedProgram === null
@@ -167,7 +233,8 @@ export function renderEpgGuideDom(
       selectedRow === undefined ? '' : `${selectedRow.number} - ${selectedRow.name}`;
   }
   if (dom.epgDetailTitleElement) {
-    dom.epgDetailTitleElement.textContent = view.guide.infoPanel?.title ?? view.guide.state.label;
+    dom.epgDetailTitleElement.textContent =
+      (view.guide.infoPanel?.title ?? view.guide.state.label).slice(0, 160);
   }
   if (dom.epgDetailTimeElement) {
     dom.epgDetailTimeElement.textContent = view.guide.infoPanel === null ? view.guide.state.detail : [
@@ -176,9 +243,13 @@ export function renderEpgGuideDom(
       view.guide.infoPanel.timeLabel,
       settings.previewBadgesEnabled ? view.guide.infoPanel.badges.join(' / ') : '',
       view.guide.infoPanel.genres,
-      view.guide.infoPanel.description,
     ].filter(Boolean).join(' - ');
   }
+  if (dom.epgDetailDescriptionElement) {
+    dom.epgDetailDescriptionElement.textContent =
+      (view.guide.infoPanel?.description ?? '').slice(0, 600);
+  }
+  renderGuideDetailArtwork(view, dom);
 
   if (!dom.epgGridElement) {
     return;
@@ -194,7 +265,7 @@ export function renderEpgGuideDom(
 
   const shell = document.createElement('section');
   shell.className = 'epg-shell';
-  shell.dataset.epgLayout = view.guide.shell.layoutMode;
+  shell.dataset.epgLayout = settings.guideLayout;
   shell.dataset.guideDensity = settings.guideDensity;
   dom.epgGridElement.dataset.guideDensity = settings.guideDensity;
 
@@ -208,9 +279,18 @@ export function renderEpgGuideDom(
   headerBrand.append(brand);
 
   const shellNowWatching = view.guide.shell.nowWatching;
-  const nowPlaying = shellNowWatching === null ? null : document.createElement('div');
+  const showNowWatching = view.route === 'guide' &&
+    view.guide.presentationState === 'ready' &&
+    settings.nowWatchingBannerEnabled &&
+    shellNowWatching !== null;
+  const nowPlaying = !showNowWatching || settings.guideLayout !== 'classic'
+    ? null
+    : document.createElement('div');
   if (nowPlaying !== null) {
     nowPlaying.className = 'epg-classic-now-playing';
+    nowPlaying.setAttribute('role', 'status');
+    nowPlaying.setAttribute('aria-live', 'polite');
+    nowPlaying.setAttribute('aria-atomic', 'true');
     const nowLabel = document.createElement('span');
     nowLabel.className = 'epg-classic-now-playing-label';
     nowLabel.textContent = 'NOW PLAYING';
@@ -235,10 +315,14 @@ export function renderEpgGuideDom(
   if (nowPlaying !== null) classicHeader.append(nowPlaying);
   classicHeader.append(focusHint);
 
-  const nowWatching = shellNowWatching === null ? null : document.createElement('div');
+  const nowWatching = !showNowWatching || settings.guideLayout !== 'overlay'
+    ? null
+    : document.createElement('div');
   if (nowWatching !== null && shellNowWatching !== null) {
     nowWatching.className = 'epg-now-watching-banner';
+    nowWatching.setAttribute('role', 'status');
     nowWatching.setAttribute('aria-live', 'polite');
+    nowWatching.setAttribute('aria-atomic', 'true');
     const nowBannerLabel = document.createElement('span');
     nowBannerLabel.className = 'epg-now-watching-live';
     nowBannerLabel.textContent = 'NOW PLAYING';
@@ -285,6 +369,10 @@ export function renderEpgGuideDom(
 
   shell.append(classicHeader);
   if (nowWatching !== null) shell.append(nowWatching);
+  const libraryFilter = view.guide.libraryFilter;
+  if (shouldRenderGuideLibraryTabs(settings.libraryTabsEnabled, libraryFilter)) {
+    shell.append(guideLibraryTabsDom(libraryFilter));
+  }
   shell.append(stateElement);
   if (view.guide.presentationState === 'ready') {
     stateElement.hidden = true;
@@ -301,6 +389,123 @@ export function renderEpgGuideDom(
     shell.append(...readyGuideGridDom(view, trackWidth, settings.previewBadgesEnabled));
   }
   dom.epgGridElement.replaceChildren(shell);
+}
+
+export function renderGuideDetailArtwork(
+  view: RouteWorkflowViewModel,
+  dom: Pick<RendererDomBindings,
+    'epgDetailArtworkElement' |
+    'epgDetailPosterElement' |
+    'epgDetailArtworkPlaceholderElement'>,
+): void {
+  const figure = dom.epgDetailArtworkElement;
+  const image = dom.epgDetailPosterElement;
+  const placeholder = dom.epgDetailArtworkPlaceholderElement;
+  if (figure === null || image === null || placeholder === null) return;
+  placeholder.setAttribute('aria-hidden', 'true');
+  const info = view.guide.infoPanel;
+  const artwork = info?.artwork ?? null;
+  const nowMs = view.guide.nowMs;
+  if (
+    info === null ||
+    artwork === null ||
+    artwork.status === 'placeholder' ||
+    artwork.expiresAtMs <= nowMs ||
+    artwork.kind !== 'poster' ||
+    !isSafeArtworkRefId(artwork.id)
+  ) {
+    placeholder.textContent = 'Artwork unavailable';
+    clearGuideArtworkImage(image);
+    failedArtwork.delete(image);
+    setArtworkState(figure, image, placeholder, 'missing');
+    return;
+  }
+  const failed = failedArtwork.get(image);
+  if (
+    failed?.presentationGeneration === info.presentationGeneration &&
+    failed.refId === artwork.id
+  ) {
+    placeholder.textContent = 'Artwork unavailable';
+    clearGuideArtworkImage(image);
+    setArtworkState(figure, image, placeholder, 'error');
+    return;
+  }
+  const generationText = String(info.presentationGeneration);
+  if (
+    image.dataset.artworkRefId === artwork.id &&
+    image.dataset.artworkGeneration === generationText &&
+    image.getAttribute('src') !== null
+  ) return;
+  image.onload = null;
+  image.onerror = null;
+  image.dataset.artworkRefId = artwork.id;
+  image.dataset.artworkGeneration = generationText;
+  image.alt = clampArtworkAlt(
+    artwork.altText.length > 0 ? artwork.altText : `Poster for ${info.title}`,
+  );
+  image.decoding = 'async';
+  image.draggable = false;
+  placeholder.textContent = 'Loading artwork…';
+  setArtworkState(figure, image, placeholder, 'loading');
+  const request = Object.freeze({ refId: artwork.id, generationText });
+  const artworkUrl = `lineup://shell/artwork/${encodeURIComponent(artwork.id)}`;
+  pendingArtwork.set(image, request);
+  image.onload = () => {
+    if (!isPendingArtwork(image, request, artwork.id, generationText, artworkUrl)) return;
+    pendingArtwork.delete(image);
+    image.onload = null;
+    image.onerror = null;
+    setArtworkState(figure, image, placeholder, 'available');
+  };
+  image.onerror = () => {
+    if (!isPendingArtwork(image, request, artwork.id, generationText, artworkUrl)) return;
+    failedArtwork.set(image, {
+      presentationGeneration: info.presentationGeneration,
+      refId: artwork.id,
+    });
+    placeholder.textContent = 'Artwork unavailable';
+    clearGuideArtworkImage(image);
+    setArtworkState(figure, image, placeholder, 'error');
+  };
+  image.src = artworkUrl;
+}
+
+function isPendingArtwork(
+  image: HTMLImageElement,
+  request: object,
+  refId: string,
+  generationText: string,
+  artworkUrl: string,
+): boolean {
+  return pendingArtwork.get(image) === request &&
+    image.dataset.artworkRefId === refId &&
+    image.dataset.artworkGeneration === generationText &&
+    image.getAttribute('src') === artworkUrl;
+}
+
+function clearGuideArtworkImage(image: HTMLImageElement): void {
+  pendingArtwork.delete(image);
+  image.onload = null;
+  image.onerror = null;
+  image.removeAttribute('src');
+  image.alt = '';
+  delete image.dataset.artworkRefId;
+  delete image.dataset.artworkGeneration;
+}
+
+function setArtworkState(
+  figure: HTMLElement,
+  image: HTMLImageElement,
+  placeholder: HTMLElement,
+  state: 'missing' | 'loading' | 'available' | 'error',
+): void {
+  figure.dataset.artworkState = state;
+  image.hidden = state !== 'available';
+  placeholder.hidden = state === 'available';
+}
+
+function clampArtworkAlt(value: string): string {
+  return value.slice(0, 160);
 }
 
 function readyGuideGridDom(

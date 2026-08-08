@@ -4,6 +4,7 @@ export const DESKTOP_PERSISTENCE_DIRECTORY = 'persistence';
 export const DESKTOP_PERSISTENCE_FILE_NAME = 'lineup-desktop-persistence.json';
 export const DESKTOP_CHANNEL_PERSISTENCE_FILE_NAME = 'lineup-desktop-channels.json';
 export const DESKTOP_SETTINGS_FILE_NAME = 'lineup-desktop-settings.json';
+export const DESKTOP_GUIDE_PREFERENCES_FILE_NAME = 'lineup-desktop-guide-preferences.json';
 
 export interface ElectronAppPathProvider {
   getPath(name: 'userData'): string;
@@ -33,4 +34,8 @@ export function resolveDesktopAppDataPaths(app: ElectronAppPathProvider): Deskto
 
 export function resolveDesktopSettingsFilePath(app: ElectronAppPathProvider): string {
   return path.join(app.getPath('userData'), DESKTOP_SETTINGS_FILE_NAME);
+}
+
+export function resolveDesktopGuidePreferencesFilePath(app: ElectronAppPathProvider): string {
+  return path.join(app.getPath('userData'), DESKTOP_GUIDE_PREFERENCES_FILE_NAME);
 }

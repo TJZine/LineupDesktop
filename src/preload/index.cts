@@ -21,6 +21,10 @@ import {
   createPlayerRecoveryBridge,
   type PlayerRecoveryBridgeInvoke,
 } from './playerRecoveryBridge.cjs';
+import {
+  createPlayerPresentationBridge,
+  type PlayerPresentationBridgeInvoke,
+} from './playerPresentationBridge.cjs';
 import { createSettingsBridge, type SettingsBridgeInvoke } from './settingsBridge.cjs';
 import {
   LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL,
@@ -41,11 +45,13 @@ import {
   LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL,
   LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
   LINEUP_PLAYER_CLEANUP_CHANNEL,
   LINEUP_PLAYER_COMMAND_CHANNEL,
   LINEUP_PLAYER_EVENT_CHANNEL,
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
   LINEUP_PLAYER_RECOVERY_CHANNEL,
+  LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
   LINEUP_PLEX_CANCEL_PIN_CHANNEL,
   LINEUP_PLEX_GET_HOME_USERS_CHANNEL,
@@ -1591,6 +1597,12 @@ const playerRecoveryBridge = createPlayerRecoveryBridge(
     hasForbiddenField: hasForbiddenPrivilegedField,
   },
 );
+const invokePlayerPresentation: PlayerPresentationBridgeInvoke = (channel, input) =>
+  ipcRenderer.invoke(channel, input);
+const updatePlayerPresentation = createPlayerPresentationBridge(
+  invokePlayerPresentation,
+  LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL,
+);
 const invokeSettings: SettingsBridgeInvoke = (channel, input) => ipcRenderer.invoke(channel, input);
 
 const lineupDesktop: LineupDesktopPreloadApi = {
@@ -1669,6 +1681,7 @@ const lineupDesktop: LineupDesktopPreloadApi = {
     },
     getSnapshot: playerSnapshotBridge.getSnapshot,
     cleanup: playerSnapshotBridge.cleanup,
+    updatePresentation: updatePlayerPresentation,
     tuneChannel: createPlayerTuneBridge(
       invokeGuide,
       LINEUP_PLAYER_TUNE_CHANNEL,
@@ -1909,6 +1922,7 @@ const lineupDesktop: LineupDesktopPreloadApi = {
     invokeGuide,
     {
       getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      setLibraryFilter: LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
       tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
     },
     createRequestId,

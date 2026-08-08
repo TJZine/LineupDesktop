@@ -44,6 +44,7 @@ import {
 } from '../../main/plex/desktopPlexRuntimeSupport.js';
 import { registerPlexIpcHandlers } from '../../main/plex/plexIpc.js';
 import { ChannelBuilderFacetTransportUnavailableError } from '../../main/plex/channelBuilderFacetSession.js';
+import { GuideArtworkSessionGenerationOwner } from '../../main/plex/guideArtworkSessionGenerationOwner.js';
 
 const placeholderAccountToken = ['placeholder', 'account', 'value'].join('-');
 const placeholderManagedToken = ['placeholder', 'managed', 'value'].join('-');
@@ -1888,6 +1889,10 @@ function createRuntimeFixture(options: {
     credentialStore,
     serverDiscovery: discovery,
     libraryTransport,
+    guideArtworkSessionGenerationOwner: new GuideArtworkSessionGenerationOwner(
+      authService,
+      discovery,
+    ),
     diagnosticEventStore: diagnostics,
     nowMs: () => 100_000,
   });

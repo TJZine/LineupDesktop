@@ -46,10 +46,31 @@ import {
   type PlayerError,
   type PlayerEvent,
   type PlayerIpcResult,
+  type PlayerPresentationResult,
   type PlayerRendererSafeDiagnostic,
   type PlayerSnapshot,
   type PlayerTrackSummary,
 } from '../../contracts/player.js';
+
+const exactPresentationTimeout = {
+  ok: false,
+  status: 'timeout',
+  documentEpoch: 2,
+  revision: 3,
+  error: {
+    code: 'PLAYER_PRESENTATION_TIMEOUT',
+    message: 'Native presentation request timed out.',
+    recoverable: true,
+    retryable: true,
+  },
+} as const satisfies PlayerPresentationResult;
+
+const invalidPresentationTimeout: PlayerPresentationResult = {
+  ...exactPresentationTimeout,
+  // @ts-expect-error timeout status cannot carry rejected failure vocabulary.
+  error: { code: 'PLAYER_PRESENTATION_REJECTED', message: 'Player presentation request was rejected.', recoverable: true, retryable: false },
+};
+void invalidPresentationTimeout;
 import {
   PLEX_FORBIDDEN_RENDERER_FIELD_KEYS,
   PLEX_RUNTIME_ERROR_CODES,

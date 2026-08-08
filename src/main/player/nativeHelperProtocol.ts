@@ -2,6 +2,26 @@ import type { PlayerCommandName, PlayerRequestId } from '../../contracts/player.
 import type { NativeHelperPlaybackSetup } from './nativeHelperPlaybackSetup.js';
 
 export const MAX_HELPER_MESSAGE_SIZE = 1024 * 1024; // 1MB
+export const MAX_PRESENTATION_MESSAGE_SIZE = 4096;
+
+export type NativePresentationMode =
+  | 'hidden'
+  | 'player-full'
+  | 'guide-overlay-full'
+  | 'guide-classic-pip';
+
+export interface NativeHelperPresentationUpdateMessage {
+  type: 'presentation.update';
+  version: 1;
+  operationId: PlayerRequestId;
+  documentEpoch: number;
+  revision: number;
+  parentHwnd: string;
+  parentPid: number;
+  loadedRequestId: PlayerRequestId | null;
+  mode: NativePresentationMode;
+  bounds: { x: number; y: number; width: number; height: number } | null;
+}
 
 export interface NativeHelperCommandMessage {
   type: 'command';
@@ -26,7 +46,8 @@ export interface NativeHelperAudioOutputQueryMessage {
 export type NativeHelperInputMessage =
   | NativeHelperCommandMessage
   | NativeHelperCleanupMessage
-  | NativeHelperAudioOutputQueryMessage;
+  | NativeHelperAudioOutputQueryMessage
+  | NativeHelperPresentationUpdateMessage;
 
 export type NativeHelperOutputMessage =
   | {
@@ -62,6 +83,14 @@ export type NativeHelperOutputMessage =
       requestId: PlayerRequestId;
       ok: false;
       error: unknown;
+    }
+  | {
+      type: 'presentation.result';
+      version: 1;
+      operationId: PlayerRequestId;
+      documentEpoch: number;
+      revision: number;
+      status: 'applied' | 'hidden' | 'stale' | 'rejected';
     };
 
 export function validateHelperMessageSize(messageStr: string): void {

@@ -7,6 +7,7 @@ import {
 import type { NativePlayerHostFailure } from './nativePlayerHostPort.js';
 import type { PrivilegedPlaybackDispatchContext } from './privilegedPlaybackDispatchContext.js';
 import type { NativeHelperInputMessage } from './nativeHelperProtocol.js';
+import type { NativePlayerPresentationUpdate } from './nativePlayerHostPort.js';
 import type { NativeAudioOutput } from './nativePlayerHostPort.js';
 
 export type NativeHelperProcessMessage =
@@ -14,7 +15,8 @@ export type NativeHelperProcessMessage =
   | { type: 'result'; requestId: PlayerRequestId; ok: false; error: unknown }
   | { type: 'event'; event: unknown }
   | { type: 'audio-output.result'; requestId: PlayerRequestId; ok: true; outputs: NativeAudioOutput[] }
-  | { type: 'audio-output.result'; requestId: PlayerRequestId; ok: false; error: unknown };
+  | { type: 'audio-output.result'; requestId: PlayerRequestId; ok: false; error: unknown }
+  | { type: 'presentation.result'; version: 1; operationId: PlayerRequestId; documentEpoch: number; revision: number; status: 'applied' | 'hidden' | 'stale' | 'rejected' };
 
 const SAFE_FAILURE_CATEGORIES = PLAYER_ERROR_CATEGORIES.filter(
   (category) => category !== 'stale-request' && category !== 'validation-failure',
@@ -56,6 +58,34 @@ export function toNativeHelperAudioOutputQuery(
   return { type: 'audio-output.query', requestId };
 }
 
+export function toNativeHelperPresentationUpdate(
+  update: NativePlayerPresentationUpdate & { operationId: PlayerRequestId },
+): NativeHelperInputMessage {
+  if (!isNativeHelperPresentationUpdate(update)) {
+    throw new Error('Native presentation update is invalid.');
+  }
+  return { type: 'presentation.update', version: 1, ...update };
+}
+
+export function isNativeHelperPresentationUpdate(
+  value: unknown,
+): value is NativePlayerPresentationUpdate & { operationId: PlayerRequestId } {
+  if (!isPlainRecord(value) || !hasExactKeys(value, [
+    'operationId', 'documentEpoch', 'revision', 'parentHwnd', 'parentPid',
+    'loadedRequestId', 'mode', 'bounds',
+  ])) return false;
+  if (!isRequestId(value.operationId) || !isPositiveSafeInteger(value.documentEpoch) ||
+    !isPositiveSafeInteger(value.revision) || !isNonZeroDecimal(value.parentHwnd) ||
+    !isPositiveProcessId(value.parentPid) ||
+    !(value.loadedRequestId === null || isRequestId(value.loadedRequestId)) ||
+    !(value.mode === 'hidden' || value.mode === 'player-full' ||
+      value.mode === 'guide-overlay-full' || value.mode === 'guide-classic-pip')) return false;
+  if (value.mode === 'hidden') return value.bounds === null;
+  if (value.loadedRequestId === null || !isNormalizedBounds(value.bounds)) return false;
+  return value.mode === 'guide-classic-pip' ||
+    value.bounds.x === 0 && value.bounds.y === 0 && value.bounds.width === 1 && value.bounds.height === 1;
+}
+
 export function parseNativeHelperProcessMessage(
   line: string,
 ): { message: NativeHelperProcessMessage } | { error: NativePlayerHostFailure } {
@@ -66,6 +96,26 @@ export function parseNativeHelperProcessMessage(
     return { error: safeNativeHostFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true) };
   }
   if (!isRecord(value)) {
+    return { error: safeNativeHostFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true) };
+  }
+  if (value.type === 'presentation.result') {
+    if (
+      hasExactKeys(value, ['type', 'version', 'operationId', 'documentEpoch', 'revision', 'status']) &&
+      value.version === 1 &&
+      isRequestId(value.operationId) &&
+      isPositiveSafeInteger(value.documentEpoch) &&
+      isPositiveSafeInteger(value.revision) &&
+      (value.status === 'applied' || value.status === 'hidden' || value.status === 'stale' || value.status === 'rejected')
+    ) {
+      return { message: {
+        type: 'presentation.result',
+        version: 1,
+        operationId: value.operationId,
+        documentEpoch: value.documentEpoch,
+        revision: value.revision,
+        status: value.status,
+      } };
+    }
     return { error: safeNativeHostFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true) };
   }
   if (value.type === 'event') {
@@ -136,6 +186,31 @@ export function parseNativeHelperProcessMessage(
     }
   }
   return { error: safeNativeHostFailure('PLAYER_HELPER_MALFORMED_OUTPUT', 'helper-failure', true, true) };
+}
+
+function isRequestId(value: unknown): value is PlayerRequestId {
+  return typeof value === 'string' && /^[A-Za-z0-9._-]{1,120}$/u.test(value);
+}
+
+function isNonZeroDecimal(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^[0-9]+$/u.test(value)) return false;
+  try { return BigInt(value) > 0n && BigInt(value) <= 18_446_744_073_709_551_615n; } catch { return false; }
+}
+
+function isPositiveProcessId(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 2_147_483_647;
+}
+
+function isNormalizedBounds(value: unknown): value is { x: number; y: number; width: number; height: number } {
+  if (!isPlainRecord(value) || !hasExactKeys(value, ['x', 'y', 'width', 'height'])) return false;
+  const { x, y, width, height } = value;
+  return [x, y, width, height].every((item) => typeof item === 'number' && Number.isFinite(item)) &&
+    typeof x === 'number' && typeof y === 'number' && typeof width === 'number' && typeof height === 'number' &&
+    x >= 0 && y >= 0 && width > 0 && height > 0 && x + width <= 1 && y + height <= 1;
+}
+
+function isPositiveSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
 }
 
 function isNativeAudioOutputs(value: unknown): value is NativeAudioOutput[] {
@@ -233,6 +308,10 @@ function hasForbiddenPrivilegedField(value: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return isRecord(value) && Object.getPrototypeOf(value) === Object.prototype;
 }
 
 function hasExactKeys(

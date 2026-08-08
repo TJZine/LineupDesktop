@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import ts from 'typescript';
+import { isSafeArtworkRefId } from '../../contracts/artwork.js';
 
 import {
   LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL,
@@ -19,12 +20,14 @@ import {
   LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_VALIDATE_DRAFT_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
   LINEUP_PLAYER_CLEANUP_CHANNEL,
   LINEUP_PLAYER_COMMAND_CHANNEL,
   LINEUP_PLAYER_EVENT_CHANNEL,
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
   LINEUP_PLAYER_RECOVERY_CHANNEL,
+  LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL,
   LINEUP_PLEX_CANCEL_PIN_CHANNEL,
   LINEUP_PLEX_GET_HOME_USERS_CHANNEL,
   LINEUP_PLEX_GET_METADATA_CHANNEL,
@@ -50,6 +53,7 @@ import {
   LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL,
   PLAYER_RENDERER_INTENTS,
 } from '../../contracts/ipc.js';
+import { PLAYER_PRESENTATION_MODES } from '../../contracts/player.js';
 import {
   CHANNEL_SETUP_ERROR_CODES,
   CHANNEL_SETUP_BUILD_MODES,
@@ -117,6 +121,10 @@ const playerBridgeSourceUrl = new URL('../../preload/playerBridge.cts', import.m
 const playerBridgeSourceText = readFileSync(playerBridgeSourceUrl, 'utf8');
 const playerRecoveryBridgeSourceText = readFileSync(
   new URL('../../preload/playerRecoveryBridge.cts', import.meta.url),
+  'utf8',
+);
+const playerPresentationBridgeSourceText = readFileSync(
+  new URL('../../preload/playerPresentationBridge.cts', import.meta.url),
   'utf8',
 );
 const settingsGuardSourceUrl = new URL('../../preload/settingsBridgeGuards.cts', import.meta.url);
@@ -350,6 +358,7 @@ function evaluateGuideBridgeModule(): Record<string, unknown> {
     fileName: 'src/preload/guideBridge.cts',
   }).outputText;
   const requireGuide = (moduleName: string) => {
+    if (moduleName === '../contracts/artwork.js') return { isSafeArtworkRefId };
     assert.fail(`unexpected guide bridge require ${moduleName}`);
   };
   const evaluateGuide = new Function('require', 'exports', 'module', compiled);
@@ -447,6 +456,23 @@ function evaluateSettingsBridgeModule(guards: Record<string, unknown>): Record<s
   return moduleObject.exports as Record<string, unknown>;
 }
 
+function evaluatePlayerPresentationBridgeModule(): Record<string, unknown> {
+  const moduleObject = { exports: {} as Record<string, unknown> };
+  const compiled = ts.transpileModule(playerPresentationBridgeSourceText, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    fileName: 'src/preload/playerPresentationBridge.cts',
+  }).outputText;
+  new Function('require', 'exports', 'module', compiled)(
+    (moduleName: string) => {
+      if (moduleName === '../contracts/player.js') return { PLAYER_PRESENTATION_MODES };
+      return assert.fail(`unexpected player presentation bridge require ${moduleName}`);
+    },
+    moduleObject.exports,
+    moduleObject,
+  );
+  return moduleObject.exports;
+}
+
 function createPreloadHarness(
   invoke: (
     channel: string,
@@ -470,6 +496,7 @@ function createPreloadHarness(
   const guideBridgeExports = evaluateGuideBridgeModule();
   const playerBridgeExports = evaluatePlayerBridgeModule();
   const playerRecoveryBridgeExports = evaluatePlayerRecoveryBridgeModule();
+  const playerPresentationBridgeExports = evaluatePlayerPresentationBridgeModule();
   const settingsBridgeExports = evaluateSettingsBridgeModule(evaluateSettingsGuardModule());
   const compiled = ts.transpileModule(preloadSourceText, {
     compilerOptions: {
@@ -502,6 +529,9 @@ function createPreloadHarness(
     }
     if (moduleName === './playerRecoveryBridge.cjs') {
       return playerRecoveryBridgeExports;
+    }
+    if (moduleName === './playerPresentationBridge.cjs') {
+      return playerPresentationBridgeExports;
     }
     if (moduleName === './settingsBridge.cjs') {
       return settingsBridgeExports;
@@ -645,6 +675,7 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_PLAYER_CLEANUP_CHANNEL,
   LINEUP_PLAYER_EVENT_CHANNEL,
   LINEUP_PLAYER_RECOVERY_CHANNEL,
+  LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL,
   LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL,
   LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL,
   LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
@@ -676,6 +707,7 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
   LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
   LINEUP_SETTINGS_GET_AUDIO_OUTPUTS_CHANNEL,
@@ -690,6 +722,7 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL',
     'LINEUP_PLAYER_CLEANUP_CHANNEL',
     'LINEUP_PLAYER_RECOVERY_CHANNEL',
+    'LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL',
     'LINEUP_DIAGNOSTICS_RECORD_RENDERER_EVENT_CHANNEL',
     'LINEUP_DIAGNOSTICS_GET_SUMMARY_CHANNEL',
     'LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL',
@@ -721,6 +754,7 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL',
     'LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL',
     'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
+    'LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL',
     'LINEUP_PLAYER_TUNE_CHANNEL',
   ]),
   on: new Set([
@@ -1224,6 +1258,16 @@ function isInvokePlayerRecoveryChannelParameter(node: ts.Identifier): boolean {
     ) {
       return true;
     }
+    current = current.parent;
+  }
+  return false;
+}
+
+function isInvokePlayerPresentationChannelParameter(node: ts.Identifier): boolean {
+  if (node.text !== 'channel') return false;
+  let current: ts.Node | undefined = node;
+  while (current !== undefined && !ts.isSourceFile(current)) {
+    if (ts.isVariableDeclaration(current) && ts.isIdentifier(current.name) && current.name.text === 'invokePlayerPresentation') return true;
     current = current.parent;
   }
   return false;
@@ -1825,7 +1869,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
   const guideBridgeExports = evaluateGuideBridgeModule();
   const createGuideBridge = guideBridgeExports.createGuideBridge as (
     invoke: (channel: string, request: { requestId: string; payload: unknown }) => Promise<unknown>,
-    channels: { getPresentation: string; tuneChannel: string },
+    channels: { getPresentation: string; setLibraryFilter: string; tuneChannel: string },
     createRequestId: (prefix: string) => string,
   ) => { getPresentation: (input: { startTimeMs: number; durationMs: number }) => Promise<unknown> };
   const validPresentation = {
@@ -1847,6 +1891,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
             genres: ['Drama'],
             startsAtMs: 1,
             endsAtMs: 2,
+            artwork: null,
           },
         ],
       },
@@ -1858,6 +1903,8 @@ test('guide bridge validates presentation request ranges and result envelopes', 
       startsAtMs: 1,
       endsAtMs: 2,
     },
+    channelWindow: { offset: 0, total: 1 },
+    libraryFilter: { scopeToken: 'scope-1', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'missing' },
   };
 
   let invoked = false;
@@ -1872,6 +1919,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
     },
     {
       getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      setLibraryFilter: LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
       tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
     },
     () => 'guide-request-1',
@@ -1892,6 +1940,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
     }),
     {
       getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      setLibraryFilter: LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
       tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
     },
     () => 'guide-request-2',
@@ -1910,6 +1959,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
     }),
     {
       getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      setLibraryFilter: LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
       tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
     },
     () => 'guide-request-3',
@@ -3006,6 +3056,12 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
         return;
       }
 
+      if (isInvokePlayerPresentationChannelParameter(channelExpression)) {
+        observedCalls.push(`${methodName}:invokePlayerPresentation.channel`);
+        ts.forEachChild(node, visit);
+        return;
+      }
+
       if (isInvokeSettingsChannelParameter(channelExpression)) {
         observedCalls.push(`${methodName}:invokeSettings.channel`);
         ts.forEachChild(node, visit);
@@ -3039,6 +3095,7 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
     'invoke:invokeChannelSetup.channel',
     'invoke:invokeCustomChannels.channel',
     'invoke:invokeGuide.channel',
+    'invoke:invokePlayerPresentation.channel',
     'invoke:invokePlayerRecovery.channel',
     'invoke:invokePlayerSnapshot.channel',
     'invoke:invokePlex.channel',
@@ -3160,6 +3217,7 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
 
   assert.deepEqual(collectCreateGuideBridgeChannelArguments().sort(), [
     'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
+    'LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL',
     'LINEUP_PLAYER_TUNE_CHANNEL',
   ]);
 

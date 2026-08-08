@@ -6,6 +6,7 @@ import type { ChannelConfig } from '../../domain/channel/types.js';
 import type { ChannelRepository } from '../../domain/channel/channelRepository.js';
 import type { PlexMediaItemMinimal } from '../../domain/channel/interfaces.js';
 import type { PlexLibraryMinimalAdapter } from '../../main/channel/plexLibraryMinimalAdapter.js';
+import { ChannelPublicReferenceOwner } from '../../main/channel/channelPublicReferenceOwner.js';
 
 class MockChannelRepository {
   public data = {
@@ -189,6 +190,46 @@ test('GuideRuntime getPresentation generates schedule presentation for channels'
   assert.equal(presentation.channels[1]?.id, 'chan-2');
   assert.equal(presentation.channels[1]?.programs.length, 1);
   assert.equal(presentation.channels[1]?.programs[0]?.title, 'Movie 1');
+});
+
+test('GuideRuntime artwork output becomes an owned renderer-safe projection for hostile titles', async () => {
+  const repository = new MockChannelRepository();
+  const configured = createChannelConfig('chan-1', 1, 'Channel 1');
+  repository.data.channels = [configured];
+  repository.data.currentChannelId = configured.id;
+  const hostileTitle = 'Bearer secret https://private.invalid/<title>\u0000'.repeat(8);
+  const plexAdapter = new MockPlexLibraryAdapter();
+  plexAdapter.setLibraryItems('lib-1', [{ ...createLibraryItem(0), title: hostileTitle }]);
+  const createdRefs: object[] = [];
+  const runtime = new GuideRuntime({
+    repository: repository as unknown as ChannelRepository,
+    plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
+    activeChannelScheduler: new ChannelScheduler({ clock: { now: () => 1_000 } }),
+    clock: { now: () => 1_000 },
+    guideArtworkOwner: {
+      createRef: (input: { altText: string }) => {
+        const ref = Object.freeze({
+          id: 'artwork-ABCDEFGHIJKLMNOP', kind: 'poster' as const, expiresAtMs: 10_000,
+          altText: input.altText, status: 'available' as const,
+        });
+        createdRefs.push(ref);
+        return ref;
+      },
+    } as never,
+    loadLineupRevision: async () => 2,
+  });
+  const raw = await runtime.getPresentation(1_000, 1_800_000);
+  const aggregate = {
+    storedChannelData: { ...repository.data, channelOrder: ['chan-1'], savedAt: 1 },
+    currentChannelId: 'chan-1', lineupRevision: 2, channelBuilderState: null,
+  };
+  const owner = new ChannelPublicReferenceOwner();
+  const projected = owner.projectPresentation(owner.createGeneration(aggregate), raw);
+
+  assert.equal(projected.channels[0]!.programs[0]!.title, '[redacted]');
+  assert.equal(projected.channels[0]!.programs[0]!.artwork?.altText, '[redacted]');
+  assert.notEqual(projected.channels[0]!.programs[0]!.artwork, createdRefs[0]);
+  assert.equal((createdRefs[0] as { altText: string }).altText, hostileTitle);
 });
 
 test('GuideRuntime tuneChannel configures active scheduler and persists choice', async () => {

@@ -108,13 +108,22 @@
 
 .epg-now-watching-banner {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns:
+    minmax(0, max-content)
+    minmax(0, 1fr)
+    minmax(0, 2fr)
+    minmax(0, max-content);
   align-items: center;
   gap: var(--space-4);
+  overflow: hidden;
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-control);
   background: rgba(0, 0, 0, 0.52);
+}
+
+.epg-now-watching-banner > * {
+  min-width: 0;
 }
 
 .epg-state-panel {
@@ -134,6 +143,15 @@
 .epg-now-watching-live,
 .epg-now-watching-program {
   color: var(--color-text-subtle);
+}
+
+.epg-now-watching-live,
+.epg-now-watching-channel,
+.epg-now-watching-program,
+.epg-now-watching-time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .epg-now-watching-live {
@@ -495,6 +513,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .epg-classic-now-playing,
+  .epg-now-watching-banner {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+
   .epg-grid__program[data-selected-program="true"] .epg-cell-title {
     animation: none !important;
     transform: none !important;
@@ -502,16 +527,56 @@
     white-space: nowrap;
     overflow: hidden;
   }
+
+  [data-epg-detail-artwork],
+  [data-epg-detail-poster] {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 .guide-detail {
   display: grid;
-  gap: var(--space-1);
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: var(--space-4);
   min-width: 0;
   padding: var(--space-5);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-control);
   background: rgba(121, 199, 255, 0.1);
+}
+
+.guide-detail__copy {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+[data-epg-detail-artwork] {
+  display: grid;
+  place-items: center;
+  width: 112px;
+  height: 168px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: rgba(0, 0, 0, 0.32);
+}
+
+[data-epg-detail-poster] {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+[data-epg-detail-artwork-placeholder] {
+  padding: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: center;
 }
 
 .guide-detail strong,
@@ -521,6 +586,10 @@
 }
 
 .guide-detail h3 {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   font-size: 19px;
   line-height: 1.15;
 }
@@ -530,8 +599,80 @@
   font-size: 14px;
 }
 
+[data-epg-detail-description] {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+}
+
+@media (forced-colors: active) {
+  .epg-classic-now-playing,
+  .epg-now-watching-banner {
+    color: CanvasText;
+  }
+
+  .epg-now-watching-banner {
+    border-color: CanvasText;
+  }
+
+  [data-epg-detail-artwork] {
+    border-color: CanvasText;
+    outline: 1px solid CanvasText;
+    background: Canvas;
+  }
+
+  [data-epg-detail-artwork-placeholder] {
+    color: CanvasText;
+  }
+}
+
 .workflow-actions button {
   background: var(--color-inverse-bg);
   color: var(--color-inverse-text);
   border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.epg-library-tabs {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.25rem 0;
+}
+
+.epg-library-tab {
+  border: 1px solid var(--lineup-border, #667085);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  padding: 0.4rem 0.85rem;
+  white-space: nowrap;
+}
+
+.epg-library-tab[aria-selected="true"] {
+  background: var(--lineup-accent, #7c3aed);
+  color: Canvas;
+}
+
+.epg-library-tab:focus-visible {
+  outline: 3px solid Highlight;
+  outline-offset: 2px;
+}
+
+.epg-library-tab[aria-busy="true"] {
+  opacity: 0.65;
+}
+.epg-shell[data-epg-layout="overlay"] {
+  background: linear-gradient(180deg, rgb(5 8 13 / 0.78), rgb(5 8 13 / 0.9));
+}
+
+:root[data-native-presentation-mode="guide-classic-pip"] .epg-shell[data-epg-layout="classic"] {
+  padding-right: calc(var(--native-pip-width) + (var(--native-pip-inset) * 2));
+}
+
+:root[data-native-presentation-aperture="open"][data-native-presentation-mode="guide-classic-pip"]
+  .screen[data-screen="guide"] .screen__content {
+  background:
+    linear-gradient(var(--color-surface), var(--color-surface)) left / calc(100% - var(--native-pip-width) - var(--native-pip-inset)) 100% no-repeat,
+    linear-gradient(var(--color-surface), var(--color-surface)) right top / calc(var(--native-pip-width) + var(--native-pip-inset)) var(--native-pip-inset) no-repeat,
+    linear-gradient(var(--color-surface), var(--color-surface)) right bottom / calc(var(--native-pip-width) + var(--native-pip-inset)) calc(100% - var(--native-pip-height) - var(--native-pip-inset)) no-repeat;
 }

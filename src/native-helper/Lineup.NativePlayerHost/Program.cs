@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
@@ -33,7 +35,11 @@ namespace Lineup.NativePlayerHost
 
         private const int GlColorBufferBit = 0x00004000;
         private const int SwpShowWindow = 0x0040;
-        private static readonly IntPtr HwndTopmost = new IntPtr(-1);
+        private const int SwpHideWindow = 0x0080;
+        private const int SwpNoActivate = 0x0010;
+        private const int MAX_HELPER_MESSAGE_SIZE = 1024 * 1024;
+        private const int MAX_PRESENTATION_MESSAGE_SIZE = 4096;
+        private static readonly IntPtr HwndBottom = new IntPtr(1);
         private static readonly object MpvLock = new object();
 
         private static string? libmpvPath;
@@ -51,10 +57,16 @@ namespace Lineup.NativePlayerHost
         private static MpvPlaybackQualityState? qualityState;
 
         private static RenderSurface? renderSurface;
-        private static Thread? renderThread;
         private static Thread? eventThread;
-        private static bool renderThreadRunning = false;
         private static IntPtr renderContext = IntPtr.Zero;
+        private static readonly BlockingCollection<PresentationWork> PresentationQueue = new BlockingCollection<PresentationWork>(16);
+        private static Thread? presentationThread;
+        private static long latestPresentationEpoch;
+        private static long latestPresentationRevision;
+        private static string? latestPresentationLoadedRequestId;
+        private static bool latestPresentationHidden;
+        private static BigInteger latestPresentationOperationSequence = BigInteger.Zero;
+        private const long JavaScriptMaxSafeInteger = 9007199254740991L;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct MpvEvent
@@ -137,6 +149,30 @@ namespace Lineup.NativePlayerHost
             public PlaybackSetup? setup { get; set; }
             public string? playbackUrl { get; set; }
             public CredentialHeader? credentialHeader { get; set; }
+            public int version { get; set; }
+            public string? operationId { get; set; }
+            public long documentEpoch { get; set; }
+            public long revision { get; set; }
+            public string? parentHwnd { get; set; }
+            public int parentPid { get; set; }
+            public string? loadedRequestId { get; set; }
+            public string? mode { get; set; }
+            public NormalizedBounds? bounds { get; set; }
+        }
+
+        public sealed class NormalizedBounds
+        {
+            public double x { get; set; }
+            public double y { get; set; }
+            public double width { get; set; }
+            public double height { get; set; }
+        }
+
+        private sealed class PresentationWork
+        {
+            public required InputMessage Message { get; init; }
+            public readonly ManualResetEventSlim Completed = new ManualResetEventSlim(false);
+            public string Status { get; set; } = "rejected";
         }
 
         public sealed class PlaybackSetup
@@ -223,6 +259,14 @@ namespace Lineup.NativePlayerHost
 
                 ConfigureLibmpvPath(args);
 
+                presentationThread = new Thread(PresentationLoop)
+                {
+                    IsBackground = true,
+                    Name = "LineupPresentationRenderLoop"
+                };
+                presentationThread.SetApartmentState(ApartmentState.STA);
+                presentationThread.Start();
+
                 // Process stdin NDJSON stream
                 Thread commandThread = new Thread(CommandLoop)
                 {
@@ -232,6 +276,9 @@ namespace Lineup.NativePlayerHost
                 commandThread.Start();
 
                 commandThread.Join();
+                HandleCleanup(currentRequestId);
+                PresentationQueue.CompleteAdding();
+                presentationThread.Join();
                 return 0;
             }
             catch (Exception)
@@ -256,11 +303,23 @@ namespace Lineup.NativePlayerHost
                     continue;
                 }
 
+                if (line.Length > MAX_HELPER_MESSAGE_SIZE)
+                {
+                    break;
+                }
+
                 try
                 {
-                    InputMessage? message = JsonSerializer.Deserialize<InputMessage>(line);
+                    using JsonDocument document = JsonDocument.Parse(line);
+                    InputMessage? message = document.RootElement.Deserialize<InputMessage>();
                     if (message == null)
                     {
+                        continue;
+                    }
+
+                    if (message.type == "presentation.update" && line.Length > MAX_PRESENTATION_MESSAGE_SIZE)
+                    {
+                        WritePresentationResult(message, "rejected");
                         continue;
                     }
 
@@ -276,6 +335,17 @@ namespace Lineup.NativePlayerHost
                         continue;
                     }
 
+                    if (message.type == "presentation.update")
+                    {
+                        if (!HasExactPresentationKeys(document.RootElement))
+                        {
+                            WritePresentationResult(message, "rejected");
+                            continue;
+                        }
+                        HandlePresentationUpdate(message);
+                        continue;
+                    }
+
                     if (message.type == "command" && message.requestId != null && message.command != null)
                     {
                         HandleCommand(message);
@@ -286,6 +356,77 @@ namespace Lineup.NativePlayerHost
                     WriteResult(currentRequestId ?? "unknown", false, "PLAYER_HELPER_PARSE_ERROR", ex.Message);
                 }
             }
+        }
+
+        private static bool HasExactPresentationKeys(JsonElement root)
+        {
+            if (root.ValueKind != JsonValueKind.Object) return false;
+            HashSet<string> expected = new HashSet<string> { "type", "version", "operationId", "documentEpoch", "revision", "parentHwnd", "parentPid", "loadedRequestId", "mode", "bounds" };
+            int count = 0;
+            foreach (JsonProperty property in root.EnumerateObject()) { if (!expected.Remove(property.Name)) return false; count += 1; }
+            if (count != 10 || expected.Count != 0) return false;
+            if (root.GetProperty("type").ValueKind != JsonValueKind.String || root.GetProperty("type").GetString() != "presentation.update" ||
+                root.GetProperty("version").ValueKind != JsonValueKind.Number || !root.GetProperty("version").TryGetInt32(out int version) || version != 1 ||
+                root.GetProperty("operationId").ValueKind != JsonValueKind.String || !IsPresentationRequestId(root.GetProperty("operationId").GetString()) ||
+                root.GetProperty("documentEpoch").ValueKind != JsonValueKind.Number || !root.GetProperty("documentEpoch").TryGetInt64(out long documentEpoch) || !IsPositiveSafeInteger(documentEpoch) ||
+                root.GetProperty("revision").ValueKind != JsonValueKind.Number || !root.GetProperty("revision").TryGetInt64(out long revision) || !IsPositiveSafeInteger(revision) ||
+                root.GetProperty("parentHwnd").ValueKind != JsonValueKind.String || !IsNonZeroDecimal(root.GetProperty("parentHwnd").GetString()) ||
+                root.GetProperty("parentPid").ValueKind != JsonValueKind.Number || !root.GetProperty("parentPid").TryGetInt32(out int parentPid) || parentPid <= 0 ||
+                root.GetProperty("mode").ValueKind != JsonValueKind.String)
+            {
+                return false;
+            }
+            string? mode = root.GetProperty("mode").GetString();
+            JsonElement loadedRequest = root.GetProperty("loadedRequestId");
+            bool loadedRequestValid = loadedRequest.ValueKind == JsonValueKind.Null ||
+                loadedRequest.ValueKind == JsonValueKind.String && IsPresentationRequestId(loadedRequest.GetString());
+            if (!loadedRequestValid || (mode != "hidden" && loadedRequest.ValueKind == JsonValueKind.Null)) return false;
+            JsonElement bounds = root.GetProperty("bounds");
+            if (mode == "hidden") return bounds.ValueKind == JsonValueKind.Null;
+            if (mode != "player-full" && mode != "guide-overlay-full" && mode != "guide-classic-pip") return false;
+            if (bounds.ValueKind == JsonValueKind.Null) return false;
+            if (bounds.ValueKind != JsonValueKind.Object) return false;
+            HashSet<string> boundKeys = new HashSet<string> { "x", "y", "width", "height" };
+            int boundCount = 0;
+            foreach (JsonProperty property in bounds.EnumerateObject()) { if (!boundKeys.Remove(property.Name)) return false; boundCount += 1; }
+            if (boundCount != 4 || boundKeys.Count != 0 ||
+                !TryGetFiniteNormalized(bounds, "x", out double x) ||
+                !TryGetFiniteNormalized(bounds, "y", out double y) ||
+                !TryGetFiniteNormalized(bounds, "width", out double width) ||
+                !TryGetFiniteNormalized(bounds, "height", out double height) ||
+                width <= 0 || height <= 0 || x + width > 1 || y + height > 1)
+            {
+                return false;
+            }
+            return mode == "guide-classic-pip" || x == 0 && y == 0 && width == 1 && height == 1;
+        }
+
+        private static bool IsPositiveSafeInteger(long value) => value > 0 && value <= JavaScriptMaxSafeInteger;
+
+        private static bool IsPresentationRequestId(string? value)
+        {
+            if (value == null || value.Length < 1 || value.Length > 120) return false;
+            foreach (char character in value)
+            {
+                if (!(character >= 'A' && character <= 'Z') && !(character >= 'a' && character <= 'z') &&
+                    !(character >= '0' && character <= '9') && character != '.' && character != '_' && character != '-') return false;
+            }
+            return true;
+        }
+
+        private static bool IsNonZeroDecimal(string? value)
+        {
+            if (value == null || value.Length == 0) return false;
+            foreach (char character in value) if (character < '0' || character > '9') return false;
+            return ulong.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out ulong parsed) && parsed != 0;
+        }
+
+        private static bool TryGetFiniteNormalized(JsonElement bounds, string name, out double value)
+        {
+            value = 0;
+            JsonElement property = bounds.GetProperty(name);
+            return property.ValueKind == JsonValueKind.Number && property.TryGetDouble(out value) &&
+                !double.IsNaN(value) && !double.IsInfinity(value) && value >= 0 && value <= 1;
         }
 
         private static void HandleAudioOutputQuery(string requestId)
@@ -409,6 +550,8 @@ namespace Lineup.NativePlayerHost
                         WriteResult(msg.requestId!, false, "PLAYER_HELPER_INVALID_COMMAND", "Missing playbackUrl or setup details.");
                         return;
                     }
+
+                    DestroyPresentationOnOwnerThread();
 
                     InitializeMpv(msg);
                     CacheLoadedMedia(msg);
@@ -617,43 +760,6 @@ namespace Lineup.NativePlayerHost
                     throw new InvalidOperationException("Native player initialization failed.");
                 }
 
-                // Create topmost presentation window
-                renderSurface = RenderSurface.TryCreate();
-                if (renderSurface == null)
-                {
-                    TeardownMpvContext();
-                    throw new InvalidOperationException("Native player initialization failed.");
-                }
-
-                // Create OpenGL Render Context
-                IntPtr apiType = Marshal.StringToHGlobalAnsi("opengl");
-                MpvOpenGlInitParams initParams = new MpvOpenGlInitParams
-                {
-                    get_proc_address = Marshal.GetFunctionPointerForDelegate((MpvOpenGlGetProcAddressDelegate)GetOpenGlProcAddress),
-                    get_proc_address_ctx = IntPtr.Zero
-                };
-                IntPtr initParamsPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MpvOpenGlInitParams>());
-                Marshal.StructureToPtr(initParams, initParamsPtr, false);
-
-                IntPtr initParamArray = AllocRenderParams(
-                    new MpvRenderParam { type = 1, data = apiType },
-                    new MpvRenderParam { type = 2, data = initParamsPtr }
-                );
-
-                renderSurface.MakeCurrent();
-                int contextResult = NativeMethods.mpv_render_context_create(out renderContext, mpvContext, initParamArray);
-                NativeMethods.wglMakeCurrent(IntPtr.Zero, IntPtr.Zero);
-
-                Marshal.FreeHGlobal(initParamArray);
-                Marshal.FreeHGlobal(initParamsPtr);
-                Marshal.FreeHGlobal(apiType);
-
-                if (contextResult < 0 || renderContext == IntPtr.Zero)
-                {
-                    TeardownMpvContext();
-                    throw new InvalidOperationException("Native player initialization failed.");
-                }
-
                 trackState = new MpvTrackState(mpvContext, msg.setup);
                 qualityState = new MpvPlaybackQualityState(mpvContext, msg.setup?.playbackMode ?? "unknown");
                 currentPlaybackSetup = msg.setup;
@@ -668,15 +774,6 @@ namespace Lineup.NativePlayerHost
                 ObserveProperty(mpvContext, 8, "video-params", MpvFormatNone);
                 ObserveProperty(mpvContext, 9, "video-codec", MpvFormatString);
                 ObserveProperty(mpvContext, 10, "audio-codec", MpvFormatString);
-
-                // Start rendering thread
-                renderThreadRunning = true;
-                renderThread = new Thread(RenderLoop)
-                {
-                    IsBackground = true,
-                    Name = "LineupRenderLoop"
-                };
-                renderThread.Start();
 
                 // Start Event Poll Loop
                 eventThread = new Thread(EventPollLoop)
@@ -867,42 +964,252 @@ namespace Lineup.NativePlayerHost
             });
         }
 
-        private static void RenderLoop()
+        private static void HandlePresentationUpdate(InputMessage message)
         {
-            while (renderThreadRunning && renderContext != IntPtr.Zero && renderSurface != null)
+            if (message.version != 1 || string.IsNullOrWhiteSpace(message.operationId) ||
+                message.documentEpoch <= 0 || message.revision <= 0 ||
+                string.IsNullOrWhiteSpace(message.parentHwnd) || message.parentPid <= 0 ||
+                string.IsNullOrWhiteSpace(message.mode))
             {
-                renderSurface.MakeCurrent();
-                NativeMethods.glViewport(0, 0, renderSurface.Width, renderSurface.Height);
-                NativeMethods.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-                NativeMethods.glClear(GlColorBufferBit);
+                WritePresentationResult(message, "rejected");
+                return;
+            }
+            if (!TryAdvancePresentationOperationSequence(message.operationId))
+            {
+                WritePresentationResult(message, "rejected");
+                return;
+            }
+            PresentationWork work = new PresentationWork { Message = message };
+            if (!PresentationQueue.TryAdd(work))
+            {
+                WritePresentationResult(message, "rejected");
+                return;
+            }
+            work.Completed.Wait();
+            WritePresentationResult(message, work.Status);
+        }
 
-                IntPtr renderParams = AllocRenderParams(
-                    new MpvRenderParam { type = 3, data = renderSurface.FboParam },
-                    new MpvRenderParam { type = 4, data = renderSurface.FlipYParam }
-                );
+        private static bool TryAdvancePresentationOperationSequence(string operationId)
+        {
+            const string prefix = "presentation-";
+            if (!operationId.StartsWith(prefix, StringComparison.Ordinal) ||
+                !BigInteger.TryParse(operationId.Substring(prefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out BigInteger sequence) ||
+                sequence <= latestPresentationOperationSequence)
+            {
+                return false;
+            }
+            latestPresentationOperationSequence = sequence;
+            return true;
+        }
 
+        private static void PresentationLoop()
+        {
+            while (!PresentationQueue.IsCompleted)
+            {
+                if (PresentationQueue.TryTake(out PresentationWork? work, 16))
+                {
+                    try
+                    {
+                        work.Status = ExecutePresentationWork(work.Message);
+                    }
+                    catch
+                    {
+                        ContainPresentationFailure();
+                        work.Status = "rejected";
+                    }
+                    finally
+                    {
+                        work.Completed.Set();
+                    }
+                }
                 try
                 {
-                    NativeMethods.mpv_render_context_update(renderContext);
-                    NativeMethods.mpv_render_context_render(renderContext, renderParams);
+                    RenderFrame();
+                    PumpWindowMessages();
                 }
-                finally
+                catch
                 {
-                    Marshal.FreeHGlobal(renderParams);
+                    FailPresentationLifecycle();
+                    return;
                 }
-
-                NativeMethods.SwapBuffers(renderSurface.DeviceContext);
-                PumpWindowMessages();
-                Thread.Sleep(16);
             }
+            DestroyPresentationResources();
+        }
+
+        private static string ExecutePresentationWork(InputMessage message)
+        {
+            if (message.type == "presentation.destroy")
+            {
+                DestroyPresentationResources();
+                return "hidden";
+            }
+            bool exactTuple = message.documentEpoch == latestPresentationEpoch &&
+                message.revision == latestPresentationRevision &&
+                String.Equals(latestPresentationLoadedRequestId, message.loadedRequestId, StringComparison.Ordinal);
+            bool staleRevision = message.documentEpoch < latestPresentationEpoch ||
+                message.documentEpoch == latestPresentationEpoch && message.revision < latestPresentationRevision;
+            bool stalePair = staleRevision ||
+                message.documentEpoch == latestPresentationEpoch && message.revision == latestPresentationRevision &&
+                    !String.Equals(latestPresentationLoadedRequestId, message.loadedRequestId, StringComparison.Ordinal) ||
+                exactTuple && latestPresentationHidden && message.mode != "hidden";
+            if (message.mode == "hidden")
+            {
+                if (!HidePresentationSurface()) return "rejected";
+                latestPresentationHidden = true;
+                if (staleRevision) return "stale";
+                latestPresentationEpoch = message.documentEpoch;
+                latestPresentationRevision = message.revision;
+                latestPresentationLoadedRequestId = message.loadedRequestId;
+                return "hidden";
+            }
+            if (stalePair)
+            {
+                if (!HidePresentationSurface()) return "rejected";
+                return "stale";
+            }
+            if (message.loadedRequestId == null || message.loadedRequestId != currentRequestId || message.bounds == null ||
+                !ulong.TryParse(message.parentHwnd, NumberStyles.None, CultureInfo.InvariantCulture, out ulong rawParent) || rawParent == 0)
+            {
+                if (!HidePresentationSurface()) return "rejected";
+                return "stale";
+            }
+            IntPtr parent = unchecked((IntPtr)(long)rawParent);
+            if (renderSurface == null || !renderSurface.HasParent(parent))
+            {
+                DestroyPresentationResources();
+                renderSurface = RenderSurface.TryCreate(parent, message.parentPid);
+            }
+            if (renderSurface == null || !renderSurface.ApplyBounds(message.bounds, message.mode == "guide-classic-pip"))
+            {
+                HidePresentationSurface();
+                return "rejected";
+            }
+            EnsureRenderContext();
+            if (!renderSurface.Show())
+            {
+                DestroyPresentationResources();
+                return "rejected";
+            }
+            latestPresentationEpoch = message.documentEpoch;
+            latestPresentationRevision = message.revision;
+            latestPresentationLoadedRequestId = message.loadedRequestId;
+            latestPresentationHidden = false;
+            return "applied";
+        }
+
+        private static bool HidePresentationSurface()
+        {
+            if (renderSurface == null || renderSurface.Hide()) return true;
+            DestroyPresentationResources();
+            return false;
+        }
+
+        private static void EnsureRenderContext()
+        {
+            if (renderContext != IntPtr.Zero) return;
+            if (renderSurface == null || mpvContext == IntPtr.Zero) throw new InvalidOperationException();
+            IntPtr apiType = Marshal.StringToHGlobalAnsi("opengl");
+            MpvOpenGlInitParams initParams = new MpvOpenGlInitParams
+            {
+                get_proc_address = Marshal.GetFunctionPointerForDelegate((MpvOpenGlGetProcAddressDelegate)GetOpenGlProcAddress),
+                get_proc_address_ctx = IntPtr.Zero
+            };
+            IntPtr initParamsPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MpvOpenGlInitParams>());
+            Marshal.StructureToPtr(initParams, initParamsPtr, false);
+            IntPtr initParamArray = AllocRenderParams(new MpvRenderParam { type = 1, data = apiType }, new MpvRenderParam { type = 2, data = initParamsPtr });
+            try
+            {
+                if (!renderSurface.MakeCurrent()) throw new InvalidOperationException();
+                if (NativeMethods.mpv_render_context_create(out renderContext, mpvContext, initParamArray) < 0) renderContext = IntPtr.Zero;
+                NativeMethods.wglMakeCurrent(IntPtr.Zero, IntPtr.Zero);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(initParamArray); Marshal.FreeHGlobal(initParamsPtr); Marshal.FreeHGlobal(apiType);
+            }
+            if (renderContext == IntPtr.Zero) throw new InvalidOperationException();
+        }
+
+        private static void RenderFrame()
+        {
+            if (renderContext == IntPtr.Zero || renderSurface == null || !renderSurface.Visible) return;
+            if (!renderSurface.MakeCurrent()) throw new InvalidOperationException();
+            NativeMethods.glViewport(0, 0, renderSurface.Width, renderSurface.Height);
+            NativeMethods.glClearColor(0, 0, 0, 1); NativeMethods.glClear(GlColorBufferBit);
+            IntPtr renderParams = AllocRenderParams(new MpvRenderParam { type = 3, data = renderSurface.FboParam }, new MpvRenderParam { type = 4, data = renderSurface.FlipYParam });
+            try { NativeMethods.mpv_render_context_update(renderContext); NativeMethods.mpv_render_context_render(renderContext, renderParams); }
+            finally { Marshal.FreeHGlobal(renderParams); }
+            if (!NativeMethods.SwapBuffers(renderSurface.DeviceContext)) throw new InvalidOperationException();
+        }
+
+        private static void DestroyPresentationResources()
+        {
+            IntPtr context = renderContext;
+            renderContext = IntPtr.Zero;
+            try
+            {
+                if (context != IntPtr.Zero) NativeMethods.mpv_render_context_free(context);
+            }
+            catch
+            {
+            }
+
+            RenderSurface? surface = renderSurface;
+            renderSurface = null;
+            try
+            {
+                surface?.Dispose();
+            }
+            catch
+            {
+            }
+        }
+
+        private static void ContainPresentationFailure()
+        {
+            try
+            {
+                HidePresentationSurface();
+            }
+            catch
+            {
+            }
+            DestroyPresentationResources();
+            latestPresentationHidden = true;
+        }
+
+        private static void FailPresentationLifecycle()
+        {
+            ContainPresentationFailure();
+            Environment.Exit(1);
+        }
+
+        private static void WritePresentationResult(InputMessage message, string status)
+        {
+            Console.Out.WriteLine(JsonSerializer.Serialize(new Dictionary<string, object?> {
+                ["type"] = "presentation.result", ["version"] = 1, ["operationId"] = message.operationId,
+                ["documentEpoch"] = message.documentEpoch, ["revision"] = message.revision, ["status"] = status
+            }));
+            Console.Out.Flush();
         }
 
         private static void HandleCleanup(string? requestId)
         {
+            DestroyPresentationOnOwnerThread();
             lock (MpvLock)
             {
                 TeardownMpvContext();
             }
+        }
+
+        private static void DestroyPresentationOnOwnerThread()
+        {
+            PresentationWork destroy = new PresentationWork { Message = new InputMessage { type = "presentation.destroy", operationId = "cleanup", documentEpoch = 1, revision = 1, mode = "hidden" } };
+            if (!PresentationQueue.TryAdd(destroy))
+            {
+                throw new InvalidOperationException("Native presentation cleanup could not be queued.");
+            }
+            destroy.Completed.Wait();
         }
 
         private static void ConfigureLibmpvPath(string[] args)
@@ -934,19 +1241,6 @@ namespace Lineup.NativePlayerHost
 
         private static void TeardownMpvContext()
         {
-            renderThreadRunning = false;
-            if (renderThread != null && renderThread.IsAlive)
-            {
-                renderThread.Join();
-            }
-            renderThread = null;
-
-            if (renderContext != IntPtr.Zero)
-            {
-                NativeMethods.mpv_render_context_free(renderContext);
-                renderContext = IntPtr.Zero;
-            }
-
             if (mpvContext != IntPtr.Zero)
             {
                 NativeMethods.mpv_terminate_destroy(mpvContext);
@@ -958,12 +1252,6 @@ namespace Lineup.NativePlayerHost
                 eventThread.Join();
             }
             eventThread = null;
-
-            if (renderSurface != null)
-            {
-                renderSurface.Dispose();
-                renderSurface = null;
-            }
 
             currentRequestId = null;
             currentMediaId = null;
@@ -1280,10 +1568,13 @@ namespace Lineup.NativePlayerHost
             private readonly IntPtr classAtom;
             private readonly IntPtr instance;
             private readonly string className;
+            private readonly IntPtr parent;
+            private readonly int parentPid;
 
             public readonly IntPtr DeviceContext;
-            public readonly int Width;
-            public readonly int Height;
+            public int Width { get; private set; }
+            public int Height { get; private set; }
+            public bool Visible { get; private set; }
             public readonly IntPtr FboParam;
             public readonly IntPtr FlipYParam;
 
@@ -1295,7 +1586,9 @@ namespace Lineup.NativePlayerHost
                 IntPtr deviceContext,
                 IntPtr renderingContext,
                 int width,
-                int height)
+                int height,
+                IntPtr parent,
+                int parentPid)
             {
                 this.instance = instance;
                 this.classAtom = classAtom;
@@ -1305,6 +1598,8 @@ namespace Lineup.NativePlayerHost
                 this.renderingContext = renderingContext;
                 Width = width;
                 Height = height;
+                this.parent = parent;
+                this.parentPid = parentPid;
 
                 MpvOpenGlFbo fbo = new MpvOpenGlFbo { fbo = 0, w = Width, h = Height, internal_format = 0 };
                 FboParam = Marshal.AllocHGlobal(Marshal.SizeOf<MpvOpenGlFbo>());
@@ -1313,15 +1608,15 @@ namespace Lineup.NativePlayerHost
                 Marshal.WriteInt32(FlipYParam, 1);
             }
 
-            public static RenderSurface? TryCreate()
+            public static RenderSurface? TryCreate(IntPtr parent, int parentPid)
             {
+                if (!ValidateParent(parent, parentPid, out _, out _, out _)) return null;
                 IntPtr instance = NativeMethods.GetModuleHandle(null);
                 string className = "LineupNativePlayerPresentationHost";
-                int width = 960;
-                int height = 540;
-                int x = 80;
-                int y = 80;
-                int style = unchecked((int)0x90000000); // WS_VISIBLE | WS_POPUP
+                int width = 1;
+                int height = 1;
+                int style = unchecked((int)0x4E000000); // WS_CHILD | CLIPSIBLINGS | CLIPCHILDREN | DISABLED
+                int exStyle = unchecked((int)0x08000004); // NOACTIVATE | NOPARENTNOTIFY
 
                 NativeMethods.WNDCLASSEX wndClass = new NativeMethods.WNDCLASSEX
                 {
@@ -1338,15 +1633,15 @@ namespace Lineup.NativePlayerHost
                 }
 
                 IntPtr window = NativeMethods.CreateWindowEx(
-                    0,
+                    exStyle,
                     className,
                     string.Empty,
                     style,
-                    x,
-                    y,
+                    0,
+                    0,
                     width,
                     height,
-                    IntPtr.Zero,
+                    parent,
                     IntPtr.Zero,
                     instance,
                     IntPtr.Zero);
@@ -1383,16 +1678,48 @@ namespace Lineup.NativePlayerHost
                     return null;
                 }
 
-                NativeMethods.ShowWindow(window, 5);
-                NativeMethods.SetWindowPos(window, HwndTopmost, x, y, width, height, SwpShowWindow);
-                NativeMethods.UpdateWindow(window);
                 NativeMethods.wglMakeCurrent(IntPtr.Zero, IntPtr.Zero);
-                return new RenderSurface(instance, new IntPtr(atom), className, window, deviceContext, renderingContext, width, height);
+                return new RenderSurface(instance, new IntPtr(atom), className, window, deviceContext, renderingContext, width, height, parent, parentPid);
             }
 
-            public void MakeCurrent()
+            public bool HasParent(IntPtr value) => value == parent;
+
+            public bool ApplyBounds(NormalizedBounds bounds, bool classic)
             {
-                NativeMethods.wglMakeCurrent(DeviceContext, renderingContext);
+                if (!ValidateParent(parent, parentPid, out NativeMethods.RECT client, out uint dpi, out NativeMethods.RECT stableClient)) return false;
+                if (client.left != stableClient.left || client.top != stableClient.top || client.right != stableClient.right || client.bottom != stableClient.bottom) return false;
+                int clientWidth = client.right - client.left, clientHeight = client.bottom - client.top;
+                if (clientWidth <= 0 || clientHeight <= 0 || !FiniteBounds(bounds)) return false;
+                int left = Clamp((int)Math.Floor(bounds.x * clientWidth), 0, clientWidth);
+                int top = Clamp((int)Math.Floor(bounds.y * clientHeight), 0, clientHeight);
+                int right = Clamp((int)Math.Ceiling((bounds.x + bounds.width) * clientWidth), 0, clientWidth);
+                int bottom = Clamp((int)Math.Ceiling((bounds.y + bounds.height) * clientHeight), 0, clientHeight);
+                int width = right - left, height = bottom - top;
+                int inset = (int)Math.Ceiling(16.0 * dpi / 96.0);
+                if (width <= 0 || height <= 0 || classic && (width < 160 || height < 90 || width > clientWidth / 2 || height > clientHeight / 2 || left < inset || top < inset || clientWidth - right < inset || clientHeight - bottom < inset)) return false;
+                if (!NativeMethods.SetWindowPos(window, HwndBottom, left, top, width, height, SwpNoActivate)) return false;
+                Width = width; Height = height;
+                Marshal.StructureToPtr(new MpvOpenGlFbo { fbo = 0, w = Width, h = Height, internal_format = 0 }, FboParam, false);
+                return true;
+            }
+
+            public bool Show()
+            {
+                bool shown = NativeMethods.SetWindowPos(window, HwndBottom, 0, 0, 0, 0, 0x0001 | 0x0002 | SwpNoActivate | SwpShowWindow);
+                if (shown) Visible = true;
+                return shown;
+            }
+
+            public bool Hide()
+            {
+                bool hidden = NativeMethods.SetWindowPos(window, HwndBottom, 0, 0, 0, 0, 0x0001 | 0x0002 | SwpNoActivate | SwpHideWindow);
+                if (hidden) Visible = false;
+                return hidden;
+            }
+
+            public bool MakeCurrent()
+            {
+                return NativeMethods.wglMakeCurrent(DeviceContext, renderingContext);
             }
 
             public void Dispose()
@@ -1411,8 +1738,30 @@ namespace Lineup.NativePlayerHost
 
             private static IntPtr DefWindowProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
             {
+                if (msg == 0x0021) return new IntPtr(3); // WM_MOUSEACTIVATE / MA_NOACTIVATE
+                if (msg == 0x003D) return IntPtr.Zero; // WM_GETOBJECT: no native accessibility provider
                 return NativeMethods.DefWindowProc(hwnd, msg, wParam, lParam);
             }
+
+            private static bool ValidateParent(IntPtr parent, int expectedPid, out NativeMethods.RECT client, out uint dpi, out NativeMethods.RECT stableClient)
+            {
+                client = default; stableClient = default; dpi = 0;
+                if (!NativeMethods.IsWindow(parent)) return false;
+                NativeMethods.GetWindowThreadProcessId(parent, out uint pid);
+                if (pid != (uint)expectedPid || !NativeMethods.AreDpiAwarenessContextsEqual(NativeMethods.GetWindowDpiAwarenessContext(parent), NativeMethods.GetThreadDpiAwarenessContext())) return false;
+                uint before = NativeMethods.GetDpiForWindow(parent);
+                if (before == 0 || !NativeMethods.GetClientRect(parent, out client)) return false;
+                uint after = NativeMethods.GetDpiForWindow(parent);
+                if (before != after || !NativeMethods.GetClientRect(parent, out stableClient) || !NativeMethods.IsWindow(parent)) return false;
+                NativeMethods.GetWindowThreadProcessId(parent, out uint stablePid);
+                if (stablePid != (uint)expectedPid) return false;
+                dpi = after; return true;
+            }
+
+            private static bool FiniteBounds(NormalizedBounds value) =>
+                double.IsFinite(value.x) && double.IsFinite(value.y) && double.IsFinite(value.width) && double.IsFinite(value.height) &&
+                value.x >= 0 && value.y >= 0 && value.width > 0 && value.height > 0 && value.x + value.width <= 1 && value.y + value.height <= 1;
+            private static int Clamp(int value, int min, int max) => Math.Min(Math.Max(value, min), max);
         }
 
         internal static class NativeMethods
@@ -1497,6 +1846,27 @@ namespace Lineup.NativePlayerHost
 
             [DllImport("user32.dll", SetLastError = true)]
             public static extern bool DestroyWindow(IntPtr hWnd);
+
+            [DllImport("user32.dll")]
+            public static extern bool IsWindow(IntPtr hWnd);
+
+            [DllImport("user32.dll")]
+            public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+            [DllImport("user32.dll")]
+            public static extern IntPtr GetWindowDpiAwarenessContext(IntPtr hWnd);
+
+            [DllImport("user32.dll")]
+            public static extern IntPtr GetThreadDpiAwarenessContext();
+
+            [DllImport("user32.dll")]
+            public static extern bool AreDpiAwarenessContextsEqual(IntPtr dpiContextA, IntPtr dpiContextB);
+
+            [DllImport("user32.dll")]
+            public static extern uint GetDpiForWindow(IntPtr hWnd);
+
+            [DllImport("user32.dll")]
+            public static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
 
             [DllImport("user32.dll", SetLastError = true)]
             public static extern IntPtr GetDC(IntPtr hWnd);
@@ -1586,6 +1956,15 @@ namespace Lineup.NativePlayerHost
             {
                 public int x;
                 public int y;
+            }
+
+            [StructLayout(LayoutKind.Sequential)]
+            public struct RECT
+            {
+                public int left;
+                public int top;
+                public int right;
+                public int bottom;
             }
 
             [StructLayout(LayoutKind.Sequential)]

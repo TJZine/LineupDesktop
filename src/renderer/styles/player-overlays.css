@@ -2,13 +2,7 @@
   z-index: 0;
 }
 
-.player-presentation .player-surface,
-.player-surface {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background: #000;
-}
+.player-presentation[data-native-presentation-aperture="opaque"] { background: #000; }
 
 .overlay-stack {
   --overlay-safe-margin: clamp(28px, 5vw, 96px);
@@ -267,8 +261,7 @@
 }
 
 @media (forced-colors: active) {
-  .player-presentation .player-surface,
-  .player-surface {
+  [data-player-presentation-surface] {
     background: Canvas;
   }
 

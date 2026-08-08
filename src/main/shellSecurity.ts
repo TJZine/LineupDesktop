@@ -1,7 +1,7 @@
 import { LINEUP_PROTOCOL_ORIGIN, LINEUP_SHELL_URL } from '../contracts/shell.js';
 
 /**
- * Shell IPC authorization is tied to the app-owned BrowserWindow sender, an
+ * Shell IPC authorization is tied to the app-owned WebContentsView sender, an
  * alive main frame, the exact shell URL, and the lineup://shell origin.
  */
 export interface ShellIpcAuthorizationDetails {

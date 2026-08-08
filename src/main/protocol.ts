@@ -4,6 +4,12 @@ import { net, protocol } from 'electron';
 import { pathToFileURL } from 'node:url';
 
 import { resolveRendererProtocolRequest } from './rendererProtocolPolicy.js';
+import { ARTWORK_REF_ID_PATTERN } from '../contracts/artwork.js';
+import type { GuideArtworkDelivery, GuideArtworkOwner } from './channel/guideArtworkOwner.js';
+
+export interface GuideArtworkProtocolDiagnosticPort {
+  recordDeliveryFailure(): void;
+}
 
 export const LINEUP_CSP =
   "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none';";
@@ -20,8 +26,26 @@ export function registerLineupProtocolScheme(): void {
   ]);
 }
 
-export function registerLineupProtocolHandler(rendererRoot: string): void {
-  protocol.handle('lineup', async (request) => serveRendererFile(request.url, rendererRoot));
+export function registerLineupProtocolHandler(
+  rendererRoot: string,
+  guideArtworkOwner?: Pick<GuideArtworkOwner, 'get'>,
+  diagnosticPort?: GuideArtworkProtocolDiagnosticPort,
+): void {
+  protocol.handle('lineup', async (request) =>
+    serveLineupProtocolRequest(request, rendererRoot, guideArtworkOwner, diagnosticPort));
+}
+
+export async function serveLineupProtocolRequest(
+  request: Pick<Request, 'url' | 'method'>,
+  rendererRoot: string,
+  guideArtworkOwner?: Pick<GuideArtworkOwner, 'get'>,
+  diagnosticPort?: GuideArtworkProtocolDiagnosticPort,
+): Promise<Response> {
+  if (isArtworkRoute(request.url)) {
+    return serveGuideArtwork(request, guideArtworkOwner, diagnosticPort);
+  }
+  if (request.method !== 'GET') return textResponse('Not found.', 404);
+  return serveRendererFile(request.url, rendererRoot);
 }
 
 export async function serveRendererFile(urlText: string, rendererRoot: string): Promise<Response> {
@@ -73,4 +97,64 @@ function textResponse(text: string, status: number): Response {
       'content-type': 'text/plain; charset=utf-8',
     },
   });
+}
+
+async function serveGuideArtwork(
+  request: Pick<Request, 'url' | 'method'>,
+  guideArtworkOwner: Pick<GuideArtworkOwner, 'get'> | undefined,
+  diagnosticPort: GuideArtworkProtocolDiagnosticPort | undefined,
+): Promise<Response> {
+  if (request.method !== 'GET') return textResponse('Not found.', 404);
+  const refId = readArtworkRefId(request.url);
+  if (refId === null || guideArtworkOwner === undefined) {
+    return textResponse('Not found.', 404);
+  }
+  let delivery: GuideArtworkDelivery | null;
+  try {
+    delivery = await guideArtworkOwner.get(refId);
+  } catch {
+    try { diagnosticPort?.recordDeliveryFailure(); } catch { /* diagnostics are best-effort */ }
+    return textResponse('Not found.', 404);
+  }
+  if (delivery === null) return textResponse('Not found.', 404);
+  return new Response(new Uint8Array(delivery.bytes).buffer, {
+    status: 200,
+    headers: {
+      'Content-Security-Policy': LINEUP_CSP,
+      'content-type': delivery.mimeType,
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+}
+
+function isArtworkRoute(urlText: string): boolean {
+  try {
+    const url = new URL(urlText);
+    return url.protocol === 'lineup:' && url.host === 'shell' &&
+      (url.pathname === '/artwork' || url.pathname.startsWith('/artwork/'));
+  } catch {
+    return false;
+  }
+}
+
+function readArtworkRefId(urlText: string): string | null {
+  try {
+    const url = new URL(urlText);
+    if (
+      url.protocol !== 'lineup:' ||
+      url.host !== 'shell' ||
+      url.username !== '' ||
+      url.password !== '' ||
+      url.search !== '' ||
+      url.hash !== ''
+    ) return null;
+    const match = /^\/artwork\/([^/]+)$/u.exec(url.pathname);
+    if (match === null || match[1] === undefined || !ARTWORK_REF_ID_PATTERN.test(match[1])) {
+      return null;
+    }
+    return match[1];
+  } catch {
+    return null;
+  }
 }

@@ -7,6 +7,49 @@ export * from './playerQuality.js';
 
 export type PlayerRequestId = string;
 
+export const PLAYER_PRESENTATION_MODES = [
+  'hidden',
+  'player-full',
+  'guide-overlay-full',
+  'guide-classic-pip',
+] as const;
+export type PlayerPresentationMode = (typeof PLAYER_PRESENTATION_MODES)[number];
+
+export interface PlayerPresentationRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface PlayerPresentationRequest {
+  documentEpoch: number | null;
+  revision: number;
+  requestId: PlayerRequestId | null;
+  mode: PlayerPresentationMode;
+  rect: PlayerPresentationRect | null;
+}
+
+export type PlayerPresentationError =
+  | { code: 'PLAYER_PRESENTATION_MAIN_STALE'; message: 'Player presentation request is stale.'; recoverable: true; retryable: false }
+  | { code: 'PLAYER_PRESENTATION_HELPER_STALE'; message: 'Native presentation request is stale.'; recoverable: true; retryable: false }
+  | { code: 'PLAYER_PRESENTATION_REJECTED'; message: 'Player presentation request was rejected.'; recoverable: true; retryable: false }
+  | { code: 'PLAYER_PRESENTATION_TIMEOUT'; message: 'Native presentation request timed out.'; recoverable: true; retryable: true }
+  | { code: 'PLAYER_PRESENTATION_LIFECYCLE_FAILURE'; message: 'Native presentation is unavailable.'; recoverable: true; retryable: true };
+
+export type PlayerPresentationResult =
+  | {
+      ok: true;
+      status: 'applied' | 'hidden' | 'deferred' | 'unsupported';
+      documentEpoch: number;
+      revision: number;
+    }
+  | { ok: false; status: 'main-stale'; documentEpoch: number | null; revision: number | null; error: Extract<PlayerPresentationError, { code: 'PLAYER_PRESENTATION_MAIN_STALE' }> }
+  | { ok: false; status: 'helper-stale'; documentEpoch: number | null; revision: number | null; error: Extract<PlayerPresentationError, { code: 'PLAYER_PRESENTATION_HELPER_STALE' }> }
+  | { ok: false; status: 'rejected'; documentEpoch: number | null; revision: number | null; error: Extract<PlayerPresentationError, { code: 'PLAYER_PRESENTATION_REJECTED' }> }
+  | { ok: false; status: 'timeout'; documentEpoch: number | null; revision: number | null; error: Extract<PlayerPresentationError, { code: 'PLAYER_PRESENTATION_TIMEOUT' }> }
+  | { ok: false; status: 'lifecycle-failure'; documentEpoch: number | null; revision: number | null; error: Extract<PlayerPresentationError, { code: 'PLAYER_PRESENTATION_LIFECYCLE_FAILURE' }> };
+
 export type PlayerMediaId = string;
 
 export type PlayerTrackId = string;

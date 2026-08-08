@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
+import type { BaseWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 
 import {
   LINEUP_DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
@@ -37,7 +37,7 @@ export interface RegisterDiagnosticsIpcHandlersOptions {
   shellMode: ShellMode;
   isAuthorizedEvent(event: IpcMainInvokeEvent): boolean;
   createRequestId(prefix: string): string;
-  getShellWindow?: () => BrowserWindow | null;
+  getShellWindow?: () => BaseWindow | null;
   parentDirectoryProvider?: () => Promise<string | null> | string | null;
   playerSnapshotProvider?: () => PlayerSnapshot | null | Promise<PlayerSnapshot | null>;
   appVersion?: string;
@@ -386,7 +386,7 @@ function getElectronIpcMain(): DiagnosticsIpcMain {
 
 function getElectronDialog(): {
   showOpenDialog: (
-    window: BrowserWindow | undefined,
+    window: BaseWindow | undefined,
     options: { title: string; buttonLabel: string; properties: string[] },
   ) => Promise<{ canceled: boolean; filePaths: string[] }>;
 } {
@@ -394,7 +394,7 @@ function getElectronDialog(): {
   const electron = require('electron') as {
     dialog?: {
       showOpenDialog: (
-        window: BrowserWindow | undefined,
+        window: BaseWindow | undefined,
         options: { title: string; buttonLabel: string; properties: string[] },
       ) => Promise<{ canceled: boolean; filePaths: string[] }>;
     };

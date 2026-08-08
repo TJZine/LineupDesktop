@@ -6,6 +6,7 @@ import {
   LINEUP_PLAYER_CLEANUP_CHANNEL,
   LINEUP_PLAYER_COMMAND_CHANNEL,
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
+  LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL,
 } from '../../contracts/ipc.js';
 import type {
   PlayerCommand,
@@ -13,6 +14,7 @@ import type {
   PlayerError,
   PlayerEvent,
   PlayerIpcResult,
+  PlayerPresentationResult,
   PlayerRequestId,
   PlayerSnapshot,
 } from '../../contracts/player.js';
@@ -26,6 +28,7 @@ import type {
   NativePlayerHostLifecycleFailure,
   NativePlayerHostPort,
 } from './nativePlayerHostPort.js';
+import type { NativePlayerPresentationOwner } from './nativePlayerPresentationOwner.js';
 
 type PlayerIpcMain = Pick<IpcMain, 'handle' | 'removeHandler'>;
 
@@ -40,6 +43,7 @@ export interface RegisterPlayerIpcHandlersOptions {
   nativeHost?: NativePlayerHostPort | null;
   nativeHostFactory?: NativePlayerHostFactory;
   onNativeHostLifecycleFailure?(failure: NativePlayerHostLifecycleFailure): void;
+  presentationOwner?: Pick<NativePlayerPresentationOwner, 'update'> | null;
   ipcMain?: PlayerIpcMain;
 }
 
@@ -54,6 +58,7 @@ const PLAYER_IPC_CHANNELS = [
   LINEUP_PLAYER_COMMAND_CHANNEL,
   LINEUP_PLAYER_GET_SNAPSHOT_CHANNEL,
   LINEUP_PLAYER_CLEANUP_CHANNEL,
+  LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL,
 ] as const;
 
 export function registerPlayerIpcHandlers(
@@ -147,6 +152,16 @@ export function registerPlayerIpcHandlers(
     return playerSuccess(requestId, result.snapshot);
   });
 
+  ipcMain.handle(LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL, async (event, payload: unknown) => {
+    if (!options.isAuthorizedEvent(event)) {
+      return presentationRejected(null, null);
+    }
+    return options.presentationOwner?.update(payload) ?? presentationRejected(
+      getNullablePositiveInteger(payload, 'documentEpoch'),
+      getPositiveInteger(payload, 'revision'),
+    );
+  });
+
   return {
     adapter: runtime.adapter,
     teardown: async () => {
@@ -176,6 +191,36 @@ export function registerPlayerIpcHandlers(
         }
       }
     }
+  };
+}
+
+function getPositiveInteger(value: unknown, key: string): number | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value) || !(key in value)) return null;
+  const candidate = (value as Record<string, unknown>)[key];
+  return typeof candidate === 'number' && Number.isSafeInteger(candidate) && candidate > 0 ? candidate : null;
+}
+
+function getNullablePositiveInteger(value: unknown, key: string): number | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value) || !(key in value)) return null;
+  const candidate = (value as Record<string, unknown>)[key];
+  return candidate === null ? null : getPositiveInteger(value, key);
+}
+
+function presentationRejected(
+  documentEpoch: number | null,
+  revision: number | null,
+): PlayerPresentationResult {
+  return {
+    ok: false as const,
+    status: 'rejected' as const,
+    documentEpoch,
+    revision,
+    error: {
+      code: 'PLAYER_PRESENTATION_REJECTED' as const,
+      message: 'Player presentation request was rejected.' as const,
+      recoverable: true as const,
+      retryable: false as const,
+    },
   };
 }
 

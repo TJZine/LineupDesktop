@@ -4,6 +4,30 @@ import type {
   EpgPresentationState,
   EpgProgramCellViewModel,
 } from './epg.js';
+import type { ArtworkRef } from '../contracts/artwork.js';
+import type { GuideLibraryFilterState } from '../contracts/guide.js';
+import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
+import type { AppRouteId } from './navigation.js';
+import type { PlayerPresentationMode, PlayerSnapshot } from '../contracts/player.js';
+import type { DesktopSettingsValues } from '../contracts/settings.js';
+import type { RendererShellState } from './shell/shellState.js';
+
+export function projectNativePlayerPresentationMode(input: {
+  route: AppRouteId;
+  guideLayout: DesktopSettingsValues['guideLayout'];
+  snapshot: PlayerSnapshot;
+  shell: RendererShellState;
+}): PlayerPresentationMode {
+  const blocked = input.shell.bootstrap !== 'ready' || input.shell.exitConfirmOpen ||
+    input.shell.inlineError !== null || input.snapshot.lastError !== null;
+  const presentable = input.snapshot.requestId !== null &&
+    ['ready', 'buffering', 'playing', 'paused', 'seeking', 'stalled'].includes(input.snapshot.status);
+  if (blocked || !presentable) return 'hidden';
+  if (input.route === 'player') return 'player-full';
+  if (input.route !== 'guide') return 'hidden';
+  if (input.guideLayout === 'overlay') return 'guide-overlay-full';
+  return input.snapshot.playing ? 'guide-classic-pip' : 'hidden';
+}
 
 export interface ProgramSummaryViewModel {
   title: string;
@@ -30,12 +54,84 @@ export interface EpgInfoPanelViewModel {
   description: string;
   badges: readonly string[];
   genres: string;
+  artwork: ArtworkRef | null;
+  presentationGeneration: number;
 }
 
 export interface EpgPresentationStateViewModel {
   state: EpgPresentationState;
   label: string;
   detail: string;
+}
+
+export interface GuideLibraryFilterController {
+  select(libraryId: string | null): boolean;
+  cancel(): void;
+  isPending(): boolean;
+}
+
+export function createGuideLibraryFilterController(options: {
+  guide: LineupDesktopPreloadApi['guide'];
+  getActiveRoute(): AppRouteId;
+  getFilter(): GuideLibraryFilterState | null;
+  applyFilter(filter: GuideLibraryFilterState): void;
+  refresh(): void;
+  cancelPage(): void;
+  handleFailure(message: string): void;
+  onPendingChanged(): void;
+}): GuideLibraryFilterController {
+  let operationGeneration = 0;
+  let pending = false;
+
+  const cancel = (): void => {
+    operationGeneration += 1;
+    if (!pending) return;
+    pending = false;
+    options.onPendingChanged();
+  };
+
+  return {
+    select(libraryId) {
+      const filter = options.getFilter();
+      if (pending || options.getActiveRoute() !== 'guide' || filter === null ||
+        (libraryId !== null && !filter.libraries.some((library) => library.id === libraryId))) return false;
+      const generation = ++operationGeneration;
+      const scopeToken = filter.scopeToken;
+      pending = true;
+      options.cancelPage();
+      options.onPendingChanged();
+      void options.guide.setLibraryFilter({
+        expectedScopeToken: scopeToken,
+        expectedRevision: filter.revision,
+        libraryId,
+      }).then((result) => {
+        if (generation !== operationGeneration) return;
+        pending = false;
+        if (options.getActiveRoute() !== 'guide' || options.getFilter()?.scopeToken !== scopeToken) {
+          options.onPendingChanged();
+          return;
+        }
+        if (!result.ok) {
+          options.handleFailure(result.error.message);
+          options.onPendingChanged();
+          return;
+        }
+        options.applyFilter(result.value);
+        options.onPendingChanged();
+        options.refresh();
+      }, () => {
+        if (generation !== operationGeneration) return;
+        pending = false;
+        if (options.getActiveRoute() === 'guide' && options.getFilter()?.scopeToken === scopeToken) {
+          options.handleFailure('Guide preferences could not be saved.');
+        }
+        options.onPendingChanged();
+      });
+      return true;
+    },
+    cancel,
+    isPending: () => pending,
+  };
 }
 
 export function createEpgShellView(
@@ -74,6 +170,8 @@ export function createInfoPanelView(program: EpgProgramCellViewModel): EpgInfoPa
     description: program.description,
     badges: [program.rating, ...program.quality],
     genres: program.genres.join(' - '),
+    artwork: program.artwork,
+    presentationGeneration: program.presentationGeneration,
   };
 }
 

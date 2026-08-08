@@ -4,7 +4,8 @@ import fs from 'node:fs/promises';
 
 import {
   app,
-  BrowserWindow,
+  BaseWindow,
+  WebContentsView,
   ipcMain,
   screen,
   type IpcMainInvokeEvent,
@@ -39,9 +40,11 @@ import {
 } from './shellSecurity.js';
 import { registerPlayerIpcHandlers, type PlayerIpcTeardown } from './player/playerIpc.js';
 import { createProductionNativeHostFactory } from './player/productionNativeHostFactory.js';
+import { NativePlayerPresentationOwner } from './player/nativePlayerPresentationOwner.js';
 import { DiagnosticEventStore } from './diagnostics/diagnosticEventStore.js';
 import { registerDiagnosticsIpcHandlers, type DiagnosticsIpcTeardown } from './diagnostics/supportBundleIpc.js';
 import {
+  bindGuideArtworkOwnerToWebContents,
   createChannelComposition,
   registerChannelCompositionIpc,
   type ChannelCompositionRegistration,
@@ -67,8 +70,8 @@ import {
 } from './plex/plexComposition.js';
 import { runSmokeAssertions, type ShellContainmentCounters } from './smokeAssertions.js';
 import { registerShellAppCommandController } from './window/shellAppCommandController.js';
-import { createShellWindowController } from './window/shellWindowController.js';
-import { resolveDesktopSettingsFilePath } from './persistence/appDataPaths.js';
+import { createShellWindowController, type ShellWindow } from './window/shellWindowController.js';
+import { resolveDesktopGuidePreferencesFilePath, resolveDesktopSettingsFilePath } from './persistence/appDataPaths.js';
 import { DesktopSettingsStore } from './persistence/desktopSettingsStore.js';
 import { registerSettingsIpcHandlers, type SettingsIpcTeardown } from './settings/settingsIpc.js';
 import { createSettingsNativeHostComposition } from './settings/settingsNativeHostComposition.js';
@@ -79,6 +82,7 @@ import { ChannelPersistenceStartupOwner } from './persistence/channelPersistence
 import { DesktopChannelPersistenceStore } from './persistence/desktopChannelPersistenceStore.js';
 import { createChannelBuilderSmokeFixture } from './channel/channelBuilderSmokeFixture.js';
 import { cleanupFailedApplicationStartup } from './applicationStartupCleanup.js';
+import { ApplicationQuitLifecycleOwner } from './applicationQuitLifecycleOwner.js';
 
 registerLineupProtocolScheme();
 
@@ -99,9 +103,11 @@ let playbackRuntime: PlexPlaybackRuntime | null = null;
 let playbackEventRouter: PlaybackEventRouter | null = null;
 let playbackProgramTransitionOwner: PlaybackProgramTransitionOwner | null = null;
 let teardownPlayerRecoveryIpc: PlayerRecoveryIpcTeardown | null = null;
-let playerIpcQuitTeardownInProgress = false;
-let playerIpcQuitTeardownComplete = false;
+let nativePlayerPresentationOwner: NativePlayerPresentationOwner | null = null;
+let shellPresentationCleanupInProgress: Promise<void> | null = null;
 let singleInstanceOwner: SingleInstanceOwner | null = null;
+let applicationQuitLifecycleOwner: ApplicationQuitLifecycleOwner | null = null;
+let applicationStartupSettled: Promise<void> = Promise.resolve();
 let containmentCounters: ShellContainmentCounters = {
   navigationDenied: 0,
   windowOpenDenied: 0,
@@ -111,7 +117,18 @@ let containmentCounters: ShellContainmentCounters = {
 
 app.commandLine.appendSwitch('disable-gpu');
 
-void startApplication().catch(async (error: unknown) => {
+const applicationStartup = startApplication();
+applicationStartupSettled = applicationStartup.then(
+  () => undefined,
+  () => undefined,
+);
+void applicationStartup.catch(async (error: unknown) => {
+  if (applicationQuitLifecycleOwner?.isQuitRequested() === true) return;
+  try {
+    await cleanupShellAndNativePresentation();
+  } catch (cleanupError: unknown) {
+    reportMainProcessDiagnostic('Shell and presentation cleanup after startup failure failed', cleanupError);
+  }
   const cleanupSettingsIpc = teardownSettingsIpc;
   teardownSettingsIpc = null;
   const cleanupDiagnosticsIpc = teardownDiagnosticsIpc;
@@ -170,10 +187,17 @@ async function startApplication(): Promise<void> {
   const smokeMode = shellMode === 'smoke';
   singleInstanceOwner = new SingleInstanceOwner({
     app,
-    getWindow: () => shellWindowController?.getWindow() ?? null,
+    getWindow: () => shellWindowController?.getWindow()?.baseWindow ?? null,
   });
   if (!singleInstanceOwner.acquire().primary) return;
-  registerApplicationLifecycleHandlers();
+  const quitLifecycleOwner = new ApplicationQuitLifecycleOwner({
+    cleanupCurrentOwners: cleanupApplicationRuntimeForQuit,
+    waitForStartupSettlement: () => applicationStartupSettled,
+    quit: () => app.quit(),
+    reportDiagnostic: reportMainProcessDiagnostic,
+  });
+  applicationQuitLifecycleOwner = quitLifecycleOwner;
+  registerApplicationLifecycleHandlers(quitLifecycleOwner);
 
   const smokeFixture =
     smokeBootstrap.status === 'smoke'
@@ -196,6 +220,7 @@ async function startApplication(): Promise<void> {
         },
       },
     }).bootstrap();
+    if (quitLifecycleOwner.isQuitRequested()) return;
     if (bootstrap.status !== 'ready') throw new Error(bootstrap.error.message);
     channelStartupStore = new DesktopChannelPersistenceStore({
       readyCapability: bootstrap.capability,
@@ -207,27 +232,51 @@ async function startApplication(): Promise<void> {
     app,
     diagnosticEventStore,
   });
+  if (quitLifecycleOwner.isQuitRequested()) {
+    await runQuitCleanupStep('Plex cleanup failed during quit', () => plexCreated.teardown());
+    return;
+  }
   plexComposition = plexCreated;
   if (channelStartupStore !== null) {
     const startup = await new ChannelPersistenceStartupOwner({
       store: channelStartupStore,
       clock: { now: () => Date.now() },
     }).loadAndRepair();
+    if (quitLifecycleOwner.isQuitRequested()) return;
     if (!startup.ok) throw new Error(startup.error.message);
   }
   await app.whenReady();
+  if (quitLifecycleOwner.isQuitRequested()) return;
   shellWindowController = createShellWindowController({
-    createBrowserWindow: (options) => new BrowserWindow(options),
+    createBaseWindow: (options) => new BaseWindow(options),
+    createWebContentsView: (options) => new WebContentsView(options),
     screen,
     preloadPath,
     smokeMode,
     publishShellStatus,
+    invalidatePresentationDocument: () => nativePlayerPresentationOwner?.invalidateDocument(),
+    hidePresentation: () => nativePlayerPresentationOwner?.hide() ?? Promise.resolve(),
+  });
+  const settingsStore = new DesktopSettingsStore({
+    settingsFilePath: resolveDesktopSettingsFilePath(app),
+    migrationEventSink: (event) => {
+      diagnosticEventStore.record({
+        surface: 'main', category: 'lifecycle', severity: event.status === 'succeeded' ? 'info' : 'error',
+        status: event.status, operation: 'settings.migration', message: 'Desktop settings migration completed.',
+        result: event.status === 'succeeded' ? 'success' : 'failure',
+        context: { fromVersion: event.fromVersion, toVersion: event.toVersion, status: event.status, revision: event.revision },
+      });
+    },
   });
   const channelCreated = createChannelComposition({
     persistence,
     plexRuntime: plexCreated.runtime,
+    guideArtworkSessionGenerationOwner: plexCreated.guideArtworkSessionGenerationOwner,
+    guideArtworkTransport: plexCreated.guideArtworkTransport,
     channelBuilderContextSource: smokeFixture?.contextSource,
     diagnosticEventStore,
+    guidePreferencesFilePath: resolveDesktopGuidePreferencesFilePath(app),
+    getLibraryTabsEnabled: async () => (await settingsStore.loadSnapshot()).values.libraryTabsEnabled,
   });
   channelComposition = channelCreated;
   plexComposition = registerPlexCompositionIpc(plexCreated, {
@@ -243,30 +292,23 @@ async function startApplication(): Promise<void> {
     diagnosticEventStore,
   });
 
-    registerLineupProtocolHandler(rendererRoot);
-    configurePermissionContainment();
-    registerShellIpcHandlers();
-    const settingsStore = new DesktopSettingsStore({
-      settingsFilePath: resolveDesktopSettingsFilePath(app),
-      migrationEventSink: (event) => {
+    registerLineupProtocolHandler(rendererRoot, channelCreated.guideArtworkOwner, {
+      recordDeliveryFailure: () => {
         diagnosticEventStore.record({
           surface: 'main',
-          category: 'lifecycle',
-          severity: event.status === 'succeeded' ? 'info' : 'error',
-          status: event.status,
-          operation: 'settings.migration',
-          message: 'Desktop settings migration completed.',
-          result: event.status === 'succeeded' ? 'success' : 'failure',
-          context: {
-            fromVersion: event.fromVersion,
-            toVersion: event.toVersion,
-            status: event.status,
-            revision: event.revision,
-          },
+          category: 'ipc',
+          severity: 'warning',
+          status: 'failed',
+          operation: 'guide.artwork.delivery',
+          message: 'Guide artwork delivery failed.',
+          result: 'failure',
         });
       },
     });
+    configurePermissionContainment();
+    registerShellIpcHandlers();
     const initialSettingsSnapshot = await settingsStore.loadSnapshot();
+    if (quitLifecycleOwner.isQuitRequested()) return;
     const productionNativeHostFactory = shellMode === 'production'
       ? createProductionNativeHostFactory({ diagnosticEventStore })
       : null;
@@ -283,6 +325,12 @@ async function startApplication(): Promise<void> {
       settingsPolicy,
       settingsAudioOutputOwner,
     } = settingsNativeHostComposition;
+    nativePlayerPresentationOwner = new NativePlayerPresentationOwner({
+      platform: process.platform,
+      host: productionNativeHost,
+      getSnapshot: () => teardownPlayerIpc?.adapter?.getSnapshot() ?? null,
+      getParentIdentity: () => getShellWindowController().getNativeParentIdentity(),
+    });
     teardownSettingsIpc = registerSettingsIpcHandlers({
       store: settingsStore,
       policy: settingsPolicy,
@@ -295,7 +343,7 @@ async function startApplication(): Promise<void> {
       shellMode,
       isAuthorizedEvent,
       createRequestId,
-      getShellWindow: () => getShellWindowController().getWindow(),
+      getShellWindow: () => getShellWindowController().getBaseWindow(),
       appVersion: app.getVersion(),
     });
     const eventRouter = createPlaybackEventRouter({
@@ -312,6 +360,7 @@ async function startApplication(): Promise<void> {
       reportDiagnostic: reportMainProcessDiagnostic,
       diagnosticEventStore,
       nativeHost: productionNativeHost,
+      presentationOwner: nativePlayerPresentationOwner,
       onNativeHostLifecycleFailure: () => {
         const transitionOwner = playbackProgramTransitionOwner;
         const runtime = playbackRuntime;
@@ -388,100 +437,121 @@ async function startApplication(): Promise<void> {
       .catch((error) => {
         reportMainProcessDiagnostic('Guide runtime active channel initialization failed', error);
       });
-    const shellWindow = getShellWindowController().createWindow();
+    const shellWindow = await getShellWindowController().createWindow();
+    if (quitLifecycleOwner.isQuitRequested()) return;
+    bindGuideArtworkOwnerToWebContents(shellWindow.webContents, channelCreated.guideArtworkOwner);
     registerShellAppCommandController(shellWindow, {
       sendMediaInput: (input) => sendToShellWindow(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, input),
       reportDiagnostic: reportMainProcessDiagnostic,
     });
     attachContainmentHandlers(shellWindow);
     await shellWindow.loadURL(LINEUP_SHELL_URL);
+    if (quitLifecycleOwner.isQuitRequested()) return;
     if (!isAllowedShellUrl(shellWindow.webContents.getURL())) {
       throw new Error('Renderer loaded an unexpected URL.');
     }
     publishShellStatus('ready');
+    getShellWindowController().showWindow();
     if (smokeMode) {
       await runSmokeAssertions(shellWindow, containmentCounters);
+      if (quitLifecycleOwner.isQuitRequested()) return;
       app.exit(0);
     }
 }
 
-function registerApplicationLifecycleHandlers(): void {
+function registerApplicationLifecycleHandlers(
+  quitLifecycleOwner: ApplicationQuitLifecycleOwner,
+): void {
   app.on('window-all-closed', () => {
     app.quit();
   });
 
   app.on('before-quit', (event) => {
-    singleInstanceOwner?.teardown();
-    singleInstanceOwner = null;
-    publishShellStatus('closing');
-    teardownSettingsIpc?.();
-    teardownSettingsIpc = null;
-    teardownDiagnosticsIpc?.();
-    teardownDiagnosticsIpc = null;
-    teardownPlayerRecoveryIpc?.();
-    teardownPlayerRecoveryIpc = null;
-    const localPlaybackProgramTransitionOwner = playbackProgramTransitionOwner;
-    playbackProgramTransitionOwner = null;
-    localPlaybackProgramTransitionOwner?.dispose();
-    const teardown = teardownPlayerIpc;
-    if (playerIpcQuitTeardownComplete || teardown === null) {
-      const localPlaybackEventRouter = playbackEventRouter;
-      playbackEventRouter = null;
-      const localPlaybackRuntime = playbackRuntime;
-      playbackRuntime = null;
-      const localChannelComposition = channelComposition;
-      channelComposition = null;
-      const teardownPlex = plexComposition?.teardown ?? null;
-      plexComposition = null;
-      localPlaybackEventRouter?.dispose();
-      void (async () => {
-        await localPlaybackRuntime?.teardown();
-        await Promise.all([
-          teardownPlex?.() ?? Promise.resolve(),
-          localChannelComposition?.teardown() ?? Promise.resolve(),
-        ]);
-      })().catch((error: unknown) => {
-          reportMainProcessDiagnostic('Runtime composition cleanup failed during quit', error);
-        });
-      return;
+    if (!quitLifecycleOwner.isQuitRequested()) {
+      try {
+        publishShellStatus('closing');
+      } catch (error: unknown) {
+        reportMainProcessDiagnostic('Shell closing status publication failed', error);
+      }
     }
-    if (playerIpcQuitTeardownInProgress) {
-      event.preventDefault();
-      return;
-    }
-
-    event.preventDefault();
-    teardownPlayerIpc = null;
-    const teardownPlex = plexComposition?.teardown ?? null;
-    plexComposition = null;
-    const localChannelComposition = channelComposition;
-    channelComposition = null;
-    playerIpcQuitTeardownInProgress = true;
-    const localPlaybackRuntime = playbackRuntime;
-    playbackRuntime = null;
-    const localPlaybackEventRouter = playbackEventRouter;
-    playbackEventRouter = null;
-    (async () => {
-      await teardown.teardown();
-      localPlaybackEventRouter?.dispose();
-      await localPlaybackRuntime?.teardown();
-      await Promise.all([
-        teardownPlex?.() ?? Promise.resolve(),
-        localChannelComposition?.teardown() ?? Promise.resolve(),
-      ]);
-    })()
-      .catch((error: unknown) => {
-        reportMainProcessDiagnostic('Player IPC cleanup failed during quit', error);
-      })
-      .finally(() => {
-        playerIpcQuitTeardownComplete = true;
-        playerIpcQuitTeardownInProgress = false;
-        app.quit();
-      });
+    quitLifecycleOwner.handleBeforeQuit(event);
   });
 }
 
-function attachContainmentHandlers(window: BrowserWindow): void {
+async function cleanupApplicationRuntimeForQuit(): Promise<void> {
+  const cleanupSingleInstanceOwner = singleInstanceOwner;
+  singleInstanceOwner = null;
+  const cleanupSettingsIpc = teardownSettingsIpc;
+  teardownSettingsIpc = null;
+  const cleanupDiagnosticsIpc = teardownDiagnosticsIpc;
+  teardownDiagnosticsIpc = null;
+  const cleanupPlayerRecoveryIpc = teardownPlayerRecoveryIpc;
+  teardownPlayerRecoveryIpc = null;
+  const cleanupPlaybackProgramTransitionOwner = playbackProgramTransitionOwner;
+  playbackProgramTransitionOwner = null;
+  const cleanupPlayerIpc = teardownPlayerIpc;
+  teardownPlayerIpc = null;
+  const cleanupPlaybackEventRouter = playbackEventRouter;
+  playbackEventRouter = null;
+  const cleanupPlaybackRuntime = playbackRuntime;
+  playbackRuntime = null;
+  const cleanupChannelComposition = channelComposition;
+  channelComposition = null;
+  const cleanupPlexComposition = plexComposition;
+  plexComposition = null;
+
+  await runQuitCleanupStep(
+    'Single-instance cleanup failed during quit',
+    () => cleanupSingleInstanceOwner?.teardown(),
+  );
+  await runQuitCleanupStep('Settings IPC cleanup failed during quit', () => cleanupSettingsIpc?.());
+  await runQuitCleanupStep('Diagnostics IPC cleanup failed during quit', () => cleanupDiagnosticsIpc?.());
+  await runQuitCleanupStep(
+    'Player recovery IPC cleanup failed during quit',
+    () => cleanupPlayerRecoveryIpc?.(),
+  );
+  await runQuitCleanupStep(
+    'Playback transition cleanup failed during quit',
+    () => cleanupPlaybackProgramTransitionOwner?.dispose(),
+  );
+  await runQuitCleanupStep(
+    'Guide artwork cleanup failed during quit',
+    () => cleanupChannelComposition?.guideArtworkOwner.dispose(),
+  );
+  await runQuitCleanupStep(
+    'Shell and presentation cleanup failed during quit',
+    cleanupShellAndNativePresentation,
+  );
+  await runQuitCleanupStep('Player IPC cleanup failed during quit', () => cleanupPlayerIpc?.teardown());
+  await runQuitCleanupStep(
+    'Playback event cleanup failed during quit',
+    () => cleanupPlaybackEventRouter?.dispose(),
+  );
+  await runQuitCleanupStep(
+    'Playback runtime cleanup failed during quit',
+    () => cleanupPlaybackRuntime?.teardown(),
+  );
+  await Promise.all([
+    runQuitCleanupStep('Plex cleanup failed during quit', () => cleanupPlexComposition?.teardown()),
+    runQuitCleanupStep(
+      'Channel cleanup failed during quit',
+      () => cleanupChannelComposition?.teardown(),
+    ),
+  ]);
+}
+
+async function runQuitCleanupStep(
+  failureMessage: string,
+  cleanup: () => unknown | Promise<unknown>,
+): Promise<void> {
+  try {
+    await cleanup();
+  } catch (error: unknown) {
+    reportMainProcessDiagnostic(failureMessage, error);
+  }
+}
+
+function attachContainmentHandlers(window: ShellWindow): void {
   window.webContents.setWindowOpenHandler(() => {
     containmentCounters.windowOpenDenied += 1;
     return { action: 'deny' };
@@ -504,6 +574,36 @@ function attachContainmentHandlers(window: BrowserWindow): void {
       window.webContents.stop();
     }
   });
+}
+
+function cleanupShellAndNativePresentation(): Promise<void> {
+  if (shellPresentationCleanupInProgress !== null) return shellPresentationCleanupInProgress;
+  const controller = shellWindowController;
+  const presentationOwner = nativePlayerPresentationOwner;
+  const cleanup = (async (): Promise<void> => {
+    const errors: Error[] = [];
+    try {
+      await controller?.dispose();
+    } catch (error: unknown) {
+      errors.push(error instanceof Error ? error : new Error('Shell window cleanup failed.'));
+    }
+    try {
+      await presentationOwner?.dispose();
+    } catch (error: unknown) {
+      errors.push(error instanceof Error ? error : new Error('Native presentation cleanup failed.'));
+    } finally {
+      if (shellWindowController === controller) shellWindowController = null;
+      if (nativePlayerPresentationOwner === presentationOwner) nativePlayerPresentationOwner = null;
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) {
+      throw new AggregateError(errors, 'Shell and native presentation cleanup failed.');
+    }
+  })();
+  shellPresentationCleanupInProgress = cleanup.finally(() => {
+    shellPresentationCleanupInProgress = null;
+  });
+  return shellPresentationCleanupInProgress;
 }
 
 function configurePermissionContainment(): void {
@@ -549,21 +649,24 @@ function registerShellIpcHandlers(): void {
 }
 
 function isAuthorizedEvent(event: IpcMainInvokeEvent): boolean {
-  const shellWindow = getShellWindowController().getWindow();
-  if (shellWindow === null) {
+  try {
+    const shellWindow = getShellWindowController().getWindow();
+    if (shellWindow === null || event.sender !== shellWindow.webContents || event.sender.isDestroyed()) {
+      return false;
+    }
+    const senderFrame = event.senderFrame;
+    if (senderFrame === null) return false;
+    const details: ShellIpcAuthorizationDetails = {
+      senderMatchesShell: true,
+      senderDestroyed: false,
+      senderUrl: event.sender.getURL(),
+      frameUrl: senderFrame.url,
+      frameIsMainFrame: senderFrame === event.sender.mainFrame,
+    };
+    return isAuthorizedShellIpcRequest(details);
+  } catch {
     return false;
   }
-  if (event.senderFrame === null) {
-    return false;
-  }
-  const details: ShellIpcAuthorizationDetails = {
-    senderMatchesShell: event.sender === shellWindow.webContents,
-    senderDestroyed: event.sender.isDestroyed(),
-    senderUrl: event.sender.getURL(),
-    frameUrl: event.senderFrame.url,
-    frameIsMainFrame: event.senderFrame === event.sender.mainFrame,
-  };
-  return isAuthorizedShellIpcRequest(details);
 }
 
 function getShellCapabilities(): ShellCapabilities {
@@ -592,8 +695,8 @@ function sendPlayerEvent(event: PlayerEvent): void {
 }
 
 function sendToShellWindow(channel: string, payload: unknown): void {
-  const window = getShellWindowController().getWindow();
-  if (window === null || window.isDestroyed()) {
+  const window = shellWindowController?.getWindow() ?? null;
+  if (window === null || window.baseWindow.isDestroyed()) {
     return;
   }
 

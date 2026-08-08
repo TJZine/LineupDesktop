@@ -65,19 +65,56 @@ test('smoke composition keeps synchronous and asynchronous player delivery in di
     ['unsubscribe?.()', 'runtime.adapter?.cleanup()'],
     'player teardown',
   );
-  const quitFlow = sliceBetween(mainSource, "app.on('before-quit'", 'function attachContainmentHandlers');
-  assertSymbolsInOrder(
-    quitFlow,
-    [
-      'teardownDiagnosticsIpc?.()',
-      'playerIpcQuitTeardownComplete || teardown === null',
-    ],
-    'unconditional diagnostics teardown',
+  const quitFlow = sliceBetween(
+    mainSource,
+    "app.on('before-quit'",
+    'async function cleanupApplicationRuntimeForQuit()',
   );
   assertSymbolsInOrder(
     quitFlow,
-    ['teardown.teardown()', 'localPlaybackEventRouter?.dispose()', 'localPlaybackRuntime?.teardown()'],
-    'deferred quit cleanup',
+    [
+      "publishShellStatus('closing')",
+      'quitLifecycleOwner.handleBeforeQuit(event)',
+    ],
+    'quit lifecycle delegation',
+  );
+  const quitCleanup = sliceBetween(
+    mainSource,
+    'async function cleanupApplicationRuntimeForQuit()',
+    'async function runQuitCleanupStep(',
+  );
+  assertSymbolsInOrder(
+    quitCleanup,
+    [
+      'Single-instance cleanup failed during quit',
+      'Settings IPC cleanup failed during quit',
+      'Diagnostics IPC cleanup failed during quit',
+      'Player recovery IPC cleanup failed during quit',
+      'Playback transition cleanup failed during quit',
+      'Guide artwork cleanup failed during quit',
+      'Shell and presentation cleanup failed during quit',
+      'Player IPC cleanup failed during quit',
+      'Playback event cleanup failed during quit',
+      'Playback runtime cleanup failed during quit',
+      'Plex cleanup failed during quit',
+      'Channel cleanup failed during quit',
+    ],
+    'application quit cleanup',
+  );
+  assertSymbolsInOrder(
+    sliceBetween(mainSource, 'async function runQuitCleanupStep(', 'function attachContainmentHandlers'),
+    ['await cleanup()', 'reportMainProcessDiagnostic(failureMessage, error)'],
+    'independent quit cleanup failure containment',
+  );
+  assertSymbolsInOrder(
+    sliceBetween(mainSource, 'function cleanupShellAndNativePresentation()', 'function configurePermissionContainment'),
+    [
+      'await controller?.dispose()',
+      'await presentationOwner?.dispose()',
+      'shellWindowController === controller',
+      'nativePlayerPresentationOwner === presentationOwner',
+    ],
+    'shell and presentation cleanup ownership',
   );
   assertSymbolsInOrder(
     mainSource,

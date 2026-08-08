@@ -1,4 +1,4 @@
-import type { BrowserWindow } from 'electron';
+import type { ShellWindow } from './window/shellWindowController.js';
 
 import { LINEUP_SHELL_URL } from '../contracts/shell.js';
 import { LINEUP_CSP } from './protocol.js';
@@ -38,7 +38,7 @@ export interface ShellContainmentCounters {
 }
 
 export async function runSmokeAssertions(
-  window: BrowserWindow,
+  window: ShellWindow,
   containmentCounters: ShellContainmentCounters,
 ): Promise<void> {
   const result = await window.webContents.executeJavaScript(`
@@ -73,7 +73,7 @@ export async function runSmokeAssertions(
       const screenRoot = document.querySelector('[data-static-screen-root]');
       const screenStack = document.querySelector('[data-static-screens-mounted]');
       const styledPlayerScreen = document.querySelector('[data-screen="player"]');
-      const playerSurface = document.querySelector('.player-surface');
+      const playerSurface = document.querySelector('[data-player-presentation-surface]');
       const playerFocusButton = document.querySelector('[data-focus-id="overlay-player-retry"]');
       const stylesheetTexts = [];
       for (const sheet of Array.from(document.styleSheets)) {
@@ -156,6 +156,7 @@ export async function runSmokeAssertions(
       if (!bridge?.player?.dispatch) failures.push('player dispatch api');
       if (!bridge?.player?.getSnapshot) failures.push('player snapshot api');
       if (!bridge?.player?.cleanup) failures.push('player cleanup api');
+      if (!bridge?.player?.updatePresentation) failures.push('player presentation api');
       if (!bridge?.player?.onEvent) failures.push('player event api');
       const assertBridgeMethods = (namespace, methods) => {
         const api = bridge?.[namespace];

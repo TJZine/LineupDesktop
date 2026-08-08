@@ -19,6 +19,7 @@ import {
   LINEUP_CHANNEL_SETUP_START_APPLY_CHANNEL,
   LINEUP_CHANNEL_SETUP_START_REVIEW_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
 } from '../../contracts/ipc.js';
 import type { ChannelRuntime } from './channelRuntime.js';
@@ -28,6 +29,10 @@ import {
   type ChannelPublicReferenceOwner,
 } from './channelPublicReferenceOwner.js';
 import type { GuideIpcResult, GuideRuntimeError } from '../../contracts/guide.js';
+import {
+  DesktopGuidePreferencesCommitCurrentnessError,
+  DesktopGuidePreferencesStoreError,
+} from './desktopGuidePreferencesStore.js';
 import { LivePlexTransportError } from '../plex/livePlexTransport.js';
 import {
   channelBuilderRequestError,
@@ -63,7 +68,7 @@ export function registerChannelIpcHandlers(
       payload,
       options.createRequestId('channel-setup-status'),
     );
-    if (!options.isAuthorizedEvent(event)) {
+    if (!isAuthorizedChannelEvent(options, event)) {
       return channelSetupFailure(request.requestId, channelBuilderRequestError('getStatus', 'unauthorized'));
     }
     if (!request.ok) {
@@ -77,7 +82,7 @@ export function registerChannelIpcHandlers(
       payload,
       options.createRequestId('channel-setup-review'),
     );
-    if (!options.isAuthorizedEvent(event)) {
+    if (!isAuthorizedChannelEvent(options, event)) {
       return channelSetupFailure(request.requestId, channelBuilderRequestError('startReview', 'unauthorized'));
     }
     if (!request.ok) {
@@ -91,7 +96,7 @@ export function registerChannelIpcHandlers(
       payload,
       options.createRequestId('channel-setup-apply'),
     );
-    if (!options.isAuthorizedEvent(event)) {
+    if (!isAuthorizedChannelEvent(options, event)) {
       return channelSetupFailure(request.requestId, channelBuilderRequestError('startApply', 'unauthorized'));
     }
     if (!request.ok) {
@@ -105,7 +110,7 @@ export function registerChannelIpcHandlers(
       payload,
       options.createRequestId('channel-setup-operation'),
     );
-    if (!options.isAuthorizedEvent(event)) {
+    if (!isAuthorizedChannelEvent(options, event)) {
       return channelSetupFailure(request.requestId, channelBuilderRequestError('getOperation', 'unauthorized'));
     }
     if (!request.ok) {
@@ -119,7 +124,7 @@ export function registerChannelIpcHandlers(
       payload,
       options.createRequestId('channel-setup-cancel'),
     );
-    if (!options.isAuthorizedEvent(event)) {
+    if (!isAuthorizedChannelEvent(options, event)) {
       return channelSetupFailure(request.requestId, channelBuilderRequestError('cancel', 'unauthorized'));
     }
     if (!request.ok) {
@@ -134,7 +139,7 @@ export function registerChannelIpcHandlers(
 
     ipcMain.handle(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL, async (event, payload: unknown) => {
       const request = readPresentationRequest(payload, options);
-      if (!options.isAuthorizedEvent(event)) {
+      if (!isAuthorizedChannelEvent(options, event)) {
         return unauthorizedGuideResult(request.requestId, 'getPresentation');
       }
       if (!request.ok) {
@@ -143,13 +148,17 @@ export function registerChannelIpcHandlers(
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           const generationA = await options.runtime.loadPublicReferenceGeneration();
-          const raw = await guideRuntime.getPresentation(
-            request.payload.startTimeMs,
-            request.payload.durationMs,
-          );
+          const value = await guideRuntime.getPagedPresentation({
+            startTimeMs: request.payload.startTimeMs,
+            durationMs: request.payload.durationMs,
+            channelOffset: request.payload.channelOffset,
+            channelLimit: request.payload.channelLimit,
+            generation: generationA,
+            publicReferenceOwner,
+          });
           const generationB = await options.runtime.loadPublicReferenceGeneration();
-          if (generationA.fingerprint !== generationB.fingerprint) continue;
-          const value = publicReferenceOwner.projectPresentation(generationA, raw);
+          if (generationA.fingerprint !== generationB.fingerprint ||
+            !guideRuntime.isPreferenceScopeCurrent(value.libraryFilter.scopeToken)) continue;
           return { ok: true, value, requestId: request.requestId };
         } catch (error: unknown) {
           if (error instanceof ChannelPublicReferenceConsistencyError) continue;
@@ -173,9 +182,34 @@ export function registerChannelIpcHandlers(
       };
     });
 
+    ipcMain.handle(LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL, async (event, payload: unknown) => {
+      const request = readSetLibraryFilterRequest(payload, options);
+      if (!isAuthorizedChannelEvent(options, event)) return unauthorizedGuideResult(request.requestId, 'setLibraryFilter');
+      if (!request.ok) return validationGuideResult(request.requestId, 'setLibraryFilter');
+      try {
+        const generation = await options.runtime.loadPublicReferenceGeneration();
+        const value = await guideRuntime.setLibraryFilter({
+          generation,
+          publicReferenceOwner,
+          expectedScopeToken: request.payload.expectedScopeToken,
+          expectedRevision: request.payload.expectedRevision,
+          libraryId: request.payload.libraryId,
+          loadCurrentGeneration: () => options.runtime.loadPublicReferenceGeneration(),
+          isCommitCurrent: () => isAuthorizedChannelEvent(options, event),
+        });
+        return { ok: true, value, requestId: request.requestId };
+      } catch (error: unknown) {
+        return error instanceof DesktopGuidePreferencesCommitCurrentnessError
+          ? unauthorizedGuideResult(request.requestId, 'setLibraryFilter')
+          : error instanceof DesktopGuidePreferencesStoreError
+          ? { ok: false, requestId: request.requestId, error: mapGuideFilterError(error) }
+          : validationGuideResult(request.requestId, 'setLibraryFilter');
+      }
+    });
+
     ipcMain.handle(LINEUP_PLAYER_TUNE_CHANNEL, async (event, payload: unknown) => {
       const request = readTuneRequest(payload, options);
-      if (!options.isAuthorizedEvent(event)) {
+      if (!isAuthorizedChannelEvent(options, event)) {
         return unauthorizedGuideResult(request.requestId, 'tuneChannel');
       }
       if (!request.ok) {
@@ -216,9 +250,21 @@ export function registerChannelIpcHandlers(
     ipcMain.removeHandler(LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL);
     if (options.guideRuntime) {
       ipcMain.removeHandler(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL);
+      ipcMain.removeHandler(LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL);
       ipcMain.removeHandler(LINEUP_PLAYER_TUNE_CHANNEL);
     }
   };
+}
+
+function isAuthorizedChannelEvent(
+  options: Pick<RegisterChannelIpcHandlersOptions, 'isAuthorizedEvent'>,
+  event: IpcMainInvokeEvent,
+): boolean {
+  try {
+    return options.isAuthorizedEvent(event);
+  } catch {
+    return false;
+  }
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -248,8 +294,8 @@ export type ChannelIpcRequestEnvelope =
   | ChannelSetupCancelRequest;
 
 type ReadPresentationRequestResult =
-  | { ok: true; requestId: string; payload: { startTimeMs: number; durationMs: number } }
-  | { ok: false; requestId: string; payload: Partial<{ startTimeMs: number; durationMs: number }> };
+  | { ok: true; requestId: string; payload: { startTimeMs: number; durationMs: number; channelOffset: number; channelLimit: number } }
+  | { ok: false; requestId: string; payload: Partial<{ startTimeMs: number; durationMs: number; channelOffset: number; channelLimit: number }> };
 
 function readPresentationRequest(
   value: unknown,
@@ -268,14 +314,16 @@ function readPresentationRequest(
     !REQUEST_ID_PATTERN.test(value.requestId) ||
     !isPlainRecord(value.payload) ||
     !hasOnlyKeys(value, ['requestId', 'payload']) ||
-    !hasOnlyKeys(value.payload, ['startTimeMs', 'durationMs']) ||
+    !hasOnlyOptionalKeys(value.payload, ['startTimeMs', 'durationMs'], ['channelOffset', 'channelLimit']) ||
     typeof value.payload.startTimeMs !== 'number' ||
     !Number.isFinite(value.payload.startTimeMs) ||
     value.payload.startTimeMs < 0 ||
     typeof value.payload.durationMs !== 'number' ||
     !Number.isFinite(value.payload.durationMs) ||
     value.payload.durationMs <= 0 ||
-    value.payload.durationMs > MAX_GUIDE_PRESENTATION_DURATION_MS
+    value.payload.durationMs > MAX_GUIDE_PRESENTATION_DURATION_MS ||
+    (value.payload.channelOffset !== undefined && (typeof value.payload.channelOffset !== 'number' || !Number.isSafeInteger(value.payload.channelOffset) || value.payload.channelOffset < 0)) ||
+    (value.payload.channelLimit !== undefined && (typeof value.payload.channelLimit !== 'number' || !Number.isSafeInteger(value.payload.channelLimit) || value.payload.channelLimit < 1 || value.payload.channelLimit > 24))
   ) {
     return { ok: false, requestId, payload: {} };
   }
@@ -285,6 +333,8 @@ function readPresentationRequest(
     payload: {
       startTimeMs: value.payload.startTimeMs,
       durationMs: value.payload.durationMs,
+      channelOffset: typeof value.payload.channelOffset === 'number' ? value.payload.channelOffset : 0,
+      channelLimit: typeof value.payload.channelLimit === 'number' ? value.payload.channelLimit : 9,
     },
   };
 }
@@ -362,7 +412,7 @@ function readTuneRequest(
 
 function unauthorizedGuideResult(
   requestId: string,
-  operation: 'getPresentation' | 'tuneChannel',
+  operation: 'getPresentation' | 'setLibraryFilter' | 'tuneChannel',
 ): GuideIpcResult<never> {
   return {
     ok: false,
@@ -379,7 +429,7 @@ function unauthorizedGuideResult(
 
 function validationGuideResult(
   requestId: string,
-  operation: 'getPresentation' | 'tuneChannel',
+  operation: 'getPresentation' | 'setLibraryFilter' | 'tuneChannel',
 ): GuideIpcResult<never> {
   return {
     ok: false,
@@ -392,4 +442,55 @@ function validationGuideResult(
       operation,
     },
   };
+}
+
+type ReadSetLibraryFilterResult =
+  | { ok: true; requestId: string; payload: { expectedScopeToken: string; expectedRevision: number; libraryId: string | null } }
+  | { ok: false; requestId: string; payload: Record<string, never> };
+
+function readSetLibraryFilterRequest(
+  value: unknown,
+  options: Pick<RegisterChannelIpcHandlersOptions, 'createRequestId'>,
+): ReadSetLibraryFilterResult {
+  const fallbackRequestId = options.createRequestId('guide-library-filter');
+  if (!isPlainRecord(value)) return { ok: false, requestId: fallbackRequestId, payload: {} };
+  const requestId = typeof value.requestId === 'string' && REQUEST_ID_PATTERN.test(value.requestId)
+    ? value.requestId : fallbackRequestId;
+  if (typeof value.requestId !== 'string' || !REQUEST_ID_PATTERN.test(value.requestId) ||
+    !isPlainRecord(value.payload) || !hasOnlyKeys(value, ['requestId', 'payload']) ||
+    !hasOnlyKeys(value.payload, ['expectedScopeToken', 'expectedRevision', 'libraryId']) ||
+    typeof value.payload.expectedScopeToken !== 'string' || !REQUEST_ID_PATTERN.test(value.payload.expectedScopeToken) ||
+    typeof value.payload.expectedRevision !== 'number' || !Number.isSafeInteger(value.payload.expectedRevision) || value.payload.expectedRevision < 0 ||
+    !(value.payload.libraryId === null || (typeof value.payload.libraryId === 'string' && REQUEST_ID_PATTERN.test(value.payload.libraryId)))) {
+    return { ok: false, requestId, payload: {} };
+  }
+  return { ok: true, requestId, payload: {
+    expectedScopeToken: value.payload.expectedScopeToken,
+    expectedRevision: value.payload.expectedRevision,
+    libraryId: value.payload.libraryId,
+  } };
+}
+
+function mapGuideFilterError(error: DesktopGuidePreferencesStoreError): GuideRuntimeError {
+  return mapGuideFilterCode(error.code);
+}
+
+function mapGuideFilterCode(code: DesktopGuidePreferencesStoreError['code']): GuideRuntimeError {
+  const retryable = code !== 'GUIDE_FILTER_UNSUPPORTED_VERSION' && code !== 'GUIDE_FILTER_REVISION_EXHAUSTED';
+  return {
+    code,
+    message: code === 'GUIDE_FILTER_SCOPE_STALE' ? 'Guide scope changed. Refresh and try again.'
+      : code === 'GUIDE_FILTER_REVISION_CONFLICT' ? 'Guide filter changed. Refresh and try again.'
+        : code === 'GUIDE_FILTER_UNSUPPORTED_VERSION' ? 'Guide preferences use an unsupported version.'
+          : code === 'GUIDE_FILTER_REVISION_EXHAUSTED' ? 'Guide preference revision is exhausted.'
+            : 'Guide preferences could not be saved.',
+    retryable,
+    recoverable: retryable,
+    operation: 'setLibraryFilter',
+  };
+}
+
+function hasOnlyOptionalKeys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[]): boolean {
+  const allowed = new Set([...required, ...optional]);
+  return required.every((key) => Object.hasOwn(value, key)) && Object.keys(value).every((key) => allowed.has(key));
 }

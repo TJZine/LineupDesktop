@@ -19,6 +19,7 @@ import {
 } from '../../renderer/workflow.js';
 import { renderShellDom, type ShellDomBindings } from '../../renderer/shell/shellDom.js';
 import { beginFullscreenRequest, rejectFullscreenRequest } from '../../renderer/shell/shellState.js';
+import { cssDeclaration, extractCssRule, normalizeCss } from './cssTestUtils.js';
 
 const GUIDE_BASE = Date.UTC(2026, 4, 12, 20, 0, 0);
 function createRendererSafePlayerSnapshot() {
@@ -45,6 +46,7 @@ const GUIDE_PRESENTATION: EpgPresentationSource = {
       description: 'Archive description.', showTitle: 'The Midnight Archive', episodeLabel: 'S2 E4',
       rating: 'TV-14', quality: ['HD'], genres: ['Drama'],
       startsAtMs: GUIDE_BASE, endsAtMs: GUIDE_BASE + 60 * 60 * 1000,
+      artwork: null,
     }],
   }],
   nowWatching: {
@@ -509,6 +511,215 @@ test('route DOM suppresses now-playing chrome and summary when ready data has no
   } finally {
     restoreDocument(originalDocument);
   }
+});
+
+test('Guide Now Watching setting projects exactly one layout-owned status without disturbing the grid', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    createElement: (tagName: string) => new ElementDouble(tagName),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const grid = new ElementDouble();
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.epgGridElement = grid as unknown as HTMLElement;
+    const maxSafeTitle = 'T'.repeat(2_000);
+    const maxSafeChannelNumber = '9'.repeat(120);
+    const maxSafeChannelName = 'C'.repeat(2_000);
+    const maxSafeChannelLabel = `${maxSafeChannelNumber} - ${maxSafeChannelName}`;
+    const base = createWorkflowState('guide', {
+      ...GUIDE_PRESENTATION,
+      channels: GUIDE_PRESENTATION.channels.map((channel) => ({
+        ...channel,
+        number: maxSafeChannelNumber,
+        name: maxSafeChannelName,
+      })),
+      nowWatching: { ...GUIDE_PRESENTATION.nowWatching!, title: maxSafeTitle },
+    });
+    const render = (enabled: boolean, layout: 'classic' | 'overlay', route: 'guide' | 'player' = 'guide') => {
+      const state = route === 'guide' ? base : createWorkflowState('player', base.guidePresentation);
+      renderWorkflowDom(
+        {
+          ...state,
+          settingsDraft: {
+            ...state.settingsDraft,
+            nowWatchingBannerEnabled: enabled,
+            guideLayout: layout,
+          },
+        },
+        createPlayerOverlayState(),
+        createRendererSafePlayerSnapshot(),
+        dom,
+      );
+    };
+
+    render(true, 'classic');
+    const classic = findElementsByClassName(grid, 'epg-classic-now-playing');
+    assert.equal(classic.length, 1);
+    assert.equal(findElementsByClassName(grid, 'epg-now-watching-banner').length, 0);
+    assert.equal(classic[0]?.getAttribute('role'), 'status');
+    assert.equal(classic[0]?.getAttribute('aria-live'), 'polite');
+    assert.equal(classic[0]?.getAttribute('aria-atomic'), 'true');
+    assert.equal(classic[0]?.dataset.focusId, undefined);
+    const classicChannel = findElementsByClassName(classic[0]!, 'epg-classic-now-playing-channel');
+    assert.equal(classicChannel[0]?.textContent, maxSafeChannelLabel);
+    const classicFocusIds = findFocusIds(grid);
+    assert.ok(classicFocusIds.some((focusId) => focusId.startsWith('guide-program-')));
+
+    render(true, 'overlay');
+    const overlay = findElementsByClassName(grid, 'epg-now-watching-banner');
+    assert.equal(findElementsByClassName(grid, 'epg-classic-now-playing').length, 0);
+    assert.equal(overlay.length, 1);
+    assert.equal(overlay[0]?.getAttribute('role'), 'status');
+    assert.equal(overlay[0]?.getAttribute('aria-live'), 'polite');
+    assert.equal(overlay[0]?.getAttribute('aria-atomic'), 'true');
+    assert.equal(overlay[0]?.dataset.focusId, undefined);
+    const overlayChannel = findElementsByClassName(overlay[0]!, 'epg-now-watching-channel');
+    const overlayProgram = findElementsByClassName(overlay[0]!, 'epg-now-watching-program');
+    assert.equal(overlayChannel.length, 1);
+    assert.equal(overlayChannel[0]?.textContent, maxSafeChannelLabel);
+    assert.equal(overlayChannel[0]?.children.length, 0);
+    assert.equal(overlayProgram.length, 1);
+    assert.equal(overlayProgram[0]?.textContent, maxSafeTitle);
+    assert.equal(overlayProgram[0]?.children.length, 0);
+    assert.equal(collectText(overlay[0]!).includes(maxSafeTitle), true);
+    assert.deepEqual(findFocusIds(grid), classicFocusIds);
+    assert.equal(findElementsByRole(grid, 'gridcell').length, 1);
+
+    for (const layout of ['classic', 'overlay'] as const) {
+      render(false, layout);
+      assert.equal(findElementsByClassName(grid, 'epg-classic-now-playing').length, 0);
+      assert.equal(findElementsByClassName(grid, 'epg-now-watching-banner').length, 0);
+      assert.deepEqual(findFocusIds(grid), classicFocusIds);
+    }
+
+    render(true, 'overlay', 'player');
+    assert.equal(findElementsByClassName(grid, 'epg-classic-now-playing').length, 0);
+    assert.equal(findElementsByClassName(grid, 'epg-now-watching-banner').length, 0);
+
+    render(true, 'classic');
+    assert.equal(findElementsByClassName(grid, 'epg-classic-now-playing').length, 1);
+    assert.equal(findElementsByClassName(grid, 'epg-now-watching-banner').length, 0);
+    assert.deepEqual(findFocusIds(grid), classicFocusIds);
+  } finally {
+    restoreDocument(originalDocument);
+  }
+});
+
+test('Guide clears stale Now Watching surfaces for every non-ready presentation state in both layouts', () => {
+  const originalDocument = Reflect.get(globalThis, 'document') as Document | undefined;
+  const documentDouble = {
+    documentElement: { dataset: {} },
+    querySelector: () => null,
+    createElement: (tagName: string) => new ElementDouble(tagName),
+  };
+  Object.defineProperty(globalThis, 'document', {
+    value: documentDouble,
+    configurable: true,
+  });
+
+  try {
+    const grid = new ElementDouble();
+    const dom = createOverlayDomBindings({
+      overlayStack: new ElementDouble(),
+      overlays: [],
+      overlayActions: [],
+    });
+    dom.epgGridElement = grid as unknown as HTMLElement;
+    const base = createWorkflowState('guide');
+    assert.notEqual(base.guidePresentation.nowWatching, null);
+    const render = (layout: 'classic' | 'overlay', presentationState: 'ready' | 'loading' | 'empty-channels' | 'empty-programs' | 'error') => {
+      renderWorkflowDom(
+        {
+          ...base,
+          epg: setEpgPresentationState(base.epg, presentationState),
+          settingsDraft: {
+            ...base.settingsDraft,
+            nowWatchingBannerEnabled: true,
+            guideLayout: layout,
+          },
+        },
+        createPlayerOverlayState(),
+        createRendererSafePlayerSnapshot(),
+        dom,
+      );
+    };
+
+    for (const layout of ['classic', 'overlay'] as const) {
+      const activeClass = layout === 'classic'
+        ? 'epg-classic-now-playing'
+        : 'epg-now-watching-banner';
+      for (const presentationState of ['loading', 'empty-channels', 'empty-programs', 'error'] as const) {
+        render(layout, 'ready');
+        assert.equal(findElementsByClassName(grid, activeClass).length, 1);
+
+        render(layout, presentationState);
+        assert.equal(grid.getAttribute('role'), null);
+        assert.equal(findElementsByClassName(grid, 'epg-classic-now-playing').length, 0);
+        assert.equal(findElementsByClassName(grid, 'epg-now-watching-banner').length, 0);
+        assert.doesNotMatch(collectText(grid), /NOW PLAYING/u);
+      }
+    }
+  } finally {
+    restoreDocument(originalDocument);
+  }
+});
+
+test('Guide Now Watching surfaces explicitly honor reduced motion and forced colors', () => {
+  const processValue = Reflect.get(globalThis, 'process') as {
+    getBuiltinModule(name: string): { readFileSync(path: URL, encoding: 'utf8'): string };
+  };
+  const css = processValue.getBuiltinModule('node:fs').readFileSync(
+    new URL('../../renderer/styles/guide-epg.css', import.meta.url),
+    'utf8',
+  );
+  const normalized = normalizeCss(css);
+  const banner = extractCssRule(normalized, '.epg-now-watching-banner');
+  assert.equal(
+    cssDeclaration(banner, 'grid-template-columns'),
+    'minmax(0, max-content) minmax(0, 1fr) minmax(0, 2fr) minmax(0, max-content)',
+  );
+  assert.equal(cssDeclaration(banner, 'overflow'), 'hidden');
+  const bannerChildren = extractCssRule(normalized, '.epg-now-watching-banner > *');
+  assert.equal(cssDeclaration(bannerChildren, 'min-width'), '0');
+  for (const selector of [
+    '.epg-now-watching-live',
+    '.epg-now-watching-channel',
+    '.epg-now-watching-program',
+    '.epg-now-watching-time',
+  ]) {
+    const declaration = extractCssRule(normalized, selector, { declaration: 'overflow' });
+    assert.equal(cssDeclaration(declaration, 'overflow'), 'hidden');
+    assert.equal(cssDeclaration(declaration, 'text-overflow'), 'ellipsis');
+    assert.equal(cssDeclaration(declaration, 'white-space'), 'nowrap');
+  }
+
+  for (const selector of ['.epg-classic-now-playing', '.epg-now-watching-banner']) {
+    const reduced = extractCssRule(normalized, selector, {
+      atRule: '@media (prefers-reduced-motion: reduce)',
+    });
+    assert.equal(cssDeclaration(reduced, 'animation'), 'none !important');
+    assert.equal(cssDeclaration(reduced, 'transition'), 'none !important');
+    const forced = extractCssRule(normalized, selector, {
+      atRule: '@media (forced-colors: active)',
+      declaration: 'color',
+    });
+    assert.equal(cssDeclaration(forced, 'color'), 'CanvasText');
+  }
+  const forcedBanner = extractCssRule(normalized, '.epg-now-watching-banner', {
+    atRule: '@media (forced-colors: active)',
+  });
+  assert.equal(cssDeclaration(forcedBanner, 'border-color'), 'CanvasText');
 });
 
 test('route DOM renders player OSD fields and playback option rows', () => {
@@ -1202,6 +1413,20 @@ function findElementsByRole(element: ElementDouble, role: string): ElementDouble
   ];
 }
 
+function findElementsByClassName(element: ElementDouble, className: string): ElementDouble[] {
+  return [
+    ...(element.className.split(' ').includes(className) ? [element] : []),
+    ...element.children.flatMap((child) => findElementsByClassName(child, className)),
+  ];
+}
+
+function findFocusIds(element: ElementDouble): string[] {
+  return [
+    ...(element.dataset.focusId === undefined ? [] : [element.dataset.focusId]),
+    ...element.children.flatMap(findFocusIds),
+  ];
+}
+
 function restoreDocument(originalDocument: Document | undefined): void {
   if (originalDocument === undefined) {
     Reflect.deleteProperty(globalThis, 'document');
@@ -1284,6 +1509,10 @@ function createOverlayDomBindings({
     epgDetailChannelElement: null,
     epgDetailTitleElement: null,
     epgDetailTimeElement: null,
+    epgDetailDescriptionElement: null,
+    epgDetailArtworkElement: null,
+    epgDetailPosterElement: null,
+    epgDetailArtworkPlaceholderElement: null,
     settingsSourceElement: null,
     settingsChannelsElement: null,
     settingsStateElement: null,

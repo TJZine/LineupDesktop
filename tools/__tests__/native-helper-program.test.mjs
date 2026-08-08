@@ -7,6 +7,169 @@ import path from 'node:path';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const programPath = path.join(repoRoot, 'src/native-helper/Lineup.NativePlayerHost/Program.cs');
 
+function methodBody(source, signature) {
+  const signatureIndex = source.indexOf(signature);
+  assert.notEqual(signatureIndex, -1, `missing method: ${signature}`);
+  const bodyStart = source.indexOf('{', signatureIndex + signature.length);
+  assert.notEqual(bodyStart, -1, `missing method body: ${signature}`);
+  let depth = 0;
+  for (let index = bodyStart; index < source.length; index += 1) {
+    const skippedTo = skipCSharpCommentOrLiteral(source, index);
+    if (skippedTo !== null) {
+      index = skippedTo - 1;
+      continue;
+    }
+    if (source[index] === '{') depth += 1;
+    if (source[index] === '}') depth -= 1;
+    if (depth === 0) return source.slice(bodyStart + 1, index);
+  }
+  assert.fail(`unterminated method body: ${signature}`);
+}
+
+function skipCSharpCommentOrLiteral(source, index) {
+  const current = source[index];
+  const next = source[index + 1];
+  if (current === '/' && next === '/') {
+    const newline = source.indexOf('\n', index + 2);
+    return newline === -1 ? source.length : newline + 1;
+  }
+  if (current === '/' && next === '*') {
+    const end = source.indexOf('*/', index + 2);
+    assert.notEqual(end, -1, 'unterminated C# block comment');
+    return end + 2;
+  }
+  if (current === "'") return skipCSharpQuotedLiteral(source, index, "'", false);
+  if (current !== '"') return null;
+
+  const prefix = source.slice(Math.max(0, index - 2), index);
+  const verbatim = prefix.endsWith('@') || prefix === '@$';
+  const interpolated = prefix.endsWith('$') || prefix === '$@';
+  if (verbatim) {
+    return interpolated
+      ? skipCSharpInterpolatedString(source, index, true)
+      : skipCSharpQuotedLiteral(source, index, '"', true);
+  }
+
+  let quoteCount = 1;
+  while (source[index + quoteCount] === '"') quoteCount += 1;
+  if (quoteCount >= 3) {
+    const delimiter = '"'.repeat(quoteCount);
+    const end = source.indexOf(delimiter, index + quoteCount);
+    assert.notEqual(end, -1, 'unterminated C# raw string literal');
+    return end + quoteCount;
+  }
+  return interpolated
+    ? skipCSharpInterpolatedString(source, index, false)
+    : skipCSharpQuotedLiteral(source, index, '"', false);
+}
+
+function skipCSharpQuotedLiteral(source, start, quote, verbatim) {
+  for (let index = start + 1; index < source.length; index += 1) {
+    if (verbatim && source[index] === quote && source[index + 1] === quote) {
+      index += 1;
+      continue;
+    }
+    if (!verbatim && source[index] === '\\') {
+      index += 1;
+      continue;
+    }
+    if (source[index] === quote) return index + 1;
+  }
+  assert.fail(`unterminated C# ${quote === "'" ? 'character' : 'string'} literal`);
+}
+
+function skipCSharpInterpolatedString(source, start, verbatim) {
+  for (let index = start + 1; index < source.length; index += 1) {
+    if (verbatim && source[index] === '"' && source[index + 1] === '"') {
+      index += 1;
+      continue;
+    }
+    if (!verbatim && source[index] === '\\') {
+      index += 1;
+      continue;
+    }
+    if (source[index] === '{' && source[index + 1] === '{') {
+      index += 1;
+      continue;
+    }
+    if (source[index] === '}' && source[index + 1] === '}') {
+      index += 1;
+      continue;
+    }
+    if (source[index] === '{') {
+      index = skipCSharpInterpolationExpression(source, index + 1) - 1;
+      continue;
+    }
+    if (source[index] === '"') return index + 1;
+  }
+  assert.fail('unterminated C# interpolated string literal');
+}
+
+function skipCSharpInterpolationExpression(source, start) {
+  let depth = 1;
+  for (let index = start; index < source.length; index += 1) {
+    const skippedTo = skipCSharpCommentOrLiteral(source, index);
+    if (skippedTo !== null) {
+      index = skippedTo - 1;
+      continue;
+    }
+    if (source[index] === '{') depth += 1;
+    if (source[index] === '}') depth -= 1;
+    if (depth === 0) return index + 1;
+  }
+  assert.fail('unterminated C# interpolation expression');
+}
+
+function assertUniqueOrdered(source, earlier, later) {
+  const earlierIndexes = findOccurrences(source, earlier);
+  const laterIndexes = findOccurrences(source, later);
+  assert.equal(earlierIndexes.length, 1, `expected exactly one earlier statement: ${earlier}`);
+  assert.equal(laterIndexes.length, 1, `expected exactly one later statement: ${later}`);
+  assert.ok(earlierIndexes[0] < laterIndexes[0], `expected ${earlier} before ${later}`);
+}
+
+function findOccurrences(source, value) {
+  const indexes = [];
+  let index = source.indexOf(value);
+  while (index !== -1) {
+    indexes.push(index);
+    index = source.indexOf(value, index + value.length);
+  }
+  return indexes;
+}
+
+test('native helper source inspection ignores braces in C# literals and comments', () => {
+  const source = String.raw`
+private static void Example()
+{
+    string normal = "}";
+    string escaped = "\\\"}";
+    string verbatim = @"}""{";
+    string verbatimLeadingQuote = @"""{";
+    string interpolatedVerbatimDollarAt = $@"{Format(new[] { "}" })}";
+    string interpolatedVerbatimAtDollar = @$"{Format(new[] { "}" })}";
+    if (true)
+    {
+        string raw = """ } """;
+        string interpolatedRaw = $""" {Format(new[] { "}" })} """;
+        Run();
+    }
+    string interpolated = $"{Format("}")}";
+    char brace = '}';
+    // }
+    /* { } */
+    Finish();
+}
+`;
+  const body = methodBody(source, 'private static void Example()');
+  assert.match(body, /Finish\(\);/u);
+  assertUniqueOrdered(body, 'Run()', 'Finish()');
+  assert.throws(
+    () => assertUniqueOrdered(`${body}\nRun();`, 'Run()', 'Finish()'),
+    /expected exactly one earlier statement/u,
+  );
+});
+
 test('native helper resolves libmpv from helper directory or explicit override', async () => {
   const source = await readFile(programPath, 'utf8');
 
@@ -161,7 +324,7 @@ test('native helper gates runtime control results and formats seek values invari
   assert.doesNotMatch(source, /Marshal\.StructureToPtr\(value,\s*data/u);
 });
 
-test('native helper checks essential property observation registration before starting threads', async () => {
+test('native helper checks essential property observation registration before starting event delivery', async () => {
   const source = await readFile(programPath, 'utf8');
 
   assert.match(
@@ -170,7 +333,7 @@ test('native helper checks essential property observation registration before st
   );
   assert.match(
     source,
-    /ObserveProperty\(mpvContext,\s*1,\s*"time-pos",\s*MpvFormatDouble\)[\s\S]*?ObserveProperty\(mpvContext,\s*10,\s*"audio-codec",\s*MpvFormatString\)[\s\S]*?renderThread\.Start\(\)/u,
+    /ObserveProperty\(mpvContext,\s*1,\s*"time-pos",\s*MpvFormatDouble\)[\s\S]*?ObserveProperty\(mpvContext,\s*10,\s*"audio-codec",\s*MpvFormatString\)[\s\S]*?eventThread\.Start\(\)/u,
   );
   assert.match(
     source,
@@ -217,4 +380,116 @@ test('native helper classifies official end-file reasons without exposing raw mp
     /\["message"\]\s*=\s*"Native playback ended with a player engine error\."/u,
   );
   assert.doesNotMatch(source, /\["(?:reason|error)"\]\s*=\s*endFile\./u);
+});
+
+test('native presentation uses one bounded owner thread and a disabled nonactivating child', async () => {
+  const source = await readFile(programPath, 'utf8');
+  const manifest = await readFile(path.join(path.dirname(programPath), 'app.manifest'), 'utf8');
+  assert.match(source, /BlockingCollection<PresentationWork>\(16\)/u);
+  assert.match(source, /Name = "LineupPresentationRenderLoop"/u);
+  assert.match(source, /0x4E000000/u);
+  assert.match(source, /0x08000004/u);
+  assert.match(source, /HwndBottom/u);
+  assert.match(source, /WM_MOUSEACTIVATE \/ MA_NOACTIVATE/u);
+  assert.match(source, /WM_GETOBJECT: no native accessibility provider/u);
+  assert.match(source, /AreDpiAwarenessContextsEqual/u);
+  assert.match(source, /Math\.Floor\(bounds\.x/u);
+  assert.match(source, /Math\.Ceiling\(\(bounds\.x \+ bounds\.width\)/u);
+  assert.doesNotMatch(source, /HWND_TOPMOST|HwndTopmost|WS_POPUP/u);
+  assert.match(manifest, />PerMonitorV2</u);
+});
+
+test('native presentation validates exact input grammar before queueing and rejects duplicate operations', async () => {
+  const source = await readFile(programPath, 'utf8');
+
+  assert.match(source, /if \(!HasExactPresentationKeys\(document\.RootElement\)\)\s*\{\s*WritePresentationResult\(message, "rejected"\)/su);
+  assert.match(source, /count != 10 \|\| expected\.Count != 0/u);
+  assert.match(source, /IsPositiveSafeInteger\(documentEpoch\)/u);
+  assert.match(source, /IsNonZeroDecimal\(root\.GetProperty\("parentHwnd"\)\.GetString\(\)\)/u);
+  assert.match(source, /mode != "hidden" && loadedRequest\.ValueKind == JsonValueKind\.Null/u);
+  assert.match(source, /boundCount != 4 \|\| boundKeys\.Count != 0/u);
+  assert.match(source, /width <= 0 \|\| height <= 0 \|\| x \+ width > 1 \|\| y \+ height > 1/u);
+  assert.match(source, /if \(!TryAdvancePresentationOperationSequence\(message\.operationId\)\)\s*\{\s*WritePresentationResult\(message, "rejected"\);\s*return;\s*\}/su);
+});
+
+test('native helper applies the presentation cap only after parsing the message type', async () => {
+  const source = await readFile(programPath, 'utf8');
+  const commandLoop = methodBody(source, 'private static void CommandLoop()');
+
+  assert.match(source, /private const int MAX_HELPER_MESSAGE_SIZE = 1024 \* 1024;/u);
+  assert.match(source, /private const int MAX_PRESENTATION_MESSAGE_SIZE = 4096;/u);
+  assertUniqueOrdered(commandLoop, 'line.Length > MAX_HELPER_MESSAGE_SIZE', 'JsonDocument.Parse(line)');
+  assertUniqueOrdered(commandLoop, 'JsonDocument.Parse(line)', 'message.type == "presentation.update" && line.Length > MAX_PRESENTATION_MESSAGE_SIZE');
+  assert.doesNotMatch(commandLoop, /Contains\("\\"presentation\.update\\""/u);
+});
+
+test('native presentation currentness is epoch, revision, and loaded-request exact', async () => {
+  const source = await readFile(programPath, 'utf8');
+  const executeWork = methodBody(source, 'private static string ExecutePresentationWork(InputMessage message)');
+
+  assert.match(source, /message\.documentEpoch < latestPresentationEpoch/u);
+  assert.match(source, /message\.documentEpoch == latestPresentationEpoch && message\.revision < latestPresentationRevision/u);
+  assert.match(source, /!String\.Equals\(latestPresentationLoadedRequestId, message\.loadedRequestId, StringComparison\.Ordinal\)/u);
+  assert.match(executeWork, /if \(message\.mode == "hidden"\)[\s\S]*?HidePresentationSurface\(\)[\s\S]*?latestPresentationHidden = true;[\s\S]*?if \(staleRevision\) return "stale";[\s\S]*?return "hidden";/u);
+  assert.doesNotMatch(executeWork, /if \(message\.mode == "hidden"\)[\s\S]*?if \(stalePair\) return "stale";/u);
+  assert.match(source, /message\.loadedRequestId == null \|\| message\.loadedRequestId != currentRequestId/u);
+  assert.match(source, /exactTuple && latestPresentationHidden && message\.mode != "hidden"/u);
+  assert.match(executeWork, /latestPresentationHidden = false;\s*return "applied";/u);
+});
+
+test('native presentation SetWindowPos outcomes control visibility and acknowledgements', async () => {
+  const source = await readFile(programPath, 'utf8');
+
+  assert.match(source, /public bool Show\(\)\s*\{\s*bool shown = NativeMethods\.SetWindowPos[\s\S]*?if \(shown\) Visible = true;\s*return shown;\s*\}/u);
+  assert.match(source, /public bool Hide\(\)\s*\{\s*bool hidden = NativeMethods\.SetWindowPos[\s\S]*?if \(hidden\) Visible = false;\s*return hidden;\s*\}/u);
+  assert.match(source, /if \(!renderSurface\.Show\(\)\)\s*\{\s*DestroyPresentationResources\(\);\s*return "rejected";\s*\}[\s\S]*?return "applied";/u);
+  assert.match(source, /if \(renderSurface == null \|\| renderSurface\.Hide\(\)\) return true;\s*DestroyPresentationResources\(\);\s*return false;/u);
+  assert.match(source, /if \(!HidePresentationSurface\(\)\) return "rejected";\s*latestPresentationHidden = true;\s*if \(staleRevision\) return "stale";/u);
+});
+
+test('native presentation contains rejected work and fails the shared lifecycle on asynchronous rendering errors', async () => {
+  const source = await readFile(programPath, 'utf8');
+  const presentationLoop = methodBody(source, 'private static void PresentationLoop()');
+  const failureContainment = methodBody(source, 'private static void ContainPresentationFailure()');
+  const lifecycleFailure = methodBody(source, 'private static void FailPresentationLifecycle()');
+  const renderFrame = methodBody(source, 'private static void RenderFrame()');
+
+  assert.match(presentationLoop, /catch\s*\{\s*ContainPresentationFailure\(\);\s*work\.Status = "rejected";\s*\}\s*finally\s*\{\s*work\.Completed\.Set\(\);/u);
+  assert.match(presentationLoop, /try\s*\{\s*RenderFrame\(\);\s*PumpWindowMessages\(\);\s*\}\s*catch\s*\{\s*FailPresentationLifecycle\(\);\s*return;/u);
+  assert.match(failureContainment, /try\s*\{\s*HidePresentationSurface\(\);\s*\}\s*catch\s*\{\s*\}\s*DestroyPresentationResources\(\);\s*latestPresentationHidden = true;/u);
+  assertUniqueOrdered(lifecycleFailure, 'ContainPresentationFailure()', 'Environment.Exit(1)');
+  assert.match(renderFrame, /if \(!renderSurface\.MakeCurrent\(\)\) throw new InvalidOperationException\(\);/u);
+  assert.match(renderFrame, /if \(!NativeMethods\.SwapBuffers\(renderSurface\.DeviceContext\)\) throw new InvalidOperationException\(\);/u);
+});
+
+test('native presentation resources are destroyed by their owner before mpv teardown', async () => {
+  const source = await readFile(programPath, 'utf8');
+  const teardown = methodBody(source, 'private static void TeardownMpvContext()');
+  const cleanup = methodBody(source, 'private static void HandleCleanup(string? requestId)');
+  const command = methodBody(source, 'private static void HandleCommand(InputMessage msg)');
+
+  assert.doesNotMatch(teardown, /renderContext|renderSurface|DestroyPresentationResources/u);
+  assertUniqueOrdered(cleanup, 'DestroyPresentationOnOwnerThread()', 'TeardownMpvContext()');
+  assertUniqueOrdered(command, 'DestroyPresentationOnOwnerThread()', 'InitializeMpv(msg)');
+});
+
+test('native presentation operation ids reject every replay and nonincreasing sequence', async () => {
+  const source = await readFile(programPath, 'utf8');
+
+  assert.match(source, /private static BigInteger latestPresentationOperationSequence = BigInteger\.Zero;/u);
+  assert.match(source, /private static bool TryAdvancePresentationOperationSequence\(string operationId\)/u);
+  assert.match(source, /const string prefix = "presentation-";/u);
+  assert.match(source, /!operationId\.StartsWith\(prefix, StringComparison\.Ordinal\)/u);
+  assert.match(source, /!BigInteger\.TryParse\(operationId\.Substring\(prefix\.Length\), NumberStyles\.None, CultureInfo\.InvariantCulture, out BigInteger sequence\)/u);
+  assert.match(source, /sequence <= latestPresentationOperationSequence\)\s*\{\s*return false;\s*\}\s*latestPresentationOperationSequence = sequence;\s*return true;/su);
+});
+
+test('native presentation duplicate custody is constant-space with no finite retention cap', async () => {
+  const source = await readFile(programPath, 'utf8');
+  const advanceSequence = methodBody(source, 'private static bool TryAdvancePresentationOperationSequence(string operationId)');
+
+  assert.doesNotMatch(source, /PresentationOperationIds|PresentationOperationIdOrder|PresentationOperationIdCapacity/u);
+  assert.match(advanceSequence, /sequence <= latestPresentationOperationSequence/u);
+  assert.match(advanceSequence, /latestPresentationOperationSequence = sequence;/u);
+  assert.doesNotMatch(advanceSequence, /HashSet|Queue|Dictionary|List/u);
 });

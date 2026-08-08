@@ -52,6 +52,7 @@ export function registerRendererFocusTargets(
   dom: RendererDomBindings,
 ): void {
   const registered = new Set<string>();
+  const guideNeighbors = getGuideFocusNeighbors(dom.focusableElements);
   const currentFocusIds = new Set(
     dom.focusableElements
       .filter((element) => !isElementHiddenFromFocus(element))
@@ -116,6 +117,8 @@ export function registerRendererFocusTargets(
       ? getNumpadNeighbors(focusId)
       : focusId.startsWith('settings-')
       ? getSettingsNeighbors(focusId, currentFocusIds)
+      : guideNeighbors.has(focusId)
+      ? guideNeighbors.get(focusId)
       : focusId.startsWith('setup-') || focusId.startsWith('plex-') || focusId.startsWith('channel-') || focusId.startsWith('custom-') || focusId.startsWith('btn-auth-') || focusId.startsWith('btn-profile-') || focusId.startsWith('btn-server-')
       ? getStagedSetupNeighbors(focusId) ?? getSetupNeighbors(focusId)
       : shellNeighbors ?? undefined;
@@ -141,6 +144,50 @@ export function registerRendererFocusTargets(
     });
     registered.add(focusId);
   });
+}
+
+export function shouldYieldGuideProgramDirectionToFocusGraph(
+  focusId: string,
+  direction: FocusDirection,
+  elements: readonly HTMLElement[],
+): boolean {
+  if (direction !== 'up') return false;
+  return getGuideFocusNeighbors(elements).get(focusId)?.up?.startsWith('guide-library-') === true;
+}
+
+export function captureGuideProgramFocusIntent(
+  pendingFocusId: string | null,
+  activeFocusId: string | null,
+): string | null {
+  if (pendingFocusId?.startsWith('guide-program-') === true) return pendingFocusId;
+  return activeFocusId?.startsWith('guide-program-') === true ? activeFocusId : null;
+}
+
+function getGuideFocusNeighbors(
+  elements: readonly HTMLElement[],
+): ReadonlyMap<string, Partial<Record<FocusDirection, string>>> {
+  const tabs = elements.filter((element) => element.dataset.focusId?.startsWith('guide-library-') === true);
+  const programs = elements.filter((element) => element.dataset.focusId?.startsWith('guide-program-') === true);
+  if (tabs.length === 0 || programs.length === 0) return new Map();
+  const selectedTab = tabs.find((element) => element.getAttribute('aria-selected') === 'true') ?? tabs[0]!;
+  const selectedProgram = programs.find((element) => element.dataset.selectedProgram === 'true') ?? programs[0]!;
+  const firstChannelId = programs[0]?.dataset.guideChannelId;
+  const neighbors = new Map<string, Partial<Record<FocusDirection, string>>>();
+  tabs.forEach((tab, index) => {
+    const focusId = tab.dataset.focusId!;
+    neighbors.set(focusId, {
+      up: focusId,
+      down: selectedProgram.dataset.focusId!,
+      left: tabs[Math.max(0, index - 1)]!.dataset.focusId!,
+      right: tabs[Math.min(tabs.length - 1, index + 1)]!.dataset.focusId!,
+    });
+  });
+  for (const program of programs) {
+    if (program.dataset.guideChannelId === firstChannelId) {
+      neighbors.set(program.dataset.focusId!, { up: selectedTab.dataset.focusId! });
+    }
+  }
+  return neighbors;
 }
 
 function getShellNeighbors(focusId: string): Partial<Record<FocusDirection, string>> | null {
