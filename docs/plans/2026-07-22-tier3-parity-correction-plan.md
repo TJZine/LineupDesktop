@@ -7973,6 +7973,31 @@ feasibility plus real-host campaign before WS5 closeout. Any observed Windows
 failure returns the completed code to remediation/replan; unavailable proof
 remains explicit debt rather than retroactively erasing implemented work.
 
+**Unit 5F public-projection re-adjudication — 2026-08-08:** fresh source proof
+accepts one narrow contract correction and supersedes only the earlier Unit 5F
+assumption that renderer-visible `GuideLibraryFilterState` is sufficient to
+derive Auto. Main's generation has complete raw visible-channel/source truth,
+but the public library rows omit custom/unknown non-library membership. All-show
+and All-show-plus-custom may therefore expose indistinguishable library-kind
+evidence even though Auto requires zero versus 15 minutes. Preload's current
+exact-object guard also rejects every additional result key. The accepted repair
+is one required main-owned renderer-safe numeric bound on the existing
+`GuidePresentationSource`: `minimumStartTimeMs`. It adds no source kind,
+membership, identifier, credential, raw source metadata, read/mutation method,
+IPC channel, or preload method. The exact contract, owners, files, currentness,
+proof, rollback, and stop conditions below replace the prior abbreviated Unit
+5F handoff; Units 5A–5E remain accepted and Unit 5G remains serially paused.
+
+**Unit 5F re-review adjudication — 2026-08-08:** all four findings are
+accepted. `channelIpc.ts` joins the exact allowlist for a distinct internal
+Guide-currentness sentinel catch; renderer optimistic Settings publication now
+invalidates provisional UI only and one non-saving accepted/rollback settlement
+owns bridge refresh; preload-vocabulary and renderer-runtime-owner tests join as
+fixture/assertion-only proof; and the prior mandatory corrective refetch is
+superseded. Main's first clamped result already supplies the authoritative bound
+and full unchanged duration, so renderer adopts it atomically with zero duplicate
+request. These repairs do not broaden Unit 5F or reopen 5G/5H.
+
 #### WS5 Goal
 
 Deliver a production-shaped Guide that preserves the main/preload/renderer
@@ -8005,6 +8030,10 @@ closeout review.
   package-script change, compatibility shim, or upstream import. Unit 5D may
   add only its versioned private native-presentation message and the exact
   public presentation-update operation below; neither is playback authority.
+- Apart from Unit 5F's required `GuidePresentationSource.minimumStartTimeMs`
+  field, do not alter a public Guide schema in 5F. The existing request,
+  library-filter state, Settings schema/persistence, IPC literals, and
+  preload/shell method inventory remain unchanged.
 - Do not turn `src/main/index.ts`, `src/main/channel/channelComposition.ts`, or
   `src/renderer/index.ts` into policy owners. They remain composition roots.
 
@@ -8063,6 +8092,16 @@ closeout review.
   matching `SAFE_REFERENCE` may cross byte-for-byte as public references;
   unsafe values are deterministically remapped. No unvalidated/unsafe/private
   identifier, secret, Plex locator, credential, or tokenized material crosses.
+- Unit 5F extends only `GuidePresentationSource` with the required own key
+  `minimumStartTimeMs: number`. It is epoch milliseconds, must be a finite
+  nonnegative safe integer, is never optional or null, and is the main-owned
+  inclusive lower bound for Guide query windows and leftward navigation.
+  `GuideLibraryFilterState`, every library row, the request payload, and every
+  IPC literal remain byte-for-byte unchanged. The field contains no source kind,
+  membership bit, identifier, revision, path, secret, or privileged metadata.
+  Preload adds this one key to the exact result allowlist and rejects a missing,
+  extra, fractional, negative, unsafe, `NaN`, infinite, string, null, or object
+  value before renderer delivery.
 - Add exactly one mutation, `guide.setLibraryFilter`, with request
   `{ expectedScopeToken, expectedRevision, libraryId: string | null }` and
   result `GuideLibraryFilterState`. It uses existing Guide sender
@@ -8417,16 +8456,71 @@ closeout review.
 - `guideDensity`: `comfortable` is Detailed, four 30-minute slots/two hours;
   `compact` is Wide, six slots/three hours. It is not a row-height-only change.
   A change preserves selection when present and safely recenters/refetches.
-- `pastItemsWindow`: explicit `0`, `15`, and `30` are minutes. `auto` is zero
-  only for show-only selected scope and 15 for All, movie, mixed, or unknown.
-  Snap start to the existing slot and clamp to local midnight. Left navigation
-  cannot fetch or focus before the bound. DST tests avoid fixed-day assumptions.
-- For Auto, a selected library is show-only only when its public `contentKind`
-  is `show`; All is show-only only when every current visible channel belongs
-  to a `show` library and there is no custom, mixed, movie, or unknown source.
-  The initial no-state request uses the conservative 15-minute window and
-  performs one bounded corrective refetch if the returned state proves
-  show-only. No untrusted type label controls main library membership.
+- Main reads one persisted Settings snapshot per presentation attempt and
+  retains its internal revision plus `pastItemsWindow`. It re-reads after
+  projection. `guideRuntime.ts` owns and exports only to the main Guide query
+  seam the internal `GuidePresentationCurrentnessError` sentinel; changed
+  Settings revision/value throws that sentinel. `channelIpc.ts` catches it
+  alongside but distinctly from `ChannelPublicReferenceConsistencyError` in
+  the existing three-attempt loop, then returns the unchanged
+  `GUIDE_PRESENTATION_STALE` exhaustion result. The public-reference error is
+  neither renamed, broadened, nor used for Settings currentness. Neither
+  Settings value nor revision is exposed. The sentinel carries no fields or
+  cause and has only name `GuidePresentationCurrentnessError` plus fixed message
+  `Guide presentation settings changed while loading.` Explicit `0`, `15`, and
+  `30` select elapsed minutes. Auto selects
+  zero only for the exact main-only show classification below and otherwise 15.
+- Main captures `clock.now()` once, subtracts the selected elapsed minutes,
+  floors that instant to the existing 30-minute epoch slot, and sets
+  `minimumStartTimeMs` to the later of that value and the captured instant's
+  local-calendar midnight. Midnight is constructed from local year/month/date
+  at `00:00:00.000`, never UTC midnight, a fixed offset, or
+  `now - 86_400_000`; the clamp may therefore be exact midnight rather than an
+  epoch-slot multiple. Invalid clock/date/overflow fails through the existing
+  safe presentation failure. Main clamps the scheduler query start to
+  `max(request.startTimeMs, minimumStartTimeMs)` before content resolution and
+  leaves duration unchanged, so the initial provisional request never fetches
+  pre-bound schedule content.
+- Auto uses only the accepted generation's raw nonhidden channels and the raw
+  selected-library ID after preference normalization. All is show-only only
+  when at least one visible channel exists and every visible channel has exact
+  `contentSource.type === 'library'` plus `libraryType === 'show'`; any present
+  `sourceLibraryId` must equal that source's `libraryId`. A selected library is
+  show-only only when at least one eligible visible channel exists and every
+  eligible channel has that same exact show-library source for the selected raw
+  ID with the same optional `sourceLibraryId` consistency. Empty, movie, mixed,
+  playlist, collection, custom/non-library, mismatched, ambiguous, or unknown
+  truth is 15. Public kinds, names, IDs, and page contents never decide it.
+- Renderer stores the accepted bound with the presentation generation. Before a
+  current result exists, `state.values.pastItemsWindow` immediately invalidates
+  and shapes only provisional UI/bound state; Auto is conservatively 15 under
+  the same slot/local-midnight rules and never classifies source truth. A
+  persistence success, failure restoration, or conflict/rebase rollback is a
+  second invalidation. Renderer requests no Guide data from the optimistic
+  publish: it marks one settlement refresh pending, waits until Settings is
+  non-loading/non-saving with nonnull `state.snapshot` and
+  `state.values.pastItemsWindow` equal to the accepted
+  `state.snapshot.values.pastItemsWindow`, then issues exactly one current
+  refresh on Guide/Player or clears the pending marker for ordinary later route
+  entry. Multiple optimistic/coalesced publishes settle once. The accepted main
+  field replaces the provisional bound; stale pre-settlement Guide work cannot
+  restore it.
+- Main resolves the effective interval as
+  `[max(request.startTimeMs, minimumStartTimeMs), max(request.startTimeMs,
+  minimumStartTimeMs) + unchanged duration]`; therefore a provisional request
+  below the authoritative bound returns exactly
+  `[minimumStartTimeMs, minimumStartTimeMs + unchanged duration]`. Renderer
+  atomically applies that first current result, stores `minimumStartTimeMs` as
+  the state/window lower bound, and sets the visible window start to the same
+  effective start. No identical corrective refetch is needed or allowed. Every
+  later request, window clamp, previous-window action, left transition,
+  fallback, and focus restoration refuses a start before the bound. A current
+  program that began earlier but overlaps the bounded window remains eligible.
+  Slot/local-midnight rollover is recomputed by each ordinary current request,
+  whose accepted result atomically advances the bound/window without a duplicate
+  request. This main-clamped result seam supersedes the earlier provisional-
+  correction rule because the first result now carries both the authoritative
+  lower bound and a full-duration schedule beginning at the effective start.
 
 **Focus, input, accessibility, and large-guide budgets**
 
@@ -9160,10 +9254,88 @@ and tests.
 
 **Unit 5F — past-item policy**
 
-Consume exact Auto/0/15/30 policy, library type, slot snap, local-midnight
-clamp, and left-navigation bound. Limit edits to Guide main query/public
-projection and EPG/polling plus tests. Prove show-only, movie, mixed/All/
-unknown, midnight, spring-forward, fall-back, setting change, and stale request.
+Outcome: consume persisted Auto/0/15/30 through the one frozen
+`minimumStartTimeMs` public projection, while main—not renderer-visible library
+metadata—owns raw source classification and the effective query lower bound.
+No new IPC operation, preload method, Settings field, persistence schema, or
+source/membership projection is permitted.
+
+The exact production allowlist is `src/contracts/guide.ts`,
+`src/main/channel/guideRuntime.ts`, `src/main/channel/channelComposition.ts`,
+`src/main/channel/channelIpc.ts` solely for the distinct internal currentness
+sentinel catch in the existing three-attempt presentation loop,
+`src/main/index.ts` for the persisted Settings snapshot/revision callback only,
+`src/preload/guideBridge.cts`, `src/renderer/epg.ts`,
+`src/renderer/guidePresentationPolling.ts`, `src/renderer/workflow.ts`, and
+`src/renderer/index.ts` for Settings-change/polling wiring only. Exact test
+scope is existing `src/__tests__/contracts/contracts.test.ts`,
+`src/__tests__/preload/guideBridge.test.ts`,
+`src/__tests__/main/guideRuntime.test.ts`,
+`src/__tests__/main/guidePresentationPaging.test.ts`,
+`src/__tests__/main/channelComposition.test.ts`,
+`src/__tests__/main/channelRuntimeIpc.test.ts`,
+`src/__tests__/renderer/epg.test.ts`,
+`src/__tests__/renderer/epgStateUpdate.test.ts`,
+`src/__tests__/renderer/guidePresentationPolling.test.ts`,
+`src/__tests__/renderer/guideLibraryTabs.test.ts`,
+`src/__tests__/renderer/guidePagingNavigation.test.ts`,
+`src/__tests__/renderer/settingsRuntime.test.ts`,
+`src/__tests__/integration/preloadContractVocabulary.test.ts`,
+`src/__tests__/renderer/rendererRuntimeOwners.test.ts`, and exact new focused
+tests `src/__tests__/main/guidePastItemsWindow.test.ts` and
+`src/__tests__/renderer/guidePastItemsWindow.test.ts`. No other production or
+test file may change without reviewed replan. The integration-vocabulary and
+renderer-runtime-owner files receive fixture/assertion updates only: they prove
+the one added result key/validator path and exact runtime owner wiring, and add
+no integration exception, production owner, IPC literal, or method.
+
+No-touch owners are `src/contracts/settings.ts`, `src/contracts/ipc.ts`,
+`src/contracts/shell.ts`, `src/main/persistence/desktopSettingsStore.ts`, every
+other `src/main/settings/**` owner,
+`src/main/channel/channelPublicReferenceOwner.ts`,
+`src/main/channel/desktopGuidePreferencesStore.ts`,
+`src/preload/channels.cts`, `src/preload/index.cts`, every Guide artwork/player/
+native/helper owner, and all Guide DOM/style/virtualization owners reserved for
+5G. Main/renderer composition roots remain wiring-only and may not acquire time,
+classification, Settings, or navigation policy.
+
+Main proof covers explicit 0/15/30; selected show, movie, mixed, empty, unknown,
+and mismatched membership; All show; and All with the same public show-library
+projection plus custom/playlist/collection/mixed/unknown membership yielding 15.
+It also proves query clamping occurs before resolver/scheduler work, Settings
+revision/value change retries through existing presentation-stale custody, and
+that injected `GuidePresentationCurrentnessError` and
+`ChannelPublicReferenceConsistencyError` each independently retry, can succeed
+on a later attempt, and exhaust to the same unchanged safe stale result without
+being conflated. No new public value other than the bound. Time proof pins local midnight and
+both `America/New_York` spring-forward/fall-back dates without assuming a
+24-hour local day: subtraction is elapsed minutes, slot floor is epoch math,
+midnight is local calendar construction, and repeated/missing local wall times
+remain ordered by epoch milliseconds.
+
+Renderer proof covers provisional Auto 15, atomic accepted-bound/effective-start
+adoption, a full unchanged-duration visible window, every leftward/window/focus
+clamp, overlapping-current-program eligibility, and zero duplicate/corrective
+request after the first main-clamped result. It separately proves optimistic
+UI/bound invalidation with no bridge request, one non-saving accepted save-
+success refresh, one storage-failure restoration refresh, one conflict/rebase-
+rollback refresh, coalesced optimistic changes settling to one refresh, route-
+ineligible settlement deferring to ordinary route entry, stale-result rejection,
+and ordinary poll adoption across slot/local-midnight rollover. Main's persisted
+snapshot remains authoritative; a stale pre-settlement response cannot restore
+the provisional or final accepted bound.
+
+Rollback 5F atomically removes the one result field, internal currentness
+sentinel/catch, main Settings/raw-source/time computation, strict preload key,
+renderer bound/currentness/navigation,
+and their tests, returning to the accepted 5E checkpoint. Never retain a main
+field without preload validation, renderer Auto inference without raw truth, or
+left navigation without the same accepted bound. Stop and replan if exact Auto
+classification cannot be derived from the frozen raw channel source union, if
+Settings revision cannot be checked without public exposure, if another result
+field/operation/method/identifier/kind is requested, if the renderer needs raw
+membership, or if the first main-clamped result cannot supply a full-duration
+window without a duplicate request.
 
 **Unit 5G — large-guide virtualization and aggressive preload**
 
@@ -9253,6 +9425,25 @@ then may the controller close the local WS5 gate and write the WS6 handoff.
   contract, speculative compatibility code, or a one-implementation interface
   without trust-boundary need. The narrow live-art transport is justified only
   by token/host/path custody across Plex and artwork owners.
+- Unit 5F changes no owner responsibility and adds no production file. The
+  628-line `guideRuntime.ts` keeps raw lineup/filter/query and main projection
+  policy together; the 777-line `epg.ts` keeps Guide window/selection clamps;
+  the 486-line polling owner keeps existing request currentness plus atomic
+  main-clamped-result application, with no corrective lifecycle; and the
+  532-line `workflow.ts` only derives provisional/final EPG state from renderer
+  Settings publications. `channelIpc.ts` adds only the second narrow internal
+  sentinel branch to its existing bounded Guide presentation retry loop. The
+  740-line main and 1,108-line renderer composition roots receive callback/
+  event wiring only, while `channelComposition.ts` remains construction wiring
+  and `guideBridge.cts` remains strict validation. Decision: cohesive growth,
+  no extraction. Evidence: the new number has one main computation owner, one
+  preload trust check, and one existing EPG/polling consumer lifecycle; the
+  distinct sentinel preserves rather than broadens public-reference semantics. A helper,
+  service, second result type, or compatibility wrapper would split one current
+  invariant without a second consumer. Unit review must inspect line counts and
+  give fresh architecture dispositions for both composition roots, every
+  touched file over 500 lines; run
+  `npm run verify:maintainability`.
 
 #### WS5 Verification Commands
 
@@ -9352,8 +9543,33 @@ Running the integration vocabulary test after `build:electron` is mandatory so
 its existing bundle assertion proves the sandboxed output has no local preload
 requires. No conditional omission or inline-literal substitute is accepted.
 
-Unit 5D production implementation is the next authorized coding package under
-the dated coding-first adjudication. The following Unit 5D-0 command remains a
+Unit 5F minimum verification is exact and must pass before its independent
+implementation review/checkpoint:
+
+```bash
+node --import tsx --test src/__tests__/contracts/contracts.test.ts src/__tests__/integration/preloadContractVocabulary.test.ts src/__tests__/preload/guideBridge.test.ts src/__tests__/main/guideRuntime.test.ts src/__tests__/main/guidePresentationPaging.test.ts src/__tests__/main/channelComposition.test.ts src/__tests__/main/channelRuntimeIpc.test.ts src/__tests__/main/guidePastItemsWindow.test.ts src/__tests__/renderer/epg.test.ts src/__tests__/renderer/epgStateUpdate.test.ts src/__tests__/renderer/guidePresentationPolling.test.ts src/__tests__/renderer/guideLibraryTabs.test.ts src/__tests__/renderer/guidePagingNavigation.test.ts src/__tests__/renderer/settingsRuntime.test.ts src/__tests__/renderer/rendererRuntimeOwners.test.ts src/__tests__/renderer/guidePastItemsWindow.test.ts
+npm run typecheck
+npm run test:contracts
+npm run build:electron
+npm run verify:architecture
+npm run verify:maintainability
+npm run verify:redaction
+npm run verify
+git diff --check
+git status --short --branch
+```
+
+Expected: every exact field/key/range rejection, raw-source Auto matrix,
+pre-resolution clamp, both distinct internal retry-sentinel paths, Settings
+save-success/failure/conflict settlement, local-midnight/DST vector, renderer
+atomic full-duration bound/currentness/navigation case, and zero-duplicate-
+request case passes;
+the full gate has zero failures; only the 5F allowlist is changed; no new IPC
+literal/method, identifier/kind/source field, secret, import, or tracked proof
+artifact exists.
+
+Unit 5D production implementation is accepted history under the dated
+coding-first adjudication. The following Unit 5D-0 command remains a
 deferred 5H Windows-proof design surface; its outstanding PowerShell cleanup/
 closure details must be corrected and reviewed before 5H executes it, but they
 do not block Unit 5D–5G product coding:
@@ -9458,6 +9674,19 @@ failures inside the active unit; do not weaken a gate or expand ownership.
   fallback can widen it.
 - Existing tune, Page, polling/currentness, day/DST behavior, channel order,
   recovery, focus custody, and lifecycle cancellation do not regress.
+- Unit 5F's only public expansion is required finite nonnegative safe-integer
+  `minimumStartTimeMs`. Main derives it from one current persisted Settings
+  revision plus exact raw selected/visible source truth, clamps query work before
+  resolution, and rechecks Settings currentness. Preload rejects every shape
+  drift. Renderer stores and consumes the bound without type/membership
+  inference, atomically adopts the first main-clamped full-duration result, and
+  never requests or navigates left of it after acceptance. Optimistic Settings
+  publication changes provisional UI only; success/failure/conflict settlement
+  issues at most one current refresh and the main persisted snapshot remains
+  authoritative. The distinct internal currentness and public-reference errors
+  retain independent retry meaning. Auto All-show is zero, All-show-plus-custom
+  is 15, and neither requires an identical corrective request. Local-midnight
+  and both DST transitions pass without fixed-day or fixed-offset arithmetic.
 - Guide Overlay and Classic compose the helper's one real child-HWND player
   presentation beneath the transparent shell view in the production Unit 5D
   code, and matching epoch/request/revision applied ACK completes the opaque-
@@ -9495,6 +9724,13 @@ units and unrelated work. Persistence v1 has only All/valid-selection semantics
 and needs no down-migration; removing 5B removes its operation/store together
 without touching WS3 Settings. Clear memory caches and restart before rollback
 proof.
+
+Unit 5F is one atomic contract checkpoint: the required field, main
+Settings/raw-source computation and currentness check, preload validation,
+renderer provisional/settlement/atomic-bound/navigation consumption, wiring,
+and tests land or
+roll back together. It writes no persisted data and needs no migration or
+down-migration; rollback restores the accepted 5E Guide result exactly.
 
 Unit 5D now has one production coding checkpoint followed later by a 5H Windows
 proof checkpoint. The production checkpoint atomically spans public contract/
@@ -9646,6 +9882,18 @@ Stop before further edit and return to planning/review if:
   import of the IPC literal from `src/contracts/ipc.ts` or another shared
   runtime module, an inline/alternate channel string, an additional operation,
   or a weakened Electron/sandbox/bundle vocabulary assertion;
+- Unit 5F needs any public addition other than required
+  `minimumStartTimeMs: number`, changes a request/IPC literal/preload method or
+  Guide/Settings persistence schema, exposes a source kind/membership/identifier/
+  revision/secret, derives Auto from public rows, cannot read and recheck one
+  internal persisted Settings revision, queries before the main bound, uses UTC/
+  fixed-offset/fixed-day midnight math, permits pre-bound left navigation/focus,
+  returns less than the unchanged requested duration from the effective start,
+  performs an identical corrective/duplicate request, races a Guide request from
+  optimistic Settings publication, misses or duplicates the one non-saving
+  success/rollback settlement refresh, conflates the two internal retry errors,
+  broadens/renames the public-reference error, weakens one-active/one-latest
+  custody, or needs a file outside the exact 5F allowlist;
 - an assigned row, upstream pin, owner, WS3 contribution, or accepted WS1–WS4
   invariant materially contradicts this plan;
 - implementation needs a file/owner outside the unit, dependency, privilege,
@@ -9666,6 +9914,56 @@ Plex, paired-upstream, day/DST/soak, operator, or package rows are not themselve
 replans only when the exact `WS5-PROOF-*` entry is complete and every affected
 row remains open. Evidence of defective/missing behavior is a remediation/
 replan trigger.
+
+#### WS5 Unit 5F Contract Feature-Review Handoff — Current
+
+MODEL_SUGGESTION
+PLANNER: configured `planner` role
+IMPLEMENTER: resolve the bounded implementation role at dispatch from the
+approved Unit 5F through `.codex/config.toml`
+REVIEWER: configured `reviewer` role
+WHY: Unit 5F narrowly changes a strict renderer-facing Guide result across
+main raw-source/Settings ownership, preload validation, and renderer request/
+focus currentness. Exact model and reasoning settings remain role-TOML-owned.
+
+NEXT_SESSION_HANDOFF
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
+TASK: Review The WS5 Unit 5F Minimum-Start Contract Amendment
+TASK_FAMILY: feature/design
+TIER: Tier 3
+PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
+ARTIFACT: Unit 5F public-projection re-adjudication and exact Unit 5F package
+FILES:
+- docs/plans/2026-07-22-tier3-parity-correction-plan.md
+- src/contracts/guide.ts
+- src/main/channel/guideRuntime.ts
+- src/main/channel/channelComposition.ts
+- src/main/channel/channelIpc.ts
+- src/main/index.ts
+- src/preload/guideBridge.cts
+- src/renderer/epg.ts
+- src/renderer/guidePresentationPolling.ts
+- src/renderer/workflow.ts
+- src/renderer/index.ts
+- src/__tests__/integration/preloadContractVocabulary.test.ts
+- src/__tests__/renderer/rendererRuntimeOwners.test.ts
+- src/__tests__/renderer/settingsRuntime.test.ts
+BLOCKERS: implementation remains paused until fresh independent plan review
+MESSAGE:
+Read the active plan's WS5 architecture/invariants, Unit 5F package,
+file-shape disposition, verification, acceptance, rollback, and replan sections.
+Adversarially verify that required finite nonnegative safe-integer
+`minimumStartTimeMs` is the only public addition; main alone derives it from one
+revision-current persisted `pastItemsWindow` plus exact raw visible/selected
+source truth; the distinct internal currentness sentinel preserves the existing
+public-reference error; main returns a full unchanged-duration effective window;
+and preload remains exact. Verify renderer atomically adopts that first result,
+issues no identical correction, changes provisional UI without bridge work on
+optimistic Settings publication, and issues one current refresh only after a
+non-saving success/rollback settlement. Confirm exact allowlist/no-touch owners,
+DST-safe local-midnight proof, focused vocabulary/runtime-owner fixtures, tests,
+rollback, and no new operation, source metadata, identifier, kind, or secret.
+Return findings-first approval/rejection; do not implement.
 
 #### WS5 First-Unit Feature-Review Handoff
 
