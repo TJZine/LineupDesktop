@@ -17,11 +17,11 @@
 > `3258511`; Windows/native/physical-device/paired/package proof remains
 > `WS4-PROOF-01` through `WS4-PROOF-04`. WS5's decision-complete execution
 > plan is frozen at `73ce570`; Units 5A–5C are committed at `46acf1f`,
-> `6180815`, and `beeb5ef`. Production Unit 5D is committed at `81cf42c`, and
-> Unit 5E is committed at `154fcfd`; Unit 5F is the next authorized package.
-> Windows composition proof remains
-> deferred to 5H, so Units 5D–5E do not close `EPG-10`, `EPG-11`, `UI-36`, or
-> WS5.
+> `6180815`, and `beeb5ef`. Production Unit 5D is committed at `81cf42c`, Unit
+> 5E at `154fcfd`, and Unit 5F at `3501fb8`; Unit 5G is the next authorized
+> package.
+> Windows composition proof remains deferred to 5H, so Units 5D–5F do not
+> close `EPG-10`–`EPG-12`, `UI-36`, or WS5.
 > RD-27 Windows observation, `WS2-POST-VALIDATION-01` native proof, and other
 > environment-specific evidence remain required but are accumulated for the
 > final consolidated Windows campaign; none can close missing code.
@@ -74,9 +74,11 @@ the app-owned Win32 child-window helper seam, and Player/Overlay/Classic Guide
 composition. Unit 5E `154fcfd` adds exact four-slot/two-hour Detailed and
 six-slot/three-hour Wide Guide windows, density-aware bounded polling,
 selection-preserving recentering, and readable shared row geometry. Unit 5F is
-next. Windows composition proof is explicitly deferred to 5H, so `EPG-10`,
-`EPG-11`, `UI-36`, affected parity rows, and WS5 remain open. WS6–WS9 remain
-unopened.
+committed at `3501fb8` with main-owned Auto/0/15/30 policy, exact raw-source
+classification, a strict renderer-safe minimum-start projection, DST-safe local
+midnight clamping, and bound-aware focus/navigation. Unit 5G is next. Windows
+composition proof is explicitly deferred to 5H, so `EPG-10`–`EPG-12`, `UI-36`,
+affected parity rows, and WS5 remain open. WS6–WS9 remain unopened.
 The accepted 227-row audit remains the program baseline, so WS3 entry validates
 only its assigned rows and affected current owners rather than repeating the
 program-wide audit.
@@ -487,7 +489,7 @@ The watch-list owners that remain over 500 lines are reported by
 | Repo genesis decision | `docs/architecture/desktop-repo-genesis-adr.md` | Accepted |
 | Import provenance | `docs/architecture/import-ledger.md` | Current copied/adapted upstream source ledger, including the exact Package 7 overlay presentation slice at pinned `4bdb0e1b3370e7893a582ec80226557727832d0b` and observed-current `a1a7ea7dcb1cfc8aee7cfcf88cf5a1dac718bf30` |
 | Original Lineup compatibility | `docs/architecture/original-lineup-reference-compatibility-matrix.md` and `docs/architecture/original-lineup-divergence-register.md` | Current copied/adapted/reference/proof-context memory, including Package 7 overlay presentation and the reviewed Package 6 Info-precedence divergence |
-| Product parity and MVP roadmap | `docs/product/lineup-product-parity-matrix.md`, `docs/development/windows-ui-proof-plan.md`, `docs/plans/2026-07-22-tier3-parity-correction-plan.md`, and `docs/roadmap/desktop-port-roadmap.md` | WS1 implementation/review landed but proof remains deferred/open. WS2's platform-neutral implementation gate is closed at published `d2f1e97`, with lifecycle hardening at `358e8de`; `WS2-POST-VALIDATION-01` remains native/Windows debt. WS3's local gate is accepted/closed at `87662b5` with its proof/contribution packet open. WS4's local implementation gate closes at `3258511` with `WS4-PROOF-01`–`WS4-PROOF-04` open. WS5's plan is frozen at `73ce570`; Units 5A–5E land at `46acf1f`, `6180815`, `beeb5ef`, `81cf42c`, and `154fcfd`; Unit 5F is next, while Windows composition proof remains deferred to 5H. WS6–WS9 remain unopened. Environment-specific proof accumulates for the final Windows campaign before RD-27/RD-28/program closeout. |
+| Product parity and MVP roadmap | `docs/product/lineup-product-parity-matrix.md`, `docs/development/windows-ui-proof-plan.md`, `docs/plans/2026-07-22-tier3-parity-correction-plan.md`, and `docs/roadmap/desktop-port-roadmap.md` | WS1 implementation/review landed but proof remains deferred/open. WS2's platform-neutral implementation gate is closed at published `d2f1e97`, with lifecycle hardening at `358e8de`; `WS2-POST-VALIDATION-01` remains native/Windows debt. WS3's local gate is accepted/closed at `87662b5` with its proof/contribution packet open. WS4's local implementation gate closes at `3258511` with `WS4-PROOF-01`–`WS4-PROOF-04` open. WS5's plan is frozen at `73ce570`; Units 5A–5F land at `46acf1f`, `6180815`, `beeb5ef`, `81cf42c`, `154fcfd`, and `3501fb8`; Unit 5G is next, while Windows composition proof remains deferred to 5H. WS6–WS9 remain unopened. Environment-specific proof accumulates for the final Windows campaign before RD-27/RD-28/program closeout. |
 | File-shape guardrails | `docs/architecture/file-shape-guardrails.md` and `tools/verify-maintainability.mjs` | Architecture Health owner for production file-size evidence, cohesion-based dispositions, fresh hotspot review triggers, and Tier 3 file-shape verification |
 | Electron main shell | `src/main/index.ts`, `src/main/applicationStartupCleanup.ts`, `src/main/applicationQuitLifecycleOwner.ts`, `src/main/protocol.ts`, `src/main/smokeAssertions.ts`, `src/main/window/shellWindowController.ts`, and `src/main/window/shellAppCommandController.ts` | Secure shell frame with split smoke/startup owners, an idempotent two-phase quit lifecycle owner that drains startup races before final exit, plus main-owned BrowserWindow/fullscreen/display/restore and foreground app-command custody. Focused media actions use only valid Electron accelerator names or the closed semantic media-input event; unknown/next/previous commands remain unhandled and no `globalShortcut` is installed. `src/main/index.ts` remains composition and IPC wiring. |
 | Preload bridge | `src/preload/index.cts`, `src/preload/channels.cts`, `src/preload/settingsBridge.cts`, `src/preload/settingsBridgeGuards.cts`, `src/preload/playerRecoveryBridge.cts`, `src/preload/channelSetupBridge.cts`, `src/preload/channelBridgeGuards.cts`, and `src/preload/diagnosticsBridgeGuards.cts` | Narrow shell/window/player/diagnostics/Plex/channel/Settings bridge with runtime payload guards. WS3 exposes three Settings operations and guarded play/pause; WS4 adds the closed stop/relative-seek intents, required safe `seekSupport`, and a four-value main-to-renderer semantic media-input event. Snapshot identity is stripped before host dispatch, raw app-command strings are not exposed, and the sandbox-compatible entrypoint remains the sole `contextBridge`/`ipcRenderer` value owner. |
@@ -684,8 +686,8 @@ proof. Unit 3D is accepted and WS3's local gate is closed. WS4's local gate
 closes through `3258511`; `WS4-PROOF-01`–`WS4-PROOF-04` remain open. WS5's
 decision-complete plan is frozen at `73ce570`; Units 5A–5C are committed at
 `46acf1f`, `6180815`, and `beeb5ef`; Unit 5D is committed at `81cf42c`, and
-Unit 5E at `154fcfd`. Unit 5F is next, while Windows composition proof remains
-deferred to 5H. WS6
+Unit 5E at `154fcfd`, and Unit 5F at `3501fb8`. Unit 5G is next, while Windows
+composition proof remains deferred to 5H. WS6
 through WS9 remain unopened. RD-27 remains later and is not
 authorized to implement those gaps silently. The final consolidated Windows
 campaign owns accumulated environment-specific proof, not another

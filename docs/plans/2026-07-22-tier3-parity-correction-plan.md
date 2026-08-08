@@ -9242,8 +9242,8 @@ HWND, or partial BaseWindow/WebContentsView migration.
 **Unit 5E — Detailed two-hour versus Wide three-hour density**
 
 Unit 5E is implemented, independently reviewed, and committed at `154fcfd`.
-Its local coding gate is complete; Unit 5F is the next authorized package and
-Unit 5G remains serially paused behind it. The deferred Windows
+Its local coding gate is complete. Unit 5F is completed below, and Unit 5G is
+the next authorized package. The deferred Windows
 feasibility/real-host campaign remains mandatory in 5H before WS5 closeout, but
 does not block completing the remaining coding units.
 
@@ -9253,6 +9253,9 @@ edits to EPG state, presentation/DOM/style, polling only for bounded refetch,
 and tests.
 
 **Unit 5F — past-item policy**
+
+Unit 5F is implemented, independently reviewed, and committed at `3501fb8`.
+Its local coding gate is complete; Unit 5G is the next authorized package.
 
 Outcome: consume persisted Auto/0/15/30 through the one frozen
 `minimumStartTimeMs` public projection, while main—not renderer-visible library

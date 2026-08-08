@@ -22,9 +22,9 @@ WS4's local implementation gate closes through `f4570df`, `a78228b`,
 `a654cdd`, `c4dadcf`, and final product checkpoint `3258511`;
 `WS4-PROOF-01`–`WS4-PROOF-04` remain open. WS5's decision-complete plan is
 frozen at `73ce570`; Units 5A–5C land at `46acf1f`, `6180815`, and `beeb5ef`.
-Production Unit 5D lands at `81cf42c`, and Unit 5E at `154fcfd`; Unit 5F is
-next, with Windows composition proof still deferred to 5H. WS6–WS9 remain
-unopened.
+Production Unit 5D lands at `81cf42c`, Unit 5E at `154fcfd`, and Unit 5F at
+`3501fb8`; Unit 5G is next, with Windows composition proof still deferred to
+5H. WS6–WS9 remain unopened.
 Locally verifiable implementation advances in order before one consolidated
 Windows/native/manual/live/package campaign. Windows proof cannot implement or
 waive code gaps, and absent proof cannot promote a row.
@@ -50,8 +50,8 @@ durable completion summary.
       `f0e2817` are closed; Unit 3D is accepted; WS4's local gate closes through
       `3258511` with `WS4-PROOF-01`–`WS4-PROOF-04` open; WS5's plan is frozen at
       `73ce570`, Units 5A–5C land at `46acf1f`, `6180815`, and `beeb5ef`, and
-      production Unit 5D lands at `81cf42c`, and Unit 5E at `154fcfd`; Unit 5F
-      is next and Windows
+      production Unit 5D lands at `81cf42c`, Unit 5E at `154fcfd`, and Unit 5F
+      at `3501fb8`; Unit 5G is next and Windows
       composition proof remains deferred to 5H;
       WS6–WS9 remain unopened.
 - [x] Workflow, skills, launchers, role config, docs verifier, redaction
@@ -347,7 +347,7 @@ live integration blockers delay the complete Desktop skeleton.
 | Production playback controls and playback-state presentation over native video | RD-25 | Preserve the upstream playback interaction feel where it fits Desktop native-helper boundaries; renderer stays free of raw playback descriptors, URLs, headers, and native handles. |
 | Subtitle/audio/HDR option UI and playback-quality controls | RD-26 | Import or adapt upstream media-option presentation and interaction patterns only after runtime media-option behavior is real and renderer-safe. |
 | Historical WebOS-informed local renderer regression bundle | Complete WebOS UI Parity Reopen, proof bundle closed 2026-07-16 | Packages 0–8 are locally captured at exact viewports; the 2026-07-22 master matrix supersedes any full feature/UI parity interpretation. |
-| Current-upstream feature/UI parity correction | Active reviewed nine-workstream parity-correction plan | WS1 implementation/review landed but deferred proof remains open. WS2's platform-neutral implementation gate is closed at `d2f1e97`, lifecycle hardening landed at `358e8de`, and `WS2-POST-VALIDATION-01` remains open. WS3's local gate closes through `87662b5` with its consolidated proof/contribution packet open. WS4's local gate closes through `f4570df`, `a78228b`, `a654cdd`, smoke correction `c4dadcf`, and final product `3258511`; 36/36 production-build local proof and final full verification passed, while `WS4-PROOF-01`–`WS4-PROOF-04` remain open without capability promotion. WS5's plan is frozen at `73ce570`; Units 5A–5E land at `46acf1f`, `6180815`, `beeb5ef`, `81cf42c`, and `154fcfd`; Unit 5F is next and Windows composition proof remains deferred to 5H. WS6–WS9 remain unopened. Do not bury implementation inside RD-27 observation. |
+| Current-upstream feature/UI parity correction | Active reviewed nine-workstream parity-correction plan | WS1 implementation/review landed but deferred proof remains open. WS2's platform-neutral implementation gate is closed at `d2f1e97`, lifecycle hardening landed at `358e8de`, and `WS2-POST-VALIDATION-01` remains open. WS3's local gate closes through `87662b5` with its consolidated proof/contribution packet open. WS4's local gate closes through `f4570df`, `a78228b`, `a654cdd`, smoke correction `c4dadcf`, and final product `3258511`; 36/36 production-build local proof and final full verification passed, while `WS4-PROOF-01`–`WS4-PROOF-04` remain open without capability promotion. WS5's plan is frozen at `73ce570`; Units 5A–5F land at `46acf1f`, `6180815`, `beeb5ef`, `81cf42c`, `154fcfd`, and `3501fb8`; Unit 5G is next and Windows composition proof remains deferred to 5H. WS6–WS9 remain unopened. Do not bury implementation inside RD-27 observation. |
 | Full MVP Windows behavior proof | Consolidated campaign beginning with RD-27 after WS3–WS8 and WS9 prerequisite implementation/hardening | Run accumulated redaction-safe Windows/native/manual/live proof across implemented surfaces, including WS1 debt, `WS2-POST-VALIDATION-01`, and the mandatory fresh three-row Package 6 audit. RD-28 package lifecycle and the final 227-row program audit follow. |
 
 WS4's local closeout covers exactly its 35 assigned input/overlay rows and no
@@ -386,7 +386,12 @@ four-slot/two-hour Detailed and six-slot/three-hour Wide Guide windows,
 selection-preserving density transitions, density-current bounded polling, and
 shared readable row geometry. Its full verification passes 1,293 of 1,294
 contract tests with one intentional skip plus 188/188 harness/docs tests;
-build and Electron smoke pass locally. Unit 5F is next. Wider Windows
+build and Electron smoke pass locally. Unit 5F `3501fb8` adds main-owned
+Auto/0/15/30 past-item policy, a strict minimum-start projection, raw-source
+show-only classification, DST-safe local-midnight clamping, and bound-aware
+focus/navigation. Its focused suite passes 171/171; full verification passes
+1,314 of 1,315 contract tests with one intentional skip plus 188/188 harness
+tests; build and Electron smoke pass locally. Unit 5G is next. Wider Windows
 compilation and composition proof remains deferred to 5H and cannot be claimed
 from this macOS closeout; `EPG-10`, `EPG-11`, `UI-36`, affected parity rows,
 and WS5 stay open.
@@ -1886,9 +1891,9 @@ gate is closed while `WS2-POST-VALIDATION-01` remains proof debt; WS3 is the
 final product source is `87662b5`; `5f368d4` remains prior Unit 3C-D,
 `77d09ad` the viewport repair, and `f0e2817` test-only harness proof. WS4's
 local gate closes through `3258511` with `WS4-PROOF-01`–`WS4-PROOF-04` open.
-WS5's plan is frozen at `73ce570`; Units 5A–5E land at `46acf1f`, `6180815`,
-`beeb5ef`, `81cf42c`, and `154fcfd`. Unit 5F is next, with Windows composition
-proof deferred to 5H. WS6 through WS9 remain unopened. RD-27 begins the
+WS5's plan is frozen at `73ce570`; Units 5A–5F land at `46acf1f`, `6180815`,
+`beeb5ef`, `81cf42c`, `154fcfd`, and `3501fb8`. Unit 5G is next, with Windows
+composition proof deferred to 5H. WS6 through WS9 remain unopened. RD-27 begins the
 final consolidated Windows observation/soak campaign; it is not canceled.
 
 Depends on:

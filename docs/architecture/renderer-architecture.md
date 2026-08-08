@@ -13,7 +13,8 @@ Unit 3D is accepted and WS3's local renderer gate is closed. WS4's local input/
 overlay gate closes through final product checkpoint `3258511`, with final
 production-build proof 36/36 and controller visual inspection passed. WS5
 Units 5A–5D land through native-presentation checkpoint `81cf42c`; Unit 5E
-lands at `154fcfd`, and Unit 5F is next. Windows operational proof,
+lands at `154fcfd`, Unit 5F at `3501fb8`, and Unit 5G is next. Windows
+operational proof,
 including `WS4-PROOF-01`–`WS4-PROOF-04` and the mandatory three-row Package 6
 operator-assisted fullscreen audit, remains pending. Historical completed units
 below describe their bounded implementation history only.
@@ -110,6 +111,15 @@ one latest request. `guideDensityRefresh.ts` coalesces loading-time density
 changes into one eligible refresh, while both densities keep the same readable
 row geometry. No contract, preload, main, persistence, or native privilege is
 added.
+
+WS5 Unit 5F adds the required safe-integer `minimumStartTimeMs` Guide result.
+Main derives it from persisted Auto/0/15/30 policy and exact raw visible-source
+truth, clamps each full-duration query to a DST-safe local-midnight/slot bound,
+and rechecks Settings currentness. Preload validates the one strict field.
+Renderer adopts the first current bound for Guide and Player, prevents earlier
+fetch/focus/navigation, and lets the polling owner coalesce one accepted or
+rollback Settings settlement. No source kind, membership, identifier, Settings
+revision, or new operation crosses into renderer.
 
 Renderer code must remain unprivileged. It must not import Electron, Node, main,
 preload, native-helper, Plex transport, persisted secrets, raw auth headers,
