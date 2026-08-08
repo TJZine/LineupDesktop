@@ -137,18 +137,18 @@ export interface EpgDirectionResult {
 export type EpgGuideDensity = 'comfortable' | 'compact';
 
 export const EPG_SLOT_DURATION_MS = 30 * 60 * 1000;
-export const EPG_VISIBLE_SLOT_COUNT = 6;
-export const EPG_WINDOW_DURATION_MS = EPG_SLOT_DURATION_MS * EPG_VISIBLE_SLOT_COUNT;
-export const EPG_DETAILED_SLOT_COUNT = 4;
-export const EPG_DETAILED_WINDOW_DURATION_MS = EPG_SLOT_DURATION_MS * EPG_DETAILED_SLOT_COUNT;
+export const EPG_COMPACT_SLOT_COUNT = 6;
+export const EPG_COMPACT_WINDOW_DURATION_MS = EPG_SLOT_DURATION_MS * EPG_COMPACT_SLOT_COUNT;
+export const EPG_COMFORTABLE_SLOT_COUNT = 4;
+export const EPG_COMFORTABLE_WINDOW_DURATION_MS = EPG_SLOT_DURATION_MS * EPG_COMFORTABLE_SLOT_COUNT;
 export const EPG_CHANNEL_PAGE_SIZE = 9;
 
 export function getEpgVisibleSlotCount(density: EpgGuideDensity): number {
-  return density === 'comfortable' ? EPG_DETAILED_SLOT_COUNT : EPG_VISIBLE_SLOT_COUNT;
+  return density === 'comfortable' ? EPG_COMFORTABLE_SLOT_COUNT : EPG_COMPACT_SLOT_COUNT;
 }
 
 export function getEpgWindowDurationMs(density: EpgGuideDensity): number {
-  return density === 'comfortable' ? EPG_DETAILED_WINDOW_DURATION_MS : EPG_WINDOW_DURATION_MS;
+  return density === 'comfortable' ? EPG_COMFORTABLE_WINDOW_DURATION_MS : EPG_COMPACT_WINDOW_DURATION_MS;
 }
 
 /** An honest startup value. Product Guide rows arrive only from the scheduler bridge. */

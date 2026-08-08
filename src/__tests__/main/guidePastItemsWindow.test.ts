@@ -15,8 +15,8 @@ import {
 } from '../../main/channel/guideRuntime.js';
 import { DesktopGuidePreferencesStore } from '../../main/channel/desktopGuidePreferencesStore.js';
 
-const SLOT_MS = 30 * 60 * 1_000;
 const NOW = Date.UTC(2026, 6, 8, 16, 45);
+const AUTO_CLASSIFICATION_NOW = Date.UTC(2026, 6, 8, 16, 31);
 
 function channel(
   id: string,
@@ -70,13 +70,6 @@ function generation(channels: readonly ChannelConfig[]): ChannelPublicReferenceG
   return Object.freeze({ lineupRevision: 1, channels, currentChannelId: channels[0]?.id ?? null, fingerprint: 'guide-past-items-window' });
 }
 
-function expectedBound(nowMs: number, pastMinutes: number): number {
-  const slot = Math.floor((nowMs - pastMinutes * 60_000) / SLOT_MS) * SLOT_MS;
-  const midnight = new Date(nowMs);
-  midnight.setHours(0, 0, 0, 0);
-  return Math.max(0, slot, midnight.getTime());
-}
-
 test('main Auto classification uses raw source truth for selected and All scopes', () => {
   const showChannel = show('channel-1');
   assert.equal(isGuideShowOnlyScope([showChannel], null), true);
@@ -91,14 +84,26 @@ test('main Auto classification uses raw source truth for selected and All scopes
   assert.equal(isGuideShowOnlyScope([showChannel, manual('channel-5')], null), false);
   assert.equal(isGuideShowOnlyScope([show('channel-6', 'shows', 'other-library')], 'shows'), false);
 
-  assert.equal(computeGuideMinimumStartTimeMs(NOW, 'auto', [showChannel], null), expectedBound(NOW, 0));
-  assert.equal(computeGuideMinimumStartTimeMs(NOW, 'auto', [movie('channel-2')], null), expectedBound(NOW, 15));
-  assert.equal(computeGuideMinimumStartTimeMs(NOW, 'auto', [movie('channel-2')], 'movies'), expectedBound(NOW, 15));
-  assert.equal(computeGuideMinimumStartTimeMs(NOW, 'auto', [mixed('channel-3')], 'shows'), expectedBound(NOW, 15));
-  assert.equal(computeGuideMinimumStartTimeMs(NOW, 'auto', [showChannel], 'missing'), expectedBound(NOW, 15));
-  assert.equal(computeGuideMinimumStartTimeMs(NOW, '0', [movie('channel-2')], null), expectedBound(NOW, 0));
-  assert.equal(computeGuideMinimumStartTimeMs(NOW, '15', [showChannel], null), expectedBound(NOW, 15));
-  assert.equal(computeGuideMinimumStartTimeMs(NOW, '30', [showChannel], null), expectedBound(NOW, 30));
+  const processValue: unknown = Reflect.get(globalThis, 'process');
+  assert.equal(typeof processValue, 'object');
+  if (typeof processValue !== 'object' || processValue === null) return;
+  const env = (processValue as { env: Record<string, string | undefined> }).env;
+  const previousTimezone = env.TZ;
+  try {
+    env.TZ = 'America/New_York';
+    // 2026-07-08T16:31:00Z / 12:31 EDT: Auto 0 -> 12:30, Auto 15 -> 12:00.
+    assert.equal(computeGuideMinimumStartTimeMs(AUTO_CLASSIFICATION_NOW, 'auto', [showChannel], null), 1_783_528_200_000);
+    assert.equal(computeGuideMinimumStartTimeMs(AUTO_CLASSIFICATION_NOW, 'auto', [movie('channel-2')], null), 1_783_526_400_000);
+    assert.equal(computeGuideMinimumStartTimeMs(AUTO_CLASSIFICATION_NOW, 'auto', [movie('channel-2')], 'movies'), 1_783_526_400_000);
+    assert.equal(computeGuideMinimumStartTimeMs(AUTO_CLASSIFICATION_NOW, 'auto', [mixed('channel-3')], 'shows'), 1_783_526_400_000);
+    assert.equal(computeGuideMinimumStartTimeMs(AUTO_CLASSIFICATION_NOW, 'auto', [showChannel], 'missing'), 1_783_526_400_000);
+    assert.equal(computeGuideMinimumStartTimeMs(AUTO_CLASSIFICATION_NOW, '0', [movie('channel-2')], null), 1_783_528_200_000);
+    assert.equal(computeGuideMinimumStartTimeMs(AUTO_CLASSIFICATION_NOW, '15', [showChannel], null), 1_783_526_400_000);
+    assert.equal(computeGuideMinimumStartTimeMs(AUTO_CLASSIFICATION_NOW, '30', [showChannel], null), 1_783_526_400_000);
+  } finally {
+    if (previousTimezone === undefined) delete env.TZ;
+    else env.TZ = previousTimezone;
+  }
 });
 
 test('main bound clamps the schedule request before content resolution and preserves duration', async (t) => {
@@ -132,7 +137,8 @@ test('main bound clamps the schedule request before content resolution and prese
     publicReferenceOwner: owner,
   });
   assert.equal(resolutions, 1);
-  const minimumStartTimeMs = expectedBound(NOW, 15);
+  // 2026-07-08T16:45:00Z / 12:45 EDT, 15-minute window -> 2026-07-08T16:30:00Z / 12:30 EDT.
+  const minimumStartTimeMs = 1_783_528_200_000;
   const windowEndTimeMs = minimumStartTimeMs + 2 * 60 * 60 * 1_000;
   assert.equal(value.minimumStartTimeMs, minimumStartTimeMs);
   assert.equal(value.channelWindow.total, 1);
@@ -187,11 +193,16 @@ test('main local-midnight clamp remains calendar-based across spring-forward and
   const previous = env.TZ;
   try {
     env.TZ = 'America/New_York';
-    for (const nowMs of [Date.UTC(2024, 2, 10, 5, 15), Date.UTC(2024, 10, 3, 4, 15)]) {
-      const midnight = new Date(nowMs);
-      midnight.setHours(0, 0, 0, 0);
-      assert.equal(computeGuideMinimumStartTimeMs(nowMs, '30', [movie('channel-1')], null), Math.max(0, midnight.getTime(), Math.floor((nowMs - 30 * 60_000) / SLOT_MS) * SLOT_MS));
-    }
+    // 2024-03-10T05:15:00Z / 00:15 EST -> local midnight 2024-03-10T05:00:00Z.
+    assert.equal(
+      computeGuideMinimumStartTimeMs(Date.UTC(2024, 2, 10, 5, 15), '30', [movie('channel-1')], null),
+      1_710_046_800_000,
+    );
+    // 2024-11-03T04:15:00Z / 00:15 EDT -> local midnight 2024-11-03T04:00:00Z.
+    assert.equal(
+      computeGuideMinimumStartTimeMs(Date.UTC(2024, 10, 3, 4, 15), '30', [movie('channel-1')], null),
+      1_730_606_400_000,
+    );
   } finally {
     if (previous === undefined) delete env.TZ;
     else env.TZ = previous;

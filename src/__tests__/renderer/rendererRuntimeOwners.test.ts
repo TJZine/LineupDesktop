@@ -15,6 +15,7 @@ import { renderRendererFocus, syncRendererFocusTargets } from '../../renderer/fo
 import { createFullscreenTransportCoordinator } from '../../renderer/fullscreenTransport.js';
 import { createEmptyPlayerSnapshot } from '../../renderer/playerOverlayPresentation.js';
 import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
+import { DEFAULT_GUIDE_PRELOAD_PROFILE } from '../../renderer/guideVirtualization.js';
 import { FocusRegistry, type FocusState } from '../../renderer/navigation.js';
 import { dispatchPlexRuntimeAction } from '../../renderer/plexRuntimeActionDispatch.js';
 import { subscribePlayerBridge } from '../../renderer/playerBridgeSubscription.js';
@@ -129,7 +130,8 @@ test('guide presentation polling serializes refreshes and settles coalesced work
   let loadingCount = 0;
   let failureCount = 0;
   let activeRoute: 'player' | 'guide' = 'guide';
-  let windowStartMs = 1_778_619_600_000;
+  const initialWindowStartMs = 1_778_619_600_000;
+  let windowStartMs = initialWindowStartMs;
 
   const polling = createGuidePresentationPolling({
     guide: {
@@ -168,7 +170,10 @@ test('guide presentation polling serializes refreshes and settles coalesced work
   requests[0]?.resolve({ ok: true, value: { channels: [], nowWatching: null } });
   await first;
   assert.equal(requests.length, 2);
-  assert.deepEqual(requestedWindows, [1_778_612_400_000, 1_778_616_000_000]);
+  assert.deepEqual(requestedWindows, [
+    initialWindowStartMs - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+    initialWindowStartMs + EPG_SLOT_DURATION_MS * 2 - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+  ]);
   assert.equal(applied.length, 0);
 
   requests[1]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
@@ -344,7 +349,10 @@ test('guide presentation polling schedules Player and Guide with route-owned win
 
   polling.start();
   await settleAsyncWork();
-  assert.equal(windows[0], Math.floor(nowMs / 1_800_000) * 1_800_000 - 7_200_000);
+  assert.equal(
+    windows[0],
+    Math.floor(nowMs / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+  );
   assert.equal(loadingCount, 0);
   assert.equal(playerApplyCount, 1);
   intervalCallbacks[0]?.();
@@ -354,7 +362,7 @@ test('guide presentation polling schedules Player and Guide with route-owned win
   activeRoute = 'guide';
   polling.reconcile('player', 'guide');
   await settleAsyncWork();
-  assert.equal(windows.at(-1), 1_699_992_800_000);
+  assert.equal(windows.at(-1), 1_700_000_000_000 - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs);
   assert.equal(loadingCount, 1);
   activeRoute = 'settings';
   polling.reconcile('guide', 'settings');
@@ -444,14 +452,17 @@ test('Player first result adopts the authoritative Guide bound before the Player
   });
 
   await polling.refresh('player-first-result', { allowPlayerRoute: true });
-  assert.deepEqual(requestStarts, [base - EPG_SLOT_DURATION_MS - 7_200_000]);
+  assert.deepEqual(requestStarts, [base - EPG_SLOT_DURATION_MS - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs]);
   assert.equal(state.minimumStartTimeMs, base);
   assert.equal(state.windowStartMs, base);
 
   activeRoute = 'guide';
   polling.reconcile('player', 'guide');
   await settleAsyncWork();
-  assert.deepEqual(requestStarts, [base - EPG_SLOT_DURATION_MS - 7_200_000, base - 7_200_000]);
+  assert.deepEqual(requestStarts, [
+    base - EPG_SLOT_DURATION_MS - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+    base - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+  ]);
   assert.equal(state.minimumStartTimeMs, base);
   assert.equal(state.windowStartMs, base);
 });

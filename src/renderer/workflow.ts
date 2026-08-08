@@ -437,15 +437,13 @@ function formatRecoveryDetail(
 export function applyWorkflowSettingsAction(
   state: WorkflowState,
   actionId: SettingsActionId,
+  nowMs = Date.now(),
 ): WorkflowState {
   const settingsDraft = applySettingsAction(state.settingsDraft, actionId);
-  const epg = setEpgGuideDensity(state.epg, state.guidePresentation, settingsDraft.guideDensity);
   return {
     ...state,
     settingsDraft,
-    epg: settingsDraft.pastItemsWindow === state.settingsDraft.pastItemsWindow
-      ? epg
-      : setEpgPastItemsWindow(epg, settingsDraft.pastItemsWindow, Date.now(), state.guidePresentation),
+    epg: synchronizeEpgWithSettings(state, settingsDraft, nowMs),
   };
 }
 
@@ -453,20 +451,29 @@ export function applyWorkflowSettingsValues(
   state: WorkflowState,
   values: DesktopSettingsValues,
   capabilities?: DesktopSettingsCapabilityProjection | null,
+  nowMs = Date.now(),
 ): WorkflowState {
   const settingsDraft = applyPersistedSettingsValues(
     state.settingsDraft,
     values,
     capabilities ?? state.settingsDraft.capabilities,
   );
-  const epg = setEpgGuideDensity(state.epg, state.guidePresentation, settingsDraft.guideDensity);
   return {
     ...state,
     settingsDraft,
-    epg: settingsDraft.pastItemsWindow === state.settingsDraft.pastItemsWindow
-      ? epg
-      : setEpgPastItemsWindow(epg, settingsDraft.pastItemsWindow, Date.now(), state.guidePresentation),
+    epg: synchronizeEpgWithSettings(state, settingsDraft, nowMs),
   };
+}
+
+function synchronizeEpgWithSettings(
+  state: WorkflowState,
+  settingsDraft: SettingsDraftState,
+  nowMs: number,
+): EpgState {
+  const epg = setEpgGuideDensity(state.epg, state.guidePresentation, settingsDraft.guideDensity);
+  return settingsDraft.pastItemsWindow === state.settingsDraft.pastItemsWindow
+    ? epg
+    : setEpgPastItemsWindow(epg, settingsDraft.pastItemsWindow, nowMs, state.guidePresentation);
 }
 
 export function applyWorkflowSupportBundleExportStatus(

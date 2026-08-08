@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  EPG_COMPACT_WINDOW_DURATION_MS,
   EPG_SLOT_DURATION_MS,
   computeProvisionalEpgMinimumStartTimeMs,
   createEpgGuideView,
@@ -13,6 +14,7 @@ import {
   type EpgPresentationSource,
 } from '../../renderer/epg.js';
 import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
+import { DEFAULT_GUIDE_PRELOAD_PROFILE } from '../../renderer/guideVirtualization.js';
 
 const BASE = Date.UTC(2026, 6, 8, 12, 0);
 
@@ -78,30 +80,41 @@ test('renderer uses conservative Auto 15 provisionally and never moves left of t
   assert.equal(moved.windowChanged, false);
 });
 
-test('renderer provisional bounds follow ordinary slot rollover and local midnight without fixed-day assumptions', () => {
-  const first = BASE + 14 * 60_000;
-  const second = BASE + 16 * 60_000;
-  for (const nowMs of [first, second]) {
-    const slotStartMs = Math.floor((nowMs - 15 * 60_000) / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS;
-    const midnight = new Date(nowMs);
-    midnight.setHours(0, 0, 0, 0);
-    assert.equal(computeProvisionalEpgMinimumStartTimeMs(nowMs, '15'), Math.max(slotStartMs, midnight.getTime()));
-  }
-  const nearMidnight = new Date(BASE);
-  nearMidnight.setHours(0, 10, 0, 0);
-  const localMidnight = new Date(nearMidnight.getTime());
-  localMidnight.setHours(0, 0, 0, 0);
-  assert.equal(computeProvisionalEpgMinimumStartTimeMs(nearMidnight.getTime(), '30'), localMidnight.getTime());
-});
-
-test('renderer keeps epoch-zero bounds nonnegative in a positive-offset timezone', () => {
+test('renderer provisional bounds follow slot rollover and local midnight under the owned timezone', () => {
   const processValue: unknown = Reflect.get(globalThis, 'process');
   assert.equal(typeof processValue, 'object');
   if (typeof processValue !== 'object' || processValue === null) return;
   const env = (processValue as { env: Record<string, string | undefined> }).env;
   const previousTimezone = env.TZ;
   try {
-    env.TZ = 'Pacific/Kiritimati';
+    env.TZ = 'America/New_York';
+    const cases = [
+      // 2026-07-08T12:14:00Z / 08:14 EDT -> 2026-07-08T11:30:00Z / 07:30 EDT.
+      { nowMs: 1_783_512_840_000, setting: '15' as const, expected: 1_783_510_200_000 },
+      // 2026-07-08T12:16:00Z / 08:16 EDT -> 2026-07-08T12:00:00Z / 08:00 EDT.
+      { nowMs: 1_783_512_960_000, setting: '15' as const, expected: 1_783_512_000_000 },
+      // 2026-07-08T04:10:00Z / 00:10 EDT -> local midnight 2026-07-08T04:00:00Z.
+      { nowMs: 1_783_483_800_000, setting: '30' as const, expected: 1_783_483_200_000 },
+    ] as const;
+    for (const { nowMs, setting, expected } of cases) {
+      assert.equal(computeProvisionalEpgMinimumStartTimeMs(nowMs, setting), expected);
+    }
+  } finally {
+    if (previousTimezone === undefined) delete env.TZ;
+    else env.TZ = previousTimezone;
+  }
+});
+
+test('renderer keeps epoch-zero bounds nonnegative in Asia/Tokyo', () => {
+  const processValue: unknown = Reflect.get(globalThis, 'process');
+  assert.equal(typeof processValue, 'object');
+  if (typeof processValue !== 'object' || processValue === null) return;
+  const env = (processValue as { env: Record<string, string | undefined> }).env;
+  const previousTimezone = env.TZ;
+  try {
+    env.TZ = 'Asia/Tokyo';
+    assert.equal(Intl.DateTimeFormat().resolvedOptions().timeZone, 'Asia/Tokyo');
+    assert.equal(new Date(0).getHours(), 9);
     assert.equal(computeProvisionalEpgMinimumStartTimeMs(0, '30'), 0);
   } finally {
     if (previousTimezone === undefined) delete env.TZ;
@@ -166,10 +179,10 @@ test('polling adopts the main-clamped effective start and full duration without 
   const refresh = polling.refresh('past-window');
   await Promise.resolve();
   assert.deepEqual(requests, [{
-    startTimeMs: BASE - EPG_SLOT_DURATION_MS - 120 * 60_000,
-    durationMs: 7 * 60 * 60 * 1_000,
+    startTimeMs: BASE - EPG_SLOT_DURATION_MS - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+    durationMs: EPG_COMPACT_WINDOW_DURATION_MS + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
     channelOffset: 0,
-    channelLimit: 12,
+    channelLimit: DEFAULT_GUIDE_PRELOAD_PROFILE.channelLimit,
   }]);
   pending.resolve({
     ok: true,
@@ -216,7 +229,10 @@ test('sequential polling settlements advance the bound and retain a program cros
   await polling.refresh('poll-slot-two');
   assert.equal(state.minimumStartTimeMs, secondBound);
   assert.equal(state.windowStartMs, secondBound);
-  assert.deepEqual(requests, [firstBound - 120 * 60_000, firstBound - 120 * 60_000]);
+  assert.deepEqual(requests, [
+    firstBound - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+    firstBound - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+  ]);
   assert.deepEqual(renderedProgramIds, ['program-1', 'program-1']);
   await Promise.resolve();
   assert.equal(requests.length, 2);

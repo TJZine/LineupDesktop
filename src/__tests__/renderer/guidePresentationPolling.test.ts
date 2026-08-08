@@ -1,15 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  EPG_DETAILED_WINDOW_DURATION_MS,
-  EPG_WINDOW_DURATION_MS,
+  EPG_COMFORTABLE_WINDOW_DURATION_MS,
+  EPG_COMPACT_WINDOW_DURATION_MS,
+  EPG_SLOT_DURATION_MS,
   type EpgGuideDensity,
 } from '../../renderer/epg.js';
 import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
-import { DEFAULT_GUIDE_PRELOAD_PROFILE } from '../../renderer/guideVirtualization.js';
+import {
+  AGGRESSIVE_GUIDE_PRELOAD_PROFILE,
+  DEFAULT_GUIDE_PRELOAD_PROFILE,
+} from '../../renderer/guideVirtualization.js';
 
-const bufferedDuration = (durationMs: number): number => durationMs + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2;
+const bufferedDuration = (durationMs: number): number =>
+  durationMs + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2;
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -101,14 +106,22 @@ test('Guide polling requests exactly the density duration', async () => {
   await polling.refresh('density-comfortable');
   density = 'compact';
   await polling.refresh('density-compact');
-  assert.deepEqual(durations, [bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS), bufferedDuration(EPG_WINDOW_DURATION_MS)]);
+  assert.deepEqual(durations, [bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS), bufferedDuration(EPG_COMPACT_WINDOW_DURATION_MS)]);
 });
 
 test('Desktop preload profiles use exact row/time bounds and aggressive idle warming starts with the next channel page', async () => {
   const windowStartMs = 10 * 60 * 60_000;
   for (const [aggressive, expected] of [
-    [false, { startTimeMs: windowStartMs - 120 * 60_000, durationMs: EPG_WINDOW_DURATION_MS + 240 * 60_000, channelLimit: 12 }],
-    [true, { startTimeMs: windowStartMs - 360 * 60_000, durationMs: EPG_WINDOW_DURATION_MS + 720 * 60_000, channelLimit: 24 }],
+    [false, {
+      startTimeMs: windowStartMs - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+      durationMs: EPG_COMPACT_WINDOW_DURATION_MS + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
+      channelLimit: DEFAULT_GUIDE_PRELOAD_PROFILE.channelLimit,
+    }],
+    [true, {
+      startTimeMs: windowStartMs - AGGRESSIVE_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+      durationMs: EPG_COMPACT_WINDOW_DURATION_MS + AGGRESSIVE_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
+      channelLimit: AGGRESSIVE_GUIDE_PRELOAD_PROFILE.channelLimit,
+    }],
   ] as const) {
     const requests: Array<{ startTimeMs: number; durationMs: number; channelOffset?: number; channelLimit?: number }> = [];
     const idle: Array<() => void> = [];
@@ -138,7 +151,7 @@ test('Desktop preload profiles use exact row/time bounds and aggressive idle war
       assert.equal(idle.length, 1);
       idle.shift()?.();
       await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
-      assert.equal(requests[1]?.channelOffset, 24);
+      assert.equal(requests[1]?.channelOffset, AGGRESSIVE_GUIDE_PRELOAD_PROFILE.channelLimit);
       assert.equal(requests.length, 2);
     } else {
       assert.equal(idle.length, 0);
@@ -178,24 +191,35 @@ test('aggressive page and adjacent-time warm entries are consumed without anothe
   assert.equal(requests.length, 1);
   idle.shift()?.();
   await tick();
-  assert.equal(requests[1]?.channelOffset, 24);
+  assert.equal(requests[1]?.channelOffset, AGGRESSIVE_GUIDE_PRELOAD_PROFILE.channelLimit);
 
   const beforePage = requests.length;
-  await controller.requestPage({ targetGlobalIndex: 24, scopeToken: 'scope', channelOffset: 24 });
+  await controller.requestPage({
+    targetGlobalIndex: AGGRESSIVE_GUIDE_PRELOAD_PROFILE.channelLimit,
+    scopeToken: 'scope',
+    channelOffset: AGGRESSIVE_GUIDE_PRELOAD_PROFILE.channelLimit,
+  });
   assert.equal(requests.length, beforePage, 'warmed page is applied from cache');
 
   idle.shift()?.();
   await tick();
-  assert.equal(requests.at(-1)?.channelOffset, 48, 'cache-hit page reprioritizes the next adjacent page');
+  assert.equal(
+    requests.at(-1)?.channelOffset,
+    AGGRESSIVE_GUIDE_PRELOAD_PROFILE.channelLimit * 2,
+    'cache-hit page reprioritizes the next adjacent page',
+  );
   idle.shift()?.();
   await tick();
   assert.equal(requests.at(-1)?.channelOffset, 0, 'cache-hit page then warms the previous adjacent page');
   idle.shift()?.();
   await tick();
-  assert.equal(requests.at(-1)?.channelOffset, 24);
-  assert.equal(requests.at(-1)?.startTimeMs, windowStartMs + EPG_WINDOW_DURATION_MS / 6 - 360 * 60_000);
+  assert.equal(requests.at(-1)?.channelOffset, AGGRESSIVE_GUIDE_PRELOAD_PROFILE.channelLimit);
+  assert.equal(
+    requests.at(-1)?.startTimeMs,
+    windowStartMs + EPG_SLOT_DURATION_MS - AGGRESSIVE_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+  );
   const beforeWindow = requests.length;
-  windowStartMs += EPG_WINDOW_DURATION_MS / 6;
+  windowStartMs += EPG_SLOT_DURATION_MS;
   await controller.refresh('epg-window-change');
   assert.equal(requests.length, beforeWindow, 'warmed adjacent time window is applied from cache');
   assert.equal(applied, 3);
@@ -272,7 +296,7 @@ test('a scheduled idle warm cannot displace foreground active and trailing inten
   controller.stop();
 });
 
-test('startup density change during loading latches one Wide refetch after stale Detailed work', async () => {
+test('startup density change during loading latches one compact refetch after stale comfortable work', async () => {
   let density: EpgGuideDensity = 'comfortable';
   const requests: Array<{ durationMs: number; deferred: Deferred<Awaited<ReturnType<LineupDesktopPreloadApi['guide']['getPresentation']>>> }> = [];
   let applied = 0;
@@ -290,7 +314,7 @@ test('startup density change during loading latches one Wide refetch after stale
   ));
 
   const initial = polling.refresh('poll-start');
-  assert.deepEqual(requests.map(({ durationMs }) => durationMs), [bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS)]);
+  assert.deepEqual(requests.map(({ durationMs }) => durationMs), [bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS)]);
   density = 'compact';
   polling.noteGuideDensityChange();
   await polling.settleGuideDensity(true);
@@ -298,19 +322,19 @@ test('startup density change during loading latches one Wide refetch after stale
 
   const latest = polling.settleGuideDensity(false);
   assert.equal(polling.hasPendingGuideDensityChange(), false);
-  assert.deepEqual(requests.map(({ durationMs }) => durationMs), [bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS)]);
+  assert.deepEqual(requests.map(({ durationMs }) => durationMs), [bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS)]);
   requests[0]?.deferred.resolve(result('stale-detailed'));
   await initial;
   assert.equal(applied, 0);
   assert.deepEqual(requests.map(({ durationMs }) => durationMs), [
-    bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS),
-    bufferedDuration(EPG_WINDOW_DURATION_MS),
+    bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS),
+    bufferedDuration(EPG_COMPACT_WINDOW_DURATION_MS),
   ]);
   requests[1]?.deferred.resolve(result('current-wide'));
   await latest;
   assert.deepEqual(requests.map(({ durationMs }) => durationMs), [
-    bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS),
-    bufferedDuration(EPG_WINDOW_DURATION_MS),
+    bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS),
+    bufferedDuration(EPG_COMPACT_WINDOW_DURATION_MS),
   ]);
   assert.equal(applied, 1);
 });
@@ -341,13 +365,13 @@ test('repeated loading density changes coalesce to one latest refetch', async ()
   assert.equal(polling.hasPendingGuideDensityChange(), true);
   const latest = polling.settleGuideDensity(false);
   assert.equal(polling.hasPendingGuideDensityChange(), false);
-  assert.deepEqual(requests.map(({ durationMs }) => durationMs), [bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS)]);
+  assert.deepEqual(requests.map(({ durationMs }) => durationMs), [bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS)]);
 
   requests[0]?.deferred.resolve(result('stale-detailed'));
   await initial;
   assert.deepEqual(requests.map(({ durationMs }) => durationMs), [
-    bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS),
-    bufferedDuration(EPG_WINDOW_DURATION_MS),
+    bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS),
+    bufferedDuration(EPG_COMPACT_WINDOW_DURATION_MS),
   ]);
   requests[1]?.deferred.resolve(result('current-wide'));
   await latest;
@@ -377,14 +401,14 @@ test('density churn keeps one active request and applies only the latest current
   const second = polling.refresh('density-comfortable');
   const latest = polling.refresh('density-comfortable-latest');
   assert.equal(requests.length, 1);
-  assert.equal(requests[0]?.durationMs, bufferedDuration(EPG_WINDOW_DURATION_MS));
+  assert.equal(requests[0]?.durationMs, bufferedDuration(EPG_COMPACT_WINDOW_DURATION_MS));
 
   requests[0]?.deferred.resolve(result('stale'));
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(applied, 0);
   assert.equal(requests.length, 2);
-  assert.equal(requests[1]?.durationMs, bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS));
+  assert.equal(requests[1]?.durationMs, bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS));
 
   requests[1]?.deferred.resolve(result('current'));
   await Promise.all([first, second, latest]);

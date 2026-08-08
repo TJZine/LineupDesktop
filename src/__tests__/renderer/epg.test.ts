@@ -3,9 +3,9 @@ import test from 'node:test';
 import { containsPlexForbiddenRendererField } from '../../contracts/plex.js';
 import {
   EPG_CHANNEL_PAGE_SIZE,
-  EPG_DETAILED_WINDOW_DURATION_MS,
+  EPG_COMFORTABLE_WINDOW_DURATION_MS,
+  EPG_COMPACT_WINDOW_DURATION_MS,
   EPG_SLOT_DURATION_MS,
-  EPG_WINDOW_DURATION_MS,
   calculateProgramSpan,
   createEpgGuideView,
   createEpgState,
@@ -88,14 +88,14 @@ test('EPG projects scheduler rows, stable cell ids, slots, clipping, and details
   assert.match(formatEpgTimeWindow(BASE, BASE + EPG_SLOT_DURATION_MS), /^\d{1,2}:\d{2} [AP]M - \d{1,2}:\d{2} [AP]M$/u);
 });
 
-test('Guide density projects exact Detailed and Wide slot counts and durations', () => {
+test('Guide density projects exact comfortable and compact slot counts and durations', () => {
   const source = presentation();
   const detailed = createEpgGuideView(createEpgState(source, 4, 'comfortable'), source);
   const wide = createEpgGuideView(createEpgState(source, 6, 'compact'), source);
   assert.equal(detailed.slots.length, 4);
-  assert.equal(detailed.windowEndMs - detailed.windowStartMs, EPG_DETAILED_WINDOW_DURATION_MS);
+  assert.equal(detailed.windowEndMs - detailed.windowStartMs, EPG_COMFORTABLE_WINDOW_DURATION_MS);
   assert.equal(wide.slots.length, 6);
-  assert.equal(wide.windowEndMs - wide.windowStartMs, EPG_WINDOW_DURATION_MS);
+  assert.equal(wide.windowEndMs - wide.windowStartMs, EPG_COMPACT_WINDOW_DURATION_MS);
 });
 
 test('density transition preserves a selected program by recentering without changing generation or currentness', () => {
@@ -199,8 +199,8 @@ test('EPG settlement clamps an accepted upper start and keeps the selected progr
 });
 
 test('program span excludes programs outside the active window', () => {
-  assert.equal(calculateProgramSpan(program('outside', -3, -2), BASE, BASE + EPG_WINDOW_DURATION_MS), null);
-  assert.deepEqual(calculateProgramSpan(program('clipped', -1, 2), BASE, BASE + EPG_WINDOW_DURATION_MS), {
+  assert.equal(calculateProgramSpan(program('outside', -3, -2), BASE, BASE + EPG_COMPACT_WINDOW_DURATION_MS), null);
+  assert.deepEqual(calculateProgramSpan(program('clipped', -1, 2), BASE, BASE + EPG_COMPACT_WINDOW_DURATION_MS), {
     columnStart: 1,
     columnSpan: 2,
   });
