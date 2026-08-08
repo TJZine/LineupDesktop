@@ -61,6 +61,9 @@ export interface GuidePresentationPollingController {
   getPendingPageTarget(): number | null;
   getGeneration(): number;
   getLastValidPresentation(): ReturnType<typeof normalizeEpgPresentation> | null;
+  hasPendingGuideDensityChange(): boolean;
+  noteGuideDensityChange(): void;
+  settleGuideDensity(loading: boolean): Promise<void>;
   notePastItemsWindowChange(): void;
   settlePastItemsWindow(input: GuidePastItemsWindowSettlementInput): void;
 }
@@ -81,7 +84,6 @@ export interface GuidePresentationRefreshOptions {
 
 export interface GuidePageRefreshRequest {
   targetGlobalIndex: number;
-  sourceLocalIndex: number;
   scopeToken: string | null;
   channelOffset: number;
 }
@@ -175,6 +177,7 @@ export function createGuidePresentationPolling(
   let trailingRefresh: GuidePresentationRefreshIntent | null = null;
   let refreshRequestSequence = 0;
   let pendingPage: Readonly<GuidePageRefreshRequest & { requestSequence: number }> | null = null;
+  let guideDensityRefreshPending = false;
   let pastItemsWindowGeneration = 0;
   let pastItemsWindowSettlementPending = false;
   let cacheProfile: GuidePreloadProfile = getProfile();
@@ -377,7 +380,6 @@ export function createGuidePresentationPolling(
     }
     void requestPage({
       targetGlobalIndex: decision.targetGlobalIndex,
-      sourceLocalIndex: decision.sourceLocalIndex,
       scopeToken: input.scopeToken,
       channelOffset: decision.channelOffset,
     });
@@ -595,6 +597,20 @@ export function createGuidePresentationPolling(
     getPendingPageTarget: () => pendingPage?.targetGlobalIndex ?? null,
     getGeneration: () => guidePresentationGeneration,
     getLastValidPresentation: () => lastValidPresentation,
+    hasPendingGuideDensityChange: () => guideDensityRefreshPending,
+    noteGuideDensityChange() {
+      guideDensityRefreshPending = true;
+    },
+    settleGuideDensity(loading) {
+      if (loading || !guideDensityRefreshPending) return Promise.resolve();
+      guideDensityRefreshPending = false;
+      const route = options.getActiveRoute();
+      if (route !== 'guide' && route !== 'player') return Promise.resolve();
+      return refresh('guide-density-change', {
+        showLoading: route === 'guide',
+        allowPlayerRoute: route === 'player',
+      });
+    },
     notePastItemsWindowChange() {
       pastItemsWindowGeneration += 1;
       pastItemsWindowSettlementPending = true;

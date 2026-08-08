@@ -36,7 +36,6 @@ import { registerRendererActions, type GuideActionId, type GuideProgramActionTar
 import { subscribePlayerBridge } from './playerBridgeSubscription.js';
 import { createGuidePresentationPolling } from './guidePresentationPolling.js';
 import { projectGuideCacheIdentity } from './guideVirtualization.js';
-import { createGuideDensityRefreshLatch } from './guideDensityRefresh.js';
 import { createGuideLibraryFilterController, projectNativePlayerPresentationMode } from './guidePresentation.js';
 import { createNativePlayerPresentationController } from './player/nativePlayerPresentationController.js';
 import { invalidateGuideLayoutMetrics, projectGuideLibraryTabsPending } from './epg/guideDom.js';
@@ -96,7 +95,6 @@ let overlayState = createPlayerOverlayState();
 let playerSnapshot = createEmptyPlayerSnapshot();
 let activeSettingsCategory: SettingsSectionId = 'audio-subtitles', activeSetupStage = 'account';
 let pendingGuideFocusId: string | null = null, launchActive = true;
-const guideDensityRefreshLatch = createGuideDensityRefreshLatch();
 let startupProfilePickerHandled = false;
 const focusRegistry = new FocusRegistry(); let focusState: FocusState;
 let guidePresentationPolling: ReturnType<typeof createGuidePresentationPolling>;
@@ -107,9 +105,9 @@ const settingsRuntime = createSettingsRuntime({
     const layoutChanged = state.values.guideLayout !== workflowState.settingsDraft.guideLayout;
     const aggressivePreloadChanged = state.values.aggressiveGuidePreloadEnabled !== workflowState.settingsDraft.aggressiveGuidePreloadEnabled;
     const pastItemsWindowChanged = state.values.pastItemsWindow !== workflowState.settingsDraft.pastItemsWindow;
-    const densityRefreshWasPending = guideDensityRefreshLatch.hasPending();
+    const densityRefreshWasPending = guidePresentationPolling?.hasPendingGuideDensityChange() ?? false;
     if (densityChanged) {
-      guideDensityRefreshLatch.noteChange();
+      guidePresentationPolling?.noteGuideDensityChange();
       retainGuideProgramFocusIntent();
     }
     if (densityChanged || layoutChanged) invalidateGuideLayoutMetrics(dom.epgGridElement);
@@ -125,15 +123,9 @@ const settingsRuntime = createSettingsRuntime({
     if (errorElement) { errorElement.textContent = state.errorMessage ?? ''; errorElement.hidden = state.errorMessage === null; }
     if (!state.loading) {
       const activeRoute = workflowState.routeState.activeRoute;
-      const shouldRefreshDensity = guideDensityRefreshLatch.consume(false, activeRoute);
       renderApp();
       if (densityChanged || densityRefreshWasPending) restorePendingGuideFocus();
-      if (shouldRefreshDensity && guidePresentationPolling !== undefined) {
-        void guidePresentationPolling.refresh('guide-density-change', {
-          showLoading: activeRoute === 'guide',
-          allowPlayerRoute: activeRoute === 'player',
-        });
-      }
+      void guidePresentationPolling?.settleGuideDensity(false);
       if (aggressivePreloadChanged && guidePresentationPolling !== undefined && (activeRoute === 'guide' || activeRoute === 'player')) {
         void guidePresentationPolling.refresh('guide-aggressive-preload-change', {
           showLoading: activeRoute === 'guide',
@@ -145,6 +137,8 @@ const settingsRuntime = createSettingsRuntime({
         acceptedValue: state.snapshot?.values.pastItemsWindow ?? null,
         saving: state.saving,
       });
+    } else {
+      void guidePresentationPolling?.settleGuideDensity(true);
     }
   },
 });

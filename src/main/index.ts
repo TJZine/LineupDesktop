@@ -276,7 +276,6 @@ async function startApplication(): Promise<void> {
     channelBuilderContextSource: smokeFixture?.contextSource,
     diagnosticEventStore,
     guidePreferencesFilePath: resolveDesktopGuidePreferencesFilePath(app),
-    getLibraryTabsEnabled: async () => (await settingsStore.loadSnapshot()).values.libraryTabsEnabled,
     getPastItemsWindowSnapshot: async () => {
       const snapshot = await settingsStore.loadSnapshot();
       return {

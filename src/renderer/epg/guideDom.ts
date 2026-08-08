@@ -271,7 +271,6 @@ export function renderEpgGuideDom(
     dom.epgGridElement.setAttribute('role', 'grid');
   } else {
     dom.epgGridElement.removeAttribute('role');
-    dom.epgGridElement.dataset.guideVisibleRowsClamped = 'false';
   }
 
   const trackWidth = GUIDE_TRACK_UNITS;
@@ -455,7 +454,6 @@ export function renderEpgGuideDom(
       focusedRowIndex,
       focusedProgramId: view.guide.selectedProgram?.id ?? null,
     });
-    dom.epgGridElement.dataset.guideVisibleRowsClamped = String(virtualRange.visibleRowsClamped);
     shell.append(...readyGuideGridDom(
       view,
       trackWidth,
@@ -697,7 +695,6 @@ function readyGuideGridDom(
 function projectBufferedGuideCell(cell: HTMLElement, side: 'before' | 'after'): void {
   delete cell.dataset.guideProgramAction;
   delete cell.dataset.focusId;
-  cell.dataset.guideBufferedProgram = side;
   cell.tabIndex = -1;
   cell.setAttribute('aria-hidden', 'true');
   cell.removeAttribute('role');
@@ -723,7 +720,6 @@ function readGuideRowGap(row: HTMLElement): number | null {
 function guideRowSpacer(height: number): HTMLElement {
   const spacer = document.createElement('div');
   spacer.className = 'epg-grid__row-spacer';
-  spacer.dataset.epgVirtualSpacer = '';
   spacer.setAttribute('aria-hidden', 'true');
   spacer.style.height = `${String(Math.max(0, height))}px`;
   return spacer;

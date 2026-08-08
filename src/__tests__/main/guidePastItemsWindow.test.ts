@@ -119,7 +119,7 @@ test('main bound clamps the schedule request before content resolution and prese
     preferencesStore: new DesktopGuidePreferencesStore(path.join(directory, 'preferences.json')),
     guideContextSource: { getBuilderContextForMain: () => ({ ok: true, snapshot: { activeProfileId: 'profile', selectedServerId: 'server' } }) },
     createScopeToken: () => 'scope',
-    getPastItemsWindowSnapshot: async () => ({ revision: 4, pastItemsWindow: '15' as const }),
+    getPastItemsWindowSnapshot: async () => ({ revision: 4, pastItemsWindow: '15' as const, libraryTabsEnabled: true }),
   });
   const owner = new ChannelPublicReferenceOwner();
   const source = movie('channel-1');
@@ -143,7 +143,11 @@ test('main bound clamps the schedule request before content resolution and prese
 test('main rejects a Settings revision/value race through the dedicated currentness sentinel', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-guide-past-window-race-'));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
-  let snapshot: { revision: number; pastItemsWindow: 'auto' | '0' | '15' | '30' } = { revision: 1, pastItemsWindow: '15' };
+  let snapshot: { revision: number; pastItemsWindow: 'auto' | '0' | '15' | '30'; libraryTabsEnabled: boolean } = {
+    revision: 1,
+    pastItemsWindow: '15',
+    libraryTabsEnabled: true,
+  };
   let reads = 0;
   const runtime = new GuideRuntime({
     repository: { loadNormalized: async () => null } as never,
@@ -158,7 +162,7 @@ test('main rejects a Settings revision/value race through the dedicated currentn
     createScopeToken: () => 'scope',
     getPastItemsWindowSnapshot: async () => {
       reads += 1;
-      if (reads === 2) snapshot = { revision: 2, pastItemsWindow: '30' };
+      if (reads === 2) snapshot = { revision: 2, pastItemsWindow: '30', libraryTabsEnabled: true };
       return snapshot;
     },
   });

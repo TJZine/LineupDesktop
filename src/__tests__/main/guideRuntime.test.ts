@@ -6,7 +6,7 @@ import type { ChannelConfig } from '../../domain/channel/types.js';
 import type { ChannelRepository } from '../../domain/channel/channelRepository.js';
 import type { PlexMediaItemMinimal } from '../../domain/channel/interfaces.js';
 import type { PlexLibraryMinimalAdapter } from '../../main/channel/plexLibraryMinimalAdapter.js';
-import { ChannelPublicReferenceOwner } from '../../main/channel/channelPublicReferenceOwner.js';
+import { ChannelPublicReferenceOwner, type ChannelPublicReferenceGeneration } from '../../main/channel/channelPublicReferenceOwner.js';
 
 class MockChannelRepository {
   public data = {
@@ -114,7 +114,43 @@ function createLibraryItem(index: number, durationMs = 1_800_000): PlexMediaItem
   };
 }
 
-test('GuideRuntime getPresentation returns empty channels list if none configured', async () => {
+function pagedRuntimeOptions() {
+  return {
+    preferencesStore: {
+      activateScope: async (scope: { scopeToken: string }) => ({
+        scopeToken: scope.scopeToken,
+        revision: 0,
+        selectedLibraryId: null,
+        persistenceStatus: 'missing' as const,
+      }),
+    } as never,
+    guideContextSource: {
+      getBuilderContextForMain: () => ({
+        ok: true as const,
+        snapshot: { activeProfileId: 'profile', selectedServerId: 'server' },
+      }),
+    },
+    getPastItemsWindowSnapshot: async () => ({
+      revision: 0,
+      pastItemsWindow: 'auto' as const,
+      libraryTabsEnabled: true,
+    }),
+  };
+}
+
+function createGeneration(
+  repository: MockChannelRepository,
+  lineupRevision = 1,
+): ChannelPublicReferenceGeneration {
+  return Object.freeze({
+    lineupRevision,
+    channels: repository.data.channels,
+    currentChannelId: repository.data.currentChannelId,
+    fingerprint: `guide-runtime-${String(lineupRevision)}`,
+  });
+}
+
+test('GuideRuntime getPagedPresentation returns empty channels list if none configured', async () => {
   const repository = new MockChannelRepository();
   const plexAdapter = new MockPlexLibraryAdapter();
   const activeScheduler = new ChannelScheduler({ clock: { now: () => 1000 } });
@@ -124,13 +160,20 @@ test('GuideRuntime getPresentation returns empty channels list if none configure
     plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
     activeChannelScheduler: activeScheduler,
     clock: { now: () => 1000 },
+    ...pagedRuntimeOptions(),
   });
 
-  const presentation = await runtime.getPresentation(1000, 3600 * 1000);
-  assert.deepEqual(presentation, {
-    channels: [],
-    nowWatching: null,
+  const presentation = await runtime.getPagedPresentation({
+    startTimeMs: 1000,
+    durationMs: 3600 * 1000,
+    channelOffset: 0,
+    channelLimit: 24,
+    generation: createGeneration(repository),
+    publicReferenceOwner: new ChannelPublicReferenceOwner(),
   });
+  assert.deepEqual(presentation.channels, []);
+  assert.equal(presentation.nowWatching, null);
+  assert.deepEqual(presentation.channelWindow, { offset: 0, total: 0 });
 });
 
 test('GuideRuntime loadChannel emits programStart before optional tune notification', async () => {
@@ -161,7 +204,7 @@ test('GuideRuntime loadChannel emits programStart before optional tune notificat
   assert.deepEqual(trace, ['programStart', 'onChannelTuned']);
 });
 
-test('GuideRuntime getPresentation generates schedule presentation for channels', async () => {
+test('GuideRuntime getPagedPresentation generates schedule presentation for channels', async () => {
   const repository = new MockChannelRepository();
   const chan1 = createChannelConfig('chan-1', 1, 'Channel 1', 'lib-1');
   const chan2 = createChannelConfig('chan-2', 2, 'Channel 2', 'lib-2');
@@ -178,9 +221,17 @@ test('GuideRuntime getPresentation generates schedule presentation for channels'
     plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
     activeChannelScheduler: activeScheduler,
     clock: { now: () => 1000 },
+    ...pagedRuntimeOptions(),
   });
 
-  const presentation = await runtime.getPresentation(1000, 1_800_000);
+  const presentation = await runtime.getPagedPresentation({
+    startTimeMs: 1000,
+    durationMs: 1_800_000,
+    channelOffset: 0,
+    channelLimit: 24,
+    generation: createGeneration(repository),
+    publicReferenceOwner: new ChannelPublicReferenceOwner(),
+  });
 
   assert.equal(presentation.channels.length, 2);
   assert.equal(presentation.channels[0]?.id, 'chan-1');
@@ -192,7 +243,7 @@ test('GuideRuntime getPresentation generates schedule presentation for channels'
   assert.equal(presentation.channels[1]?.programs[0]?.title, 'Movie 1');
 });
 
-test('GuideRuntime artwork output becomes an owned renderer-safe projection for hostile titles', async () => {
+test('GuideRuntime paged artwork output becomes an owned renderer-safe projection for hostile titles', async () => {
   const repository = new MockChannelRepository();
   const configured = createChannelConfig('chan-1', 1, 'Channel 1');
   repository.data.channels = [configured];
@@ -206,6 +257,7 @@ test('GuideRuntime artwork output becomes an owned renderer-safe projection for 
     plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
     activeChannelScheduler: new ChannelScheduler({ clock: { now: () => 1_000 } }),
     clock: { now: () => 1_000 },
+    ...pagedRuntimeOptions(),
     guideArtworkOwner: {
       createRef: (input: { altText: string }) => {
         const ref = Object.freeze({
@@ -216,15 +268,15 @@ test('GuideRuntime artwork output becomes an owned renderer-safe projection for 
         return ref;
       },
     } as never,
-    loadLineupRevision: async () => 2,
   });
-  const raw = await runtime.getPresentation(1_000, 1_800_000);
-  const aggregate = {
-    storedChannelData: { ...repository.data, channelOrder: ['chan-1'], savedAt: 1 },
-    currentChannelId: 'chan-1', lineupRevision: 2, channelBuilderState: null,
-  };
-  const owner = new ChannelPublicReferenceOwner();
-  const projected = owner.projectPresentation(owner.createGeneration(aggregate), raw);
+  const projected = await runtime.getPagedPresentation({
+    startTimeMs: 1_000,
+    durationMs: 1_800_000,
+    channelOffset: 0,
+    channelLimit: 24,
+    generation: createGeneration(repository, 2),
+    publicReferenceOwner: new ChannelPublicReferenceOwner(),
+  });
 
   assert.equal(projected.channels[0]!.programs[0]!.title, '[redacted]');
   assert.equal(projected.channels[0]!.programs[0]!.artwork?.altText, '[redacted]');
@@ -283,7 +335,7 @@ test('GuideRuntime tuneChannel does not mutate active scheduler when persistence
   assert.equal(repository.data.currentChannelId, null);
 });
 
-test('GuideRuntime excludes hidden channels from presentation and tuning', async () => {
+test('GuideRuntime excludes hidden channels from paged presentation and tuning', async () => {
   const repository = new MockChannelRepository();
   const hidden = createChannelConfig('hidden-chan', 1, 'Hidden Channel', 'lib-hidden');
   hidden.hidden = true;
@@ -301,9 +353,17 @@ test('GuideRuntime excludes hidden channels from presentation and tuning', async
     plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
     activeChannelScheduler: activeScheduler,
     clock: { now: () => 1000 },
+    ...pagedRuntimeOptions(),
   });
 
-  const presentation = await runtime.getPresentation(1000, 1_800_000);
+  const presentation = await runtime.getPagedPresentation({
+    startTimeMs: 1000,
+    durationMs: 1_800_000,
+    channelOffset: 0,
+    channelLimit: 24,
+    generation: createGeneration(repository),
+    publicReferenceOwner: new ChannelPublicReferenceOwner(),
+  });
   await assert.rejects(() => runtime.tuneChannel('hidden-chan'), /Channel not found/u);
 
   assert.deepEqual(presentation.channels.map((channel) => channel.id), ['visible-chan']);
@@ -344,7 +404,7 @@ test('GuideRuntime logs and isolates onChannelTuned callback failures', async ()
   assert.match(JSON.stringify(errors[0]), /callback failed/u);
 });
 
-test('GuideRuntime logs content resolution failures while returning empty channel programs', async () => {
+test('GuideRuntime paged presentation logs content resolution failures while returning empty channel programs', async () => {
   const repository = new MockChannelRepository();
   const chan1 = createChannelConfig('chan-1', 1, 'Channel 1');
   repository.data.channels = [chan1];
@@ -359,16 +419,24 @@ test('GuideRuntime logs content resolution failures while returning empty channe
     plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
     activeChannelScheduler: new ChannelScheduler({ clock: { now: () => 1000 } }),
     clock: { now: () => 1000 },
+    ...pagedRuntimeOptions(),
     logger: {
       warn: () => undefined,
       error: (_message, detail) => errors.push(detail),
     },
   });
 
-  const presentation = await runtime.getPresentation(1000, 1_800_000);
+  const presentation = await runtime.getPagedPresentation({
+    startTimeMs: 1000,
+    durationMs: 1_800_000,
+    channelOffset: 0,
+    channelLimit: 24,
+    generation: createGeneration(repository),
+    publicReferenceOwner: new ChannelPublicReferenceOwner(),
+  });
 
   assert.equal(presentation.channels[0]?.programs.length, 0);
-  assert.equal(errors.length, 2);
+  assert.equal(errors.length, 1);
   assert.match(JSON.stringify(errors[0]), /library unavailable/u);
 });
 

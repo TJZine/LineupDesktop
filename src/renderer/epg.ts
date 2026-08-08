@@ -379,7 +379,6 @@ export function selectEpgPageTarget(
 
 export interface EpgPageNavigationIntent {
   targetGlobalIndex: number;
-  sourceLocalIndex: number;
   channelOffset: number;
   targetLocalIndex: number | null;
   fetchRequired: boolean;
@@ -457,7 +456,6 @@ export function resolveEpgPageNavigation(
   const maximumOffset = Math.max(0, window.total - channelLimit);
   return {
     targetGlobalIndex,
-    sourceLocalIndex,
     channelOffset: inside || boundaryClamped ? window.offset : clamp(targetGlobalIndex - sourceLocalIndex, 0, maximumOffset),
     targetLocalIndex: inside ? targetGlobalIndex - window.offset : null,
     fetchRequired: !inside && !boundaryClamped,

@@ -31,7 +31,7 @@ export type GuidePastItemsWindowSetting = 'auto' | '0' | '15' | '30';
 export interface GuidePastItemsWindowSnapshot {
   revision: number;
   pastItemsWindow: GuidePastItemsWindowSetting;
-  libraryTabsEnabled?: boolean;
+  libraryTabsEnabled: boolean;
 }
 
 export class GuidePresentationCurrentnessError extends Error {
@@ -52,10 +52,8 @@ export class GuideRuntime {
   private readonly onChannelTuned?: (channelId: string) => void | Promise<void>;
   private readonly logger: ChannelLogger;
   private readonly guideArtworkOwner: GuideArtworkOwner | null;
-  private readonly loadLineupRevision: (() => Promise<number>) | null;
   private readonly preferencesStore: DesktopGuidePreferencesStore | null;
   private readonly guideContextSource: Readonly<{ getBuilderContextForMain(): GuideContextResult }> | null;
-  private readonly getLibraryTabsEnabled: () => boolean | Promise<boolean>;
   private readonly getPastItemsWindowSnapshot: () => Promise<GuidePastItemsWindowSnapshot>;
   private readonly createScopeToken: () => string;
   private activeScopeKey: string | null = null;
@@ -69,10 +67,8 @@ export class GuideRuntime {
     onChannelTuned?: (channelId: string) => void | Promise<void>;
     logger?: ChannelLogger;
     guideArtworkOwner?: GuideArtworkOwner;
-    loadLineupRevision?: () => Promise<number>;
     preferencesStore?: DesktopGuidePreferencesStore;
     guideContextSource?: Readonly<{ getBuilderContextForMain(): GuideContextResult }>;
-    getLibraryTabsEnabled?: () => boolean | Promise<boolean>;
     getPastItemsWindowSnapshot?: () => Promise<GuidePastItemsWindowSnapshot>;
     createScopeToken?: () => string;
   }) {
@@ -87,13 +83,12 @@ export class GuideRuntime {
     this.onChannelTuned = input.onChannelTuned;
     this.logger = input.logger ?? { warn: () => undefined, error: () => undefined };
     this.guideArtworkOwner = input.guideArtworkOwner ?? null;
-    this.loadLineupRevision = input.loadLineupRevision ?? null;
     this.preferencesStore = input.preferencesStore ?? null;
     this.guideContextSource = input.guideContextSource ?? null;
-    this.getLibraryTabsEnabled = input.getLibraryTabsEnabled ?? (() => true);
     this.getPastItemsWindowSnapshot = input.getPastItemsWindowSnapshot ?? (async () => ({
       revision: 0,
       pastItemsWindow: 'auto',
+      libraryTabsEnabled: true,
     }));
     this.createScopeToken = input.createScopeToken ?? (() => `guide-scope-${randomBytes(16).toString('hex')}`);
   }
@@ -113,7 +108,7 @@ export class GuideRuntime {
     const capturedNowMs = this.clock.now();
     let preference = await this.activatePreferenceScope(input.generation);
     const libraryRows = deriveLibraries(input.generation, input.publicReferenceOwner);
-    const tabsEnabled = (settingsSnapshot.libraryTabsEnabled ?? await this.getLibraryTabsEnabled()) && libraryRows.length > 1;
+    const tabsEnabled = settingsSnapshot.libraryTabsEnabled && libraryRows.length > 1;
     const validSelection = preference.selectedLibraryId === null ||
       libraryRows.some((library) => library.rawId === preference.selectedLibraryId);
     if ((!tabsEnabled || !validSelection) && preference.selectedLibraryId !== null) {
@@ -267,100 +262,6 @@ export class GuideRuntime {
     if (!state.isActive || state.currentProgram === null) return null;
     const row = resolved.find(({ channel }) => channel.id === state.channelId);
     return row === undefined ? null : mapCurrentProgram(state.currentProgram, row.channel.id, [...row.items]);
-  }
-
-  async getPresentation(
-    startTimeMs: number,
-    durationMs: number,
-  ): Promise<EpgPresentationSource> {
-    const lineupRevision = this.guideArtworkOwner === null || this.loadLineupRevision === null
-      ? null
-      : await this.loadLineupRevision();
-    const loaded = await this.repository.loadNormalized();
-    const visibleChannels = loaded?.data.channels.filter(isVisibleChannel) ?? [];
-    if (!loaded || visibleChannels.length === 0) {
-      return {
-        channels: [],
-        nowWatching: null,
-      };
-    }
-
-    const epgChannels: EpgChannelViewModel[] = await Promise.all(
-      visibleChannels.map(async (channel) => {
-        let channelItems: ChannelContentItem[] = [];
-        try {
-          channelItems = await this.contentResolver.resolveSource(channel.contentSource);
-        } catch (error) {
-          this.logContentResolutionFailure('GuideRuntime.getPresentation.channel', channel, error);
-        }
-
-        if (channelItems.length === 0) {
-          return {
-            id: channel.id,
-            number: String(channel.number),
-            name: channel.name,
-            programs: [],
-          };
-        }
-
-        const scheduler = createSchedulerForChannel(channel, channelItems, this.clock);
-        const window = scheduler.getScheduleWindow(startTimeMs, startTimeMs + durationMs);
-        const programs = window.programs.map((prog) =>
-          mapScheduledProgramToViewModel(
-            prog,
-            channel.id,
-            channelItems,
-            this.guideArtworkOwner,
-            lineupRevision,
-          ),
-        );
-
-        return {
-          id: channel.id,
-          number: String(channel.number),
-          name: channel.name,
-          programs,
-        };
-      }),
-    );
-
-    let nowWatching: EpgCurrentProgramViewModel | null = null;
-    const currentChannel = visibleChannels.find(
-      (c) => c.id === loaded.data.currentChannelId,
-    );
-
-    if (currentChannel) {
-      const state = this.activeChannelScheduler.getState();
-      if (state.isActive && state.currentProgram && state.channelId === currentChannel.id) {
-        let currentItems: ChannelContentItem[] = [];
-        try {
-          currentItems = await this.contentResolver.resolveSource(currentChannel.contentSource);
-        } catch (error) {
-          this.logContentResolutionFailure('GuideRuntime.getPresentation.nowWatching.active', currentChannel, error);
-        }
-        nowWatching = mapCurrentProgram(state.currentProgram, currentChannel.id, currentItems);
-      } else {
-        // Fallback calculation if active scheduler is not loaded yet
-        let currentItems: ChannelContentItem[] = [];
-        try {
-          currentItems = await this.contentResolver.resolveSource(currentChannel.contentSource);
-        } catch (error) {
-          this.logContentResolutionFailure('GuideRuntime.getPresentation.nowWatching.fallback', currentChannel, error);
-        }
-        if (currentItems.length > 0) {
-          const scheduler = createSchedulerForChannel(currentChannel, currentItems, this.clock);
-          const currentProgram = scheduler.getCurrentProgram();
-          if (currentProgram && currentProgram.isCurrent) {
-            nowWatching = mapCurrentProgram(currentProgram, currentChannel.id, currentItems);
-          }
-        }
-      }
-    }
-
-    return {
-      channels: epgChannels,
-      nowWatching,
-    };
   }
 
   async tuneChannel(channelId: string): Promise<void> {

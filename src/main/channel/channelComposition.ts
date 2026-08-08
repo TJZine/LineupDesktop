@@ -50,11 +50,10 @@ export interface CreateChannelCompositionOptions {
   guideArtworkSessionGenerationOwner: GuideArtworkSessionGenerationOwner;
   guideArtworkTransport: LivePlexGuideArtworkTransport;
   guidePreferencesFilePath?: string;
-  getLibraryTabsEnabled?: () => boolean | Promise<boolean>;
   getPastItemsWindowSnapshot?: () => Promise<{
     revision: number;
     pastItemsWindow: 'auto' | '0' | '15' | '30';
-    libraryTabsEnabled?: boolean;
+    libraryTabsEnabled: boolean;
   }>;
 }
 
@@ -163,12 +162,9 @@ export function createChannelComposition(
     onChannelTuned: typeof options.onChannelTuned === 'function' ? options.onChannelTuned : undefined,
     logger: guideLogger,
     guideArtworkOwner,
-    loadLineupRevision: async () =>
-      (await runtime.loadPublicReferenceGeneration()).lineupRevision,
     ...(guidePreferencesStore === null ? {} : {
       preferencesStore: guidePreferencesStore,
       guideContextSource: options.plexRuntime,
-      getLibraryTabsEnabled: options.getLibraryTabsEnabled,
       getPastItemsWindowSnapshot: options.getPastItemsWindowSnapshot,
     }),
   });

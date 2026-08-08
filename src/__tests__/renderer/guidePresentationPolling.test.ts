@@ -6,7 +6,6 @@ import {
   type EpgGuideDensity,
 } from '../../renderer/epg.js';
 import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
-import { createGuideDensityRefreshLatch } from '../../renderer/guideDensityRefresh.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import { DEFAULT_GUIDE_PRELOAD_PROFILE } from '../../renderer/guideVirtualization.js';
 
@@ -182,7 +181,7 @@ test('aggressive page and adjacent-time warm entries are consumed without anothe
   assert.equal(requests[1]?.channelOffset, 24);
 
   const beforePage = requests.length;
-  await controller.requestPage({ targetGlobalIndex: 24, sourceLocalIndex: 0, scopeToken: 'scope', channelOffset: 24 });
+  await controller.requestPage({ targetGlobalIndex: 24, scopeToken: 'scope', channelOffset: 24 });
   assert.equal(requests.length, beforePage, 'warmed page is applied from cache');
 
   idle.shift()?.();
@@ -289,17 +288,16 @@ test('startup density change during loading latches one Wide refetch after stale
     () => density,
     () => { applied += 1; },
   ));
-  const densityRefreshLatch = createGuideDensityRefreshLatch();
 
   const initial = polling.refresh('poll-start');
   assert.deepEqual(requests.map(({ durationMs }) => durationMs), [bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS)]);
   density = 'compact';
-  densityRefreshLatch.noteChange();
-  assert.equal(densityRefreshLatch.consume(true, 'guide'), false);
-  assert.equal(densityRefreshLatch.hasPending(), true);
+  polling.noteGuideDensityChange();
+  await polling.settleGuideDensity(true);
+  assert.equal(polling.hasPendingGuideDensityChange(), true);
 
-  assert.equal(densityRefreshLatch.consume(false, 'guide'), true);
-  const latest = polling.refresh('guide-density-change');
+  const latest = polling.settleGuideDensity(false);
+  assert.equal(polling.hasPendingGuideDensityChange(), false);
   assert.deepEqual(requests.map(({ durationMs }) => durationMs), [bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS)]);
   requests[0]?.deferred.resolve(result('stale-detailed'));
   await initial;
@@ -315,7 +313,6 @@ test('startup density change during loading latches one Wide refetch after stale
     bufferedDuration(EPG_WINDOW_DURATION_MS),
   ]);
   assert.equal(applied, 1);
-  assert.equal(densityRefreshLatch.consume(false, 'guide'), false);
 });
 
 test('repeated loading density changes coalesce to one latest refetch', async () => {
@@ -334,18 +331,16 @@ test('repeated loading density changes coalesce to one latest refetch', async ()
     () => density,
     () => { applied += 1; },
   ));
-  const densityRefreshLatch = createGuideDensityRefreshLatch();
 
   const initial = polling.refresh('poll-start');
   for (const nextDensity of ['compact', 'comfortable', 'compact'] as const) {
     density = nextDensity;
-    densityRefreshLatch.noteChange();
-    assert.equal(densityRefreshLatch.consume(true, 'guide'), false);
+    polling.noteGuideDensityChange();
+    await polling.settleGuideDensity(true);
   }
-  assert.equal(densityRefreshLatch.hasPending(), true);
-  assert.equal(densityRefreshLatch.consume(false, 'guide'), true);
-  const latest = polling.refresh('guide-density-change');
-  assert.equal(densityRefreshLatch.consume(false, 'guide'), false);
+  assert.equal(polling.hasPendingGuideDensityChange(), true);
+  const latest = polling.settleGuideDensity(false);
+  assert.equal(polling.hasPendingGuideDensityChange(), false);
   assert.deepEqual(requests.map(({ durationMs }) => durationMs), [bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS)]);
 
   requests[0]?.deferred.resolve(result('stale-detailed'));

@@ -6,8 +6,6 @@ import type { DesktopPlexAuthService } from './auth/index.js';
 import type { DesktopPlexServerDiscovery } from './discovery/index.js';
 import type { PlexConnection } from './discovery/types.js';
 
-export type GuideArtworkSessionStatus = 'ready' | 'unavailable' | 'disposed';
-
 export type GuideArtworkReadySession = Readonly<{
   generationId: number;
   status: 'ready';

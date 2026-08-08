@@ -61,7 +61,6 @@ test('300-by-48 projection preserves header-relative viewport geometry, internal
     viewportHeight: 30 * ROW_OUTER_SIZE,
     focusedRowIndex: 115,
   });
-  assert.equal(oversized.visibleRowsClamped, true);
   assert.equal(oversized.rowIndexes.length, GUIDE_DOM_ROW_CAP);
   assert.ok(oversized.rowIndexes.includes(115));
   assert.deepEqual(oversized.rowIndexes, Array.from(
@@ -105,7 +104,7 @@ test('actual Guide DOM reconciliation keeps buffer data nonfocusable, caches lay
     renderEpgGuideDom(view200, dom);
     assert.equal(metrics.reads, 3, 'two consecutive rows and grid geometry are sampled once');
     const spacerHeights = grid.descendants()
-      .filter((node) => node.dataset.epgVirtualSpacer === '')
+      .filter((node) => node.className === 'epg-grid__row-spacer')
       .map((node) => Number.parseInt(node.style.height, 10));
     assert.ok(spacerHeights.includes(137 * ACTUAL_ROW_STRIDE - ACTUAL_SHELL_GAP));
     assert.ok(spacerHeights.includes(51 * ACTUAL_ROW_STRIDE - ACTUAL_SHELL_GAP));
@@ -115,7 +114,7 @@ test('actual Guide DOM reconciliation keeps buffer data nonfocusable, caches lay
     assert.ok(renderedProgramIds.length > 0);
     assert.ok(renderedProgramIds.some((id) => Number(id.split('-').at(-1)) < 12), 'the -120-minute DOM buffer is mounted');
     assert.ok(renderedProgramIds.some((id) => Number(id.split('-').at(-1)) >= 18), 'the +120-minute DOM buffer is mounted');
-    const bufferedCells = grid.descendants().filter((node) => node.dataset.guideBufferedProgram !== undefined);
+    const bufferedCells = grid.descendants().filter((node) => node.className === 'epg-grid__program' && node.disabled);
     assert.ok(bufferedCells.length > 0);
     assert.ok(bufferedCells.every((node) => node.dataset.focusId === undefined
       && node.dataset.guideProgramAction === undefined
@@ -192,15 +191,19 @@ test('Desktop cache identities and LRU protect current/focused entries within bo
     for (let index = 0; index < expectedEntries + 4; index += 1) {
       cache.set({ key: `buffer-${String(index)}`, value: `buffer-${String(index)}`, programCount: 500, focused: false, current: false });
     }
-    assert.ok(cache.size <= profile.maximumEntries);
-    assert.ok(cache.programCount <= profile.maximumPrograms);
+    assert.equal(cache.get('buffer-0'), null, 'oldest unprotected entry is evicted at the entry cap');
+    assert.equal(cache.get(`buffer-${String(expectedEntries + 3)}`), `buffer-${String(expectedEntries + 3)}`);
     assert.equal(cache.get('focused'), 'focused');
     assert.equal(cache.get('current'), 'current');
     cache.set({ key: 'replacement-focus', value: 'replacement-focus', programCount: 500, focused: true, current: false });
     assert.equal(cache.get('replacement-focus'), 'replacement-focus');
-    assert.ok(cache.size <= profile.maximumEntries);
+    cache.set({ key: 'program-overflow', value: 'program-overflow', programCount: profile.maximumPrograms + 1, focused: false, current: false });
+    assert.equal(cache.get('program-overflow'), null, 'an unprotected over-budget entry is evicted at the program cap');
+    assert.equal(cache.get('replacement-focus'), 'replacement-focus');
+    assert.equal(cache.get('current'), 'current');
     cache.clear();
-    assert.equal(cache.size, 0);
+    assert.equal(cache.get('focused'), null);
+    assert.equal(cache.get('current'), null);
   }
 });
 
@@ -280,6 +283,7 @@ class TimingElement {
   textContent = '';
   type = '';
   hidden = false;
+  disabled = false;
   tabIndex = 0;
   scrollTop = 0;
   clientHeight = 0;

@@ -50,7 +50,6 @@ The renderer shell currently spans:
 - `src/renderer/playerOverlayDom.ts`
 - `src/renderer/playerBridgeSubscription.ts`
 - `src/renderer/guidePresentation.ts`
-- `src/renderer/guideDensityRefresh.ts`
 - `src/renderer/guidePresentationPolling.ts`
 - `src/renderer/guideTuneController.ts`
 - `src/renderer/desktopInput.ts`
@@ -107,10 +106,10 @@ exactly four 30-minute slots and a two-hour request window; Wide owns exactly
 six slots and a three-hour window. `epg.ts` owns density-aware visibility,
 clamping, navigation, and selection-preserving recentering. The polling owner
 captures request duration for stale-result rejection and retains one active and
-one latest request. `guideDensityRefresh.ts` coalesces loading-time density
-changes into one eligible refresh, while both densities keep the same readable
-row geometry. No contract, preload, main, persistence, or native privilege is
-added.
+one latest request. It also coalesces loading-time density changes into one
+eligible refresh through the Settings settlement path, while both densities keep
+the same readable row geometry. No contract, preload, main, persistence, or
+native privilege is added.
 
 WS5 Unit 5F adds the required safe-integer `minimumStartTimeMs` Guide result.
 Main derives it from persisted Auto/0/15/30 policy and exact raw visible-source

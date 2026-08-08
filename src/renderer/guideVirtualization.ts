@@ -44,14 +44,13 @@ export interface GuideVirtualRange {
   readonly programIds: ReadonlySet<string>;
   readonly leadingRows: number;
   readonly trailingRows: number;
-  readonly visibleRowsClamped: boolean;
 }
 
 /** Pure Desktop Guide row/cell projection. Layout values are sampled by the DOM lifecycle owner. */
 export function projectGuideVirtualRange(input: GuideVirtualRangeInput): GuideVirtualRange {
   const rowCount = input.rows.length;
   if (rowCount === 0) {
-    return { rowIndexes: [], rowPlacements: [], programIds: new Set(), leadingRows: 0, trailingRows: 0, visibleRowsClamped: false };
+    return { rowIndexes: [], rowPlacements: [], programIds: new Set(), leadingRows: 0, trailingRows: 0 };
   }
   const rowOuterSize = positiveFinite(input.rowOuterSize, 1);
   const scrollTop = Math.max(0, finite(input.scrollTop, 0) - Math.max(0, finite(input.rowStartOffset ?? 0, 0)));
@@ -115,7 +114,6 @@ export function projectGuideVirtualRange(input: GuideVirtualRangeInput): GuideVi
     programIds,
     leadingRows: rowIndexes[0] ?? 0,
     trailingRows: rowCount - 1 - (rowIndexes[rowIndexes.length - 1] ?? rowCount - 1),
-    visibleRowsClamped,
   };
 }
 
@@ -132,9 +130,6 @@ export class GuidePresentationLru<T> {
   #programCount = 0;
 
   constructor(private readonly profile: GuidePreloadProfile) {}
-
-  get size(): number { return this.#entries.size; }
-  get programCount(): number { return this.#programCount; }
 
   get(key: string, protection: Readonly<{ focused: boolean; current: boolean }> = { focused: false, current: false }): T | null {
     const entry = this.#entries.get(key);

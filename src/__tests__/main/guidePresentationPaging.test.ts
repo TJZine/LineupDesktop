@@ -243,7 +243,11 @@ function createRuntime(
     clock: { now: () => 0 }, preferencesStore,
     guideContextSource: { getBuilderContextForMain: () => ({ ok: true, snapshot: { activeProfileId: 'profile', selectedServerId: 'server' } }) },
     createScopeToken: () => 'scope-token',
-    getLibraryTabsEnabled: () => libraryTabsEnabled,
+    getPastItemsWindowSnapshot: async () => ({
+      revision: 0,
+      pastItemsWindow: 'auto' as const,
+      libraryTabsEnabled,
+    }),
   });
 }
 
