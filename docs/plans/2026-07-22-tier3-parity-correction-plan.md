@@ -9147,9 +9147,9 @@ HWND, or partial BaseWindow/WebContentsView migration.
 
 **Unit 5E — Detailed two-hour versus Wide three-hour density**
 
-Unit 5E is paused only until production Unit 5D has a complete independently
-reviewed implementation and passing local automated/production-index proof.
-This serial stop also applies to Units 5F and 5G. The deferred Windows
+Unit 5E is implemented, independently reviewed, and committed at `154fcfd`.
+Its local coding gate is complete; Unit 5F is the next authorized package and
+Unit 5G remains serially paused behind it. The deferred Windows
 feasibility/real-host campaign remains mandatory in 5H before WS5 closeout, but
 does not block completing the remaining coding units.
 
