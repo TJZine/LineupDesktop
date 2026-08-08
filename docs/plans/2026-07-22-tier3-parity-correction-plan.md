@@ -9399,6 +9399,17 @@ bounds; both use the synthetic 300-by-48 fixture and rerun 5B's paging tests.
 
 **Unit 5H — local product proof and authority reconciliation**
 
+**Scope correction — 2026-08-08.** WS5 application implementation is complete
+through Units 5A–5G plus Guide focus-transition correction `1e4a282`. Packages
+5H-A through 5H-C below are proof/audit infrastructure, not product feature
+work, and are no longer authorized for macOS execution or implementation.
+Preserve their requirements as deferred input to the consolidated Windows
+audit/testing campaign. Until that campaign moves to the Windows machine, run
+only the repository's normal verification and Electron smoke checks; do not
+build a replacement local proof harness. Unit 5H-D and Unit 5I remain truthful
+post-proof reconciliation and closeout work and cannot close WS5 before the
+Windows observations.
+
 Freshness at committed Unit 5G/docs checkpoint `dcfb1ea` found no product-contract
 contradiction, but the earlier Unit 5H paragraph was not execution-ready: it
 named desired observations without a local runner/evidence contract, every
