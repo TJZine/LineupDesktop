@@ -9342,6 +9342,11 @@ window without a duplicate request.
 
 **Unit 5G — large-guide virtualization and aggressive preload**
 
+Unit 5G is implemented, independently reviewed, and committed at `4946fb5`.
+Its local coding/performance gate is complete; Unit 5H is the next authorized
+package. The macOS arm64 synthetic production-DOM timings are local evidence
+only and make no Windows or live-large-lineup claim.
+
 **Desktop performance adjudication — 2026-08-02:** upstream `0258dbe` is a
 behavior/reference source, not the performance authority for this Windows-first
 Electron app. Its fixed five visible rows, two-row buffer, 60-minute buffer, and
