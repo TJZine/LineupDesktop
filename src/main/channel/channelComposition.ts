@@ -25,7 +25,7 @@ import { CustomChannelRuntime } from './customChannelRuntime.js';
 import type { DesktopPlexRuntime } from '../plex/desktopPlexRuntime.js';
 import { PlexLibraryMinimalAdapter } from './plexLibraryMinimalAdapter.js';
 import { ChannelScheduler } from '../../domain/scheduler/channelScheduler.js';
-import { GuideRuntime } from './guideRuntime.js';
+import { GuideRuntime, type GuidePastItemsWindowSnapshot } from './guideRuntime.js';
 import type { ChannelClock, ChannelLogger } from '../../domain/channel/interfaces.js';
 import { ChannelPublicReferenceOwner } from './channelPublicReferenceOwner.js';
 import { GuideArtworkOwner } from './guideArtworkOwner.js';
@@ -50,11 +50,7 @@ export interface CreateChannelCompositionOptions {
   guideArtworkSessionGenerationOwner: GuideArtworkSessionGenerationOwner;
   guideArtworkTransport: LivePlexGuideArtworkTransport;
   guidePreferencesFilePath?: string;
-  getPastItemsWindowSnapshot?: () => Promise<{
-    revision: number;
-    pastItemsWindow: 'auto' | '0' | '15' | '30';
-    libraryTabsEnabled: boolean;
-  }>;
+  getPastItemsWindowSnapshot?: () => Promise<GuidePastItemsWindowSnapshot>;
 }
 
 export interface RegisterChannelCompositionIpcOptions {

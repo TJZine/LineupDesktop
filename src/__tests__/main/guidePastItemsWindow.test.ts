@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import type { ChannelConfig } from '../../domain/channel/types.js';
 import { ChannelScheduler } from '../../domain/scheduler/channelScheduler.js';
+import { DEFAULT_DESKTOP_SETTINGS_VALUES, SETTINGS_SCHEMA_VERSION } from '../../contracts/settings.js';
 import { ChannelPublicReferenceOwner, type ChannelPublicReferenceGeneration } from '../../main/channel/channelPublicReferenceOwner.js';
 import {
   computeGuideMinimumStartTimeMs,
@@ -14,6 +15,7 @@ import {
   isGuideShowOnlyScope,
 } from '../../main/channel/guideRuntime.js';
 import { DesktopGuidePreferencesStore } from '../../main/channel/desktopGuidePreferencesStore.js';
+import { DesktopSettingsSnapshotOwner } from '../../main/settings/desktopSettingsSnapshotOwner.js';
 
 const NOW = Date.UTC(2026, 6, 8, 16, 45);
 const AUTO_CLASSIFICATION_NOW = Date.UTC(2026, 6, 8, 16, 31);
@@ -149,16 +151,34 @@ test('main bound clamps the schedule request before content resolution and prese
 test('main rejects a Settings revision/value race through the dedicated currentness sentinel', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-guide-past-window-race-'));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
-  let snapshot: { revision: number; pastItemsWindow: 'auto' | '0' | '15' | '30'; libraryTabsEnabled: boolean } = {
+  let backingLoads = 0;
+  let backingReplacements = 0;
+  let observations = 0;
+  let releaseResolution!: () => void;
+  const resolutionStarted = new Promise<void>((resolve) => { releaseResolution = resolve; });
+  let continueResolution!: () => void;
+  const resolutionGate = new Promise<void>((resolve) => { continueResolution = resolve; });
+  const initialSnapshot = {
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
     revision: 1,
-    pastItemsWindow: '15',
-    libraryTabsEnabled: true,
+    status: 'ready' as const,
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, pastItemsWindow: '15' as const },
   };
-  let reads = 0;
+  const snapshotOwner = new DesktopSettingsSnapshotOwner({
+    loadSnapshot: async () => { backingLoads += 1; return initialSnapshot; },
+    replace: async (expectedRevision, values) => {
+      backingReplacements += 1;
+      return { ...initialSnapshot, revision: expectedRevision + 1, values };
+    },
+  }, initialSnapshot);
   const runtime = new GuideRuntime({
     repository: { loadNormalized: async () => null } as never,
     plexLibraryAdapter: {
-      getLibraryItems: async () => [{ ratingKey: 'item', type: 'movie', title: 'Item', durationMs: 60 * 60 * 1_000 }],
+      getLibraryItems: async () => {
+        releaseResolution();
+        await resolutionGate;
+        return [{ ratingKey: 'item', type: 'movie', title: 'Item', durationMs: 60 * 60 * 1_000 }];
+      },
       getCollectionItems: async () => [], getShowEpisodes: async () => [], getPlaylistItems: async () => [], getItem: async () => null,
     } as never,
     activeChannelScheduler: new ChannelScheduler({ clock: { now: () => NOW } }),
@@ -167,22 +187,36 @@ test('main rejects a Settings revision/value race through the dedicated currentn
     guideContextSource: { getBuilderContextForMain: () => ({ ok: true, snapshot: { activeProfileId: 'profile', selectedServerId: 'server' } }) },
     createScopeToken: () => 'scope',
     getPastItemsWindowSnapshot: async () => {
-      reads += 1;
-      if (reads === 2) snapshot = { revision: 2, pastItemsWindow: '30', libraryTabsEnabled: true };
-      return snapshot;
+      observations += 1;
+      const snapshot = snapshotOwner.observeSnapshot();
+      return {
+        revision: snapshot.revision,
+        pastItemsWindow: snapshot.values.pastItemsWindow,
+        libraryTabsEnabled: snapshot.values.libraryTabsEnabled,
+      };
     },
   });
+  const presentation = runtime.getPagedPresentation({
+    startTimeMs: 0,
+    durationMs: 60 * 60 * 1_000,
+    channelOffset: 0,
+    channelLimit: 9,
+    generation: generation([movie('channel-1')]),
+    publicReferenceOwner: new ChannelPublicReferenceOwner(),
+  });
+  await resolutionStarted;
+  await snapshotOwner.replace(1, {
+    ...DEFAULT_DESKTOP_SETTINGS_VALUES,
+    pastItemsWindow: '30',
+  });
+  continueResolution();
   await assert.rejects(
-    runtime.getPagedPresentation({
-      startTimeMs: 0,
-      durationMs: 60 * 60 * 1_000,
-      channelOffset: 0,
-      channelLimit: 9,
-      generation: generation([manual('channel-1')]),
-      publicReferenceOwner: new ChannelPublicReferenceOwner(),
-    }),
+    presentation,
     (error: unknown) => error instanceof GuidePresentationCurrentnessError,
   );
+  assert.equal(observations, 2);
+  assert.equal(backingLoads, 0);
+  assert.equal(backingReplacements, 1);
 });
 
 test('main local-midnight clamp remains calendar-based across spring-forward and fall-back', () => {
