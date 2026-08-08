@@ -403,16 +403,13 @@ export function settleEpgPresentation(
     ? presentation.minimumStartTimeMs
     : state.minimumStartTimeMs;
   const acceptedWindowStartMs = isValidTime(effectiveStartTimeMs)
-    ? Math.max(minimumStartTimeMs ?? 0, effectiveStartTimeMs)
+    ? effectiveStartTimeMs
     : undefined;
   let next = updateEpgState({
     ...state,
     minimumStartTimeMs,
     ...(acceptedWindowStartMs === undefined ? {} : { windowStartMs: acceptedWindowStartMs }),
   }, presentation, generation, guideDensity);
-  if (acceptedWindowStartMs !== undefined) {
-    next = { ...next, windowStartMs: acceptedWindowStartMs };
-  }
   if (typeof pagingTargetGlobalIndex === 'number') {
     const window = presentation.channelWindow;
     if (window !== undefined) {

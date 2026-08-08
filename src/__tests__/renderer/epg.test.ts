@@ -18,6 +18,7 @@ import {
   normalizeEpgPresentation,
   setEpgGuideDensity,
   setEpgPresentationState,
+  settleEpgPresentation,
   updateEpgState,
   type EpgPresentationSource,
   type EpgProgramViewModel,
@@ -145,6 +146,56 @@ test('EPG normalization preserves an honest missing now-watching value', () => {
   const after = Date.now();
   assert.equal(normalized.nowWatching, null);
   assert.ok(normalized.nowMs >= before && normalized.nowMs <= after);
+});
+
+test('EPG settlement clamps an accepted start below the presentation minimum', () => {
+  const source = presentation();
+  const settled = settleEpgPresentation(
+    createEpgState(source, 1, 'compact'),
+    source,
+    2,
+    null,
+    false,
+    'compact',
+    BASE - 4 * EPG_SLOT_DURATION_MS,
+  );
+
+  assert.equal(settled.state.windowStartMs, BASE - EPG_SLOT_DURATION_MS);
+});
+
+test('EPG settlement preserves an accepted start inside the presentation bounds', () => {
+  const source = presentation();
+  const acceptedStartMs = BASE + EPG_SLOT_DURATION_MS;
+  const settled = settleEpgPresentation(
+    createEpgState(source, 1, 'compact'),
+    source,
+    2,
+    null,
+    false,
+    'compact',
+    acceptedStartMs,
+  );
+
+  assert.equal(settled.state.windowStartMs, acceptedStartMs);
+});
+
+test('EPG settlement clamps an accepted upper start and keeps the selected program visible in the view', () => {
+  const source = presentation();
+  const settled = settleEpgPresentation(
+    createEpgState(source, 1, 'compact'),
+    source,
+    2,
+    null,
+    false,
+    'compact',
+    BASE + 8 * EPG_SLOT_DURATION_MS,
+  );
+  const view = createEpgGuideView(settled.state, source);
+
+  assert.equal(settled.state.windowStartMs, BASE + 2 * EPG_SLOT_DURATION_MS);
+  assert.equal(view.windowStartMs, settled.state.windowStartMs);
+  assert.equal(view.selectedProgram?.id, 'a-current');
+  assert.equal(view.selectedProgram?.isSelected, true);
 });
 
 test('program span excludes programs outside the active window', () => {
