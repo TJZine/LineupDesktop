@@ -35,6 +35,7 @@ import { findEpgProgramCell, focusEpgNow, selectEpgPageTarget, settleEpgPresenta
 import { registerRendererActions, type GuideActionId, type GuideProgramActionTarget } from './rendererActionRegistration.js';
 import { subscribePlayerBridge } from './playerBridgeSubscription.js';
 import { createGuidePresentationPolling } from './guidePresentationPolling.js';
+import { createGuideDensityRefreshLatch } from './guideDensityRefresh.js';
 import { createGuideLibraryFilterController, projectNativePlayerPresentationMode } from './guidePresentation.js';
 import { createNativePlayerPresentationController } from './player/nativePlayerPresentationController.js';
 import { projectGuideLibraryTabsPending } from './epg/guideDom.js';
@@ -79,18 +80,37 @@ let overlayState = createPlayerOverlayState();
 let playerSnapshot = createEmptyPlayerSnapshot();
 let activeSettingsCategory: SettingsSectionId = 'audio-subtitles', activeSetupStage = 'account';
 let pendingGuideFocusId: string | null = null, launchActive = true;
+const guideDensityRefreshLatch = createGuideDensityRefreshLatch();
 let startupProfilePickerHandled = false;
 const focusRegistry = new FocusRegistry(); let focusState: FocusState;
+let guidePresentationPolling: ReturnType<typeof createGuidePresentationPolling>;
 const settingsRuntime = createSettingsRuntime({
   settings: window.lineupDesktop.settings, windowBridge: fullscreenTransport,
   onStateChanged: (state) => {
+    const densityChanged = state.values.guideDensity !== workflowState.settingsDraft.guideDensity;
+    const densityRefreshWasPending = guideDensityRefreshLatch.hasPending();
+    if (densityChanged) {
+      guideDensityRefreshLatch.noteChange();
+      retainGuideProgramFocusIntent();
+    }
     workflowState = applyWorkflowSettingsValues(workflowState, state.values, state.capabilities);
     document.documentElement.dataset.theme = state.values.theme;
     playerOverlayController.setNowPlayingAutoHideMs(state.values.nowPlayingAutoHideMs);
     document.documentElement.dataset.settingsSaving = String(state.saving); document.documentElement.dataset.settingsErrorCode = state.errorCode ?? '';
     const errorElement = document.querySelector<HTMLElement>('[data-settings-error]');
     if (errorElement) { errorElement.textContent = state.errorMessage ?? ''; errorElement.hidden = state.errorMessage === null; }
-    if (!state.loading) renderApp();
+    if (!state.loading) {
+      const activeRoute = workflowState.routeState.activeRoute;
+      const shouldRefreshDensity = guideDensityRefreshLatch.consume(false, activeRoute);
+      renderApp();
+      if (densityChanged || densityRefreshWasPending) restorePendingGuideFocus();
+      if (shouldRefreshDensity && guidePresentationPolling !== undefined) {
+        void guidePresentationPolling.refresh('guide-density-change', {
+          showLoading: activeRoute === 'guide',
+          allowPlayerRoute: activeRoute === 'player',
+        });
+      }
+    }
   },
 });
 const plexController = createPlexRuntimeController({
@@ -142,7 +162,6 @@ initializeProfilePinModal({
 
 syncRendererFocusTargets(focusRegistry, dom);
 focusState = focusRegistry.createInitialState(workflowState.routeState.activeRoute);
-let guidePresentationPolling: ReturnType<typeof createGuidePresentationPolling>;
 let guideFilterController: ReturnType<typeof createGuideLibraryFilterController> | null = null;
 const playerErrorRecoveryController = createPlayerErrorRecoveryController({
   bridge: window.lineupDesktop.player,
@@ -322,6 +341,7 @@ guidePresentationPolling = createGuidePresentationPolling({
   host: window,
   getActiveRoute: () => workflowState.routeState.activeRoute,
   getWindowStartMs: () => workflowState.epg.windowStartMs,
+  getGuideDensity: () => workflowState.settingsDraft.guideDensity,
   getChannelOffset: () => workflowState.guidePresentation.channelWindow?.offset ?? 0,
   setLoading: (generation) => {
     retainGuideProgramFocusIntent();
@@ -339,6 +359,7 @@ guidePresentationPolling = createGuidePresentationPolling({
       generation,
       pagingTargetGlobalIndex,
       capturedFocusId !== null,
+      workflowState.settingsDraft.guideDensity,
     );
     workflowState = {
       ...workflowState,

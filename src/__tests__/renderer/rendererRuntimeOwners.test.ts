@@ -138,6 +138,7 @@ test('guide presentation polling serializes refreshes and settles coalesced work
     host: createNoopIntervalHost(),
     getActiveRoute: () => activeRoute,
     getWindowStartMs: () => windowStartMs,
+    getGuideDensity: () => 'compact',
     setLoading: () => {
       loadingCount += 1;
     },
@@ -204,6 +205,7 @@ test('guide presentation polling applies sustained slow responses while bounding
     } as unknown as Window,
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => 1_778_619_600_000,
+    getGuideDensity: () => 'compact',
     setLoading: () => undefined,
     applyPresentation: (_presentation, generation) => { appliedGenerations.push(generation); },
     handleFailure: () => assert.fail('failure callback was not expected'),
@@ -275,6 +277,7 @@ test('guide presentation polling times out hung work, starts trailing work, and 
     } as unknown as Window,
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => 1_778_619_600_000,
+    getGuideDensity: () => 'compact',
     setLoading: () => undefined,
     applyPresentation: () => { applied += 1; },
     handleFailure: (_source, message) => { failureMessages.push(message); },
@@ -325,6 +328,7 @@ test('guide presentation polling schedules Player and Guide with route-owned win
     } as unknown as Window,
     getActiveRoute: () => activeRoute,
     getWindowStartMs: () => 1_700_000_000_000,
+    getGuideDensity: () => 'compact',
     getNowMs: () => nowMs,
     setLoading: () => { loadingCount += 1; },
     applyPresentation: () => undefined,

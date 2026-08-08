@@ -11,6 +11,7 @@ import {
   moveEpgSelection,
   pageEpgSelection,
   selectEpgProgram,
+  setEpgGuideDensity,
   type EpgDirection,
   type EpgDirectionResult,
   type EpgActionId,
@@ -217,6 +218,7 @@ export function createWorkflowState(
   initialRoute: AppRouteId = 'player',
   guidePresentation: EpgPresentationSource = EMPTY_EPG_PRESENTATION_SOURCE,
 ): WorkflowState {
+  const settingsDraft = createSettingsDraftState();
   return {
     routeState: {
       activeRoute: initialRoute,
@@ -224,9 +226,9 @@ export function createWorkflowState(
     },
     lastActionId: null,
     lastActionRoute: null,
-    settingsDraft: createSettingsDraftState(),
+    settingsDraft,
     channelSetupDraft: createChannelSetupDraftState(),
-    epg: createEpgState(guidePresentation),
+    epg: createEpgState(guidePresentation, 0, settingsDraft.guideDensity),
     guidePresentation,
   };
 }
@@ -429,9 +431,11 @@ export function applyWorkflowSettingsAction(
   state: WorkflowState,
   actionId: SettingsActionId,
 ): WorkflowState {
+  const settingsDraft = applySettingsAction(state.settingsDraft, actionId);
   return {
     ...state,
-    settingsDraft: applySettingsAction(state.settingsDraft, actionId),
+    settingsDraft,
+    epg: setEpgGuideDensity(state.epg, state.guidePresentation, settingsDraft.guideDensity),
   };
 }
 
@@ -440,13 +444,15 @@ export function applyWorkflowSettingsValues(
   values: DesktopSettingsValues,
   capabilities?: DesktopSettingsCapabilityProjection | null,
 ): WorkflowState {
+  const settingsDraft = applyPersistedSettingsValues(
+    state.settingsDraft,
+    values,
+    capabilities ?? state.settingsDraft.capabilities,
+  );
   return {
     ...state,
-    settingsDraft: applyPersistedSettingsValues(
-      state.settingsDraft,
-      values,
-      capabilities ?? state.settingsDraft.capabilities,
-    ),
+    settingsDraft,
+    epg: setEpgGuideDensity(state.epg, state.guidePresentation, settingsDraft.guideDensity),
   };
 }
 

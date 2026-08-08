@@ -3,9 +3,10 @@ import type { AppRouteId } from './navigation.js';
 import {
   EPG_CHANNEL_PAGE_SIZE,
   EPG_SLOT_DURATION_MS,
-  EPG_WINDOW_DURATION_MS,
+  getEpgWindowDurationMs,
   normalizeEpgPresentation,
   resolveEpgPageNavigation,
+  type EpgGuideDensity,
   type EpgPresentationSource,
   type EpgState,
 } from './epg.js';
@@ -20,6 +21,7 @@ export interface GuidePresentationPollingOptions {
   host: Window;
   getActiveRoute(): AppRouteId;
   getWindowStartMs(): number;
+  getGuideDensity(): EpgGuideDensity;
   getChannelOffset?(): number;
   getNowMs?(): number;
   setLoading(generation: number): void;
@@ -83,6 +85,7 @@ interface GuidePresentationRefreshIntent {
   advanceGenerationOnStart: boolean;
   playerRefresh: boolean;
   windowStartMs: number;
+  requestedDurationMs: number;
   channelOffset: number;
   readonly abortController: AbortController;
   readonly promise: Promise<void>;
@@ -97,6 +100,7 @@ function createRefreshIntent(
   advanceGenerationOnStart: boolean,
   playerRefresh: boolean,
   windowStartMs: number,
+  requestedDurationMs: number,
   channelOffset: number,
 ): GuidePresentationRefreshIntent {
   let settled = false;
@@ -112,6 +116,7 @@ function createRefreshIntent(
     advanceGenerationOnStart,
     playerRefresh,
     windowStartMs,
+    requestedDurationMs,
     channelOffset,
     abortController: new AbortController(),
     promise,
@@ -134,6 +139,8 @@ export function createGuidePresentationPolling(
   let trailingRefresh: GuidePresentationRefreshIntent | null = null;
   let refreshRequestSequence = 0;
   let pendingPage: Readonly<GuidePageRefreshRequest & { requestSequence: number }> | null = null;
+
+  const getRequestedDurationMs = (): number => getEpgWindowDurationMs(options.getGuideDensity());
 
   const cancelPage = (): void => {
     if (pendingPage === null) return;
@@ -187,6 +194,7 @@ export function createGuidePresentationPolling(
     const windowStartMs = playerRefresh
       ? Math.floor((options.getNowMs?.() ?? Date.now()) / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS
       : options.getWindowStartMs();
+    const requestedDurationMs = getRequestedDurationMs();
     const latestIntent = trailingRefresh ?? activeRefresh;
     const channelOffset = refreshOptions.channelOffset ?? options.getChannelOffset?.() ?? 0;
     const coalescedInterval = source === 'poll-interval'
@@ -194,6 +202,7 @@ export function createGuidePresentationPolling(
       && latestIntent.lifecycleGeneration === guidePresentationLifecycleGeneration
       && latestIntent.playerRefresh === playerRefresh
       && latestIntent.windowStartMs === windowStartMs
+      && latestIntent.requestedDurationMs === requestedDurationMs
       && latestIntent.channelOffset === channelOffset;
     const generation = coalescedInterval
       ? guidePresentationGeneration
@@ -211,6 +220,7 @@ export function createGuidePresentationPolling(
         false,
         playerRefresh,
         windowStartMs,
+        requestedDurationMs,
         channelOffset,
       );
       startRefresh(intent);
@@ -226,6 +236,7 @@ export function createGuidePresentationPolling(
         coalescedInterval,
         playerRefresh,
         windowStartMs,
+        requestedDurationMs,
         channelOffset,
       );
     } else {
@@ -233,6 +244,7 @@ export function createGuidePresentationPolling(
       trailingRefresh.source = source;
       trailingRefresh.playerRefresh = playerRefresh;
       trailingRefresh.windowStartMs = windowStartMs;
+      trailingRefresh.requestedDurationMs = requestedDurationMs;
       trailingRefresh.channelOffset = channelOffset;
       if (!coalescedInterval) {
         trailingRefresh.generation = generation;
@@ -301,7 +313,7 @@ export function createGuidePresentationPolling(
         result = await waitForGuidePresentation(
           options.guide.getPresentation({
             startTimeMs: intent.windowStartMs,
-            durationMs: EPG_WINDOW_DURATION_MS,
+            durationMs: intent.requestedDurationMs,
             channelOffset: intent.channelOffset,
             channelLimit: EPG_CHANNEL_PAGE_SIZE,
           }),
@@ -348,6 +360,7 @@ export function createGuidePresentationPolling(
 
   const isCurrent = (intent: GuidePresentationRefreshIntent): boolean => intent === activeRefresh
     && intent.lifecycleGeneration === guidePresentationLifecycleGeneration
+    && intent.requestedDurationMs === getRequestedDurationMs()
     && options.getActiveRoute() === (intent.playerRefresh ? 'player' : 'guide');
 
   const settlePagingFailure = (intent: GuidePresentationRefreshIntent): boolean => {

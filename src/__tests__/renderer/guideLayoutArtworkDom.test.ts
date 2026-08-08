@@ -98,3 +98,21 @@ test('forced-color player overlay CSS targets the semantic presentation surface'
     null,
   );
 });
+
+test('Guide density no longer compresses row geometry', () => {
+  const processValue = Reflect.get(globalThis, 'process') as {
+    getBuiltinModule(name: string): { readFileSync(path: URL, encoding: 'utf8'): string };
+  };
+  const guide = processValue.getBuiltinModule('node:fs').readFileSync(
+    new URL('../../renderer/styles/guide-epg.css', import.meta.url),
+    'utf8',
+  );
+  const normalized = normalizeCss(guide);
+  assert.equal(extractCssRule(normalized, '.epg-shell[data-guide-density="compact"]'), null);
+  assert.equal(extractCssRule(normalized, '.epg-shell[data-guide-density="comfortable"]'), null);
+  assert.equal(normalized.includes('--guide-row-height: 72px'), false);
+  assert.equal(cssDeclaration(extractCssRule(normalized, '.epg-grid__channel'), 'height'), 'var(--guide-row-height)');
+  assert.equal(cssDeclaration(extractCssRule(normalized, '.screen[data-screen="guide"] .epg-grid__program'), 'top'), '4px');
+  assert.equal(cssDeclaration(extractCssRule(normalized, '.screen[data-screen="guide"] .epg-grid__program'), 'bottom'), '4px');
+  assert.equal(cssDeclaration(extractCssRule(normalized, '.screen[data-screen="guide"] .epg-grid__program'), 'padding'), 'var(--space-2) var(--space-4)');
+});

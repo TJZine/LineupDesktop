@@ -42,7 +42,7 @@ function render(artwork: ArtworkRef | null, generation = 1) {
     }],
     nowWatching: null,
   };
-  const guide = createEpgGuideView(createEpgState(presentation, generation), presentation);
+  const guide = createEpgGuideView(createEpgState(presentation, generation, 'compact'), presentation);
   const figure = new FakeElement();
   const image = new FakeImage();
   const placeholder = new FakeElement();
