@@ -10611,552 +10611,64 @@ replans only when the exact `WS5-PROOF-*` entry is complete and every affected
 row remains open. Evidence of defective/missing behavior is a remediation/
 replan trigger.
 
-#### WS5 Unit 5F Contract Feature-Review Handoff — Current
+#### WS5 Durable Checkpoint And Next Execution — Current 2026-08-08
 
-MODEL_SUGGESTION
-PLANNER: configured `planner` role
-IMPLEMENTER: resolve the bounded implementation role at dispatch from the
-approved Unit 5F through `.codex/config.toml`
-REVIEWER: configured `reviewer` role
-WHY: Unit 5F narrowly changes a strict renderer-facing Guide result across
-main raw-source/Settings ownership, preload validation, and renderer request/
-focus currentness. Exact model and reasoning settings remain role-TOML-owned.
+WS5 application implementation is complete through Units 5A–5G plus the Guide
+focus-transition correction `1e4a282`. The accepted checkpoints are the frozen
+plan `73ce570`, Units 5A–5C `46acf1f`, `6180815`, and `beeb5ef`, production
+Unit 5D `81cf42c`, Unit 5E `154fcfd`, Unit 5F `3501fb8`, and Unit 5G
+`4946fb5`. The authoritative WS5 product checkpoint is `1e4a282`; the local
+coding gate is closed, but this status does not close any
+Windows/native/live/current-upstream proof row.
 
-NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
-TASK: Review The WS5 Unit 5F Minimum-Start Contract Amendment
-TASK_FAMILY: feature/design
-TIER: Tier 3
-PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: Unit 5F public-projection re-adjudication and exact Unit 5F package
-FILES:
-- docs/plans/2026-07-22-tier3-parity-correction-plan.md
-- src/contracts/guide.ts
-- src/main/channel/guideRuntime.ts
-- src/main/channel/channelComposition.ts
-- src/main/channel/channelIpc.ts
-- src/main/index.ts
-- src/preload/guideBridge.cts
-- src/renderer/epg.ts
-- src/renderer/guidePresentationPolling.ts
-- src/renderer/workflow.ts
-- src/renderer/index.ts
-- src/__tests__/integration/preloadContractVocabulary.test.ts
-- src/__tests__/renderer/rendererRuntimeOwners.test.ts
-- src/__tests__/renderer/settingsRuntime.test.ts
-BLOCKERS: implementation remains paused until fresh independent plan review
-MESSAGE:
-Read the active plan's WS5 architecture/invariants, Unit 5F package,
-file-shape disposition, verification, acceptance, rollback, and replan sections.
-Adversarially verify that required finite nonnegative safe-integer
-`minimumStartTimeMs` is the only public addition; main alone derives it from one
-revision-current persisted `pastItemsWindow` plus exact raw visible/selected
-source truth; the distinct internal currentness sentinel preserves the existing
-public-reference error; main returns a full unchanged-duration effective window;
-and preload remains exact. Verify renderer atomically adopts that first result,
-issues no identical correction, changes provisional UI without bridge work on
-optimistic Settings publication, and issues one current refresh only after a
-non-saving success/rollback settlement. Confirm exact allowlist/no-touch owners,
-DST-safe local-midnight proof, focused vocabulary/runtime-owner fixtures, tests,
-rollback, and no new operation, source metadata, identifier, kind, or secret.
-Return findings-first approval/rejection; do not implement.
+The earlier Unit 5A, 5B, 5D-0, and 5D coding-first review handoffs are completed
+or superseded history, not active instructions. The macOS proof-harness work
+described by 5H-A through 5H-C was discarded and is no longer authorized for
+implementation or execution. Its requirements remain deferred input to the
+consolidated Windows audit/testing campaign. Until that campaign reaches the
+Windows machine, do not build a replacement local proof harness; macOS may run
+only the repository's normal verification and Electron smoke checks, which make
+no Windows, native-composition, live-Plex, or large-live-lineup claim.
 
-#### WS5 First-Unit Feature-Review Handoff
+Unit 5H/5I audit, Windows/native composition, large-live-lineup, and WS5
+closeout therefore remain deferred to that Windows campaign. No 5H proof
+script, archive, or replacement harness is present or runnable on this Mac,
+and no 5H-A–5H-C implementation is authorized here.
 
-MODEL_SUGGESTION
-PLANNER: configured `planner` role
-IMPLEMENTER: resolve the bounded implementation role at dispatch from the
-approved Unit 5A through `.codex/config.toml`
-REVIEWER: configured `reviewer` role
-WHY: Unit 5A crosses the Guide projection, main-only Plex/artwork trust
-boundary, custom protocol authorization, renderer lifecycle/focus, and input
-precedence. Exact model and reasoning settings remain role-TOML-owned.
+The remaining authoritative sequence is:
 
-NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
-TASK: Review The Whole-WS5 Amendment And Approve Or Reject Unit 5A
-TASK_FAMILY: feature/design review
-TIER: Tier 3
-PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: Whole-WS5 Decision-Complete Amendment — Guide, especially Unit 5A
-FILES:
-- docs/plans/2026-07-22-tier3-parity-correction-plan.md
-- docs/product/lineup-product-parity-matrix.md
-- docs/architecture/CURRENT_STATE.md
-- docs/architecture/renderer-architecture.md
-- docs/architecture/playback-architecture.md
-- docs/roadmap/desktop-port-roadmap.md
-- docs/development/windows-ui-proof-plan.md
-- src/contracts/artwork.ts
-- src/contracts/guide.ts
-- src/contracts/ipc.ts
-- src/contracts/shell.ts
-- src/main/channel/customChannelArtworkProxy.ts
-- src/main/channel/channelBuilderContextEpochOwner.ts
-- src/main/channel/channelLineupMutationCoordinator.ts
-- src/main/channel/channelRuntime.ts
-- src/main/channel/guideRuntime.ts
-- src/main/channel/channelComposition.ts
-- src/main/channel/channelPublicReferenceOwner.ts
-- src/main/plex/desktopPlexContextNotifications.ts
-- src/main/plex/guideArtworkSessionGenerationOwner.ts
-- src/main/plex/livePlexTransport.ts
-- src/main/plex/desktopPlexRuntime.ts
-- src/main/plex/plexComposition.ts
-- src/main/protocol.ts
-- src/main/rendererProtocolPolicy.ts
-- src/main/index.ts
-- src/preload/guideBridge.cts
-- src/preload/index.cts
-- src/renderer/epg.ts
-- src/renderer/epg/guideDom.ts
-- src/renderer/guidePresentation.ts
-- src/renderer/shell/navigationLifecycle.ts
-- src/renderer/desktopInput.ts
-- src/renderer/focusDom.ts
-- src/renderer/staticDom.ts
-- src/renderer/domBindings.ts
-- src/renderer/index.ts
-- src/renderer/styles/guide-epg.css
-- src/__tests__/contracts/contracts.test.ts
-- src/__tests__/integration/preloadContractVocabulary.test.ts
-- src/__tests__/preload/guideBridge.test.ts
-- src/__tests__/main/guideArtworkSessionGenerationOwner.test.ts
-- src/__tests__/main/desktopPlexGuideArtworkSession.test.ts
-- src/__tests__/main/guideArtworkOwner.test.ts
-- src/__tests__/main/livePlexGuideArtworkTransport.test.ts
-- src/__tests__/main/guideArtworkProtocol.test.ts
-- src/__tests__/main/guideArtworkComposition.test.ts
-- src/__tests__/main/guideRuntime.test.ts
-- src/__tests__/main/rendererProtocolPolicy.test.ts
-- src/__tests__/main/channelRuntimeIpc.test.ts
-- src/__tests__/main/channelComposition.test.ts
-- src/__tests__/main/plexComposition.test.ts
-- src/__tests__/main/shellSecurity.test.ts
-- src/__tests__/main/shellWindowController.test.ts
-- src/__tests__/renderer/epg.test.ts
-- src/__tests__/renderer/epgStateUpdate.test.ts
-- src/__tests__/renderer/epg/guideDom.test.ts
-- src/__tests__/renderer/guideDetailArtworkDom.test.ts
-- src/__tests__/renderer/navigationLifecycle.test.ts
-- src/__tests__/renderer/desktopInput.test.ts
-- src/__tests__/renderer/guidePlayToNowInput.test.ts
-BLOCKERS: none for read-only review. Unit 5A product editing stays blocked until
-review explicitly approves all adjudicated corrections: immutable session generation,
-the exact anchored `normalizeGuideArtworkLocator` allowlist/origin algorithm,
-fixed DOM, one-shot `mediaPlay`, WS1 safe-reference passthrough, atomic 5B
-cross-page paging plus page-before-resolution/fair caps, exact v1 persistence,
-Desktop/upstream art divergence, narrow fixed-GET bearer semantics, and
-unconditional tests, plus the write boundary, rollback, and stops.
-MESSAGE:
-Review the whole amendment adversarially, then explicitly approve or return
-findings for Unit 5A before product edit. Confirm all accepted findings and the
-dated re-review repairs are now decision-complete: refs, cache, queue, captured
-token/connection, and late results share one immutable non-deduplicating
-server/profile/lineup session generation with checks before queue/fetch and
-after fetch and no credential reacquisition; `normalizeGuideArtworkLocator`
-accepts only the exact anchored poster grammar and byte-preserving captured-
-origin algorithm, rejects every named vector before fetch, prohibits redirects,
-and sends the captured token only in the existing redacted header; the
-unguessable ref is only a fixed-route GET delivery bearer issued to the
-authorized shell and revoked on every named lifecycle; 5A proves fixed Classic
-available/missing/error/alt/clamp/no-loop behavior and 5D owns both-layout
-parity; only one-shot Guide `mediaPlay` means Play-to-now; WS1 safe public-
-reference passthrough remains intact; 5B atomically owns cross-page ±5 behavior
-and filters/sorts/pages before resolving, while 5G preserves that paging and
-adds fair 1,000-program truncation/virtualization; persistence v1 and
-corruption/tombstone/CAS/atomic-write policy are exact; and every named new/
-existing test is mandatory.
-Confirm the explicit Desktop divergence from upstream `0258dbe` does not claim
-exact visual parity. Reject if work needs broader public/Plex ownership,
-Settings mutation, a raw unsafe renderer capability, new privilege/dependency/
-import, `desktopInput.ts`/repeat/gamepad changes, composition-root policy,
-weaker proof, conditional tests, or an owner outside the reviewed unit. Do not
-implement, repeat the audit, reopen WS1–WS4, claim external proof, or begin
-WS6–WS9.
+1. On the Windows machine, begin with a reviewed Windows-side proof-tooling
+   freshness/planning/implementation gate against product checkpoint `1e4a282`.
+   Reconcile the actual checkout and tool ownership before authorizing any
+   proof runner, archive/transfer custody, native observer, or Windows command.
+   This gate must not assume that the deferred 5H-A–5H-C files, scripts, or
+   archives exist, and it authorizes no product feature or contract change.
+2. Only after that tooling gate is reviewed and implemented may the Windows
+   audit/testing campaign execute the exact **5H-W — Windows-only execution
+   boundary** contract above: 100% DPI feasibility followed by authorized
+   real-host Player/Overlay/Classic composition through the reviewed helper/
+   adapter, applied ACK and transparency currentness, resize/maximize/
+   fullscreen/minimize/restore, pointer/keyboard focus, UIA/MSAA, z-order/
+   no-bleed, strict ACL admission, exact Release-helper digest binding, and
+   complete teardown/root deletion with no orphan. DOM, fake-host, helper-only,
+   RD-06, macOS, black-proxy, or merged captures cannot substitute.
+3. Record the required `WS5-PROOF-01` through `WS5-PROOF-06` entries using
+   the consolidated proof-debt contract above after the reviewed Windows
+   campaign. 5H-D may reconcile only observed local/portable truth and must
+   leave unavailable 125%/150% DPI, second-display, physical-device, live-Plex,
+   paired-upstream, soak, operator, and large-live-lineup rows explicitly open.
+   Unit 5I then performs the whole-WS5 review and records the proof packet;
+   neither unit may close WS5 while the Windows minimum gate or an affected
+   proof obligation is missing.
+4. Only after the reviewed tooling gate, Windows campaign, 5H-D, 5I, and the
+   independent whole-WS5 review are clean may the controller hand off to WS6.
+   WS6 remains distinct Custom Channels work,
+   starts only after WS1's lineup persistence/mutation boundary is stable, and
+   must close before WS7 when its rows change visible surfaces. WS6–WS9 are
+   otherwise unopened.
 
-#### WS5 Unit 5B Implementation-Stop Feature-Review Handoff
-
-MODEL_SUGGESTION
-PLANNER: configured `planner` role
-IMPLEMENTER: resolve the bounded implementation role at dispatch through
-`.codex/config.toml` only after approval
-REVIEWER: configured `reviewer` role
-WHY: the stop concerns the sandboxed preload runtime-literal owner and bundle
-boundary, not a new public operation or a broader 5B redesign.
-
-NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
-TASK: Review And Approve Or Reject The Unit 5B Preload Channel-Owner Amendment
-TASK_FAMILY: feature/design review
-TIER: Tier 3
-PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: Whole-WS5 Decision-Complete Amendment — Unit 5B implementation stop
-FILES:
-- docs/plans/2026-07-22-tier3-parity-correction-plan.md
-- src/contracts/ipc.ts
-- src/preload/channels.cts
-- src/preload/index.cts
-- src/preload/guideBridge.cts
-- src/__tests__/integration/preloadContractVocabulary.test.ts
-- src/__tests__/preload/guideBridge.test.ts
-- src/__tests__/main/desktopGuidePreferencesStore.test.ts
-- src/__tests__/main/guideLibraryFilterIpc.test.ts
-- src/__tests__/main/guidePresentationPaging.test.ts
-- src/__tests__/renderer/guideLibraryTabs.test.ts
-- src/__tests__/renderer/guidePagingNavigation.test.ts
-BLOCKERS: Unit 5B implementation is stopped. Partial 5B edits already exist in
-the worktree, including `src/contracts/ipc.ts`, `src/preload/guideBridge.cts`,
-and `src/preload/index.cts`; `src/preload/channels.cts` is observed untouched
-and must remain so until this amendment is approved. This planner amendment
-changes no product or test file.
-MESSAGE:
-Review only the dated Unit 5B implementation-stop adjudication and its effects
-on the existing 5B boundary. Approve resumption only if
-`src/preload/channels.cts` is the sandbox-local owner of exactly
-`LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL =
-'lineup:guide:setLibraryFilter'`, matching `src/contracts/ipc.ts` byte-for-byte;
-`src/preload/index.cts` imports that constant only from `./channels.cjs` and
-passes it as the sole new `createGuideBridge` channel binding; and the named
-vocabulary/bridge tests prove exact parity, one added invoke constant, no
-inline/alternate literal, no shared-runtime IPC-value or Electron import, and
-the unchanged bundled sandbox boundary. Confirm the new file permission does
-not alter the Guide schema, v1 persistence or 1 MiB rules, paging, any other 5B
-owner, Unit 5A, or Unit 5C+. Reject broader preload ownership, a second
-operation/literal, weakened bundle proof, or implementation outside the exact
-listed seam. Do not implement or continue partial 5B work during this review.
-
-#### Historical Superseded WS5 Unit 5D-0/5D Proof-First Review Handoff
-
-MODEL_SUGGESTION
-PLANNER: configured role `planner`; `gpt-5.6-sol`, reasoning `high`
-IMPLEMENTER: configured role `worker`; `gpt-5.6-sol`, reasoning `medium`
-REVIEWER: configured role `reviewer`; `gpt-5.6-sol`, reasoning `high`
-WHY: 5D-0 is a bounded but native/Electron feasibility implementation; later 5D
-crosses proof capability custody, public IPC, window/view lifecycle, currentness,
-shared helper health, Win32 DPI/thread/z-order, and renderer transparency. Both
-need material implementation judgment and adversarial security/correctness proof.
-
-NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
-TASK: Independently Review And Approve Or Reject The Staged Unit 5D-0 And Unit
-5D Windows Native Presentation Architecture
-TASK_FAMILY: feature/design review
-TIER: Tier 3
-PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: Whole-WS5 Decision-Complete Amendment — Unit 5D narrow custody/
-bootstrap re-adjudication
-PRIMARY_RANGES: latest six-finding adjudication; ignored 5D-0 custody; startup
-decision; Release helper digest/ACL/proof script; malformed result correlation;
-exact scope; verification; acceptance/rollback/proof; stops; this handoff
-FILES:
-- docs/plans/2026-07-22-tier3-parity-correction-plan.md
-- AGENTS.md
-- docs/AGENTIC_DEV_WORKFLOW.md
-- docs/architecture/CURRENT_STATE.md
-- docs/architecture/playback-architecture.md
-- docs/architecture/renderer-architecture.md
-- docs/architecture/security-and-secret-flow.md
-- docs/architecture/file-shape-guardrails.md
-- docs/development/windows-ui-proof-plan.md
-- src/contracts/ipc.ts
-- src/contracts/player.ts
-- src/contracts/shell.ts
-- src/preload/channels.cts
-- src/preload/index.cts
-- src/main/index.ts
-- planned src/main/bootstrapModeDecisionOwner.ts
-- planned src/main/security/windowsProofAclInspector.ts
-- src/main/window/shellWindowController.ts
-- src/main/diagnostics/supportBundleIpc.ts
-- src/main/shellSecurity.ts
-- src/main/smokeAssertions.ts
-- src/main/smokeFullscreenAssertions.ts
-- src/main/player/playerIpc.ts
-- src/main/player/desktopPlayerAdapter.ts
-- src/main/player/privilegedPlaybackDispatchContext.ts
-- src/main/player/nativePlayerHostPort.ts
-- src/main/player/nativeHelperProtocol.ts
-- src/main/player/nativeHelperProtocolCodec.ts
-- src/main/player/nativePlayerHostProcess.ts
-- src/main/player/productionNativeHostFactory.ts
-- src/main/settings/settingsNativeHostComposition.ts
-- src/native-helper/Lineup.NativePlayerHost/Program.cs
-- src/native-helper/Lineup.NativePlayerHost/Lineup.NativePlayerHost.csproj
-- src/renderer/guidePresentation.ts
-- src/renderer/epg/guideDom.ts
-- src/renderer/shell/shellDom.ts
-- src/renderer/index.ts
-- src/renderer/styles/base.css
-- src/renderer/styles/player-overlays.css
-- src/renderer/styles/guide-epg.css
-- src/__tests__/main/player/desktopPlayerAdapter.test.ts
-- src/__tests__/main/player/nativePlayerHostProcess.test.ts
-- src/__tests__/main/player/productionNativeHostFactory.test.ts
-- src/__tests__/main/playerIpc.test.ts
-- src/__tests__/main/shellWindowController.test.ts
-- src/__tests__/main/settingsNativeHostComposition.test.ts
-- src/__tests__/main/smokeFullscreenAssertions.test.ts
-- src/__tests__/renderer/guideLayoutArtworkDom.test.ts
-- src/__tests__/renderer/routeDom.test.ts
-- src/__tests__/renderer/playerOverlayPresentation.test.ts
-- tools/smoke-electron.mjs
-- tools/__tests__/native-helper-program.test.mjs
-- tools/__tests__/smoke-electron.test.mjs
-- planned ignored docs/runs/ws5-native-presentation-feasibility/index.mjs
-- planned ignored docs/runs/ws5-native-presentation-feasibility/shell.html
-- planned ignored docs/runs/ws5-native-presentation-feasibility/Lineup.NativePresentationFeasibility/Program.cs
-- planned ignored docs/runs/ws5-native-presentation-feasibility/Lineup.NativePresentationFeasibility/Lineup.NativePresentationFeasibility.csproj
-- planned ignored docs/runs/ws5-native-presentation-feasibility/Lineup.NativePresentationFeasibility/app.manifest
-- planned ignored docs/runs/ws5-native-presentation-feasibility/ws5-native-presentation-feasibility.test.mjs
-- planned src/main/player/nativePlayerPresentationOwner.ts
-- planned src/main/player/nativePresentationProofBootstrapOwner.ts
-- planned src/main/player/nativePresentationProofComposition.ts
-- planned src/main/player/nativePresentationProofAssertions.ts
-- planned src/renderer/player/nativePlayerPresentationController.ts
-- planned src/preload/playerPresentationBridge.cts
-- planned src/native-helper/Lineup.NativePlayerHost/app.manifest
-- planned tools/ws5-native-guide-presentation-proof.ps1
-- planned tools/ws5-native-guide-presentation-proof.mjs
-- planned src/__tests__/preload/playerPresentationBridge.test.ts
-- planned src/__tests__/main/player/nativePlayerPresentationOwner.test.ts
-- planned src/__tests__/main/player/nativePresentationProofBootstrapOwner.test.ts
-- planned src/__tests__/main/player/nativePresentationProofComposition.test.ts
-- planned src/__tests__/main/bootstrapModeDecisionOwner.test.ts
-- planned src/__tests__/main/security/windowsProofAclInspector.test.ts
-- planned src/__tests__/renderer/nativePlayerPresentationController.test.ts
-- planned tools/__tests__/ws5-native-guide-presentation-proof.test.mjs
-- planned tools/__tests__/ws5-native-guide-presentation-proof-script.test.mjs
-BLOCKERS: Historical only. The authoritative coding-first handoff below
-supersedes this proof-first stop.
-The latest narrow custody/security replan received reject and is superseded.
-`src/renderer/shell/shellDom.ts` remains observed untouched; preserve every
-existing earlier-unit worktree change. This planner amendment changes no product
-or test file. Approval authorizes only the exact ignored 5D-0 package first.
-Production/public 5D, Units 5E–5G, `EPG-10`, and `UI-36` stay paused until their
-serial gates pass.
-MESSAGE:
-Review the latest six-finding adjudication without reopening accepted topology,
-currentness, or native-thread decisions. Approve only if 5D-0 is the exact six-
-file source/test closure under already ignored
-`docs/runs/ws5-native-presentation-feasibility/`, with only bin/obj/evidence
-extras, no `.gitignore`/tracked/product edit, raw exact-set source review rather
-than git diff, bin/obj cleanup, and root deletion after disposition. Confirm its
-100%-DPI proof precedes product edit, failure replans, and success closes no row.
-
-Then review the already-frozen production architecture: sentinel capability
-accepts only the exact canonical temp/userData/fixed MP4/digest/ACL markers on
-Windows, feeds one branded local file through the real privileged adapter and
-single production helper, rejects every partial/default-production case, never
-exposes path/control to renderer/preload/argv/log, and completely tears down.
-Confirm one helper presentation/render thread exclusively owns bounded HWND/WGL/
-render work and same-thread destroy-before-join; ACK follows execution. Confirm
-helper—not Electron screen APIs—validates parent PID/equal DPI contexts, physical
-GetClientRect stability, exact floor/ceil/clamp/straddling rules, and embedded
-Release PerMonitorV2 resource. Confirm any post-send reject/write/output/framing/
-timeout/exit failure quarantines the shared helper, emits lifecycle failure, and
-runs existing playback crash cleanup; only pre-send rejection is presentation-
-only. Confirm hidden-before-load/switch/cleanup and opaque-before-hide plus
-matching epoch/request/revision applied-ACK-before-transparency in both main and
-renderer. Confirm main one-active/one-latest queue, deterministic supersession,
-constant-memory/no-log churn, exact result union/preload keys, explicit shell/
-view/listener/native teardown, and disabled/nonactivation plus pointer/focus/
-UIA/MSAA proof without `HTTRANSPARENT` reliance.
-
-Explicitly confirm the new pre-side-effect bootstrap decision selects normal,
-exactly one complete smoke, or exactly one complete proof and rejects shared-
-only/partial/duplicate/mixed before either validator/downstream owner. Confirm
-proof resolves only the canonical clean-rebuilt repo Release helper, binds its
-private SHA-256 through capability/manifest/spawn/result/post-exit, and cannot
-fall back to packaged/Debug or survive mutation. Confirm ACL admission uses the
-fixed stdin PowerShell/.NET policy: no reparse, current-user proof ownership/
-effective control, only current-user/SYSTEM/Administrators write ACEs whether
-explicit/inherited, no broad/unknown write, allowed SYSTEM/Admin behavior, and
-real Windows positives/negatives. Confirm malformed public input resolves local
-rejected with independently echoed-valid-or-null epoch/revision and zero IPC.
-Confirm the single tracked PowerShell entrypoint fails closed on stale output,
-every native exit, clean/no-incremental rebuild, exact path, exact-one embedded
-PerMonitorV2 node, every digest comparison, and cleanup.
-
-Reject a public/product edit before 5D-0, fake-host proof substitution, generic
-local-file authority, second helper/window/view, renderer handle/path, main DIP/
-physical conversion, cross-thread native mutation, pre-execution ACK, unbounded
-pending work, presentation-only post-send failure, stale transparency, load
-without hidden ACK, partial cleanup/rollback, missing manifest extraction, or
-Unit 5E–5G continuation. Also reject ordinary git-diff review of ignored source,
-ambiguous smoke/proof selection, vague ACLs, helper fallback/digest drift,
-nonnullable malformed correlations, or ad-hoc manifest commands. Do not
-implement during this read-only review.
-
-#### WS5 Unit 5D Coding-First Implementation Handoff — Authoritative 2026-08-02
-
-This handoff supersedes the preceding 5D-0-first review handoff only for
-execution order. The reviewed production architecture and invariants remain
-authoritative. The disposable 5D-0 package, proof bootstrap/capability, ACL
-inspector, proof entrypoints, Release-digest evidence, and Windows observation
-are deferred to 5H and are explicitly out of scope for this implementation.
-
-MODEL_SUGGESTION
-PLANNER: no further planning is required for the frozen production seam
-IMPLEMENTER: resolve the configured `worker` role through `.codex/config.toml`
-REVIEWER: configured `reviewer` role after the implementation diff is complete
-WHY: production Unit 5D crosses Electron shell/view ownership, public IPC,
-main currentness/backpressure, shared native-helper lifecycle, Win32 thread/DPI/
-z-order behavior, and renderer transparency. The decisions are frozen, but the
-implementation needs material cross-boundary judgment.
-
-NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-implement
-TASK: Implement WS5 Unit 5D Production Native Guide Presentation
-TASK_FAMILY: feature/design
-TIER: Tier 3
-PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: approved Units 5A–5C cumulative worktree plus the coding-first Unit
-5D adjudication
-FILES:
-- src/contracts/ipc.ts
-- src/contracts/player.ts
-- src/contracts/shell.ts
-- src/preload/channels.cts
-- src/preload/index.cts
-- src/preload/playerPresentationBridge.cts
-- src/main/index.ts
-- src/main/window/shellWindowController.ts
-- src/main/diagnostics/supportBundleIpc.ts
-- src/main/shellSecurity.ts
-- src/main/smokeAssertions.ts
-- src/main/smokeFullscreenAssertions.ts
-- src/main/player/playerIpc.ts
-- src/main/player/desktopPlayerAdapter.ts
-- src/main/player/privilegedPlaybackDispatchContext.ts
-- src/main/player/nativePlayerHostPort.ts
-- src/main/player/nativeHelperProtocol.ts
-- src/main/player/nativeHelperProtocolCodec.ts
-- src/main/player/nativePlayerHostProcess.ts
-- src/main/player/productionNativeHostFactory.ts
-- src/main/player/nativePlayerPresentationOwner.ts
-- src/main/settings/settingsNativeHostComposition.ts
-- src/native-helper/Lineup.NativePlayerHost/Program.cs
-- src/native-helper/Lineup.NativePlayerHost/Lineup.NativePlayerHost.csproj
-- src/native-helper/Lineup.NativePlayerHost/app.manifest
-- src/renderer/guidePresentation.ts
-- src/renderer/epg/guideDom.ts
-- src/renderer/player/nativePlayerPresentationController.ts
-- src/renderer/shell/shellDom.ts
-- src/renderer/index.ts
-- src/renderer/styles/base.css
-- src/renderer/styles/player-overlays.css
-- src/renderer/styles/guide-epg.css
-- focused contract, preload, main, native-helper, and renderer tests named by
-  the production Unit 5D verification command
-BLOCKERS: none for production implementation. Windows composition remains
-unproven and all affected parity rows stay open until deferred 5H proof.
-MESSAGE:
-Implement only the frozen production Unit 5D seam. Replace the detached fixed
-topmost helper popup with the one app-owned disabled/nonactivating child HWND
-under the framed opaque BaseWindow and transparent sandboxed WebContentsView.
-Preserve one dedicated helper presentation/render thread; helper-owned parent/
-PID/DPI-context/physical-client validation and rounding; main-owned document
-epoch, one-active/one-latest queue, revision/currentness, and lifecycle; exact
-public/preload result validation; two-phase opaque/hidden/applied-ACK behavior;
-same-host quarantine/playback cleanup; explicit view/native/window teardown;
-and renderer-only safe mode/geometry intent. Implement Classic playing-only PIP
-and Overlay/full-player modes without a fake/second surface, topmost/popup,
-renderer handle, capture, playback-policy change, Settings mutation, dependency,
-or new privilege. Do not implement 5D-0, proof bootstrap/capability, ACL
-inspection, local-file proof authority, proof scripts, or Windows evidence in
-this unit. Run the exact local Unit 5D command, protected Units 5A–5C suites,
-`npm run verify`, and `git diff --check`; then request independent implementation
-review. A local pass closes only the coding gate and authorizes Unit 5E; it does
-not close `EPG-10`, `UI-36`, `WS5-PROOF-04`, or WS5.
-
-#### WS5 Unit 5H Feature-Review Handoff — Current 2026-08-08
-
-This handoff supersedes the stale Unit 5F-current label and earlier ad-hoc
-5D-0 execution block. Units 5A–5G are implemented and committed; this review
-owns only the Unit 5H freshness amendment.
-
-MODEL_SUGGESTION
-PLANNER: configured `planner` role
-IMPLEMENTER: configured `worker` role for 5H-A, 5H-B, and 5H-C; controller for
-5H-D authority reconciliation
-REVIEWER: fresh configured `reviewer` role after the plan and after each
-material implementation package
-WHY: 5H-A is a bounded but evidence-sensitive Electron renderer harness; 5H-B
-crosses pre-side-effect startup selection, proof-only local-file authority,
-Windows ACL admission, exact helper binding, external GDI/UIA/MSAA observation,
-and lifecycle cleanup; 5H-C is a native/Electron ignored-source closure plus
-digest-bound transfer custody. Exact model and effort remain role-TOML-owned.
-
-NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
-TASK: Review WS5 Unit 5H Pre-Windows Proof Preparation And Exact Windows Gate
-TASK_FAMILY: feature/design
-TIER: Tier 3
-PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: Unit 5H local proof, tracked Windows substrate, ignored feasibility,
-evidence-schema, verification, rollback, and Windows-boundary amendment
-FILES:
-- docs/plans/2026-07-22-tier3-parity-correction-plan.md
-- docs/architecture/CURRENT_STATE.md
-- docs/architecture/playback-architecture.md
-- docs/architecture/renderer-architecture.md
-- docs/development/windows-ui-proof-plan.md
-- src/main/index.ts
-- src/main/smokeBootstrapOwner.ts
-- src/main/player/privilegedPlaybackDispatchContext.ts
-- src/main/player/desktopPlayerAdapter.ts
-- src/main/player/nativeHelperProtocol.ts
-- src/main/player/nativeHelperProtocolCodec.ts
-- src/main/player/nativePlayerHostProcess.ts
-- src/main/player/productionNativeHostFactory.ts
-- src/main/player/nativePlayerPresentationOwner.ts
-- src/main/window/shellWindowController.ts
-- src/native-helper/Lineup.NativePlayerHost/Program.cs
-- src/renderer/index.ts
-- src/renderer/epg.ts
-- src/renderer/epg/guideDom.ts
-- src/renderer/guidePresentationPolling.ts
-- src/renderer/guideVirtualization.ts
-- tools/smoke-electron.mjs
-- tools/__tests__/smoke-electron.test.mjs
-- planned tools/ws5-guide-local-proof.mjs
-- planned tools/ws5-guide-local-proof-preload.cjs
-- planned tools/__tests__/ws5-guide-local-proof.test.mjs
-- planned tools/ws5-native-presentation-feasibility-transfer.mjs
-- planned tools/ws5-native-presentation-feasibility.reviewed.json
-- planned tools/__tests__/ws5-native-presentation-feasibility-transfer.test.mjs
-- planned tools/ws5-native-guide-observer/Lineup.Ws5NativeGuideObserver.csproj
-- planned tools/ws5-native-guide-observer/Program.cs
-- planned tools/ws5-native-guide-observer/app.manifest
-- planned tools/__tests__/ws5-native-guide-observer.test.mjs
-- docs/runs/ws5-unit5g-performance/capture.ts
-- docs/runs/ws5-unit5g-performance/timings.json
-BLOCKERS: none for plan review or macOS-preparable implementation. This Mac has
-no `dotnet`, PowerShell, Win32, Windows SDK `mt.exe`, or real Windows helper
-runtime; 5H-W and WS5/5I closeout remain blocked until the later Windows x64
-execution passes.
-MESSAGE:
-Review only the current Unit 5H amendment against committed checkpoint
-`dcfb1ea`. Confirm 5H-A runs the emitted production renderer without runtime
-source imports, uses only a harness preload and renderer-safe synthetic data,
-closes the exact ordered three-viewport/scenario/assertion/input/accessibility/
-300x48 matrix, distinguishes real Electron MediaPlay, renderer-only app-command,
-remote-like D-pad, and frozen gamepad mappings, enforces every closed manifest
-schema/value/order/timing/cap rule, and makes no main/preload/native/live/Windows
-claim. Confirm 5H-B is proof-only: startup selection precedes side effects;
-normal/smoke behavior is unchanged; only a Windows-validated branded nonce-root/
-fixed-MP4/ACL/helper-digest capability can reach the existing adapter/helper;
-the external observer is not a product shell, uses whole-desktop GDI plus the
-fixed cross-app probe and exact UIA/MSAA categories, never persists identifiers,
-and has bounded process-tree cleanup. Confirm 5H-C retains exactly six ignored
-raw-reviewed files, creates the exact deterministic ustar and approved tracked
-digest manifest, imports it exclusively into an ordinary clean Windows checkout
-without recreation, and removes imported source while preserving evidence and
-the operator archive. Confirm 5H-D cannot close affected rows, WS5, or hand off
-WS6 before the exact 5H-W 100%-DPI Windows feasibility and real-host commands
-pass. Reject product behavior, public/preload/renderer/native-helper expansion,
-pseudo Plex credentials, source-only visual proof, merged/capturePage native
-evidence, unsafe/free-form evidence, ad-hoc Windows commands or source recreation,
-unbounded custody, weakened limits, or a claim inferred across platforms. Do
-not implement during this read-only review.
+The detailed **Unit 5H** scope correction, Windows gate, verification commands,
+acceptance criteria, rollback/checkpoint rules, consolidated proof debt, and
+replan triggers above remain authoritative. This checkpoint summary replaces
+only the accumulated completed/superseded review-handoff bodies; it does not
+weaken those requirements or reopen Units 5A–5G.
