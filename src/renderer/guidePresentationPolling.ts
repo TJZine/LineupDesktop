@@ -80,6 +80,7 @@ export interface GuidePresentationRefreshOptions {
   channelOffset?: number;
   windowStartMs?: number;
   warmOnly?: boolean;
+  invalidateCache?: true;
 }
 
 export interface GuidePageRefreshRequest {
@@ -169,6 +170,13 @@ function createRefreshIntent(
 export function createGuidePresentationPolling(
   options: GuidePresentationPollingOptions,
 ): GuidePresentationPollingController {
+  function getProfile(): GuidePreloadProfile {
+    return options.getAggressivePreloadEnabled?.() === true
+      ? AGGRESSIVE_GUIDE_PRELOAD_PROFILE
+      : DEFAULT_GUIDE_PRELOAD_PROFILE;
+  }
+
+  const getCacheIdentity = (): string | null => options.getCacheIdentity?.() ?? null;
   let guidePollTimer: number | null = null;
   let guidePresentationGeneration = 0;
   let guidePresentationLifecycleGeneration = 0;
@@ -186,28 +194,28 @@ export function createGuidePresentationPolling(
   let warmIdleHandle: number | null = null;
   let cachedScopeToken: string | null = null;
 
-  const getRequestedDurationMs = (): number => getEpgWindowDurationMs(options.getGuideDensity());
+  const invalidatePresentationCache = (): void => {
+    presentationCache.clear();
+    warmCandidates = [];
+    cachedScopeToken = null;
+  };
 
-  function getProfile(): GuidePreloadProfile {
-    return options.getAggressivePreloadEnabled?.() === true
-      ? AGGRESSIVE_GUIDE_PRELOAD_PROFILE
-      : DEFAULT_GUIDE_PRELOAD_PROFILE;
-  }
+  const getRequestedDurationMs = (): number => getEpgWindowDurationMs(options.getGuideDensity());
 
   const refreshProfile = (): GuidePreloadProfile => {
     const next = getProfile();
     if (next !== cacheProfile) {
       cacheProfile = next;
-      presentationCache.clear();
       presentationCache = new GuidePresentationLru(next);
+      warmCandidates = [];
+      cachedScopeToken = null;
     }
     return next;
   };
 
   const cancelPage = (): void => {
     if (pendingPage === null) return;
-    presentationCache.clear();
-    cachedScopeToken = null;
+    invalidatePresentationCache();
     pendingPage = null;
     const cancelledActivePage = activeRefresh?.source === 'guide-page-change'
       ? activeRefresh
@@ -245,9 +253,7 @@ export function createGuidePresentationPolling(
     );
     stoppedActive?.settle();
     stoppedTrailing?.settle();
-    presentationCache.clear();
-    warmCandidates = [];
-    cachedScopeToken = null;
+    invalidatePresentationCache();
     if (warmIdleHandle !== null && 'cancelIdleCallback' in options.host) options.host.cancelIdleCallback(warmIdleHandle);
     warmIdleHandle = null;
   };
@@ -256,11 +262,7 @@ export function createGuidePresentationPolling(
     source: string,
     refreshOptions: GuidePresentationRefreshOptions = {},
   ): Readonly<{ promise: Promise<void>; requestSequence: number }> => {
-    if (['guide-density-change', 'guide-aggressive-preload-change', 'guide-library-filter', 'custom-channel-change'].includes(source) ||
-      source.startsWith('guide-past-items-window')) {
-      presentationCache.clear();
-      warmCandidates = [];
-    }
+    if (refreshOptions.invalidateCache === true) invalidatePresentationCache();
     const playerRefresh = options.getActiveRoute() === 'player' && refreshOptions.allowPlayerRoute === true;
     if (options.getActiveRoute() !== 'guide' && !playerRefresh) {
       return { promise: Promise.resolve(), requestSequence: 0 };
@@ -300,7 +302,7 @@ export function createGuidePresentationPolling(
         profile.channelLimit,
         profile.timeBufferMs,
         refreshOptions.warmOnly === true,
-        options.getCacheIdentity?.() ?? null,
+        getCacheIdentity(),
         pastItemsWindowGeneration,
       );
       startRefresh(intent);
@@ -321,7 +323,7 @@ export function createGuidePresentationPolling(
         profile.channelLimit,
         profile.timeBufferMs,
         refreshOptions.warmOnly === true,
-        options.getCacheIdentity?.() ?? null,
+        getCacheIdentity(),
         pastItemsWindowGeneration,
       );
     } else {
@@ -334,7 +336,7 @@ export function createGuidePresentationPolling(
       trailingRefresh.channelLimit = profile.channelLimit;
       trailingRefresh.timeBufferMs = profile.timeBufferMs;
       trailingRefresh.warmOnly = refreshOptions.warmOnly === true;
-      trailingRefresh.cacheIdentity = options.getCacheIdentity?.() ?? null;
+      trailingRefresh.cacheIdentity = getCacheIdentity();
       trailingRefresh.pastItemsWindowGeneration = pastItemsWindowGeneration;
       if (!coalescedInterval) {
         trailingRefresh.generation = generation;
@@ -404,12 +406,16 @@ export function createGuidePresentationPolling(
         intent.channelOffset,
         intent.channelLimit,
       );
+      const currentCacheIdentity = getCacheIdentity();
       const key = intent.cacheIdentity === null ? null : `${intent.cacheIdentity}:${baseKey}`;
       const cacheEligibleSource = intent.source === 'guide-page-change' || intent.source === 'epg-window-change';
-      const cached = key !== null && cacheEligibleSource && intent.cacheIdentity === options.getCacheIdentity?.()
+      const cached = key !== null && cacheEligibleSource && intent.cacheIdentity === currentCacheIdentity
         ? presentationCache.get(key, { focused: true, current: true })
         : null;
-      if (cached !== null) await Promise.resolve();
+      if (cached !== null) {
+        // Align the cache path's currentness recheck with the network path's async boundary.
+        await Promise.resolve();
+      }
       if (cached !== null && isCurrent(intent)) {
         lastValidPresentation = cached;
         options.applyPresentation(
@@ -459,13 +465,10 @@ export function createGuidePresentationPolling(
         } else {
           const normalized = normalizeEpgPresentation(result.value);
           const nextScopeToken = normalized.libraryFilter?.scopeToken ?? null;
-          if (cachedScopeToken !== null && nextScopeToken !== cachedScopeToken) {
-            presentationCache.clear();
-            warmCandidates = [];
-          }
+          if (cachedScopeToken !== null && nextScopeToken !== cachedScopeToken) invalidatePresentationCache();
           cachedScopeToken = nextScopeToken;
           const scopeMatches = nextScopeToken === (options.getCacheScopeToken?.() ?? null);
-          if (key !== null && intent.cacheIdentity === options.getCacheIdentity?.() && scopeMatches) {
+          if (key !== null && intent.cacheIdentity === getCacheIdentity() && scopeMatches) {
             presentationCache.set({
               key,
               value: normalized,
@@ -474,8 +477,6 @@ export function createGuidePresentationPolling(
               current: !intent.warmOnly && normalized.channels.some((channel) => channel.programs.some((program) =>
                 program.startsAtMs <= normalized.nowMs && normalized.nowMs < program.endsAtMs)),
             });
-          } else if (intent.warmOnly) {
-            return;
           }
           if (intent.warmOnly) return;
           lastValidPresentation = normalized;
@@ -502,7 +503,7 @@ export function createGuidePresentationPolling(
     && intent.lifecycleGeneration === guidePresentationLifecycleGeneration
     && intent.requestedDurationMs === getRequestedDurationMs()
     && intent.pastItemsWindowGeneration === pastItemsWindowGeneration
-    && intent.cacheIdentity === (options.getCacheIdentity?.() ?? null)
+    && intent.cacheIdentity === getCacheIdentity()
     && options.getActiveRoute() === (intent.playerRefresh ? 'player' : 'guide');
   const settlePagingFailure = (intent: GuidePresentationRefreshIntent): boolean => {
     if (pendingPage?.requestSequence !== intent.requestSequence) return false;
@@ -609,14 +610,13 @@ export function createGuidePresentationPolling(
       return refresh('guide-density-change', {
         showLoading: route === 'guide',
         allowPlayerRoute: route === 'player',
+        invalidateCache: true,
       });
     },
     notePastItemsWindowChange() {
       pastItemsWindowGeneration += 1;
       pastItemsWindowSettlementPending = true;
-      presentationCache.clear();
-      warmCandidates = [];
-      cachedScopeToken = null;
+      invalidatePresentationCache();
     },
     settlePastItemsWindow({ currentValue, acceptedValue, saving }) {
       if (!pastItemsWindowSettlementPending || saving || acceptedValue === null || currentValue !== acceptedValue) return;
@@ -626,6 +626,7 @@ export function createGuidePresentationPolling(
         void refresh('guide-past-items-window-settlement', {
           showLoading: route === 'guide',
           allowPlayerRoute: route === 'player',
+          invalidateCache: true,
         });
       }
     },

@@ -251,6 +251,144 @@ test('past-window and trusted identity changes invalidate cached presentations b
   controller.stop();
 });
 
+test('cache invalidation requires explicit intent instead of diagnostic source labels', async () => {
+  let activeRoute: 'guide' | 'settings' = 'guide';
+  let requests = 0;
+  const controller = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async () => result(`invalidation-${String(++requests)}`),
+      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+    },
+    host: host(),
+    getActiveRoute: () => activeRoute,
+    getWindowStartMs: () => 0,
+    getGuideDensity: () => 'compact',
+    getCacheIdentity: () => 'identity',
+    getCacheScopeToken: () => 'scope',
+    setLoading: () => undefined,
+    applyPresentation: () => undefined,
+    handleFailure: () => undefined,
+  });
+
+  await controller.refresh('foreground');
+  assert.equal(requests, 1);
+
+  activeRoute = 'settings';
+  await controller.refresh('guide-density-change');
+  activeRoute = 'guide';
+  await controller.refresh('epg-window-change');
+  assert.equal(requests, 1, 'a diagnostic label does not clear the cache off-route');
+
+  activeRoute = 'settings';
+  await controller.refresh('diagnostic-label', { invalidateCache: true });
+  activeRoute = 'guide';
+  await controller.refresh('epg-window-change');
+  assert.equal(requests, 2, 'typed invalidation clears the cache independently of source');
+  controller.stop();
+});
+
+test('preload profile replacement swaps the cache and discards stale warm candidates', async () => {
+  let aggressive = true;
+  const idle: Array<() => void> = [];
+  const requests: Array<{ channelLimit?: number }> = [];
+  const controller = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async (input) => {
+        requests.push(input);
+        return result(`profile-switch-${String(requests.length)}`);
+      },
+      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+    },
+    host: idleHost(idle),
+    getActiveRoute: () => 'guide',
+    getWindowStartMs: () => 0,
+    getGuideDensity: () => 'compact',
+    getAggressivePreloadEnabled: () => aggressive,
+    getCacheIdentity: () => 'identity',
+    getCacheScopeToken: () => 'scope',
+    setLoading: () => undefined,
+    applyPresentation: () => undefined,
+    handleFailure: () => undefined,
+  });
+
+  await controller.refresh('foreground');
+  assert.equal(requests.length, 1);
+  assert.equal(idle.length, 1);
+
+  aggressive = false;
+  await controller.refresh('epg-window-change');
+  assert.equal(requests.length, 2, 'the new profile starts with an empty LRU');
+  assert.equal(requests[1]?.channelLimit, DEFAULT_GUIDE_PRELOAD_PROFILE.channelLimit);
+  idle.shift()?.();
+  await tick();
+  assert.equal(requests.length, 2, 'warm candidates from the discarded profile are not requested');
+  controller.stop();
+});
+
+test('undefined cache identity matches null for lookup, insertion, and currentness', async () => {
+  for (const initialIdentity of [null, undefined] as const) {
+    const identity: string | null | undefined = initialIdentity;
+    let requests = 0;
+    let applied = 0;
+    const pending = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['guide']['getPresentation']>>>();
+    const controller = createGuidePresentationPolling({
+      guide: {
+        getPresentation: async () => {
+          requests += 1;
+          return pending.promise;
+        },
+        setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+      },
+      host: host(),
+      getActiveRoute: () => 'guide',
+      getWindowStartMs: () => 0,
+      getGuideDensity: () => 'compact',
+      getCacheIdentity: () => identity as string | null,
+      getCacheScopeToken: () => 'scope',
+      setLoading: () => undefined,
+      applyPresentation: () => { applied += 1; },
+      handleFailure: () => undefined,
+    });
+
+    const first = controller.refresh('foreground');
+    await Promise.resolve();
+    pending.resolve(result(`identity-${String(initialIdentity)}`));
+    await first;
+    await controller.refresh('epg-window-change');
+    assert.equal(requests, 2, `identity ${String(initialIdentity)} does not create a cache entry`);
+    assert.equal(applied, 2, `identity ${String(initialIdentity)} remains current after normalization`);
+    controller.stop();
+  }
+});
+
+test('cache hits cross one async boundary before currentness is rechecked', async () => {
+  let activeRoute: 'guide' | 'settings' = 'guide';
+  let applied = 0;
+  const controller = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async () => result('microtask'),
+      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+    },
+    host: host(),
+    getActiveRoute: () => activeRoute,
+    getWindowStartMs: () => 0,
+    getGuideDensity: () => 'compact',
+    getCacheIdentity: () => 'identity',
+    getCacheScopeToken: () => 'scope',
+    setLoading: () => undefined,
+    applyPresentation: () => { applied += 1; },
+    handleFailure: () => undefined,
+  });
+
+  await controller.refresh('foreground');
+  assert.equal(applied, 1);
+  const cacheHit = controller.refresh('epg-window-change');
+  activeRoute = 'settings';
+  await cacheHit;
+  assert.equal(applied, 1, 'the cache hit yields before applying stale presentation');
+  controller.stop();
+});
+
 test('a scheduled idle warm cannot displace foreground active and trailing intent', async () => {
   const idle: Array<() => void> = [];
   const requests: Array<{

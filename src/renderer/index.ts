@@ -130,6 +130,7 @@ const settingsRuntime = createSettingsRuntime({
         void guidePresentationPolling.refresh('guide-aggressive-preload-change', {
           showLoading: activeRoute === 'guide',
           allowPlayerRoute: activeRoute === 'player',
+          invalidateCache: true,
         });
       }
       guidePresentationPolling?.settlePastItemsWindow({
@@ -452,7 +453,7 @@ guideFilterController = createGuideLibraryFilterController({
       guidePresentation: { ...workflowState.guidePresentation, libraryFilter },
     };
   },
-  refresh: () => { void guidePresentationPolling.refresh('guide-library-filter', { channelOffset: 0, showLoading: false }); },
+  refresh: () => { void guidePresentationPolling.refresh('guide-library-filter', { channelOffset: 0, showLoading: false, invalidateCache: true }); },
   cancelPage: () => guidePresentationPolling.cancelPage(),
   handleFailure: (message) => {
     workflowState = { ...workflowState, epg: setEpgTuneError(workflowState.epg, message) };
@@ -901,7 +902,7 @@ async function applyCustomChannelAction(
     selectedSourceId: resolveLiveSelectedPlexSectionId(plexController.getState()),
     controller: customChannelController,
     refreshChannels: () => { void channelController.loadStatus(); },
-    refreshGuide: () => { void guidePresentationPolling.refresh('custom-channel-change', { showLoading: false }); },
+    refreshGuide: () => { void guidePresentationPolling.refresh('custom-channel-change', { showLoading: false, invalidateCache: true }); },
     render: renderApp,
     flow: {
       openEditor: (focusId) => stagedSetupController.openCustomEditor(focusId),

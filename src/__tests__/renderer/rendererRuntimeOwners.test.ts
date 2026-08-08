@@ -369,7 +369,7 @@ test('guide presentation polling schedules Player and Guide with route-owned win
   assert.equal(clearCount, 2);
 });
 
-test('guide polling owns one accepted or rollback past-items settlement and defers off-route', async () => {
+test('Settings-route past-items settlement makes no request; Guide entry recovers once', async () => {
   let activeRoute: 'guide' | 'settings' = 'guide';
   let requests = 0;
   const polling = createGuidePresentationPolling({
@@ -402,6 +402,7 @@ test('guide polling owns one accepted or rollback past-items settlement and defe
 
   activeRoute = 'settings';
   polling.notePastItemsWindowChange();
+  // Off-route settlement is consumed without a request; ordinary Guide entry owns recovery.
   polling.settlePastItemsWindow({ currentValue: '30', acceptedValue: '30', saving: false });
   await settleAsyncWork();
   assert.equal(requests, 1);
