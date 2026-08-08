@@ -51,6 +51,11 @@ export interface CreateChannelCompositionOptions {
   guideArtworkTransport: LivePlexGuideArtworkTransport;
   guidePreferencesFilePath?: string;
   getLibraryTabsEnabled?: () => boolean | Promise<boolean>;
+  getPastItemsWindowSnapshot?: () => Promise<{
+    revision: number;
+    pastItemsWindow: 'auto' | '0' | '15' | '30';
+    libraryTabsEnabled?: boolean;
+  }>;
 }
 
 export interface RegisterChannelCompositionIpcOptions {
@@ -164,6 +169,7 @@ export function createChannelComposition(
       preferencesStore: guidePreferencesStore,
       guideContextSource: options.plexRuntime,
       getLibraryTabsEnabled: options.getLibraryTabsEnabled,
+      getPastItemsWindowSnapshot: options.getPastItemsWindowSnapshot,
     }),
   });
   const unsubscribeGuidePreferenceScope = guidePreferencesStore === null

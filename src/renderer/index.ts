@@ -88,9 +88,14 @@ const settingsRuntime = createSettingsRuntime({
   settings: window.lineupDesktop.settings, windowBridge: fullscreenTransport,
   onStateChanged: (state) => {
     const densityChanged = state.values.guideDensity !== workflowState.settingsDraft.guideDensity;
+    const pastItemsWindowChanged = state.values.pastItemsWindow !== workflowState.settingsDraft.pastItemsWindow;
     const densityRefreshWasPending = guideDensityRefreshLatch.hasPending();
     if (densityChanged) {
       guideDensityRefreshLatch.noteChange();
+      retainGuideProgramFocusIntent();
+    }
+    if (pastItemsWindowChanged) {
+      guidePresentationPolling?.notePastItemsWindowChange();
       retainGuideProgramFocusIntent();
     }
     workflowState = applyWorkflowSettingsValues(workflowState, state.values, state.capabilities);
@@ -110,6 +115,11 @@ const settingsRuntime = createSettingsRuntime({
           allowPlayerRoute: activeRoute === 'player',
         });
       }
+      guidePresentationPolling?.settlePastItemsWindow({
+        currentValue: state.values.pastItemsWindow,
+        acceptedValue: state.snapshot?.values.pastItemsWindow ?? null,
+        saving: state.saving,
+      });
     }
   },
 });
@@ -351,7 +361,7 @@ guidePresentationPolling = createGuidePresentationPolling({
     };
     renderApp();
   },
-  applyPresentation: (normalizedGuidePresentation, generation, pagingTargetGlobalIndex) => {
+  applyPresentation: (normalizedGuidePresentation, generation, pagingTargetGlobalIndex, effectiveStartTimeMs) => {
     const capturedFocusId = captureGuideProgramFocusIntent(pendingGuideFocusId, focusState.activeId);
     const settlement = settleEpgPresentation(
       workflowState.epg,
@@ -360,6 +370,7 @@ guidePresentationPolling = createGuidePresentationPolling({
       pagingTargetGlobalIndex,
       capturedFocusId !== null,
       workflowState.settingsDraft.guideDensity,
+      effectiveStartTimeMs,
     );
     workflowState = {
       ...workflowState,
@@ -370,8 +381,21 @@ guidePresentationPolling = createGuidePresentationPolling({
     renderApp();
     restorePendingGuideFocus();
   },
-  applyPlayerPresentation: (normalizedGuidePresentation) => {
-    workflowState = { ...workflowState, guidePresentation: normalizedGuidePresentation };
+  applyPlayerPresentation: (normalizedGuidePresentation, generation, effectiveStartTimeMs) => {
+    const settlement = settleEpgPresentation(
+      workflowState.epg,
+      normalizedGuidePresentation,
+      generation,
+      null,
+      false,
+      workflowState.settingsDraft.guideDensity,
+      effectiveStartTimeMs,
+    );
+    workflowState = {
+      ...workflowState,
+      guidePresentation: normalizedGuidePresentation,
+      epg: settlement.state,
+    };
     renderApp();
   },
   handlePlayerFailure: (source, message) => recordRendererBridgeFailure(

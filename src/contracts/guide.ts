@@ -55,6 +55,7 @@ export interface GuideLibraryFilterState {
 export interface GuidePresentationSource extends EpgPresentationSource {
   channelWindow: { offset: number; total: number };
   libraryFilter: GuideLibraryFilterState;
+  minimumStartTimeMs: number;
 }
 
 export interface GuideGetPresentationRequest {

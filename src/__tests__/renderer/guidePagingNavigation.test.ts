@@ -347,6 +347,7 @@ test('Guide +5,+5,-5,-5 reversal discards its queued page and focuses the loaded
 function presentation(count: number, offset: number, total: number): GuidePresentationSource {
   return {
     nowWatching: null,
+    minimumStartTimeMs: 0,
     channelWindow: { offset, total },
     libraryFilter: { scopeToken: 'scope', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'missing' },
     channels: Array.from({ length: count }, (_, local) => {

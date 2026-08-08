@@ -19,6 +19,7 @@ import {
   ChannelPublicReferenceConsistencyError,
   ChannelPublicReferenceOwner,
 } from '../../main/channel/channelPublicReferenceOwner.js';
+import { GuidePresentationCurrentnessError } from '../../main/channel/guideRuntime.js';
 import { ChannelRuntime } from '../../main/channel/channelRuntime.js';
 
 test('ChannelRuntime status uses public references and exact builder metadata', async () => {
@@ -131,6 +132,111 @@ test('Guide presentation retries consistency failures but maps projection failur
     assert.equal(presentationLoads, scenario === 'consistency' ? 3 : 1);
     assert.equal(generationLoads, scenario === 'consistency' ? 3 : 1);
   }
+});
+
+test('Guide presentation retries the Settings currentness sentinel independently', async () => {
+  const handlers = new Map<string, (event: never, payload: unknown) => Promise<unknown>>();
+  let presentationLoads = 0;
+  registerChannelIpcHandlers({
+    runtime: {
+      loadPublicReferenceGeneration: async () => ({ lineupRevision: 1, channels: [], currentChannelId: null, fingerprint: 'same' }),
+    } as never,
+    guideRuntime: {
+      isPreferenceScopeCurrent: () => true,
+      getPagedPresentation: async () => {
+        presentationLoads += 1;
+        if (presentationLoads < 3) throw new GuidePresentationCurrentnessError();
+        return {
+          channels: [],
+          nowWatching: null,
+          channelWindow: { offset: 0, total: 0 },
+          libraryFilter: { scopeToken: 'scope', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'ready' },
+          minimumStartTimeMs: 0,
+        };
+      },
+    } as never,
+    publicReferenceOwner: {} as never,
+    isAuthorizedEvent: () => true,
+    createRequestId: () => 'fallback',
+    ipcMain: {
+      handle: (channel, handler) => { handlers.set(channel, handler as never); },
+      removeHandler: () => undefined,
+    },
+  });
+  const result = await handlers.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL)!(
+    undefined as never,
+    { requestId: 'guide-settings-currentness', payload: { startTimeMs: 0, durationMs: 60_000 } },
+  ) as { ok: boolean };
+  assert.equal(result.ok, true);
+  assert.equal(presentationLoads, 3);
+});
+
+test('Guide presentation exhausts the Settings currentness retry budget as stale', async () => {
+  const handlers = new Map<string, (event: never, payload: unknown) => Promise<unknown>>();
+  let presentationLoads = 0;
+  registerChannelIpcHandlers({
+    runtime: {
+      loadPublicReferenceGeneration: async () => ({ lineupRevision: 1, channels: [], currentChannelId: null, fingerprint: 'same' }),
+    } as never,
+    guideRuntime: {
+      isPreferenceScopeCurrent: () => true,
+      getPagedPresentation: async () => {
+        presentationLoads += 1;
+        throw new GuidePresentationCurrentnessError();
+      },
+    } as never,
+    publicReferenceOwner: {} as never,
+    isAuthorizedEvent: () => true,
+    createRequestId: () => 'fallback',
+    ipcMain: {
+      handle: (channel, handler) => { handlers.set(channel, handler as never); },
+      removeHandler: () => undefined,
+    },
+  });
+  const result = await handlers.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL)!(
+    undefined as never,
+    { requestId: 'guide-settings-currentness-exhausted', payload: { startTimeMs: 0, durationMs: 60_000 } },
+  ) as { ok: boolean; error: { code: string } };
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'GUIDE_PRESENTATION_STALE');
+  assert.equal(presentationLoads, 3);
+});
+
+test('Guide presentation retries a public-reference consistency failure independently before success', async () => {
+  const handlers = new Map<string, (event: never, payload: unknown) => Promise<unknown>>();
+  let presentationLoads = 0;
+  registerChannelIpcHandlers({
+    runtime: {
+      loadPublicReferenceGeneration: async () => ({ lineupRevision: 1, channels: [], currentChannelId: null, fingerprint: 'same' }),
+    } as never,
+    guideRuntime: {
+      isPreferenceScopeCurrent: () => true,
+      getPagedPresentation: async () => {
+        presentationLoads += 1;
+        if (presentationLoads === 1) throw new ChannelPublicReferenceConsistencyError();
+        return {
+          channels: [],
+          nowWatching: null,
+          channelWindow: { offset: 0, total: 0 },
+          libraryFilter: { scopeToken: 'scope', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'ready' },
+          minimumStartTimeMs: 0,
+        };
+      },
+    } as never,
+    publicReferenceOwner: {} as never,
+    isAuthorizedEvent: () => true,
+    createRequestId: () => 'fallback',
+    ipcMain: {
+      handle: (channel, handler) => { handlers.set(channel, handler as never); },
+      removeHandler: () => undefined,
+    },
+  });
+  const result = await handlers.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL)!(
+    undefined as never,
+    { requestId: 'guide-reference-retry-success', payload: { startTimeMs: 0, durationMs: 60_000 } },
+  ) as { ok: boolean };
+  assert.equal(result.ok, true);
+  assert.equal(presentationLoads, 2);
 });
 
 test('channel IPC registers and removes exactly the five setup handlers', async () => {

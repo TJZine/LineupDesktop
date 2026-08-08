@@ -29,6 +29,7 @@ function presentation(artwork: unknown, overrides: Record<string, unknown> = {})
       }],
     }],
     nowWatching: null,
+    minimumStartTimeMs: 0,
     channelWindow: { offset: 0, total: 1 },
     libraryFilter: { scopeToken: 'scope-1', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'missing' },
   };
@@ -72,6 +73,30 @@ test('guide bridge accepts only the strict poster artwork reference vocabulary',
   }
 });
 
+test('guide bridge validates the required finite nonnegative minimum start bound', async () => {
+  const base = presentation(null) as Record<string, unknown>;
+  const missing = { ...base };
+  delete missing.minimumStartTimeMs;
+  const invalid = [
+    missing,
+    { ...base, extra: true },
+    { ...base, minimumStartTimeMs: 1.5 },
+    { ...base, minimumStartTimeMs: -1 },
+    { ...base, minimumStartTimeMs: Number.MAX_SAFE_INTEGER + 1 },
+    { ...base, minimumStartTimeMs: Number.NaN },
+    { ...base, minimumStartTimeMs: Number.POSITIVE_INFINITY },
+    { ...base, minimumStartTimeMs: '0' },
+    { ...base, minimumStartTimeMs: null },
+    { ...base, minimumStartTimeMs: {} },
+  ];
+  for (const value of invalid) {
+    const result = await invokeWith(value);
+    assert.equal(result.ok, false);
+    assert.equal(result.error?.code, 'GUIDE_VALIDATION_FAILED');
+  }
+  assert.equal((await invokeWith(base)).ok, true);
+});
+
 test('guide bridge enforces bounded title and description fields', async () => {
   const artwork = {
     id: 'artwork-ABCDEFGHIJKLMNOP', kind: 'poster', expiresAtMs: 100,
@@ -103,7 +128,7 @@ test('guide bridge enforces channel, row, aggregate, and library relation bounds
   });
   const withChannels = (channels: unknown[], libraryFilter: unknown = {
     scopeToken: 'scope', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'ready',
-  }) => ({ channels, nowWatching: null, channelWindow: { offset: 0, total: channels.length }, libraryFilter });
+  }) => ({ channels, nowWatching: null, minimumStartTimeMs: 0, channelWindow: { offset: 0, total: channels.length }, libraryFilter });
   assert.equal((await invokeWith(withChannels(Array.from({ length: 24 }, (_, index) => row(index, 0))))).ok, true);
   assert.equal((await invokeWith(withChannels(Array.from({ length: 25 }, (_, index) => row(index, 0))))).ok, false);
   assert.equal((await invokeWith(withChannels([row(1, 201)]))).ok, false);

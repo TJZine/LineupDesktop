@@ -26,6 +26,21 @@ import type { DesktopGuidePreferencesStore } from './desktopGuidePreferencesStor
 import { DesktopGuidePreferencesStoreError } from './desktopGuidePreferencesStore.js';
 import { channelLibraryIds, libraryIdsFromContentSource } from './channelLibraryIds.js';
 
+export type GuidePastItemsWindowSetting = 'auto' | '0' | '15' | '30';
+
+export interface GuidePastItemsWindowSnapshot {
+  revision: number;
+  pastItemsWindow: GuidePastItemsWindowSetting;
+  libraryTabsEnabled?: boolean;
+}
+
+export class GuidePresentationCurrentnessError extends Error {
+  public constructor() {
+    super('Guide presentation settings changed while loading.');
+    this.name = 'GuidePresentationCurrentnessError';
+  }
+}
+
 type GuideContextResult = Readonly<{ ok: true; snapshot: Readonly<{ activeProfileId: string; selectedServerId: string }> }> |
   Readonly<{ ok: false }> | null;
 
@@ -41,6 +56,7 @@ export class GuideRuntime {
   private readonly preferencesStore: DesktopGuidePreferencesStore | null;
   private readonly guideContextSource: Readonly<{ getBuilderContextForMain(): GuideContextResult }> | null;
   private readonly getLibraryTabsEnabled: () => boolean | Promise<boolean>;
+  private readonly getPastItemsWindowSnapshot: () => Promise<GuidePastItemsWindowSnapshot>;
   private readonly createScopeToken: () => string;
   private activeScopeKey: string | null = null;
   private activeScopeToken: string | null = null;
@@ -57,6 +73,7 @@ export class GuideRuntime {
     preferencesStore?: DesktopGuidePreferencesStore;
     guideContextSource?: Readonly<{ getBuilderContextForMain(): GuideContextResult }>;
     getLibraryTabsEnabled?: () => boolean | Promise<boolean>;
+    getPastItemsWindowSnapshot?: () => Promise<GuidePastItemsWindowSnapshot>;
     createScopeToken?: () => string;
   }) {
     this.repository = input.repository;
@@ -74,6 +91,10 @@ export class GuideRuntime {
     this.preferencesStore = input.preferencesStore ?? null;
     this.guideContextSource = input.guideContextSource ?? null;
     this.getLibraryTabsEnabled = input.getLibraryTabsEnabled ?? (() => true);
+    this.getPastItemsWindowSnapshot = input.getPastItemsWindowSnapshot ?? (async () => ({
+      revision: 0,
+      pastItemsWindow: 'auto',
+    }));
     this.createScopeToken = input.createScopeToken ?? (() => `guide-scope-${randomBytes(16).toString('hex')}`);
   }
 
@@ -88,18 +109,28 @@ export class GuideRuntime {
     if (this.preferencesStore === null || this.guideContextSource === null) {
       throw new Error('Guide preferences are unavailable.');
     }
+    const settingsSnapshot = await this.getPastItemsWindowSnapshot();
+    const capturedNowMs = this.clock.now();
     let preference = await this.activatePreferenceScope(input.generation);
     const libraryRows = deriveLibraries(input.generation, input.publicReferenceOwner);
-    const tabsEnabled = await this.getLibraryTabsEnabled() && libraryRows.length > 1;
+    const tabsEnabled = (settingsSnapshot.libraryTabsEnabled ?? await this.getLibraryTabsEnabled()) && libraryRows.length > 1;
     const validSelection = preference.selectedLibraryId === null ||
       libraryRows.some((library) => library.rawId === preference.selectedLibraryId);
     if ((!tabsEnabled || !validSelection) && preference.selectedLibraryId !== null) {
       preference = await this.preferencesStore.normalizeSelection(preference.scopeToken, preference.revision);
     }
     const selectedRawLibraryId = tabsEnabled ? preference.selectedLibraryId : null;
-    const eligible = input.generation.channels
+    const eligibleChannels = input.generation.channels
       .filter((channel) => channel.hidden !== true)
-      .filter((channel) => selectedRawLibraryId === null || channelLibraryIds(channel).includes(selectedRawLibraryId))
+      .filter((channel) => selectedRawLibraryId === null || channelLibraryIds(channel).includes(selectedRawLibraryId));
+    const minimumStartTimeMs = computeGuideMinimumStartTimeMs(
+      capturedNowMs,
+      settingsSnapshot.pastItemsWindow,
+      eligibleChannels,
+      selectedRawLibraryId,
+    );
+    const effectiveStartTimeMs = Math.max(input.startTimeMs, minimumStartTimeMs);
+    const eligible = eligibleChannels
       .map((channel) => ({
         channel,
         publicId: input.publicReferenceOwner.projectChannelReference(input.generation, channel.id),
@@ -115,7 +146,7 @@ export class GuideRuntime {
       catch (error) { this.logContentResolutionFailure('GuideRuntime.getPagedPresentation.channel', channel, error); }
       if (items.length === 0) return { channel, items, programs: [] as EpgProgramViewModel[] };
       const scheduler = createSchedulerForChannel(channel, items, this.clock);
-      const programs = scheduler.getScheduleWindow(input.startTimeMs, input.startTimeMs + input.durationMs).programs
+      const programs = scheduler.getScheduleWindow(effectiveStartTimeMs, effectiveStartTimeMs + input.durationMs).programs
         .map((program) => mapScheduledProgramToViewModel(
           program, channel.id, items, this.guideArtworkOwner, input.generation.lineupRevision,
         ))
@@ -144,7 +175,19 @@ export class GuideRuntime {
         : null,
       persistenceStatus: preference.persistenceStatus,
     };
-    return { ...projected, channels, channelWindow: { offset, total }, libraryFilter };
+    const latestSettingsSnapshot = await this.getPastItemsWindowSnapshot();
+    if (latestSettingsSnapshot.revision !== settingsSnapshot.revision ||
+      latestSettingsSnapshot.pastItemsWindow !== settingsSnapshot.pastItemsWindow ||
+      latestSettingsSnapshot.libraryTabsEnabled !== settingsSnapshot.libraryTabsEnabled) {
+      throw new GuidePresentationCurrentnessError();
+    }
+    return {
+      ...projected,
+      channels,
+      channelWindow: { offset, total },
+      libraryFilter,
+      minimumStartTimeMs,
+    };
   }
 
   async setLibraryFilter(input: {
@@ -421,6 +464,47 @@ export class GuideRuntime {
 
 function isVisibleChannel(channel: ChannelConfig): boolean {
   return channel.hidden !== true;
+}
+
+export function computeGuideMinimumStartTimeMs(
+  nowMs: number,
+  setting: GuidePastItemsWindowSetting,
+  visibleChannels: readonly ChannelConfig[],
+  selectedRawLibraryId: string | null,
+): number {
+  if (!Number.isFinite(nowMs) || nowMs < 0) {
+    throw new Error('Guide clock value is invalid.');
+  }
+  const captured = new Date(nowMs);
+  if (!Number.isFinite(captured.getTime())) {
+    throw new Error('Guide clock date is invalid.');
+  }
+  const pastMinutes = setting === 'auto'
+    ? isGuideShowOnlyScope(visibleChannels, selectedRawLibraryId) ? 0 : 15
+    : Number(setting);
+  const elapsedMs = pastMinutes * 60_000;
+  const slotStartMs = Math.floor((nowMs - elapsedMs) / 1_800_000) * 1_800_000;
+  const localMidnight = new Date(nowMs);
+  localMidnight.setHours(0, 0, 0, 0);
+  const minimumStartTimeMs = Math.max(0, slotStartMs, localMidnight.getTime());
+  if (!Number.isSafeInteger(minimumStartTimeMs) || minimumStartTimeMs < 0) {
+    throw new Error('Guide minimum start time is invalid.');
+  }
+  return minimumStartTimeMs;
+}
+
+export function isGuideShowOnlyScope(
+  channels: readonly ChannelConfig[],
+  selectedRawLibraryId: string | null,
+): boolean {
+  if (channels.length === 0) return false;
+  return channels.every((channel) => {
+    const source = channel.contentSource;
+    return source.type === 'library' &&
+      source.libraryType === 'show' &&
+      (selectedRawLibraryId === null || source.libraryId === selectedRawLibraryId) &&
+      (channel.sourceLibraryId === undefined || channel.sourceLibraryId === source.libraryId);
+  });
 }
 
 function deriveLibraries(

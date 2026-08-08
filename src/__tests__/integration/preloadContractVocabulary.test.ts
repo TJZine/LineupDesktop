@@ -1903,6 +1903,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
       startsAtMs: 1,
       endsAtMs: 2,
     },
+    minimumStartTimeMs: 0,
     channelWindow: { offset: 0, total: 1 },
     libraryFilter: { scopeToken: 'scope-1', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'missing' },
   };

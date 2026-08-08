@@ -277,6 +277,14 @@ async function startApplication(): Promise<void> {
     diagnosticEventStore,
     guidePreferencesFilePath: resolveDesktopGuidePreferencesFilePath(app),
     getLibraryTabsEnabled: async () => (await settingsStore.loadSnapshot()).values.libraryTabsEnabled,
+    getPastItemsWindowSnapshot: async () => {
+      const snapshot = await settingsStore.loadSnapshot();
+      return {
+        revision: snapshot.revision,
+        pastItemsWindow: snapshot.values.pastItemsWindow,
+        libraryTabsEnabled: snapshot.values.libraryTabsEnabled,
+      };
+    },
   });
   channelComposition = channelCreated;
   plexComposition = registerPlexCompositionIpc(plexCreated, {

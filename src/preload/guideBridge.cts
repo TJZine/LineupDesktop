@@ -181,7 +181,10 @@ function isGuideResult<T>(
 function isGuidePresentationSource(value: unknown): value is GuidePresentationSource {
   return (
     isPlainRecord(value) &&
-    hasOnlyKeys(value, ['channels', 'nowWatching', 'channelWindow', 'libraryFilter']) &&
+    hasOnlyKeys(value, ['channels', 'nowWatching', 'channelWindow', 'libraryFilter', 'minimumStartTimeMs']) &&
+    typeof value.minimumStartTimeMs === 'number' &&
+    Number.isSafeInteger(value.minimumStartTimeMs) &&
+    value.minimumStartTimeMs >= 0 &&
     Array.isArray(value.channels) &&
     value.channels.length <= MAX_GUIDE_CHANNELS &&
     value.channels.every(isEpgChannelViewModel) &&

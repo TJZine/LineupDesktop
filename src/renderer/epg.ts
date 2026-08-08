@@ -50,6 +50,7 @@ export type EpgPresentationState =
 
 export interface EpgState {
   guideDensity: EpgGuideDensity;
+  minimumStartTimeMs?: number;
   windowStartMs: number;
   selectedChannelId: string;
   selectedProgramId: string;
@@ -109,6 +110,7 @@ export interface EpgPresentationSource {
   channels: readonly EpgChannelViewModel[];
   nowWatching: EpgCurrentProgramViewModel | null;
   nowMs?: number;
+  minimumStartTimeMs?: number;
   channelWindow?: { offset: number; total: number };
   libraryFilter?: GuideLibraryFilterState;
 }
@@ -172,6 +174,7 @@ export function createEpgState(
   const initialSelection = deriveInitialEpgSelection(presentation, guideDensity);
   return {
     guideDensity,
+    minimumStartTimeMs: isSafeNonNegativeInteger(presentation.minimumStartTimeMs) ? presentation.minimumStartTimeMs : undefined,
     ...initialSelection,
     presentationState: classifyPresentation(presentation, initialSelection.windowStartMs, guideDensity),
     presentationGeneration,
@@ -267,7 +270,7 @@ export function focusEpgNow(
   nowMs: number,
 ): EpgState {
   if (state.presentationState !== 'ready' || !isValidTime(nowMs)) return state;
-  const windowStartMs = snapWindowStartMs(nowMs);
+  const windowStartMs = Math.max(state.minimumStartTimeMs ?? 0, snapWindowStartMs(nowMs));
   const focusedChannel = findChannel(state.selectedChannelId, presentation);
   const currentProgram = focusedChannel?.programs.find((program) =>
     isEpgProgramPlayable(program, nowMs));
@@ -394,8 +397,22 @@ export function settleEpgPresentation(
   pagingTargetGlobalIndex: number | null | undefined,
   restoreSelectedProgramFocus: boolean,
   guideDensity: EpgGuideDensity = state.guideDensity,
+  effectiveStartTimeMs?: number,
 ): EpgPresentationSettlement {
-  let next = updateEpgState(state, presentation, generation, guideDensity);
+  const minimumStartTimeMs = isSafeNonNegativeInteger(presentation.minimumStartTimeMs)
+    ? presentation.minimumStartTimeMs
+    : state.minimumStartTimeMs;
+  const acceptedWindowStartMs = isValidTime(effectiveStartTimeMs)
+    ? Math.max(minimumStartTimeMs ?? 0, effectiveStartTimeMs)
+    : undefined;
+  let next = updateEpgState({
+    ...state,
+    minimumStartTimeMs,
+    ...(acceptedWindowStartMs === undefined ? {} : { windowStartMs: acceptedWindowStartMs }),
+  }, presentation, generation, guideDensity);
+  if (acceptedWindowStartMs !== undefined) {
+    next = { ...next, windowStartMs: acceptedWindowStartMs };
+  }
   if (typeof pagingTargetGlobalIndex === 'number') {
     const window = presentation.channelWindow;
     if (window !== undefined) {
@@ -491,9 +508,11 @@ export function updateEpgState(
 ): EpgState {
   const initial = deriveInitialEpgSelection(presentation, guideDensity);
   const presentationState = classifyPresentation(presentation, initial.windowStartMs, guideDensity);
+  const minimumStartTimeMs = isSafeNonNegativeInteger(presentation.minimumStartTimeMs) ? presentation.minimumStartTimeMs : state.minimumStartTimeMs;
   if (presentationState !== 'ready') {
     return {
       guideDensity,
+      minimumStartTimeMs,
       windowStartMs: initial.windowStartMs,
       selectedChannelId: '',
       selectedProgramId: '',
@@ -505,6 +524,7 @@ export function updateEpgState(
   return normalizeEpgSelection({
     ...state,
     guideDensity,
+    minimumStartTimeMs,
     presentationState: 'ready',
     presentationGeneration,
     tuneError: null,
@@ -537,10 +557,35 @@ export function setEpgGuideDensity(
     ? state.windowStartMs
     : clampWindowStartMs(
       snapWindowStartMs(anchorMs - nextDurationMs / 2),
-      presentation,
+      withStateMinimumStart(presentation, state),
       guideDensity,
     );
   return normalizeEpgSelection({ ...next, windowStartMs: recenteredStartMs }, presentation);
+}
+
+export type EpgPastItemsWindowSetting = 'auto' | '0' | '15' | '30';
+export function computeProvisionalEpgMinimumStartTimeMs(nowMs: number, setting: EpgPastItemsWindowSetting): number {
+  if (!Number.isFinite(nowMs) || nowMs < 0) return 0;
+  const pastMinutes = setting === 'auto' ? 15 : Number(setting);
+  const slotStartMs = Math.floor((nowMs - pastMinutes * 60_000) / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS;
+  const localMidnight = new Date(nowMs);
+  if (!Number.isFinite(localMidnight.getTime())) return 0;
+  localMidnight.setHours(0, 0, 0, 0);
+  return Math.max(0, slotStartMs, localMidnight.getTime());
+}
+export function setEpgPastItemsWindow(
+  state: EpgState,
+  setting: EpgPastItemsWindowSetting,
+  nowMs: number,
+  presentation: EpgPresentationSource,
+): EpgState {
+  const minimumStartTimeMs = computeProvisionalEpgMinimumStartTimeMs(nowMs, setting);
+  const next = {
+    ...state,
+    minimumStartTimeMs,
+    windowStartMs: Math.max(minimumStartTimeMs, state.windowStartMs),
+  };
+  return next.presentationState === 'ready' ? normalizeEpgSelection(next, presentation) : next;
 }
 
 function createProgramCell(
@@ -599,7 +644,7 @@ function normalizeEpgSelection(
 ): EpgState {
   if (state.presentationState !== 'ready') return state;
   const windowStartMs = clampWindow
-    ? clampWindowStartMs(state.windowStartMs, presentation, state.guideDensity)
+    ? clampWindowStartMs(state.windowStartMs, withStateMinimumStart(presentation, state), state.guideDensity)
     : state.windowStartMs;
   const selectedChannel = findChannel(state.selectedChannelId, presentation);
   const channel = selectedChannel !== undefined && visibleProgramsForChannel(selectedChannel, windowStartMs, state.guideDensity).length > 0
@@ -623,7 +668,7 @@ function moveWindow(state: EpgState, offset: number, presentation: EpgPresentati
     ...state,
     windowStartMs: clampWindowStartMs(
       state.windowStartMs + offset * EPG_SLOT_DURATION_MS,
-      presentation,
+      withStateMinimumStart(presentation, state),
       state.guideDensity,
     ),
     tuneError: null,
@@ -633,7 +678,7 @@ function moveWindow(state: EpgState, offset: number, presentation: EpgPresentati
 function moveWindowIntent(state: EpgState, offset: number): EpgState {
   return {
     ...state,
-    windowStartMs: state.windowStartMs + offset * EPG_SLOT_DURATION_MS,
+    windowStartMs: Math.max(state.minimumStartTimeMs ?? 0, state.windowStartMs + offset * EPG_SLOT_DURATION_MS),
     tuneError: null,
   };
 }
@@ -727,7 +772,17 @@ function minWindowStartMs(presentation: EpgPresentationSource): number {
     (minimum, entry) => minimum === null || entry.program.startsAtMs < minimum ? entry.program.startsAtMs : minimum,
     null,
   );
-  return snapWindowStartMs(firstStartMs ?? presentation.nowMs ?? Date.now());
+  const derived = snapWindowStartMs(firstStartMs ?? presentation.nowMs ?? Date.now());
+  return isSafeNonNegativeInteger(presentation.minimumStartTimeMs) ? presentation.minimumStartTimeMs : derived;
+}
+
+function withStateMinimumStart(
+  presentation: EpgPresentationSource,
+  state: EpgState,
+): EpgPresentationSource {
+  return state.minimumStartTimeMs === undefined
+    ? presentation
+    : { ...presentation, minimumStartTimeMs: state.minimumStartTimeMs };
 }
 
 function maxWindowStartMs(
@@ -770,6 +825,10 @@ function snapWindowStartMs(valueMs: number): number {
 
 function isValidTime(value: number | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function isSafeNonNegativeInteger(value: number | undefined): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

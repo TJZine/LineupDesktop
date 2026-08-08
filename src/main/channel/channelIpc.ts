@@ -24,6 +24,7 @@ import {
 } from '../../contracts/ipc.js';
 import type { ChannelRuntime } from './channelRuntime.js';
 import type { GuideRuntime } from './guideRuntime.js';
+import { GuidePresentationCurrentnessError } from './guideRuntime.js';
 import {
   ChannelPublicReferenceConsistencyError,
   type ChannelPublicReferenceOwner,
@@ -162,6 +163,7 @@ export function registerChannelIpcHandlers(
           return { ok: true, value, requestId: request.requestId };
         } catch (error: unknown) {
           if (error instanceof ChannelPublicReferenceConsistencyError) continue;
+          if (error instanceof GuidePresentationCurrentnessError) continue;
           return {
             ok: false,
             requestId: request.requestId,

@@ -12,6 +12,7 @@ import {
   pageEpgSelection,
   selectEpgProgram,
   setEpgGuideDensity,
+  setEpgPastItemsWindow,
   type EpgDirection,
   type EpgDirectionResult,
   type EpgActionId,
@@ -219,6 +220,12 @@ export function createWorkflowState(
   guidePresentation: EpgPresentationSource = EMPTY_EPG_PRESENTATION_SOURCE,
 ): WorkflowState {
   const settingsDraft = createSettingsDraftState();
+  const initialEpg = setEpgPastItemsWindow(
+    createEpgState(guidePresentation, 0, settingsDraft.guideDensity),
+    settingsDraft.pastItemsWindow,
+    guidePresentation.nowMs ?? Date.now(),
+    guidePresentation,
+  );
   return {
     routeState: {
       activeRoute: initialRoute,
@@ -228,7 +235,7 @@ export function createWorkflowState(
     lastActionRoute: null,
     settingsDraft,
     channelSetupDraft: createChannelSetupDraftState(),
-    epg: createEpgState(guidePresentation, 0, settingsDraft.guideDensity),
+    epg: initialEpg,
     guidePresentation,
   };
 }
@@ -432,10 +439,13 @@ export function applyWorkflowSettingsAction(
   actionId: SettingsActionId,
 ): WorkflowState {
   const settingsDraft = applySettingsAction(state.settingsDraft, actionId);
+  const epg = setEpgGuideDensity(state.epg, state.guidePresentation, settingsDraft.guideDensity);
   return {
     ...state,
     settingsDraft,
-    epg: setEpgGuideDensity(state.epg, state.guidePresentation, settingsDraft.guideDensity),
+    epg: settingsDraft.pastItemsWindow === state.settingsDraft.pastItemsWindow
+      ? epg
+      : setEpgPastItemsWindow(epg, settingsDraft.pastItemsWindow, Date.now(), state.guidePresentation),
   };
 }
 
@@ -449,10 +459,13 @@ export function applyWorkflowSettingsValues(
     values,
     capabilities ?? state.settingsDraft.capabilities,
   );
+  const epg = setEpgGuideDensity(state.epg, state.guidePresentation, settingsDraft.guideDensity);
   return {
     ...state,
     settingsDraft,
-    epg: setEpgGuideDensity(state.epg, state.guidePresentation, settingsDraft.guideDensity),
+    epg: settingsDraft.pastItemsWindow === state.settingsDraft.pastItemsWindow
+      ? epg
+      : setEpgPastItemsWindow(epg, settingsDraft.pastItemsWindow, Date.now(), state.guidePresentation),
   };
 }
 

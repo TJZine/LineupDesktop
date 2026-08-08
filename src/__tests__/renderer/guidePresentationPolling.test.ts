@@ -36,6 +36,7 @@ function result(requestId: string): Awaited<ReturnType<LineupDesktopPreloadApi['
     value: {
       channels: [],
       nowWatching: null,
+      minimumStartTimeMs: 0,
       channelWindow: { offset: 0, total: 0 },
       libraryFilter: {
         scopeToken: 'scope',

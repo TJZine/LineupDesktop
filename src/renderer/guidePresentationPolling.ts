@@ -29,12 +29,14 @@ export interface GuidePresentationPollingOptions {
     presentation: ReturnType<typeof normalizeEpgPresentation>,
     generation: number,
     pagingTargetGlobalIndex: number | null | undefined,
+    effectiveStartTimeMs?: number,
   ): void;
   handleFailure(source: string, message: string, generation: number, retainLastValid: boolean): void;
   setPagingBusy?(busy: boolean): void;
   applyPlayerPresentation?(
     presentation: ReturnType<typeof normalizeEpgPresentation>,
     generation: number,
+    effectiveStartTimeMs?: number,
   ): void;
   handlePlayerFailure?(source: string, message: string, generation: number): void;
 }
@@ -50,6 +52,14 @@ export interface GuidePresentationPollingController {
   getPendingPageTarget(): number | null;
   getGeneration(): number;
   getLastValidPresentation(): ReturnType<typeof normalizeEpgPresentation> | null;
+  notePastItemsWindowChange(): void;
+  settlePastItemsWindow(input: GuidePastItemsWindowSettlementInput): void;
+}
+
+export interface GuidePastItemsWindowSettlementInput {
+  currentValue: 'auto' | '0' | '15' | '30';
+  acceptedValue: 'auto' | '0' | '15' | '30' | null;
+  saving: boolean;
 }
 
 export interface GuidePresentationRefreshOptions {
@@ -87,6 +97,7 @@ interface GuidePresentationRefreshIntent {
   windowStartMs: number;
   requestedDurationMs: number;
   channelOffset: number;
+  pastItemsWindowGeneration: number;
   readonly abortController: AbortController;
   readonly promise: Promise<void>;
   settle(): void;
@@ -102,6 +113,7 @@ function createRefreshIntent(
   windowStartMs: number,
   requestedDurationMs: number,
   channelOffset: number,
+  pastItemsWindowGeneration: number,
 ): GuidePresentationRefreshIntent {
   let settled = false;
   let resolvePromise: () => void = () => undefined;
@@ -118,6 +130,7 @@ function createRefreshIntent(
     windowStartMs,
     requestedDurationMs,
     channelOffset,
+    pastItemsWindowGeneration,
     abortController: new AbortController(),
     promise,
     settle: () => {
@@ -139,6 +152,8 @@ export function createGuidePresentationPolling(
   let trailingRefresh: GuidePresentationRefreshIntent | null = null;
   let refreshRequestSequence = 0;
   let pendingPage: Readonly<GuidePageRefreshRequest & { requestSequence: number }> | null = null;
+  let pastItemsWindowGeneration = 0;
+  let pastItemsWindowSettlementPending = false;
 
   const getRequestedDurationMs = (): number => getEpgWindowDurationMs(options.getGuideDensity());
 
@@ -222,6 +237,7 @@ export function createGuidePresentationPolling(
         windowStartMs,
         requestedDurationMs,
         channelOffset,
+        pastItemsWindowGeneration,
       );
       startRefresh(intent);
       return { promise: intent.promise, requestSequence };
@@ -238,6 +254,7 @@ export function createGuidePresentationPolling(
         windowStartMs,
         requestedDurationMs,
         channelOffset,
+        pastItemsWindowGeneration,
       );
     } else {
       trailingRefresh.requestSequence = requestSequence;
@@ -246,6 +263,7 @@ export function createGuidePresentationPolling(
       trailingRefresh.windowStartMs = windowStartMs;
       trailingRefresh.requestedDurationMs = requestedDurationMs;
       trailingRefresh.channelOffset = channelOffset;
+      trailingRefresh.pastItemsWindowGeneration = pastItemsWindowGeneration;
       if (!coalescedInterval) {
         trailingRefresh.generation = generation;
         trailingRefresh.lifecycleGeneration = guidePresentationLifecycleGeneration;
@@ -345,11 +363,16 @@ export function createGuidePresentationPolling(
           );
         } else {
           lastValidPresentation = normalizeEpgPresentation(result.value);
-          if (intent.playerRefresh) options.applyPlayerPresentation?.(lastValidPresentation, intent.generation);
+          const effectiveStartTimeMs = Math.max(
+            intent.windowStartMs,
+            lastValidPresentation.minimumStartTimeMs ?? intent.windowStartMs,
+          );
+          if (intent.playerRefresh) options.applyPlayerPresentation?.(lastValidPresentation, intent.generation, effectiveStartTimeMs);
           else options.applyPresentation(
             lastValidPresentation,
             intent.generation,
             settlePagingSuccess(intent, lastValidPresentation),
+            effectiveStartTimeMs,
           );
         }
       }
@@ -361,6 +384,7 @@ export function createGuidePresentationPolling(
   const isCurrent = (intent: GuidePresentationRefreshIntent): boolean => intent === activeRefresh
     && intent.lifecycleGeneration === guidePresentationLifecycleGeneration
     && intent.requestedDurationMs === getRequestedDurationMs()
+    && intent.pastItemsWindowGeneration === pastItemsWindowGeneration
     && options.getActiveRoute() === (intent.playerRefresh ? 'player' : 'guide');
 
   const settlePagingFailure = (intent: GuidePresentationRefreshIntent): boolean => {
@@ -426,6 +450,21 @@ export function createGuidePresentationPolling(
     getPendingPageTarget: () => pendingPage?.targetGlobalIndex ?? null,
     getGeneration: () => guidePresentationGeneration,
     getLastValidPresentation: () => lastValidPresentation,
+    notePastItemsWindowChange() {
+      pastItemsWindowGeneration += 1;
+      pastItemsWindowSettlementPending = true;
+    },
+    settlePastItemsWindow({ currentValue, acceptedValue, saving }) {
+      if (!pastItemsWindowSettlementPending || saving || acceptedValue === null || currentValue !== acceptedValue) return;
+      pastItemsWindowSettlementPending = false;
+      const route = options.getActiveRoute();
+      if (route === 'guide' || route === 'player') {
+        void refresh('guide-past-items-window-settlement', {
+          showLoading: route === 'guide',
+          allowPlayerRoute: route === 'player',
+        });
+      }
+    },
   };
 }
 

@@ -4,7 +4,13 @@ import assert from 'node:assert/strict';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import type { PlayerEvent, PlayerSnapshot } from '../../contracts/player.js';
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
-import { DEFAULT_EPG_PRESENTATION_SOURCE, type EpgPresentationSource } from '../../renderer/epg.js';
+import {
+  DEFAULT_EPG_PRESENTATION_SOURCE,
+  EPG_SLOT_DURATION_MS,
+  createEpgState,
+  settleEpgPresentation,
+  type EpgPresentationSource,
+} from '../../renderer/epg.js';
 import { renderRendererFocus, syncRendererFocusTargets } from '../../renderer/focusDom.js';
 import { createFullscreenTransportCoordinator } from '../../renderer/fullscreenTransport.js';
 import { createEmptyPlayerSnapshot } from '../../renderer/playerOverlayPresentation.js';
@@ -353,6 +359,101 @@ test('guide presentation polling schedules Player and Guide with route-owned win
   activeRoute = 'settings';
   polling.reconcile('guide', 'settings');
   assert.equal(clearCount, 2);
+});
+
+test('guide polling owns one accepted or rollback past-items settlement and defers off-route', async () => {
+  let activeRoute: 'guide' | 'settings' = 'guide';
+  let requests = 0;
+  const polling = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async () => {
+        requests += 1;
+        return { ok: true, requestId: `settlement-${requests}`, value: DEFAULT_EPG_PRESENTATION_SOURCE };
+      },
+    } as unknown as LineupDesktopPreloadApi['guide'],
+    host: createNoopIntervalHost(),
+    getActiveRoute: () => activeRoute,
+    getWindowStartMs: () => 1_778_619_600_000,
+    getGuideDensity: () => 'compact',
+    setLoading: () => undefined,
+    applyPresentation: () => undefined,
+    handleFailure: () => undefined,
+  });
+
+  polling.notePastItemsWindowChange();
+  polling.notePastItemsWindowChange();
+  polling.settlePastItemsWindow({ currentValue: '15', acceptedValue: '15', saving: true });
+  await settleAsyncWork();
+  assert.equal(requests, 0);
+  polling.settlePastItemsWindow({ currentValue: '15', acceptedValue: '15', saving: false });
+  await settleAsyncWork();
+  assert.equal(requests, 1);
+  polling.settlePastItemsWindow({ currentValue: '15', acceptedValue: '15', saving: false });
+  await settleAsyncWork();
+  assert.equal(requests, 1);
+
+  activeRoute = 'settings';
+  polling.notePastItemsWindowChange();
+  polling.settlePastItemsWindow({ currentValue: '30', acceptedValue: '30', saving: false });
+  await settleAsyncWork();
+  assert.equal(requests, 1);
+  activeRoute = 'guide';
+  polling.reconcile('settings', 'guide');
+  await settleAsyncWork();
+  assert.equal(requests, 2);
+});
+
+test('Player first result adopts the authoritative Guide bound before the Player-to-Guide route refresh', async () => {
+  const base = 1_778_619_600_000;
+  const authoritative: EpgPresentationSource = {
+    channels: [{
+      id: 'channel-1', number: '1', name: 'One', programs: [{
+        id: 'program-1', title: 'Program', subtitle: '', description: '', showTitle: '', episodeLabel: '',
+        rating: '', quality: [], genres: [], startsAtMs: base, endsAtMs: base + EPG_SLOT_DURATION_MS, artwork: null,
+      }],
+    }],
+    nowWatching: null,
+    nowMs: base,
+    minimumStartTimeMs: base,
+    channelWindow: { offset: 0, total: 1 },
+    libraryFilter: { scopeToken: 'scope', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'ready' },
+  };
+  let activeRoute: 'player' | 'guide' = 'player';
+  let state = createEpgState({ channels: [], nowWatching: null, nowMs: base - EPG_SLOT_DURATION_MS }, 0, 'compact');
+  const requestStarts: number[] = [];
+  const polling = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async (request: { startTimeMs: number }) => {
+        requestStarts.push(request.startTimeMs);
+        return { ok: true, requestId: `player-guide-${requestStarts.length}`, value: authoritative };
+      },
+    } as unknown as LineupDesktopPreloadApi['guide'],
+    host: createNoopIntervalHost(),
+    getActiveRoute: () => activeRoute,
+    getWindowStartMs: () => state.windowStartMs,
+    getGuideDensity: () => state.guideDensity,
+    getNowMs: () => base - EPG_SLOT_DURATION_MS,
+    setLoading: (generation) => { state = { ...state, presentationState: 'loading', presentationGeneration: generation }; },
+    applyPresentation: (presentation, generation, _target, effectiveStartTimeMs) => {
+      state = settleEpgPresentation(state, presentation, generation, _target, false, 'compact', effectiveStartTimeMs).state;
+    },
+    applyPlayerPresentation: (presentation, generation, effectiveStartTimeMs) => {
+      state = settleEpgPresentation(state, presentation, generation, null, false, 'compact', effectiveStartTimeMs).state;
+    },
+    handleFailure: () => undefined,
+  });
+
+  await polling.refresh('player-first-result', { allowPlayerRoute: true });
+  assert.deepEqual(requestStarts, [base - EPG_SLOT_DURATION_MS]);
+  assert.equal(state.minimumStartTimeMs, base);
+  assert.equal(state.windowStartMs, base);
+
+  activeRoute = 'guide';
+  polling.reconcile('player', 'guide');
+  await settleAsyncWork();
+  assert.deepEqual(requestStarts, [base - EPG_SLOT_DURATION_MS, base]);
+  assert.equal(state.minimumStartTimeMs, base);
+  assert.equal(state.windowStartMs, base);
 });
 
 test('shell controller rejects stale capabilities and exposes recoverable safe startup failure', async () => {
