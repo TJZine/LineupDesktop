@@ -7,7 +7,11 @@ import { renderEpgGuideDom, renderGuideDetailArtwork } from '../../renderer/epg/
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
 import type { RouteWorkflowViewModel } from '../../renderer/workflow.js';
-import { extractCssAtRuleBody } from './cssAtRuleTestUtils.js';
+import {
+  cssDeclaration,
+  extractCssAtRuleBody,
+  extractCssRule,
+} from './cssAtRuleTestUtils.js';
 
 class FakeElement {
   readonly dataset: Record<string, string> = {};
@@ -189,20 +193,20 @@ test('artwork accessibility styles disable motion and preserve forced-color boun
   );
   const reducedMotion = extractCssAtRuleBody(css, '@media (prefers-reduced-motion: reduce)');
   const forcedColors = extractCssAtRuleBody(css, '@media (forced-colors: active)');
-  assert.ok(reducedMotion !== null);
-  assert.ok(forcedColors !== null);
-  assert.match(
-    reducedMotion,
-    /\[data-epg-detail-artwork\],\s*\[data-epg-detail-poster\]\s*\{[^{}]*animation:\s*none\s*!important;[^{}]*transition:\s*none\s*!important;[^{}]*\}/u,
-  );
-  assert.match(
-    forcedColors,
-    /\[data-epg-detail-artwork\]\s*\{[^{}]*border-color:\s*CanvasText;[^{}]*outline:\s*1px solid CanvasText;[^{}]*background:\s*Canvas;[^{}]*\}/u,
-  );
-  assert.match(
-    forcedColors,
-    /\[data-epg-detail-artwork-placeholder\]\s*\{[^{}]*color:\s*CanvasText;[^{}]*\}/u,
-  );
+  const reducedArtwork = extractCssRule(reducedMotion ?? '', [
+    '[data-epg-detail-artwork]',
+    '[data-epg-detail-poster]',
+  ]);
+  assert.equal(cssDeclaration(reducedArtwork, 'animation'), 'none !important');
+  assert.equal(cssDeclaration(reducedArtwork, 'transition'), 'none !important');
+
+  const forcedArtwork = extractCssRule(forcedColors ?? '', '[data-epg-detail-artwork]');
+  assert.equal(cssDeclaration(forcedArtwork, 'border-color'), 'CanvasText');
+  assert.equal(cssDeclaration(forcedArtwork, 'outline'), '1px solid CanvasText');
+  assert.equal(cssDeclaration(forcedArtwork, 'background'), 'Canvas');
+
+  const forcedPlaceholder = extractCssRule(forcedColors ?? '', '[data-epg-detail-artwork-placeholder]');
+  assert.equal(cssDeclaration(forcedPlaceholder, 'color'), 'CanvasText');
 });
 
 test('CSS media assertions stay contained within the matched at-rule body', () => {

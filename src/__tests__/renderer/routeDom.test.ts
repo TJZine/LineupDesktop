@@ -19,7 +19,11 @@ import {
 } from '../../renderer/workflow.js';
 import { renderShellDom, type ShellDomBindings } from '../../renderer/shell/shellDom.js';
 import { beginFullscreenRequest, rejectFullscreenRequest } from '../../renderer/shell/shellState.js';
-import { extractCssAtRuleBody } from './cssAtRuleTestUtils.js';
+import {
+  cssDeclaration,
+  extractCssAtRuleBody,
+  extractCssRule,
+} from './cssAtRuleTestUtils.js';
 
 const GUIDE_BASE = Date.UTC(2026, 4, 12, 20, 0, 0);
 function createRendererSafePlayerSnapshot() {
@@ -685,30 +689,42 @@ test('Guide Now Watching surfaces explicitly honor reduced motion and forced col
   );
   const reducedMotion = extractCssAtRuleBody(css, '@media (prefers-reduced-motion: reduce)');
   const forcedColors = extractCssAtRuleBody(css, '@media (forced-colors: active)');
-  assert.ok(reducedMotion !== null);
-  assert.ok(forcedColors !== null);
-  assert.match(
-    css,
-    /\.epg-now-watching-banner\s*\{[^{}]*grid-template-columns:\s*minmax\(0,\s*max-content\)\s+minmax\(0,\s*1fr\)\s+minmax\(0,\s*2fr\)\s+minmax\(0,\s*max-content\);[^{}]*overflow:\s*hidden;[^{}]*\}/u,
+  const banner = extractCssRule(css, '.epg-now-watching-banner');
+  assert.equal(
+    cssDeclaration(banner, 'grid-template-columns'),
+    'minmax(0, max-content) minmax(0, 1fr) minmax(0, 2fr) minmax(0, max-content)',
   );
-  assert.match(css, /\.epg-now-watching-banner\s*>\s*\*\s*\{\s*min-width:\s*0;\s*\}/u);
-  assert.match(
-    css,
-    /\.epg-now-watching-live,\s*\.epg-now-watching-channel,\s*\.epg-now-watching-program,\s*\.epg-now-watching-time\s*\{\s*overflow:\s*hidden;\s*text-overflow:\s*ellipsis;\s*white-space:\s*nowrap;\s*\}/u,
-  );
+  assert.equal(cssDeclaration(banner, 'overflow'), 'hidden');
 
-  assert.match(
-    reducedMotion,
-    /\.epg-classic-now-playing,\s*\.epg-now-watching-banner\s*\{[^{}]*animation:\s*none\s*!important;[^{}]*transition:\s*none\s*!important;[^{}]*\}/u,
-  );
-  assert.match(
-    forcedColors,
-    /\.epg-classic-now-playing,\s*\.epg-now-watching-banner\s*\{\s*color:\s*CanvasText;\s*\}/u,
-  );
-  assert.match(
-    forcedColors,
-    /\.epg-now-watching-banner\s*\{[^{}]*border-color:\s*CanvasText;[^{}]*\}/u,
-  );
+  const bannerChildren = extractCssRule(css, '.epg-now-watching-banner > *');
+  assert.equal(cssDeclaration(bannerChildren, 'min-width'), '0');
+
+  const textSelectors = [
+    '.epg-now-watching-live',
+    '.epg-now-watching-channel',
+    '.epg-now-watching-program',
+    '.epg-now-watching-time',
+  ];
+  const textRule = extractCssRule(css, textSelectors);
+  assert.equal(cssDeclaration(textRule, 'overflow'), 'hidden');
+  assert.equal(cssDeclaration(textRule, 'text-overflow'), 'ellipsis');
+  assert.equal(cssDeclaration(textRule, 'white-space'), 'nowrap');
+
+  const reduced = extractCssRule(reducedMotion ?? '', [
+    '.epg-classic-now-playing',
+    '.epg-now-watching-banner',
+  ]);
+  assert.equal(cssDeclaration(reduced, 'animation'), 'none !important');
+  assert.equal(cssDeclaration(reduced, 'transition'), 'none !important');
+
+  const forced = extractCssRule(forcedColors ?? '', [
+    '.epg-classic-now-playing',
+    '.epg-now-watching-banner',
+  ]);
+  assert.equal(cssDeclaration(forced, 'color'), 'CanvasText');
+
+  const forcedBanner = extractCssRule(forcedColors ?? '', '.epg-now-watching-banner');
+  assert.equal(cssDeclaration(forcedBanner, 'border-color'), 'CanvasText');
 });
 
 test('route DOM renders player OSD fields and playback option rows', () => {

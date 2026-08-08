@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
 import { projectNativePlayerPresentationMode } from '../../renderer/guidePresentation.js';
-import { extractCssAtRuleBody } from './cssAtRuleTestUtils.js';
+import {
+  cssDeclaration,
+  containsCssSelector,
+  extractCssAtRuleBody,
+  extractCssRule,
+} from './cssAtRuleTestUtils.js';
 
 test('Guide layouts retain one artwork subtree and one native presentation aperture', () => {
   const root = {
@@ -40,26 +45,43 @@ test('native aperture CSS makes only acknowledged page compositions transparent 
   const fs = processValue.getBuiltinModule('node:fs');
   const base = fs.readFileSync(new URL('../../renderer/styles/base.css', import.meta.url), 'utf8');
   const guide = fs.readFileSync(new URL('../../renderer/styles/guide-epg.css', import.meta.url), 'utf8');
-  assert.match(
-    base,
-    /:root\[data-native-presentation-aperture="open"\],\s*:root\[data-native-presentation-aperture="open"\]\s+body,\s*:root\[data-native-presentation-aperture="open"\]\s+\.app-shell,\s*:root\[data-native-presentation-aperture="open"\]\s+\[data-static-screen-root\],\s*:root\[data-native-presentation-aperture="open"\]\s+\.screen-stack\s*\{\s*background:\s*transparent;\s*\}/u,
-  );
-  assert.match(
-    base,
-    /:root\[data-native-presentation-aperture="open"\]\[data-native-presentation-mode="player-full"\]\s*\.screen\[data-screen="player"\],\s*:root\[data-native-presentation-aperture="open"\]\[data-native-presentation-mode="guide-overlay-full"\]\s*\.screen\[data-screen="guide"\],\s*:root\[data-native-presentation-aperture="open"\]\[data-native-presentation-mode="guide-classic-pip"\]\s*\.screen\[data-screen="guide"\]\s*\{\s*background:\s*transparent;\s*\}/u,
-  );
-  assert.match(base, /:root\s*\{[^{}]*background:\s*var\(--color-app-bg\);/u);
-  assert.doesNotMatch(base, /:root\s*\{[^{}]*background:\s*transparent;/u);
+  const openBackground = extractCssRule(base, [
+    ':root[data-native-presentation-aperture="open"]',
+    ':root[data-native-presentation-aperture="open"] body',
+    ':root[data-native-presentation-aperture="open"] .app-shell',
+    ':root[data-native-presentation-aperture="open"] [data-static-screen-root]',
+    ':root[data-native-presentation-aperture="open"] .screen-stack',
+  ]);
+  assert.equal(cssDeclaration(openBackground, 'background'), 'transparent');
 
-  assert.match(
+  const openScreens = extractCssRule(base, [
+    ':root[data-native-presentation-aperture="open"][data-native-presentation-mode="player-full"] .screen[data-screen="player"]',
+    ':root[data-native-presentation-aperture="open"][data-native-presentation-mode="guide-overlay-full"] .screen[data-screen="guide"]',
+    ':root[data-native-presentation-aperture="open"][data-native-presentation-mode="guide-classic-pip"] .screen[data-screen="guide"]',
+  ]);
+  assert.equal(cssDeclaration(openScreens, 'background'), 'transparent');
+
+  const root = extractCssRule(base, ':root');
+  assert.equal(cssDeclaration(root, 'background'), 'var(--color-app-bg)');
+
+  const classicPip = extractCssRule(
     guide,
-    /:root\[data-native-presentation-mode="guide-classic-pip"\]\s*\.epg-shell\[data-epg-layout="classic"\]\s*\{\s*padding-right:\s*calc\(var\(--native-pip-width\)\s*\+\s*\(var\(--native-pip-inset\)\s*\*\s*2\)\);\s*\}/u,
+    ':root[data-native-presentation-mode="guide-classic-pip"] .epg-shell[data-epg-layout="classic"]',
   );
-  assert.doesNotMatch(guide, /^\.epg-shell\[data-epg-layout="classic"\]\s*\{[^{}]*padding-right:/mu);
-  assert.match(
+  assert.equal(
+    cssDeclaration(classicPip, 'padding-right'),
+    'calc(var(--native-pip-width) + (var(--native-pip-inset) * 2))',
+  );
+  assert.equal(containsCssSelector(guide, '.epg-shell[data-epg-layout="classic"]'), false);
+
+  const classicAperture = extractCssRule(
     guide,
-    /:root\[data-native-presentation-aperture="open"\]\[data-native-presentation-mode="guide-classic-pip"\]\s+\.screen\[data-screen="guide"\]\s+\.screen__content\s*\{[^{}]*background:\s*linear-gradient\(var\(--color-surface\),\s*var\(--color-surface\)\) left[^{}]*,\s*linear-gradient\(var\(--color-surface\),\s*var\(--color-surface\)\) right top[^{}]*,\s*linear-gradient\(var\(--color-surface\),\s*var\(--color-surface\)\) right bottom[^{}]*;[^{}]*\}/u,
+    ':root[data-native-presentation-aperture="open"][data-native-presentation-mode="guide-classic-pip"] .screen[data-screen="guide"] .screen__content',
   );
+  const classicBackground = cssDeclaration(classicAperture, 'background');
+  assert.ok(classicBackground?.includes('linear-gradient(var(--color-surface), var(--color-surface)) left'));
+  assert.ok(classicBackground?.includes('linear-gradient(var(--color-surface), var(--color-surface)) right top'));
+  assert.ok(classicBackground?.includes('linear-gradient(var(--color-surface), var(--color-surface)) right bottom'));
 });
 
 test('forced-color player overlay CSS targets the semantic presentation surface', () => {
@@ -71,12 +93,9 @@ test('forced-color player overlay CSS targets the semantic presentation surface'
     'utf8',
   );
   const forcedColors = extractCssAtRuleBody(overlays, '@media (forced-colors: active)');
-  assert.ok(forcedColors !== null);
-  assert.match(
-    forcedColors,
-    /\[data-player-presentation-surface\]\s*\{[^{}]*background:\s*Canvas;[^{}]*\}/u,
-  );
-  assert.doesNotMatch(forcedColors, /\.player-surface\s*\{/u);
+  const presentationSurface = extractCssRule(forcedColors ?? '', '[data-player-presentation-surface]');
+  assert.equal(cssDeclaration(presentationSurface, 'background'), 'Canvas');
+  assert.equal(containsCssSelector(forcedColors ?? '', '.player-surface'), false);
 });
 
 test('Guide density no longer compresses row geometry', () => {
@@ -87,11 +106,14 @@ test('Guide density no longer compresses row geometry', () => {
     new URL('../../renderer/styles/guide-epg.css', import.meta.url),
     'utf8',
   );
-  assert.doesNotMatch(guide, /\.epg-shell\[data-guide-density="(?:compact|comfortable)"\]\s*\{/u);
-  assert.doesNotMatch(guide, /--guide-row-height:\s*72px/u);
-  assert.match(guide, /\.epg-grid__channel\s*\{[^{}]*height:\s*var\(--guide-row-height\);/u);
-  assert.match(
-    guide,
-    /\.screen\[data-screen="guide"\]\s*\.epg-grid__program\s*\{[^{}]*top:\s*4px;[^{}]*bottom:\s*4px;[^{}]*padding:\s*var\(--space-2\)\s+var\(--space-4\);[^{}]*\}/u,
-  );
+  assert.equal(containsCssSelector(guide, '.epg-shell[data-guide-density="compact"]'), false);
+  assert.equal(containsCssSelector(guide, '.epg-shell[data-guide-density="comfortable"]'), false);
+  const shell = extractCssRule(guide, '.epg-shell');
+  assert.equal(cssDeclaration(shell, '--guide-row-height'), '108px');
+  const channel = extractCssRule(guide, '.epg-grid__channel');
+  assert.equal(cssDeclaration(channel, 'height'), 'var(--guide-row-height)');
+  const program = extractCssRule(guide, '.screen[data-screen="guide"] .epg-grid__program');
+  assert.equal(cssDeclaration(program, 'top'), '4px');
+  assert.equal(cssDeclaration(program, 'bottom'), '4px');
+  assert.equal(cssDeclaration(program, 'padding'), 'var(--space-2) var(--space-4)');
 });
