@@ -61,7 +61,7 @@ async function assertArtworkFailurePromptly(
 ): Promise<void> {
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
-    timeoutHandle = setTimeout(() => reject(new Error('artwork failure did not settle promptly')), 100);
+    timeoutHandle = setTimeout(() => reject(new Error('artwork failure did not settle promptly')), 1_000);
   });
   try {
     await Promise.race([

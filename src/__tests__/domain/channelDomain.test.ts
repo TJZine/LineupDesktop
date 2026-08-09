@@ -949,25 +949,39 @@ test('channel domain source cache keeps caller abort local to shared in-flight w
 
 test('channel domain source cache aborts transport when its last caller cancels', async () => {
   const sourceCache = new SourceResolutionCache(new FakeClock(10));
-  const callerController = new AbortController();
+  const source = librarySource();
+  const firstController = new AbortController();
+  const secondController = new AbortController();
+  let calls = 0;
   let transportSignal: ChannelAbortSignal | null = null;
   let rejectTransport: (error: Error) => void = () => undefined;
   const transport = new Promise<ResolvedContentItem[]>((_resolve, reject) => {
     rejectTransport = reject;
   });
-  const pending = sourceCache.resolve(librarySource(), async (_source, options) => {
+  const first = sourceCache.resolve(source, async (_source, options) => {
+    calls++;
     transportSignal = options.signal;
     options.signal.addEventListener?.('abort', () => rejectTransport(new Error('transport aborted')));
     return transport;
-  }, { signal: callerController.signal });
-  const rejected = assert.rejects(pending, /Aborted/u);
+  }, { signal: firstController.signal });
+  const second = sourceCache.resolve(source, async () => {
+    calls++;
+    return [resolvedItem('unexpected')];
+  }, { signal: secondController.signal });
+  const firstRejected = assert.rejects(first, /Aborted/u);
+  const secondRejected = assert.rejects(second, /Aborted/u);
   await Promise.resolve();
   const signal = assertPresentSignal(transportSignal);
+  assert.equal(calls, 1);
 
-  callerController.abort();
+  firstController.abort();
+  await firstRejected;
+  assert.equal(signal.aborted, false);
 
-  await rejected;
+  secondController.abort();
+  await secondRejected;
   assert.equal(signal.aborted, true);
+  assert.equal(calls, 1);
 });
 
 test('channel domain source cache clear aborts in-flight waiters and transport', async () => {

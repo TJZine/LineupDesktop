@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { setImmediate as waitForImmediate } from 'node:timers/promises';
 
 import {
   LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL,
@@ -194,7 +195,7 @@ test('Guide cancellation is sender-bound, aborts main-owned work, and settles sa
 test('Guide cancellation rejects malformed payloads and unauthorized events without aborting work', async () => {
   const harness = createCancellationHarness();
   const pending = harness.get('guide-validation', harness.sender);
-  await settleMicrotasks();
+  await settlePendingHandlerWork();
 
   const malformed = await harness.cancel('guide-validation', harness.sender, { extra: true });
   assert.equal(malformed.ok, false);
@@ -216,7 +217,7 @@ test('Guide cancellation rejects malformed payloads and unauthorized events with
 test('Guide presentation aborts on sender destruction and channel IPC teardown', async () => {
   const destroyedHarness = createCancellationHarness();
   const destroyed = destroyedHarness.get('guide-destroyed', destroyedHarness.sender);
-  await settleMicrotasks();
+  await settlePendingHandlerWork();
   destroyedHarness.sender.emitDestroyed();
   const destroyedResult = await destroyed;
   assert.equal(destroyedHarness.signals[0]?.aborted, true);
@@ -225,7 +226,7 @@ test('Guide presentation aborts on sender destruction and channel IPC teardown',
 
   const teardownHarness = createCancellationHarness();
   const tornDown = teardownHarness.get('guide-teardown', teardownHarness.sender);
-  await settleMicrotasks();
+  await settlePendingHandlerWork();
   await teardownHarness.teardown();
   const teardownResult = await tornDown;
   assert.equal(teardownHarness.signals[0]?.aborted, true);
@@ -247,7 +248,7 @@ test('Guide presentation main timeout aborts owned work and returns the fixed se
   });
   const harness = createCancellationHarness();
   const pending = harness.get('guide-timeout', harness.sender);
-  await settleMicrotasks();
+  await settlePendingHandlerWork();
   assert.equal(harness.signals[0]?.aborted, false);
   assert.ok(timeoutCallback);
 
@@ -265,10 +266,10 @@ test('Guide presentation main timeout aborts owned work and returns the fixed se
 test('Guide cancel-settle-new same-id race retains cancellation custody for the replacement', async () => {
   const harness = createCancellationHarness();
   const first = harness.get('guide-reused', harness.sender);
-  await settleMicrotasks();
+  await settlePendingHandlerWork();
   await harness.cancel('guide-reused', harness.sender);
   const second = harness.get('guide-reused', harness.sender);
-  await settleMicrotasks();
+  await settlePendingHandlerWork();
   assert.equal(harness.signals.length, 2);
   assert.equal(harness.signals[0]?.aborted, true);
   assert.equal(harness.signals[1]?.aborted, false);
@@ -287,7 +288,7 @@ test('Guide sustained cancellation keeps at most one non-aborted privileged requ
   for (let index = 0; index < 20; index += 1) {
     const requestId = `guide-bounded-${String(index)}`;
     const pending = harness.get(requestId, harness.sender);
-    await settleMicrotasks();
+    await settlePendingHandlerWork();
     assert.ok(harness.signals.filter((signal) => !signal.aborted).length <= 1);
     await harness.cancel(requestId, harness.sender);
     const result = await pending;
@@ -301,7 +302,7 @@ test('Guide sustained cancellation keeps at most one non-aborted privileged requ
 test('Guide cancellation settles a noncooperative generation load and releases same-id custody', async () => {
   const harness = createNonCooperativeGuideHarness('generation');
   const first = harness.get('guide-stalled-generation');
-  await settleMicrotasks();
+  await settlePendingHandlerWork();
   assert.equal(harness.operations.length, 1);
   assert.equal(harness.sender.destroyedListenerCount, 1);
 
@@ -310,18 +311,18 @@ test('Guide cancellation settles a noncooperative generation load and releases s
   assert.equal(harness.sender.destroyedListenerCount, 0);
 
   const replacement = harness.get('guide-stalled-generation');
-  await settleMicrotasks();
+  await settlePendingHandlerWork();
   assert.equal(harness.operations.length, 2);
   assert.equal(harness.sender.destroyedListenerCount, 1);
   harness.operations[0]?.reject(new Error('late private generation failure'));
-  await settleMicrotasks();
+  await settlePendingHandlerWork();
   assert.equal(harness.sender.destroyedListenerCount, 1);
   harness.sender.emitDestroyed();
   assert.equal((await replacement).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
   assert.equal(harness.sender.destroyedListenerCount, 0);
 
   harness.operations[1]?.resolve(publicGeneration());
-  await settleMicrotasks();
+  await settlePendingHandlerWork();
   await harness.teardown();
 });
 
@@ -345,7 +346,7 @@ test('Guide timeout and sustained cancellation settle noncooperative presentatio
 
   const harness = createNonCooperativeGuideHarness('presentation');
   const timedOut = harness.get('guide-stalled-presentation');
-  await settleMicrotasks();
+  await settlePendingHandlerWork();
   assert.equal(harness.operations.length, 1);
   assert.equal(harness.sender.destroyedListenerCount, 1);
   assert.equal(timers.size, 1);
@@ -356,22 +357,22 @@ test('Guide timeout and sustained cancellation settle noncooperative presentatio
   assert.equal(harness.signals[0]?.aborted, true);
 
   const replacement = harness.get('guide-stalled-presentation');
-  await settleMicrotasks();
+  await settlePendingHandlerWork();
   assert.equal(harness.operations.length, 2);
   assert.equal(harness.sender.destroyedListenerCount, 1);
   assert.equal(timers.size, 1);
   harness.operations[0]?.resolve(publicPresentation());
-  await settleMicrotasks();
+  await settlePendingHandlerWork();
   assert.equal(harness.sender.destroyedListenerCount, 1);
   assert.equal(timers.size, 1);
   await harness.cancel('guide-stalled-presentation');
   assert.equal((await replacement).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
   harness.operations[1]?.reject(new Error('late private presentation failure'));
-  await settleMicrotasks();
+  await settlePendingHandlerWork();
 
   for (let index = 0; index < 19; index += 1) {
     const pending = harness.get('guide-stalled-presentation');
-    await settleMicrotasks();
+    await settlePendingHandlerWork();
     assert.equal(harness.sender.destroyedListenerCount, 1);
     assert.equal(timers.size, 1);
     assert.ok(harness.signals.filter((signal) => !signal.aborted).length <= 1);
@@ -381,7 +382,7 @@ test('Guide timeout and sustained cancellation settle noncooperative presentatio
     assert.equal(timers.size, 0);
     assert.equal(harness.signals.filter((signal) => !signal.aborted).length, 0);
     harness.operations[index + 2]?.reject(new Error('late private presentation failure'));
-    await settleMicrotasks();
+    await settlePendingHandlerWork();
   }
   await harness.teardown();
 });
@@ -716,9 +717,8 @@ function publicPresentation(): object {
   };
 }
 
-async function settleMicrotasks(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+async function settlePendingHandlerWork(): Promise<void> {
+  await waitForImmediate();
 }
 
 function memoryStorage(initial: ChannelAggregate): ChannelPersistenceStoragePort {
