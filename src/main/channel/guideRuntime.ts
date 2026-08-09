@@ -162,7 +162,7 @@ export class GuideRuntime {
         name: channel.name,
         programs,
       })),
-      nowWatching: this.projectNowWatching(input.generation),
+      nowWatching: this.projectNowWatching(input.generation, capturedNowMs),
     };
     const projected = input.publicReferenceOwner.projectPresentation(input.generation, raw);
     const channels = applyFairProgramCap(projected.channels, 1_000);
@@ -261,11 +261,18 @@ export class GuideRuntime {
     });
   }
 
-  private projectNowWatching(generation: ChannelPublicReferenceGeneration): EpgCurrentProgramViewModel | null {
+  private projectNowWatching(
+    generation: ChannelPublicReferenceGeneration,
+    capturedNowMs: number,
+  ): EpgCurrentProgramViewModel | null {
     const state = this.activeChannelScheduler.getState();
-    if (!state.isActive || state.currentProgram === null) return null;
+    if (!state.isActive || generation.currentChannelId !== state.channelId) return null;
     const channel = generation.channels.find(({ id, hidden }) => id === state.channelId && hidden !== true);
-    return channel === undefined ? null : mapCurrentProgram(state.currentProgram, channel.id, []);
+    return channel === undefined ? null : mapCurrentProgram(
+      this.activeChannelScheduler.getProgramAtTime(capturedNowMs),
+      channel.id,
+      [],
+    );
   }
 
   async tuneChannel(channelId: string): Promise<void> {

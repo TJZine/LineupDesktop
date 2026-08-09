@@ -143,6 +143,63 @@ test('Guide projects Now Watching from active scheduler state when paging and fi
   assert.equal(filteredAway.nowWatching?.title, 'Active Movie');
 });
 
+test('Guide recalculates Now Watching at its captured clock time without mutating preference state', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-guide-paging-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  let nowMs = 0;
+  const clock = { now: () => nowMs };
+  const channels = [channel('channel-active', 10, 'library-a')];
+  const scheduler = new ChannelScheduler({ clock });
+  scheduler.loadChannel({
+    channelId: 'channel-active', anchorTime: 0, playbackMode: 'sequential', shuffleSeed: 0,
+    content: [
+      { ratingKey: 'first', type: 'movie', title: 'First', fullTitle: 'First', durationMs: 60_000,
+        thumb: null, year: null, scheduledIndex: 0 },
+      { ratingKey: 'second', type: 'movie', title: 'Second', fullTitle: 'Second', durationMs: 60_000,
+        thumb: null, year: null, scheduledIndex: 1 },
+    ],
+  });
+  nowMs = 60_001;
+  const store = new DesktopGuidePreferencesStore(path.join(directory, 'preferences.json'));
+  const runtime = createRuntime(channels, emptyAdapter(), store, true, scheduler, clock);
+  const generation = generationFor(channels, 'generation-rollover', 'channel-active');
+  const result = await page(runtime, generation, new ChannelPublicReferenceOwner(), 0, 1);
+
+  assert.equal(result.nowWatching?.title, 'Second');
+  assert.equal(result.nowWatching?.startsAtMs, 60_000);
+  assert.equal(result.libraryFilter.revision, 0);
+  assert.equal(result.libraryFilter.selectedLibraryId, null);
+});
+
+test('Guide omits Now Watching when committed generation and active scheduler channels disagree', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-guide-paging-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const channels = [channel('channel-old', 10), channel('channel-committed', 20)];
+  const scheduler = new ChannelScheduler({ clock: { now: () => 0 } });
+  scheduler.loadChannel({
+    channelId: 'channel-old', anchorTime: 0, playbackMode: 'sequential', shuffleSeed: 0,
+    content: [{ ratingKey: 'old', type: 'movie', title: 'Old', fullTitle: 'Old', durationMs: 60_000,
+      thumb: null, year: null, scheduledIndex: 0 }],
+  });
+  const runtime = createRuntime(
+    channels,
+    emptyAdapter(),
+    new DesktopGuidePreferencesStore(path.join(directory, 'preferences.json')),
+    true,
+    scheduler,
+  );
+  const result = await page(
+    runtime,
+    generationFor(channels, 'generation-mismatch', 'channel-committed'),
+    new ChannelPublicReferenceOwner(),
+    0,
+    24,
+  );
+
+  assert.equal(result.nowWatching, null);
+  assert.equal(result.libraryFilter.revision, 0);
+});
+
 test('Guide paging uses public-id tie breaks, empty bounds, and fair 200/1000 program truncation', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-guide-paging-'));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
@@ -288,12 +345,13 @@ function createRuntime(
   preferencesStore: DesktopGuidePreferencesStore,
   libraryTabsEnabled = true,
   activeChannelScheduler = new ChannelScheduler({ clock: { now: () => 0 } }),
+  clock = { now: () => 0 },
 ): GuideRuntime {
   return new GuideRuntime({
     repository: { loadNormalized: async () => null } as never,
     plexLibraryAdapter: adapter as never,
     activeChannelScheduler,
-    clock: { now: () => 0 }, preferencesStore,
+    clock, preferencesStore,
     guideContextSource: { getBuilderContextForMain: () => ({ ok: true, snapshot: { activeProfileId: 'profile', selectedServerId: 'server' } }) },
     createScopeToken: () => 'scope-token',
     getPastItemsWindowSnapshot: async () => ({
@@ -302,6 +360,13 @@ function createRuntime(
       libraryTabsEnabled,
     }),
   });
+}
+
+function emptyAdapter() {
+  return {
+    getLibraryItems: async () => [], getCollectionItems: async () => [], getShowEpisodes: async () => [],
+    getPlaylistItems: async () => [], getItem: async () => null,
+  };
 }
 
 function page(
