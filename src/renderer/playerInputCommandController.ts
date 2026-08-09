@@ -38,6 +38,7 @@ interface PendingDirectCommand {
   requestId: string;
   command: PlayerCommandName;
   snapshotRequestId: string;
+  settled: boolean;
 }
 
 interface DeferredPause {
@@ -86,7 +87,26 @@ export function createPlayerInputCommandController(
   };
 
   const settle = (event: Extract<PlayerEvent, { event: 'command.settled' }>): void => {
-    if (pending?.requestId !== event.requestId || pending.command !== event.command) return;
+    if (
+      pending?.requestId !== event.requestId ||
+      pending.command !== event.command ||
+      pending.settled
+    ) return;
+    if (event.ok && pending.command === 'play' && deferredPause !== null) {
+      const snapshot = options.getSnapshot();
+      if (
+        snapshot.requestId !== pending.snapshotRequestId ||
+        isInconsistentPlaybackPair(snapshot)
+      ) {
+        release();
+        resolveDeferredPause('rejected');
+        return;
+      }
+      if (snapshot.status !== 'playing' || !snapshot.playing) {
+        pending.settled = true;
+        return;
+      }
+    }
     const settled = release();
     if (!event.ok && settled !== null) {
       options.recordDiagnostic(
@@ -120,10 +140,15 @@ export function createPlayerInputCommandController(
     deltaMs?: number,
   ): void => {
     const requestId = `renderer-input-${command.replace('.', '-')}-${++sequence}`;
-    pending = { requestId, command, snapshotRequestId };
+    pending = { requestId, command, snapshotRequestId, settled: false };
     timer = options.host.setTimeout(() => {
       timer = null;
-      fail(requestId);
+      if (pending?.requestId === requestId && pending.settled) {
+        release();
+        resolveDeferredPause('rejected');
+      } else {
+        fail(requestId);
+      }
     }, COMMAND_TIMEOUT_MS);
     const payload = deltaMs === undefined
       ? { snapshotRequestId }
@@ -226,7 +251,20 @@ export function createPlayerInputCommandController(
         release();
         resolveDeferredPause('rejected');
       } else if (isInconsistentPlaybackPair(snapshot)) {
-        fail(pending.requestId);
+        if (pending.settled) {
+          release();
+          resolveDeferredPause('rejected');
+        } else {
+          fail(pending.requestId);
+        }
+      } else if (pending.settled && snapshot.status === 'playing' && snapshot.playing) {
+        const deferred = deferredPause;
+        release();
+        deferredPause = null;
+        if (deferred !== null) {
+          const result = pauseCurrent(deferred.snapshotRequestId);
+          deferred.resolve(result === 'started' ? 'started' : 'rejected');
+        }
       }
     },
     routeLeave() {
