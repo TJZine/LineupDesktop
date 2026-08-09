@@ -67,7 +67,6 @@ export interface PlayerOverlayController {
 interface PendingCommand {
   requestId: string;
   command: PlayerCommandName;
-  kind: 'track';
   snapshotRequestId: string | null;
   focusId: string | null;
   trackId: string | null;
@@ -379,7 +378,7 @@ export function createPlayerOverlayController(
     }
     const requestId = `renderer-select-${family}-${++sequence}`;
     const command = family === 'audio' ? 'track.audio.select' : 'track.subtitle.select';
-    pendingCommand = { requestId, command, kind: 'track', snapshotRequestId: snapshot.requestId, focusId, trackId, family };
+    pendingCommand = { requestId, command, snapshotRequestId: snapshot.requestId, focusId, trackId, family };
     armPendingCommandTimer(requestId);
     update((state) => ({ ...state, pendingTrackFocusId: focusId, playbackOptionsError: null }));
     try {
@@ -526,7 +525,7 @@ export function createPlayerOverlayController(
     }
     const completed = releasePendingCommand();
     if (completed === null) return;
-    if (completed.kind === 'track') closeOptionsWithFallback(completed);
+    closeOptionsWithFallback(completed);
   };
 
   const failPendingCommand = (requestId: string): void => {
@@ -582,11 +581,11 @@ export function createPlayerOverlayController(
     lastSnapshotRequestId = snapshot.requestId;
     if (pendingCommand !== null && previousRequest !== snapshot.requestId) {
       const invalidated = releasePendingCommand();
-      if (invalidated?.kind === 'track') closeOptionsWithFallback(invalidated, false);
+      if (invalidated !== null) closeOptionsWithFallback(invalidated, false);
     }
     const ambiguousAuthoritativeLoad = authoritative && !explicitTrackList &&
       ['loading', 'buffering', 'stalled', 'seeking'].includes(snapshot.status);
-    if (pendingCommand?.kind === 'track' && !ambiguousAuthoritativeLoad &&
+    if (pendingCommand !== null && !ambiguousAuthoritativeLoad &&
       !trackMembership(snapshot, pendingCommand.family, pendingCommand.trackId)) {
       const invalidated = releasePendingCommand();
       if (invalidated !== null) {
@@ -633,7 +632,7 @@ export function createPlayerOverlayController(
     const state = options.getState();
     if (state.activeOverlayId === null) return false;
     const wasOptions = state.activeOverlayId === 'playbackOptions';
-    if (pendingCommand?.kind === 'track') releasePendingCommand();
+    if (pendingCommand !== null) releasePendingCommand();
     if (state.activeOverlayId === 'miniGuide') miniGuideTimer = clearTimer(miniGuideTimer);
     if (state.activeOverlayId === 'playerOsd') osdTimer = clearTimer(osdTimer);
     if (state.activeOverlayId === 'nowPlaying') nowPlayingTimer = clearTimer(nowPlayingTimer);

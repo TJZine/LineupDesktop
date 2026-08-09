@@ -338,6 +338,7 @@ test('settled play deferral times out without later pause revival', async () => 
   harness.timers.advance(30_000);
   assert.equal(sleep.projection().status, 'failed');
   assert.deepEqual(sleep.diagnostics(), ['Sleep timer pause was not accepted.']);
+  assert.deepEqual(harness.diagnostics, ['Player command failed.']);
   harness.setSnapshot(playingSnapshot());
   harness.controller.reconcileSnapshot(playingSnapshot(), true);
   await flush();

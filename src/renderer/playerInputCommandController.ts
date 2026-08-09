@@ -143,12 +143,7 @@ export function createPlayerInputCommandController(
     pending = { requestId, command, snapshotRequestId, settled: false };
     timer = options.host.setTimeout(() => {
       timer = null;
-      if (pending?.requestId === requestId && pending.settled) {
-        release();
-        resolveDeferredPause('rejected');
-      } else {
-        fail(requestId);
-      }
+      fail(requestId);
     }, COMMAND_TIMEOUT_MS);
     const payload = deltaMs === undefined
       ? { snapshotRequestId }
