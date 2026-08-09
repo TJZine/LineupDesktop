@@ -191,6 +191,113 @@ test('Guide cancellation is sender-bound, aborts main-owned work, and settles sa
   await teardown();
 });
 
+test('Guide cancellation rejects malformed payloads and unauthorized events without aborting work', async () => {
+  const harness = createCancellationHarness();
+  const pending = harness.get('guide-validation', harness.sender);
+  await settleMicrotasks();
+
+  const malformed = await harness.cancel('guide-validation', harness.sender, { extra: true });
+  assert.equal(malformed.ok, false);
+  assert.equal(malformed.error?.code, 'GUIDE_VALIDATION_FAILED');
+  assert.equal(harness.signals[0]?.aborted, false);
+
+  harness.authorized = false;
+  const unauthorized = await harness.cancel('guide-validation', harness.sender);
+  assert.equal(unauthorized.ok, false);
+  assert.equal(unauthorized.error?.code, 'GUIDE_UNAUTHORIZED');
+  assert.equal(harness.signals[0]?.aborted, false);
+
+  harness.authorized = true;
+  await harness.cancel('guide-validation', harness.sender);
+  await pending;
+  await harness.teardown();
+});
+
+test('Guide presentation aborts on sender destruction and channel IPC teardown', async () => {
+  const destroyedHarness = createCancellationHarness();
+  const destroyed = destroyedHarness.get('guide-destroyed', destroyedHarness.sender);
+  await settleMicrotasks();
+  destroyedHarness.sender.emitDestroyed();
+  const destroyedResult = await destroyed;
+  assert.equal(destroyedHarness.signals[0]?.aborted, true);
+  assert.equal(destroyedResult.error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+  await destroyedHarness.teardown();
+
+  const teardownHarness = createCancellationHarness();
+  const tornDown = teardownHarness.get('guide-teardown', teardownHarness.sender);
+  await settleMicrotasks();
+  await teardownHarness.teardown();
+  const teardownResult = await tornDown;
+  assert.equal(teardownHarness.signals[0]?.aborted, true);
+  assert.equal(teardownResult.error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+});
+
+test('Guide presentation main timeout aborts owned work and returns the fixed settlement', async (t) => {
+  let timeoutCallback: (() => void) | null = null;
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = ((callback: () => void) => {
+    timeoutCallback = callback;
+    return 1 as never;
+  }) as unknown as typeof globalThis.setTimeout;
+  globalThis.clearTimeout = (() => undefined) as typeof globalThis.clearTimeout;
+  t.after(() => {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  });
+  const harness = createCancellationHarness();
+  const pending = harness.get('guide-timeout', harness.sender);
+  await settleMicrotasks();
+  assert.equal(harness.signals[0]?.aborted, false);
+  assert.ok(timeoutCallback);
+
+  (timeoutCallback as () => void)();
+
+  const result = await pending;
+  assert.equal(harness.signals[0]?.aborted, true);
+  assert.deepEqual(result.error, {
+    code: 'GUIDE_PRESENTATION_CANCELLED', message: 'Guide refresh was cancelled.',
+    retryable: true, recoverable: true, operation: 'getPresentation',
+  });
+  await harness.teardown();
+});
+
+test('Guide cancel-settle-new same-id race retains cancellation custody for the replacement', async () => {
+  const harness = createCancellationHarness();
+  const first = harness.get('guide-reused', harness.sender);
+  await settleMicrotasks();
+  await harness.cancel('guide-reused', harness.sender);
+  const second = harness.get('guide-reused', harness.sender);
+  await settleMicrotasks();
+  assert.equal(harness.signals.length, 2);
+  assert.equal(harness.signals[0]?.aborted, true);
+  assert.equal(harness.signals[1]?.aborted, false);
+  await first;
+
+  const replacementCancel = await harness.cancel('guide-reused', harness.sender);
+  assert.equal(replacementCancel.ok, true);
+  const secondResult = await second;
+  assert.equal(harness.signals[1]?.aborted, true);
+  assert.equal(secondResult.error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+  await harness.teardown();
+});
+
+test('Guide sustained cancellation keeps at most one non-aborted privileged request', async () => {
+  const harness = createCancellationHarness();
+  for (let index = 0; index < 20; index += 1) {
+    const requestId = `guide-bounded-${String(index)}`;
+    const pending = harness.get(requestId, harness.sender);
+    await settleMicrotasks();
+    assert.ok(harness.signals.filter((signal) => !signal.aborted).length <= 1);
+    await harness.cancel(requestId, harness.sender);
+    const result = await pending;
+    assert.equal(result.error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+    assert.equal(harness.signals.filter((signal) => !signal.aborted).length, 0);
+  }
+  assert.equal(harness.signals.length, 20);
+  await harness.teardown();
+});
+
 test('Guide presentation retries the Settings currentness sentinel independently', async () => {
   const handlers = new Map<string, (event: never, payload: unknown) => Promise<unknown>>();
   let presentationLoads = 0;
@@ -329,6 +436,95 @@ test('channel IPC registers and removes exactly the five setup handlers', async 
   await teardown();
   assert.deepEqual(removed, expected);
 });
+
+type GuideCancellationResult = {
+  ok: boolean;
+  error?: { code: string; message: string; retryable: boolean; recoverable: boolean; operation: string };
+};
+
+class FakeGuideSender {
+  private readonly destroyedListeners = new Set<() => void>();
+
+  once(event: string, listener: () => void): void {
+    if (event === 'destroyed') this.destroyedListeners.add(listener);
+  }
+
+  removeListener(event: string, listener: () => void): void {
+    if (event === 'destroyed') this.destroyedListeners.delete(listener);
+  }
+
+  emitDestroyed(): void {
+    const listeners = [...this.destroyedListeners];
+    this.destroyedListeners.clear();
+    listeners.forEach((listener) => listener());
+  }
+}
+
+type GuideCancellationHarness = {
+  sender: FakeGuideSender;
+  signals: AbortSignal[];
+  authorized: boolean;
+  get(requestId: string, sender: FakeGuideSender): Promise<GuideCancellationResult>;
+  cancel(requestId: string, sender: FakeGuideSender, payload?: Record<string, unknown>): Promise<GuideCancellationResult>;
+  teardown(): Promise<void>;
+};
+
+function createCancellationHarness(): GuideCancellationHarness {
+  const handlers = new Map<string, (event: never, payload: unknown) => Promise<unknown> | unknown>();
+  const sender = new FakeGuideSender();
+  const signals: AbortSignal[] = [];
+  const harness: GuideCancellationHarness = {
+    sender,
+    signals,
+    authorized: true,
+    get(requestId: string, requestSender: FakeGuideSender) {
+      return handlers.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL)!({ sender: requestSender } as never, {
+        requestId, payload: { startTimeMs: 0, durationMs: 60_000 },
+      }) as Promise<GuideCancellationResult>;
+    },
+    async cancel(
+      requestId: string,
+      requestSender: FakeGuideSender,
+      payload: Record<string, unknown> = {},
+    ) {
+      return await handlers.get(LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL)!({ sender: requestSender } as never, {
+        requestId, payload,
+      }) as GuideCancellationResult;
+    },
+    teardown: async () => undefined,
+  };
+  const teardown = registerChannelIpcHandlers({
+    runtime: {
+      loadPublicReferenceGeneration: async () => ({
+        lineupRevision: 1, channels: [], currentChannelId: null, fingerprint: 'same',
+      }),
+    } as never,
+    guideRuntime: {
+      isPreferenceScopeCurrent: () => true,
+      getPagedPresentation: async ({ signal }: { signal: AbortSignal }) => {
+        signals.push(signal);
+        await new Promise<void>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new Error('private abort detail')), { once: true });
+        });
+        throw new Error('unreachable');
+      },
+    } as never,
+    publicReferenceOwner: {} as never,
+    isAuthorizedEvent: () => harness.authorized,
+    createRequestId: () => 'fallback',
+    ipcMain: {
+      handle: (channel, handler) => handlers.set(channel, handler as never),
+      removeHandler: () => undefined,
+    },
+  });
+  harness.teardown = teardown;
+  return harness;
+}
+
+async function settleMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 function memoryStorage(initial: ChannelAggregate): ChannelPersistenceStoragePort {
   let aggregate = initial;
