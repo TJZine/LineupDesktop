@@ -5,7 +5,6 @@ import type {
 } from '../contracts/player.js';
 import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
 import type { DesktopInputButton } from './navigation.js';
-import { toRendererSafeFailureMessage } from './rendererSafeFailureMessage.js';
 
 export interface PlayerInputCommandTimerHost {
   setTimeout(callback: () => void, delayMs: number): number;
@@ -47,6 +46,7 @@ interface DeferredPause {
 }
 
 const COMMAND_TIMEOUT_MS = 30_000;
+const PLAYER_COMMAND_FAILURE_MESSAGE = 'Player command failed.';
 
 export function createPlayerInputCommandController(
   options: PlayerInputCommandControllerOptions,
@@ -73,13 +73,13 @@ export function createPlayerInputCommandController(
     deferred?.resolve(result);
   };
 
-  const fail = (requestId: string, message: string): void => {
+  const fail = (requestId: string): void => {
     if (disposed || pending?.requestId !== requestId) return;
     const failed = release();
     if (failed !== null) {
       options.recordDiagnostic(
         `player.${failed.command}`,
-        toRendererSafeFailureMessage(message, 'Player command failed.'),
+        PLAYER_COMMAND_FAILURE_MESSAGE,
       );
     }
     resolveDeferredPause('rejected');
@@ -91,10 +91,7 @@ export function createPlayerInputCommandController(
     if (!event.ok && settled !== null) {
       options.recordDiagnostic(
         `player.${settled.command}`,
-        toRendererSafeFailureMessage(
-          event.error?.message ?? 'Player command failed.',
-          'Player command failed.',
-        ),
+        PLAYER_COMMAND_FAILURE_MESSAGE,
       );
     }
     if (
@@ -126,7 +123,7 @@ export function createPlayerInputCommandController(
     pending = { requestId, command, snapshotRequestId };
     timer = options.host.setTimeout(() => {
       timer = null;
-      fail(requestId, 'Player command timed out.');
+      fail(requestId);
     }, COMMAND_TIMEOUT_MS);
     const payload = deltaMs === undefined
       ? { snapshotRequestId }
@@ -134,13 +131,13 @@ export function createPlayerInputCommandController(
     void options.player.dispatch({ intent, requestId, payload }).then((result) => {
       if (disposed || pending?.requestId !== requestId) return;
       if (!result.ok || !result.value.accepted) {
-        fail(requestId, result.ok ? 'Player command was not accepted.' : result.error.message);
+        fail(requestId);
         return;
       }
       for (const event of result.value.events) {
         if (event.event === 'command.settled') settle(event);
       }
-    }).catch(() => fail(requestId, 'Player command failed.'));
+    }).catch(() => fail(requestId));
   };
 
   const handleInput = (input: DesktopInputButton, blocked = false): boolean => {
@@ -220,7 +217,7 @@ export function createPlayerInputCommandController(
     handlePlayerEvent(event) {
       if (event.event === 'command.settled') settle(event);
       else if (event.event === 'error' && event.requestId !== null && pending?.requestId === event.requestId) {
-        fail(event.requestId, event.error.message);
+        fail(event.requestId);
       }
     },
     reconcileSnapshot(snapshot, authoritative) {
@@ -229,7 +226,7 @@ export function createPlayerInputCommandController(
         release();
         resolveDeferredPause('rejected');
       } else if (isInconsistentPlaybackPair(snapshot)) {
-        fail(pending.requestId, 'Inconsistent player state ignored.');
+        fail(pending.requestId);
       }
     },
     routeLeave() {

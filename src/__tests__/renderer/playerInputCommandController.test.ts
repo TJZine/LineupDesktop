@@ -98,7 +98,7 @@ test('one pending command ignores mismatches and releases on timeout, stale snap
   assert.equal(harness.envelopes.length, 1);
 
   harness.timers.advance(30_000);
-  assert.deepEqual(harness.diagnostics, ['Player command timed out.']);
+  assert.deepEqual(harness.diagnostics, ['Player command failed.']);
   harness.controller.handleInput('mediaStop');
   await flush();
   assert.equal(harness.envelopes.length, 2);
@@ -116,7 +116,7 @@ test('one pending command ignores mismatches and releases on timeout, stale snap
   harness.controller.cleanup();
   harness.timers.advance(30_000);
   assert.equal(harness.controller.handleInput('mediaStop'), false);
-  assert.deepEqual(harness.diagnostics, ['Player command timed out.']);
+  assert.deepEqual(harness.diagnostics, ['Player command failed.']);
 });
 
 test('inconsistent authoritative playback state fails safely without mutating semantic focus', async () => {
@@ -144,7 +144,36 @@ test('inconsistent authoritative playback state fails safely without mutating se
   harness.controller.handleInput('space');
   await flush();
   harness.controller.reconcileSnapshot({ ...playingSnapshot(), playing: false }, true);
-  assert.deepEqual(harness.diagnostics, ['Inconsistent player state ignored.']);
+  assert.deepEqual(harness.diagnostics, ['Player command failed.']);
+});
+
+test('direct command failures expose only fixed renderer-safe diagnostics', async () => {
+  for (const message of [
+    'Set-Cookie: sessionId=private-session',
+    'api_key=private-api-key',
+    '-----BEGIN PRIVATE KEY-----',
+  ]) {
+    const harness = createHarness(playingSnapshot(), { settleInDispatch: false });
+    harness.controller.handleInput('mediaPause');
+    await flush();
+    const requestId = harness.envelopes[0]?.requestId;
+    assert.ok(requestId);
+    harness.controller.handlePlayerEvent({
+      event: 'command.settled',
+      requestId,
+      command: 'pause',
+      ok: false,
+      error: {
+        code: 'PLAYER_COMMAND_FAILED',
+        category: 'unknown',
+        message,
+        recoverable: true,
+        retryable: true,
+        requestId,
+      },
+    });
+    assert.deepEqual(harness.diagnostics, ['Player command failed.']);
+  }
 });
 
 test('pauseCurrent starts exactly one guarded pause only for the exact current playing request', async () => {

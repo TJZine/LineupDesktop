@@ -78,7 +78,7 @@ test('bridge request timeouts clear tune and track ownership through normal fail
   track.timers.advance(30_000);
   await trackRequest;
   assert.equal(track.state().pendingTrackFocusId, null);
-  assert.equal(track.state().playbackOptionsError, 'Track selection timed out.');
+  assert.equal(track.state().playbackOptionsError, 'Track selection failed.');
   assert.equal(track.focus.at(-1), 'overlay-audio-track-audio-alt');
 
   const tune = createHarness(playingSnapshot(), {
@@ -90,7 +90,7 @@ test('bridge request timeouts clear tune and track ownership through normal fail
   await tuneRequest;
   assert.equal(tune.state().pendingTuneChannelId, null);
   assert.equal(tune.state().transitionChannelId, null);
-  assert.equal(tune.state().miniGuideError, 'Channel tune timed out.');
+  assert.equal(tune.state().miniGuideError, 'Channel tune failed.');
 });
 
 test('accepted track commands retain a settlement deadline', async () => {
@@ -104,7 +104,7 @@ test('accepted track commands retain a settlement deadline', async () => {
   );
   track.timers.advance(30_000);
   assert.equal(track.state().pendingTrackFocusId, null);
-  assert.equal(track.state().playbackOptionsError, 'Track selection timed out.');
+  assert.equal(track.state().playbackOptionsError, 'Track selection failed.');
 });
 
 test('dispose makes later overlay input inert', () => {
@@ -192,7 +192,7 @@ test('track selection waits for matching settlement and keeps exact focus on loc
   harness.controller.handlePlayerEvent({ event: 'command.settled', requestId: 'renderer-select-audio-1', command: 'track.audio.select', ok: false, error: safeError() });
   assert.equal(harness.state().activeOverlayId, 'playbackOptions');
   assert.equal(harness.state().playbackOptionsFocusId, 'overlay-audio-track-audio-alt');
-  assert.equal(harness.state().playbackOptionsError, 'Safe failure.');
+  assert.equal(harness.state().playbackOptionsError, 'Track selection failed.');
 });
 
 test('late rejected track dispatch cannot fail a newer pending selection after route invalidation', async () => {
@@ -327,7 +327,7 @@ test('failed, thrown, and superseded tune results never start stale reconciliati
   await rejected.controller.tune('one', 'miniGuide');
   assert.equal(refreshes, 0);
   assert.equal(rejected.state().activeOverlayId, 'miniGuide');
-  assert.equal(rejected.state().miniGuideError, 'Safe failure.');
+  assert.equal(rejected.state().miniGuideError, 'Channel tune failed.');
 
   const thrown = createHarness(playingSnapshot(), {
     tuneChannel: async () => { throw new Error('private failure'); },
@@ -515,7 +515,7 @@ test('mini-guide pointer activation selects exact row, contains Left, and owns i
     error: { code: 'FAILED', message: 'Mini failed safely.', retryable: true, recoverable: true, operation: 'player.tuneChannel' },
   });
   await flushPromiseQueue();
-  assert.equal(harness.state().miniGuideError, 'Mini failed safely.');
+  assert.equal(harness.state().miniGuideError, 'Channel tune failed.');
   assert.equal(harness.focus.at(-1), 'overlay-mini-channel-two');
   harness.controller.handleInput('down');
   assert.equal(harness.state().miniGuideError, null);
@@ -542,13 +542,13 @@ test('transition ownership suppresses duplicate tune and survives a higher overl
   assert.equal(view.visibleOverlays.transition, true);
 });
 
-test('paused OSD persists and warning or unmatched error events are sanitized diagnostics only', () => {
+test('paused OSD persists and warning or unmatched error events use fixed diagnostics only', () => {
   const harness = createHarness({ ...playingSnapshot(), status: 'paused', playing: false });
   harness.controller.requestOsd();
   harness.timers.advance(30_000);
   assert.equal(harness.state().activeOverlayId, 'playerOsd');
-  harness.controller.handlePlayerEvent({ event: 'warning', requestId: null, warning: { ...safeError(), message: ['to', 'ken', 'opaque'].join('') } });
-  harness.controller.handlePlayerEvent({ event: 'error', requestId: 'unmatched', error: { ...safeError(), message: ['se', 'cret'].join('') } });
+  harness.controller.handlePlayerEvent({ event: 'warning', requestId: null, warning: { ...safeError(), message: 'Set-Cookie: sessionId=private-session' } });
+  harness.controller.handlePlayerEvent({ event: 'error', requestId: 'unmatched', error: { ...safeError(), message: 'api_key=private-api-key -----BEGIN PRIVATE KEY-----' } });
   assert.deepEqual(harness.diagnostics, ['Player warning.', 'Player error.']);
   assert.equal(harness.state().activeOverlayId, 'playerOsd');
 });

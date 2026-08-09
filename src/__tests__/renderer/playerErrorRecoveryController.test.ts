@@ -83,9 +83,41 @@ test('renderer recovery owner sanitizes failure, restores focus, and times out',
   assert.equal(controller.retry(), false);
   timers.runAll();
 
-  assert.equal(state.retryError, 'Player recovery timed out.');
+  assert.equal(state.retryError, 'Player recovery failed.');
   assert.equal(state.recoveryPendingAction, null);
   assert.equal(focus.at(-1), 'overlay-player-skip');
+  controller.dispose();
+});
+
+test('renderer recovery owner replaces boundary failure text with fixed copy', async () => {
+  let state = createPlayerOverlayState();
+  const controller = createPlayerErrorRecoveryController({
+    bridge: {
+      recover: async () => ({
+        ok: false,
+        requestId: 'recovery-secret',
+        value: { status: 'failed', snapshot: createEmptyPlayerSnapshot() },
+        error: {
+          code: 'PLAYER_RECOVERY_UNAVAILABLE',
+          category: 'unknown',
+          message: 'Set-Cookie: sessionId=private api_key=secret -----BEGIN PRIVATE KEY-----',
+          recoverable: true,
+          retryable: true,
+          requestId: 'recovery-secret',
+        },
+      }),
+    },
+    host: new FakeTimers(),
+    getState: () => state,
+    setState: (next) => { state = next; },
+    acceptSnapshot: () => undefined,
+    render: () => undefined,
+    focus: () => undefined,
+  });
+
+  assert.equal(controller.retry(), true);
+  await flush();
+  assert.equal(state.retryError, 'Player recovery failed.');
   controller.dispose();
 });
 
@@ -150,7 +182,7 @@ test('timed-out recovery settlements cannot resurrect state, snapshot, focus, or
     await flush();
 
     assert.equal(state, terminalState);
-    assert.equal(state.retryError, 'Player recovery timed out.');
+    assert.equal(state.retryError, 'Player recovery failed.');
     assert.equal(acceptedSnapshots, 0);
     assert.equal(renders, terminalRenders);
     assert.deepEqual(focus, terminalFocus);
