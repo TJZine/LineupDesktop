@@ -386,7 +386,7 @@ function isVisibleChannel(channel: ChannelConfig): boolean {
 export function computeGuideMinimumStartTimeMs(
   nowMs: number,
   setting: GuidePastItemsWindowSetting,
-  visibleChannels: readonly ChannelConfig[],
+  eligibleChannels: readonly ChannelConfig[],
   selectedRawLibraryId: string | null,
 ): number {
   if (!Number.isFinite(nowMs) || nowMs < 0) {
@@ -397,11 +397,11 @@ export function computeGuideMinimumStartTimeMs(
     throw new Error('Guide clock date is invalid.');
   }
   const pastMinutes = setting === 'auto'
-    ? isGuideShowOnlyScope(visibleChannels, selectedRawLibraryId) ? 0 : 15
+    ? isGuideShowOnlyScope(eligibleChannels, selectedRawLibraryId) ? 0 : 15
     : Number(setting);
   const elapsedMs = pastMinutes * 60_000;
   const slotStartMs = Math.floor((nowMs - elapsedMs) / 1_800_000) * 1_800_000;
-  const localMidnight = new Date(nowMs);
+  const localMidnight = captured;
   localMidnight.setHours(0, 0, 0, 0);
   const minimumStartTimeMs = Math.max(0, slotStartMs, localMidnight.getTime());
   if (!Number.isSafeInteger(minimumStartTimeMs) || minimumStartTimeMs < 0) {

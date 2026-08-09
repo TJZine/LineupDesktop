@@ -119,7 +119,7 @@ test('Guide projects Now Watching from active scheduler state when paging and fi
     }],
   });
   const store = new DesktopGuidePreferencesStore(path.join(directory, 'preferences.json'));
-  const runtime = createRuntime(channels, adapter, store, true, scheduler);
+  const runtime = createRuntime(channels, adapter, store, { activeChannelScheduler: scheduler });
   const owner = new ChannelPublicReferenceOwner();
   const generation = generationFor(channels, 'generation-now-watching', 'channel-active');
   const activePublicId = owner.projectChannelReference(generation, 'channel-active');
@@ -161,7 +161,10 @@ test('Guide recalculates Now Watching at its captured clock time without mutatin
   });
   nowMs = 60_001;
   const store = new DesktopGuidePreferencesStore(path.join(directory, 'preferences.json'));
-  const runtime = createRuntime(channels, emptyAdapter(), store, true, scheduler, clock);
+  const runtime = createRuntime(channels, emptyAdapter(), store, {
+    activeChannelScheduler: scheduler,
+    clock,
+  });
   const generation = generationFor(channels, 'generation-rollover', 'channel-active');
   const result = await page(runtime, generation, new ChannelPublicReferenceOwner(), 0, 1);
 
@@ -185,8 +188,7 @@ test('Guide omits Now Watching when committed generation and active scheduler ch
     channels,
     emptyAdapter(),
     new DesktopGuidePreferencesStore(path.join(directory, 'preferences.json')),
-    true,
-    scheduler,
+    { activeChannelScheduler: scheduler },
   );
   const result = await page(
     runtime,
@@ -251,7 +253,7 @@ test('Guide disabled and single-library states act as All and persist one normal
     generation, publicReferenceOwner: owner, expectedScopeToken: initial.libraryFilter.scopeToken,
     expectedRevision: 0, libraryId: selectedId, loadCurrentGeneration: async () => generation,
   });
-  const disabled = createRuntime(channels, adapter, store, false);
+  const disabled = createRuntime(channels, adapter, store, { libraryTabsEnabled: false });
   const disabledResult = await page(disabled, generation, owner, 0, 24);
   assert.equal(disabledResult.libraryFilter.selectedLibraryId, null);
   assert.equal(disabledResult.libraryFilter.revision, 2);
@@ -343,10 +345,15 @@ function createRuntime(
   channels: readonly ChannelConfig[],
   adapter: object,
   preferencesStore: DesktopGuidePreferencesStore,
-  libraryTabsEnabled = true,
-  activeChannelScheduler = new ChannelScheduler({ clock: { now: () => 0 } }),
-  clock = { now: () => 0 },
+  options: {
+    libraryTabsEnabled?: boolean;
+    activeChannelScheduler?: ChannelScheduler;
+    clock?: { now(): number };
+  } = {},
 ): GuideRuntime {
+  const libraryTabsEnabled = options.libraryTabsEnabled ?? true;
+  const activeChannelScheduler = options.activeChannelScheduler ?? new ChannelScheduler({ clock: { now: () => 0 } });
+  const clock = options.clock ?? { now: () => 0 };
   return new GuideRuntime({
     repository: { loadNormalized: async () => null } as never,
     plexLibraryAdapter: adapter as never,

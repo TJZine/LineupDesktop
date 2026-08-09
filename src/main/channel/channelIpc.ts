@@ -64,6 +64,7 @@ export type ChannelIpcTeardown = () => Promise<void>;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,120}$/u;
 const MAX_GUIDE_PRESENTATION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const GUIDE_PRESENTATION_TIMEOUT_MS = 30_000;
+const MAX_ACTIVE_GUIDE_PRESENTATIONS_PER_SENDER = 2;
 
 export function registerChannelIpcHandlers(
   options: RegisterChannelIpcHandlersOptions,
@@ -158,8 +159,15 @@ export function registerChannelIpcHandlers(
       if (activePresentations.has(request.requestId)) {
         return validationGuideResult(request.requestId, 'getPresentation');
       }
-      const controller = new AbortController();
       const sender = readGuideSender(event) ?? event;
+      let activeSenderPresentations = 0;
+      for (const active of activePresentations.values()) {
+        if (active.sender === sender) activeSenderPresentations += 1;
+      }
+      if (activeSenderPresentations >= MAX_ACTIVE_GUIDE_PRESENTATIONS_PER_SENDER) {
+        return validationGuideResult(request.requestId, 'getPresentation');
+      }
+      const controller = new AbortController();
       let removeDestroyedListener: () => void = () => undefined;
       let timeout: ReturnType<typeof globalThis.setTimeout> | undefined;
       let cleanedUp = false;

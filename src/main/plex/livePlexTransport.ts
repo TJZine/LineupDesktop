@@ -350,6 +350,7 @@ export class LivePlexTransport
         throwForHttpStatus(response.status);
       } catch (error) {
         cancelGuideArtworkResponseBody(response);
+        timeoutController.abort();
         throw error;
       }
       let mimeType: GuideArtworkMimeType;
@@ -357,11 +358,13 @@ export class LivePlexTransport
         mimeType = normalizeGuideArtworkMimeType(response.headers.get('content-type'));
       } catch (error) {
         cancelGuideArtworkResponseBody(response);
+        timeoutController.abort();
         throw error;
       }
       const contentLength = readContentLength(response.headers.get('content-length'));
       if (contentLength !== null && contentLength > GUIDE_ARTWORK_MAX_BYTES) {
         cancelGuideArtworkResponseBody(response);
+        timeoutController.abort();
         throw guideArtworkError('parse-error');
       }
       return {

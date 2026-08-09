@@ -136,6 +136,133 @@ test('Guide presentation retries consistency failures but maps projection failur
   }
 });
 
+test('Guide presentation caps active requests per sender before privileged setup', async () => {
+  const handlers = new Map<string, (event: never, payload: unknown) => Promise<unknown> | unknown>();
+  const sender = new FakeGuideSender();
+  const otherSender = new FakeGuideSender();
+  const presentationOperations: DeferredValue[] = [];
+  let generationLoads = 0;
+  let nextTimerId = 0;
+  let timerSchedules = 0;
+  const activeTimers = new Set<number>();
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = ((_callback: () => void) => {
+    timerSchedules += 1;
+    nextTimerId += 1;
+    activeTimers.add(nextTimerId);
+    return nextTimerId as never;
+  }) as unknown as typeof globalThis.setTimeout;
+  globalThis.clearTimeout = ((timerId: number) => {
+    activeTimers.delete(timerId);
+  }) as typeof globalThis.clearTimeout;
+
+  let teardown: (() => Promise<void>) | undefined;
+  try {
+    teardown = registerChannelIpcHandlers({
+      runtime: {
+        loadPublicReferenceGeneration: async () => {
+          generationLoads += 1;
+          return publicGeneration();
+        },
+      } as never,
+      guideRuntime: {
+        isPreferenceScopeCurrent: () => true,
+        getPagedPresentation: async ({ signal }: { signal: AbortSignal }) => {
+          const operation = deferredValue();
+          presentationOperations.push(operation);
+          signal.addEventListener('abort', () => operation.reject(new Error('private abort detail')), { once: true });
+          return await operation.promise;
+        },
+      } as never,
+      publicReferenceOwner: {} as never,
+      isAuthorizedEvent: () => true,
+      createRequestId: () => 'fallback',
+      ipcMain: {
+        handle: (channel, handler) => handlers.set(channel, handler as never),
+        removeHandler: () => undefined,
+      },
+    });
+
+    const get = (requestId: string, requestSender: FakeGuideSender) => handlers.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL)!(
+      { sender: requestSender } as never,
+      { requestId, payload: { startTimeMs: 0, durationMs: 60_000 } },
+    ) as Promise<GuideCancellationResult>;
+    const cancel = async (requestId: string, requestSender: FakeGuideSender) => await handlers.get(LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL)!(
+      { sender: requestSender } as never,
+      { requestId, payload: {} },
+    ) as GuideCancellationResult;
+
+    const first = get('guide-cap-first', sender);
+    const second = get('guide-cap-second', sender);
+    assert.equal(generationLoads, 2);
+    assert.equal(sender.destroyedListenerCount, 2);
+    assert.equal(activeTimers.size, 2);
+    await Promise.resolve();
+    assert.equal(presentationOperations.length, 2);
+
+    const rejected = await get('guide-cap-rejected', sender);
+    assert.equal(rejected.ok, false);
+    assert.equal(rejected.error?.code, 'GUIDE_VALIDATION_FAILED');
+    assert.equal(generationLoads, 2);
+    assert.equal(presentationOperations.length, 2);
+    assert.equal(sender.destroyedListenerCount, 2);
+    assert.equal(activeTimers.size, 2);
+
+    await Promise.resolve();
+    assert.equal(presentationOperations.length, 2);
+
+    const other = get('guide-cap-other-sender', otherSender);
+    assert.equal(generationLoads, 3);
+    assert.equal(otherSender.destroyedListenerCount, 1);
+    assert.equal(activeTimers.size, 3);
+    await Promise.resolve();
+    assert.equal(presentationOperations.length, 3);
+
+    assert.equal((await cancel('guide-cap-first', sender)).ok, true);
+    assert.equal((await first).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+    assert.equal(sender.destroyedListenerCount, 1);
+    assert.equal(activeTimers.size, 2);
+
+    const replacement = get('guide-cap-replacement', sender);
+    assert.equal(generationLoads, 4);
+    assert.equal(sender.destroyedListenerCount, 2);
+    assert.equal(activeTimers.size, 3);
+    await Promise.resolve();
+    assert.equal(presentationOperations.length, 4);
+
+    presentationOperations[1]?.resolve(publicPresentation());
+    assert.equal((await second).ok, true);
+    assert.equal(sender.destroyedListenerCount, 1);
+    assert.equal(activeTimers.size, 2);
+
+    const generationLoadsBeforeAdmission = generationLoads;
+    const afterCleanup = get('guide-cap-after-cleanup', sender);
+    assert.equal(generationLoads, generationLoadsBeforeAdmission + 1);
+    assert.equal(sender.destroyedListenerCount, 2);
+    assert.equal(activeTimers.size, 3);
+    await Promise.resolve();
+    assert.equal(presentationOperations.length, 5);
+
+    for (const [requestId, pending, requestSender] of [
+      ['guide-cap-replacement', replacement, sender],
+      ['guide-cap-after-cleanup', afterCleanup, sender],
+      ['guide-cap-other-sender', other, otherSender],
+    ] as const) {
+      assert.equal((await cancel(requestId, requestSender)).ok, true);
+      assert.equal((await pending).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+    }
+    assert.equal(sender.destroyedListenerCount, 0);
+    assert.equal(otherSender.destroyedListenerCount, 0);
+    assert.equal(activeTimers.size, 0);
+    assert.equal(timerSchedules, 5);
+  } finally {
+    await teardown?.();
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
+});
+
 test('Guide cancellation is sender-bound, aborts main-owned work, and settles safely', async () => {
   const handlers = new Map<string, (event: never, payload: unknown) => Promise<unknown> | unknown>();
   const sender = {};

@@ -211,8 +211,9 @@ test('guide artwork timeout is injectable, fast, and its failure remains redacte
   });
 });
 
-test('guide artwork transport cancels response bodies before early HTTP, MIME, and length failures', async () => {
+test('guide artwork transport cancels response bodies and aborts early HTTP, MIME, and length failures', async () => {
   const canceled: string[] = [];
+  const signals: Array<{ label: string; signal: AbortSignal }> = [];
   const response = (label: string, status: number, headers: Record<string, string>) => new Response(
     new ReadableStream<Uint8Array>({
       pull() { /* keep the body open until the transport cancels it */ },
@@ -225,13 +226,31 @@ test('guide artwork transport cancels response bodies before early HTTP, MIME, a
     response('mime', 200, { 'content-type': 'text/html' }),
     response('length', 200, { 'content-type': 'image/jpeg', 'content-length': '1500001' }),
   ];
-  const transport = new LivePlexTransport({ fetch: async () => responses.shift()! });
-  for (const locator of ['/library/metadata/1/thumb', '/library/metadata/2/thumb', '/library/metadata/3/thumb']) {
+  const labels = ['http', 'mime', 'length'] as const;
+  const transport = new LivePlexTransport({
+    fetch: async (_input, init) => {
+      const label = labels[signals.length];
+      if (label !== undefined && init?.signal !== undefined && init.signal !== null) {
+        signals.push({ label, signal: init.signal });
+      }
+      return responses.shift()!;
+    },
+  });
+  const scenarios = [
+    { locator: '/library/metadata/1/thumb', expectedCode: 'server-error' },
+    { locator: '/library/metadata/2/thumb', expectedCode: 'parse-error' },
+    { locator: '/library/metadata/3/thumb', expectedCode: 'parse-error' },
+  ] as const;
+  for (const { locator, expectedCode } of scenarios) {
     await assert.rejects(transport.fetchGuideArtwork({
       connection: connection(), token: capturedCredential, locator,
-    }), LivePlexTransportError);
+    }), (error: unknown) => error instanceof LivePlexTransportError && error.code === expectedCode);
   }
   assert.deepEqual(canceled, ['http', 'mime', 'length']);
+  assert.deepEqual(
+    signals.map(({ label, signal }) => [label, signal.aborted]),
+    [['http', true], ['mime', true], ['length', true]],
+  );
 });
 
 test('guide artwork failure does not await never-settling or rejecting response cleanup', async () => {

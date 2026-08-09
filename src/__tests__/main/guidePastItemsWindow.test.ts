@@ -139,7 +139,7 @@ test('main bound clamps the schedule request before content resolution and prese
     publicReferenceOwner: owner,
   });
   assert.equal(resolutions, 1);
-  // 2026-07-08T16:45:00Z / 12:45 EDT, 15-minute window -> 2026-07-08T16:30:00Z / 12:30 EDT.
+  // 2026-07-08T16:45:00Z minus 15 minutes floors to the epoch-aligned 16:30 UTC slot.
   const minimumStartTimeMs = 1_783_528_200_000;
   const windowEndTimeMs = minimumStartTimeMs + 2 * 60 * 60 * 1_000;
   assert.equal(value.minimumStartTimeMs, minimumStartTimeMs);
