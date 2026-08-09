@@ -26,8 +26,9 @@ Production Unit 5D lands at `81cf42c`, Unit 5E at `154fcfd`, Unit 5F at
 `3501fb8`, Unit 5G at `4946fb5`, and Guide focus-transition correction at
 `1e4a282`. Exact Guide presentation cancellation lands at `0ebaf2f`, global Now
 Watching projection at `8c30b1b`, and its captured-time/generation-currentness
-correction at `cf38e70`. WS5 application implementation is complete; Unit 5H
-proof/audit and Unit 5I closeout remain deferred to the Windows campaign.
+correction at `cf38e70`. WS5 application implementation is complete through
+Units 5A–5G; Unit 5H proof/audit and Unit 5I closeout remain deferred to the
+Windows campaign.
 WS6–WS9 remain unopened.
 Locally verifiable implementation advances in order before one consolidated
 Windows/native/manual/live/package campaign. Windows proof cannot implement or
@@ -372,8 +373,9 @@ remains `WS4-PROOF-03`, and packaged exit/teardown remains `WS4-PROOF-04`.
 RD-27, and RD-28 are unchanged. Exact `0258dbe` was reference-only, so the
 import ledger is unchanged.
 
-WS5 execution is locally complete through Unit 5D. The frozen plan checkpoint
-is `73ce570`; Unit 5A `46acf1f` owns secure expiring Guide artwork references,
+WS5 application implementation is locally complete through Units 5A–5G. The
+frozen plan checkpoint is `73ce570`; Unit 5A `46acf1f` owns secure expiring
+Guide artwork references,
 main-only Plex transport, focused-detail presentation, and Play-to-now; Unit 5B
 `6180815` owns versioned persisted library filters, strict preload/IPC
 vocabulary, bounded Guide pages, and focus-safe paging; Unit 5C `beeb5ef` owns
