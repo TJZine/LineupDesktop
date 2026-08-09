@@ -483,8 +483,18 @@ function createPreloadHarness(
   api: Record<string, { [method: string]: (...args: unknown[]) => Promise<unknown> }>;
   calls: PreloadInvokeCall[];
   input: (value: unknown) => unknown;
+  emit(channel: string, payload: unknown): void;
+  removals: Array<{
+    channel: string;
+    listener: (event: unknown, payload: unknown) => void;
+  }>;
 } {
   const calls: PreloadInvokeCall[] = [];
+  const listeners = new Map<string, Set<(event: unknown, payload: unknown) => void>>();
+  const removals: Array<{
+    channel: string;
+    listener: (event: unknown, payload: unknown) => void;
+  }> = [];
   let exposedApi: unknown = null;
   const input = (value: unknown) => JSON.parse(JSON.stringify(value)) as unknown;
   const channelGuardExports = evaluateChannelGuardModule();
@@ -550,8 +560,15 @@ function createPreloadHarness(
           calls.push({ channel, request });
           return invoke(channel, request, input);
         },
-        on: () => undefined,
-        removeListener: () => undefined,
+        on: (channel: string, listener: (event: unknown, payload: unknown) => void) => {
+          const channelListeners = listeners.get(channel) ?? new Set();
+          channelListeners.add(listener);
+          listeners.set(channel, channelListeners);
+        },
+        removeListener: (channel: string, listener: (event: unknown, payload: unknown) => void) => {
+          removals.push({ channel, listener });
+          listeners.get(channel)?.delete(listener);
+        },
       },
     };
   };
@@ -563,6 +580,12 @@ function createPreloadHarness(
     api: exposedApi as Record<string, { [method: string]: (...args: unknown[]) => Promise<unknown> }>,
     calls,
     input,
+    emit(channel, payload) {
+      for (const listener of listeners.get(channel) ?? []) {
+        listener({}, payload);
+      }
+    },
+    removals,
   };
 }
 
@@ -1466,6 +1489,30 @@ test('preload guard vocabulary matches contract vocabulary', () => {
     [...new Set(PLEX_FORBIDDEN_RENDERER_FIELD_KEYS)].sort(),
   );
   assert.equal(preloadPlexForbiddenKeys.length, new Set(preloadPlexForbiddenKeys).size);
+});
+
+test('preload media-input subscription validates delivery and removes its exact wrapper', () => {
+  const harness = createPreloadHarness(() => assert.fail('media input must not invoke IPC'));
+  const onMediaInput = harness.api.shell?.onMediaInput as unknown as (
+    listener: unknown,
+  ) => () => void;
+  assert.throws(
+    () => onMediaInput(null),
+    { name: 'TypeError', message: 'Media input listener must be a function.' },
+  );
+
+  const delivered: unknown[] = [];
+  const unsubscribe = onMediaInput((input: unknown) => delivered.push(input));
+  harness.emit(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, 'mediaPlay');
+  harness.emit(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, 'mediaStop');
+  harness.emit(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, { input: 'mediaPause' });
+  assert.deepEqual(delivered, ['mediaPlay']);
+
+  unsubscribe();
+  assert.equal(harness.removals.length, 1);
+  assert.equal(harness.removals[0]?.channel, LINEUP_SHELL_MEDIA_INPUT_CHANNEL);
+  harness.emit(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, 'mediaPause');
+  assert.deepEqual(delivered, ['mediaPlay']);
 });
 
 test('preload Plex bridge validates invoke results before returning them', async () => {
