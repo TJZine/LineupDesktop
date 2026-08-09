@@ -8,9 +8,10 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const programPath = path.join(repoRoot, 'src/native-helper/Lineup.NativePlayerHost/Program.cs');
 
 function methodBody(source, signature) {
-  const signatureIndex = source.indexOf(signature);
+  const maskedSource = maskCSharpCommentOrLiteralContent(source);
+  const signatureIndex = maskedSource.indexOf(signature);
   assert.notEqual(signatureIndex, -1, `missing method: ${signature}`);
-  const bodyStart = source.indexOf('{', signatureIndex + signature.length);
+  const bodyStart = maskedSource.indexOf('{', signatureIndex + signature.length);
   assert.notEqual(bodyStart, -1, `missing method body: ${signature}`);
   let depth = 0;
   for (let index = bodyStart; index < source.length; index += 1) {
@@ -24,6 +25,24 @@ function methodBody(source, signature) {
     if (depth === 0) return source.slice(bodyStart + 1, index);
   }
   assert.fail(`unterminated method body: ${signature}`);
+}
+
+function maskCSharpCommentOrLiteralContent(source) {
+  const masked = source.split('');
+  for (let index = 0; index < source.length;) {
+    const skippedTo = skipCSharpCommentOrLiteral(source, index);
+    if (skippedTo === null) {
+      index += 1;
+      continue;
+    }
+    for (let maskedIndex = index; maskedIndex < skippedTo; maskedIndex += 1) {
+      if (masked[maskedIndex] !== '\n' && masked[maskedIndex] !== '\r') {
+        masked[maskedIndex] = ' ';
+      }
+    }
+    index = skippedTo;
+  }
+  return masked.join('');
 }
 
 function skipCSharpCommentOrLiteral(source, index) {
@@ -129,11 +148,13 @@ function assertUniqueOrdered(source, earlier, later) {
 }
 
 function findOccurrences(source, value) {
+  const maskedSource = maskCSharpCommentOrLiteralContent(source);
+  const maskedValue = maskCSharpCommentOrLiteralContent(value);
   const indexes = [];
-  let index = source.indexOf(value);
+  let index = maskedSource.indexOf(maskedValue);
   while (index !== -1) {
     indexes.push(index);
-    index = source.indexOf(value, index + value.length);
+    index = maskedSource.indexOf(maskedValue, index + maskedValue.length);
   }
   return indexes;
 }
@@ -156,8 +177,11 @@ private static void Example()
     }
     string interpolated = $"{Format("}")}";
     char brace = '}';
+    string callText = "Run(); Finish();";
     // }
+    // Run();
     /* { } */
+    /* Finish(); */
     Finish();
 }
 `;
@@ -166,6 +190,24 @@ private static void Example()
   assertUniqueOrdered(body, 'Run()', 'Finish()');
   assert.throws(
     () => assertUniqueOrdered(`${body}\nRun();`, 'Run()', 'Finish()'),
+    /expected exactly one earlier statement/u,
+  );
+
+  const ignoredSignature = String.raw`
+// private static void Ignored()
+string literal = "private static void Ignored() { Run(); }";
+`;
+  assert.throws(
+    () => methodBody(ignoredSignature, 'private static void Ignored()'),
+    /missing method/u,
+  );
+
+  const ignoredCalls = String.raw`
+// Run()
+string literal = "Finish()";
+`;
+  assert.throws(
+    () => assertUniqueOrdered(ignoredCalls, 'Run()', 'Finish()'),
     /expected exactly one earlier statement/u,
   );
 });
