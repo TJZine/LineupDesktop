@@ -98,7 +98,7 @@ let activeSettingsCategory: SettingsSectionId = 'audio-subtitles', activeSetupSt
 let pendingGuideFocusId: string | null = null, launchActive = true;
 let startupProfilePickerHandled = false;
 const focusRegistry = new FocusRegistry(); let focusState: FocusState;
-let guidePresentationPolling: ReturnType<typeof createGuidePresentationPolling>;
+let guidePresentationPolling: ReturnType<typeof createGuidePresentationPolling> | undefined;
 const settingsGuideDensitySettlementOwner = createSettingsGuideDensitySettlementOwner({
   getCurrentDensity: () => workflowState.settingsDraft.guideDensity,
   getPolling: () => guidePresentationPolling,
@@ -117,8 +117,7 @@ const settingsRuntime = createSettingsRuntime({
         workflowState = applyWorkflowSettingsValues(workflowState, state.values, state.capabilities);
       },
     );
-    const { densityChanged } = densitySettlement;
-    if (densityChanged || layoutChanged) invalidateGuideLayoutMetrics(dom.epgGridElement);
+    if (layoutChanged) invalidateGuideLayoutMetrics(dom.epgGridElement);
     if (pastItemsWindowChanged) {
       guidePresentationPolling?.notePastItemsWindowChange();
       retainGuideProgramFocusIntent();
@@ -132,8 +131,9 @@ const settingsRuntime = createSettingsRuntime({
       const activeRoute = workflowState.routeState.activeRoute;
       renderApp();
       void densitySettlement.finish(false);
-      if (aggressivePreloadChanged && guidePresentationPolling !== undefined && (activeRoute === 'guide' || activeRoute === 'player')) {
-        void guidePresentationPolling.refresh('guide-aggressive-preload-change', {
+      const polling = guidePresentationPolling;
+      if (aggressivePreloadChanged && polling !== undefined && (activeRoute === 'guide' || activeRoute === 'player')) {
+        void polling.refresh('guide-aggressive-preload-change', {
           showLoading: activeRoute === 'guide',
           allowPlayerRoute: activeRoute === 'player',
           invalidateCache: true,
@@ -230,7 +230,12 @@ const playerOverlayController = createPlayerOverlayController({
   },
   openGuide: () => activateRoute('guide'),
   refreshChannelStatus: () => channelController.loadStatus(),
-  refreshGuidePresentation: () => guidePresentationPolling.refresh('player-tune-success', { showLoading: false, allowPlayerRoute: true }),
+  refreshGuidePresentation: () => {
+    const polling = guidePresentationPolling;
+    return polling === undefined
+      ? Promise.resolve()
+      : polling.refresh('player-tune-success', { showLoading: false, allowPlayerRoute: true });
+  },
   recordDiagnostic: (operation, message) => recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'player.dispatch', message, { operation, route: workflowState.routeState.activeRoute }),
   recovery: playerErrorRecoveryController,
   nowPlayingAutoHideMs: workflowState.settingsDraft.nowPlayingAutoHideMs,
@@ -372,7 +377,7 @@ const playerBridgeSubscription = subscribePlayerBridge({
   },
   render: renderApp,
 });
-guidePresentationPolling = createGuidePresentationPolling({
+const initializedGuidePresentationPolling = createGuidePresentationPolling({
   guide: window.lineupDesktop.guide,
   host: window,
   getActiveRoute: () => workflowState.routeState.activeRoute,
@@ -449,6 +454,7 @@ guidePresentationPolling = createGuidePresentationPolling({
     else dom.epgGridElement?.removeAttribute('aria-busy');
   },
 });
+guidePresentationPolling = initializedGuidePresentationPolling;
 guideFilterController = createGuideLibraryFilterController({
   guide: window.lineupDesktop.guide,
   getActiveRoute: () => workflowState.routeState.activeRoute,
@@ -459,8 +465,8 @@ guideFilterController = createGuideLibraryFilterController({
       guidePresentation: { ...workflowState.guidePresentation, libraryFilter },
     };
   },
-  refresh: () => { void guidePresentationPolling.refresh('guide-library-filter', { channelOffset: 0, showLoading: false, invalidateCache: true, cancelActive: true }); },
-  cancelPage: () => guidePresentationPolling.cancelPage(),
+  refresh: () => { void initializedGuidePresentationPolling.refresh('guide-library-filter', { channelOffset: 0, showLoading: false, invalidateCache: true, cancelActive: true }); },
+  cancelPage: () => initializedGuidePresentationPolling.cancelPage(),
   handleFailure: (message) => {
     workflowState = { ...workflowState, epg: setEpgTuneError(workflowState.epg, message) };
   },
@@ -491,7 +497,7 @@ attachNavigationInputRuntime(navigationLifecycle, {
     playerBridgeSubscription.unsubscribe();
     playerInputCommandController.cleanup();
     sleepTimerController.cleanup();
-    guidePresentationPolling.stop();
+    initializedGuidePresentationPolling.stop();
     if (guideVirtualFrame !== null) window.cancelAnimationFrame(guideVirtualFrame);
     guideVirtualFrame = null;
     dom.epgGridElement?.removeEventListener('scroll', scheduleGuideVirtualReconcile);
@@ -603,7 +609,7 @@ async function continueAfterAudioSetup(): Promise<void> {
   if (stage === null) return;
   activateRoute('channelSetup');
 }
-guidePresentationPolling.start();
+initializedGuidePresentationPolling.start();
 void customChannelController.loadSnapshot();
 
 function renderStatus(event: ShellStatusEvent): void {
@@ -638,7 +644,7 @@ function activateRoute(route: AppRouteId, enterChannelSetup = true): boolean {
     guideFilterController?.cancel();
     pendingGuideFocusId = null;
   }
-  guidePresentationPolling.reconcile(previousRoute, workflowState.routeState.activeRoute);
+  initializedGuidePresentationPolling.reconcile(previousRoute, workflowState.routeState.activeRoute);
   focusState = focusRegistry.focusRoute(focusState, route).state;
   renderApp();
   if (enterChannelSetup && previousRoute !== route && route === 'channelSetup') {
@@ -679,7 +685,7 @@ async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
       guideFilterController?.cancel();
       pendingGuideFocusId = null;
     }
-    guidePresentationPolling.reconcile(previousRoute, nextRoute);
+    initializedGuidePresentationPolling.reconcile(previousRoute, nextRoute);
     focusState = focusRegistry.focusRoute(focusState, nextRoute).state;
     void settingsPlaybackLifecycle.routeChanged(previousRoute, nextRoute, workflowState.settingsDraft.keepPlaybackRunningInSettings);
   }
@@ -723,7 +729,7 @@ function applyEpgAction(action: EpgActionId): void {
   workflowState = applyWorkflowEpgAction(workflowState, action);
   renderApp();
   if (workflowState.epg.windowStartMs !== previousWindowStartMs) {
-    void guidePresentationPolling.refresh('epg-window-change', { showLoading: true });
+    void initializedGuidePresentationPolling.refresh('epg-window-change', { showLoading: true });
   }
 }
 
@@ -741,7 +747,7 @@ function handleGuideDirection(direction: 'up' | 'down' | 'left' | 'right'): bool
   focusState = advanceGuideProgramFocusIntent(focusState, selectedFocusId);
   renderApp();
   if (movement.result.windowChanged) {
-    void guidePresentationPolling.refresh('epg-window-change', { showLoading: true });
+    void initializedGuidePresentationPolling.refresh('epg-window-change', { showLoading: true });
   } else {
     if (selectedFocusId !== undefined) restoreFocusTarget(selectedFocusId);
   }
@@ -753,7 +759,7 @@ function handleGuidePage(offset: -5 | 5): boolean {
       !focusState.activeId?.startsWith('guide-program-')) {
     return false;
   }
-  const result = guidePresentationPolling.navigatePage({
+  const result = initializedGuidePresentationPolling.navigatePage({
     state: workflowState.epg,
     presentation: workflowState.guidePresentation,
     offset,
@@ -784,7 +790,7 @@ function handleGuideMediaPlay(): boolean {
   focusState = advanceGuideProgramFocusIntent(focusState, selectedFocusId);
   renderApp();
   if (nextEpg.windowStartMs !== previousWindowStartMs) {
-    void guidePresentationPolling.refresh('guide-media-play-now', { showLoading: true });
+    void initializedGuidePresentationPolling.refresh('guide-media-play-now', { showLoading: true });
   } else {
     if (selectedFocusId !== undefined) restoreFocusTarget(selectedFocusId);
   }
@@ -801,7 +807,7 @@ function applyGuideAction(action: GuideActionId): void {
       return;
     case 'refresh':
     case 'retry':
-      void guidePresentationPolling.refresh(`guide-${action}`, { showLoading: true });
+      void initializedGuidePresentationPolling.refresh(`guide-${action}`, { showLoading: true });
   }
 }
 
@@ -908,7 +914,7 @@ async function applyCustomChannelAction(
     selectedSourceId: resolveLiveSelectedPlexSectionId(plexController.getState()),
     controller: customChannelController,
     refreshChannels: () => { void channelController.loadStatus(); },
-    refreshGuide: () => { void guidePresentationPolling.refresh('custom-channel-change', { showLoading: false, invalidateCache: true }); },
+    refreshGuide: () => { void initializedGuidePresentationPolling.refresh('custom-channel-change', { showLoading: false, invalidateCache: true }); },
     render: renderApp,
     flow: {
       openEditor: (focusId) => stagedSetupController.openCustomEditor(focusId),

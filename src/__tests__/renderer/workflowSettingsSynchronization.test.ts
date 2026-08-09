@@ -7,6 +7,7 @@ import {
   applyWorkflowSettingsValues,
   createWorkflowState,
 } from '../../renderer/workflow.js';
+import { computeProvisionalEpgMinimumStartTimeMs } from '../../renderer/epg.js';
 
 const FIXED_NOW_MS = 1_783_512_840_000;
 
@@ -30,6 +31,26 @@ test('settings action and persisted-values synchronization share the fixed EPG c
   assert.equal(actionState.epg.minimumStartTimeMs, 1_783_512_000_000);
   assert.equal(actionState.epg.windowStartMs, 1_783_512_000_000);
   assert.deepEqual(actionState.epg, valuesState.epg);
+});
+
+test('workflow startup uses its fallback clock unless the Guide captures a clock value', () => {
+  const fallbackNowMs = FIXED_NOW_MS;
+  const fallbackState = createWorkflowState('settings', { channels: [], nowWatching: null }, fallbackNowMs);
+  assert.equal(
+    fallbackState.epg.minimumStartTimeMs,
+    computeProvisionalEpgMinimumStartTimeMs(fallbackNowMs, 'auto'),
+  );
+
+  const capturedNowMs = FIXED_NOW_MS + 60 * 60 * 1_000;
+  const capturedState = createWorkflowState(
+    'settings',
+    { channels: [], nowWatching: null, nowMs: capturedNowMs },
+    fallbackNowMs,
+  );
+  assert.equal(
+    capturedState.epg.minimumStartTimeMs,
+    computeProvisionalEpgMinimumStartTimeMs(capturedNowMs, 'auto'),
+  );
 });
 
 test('settings synchronization defaults to the production clock without replacing Date.now', () => {

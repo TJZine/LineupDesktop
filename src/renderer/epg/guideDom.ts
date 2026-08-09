@@ -17,6 +17,8 @@ export interface CellPosition {
 }
 
 const GUIDE_TRACK_UNITS = 1000;
+// CSS rows are 108px tall; the ~12px inter-row gap yields the 120px outer fallback.
+const GUIDE_FALLBACK_ROW_OUTER_SIZE = 120;
 const failedArtwork = new WeakMap<HTMLImageElement, Readonly<{
   presentationGeneration: number;
   refId: string;
@@ -398,7 +400,7 @@ export function renderEpgGuideDom(
       actionError.textContent = view.guide.tuneError;
       shell.append(actionError);
     }
-    const metricsKey = `${settings.guideDensity}:${settings.guideLayout}`;
+    const metricsKey = settings.guideLayout;
     const cachedMetrics = guideLayoutMetrics.get(dom.epgGridElement);
     const canReuse = cachedMetrics?.key === metricsKey && cachedMetrics.measured;
     const measuredRows = !canReuse && typeof dom.epgGridElement.querySelectorAll === 'function'
@@ -423,7 +425,7 @@ export function renderEpgGuideDom(
         ? measuredStride
         : hasMeasurement && computedGap !== null
           ? (measuredRow ?? 0) + computedGap
-          : 120;
+          : GUIDE_FALLBACK_ROW_OUTER_SIZE;
     const rowGapSize = canReuse
       ? cachedMetrics.rowGapSize
       : hasMeasurement ? Math.max(0, rowOuterSize - (measuredRow ?? rowOuterSize)) : 0;

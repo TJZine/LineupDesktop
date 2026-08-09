@@ -88,6 +88,7 @@ test('renderer provisional bounds follow slot rollover and local midnight under 
   const previousTimezone = env.TZ;
   try {
     env.TZ = 'America/New_York';
+    assert.equal(Intl.DateTimeFormat().resolvedOptions().timeZone, 'America/New_York');
     const cases = [
       // 2026-07-08T12:14:00Z / 08:14 EDT -> 2026-07-08T11:30:00Z / 07:30 EDT.
       { nowMs: 1_783_512_840_000, setting: '15' as const, expected: 1_783_510_200_000 },

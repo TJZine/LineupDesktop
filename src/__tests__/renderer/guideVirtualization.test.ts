@@ -196,18 +196,18 @@ test('Desktop cache identities and LRU protect current/focused entries within bo
     [AGGRESSIVE_GUIDE_PRELOAD_PROFILE, 12],
   ] as const) {
     const cache = new GuidePresentationLru<string>(profile);
-    cache.set({ key: 'focused', value: 'focused', programCount: 500, focused: true, current: false });
-    cache.set({ key: 'current', value: 'current', programCount: 500, focused: false, current: true });
+    cache.set({ key: 'focused', value: 'focused', fetchedAtMs: 0, programCount: 500, focused: true, current: false });
+    cache.set({ key: 'current', value: 'current', fetchedAtMs: 0, programCount: 500, focused: false, current: true });
     for (let index = 0; index < expectedEntries + 4; index += 1) {
-      cache.set({ key: `buffer-${String(index)}`, value: `buffer-${String(index)}`, programCount: 500, focused: false, current: false });
+      cache.set({ key: `buffer-${String(index)}`, value: `buffer-${String(index)}`, fetchedAtMs: 0, programCount: 500, focused: false, current: false });
     }
     assert.equal(cache.get('buffer-0'), null, 'oldest unprotected entry is evicted at the entry cap');
     assert.equal(cache.get(`buffer-${String(expectedEntries + 3)}`), `buffer-${String(expectedEntries + 3)}`);
     assert.equal(cache.get('focused'), 'focused');
     assert.equal(cache.get('current'), 'current');
-    cache.set({ key: 'replacement-focus', value: 'replacement-focus', programCount: 500, focused: true, current: false });
+    cache.set({ key: 'replacement-focus', value: 'replacement-focus', fetchedAtMs: 0, programCount: 500, focused: true, current: false });
     assert.equal(cache.get('replacement-focus'), 'replacement-focus');
-    cache.set({ key: 'program-overflow', value: 'program-overflow', programCount: profile.maximumPrograms + 1, focused: false, current: false });
+    cache.set({ key: 'program-overflow', value: 'program-overflow', fetchedAtMs: 0, programCount: profile.maximumPrograms + 1, focused: false, current: false });
     assert.equal(cache.get('program-overflow'), null, 'an unprotected over-budget entry is evicted at the program cap');
     assert.equal(cache.get('replacement-focus'), 'replacement-focus');
     assert.equal(cache.get('current'), 'current');
@@ -215,6 +215,47 @@ test('Desktop cache identities and LRU protect current/focused entries within bo
     assert.equal(cache.get('focused'), null);
     assert.equal(cache.get('current'), null);
   }
+});
+
+test('Guide cache freshness is strict before the poll interval and removes entries at the boundary', () => {
+  const cache = new GuidePresentationLru<string>({
+    ...DEFAULT_GUIDE_PRELOAD_PROFILE,
+    maximumEntries: 12,
+    maximumPrograms: 6_000,
+  });
+  cache.set({
+    key: 'stale-candidate',
+    value: 'cached',
+    fetchedAtMs: 1_000,
+    programCount: 6_000,
+    focused: false,
+    current: false,
+  });
+
+  assert.equal(cache.get(
+    'stale-candidate',
+    { focused: false, current: false },
+    { nowMs: 15_999, maxAgeMs: 15_000 },
+  ), 'cached');
+  assert.equal(cache.get(
+    'stale-candidate',
+    { focused: false, current: false },
+    { nowMs: 16_000, maxAgeMs: 15_000 },
+  ), null);
+
+  cache.set({
+    key: 'replacement',
+    value: 'fresh',
+    fetchedAtMs: 16_000,
+    programCount: 6_000,
+    focused: false,
+    current: false,
+  });
+  assert.equal(cache.get(
+    'replacement',
+    { focused: false, current: false },
+    { nowMs: 16_000, maxAgeMs: 15_000 },
+  ), 'fresh');
 });
 
 function fixtureRows(): readonly EpgChannelRowViewModel[] {

@@ -120,9 +120,16 @@ export function projectGuideVirtualRange(input: GuideVirtualRangeInput): GuideVi
 export interface GuideCacheEntry<T> {
   readonly key: string;
   readonly value: T;
+  /** Epoch timestamp captured when the entry's response was accepted. */
+  readonly fetchedAtMs: number;
   readonly programCount: number;
   readonly focused: boolean;
   readonly current: boolean;
+}
+
+export interface GuideCacheFreshness {
+  readonly nowMs: number;
+  readonly maxAgeMs: number;
 }
 
 export class GuidePresentationLru<T> {
@@ -131,9 +138,17 @@ export class GuidePresentationLru<T> {
 
   constructor(private readonly profile: GuidePreloadProfile) {}
 
-  get(key: string, protection: Readonly<{ focused: boolean; current: boolean }> = { focused: false, current: false }): T | null {
+  get(
+    key: string,
+    protection: Readonly<{ focused: boolean; current: boolean }> = { focused: false, current: false },
+    freshness?: GuideCacheFreshness,
+  ): T | null {
     const entry = this.#entries.get(key);
     if (entry === undefined) return null;
+    if (freshness !== undefined && freshness.nowMs - entry.fetchedAtMs >= freshness.maxAgeMs) {
+      this.#delete(key);
+      return null;
+    }
     this.set({
       ...entry,
       focused: entry.focused || protection.focused,
@@ -167,6 +182,13 @@ export class GuidePresentationLru<T> {
     this.#programCount = 0;
   }
 
+  #delete(key: string): void {
+    const entry = this.#entries.get(key);
+    if (entry === undefined) return;
+    this.#entries.delete(key);
+    this.#programCount -= entry.programCount;
+  }
+
   #evict(): void {
     while (this.#entries.size > this.profile.maximumEntries || this.#programCount > this.profile.maximumPrograms) {
       const candidates = [...this.#entries.values()].filter((entry) => !entry.focused && !entry.current);
@@ -174,12 +196,10 @@ export class GuidePresentationLru<T> {
       if (victim === undefined) {
         const newest = [...this.#entries.values()].at(-1);
         if (newest === undefined) break;
-        this.#entries.delete(newest.key);
-        this.#programCount -= newest.programCount;
+        this.#delete(newest.key);
         continue;
       }
-      this.#entries.delete(victim.key);
-      this.#programCount -= victim.programCount;
+      this.#delete(victim.key);
     }
   }
 }

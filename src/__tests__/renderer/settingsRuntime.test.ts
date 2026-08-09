@@ -554,7 +554,9 @@ test('settings runtime coalesces rapid past-items-window changes into one latest
   const second = runtime.replaceValues((values) => ({ ...values, pastItemsWindow: '15' }));
   assert.equal(runtime.getState().values.pastItemsWindow, '15');
   assert.equal(replacements.length, 1);
-  firstReplace.resolve(desktopSettingsSuccess('settings-replace-1', snapshot(2, { pastItemsWindow: '0' })));
+  const firstRequest = replacements[0];
+  assert.ok(firstRequest);
+  firstReplace.resolve(desktopSettingsSuccess(firstRequest.requestId, snapshot(2, { pastItemsWindow: '0' })));
   await Promise.all([first, second]);
   assert.equal(replacements.length, 2);
   assert.equal(replacements[1]?.values.pastItemsWindow, '15');

@@ -9,6 +9,7 @@ import {
   normalizeDesktopSettingsReplaceValues,
 } from '../../contracts/settings.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
+import type { GuidePresentationSource } from '../../contracts/guide.js';
 import type { PlayerEvent, PlayerSnapshot } from '../../contracts/player.js';
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import {
@@ -649,61 +650,72 @@ test('Settings density settlement drives Guide and Player polling through optimi
   assert.ok(states.some((state) => state.errorCode === 'storage-unavailable' && !state.saving));
 });
 
-test('Player first result adopts the authoritative Guide bound before the Player-to-Guide route refresh', async () => {
+test('Player first result clamps only to a newer bound and otherwise preserves the Guide window before route refresh', async () => {
   const base = 1_778_619_600_000;
-  const authoritative: EpgPresentationSource = {
-    channels: [{
-      id: 'channel-1', number: '1', name: 'One', programs: [{
-        id: 'program-1', title: 'Program', subtitle: '', description: '', showTitle: '', episodeLabel: '',
-        rating: '', quality: [], genres: [], startsAtMs: base, endsAtMs: base + EPG_SLOT_DURATION_MS, artwork: null,
+  const scenarios = [
+    { label: 'clamp', initialWindowStartMs: base - EPG_SLOT_DURATION_MS, programDurationSlots: 1, expectedWindowStartMs: base },
+    { label: 'preserve', initialWindowStartMs: base + EPG_SLOT_DURATION_MS, programDurationSlots: 8, expectedWindowStartMs: base + EPG_SLOT_DURATION_MS },
+  ] as const;
+
+  for (const scenario of scenarios) {
+    const authoritative: EpgPresentationSource & GuidePresentationSource = {
+      channels: [{
+        id: 'channel-1', number: '1', name: 'One', programs: [{
+          id: 'program-1', title: 'Program', subtitle: '', description: '', showTitle: '', episodeLabel: '',
+          rating: '', quality: [], genres: [], startsAtMs: base,
+          endsAtMs: base + scenario.programDurationSlots * EPG_SLOT_DURATION_MS, artwork: null,
+        }],
       }],
-    }],
-    nowWatching: null,
-    nowMs: base,
-    minimumStartTimeMs: base,
-    channelWindow: { offset: 0, total: 1 },
-    libraryFilter: { scopeToken: 'scope', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'ready' },
-  };
-  let activeRoute: 'player' | 'guide' = 'player';
-  let state = createEpgState({ channels: [], nowWatching: null, nowMs: base - EPG_SLOT_DURATION_MS }, 0, 'compact');
-  const requestStarts: number[] = [];
-  const polling = createGuidePresentationPolling({
-    guide: {
+      nowWatching: null,
+      nowMs: base,
+      minimumStartTimeMs: base,
+      channelWindow: { offset: 0, total: 1 },
+      libraryFilter: { scopeToken: 'scope', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'ready' },
+    };
+    let activeRoute: 'player' | 'guide' = 'player';
+    let state = createEpgState({ channels: [], nowWatching: null, nowMs: scenario.initialWindowStartMs }, 0, 'compact');
+    const requestStarts: number[] = [];
+    const guide = {
       getPresentation: async (request: { startTimeMs: number }) => {
         requestStarts.push(request.startTimeMs);
-        return { ok: true, requestId: `player-guide-${requestStarts.length}`, value: authoritative };
+        return { ok: true, requestId: `player-guide-${scenario.label}-${requestStarts.length}`, value: authoritative };
       },
       cancelPresentation: async () => undefined,
-    } as unknown as LineupDesktopPreloadApi['guide'],
-    host: createNoopIntervalHost(),
-    getActiveRoute: () => activeRoute,
-    getWindowStartMs: () => state.windowStartMs,
-    getGuideDensity: () => state.guideDensity,
-    getNowMs: () => base - EPG_SLOT_DURATION_MS,
-    setLoading: (generation) => { state = { ...state, presentationState: 'loading', presentationGeneration: generation }; },
-    applyPresentation: (presentation, generation, _target, effectiveStartTimeMs) => {
-      state = settleEpgPresentation(state, presentation, generation, _target, false, 'compact', effectiveStartTimeMs).state;
-    },
-    applyPlayerPresentation: (presentation, generation, effectiveStartTimeMs) => {
-      state = settleEpgPresentation(state, presentation, generation, null, false, 'compact', effectiveStartTimeMs).state;
-    },
-    handleFailure: () => undefined,
-  });
+      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+    } satisfies LineupDesktopPreloadApi['guide'];
+    const polling = createGuidePresentationPolling({
+      guide,
+      host: createNoopIntervalHost(),
+      getActiveRoute: () => activeRoute,
+      getWindowStartMs: () => state.windowStartMs,
+      getGuideDensity: () => state.guideDensity,
+      getNowMs: () => base - EPG_SLOT_DURATION_MS,
+      setLoading: (generation) => { state = { ...state, presentationState: 'loading', presentationGeneration: generation }; },
+      applyPresentation: (presentation, generation, _target, effectiveStartTimeMs) => {
+        state = settleEpgPresentation(state, presentation, generation, _target, false, 'compact', effectiveStartTimeMs).state;
+      },
+      applyPlayerPresentation: (presentation, generation, effectiveStartTimeMs) => {
+        state = settleEpgPresentation(state, presentation, generation, null, false, 'compact', effectiveStartTimeMs).state;
+      },
+      handleFailure: () => undefined,
+    });
 
-  await polling.refresh('player-first-result', { allowPlayerRoute: true });
-  assert.deepEqual(requestStarts, [base - EPG_SLOT_DURATION_MS - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs]);
-  assert.equal(state.minimumStartTimeMs, base);
-  assert.equal(state.windowStartMs, base);
+    await polling.refresh('player-first-result', { allowPlayerRoute: true });
+    assert.deepEqual(requestStarts, [base - EPG_SLOT_DURATION_MS - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs], scenario.label);
+    assert.equal(state.minimumStartTimeMs, base, scenario.label);
+    assert.equal(state.windowStartMs, scenario.expectedWindowStartMs, scenario.label);
 
-  activeRoute = 'guide';
-  polling.reconcile('player', 'guide');
-  await settleAsyncWork();
-  assert.deepEqual(requestStarts, [
-    base - EPG_SLOT_DURATION_MS - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
-    base - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
-  ]);
-  assert.equal(state.minimumStartTimeMs, base);
-  assert.equal(state.windowStartMs, base);
+    activeRoute = 'guide';
+    polling.reconcile('player', 'guide');
+    await settleAsyncWork();
+    assert.deepEqual(requestStarts, [
+      base - EPG_SLOT_DURATION_MS - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+      scenario.expectedWindowStartMs - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+    ], scenario.label);
+    assert.equal(state.minimumStartTimeMs, base, scenario.label);
+    assert.equal(state.windowStartMs, scenario.expectedWindowStartMs, scenario.label);
+    polling.stop();
+  }
 });
 
 test('shell controller rejects stale capabilities and exposes recoverable safe startup failure', async () => {

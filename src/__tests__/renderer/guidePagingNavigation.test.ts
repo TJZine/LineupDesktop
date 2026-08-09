@@ -12,6 +12,7 @@ import {
   createGuidePresentationPolling,
   type GuidePresentationPollingOptions,
 } from '../../renderer/guidePresentationPolling.js';
+import { DEFAULT_GUIDE_PRELOAD_PROFILE } from '../../renderer/guideVirtualization.js';
 import type { GuideIpcResult, GuidePresentationSource } from '../../contracts/guide.js';
 
 test('Guide Page navigation keeps ±5 local, crosses pages, replaces one target, and clamps boundaries', () => {
@@ -86,7 +87,7 @@ test('Guide paging owner binds focus to its exact request and retains last valid
   });
   const success = polling.requestPage({ targetGlobalIndex: 12, scopeToken: 'scope', channelOffset: 10 });
   assert.deepEqual(busy, [true]);
-  assert.deepEqual(channelLimits, [12]);
+  assert.deepEqual(channelLimits, [DEFAULT_GUIDE_PRELOAD_PROFILE.channelLimit]);
   requests[0]?.resolve(okPresentation(EPG_CHANNEL_PAGE_SIZE, 10, 30, 'scope'));
   await success;
   assert.deepEqual(applied, [{ offset: 10, target: 12 }]);

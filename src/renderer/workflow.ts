@@ -218,12 +218,13 @@ const ROUTE_COPY = {
 export function createWorkflowState(
   initialRoute: AppRouteId = 'player',
   guidePresentation: EpgPresentationSource = EMPTY_EPG_PRESENTATION_SOURCE,
+  nowMs = Date.now(),
 ): WorkflowState {
   const settingsDraft = createSettingsDraftState();
   const initialEpg = setEpgPastItemsWindow(
     createEpgState(guidePresentation, 0, settingsDraft.guideDensity),
     settingsDraft.pastItemsWindow,
-    guidePresentation.nowMs ?? Date.now(),
+    guidePresentation.nowMs ?? nowMs,
     guidePresentation,
   );
   return {

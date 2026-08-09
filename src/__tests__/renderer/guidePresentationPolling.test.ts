@@ -96,7 +96,9 @@ test('Guide polling requests exactly the density duration', async () => {
       durations.push(input.durationMs);
       return result(`request-${String(durations.length)}`);
     },
-  } as unknown as LineupDesktopPreloadApi['guide'];
+    cancelPresentation: async () => undefined,
+    setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+  } satisfies LineupDesktopPreloadApi['guide'];
   const polling = createGuidePresentationPolling(createOptions(
     guide,
     () => density,
@@ -355,6 +357,47 @@ test('cache invalidation requires explicit intent instead of diagnostic source l
   controller.stop();
 });
 
+test('page/window cache entries expire at the poll interval and refetch on a stale miss', async () => {
+  let nowMs = 1_000;
+  let requests = 0;
+  let applied = 0;
+  const guide = {
+    getPresentation: async () => {
+      requests += 1;
+      return result(`freshness-${String(requests)}`);
+    },
+    cancelPresentation: async () => undefined,
+    setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+  } satisfies LineupDesktopPreloadApi['guide'];
+  const controller = createGuidePresentationPolling({
+    guide,
+    host: host(),
+    getActiveRoute: () => 'guide',
+    getWindowStartMs: () => 0,
+    getGuideDensity: () => 'compact',
+    getCacheIdentity: () => 'identity',
+    getCacheScopeToken: () => 'scope',
+    getNowMs: () => nowMs,
+    setLoading: () => undefined,
+    applyPresentation: () => { applied += 1; },
+    handleFailure: () => undefined,
+  });
+
+  await controller.refresh('foreground');
+  assert.equal(requests, 1);
+
+  nowMs += 14_999;
+  await controller.refresh('epg-window-change');
+  assert.equal(requests, 1, 'an entry younger than one poll interval is reused');
+  assert.equal(applied, 2);
+
+  nowMs += 1;
+  await controller.refresh('epg-window-change');
+  assert.equal(requests, 2, 'an entry at the poll interval is removed and refetched');
+  assert.equal(applied, 3);
+  controller.stop();
+});
+
 test('preload profile replacement swaps the cache and discards stale warm candidates', async () => {
   let aggressive = true;
   const idle: Array<() => void> = [];
@@ -516,7 +559,9 @@ test('startup density change during loading latches one compact refetch after st
       requests.push({ durationMs: input.durationMs, deferred: pending });
       return pending.promise;
     },
-  } as unknown as LineupDesktopPreloadApi['guide'];
+    cancelPresentation: async () => undefined,
+    setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+  } satisfies LineupDesktopPreloadApi['guide'];
   const polling = createGuidePresentationPolling(createOptions(
     guide,
     () => density,
@@ -559,7 +604,9 @@ test('repeated loading density changes coalesce to one latest refetch', async ()
       requests.push({ durationMs: input.durationMs, deferred: pending });
       return pending.promise;
     },
-  } as unknown as LineupDesktopPreloadApi['guide'];
+    cancelPresentation: async () => undefined,
+    setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+  } satisfies LineupDesktopPreloadApi['guide'];
   const polling = createGuidePresentationPolling(createOptions(
     guide,
     () => density,
@@ -598,7 +645,9 @@ test('density churn keeps one active request and applies only the latest current
       requests.push({ durationMs: input.durationMs, deferred: pending });
       return pending.promise;
     },
-  } as unknown as LineupDesktopPreloadApi['guide'];
+    cancelPresentation: async () => undefined,
+    setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+  } satisfies LineupDesktopPreloadApi['guide'];
   const polling = createGuidePresentationPolling(createOptions(
     guide,
     () => density,

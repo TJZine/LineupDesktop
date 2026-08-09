@@ -178,6 +178,7 @@ export function createGuidePresentationPolling(
   }
 
   const getCacheIdentity = (): string | null => options.getCacheIdentity?.() ?? null;
+  const getNowMs = (): number => options.getNowMs?.() ?? Date.now();
   let guidePollTimer: number | null = null;
   let guidePresentationGeneration = 0;
   let guidePresentationLifecycleGeneration = 0;
@@ -269,7 +270,7 @@ export function createGuidePresentationPolling(
       return { promise: Promise.resolve(), requestSequence: 0 };
     }
     const windowStartMs = refreshOptions.windowStartMs ?? (playerRefresh
-      ? Math.floor((options.getNowMs?.() ?? Date.now()) / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS
+      ? Math.floor(getNowMs() / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS
       : options.getWindowStartMs());
     const requestedDurationMs = getRequestedDurationMs();
     const profile = refreshProfile();
@@ -418,7 +419,11 @@ export function createGuidePresentationPolling(
       const key = intent.cacheIdentity === null ? null : `${intent.cacheIdentity}:${baseKey}`;
       const cacheEligibleSource = intent.source === 'guide-page-change' || intent.source === 'epg-window-change';
       const cached = key !== null && cacheEligibleSource && intent.cacheIdentity === currentCacheIdentity
-        ? presentationCache.get(key, { focused: true, current: true })
+        ? presentationCache.get(
+          key,
+          { focused: true, current: true },
+          { nowMs: getNowMs(), maxAgeMs: GUIDE_POLL_INTERVAL_MS },
+        )
         : null;
       if (cached !== null) {
         // Align the cache path's currentness recheck with the network path's async boundary.
@@ -430,7 +435,7 @@ export function createGuidePresentationPolling(
           cached,
           intent.generation,
           settlePagingSuccess(intent, cached),
-          Math.max(intent.windowStartMs, cached.minimumStartTimeMs ?? intent.windowStartMs),
+          resolveEffectiveStartTimeMs(intent, cached),
         );
         queueAggressiveWarming(intent, cached);
         return;
@@ -483,6 +488,7 @@ export function createGuidePresentationPolling(
             presentationCache.set({
               key,
               value: normalized,
+              fetchedAtMs: getNowMs(),
               programCount: normalized.channels.reduce((count, channel) => count + channel.programs.length, 0),
               focused: !intent.warmOnly,
               current: !intent.warmOnly && normalized.channels.some((channel) => channel.programs.some((program) =>
@@ -491,10 +497,7 @@ export function createGuidePresentationPolling(
           }
           if (intent.warmOnly) return;
           lastValidPresentation = normalized;
-          const effectiveStartTimeMs = Math.max(
-            intent.windowStartMs,
-            lastValidPresentation.minimumStartTimeMs ?? intent.windowStartMs,
-          );
+          const effectiveStartTimeMs = resolveEffectiveStartTimeMs(intent, lastValidPresentation);
           if (intent.playerRefresh) options.applyPlayerPresentation?.(lastValidPresentation, intent.generation, effectiveStartTimeMs);
           else options.applyPresentation(
             lastValidPresentation,
@@ -508,6 +511,19 @@ export function createGuidePresentationPolling(
     } finally {
       completeRefresh(intent);
     }
+  };
+
+  const resolveEffectiveStartTimeMs = (
+    intent: GuidePresentationRefreshIntent,
+    presentation: ReturnType<typeof normalizeEpgPresentation>,
+  ): number => {
+    const existingGuideWindowStartMs = intent.playerRefresh
+      ? options.getWindowStartMs()
+      : intent.windowStartMs;
+    return Math.max(
+      existingGuideWindowStartMs,
+      presentation.minimumStartTimeMs ?? existingGuideWindowStartMs,
+    );
   };
 
   const isCurrent = (intent: GuidePresentationRefreshIntent): boolean => intent === activeRefresh
