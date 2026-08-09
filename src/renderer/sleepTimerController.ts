@@ -99,11 +99,7 @@ export function createSleepTimerController(
     deadlineMs = null;
     lastRemainingMs = 0;
     const playback = options.getCurrentPlayback();
-    if (
-      playback.requestId !== null &&
-      playback.status === 'playing' &&
-      playback.playing
-    ) {
+    if (playback.requestId !== null) {
       const onDeferredResolved = (result: DeferredPauseResult): void => {
         if (disposed || activeGeneration !== generation) return;
         if (result === 'started') {
@@ -141,9 +137,10 @@ export function createSleepTimerController(
     publish({
       presetMinutes: null,
       remainingMs: 0,
-      status: 'expired',
-      message: 'Sleep timer ended',
+      status: 'failed',
+      message: 'Sleep timer ended; playback could not be paused',
     });
+    options.recordDiagnostic('player.sleep-timer', 'Sleep timer pause was not accepted.');
   };
 
   const tick = (activeGeneration: number): void => {

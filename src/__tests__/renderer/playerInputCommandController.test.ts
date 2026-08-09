@@ -205,6 +205,67 @@ test('sleep expiry defers once behind play or seek and pauses after settlement',
   }
 });
 
+test('sleep expiry defers behind play that began paused before playback becomes playing', async () => {
+  const harness = createHarness(
+    { ...playingSnapshot(), status: 'paused', playing: false },
+    { settleInDispatch: false },
+  );
+  const sleep = createSleepHarness(harness);
+  sleep.controller.cyclePreset();
+  harness.timers.advance(15 * 60_000 - 1_000);
+  harness.controller.handleInput('mediaPlay');
+  await flush();
+
+  harness.timers.advance(1_000);
+  assert.equal(sleep.projection().status, 'expiring');
+  assert.equal(harness.envelopes.length, 1);
+
+  harness.setSnapshot(playingSnapshot());
+  settleCurrent(harness, 'play');
+  await flush();
+  assert.equal(sleep.projection().status, 'expired');
+  assertEnvelope(harness.envelopes[1], 'player.pauseIfCurrent', {
+    snapshotRequestId: 'playback-1',
+  });
+});
+
+test('sleep expiry rejects failed play and seek settlements without dispatching pause', async () => {
+  for (const pending of ['play', 'seek'] as const) {
+    const initial = pending === 'play'
+      ? { ...playingSnapshot(), status: 'paused' as const, playing: false }
+      : playingSnapshot();
+    const harness = createHarness(initial, { settleInDispatch: false });
+    const sleep = createSleepHarness(harness);
+    sleep.controller.cyclePreset();
+    harness.timers.advance(15 * 60_000 - 1_000);
+    harness.controller.handleInput(pending === 'play' ? 'mediaPlay' : 'mediaFastForward');
+    await flush();
+
+    harness.timers.advance(1_000);
+    assert.equal(sleep.projection().status, 'expiring');
+    settleCurrent(harness, pending === 'play' ? 'play' : 'seek.relative', false);
+    await flush();
+
+    assert.equal(sleep.projection().status, 'failed');
+    assert.equal(harness.envelopes.length, 1);
+    assert.deepEqual(sleep.diagnostics(), ['Sleep timer pause was not accepted.']);
+  }
+});
+
+test('sleep deferral requires the pending command snapshot to match the expiry request', async () => {
+  const harness = createHarness(playingSnapshot(), { settleInDispatch: false });
+  harness.controller.handleInput('mediaFastForward');
+  await flush();
+
+  assert.equal(
+    harness.controller.pauseCurrent('playback-2', () => assert.fail('must not defer')),
+    'rejected',
+  );
+  settleCurrent(harness, 'seek.relative');
+  await flush();
+  assert.equal(harness.envelopes.length, 1);
+});
+
 test('sleep expiry rejects pending stop and invalidates deferred pause on route leave', async () => {
   for (const pending of ['play', 'seek', 'stop'] as const) {
     const harness = createHarness(playingSnapshot(), { settleInDispatch: false });
@@ -342,10 +403,26 @@ function createSleepHarness(harness: Harness) {
 function settleCurrent(
   harness: Harness,
   command: 'play' | 'pause' | 'stop' | 'seek.relative',
+  ok = true,
 ): void {
   const requestId = harness.envelopes.at(-1)?.requestId;
   assert.ok(requestId);
-  harness.controller.handlePlayerEvent({ event: 'command.settled', requestId, command, ok: true });
+  harness.controller.handlePlayerEvent({
+    event: 'command.settled',
+    requestId,
+    command,
+    ok,
+    ...(ok ? {} : {
+      error: {
+        code: 'PLAYER_COMMAND_FAILED',
+        category: 'unknown' as const,
+        message: 'Command failed.',
+        recoverable: true,
+        retryable: true,
+        requestId,
+      },
+    }),
+  });
 }
 
 function assertEnvelope(

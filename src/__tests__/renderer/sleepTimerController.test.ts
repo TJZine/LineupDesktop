@@ -56,16 +56,37 @@ test('one-minute warning occurs once and expiry pauses only the current playing 
   assert.equal(harness.pendingTimers(), 0);
 });
 
-test('stale or already-paused playback is never paused at expiry', () => {
-  const paused = createHarness({ requestId: 'request-one', status: 'paused', playing: false });
+test('ineligible or inconsistent playback requests the command owner and fails without acceptance', () => {
+  const paused = createHarness(
+    { requestId: 'request-one', status: 'paused', playing: false },
+    'rejected',
+  );
   paused.controller.cyclePreset();
   paused.advance(15 * 60_000);
-  assert.deepEqual(paused.pauses(), []);
+  assert.deepEqual(paused.pauses(), ['request-one']);
+  assert.equal(paused.projection().status, 'failed');
+
+  const inconsistent = createHarness(
+    { requestId: 'request-one', status: 'paused', playing: true },
+    'rejected',
+  );
+  inconsistent.controller.cyclePreset();
+  inconsistent.advance(15 * 60_000);
+  assert.deepEqual(inconsistent.pauses(), ['request-one']);
+  assert.equal(inconsistent.projection().status, 'failed');
 
   const missing = createHarness({ requestId: null, status: 'playing', playing: true });
   missing.controller.cyclePreset();
   missing.advance(15 * 60_000);
   assert.deepEqual(missing.pauses(), []);
+  assert.equal(missing.projection().status, 'failed');
+
+  for (const harness of [paused, inconsistent, missing]) {
+    assert.deepEqual(
+      harness.diagnostics(),
+      ['player.sleep-timer:Sleep timer pause was not accepted.'],
+    );
+  }
 });
 
 test('rejected guarded pause reports bounded feedback without retry or timer resurrection', () => {

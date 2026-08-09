@@ -99,6 +99,7 @@ export function createPlayerInputCommandController(
     }
     if (
       settled !== null
+      && event.ok
       && (settled.command === 'play' || settled.command === 'seek.relative')
       && deferredPause !== null
     ) {
@@ -191,6 +192,7 @@ export function createPlayerInputCommandController(
         deferredPause === null
         && onDeferredResolved !== undefined
         && (pending.command === 'play' || pending.command === 'seek.relative')
+        && pending.snapshotRequestId === snapshotRequestId
       ) {
         deferredPause = { snapshotRequestId, resolve: onDeferredResolved };
         return 'deferred';
