@@ -6603,12 +6603,15 @@ inferred.
    token, Plex payload, helper output, Electron object, or raw platform command
    crosses to renderer state.
 4. **Foreground Windows command seam.** `shellAppCommandController.ts` remains
-   the sole app-command owner. It may translate only reviewed recognized
+   the sole app-command owner. Unit 4B originally translated reviewed recognized
    foreground commands into synthetic key down/up pairs for the existing
-   renderer input path. Media commands are consumed only when the shell window
-   and web contents are live and the window is focused; unfocused, destroyed,
-   unknown, next-track, and previous-track commands are not forwarded and are
-   not stolen from another application. No `globalShortcut` is allowed.
+   renderer input path. Post-closeout correction `1f815f3` supersedes that
+   transport for Play, Pause, Rewind, and Fast Forward with the closed semantic
+   media-input preload event; Browser Back, Play/Pause, and Stop retain their
+   reviewed synthetic-key path. Media commands are consumed only when the shell
+   window and web contents are live and the window is focused; unfocused,
+   destroyed, unknown, next-track, and previous-track commands are not forwarded
+   and are not stolen from another application. No `globalShortcut` is allowed.
 5. **Focus and overlay seam.** Existing shell/bootstrap/error/profile/exit
    precedence remains above route/player input. Existing playback options,
    now-playing, mini-guide, OSD, badge/number/transition, loading, and error
@@ -6996,24 +6999,34 @@ focused assertion.
 
 ##### Unit 4B — focused Windows BrowserWindow app-command routing
 
-**Outcome:** map foreground Windows app commands for Play, Pause, Play/Pause,
-Rewind, Fast Forward, and Stop into Unit 4A's standard renderer media-key path
-without a new bridge. Preserve browser-backward behavior and leave
-next/previous-track and unknown commands unhandled.
+**Historical outcome:** Unit 4B mapped foreground Windows app commands for Play,
+Pause, Play/Pause, Rewind, Fast Forward, and Stop into Unit 4A's standard
+renderer media-key path without a new bridge. Post-closeout correction
+`1f815f3` supersedes that original no-new-bridge decision for Play, Pause,
+Rewind, and Fast Forward with one closed semantic media-input preload event;
+Play/Pause and Stop remain synthetic media keys. Browser Back remains on its
+synthetic Escape path, and next/previous-track and unknown commands remain
+unhandled.
 
 **Owner/write boundary:** exactly
 `src/main/window/shellAppCommandController.ts` and
 `src/__tests__/main/shellAppCommandController.test.ts`. Read Unit 4A mapping
 tests, but do not edit renderer, main composition, player, contracts, preload,
-package, or docs.
+package, or docs. This boundary records the original Unit 4B checkpoint;
+`1f815f3` later and intentionally expanded the reviewed correction across the
+closed contract, preload event, renderer consumer, and composition wiring.
 
-**Contracts and acceptance:** apply invariant 4. Recognized exact app commands
+**Historical contracts and acceptance:** apply invariant 4. At the Unit 4B
+checkpoint, recognized exact app commands
 are `media-play`, `media-pause`, `media-play-pause`, `media-rewind`,
 `media-fast-forward`, and `media-stop`; each forwards one keyDown/keyUp pair
 only from a live focused shell window. `media-nexttrack`,
 `media-previoustrack`, unknown, destroyed, and unfocused cases forward nothing;
 media commands are not prevented when they cannot be safely forwarded. Teardown
 removes the one listener. No raw command is sent through IPC or diagnostics.
+The `1f815f3` correction replaces only the four commands named above with the
+closed semantic event and keeps raw app-command strings out of IPC and renderer
+state.
 
 **Verification classification:** new regression/contract test required.
 
