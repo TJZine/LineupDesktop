@@ -24,8 +24,11 @@ WS4's local implementation gate closes through `f4570df`, `a78228b`,
 frozen at `73ce570`; Units 5A–5C land at `46acf1f`, `6180815`, and `beeb5ef`.
 Production Unit 5D lands at `81cf42c`, Unit 5E at `154fcfd`, Unit 5F at
 `3501fb8`, Unit 5G at `4946fb5`, and Guide focus-transition correction at
-`1e4a282`. WS5 application implementation is complete; Unit 5H proof/audit and
-Unit 5I closeout remain deferred to the Windows campaign. WS6–WS9 remain unopened.
+`1e4a282`. Exact Guide presentation cancellation lands at `0ebaf2f`, global Now
+Watching projection at `8c30b1b`, and its captured-time/generation-currentness
+correction at `cf38e70`. WS5 application implementation is complete; Unit 5H
+proof/audit and Unit 5I closeout remain deferred to the Windows campaign.
+WS6–WS9 remain unopened.
 Locally verifiable implementation advances in order before one consolidated
 Windows/native/manual/live/package campaign. Windows proof cannot implement or
 waive code gaps, and absent proof cannot promote a row.
@@ -400,7 +403,14 @@ and keyboard/D-pad focus reveal without wheel-scroll snapback. Its focused
 controller closeout passes 79/79; full verification passes 1,324 of 1,325
 contract tests with one intentional skip plus 188/188 harness tests; build and
 Electron smoke pass locally. Guide focus-transition correction `1e4a282`
-closes the last observed product regression. WS5 application implementation is
+closes the last observed product regression. Post-checkpoint corrections add
+the exact guarded `guide.cancelPresentation` operation with main-owned abort,
+timeout, sender-destruction, settlement, and teardown custody; renderer/preload
+retain only request-id correlation and no transferable signal or generic RPC
+surface. Global Now Watching is independent of the visible page/filter and is
+calculated at one captured time from the active scheduler/public references
+only when the scheduler channel agrees with the committed generation, without
+off-page Plex resolution or DTO expansion. WS5 application implementation is
 complete. Wider Windows compilation, composition, and live-large-lineup proof
 remains deferred to Unit 5H and cannot be
 claimed from this macOS closeout; `EPG-10`–`EPG-13`, `UI-36`, affected parity

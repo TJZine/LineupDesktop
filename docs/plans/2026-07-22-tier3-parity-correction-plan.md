@@ -10634,6 +10634,28 @@ Unit 5D `81cf42c`, Unit 5E `154fcfd`, Unit 5F `3501fb8`, and Unit 5G
 coding gate is closed, but this status does not close any
 Windows/native/live/current-upstream proof row.
 
+The durable post-checkpoint Guide correction is exact and does not reopen the
+product boundary. Commit `0ebaf2f` adds only `guide.cancelPresentation` and its
+closed IPC channel; `4ffa57a` keeps the timeout implementation within the
+runtime timer vocabulary. Preload retains only active presentation request ids
+and sends the exact empty cancellation payload. Main validates and authorizes
+the sender, owns each request's abort controller and 30-second timeout, and
+cleans custody on settlement, sender destruction, explicit cancellation, and
+IPC teardown. The signal propagates through Guide/content resolution and the
+last-consumer Plex adapter seam, while cancellation settles to a fixed safe
+result. No `AbortSignal`, raw IPC string, privileged locator, or generic RPC
+surface crosses the bridge.
+
+Commit `8c30b1b` makes Now Watching independent of the visible Guide page and
+library filter. Currentness correction `cf38e70` projects it only when the
+active scheduler channel agrees with `generation.currentChannelId`, recalculates
+the program at one captured time from the already-owned schedule and public
+references, and uses the scheduler item as its safe fallback. It does not
+resolve off-page Plex content, mutate preferences, broaden the Guide DTO, or
+move schedule truth into preload/renderer. Cancellation lifecycle, race, and
+bounded-work proof is recorded by test checkpoint `0074a62`. These corrections
+do not close Unit 5H/5I or any Windows/native/live/current-upstream proof row.
+
 The earlier Unit 5A, 5B, 5D-0, and 5D coding-first review handoffs are completed
 or superseded history, not active instructions. The macOS proof-harness work
 described by 5H-A through 5H-C was discarded and is no longer authorized for
