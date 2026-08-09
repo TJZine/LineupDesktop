@@ -287,6 +287,43 @@ test('successful play settlement waits for authoritative playing state and pause
   assert.equal(harness.envelopes.length, 2);
 });
 
+test('inconsistent authoritative state rejects settled play deferral without late revival', async () => {
+  const paused = { ...playingSnapshot(), status: 'paused' as const, playing: false };
+  const harness = createHarness(paused, { settleInDispatch: false });
+  const sleep = createSleepHarness(harness);
+  sleep.controller.cyclePreset();
+  harness.timers.advance(15 * 60_000 - 1_000);
+  harness.controller.handleInput('mediaPlay');
+  await flush();
+  harness.timers.advance(1_000);
+  settleCurrent(harness, 'play');
+
+  harness.controller.reconcileSnapshot({ ...playingSnapshot(), playing: false }, true);
+  assert.equal(sleep.projection().status, 'failed');
+  harness.setSnapshot(playingSnapshot());
+  harness.controller.reconcileSnapshot(playingSnapshot(), true);
+  await flush();
+  assert.equal(harness.envelopes.length, 1);
+});
+
+test('failed play settlement rejects sleep deferral without late revival', async () => {
+  const paused = { ...playingSnapshot(), status: 'paused' as const, playing: false };
+  const harness = createHarness(paused, { settleInDispatch: false });
+  const sleep = createSleepHarness(harness);
+  sleep.controller.cyclePreset();
+  harness.timers.advance(15 * 60_000 - 1_000);
+  harness.controller.handleInput('mediaPlay');
+  await flush();
+  harness.timers.advance(1_000);
+  settleCurrent(harness, 'play', false);
+
+  assert.equal(sleep.projection().status, 'failed');
+  harness.setSnapshot(playingSnapshot());
+  harness.controller.reconcileSnapshot(playingSnapshot(), true);
+  await flush();
+  assert.equal(harness.envelopes.length, 1);
+});
+
 test('settled play deferral times out without later pause revival', async () => {
   const paused = { ...playingSnapshot(), status: 'paused' as const, playing: false };
   const harness = createHarness(paused, { settleInDispatch: false });
