@@ -151,10 +151,12 @@ function findOccurrences(source, value) {
   const maskedSource = maskCSharpCommentOrLiteralContent(source);
   const maskedValue = maskCSharpCommentOrLiteralContent(value);
   const indexes = [];
-  let index = maskedSource.indexOf(maskedValue);
+  let index = source.indexOf(value);
   while (index !== -1) {
-    indexes.push(index);
-    index = maskedSource.indexOf(maskedValue, index + maskedValue.length);
+    if (maskedSource.slice(index, index + value.length) === maskedValue) {
+      indexes.push(index);
+    }
+    index = source.indexOf(value, index + value.length);
   }
   return indexes;
 }
@@ -209,6 +211,19 @@ string literal = "Finish()";
   assert.throws(
     () => assertUniqueOrdered(ignoredCalls, 'Run()', 'Finish()'),
     /expected exactly one earlier statement/u,
+  );
+
+  const wrongSameLengthLiteral = String.raw`
+JsonDocument.Parse(line);
+message.type == "presentation.updata" && line.Length > MAX_PRESENTATION_MESSAGE_SIZE
+`;
+  assert.throws(
+    () => assertUniqueOrdered(
+      wrongSameLengthLiteral,
+      'JsonDocument.Parse(line)',
+      'message.type == "presentation.update" && line.Length > MAX_PRESENTATION_MESSAGE_SIZE',
+    ),
+    /expected exactly one later statement/u,
   );
 });
 
