@@ -449,7 +449,7 @@ export function createGuidePresentationPolling(
           options.guide.cancelPresentation,
         );
       } catch (error: unknown) {
-        if (isCurrent(intent)) {
+        if (isCurrent(intent) && !intent.warmOnly) {
           const message = isGuideRefreshTimeout(error)
             ? GUIDE_REQUEST_TIMEOUT_MESSAGE
             : summarizeRendererBridgeError(error);
@@ -464,13 +464,15 @@ export function createGuidePresentationPolling(
 
       if (isCurrent(intent)) {
         if (!result.ok) {
-          if (intent.playerRefresh) options.handlePlayerFailure?.(intent.source, result.error.message, intent.generation);
-          else options.handleFailure(
-            intent.source,
-            result.error.message,
-            intent.generation,
-            settlePagingFailure(intent),
-          );
+          if (!intent.warmOnly) {
+            if (intent.playerRefresh) options.handlePlayerFailure?.(intent.source, result.error.message, intent.generation);
+            else options.handleFailure(
+              intent.source,
+              result.error.message,
+              intent.generation,
+              settlePagingFailure(intent),
+            );
+          }
         } else {
           const normalized = normalizeEpgPresentation(result.value);
           const nextScopeToken = normalized.libraryFilter?.scopeToken ?? null;

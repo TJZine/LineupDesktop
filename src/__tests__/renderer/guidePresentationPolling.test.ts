@@ -161,6 +161,70 @@ test('Desktop preload profiles use exact row/time bounds and aggressive idle war
   }
 });
 
+test('aggressive warm failures remain cache misses without applying foreground failure state', async () => {
+  for (const failureMode of ['rejection', 'error-result'] as const) {
+    const idle: Array<() => void> = [];
+    const failures: string[] = [];
+    let requestCount = 0;
+    let applied = 0;
+    const controller = createGuidePresentationPolling({
+      guide: {
+        getPresentation: async (input) => {
+          requestCount += 1;
+          if (requestCount === 1) {
+            const response = result(`${failureMode}-foreground`);
+            if (!response.ok) throw new Error('Expected foreground fixture success.');
+            return {
+              ...response,
+              value: {
+                ...response.value,
+                channelWindow: { offset: input.channelOffset ?? 0, total: 300 },
+              },
+            };
+          }
+          if (failureMode === 'rejection') throw new Error('private warm failure');
+          return {
+            ok: false as const,
+            requestId: `${failureMode}-warm`,
+            error: {
+              code: 'GUIDE_TRANSPORT_ERROR',
+              message: 'Guide is unavailable.',
+              retryable: true,
+              recoverable: true,
+              operation: 'getPresentation',
+            },
+          };
+        },
+        cancelPresentation: async () => undefined,
+        setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+      },
+      host: idleHost(idle),
+      getActiveRoute: () => 'guide',
+      getWindowStartMs: () => 0,
+      getGuideDensity: () => 'compact',
+      getAggressivePreloadEnabled: () => true,
+      getCacheIdentity: () => 'identity',
+      getCacheScopeToken: () => 'scope',
+      setLoading: () => undefined,
+      applyPresentation: () => { applied += 1; },
+      handleFailure: (source) => { failures.push(`guide:${source}`); },
+      handlePlayerFailure: (source) => { failures.push(`player:${source}`); },
+    });
+
+    await controller.refresh('foreground');
+    assert.equal(applied, 1, `${failureMode} applies the foreground result`);
+    assert.equal(idle.length, 1, `${failureMode} schedules an aggressive warm`);
+
+    idle.shift()?.();
+    await tick();
+
+    assert.equal(requestCount, 2, `${failureMode} executes the warm request`);
+    assert.equal(applied, 1, `${failureMode} does not apply a warm result`);
+    assert.deepEqual(failures, [], `${failureMode} does not apply foreground failure state`);
+    controller.stop();
+  }
+});
+
 test('aggressive page and adjacent-time warm entries are consumed without another bridge request', async () => {
   let windowStartMs = 10 * 60 * 60_000;
   const idle: Array<() => void> = [];
