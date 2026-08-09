@@ -95,6 +95,54 @@ test('Guide filtering uses raw membership, includes custom channels only in All,
   assert.deepEqual(removed.channels.map((row) => row.number), ['15', '20']);
 });
 
+test('Guide projects Now Watching from active scheduler state when paging and filtering hide its row', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-guide-paging-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const channels = [
+    channel('channel-active', 10, 'library-a'),
+    channel('channel-middle', 20, 'library-b'),
+    channel('channel-last', 30, 'library-b'),
+  ];
+  const adapter = {
+    getLibraryItems: async (libraryId: string) => [{
+      ratingKey: `${libraryId}-item`, type: 'movie', title: libraryId, durationMs: 60_000,
+    }],
+    getCollectionItems: async () => [], getShowEpisodes: async () => [],
+    getPlaylistItems: async () => [], getItem: async () => null,
+  };
+  const scheduler = new ChannelScheduler({ clock: { now: () => 0 } });
+  scheduler.loadChannel({
+    channelId: 'channel-active', anchorTime: 0, playbackMode: 'sequential', shuffleSeed: 0,
+    content: [{
+      ratingKey: 'active-item', type: 'movie', title: 'Active Movie', fullTitle: 'Active Movie',
+      durationMs: 60_000, thumb: null, year: null, scheduledIndex: 0,
+    }],
+  });
+  const store = new DesktopGuidePreferencesStore(path.join(directory, 'preferences.json'));
+  const runtime = createRuntime(channels, adapter, store, true, scheduler);
+  const owner = new ChannelPublicReferenceOwner();
+  const generation = generationFor(channels, 'generation-now-watching', 'channel-active');
+  const activePublicId = owner.projectChannelReference(generation, 'channel-active');
+
+  const pagedAway = await page(runtime, generation, owner, 2, 1);
+  assert.deepEqual(pagedAway.channels.map((row) => row.number), ['30']);
+  assert.deepEqual(pagedAway.nowWatching, {
+    title: 'Active Movie', subtitle: '', channelId: activePublicId, startsAtMs: 0, endsAtMs: 60_000,
+  });
+
+  const all = await page(runtime, generation, owner, 0, 24);
+  const libraryB = all.libraryFilter.libraries.find((library) => library.name === 'Library 20')!;
+  await runtime.setLibraryFilter({
+    generation, publicReferenceOwner: owner, expectedScopeToken: all.libraryFilter.scopeToken,
+    expectedRevision: all.libraryFilter.revision, libraryId: libraryB.id,
+    loadCurrentGeneration: async () => generation,
+  });
+  const filteredAway = await page(runtime, generation, owner, 0, 24);
+  assert.deepEqual(filteredAway.channels.map((row) => row.number), ['20', '30']);
+  assert.equal(filteredAway.nowWatching?.channelId, activePublicId);
+  assert.equal(filteredAway.nowWatching?.title, 'Active Movie');
+});
+
 test('Guide paging uses public-id tie breaks, empty bounds, and fair 200/1000 program truncation', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-guide-paging-'));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
@@ -226,8 +274,12 @@ function channel(id: string, number: number, libraryId = `library-${id}`): Chann
   };
 }
 
-function generationFor(channels: readonly ChannelConfig[], fingerprint: string): ChannelPublicReferenceGeneration {
-  return Object.freeze({ lineupRevision: 1, channels, currentChannelId: null, fingerprint });
+function generationFor(
+  channels: readonly ChannelConfig[],
+  fingerprint: string,
+  currentChannelId: string | null = null,
+): ChannelPublicReferenceGeneration {
+  return Object.freeze({ lineupRevision: 1, channels, currentChannelId, fingerprint });
 }
 
 function createRuntime(
@@ -235,11 +287,12 @@ function createRuntime(
   adapter: object,
   preferencesStore: DesktopGuidePreferencesStore,
   libraryTabsEnabled = true,
+  activeChannelScheduler = new ChannelScheduler({ clock: { now: () => 0 } }),
 ): GuideRuntime {
   return new GuideRuntime({
     repository: { loadNormalized: async () => null } as never,
     plexLibraryAdapter: adapter as never,
-    activeChannelScheduler: new ChannelScheduler({ clock: { now: () => 0 } }),
+    activeChannelScheduler,
     clock: { now: () => 0 }, preferencesStore,
     guideContextSource: { getBuilderContextForMain: () => ({ ok: true, snapshot: { activeProfileId: 'profile', selectedServerId: 'server' } }) },
     createScopeToken: () => 'scope-token',
