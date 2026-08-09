@@ -397,7 +397,7 @@ export function createPlayerOverlayController(
       } else {
         for (const event of result.value.events) if (event.event === 'command.settled') settleCommand(event);
       }
-    } catch (error) {
+    } catch {
       failPendingCommand(requestId);
     }
   };
@@ -463,7 +463,7 @@ export function createPlayerOverlayController(
       if (generation !== tuneGeneration || disposed) return;
       await options.refreshGuidePresentation().catch(() => undefined);
       if (generation !== tuneGeneration || disposed) return;
-    } catch (error) {
+    } catch {
       if (generation === tuneGeneration && !disposed) {
         failTune(generation, invoker);
       }
