@@ -1,17 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import {
+  DEFAULT_DESKTOP_SETTINGS_VALUES,
+  createDesktopSettingsView,
+  desktopSettingsFailure,
+  desktopSettingsSuccess,
+  normalizeDesktopSettingsReplaceValues,
+} from '../../contracts/settings.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import type { PlayerEvent, PlayerSnapshot } from '../../contracts/player.js';
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import {
   DEFAULT_EPG_PRESENTATION_SOURCE,
   EPG_SLOT_DURATION_MS,
+  EPG_COMFORTABLE_WINDOW_DURATION_MS,
+  EPG_COMPACT_WINDOW_DURATION_MS,
+  createGuideProgramFocusId,
   createEpgState,
   settleEpgPresentation,
   type EpgPresentationSource,
 } from '../../renderer/epg.js';
-import { renderRendererFocus, syncRendererFocusTargets } from '../../renderer/focusDom.js';
+import { captureGuideProgramFocusIntent, renderRendererFocus, syncRendererFocusTargets } from '../../renderer/focusDom.js';
 import { createFullscreenTransportCoordinator } from '../../renderer/fullscreenTransport.js';
 import { createEmptyPlayerSnapshot } from '../../renderer/playerOverlayPresentation.js';
 import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
@@ -22,6 +32,7 @@ import { subscribePlayerBridge } from '../../renderer/playerBridgeSubscription.j
 import type { PlexRuntimeController } from '../../renderer/plexRuntimeActions.js';
 import { createShellController } from '../../renderer/shell/shellController.js';
 import { createRendererShellState, type RendererShellState } from '../../renderer/shell/shellState.js';
+import { createSettingsRuntime } from '../../renderer/settings/settingsRuntime.js';
 
 test('player bridge subscription owns event projection and unsubscribe cleanup', async () => {
   const initialSnapshot = { ...createEmptyPlayerSnapshot(), requestId: 'playback-1', status: 'playing' as const, playing: true };
@@ -419,6 +430,181 @@ test('Settings-route past-items settlement makes no request; Guide entry recover
   assert.equal(requests, 2);
 });
 
+test('Settings density settlement drives Guide and Player polling through optimistic save and rollback', async () => {
+  type Route = 'guide' | 'player' | 'settings';
+  const base = 1_783_512_000_000;
+  const presentation: EpgPresentationSource = {
+    channels: [{
+      id: 'channel-1', number: '1', name: 'One', programs: [{
+        id: 'program-1', title: 'Program', subtitle: '', description: '', showTitle: '', episodeLabel: '',
+        rating: '', quality: [], genres: [], startsAtMs: base, endsAtMs: base + EPG_SLOT_DURATION_MS, artwork: null,
+      }],
+    }],
+    nowWatching: null,
+    nowMs: base,
+    minimumStartTimeMs: base,
+  };
+  let activeRoute: Route = 'guide';
+  let guideDensity: 'comfortable' | 'compact' = 'comfortable';
+  let activeFocusId: string | null = createGuideProgramFocusId('channel-1', 'program-1');
+  let pendingFocusId: string | null = null;
+  let epgState = createEpgState(presentation, 0, guideDensity);
+  const restoredFocusIds: string[] = [];
+  const requests: Array<{ route: Route; durationMs: number; startTimeMs: number }> = [];
+  const settlementQueue: Promise<void>[] = [];
+  const states: Array<{
+    loading: boolean;
+    saving: boolean;
+    density: 'comfortable' | 'compact';
+    errorCode: string | null;
+  }> = [];
+
+  const polling = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async (request: { startTimeMs: number; durationMs: number }) => {
+        requests.push({ route: activeRoute, startTimeMs: request.startTimeMs, durationMs: request.durationMs });
+        return { ok: true, requestId: `density-guide-${String(requests.length)}`, value: presentation };
+      },
+      cancelPresentation: async () => undefined,
+    } as unknown as LineupDesktopPreloadApi['guide'],
+    host: createNoopIntervalHost(),
+    getActiveRoute: () => activeRoute,
+    getWindowStartMs: () => epgState.windowStartMs,
+    getGuideDensity: () => guideDensity,
+    getNowMs: () => base,
+    setLoading: (generation) => {
+      epgState = { ...epgState, presentationState: 'loading', presentationGeneration: generation };
+    },
+    applyPresentation: (value, generation, target, effectiveStartTimeMs) => {
+      const capturedFocusId = captureGuideProgramFocusIntent(pendingFocusId, activeFocusId);
+      const settlement = settleEpgPresentation(
+        epgState,
+        value,
+        generation,
+        target,
+        capturedFocusId !== null,
+        guideDensity,
+        effectiveStartTimeMs,
+      );
+      epgState = settlement.state;
+      if (settlement.pendingFocusId !== undefined) pendingFocusId = settlement.pendingFocusId;
+      if (pendingFocusId !== null) {
+        restoredFocusIds.push(pendingFocusId);
+        pendingFocusId = null;
+      }
+    },
+    applyPlayerPresentation: (value, generation, effectiveStartTimeMs) => {
+      epgState = settleEpgPresentation(
+        epgState,
+        value,
+        generation,
+        null,
+        false,
+        guideDensity,
+        effectiveStartTimeMs,
+      ).state;
+    },
+    handleFailure: () => assert.fail('unexpected Guide failure'),
+    handlePlayerFailure: () => assert.fail('unexpected Player failure'),
+  });
+
+  let replacementCount = 0;
+  const settings = createSettingsRuntime({
+    settings: {
+      getAudioOutputs: async ({ requestId }) => desktopSettingsSuccess(requestId, {
+        status: 'unavailable',
+        reason: 'platform-unsupported',
+        outputs: [{ kind: 'system-default', id: 'system-default', label: 'System default' }],
+      }),
+      getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, settingsSnapshot(1)),
+      replace: async (input) => {
+        replacementCount += 1;
+        if (replacementCount === 2) return desktopSettingsFailure(input.requestId, 'storage-unavailable');
+        return desktopSettingsSuccess(input.requestId, settingsSnapshot(
+          replacementCount + 1,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
+      },
+    },
+    windowBridge: {
+      setFullscreen: async (enabled) => ({
+        ok: true,
+        requestId: `density-window-${String(enabled)}`,
+        value: { enabled },
+      }),
+    },
+    onStateChanged: (state) => {
+      states.push({
+        loading: state.loading,
+        saving: state.saving,
+        density: state.values.guideDensity,
+        errorCode: state.errorCode,
+      });
+      const densityChanged = state.values.guideDensity !== guideDensity;
+      if (densityChanged) {
+        polling.noteGuideDensityChange();
+        pendingFocusId = captureGuideProgramFocusIntent(pendingFocusId, activeFocusId);
+      }
+      guideDensity = state.values.guideDensity;
+      settlementQueue.push(polling.settleGuideDensity(state.loading));
+    },
+  });
+  const settleSettingsCallbacks = async (): Promise<void> => {
+    while (settlementQueue.length > 0) {
+      const pending = settlementQueue.splice(0);
+      await Promise.all(pending);
+    }
+  };
+
+  await settings.initialize();
+  await settleSettingsCallbacks();
+  assert.deepEqual(requests, []);
+  assert.equal(states[0]?.loading, true);
+  assert.equal(states.at(-1)?.loading, false);
+
+  await settings.replaceValues((values) => ({ ...values, guideDensity: 'compact' }));
+  await settleSettingsCallbacks();
+  await settings.replaceValues((values) => ({ ...values, guideDensity: 'comfortable' }));
+  await settleSettingsCallbacks();
+  assert.equal(settings.getState().values.guideDensity, 'compact');
+  assert.equal(settings.getState().errorCode, 'storage-unavailable');
+
+  activeRoute = 'player';
+  activeFocusId = null;
+  await settings.replaceValues((values) => ({ ...values, guideDensity: 'comfortable' }));
+  await settleSettingsCallbacks();
+  activeRoute = 'settings';
+  await settings.replaceValues((values) => ({ ...values, guideDensity: 'compact' }));
+  await settleSettingsCallbacks();
+  assert.equal(requests.length, 4);
+
+  activeRoute = 'guide';
+  polling.reconcile('settings', 'guide');
+  await settleAsyncWork();
+  polling.stop();
+
+  assert.deepEqual(requests.map(({ route }) => route), ['guide', 'guide', 'guide', 'player', 'guide']);
+  assert.deepEqual(requests.map(({ durationMs }) => durationMs), [
+    EPG_COMPACT_WINDOW_DURATION_MS + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
+    EPG_COMFORTABLE_WINDOW_DURATION_MS + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
+    EPG_COMPACT_WINDOW_DURATION_MS + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
+    EPG_COMFORTABLE_WINDOW_DURATION_MS + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
+    EPG_COMPACT_WINDOW_DURATION_MS + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
+  ]);
+  assert.deepEqual(
+    requests.map(({ startTimeMs }) => startTimeMs),
+    requests.map(() => base - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs),
+  );
+  assert.deepEqual(restoredFocusIds, [
+    createGuideProgramFocusId('channel-1', 'program-1'),
+    createGuideProgramFocusId('channel-1', 'program-1'),
+    createGuideProgramFocusId('channel-1', 'program-1'),
+  ]);
+  assert.ok(states.some((state) => state.saving && state.density === 'compact'));
+  assert.ok(states.some((state) => state.saving && state.density === 'comfortable'));
+  assert.ok(states.some((state) => state.errorCode === 'storage-unavailable' && !state.saving));
+});
+
 test('Player first result adopts the authoritative Guide bound before the Player-to-Guide route refresh', async () => {
   const base = 1_778_619_600_000;
   const authoritative: EpgPresentationSource = {
@@ -796,6 +982,18 @@ function createNoopIntervalHost(): Window {
     setTimeout: () => 2,
     clearTimeout: () => undefined,
   } as unknown as Window;
+}
+
+function settingsSnapshot(
+  revision: number,
+  values: typeof DEFAULT_DESKTOP_SETTINGS_VALUES = DEFAULT_DESKTOP_SETTINGS_VALUES,
+) {
+  return createDesktopSettingsView({
+    schemaVersion: 2,
+    revision,
+    status: 'ready',
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, ...values },
+  });
 }
 
 class FullscreenOverlayFocusElement {
