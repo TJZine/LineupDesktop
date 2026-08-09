@@ -14,8 +14,6 @@ import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import {
   DEFAULT_EPG_PRESENTATION_SOURCE,
   EPG_SLOT_DURATION_MS,
-  EPG_COMFORTABLE_WINDOW_DURATION_MS,
-  EPG_COMPACT_WINDOW_DURATION_MS,
   createGuideProgramFocusId,
   createEpgState,
   settleEpgPresentation,
@@ -33,6 +31,7 @@ import type { PlexRuntimeController } from '../../renderer/plexRuntimeActions.js
 import { createShellController } from '../../renderer/shell/shellController.js';
 import { createRendererShellState, type RendererShellState } from '../../renderer/shell/shellState.js';
 import { createSettingsRuntime } from '../../renderer/settings/settingsRuntime.js';
+import { createSettingsGuideDensitySettlementOwner } from '../../renderer/settings/guideDensitySettlement.js';
 
 test('player bridge subscription owns event projection and unsubscribe cleanup', async () => {
   const initialSnapshot = { ...createEmptyPlayerSnapshot(), requestId: 'playback-1', status: 'playing' as const, playing: true };
@@ -446,12 +445,16 @@ test('Settings density settlement drives Guide and Player polling through optimi
   };
   let activeRoute: Route = 'guide';
   let guideDensity: 'comfortable' | 'compact' = 'comfortable';
-  let activeFocusId: string | null = createGuideProgramFocusId('channel-1', 'program-1');
+  const programFocusId = createGuideProgramFocusId('channel-1', 'program-1');
+  const focusRegistry = new FocusRegistry();
+  focusRegistry.register({ id: programFocusId, route: 'guide', order: 1 });
+  let focusState: FocusState = { activeRoute: 'guide', activeId: programFocusId };
   let pendingFocusId: string | null = null;
   let epgState = createEpgState(presentation, 0, guideDensity);
   const restoredFocusIds: string[] = [];
   const requests: Array<{ route: Route; durationMs: number; startTimeMs: number }> = [];
   const settlementQueue: Promise<void>[] = [];
+  const settlementTrace: string[] = [];
   const states: Array<{
     loading: boolean;
     saving: boolean;
@@ -476,7 +479,7 @@ test('Settings density settlement drives Guide and Player polling through optimi
       epgState = { ...epgState, presentationState: 'loading', presentationGeneration: generation };
     },
     applyPresentation: (value, generation, target, effectiveStartTimeMs) => {
-      const capturedFocusId = captureGuideProgramFocusIntent(pendingFocusId, activeFocusId);
+      const capturedFocusId = captureGuideProgramFocusIntent(pendingFocusId, focusState.activeId);
       const settlement = settleEpgPresentation(
         epgState,
         value,
@@ -506,6 +509,34 @@ test('Settings density settlement drives Guide and Player polling through optimi
     },
     handleFailure: () => assert.fail('unexpected Guide failure'),
     handlePlayerFailure: () => assert.fail('unexpected Player failure'),
+  });
+  const densitySettlementOwner = createSettingsGuideDensitySettlementOwner({
+    getCurrentDensity: () => guideDensity,
+    getPolling: () => ({
+      hasPendingGuideDensityChange: () => polling.hasPendingGuideDensityChange(),
+      noteGuideDensityChange: () => {
+        settlementTrace.push('note');
+        polling.noteGuideDensityChange();
+      },
+      settleGuideDensity: (loading) => {
+        settlementTrace.push(`settle:${String(loading)}`);
+        return polling.settleGuideDensity(loading);
+      },
+    }),
+    retainGuideProgramFocusIntent: () => {
+      settlementTrace.push('retain-focus');
+      pendingFocusId = captureGuideProgramFocusIntent(pendingFocusId, focusState.activeId);
+    },
+    restorePendingGuideFocus: () => {
+      settlementTrace.push('restore-focus');
+      if (pendingFocusId === null || activeRoute !== 'guide') return;
+      focusState = focusRegistry.focusTarget(
+        { ...focusState, activeRoute: 'guide' },
+        pendingFocusId,
+      ).state;
+      restoredFocusIds.push(focusState.activeId ?? 'missing-focus');
+      pendingFocusId = null;
+    },
   });
 
   let replacementCount = 0;
@@ -540,13 +571,15 @@ test('Settings density settlement drives Guide and Player polling through optimi
         density: state.values.guideDensity,
         errorCode: state.errorCode,
       });
-      const densityChanged = state.values.guideDensity !== guideDensity;
-      if (densityChanged) {
-        polling.noteGuideDensityChange();
-        pendingFocusId = captureGuideProgramFocusIntent(pendingFocusId, activeFocusId);
-      }
-      guideDensity = state.values.guideDensity;
-      settlementQueue.push(polling.settleGuideDensity(state.loading));
+      const densitySettlement = densitySettlementOwner.begin(
+        state.values.guideDensity,
+        () => {
+          settlementTrace.push('apply-workflow-values');
+          guideDensity = state.values.guideDensity;
+        },
+      );
+      if (!state.loading) settlementTrace.push('render');
+      settlementQueue.push(densitySettlement.finish(state.loading));
     },
   });
   const settleSettingsCallbacks = async (): Promise<void> => {
@@ -562,44 +595,55 @@ test('Settings density settlement drives Guide and Player polling through optimi
   assert.equal(states[0]?.loading, true);
   assert.equal(states.at(-1)?.loading, false);
 
+  settlementTrace.length = 0;
   await settings.replaceValues((values) => ({ ...values, guideDensity: 'compact' }));
   await settleSettingsCallbacks();
+  assert.deepEqual(settlementTrace.slice(0, 6), [
+    'note',
+    'retain-focus',
+    'apply-workflow-values',
+    'render',
+    'restore-focus',
+    'settle:false',
+  ]);
   await settings.replaceValues((values) => ({ ...values, guideDensity: 'comfortable' }));
   await settleSettingsCallbacks();
   assert.equal(settings.getState().values.guideDensity, 'compact');
   assert.equal(settings.getState().errorCode, 'storage-unavailable');
 
   activeRoute = 'player';
-  activeFocusId = null;
+  focusState = { activeRoute: 'player', activeId: null };
   await settings.replaceValues((values) => ({ ...values, guideDensity: 'comfortable' }));
   await settleSettingsCallbacks();
   activeRoute = 'settings';
+  focusState = { activeRoute: 'settings', activeId: null };
   await settings.replaceValues((values) => ({ ...values, guideDensity: 'compact' }));
   await settleSettingsCallbacks();
   assert.equal(requests.length, 4);
 
   activeRoute = 'guide';
+  focusState = { activeRoute: 'guide', activeId: programFocusId };
   polling.reconcile('settings', 'guide');
   await settleAsyncWork();
   polling.stop();
 
   assert.deepEqual(requests.map(({ route }) => route), ['guide', 'guide', 'guide', 'player', 'guide']);
+  const detailedPresentationDurationMs = 2 * 60 * 60_000;
+  const widePresentationDurationMs = 3 * 60 * 60_000;
+  const preloadBufferEachSideMs = 2 * 60 * 60_000;
   assert.deepEqual(requests.map(({ durationMs }) => durationMs), [
-    EPG_COMPACT_WINDOW_DURATION_MS + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
-    EPG_COMFORTABLE_WINDOW_DURATION_MS + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
-    EPG_COMPACT_WINDOW_DURATION_MS + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
-    EPG_COMFORTABLE_WINDOW_DURATION_MS + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
-    EPG_COMPACT_WINDOW_DURATION_MS + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
+    widePresentationDurationMs + preloadBufferEachSideMs * 2,
+    detailedPresentationDurationMs + preloadBufferEachSideMs * 2,
+    widePresentationDurationMs + preloadBufferEachSideMs * 2,
+    detailedPresentationDurationMs + preloadBufferEachSideMs * 2,
+    widePresentationDurationMs + preloadBufferEachSideMs * 2,
   ]);
   assert.deepEqual(
     requests.map(({ startTimeMs }) => startTimeMs),
-    requests.map(() => base - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs),
+    requests.map(() => base - preloadBufferEachSideMs),
   );
-  assert.deepEqual(restoredFocusIds, [
-    createGuideProgramFocusId('channel-1', 'program-1'),
-    createGuideProgramFocusId('channel-1', 'program-1'),
-    createGuideProgramFocusId('channel-1', 'program-1'),
-  ]);
+  assert.equal(restoredFocusIds.length, 7);
+  assert.equal(restoredFocusIds.every((focusId) => focusId === programFocusId), true);
   assert.ok(states.some((state) => state.saving && state.density === 'compact'));
   assert.ok(states.some((state) => state.saving && state.density === 'comfortable'));
   assert.ok(states.some((state) => state.errorCode === 'storage-unavailable' && !state.saving));

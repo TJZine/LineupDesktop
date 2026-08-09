@@ -56,6 +56,7 @@ import { handleStagedSetupBack } from './setup/stagedSetupController.js';
 import { renderStagedSetupDom } from './setup/stagedSetupDom.js';
 import { cleanupSetupRouteLifecycle, clearSetupSourceLifecycle, createSetupComposition } from './setup/setupComposition.js';
 import { createSettingsRuntime } from './settings/settingsRuntime.js';
+import { createSettingsGuideDensitySettlementOwner } from './settings/guideDensitySettlement.js';
 import { createAudioSetupRuntime } from './settings/audioSetupRuntime.js';
 import { canActivateRouteDuringAudioSetup } from './settings/audioSetupNavigation.js';
 import { renderAudioSetupDom } from './settings/audioSetupDom.js';
@@ -98,24 +99,30 @@ let pendingGuideFocusId: string | null = null, launchActive = true;
 let startupProfilePickerHandled = false;
 const focusRegistry = new FocusRegistry(); let focusState: FocusState;
 let guidePresentationPolling: ReturnType<typeof createGuidePresentationPolling>;
+const settingsGuideDensitySettlementOwner = createSettingsGuideDensitySettlementOwner({
+  getCurrentDensity: () => workflowState.settingsDraft.guideDensity,
+  getPolling: () => guidePresentationPolling,
+  retainGuideProgramFocusIntent: () => { retainGuideProgramFocusIntent(); },
+  restorePendingGuideFocus,
+});
 const settingsRuntime = createSettingsRuntime({
   settings: window.lineupDesktop.settings, windowBridge: fullscreenTransport,
   onStateChanged: (state) => {
-    const densityChanged = state.values.guideDensity !== workflowState.settingsDraft.guideDensity;
     const layoutChanged = state.values.guideLayout !== workflowState.settingsDraft.guideLayout;
     const aggressivePreloadChanged = state.values.aggressiveGuidePreloadEnabled !== workflowState.settingsDraft.aggressiveGuidePreloadEnabled;
     const pastItemsWindowChanged = state.values.pastItemsWindow !== workflowState.settingsDraft.pastItemsWindow;
-    const densityRefreshWasPending = guidePresentationPolling?.hasPendingGuideDensityChange() ?? false;
-    if (densityChanged) {
-      guidePresentationPolling?.noteGuideDensityChange();
-      retainGuideProgramFocusIntent();
-    }
+    const densitySettlement = settingsGuideDensitySettlementOwner.begin(
+      state.values.guideDensity,
+      () => {
+        workflowState = applyWorkflowSettingsValues(workflowState, state.values, state.capabilities);
+      },
+    );
+    const { densityChanged } = densitySettlement;
     if (densityChanged || layoutChanged) invalidateGuideLayoutMetrics(dom.epgGridElement);
     if (pastItemsWindowChanged) {
       guidePresentationPolling?.notePastItemsWindowChange();
       retainGuideProgramFocusIntent();
     }
-    workflowState = applyWorkflowSettingsValues(workflowState, state.values, state.capabilities);
     document.documentElement.dataset.theme = state.values.theme;
     playerOverlayController.setNowPlayingAutoHideMs(state.values.nowPlayingAutoHideMs);
     document.documentElement.dataset.settingsSaving = String(state.saving); document.documentElement.dataset.settingsErrorCode = state.errorCode ?? '';
@@ -124,8 +131,7 @@ const settingsRuntime = createSettingsRuntime({
     if (!state.loading) {
       const activeRoute = workflowState.routeState.activeRoute;
       renderApp();
-      if (densityChanged || densityRefreshWasPending) restorePendingGuideFocus();
-      void guidePresentationPolling?.settleGuideDensity(false);
+      void densitySettlement.finish(false);
       if (aggressivePreloadChanged && guidePresentationPolling !== undefined && (activeRoute === 'guide' || activeRoute === 'player')) {
         void guidePresentationPolling.refresh('guide-aggressive-preload-change', {
           showLoading: activeRoute === 'guide',
@@ -139,7 +145,7 @@ const settingsRuntime = createSettingsRuntime({
         saving: state.saving,
       });
     } else {
-      void guidePresentationPolling?.settleGuideDensity(true);
+      void densitySettlement.finish(true);
     }
   },
 });
