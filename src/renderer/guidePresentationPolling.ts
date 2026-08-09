@@ -81,6 +81,7 @@ export interface GuidePresentationRefreshOptions {
   windowStartMs?: number;
   warmOnly?: boolean;
   invalidateCache?: true;
+  cancelActive?: true;
 }
 
 export interface GuidePageRefreshRequest {
@@ -352,6 +353,13 @@ export function createGuidePresentationPolling(
     refreshOptions: GuidePresentationRefreshOptions = {},
   ): Promise<void> => {
     cancelPage();
+    if (refreshOptions.cancelActive === true && activeRefresh !== null) {
+      guidePresentationLifecycleGeneration += 1;
+      guidePresentationGeneration += 1;
+      activeRefresh.abortController.abort(
+        createGuideRefreshError('Guide refresh superseded.', 'AbortError'),
+      );
+    }
     return queueRefresh(source, refreshOptions).promise;
   };
 
@@ -438,6 +446,7 @@ export function createGuidePresentationPolling(
           }),
           intent.abortController,
           options.host,
+          options.guide.cancelPresentation,
         );
       } catch (error: unknown) {
         if (isCurrent(intent)) {
@@ -637,6 +646,7 @@ function waitForGuidePresentation<T>(
   request: Promise<T>,
   abortController: AbortController,
   host: Window,
+  cancelPresentation: () => Promise<void>,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const { signal } = abortController;
@@ -654,6 +664,7 @@ function waitForGuidePresentation<T>(
       action();
     };
     const handleAbort = (): void => {
+      void cancelPresentation().catch(() => undefined);
       settle(() => reject(readGuideRefreshAbortReason(signal)));
     };
 

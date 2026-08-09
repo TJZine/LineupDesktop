@@ -133,6 +133,7 @@ test('Desktop preload profiles use exact row/time bounds and aggressive idle war
           if (!response.ok) throw new Error('Expected Guide profile fixture success.');
           return { ...response, value: { ...response.value, channelWindow: { offset: input.channelOffset ?? 0, total: 300 } } };
         },
+        cancelPresentation: async () => undefined,
         setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
       },
       host: {
@@ -174,6 +175,7 @@ test('aggressive page and adjacent-time warm entries are consumed without anothe
         if (!response.ok) throw new Error('Expected warm cache fixture success.');
         return { ...response, value: { ...response.value, channelWindow: { offset: input.channelOffset ?? 0, total: 300 } } };
       },
+      cancelPresentation: async () => undefined,
       setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
     },
     host: idleHost(idle),
@@ -232,6 +234,7 @@ test('past-window and trusted identity changes invalidate cached presentations b
   const controller = createGuidePresentationPolling({
     guide: {
       getPresentation: async () => result(`identity-${String(++requests)}`),
+      cancelPresentation: async () => undefined,
       setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
     },
     host: host(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
@@ -257,6 +260,7 @@ test('cache invalidation requires explicit intent instead of diagnostic source l
   const controller = createGuidePresentationPolling({
     guide: {
       getPresentation: async () => result(`invalidation-${String(++requests)}`),
+      cancelPresentation: async () => undefined,
       setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
     },
     host: host(),
@@ -297,6 +301,7 @@ test('preload profile replacement swaps the cache and discards stale warm candid
         requests.push(input);
         return result(`profile-switch-${String(requests.length)}`);
       },
+      cancelPresentation: async () => undefined,
       setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
     },
     host: idleHost(idle),
@@ -337,6 +342,7 @@ test('undefined cache identity matches null for lookup, insertion, and currentne
           requests += 1;
           return pending.promise;
         },
+        cancelPresentation: async () => undefined,
         setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
       },
       host: host(),
@@ -367,6 +373,7 @@ test('cache hits cross one async boundary before currentness is rechecked', asyn
   const controller = createGuidePresentationPolling({
     guide: {
       getPresentation: async () => result('microtask'),
+      cancelPresentation: async () => undefined,
       setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
     },
     host: host(),
@@ -409,6 +416,7 @@ test('a scheduled idle warm cannot displace foreground active and trailing inten
         requests.push({ input, pending });
         return pending.promise;
       },
+      cancelPresentation: async () => undefined,
       setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
     },
     host: idleHost(idle), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,

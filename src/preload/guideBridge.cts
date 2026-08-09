@@ -9,6 +9,7 @@ export type GuideBridgeInvoke = (
 
 export type GuideBridgeChannels = {
   getPresentation: string;
+  cancelPresentation: string;
   setLibraryFilter: string;
   tuneChannel: string;
 };
@@ -25,6 +26,7 @@ const GUIDE_ERROR_OPERATIONS: Readonly<Record<string, readonly GuideOperation[]>
   GUIDE_UNAUTHORIZED: ['getPresentation', 'setLibraryFilter', 'tuneChannel'],
   GUIDE_VALIDATION_FAILED: ['getPresentation', 'setLibraryFilter', 'tuneChannel'],
   GUIDE_PRESENTATION_STALE: ['getPresentation'],
+  GUIDE_PRESENTATION_CANCELLED: ['getPresentation'],
   GUIDE_AUTH_FAILED: ['getPresentation'],
   GUIDE_CHANNEL_NOT_FOUND: ['getPresentation'],
   GUIDE_TRANSPORT_ERROR: ['getPresentation'],
@@ -42,6 +44,7 @@ export function createGuideBridge(
   channels: GuideBridgeChannels,
   createRequestId: (prefix: string) => string,
 ): LineupDesktopPreloadApi['guide'] {
+  const activePresentationRequestIds = new Set<string>();
   return {
     getPresentation: async (input) => {
       const requestId = createRequestId('guide-presentation');
@@ -60,6 +63,7 @@ export function createGuideBridge(
       ) {
         return guideValidationFailure(requestId, 'getPresentation', 'Invalid presentation time range options.');
       }
+      activePresentationRequestIds.add(requestId);
       try {
         const result = await invoke(channels.getPresentation, {
           requestId,
@@ -75,7 +79,19 @@ export function createGuideBridge(
           : guideValidationFailure(requestId, 'getPresentation', 'Invalid guide result envelope received.');
       } catch {
         return guideValidationFailure(requestId, 'getPresentation', 'Internal IPC invoke failed.');
+      } finally {
+        activePresentationRequestIds.delete(requestId);
       }
+    },
+    cancelPresentation: async () => {
+      const requestIds = [...activePresentationRequestIds];
+      await Promise.all(requestIds.map(async (requestId) => {
+        try {
+          await invoke(channels.cancelPresentation, { requestId, payload: {} });
+        } catch {
+          // Cancellation is best-effort from the renderer's perspective.
+        }
+      }));
     },
     setLibraryFilter: async (input) => {
       const requestId = createRequestId('guide-library-filter');

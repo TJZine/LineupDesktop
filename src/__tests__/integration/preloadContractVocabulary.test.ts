@@ -20,6 +20,7 @@ import {
   LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_VALIDATE_DRAFT_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL,
   LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
   LINEUP_PLAYER_CLEANUP_CHANNEL,
@@ -730,6 +731,7 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL,
   LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
   LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
@@ -777,6 +779,7 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL',
     'LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL',
     'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
+    'LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL',
     'LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL',
     'LINEUP_PLAYER_TUNE_CHANNEL',
   ]),
@@ -1916,7 +1919,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
   const guideBridgeExports = evaluateGuideBridgeModule();
   const createGuideBridge = guideBridgeExports.createGuideBridge as (
     invoke: (channel: string, request: { requestId: string; payload: unknown }) => Promise<unknown>,
-    channels: { getPresentation: string; setLibraryFilter: string; tuneChannel: string },
+    channels: { getPresentation: string; cancelPresentation: string; setLibraryFilter: string; tuneChannel: string },
     createRequestId: (prefix: string) => string,
   ) => { getPresentation: (input: { startTimeMs: number; durationMs: number }) => Promise<unknown> };
   const validPresentation = {
@@ -1967,6 +1970,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
     },
     {
       getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      cancelPresentation: LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL,
       setLibraryFilter: LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
       tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
     },
@@ -1988,6 +1992,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
     }),
     {
       getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      cancelPresentation: LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL,
       setLibraryFilter: LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
       tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
     },
@@ -2007,6 +2012,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
     }),
     {
       getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      cancelPresentation: LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL,
       setLibraryFilter: LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
       tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
     },
@@ -3264,6 +3270,7 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
   }
 
   assert.deepEqual(collectCreateGuideBridgeChannelArguments().sort(), [
+    'LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL',
     'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
     'LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL',
     'LINEUP_PLAYER_TUNE_CHANNEL',

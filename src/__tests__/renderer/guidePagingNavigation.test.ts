@@ -66,6 +66,7 @@ test('Guide paging owner binds focus to its exact request and retains last valid
         requests.push(deferred);
         return deferred.promise;
       },
+      cancelPresentation: async () => undefined,
       setLibraryFilter: async (_input) => {
         throw new Error('Unexpected Guide library-filter request.');
       },
@@ -126,6 +127,7 @@ test('Guide paging owner keeps one active/one trailing target and rejects time-r
         requests.push(deferred);
         return deferred.promise;
       },
+      cancelPresentation: async () => undefined,
       setLibraryFilter: async (_input) => {
         throw new Error('Unexpected Guide library-filter request.');
       },
@@ -170,6 +172,7 @@ test('Guide interval supersession clears a queued page through its existing sett
         requests.push(deferred);
         return deferred.promise;
       },
+      cancelPresentation: async () => undefined,
       setLibraryFilter: async (_input) => {
         throw new Error('Unexpected Guide library-filter request.');
       },
@@ -215,6 +218,7 @@ test('Guide page cancellation rejects late success and failure without replacing
         requests.push(deferred);
         return deferred.promise;
       },
+      cancelPresentation: async () => undefined,
       setLibraryFilter: async (_input) => {
         throw new Error('Unexpected Guide library-filter request.');
       },
@@ -254,6 +258,7 @@ test('Guide page cancellation releases the active request before starting the la
   const requests: Array<Deferred<GuideIpcResult<GuidePresentationSource>>> = [];
   const applied: number[] = [];
   const busy: boolean[] = [];
+  let cancellations = 0;
   const polling = createGuidePresentationPolling({
     guide: {
       getPresentation: async (_input) => {
@@ -261,6 +266,7 @@ test('Guide page cancellation releases the active request before starting the la
         requests.push(deferred);
         return deferred.promise;
       },
+      cancelPresentation: async () => { cancellations += 1; },
       setLibraryFilter: async (_input) => {
         throw new Error('Unexpected Guide library-filter request.');
       },
@@ -276,6 +282,7 @@ test('Guide page cancellation releases the active request before starting the la
   });
   assert.equal(requests.length, 1);
   polling.cancelPage();
+  assert.equal(cancellations, 1);
   const latest = polling.requestPage({
     targetGlobalIndex: 17, scopeToken: 'scope', channelOffset: 15,
   });
@@ -307,6 +314,7 @@ test('Guide +5,+5,-5,-5 reversal discards its queued page and focuses the loaded
         requests.push(deferred);
         return deferred.promise;
       },
+      cancelPresentation: async () => undefined,
       setLibraryFilter: async (_input) => {
         throw new Error('Unexpected Guide library-filter request.');
       },

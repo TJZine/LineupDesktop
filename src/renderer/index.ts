@@ -453,7 +453,7 @@ guideFilterController = createGuideLibraryFilterController({
       guidePresentation: { ...workflowState.guidePresentation, libraryFilter },
     };
   },
-  refresh: () => { void guidePresentationPolling.refresh('guide-library-filter', { channelOffset: 0, showLoading: false, invalidateCache: true }); },
+  refresh: () => { void guidePresentationPolling.refresh('guide-library-filter', { channelOffset: 0, showLoading: false, invalidateCache: true, cancelActive: true }); },
   cancelPage: () => guidePresentationPolling.cancelPage(),
   handleFailure: (message) => {
     workflowState = { ...workflowState, epg: setEpgTuneError(workflowState.epg, message) };

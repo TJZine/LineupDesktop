@@ -5,12 +5,13 @@ import guideBridgeModule from '../../preload/guideBridge.cjs';
 
 type GuideBridge = {
   getPresentation(input: { startTimeMs: number; durationMs: number; channelOffset?: number; channelLimit?: number }): Promise<unknown>;
+  cancelPresentation(): Promise<void>;
   setLibraryFilter(input: { expectedScopeToken: string; expectedRevision: number; libraryId: string | null }): Promise<unknown>;
 };
 
 const createGuideBridge = guideBridgeModule.createGuideBridge as (
   invoke: (channel: string, request: { requestId: string; payload: unknown }) => Promise<unknown>,
-  channels: { getPresentation: string; setLibraryFilter: string; tuneChannel: string },
+  channels: { getPresentation: string; cancelPresentation: string; setLibraryFilter: string; tuneChannel: string },
   createRequestId: (prefix: string) => string,
 ) => GuideBridge;
 const createPlayerTuneBridge = guideBridgeModule.createPlayerTuneBridge as (
@@ -38,7 +39,7 @@ function presentation(artwork: unknown, overrides: Record<string, unknown> = {})
 async function invokeWith(value: unknown): Promise<{ ok: boolean; error?: { code: string } }> {
   const bridge = createGuideBridge(
     async (_channel, request) => ({ ok: true, requestId: request.requestId, value }),
-    { getPresentation: 'guide:get-presentation', setLibraryFilter: 'guide:set-library-filter', tuneChannel: 'player:tune' },
+    { getPresentation: 'guide:get-presentation', cancelPresentation: 'guide:cancel-presentation', setLibraryFilter: 'guide:set-library-filter', tuneChannel: 'player:tune' },
     () => 'guide-artwork-request-1',
   );
   return await bridge.getPresentation({ startTimeMs: 0, durationMs: 60_000 }) as {
@@ -156,7 +157,7 @@ test('guide bridge invokes the one filter channel with exact CAS payload and val
         selectedLibraryId: 'library-a', persistenceStatus: 'ready',
       },
     };
-  }, { getPresentation: 'guide:get', setLibraryFilter: 'lineup:guide:setLibraryFilter', tuneChannel: 'player:tune' }, () => 'filter-request');
+  }, { getPresentation: 'guide:get', cancelPresentation: 'guide:cancel', setLibraryFilter: 'lineup:guide:setLibraryFilter', tuneChannel: 'player:tune' }, () => 'filter-request');
   const result = await bridge.setLibraryFilter({ expectedScopeToken: 'scope-1', expectedRevision: 3, libraryId: 'library-a' }) as { ok: boolean };
   assert.equal(result.ok, true);
   assert.deepEqual(invocations, [{
@@ -177,7 +178,7 @@ test('guide bridge invokes the one filter channel with exact CAS payload and val
 test('guide bridge rejects invalid channel paging before invocation', async () => {
   let calls = 0;
   const bridge = createGuideBridge(async () => { calls += 1; return {}; },
-    { getPresentation: 'guide:get', setLibraryFilter: 'guide:set', tuneChannel: 'player:tune' }, () => 'guide-request');
+    { getPresentation: 'guide:get', cancelPresentation: 'guide:cancel', setLibraryFilter: 'guide:set', tuneChannel: 'player:tune' }, () => 'guide-request');
   const invalid = [
     { channelOffset: -1 }, { channelOffset: 1.5 }, { channelOffset: Number.MAX_SAFE_INTEGER + 1 },
     { channelLimit: 0 }, { channelLimit: 25 }, { channelLimit: 1.5 },
@@ -195,7 +196,7 @@ test('guide bridge rejects invalid channel paging before invocation', async () =
 test('guide bridge rejects mismatched filter success and nonclosed error code-operation pairs', async () => {
   const call = async (value: unknown) => {
     const bridge = createGuideBridge(async (_channel, request) => ({ ...(value as object), requestId: request.requestId }),
-      { getPresentation: 'guide:get', setLibraryFilter: 'guide:set', tuneChannel: 'player:tune' }, () => 'filter-request');
+      { getPresentation: 'guide:get', cancelPresentation: 'guide:cancel', setLibraryFilter: 'guide:set', tuneChannel: 'player:tune' }, () => 'filter-request');
     return await bridge.setLibraryFilter({ expectedScopeToken: 'scope', expectedRevision: 1, libraryId: null }) as { ok: boolean; error?: { code: string } };
   };
   const state = { scopeToken: 'scope', revision: 2, libraries: [], selectedLibraryId: null, persistenceStatus: 'ready' };
@@ -214,7 +215,7 @@ test('guide bridge closes presentation and tune error vocabulary to exact operat
   });
   const guideResult = async (value: unknown) => {
     const bridge = createGuideBridge(async (_channel, request) => ({ ...(value as object), requestId: request.requestId }),
-      { getPresentation: 'guide:get', setLibraryFilter: 'guide:set', tuneChannel: 'player:tune' }, () => 'guide-request');
+      { getPresentation: 'guide:get', cancelPresentation: 'guide:cancel', setLibraryFilter: 'guide:set', tuneChannel: 'player:tune' }, () => 'guide-request');
     return await bridge.getPresentation({ startTimeMs: 0, durationMs: 1 }) as { ok: boolean; error?: { code: string } };
   };
   assert.equal((await guideResult(runtimeError('GUIDE_PRESENTATION_STALE', 'getPresentation'))).error?.code,
@@ -234,7 +235,7 @@ test('guide bridge closes presentation and tune error vocabulary to exact operat
 test('guide filter mutation rejection returns the fixed local failure without a second invocation', async () => {
   let calls = 0;
   const bridge = createGuideBridge(async () => { calls += 1; throw new Error('private rejection'); },
-    { getPresentation: 'guide:get', setLibraryFilter: 'guide:set', tuneChannel: 'player:tune' }, () => 'filter-request');
+    { getPresentation: 'guide:get', cancelPresentation: 'guide:cancel', setLibraryFilter: 'guide:set', tuneChannel: 'player:tune' }, () => 'filter-request');
   const result = await bridge.setLibraryFilter({ expectedScopeToken: 'scope', expectedRevision: 0, libraryId: null }) as {
     ok: false; error: { code: string; operation: string; message: string };
   };
@@ -243,4 +244,36 @@ test('guide filter mutation rejection returns the fixed local failure without a 
     code: 'GUIDE_VALIDATION_FAILED', operation: 'setLibraryFilter', message: 'Internal IPC invoke failed.',
     retryable: false, recoverable: false,
   });
+});
+
+test('guide bridge cancels only its currently active presentation request ids', async () => {
+  const pending = new Map<string, () => void>();
+  const cancellations: Array<{ channel: string; request: { requestId: string; payload: unknown } }> = [];
+  let sequence = 0;
+  const bridge = createGuideBridge(async (channel, request) => {
+    if (channel === 'guide:cancel') {
+      cancellations.push({ channel, request });
+      return { ok: true, requestId: request.requestId, value: {} };
+    }
+    await new Promise<void>((resolve) => pending.set(request.requestId, resolve));
+    return { ok: true, requestId: request.requestId, value: presentation(null) };
+  }, {
+    getPresentation: 'guide:get', cancelPresentation: 'guide:cancel',
+    setLibraryFilter: 'guide:set', tuneChannel: 'player:tune',
+  }, () => `presentation-${String(++sequence)}`);
+
+  const first = bridge.getPresentation({ startTimeMs: 0, durationMs: 1 });
+  const second = bridge.getPresentation({ startTimeMs: 1, durationMs: 1 });
+  await bridge.cancelPresentation();
+  assert.deepEqual(cancellations, [
+    { channel: 'guide:cancel', request: { requestId: 'presentation-1', payload: {} } },
+    { channel: 'guide:cancel', request: { requestId: 'presentation-2', payload: {} } },
+  ]);
+
+  pending.get('presentation-1')?.();
+  pending.get('presentation-2')?.();
+  await Promise.all([first, second]);
+  cancellations.length = 0;
+  await bridge.cancelPresentation();
+  assert.deepEqual(cancellations, []);
 });

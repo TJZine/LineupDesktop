@@ -15,6 +15,7 @@ type SourceInFlightEntry = {
   epoch: number;
   generation: number;
   abortController: SourceResolutionAbortController;
+  consumers: number;
 };
 
 type ResolveSourceUncached = (
@@ -134,16 +135,7 @@ export class SourceResolutionCache {
 
     const inFlight = this.sourceInFlight.get(cacheKey);
     if (inFlight && inFlight.epoch === epoch && inFlight.generation === generation) {
-      const items = await raceWithAbortSignal(
-        inFlight.promise,
-        callerSignal,
-        createCallerAbortedError,
-      );
-      this.assertCurrentScope(cacheKey, {
-        epoch: inFlight.epoch,
-        generation: inFlight.generation,
-      });
-      return cloneResolvedItems(items);
+      return this.consumeInFlight(cacheKey, inFlight, callerSignal);
     }
     if (inFlight) {
       this.sourceInFlight.delete(cacheKey);
@@ -168,10 +160,28 @@ export class SourceResolutionCache {
         }
       });
 
-    this.sourceInFlight.set(cacheKey, { promise: resolvePromise, epoch, generation, abortController });
-    const items = await raceWithAbortSignal(resolvePromise, callerSignal, createCallerAbortedError);
-    this.assertCurrentScope(cacheKey, { epoch, generation });
-    return cloneResolvedItems(items);
+    const entry = { promise: resolvePromise, epoch, generation, abortController, consumers: 0 };
+    this.sourceInFlight.set(cacheKey, entry);
+    return this.consumeInFlight(cacheKey, entry, callerSignal);
+  }
+
+  private async consumeInFlight(
+    cacheKey: string,
+    entry: SourceInFlightEntry,
+    callerSignal: ChannelAbortSignal | null,
+  ): Promise<ResolvedContentItem[]> {
+    entry.consumers += 1;
+    try {
+      const items = await raceWithAbortSignal(entry.promise, callerSignal, createCallerAbortedError);
+      this.assertCurrentScope(cacheKey, { epoch: entry.epoch, generation: entry.generation });
+      return cloneResolvedItems(items);
+    } finally {
+      entry.consumers -= 1;
+      if (entry.consumers === 0 && this.sourceInFlight.get(cacheKey) === entry) {
+        entry.abortController.abort();
+        this.sourceInFlight.delete(cacheKey);
+      }
+    }
   }
 
   public buildKey(source: ChannelContentSource): string {

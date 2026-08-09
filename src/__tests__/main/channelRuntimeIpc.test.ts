@@ -8,6 +8,7 @@ import {
   LINEUP_CHANNEL_SETUP_START_APPLY_CHANNEL,
   LINEUP_CHANNEL_SETUP_START_REVIEW_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL,
 } from '../../contracts/ipc.js';
 import type {
   ChannelAggregate,
@@ -132,6 +133,62 @@ test('Guide presentation retries consistency failures but maps projection failur
     assert.equal(presentationLoads, scenario === 'consistency' ? 3 : 1);
     assert.equal(generationLoads, scenario === 'consistency' ? 3 : 1);
   }
+});
+
+test('Guide cancellation is sender-bound, aborts main-owned work, and settles safely', async () => {
+  const handlers = new Map<string, (event: never, payload: unknown) => Promise<unknown> | unknown>();
+  const sender = {};
+  const otherSender = {};
+  let signal: AbortSignal | undefined;
+  const teardown = registerChannelIpcHandlers({
+    runtime: {
+      loadPublicReferenceGeneration: async () => ({
+        lineupRevision: 1, channels: [], currentChannelId: null, fingerprint: 'same',
+      }),
+    } as never,
+    guideRuntime: {
+      isPreferenceScopeCurrent: () => true,
+      getPagedPresentation: async (input: { signal?: AbortSignal }) => {
+        signal = input.signal;
+        await new Promise<void>((_resolve, reject) => {
+          input.signal?.addEventListener('abort', () => reject(new Error('private abort detail')), { once: true });
+        });
+        throw new Error('unreachable');
+      },
+    } as never,
+    publicReferenceOwner: {} as never,
+    isAuthorizedEvent: () => true,
+    createRequestId: () => 'fallback',
+    ipcMain: {
+      handle: (channel, handler) => handlers.set(channel, handler as never),
+      removeHandler: () => undefined,
+    },
+  });
+  const request = { requestId: 'guide-cancel-owner', payload: { startTimeMs: 0, durationMs: 60_000 } };
+  const pending = handlers.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL)!({ sender } as never, request) as Promise<unknown>;
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(signal?.aborted, false);
+
+  const unauthorized = await handlers.get(LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL)!({ sender: otherSender } as never, {
+    requestId: request.requestId, payload: {},
+  }) as { ok: boolean; error: { code: string } };
+  assert.equal(unauthorized.ok, false);
+  assert.equal(unauthorized.error.code, 'GUIDE_UNAUTHORIZED');
+  assert.equal(signal?.aborted, false);
+
+  const cancelled = await handlers.get(LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL)!({ sender } as never, {
+    requestId: request.requestId, payload: {},
+  }) as { ok: boolean; value: object };
+  assert.deepEqual(cancelled, { ok: true, value: {}, requestId: request.requestId });
+  assert.equal(signal?.aborted, true);
+  const result = await pending as { ok: boolean; error: { code: string; message: string } };
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.error, {
+    code: 'GUIDE_PRESENTATION_CANCELLED', message: 'Guide refresh was cancelled.',
+    retryable: true, recoverable: true, operation: 'getPresentation',
+  });
+  await teardown();
 });
 
 test('Guide presentation retries the Settings currentness sentinel independently', async () => {

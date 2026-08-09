@@ -142,6 +142,7 @@ test('guide presentation polling serializes refreshes and settles coalesced work
         const result = await pendingRequest.promise;
         return { ...result, requestId: `guide-${requests.length}` };
       },
+      cancelPresentation: async () => undefined,
     } as unknown as LineupDesktopPreloadApi['guide'],
     host: createNoopIntervalHost(),
     getActiveRoute: () => activeRoute,
@@ -207,6 +208,7 @@ test('guide presentation polling applies sustained slow responses while bounding
         const result = await request.promise;
         return { ...result, requestId: `slow-guide-${requests.length}` };
       },
+      cancelPresentation: async () => undefined,
     } as unknown as LineupDesktopPreloadApi['guide'],
     host: {
       setInterval: (callback: TimerHandler) => { intervalCallbacks.push(callback as () => void); return 11; },
@@ -268,6 +270,7 @@ test('guide presentation polling times out hung work, starts trailing work, and 
   const clearedTimeouts: number[] = [];
   const failureMessages: string[] = [];
   let applied = 0;
+  let cancellations = 0;
   const polling = createGuidePresentationPolling({
     guide: {
       getPresentation: async () => {
@@ -276,6 +279,7 @@ test('guide presentation polling times out hung work, starts trailing work, and 
         const result = await request.promise;
         return { ...result, requestId: `timed-guide-${requests.length}` };
       },
+      cancelPresentation: async () => { cancellations += 1; },
     } as unknown as LineupDesktopPreloadApi['guide'],
     host: {
       setInterval: () => 1,
@@ -301,6 +305,7 @@ test('guide presentation polling times out hung work, starts trailing work, and 
 
   timeoutCallbacks[0]?.();
   await first;
+  assert.equal(cancellations, 1);
   assert.deepEqual(failureMessages, ['Guide refresh timed out. Try again.']);
   assert.deepEqual(clearedTimeouts, [1]);
   assert.equal(requests.length, 2);
@@ -330,6 +335,7 @@ test('guide presentation polling schedules Player and Guide with route-owned win
         windows.push(request.startTimeMs);
         return { ok: true, requestId: `guide-${windows.length}`, value: DEFAULT_EPG_PRESENTATION_SOURCE };
       },
+      cancelPresentation: async () => undefined,
     } as unknown as LineupDesktopPreloadApi['guide'],
     host: {
       setInterval: (callback: TimerHandler) => { intervalCallbacks.push(callback as () => void); return 7; },
@@ -378,6 +384,7 @@ test('Settings-route past-items settlement makes no request; Guide entry recover
         requests += 1;
         return { ok: true, requestId: `settlement-${requests}`, value: DEFAULT_EPG_PRESENTATION_SOURCE };
       },
+      cancelPresentation: async () => undefined,
     } as unknown as LineupDesktopPreloadApi['guide'],
     host: createNoopIntervalHost(),
     getActiveRoute: () => activeRoute,
@@ -436,6 +443,7 @@ test('Player first result adopts the authoritative Guide bound before the Player
         requestStarts.push(request.startTimeMs);
         return { ok: true, requestId: `player-guide-${requestStarts.length}`, value: authoritative };
       },
+      cancelPresentation: async () => undefined,
     } as unknown as LineupDesktopPreloadApi['guide'],
     host: createNoopIntervalHost(),
     getActiveRoute: () => activeRoute,

@@ -947,6 +947,29 @@ test('channel domain source cache keeps caller abort local to shared in-flight w
   assert.equal(calls, 1);
 });
 
+test('channel domain source cache aborts transport when its last caller cancels', async () => {
+  const sourceCache = new SourceResolutionCache(new FakeClock(10));
+  const callerController = new AbortController();
+  let transportSignal: ChannelAbortSignal | null = null;
+  let rejectTransport: (error: Error) => void = () => undefined;
+  const transport = new Promise<ResolvedContentItem[]>((_resolve, reject) => {
+    rejectTransport = reject;
+  });
+  const pending = sourceCache.resolve(librarySource(), async (_source, options) => {
+    transportSignal = options.signal;
+    options.signal.addEventListener?.('abort', () => rejectTransport(new Error('transport aborted')));
+    return transport;
+  }, { signal: callerController.signal });
+  const rejected = assert.rejects(pending, /Aborted/u);
+  await Promise.resolve();
+  const signal = assertPresentSignal(transportSignal);
+
+  callerController.abort();
+
+  await rejected;
+  assert.equal(signal.aborted, true);
+});
+
 test('channel domain source cache clear aborts in-flight waiters and transport', async () => {
   const clock = new FakeClock(10);
   const sourceCache = new SourceResolutionCache(clock);

@@ -100,11 +100,14 @@ export class GuideRuntime {
     channelLimit: number;
     generation: ChannelPublicReferenceGeneration;
     publicReferenceOwner: ChannelPublicReferenceOwner;
+    signal?: AbortSignal;
   }): Promise<GuidePresentationSource> {
     if (this.preferencesStore === null || this.guideContextSource === null) {
       throw new Error('Guide preferences are unavailable.');
     }
+    throwIfAborted(input.signal);
     const settingsSnapshot = await this.getPastItemsWindowSnapshot();
+    throwIfAborted(input.signal);
     const capturedNowMs = this.clock.now();
     let preference = await this.activatePreferenceScope(input.generation);
     const libraryRows = deriveLibraries(input.generation, input.publicReferenceOwner);
@@ -137,8 +140,11 @@ export class GuideRuntime {
     const page = eligible.slice(offset, offset + input.channelLimit);
     const resolved = await Promise.all(page.map(async ({ channel }) => {
       let items: ChannelContentItem[] = [];
-      try { items = await this.contentResolver.resolveSource(channel.contentSource); }
-      catch (error) { this.logContentResolutionFailure('GuideRuntime.getPagedPresentation.channel', channel, error); }
+      try { items = await this.contentResolver.resolveSource(channel.contentSource, { signal: input.signal }); }
+      catch (error) {
+        if (input.signal?.aborted) throw error;
+        this.logContentResolutionFailure('GuideRuntime.getPagedPresentation.channel', channel, error);
+      }
       if (items.length === 0) return { channel, items, programs: [] as EpgProgramViewModel[] };
       const scheduler = createSchedulerForChannel(channel, items, this.clock);
       const programs = scheduler.getScheduleWindow(effectiveStartTimeMs, effectiveStartTimeMs + input.durationMs).programs
@@ -361,6 +367,11 @@ export class GuideRuntime {
       });
     }
   }
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (!signal?.aborted) return;
+  throw signal.reason instanceof Error ? signal.reason : new Error('Guide presentation aborted.');
 }
 
 function isVisibleChannel(channel: ChannelConfig): boolean {
