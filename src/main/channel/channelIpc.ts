@@ -160,7 +160,7 @@ export function registerChannelIpcHandlers(
       const handleSenderDestroyed = () => controller.abort();
       const removeDestroyedListener = registerSenderDestroyedListener(event, handleSenderDestroyed);
       activePresentations.set(request.requestId, { controller, sender, removeDestroyedListener });
-      const timeout = setTimeout(() => controller.abort(), GUIDE_PRESENTATION_TIMEOUT_MS);
+      const timeout = globalThis.setTimeout(() => controller.abort(), GUIDE_PRESENTATION_TIMEOUT_MS);
       try {
         for (let attempt = 0; attempt < 3; attempt += 1) {
           try {
@@ -204,7 +204,7 @@ export function registerChannelIpcHandlers(
           },
         };
       } finally {
-        clearTimeout(timeout);
+        globalThis.clearTimeout(timeout);
         const active = activePresentations.get(request.requestId);
         if (active?.controller === controller) activePresentations.delete(request.requestId);
         removeDestroyedListener();
