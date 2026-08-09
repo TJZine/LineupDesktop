@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import process from 'node:process';
 import test from 'node:test';
+import { clearTimeout, setTimeout } from 'node:timers';
+import { setImmediate as waitForImmediate } from 'node:timers/promises';
 
 import {
   LivePlexTransport,
@@ -21,6 +24,57 @@ function connection(uri = 'https://plex.invalid:32400/base/path') {
     relay: false,
     latencyMs: 1,
   };
+}
+
+type ArtworkCancellationMode = 'never-settling' | 'rejecting';
+
+function responseWithCancellation(
+  mode: ArtworkCancellationMode,
+  options: {
+    status?: number;
+    headers?: Record<string, string>;
+    chunkBytes?: number;
+    onCancel: () => void;
+  },
+): Response {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      if (options.chunkBytes !== undefined) {
+        controller.enqueue(new Uint8Array(options.chunkBytes));
+      }
+    },
+    cancel() {
+      options.onCancel();
+      if (mode === 'never-settling') return new Promise<void>(() => {});
+      return Promise.reject(new Error('artwork cancellation failed'));
+    },
+  });
+  return new Response(body, {
+    status: options.status ?? 200,
+    headers: options.headers,
+  });
+}
+
+async function assertArtworkFailurePromptly(
+  operation: Promise<unknown>,
+  expectedCode: LivePlexTransportError['code'],
+): Promise<void> {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutHandle = setTimeout(() => reject(new Error('artwork failure did not settle promptly')), 100);
+  });
+  try {
+    await Promise.race([
+      assert.rejects(operation, (error: unknown) => {
+        assert.ok(error instanceof LivePlexTransportError);
+        assert.equal(error.code, expectedCode);
+        return true;
+      }),
+      timeout,
+    ]);
+  } finally {
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+  }
 }
 
 test('normalizeGuideArtworkLocator accepts only the anchored Plex poster grammar', () => {
@@ -178,6 +232,52 @@ test('guide artwork transport cancels response bodies before early HTTP, MIME, a
     }), LivePlexTransportError);
   }
   assert.deepEqual(canceled, ['http', 'mime', 'length']);
+});
+
+test('guide artwork failure does not await never-settling or rejecting response cleanup', async () => {
+  const unhandled: unknown[] = [];
+  const onUnhandledRejection = (reason: unknown) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandledRejection);
+  try {
+    for (const mode of ['never-settling', 'rejecting'] as const) {
+      const scenarios: Array<{
+        label: string;
+        locator: string;
+        status?: number;
+        headers: Record<string, string>;
+        chunkBytes?: number;
+        expectedCode: LivePlexTransportError['code'];
+      }> = [
+        { label: 'http', locator: '/library/metadata/1/thumb', status: 500, headers: { 'content-type': 'image/png' }, expectedCode: 'server-error' as const },
+        { label: 'mime', locator: '/library/metadata/2/thumb', headers: { 'content-type': 'text/html' }, expectedCode: 'parse-error' as const },
+        { label: 'length', locator: '/library/metadata/3/thumb', headers: { 'content-type': 'image/jpeg', 'content-length': '1500001' }, expectedCode: 'parse-error' as const },
+        { label: 'overflow', locator: '/library/metadata/4/thumb', headers: { 'content-type': 'image/png' }, chunkBytes: 1_500_001, expectedCode: 'parse-error' as const },
+      ];
+      for (const scenario of scenarios) {
+        let canceled = false;
+        const transport = new LivePlexTransport({
+          fetch: async () => responseWithCancellation(mode, {
+            ...(scenario.status !== undefined ? { status: scenario.status } : {}),
+            headers: scenario.headers,
+            ...(scenario.chunkBytes !== undefined ? { chunkBytes: scenario.chunkBytes } : {}),
+            onCancel: () => { canceled = true; },
+          }),
+        });
+        await assertArtworkFailurePromptly(
+          transport.fetchGuideArtwork({
+            connection: connection(), token: capturedCredential,
+            locator: scenario.locator,
+          }),
+          scenario.expectedCode,
+        );
+        assert.equal(canceled, true, `${mode} ${scenario.label} cleanup was not started`);
+      }
+    }
+    await waitForImmediate();
+  } finally {
+    process.off('unhandledRejection', onUnhandledRejection);
+  }
+  assert.deepEqual(unhandled, []);
 });
 
 test('guide artwork transport rejects MIME and size violations and honors abort', async () => {

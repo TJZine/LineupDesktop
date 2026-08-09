@@ -349,19 +349,19 @@ export class LivePlexTransport
       try {
         throwForHttpStatus(response.status);
       } catch (error) {
-        await cancelGuideArtworkResponseBody(response);
+        cancelGuideArtworkResponseBody(response);
         throw error;
       }
       let mimeType: GuideArtworkMimeType;
       try {
         mimeType = normalizeGuideArtworkMimeType(response.headers.get('content-type'));
       } catch (error) {
-        await cancelGuideArtworkResponseBody(response);
+        cancelGuideArtworkResponseBody(response);
         throw error;
       }
       const contentLength = readContentLength(response.headers.get('content-length'));
       if (contentLength !== null && contentLength > GUIDE_ARTWORK_MAX_BYTES) {
-        await cancelGuideArtworkResponseBody(response);
+        cancelGuideArtworkResponseBody(response);
         throw guideArtworkError('parse-error');
       }
       return {
@@ -718,7 +718,7 @@ async function readBoundedGuideArtworkBytes(
       if (result.done) break;
       total += result.value.byteLength;
       if (total > maximumBytes) {
-        await reader.cancel();
+        cancelGuideArtworkReader(reader);
         throw guideArtworkError('parse-error');
       }
       chunks.push(result.value);
@@ -735,10 +735,22 @@ async function readBoundedGuideArtworkBytes(
   return bytes;
 }
 
-async function cancelGuideArtworkResponseBody(response: Response): Promise<void> {
+function cancelGuideArtworkResponseBody(response: Response): void {
   if (response.body === null) return;
   try {
-    await response.body.cancel();
+    void response.body.cancel().catch(() => {
+      // Best-effort network resource release must not replace the fixed transport failure.
+    });
+  } catch {
+    // Best-effort network resource release must not replace the fixed transport failure.
+  }
+}
+
+function cancelGuideArtworkReader(reader: ReadableStreamDefaultReader<Uint8Array>): void {
+  try {
+    void reader.cancel().catch(() => {
+      // Best-effort network resource release must not replace the fixed transport failure.
+    });
   } catch {
     // Best-effort network resource release must not replace the fixed transport failure.
   }
