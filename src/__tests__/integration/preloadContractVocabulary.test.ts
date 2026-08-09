@@ -1506,16 +1506,24 @@ test('preload media-input subscription validates delivery and removes its exact 
 
   const delivered: unknown[] = [];
   const unsubscribe = onMediaInput((input: unknown) => delivered.push(input));
-  harness.emit(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, 'mediaPlay');
+  const validInputs = [
+    'mediaPlay',
+    'mediaPause',
+    'mediaRewind',
+    'mediaFastForward',
+  ] as const;
+  for (const input of validInputs) {
+    harness.emit(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, input);
+  }
   harness.emit(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, 'mediaStop');
   harness.emit(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, { input: 'mediaPause' });
-  assert.deepEqual(delivered, ['mediaPlay']);
+  assert.deepEqual(delivered, validInputs);
 
   unsubscribe();
   assert.equal(harness.removals.length, 1);
   assert.equal(harness.removals[0]?.channel, LINEUP_SHELL_MEDIA_INPUT_CHANNEL);
   harness.emit(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, 'mediaPause');
-  assert.deepEqual(delivered, ['mediaPlay']);
+  assert.deepEqual(delivered, validInputs);
 });
 
 test('preload Plex bridge validates invoke results before returning them', async () => {
