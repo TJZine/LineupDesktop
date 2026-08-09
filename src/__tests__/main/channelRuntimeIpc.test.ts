@@ -453,6 +453,47 @@ test('Guide cancellation settles a noncooperative generation load and releases s
   await harness.teardown();
 });
 
+test('Guide admission keeps canceled noncooperative work charged until underlying settlement', async () => {
+  const harness = createNonCooperativeGuideHarness('presentation');
+  const first = harness.get('guide-stalled-first');
+  const second = harness.get('guide-stalled-second');
+  await settlePendingHandlerWork();
+  assert.equal(harness.operations.length, 2);
+  assert.equal(harness.signals.length, 2);
+
+  await harness.cancel('guide-stalled-first');
+  await harness.cancel('guide-stalled-second');
+  assert.equal((await first).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+  assert.equal((await second).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+  assert.equal(harness.sender.destroyedListenerCount, 0);
+
+  const thirdAttempt = harness.get('guide-stalled-third');
+  await settlePendingHandlerWork();
+  const operationCountAfterThirdAttempt = harness.operations.length;
+  const signalCountAfterThirdAttempt = harness.signals.length;
+  if (operationCountAfterThirdAttempt > 2) {
+    harness.operations.at(-1)?.resolve(publicPresentation());
+  }
+  const rejected = await thirdAttempt;
+  assert.equal(rejected.error?.code, 'GUIDE_VALIDATION_FAILED');
+  assert.equal(operationCountAfterThirdAttempt, 2, 'rejection starts no privileged presentation work');
+  assert.equal(signalCountAfterThirdAttempt, 2, 'rejection creates no additional abort-controlled request');
+
+  harness.operations[0]?.resolve(publicPresentation());
+  await settlePendingHandlerWork();
+  const replacement = harness.get('guide-stalled-third');
+  await settlePendingHandlerWork();
+  assert.equal(harness.operations.length, 3);
+  assert.equal(harness.signals.length, 3);
+
+  await harness.cancel('guide-stalled-third');
+  assert.equal((await replacement).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+  harness.operations[1]?.resolve(publicPresentation());
+  harness.operations[2]?.resolve(publicPresentation());
+  await settlePendingHandlerWork();
+  await harness.teardown();
+});
+
 test('Guide timeout and sustained cancellation settle noncooperative presentations with bounded custody', async (t) => {
   const originalSetTimeout = globalThis.setTimeout;
   const originalClearTimeout = globalThis.clearTimeout;

@@ -74,6 +74,7 @@ export function registerChannelIpcHandlers(
     sender: unknown;
     cancel: () => void;
   }>();
+  const underlyingPresentationWorkBySender = new Map<unknown, number>();
 
   ipcMain.handle(LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL, (event, payload: unknown) => {
     const request = readChannelSetupEmptyRequest(
@@ -160,11 +161,8 @@ export function registerChannelIpcHandlers(
         return validationGuideResult(request.requestId, 'getPresentation');
       }
       const sender = readGuideSender(event) ?? event;
-      let activeSenderPresentations = 0;
-      for (const active of activePresentations.values()) {
-        if (active.sender === sender) activeSenderPresentations += 1;
-      }
-      if (activeSenderPresentations >= MAX_ACTIVE_GUIDE_PRESENTATIONS_PER_SENDER) {
+      const activeSenderWork = underlyingPresentationWorkBySender.get(sender) ?? 0;
+      if (activeSenderWork >= MAX_ACTIVE_GUIDE_PRESENTATIONS_PER_SENDER) {
         return validationGuideResult(request.requestId, 'getPresentation');
       }
       const controller = new AbortController();
@@ -196,6 +194,7 @@ export function registerChannelIpcHandlers(
       if (!controller.signal.aborted) {
         timeout = globalThis.setTimeout(active.cancel, GUIDE_PRESENTATION_TIMEOUT_MS);
       }
+      underlyingPresentationWorkBySender.set(sender, activeSenderWork + 1);
       try {
         const operation = loadGuidePresentation({
           requestId: request.requestId,
@@ -204,6 +203,11 @@ export function registerChannelIpcHandlers(
           guideRuntime,
           publicReferenceOwner,
           signal: controller.signal,
+        }).finally(() => {
+          const workCount = underlyingPresentationWorkBySender.get(sender);
+          if (workCount === undefined) return;
+          if (workCount === 1) underlyingPresentationWorkBySender.delete(sender);
+          else underlyingPresentationWorkBySender.set(sender, workCount - 1);
         });
         return await Promise.race([operation, cancellation]);
       } finally {
@@ -296,6 +300,7 @@ export function registerChannelIpcHandlers(
         active.cancel();
       }
       activePresentations.clear();
+      underlyingPresentationWorkBySender.clear();
       ipcMain.removeHandler(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL);
       ipcMain.removeHandler(LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL);
       ipcMain.removeHandler(LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL);
