@@ -89,6 +89,23 @@ test('settings/native-host composition keeps production creation out of developm
   }
 });
 
+test('settings/native-host composition projects helper unavailable when production host creation is absent', () => {
+  const composition = createSettingsNativeHostComposition({
+    shellMode: 'production',
+    platform: 'win32',
+    initialSnapshot: settingsSnapshot(),
+    createProductionNativeHost: () => null,
+    createRequestId: (prefix) => `${prefix}-1`,
+    diagnosticEventStore: new DiagnosticEventStore(),
+  });
+
+  assert.equal(composition.nativeHost, null);
+  assert.deepEqual(
+    composition.settingsPolicy.getCapabilityProjection().audioOutputSelection,
+    { status: 'unsupported', reason: 'helper-unavailable' },
+  );
+});
+
 test('production player IPC uses the injected host and never calls the development factory hook', async () => {
   let factoryCalls = 0;
   const host: NativePlayerHostPort = {

@@ -144,8 +144,11 @@ export class NativePlayerPresentationOwner {
       return success('unsupported', request.documentEpoch, request.revision);
     }
     const host = this.#options.host;
+    if (host?.updatePresentation === undefined) {
+      return success('unsupported', request.documentEpoch, request.revision);
+    }
     const parent = this.#options.getParentIdentity();
-    if (host?.updatePresentation === undefined || parent === null) {
+    if (parent === null) {
       return failure('rejected', request.documentEpoch, request.revision);
     }
     if (request.mode !== 'hidden' && !this.#isEligible(request)) {
