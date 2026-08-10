@@ -18,13 +18,9 @@ export class PlaybackMediaDetailPort implements PlexStreamResolverMediaDetailPor
     this.#diagnosticEventStore = options.diagnosticEventStore;
   }
 
-  async getMediaDetail(input: { mediaId: string }): Promise<PlexMediaItem | null> {
-    const prefix = 'plex-media-';
-    if (!input.mediaId.startsWith(prefix)) {
-      return null;
-    }
-    const ratingKey = input.mediaId.slice(prefix.length);
-    if (!ratingKey) {
+  async getMediaDetail(input: { ratingKey: string }): Promise<PlexMediaItem | null> {
+    const { ratingKey } = input;
+    if (ratingKey.trim() === '') {
       return null;
     }
 
@@ -45,7 +41,7 @@ export class PlaybackMediaDetailPort implements PlexStreamResolverMediaDetailPor
         );
         return parsedItems[0] ?? null;
       });
-    } catch (error: unknown) {
+    } catch {
       this.#diagnosticEventStore?.record({
         surface: 'main',
         category: 'playback',
@@ -54,23 +50,12 @@ export class PlaybackMediaDetailPort implements PlexStreamResolverMediaDetailPor
         operation: 'playbackMediaDetailPort.getMetadata',
         message: 'Playback media detail lookup failed.',
         context: {
-          ratingKey,
           flow: 'playbackMediaDetailPort -> withActiveLibraryContext(getMetadata)',
           steps: ['transport.getMetadata', 'payloadAsContainer', 'extractMetadataArray', 'parseMediaItems'],
-          error: summarizeError(error),
+          reason: 'metadata lookup failed',
         },
       });
       return null;
     }
   }
-}
-
-function summarizeError(error: unknown): { name?: string; message: string } | string {
-  if (error instanceof Error) {
-    return {
-      name: error.name,
-      message: error.message,
-    };
-  }
-  return typeof error === 'string' ? error : 'unknown error';
 }

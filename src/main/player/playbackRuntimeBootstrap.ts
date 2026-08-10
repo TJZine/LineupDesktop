@@ -61,6 +61,7 @@ export function bootstrapPlaybackRuntime(
       ? createDesktopPlayerAdapterRuntimePort(adapter)
       : {
           dispatch: async () => ({ ok: true, events: [] }),
+          settleTerminalError: (event: Extract<PlayerEvent, { event: 'error' }>) => [event],
           cleanup: async () => {},
         };
 
@@ -150,6 +151,7 @@ export function bootstrapPlaybackRuntime(
             ] as readonly PlayerEvent[],
           };
         },
+        settleTerminalError: (event: Extract<PlayerEvent, { event: 'error' }>) => [event],
         cleanup: async () => {},
       };
 
@@ -181,10 +183,10 @@ export function bootstrapPlaybackRuntime(
 function createFakeResolver() {
   return {
     async resolve(input: PlexStreamResolverInput): Promise<PlexStreamResolverResult> {
-      const fakeMediaId = `plex-media-${input.mediaId}`;
-      const fakeMediaTitle = `Live Program ${input.mediaId}`;
+      const fakeMediaId = `plex-media-${input.ratingKey}`;
+      const fakeMediaTitle = `Live Program ${input.ratingKey}`;
       const fakeMediaDurationMs = 1_200_000;
-      if (input.mediaId.length === 0) {
+      if (input.ratingKey.length === 0) {
         return {
           ok: false,
           error: {

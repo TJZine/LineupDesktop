@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { PlaybackMediaDetailPort } from '../../main/plex/playbackMediaDetailPort.js';
 import type { DesktopPlexRuntime } from '../../main/plex/desktopPlexRuntime.js';
 
-test('PlaybackMediaDetailPort returns null for non-plex media ID', async () => {
+test('PlaybackMediaDetailPort rejects an empty raw rating key before transport', async () => {
   const mockRuntime = {
     async withActiveLibraryContext() {
       throw new Error('should not be called');
@@ -11,7 +11,7 @@ test('PlaybackMediaDetailPort returns null for non-plex media ID', async () => {
   } as unknown as DesktopPlexRuntime;
 
   const port = new PlaybackMediaDetailPort(mockRuntime);
-  const result = await port.getMediaDetail({ mediaId: 'other-id' });
+  const result = await port.getMediaDetail({ ratingKey: '   ' });
   assert.equal(result, null);
 });
 
@@ -23,7 +23,7 @@ test('PlaybackMediaDetailPort returns null if connection/token is missing', asyn
   } as unknown as DesktopPlexRuntime;
 
   const port = new PlaybackMediaDetailPort(mockRuntime);
-  const result = await port.getMediaDetail({ mediaId: 'plex-media-123' });
+  const result = await port.getMediaDetail({ ratingKey: '123' });
   assert.equal(result, null);
 });
 
@@ -87,7 +87,7 @@ test('PlaybackMediaDetailPort fetches and parses metadata', async () => {
   } as unknown as DesktopPlexRuntime;
 
   const port = new PlaybackMediaDetailPort(mockRuntime);
-  const result = await port.getMediaDetail({ mediaId: 'plex-media-123' });
+  const result = await port.getMediaDetail({ ratingKey: '123' });
   assert.ok(result);
   assert.equal(result.ratingKey, '123');
   assert.equal(result.title, 'Test Episode');
@@ -120,6 +120,6 @@ test('PlaybackMediaDetailPort returns null on transport error', async () => {
   } as unknown as DesktopPlexRuntime;
 
   const port = new PlaybackMediaDetailPort(mockRuntime);
-  const result = await port.getMediaDetail({ mediaId: 'plex-media-123' });
+  const result = await port.getMediaDetail({ ratingKey: '123' });
   assert.equal(result, null);
 });

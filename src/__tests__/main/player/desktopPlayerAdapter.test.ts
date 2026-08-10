@@ -160,6 +160,51 @@ function runtimeLoadCommand(requestId = 'request-load-1'): PlayerCommand {
   };
 }
 
+function runtimeTerminalError(): Extract<PlayerEvent, { event: 'error' }> {
+  return {
+    event: 'error',
+    requestId: null,
+    error: {
+      code: 'PLAYER_PLAYBACK_CANDIDATE_UNAVAILABLE',
+      category: 'source',
+      message: 'The playback runtime could not resolve the scheduled media.',
+      recoverable: true,
+      retryable: true,
+      diagnostic: {
+        component: 'plex-playback-runtime',
+        operation: 'channel.resolve',
+        status: 'failed',
+        reason: 'playback candidate resolution failed',
+      },
+    },
+  };
+}
+
+test('desktop player adapter accepts an exact runtime terminal settlement and owns the error snapshot', () => {
+  const adapter = new DesktopPlayerAdapter(new FakeNativePlayerHost());
+  const events = adapter.settleRuntimeTerminalError(runtimeTerminalError(), null);
+
+  assert.deepEqual(events.map((event) => event.event), ['error', 'state.changed']);
+  const changed = events[1];
+  assert.equal(changed?.event, 'state.changed');
+  assert.deepEqual(changed?.event === 'state.changed' ? changed.snapshot : null, adapter.getSnapshot());
+  assert.equal(adapter.getSnapshot().requestId, null);
+  assert.equal(adapter.getSnapshot().status, 'error');
+  assert.equal(adapter.getSnapshot().playing, false);
+  assert.deepEqual(adapter.getSnapshot().lastError, events[0]?.event === 'error' ? events[0].error : null);
+});
+
+test('desktop player adapter rejects a runtime terminal settlement on request mismatch without mutation or events', async () => {
+  const adapter = new DesktopPlayerAdapter(new FakeNativePlayerHost());
+  await adapter.dispatchRuntimeCommand(runtimeLoadCommand('newer-request'), privilegedContext('newer-request'));
+  const before = adapter.getSnapshot();
+
+  const events = adapter.settleRuntimeTerminalError(runtimeTerminalError(), null);
+
+  assert.deepEqual(events, []);
+  assert.deepEqual(adapter.getSnapshot(), before);
+});
+
 function privilegedContext(requestId = 'request-load-1'): PrivilegedPlaybackDispatchContext {
   return {
     privatePlayback: {

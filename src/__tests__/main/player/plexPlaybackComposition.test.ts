@@ -242,6 +242,10 @@ class FakePlayerPort {
     return { ok: true, events: [] };
   }
 
+  settleTerminalError(event: Extract<PlayerEvent, { event: 'error' }>): readonly PlayerEvent[] {
+    return [event];
+  }
+
   async cleanup(requestId: string | null): Promise<void> {
     this.cleanupRequestIds.push(requestId);
   }
@@ -332,6 +336,11 @@ class FakeDesktopPlayerAdapter {
   runtimeEvents:
     | ((command: PlayerCommand) => readonly PlayerEvent[])
     | null = null;
+  readonly terminalSettlements: Array<{
+    event: Extract<PlayerEvent, { event: 'error' }>;
+    expectedSnapshotRequestId: string | null;
+  }> = [];
+  terminalEvents: readonly PlayerEvent[] | null = null;
 
   async dispatchRendererIntent(envelope: PlayerRendererIntentEnvelope): Promise<{
     accepted: boolean;
@@ -374,6 +383,14 @@ class FakeDesktopPlayerAdapter {
         },
       ],
     };
+  }
+
+  settleRuntimeTerminalError(
+    event: Extract<PlayerEvent, { event: 'error' }>,
+    expectedSnapshotRequestId: string | null,
+  ): readonly PlayerEvent[] {
+    this.terminalSettlements.push({ event, expectedSnapshotRequestId });
+    return this.terminalEvents ?? [event];
   }
 
   async cleanup(): Promise<{ accepted: boolean; events: readonly PlayerEvent[] }> {
@@ -439,7 +456,7 @@ test('RD-12 composition wires scheduler, resolver, runtime, player, and PMS thro
   assert.equal(result.accepted, true);
   assert.equal(result.requestId, 'request-from-runtime');
   assert.equal(resolver.inputs.length, 1);
-  assert.equal(resolver.inputs[0]?.mediaId, '42');
+  assert.equal(resolver.inputs[0]?.ratingKey, '42');
   assert.equal(resolver.inputs[0]?.startPositionMs, 60_000);
   assert.equal(resolver.inputs[0]?.capabilityProfile.id, capabilityProfile.id);
   assert.equal(player.commands.length, 1);
@@ -499,7 +516,7 @@ test('playback composition carries an exact-current manual retry through its run
   assert.equal(retried, true);
   assert.equal(resolver.inputs.length, 2);
   assert.deepEqual(
-    resolver.inputs.map((input) => input.mediaId),
+    resolver.inputs.map((input) => input.ratingKey),
     ['42', '42'],
   );
   assert.deepEqual(
@@ -689,6 +706,42 @@ test('desktop adapter runtime port requires one exact successful command settlem
     assert.equal(result.ok, false, entry.name);
     assert.deepEqual(result.events, entry.events(command), entry.name);
   }
+});
+
+test('desktop adapter runtime port delegates terminal settlement and returns the complete adapter batch', () => {
+  const adapter = new FakeDesktopPlayerAdapter();
+  const errorEvent: Extract<PlayerEvent, { event: 'error' }> = {
+    event: 'error',
+    requestId: null,
+    error: {
+      code: 'PLAYER_PLAYBACK_CANDIDATE_UNAVAILABLE',
+      category: 'source',
+      message: 'Scheduled media could not be resolved.',
+      recoverable: true,
+      retryable: true,
+    },
+  };
+  const returnedBatch: readonly PlayerEvent[] = [
+    errorEvent,
+    {
+      event: 'warning',
+      requestId: null,
+      warning: {
+        code: 'PLAYER_SAFE_TEST_WARNING',
+        category: 'stale-request',
+        message: 'Safe test warning.',
+        recoverable: true,
+        retryable: false,
+      },
+    },
+  ];
+  adapter.terminalEvents = returnedBatch;
+  const player = createDesktopPlayerAdapterRuntimePort(adapter);
+
+  const result = player.settleTerminalError(errorEvent, null);
+
+  assert.equal(result, returnedBatch);
+  assert.deepEqual(adapter.terminalSettlements, [{ event: errorEvent, expectedSnapshotRequestId: null }]);
 });
 
 test('real desktop adapter host rejection consumes exactly three recovery attempts', async () => {

@@ -47,6 +47,83 @@ test('renderer presentation controller retains one active and one latest request
   assert.equal(requests.length, 2);
 });
 
+test('renderer presentation controller keeps an applied aperture open across unchanged reconciliations', async () => {
+  const root = fakeElement();
+  let bounds = domRect(600, 20, 980, 234);
+  const element = fakeElement(() => bounds);
+  const requests: PlayerPresentationRequest[] = [];
+  const controller = createNativePlayerPresentationController({
+    element,
+    compositionElement: root,
+    updatePresentation: async (request) => {
+      requests.push(request);
+      return request.documentEpoch === null
+        ? { ok: true, status: 'deferred', documentEpoch: 11, revision: request.revision }
+        : { ok: true, status: 'applied', documentEpoch: 11, revision: request.revision };
+    },
+    getIntent: () => ({ mode: 'guide-classic-pip', requestId: 'media-1' }),
+    viewport: () => ({ width: 1000, height: 700 }),
+  });
+  controller.reconcile();
+  await flushPromises();
+  assert.equal(requests.length, 2);
+  assert.equal(root.dataset.nativePresentationAperture, 'open');
+
+  for (let index = 0; index < 100; index += 1) controller.reconcile();
+
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requests.map((request) => request.revision), [1, 2]);
+  assert.equal(root.dataset.nativePresentationAperture, 'open');
+
+  bounds = domRect(500, 30, 900, 250);
+  controller.reconcile();
+  assert.equal(requests.length, 3);
+  assert.equal(root.dataset.nativePresentationAperture, 'opaque');
+  await flushPromises();
+  assert.equal(root.dataset.nativePresentationAperture, 'open');
+});
+
+test('renderer presentation controller requires a fresh acknowledgement after a changed request fails', async () => {
+  const root = fakeElement();
+  const element = fakeElement();
+  const requests: PlayerPresentationRequest[] = [];
+  let intent: NativePlayerPresentationIntent = { mode: 'player-full', requestId: 'media-1' };
+  let rejectNext = false;
+  const controller = createNativePlayerPresentationController({
+    element,
+    compositionElement: root,
+    updatePresentation: async (request) => {
+      requests.push(request);
+      if (rejectNext) {
+        rejectNext = false;
+        throw new Error('fixed test rejection');
+      }
+      return request.documentEpoch === null
+        ? { ok: true, status: 'deferred', documentEpoch: 12, revision: request.revision }
+        : { ok: true, status: 'applied', documentEpoch: 12, revision: request.revision };
+    },
+    getIntent: () => intent,
+    viewport: () => ({ width: 1000, height: 700 }),
+  });
+  controller.reconcile();
+  await flushPromises();
+  assert.equal(root.dataset.nativePresentationAperture, 'open');
+
+  rejectNext = true;
+  intent = { mode: 'player-full', requestId: 'media-2' };
+  controller.reconcile();
+  await flushPromises();
+  assert.equal(root.dataset.nativePresentationAperture, 'opaque');
+  assert.equal(requests.length, 3);
+
+  intent = { mode: 'player-full', requestId: 'media-1' };
+  controller.reconcile();
+  assert.equal(requests.length, 4);
+  assert.equal(root.dataset.nativePresentationAperture, 'opaque');
+  await flushPromises();
+  assert.equal(root.dataset.nativePresentationAperture, 'open');
+});
+
 test('renderer presentation controller measures the first Classic request after composing Classic layout', async () => {
   const root = fakeElement();
   const element = fakeElement(() => {
@@ -84,6 +161,7 @@ test('renderer presentation controller ignores an applied acknowledgement when a
   const requests: PlayerPresentationRequest[] = [];
   const pending: Array<(result: PlayerPresentationResult) => void> = [];
   let automatic = true;
+  let intent: NativePlayerPresentationIntent = { mode: 'player-full', requestId: 'media-1' };
   const controller = createNativePlayerPresentationController({
     element,
     compositionElement: root,
@@ -96,13 +174,15 @@ test('renderer presentation controller ignores an applied acknowledgement when a
       }
       return new Promise((resolve) => pending.push(resolve));
     },
-    getIntent: () => ({ mode: 'player-full', requestId: 'media-1' }),
+    getIntent: () => intent,
     viewport: () => ({ width: 1000, height: 700 }),
   });
   controller.reconcile();
   await flushPromises();
   automatic = false;
+  intent = { mode: 'player-full', requestId: 'media-2' };
   controller.reconcile();
+  intent = { mode: 'player-full', requestId: 'media-3' };
   controller.reconcile();
   assert.equal(root.dataset.nativePresentationAperture, 'opaque');
   const active = requireAt(requests, 2);
@@ -121,6 +201,7 @@ test('renderer presentation teardown stays opaque when an earlier applied acknow
   const requests: PlayerPresentationRequest[] = [];
   const pending: Array<(result: PlayerPresentationResult) => void> = [];
   let automatic = true;
+  let intent: NativePlayerPresentationIntent = { mode: 'player-full', requestId: 'media-1' };
   let inFlight = 0;
   let maximumInFlight = 0;
   const controller = createNativePlayerPresentationController({
@@ -137,12 +218,13 @@ test('renderer presentation teardown stays opaque when an earlier applied acknow
       maximumInFlight = Math.max(maximumInFlight, inFlight);
       return new Promise((resolve) => pending.push((result) => { inFlight -= 1; resolve(result); }));
     },
-    getIntent: () => ({ mode: 'player-full', requestId: 'media-1' }),
+    getIntent: () => intent,
     viewport: () => ({ width: 1000, height: 700 }),
   });
   controller.reconcile();
   await flushPromises();
   automatic = false;
+  intent = { mode: 'player-full', requestId: 'media-2' };
   controller.reconcile();
   const teardown = controller.teardown();
   assert.equal(controller.teardown(), teardown);

@@ -30,6 +30,7 @@ export function createNativePlayerPresentationController(
   let revision = 0;
   let active: PlayerPresentationRequest | null = null;
   let latest: PlayerPresentationRequest | null = null;
+  let applied: PlayerPresentationRequest | null = null;
   let disposed = false;
   let teardownRequest: PlayerPresentationRequest | null = null;
   let teardownPromise: Promise<void> | null = null;
@@ -46,18 +47,25 @@ export function createNativePlayerPresentationController(
     compositionElement.dataset.nativePresentationMode = mode;
   };
 
-  const createRequest = (intent: NativePlayerPresentationIntent): PlayerPresentationRequest => {
-    revision += 1;
+  const describeIntent = (
+    intent: NativePlayerPresentationIntent,
+  ): Pick<PlayerPresentationRequest, 'requestId' | 'mode' | 'rect'> => {
     const rect = measureRect(intent.mode, options.element, options.viewport());
     const mode = intent.mode === 'guide-classic-pip' && rect === null ? 'hidden' : intent.mode;
     return {
-      documentEpoch,
-      revision,
       requestId: intent.requestId,
       mode,
       rect: mode === 'hidden' ? null : rect,
     };
   };
+
+  const createRequest = (
+    descriptor: Pick<PlayerPresentationRequest, 'requestId' | 'mode' | 'rect'>,
+  ): PlayerPresentationRequest => ({
+    documentEpoch,
+    revision: ++revision,
+    ...descriptor,
+  });
 
   const dispatch = (request: PlayerPresentationRequest): void => {
     active = request;
@@ -65,18 +73,20 @@ export function createNativePlayerPresentationController(
       if (active !== request) return;
       if (result.ok && result.documentEpoch > 0) documentEpoch = result.documentEpoch;
       if (!disposed) {
-        const current = options.getIntent();
-        const stillCurrent = current.mode === request.mode && current.requestId === request.requestId &&
+        const current = describeIntent(options.getIntent());
+        const stillCurrent = samePresentation(current, request) &&
           result.revision === request.revision && result.documentEpoch === request.documentEpoch &&
           latest === null && revision === request.revision;
         if (result.ok && result.status === 'applied' && stillCurrent) {
+          applied = request;
           options.element.dataset.nativePresentationAperture = 'open';
           compositionElement.dataset.nativePresentationAperture = 'open';
         } else {
           closeAperture();
+          if (result.ok && result.status === 'hidden' && stillCurrent) applied = request;
         }
         if (latest === null && result.ok && result.status === 'deferred' &&
-          current.mode === request.mode && current.requestId === request.requestId && revision === request.revision) {
+          samePresentation(current, request) && revision === request.revision) {
           latest = createRequest(current);
         }
       } else {
@@ -111,11 +121,16 @@ export function createNativePlayerPresentationController(
 
   const reconcile = (): void => {
     if (disposed) return;
-    closeAperture();
     const intent = options.getIntent();
     setMode(intent.mode);
-    const request = createRequest(intent);
-    setMode(request.mode);
+    const descriptor = describeIntent(intent);
+    setMode(descriptor.mode);
+    const pending = latest ?? active;
+    if (pending !== null && samePresentation(pending, descriptor)) return;
+    if (active === null && applied !== null && samePresentation(applied, descriptor)) return;
+    applied = null;
+    closeAperture();
+    const request = createRequest(descriptor);
     if (active === null) dispatch(request);
     else latest = request;
   };
@@ -129,6 +144,7 @@ export function createNativePlayerPresentationController(
     reconcile,
     teardown() {
       if (teardownPromise !== null) return teardownPromise;
+      applied = null;
       closeAperture();
       observer?.disconnect();
       disposed = true;
@@ -170,3 +186,19 @@ function measureRect(
 }
 
 function clamp(value: number): number { return Math.min(1, Math.max(0, value)); }
+
+function samePresentation(
+  left: Pick<PlayerPresentationRequest, 'requestId' | 'mode' | 'rect'>,
+  right: Pick<PlayerPresentationRequest, 'requestId' | 'mode' | 'rect'>,
+): boolean {
+  return left.requestId === right.requestId && left.mode === right.mode && sameRect(left.rect, right.rect);
+}
+
+function sameRect(
+  left: PlayerPresentationRequest['rect'],
+  right: PlayerPresentationRequest['rect'],
+): boolean {
+  return left === null || right === null
+    ? left === right
+    : left.x === right.x && left.y === right.y && left.width === right.width && left.height === right.height;
+}

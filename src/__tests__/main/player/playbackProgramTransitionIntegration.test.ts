@@ -193,6 +193,9 @@ test('completed helper cleanup can Retry only the canonical current program thro
         commands.push(command);
         return { ok: true };
       },
+      settleTerminalError(event) {
+        return [event];
+      },
       async cleanup() {
         playerCleanupStarted.resolve(undefined);
         await playerCleanupRelease.promise;

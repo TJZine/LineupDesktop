@@ -61,6 +61,9 @@ function createRuntime(
       async dispatch() {
         return { ok: true };
       },
+      settleTerminalError(event) {
+        return [event];
+      },
       async cleanup() {},
     },
     pms: {

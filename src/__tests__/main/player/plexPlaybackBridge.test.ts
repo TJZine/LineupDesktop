@@ -216,6 +216,10 @@ class FakePlayer implements PlexPlaybackRuntimePlayerPort {
     return { ok: true };
   }
 
+  settleTerminalError(event: Extract<PlayerEvent, { event: 'error' }>): readonly PlayerEvent[] {
+    return [event];
+  }
+
   async cleanup(): Promise<void> {
     return undefined;
   }
@@ -260,7 +264,7 @@ test('RD-12 bridge maps current scheduler program to resolver input and runtime 
   assert.equal(result.requestId, 'request-bridge');
   assert.equal(resolver.inputs.length, 1);
   assert.equal(resolver.inputs[0]?.requestId, 'request-bridge');
-  assert.equal(resolver.inputs[0]?.mediaId, 'rating-1');
+  assert.equal(resolver.inputs[0]?.ratingKey, 'rating-1');
   assert.equal(resolver.inputs[0]?.startPositionMs, 90_000);
   assert.equal(resolver.inputs[0]?.autoplay, true);
   assert.equal(resolver.inputs[0]?.capabilityProfile.id, capabilityProfile.id);
@@ -700,7 +704,7 @@ test('RD-12 bridge keeps streamDescriptor private and public outputs redacted', 
 
   const publicCandidate = { ...candidate };
   delete (publicCandidate as { privatePlayback?: unknown }).privatePlayback;
-  assert.equal(resolver.inputs[0]?.mediaId, 'rating-1');
+  assert.equal(resolver.inputs[0]?.ratingKey, 'rating-1');
   assertPublicSafe(selection, rawPrivateValues);
   assertPublicSafe(publicCandidate, rawPrivateValues);
   assertPublicSafe(resolver.inputs[0], rawPrivateValues);

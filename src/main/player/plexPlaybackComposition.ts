@@ -28,6 +28,10 @@ type DesktopPlayerAdapterRuntimePort = {
     accepted: boolean;
     events: readonly PlayerEvent[];
   }>;
+  settleRuntimeTerminalError(
+    event: Extract<PlayerEvent, { event: 'error' }>,
+    expectedSnapshotRequestId: PlayerRequestId | null,
+  ): readonly PlayerEvent[];
 };
 
 export interface PlexPlaybackCompositionResolverPort {
@@ -117,6 +121,9 @@ export function createDesktopPlayerAdapterRuntimePort(
       if (!result.accepted) {
         throw new Error('Desktop player adapter cleanup failed.');
       }
+    },
+    settleTerminalError(event, expectedSnapshotRequestId) {
+      return adapter.settleRuntimeTerminalError(event, expectedSnapshotRequestId);
     },
   };
 }

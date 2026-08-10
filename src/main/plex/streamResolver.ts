@@ -34,7 +34,7 @@ export interface PlexStreamResolverAuthHeader {
 }
 
 export interface PlexStreamResolverMediaDetailPort {
-  getMediaDetail(input: { mediaId: string }): Promise<PlexMediaItem | null>;
+  getMediaDetail(input: { ratingKey: string }): Promise<PlexMediaItem | null>;
 }
 
 export interface PlexStreamResolverPmsSessionLease {
@@ -67,7 +67,7 @@ export interface PlexStreamResolverOptions {
 
 export interface PlexStreamResolverInput {
   requestId: PlayerRequestId;
-  mediaId: string;
+  ratingKey: string;
   capabilityProfile: DesktopStreamCapabilityProfile;
   autoplay?: boolean;
   startPositionMs?: number;
@@ -155,7 +155,7 @@ export class PlexStreamResolver {
       return this.#failure(input.requestId, 'PLEX_STREAM_CREDENTIAL_UNAVAILABLE', 'authentication', 'active credential unavailable', diagnostics);
     }
 
-    const mediaDetail = await this.#getMediaDetail(input.requestId, input.mediaId, diagnostics);
+    const mediaDetail = await this.#getMediaDetail(input.requestId, input.ratingKey, diagnostics);
     if (mediaDetail === null) {
       return this.#failure(input.requestId, 'PLEX_STREAM_MEDIA_UNAVAILABLE', 'source', 'media detail unavailable', diagnostics);
     }
@@ -307,11 +307,11 @@ export class PlexStreamResolver {
 
   async #getMediaDetail(
     requestId: PlayerRequestId,
-    mediaId: string,
+    ratingKey: string,
     diagnostics: PlayerRendererSafeDiagnostic[],
   ): Promise<PlexMediaItem | null> {
     try {
-      return await this.#mediaDetail.getMediaDetail({ mediaId });
+      return await this.#mediaDetail.getMediaDetail({ ratingKey });
     } catch {
       diagnostics.push(createPortFailureDiagnostic(requestId, 'media-detail.read'));
       return null;

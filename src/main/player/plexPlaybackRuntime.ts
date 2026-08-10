@@ -24,7 +24,6 @@ import {
   createRuntimeBoundaryError,
   createRuntimeLoadFailedError,
   createRuntimeSchedulerSelectionError,
-  createRuntimeSourceError,
   createRuntimeWarning,
   recordRuntimeHelperCrashDiagnostic,
 } from './plexPlaybackRuntimeDiagnostics.js';
@@ -118,6 +117,10 @@ export type PlexPlaybackRuntimePlayerDispatchResult =
     };
 export interface PlexPlaybackRuntimePlayerPort {
   dispatch(command: PlayerCommand, context?: PrivilegedPlaybackDispatchContext | null): Promise<PlexPlaybackRuntimePlayerDispatchResult>;
+  settleTerminalError(
+    event: Extract<PlayerEvent, { event: 'error' }>,
+    expectedSnapshotRequestId: PlayerRequestId | null,
+  ): readonly PlayerEvent[];
   cleanup(requestId: PlayerRequestId | null): Promise<void>;
 }
 export interface PlexPlaybackRuntimePmsPort {
@@ -273,7 +276,8 @@ export class PlexPlaybackRuntime {
       if (!this.#isCurrentEpoch(epoch)) {
         return this.#staleStartResult(epoch, null, events, 'candidate failure arrived after cleanup');
       }
-      events.push(this.#candidateResolutionError(error));
+      const errorEvent = this.#candidateResolutionError(error);
+      events.push(...this.#player.settleTerminalError(errorEvent, null));
       this.#emit(events);
       return { accepted: false, epoch, requestId: null, events };
     }
@@ -561,7 +565,7 @@ export class PlexPlaybackRuntime {
     this.#emit(result.events);
     return result;
   }
-  #candidateResolutionError(error: unknown): PlayerEvent {
+  #candidateResolutionError(error: unknown): Extract<PlayerEvent, { event: 'error' }> {
     if (
       error instanceof PlexPlaybackRuntimeCandidateResolutionError &&
       isSafePlayerError(error.playerError)
@@ -572,16 +576,23 @@ export class PlexPlaybackRuntime {
         error: error.playerError,
       };
     }
-    return createRuntimeSourceError(
-      undefined,
-      'PLAYER_PLAYBACK_CANDIDATE_UNAVAILABLE',
-      'The playback runtime could not resolve the scheduled media.',
-      {
-        operation: 'channel.resolve',
-        status: 'failed',
-        reason: 'playback candidate resolution failed',
+    return {
+      event: 'error',
+      requestId: null,
+      error: {
+        code: 'PLAYER_PLAYBACK_CANDIDATE_UNAVAILABLE',
+        category: 'source',
+        message: 'The playback runtime could not resolve the scheduled media.',
+        recoverable: true,
+        retryable: true,
+        diagnostic: {
+          component: 'plex-playback-runtime',
+          operation: 'channel.resolve',
+          status: 'failed',
+          reason: 'playback candidate resolution failed',
+        },
       },
-    );
+    };
   }
   #observeAcceptedEvents(events: readonly PlayerEvent[]): void {
     const identity = this.#activeSelection;

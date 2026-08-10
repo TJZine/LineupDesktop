@@ -114,7 +114,7 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
         : undefined;
     const resolverInput: PlexStreamResolverInput = {
       requestId,
-      mediaId: program.item.ratingKey,
+      ratingKey: program.item.ratingKey,
       capabilityProfile: await this.#resolveCapabilityProfile(),
       autoplay: this.#autoplay,
       startPositionMs: program.elapsedMs,
