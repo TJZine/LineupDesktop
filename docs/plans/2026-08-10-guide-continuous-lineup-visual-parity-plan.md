@@ -155,6 +155,7 @@ Any touched production owner over 500 lines records the required cohesion dispos
 - `src/contracts/settings.ts` and `src/main/persistence/desktopSettingsStore.ts`: strict Settings contract/migration owners; version 3 growth is cohesive and requires persistence/contract review.
 - `src/renderer/settingsSetup.ts`: Settings presentation/action owner; Guide value changes are cohesive but require fresh architecture review when touched.
 - `src/main/channel/guideRuntime.ts`: main Guide page/schedule/currentness owner; artwork-role projection is cohesive only while it remains renderer-safe and on the existing operation, and requires fresh architecture review when touched.
+- G0 proof owners use these reviewed hard line caps: `src/main/guideWindowsProofController.ts` <=550, `src/main/guideWindowsProofAnalysis.ts` <=500, `tools/guide-proof-artifact-publisher.mjs` <=300, new `src/main/guideWindowsProofSampleAnalysis.ts` <=450, new `src/main/guideWindowsProofResourceSoak.ts` <=400, new `src/renderer/guideProofResourceOwner.ts` <=250, `src/renderer/guideVirtualization.ts` <=275, and `src/contracts/guidePerformance.ts` <=180. The controller remains orchestration-only, the existing analyzer remains raw-trace sanitation/diagnostics plus delegation, the publisher remains artifact validation/aggregation/publication, and the new owners hold distinct sample-analysis, soak-analysis, and renderer resource-observation policy. Do not evade a cap through compressed formatting, forwarding wrappers, mirrored cache state, or an unreviewed helper.
 
 Fresh architecture review is mandatory whenever this plan touches `src/renderer/index.ts`, `src/renderer/epg.ts`, `src/renderer/epg/guideDom.ts`, `src/renderer/guidePresentationPolling.ts`, `src/main/channel/guideRuntime.ts`, or `src/renderer/settingsSetup.ts`, regardless of final line count.
 
@@ -180,6 +181,7 @@ Renderer Guide and Settings owners:
 - `src/renderer/settings/*` when required by version 3 values
 - `src/renderer/styles/guide-epg.css` and directly related Guide styles
 - `src/renderer/index.ts` for wiring only
+- `src/renderer/guideProofResourceOwner.ts` only for G0's fixed-schema, inert-until-requested resource observation
 - one new cohesive renderer Guide-window owner and, only if measured, one Guide grid lifecycle owner
 
 Contracts, preload validation, main Guide/Settings, and tests:
@@ -192,6 +194,51 @@ Contracts, preload validation, main Guide/Settings, and tests:
 - `src/main/persistence/desktopSettingsStore.ts` and existing Settings policy/snapshot consumers for version 3 migration
 - focused Guide, Settings, preload, persistence, renderer DOM/focus, smoke, and performance-harness tests under `src/__tests__/*`
 - the existing production-build/manual proof harness surface selected by Package G0; no replacement general harness
+
+G0's reviewed selected boundary contains exactly these forty paths:
+
+- `package.json`
+- `tools/smoke-electron.mjs`
+- `tools/guide-windows-proof.mjs`
+- `tools/copy-renderer-assets.mjs`
+- `tools/guide-proof-artifact-publisher.mjs`
+- `tools/__tests__/smoke-electron.test.mjs`
+- `tools/__tests__/guide-windows-proof.test.mjs`
+- `tools/__tests__/copy-renderer-assets.test.mjs`
+- `tools/__tests__/guide-proof-artifact-publisher.test.mjs`
+- `src/main/smokeBootstrapOwner.ts`
+- `src/main/guideWindowsProofController.ts`
+- `src/main/guideWindowsProofAnalysis.ts`
+- `src/main/guideWindowsProofSampleAnalysis.ts`
+- `src/main/guideWindowsProofResourceSoak.ts`
+- `src/main/channel/guideWindowsProofFixture.ts`
+- `src/main/channel/channelComposition.ts`
+- `src/main/channel/guideRuntime.ts`
+- `src/main/index.ts`
+- `src/domain/channel/contentResolver.ts`
+- `src/domain/channel/sourceResolutionCache.ts`
+- `src/contracts/guidePerformance.ts`
+- `src/renderer/guidePerformanceMarks.ts`
+- `src/renderer/guideProofResourceOwner.ts`
+- `src/renderer/guideVirtualization.ts`
+- `src/renderer/guidePresentationPolling.ts`
+- `src/renderer/epg/guideDom.ts`
+- `src/renderer/index.ts`
+- `src/__tests__/main/smokeBootstrapOwner.test.ts`
+- `src/__tests__/main/guideWindowsProofController.test.ts`
+- `src/__tests__/main/guideWindowsProofAnalysis.test.ts`
+- `src/__tests__/main/guideWindowsProofSampleAnalysis.test.ts`
+- `src/__tests__/main/guideWindowsProofResourceSoak.test.ts`
+- `src/__tests__/main/guideWindowsProofFixture.test.ts`
+- `src/__tests__/main/guideRuntime.test.ts`
+- `src/__tests__/domain/channelDomain.test.ts`
+- `src/__tests__/contracts/guidePerformanceContracts.test.ts`
+- `src/__tests__/renderer/guidePerformanceMarks.test.ts`
+- `src/__tests__/renderer/guideProofResourceOwner.test.ts`
+- `src/__tests__/renderer/guidePresentationPolling.test.ts`
+- `src/__tests__/renderer/guideVirtualization.test.ts`
+
+The delta from the previously approved thirty-three-path boundary is exactly `src/main/guideWindowsProofSampleAnalysis.ts`, `src/__tests__/main/guideWindowsProofSampleAnalysis.test.ts`, `src/main/guideWindowsProofResourceSoak.ts`, `src/__tests__/main/guideWindowsProofResourceSoak.test.ts`, `src/renderer/guideProofResourceOwner.ts`, `src/__tests__/renderer/guideProofResourceOwner.test.ts`, and `src/renderer/guideVirtualization.ts`. The seven-path delta and the complete forty-path boundary have zero overlap with all twenty-one `e7f1338` paths. Any further path is a collision/replan event rather than an implicit expansion.
 
 ## Files Out Of Scope
 
@@ -213,12 +260,66 @@ Packages are serial unless a package explicitly authorizes read-only sidecars. E
 Outcome:
 
 - reproduce ordinary wheel/scrollbar content exhaustion beyond twelve with a known initial focus and request trace;
-- add fixed categorical/numeric Guide performance marks for `input-received`, `input-accepted`, `request-start`, `request-settled`, `state-accepted`, `reconcile-start`, `reconcile-end`, and Chromium `frame-presented`; no new renderer API or free-form/private diagnostic field;
+- add the eight fixed categorical/numeric semantic Guide marks `input-received`, `input-accepted`, `request-start`, `request-settled`, `state-accepted`, `reconcile-start`, `reconcile-end`, and Chromium `frame-presented`; `state-accepted` always means requested product state became eligible to render and is never a harness delimiter;
 - record the exact 459-channel source cardinality/cache classes and separate input, request, reconcile, layout/paint, and presented-frame timing;
 - capture sanitized paired current-upstream/Desktop references for Classic/Overlay and required viewports/states;
 - freeze the current package budgets and decide whether later incremental DOM, cache/concurrency, or GPU work is actually required.
 
-Write boundary: Guide-specific fixed marks, a proof-only main-owned tracing/controller seam gated by the existing validated smoke/proof capability, `tools/guide-windows-proof.mjs`, its package-script entry/tests, and the local ignored proof bundle; no product visual or optimization change and no renderer-facing proof API.
+Write boundary: Guide-specific fixed marks, a proof-only main-owned tracing/controller seam gated by the existing validated smoke/proof capability, the exact forty-path boundary above, `tools/guide-windows-proof.mjs`, its package-script entry/tests, and the local ignored proof bundle; no product visual or optimization change and no renderer-facing application API.
+
+G0 additionally authorizes exactly two resource-handshake records, distinct from the eight product-semantic marks and the separately defined sample-boundary record below:
+
+- main's validated proof controller emits `lineup-guide-proof-v1:resource-request` with the exact closed detail `{ schemaVersion: 1, requestId, run, cycle, phase, cohort, sample }`, where all ids are bounded nonnegative integers, `phase` is one of `pre-entry`, `soak`, `post-exit`, `reentry`, or `post-reentry-exit`, and `cohort` is a closed G0 cohort id or `none`;
+- the renderer resource owner observes only a valid request and emits one correlated `lineup-guide-proof-v1:resource-snapshot` with the same identity plus the fixed numeric resource fields below.
+
+This handshake is inert until the validated main proof controller emits an exact request. It is proof-only User Timing evidence, not an application command surface: no preload/IPC method, `window`-callable or other global hook, DOM proof field, renderer privilege, persistent value, private text, arbitrary key, or free-form field is allowed. The renderer observer disconnects during normal renderer cleanup; every request and response mark is cleared after emission. A malformed, duplicate, unsolicited, mismatched, or unpaired record fails or is ignored according to the closed contract and cannot affect product behavior.
+
+The response's exact additional keys are `heapAvailable`, `usedJsHeapBytes`, `totalJsHeapBytes`, `domNodes`, `guideRows`, `guideCells`, `guideAccessibilityTargets`, `performanceEntries`, `guideInputListeners`, `activeAbortListeners`, `pollTimers`, `pollScheduled`, `distanceToNextPollMs`, `idleCallbacks`, `requestTimeouts`, `activeRequests`, `trailingRequests`, `pendingPageRequests`, `warmCandidates`, `presentationCacheEntries`, `presentationCachePrograms`, `presentationCacheEntryLimit`, `presentationCacheProgramLimit`, `viewportWidth`, `viewportHeight`, and `devicePixelRatio`. Every value is a bounded nonnegative finite number; `heapAvailable` and `pollScheduled` are exactly 0 or 1. Unavailable heap bytes and unscheduled poll distance are present as 0 only while the corresponding availability flag prevents them from being interpreted as observations. No extra key is accepted.
+
+### G0 sample, cohort, and frame contract
+
+Harness sample boundaries use a separate fixed `lineup-guide-proof-v1:sample-boundary` record with bounded numeric run/sample/boundary identity, a closed cohort id, and `phase: start | end`. They never impersonate a semantic product mark. Every measured sample must contain exactly one expected accepted input between its exact start/end boundaries. The analyzer binds, without reuse, the matching received/accepted input, expected renderer request start/settle when applicable, exact main runtime request slice when applicable, relevant state/reconcile events, and the first allowed presented frame after the applicable semantic terminal event and before that sample's end boundary. A global later frame, a frame after sample end, an event reused by another sample, or an unrelated request cannot satisfy coverage.
+
+Each raw sample and each per-run/per-cohort row stores only fixed categorical fields and bounded numbers. Every scalar timing/count field is exactly `number | 'not-applicable'`; absent events are never zero-filled. Exact scalar keys are `acceptedToReconcileEndMs`, `acceptedToPresentedFrameMs`, `stateAcceptedToPresentedFrameMs`, `rendererRequestDurationMs`, `mainRequestDurationMs`, `layoutDurationMs`, `paintDurationMs`, `longTaskCount`, `longTaskDurationMs`, and `distanceToNextPollMs`. A sample with an exact main request additionally retains `sourceSettlements`, an ordered array of at most the request's channel limit of 24 fixed `{ sourceClass, durationMs }` records; a sample with no main source settlement uses `sourceSettlements: 'not-applicable'`, not an empty array or synthetic zero. Per-run/cohort `sourceSettlementDurationMs` p50/p95/max is computed over the flattened raw settlement durations, never over per-request averages. Same-buffer request/state/source fields, renderer-cache main/source fields, and other structurally absent values are `not-applicable`. Polling's selected owner supplies its next monotonic deadline. Immediately before every measured input, the controller sends a resource request with the same run/cohort/sample identity; the correlated snapshot supplies `pollScheduled` and `distanceToNextPollMs`. The analyzer projects the distance as a number only when scheduled and otherwise as `not-applicable`, never as a false zero.
+
+Use only the official exact Chromium M148 presented-frame signatures confirmed for the Electron 42 runtime: `FrameSequenceTracker` with categories containing `cc` and `benchmark` and exactly `args.step === 'FramePresented'`, or `Display::FrameDisplayed` with categories containing `benchmark`, `viz`, and `disabled-by-default-display.framedisplayed`. The sanitizer chooses one canonical family for a run and never mixes families to manufacture coverage. Generic top-level `FramePresented`, `FrameSequenceTracker` without the exact step, and `devtools.timeline.frame` scheduler diagnostics are not presentation proof. If the exact emitted M148 argument location, category signature, or target-renderer-main attribution cannot be observed reliably, stop for a reviewed evidence amendment; do not fall back to a nested guessed step, generic frame name, `requestAnimationFrame`, or inferred paint.
+
+Trace configuration uses `excluded_categories: ['*']`, explicitly includes `benchmark`, `viz`, `cc`, `disabled-by-default-display.framedisplayed`, `devtools.timeline`, and `toplevel`, and omits a process-id restriction so Electron content tracing captures all processes. Layout/paint accepts only target-renderer-main-thread duration events named `Layout`, `UpdateLayoutTree`, `PrePaint`, `UpdateLayerTree`, or `Paint` under `devtools.timeline`, parsing complete `dur` slices or matched `B`/`E` pairs in trace microseconds. These are lifecycle/paint cost, not presentation. Long-task evidence accepts any complete `toplevel` slice attributed to the target renderer main thread with duration >=50,000 microseconds; scheduler task names vary and must not be hard-coded. Failure to obtain deterministic renderer-main attribution or authoritative duration event shapes is a stop condition rather than `0` evidence.
+
+Actual presented-frame proof requires a visible native proof window. Guide proof mode, and only Guide proof mode, may show its native window for bounded sampling; ordinary smoke keeps its existing hidden-window behavior. Live preflight must first prove it owns the primary instance and is not interrupting an existing user session, so it refuses rather than stealing focus. If a visible presentation surface cannot be established, stop/replan. Hidden-renderer Layout/Paint is never accepted as display proof. Electron content tracing is parsed only after recording stops; the fixed harness boundaries delimit action windows in the completed trace.
+
+Cohort binding is exact:
+
+- `same-buffer` contains wheel/scroll work that intentionally remains inside the loaded buffer and has no request;
+- `directional` binds arrow/gamepad accepted inputs and rejects an unintended boundary request;
+- `renderer-cache` binds one foreground renderer request settled as `renderer-cache` and zero main requests;
+- `source-cache` prepares outside the sample, then binds one measured foreground Page request using a new renderer key over already resolved sources, exactly one main request, cache-hit source settlements, and no cold source settlement;
+- each live process run's `cold-live` cohort dispatches and binds one accepted Page action to an unseen window, one exact foreground main request with at least one cold settlement, an accepted loading/focus-intent reconcile/presented frame, and a separately bound final accepted-state/presented frame; an earlier cold request or a record with no dispatched input is invalid;
+- `quiet-poll` binds one exact `poll-interval` request that settles before its input sample set, then requires zero renderer and main requests inside every one of its 100 sample boundaries. All 100 samples must finish before the next scheduled poll; an intervening interval invalidates and restarts the cohort rather than being relabeled as quiet; and
+- `poll-collision` first proves the active/trailing queue is empty, arms the proof latch, binds the exact renderer `poll-interval` request and its bounded main request, accepts the collision input while that request is held, and releases it. A leftover foreground request fails origin/request binding.
+
+After one discarded warm-up, every run contains exactly 100 measured samples for each applicable `same-buffer`, `directional`, `renderer-cache`, `pointer`, and `quiet-poll` cohort, plus exactly one `poll-collision` sample. Every live run additionally contains exactly 100 `source-cache` samples and one `cold-live` sample. Synthetic `source-cache` and `cold-live` rows are present as `not-applicable`; synthetic evidence never claims live Plex/source-cache proof. The 100-sample same-buffer and directional cohorts are independent and are never satisfied by splitting or combining smaller mixed-input runs.
+
+Every run emits a complete cohort matrix and raw bounded samples. Top-level summary contains `runs[]` and `aggregateByCohort[]`; p50/p95/max are recomputed from raw samples, never averaged or derived from child percentiles. Each live child contains exactly one local run. The publisher validates all three children, assigns top-level process-run identities 1 through 3, rejects missing/duplicate/mislabeled/undersized cohorts, creates the three-run aggregate, retains each child trace/summary under `runs/run-N`, and writes a top-level run-indexed trace record rather than presenting run 1 as the whole live trace.
+
+### G0 exhaustion diagnostic and resource soak
+
+Before performance cohorts, reproduce the reported defect without fixing it. Establish the known first window and top scroll position, focus a known first-page program, record start offset/eligible total/scroll top/scroll height/client height/focus index, then dispatch sustained downward wheel input through the terminal twelfth loaded row. Next drive the native scrollbar to its maximum. Record end offset/total/scroll extent/focus, accepted wheel and scroll counts, and whether a next absolute-window foreground request occurred. The diagnostic passes only by honestly recording absence or presence of that request and whether content remains exhausted at the first twelve; it must not alternate direction, use a 48 px nudge, or claim G2's continuous-window fix.
+
+Resource evidence has no renderer-private probing. `guidePresentationPolling.ts` supplies truthful fixed numeric counts for active/trailing/pending requests, poll timer, idle callback, request timeout, abort listener, warm candidates, its next poll deadline, and its presentation cache. `GuidePresentationLru` supplies its exact entry/program counts and active profile limits; mirrored cache accounting is forbidden. `renderer/index.ts` only wires the resource owner and records the six actual Guide listener registrations/removals adjacent to those operations. Renderer snapshots also contain heap availability/used/total bytes, DOM nodes, Guide rows/cells, accessibility targets, performance-entry count, viewport dimensions, and DPI. Main adds exact numeric fields `processCount`, `cpuPercent`, `workingSetKb`, `privateBytesKb`, `browserProcessCount`, `rendererProcessCount`, `gpuProcessCount`, `utilityProcessCount`, `otherProcessCount`, `activeMainGuideRequests`, `sourceCacheEntries`, `sourceInFlightEntries`, `sourceGenerationKeys`, `sourceParentDependencyKeys`, `sourceChildDependencyKeys`, and `showCacheEntries` directly from their selected owners; none crosses to renderer and no process id is retained.
+
+The main soak owner correlates exactly one snapshot to each request id within two seconds, then captures main metrics. Duplicate, mismatched, late, or missing responses fail. Heap unavailability is recorded explicitly and is not represented as an observed zero.
+
+For each process run, use existing trusted F3 navigation to reach Settings. Assert `activeRoute === 'settings'` and quiescence before every non-Guide snapshot: active/trailing/pending requests, request timeout, abort listener, poll timer, idle callback, and warm candidates are all zero. Capture `pre-entry`; enter Guide through trusted F2 input; discard the warm-up; execute at least 100 complete input/settlement cycles; and capture observations at cycles 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, and 100. Then use F3 to return to Settings, assert the same route/quiescence, and capture `post-exit`. Re-enter through F2, perform a bounded warm re-entry, capture `reentry`, return through F3, reassert Settings/quiescence, and capture `post-reentry-exit`.
+
+Plateau comparison is deterministic:
+
+- the earlier window is cycles 60, 70, and 80; the later window is cycles 80, 90, and 100; cycle 80 is the fixed shared boundary observation;
+- for discrete retained counts, `max(later) <= max(earlier)` and the least-squares slope across cycles 60, 70, 80, 90, and 100 must be <=0; transient active counts at observation points must remain within the explicit bounds below;
+- renderer Guide rows are <=24 and cells are <=400; DOM/accessibility counts use the same no-positive-trend rule; presentation cache is <= its reported profile limit of 6/12 entries and 6,000/12,000 programs; active requests <=1, trailing requests <=1, pending Page requests <=1, poll timers <=1, idle callbacks <=1, request timeouts <=1, abort listeners <=1, and warm candidates <=4;
+- source cache is <= its retained owner cap of 24, source in-flight and active main Guide requests are zero at observation points, and retained source generation/dependency/show-cache counts use the same later-max/earlier-max and nonpositive-slope rule because no lower product cap is authorized by G0;
+- used renderer heap passes when `median(later) - median(earlier) <= max(8 MiB, median(earlier) * 0.10)`; aggregate working set and private bytes each pass when the difference is <=`max(32 MiB, median(earlier) * 0.10)`; CPU/GPU are reported but are not retention counters; and
+- `post-exit` and `post-reentry-exit` separately require zero active/trailing/pending requests, timers, idle callbacks, request timeouts, abort listeners, warm candidates, and presentation-cache entries/programs. Because the current route renderer retains hidden Guide DOM on Settings, Guide rows/cells/accessibility targets must return exactly to their respective `pre-entry` baselines and are required to be zero only when that baseline is zero. The six app-lifetime Guide input listeners likewise equal the `pre-entry` listener baseline rather than zero. Retained main source/cache/dependency counts must stay within owner caps and the baseline-relative plateau rule; G0 does not silently change their route-retention policy.
 
 Acceptance:
 
@@ -229,7 +330,7 @@ Acceptance:
 - `npm run proof:guide:windows -- --mode live --expected-total 459 --runs 3 --samples 100 --output docs/runs/windows-manual-validation/2026-08-10-guide-remediation-g0/live` launches the built app against the operator's existing selected server/profile and refuses to start sampling unless the renderer-safe Guide result reports exactly 459 eligible channels. It never exports channel/program text or private identifiers. The proof-only main controller dispatches input and owns Chromium content tracing; renderer emits only the fixed categorical/numeric marks above;
 - `npm --prefix ..\Lineup run dev -- --host 127.0.0.1` launches the audited current-upstream reference for operator-driven paired capture. `docs/runs/windows-manual-validation/2026-08-10-guide-remediation-g0/paired-visual-checklist.md` records the upstream/Desktop checkpoint, exact viewports/states, observed hierarchy, and redaction result; raw captures stay beside it in the ignored bundle;
 - both proof modes fail rather than overwrite an existing output directory and write `manifest.json`, `summary.json`, `trace.json`, and `replay.txt`. The manifest records mode, Desktop/upstream commit, build hash, fixture kind or live eligible total, environment, runs/samples, mark schema version, cache/poll cohorts, artifact hashes, redaction status, and command. `replay.txt` contains the exact successful command with secrets and local user paths omitted;
-- baseline records per-run and aggregate p50/p95/max, CPU/GPU/RAM, display/DPI, build, profile, source cardinality, cache state, request class, and distance from the next poll for same-buffer, renderer-cache, source-cache, cold-live, quiet-poll, and poll-collision cohorts;
+- baseline records raw samples plus per-run and aggregate p50/p95/max, CPU/GPU/RAM, display/DPI, build, profile, source cardinality, cache state, request class, layout/paint, >50 ms long-task evidence, and `distanceToNextPollMs` for same-buffer, directional, renderer-cache, pointer, source-cache, cold-live, quiet-poll, and poll-collision cohorts, preserving `not-applicable` rather than false zeroes;
 - candidate comparison gates are same-buffer reconcile p95 <=50 ms/max <=100 ms; arrow reconcile p95 <=16 ms and presented-frame max <=32 ms; warm page/wheel/pointer presented p95 <=100 ms; cold accepted loading intent <=100 ms; no sustained >50 ms long tasks; and a 100-cycle memory/DOM/accessibility/listener/timer/request/cache plateau with route-exit cleanup;
 - plan is amended and re-reviewed only if measurements contradict the continuous-window or package assumptions.
 
@@ -366,6 +467,12 @@ Every product package runs its exact focused new/affected tests first. Before it
 
 Focused proof must include:
 
+- G0 contract tests for the eight semantic marks, the exact proof request/snapshot and sample-boundary schemas, malformed/unsolicited/duplicate/mismatched resource records, two-second correlation timeout, mark clearing, and renderer observer cleanup;
+- G0 sample-analysis tests for sample-end-bounded canonical frame selection, no frame/event reuse, exact accepted-input/request-origin/request-class/main-request binding, `number | 'not-applicable'` fields, cold-live loading/final frames, quiet-poll and poll-collision origin binding, source-cache preparation separation, authoritative layout/paint and renderer-main long-task attribution, and `distanceToNextPollMs`;
+- G0 controller/orchestration tests that complete the full matrix and reject invalid cold, cache, poll, frame, and resource lifecycles; helper-only happy-path coverage is insufficient;
+- G0 exhaustion tests for known-top sustained downward wheel plus scrollbar-to-max evidence and the recorded absence/presence of the next absolute-window request;
+- G0 resource tests for exact LRU counts after replace/evict/clear, polling timer/queue/cache counters, listener registration/removal accounting, 99-cycle rejection, observations at 0/10/.../100, the frozen plateau formulas/bounds, Settings/F3 route and quiescence assertions, post-exit/re-entry cleanup, retained main-cache treatment, and honest unavailable-heap reporting;
+- G0 publisher tests for three complete live children, top-level run identities, raw-sample percentile aggregation, run-indexed trace output, and rejection of a missing, duplicate, mislabeled, or undersized cohort;
 - Guide sparse-window merge/invalidation/LRU/currentness tests with 459 and 500 channels;
 - wheel/scrollbar/arrow/viewport-Page/pointer/gamepad boundary tests;
 - real/fake DOM tests for total spacers, explicit loading rows, mounted caps, focus/accessibility registration, and cleanup;
@@ -401,6 +508,12 @@ Stop the current package and return to feature planning/review when:
 - current upstream Guide behavior or source materially differs from the frozen reference;
 - visual parity requires copying/adapting upstream source/assets without an import-ledger decision;
 - G0 traces do not reproduce the reported content exhaustion or contradict a proposed performance owner;
+- G0 proof requires any path outside its exact forty-path boundary, overlaps a concurrent writer or `e7f1338`, or exceeds a reviewed owner cap without a cohesive extraction;
+- exact sample/resource correlation would require preload/IPC, a renderer-callable or global hook, DOM proof fields, private/free-form data, persistent state, or wider renderer privilege;
+- F3 cannot deterministically reach Settings or the required Settings/polling/request quiescence cannot be established before a resource snapshot;
+- the exact M148 presented-frame, layout/paint, or target-renderer-main long-task signatures cannot be observed and attributed reliably enough to satisfy sample boundaries;
+- cold-live cannot bind one accepted cold Page action and loading/final frames in every live child, a poll/cache cohort cannot bind its exact origin and main request, or the three live children differ in build/source/profile/eligible-total authority;
+- route-exit acceptance would require changing retained main source-cache policy rather than measuring its reviewed cap and baseline-relative plateau;
 - a persistent DOM pool, cache/concurrency change, dependency, worker, or GPU change is proposed without its required measurement;
 - native video/HTML layering fails under Guide Classic/Overlay, DPI, resize, fullscreen, multi-monitor, or teardown;
 - a selected file overlaps unresolved concurrent playback/user edits;
