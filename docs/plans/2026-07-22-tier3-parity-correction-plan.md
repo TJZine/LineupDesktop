@@ -2237,9 +2237,11 @@ production-playback defect recorded as `WIN-TEST-006`. It supersedes only the
 later statement that WS2 has no executable continuation authority and the
 normal WS5 sequencing while this blocker is open. It does not reopen completed
 WS2 recovery packages, promote a playback capability, close any parity row, or
-authorize Guide appearance work. The plan-review gate, implementation, full
-automated verification, and final adversarial implementation review are now
-complete; operator-assisted Windows playback proof remains the blocking gate.
+by itself authorize Guide appearance work. The plan-review gate,
+implementation, full automated verification, and final adversarial
+implementation review are now
+complete at product checkpoint `e7f1338`; operator-assisted Windows playback
+proof remains mandatory open debt under the sequencing replan below.
 
 **Observed defect.** In a production-mode Windows run, selecting any tested
 channel leaves the Player surface black and silent with no visible error. A
@@ -2578,8 +2580,90 @@ Unsupported media must settle into the existing safe visible error/recovery
 state with no persistent spinner; it does not justify capability promotion.
 The package fixes `WIN-TEST-006` only when at least one known-compatible item
 plays with video and audio and the Mini Guide switch also settles. Otherwise
-record the exact safe terminal phase and return to planning; do not continue
-the broader audit.
+record the exact safe terminal phase and return to planning; do not claim
+playback, WS5, native-composition, or RD-27 closeout.
+
+#### WIN-TEST-006 sequencing replan — Guide execution with mandatory proof debt (2026-08-10)
+
+This replan becomes execution authority only after an independent Tier 3 plan
+review reports no unresolved material finding. At authoring checkpoint
+`6de7597`, the worktree is clean, the `WIN-TEST-006A` product implementation,
+automated verification, and implementation review are complete at `e7f1338`,
+and the ignored Windows run bundle still records the operator proof as pending.
+Computer Use can inspect the Electron window in this controller environment,
+but input actions fail with `node_repl exec context not found`; that control
+failure is not playback evidence and must not be recorded as a pass or product
+failure.
+
+The open two-channel operator proof is reclassified from a pre-Guide product
+sequencing gate to mandatory consolidated Windows/native campaign debt. It is
+not waived, closed, or weakened. After this replan's clean independent review,
+the next authorized product package is **G0** in
+`docs/plans/2026-08-10-guide-continuous-lineup-visual-parity-plan.md`.
+That controller may execute G0 through G6 serially through their existing
+verification, independent-review, and conventional-commit gates while the
+operator proof remains pending. No product package outside that Guide plan,
+including WS6–WS9 or another playback change, is opened by this sequencing
+decision.
+
+The consolidated G6 Windows/live/native-composition campaign must carry and
+execute the exact `WIN-TEST-006` two-channel proof above together with the
+Guide/native evidence it already owns. G6, affected playback or Guide parity
+rows, WS5, and RD-27 Windows/native closeout cannot be declared complete until
+that proof passes. An environment that can inspect but cannot inject operator
+input may preserve the pending status and continue only through the pre-G6
+Guide packages; it cannot substitute synthetic input, automation, a historical
+capture, or the Computer Use failure for live proof. If the proof is attempted
+and exposes a playback/product failure, stop before the next product package,
+preserve only redacted evidence, and return to the playback quality loop for a
+reviewed remediation or proof-policy replan.
+
+Before G0 and again before every later Guide package, the controller must
+freeze the package's exact selected write-file list and pass this collision
+gate before any product edit:
+
+1. Record `git status --short --untracked-files=all`,
+   `git diff --name-only`, and `git diff --cached --name-only` at the expected
+   committed predecessor.
+2. Compare every selected path against all pre-existing tracked and untracked
+   changes and every other active writer's declared write-file list. Any exact
+   path match is a collision; stop that package without editing, staging,
+   stashing, overwriting, or absorbing the other work.
+3. Treat the `WIN-TEST-006` live-proof writer as proof-only while Guide work is
+   active. Its writable surface is limited to the ignored Windows run bundle
+   and generated build/proof outputs. It has no concurrent tracked product,
+   test, plan, or authority-doc writer.
+4. Exclude the exact committed `WIN-TEST-006A` product/test manifest returned
+   by `git diff-tree --no-commit-id --name-only -r e7f1338` from every Guide
+   package's selected write list. This immutable commit manifest, not a broad
+   directory pattern or an inferred owner list, defines the overlap set. A
+   discovered need to edit one of those paths is a collision and requires a
+   reviewed scope/sequencing amendment before either owner writes.
+
+The collision gate passes only when all selected paths are absent from other
+changes/writer lists and the proof writer remains proof-only. Unrelated user
+changes outside the selected list remain untouched and are not a reason to
+clean or reset the worktree.
+
+Rollback and replan rules are exact:
+
+- Before G0 product work begins, this documentation-only sequencing replan may
+  be reverted without reverting `e7f1338`; the operator proof simply resumes
+  its former pre-Guide blocking position.
+- After any Guide package begins or commits, do not revert this prose to imply
+  a product rollback. Use that Guide package's reviewed rollback checkpoint,
+  preserve prior commits, and issue a new sequencing replan.
+- Never remove or mark the operator proof complete as part of rollback. It
+  remains mandatory until observed passing evidence exists.
+- Stop and return to plan review if the expected committed predecessor or
+  relevant owner baseline changes materially, the exact collision gate fails,
+  another writer needs a selected path, a Guide package needs a playback owner,
+  G6 cannot include the two-channel proof, required evidence cannot remain
+  redacted, or any required verification/review has a material finding.
+- A continued `node_repl exec context not found` control failure preserves
+  pending debt; it does not authorize G6/RD-27 closeout. An observed playback
+  failure triggers the playback remediation path above rather than further
+  Guide product work.
 
 #### Acceptance, rollback, and replan triggers
 
@@ -2626,30 +2710,18 @@ REVIEWER: current tracked reviewer
 WHY: Tier 3 native-playback/Plex identity and renderer-settlement boundaries require independent plan and implementation review.
 
 NEXT_SESSION_HANDOFF
-NEXT_SESSION_LAUNCHER: operator-assisted Windows validation
-TASK: Prove WIN-TEST-006 Production Playback Remediation On Windows
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
+TASK: Review WIN-TEST-006 Sequencing Replan For Guide G0 Release
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
-ARTIFACT: WIN-TEST-006 production playback remediation amendment (2026-08-10)
+ARTIFACT: WIN-TEST-006 sequencing replan — Guide execution with mandatory proof debt (2026-08-10)
 FILES:
 - docs/plans/2026-07-22-tier3-parity-correction-plan.md
-- src/main/player/plexPlaybackBridge.ts
-- src/main/player/plexPlaybackRuntime.ts
-- src/main/player/plexPlaybackComposition.ts
-- src/main/player/desktopPlayerAdapter.ts
-- src/main/player/playbackRuntimeBootstrap.ts
-- src/main/plex/streamResolver.ts
-- src/main/plex/streamResolverComposition.ts
-- src/main/plex/playbackMediaDetailPort.ts
-- src/renderer/player/nativePlayerPresentationController.ts
-- src/__tests__/main/player/productionPlaybackMediaIdentityIntegration.test.ts
-- src/__tests__/main/player/playbackFailureRendererSettlementIntegration.test.ts
-- src/__tests__/main/player/playbackRuntimeBootstrap.test.ts
-- src/__tests__/renderer/nativePlayerPresentationController.test.ts
-BLOCKERS: Operator playback proof remains pending; Guide audit work stays blocked.
+- docs/plans/2026-08-10-guide-continuous-lineup-visual-parity-plan.md
+BLOCKERS: G0 product edits remain blocked until this independent review is clean; WIN-TEST-006 operator proof remains mandatory G6/Windows closeout debt.
 MESSAGE:
-Build and launch the reviewed checkpoint in production mode with the approved adjacent libmpv prerequisite. Tune one known MP4/H.264/AAC Direct Play item and require helper launch, moving video, audible audio, and terminal playing state. Then switch through Mini Guide to a second known-compatible channel and require the transition to settle without a black aperture or persistent spinner. Record only redacted evidence. If either action fails, preserve the exact safe terminal phase and return to the playback quality loop; do not resume Guide audit work.
+Review only the sequencing amendment and its aligned Guide authority/handoff. Require explicit preservation of the pending two-channel proof, G6/WS5/RD-27 closeout gates, exact commit-manifest collision check, rollback/replan triggers, and G0 as the next exclusive product package. If clean, route the controller to execution-unit-select for G0 under the Guide feature-quality loop; do not implement or commit.
 
 ### Current WS2 status and next authority
 
@@ -2663,7 +2735,9 @@ Build and launch the reviewed checkpoint in production mode with the approved ad
 > the end of the plan and, as a named blocking-defect exception, the
 > [WIN-TEST-006 production playback remediation amendment](#win-test-006-production-playback-remediation-amendment-2026-08-10).
 > The WIN-TEST-006 exception takes execution precedence until it is closed or
-> replanned. Each authority still waits for its own fresh plan-review gate.
+> replanned. The 2026-08-10 sequencing replan above satisfies that branch only
+> after its own clean independent review and then makes Guide G0 the next
+> product package; the live proof remains mandatory G6/Windows closeout debt.
 
 **ACTIVE_WS2_MAC_COMPLETION_OVERRIDE_2026_07_28:** the user's latest explicit
 direction supersedes every conflicting Windows-machine, `.NET` Release-build,
@@ -11101,11 +11175,14 @@ The remaining authoritative sequence is:
    proof runner, archive/transfer custody, native observer, or Windows command.
    This gate must not assume that the deferred 5H-A–5H-C files, scripts, or
    archives exist, and it authorizes no product feature or contract change.
-   The sole current product-change exception is the blocking defect discovered
-   by that Windows campaign and governed by the separately reviewed
+   The blocking defect discovered by that Windows campaign is governed by the
+   separately reviewed
    [WIN-TEST-006 production playback remediation amendment](#win-test-006-production-playback-remediation-amendment-2026-08-10).
-   That exception takes precedence until it is closed or replanned and does not
-   authorize any other WS5 feature, Guide, contract, or capability change.
+   Its implementation is complete at `e7f1338`. After clean independent review,
+   its 2026-08-10 sequencing replan authorizes only the serial G0–G6 packages
+   in `docs/plans/2026-08-10-guide-continuous-lineup-visual-parity-plan.md`
+   while carrying the operator proof into G6. It does not authorize any other
+   WS5 feature, contract, capability, playback change, or WS6–WS9 package.
 2. Only after that tooling gate is reviewed and implemented may the Windows
    audit/testing campaign execute the exact **5H-W — Windows-only execution
    boundary** contract above: 100% DPI feasibility followed by authorized
