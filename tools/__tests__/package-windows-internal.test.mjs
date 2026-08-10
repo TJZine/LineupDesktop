@@ -129,7 +129,10 @@ test('collectRuntimeVersions probes the bundled Electron runtime with a sanitize
     assert.equal(options.timeout, 15_000);
     assert.equal(options.maxBuffer, 64 * 1024);
     assert.equal(options.env.ELECTRON_RUN_AS_NODE, '1');
-    assert.equal(options.env.PATH, process.env.PATH);
+    assert.equal(
+      readEnvironmentVariable(options.env, 'PATH'),
+      readEnvironmentVariable(process.env, 'PATH'),
+    );
     for (const key of [
       'NODE_OPTIONS',
       'npm_config_node_options',
@@ -137,7 +140,7 @@ test('collectRuntimeVersions probes the bundled Electron runtime with a sanitize
       'npm_execpath',
       'npm_node_execpath',
     ]) {
-      assert.equal(Object.hasOwn(options.env, key), false);
+      assert.equal(readEnvironmentVariable(options.env, key), undefined);
     }
   }
 });
@@ -306,7 +309,10 @@ test('clean Electron build runner invokes bounded npm CLI without a shell', () =
     maxBuffer: 1024 * 1024,
     shell: false,
   });
-  assert.equal(env.PATH, process.env.PATH);
+  assert.equal(
+    readEnvironmentVariable(env, 'PATH'),
+    readEnvironmentVariable(process.env, 'PATH'),
+  );
   for (const key of [
     'NODE_OPTIONS',
     'npm_config_node_options',
@@ -314,7 +320,7 @@ test('clean Electron build runner invokes bounded npm CLI without a shell', () =
     'npm_execpath',
     'npm_node_execpath',
   ]) {
-    assert.equal(Object.hasOwn(env, key), false);
+    assert.equal(readEnvironmentVariable(env, key), undefined);
   }
 });
 
@@ -1113,4 +1119,11 @@ function withTemporaryEnvironmentVariables(values, callback) {
     restore();
     throw error;
   }
+}
+
+function readEnvironmentVariable(environment, name) {
+  const normalizedName = name.toLowerCase();
+  return Object.entries(environment).find(
+    ([key]) => key.toLowerCase() === normalizedName,
+  )?.[1];
 }
