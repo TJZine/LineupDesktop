@@ -53,6 +53,37 @@ test('Guide chains a queued loading generation only to its matching request', ()
   assert.equal(nextRequest, details[1]?.sequence);
 });
 
+test('Guide chains polling work to the matching queued loading generation', () => {
+  const details: Record<string, unknown>[] = [];
+  const owner = new GuidePerformanceMarkOwner({
+    mark: (_name, { detail }) => details.push(detail),
+    clearMarks: () => undefined,
+  });
+  owner.stateAccepted(7, 'loading', -1);
+  const loadingSequence = details[0]?.sequence;
+
+  const pollSequence = owner.requestStarted(7, 24, 12, 0, 1_000, 'poll');
+
+  assert.equal(pollSequence, loadingSequence);
+  assert.equal(details[1]?.requestOrigin, 'poll');
+});
+
+test('Guide polling reuse does not consume a newer semantic input', () => {
+  const details: Record<string, unknown>[] = [];
+  const owner = new GuidePerformanceMarkOwner({
+    mark: (_name, { detail }) => details.push(detail),
+    clearMarks: () => undefined,
+  });
+  owner.stateAccepted(7, 'loading', -1);
+  owner.inputReceived('arrow');
+  const inputSequence = details[1]?.sequence;
+  owner.requestStarted(7, 0, 12, 0, 1_000, 'poll');
+
+  const foregroundSequence = owner.requestStarted(8, 12, 12, 0, 1_000, 'foreground');
+
+  assert.equal(foregroundSequence, inputSequence);
+});
+
 test('Guide input classification stays within the fixed vocabulary', () => {
   assert.equal(classifyGuideKeyboardInput({ key: 'PageDown' }), 'page');
   assert.equal(classifyGuideKeyboardInput({ key: 'ArrowLeft' }), 'arrow');

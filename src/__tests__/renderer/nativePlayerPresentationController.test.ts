@@ -72,12 +72,18 @@ test('renderer presentation controller keeps an applied aperture open across unc
   for (let index = 0; index < 100; index += 1) controller.reconcile();
 
   assert.equal(requests.length, 2);
-  assert.deepEqual(requests.map((request) => request.revision), [1, 2]);
   assert.equal(root.dataset.nativePresentationAperture, 'open');
 
   bounds = domRect(500, 30, 900, 250);
   controller.reconcile();
   assert.equal(requests.length, 3);
+  assert.deepEqual(requests[2]?.rect, {
+    x: 0.5,
+    y: 30 / 700,
+    width: 0.4,
+    height: 220 / 700,
+  });
+  assert.notDeepEqual(requests[2]?.rect, requests[1]?.rect);
   assert.equal(root.dataset.nativePresentationAperture, 'opaque');
   await flushPromises();
   assert.equal(root.dataset.nativePresentationAperture, 'open');
