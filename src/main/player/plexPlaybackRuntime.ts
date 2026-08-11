@@ -105,6 +105,7 @@ export interface PlexPlaybackRuntimeChannelPort {
   resolvePlaybackCandidate(
     selection: PlexPlaybackScheduleSelection,
   ): Promise<PlexPlaybackRuntimeCandidate>;
+  invalidatePlaybackMediaIdentity(): void;
 }
 export type PlexPlaybackRuntimePlayerDispatchResult =
   | {
@@ -123,7 +124,7 @@ export interface PlexPlaybackRuntimePlayerPort {
   dispatch(command: PlayerCommand, context?: PrivilegedPlaybackDispatchContext | null): Promise<PlexPlaybackRuntimePlayerDispatchResult>;
   settleTerminalError(
     event: Extract<PlayerEvent, { event: 'error' }>,
-    expectedSnapshotRequestId: PlayerRequestId | null,
+    previousRequestId: PlayerRequestId | null,
   ): readonly PlayerEvent[];
   cleanup(requestId: PlayerRequestId | null): Promise<PlexPlaybackRuntimePlayerCleanupResult>;
 }
@@ -379,6 +380,9 @@ export class PlexPlaybackRuntime {
   }): Promise<readonly PlayerEvent[]> {
     const releaseCleanupHold = this.#acquireCleanupHold();
     try {
+      if (input.reason === 'logout' || input.reason === 'server-change' || input.reason === 'profile-change' || input.reason === 'teardown') {
+        this.#channel.invalidatePlaybackMediaIdentity();
+      }
       this.#recovery.cancel();
       this.#activeSelection = null;
       const events = await this.#cleanupActive(input.reason, { invalidateEpoch: true });
@@ -605,13 +609,7 @@ export class PlexPlaybackRuntime {
     event: Extract<PlayerEvent, { event: 'error' }>,
     previousRequestId: PlayerRequestId | null,
   ): readonly PlayerEvent[] {
-    if (previousRequestId !== null) {
-      const previousSettlement = this.#player.settleTerminalError(event, previousRequestId);
-      if (previousSettlement.length > 0) {
-        return previousSettlement;
-      }
-    }
-    return this.#player.settleTerminalError(event, null);
+    return this.#player.settleTerminalError(event, previousRequestId);
   }
   #observeAcceptedEvents(events: readonly PlayerEvent[]): void {
     const identity = this.#activeSelection;

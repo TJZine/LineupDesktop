@@ -107,6 +107,33 @@ class DeferredNativePlayerHost implements NativePlayerHostPort {
   }
 }
 
+class DeferredCleanupNativePlayerHost extends FakeNativePlayerHost {
+  readonly cleanupStarted: Promise<void>;
+  #notifyCleanupStarted!: () => void;
+  #finishCleanup!: () => void;
+  readonly #cleanupFinished: Promise<void>;
+
+  constructor() {
+    super();
+    this.cleanupStarted = new Promise<void>((resolve) => {
+      this.#notifyCleanupStarted = resolve;
+    });
+    this.#cleanupFinished = new Promise<void>((resolve) => {
+      this.#finishCleanup = resolve;
+    });
+  }
+
+  override async cleanup(requestId: string | null): Promise<void> {
+    this.cleanupRequestIds.push(requestId);
+    this.#notifyCleanupStarted();
+    await this.#cleanupFinished;
+  }
+
+  finishCleanup(): void {
+    this.#finishCleanup();
+  }
+}
+
 const media: PlayerMediaSummary = {
   id: 'media-1',
   title: 'Episode 1',
@@ -203,6 +230,52 @@ test('desktop player adapter rejects a runtime terminal settlement on request mi
 
   assert.deepEqual(events, []);
   assert.deepEqual(adapter.getSnapshot(), before);
+});
+
+test('desktop player adapter settles a current failure against a retained previous request', async () => {
+  const adapter = new DesktopPlayerAdapter(new FakeNativePlayerHost());
+  await adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('previous-request'),
+    privilegedContext('previous-request'),
+  );
+
+  const events = adapter.settleRuntimeTerminalError(
+    runtimeTerminalError(),
+    'previous-request',
+  );
+
+  assert.deepEqual(events.map((event) => event.event), ['error', 'state.changed']);
+  assert.equal(adapter.getSnapshot().requestId, 'previous-request');
+  assert.equal(adapter.getSnapshot().status, 'error');
+});
+
+test('desktop player adapter quarantines a prior candidate failure when a load supersedes scoped cleanup', async () => {
+  const host = new DeferredCleanupNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('previous-request'),
+    privilegedContext('previous-request'),
+  );
+
+  const cleanup = adapter.cleanup('previous-request');
+  await host.cleanupStarted;
+  await adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('newer-request'),
+    privilegedContext('newer-request'),
+  );
+  host.finishCleanup();
+  const cleanupResult = await cleanup;
+  const beforeSettlement = adapter.getSnapshot();
+
+  const settlement = adapter.settleRuntimeTerminalError(
+    runtimeTerminalError(),
+    'previous-request',
+  );
+
+  assert.deepEqual(cleanupResult.events, []);
+  assert.deepEqual(settlement, []);
+  assert.deepEqual(adapter.getSnapshot(), beforeSettlement);
+  assert.equal(adapter.getSnapshot().requestId, 'newer-request');
 });
 
 function privilegedContext(requestId = 'request-load-1'): PrivilegedPlaybackDispatchContext {

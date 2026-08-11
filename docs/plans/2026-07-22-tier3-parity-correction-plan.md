@@ -2267,10 +2267,11 @@ inconsistent:
   authoritative `PlayerSnapshot`. No adapter-owned `state.changed` event is
   produced, so the overlay retains the post-tune transition indefinitely.
 
-The synthetic `plex-media-` value belongs only to renderer-safe
-`PlayerMediaSummary.id` projection after metadata is resolved. It is not a Plex
-locator and must not be required, stripped, or reconstructed at the privileged
-metadata input seam.
+The prior synthetic `plex-media-` value belonged only to renderer-safe
+`PlayerMediaSummary.id` projection after metadata resolution, not to Plex
+locator custody. The current correction additionally removes its raw-key
+encoding: the public ID is now an independently allocated opaque value and is
+never required, stripped, or reconstructed at the privileged metadata seam.
 
 #### Goal and non-goals
 
@@ -2309,10 +2310,23 @@ This package does not:
   with renderer-safe media identity. `PlexPlaybackBridge` passes the exact raw
   scheduled key; `PlaybackMediaDetailPort` validates it as a nonempty private
   key and passes it directly to the existing main-owned metadata transport.
-- `PlexStreamResolver` remains the sole owner that projects the resolved item
-  into the renderer-safe `plex-media-${ratingKey}` media id. No caller may add
-  the prefix before metadata lookup, and no adapter may support both prefixed
-  and raw inputs.
+- `PlexPlaybackBridge` retains only the current raw-key-to-public-ID pair and
+  allocates its renderer media ID as an opaque random value independently of
+  `ratingKey`. Repeated resolution of that current key is stable without an
+  unbounded cache. Existing runtime cleanup invalidates the pair on logout,
+  server change, profile change, and teardown, so an equal Plex key in another
+  identity context cannot alias the old renderer ID. The bridge captures the
+  identity generation and claims the current ID before any settings,
+  capability, or resolver await; invalidation increments that generation and
+  clears the pair. A stale async completion remains subject to runtime epoch
+  quarantine and cannot republish its old pair into the current generation.
+  The bridge passes opaque `mediaId` and exact raw `ratingKey` as distinct
+  main-only resolver inputs.
+  `PlexStreamResolver` uses only the supplied opaque ID in renderer-safe load,
+  decision, diagnostic, session, and private-descriptor media summaries;
+  `PlaybackMediaDetailPort` receives only the raw key for main-owned metadata
+  transport. No public ID may expose, prefix, hash, truncate, or otherwise
+  encode the raw key.
 - `PlexStreamResolverResult` retains its deliberate two-part trust boundary.
   Renderer-safe `load` plus every later event, snapshot, projection, and
   support-bundle/evidence surface must exclude the raw rating key, URL, header,
@@ -2325,8 +2339,8 @@ This package does not:
 - `DesktopPlayerAdapter` remains the sole `PlayerSnapshot` authority. Add one
   main-only, synchronous terminal-error settlement operation to
   `PlexPlaybackRuntimePlayerPort`. Its input is the already-sanitized original
-  `error` event plus the expected adapter snapshot request id, and its return is
-  the complete event batch for that failure. The adapter-backed
+  `error` event plus the retained prior adapter snapshot request id, and its
+  return is the complete event batch for that failure. The adapter-backed
   `createDesktopPlayerAdapterRuntimePort` delegates settlement to the adapter
   rather than constructing a snapshot or `state.changed` event itself.
 - `playbackRuntimeBootstrap.ts` owns both runtime-port bindings. With an
@@ -2340,12 +2354,14 @@ This package does not:
   rejects, `PlexPlaybackRuntime` checks the captured start epoch immediately
   before settlement. A superseded epoch is quarantined by the existing stale
   path and must not call the adapter or publish the candidate error.
-- Adapter snapshot request identity is the second currentness guard. This
-  pre-request candidate failure may settle only when the adapter's current
-  snapshot request id exactly equals the expected post-cleanup value `null`.
-  If it differs, settlement is rejected synchronously with no snapshot
-  mutation, no original error publication, and no delayed retry. A null-request
-  failure therefore cannot overwrite a newer non-null request.
+- Adapter snapshot request identity is the second currentness guard. The
+  adapter receives the retained `previousRequestId` and synchronously accepts
+  exactly two current states after scoped cleanup: the same previous request
+  when cleanup failed and retained it, or `null` when cleanup cleared the
+  snapshot. Every other request ID is a newer owner and is rejected without
+  snapshot mutation, original-error publication, or delayed retry. This check
+  and accepted error mutation occur synchronously so a concurrent renderer
+  load cannot be overwritten after the scoped host cleanup await.
 - For an accepted settlement, the adapter applies its existing error
   sanitization and authoritative mutation: preserve the current snapshot
   request identity, set `status: 'error'`, `playing: false`, and `lastError` to
@@ -2402,11 +2418,11 @@ The worker may discover the exact cohesive files within this narrow boundary:
 `src/renderer/playerOverlayController.ts`, `src/main/index.ts`,
 `src/renderer/index.ts`, and `src/preload/index.cts` are read-only for this
 package. `playbackRuntimeBootstrap.ts` is the sole writable composition owner,
-limited to the two terminal-settlement bindings above and the mechanical
-`PlexStreamResolverInput.mediaId` to `ratingKey` vocabulary update in its
-existing development fake resolver required by the same private input rename.
-The fake resolver's behavior and projected `plex-media-...` id remain
-unchanged. Any requested edit to another composition root stops implementation
+limited to the two terminal-settlement bindings above and consuming the
+bridge-owned opaque `PlexStreamResolverInput.mediaId` in its existing
+development fake resolver. The fake keeps deterministic media behavior while
+using that already-allocated opaque ID rather than deriving one from the raw
+key. Any requested edit to another composition root stops implementation
 and returns to plan review.
 
 #### Files out of scope
@@ -2424,7 +2440,7 @@ and returns to plan review.
 
 Current line-count evidence is: `plexPlaybackBridge.ts` 260,
 `streamResolver.ts` 752, `streamResolverComposition.ts` 56,
-`playbackMediaDetailPort.ts` 76, `plexPlaybackRuntime.ts` 784,
+`playbackMediaDetailPort.ts` 76, `plexPlaybackRuntime.ts` 795,
 `plexPlaybackComposition.ts` 122, `desktopPlayerAdapter.ts` 680, and
 `playbackRuntimeBootstrap.ts` 324 lines. `streamResolver.ts`,
 `plexPlaybackRuntime.ts`, and `desktopPlayerAdapter.ts` are attention owners in
@@ -2479,17 +2495,20 @@ remain below 800 lines.
 This is one atomic execution package and the only currently authorized product
 unit. Parallel product edits are prohibited.
 
-1. Replace the private `mediaId` input vocabulary between
-   `PlexPlaybackBridge`, `PlexStreamResolver`, and `PlaybackMediaDetailPort`
-   with exact raw `ratingKey` vocabulary. Remove the `plex-media-` prefix gate
-   and stripping from metadata lookup. Keep the existing nonempty validation
-   and sanitized failure behavior; do not accept two formats.
-2. Preserve `PlexStreamResolver`'s existing renderer-safe media projection so a
-   successfully resolved raw key produces the same `plex-media-...` public id
-   without exposing the locator.
+1. Keep exact raw `ratingKey` vocabulary at the privileged metadata seam, and
+   add a distinct opaque `mediaId` resolver input allocated by
+   `PlexPlaybackBridge`. Retain only the current mapping and invalidate it on
+   existing logout/server/profile/teardown cleanup. Remove every raw-key-derived
+   public-ID projection; do not accept a prefixed locator or encode the raw key
+   in another format.
+2. Make `PlexStreamResolver` project the bridge-owned opaque ID consistently
+   through every renderer-safe media summary while `PlaybackMediaDetailPort`
+   continues to pass only the raw key to main-owned metadata transport.
 3. Add the synchronous adapter-backed error-settlement operation to the runtime
    player port and route the epoch-current candidate-resolution failure through
-   it with expected adapter snapshot request id `null`. The adapter, not the
+   it with the retained `previousRequestId`. The adapter accepts settlement
+   only when that request remains current or scoped cleanup cleared it to
+   `null`; every newer request is quarantined. The adapter, not the
    runtime/composition/renderer, mutates the snapshot and produces
    `state.changed`. `PlexPlaybackRuntime` treats the returned batch as the full
    settlement and publishes it exactly once without separately adding or
@@ -2513,8 +2532,9 @@ unit. Parallel product edits are prohibited.
    event pair; `getSnapshot()` equals the emitted snapshot; the existing
    renderer subscription consumes that `state.changed` and an active channel
    transition clears into existing recovery UI. Prove separately that a stale
-   runtime epoch never calls settlement and an expected-null settlement cannot
-   mutate or publish over a non-null newer adapter request.
+   runtime epoch never calls settlement, both retained-prior and cleared-null
+   cases settle, and neither can mutate or publish over a newer adapter request,
+   including a load begun while scoped host cleanup is pending.
 7. Extend `src/__tests__/main/player/playbackRuntimeBootstrap.test.ts` to prove
    both bootstrap branches. The adapter-backed port delegates terminal
    settlement and returns its complete ordered batch. The adapter-less fallback
@@ -2668,13 +2688,15 @@ Rollback and replan rules are exact:
 #### Acceptance, rollback, and replan triggers
 
 - Raw scheduled rating keys resolve through main-owned metadata transport and
-  are never exposed renderer-side.
-- Public media ids remain unchanged and synthetic-prefixed only after
-  successful metadata resolution.
-- An epoch-current candidate-resolution failure produces one adapter-owned safe
-  error snapshot and `state.changed`; a stale epoch or expected-request
-  mismatch cannot mutate or publish over newer playback; the observed
-  transition settles to playing or visible error through existing owners.
+  are never exposed renderer-side; the current renderer media ID is an opaque
+  independently allocated value. Repeated current resolution is stable, while
+  identity-boundary cleanup rotates it and retention remains one bounded pair.
+- With an adapter, an epoch-current candidate-resolution failure produces one
+  adapter-owned safe error snapshot and `state.changed` only when the scoped
+  cleanup retained `previousRequestId` or cleared the snapshot to `null`. A
+  stale epoch or any newer request ID cannot mutate or publish over newer
+  playback; the observed transition settles to playing or visible error
+  through existing owners.
 - The adapter-less bootstrap publishes only the one already-sanitized runtime
   error, without synthesizing `state.changed`, duplicating the event, or
   claiming snapshot authority.

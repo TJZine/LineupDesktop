@@ -183,7 +183,7 @@ export function bootstrapPlaybackRuntime(
 function createFakeResolver() {
   return {
     async resolve(input: PlexStreamResolverInput): Promise<PlexStreamResolverResult> {
-      if (input.ratingKey.length === 0) {
+      if (input.ratingKey.trim() === '') {
         return {
           ok: false,
           error: {
@@ -196,8 +196,8 @@ function createFakeResolver() {
           diagnostics: [],
         };
       }
-      const fakeMediaId = `plex-media-${input.ratingKey}`;
-      const fakeMediaTitle = `Live Program ${input.ratingKey}`;
+      const fakeMediaId = input.mediaId;
+      const fakeMediaTitle = 'Development Playback Fixture';
       const fakeMediaDurationMs = 1_200_000;
       const payload = {
         media: {

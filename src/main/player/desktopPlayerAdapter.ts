@@ -74,9 +74,10 @@ export class DesktopPlayerAdapter {
   }
   settleRuntimeTerminalError(
     event: Extract<PlayerEvent, { event: 'error' }>,
-    expectedSnapshotRequestId: PlayerRequestId | null,
+    previousRequestId: PlayerRequestId | null,
   ): readonly PlayerEvent[] {
-    if (this.#snapshot.requestId !== expectedSnapshotRequestId) {
+    const currentRequestId = this.#snapshot.requestId;
+    if (currentRequestId !== previousRequestId && currentRequestId !== null) {
       return [];
     }
     return this.#recordError(event.error);

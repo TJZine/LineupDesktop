@@ -164,6 +164,7 @@ test('completed helper cleanup can Retry only the canonical current program thro
       },
     },
     channel: {
+      invalidatePlaybackMediaIdentity() {},
       async resolvePlaybackCandidate(selection) {
         requestNumber += 1;
         const requestId = `request-${String(requestNumber)}`;

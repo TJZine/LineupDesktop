@@ -30,7 +30,7 @@ type DesktopPlayerAdapterRuntimePort = {
   }>;
   settleRuntimeTerminalError(
     event: Extract<PlayerEvent, { event: 'error' }>,
-    expectedSnapshotRequestId: PlayerRequestId | null,
+    previousRequestId: PlayerRequestId | null,
   ): readonly PlayerEvent[];
 };
 
@@ -120,8 +120,8 @@ export function createDesktopPlayerAdapterRuntimePort(
       const result = await adapter.cleanup(requestId);
       return { ok: result.accepted, events: result.events };
     },
-    settleTerminalError(event, expectedSnapshotRequestId) {
-      return adapter.settleRuntimeTerminalError(event, expectedSnapshotRequestId);
+    settleTerminalError(event, previousRequestId) {
+      return adapter.settleRuntimeTerminalError(event, previousRequestId);
     },
   };
 }

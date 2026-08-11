@@ -49,6 +49,7 @@ const RAW_PLEX_PRIVATE_VALUES = [
   'subtitle-rich-default-srt',
 ] as const;
 const SECRET_SHAPED_THROWN_TEXT = 'sk_live_like_1234567890abcdef';
+const OPAQUE_MEDIA_ID = 'playback-media-test-opaque';
 const SUBTITLE_DIAGNOSTIC_FORBIDDEN_KEYS = [
   'mediaId',
   'title',
@@ -153,13 +154,14 @@ test('plex stream resolver projects direct play to safe load payload and private
     pmsStarts,
   }).resolve({
     requestId: 'request-direct-play',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-direct-play',
     capabilityProfile: directPlayProfile,
     startPositionMs: 12_000,
   });
 
   assertResolved(result, 'direct-play');
-  assert.equal(result.load.media.id, 'plex-media-media-safe-main');
+  assert.equal(result.load.media.id, OPAQUE_MEDIA_ID);
   assert.equal(result.load.media.title, 'Resolver Safe Episode');
   assert.equal(result.load.media.container, 'mkv');
   assert.equal(result.load.policy.autoplay, true);
@@ -181,6 +183,7 @@ test('plex stream resolver preserves unsupported seek capability in a playable s
     mediaDetail: createMediaDetail(),
   }).resolve({
     requestId: 'request-direct-play-no-seek',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-direct-play-no-seek',
     capabilityProfile: seekUnsupportedProfile,
   });
@@ -197,6 +200,7 @@ test('plex stream resolver projects direct stream when policy requires remux', a
     mediaDetail: createMediaDetail(),
   }).resolve({
     requestId: 'request-direct-play-compare',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-direct-play-compare',
     capabilityProfile: directPlayProfile,
   });
@@ -206,6 +210,7 @@ test('plex stream resolver projects direct stream when policy requires remux', a
     mediaDetail: createMediaDetail({ container: 'avi' }),
   }).resolve({
     requestId: 'request-direct-stream',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-direct-stream',
     capabilityProfile: directPlayProfile,
     preferredSubtitleTrackId: null,
@@ -229,6 +234,7 @@ test('plex stream resolver projects transcode without leaking private descriptor
     mediaDetail: createMediaDetail({ videoCodec: 'vp9' }),
   }).resolve({
     requestId: 'request-transcode',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-transcode',
     capabilityProfile: directPlayProfile,
     preferredSubtitleTrackId: null,
@@ -244,6 +250,7 @@ test('plex stream resolver applies only allowlisted quality parameters to an all
   const mediaDetail = createMediaDetail({ videoCodec: 'vp9' });
   const qualityResult = await createResolver({ mediaDetail }).resolve({
     requestId: 'request-transcode-quality',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-transcode-quality',
     capabilityProfile: directPlayProfile,
     preferredSubtitleTrackId: null,
@@ -258,6 +265,7 @@ test('plex stream resolver applies only allowlisted quality parameters to an all
 
   const compatibilityResult = await createResolver({ mediaDetail }).resolve({
     requestId: 'request-transcode-compatibility',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-transcode-compatibility',
     capabilityProfile: directPlayProfile,
     preferredSubtitleTrackId: null,
@@ -277,6 +285,7 @@ test('plex stream resolver prefers an HDR10 candidate only when the setting requ
   const mediaDetail = createHdrChoiceMediaDetail();
   const sourceOrderResult = await createResolver({ mediaDetail }).resolve({
     requestId: 'request-hdr-source-order',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-hdr-source-order',
     capabilityProfile: directPlayProfile,
     settingsPreferences: settingsPreferences(),
@@ -286,6 +295,7 @@ test('plex stream resolver prefers an HDR10 candidate only when the setting requ
 
   const preferredHdrResult = await createResolver({ mediaDetail }).resolve({
     requestId: 'request-hdr-preferred',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-hdr-preferred',
     capabilityProfile: directPlayProfile,
     settingsPreferences: settingsPreferences({ hdrFallbackMode: 'prefer-hdr10' }),
@@ -305,6 +315,7 @@ test('plex stream resolver subtitle diagnostics require both admissions and use 
   });
   const resolve = (requestId: string) => resolver.resolve({
     requestId,
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-subtitle-diagnostic',
     capabilityProfile: directPlayProfile,
   });
@@ -388,6 +399,7 @@ test('plex stream resolver bounds counts and encodes closed reason codes in subt
     },
   }).resolve({
     requestId: 'request-bounded-subtitle-diagnostic',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-bounded-subtitle-diagnostic',
     capabilityProfile: directPlayProfile,
     settingsPreferences: settingsPreferences({ subtitleMode: 'standard' }),
@@ -409,6 +421,7 @@ test('plex stream resolver bounds counts and encodes closed reason codes in subt
 test('plex stream resolver ignores subtitle diagnostic failures without changing playback settlement', async () => {
   const input = {
     requestId: 'request-diagnostic-failure',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-diagnostic-failure',
     capabilityProfile: directPlayProfile,
     settingsPreferences: settingsPreferences(),
@@ -438,6 +451,7 @@ test('plex stream resolver normalizes unsupported policy without private playbac
     }),
   }).resolve({
     requestId: 'request-unsupported',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-unsupported',
     capabilityProfile: unsupportedProfile,
   });
@@ -455,6 +469,7 @@ test('plex stream resolver preserves language delivery default forced and HDR fa
     mediaDetail: createRichMediaDetail(),
   }).resolve({
     requestId: 'request-rich-facts',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-rich-facts',
     capabilityProfile: {
       ...directPlayProfile,
@@ -489,6 +504,7 @@ test('plex stream resolver keeps synthetic audio fallback in public track map wi
     mediaDetail,
   }).resolve({
     requestId: 'request-synthetic-audio-map',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-synthetic-audio-map',
     capabilityProfile: directPlayProfile,
   });
@@ -520,6 +536,7 @@ test('plex stream resolver preserves Plex-selected subtitle before auto forced f
     mediaDetail,
   }).resolve({
     requestId: 'request-selected-subtitle',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-selected-subtitle',
     capabilityProfile: {
       ...directPlayProfile,
@@ -544,6 +561,7 @@ test('plex stream resolver normalizes missing selected connection safely', async
     mediaDetail: createMediaDetail(),
   }).resolve({
     requestId: 'request-no-connection',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-no-connection',
     capabilityProfile: directPlayProfile,
   });
@@ -559,6 +577,7 @@ test('plex stream resolver normalizes thrown selected connection failures safely
     mediaDetail: createMediaDetail(),
   }).resolve({
     requestId: 'request-thrown-connection',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-thrown-connection',
     capabilityProfile: directPlayProfile,
   });
@@ -574,6 +593,7 @@ test('plex stream resolver normalizes missing credential safely', async () => {
     mediaDetail: createMediaDetail(),
   }).resolve({
     requestId: 'request-no-credential',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-no-credential',
     capabilityProfile: directPlayProfile,
   });
@@ -590,6 +610,7 @@ test('plex stream resolver normalizes thrown credential failures safely', async 
     mediaDetail: createMediaDetail(),
   }).resolve({
     requestId: 'request-thrown-credential',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-thrown-credential',
     capabilityProfile: directPlayProfile,
   });
@@ -605,6 +626,7 @@ test('plex stream resolver normalizes missing media detail safely', async () => 
     mediaDetail: null,
   }).resolve({
     requestId: 'request-no-media',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-no-media',
     capabilityProfile: directPlayProfile,
   });
@@ -620,6 +642,7 @@ test('plex stream resolver normalizes thrown media detail failures safely', asyn
     mediaDetail: createMediaDetail(),
   }).resolve({
     requestId: 'request-thrown-media-detail',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-thrown-media-detail',
     capabilityProfile: directPlayProfile,
   });
@@ -634,6 +657,7 @@ test('plex stream resolver normalizes invalid media detail safely', async () => 
     mediaDetail: createMediaDetail({ includeParts: false }),
   }).resolve({
     requestId: 'request-invalid-media',
+    mediaId: OPAQUE_MEDIA_ID,
     ratingKey: 'media-input-invalid-media',
     capabilityProfile: directPlayProfile,
   });
@@ -644,7 +668,7 @@ test('plex stream resolver normalizes invalid media detail safely', async () => 
 });
 
 test('plex media detail candidate mapping remains public-policy safe', () => {
-  const candidates = mapPlexMediaDetailsToDesktopStreamCandidates(createMediaDetail());
+  const candidates = mapPlexMediaDetailsToDesktopStreamCandidates(createMediaDetail(), OPAQUE_MEDIA_ID);
 
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0]?.video.codec, 'h264');
@@ -667,7 +691,7 @@ test('plex media detail candidate mapping preserves HLG dynamic range', () => {
   videoStream.dynamicRange = 'HLG';
   videoStream.colorTrc = 'arib-std-b67';
 
-  const [candidate] = mapPlexMediaDetailsToDesktopStreamCandidates(mediaDetail);
+  const [candidate] = mapPlexMediaDetailsToDesktopStreamCandidates(mediaDetail, OPAQUE_MEDIA_ID);
 
   assert.equal(candidate?.video.dynamicRange, 'hlg');
 });
@@ -680,13 +704,13 @@ test('plex media detail candidate mapping recognizes HLG transfer metadata', () 
   delete videoStream.hdr;
   videoStream.colorTrc = 'arib-std-b67';
 
-  const [candidate] = mapPlexMediaDetailsToDesktopStreamCandidates(mediaDetail);
+  const [candidate] = mapPlexMediaDetailsToDesktopStreamCandidates(mediaDetail, OPAQUE_MEDIA_ID);
 
   assert.equal(candidate?.video.dynamicRange, 'hlg');
 });
 
 test('plex media detail candidate mapping projects rich track facts without private ids', () => {
-  const [candidate] = mapPlexMediaDetailsToDesktopStreamCandidates(createRichMediaDetail());
+  const [candidate] = mapPlexMediaDetailsToDesktopStreamCandidates(createRichMediaDetail(), OPAQUE_MEDIA_ID);
 
   assert.ok(candidate);
   assert.equal(candidate.video.codec, 'hevc');

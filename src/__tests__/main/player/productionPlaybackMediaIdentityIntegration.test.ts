@@ -146,13 +146,20 @@ test('raw scheduled rating key flows through the real bridge, resolver, and medi
   assert.ok(selection);
 
   const candidate = await bridge.resolvePlaybackCandidate(selection);
+  const repeatedCandidate = await bridge.resolvePlaybackCandidate(selection);
+  const rendererMediaId = candidate.load.media.id;
 
-  assert.deepEqual(metadataInputs, [{ ratingKey }]);
-  assert.equal(candidate.load.media.id, `plex-media-${ratingKey}`);
+  assert.deepEqual(metadataInputs, [{ ratingKey }, { ratingKey }]);
+  assert.equal(repeatedCandidate.load.media.id, rendererMediaId);
+  assert.match(rendererMediaId, /^playback-media-[0-9a-f-]{36}$/u);
+  assert.equal(candidate.load.media.id, rendererMediaId);
+  assert.equal(candidate.privatePlayback?.media.id, rendererMediaId);
+  assert.equal(rendererMediaId.includes(ratingKey), false);
   assert.equal(Object.hasOwn(candidate.load, 'ratingKey'), false);
   assert.equal(Object.hasOwn(candidate.load, 'privatePlayback'), false);
   assert.equal(JSON.stringify(candidate.load).includes('dummy-private-credential'), false);
   assert.equal(JSON.stringify(candidate.load).includes(connection.uri), false);
+  assert.equal(JSON.stringify(candidate.load).includes(ratingKey), false);
   assert.ok(candidate.privatePlayback);
   assert.equal(candidate.privatePlayback.playbackUrl, `${connection.uri}/library/parts/private-file.mp4`);
   assert.deepEqual(candidate.privatePlayback.credentialHeader, {

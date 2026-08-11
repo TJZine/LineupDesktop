@@ -45,6 +45,24 @@ function createActiveScheduler(ratingKey = 'bootstrap-rating-key'): Pick<IChanne
   };
 }
 
+const SMOKE_PRIVATE_VALUES = [
+  'privatePlayback',
+  'credentialHeader',
+  'X-Plex-Token',
+  'mock-token',
+  'https://mock.plex.invalid/file.mp4',
+  '/library/metadata/mock',
+  '/library/parts/mock/file.mp4',
+  'smoke-private-key',
+] as const;
+
+function assertSmokePrivateValuesAbsent(value: unknown): void {
+  const serialized = JSON.stringify(value);
+  for (const privateValue of SMOKE_PRIVATE_VALUES) {
+    assert.equal(serialized.includes(privateValue), false, `exposed smoke private value: ${privateValue}`);
+  }
+}
+
 class CapturingHost implements NativePlayerHostPort {
   readonly contexts: Array<PrivilegedPlaybackDispatchContext | null | undefined> = [];
 
@@ -167,8 +185,9 @@ test('adapter-backed smoke bootstrap passes private playback only to privileged 
   assert.equal(host.contexts.length, 1);
   assert.ok(host.contexts[0]?.privatePlayback);
   assert.equal(Object.hasOwn(host.contexts[0] ?? {}, 'privatePlayback'), true);
-  assert.equal(JSON.stringify(start.events).includes('privatePlayback'), false);
-  assert.equal(JSON.stringify(emitted).includes('privatePlayback'), false);
+  assertSmokePrivateValuesAbsent(start.events);
+  assertSmokePrivateValuesAbsent(emitted);
+  assertSmokePrivateValuesAbsent(adapter.getSnapshot());
   assert.equal(Object.hasOwn(adapter.getSnapshot(), 'privatePlayback'), false);
 });
 
@@ -186,4 +205,32 @@ test('smoke bootstrap identifies an empty Plex rating key before deriving fake m
   assert.equal(start.accepted, false);
   const error = start.events.find((event) => event.event === 'error');
   assert.equal(error?.event === 'error' ? error.error.message : null, 'Missing Plex rating key');
+});
+
+test('smoke bootstrap rejects a whitespace-only Plex rating key as resource missing', async () => {
+  const result = bootstrapPlaybackRuntime({
+    shellMode: 'smoke',
+    scheduler: createActiveScheduler('  \t  '),
+    adapter: null,
+    createRequestId: (prefix) => `${prefix}-whitespace-rating-key`,
+    onEvents: () => undefined,
+  });
+
+  const start = await result.runtime.startCurrentPlayback('startup');
+  const error = start.events.find((event) => event.event === 'error');
+
+  assert.equal(start.accepted, false);
+  assert.deepEqual(error?.event === 'error' ? {
+    code: error.error.code,
+    category: error.error.category,
+    message: error.error.message,
+    retryable: error.error.retryable,
+    recoverable: error.error.recoverable,
+  } : null, {
+    code: 'resource-missing',
+    category: 'source',
+    message: 'Missing Plex rating key',
+    retryable: false,
+    recoverable: false,
+  });
 });

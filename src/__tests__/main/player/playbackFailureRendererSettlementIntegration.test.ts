@@ -40,6 +40,7 @@ test('real runtime and adapter failure clears an active subscribed transition in
       }),
     },
     channel: {
+      invalidatePlaybackMediaIdentity() {},
       resolvePlaybackCandidate: async () => {
         throw new PlexPlaybackRuntimeCandidateResolutionError({
           code: 'PLAYER_PLAYBACK_CANDIDATE_UNAVAILABLE',
@@ -90,6 +91,7 @@ test('candidate failure settles renderer state when failed cleanup retains the a
   const adapter = new DesktopPlayerAdapter(host);
   const harness = createRendererHarness(adapter);
   let resolutionCount = 0;
+  const emittedBatches: Array<readonly PlayerEvent[]> = [];
   const runtime = new PlexPlaybackRuntime({
     scheduler: {
       getCurrentPlayback: async () => ({
@@ -100,6 +102,7 @@ test('candidate failure settles renderer state when failed cleanup retains the a
       }),
     },
     channel: {
+      invalidatePlaybackMediaIdentity() {},
       resolvePlaybackCandidate: async () => {
         resolutionCount += 1;
         if (resolutionCount === 1) return createCandidate('active-request');
@@ -116,6 +119,7 @@ test('candidate failure settles renderer state when failed cleanup retains the a
     pms: { releaseSession: async () => undefined },
     clock: { now: () => 2_000 },
     onEvents: (events) => {
+      emittedBatches.push(events);
       for (const event of events) harness.emitPlayerEvent(event);
     },
   });
@@ -123,6 +127,7 @@ test('candidate failure settles renderer state when failed cleanup retains the a
   const started = await runtime.startCurrentPlayback('startup');
   assert.equal(started.accepted, true);
   assert.equal(adapter.getSnapshot().requestId, 'active-request');
+  emittedBatches.length = 0;
   host.failCleanup = true;
 
   void harness.controller.tune('two', 'miniGuide');
@@ -130,12 +135,18 @@ test('candidate failure settles renderer state when failed cleanup retains the a
   const failed = await runtime.startCurrentPlayback('manual-switch');
 
   assert.equal(failed.accepted, false);
+  assert.equal(emittedBatches.length, 1);
+  assert.deepEqual(emittedBatches[0], failed.events);
   assert.deepEqual(failed.events.map((event) => event.event), [
     'error',
     'state.changed',
     'error',
     'state.changed',
   ]);
+  assert.equal(failed.events.filter((event) => (
+    event.event === 'error' && event.error.code === 'PLAYER_PLAYBACK_CANDIDATE_UNAVAILABLE'
+  )).length, 1);
+  assert.deepEqual(failed.events.slice(-2).map((event) => event.event), ['error', 'state.changed']);
   assert.equal(harness.getSnapshot().requestId, 'active-request');
   assert.equal(harness.getSnapshot().status, 'error');
   assert.deepEqual(harness.getSnapshot(), adapter.getSnapshot());
@@ -146,6 +157,64 @@ test('candidate failure settles renderer state when failed cleanup retains the a
   ).visibleOverlays.playerError, true);
 
   harness.dispose();
+});
+
+test('candidate failure settles a cleared adapter snapshot after successful scoped cleanup', async () => {
+  const adapter = new DesktopPlayerAdapter(new InertNativePlayerHost());
+  let resolutionCount = 0;
+  const emittedBatches: Array<readonly PlayerEvent[]> = [];
+  const runtime = new PlexPlaybackRuntime({
+    scheduler: {
+      getCurrentPlayback: async () => ({
+        channelId: 'channel-two',
+        programId: 'program-two',
+        startedAtMs: 1_000,
+        endsAtMs: 121_000,
+      }),
+    },
+    channel: {
+      invalidatePlaybackMediaIdentity() {},
+      resolvePlaybackCandidate: async () => {
+        resolutionCount += 1;
+        if (resolutionCount === 1) return createCandidate('active-request');
+        throw new PlexPlaybackRuntimeCandidateResolutionError({
+          code: 'PLAYER_PLAYBACK_CANDIDATE_UNAVAILABLE',
+          category: 'source',
+          message: 'The scheduled media could not be resolved.',
+          recoverable: true,
+          retryable: true,
+        });
+      },
+    },
+    player: createDesktopPlayerAdapterRuntimePort(adapter),
+    pms: { releaseSession: async () => undefined },
+    clock: { now: () => 2_000 },
+    onEvents: (events) => emittedBatches.push(events),
+  });
+
+  const started = await runtime.startCurrentPlayback('startup');
+  assert.equal(started.accepted, true);
+  assert.equal(adapter.getSnapshot().requestId, 'active-request');
+  emittedBatches.length = 0;
+
+  const failed = await runtime.startCurrentPlayback('manual-switch');
+
+  assert.equal(failed.accepted, false);
+  assert.equal(emittedBatches.length, 1);
+  assert.deepEqual(emittedBatches[0], failed.events);
+  assert.deepEqual(failed.events.map((event) => event.event), [
+    'state.changed',
+    'error',
+    'state.changed',
+  ]);
+  assert.equal(failed.events.filter((event) => event.event === 'error').length, 1);
+  assert.deepEqual(failed.events.slice(-2).map((event) => event.event), ['error', 'state.changed']);
+  const finalState = failed.events.at(-1);
+  assert.equal(finalState?.event, 'state.changed');
+  assert.equal(finalState?.event === 'state.changed' ? finalState.snapshot.requestId : 'not-state', null);
+  assert.deepEqual(finalState?.event === 'state.changed' ? finalState.snapshot : null, adapter.getSnapshot());
+  assert.equal(adapter.getSnapshot().requestId, null);
+  assert.equal(adapter.getSnapshot().status, 'error');
 });
 
 class InertNativePlayerHost implements NativePlayerHostPort {

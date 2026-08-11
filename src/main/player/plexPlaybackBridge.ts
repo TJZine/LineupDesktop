@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { PlayerRequestId } from '../../contracts/player.js';
 import type { IChannelScheduler, ScheduledProgram } from '../../domain/scheduler/index.js';
 import type { PlexStreamResolverInput, PlexStreamResolverResult } from '../plex/streamResolver.js';
@@ -43,6 +45,8 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
     | DesktopStreamCapabilityProfile
     | (() => DesktopStreamCapabilityProfile | Promise<DesktopStreamCapabilityProfile>);
   readonly #createRequestId: (prefix: string) => PlayerRequestId;
+  #mediaIdentity: { ratingKey: string; mediaId: string } | null = null;
+  #mediaIdentityGeneration = 0;
   readonly #autoplay: boolean;
   readonly #settingsPreferences?: PlexPlaybackBridgeOptions['settingsPreferences'];
   readonly #settingsCapabilities?: PlexPlaybackBridgeOptions['settingsCapabilities'];
@@ -63,6 +67,11 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
     this.#settingsPreferences = options.settingsPreferences;
     this.#settingsCapabilities = options.settingsCapabilities;
     this.#resolveAudioOutput = options.resolveAudioOutput;
+  }
+
+  invalidatePlaybackMediaIdentity(): void {
+    this.#mediaIdentityGeneration += 1;
+    this.#mediaIdentity = null;
   }
 
   async getCurrentPlayback(_input?: {
@@ -101,6 +110,11 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
       }));
     }
 
+    const mediaIdentityGeneration = this.#mediaIdentityGeneration;
+    const mediaId = this.#getOrCreateMediaId(
+      program.item.ratingKey,
+      mediaIdentityGeneration,
+    );
     const requestId = this.#createRequestId('plex-playback');
     const settingsPreferences = await this.#readSettingsPreferences(requestId);
     const resolveAudioOutput = this.#resolveAudioOutput;
@@ -114,6 +128,7 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
         : undefined;
     const resolverInput: PlexStreamResolverInput = {
       requestId,
+      mediaId,
       ratingKey: program.item.ratingKey,
       capabilityProfile: await this.#resolveCapabilityProfile(),
       autoplay: this.#autoplay,
@@ -145,6 +160,17 @@ export class PlexPlaybackBridge implements PlexPlaybackRuntimeSchedulerPort, Ple
       pmsSession: result.pmsSession,
       privatePlayback,
     };
+  }
+
+  #getOrCreateMediaId(ratingKey: string, generation: number): string {
+    if (generation === this.#mediaIdentityGeneration && this.#mediaIdentity?.ratingKey === ratingKey) {
+      return this.#mediaIdentity.mediaId;
+    }
+    const mediaId = `playback-media-${randomUUID()}`;
+    if (generation === this.#mediaIdentityGeneration) {
+      this.#mediaIdentity = { ratingKey, mediaId };
+    }
+    return mediaId;
   }
 
   #readCurrentProgram(): ScheduledProgram | null {

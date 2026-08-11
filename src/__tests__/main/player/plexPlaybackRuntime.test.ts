@@ -107,6 +107,11 @@ class FakeChannelPort implements PlexPlaybackRuntimeChannelPort {
   candidatePromise: Promise<PlexPlaybackRuntimeCandidate> | null = null;
   onResolvePlaybackCandidate: (() => void) | null = null;
   readonly selections: PlexPlaybackScheduleSelection[] = [];
+  readonly identityInvalidations: number[] = [];
+
+  invalidatePlaybackMediaIdentity(): void {
+    this.identityInvalidations.push(this.identityInvalidations.length + 1);
+  }
 
   async resolvePlaybackCandidate(
     nextSelection: PlexPlaybackScheduleSelection,
@@ -775,6 +780,10 @@ test('RD-12 plex playback runtime cleans PMS and player state for every cleanup 
     assert.equal(pms.releases[0]?.requestId, `request-${reason}`);
     assert.equal(player.cleanupRequestIds[0], `request-${reason}`);
     assert.equal(player.commands.filter((command) => command.command === 'stop').length, cleanupCommandCount);
+    assert.equal(
+      channel.identityInvalidations.length,
+      ['logout', 'server-change', 'profile-change', 'teardown'].includes(reason) ? 1 : 0,
+    );
     assertNoForbiddenKeys(events);
     assertRendererSafePlayerEvents(events);
 

@@ -201,7 +201,27 @@ class FakeResolver implements PlexPlaybackBridgeResolverPort {
     if (this.result.ok) {
       return {
         ...this.result,
-        privatePlayback: { ...this.result.privatePlayback, requestId: input.requestId },
+        privatePlayback: {
+          ...this.result.privatePlayback,
+          requestId: input.requestId,
+          media: { ...this.result.privatePlayback.media, id: input.mediaId },
+        },
+        load: {
+          ...this.result.load,
+          media: { ...this.result.load.media, id: input.mediaId },
+        },
+        decision: {
+          ...this.result.decision,
+          summary: {
+            ...this.result.decision.summary,
+            media: {
+              ...this.result.decision.summary.media,
+              id: input.mediaId,
+              title: this.result.load.media.title,
+            },
+          },
+        },
+        pmsSession: this.result.pmsSession,
       };
     }
     return this.result;
@@ -265,14 +285,98 @@ test('RD-12 bridge maps current scheduler program to resolver input and runtime 
   assert.equal(resolver.inputs.length, 1);
   assert.equal(resolver.inputs[0]?.requestId, 'request-bridge');
   assert.equal(resolver.inputs[0]?.ratingKey, 'rating-1');
+  assert.match(resolver.inputs[0]?.mediaId ?? '', /^playback-media-[0-9a-f-]{36}$/u);
+  assert.equal(resolver.inputs[0]?.mediaId.includes('rating-1'), false);
   assert.equal(resolver.inputs[0]?.startPositionMs, 90_000);
   assert.equal(resolver.inputs[0]?.autoplay, true);
   assert.equal(resolver.inputs[0]?.capabilityProfile.id, capabilityProfile.id);
   assert.equal(player.commands.length, 1);
   assert.equal(player.commands[0]?.command, 'load');
-  assert.deepEqual(player.commands[0]?.payload, loadPayload);
+  assert.deepEqual(player.commands[0]?.payload, {
+    ...loadPayload,
+    media: { ...loadPayload.media, id: resolver.inputs[0]?.mediaId },
+  });
+  assert.equal(player.commands[0]?.payload.media.id, resolver.inputs[0]?.mediaId);
+  assert.equal(JSON.stringify(result).includes('rating-1'), false);
+  assert.equal(JSON.stringify(player.commands[0]).includes('rating-1'), false);
   assertPublicSafe(result, rawPrivateValues);
   assertPublicSafe(player.commands[0], rawPrivateValues);
+});
+
+test('playback bridge retains only the current opaque media identity and rotates it on identity invalidation', async () => {
+  const scheduler = new FakeScheduler();
+  const resolver = new FakeResolver();
+  const bridge = new PlexPlaybackBridge({ scheduler, resolver, capabilityProfile });
+  const selection = await bridge.getCurrentPlayback({ nowMs: 1_090_000, reason: 'startup' });
+  assert.ok(selection);
+
+  await bridge.resolvePlaybackCandidate(selection);
+  await bridge.resolvePlaybackCandidate(selection);
+  const firstMediaId = resolver.inputs[0]?.mediaId;
+  assert.equal(resolver.inputs[1]?.mediaId, firstMediaId);
+
+  bridge.invalidatePlaybackMediaIdentity();
+  await bridge.resolvePlaybackCandidate(selection);
+
+  assert.notEqual(resolver.inputs[2]?.mediaId, firstMediaId);
+  assert.equal(resolver.inputs[2]?.ratingKey, 'rating-1');
+});
+
+test('identity invalidation during deferred resolution cannot republish a stale opaque media id', async () => {
+  const scheduler = new FakeScheduler();
+  const resolver = new FakeResolver();
+  assert.equal(resolver.result.ok, true);
+  if (!resolver.result.ok) {
+    throw new Error('expected playable fake resolver result');
+  }
+  resolver.result = { ...resolver.result, pmsSession: null };
+  let requestNumber = 0;
+  let settingsCallCount = 0;
+  let notifySettingsStarted!: () => void;
+  let releaseSettings!: () => void;
+  const settingsStarted = new Promise<void>((resolve) => {
+    notifySettingsStarted = resolve;
+  });
+  const settingsReleased = new Promise<void>((resolve) => {
+    releaseSettings = resolve;
+  });
+  const bridge = new PlexPlaybackBridge({
+    scheduler,
+    resolver,
+    capabilityProfile,
+    createRequestId: () => `request-generation-${++requestNumber}`,
+    settingsPreferences: async () => {
+      settingsCallCount += 1;
+      if (settingsCallCount === 1) {
+        notifySettingsStarted();
+        await settingsReleased;
+      }
+      return defaultSettingsPreferences();
+    },
+  });
+  const player = new FakePlayer();
+  const runtime = new PlexPlaybackRuntime({
+    scheduler: bridge,
+    channel: bridge,
+    player,
+    pms: new FakePms(),
+  });
+
+  const staleStart = runtime.startCurrentPlayback('startup');
+  await settingsStarted;
+  await runtime.cleanup({ reason: 'server-change' });
+  releaseSettings();
+  const staleResult = await staleStart;
+  const staleMediaId = resolver.inputs[0]?.mediaId;
+
+  assert.equal(staleResult.accepted, false);
+  assert.equal(player.commands.length, 0);
+
+  const currentResult = await runtime.startCurrentPlayback('startup');
+
+  assert.equal(currentResult.accepted, true);
+  assert.notEqual(resolver.inputs[1]?.mediaId, staleMediaId);
+  assert.equal(resolver.inputs[1]?.ratingKey, resolver.inputs[0]?.ratingKey);
 });
 
 test('playback bridge settles private audio setup before creating a resolver session', async () => {

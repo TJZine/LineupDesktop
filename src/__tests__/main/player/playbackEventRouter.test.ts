@@ -46,6 +46,7 @@ function createRuntime(
       },
     },
     channel: {
+      invalidatePlaybackMediaIdentity() {},
       async resolvePlaybackCandidate() {
         return {
           requestId,

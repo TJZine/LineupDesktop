@@ -315,12 +315,13 @@ Observed Package 2B proof included 46/46 cleanup/runtime/composition tests,
 contract passes plus one intentional skip, 179/179 harness/docs tests,
 typecheck, Electron build, static and live Electron smoke, architecture,
 maintainability, redaction, docs, full `npm run verify`, and
-`git diff --check`. The runtime has since grown to 814 lines to retain cohesive
-request/epoch, recovery, and terminal-settlement custody. This is an explicit
-file-shape exception: extracting the small prior-request settlement decision
-would split one lifecycle invariant across files without reducing ownership or
-complexity. Future unrelated growth must use the existing cleanup, recovery,
-diagnostics, or stale-custody collaborators rather than expanding the runtime.
+`git diff --check`. Runtime checkpoint `172de14` dated 2026-08-11 records 814
+lines retaining cohesive request/epoch, recovery, and terminal-settlement
+custody. This is an explicit file-shape exception: extracting the small
+prior-request settlement decision would split one lifecycle invariant across
+files without reducing ownership or complexity. Future unrelated growth must
+use the existing cleanup, recovery, diagnostics, or stale-custody collaborators
+rather than expanding the runtime.
 The 799-line overlay controller remains at the existing threshold with no
 growth headroom.
 

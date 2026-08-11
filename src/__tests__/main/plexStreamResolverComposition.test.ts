@@ -19,6 +19,7 @@ test('createLivePlexStreamResolverComposition injects the existing diagnostic st
   });
   const result = await composition.resolver.resolve({
     requestId: 'composition-diagnostic',
+    mediaId: 'playback-media-composition',
     ratingKey: '123',
     capabilityProfile: directPlayProfile,
   });
@@ -42,6 +43,7 @@ test('createLivePlexStreamResolverComposition preserves unsupported seek without
   const mockRuntime = createPlayableRuntime();
   const result = await createLivePlexStreamResolverComposition(mockRuntime).resolver.resolve({
     requestId: 'composition-no-seek',
+    mediaId: 'playback-media-composition',
     ratingKey: '123',
     capabilityProfile: { ...directPlayProfile, id: 'composition-no-seek', seek: 'unsupported' },
   });
@@ -74,6 +76,7 @@ test('createLivePlexStreamResolverComposition normalizes missing credentials thr
 
   const result = await createLivePlexStreamResolverComposition(mockRuntime).resolver.resolve({
     requestId: 'composition-missing-credential',
+    mediaId: 'playback-media-composition',
     ratingKey: '123',
     capabilityProfile: directPlayProfile,
   });
@@ -107,6 +110,7 @@ test('createLivePlexStreamResolverComposition preserves unexpected credential fa
 
   const result = await createLivePlexStreamResolverComposition(mockRuntime).resolver.resolve({
     requestId: 'composition-unexpected-credential-failure',
+    mediaId: 'playback-media-composition',
     ratingKey: '123',
     capabilityProfile: directPlayProfile,
   });
