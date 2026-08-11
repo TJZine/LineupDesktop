@@ -105,6 +105,7 @@ window.addEventListener('pointerdown', receiveGuidePointer, { capture: true });
 dom.epgGridElement?.addEventListener('wheel', receiveGuideWheel, { passive: true });
 dom.epgGridElement?.addEventListener('scroll', handleGuideScroll, { passive: true });
 window.addEventListener('resize', handleGuideResize);
+window.visualViewport?.addEventListener('resize', handleGuideResize);
 const shellDom = queryShellDom();
 let fullscreenEnabled = false, shellState: RendererShellState = createRendererShellState();
 const fullscreenTransport = createFullscreenTransportCoordinator({
@@ -154,7 +155,7 @@ const settingsRuntime = createSettingsRuntime({
       },
     );
     if (layoutChanged || guideRowDensityChanged) invalidateGuideLayoutMetrics(dom.epgGridElement);
-    if (guideRowDensityChanged || guideTimeRangeChanged || guidePerformanceProfileChanged) guideChannelWindow.clear();
+    if (guideTimeRangeChanged || guidePerformanceProfileChanged) guideChannelWindow.clear();
     if (pastItemsWindowChanged) {
       guidePresentationPolling?.notePastItemsWindowChange();
       guideChannelWindow.clear();
@@ -167,6 +168,9 @@ const settingsRuntime = createSettingsRuntime({
     if (errorElement) { errorElement.textContent = state.errorMessage ?? ''; errorElement.hidden = state.errorMessage === null; }
     if (!state.loading) {
       renderApp();
+      if ((guideRowDensityChanged || layoutChanged) && workflowState.routeState.activeRoute === 'guide') {
+        reconcileGuideViewport(layoutChanged);
+      }
       void guideSettingsSettlement.finish(false);
       guidePresentationPolling?.settlePastItemsWindow({
         currentValue: state.values.pastItemsWindow,
@@ -565,6 +569,7 @@ attachNavigationInputRuntime(navigationLifecycle, {
     window.removeEventListener('keydown', receiveGuideKey, { capture: true });
     window.removeEventListener('pointerdown', receiveGuidePointer, { capture: true });
     window.removeEventListener('resize', handleGuideResize);
+    window.visualViewport?.removeEventListener('resize', handleGuideResize);
     guideTuneController.stop();
     playerOverlayController.dispose();
     shellController.cleanup();
@@ -1240,11 +1245,10 @@ function guideWindowIdentity(presentation: typeof workflowState.guidePresentatio
     pastItemsWindow: workflowState.settingsDraft.pastItemsWindow,
     guideTimeRange: workflowState.settingsDraft.guideTimeRange,
     guidePerformanceProfile: workflowState.settingsDraft.guidePerformanceProfile,
-    guideRowDensity: workflowState.settingsDraft.guideRowDensity,
   });
 }
 
-function reconcileGuideViewport(): void {
+function reconcileGuideViewport(allowRefresh = true): void {
   if (workflowState.routeState.activeRoute !== 'guide') return;
   const viewport = readGuideViewportRows(dom.epgGridElement);
   const focusedIndex = guideChannelWindow.absoluteIndexForChannel(workflowState.epg.selectedChannelId);
@@ -1254,6 +1258,7 @@ function reconcileGuideViewport(): void {
     workflowState = { ...workflowState, guidePresentation: guideChannelWindow.presentation() };
   }
   renderApp();
+  if (!allowRefresh) return;
   const request = guideChannelWindow.beginForeground(initializedGuidePresentationPolling.getGeneration() + 1);
   if (request === null) return;
   void initializedGuidePresentationPolling.refresh('guide-visible-window', {

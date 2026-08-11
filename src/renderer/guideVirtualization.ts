@@ -1,4 +1,5 @@
 import type { EpgChannelRowViewModel } from './epg.js';
+import type { GuideCompleteRowInterval } from './guideRowDensity.js';
 
 export const GUIDE_DOM_ROW_CAP = 24;
 export const GUIDE_DOM_CELL_CAP = 400;
@@ -35,6 +36,7 @@ export interface GuideVirtualRangeInput {
   readonly viewportHeight: number;
   readonly rowOuterSize: number;
   readonly rowStartOffset?: number;
+  readonly completeRowInterval?: GuideCompleteRowInterval;
   readonly windowStartMs: number;
   readonly windowEndMs: number;
   readonly focusedRowIndex: number;
@@ -69,24 +71,46 @@ export function projectGuideVirtualRange(input: GuideVirtualRangeInput): GuideVi
   const viewportHeight = Math.max(1, finite(input.viewportHeight, rowOuterSize));
   const firstVisible = clamp(Math.floor(scrollTop / rowOuterSize), 0, rowCount - 1);
   const lastVisible = clamp(Math.ceil((scrollTop + viewportHeight) / rowOuterSize) - 1, firstVisible, rowCount - 1);
-  const visibleCount = lastVisible - firstVisible + 1;
+  const intervalStart = input.completeRowInterval === undefined
+    ? firstVisible
+    : clamp(Math.trunc(input.completeRowInterval.start), 0, rowCount - 1);
+  const intervalCount = input.completeRowInterval === undefined
+    ? lastVisible - firstVisible + 1
+    : Math.max(0, Math.trunc(input.completeRowInterval.count));
+  const intervalEnd = intervalCount === 0
+    ? intervalStart
+    : clamp(intervalStart + intervalCount - 1, intervalStart, rowCount - 1);
+  // Keep the original viewport/overscan projection so spacer geometry remains
+  // stable; the complete interval is applied by the DOM owner as the
+  // presentation boundary for mounted rows.
+  const projectionStart = firstVisible;
+  const projectionEnd = lastVisible;
+  const visibleCount = projectionEnd - projectionStart + 1;
   const visibleRowsClamped = visibleCount > GUIDE_DOM_ROW_CAP;
   const clampedVisibleStart = visibleRowsClamped
     ? clamp(
-      input.focusedRowIndex >= firstVisible && input.focusedRowIndex <= lastVisible
+      input.focusedRowIndex >= projectionStart && input.focusedRowIndex <= projectionEnd
         ? input.focusedRowIndex - Math.floor(GUIDE_DOM_ROW_CAP / 2)
-        : firstVisible,
-      firstVisible,
-      lastVisible - GUIDE_DOM_ROW_CAP + 1,
+        : projectionStart,
+      projectionStart,
+      projectionEnd - GUIDE_DOM_ROW_CAP + 1,
     )
-    : firstVisible;
-  const clampedVisibleEnd = visibleRowsClamped ? clampedVisibleStart + GUIDE_DOM_ROW_CAP - 1 : lastVisible;
+    : projectionStart;
+  const clampedVisibleEnd = visibleRowsClamped
+    ? clampedVisibleStart + GUIDE_DOM_ROW_CAP - 1
+    : projectionEnd;
   const candidates = new Set<number>();
   for (let index = Math.max(0, clampedVisibleStart - GUIDE_ROW_BUFFER);
     index <= Math.min(rowCount - 1, clampedVisibleEnd + GUIDE_ROW_BUFFER); index += 1) candidates.add(index);
 
   const protectedRows = new Set<number>();
-  for (let index = clampedVisibleStart; index <= clampedVisibleEnd; index += 1) protectedRows.add(index);
+  const protectedStart = visibleRowsClamped
+    ? clampedVisibleStart
+    : intervalCount > 0 ? intervalStart : 1;
+  const protectedEnd = visibleRowsClamped
+    ? clampedVisibleEnd
+    : intervalCount > 0 ? intervalEnd : 0;
+  for (let index = protectedStart; index <= protectedEnd; index += 1) protectedRows.add(index);
   if (!visibleRowsClamped && input.focusedRowIndex >= 0 && input.focusedRowIndex < rowCount && protectedRows.size < GUIDE_DOM_ROW_CAP) {
     candidates.add(input.focusedRowIndex);
     protectedRows.add(input.focusedRowIndex);
@@ -97,7 +121,7 @@ export function projectGuideVirtualRange(input: GuideVirtualRangeInput): GuideVi
     const evictable = rowIndexes.filter((index) => !protectedRows.has(index));
     const source = evictable;
     if (source.length === 0) break;
-    const remove = source.sort((left, right) => rowDistance(right, firstVisible, lastVisible) - rowDistance(left, firstVisible, lastVisible))[0];
+    const remove = source.sort((left, right) => rowDistance(right, projectionStart, projectionEnd) - rowDistance(left, projectionStart, projectionEnd))[0];
     if (remove === undefined) throw new RangeError('Guide row eviction could not satisfy the mounted row cap.');
     rowIndexes.splice(rowIndexes.indexOf(remove), 1);
   }
@@ -230,7 +254,6 @@ export function projectGuideCacheIdentity(input: Readonly<{
   pastItemsWindow: string;
   guideTimeRange: string;
   guidePerformanceProfile: string;
-  guideRowDensity: string;
 }>): string {
   return JSON.stringify([
     input.scopeToken,
@@ -239,7 +262,6 @@ export function projectGuideCacheIdentity(input: Readonly<{
     input.pastItemsWindow,
     input.guideTimeRange,
     input.guidePerformanceProfile,
-    input.guideRowDensity,
   ]);
 }
 

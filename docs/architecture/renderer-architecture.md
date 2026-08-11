@@ -24,10 +24,12 @@ contract. It separates Detailed/Wide time range, Auto/Reduced resource policy,
 and Auto/Comfortable/Compact row-density selection without adding preload/IPC
 methods or renderer persistence. Auto and Reduced resource share foreground
 Guide request reach; Reduced resource disables idle warming and keeps the
-conservative cache-retention bounds. Accepted Guide-setting changes coalesce
-through one focused settlement owner, cancel stale presentation work, retain
-eligible focus intent, and invalidate the affected Guide identity. G4 still
-owns responsive row geometry, and G6 still owns Windows DPI/live/native proof.
+conservative cache-retention bounds. Accepted Guide presentation-setting
+changes coalesce through one focused settlement owner, cancel stale
+presentation work, retain eligible focus intent, and invalidate the affected
+Guide identity; density-only changes remain display-only. G4 now owns
+the pure responsive row policy, measured complete-row geometry, and bounded
+viewport recomputation; G6 still owns Windows DPI/live/native proof.
 
 This document owns the detailed renderer shell breakdown referenced by
 [`CURRENT_STATE.md`](./CURRENT_STATE.md). Keep the current-state table concise;
@@ -299,7 +301,7 @@ Its G3C behavior re-expresses the selected-detail hierarchy, Classic/Overlay
 shell regions, tuned/current channel rail, 30-minute ruler marker, temporal
 cell states, library tabs, Now Watching surfaces, and explicit loading/empty/
 error/retry presentation in the same selection, generation, focus, and DOM
-reconciliation lifecycle. **Decision: cohesive growth.** The owner is 1,121
+reconciliation lifecycle. **Decision: cohesive growth.** The owner is 1,258
 lines, but these concerns share the Guide view-model projection and DOM
 currentness invariants; extraction would create forwarding seams without an
 independent lifecycle. The >800-line owner remains a fresh architecture-review
@@ -309,9 +311,40 @@ surface before closeout.
 Its G3C behavior adds hierarchy typography, spacing/color roles, Classic/Overlay
 visibility, channel/current/future treatment, marker and focus states, and
 forced-color/reduced-motion preservation alongside the existing artwork and
-grid rules. **Decision: cohesive growth.** At 934 lines it still serves one
-Guide surface and accessibility policy; G4 owns responsive row geometry and
+grid rules. **Decision: cohesive growth.** At 966 lines it still serves one
+Guide surface and accessibility policy; G4 adds responsive row geometry and
 complete-row floors, while G6 owns Windows/native/device proof.
+
+## G4 Responsive Guide Density Disposition
+
+`src/renderer/guideRowDensity.ts` is the 139-line pure policy owner for the frozen
+108px Comfortable and 72px Compact treatments, complete-row math, explicit
+100%-scale 4K/1080p floors, and the honest 5-row scaled/narrow fallback. Auto
+selects Comfortable first and Compact only when the measured Guide grid cannot
+meet its applicable floor; an undersized grid reports `floorMet: false`
+without inventing a larger target.
+
+`src/renderer/epg/guideDom.ts` remains the cohesive measured geometry owner.
+It samples the current row region/offset and gap before Auto resolution, reports
+only complete rows through the shared interval projection, keeps overscan
+mounted but inert and hidden outside that complete interval, preserves
+focus/current selection, and skips stale mounted-row strides during density/
+layout transitions before allowing a later same-density sample. At 1,258 lines
+it remains a single Guide selection, generation, focus, and
+reconciliation lifecycle; extraction would add no independent consumer or
+currentness owner. **Decision: cohesive growth.**
+
+`src/renderer/index.ts` owns resize/visual-viewport and density/layout
+settlement wiring; density-only changes invalidate layout metrics and recompute
+visible rows without clearing Guide schedule/cache identity or notifying a
+refresh, while layout changes allow one bounded foreground request only when
+the visible window is missing.
+`src/renderer/styles/guide-epg.css` keeps the 72px treatment readable by hiding
+only secondary subtitle/episode metadata while preserving rail, title/time,
+state, focus, tuned, current, forced-color, and reduced-motion cues. No
+contract, preload, main, IPC, persistence, playback, dependency, or upstream
+surface changed. Windows/native/manual DPI and device proof remain deferred to
+G6.
 
 ## Verification
 

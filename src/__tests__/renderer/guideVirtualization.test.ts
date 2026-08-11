@@ -10,6 +10,7 @@ import {
 } from '../../renderer/epg.js';
 import {
   invalidateGuideLayoutMetrics,
+  readGuideViewportRows,
   renderEpgGuideDom,
 } from '../../renderer/epg/guideDom.js';
 import {
@@ -130,18 +131,26 @@ test('actual Guide DOM reconciliation keeps buffer data inert, caches layout rea
     const view200 = routeView(createEpgGuideView(state200, source));
     const view201 = routeView(createEpgGuideView(state201, source));
     assert.ok(view200.guide.rows[0]?.programs.length > 6, 'production view retains the time buffer');
+    const settings = {
+      guideTimeRange: 'wide' as const,
+      guideRowDensity: 'comfortable' as const,
+      previewBadgesEnabled: true,
+      libraryTabsEnabled: true,
+      nowWatchingBannerEnabled: true,
+      guideLayout: 'classic' as const,
+    };
 
     const grid = new LayoutProbeElement('main', metrics);
     grid.clientHeight = 6 * ROW_OUTER_SIZE;
     const dom = guideDomBindings(grid);
 
-    renderEpgGuideDom(view200, dom);
+    renderEpgGuideDom(view200, dom, settings);
     const readsAfterInitialRender = metrics.reads;
     grid.scrollTop = 300 + 140 * ACTUAL_ROW_STRIDE;
-    renderEpgGuideDom(view200, dom);
+    renderEpgGuideDom(view200, dom, settings);
     const readsAfterMeasuredRender = metrics.reads;
-    assert.ok(readsAfterMeasuredRender > readsAfterInitialRender,
-      'a reconciliation with existing rows performs layout reads');
+    assert.equal(readsAfterMeasuredRender, readsAfterInitialRender,
+      'a same-density reconciliation reuses the already measured row geometry');
     const spacerHeights = grid.descendants()
       .filter((node) => node.className === 'epg-grid__row-spacer')
       .map((node) => Number.parseInt(node.style.height, 10));
@@ -162,23 +171,23 @@ test('actual Guide DOM reconciliation keeps buffer data inert, caches layout rea
 
     const readsBeforeCachedReconcile = metrics.reads;
     for (let cachedRun = 0; cachedRun < 3; cachedRun += 1) {
-      renderEpgGuideDom(view200, dom);
+      renderEpgGuideDom(view200, dom, settings);
     }
     assert.equal(metrics.reads, readsBeforeCachedReconcile,
       'cached same-view reconciles do not resample layout');
 
-    renderEpgGuideDom(view201, dom);
+    renderEpgGuideDom(view201, dom, settings);
     assert.equal(metrics.reads, readsBeforeCachedReconcile,
       'focus-only changes do not resample cached layout');
     assertFocusedProgramIsVisible(grid, '201', 'program-201-15');
     assertBufferedCellsAreInert(grid);
-    renderEpgGuideDom(view200, dom);
+    renderEpgGuideDom(view200, dom, settings);
     assert.equal(metrics.reads, readsBeforeCachedReconcile,
       'returning to the cached focus does not resample layout');
 
     const readsBeforeInvalidation = metrics.reads;
     invalidateGuideLayoutMetrics(grid as unknown as HTMLElement);
-    renderEpgGuideDom(view201, dom);
+    renderEpgGuideDom(view201, dom, settings);
     assert.ok(metrics.reads > readsBeforeInvalidation,
       'explicit invalidation followed by reconciliation permits new layout reads');
     assertFocusedProgramIsVisible(grid, '201', 'program-201-15');
@@ -194,11 +203,11 @@ test('actual Guide DOM reconciliation keeps buffer data inert, caches layout rea
     const freshGrid = new LayoutProbeElement('main', metrics);
     freshGrid.clientHeight = 6 * ROW_OUTER_SIZE;
     const freshDom = guideDomBindings(freshGrid);
-    renderEpgGuideDom(view201, freshDom);
+    renderEpgGuideDom(view201, freshDom, settings);
     const freshReadsAfterInitialRender = metrics.reads;
-    renderEpgGuideDom(view201, freshDom);
-    assert.ok(metrics.reads > freshReadsAfterInitialRender,
-      'a fresh grid permits layout reads after its first DOM projection');
+    renderEpgGuideDom(view201, freshDom, settings);
+    assert.equal(metrics.reads, freshReadsAfterInitialRender,
+      'a fresh grid completes its bounded post-render measurement before the next stable projection');
     const freshRows = freshGrid.descendants().filter((node) => node.className === 'epg-grid__row');
     const freshCells = freshGrid.descendants().filter((node) => node.className === 'epg-grid__program');
     assert.ok(freshRows.length > 0);
@@ -212,19 +221,198 @@ test('actual Guide DOM reconciliation keeps buffer data inert, caches layout rea
   }
 });
 
+test('Guide complete interval keeps trailing overscan mounted but inert at a non-integral viewport', () => {
+  const originalDocument = globalThis.document;
+  const metrics = { reads: 0 };
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: { createElement: (tagName: string) => new LayoutProbeElement(tagName, metrics) },
+  });
+  try {
+    const source = fixturePresentation();
+    const view = routeView(createEpgGuideView(createEpgState(source, 1, 'wide'), source));
+    const settings = {
+      guideTimeRange: 'wide' as const,
+      guideRowDensity: 'comfortable' as const,
+      previewBadgesEnabled: true,
+      libraryTabsEnabled: true,
+      nowWatchingBannerEnabled: true,
+      guideLayout: 'classic' as const,
+    };
+    const grid = new LayoutProbeElement('main', metrics);
+    grid.clientHeight = 690;
+    grid.scrollTop = 0;
+    const beforeScrollTop = grid.scrollTop;
+
+    renderEpgGuideDom(view, guideDomBindings(grid), settings);
+
+    const rows = grid.descendants().filter((node) => node.className.split(' ').includes('epg-grid__row'));
+    const completeRows = rows.filter((row) => row.dataset.guideRowBuffer === 'false');
+    const bufferedRows = rows.filter((row) => row.dataset.guideRowBuffer === 'true');
+    assert.deepEqual(completeRows.map((row) => row.dataset.guideRowIndex), ['0', '1', '2']);
+    assert.ok(bufferedRows.some((row) => row.dataset.guideRowIndex === '3'),
+      'the trailing partial/overscan row stays mounted for geometry');
+    assert.ok(bufferedRows.every((row) => row.inert
+      && row.getAttribute('aria-hidden') === 'true'
+      && row.className.split(' ').includes('epg-grid__row--buffer')),
+    'rows outside the complete interval are inert and hidden');
+
+    const viewportBottom = grid.getBoundingClientRect().bottom;
+    assert.ok(completeRows.every((row) => row.getBoundingClientRect().bottom <= viewportBottom),
+      'every presented row ends within the row viewport');
+    assert.equal(completeRows[0]?.inert, false, 'the first complete row remains interactive');
+    assert.equal(completeRows.at(-1)?.inert, false, 'the last complete row remains interactive');
+    assert.equal(grid.scrollTop, beforeScrollTop, 'projection does not snap the viewport');
+    assert.ok(rows.length <= GUIDE_DOM_ROW_CAP);
+    assert.ok(grid.descendants().filter((node) => node.className.split(' ').includes('epg-grid__program')).length <= GUIDE_DOM_CELL_CAP);
+  } finally {
+    if (originalDocument === undefined) delete (globalThis as { document?: Document }).document;
+    else Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
+  }
+});
+
+test('Guide density transitions use the new pure row stride instead of stale mounted-row geometry', () => {
+  const originalDocument = globalThis.document;
+  const metrics = { reads: 0 };
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: { createElement: (tagName: string) => new LayoutProbeElement(tagName, metrics) },
+  });
+  try {
+    const source = fixturePresentation();
+    const view = routeView(createEpgGuideView(createEpgState(source, 1, 'wide'), source));
+    const settings = {
+      guideTimeRange: 'wide' as const,
+      previewBadgesEnabled: true,
+      libraryTabsEnabled: true,
+      nowWatchingBannerEnabled: true,
+      guideLayout: 'classic' as const,
+    };
+
+    const explicitGrid = new LayoutProbeElement('main', metrics);
+    explicitGrid.clientHeight = 720;
+    const explicitDom = guideDomBindings(explicitGrid);
+    renderEpgGuideDom(view, explicitDom, { ...settings, guideRowDensity: 'comfortable' });
+    renderEpgGuideDom(view, explicitDom, { ...settings, guideRowDensity: 'comfortable' });
+    assert.deepEqual(readGuideViewportRows(explicitGrid as unknown as HTMLElement), { start: 0, completeCount: 3 },
+      'the stable Comfortable render reports only complete rows in the remaining schedule region');
+    explicitGrid.scrollTop = 344;
+    assert.deepEqual(readGuideViewportRows(explicitGrid as unknown as HTMLElement), { start: 1, completeCount: 5 },
+      'a clipped leading Comfortable row advances the viewport start without claiming the partial row');
+    explicitGrid.clientHeight = 100;
+    assert.deepEqual(readGuideViewportRows(explicitGrid as unknown as HTMLElement), { start: 1, completeCount: 0 },
+      'a sub-row viewport reports no complete rows');
+    explicitGrid.scrollTop = 0;
+    explicitGrid.clientHeight = 720;
+    renderEpgGuideDom(view, explicitDom, { ...settings, guideRowDensity: 'compact' });
+    const explicitShell = explicitGrid.descendants().find((node) => node.className === 'epg-shell');
+    assert.equal(explicitShell?.dataset.guideRowDensityEffective, 'compact');
+    assert.ok(explicitGrid.descendants().some((node) => node.dataset.selectedProgram === 'true'
+      && node.dataset.focusId !== undefined), 'density transition keeps the selected program focus target mounted');
+    assert.deepEqual(readGuideViewportRows(explicitGrid as unknown as HTMLElement), { start: 0, completeCount: 4 },
+      'Compact transition uses 72px plus the current gap in the remaining schedule region');
+    explicitGrid.scrollTop = 344;
+    assert.deepEqual(readGuideViewportRows(explicitGrid as unknown as HTMLElement), { start: 1, completeCount: 7 },
+      'a clipped leading row advances the start and excludes the partial row');
+    explicitGrid.scrollTop = 0;
+    explicitGrid.clientHeight = 50;
+    assert.deepEqual(readGuideViewportRows(explicitGrid as unknown as HTMLElement), { start: 0, completeCount: 0 },
+      'an undersized partial viewport reports no complete rows');
+
+    const autoGrid = new LayoutProbeElement('main', metrics);
+    autoGrid.clientHeight = 720;
+    const autoDom = guideDomBindings(autoGrid);
+    renderEpgGuideDom(view, autoDom, { ...settings, guideRowDensity: 'auto' });
+    renderEpgGuideDom(view, autoDom, { ...settings, guideRowDensity: 'auto' });
+    const autoShellAt720 = autoGrid.descendants().find((node) => node.className === 'epg-shell');
+    assert.equal(autoShellAt720?.dataset.guideRowDensityEffective, 'compact',
+      'Auto chooses Compact when the remaining row region cannot meet the five-row floor');
+    assert.equal(autoShellAt720?.dataset.guideCompleteRows, '4');
+    assert.equal(autoShellAt720?.dataset.guideDensityFloorMet, 'false');
+    assert.deepEqual(readGuideViewportRows(autoGrid as unknown as HTMLElement), { start: 0, completeCount: 4 });
+    autoGrid.clientHeight = 300;
+    renderEpgGuideDom(view, autoDom, { ...settings, guideRowDensity: 'auto' });
+    const autoShell = autoGrid.descendants().find((node) => node.className === 'epg-shell');
+    assert.equal(autoShell?.dataset.guideRowDensityEffective, 'compact',
+      'Auto falls back to Compact when a resize breakpoint no longer fits Comfortable');
+    assert.deepEqual(readGuideViewportRows(autoGrid as unknown as HTMLElement), { start: 0, completeCount: 0 },
+      'Auto breakpoint transition reports no complete rows when the detail/header consumes the viewport');
+  } finally {
+    if (originalDocument === undefined) delete (globalThis as { document?: Document }).document;
+    else Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
+  }
+});
+
+test('Guide layout transitions reconcile the new row-start offset without changing Guide selection or range', () => {
+  const originalDocument = globalThis.document;
+  const metrics = { reads: 0 };
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: { createElement: (tagName: string) => new LayoutProbeElement(tagName, metrics) },
+  });
+  try {
+    const source = fixturePresentation();
+    const view = routeView(createEpgGuideView(createEpgState(source, 1, 'wide'), source));
+    const baseSettings = {
+      guideTimeRange: 'wide' as const,
+      guideRowDensity: 'comfortable' as const,
+      previewBadgesEnabled: true,
+      libraryTabsEnabled: true,
+      nowWatchingBannerEnabled: true,
+    };
+    const grid = new LayoutProbeElement('main', metrics);
+    grid.clientHeight = 720;
+    grid.scrollTop = 344;
+    const dom = guideDomBindings(grid);
+
+    renderEpgGuideDom(view, dom, { ...baseSettings, guideLayout: 'classic' });
+    const classicViewport = readGuideViewportRows(grid as unknown as HTMLElement);
+    const selectedProgram = grid.descendants().find((node) => node.dataset.selectedProgram === 'true')?.dataset.guideProgramId;
+    assert.deepEqual(classicViewport, { start: 1, completeCount: 5 });
+
+    renderEpgGuideDom(view, dom, { ...baseSettings, guideLayout: 'overlay' });
+    const overlayViewport = readGuideViewportRows(grid as unknown as HTMLElement);
+    const overlayShell = grid.descendants().find((node) => node.className === 'epg-shell');
+    assert.deepEqual(overlayViewport, { start: 2, completeCount: 5 });
+    assert.notDeepEqual(overlayViewport, classicViewport);
+    assert.equal(overlayShell?.dataset.epgLayout, 'overlay');
+    assert.equal(overlayShell?.dataset.guideTimeRange, 'wide');
+    assert.equal(
+      grid.descendants().find((node) => node.dataset.selectedProgram === 'true')?.dataset.guideProgramId,
+      selectedProgram,
+      'layout reconciliation preserves the selected program and time range projection',
+    );
+  } finally {
+    if (originalDocument === undefined) delete (globalThis as { document?: Document }).document;
+    else Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
+  }
+});
+
+test('Guide settings wiring refreshes layout changes but keeps density-only reconciliation display-only', () => {
+  const processValue = Reflect.get(globalThis, 'process') as {
+    getBuiltinModule(name: string): { readFileSync(path: URL, encoding: 'utf8'): string };
+  };
+  const source = processValue.getBuiltinModule('node:fs').readFileSync(
+    new URL('../../renderer/index.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /if \(\(guideRowDensityChanged \|\| layoutChanged\)[\s\S]*reconcileGuideViewport\(layoutChanged\);/u);
+  assert.doesNotMatch(source, /reconcileGuideViewport\(false\)/u);
+});
+
 test('Desktop cache identities and LRU protect current/focused entries within both profile caps', () => {
   const identity = projectGuideCacheIdentity({
     scopeToken: 'scope-a', revision: 1, selectedLibraryId: null, pastItemsWindow: 'auto',
-    guideTimeRange: 'wide', guidePerformanceProfile: 'auto', guideRowDensity: 'auto',
+    guideTimeRange: 'wide', guidePerformanceProfile: 'auto',
   });
   for (const changed of [
     { scopeToken: 'scope-b' }, { revision: 2 }, { selectedLibraryId: 'library' },
     { pastItemsWindow: '30' }, { guideTimeRange: 'detailed' },
-    { guidePerformanceProfile: 'reduced-resource' }, { guideRowDensity: 'compact' },
+    { guidePerformanceProfile: 'reduced-resource' },
   ]) {
     assert.notEqual(projectGuideCacheIdentity({
       scopeToken: 'scope-a', revision: 1, selectedLibraryId: null, pastItemsWindow: 'auto',
-      guideTimeRange: 'wide', guidePerformanceProfile: 'auto', guideRowDensity: 'auto', ...changed,
+      guideTimeRange: 'wide', guidePerformanceProfile: 'auto', ...changed,
     }), identity);
   }
 
@@ -323,8 +511,16 @@ test('sparse absolute DOM projection uses total geometry and keeps loading rows 
     const loadingState = { ...createEpgState(loadingPresentation, 2, 'wide'), presentationState: 'ready' as const };
     const grid = new LayoutProbeElement('main', metrics);
     grid.clientHeight = 6 * ROW_OUTER_SIZE;
-    grid.scrollTop = 250 * ROW_OUTER_SIZE;
-    renderEpgGuideDom(routeView(createEpgGuideView(loadingState, loadingPresentation)), guideDomBindings(grid));
+    grid.scrollTop = 300 + 250 * ACTUAL_ROW_STRIDE;
+    const settings = {
+      guideTimeRange: 'wide' as const,
+      guideRowDensity: 'comfortable' as const,
+      previewBadgesEnabled: true,
+      libraryTabsEnabled: true,
+      nowWatchingBannerEnabled: true,
+      guideLayout: 'classic' as const,
+    };
+    renderEpgGuideDom(routeView(createEpgGuideView(loadingState, loadingPresentation)), guideDomBindings(grid), settings);
     const loadingRows = grid.descendants().filter((node) => node.dataset.guideRowState === 'loading');
     assert.ok(loadingRows.length > 0 && loadingRows.length <= GUIDE_DOM_ROW_CAP);
     assert.ok(loadingRows.every((row) => row.getAttribute('aria-hidden') === 'true'));
@@ -336,7 +532,8 @@ test('sparse absolute DOM projection uses total geometry and keeps loading rows 
 
     owner.fail(loadingIntent);
     const errorPresentation = owner.presentation();
-    renderEpgGuideDom(routeView(createEpgGuideView(loadingState, errorPresentation)), guideDomBindings(grid));
+    const errorView = createEpgGuideView(loadingState, errorPresentation);
+    renderEpgGuideDom(routeView(errorView), guideDomBindings(grid), settings);
     const retry = grid.descendants().find((node) => node.dataset.guideRetryIndex !== undefined);
     assert.equal(retry?.dataset.guideAction, 'retry');
     assert.equal(retry?.dataset.guideProgramId, undefined);
@@ -405,7 +602,7 @@ function assertFocusedProgramIsVisible(
   programId: string,
 ): void {
   const row = grid.descendants().find((node) =>
-    node.className === 'epg-grid__row' && node.dataset.guideRowIndex === rowIndex);
+    node.className.split(' ').includes('epg-grid__row') && node.dataset.guideRowIndex === rowIndex);
   assert.ok(row, `focused row ${rowIndex} remains mounted`);
   const cell = grid.descendants().find((node) =>
     node.className === 'epg-grid__program' && node.dataset.guideProgramId === programId);
@@ -434,6 +631,7 @@ class LayoutProbeElement {
   type = '';
   hidden = false;
   disabled = false;
+  inert = false;
   tabIndex = 0;
   scrollTop = 0;
   clientHeight = 0;
@@ -468,10 +666,18 @@ class LayoutProbeElement {
     this.metrics.reads += 1;
     const grid = this.root();
     const rowIndex = Number(this.dataset.guideRowIndex ?? 0);
-    const top = this.className === 'epg-grid__row'
-      ? grid.screenTop + 300 + rowIndex * ACTUAL_ROW_STRIDE - grid.scrollTop
+    const shell = grid.descendants().find((node) => node.className === 'epg-shell');
+    const layout = shell?.dataset.epgLayout ?? 'classic';
+    const density = shell?.dataset.guideRowDensityEffective ?? 'comfortable';
+    const headerOffset = layout === 'overlay' ? 200 : 300;
+    const rowHeight = density === 'compact' ? 72 : 108;
+    const rowStride = density === 'compact' ? rowHeight + 16 : ACTUAL_ROW_STRIDE;
+    const isGridRow = this.className.split(' ').includes('epg-grid__row');
+    const top = isGridRow
+      ? grid.screenTop + headerOffset + rowIndex * rowStride - grid.scrollTop
       : this.screenTop;
-    return { height: this.className === 'epg-grid__row' ? 108 : this.clientHeight, top } as DOMRect;
+    const height = isGridRow ? rowHeight : this.clientHeight;
+    return { bottom: top + height, height, top } as DOMRect;
   }
   descendants(): LayoutProbeElement[] {
     return this.children.flatMap((child) => [child, ...child.descendants()]);

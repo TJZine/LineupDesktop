@@ -36,9 +36,11 @@ export function createSettingsGuideSettingsSettlementOwner(
   return {
     begin(nextSettings, applyWorkflowValues) {
       const polling = options.getPolling();
-      const settingsChanged = !guideSettingsEqual(nextSettings, options.getCurrentSettings());
+      const currentSettings = options.getCurrentSettings();
+      const settingsChanged = !guideSettingsEqual(nextSettings, currentSettings);
+      const presentationSettingsChanged = !guidePresentationSettingsEqual(nextSettings, currentSettings);
       const settingsRefreshWasPending = polling?.hasPendingGuideSettingsChange() ?? false;
-      if (settingsChanged) {
+      if (presentationSettingsChanged) {
         polling?.noteGuideSettingsChange();
         options.retainGuideProgramFocusIntent();
       }
@@ -50,7 +52,7 @@ export function createSettingsGuideSettingsSettlementOwner(
         finish(loading) {
           if (finished) return Promise.resolve();
           finished = true;
-          if (!loading && (settingsChanged || settingsRefreshWasPending)) {
+          if (!loading && (presentationSettingsChanged || settingsRefreshWasPending)) {
             options.restorePendingGuideFocus();
           }
           return polling?.settleGuideSettings(loading) ?? Promise.resolve();
@@ -64,4 +66,9 @@ function guideSettingsEqual(left: GuideSettingsValues, right: GuideSettingsValue
   return left.guideTimeRange === right.guideTimeRange &&
     left.guidePerformanceProfile === right.guidePerformanceProfile &&
     left.guideRowDensity === right.guideRowDensity;
+}
+
+function guidePresentationSettingsEqual(left: GuideSettingsValues, right: GuideSettingsValues): boolean {
+  return left.guideTimeRange === right.guideTimeRange &&
+    left.guidePerformanceProfile === right.guidePerformanceProfile;
 }
