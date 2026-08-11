@@ -30,14 +30,16 @@ The evidence seed is [`docs/development/guide-large-lineup-performance-parity-bu
 - Do not remove `disable-gpu` inside a Guide package. Hardware acceleration remains a separate native-composition A/B decision under the existing WS5 proof authority.
 - Do not close `EPG-10` through `EPG-13`, `UI-36`, or WS5 from synthetic tests, local DOM tests, historical frames, or reference-only upstream inspection.
 - Do not preserve the current fixed-five-channel Page key movement, twelve-channel content ceiling, mislabeled Guide Density UI, or whole-array-only scroll behavior for compatibility.
-- Do not add pre-MVP compatibility exports, dual old/new resolver methods, alias paths, deprecated proof schemas, or transition wrappers. The atomic no-compatibility resolver/cache change and its exact callers must be replanned and reviewed immediately before G1; it is not part of G0.
+- Do not add pre-MVP compatibility exports, dual old/new methods, alias paths, deprecated schemas, migration branches, or transition wrappers. Update every caller atomically when an API or persisted shape changes.
 - Do not add forwarding wrappers, one-implementation interfaces, generic UI services, unbounded page stores, unbounded workers, or a second persistence owner.
 
 ## Architecture And Invariants
 
 ### Authority and sequencing
 
-This is a separate durable Guide handoff and does not supersede the user-modified `docs/plans/2026-07-22-tier3-parity-correction-plan.md`. That plan's `WIN-TEST-006 sequencing replan — Guide execution with mandatory proof debt (2026-08-10)` is the controlling amendment: after its clean independent review, product checkpoint `e7f1338` remains fixed, the still-pending two-channel operator proof moves into the consolidated G6 Windows/native campaign, and G0 is the next authorized product package. The proof is not passed or waived and remains required before G6, WS5, affected parity rows, or RD-27 Windows/native closeout.
+This is a separate durable Guide handoff and does not supersede the user-modified `docs/plans/2026-07-22-tier3-parity-correction-plan.md`. That plan's `WIN-TEST-006 sequencing replan — Guide execution with mandatory proof debt (2026-08-10)` is the controlling amendment: product checkpoint `e7f1338` remains fixed and the still-pending two-channel operator proof stays in the consolidated G6 Windows/native campaign. The proof is not passed or waived and remains required before G6, WS5, affected parity rows, or RD-27 Windows/native closeout.
+
+G0 is complete at commit `65adb69`. The next implementation environment is macOS. Execute G1 through G5 there as separate reviewed conventional commits; run every cross-platform automated gate named below, but do not fabricate or substitute for Windows, live Plex, physical input, DPI/multi-monitor, or native-composition evidence. Those environment-specific checks remain G6 work when the branch returns to Windows. No new proof harness, artifact publisher, compatibility layer, or migration scaffold is authorized.
 
 Before G0 and each later package, freeze the exact selected write-file list and apply the amendment's collision gate: compare it with all tracked/untracked pre-existing changes and every active writer's exact write list; any path match stops the package without editing, staging, stashing, overwriting, or absorbing the other work. No Guide selected list may contain a `WIN-TEST-006A` commit-manifest path defined by the amendment. A collision, materially changed Guide baseline, requested playback-owner edit, or failed live playback attempt stops the current sequence for reviewed replan. G0 creates no proof writer or generated output.
 
@@ -87,15 +89,7 @@ Settings schema version 3 adds:
 - `guideRowDensity: 'auto' | 'comfortable' | 'compact'`; and
 - `guidePerformanceProfile: 'auto' | 'reduced-resource'`.
 
-It removes `guideDensity` and `aggressiveGuidePreloadEnabled`; version 3 retains no compatibility alias. Main-owned Settings migration maps version 2 as follows:
-
-- `guideDensity: 'comfortable'` becomes `guideTimeRange: 'detailed'`;
-- `guideDensity: 'compact'` becomes `guideTimeRange: 'wide'`;
-- `aggressiveGuidePreloadEnabled: true` becomes `guidePerformanceProfile: 'auto'`;
-- `aggressiveGuidePreloadEnabled: false` becomes `guidePerformanceProfile: 'reduced-resource'` to preserve the user's prior resource behavior; and
-- `guideRowDensity` becomes `auto`.
-
-New/missing Settings default to `guideTimeRange: 'detailed'`, `guidePerformanceProfile: 'auto'`, and `guideRowDensity: 'auto'`. Version 1 records migrate directly to version 3 while mapping historical `guideDensity` to the matching time range, preserving the other three historical values, and using `reduced-resource` for the performance profile to match the former conservative default. Each valid migration increments revision exactly once and atomically replaces the record. A corrupt record loads as the existing revision-zero `corrupt` snapshot and its original bytes remain untouched until the user performs the existing exact revision-zero replacement; that explicit repair atomically writes a valid version-3 record. A future/unsupported version rejects replacement and always preserves its bytes. An older version-2 binary must treat a version-3 record as unsupported without rewriting it. There is no down-migration, browser-storage fallback, or compatibility alias in version 3.
+It removes `guideDensity` and `aggressiveGuidePreloadEnabled`; version 3 retains no compatibility alias, migration branch, dual reader, deprecated key, or old/new adapter. New/missing Settings default to `guideTimeRange: 'detailed'`, `guidePerformanceProfile: 'auto'`, and `guideRowDensity: 'auto'`. Any persisted record that is not the exact current version-3 shape follows the existing generic invalid/corrupt recovery path; do not distinguish or translate version 1 or version 2. Original invalid bytes remain untouched until the user performs the existing exact revision-zero replacement, which atomically writes one valid version-3 record. There is no down-migration, browser-storage fallback, or compatibility export. Pre-MVP profiles may be deleted manually instead of adding product compatibility code.
 
 Row-density behavior is frozen as follows:
 
@@ -153,10 +147,10 @@ Any touched production owner over 500 lines records the required cohesion dispos
 - `src/renderer/guidePresentationPolling.ts`: current request/cache/currentness lifecycle; keep request custody cohesive and extract the sparse channel-window state because it is a distinct renderer lifecycle.
 - `src/renderer/epg.ts`: >800-line Guide state/navigation projection; keep semantic EPG navigation cohesive. G0 does not touch it or add a proof-only Page-acceptance seam.
 - `src/renderer/epg/guideDom.ts`: Guide DOM/layout owner; parity composition is cohesive, while a persistent grid lifecycle is extracted only if G0 proves it is required.
-- `src/contracts/settings.ts` and `src/main/persistence/desktopSettingsStore.ts`: strict Settings contract/migration owners; version 3 growth is cohesive and requires persistence/contract review.
+- `src/contracts/settings.ts` and `src/main/persistence/desktopSettingsStore.ts`: strict current Settings contract/store owners; version 3 growth is cohesive and requires persistence/contract review, but no migration owner or legacy reader remains.
 - `src/renderer/settingsSetup.ts`: Settings presentation/action owner; Guide value changes are cohesive but require fresh architecture review when touched.
 - `src/main/channel/guideRuntime.ts`: main Guide page/schedule/currentness owner; artwork-role projection is cohesive only while it remains renderer-safe and on the existing operation, and requires fresh architecture review when touched.
-- `src/domain/channel/channelManager.ts`: 1,022-line named hotspot and channel mutation/state owner; G0 does not touch it. The no-compatibility resolver/cache caller update remains subject to the required G1 pre-entry amendment and fresh architecture review.
+- `src/domain/channel/channelManager.ts`: 1,022-line named hotspot and channel mutation/state owner; G0 and G1 do not touch it. Any later package that truly changes its resolver/cache API must update every caller atomically without a wrapper and receive fresh architecture review.
 - G0 caps the exact retained owners at: `src/renderer/guidePerformanceMarks.ts` <=90 lines, `src/renderer/index.ts` <=1,225, `src/renderer/guidePresentationPolling.ts` <=755, `src/renderer/epg/guideDom.ts` <=765, `src/__tests__/renderer/guidePerformanceMarks.test.ts` <=90, `src/__tests__/renderer/guidePresentationPolling.test.ts` <=720, and `src/__tests__/renderer/epg/guideDom.test.ts` <=265. The seven selected files total <=3,910 physical lines, at most 332 over their 3,578-line `HEAD` baseline and at most 171 production lines over baseline. Do not meet a cap through compressed formatting, forwarding, mirrored state, or structural line-count tests.
 
 Fresh architecture review is mandatory whenever this plan touches `src/renderer/index.ts`, `src/renderer/epg.ts`, `src/renderer/epg/guideDom.ts`, `src/renderer/guidePresentationPolling.ts`, `src/main/channel/guideRuntime.ts`, `src/domain/channel/channelManager.ts`, or `src/renderer/settingsSetup.ts`, regardless of final line count. G0's review is limited to the selected renderer composition, polling, and DOM owners.
@@ -192,7 +186,7 @@ Contracts, preload validation, main Guide/Settings, and tests:
 - existing preload Guide/Settings validators and bridge tests required by strict version 3 values; no new IPC method
 - `src/main/channel/guideRuntime.ts`, `src/main/channel/guideArtworkOwner.ts`, and the existing public-reference owner for the exact safe artwork roles and any measured request-policy/currentness correction; the existing paged operation remains
 - `src/main/plex/livePlexTransport.ts` only for the exact numeric `/thumb` and `/art` Guide artwork locator families and their containment/transport tests
-- `src/main/persistence/desktopSettingsStore.ts` and existing Settings policy/snapshot consumers for version 3 migration
+- `src/main/persistence/desktopSettingsStore.ts` and existing Settings policy/snapshot consumers for the current-only version-3 replacement
 - focused Guide, Settings, preload, persistence, renderer DOM/focus, smoke, and performance-harness tests under `src/__tests__/*`
 - the existing user-operated Windows/manual proof surface only in G6; G0 adds no harness or generated evidence surface
 
@@ -277,28 +271,28 @@ Rollback: revert only the seven-path G0 commit. This removes optional timing lan
 
 ### G1 — Settings version 3 and independent PC policies
 
-Pre-entry gate: before any G1 product edit, amend and independently review G1's exact no-compatibility resolver/cache API change and complete caller list. G0 carries no resolver, cache, Channel Manager, main, or compatibility change. If another caller appears, replan G1 instead of retaining an old method or wrapper.
+Pre-entry gate: discover every current Settings contract, store, preload, policy, renderer, and Guide consumer before editing. Replace the version-2 shape atomically with the one version-3 shape; delete old migrations, deprecated keys, aliases, fixtures, and adapters in the same package. If an outside caller cannot consume version 3 directly, expand and review the package rather than retaining compatibility code.
 
 Outcome:
 
-- migrate main-owned Settings from version 2 to version 3;
+- replace main-owned Settings version 2 with the sole current version-3 schema;
 - replace the experimental aggressive toggle with `Performance profile: Auto/Reduced resource`;
 - replace `guideDensity` with `guideTimeRange` and present `Time range: Detailed (2h)/Wide (3h)`;
 - add `Row density: Auto/Comfortable/Compact`;
 - project accepted settings into Guide window/cache/layout owners without new privilege or browser storage.
 
-Write boundary: existing Settings contracts/validation/store/snapshot/policy, preload validation, renderer Settings presentation, Guide setting consumers, and focused migration/contract tests.
+Write boundary: existing Settings contracts/validation/store/snapshot/policy, preload validation, renderer Settings presentation, Guide setting consumers, and focused current-schema/invalid-record tests.
 
 Acceptance:
 
-- missing/new, version 1, and version 2 records produce the exact version 3 values defined above;
-- corrupt bytes produce the revision-zero `corrupt` snapshot and remain unchanged until an exact revision-zero replacement atomically repairs them as version 3; future/unsupported versions reject replacement and preserve bytes;
+- missing/new records produce the exact version-3 defaults defined above;
+- every non-version-3 or malformed record follows the same revision-zero invalid/corrupt path and remains unchanged until an exact revision-zero replacement atomically repairs it as version 3;
 - compare-and-swap, strict exact-key validation, redaction, and atomic mode-0600 replacement remain intact;
-- valid migrations increment revision exactly once; a version-2 binary encountering version 3 fails closed and preserves bytes;
+- no version-specific migration, backward reader, dual writer, alias, or old-binary accommodation remains;
 - changing any Guide setting settles once, preserves eligible current focus where possible, cancels stale work, and invalidates only affected window/cache state;
 - Reduced resource never reduces visible channel count or navigation reach.
 
-Rollback: version 3 is a persistence boundary. Do not roll source back after a version 3 record has been written without an explicit backward-migration/recovery decision. Before release, retain the pre-G1 commit as the code rollback point and use disposable test profiles for migration proof.
+Rollback: version 3 is a persistence boundary. Before release, retain the pre-G1 commit as the code rollback point and use disposable pre-MVP profiles. If source rollback is required, delete the disposable profile rather than adding a backward migration.
 
 ### G2 — Continuous sparse lineup window and navigation
 
@@ -418,7 +412,7 @@ Later focused proof must include:
 - Guide sparse-window merge/invalidation/LRU/currentness tests with 459 and 500 channels;
 - wheel/scrollbar/arrow/viewport-Page/pointer/gamepad boundary tests;
 - real/fake DOM tests for total spacers, explicit loading rows, mounted caps, focus/accessibility registration, and cleanup;
-- Settings version 1/version 2/version 3 migration, strict contract/preload, compare-and-swap, failed-write, and future-version tests;
+- Settings version-3 exact-shape, generic invalid-record recovery, strict contract/preload, compare-and-swap, and failed-write tests;
 - row-density/resize/DPI/forced-colors/reduced-motion tests at stable public seams;
 - current-upstream visual/manual review and G6 Windows/live/native-video composition proof; and
 - G5 measurement-specific regression coverage only when a reviewed G5 amendment authorizes an optimization.
@@ -446,14 +440,14 @@ Stop the current package and return to feature planning/review when:
 - the existing paged Guide operation cannot support sparse visible windows without a new IPC method or renderer-visible private identity;
 - continuous scrolling requires main to send the full 459-channel schedule or otherwise breaks the 24-row/400-cell/1,000-program bounds;
 - a package would widen renderer privilege, expose Plex/source/native/private data, or create browser/filesystem persistence;
-- Settings version 3 migration cannot preserve valid version 1/version 2 records atomically and fail closed;
+- G1 would require a version-specific legacy reader, migration, alias, dual writer, or compatibility wrapper;
 - current upstream Guide behavior or source materially differs from the frozen reference;
 - visual parity requires copying/adapting upstream source/assets without an import-ledger decision;
 - G0 needs a retained path outside the exact seven, overlaps a concurrent writer or `e7f1338`, exceeds a small cap, or cannot separate current G0-owned hunks from unrelated user/playback changes;
 - G0 marks would require main/preload/shared contracts, IPC/public/window/global access, DOM proof fields, a custom frame mark, package/tool/smoke changes, EPG Page-target changes, resource/provenance fields, generated artifacts, or persistent/unbounded state;
 - G0 cannot restore the twenty-one tracked superseded surfaces and delete the twenty untracked proof files without losing unrelated work;
 - another untracked proof file appears outside the exact deletion inventory;
-- the atomic no-compatibility resolver/cache change or complete caller list is not frozen and independently reviewed before G1;
+- a changed API has an outside caller that cannot be updated atomically inside the selected package;
 - a persistent DOM pool, cache/concurrency change, dependency, worker, or GPU change is proposed without reviewed user measurement and a G5 amendment;
 - native video/HTML layering fails under Guide Classic/Overlay, DPI, resize, fullscreen, multi-monitor, or teardown;
 - a selected file overlaps unresolved concurrent playback/user edits;
@@ -484,7 +478,7 @@ WHY: Tier 3 spans multiple owner boundaries; select each role/model/effort from 
 
 NEXT_SESSION_HANDOFF
 NEXT_SESSION_LAUNCHER: `lineup-desktop-feature-quality-loop`
-TASK: Complete Guide continuous-lineup and Desktop visual parity remediation through the Tier 3 quality loop
+TASK: Implement Guide packages G1-G5 on macOS, leaving Windows/live/native closeout for G6
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: `docs/plans/2026-08-10-guide-continuous-lineup-visual-parity-plan.md`
@@ -493,6 +487,6 @@ FILES:
 - `docs/plans/2026-08-10-guide-continuous-lineup-visual-parity-plan.md`
 - `docs/development/guide-large-lineup-performance-parity-bug-report.md`
 - current Guide/Settings owners named by the selected package
-BLOCKERS: clean independent review of the `WIN-TEST-006` sequencing replan, then the exact selected-package no-overlap/collision gate; the operator proof remains mandatory G6/Windows closeout debt
+BLOCKERS: apply the exact selected-package no-overlap/collision gate before each package; defer Windows/live/native-only evidence without claiming it passed
 MESSAGE:
-Execute minimal G0 inside its exact seven renderer/test paths: restore/delete the superseded proof stack, retain only the seven renderer-local User Timing landmarks, run focused/full verification, obtain clean correctness/architecture and ponytail reviews, and commit. Do not add a harness, generated artifact, shared proof contract, main/tool/package/smoke/single-instance change, or proof-only Page/DOM seam. Informal user observations do not block G1-G5. Before G1, amend and independently review the atomic no-compatibility resolver/cache API and complete caller list. Continue G1-G6 serially while preserving unrelated playback/user edits; user-operated Windows/live/native proof remains G6 closeout work.
+Start from G0 commit `65adb69`. Execute G1-G5 serially, with focused tests, `npm run verify`, correctness/architecture review, Ponytail review, and one conventional commit per package. G1 replaces Settings v2 atomically with the sole current v3 schema: delete version-specific migrations, legacy keys, aliases, adapters, and compatibility fixtures; generic invalid-record recovery is the only old-data behavior. G2 must deliver continuous populated navigation across the complete 459+/500-channel lineup, not a twelve-channel paging patch. G3 restores current-upstream hierarchy and interaction parity without copying source unless the import ledger is updated. G4 implements responsive complete-row density. Run G5 only for a measured remaining bottleneck. Do not add proof infrastructure or compatibility paths. On macOS, run all applicable automated and visual checks, record unsupported Windows-only checks as deferred, and do not close G6, WS5 proof rows, or Windows/native parity claims. Preserve unrelated playback/user edits. Return the reviewed, committed G1-G5 branch to Windows for physical input, live Plex, DPI/multi-monitor, native composition, playback debt, and durable G6 closeout.
