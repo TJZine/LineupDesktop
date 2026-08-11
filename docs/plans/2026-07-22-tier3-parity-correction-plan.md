@@ -2719,9 +2719,9 @@ ARTIFACT: WIN-TEST-006 sequencing replan — Guide execution with mandatory proo
 FILES:
 - docs/plans/2026-07-22-tier3-parity-correction-plan.md
 - docs/plans/2026-08-10-guide-continuous-lineup-visual-parity-plan.md
-BLOCKERS: G0 product edits remain blocked until this independent review is clean; WIN-TEST-006 operator proof remains mandatory G6/Windows closeout debt.
+BLOCKERS: G0-G4 are landed, G5 was not activated without measured need, and WIN-TEST-006 operator proof remains mandatory G6/Windows closeout debt.
 MESSAGE:
-Review only the sequencing amendment and its aligned Guide authority/handoff. Require explicit preservation of the pending two-channel proof, G6/WS5/RD-27 closeout gates, exact commit-manifest collision check, rollback/replan triggers, and G0 as the next exclusive product package. If clean, route the controller to execution-unit-select for G0 under the Guide feature-quality loop; do not implement or commit.
+Treat this packet as historical sequencing evidence. Current execution authority is the Guide plan's consolidated G6 / WS5 Unit 5H handoff. Preserve the pending two-channel proof, G6/WS5/RD-27 closeout gates, exact commit-manifest collision check, and rollback/replan triggers; do not route another G0 execution.
 
 ### Current WS2 status and next authority
 
@@ -2736,8 +2736,8 @@ Review only the sequencing amendment and its aligned Guide authority/handoff. Re
 > [WIN-TEST-006 production playback remediation amendment](#win-test-006-production-playback-remediation-amendment-2026-08-10).
 > The WIN-TEST-006 exception takes execution precedence until it is closed or
 > replanned. The 2026-08-10 sequencing replan above satisfies that branch only
-> after its own clean independent review and then makes Guide G0 the next
-> product package; the live proof remains mandatory G6/Windows closeout debt.
+> after its own clean independent review. Guide G0-G4 have since landed, G5 was
+> not activated, and the live proof remains mandatory G6/Windows closeout debt.
 
 **ACTIVE_WS2_MAC_COMPLETION_OVERRIDE_2026_07_28:** the user's latest explicit
 direction supersedes every conflicting Windows-machine, `.NET` Release-build,

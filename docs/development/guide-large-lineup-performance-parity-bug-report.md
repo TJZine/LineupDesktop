@@ -347,7 +347,7 @@ The existing `Aggressive Guide Preload (Experimental)` toggle should be migrated
 
 ## Proposed Evidence And Conditional Remediation Packages
 
-This report is planning input, not execution authority. Package 1 is the only unconditional next package. Packages 2 through 5 are candidate owner seams, not an approved sequence; each requires the named evidence gate and a reviewed feature plan before implementation.
+This report is evidence and historical planning input, not execution authority. Its Package 1-5 taxonomy predates and does not map one-to-one onto the Guide plan's G0-G6 execution packages. Use the active Guide plan for current sequencing; the package list below records the original evidence hypotheses only.
 
 1. Measurement and authority correction
    - add a production Electron Guide performance harness plus observed-lineup 459-channel and maximum-boundary 500-channel fixtures;
@@ -389,14 +389,14 @@ Stop and replan if a package needs a new public contract, expands renderer privi
 
 ### Production Electron/Windows performance proof
 
-Package 1 must define and emit the following marks before any budget is used as an implementation gate:
+The historical Package 1 proposal identified the following renderer marks plus one external presentation observation before any budget could be used as an implementation gate:
 
 - `input-received`: trusted renderer event received, with input kind and starting focus ID;
 - `input-accepted`: Guide owner accepts the action and records the intended focus/page target;
 - `request-start` / `request-settled`: foreground Guide request identity, cache class, source-resolution class, and currentness result;
 - `state-accepted`: the requested presentation/focus generation becomes eligible to render;
 - `reconcile-start` / `reconcile-end`: Guide-scoped projection and DOM work;
-- `frame-presented`: Chromium trace presentation of the first frame containing the accepted target. A lone `requestAnimationFrame` callback is not paint proof.
+- externally captured Chromium `frame-presented` trace evidence for the first frame containing the accepted target. This is not a renderer-emitted custom mark, and a lone `requestAnimationFrame` callback is not paint proof.
 
 Run at least three repetitions after one discarded warm-up on the exact production build. Each repetition supplies its own 100-sample same-buffer scroll and arrow/D-pad cohorts; do not combine three undersized runs into one sample set. Record per-run and aggregate p50/p95/max, CPU/GPU/RAM, display/DPI, build, profile, source cardinality, cache state, request state, and distance from the next scheduled poll. Keep separate cohorts for:
 
