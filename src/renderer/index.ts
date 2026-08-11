@@ -35,6 +35,7 @@ import { findEpgProgramCell, focusEpgNow, selectEpgPageTarget, settleEpgPresenta
 import { registerRendererActions, type GuideActionId, type GuideProgramActionTarget } from './rendererActionRegistration.js';
 import { subscribePlayerBridge } from './playerBridgeSubscription.js';
 import { createGuidePresentationPolling } from './guidePresentationPolling.js';
+import { classifyGuideKeyboardInput, guidePerformanceMarks } from './guidePerformanceMarks.js';
 import { projectGuideCacheIdentity } from './guideVirtualization.js';
 import { createGuideLibraryFilterController, projectNativePlayerPresentationMode } from './guidePresentation.js';
 import { createNativePlayerPresentationController } from './player/nativePlayerPresentationController.js';
@@ -79,7 +80,29 @@ const handleGuideResize = (): void => {
   invalidateGuideLayoutMetrics(dom.epgGridElement);
   scheduleGuideVirtualReconcile();
 };
-dom.epgGridElement?.addEventListener('scroll', scheduleGuideVirtualReconcile, { passive: true });
+let pendingGuideWheel = false;
+const receiveGuideKey = (event: KeyboardEvent): void => {
+  if (workflowState.routeState.activeRoute === 'guide') {
+    guidePerformanceMarks.inputReceived(classifyGuideKeyboardInput(event));
+  }
+};
+const receiveGuideWheel = (): void => {
+  pendingGuideWheel = true;
+  guidePerformanceMarks.inputReceived('wheel');
+};
+const receiveGuidePointer = (): void => {
+  if (workflowState.routeState.activeRoute === 'guide') guidePerformanceMarks.inputReceived('pointer');
+};
+const handleGuideScroll = (): void => {
+  if (!pendingGuideWheel) guidePerformanceMarks.inputReceived('scroll');
+  guidePerformanceMarks.inputAccepted(pendingGuideWheel ? 'wheel' : 'scroll');
+  pendingGuideWheel = false;
+  scheduleGuideVirtualReconcile();
+};
+window.addEventListener('keydown', receiveGuideKey, { capture: true });
+window.addEventListener('pointerdown', receiveGuidePointer, { capture: true });
+dom.epgGridElement?.addEventListener('wheel', receiveGuideWheel, { passive: true });
+dom.epgGridElement?.addEventListener('scroll', handleGuideScroll, { passive: true });
 window.addEventListener('resize', handleGuideResize);
 const shellDom = queryShellDom();
 let fullscreenEnabled = false, shellState: RendererShellState = createRendererShellState();
@@ -403,6 +426,7 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
       ...workflowState,
       epg: setEpgPresentationState(workflowState.epg, 'loading', generation),
     };
+    guidePerformanceMarks.stateAccepted(generation, 'loading', -1);
     renderApp();
   },
   applyPresentation: (normalizedGuidePresentation, generation, pagingTargetGlobalIndex, effectiveStartTimeMs) => {
@@ -422,6 +446,7 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
       epg: settlement.state,
     };
     if (settlement.pendingFocusId !== undefined) pendingGuideFocusId = settlement.pendingFocusId;
+    guidePerformanceMarks.stateAccepted(generation, 'ready', pagingTargetGlobalIndex ?? -1);
     renderApp();
     restorePendingGuideFocus();
   },
@@ -500,7 +525,10 @@ attachNavigationInputRuntime(navigationLifecycle, {
     initializedGuidePresentationPolling.stop();
     if (guideVirtualFrame !== null) window.cancelAnimationFrame(guideVirtualFrame);
     guideVirtualFrame = null;
-    dom.epgGridElement?.removeEventListener('scroll', scheduleGuideVirtualReconcile);
+    dom.epgGridElement?.removeEventListener('wheel', receiveGuideWheel);
+    dom.epgGridElement?.removeEventListener('scroll', handleGuideScroll);
+    window.removeEventListener('keydown', receiveGuideKey, { capture: true });
+    window.removeEventListener('pointerdown', receiveGuidePointer, { capture: true });
     window.removeEventListener('resize', handleGuideResize);
     guideTuneController.stop();
     playerOverlayController.dispose();
@@ -742,6 +770,7 @@ function handleGuideDirection(direction: 'up' | 'down' | 'left' | 'right'): bool
   }
   const movement = applyWorkflowEpgDirection(workflowState, direction);
   if (!movement.result.handled) return false;
+  guidePerformanceMarks.inputAccepted('arrow');
   workflowState = movement.workflowState;
   const selectedFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId;
   focusState = advanceGuideProgramFocusIntent(focusState, selectedFocusId);
@@ -766,6 +795,7 @@ function handleGuidePage(offset: -5 | 5): boolean {
     scopeToken: workflowState.guidePresentation.libraryFilter?.scopeToken ?? null,
   });
   if (!result.handled) return false;
+  guidePerformanceMarks.inputAccepted('page');
   if (result.targetLocalIndex !== null) {
     const nextEpg = selectEpgPageTarget(workflowState.epg, result.targetLocalIndex, workflowState.guidePresentation);
     workflowState = {
@@ -821,6 +851,7 @@ function activateGuideProgram(target: GuideProgramActionTarget): void {
 
 function focusGuideProgramFromPointer(target: GuideProgramActionTarget): boolean {
   if (focusState.activeId === target.focusId) return false;
+  guidePerformanceMarks.inputAccepted('pointer');
   focusRendererElement(target.element);
   return true;
 }

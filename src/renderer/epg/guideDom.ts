@@ -8,6 +8,7 @@ import {
 import { isSafeArtworkRefId } from '../../contracts/artwork.js';
 import type { GuideLibraryFilterState } from '../../contracts/guide.js';
 import { projectGuideVirtualRange, type GuideVirtualRange } from '../guideVirtualization.js';
+import { guidePerformanceMarks } from '../guidePerformanceMarks.js';
 
 export interface CellPosition {
   left: number;
@@ -223,7 +224,14 @@ export function projectGuideLibraryTabsPending(root: HTMLElement | null, pending
   }
 }
 
-export function renderEpgGuideDom(
+export function renderEpgGuideDom(...args: Parameters<typeof renderEpgGuideDomContent>): void {
+  guidePerformanceMarks.reconcile(
+    args[0].guide.presentationGeneration,
+    () => renderEpgGuideDomContent(...args),
+  );
+}
+
+function renderEpgGuideDomContent(
   view: RouteWorkflowViewModel,
   dom: RendererDomBindings,
   settings: Pick<DesktopSettingsValues,

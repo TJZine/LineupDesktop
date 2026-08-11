@@ -100,6 +100,7 @@ import {
   guideVisibleWindow,
   guidePresentation,
   guideCellDom,
+  renderEpgGuideDom,
 } from '../../../renderer/epg/guideDom.js';
 import type { EpgProgramCellViewModel } from '../../../renderer/epg.js';
 
@@ -236,4 +237,18 @@ test('guideCellDom builds valid DOM elements', () => {
   const subtitleEl = cell.querySelector('.epg-cell-subtitle');
   assert.notEqual(subtitleEl, null);
   assert.equal(subtitleEl?.textContent, 'Test Subtitle');
+});
+
+test('Guide reconcile instrumentation cannot replace the original render error', (context) => {
+  const original = new Error('render failed');
+  context.mock.method(globalThis.performance, 'mark', () => { throw new Error('mark failed'); });
+  context.mock.method(globalThis.performance, 'clearMarks', () => { throw new Error('clear failed'); });
+  const guide = {
+    presentationGeneration: 1,
+    get selectedProgram(): never { throw original; },
+  };
+  assert.throws(
+    () => renderEpgGuideDom({ guide } as never, {} as never),
+    (error) => error === original,
+  );
 });

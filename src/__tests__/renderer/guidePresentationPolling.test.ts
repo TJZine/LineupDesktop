@@ -111,6 +111,44 @@ test('Guide polling requests exactly the density duration', async () => {
   assert.deepEqual(durations, [bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS), bufferedDuration(EPG_COMPACT_WINDOW_DURATION_MS)]);
 });
 
+test('Guide polling emits one honest terminal mark for runtime, cache, and cancellation', async (context) => {
+  const marks: Array<{ name: string; detail: Record<string, unknown> }> = [];
+  context.mock.method(globalThis.performance, 'mark',
+    (name: string, { detail }: { detail: Record<string, unknown> }) => {
+      marks.push({ name, detail });
+      return {} as PerformanceMark;
+    });
+  context.mock.method(globalThis.performance, 'clearMarks', () => undefined);
+  const pending = deferred<ReturnType<typeof result>>();
+  let requests = 0;
+  const polling = createGuidePresentationPolling({ ...createOptions({
+    getPresentation: async () => ++requests === 1 ? result('runtime') : pending.promise,
+    cancelPresentation: async () => undefined,
+    setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+  }, () => 'comfortable', () => undefined),
+    getCacheIdentity: () => 'identity',
+    getCacheScopeToken: () => 'scope',
+  });
+
+  await polling.refresh('epg-window-change');
+  await polling.refresh('epg-window-change');
+  const cancelled = polling.refresh('foreground', { invalidateCache: true });
+  await Promise.resolve();
+  polling.stop();
+  await cancelled;
+
+  const settled = marks.filter(({ name }) => name === 'lineup-guide-v1:request-settled');
+  assert.deepEqual(settled.map(({ detail }) => [
+    detail.requestClass, detail.accepted, detail.requestOrigin,
+  ]), [
+    ['runtime', true, 'foreground'],
+    ['renderer-cache', true, 'foreground'],
+    ['rejected', false, 'foreground'],
+  ]);
+  const starts = marks.filter(({ name }) => name === 'lineup-guide-v1:request-start');
+  assert.deepEqual(starts.map(({ detail }) => detail.sequence), settled.map(({ detail }) => detail.sequence));
+});
+
 test('Desktop preload profiles use exact row/time bounds and aggressive idle warming starts with the next channel page', async () => {
   const windowStartMs = 10 * 60 * 60_000;
   for (const [aggressive, expected] of [

@@ -17,6 +17,7 @@ import {
   guideCacheKey,
   type GuidePreloadProfile,
 } from './guideVirtualization.js';
+import { guidePerformanceMarks, type GuideRequestOrigin } from './guidePerformanceMarks.js';
 
 const GUIDE_POLL_INTERVAL_MS = 15_000;
 const GUIDE_REQUEST_TIMEOUT_MS = 30_000;
@@ -408,6 +409,20 @@ export function createGuidePresentationPolling(
   };
 
   const executeRefresh = async (intent: GuidePresentationRefreshIntent): Promise<void> => {
+    const requestOrigin: GuideRequestOrigin = intent.source === 'poll-start' || intent.source === 'poll-interval'
+      ? 'poll'
+      : intent.source === 'guide-aggressive-warm' ? 'warm' : 'foreground';
+    const markSequence = guidePerformanceMarks.requestStarted(intent.generation, intent.channelOffset,
+      intent.channelLimit, intent.windowStartMs, intent.requestedDurationMs, requestOrigin);
+    let markedSettled = false;
+    const markSettled = (
+      requestClass: 'renderer-cache' | 'runtime' | 'rejected',
+      accepted: boolean,
+    ): void => {
+      if (markedSettled) return;
+      markedSettled = true;
+      guidePerformanceMarks.requestSettled(markSequence, intent.generation, requestClass, accepted, requestOrigin);
+    };
     try {
       const baseKey = guideCacheKey(
         Math.max(0, intent.windowStartMs - intent.timeBufferMs),
@@ -431,6 +446,7 @@ export function createGuidePresentationPolling(
       }
       if (cached !== null && isCurrent(intent)) {
         lastValidPresentation = cached;
+        markSettled('renderer-cache', true);
         options.applyPresentation(
           cached,
           intent.generation,
@@ -454,6 +470,7 @@ export function createGuidePresentationPolling(
           options.guide.cancelPresentation,
         );
       } catch (error: unknown) {
+        markSettled('rejected', false);
         if (isCurrent(intent) && !intent.warmOnly) {
           const message = isGuideRefreshTimeout(error)
             ? GUIDE_REQUEST_TIMEOUT_MESSAGE
@@ -469,6 +486,7 @@ export function createGuidePresentationPolling(
 
       if (isCurrent(intent)) {
         if (!result.ok) {
+          markSettled('rejected', false);
           if (!intent.warmOnly) {
             if (intent.playerRefresh) options.handlePlayerFailure?.(intent.source, result.error.message, intent.generation);
             else options.handleFailure(
@@ -495,9 +513,13 @@ export function createGuidePresentationPolling(
                 program.startsAtMs <= normalized.nowMs && normalized.nowMs < program.endsAtMs)),
             });
           }
-          if (intent.warmOnly) return;
+          if (intent.warmOnly) {
+            markSettled('runtime', true);
+            return;
+          }
           lastValidPresentation = normalized;
           const effectiveStartTimeMs = resolveEffectiveStartTimeMs(intent, lastValidPresentation);
+          markSettled('runtime', true);
           if (intent.playerRefresh) options.applyPlayerPresentation?.(lastValidPresentation, intent.generation, effectiveStartTimeMs);
           else options.applyPresentation(
             lastValidPresentation,
@@ -509,6 +531,7 @@ export function createGuidePresentationPolling(
         }
       }
     } finally {
+      markSettled('rejected', false);
       completeRefresh(intent);
     }
   };
