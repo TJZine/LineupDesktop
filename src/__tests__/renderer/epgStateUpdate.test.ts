@@ -27,7 +27,7 @@ const source: EpgPresentationSource = {
       genres: [],
       startsAtMs: BASE,
       endsAtMs: BASE + EPG_SLOT_DURATION_MS,
-      artwork: null,
+      artwork: { poster: null, background: null, logo: null },
     }],
   }],
   nowWatching: {

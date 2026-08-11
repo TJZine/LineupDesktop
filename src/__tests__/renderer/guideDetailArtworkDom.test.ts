@@ -33,7 +33,7 @@ class FakeImage extends FakeElement {
   removeAttribute(name: string): void { this.attributes.delete(name); }
 }
 
-function render(artwork: ArtworkRef | null, generation = 1) {
+function render(poster: ArtworkRef | null, generation = 1, background: ArtworkRef | null = null) {
   const nowMs = 1_000;
   const presentation = {
     nowMs,
@@ -41,7 +41,8 @@ function render(artwork: ArtworkRef | null, generation = 1) {
       id: 'channel-1', number: '1', name: 'Channel One', programs: [{
         id: 'program-1', title: 'Program One', subtitle: '', description: 'Description',
         showTitle: '', episodeLabel: '', rating: '', quality: [], genres: [],
-        startsAtMs: nowMs, endsAtMs: nowMs + 60_000, artwork,
+        startsAtMs: nowMs, endsAtMs: nowMs + 60_000,
+        artwork: { poster, background, logo: null },
       }],
     }],
     nowWatching: null,
@@ -164,6 +165,13 @@ test('null, placeholder, and expired artwork render the fixed missing state', ()
   });
   assert.equal(expired.figure.dataset.artworkState, 'missing');
   assert.equal(expired.placeholder.textContent, 'Artwork unavailable');
+
+  const backgroundOnly = render(null, 1, {
+    id: 'artwork-QRSTUVWXYZabcdef', kind: 'background', expiresAtMs: 2_000,
+    altText: 'Background', status: 'available',
+  });
+  assert.equal(backgroundOnly.figure.dataset.artworkState, 'missing');
+  assert.equal(backgroundOnly.image.getAttribute('src'), null);
 });
 
 test('fixed Classic markup owns exactly one poster, placeholder, copy, and description surface', () => {

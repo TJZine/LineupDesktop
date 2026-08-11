@@ -6,7 +6,7 @@ import {
   type EpgPresentationStateViewModel,
   type EpgShellViewModel,
 } from './guidePresentation.js';
-import type { ArtworkRef } from '../contracts/artwork.js';
+import type { GuideArtworkSet } from '../contracts/artwork.js';
 import type { GuideLibraryFilterState } from '../contracts/guide.js';
 import { GUIDE_DOM_TIME_BUFFER_MS } from './guideVirtualization.js';
 import type { GuideChannelWindowRow } from './guideChannelWindow.js';
@@ -33,7 +33,7 @@ export interface EpgProgramViewModel {
   genres: readonly string[];
   startsAtMs: number;
   endsAtMs: number;
-  artwork: ArtworkRef | null;
+  artwork: GuideArtworkSet;
 }
 
 export interface EpgChannelViewModel {

@@ -77,18 +77,24 @@ async function assertArtworkFailurePromptly(
   }
 }
 
-test('normalizeGuideArtworkLocator accepts only the anchored Plex poster grammar', () => {
+test('normalizeGuideArtworkLocator accepts only the anchored numeric Plex thumb and art grammars', () => {
   assert.equal(normalizeGuideArtworkLocator('/library/metadata/1/thumb'), '/library/metadata/1/thumb');
   assert.equal(
     normalizeGuideArtworkLocator('/library/metadata/123/thumb/1700000000'),
     '/library/metadata/123/thumb/1700000000',
+  );
+  assert.equal(normalizeGuideArtworkLocator('/library/metadata/1/art'), '/library/metadata/1/art');
+  assert.equal(
+    normalizeGuideArtworkLocator('/library/metadata/123/art/1700000000'),
+    '/library/metadata/123/art/1700000000',
   );
   const rejected = [
     '',
     'library/metadata/1/thumb',
     '/library/metadata/x/thumb',
     '/library/metadata/1/thumb/x',
-    '/library/metadata/1/art',
+    '/library/metadata/x/art',
+    '/library/metadata/1/art/x',
     '/library/metadata/1/banner',
     '/library/metadata/1/clearLogo',
     '/library/metadata/1/thumb/1/extra',
@@ -177,7 +183,7 @@ test('rejected locator and failed pre-fetch base parsing never touch fetch', asy
     return new Response();
   } });
   await assert.rejects(transport.fetchGuideArtwork({
-    connection: connection(), token: capturedCredential, locator: '/library/metadata/1/art',
+    connection: connection(), token: capturedCredential, locator: '/library/metadata/1/banner',
   }), LivePlexTransportError);
   await assert.rejects(transport.fetchGuideArtwork({
     connection: { ...connection(), uri: 'not a base uri' },

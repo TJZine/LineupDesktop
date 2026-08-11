@@ -180,7 +180,7 @@ test('captured sessions own exact frozen connection fields and artwork fetch nev
       return { bytes: new Uint8Array([1]), mimeType: 'image/jpeg' };
     },
   }, () => 1_000, () => 'artwork-ABCDEFGHIJKLMNOP');
-  const ref = artworkOwner.createRef({ locator: '/library/metadata/1/thumb', altText: 'Poster', lineupRevision: 9 });
+  const ref = artworkOwner.createRef({ role: 'poster', locator: '/library/metadata/1/thumb', altText: 'Poster', lineupRevision: 9 });
   assert.ok(ref);
   const afterCapture = { ...counts };
   assert.ok(await artworkOwner.get(ref.id));
@@ -208,7 +208,7 @@ test('runtime transitions close artwork authorization before enqueue, before que
     },
   }, () => 1_000, () => `artwork-${String(++refId).padStart(24, 'a')}`);
 
-  const beforeEnqueue = artworkOwner.createRef({ locator: '/library/metadata/1/thumb', altText: 'One', lineupRevision: 1 });
+  const beforeEnqueue = artworkOwner.createRef({ role: 'poster', locator: '/library/metadata/1/thumb', altText: 'One', lineupRevision: 1 });
   assert.ok(beforeEnqueue);
   const transition = runtime.getHomeUsers('three-gates');
   assert.equal(await artworkOwner.get(beforeEnqueue.id), null);
@@ -216,7 +216,7 @@ test('runtime transitions close artwork authorization before enqueue, before que
   home.resolve([]);
   await transition;
 
-  const refs = Array.from({ length: 5 }, (_, index) => artworkOwner.createRef({
+  const refs = Array.from({ length: 5 }, (_, index) => artworkOwner.createRef({ role: 'poster',
     locator: `/library/metadata/${String(index + 2)}/thumb`, altText: 'Poster', lineupRevision: 1,
   })) as Array<NonNullable<ReturnType<typeof artworkOwner.createRef>>>;
   const pending = refs.map((ref) => artworkOwner.get(ref.id));

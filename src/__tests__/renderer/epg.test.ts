@@ -39,7 +39,7 @@ function program(id: string, start: number, end: number): EpgProgramViewModel {
     genres: ['Drama'],
     startsAtMs: BASE + start * EPG_SLOT_DURATION_MS,
     endsAtMs: BASE + end * EPG_SLOT_DURATION_MS,
-    artwork: null,
+    artwork: { poster: null, background: null, logo: null },
   };
 }
 function presentation(): EpgPresentationSource {

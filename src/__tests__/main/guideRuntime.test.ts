@@ -250,8 +250,15 @@ test('GuideRuntime paged artwork output becomes an owned renderer-safe projectio
   repository.data.currentChannelId = configured.id;
   const hostileTitle = 'Bearer secret https://private.invalid/<title>\u0000'.repeat(8);
   const plexAdapter = new MockPlexLibraryAdapter();
-  plexAdapter.setLibraryItems('lib-1', [{ ...createLibraryItem(0), title: hostileTitle }]);
+  plexAdapter.setLibraryItems('lib-1', [{
+    ...createLibraryItem(0),
+    title: hostileTitle,
+    thumb: '/library/metadata/1/thumb',
+    art: '/library/metadata/1/art',
+    clearLogo: '/library/metadata/1/clearLogo',
+  }]);
   const createdRefs: object[] = [];
+  const createdInputs: Array<{ role: string; locator: string }> = [];
   const runtime = new GuideRuntime({
     repository: repository as unknown as ChannelRepository,
     plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
@@ -259,11 +266,13 @@ test('GuideRuntime paged artwork output becomes an owned renderer-safe projectio
     clock: { now: () => 1_000 },
     ...pagedRuntimeOptions(),
     guideArtworkOwner: {
-      createRef: (input: { altText: string }) => {
+      createRef: (input: { role: 'poster' | 'background' | 'logo'; locator: string; altText: string }) => {
         const ref = Object.freeze({
-          id: 'artwork-ABCDEFGHIJKLMNOP', kind: 'poster' as const, expiresAtMs: 10_000,
+          id: input.role === 'poster' ? 'artwork-ABCDEFGHIJKLMNOP' : 'artwork-QRSTUVWXYZabcdef',
+          kind: input.role, expiresAtMs: 10_000,
           altText: input.altText, status: 'available' as const,
         });
+        createdInputs.push({ role: input.role, locator: input.locator });
         createdRefs.push(ref);
         return ref;
       },
@@ -279,8 +288,15 @@ test('GuideRuntime paged artwork output becomes an owned renderer-safe projectio
   });
 
   assert.equal(projected.channels[0]!.programs[0]!.title, '[redacted]');
-  assert.equal(projected.channels[0]!.programs[0]!.artwork?.altText, '[redacted]');
-  assert.notEqual(projected.channels[0]!.programs[0]!.artwork, createdRefs[0]);
+  assert.equal(projected.channels[0]!.programs[0]!.artwork.poster?.altText, '[redacted]');
+  assert.equal(projected.channels[0]!.programs[0]!.artwork.background?.altText, '[redacted]');
+  assert.equal(projected.channels[0]!.programs[0]!.artwork.logo, null);
+  assert.notEqual(projected.channels[0]!.programs[0]!.artwork.poster, createdRefs[0]);
+  assert.notEqual(projected.channels[0]!.programs[0]!.artwork.background, createdRefs[1]);
+  assert.deepEqual(createdInputs, [
+    { role: 'poster', locator: '/library/metadata/1/thumb' },
+    { role: 'background', locator: '/library/metadata/1/art' },
+  ]);
   assert.equal((createdRefs[0] as { altText: string }).altText, hostileTitle);
 });
 

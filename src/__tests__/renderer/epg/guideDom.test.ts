@@ -199,7 +199,7 @@ test('guideCellDom builds valid DOM elements', () => {
     progressPercent: 40,
     widthTier: 'medium',
     timeLabel: '1:30 PM - 2:30 PM',
-    artwork: null,
+    artwork: { poster: null, background: null, logo: null },
   };
 
   const windowStart = 1000;

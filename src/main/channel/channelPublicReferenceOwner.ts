@@ -326,9 +326,6 @@ function groupBy<T>(values: readonly T[], keyOf: (value: T) => string): Map<stri
 
 function projectProgram(program: EpgProgramViewModel, id: string): EpgProgramViewModel {
   const title = display(program.title, 'Untitled program', 160);
-  const artworkFallback = `Poster for ${title}`.length <= 160
-    ? `Poster for ${title}`
-    : 'Program poster';
   return {
     id,
     title,
@@ -341,16 +338,28 @@ function projectProgram(program: EpgProgramViewModel, id: string): EpgProgramVie
     genres: program.genres.map((value) => display(value, '', 2_000)).slice(0, 20),
     startsAtMs: program.startsAtMs,
     endsAtMs: program.endsAtMs,
-    artwork: program.artwork === null
-      ? null
-      : Object.freeze({
-          id: program.artwork.id,
-          kind: program.artwork.kind,
-          expiresAtMs: program.artwork.expiresAtMs,
-          altText: display(program.artwork.altText, artworkFallback, 160),
-          status: program.artwork.status,
-        }),
+    artwork: Object.freeze({
+      poster: projectArtworkRef(program.artwork.poster, title, 'poster'),
+      background: projectArtworkRef(program.artwork.background, title, 'background'),
+      logo: projectArtworkRef(program.artwork.logo, title, 'logo'),
+    }),
   };
+}
+
+function projectArtworkRef(
+  artwork: EpgProgramViewModel['artwork']['poster'],
+  title: string,
+  role: 'poster' | 'background' | 'logo',
+) {
+  if (artwork === null) return null;
+  const fallback = `${role === 'background' ? 'Background' : role === 'logo' ? 'Logo' : 'Poster'} for ${title}`;
+  return Object.freeze({
+    id: artwork.id,
+    kind: role,
+    expiresAtMs: artwork.expiresAtMs,
+    altText: display(artwork.altText, fallback.length <= 160 ? fallback : `Program ${role}`, 160),
+    status: artwork.status,
+  });
 }
 
 function projectCurrent(

@@ -509,7 +509,7 @@ export function renderGuideDetailArtwork(
   if (figure === null || image === null || placeholder === null) return;
   placeholder.setAttribute('aria-hidden', 'true');
   const info = view.guide.infoPanel;
-  const artwork = info?.artwork ?? null;
+  const artwork = info?.artwork.poster ?? null;
   const nowMs = view.guide.nowMs;
   if (
     info === null ||

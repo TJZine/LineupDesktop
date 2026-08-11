@@ -6,6 +6,12 @@ export interface ArtworkRef {
   status: 'available' | 'placeholder';
 }
 
+export interface GuideArtworkSet {
+  poster: ArtworkRef | null;
+  background: ArtworkRef | null;
+  logo: ArtworkRef | null;
+}
+
 export const ARTWORK_REF_ID_PATTERN = /^artwork-[A-Za-z0-9_-]{16,96}$/u;
 
 export function isSafeArtworkRefId(value: unknown): value is string {

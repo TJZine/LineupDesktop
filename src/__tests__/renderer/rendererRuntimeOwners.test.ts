@@ -442,7 +442,7 @@ test('Settings time-range settlement drives Guide and Player polling through opt
     channels: [{
       id: 'channel-1', number: '1', name: 'One', programs: [{
         id: 'program-1', title: 'Program', subtitle: '', description: '', showTitle: '', episodeLabel: '',
-        rating: '', quality: [], genres: [], startsAtMs: base, endsAtMs: base + EPG_SLOT_DURATION_MS, artwork: null,
+        rating: '', quality: [], genres: [], startsAtMs: base, endsAtMs: base + EPG_SLOT_DURATION_MS, artwork: { poster: null, background: null, logo: null },
       }],
     }],
     nowWatching: null,
@@ -673,7 +673,7 @@ test('Player first result clamps only to a newer bound and otherwise preserves t
         id: 'channel-1', number: '1', name: 'One', programs: [{
           id: 'program-1', title: 'Program', subtitle: '', description: '', showTitle: '', episodeLabel: '',
           rating: '', quality: [], genres: [], startsAtMs: base,
-          endsAtMs: base + scenario.programDurationSlots * EPG_SLOT_DURATION_MS, artwork: null,
+          endsAtMs: base + scenario.programDurationSlots * EPG_SLOT_DURATION_MS, artwork: { poster: null, background: null, logo: null },
         }],
       }],
       nowWatching: null,

@@ -4,7 +4,7 @@ import type {
   EpgPresentationState,
   EpgProgramCellViewModel,
 } from './epg.js';
-import type { ArtworkRef } from '../contracts/artwork.js';
+import type { GuideArtworkSet } from '../contracts/artwork.js';
 import type { GuideLibraryFilterState } from '../contracts/guide.js';
 import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
 import type { AppRouteId } from './navigation.js';
@@ -54,7 +54,7 @@ export interface EpgInfoPanelViewModel {
   description: string;
   badges: readonly string[];
   genres: string;
-  artwork: ArtworkRef | null;
+  artwork: GuideArtworkSet;
   presentationGeneration: number;
 }
 

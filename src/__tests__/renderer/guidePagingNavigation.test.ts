@@ -365,7 +365,7 @@ function presentation(count: number, offset: number, total: number): GuidePresen
       const index = offset + local;
       return { id: `channel-${index}`, number: String(index), name: `Channel ${index}`, programs: [{
         id: `program-${index}`, title: `Program ${index}`, subtitle: '', description: '', showTitle: '', episodeLabel: '',
-        rating: '', quality: [], genres: [], startsAtMs: 0, endsAtMs: 60_000, artwork: null,
+        rating: '', quality: [], genres: [], startsAtMs: 0, endsAtMs: 60_000, artwork: { poster: null, background: null, logo: null },
       }] };
     }),
   };

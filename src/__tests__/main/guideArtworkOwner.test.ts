@@ -55,7 +55,7 @@ test('artwork refs bind the current session, clamp alt text, and expire', async 
     () => now,
     () => `artwork-${String(++refCounter).padStart(24, 'a')}`,
   );
-  const ref = owner.createRef({
+  const ref = owner.createRef({ role: 'poster',
     locator: '/library/metadata/1/thumb', altText: 'A'.repeat(200), lineupRevision: 4,
   });
   assert.ok(ref);
@@ -66,9 +66,58 @@ test('artwork refs bind the current session, clamp alt text, and expire', async 
   assert.equal(await owner.get(ref.id), null);
 });
 
+test('role policy and stable authorization identity stay closed without extending expiry', async () => {
+  let now = 1_000;
+  let generationId = 2;
+  let refCounter = 0;
+  const listeners = new Set<() => void>();
+  const owner = new GuideArtworkOwner(
+    {
+      subscribe(listener: () => void) { listeners.add(listener); return () => listeners.delete(listener); },
+      captureCurrent: (lineupRevision: number) => Object.freeze({
+        ...session(generationId), generationId, lineupRevision,
+      }),
+      isCurrent: (candidate: number) => candidate === generationId,
+    } as never,
+    { fetchGuideArtwork: async () => ({ bytes: new Uint8Array([1]), mimeType: 'image/jpeg' }) },
+    () => now,
+    () => `artwork-${String(++refCounter).padStart(24, 'a')}`,
+  );
+  const create = (role: 'poster' | 'background' | 'logo', locator: string, altText: string, lineupRevision = 4) =>
+    owner.createRef({ role, locator, altText, lineupRevision });
+
+  assert.equal(create('background', '/library/metadata/1/thumb', 'Wrong'), null);
+  assert.equal(create('poster', '/library/metadata/1/art', 'Wrong'), null);
+  assert.equal(create('logo', '/library/metadata/1/thumb', 'Wrong'), null);
+  assert.equal(create('logo', '/library/metadata/1/clearLogo', 'Wrong'), null);
+  assert.equal(owner.createRef({ role: 'banner' as never, locator: '/library/metadata/1/thumb', altText: 'Wrong', lineupRevision: 4 }), null);
+
+  const first = create('poster', '/library/metadata/1/thumb', 'First');
+  assert.ok(first);
+  now += 15_000;
+  const repeated = create('poster', '/library/metadata/1/thumb', 'Second');
+  assert.ok(repeated);
+  assert.equal(repeated.id, first.id);
+  assert.equal(repeated.expiresAtMs, first.expiresAtMs);
+  assert.equal(repeated.altText, 'Second');
+  assert.notEqual(create('poster', '/library/metadata/2/thumb', 'Other')?.id, first.id);
+  assert.notEqual(create('background', '/library/metadata/1/art', 'Other')?.id, first.id);
+  assert.notEqual(create('poster', '/library/metadata/1/thumb', 'Other', 5)?.id, first.id);
+
+  generationId += 1;
+  for (const listener of [...listeners]) listener();
+  const nextSession = create('poster', '/library/metadata/1/thumb', 'Next');
+  assert.ok(nextSession);
+  assert.notEqual(nextSession.id, first.id);
+  assert.equal(await owner.get(first.id), null);
+  owner.dispose();
+  assert.equal(await owner.get(nextSession.id), null);
+  assert.equal(create('poster', '/library/metadata/1/thumb', 'Disposed'), null);
+});
+
 test('authorization caps at 6000 live refs and cache eviction revokes delivery', async () => {
   const { owner } = fixture();
-  const refs = Array.from({ length: 6_001 }, (_, index) => owner.createRef({
+  const refs = Array.from({ length: 6_001 }, (_, index) => owner.createRef({ role: 'poster',
     locator: `/library/metadata/${String(index + 1)}/thumb`,
     altText: 'Poster',
     lineupRevision: 4,
@@ -78,7 +127,7 @@ test('authorization caps at 6000 live refs and cache eviction revokes delivery',
   owner.dispose();
 
   const cacheFixture = fixture();
-  const cacheRefs = Array.from({ length: 33 }, (_, index) => cacheFixture.owner.createRef({
+  const cacheRefs = Array.from({ length: 33 }, (_, index) => cacheFixture.owner.createRef({ role: 'poster',
     locator: `/library/metadata/${String(index + 1)}/thumb`, altText: 'Poster', lineupRevision: 4,
   }));
   for (const ref of cacheRefs) {
@@ -99,14 +148,14 @@ test('createRef reclaims expired authorizations at capacity and rejects their la
     () => now,
     () => `artwork-${String(++refCounter).padStart(24, 'a')}`,
   );
-  const refs = Array.from({ length: 6_000 }, (_, index) => owner.createRef({
+  const refs = Array.from({ length: 6_000 }, (_, index) => owner.createRef({ role: 'poster',
     locator: `/library/metadata/${String(index + 1)}/thumb`, altText: 'Poster', lineupRevision: 4,
   }));
-  assert.equal(owner.createRef({ locator: '/library/metadata/full/thumb', altText: 'Full', lineupRevision: 4 }), null);
+  assert.equal(owner.createRef({ role: 'poster', locator: '/library/metadata/full/thumb', altText: 'Full', lineupRevision: 4 }), null);
   const late = owner.get(refs[0]!.id);
   await waitForImmediate();
   now = refs[0]!.expiresAtMs;
-  const replacement = owner.createRef({ locator: '/library/metadata/6001/thumb', altText: 'New', lineupRevision: 4 });
+  const replacement = owner.createRef({ role: 'poster', locator: '/library/metadata/6001/thumb', altText: 'New', lineupRevision: 4 });
   assert.ok(replacement);
   fetch.resolve({ bytes: new Uint8Array([1]), mimeType: 'image/jpeg' });
   assert.equal(await late, null);
@@ -126,7 +175,7 @@ test('queue allows four fetches, coalesces by ref, and releases a slot', async (
       return request.promise.finally(() => { active -= 1; });
     },
   });
-  const refs = Array.from({ length: 5 }, (_, index) => owner.createRef({
+  const refs = Array.from({ length: 5 }, (_, index) => owner.createRef({ role: 'poster',
     locator: `/library/metadata/${String(index + 1)}/thumb`, altText: 'Poster', lineupRevision: 4,
   })) as Array<NonNullable<ReturnType<typeof owner.createRef>>>;
   const firstA = owner.get(refs[0]!.id);
@@ -155,7 +204,7 @@ test('generation notification revokes refs and aborts queued and in-flight work'
       }
     }),
   });
-  const ref = owner.createRef({ locator: '/library/metadata/1/thumb', altText: 'Poster', lineupRevision: 4 });
+  const ref = owner.createRef({ role: 'poster', locator: '/library/metadata/1/thumb', altText: 'Poster', lineupRevision: 4 });
   assert.ok(ref);
   const pending = owner.get(ref.id);
   await waitForImmediate();
@@ -176,7 +225,7 @@ test('currentness is checked before queue, before fetch, and after fetch', async
       return fetch.promise;
     },
   });
-  const ref = owner.createRef({ locator: '/library/metadata/1/thumb', altText: 'Poster', lineupRevision: 4 });
+  const ref = owner.createRef({ role: 'poster', locator: '/library/metadata/1/thumb', altText: 'Poster', lineupRevision: 4 });
   assert.ok(ref);
   const pending = owner.get(ref.id);
   await waitForImmediate();

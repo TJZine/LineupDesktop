@@ -1,6 +1,6 @@
 import type { GuideLibraryFilterState, GuideIpcResult, GuidePresentationSource } from '../contracts/guide.js';
 import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
-import { isSafeArtworkRefId, type ArtworkRef } from '../contracts/artwork.js';
+import { isSafeArtworkRefId, type ArtworkRef, type GuideArtworkSet } from '../contracts/artwork.js';
 
 export type GuideBridgeInvoke = (
   channel: string,
@@ -278,7 +278,7 @@ function isEpgProgramViewModel(value: unknown): boolean {
     isFiniteNonNegativeNumber(value.startsAtMs) &&
     isFiniteNonNegativeNumber(value.endsAtMs) &&
     value.endsAtMs > value.startsAtMs &&
-    (value.artwork === null || isArtworkRef(value.artwork))
+    isGuideArtworkSet(value.artwork)
   );
 }
 
@@ -358,11 +358,19 @@ function isArtworkRef(value: unknown): value is ArtworkRef {
   return isPlainRecord(value) &&
     hasOnlyKeys(value, ['id', 'kind', 'expiresAtMs', 'altText', 'status']) &&
     isSafeArtworkRefId(value.id) &&
-    value.kind === 'poster' &&
+    (value.kind === 'poster' || value.kind === 'background' || value.kind === 'logo') &&
     isFiniteNonNegativeNumber(value.expiresAtMs) &&
     Number.isSafeInteger(value.expiresAtMs) &&
     isBoundedSafeDisplayString(value.altText, 160) &&
     (value.status === 'available' || value.status === 'placeholder');
+}
+
+function isGuideArtworkSet(value: unknown): value is GuideArtworkSet {
+  return isPlainRecord(value) &&
+    hasOnlyKeys(value, ['poster', 'background', 'logo']) &&
+    (value.poster === null || (isArtworkRef(value.poster) && value.poster.kind === 'poster')) &&
+    (value.background === null || (isArtworkRef(value.background) && value.background.kind === 'background')) &&
+    (value.logo === null || (isArtworkRef(value.logo) && value.logo.kind === 'logo'));
 }
 
 function isFiniteNonNegativeNumber(value: unknown): value is number {

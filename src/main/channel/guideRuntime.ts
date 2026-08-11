@@ -585,24 +585,35 @@ function mapScheduledProgramToViewModel(
     genres: ('genres' in original ? original.genres : null) || [],
     startsAtMs: prog.scheduledStartTime,
     endsAtMs: prog.scheduledEndTime,
-    artwork: createProgramArtworkRef(original, guideArtworkOwner, lineupRevision),
+    artwork: createProgramArtworkSet(original, guideArtworkOwner, lineupRevision),
   };
 }
 
-function createProgramArtworkRef(
+function createProgramArtworkSet(
   item: ChannelContentItem | SchedulerContentItem,
   guideArtworkOwner: GuideArtworkOwner | null,
   lineupRevision: number | null,
 ) {
-  if (guideArtworkOwner === null || lineupRevision === null) return null;
+  const missing = { poster: null, background: null, logo: null } as const;
+  if (guideArtworkOwner === null || lineupRevision === null) return missing;
   const thumb = typeof item.thumb === 'string' && item.thumb.length > 0 ? item.thumb : null;
   const showThumb = 'showThumb' in item && typeof item.showThumb === 'string' && item.showThumb.length > 0
     ? item.showThumb
     : null;
-  const locator = thumb ?? showThumb;
-  if (locator === null) return null;
+  const posterLocator = thumb ?? showThumb;
+  const backgroundLocator = 'art' in item && typeof item.art === 'string' && item.art.length > 0
+    ? item.art
+    : null;
   const title = ('showTitle' in item ? item.showTitle : null) || item.title;
-  return guideArtworkOwner.createRef({ locator, altText: title, lineupRevision });
+  return {
+    poster: posterLocator === null ? null : guideArtworkOwner.createRef({
+      role: 'poster', locator: posterLocator, altText: title, lineupRevision,
+    }),
+    background: backgroundLocator === null ? null : guideArtworkOwner.createRef({
+      role: 'background', locator: backgroundLocator, altText: title, lineupRevision,
+    }),
+    logo: null,
+  };
 }
 
 function mapCurrentProgram(
