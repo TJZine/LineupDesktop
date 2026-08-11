@@ -60,6 +60,7 @@ The renderer shell currently spans:
 - `src/renderer/playerOverlayDom.ts`
 - `src/renderer/playerBridgeSubscription.ts`
 - `src/renderer/guidePresentation.ts`
+- `src/renderer/guideChannelWindow.ts`
 - `src/renderer/guidePresentationPolling.ts`
 - `src/renderer/guideTuneController.ts`
 - `src/renderer/desktopInput.ts`
@@ -87,6 +88,18 @@ hierarchy and dynamic menu rows, while the shared, information, and menu
 stylesheets own their separate visual families. Reduced-motion, forced-colors,
 exact viewport, focus, and local fullscreen continuity proof passed at Package 8
 closeout.
+
+Guide G2 adds `guideChannelWindow.ts` as the cohesive renderer owner for the
+sparse absolute eligible-channel window. It merges only current paged results,
+pins visible/focused rows, applies finite profile-aware LRU retention, projects
+explicit inert loading and retryable error rows, and derives the next missing
+foreground intent from complete viewport rows plus bounded overscan. Polling
+continues to own one active/one latest request, cancellation, stale settlement,
+poll refresh, and lower-priority Auto-only warming. `epg.ts` continues to own
+time-column-preserving semantic movement, including viewport-sized Page moves;
+the DOM uses the eligible total for spacer geometry while keeping the existing
+24-row/400-cell mount caps. Main, preload, contracts, persistence, and renderer
+privilege are unchanged.
 
 WS4 preserves this ownership while adding semantic input aliases, context Page
 routing, a source-aware 500 ms Back hold, serialized guarded play/pause/seek/

@@ -79,9 +79,13 @@ selection-preserving recentering, and readable shared row geometry. Unit 5F is
 committed at `3501fb8` with main-owned Auto/0/15/30 policy, exact raw-source
 classification, a strict renderer-safe minimum-start projection, DST-safe local
 midnight clamping, and bound-aware focus/navigation. Unit 5G is committed at
-`4946fb5` with Desktop-sized 12/24-row request profiles, fair main caps, bounded
-LRU warming, viewport/focus-aware DOM virtualization, exact row geometry, and
-keyboard/D-pad focus reveal. Post-5G Guide corrections add the exact
+`4946fb5` with fair main caps, bounded LRU warming, viewport/focus-aware DOM
+virtualization, exact row geometry, and keyboard/D-pad focus reveal. Guide G2
+replaces its fixed foreground-page behavior with a renderer-owned sparse
+absolute channel window: viewport-sized requests remain capped at 24, total
+eligible rows own spacer geometry, visible gaps project loading/retry rows, and
+focused real rows remain pinned while polling retains cancellation/currentness
+custody. Post-5G Guide corrections add the exact
 `guide.cancelPresentation` bridge operation, main-owned request cancellation,
 and a global Now Watching projection derived from the authoritative active
 scheduler at one captured time only when its channel agrees with the committed

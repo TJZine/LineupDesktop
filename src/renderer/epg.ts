@@ -9,6 +9,7 @@ import {
 import type { ArtworkRef } from '../contracts/artwork.js';
 import type { GuideLibraryFilterState } from '../contracts/guide.js';
 import { GUIDE_DOM_TIME_BUFFER_MS } from './guideVirtualization.js';
+import type { GuideChannelWindowRow } from './guideChannelWindow.js';
 
 export type EpgActionId =
   | 'previousWindow'
@@ -88,6 +89,8 @@ export interface EpgChannelRowViewModel {
   name: string;
   programs: readonly EpgProgramCellViewModel[];
   isSelected: boolean;
+  absoluteIndex?: number;
+  loadState?: 'ready' | 'loading' | 'error';
 }
 
 export interface EpgGuideViewModel {
@@ -114,6 +117,7 @@ export interface EpgPresentationSource {
   minimumStartTimeMs?: number;
   channelWindow?: { offset: number; total: number };
   libraryFilter?: GuideLibraryFilterState;
+  sparseChannelRows?: readonly GuideChannelWindowRow[];
 }
 
 export interface NormalizedEpgPresentationSource extends Omit<EpgPresentationSource, 'nowMs'> {
@@ -132,6 +136,13 @@ export interface EpgDirectionResult {
   state: EpgState;
   handled: boolean;
   windowChanged: boolean;
+}
+
+export interface EpgAbsoluteNavigationResult {
+  readonly state: EpgState;
+  readonly targetAbsoluteIndex: number;
+  readonly loaded: boolean;
+  readonly rowState: 'ready' | 'loading' | 'error';
 }
 
 export type EpgGuideTimeRange = 'detailed' | 'wide';
@@ -252,7 +263,7 @@ export function moveEpgSelection(
 
 export function pageEpgSelection(
   state: EpgState,
-  offset: -5 | 5,
+  offset: number,
   presentation: EpgPresentationSource,
 ): EpgDirectionResult {
   if (state.presentationState !== 'ready') {
@@ -263,6 +274,43 @@ export function pageEpgSelection(
     handled: true,
     windowChanged: false,
   };
+}
+
+export function moveEpgSelectionAbsolute(
+  state: EpgState,
+  offset: number,
+  presentation: EpgPresentationSource,
+): EpgAbsoluteNavigationResult | null {
+  const sparseRows = presentation.sparseChannelRows;
+  const window = presentation.channelWindow;
+  if (state.presentationState !== 'ready' || sparseRows === undefined || window === undefined || window.total === 0) return null;
+  const current = sparseRows.find((row) => row.state === 'ready' && row.channel.id === state.selectedChannelId);
+  if (current === undefined) return null;
+  const direction = offset < 0 ? -1 : 1;
+  let targetAbsoluteIndex = clamp(current.absoluteIndex + Math.trunc(offset), 0, window.total - 1);
+  while (targetAbsoluteIndex >= 0 && targetAbsoluteIndex < window.total) {
+    const target = sparseRows.find((row) => row.absoluteIndex === targetAbsoluteIndex);
+    if (target?.state !== 'ready') {
+      return {
+        state,
+        targetAbsoluteIndex,
+        loaded: false,
+        rowState: target?.state === 'error' ? 'error' : 'loading',
+      };
+    }
+    if (visibleProgramsForChannel(target.channel, state.windowStartMs, state.guideTimeRange).length > 0) {
+      return {
+        state: selectNearestProgramOnChannel(state, target.channel, presentation),
+        targetAbsoluteIndex,
+        loaded: true,
+        rowState: 'ready',
+      };
+    }
+    const next = targetAbsoluteIndex + direction;
+    if (next < 0 || next >= window.total) break;
+    targetAbsoluteIndex = next;
+  }
+  return { state, targetAbsoluteIndex, loaded: true, rowState: 'ready' };
 }
 
 export function focusEpgNow(
@@ -331,19 +379,34 @@ export function createEpgGuideView(
     const startsAtMs = normalizedState.windowStartMs + index * EPG_SLOT_DURATION_MS;
     return { startsAtMs, endsAtMs: startsAtMs + EPG_SLOT_DURATION_MS, label: formatEpgTime(startsAtMs) };
   });
+  const sourceRows = presentation.sparseChannelRows ?? presentation.channels.map((channel, absoluteIndex) => ({
+    state: 'ready' as const,
+    absoluteIndex: (presentation.channelWindow?.offset ?? 0) + absoluteIndex,
+    channel,
+  }));
   const rows = normalizedState.presentationState === 'ready'
-    ? presentation.channels.map((channel) => ({
-      id: channel.id,
-      number: channel.number,
-      name: channel.name,
-      isSelected: channel.id === normalizedState.selectedChannelId,
-      programs: renderProgramsForChannel(channel, normalizedState.windowStartMs, normalizedState.guideTimeRange).map((program) => createProgramCell(
+    ? sourceRows.map((sourceRow) => sourceRow.state === 'ready' ? ({
+      absoluteIndex: sourceRow.absoluteIndex,
+      loadState: 'ready' as const,
+      id: sourceRow.channel.id,
+      number: sourceRow.channel.number,
+      name: sourceRow.channel.name,
+      isSelected: sourceRow.channel.id === normalizedState.selectedChannelId,
+      programs: renderProgramsForChannel(sourceRow.channel, normalizedState.windowStartMs, normalizedState.guideTimeRange).map((program) => createProgramCell(
         program,
-        channel.id,
+        sourceRow.channel.id,
         normalizedState,
         windowEndMs,
         presentationForRender.nowMs,
       )),
+    }) : ({
+      absoluteIndex: sourceRow.absoluteIndex,
+      loadState: sourceRow.state,
+      id: '',
+      number: '',
+      name: '',
+      isSelected: false,
+      programs: [],
     }))
     : [];
   const selectedProgram = rows.flatMap((row) => row.programs).find((program) => program.isSelected) ?? null;
@@ -413,7 +476,16 @@ export function settleEpgPresentation(
   if (typeof pagingTargetGlobalIndex === 'number') {
     const window = presentation.channelWindow;
     if (window !== undefined) {
-      next = selectEpgPageTarget(next, pagingTargetGlobalIndex - window.offset, presentation);
+      const sparseMove = moveEpgSelectionAbsolute(
+        next,
+        pagingTargetGlobalIndex - (presentation.sparseChannelRows?.find(
+          (row) => row.state === 'ready' && row.channel.id === next.selectedChannelId,
+        )?.absoluteIndex ?? pagingTargetGlobalIndex),
+        presentation,
+      );
+      next = sparseMove?.loaded === true
+        ? sparseMove.state
+        : selectEpgPageTarget(next, pagingTargetGlobalIndex - window.offset, presentation);
     }
   }
   const pendingFocusId = pagingTargetGlobalIndex === null
@@ -438,7 +510,7 @@ export function settleEpgPresentationFailure(
 export function resolveEpgPageNavigation(
   state: EpgState,
   presentation: EpgPresentationSource,
-  offset: -5 | 5,
+  offset: number,
   pendingTargetGlobalIndex: number | null = null,
   channelLimit = EPG_CHANNEL_PAGE_SIZE,
 ): EpgPageNavigationIntent | null {
@@ -629,6 +701,8 @@ function classifyPresentation(
   windowStartMs: number,
   guideTimeRange: EpgGuideTimeRange,
 ): EpgPresentationState {
+  if (presentation.sparseChannelRows?.some((row) => row.state !== 'ready') === true &&
+    (presentation.channelWindow?.total ?? 0) > 0) return 'ready';
   if (presentation.channels.length === 0) return 'empty-channels';
   return presentation.channels.some((channel) => visibleProgramsForChannel(channel, windowStartMs, guideTimeRange).length > 0)
     ? 'ready'
@@ -649,6 +723,9 @@ function normalizeEpgSelection(
     ? selectedChannel
     : presentation.channels.find((candidate) => visibleProgramsForChannel(candidate, windowStartMs, state.guideTimeRange).length > 0);
   if (channel === undefined) {
+    if (presentation.sparseChannelRows?.some((row) => row.state !== 'ready') === true) {
+      return { ...state, windowStartMs, selectedChannelId: '', selectedProgramId: '', presentationState: 'ready' };
+    }
     return { ...state, windowStartMs, selectedChannelId: '', selectedProgramId: '', presentationState: 'empty-programs' };
   }
   const visiblePrograms = visibleProgramsForChannel(channel, windowStartMs, state.guideTimeRange);
@@ -696,6 +773,14 @@ function selectNearestProgramOnAdjacentChannel(
   const currentIndex = visibleChannels.findIndex((channel) => channel.id === state.selectedChannelId);
   const nextChannel = visibleChannels[clamp((currentIndex < 0 ? 0 : currentIndex) + offset, 0, visibleChannels.length - 1)];
   if (nextChannel === undefined) return state;
+  return selectNearestProgramOnChannel(state, nextChannel, presentation);
+}
+
+function selectNearestProgramOnChannel(
+  state: EpgState,
+  nextChannel: EpgChannelViewModel,
+  presentation: EpgPresentationSource,
+): EpgState {
   const currentProgram = findChannel(state.selectedChannelId, presentation)?.programs.find(
     (program) => program.id === state.selectedProgramId,
   );

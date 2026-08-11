@@ -112,6 +112,27 @@ test('Guide polling requests exactly the time-range duration', async () => {
   assert.deepEqual(durations, [bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS), bufferedDuration(EPG_WIDE_WINDOW_DURATION_MS)]);
 });
 
+test('foreground channel limits follow complete viewport rows plus bounded overscan and clamp at 24', async () => {
+  let completeVisibleRows = 7;
+  const limits: number[] = [];
+  const guide = {
+    getPresentation: async (input: { channelLimit?: number }) => {
+      limits.push(input.channelLimit ?? -1);
+      return result(`viewport-${String(limits.length)}`);
+    },
+    cancelPresentation: async () => undefined,
+    setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+  } satisfies LineupDesktopPreloadApi['guide'];
+  const polling = createGuidePresentationPolling({
+    ...createOptions(guide, () => 'detailed', () => undefined),
+    getCompleteVisibleRowCount: () => completeVisibleRows,
+  });
+  await polling.refresh('visible-seven');
+  completeVisibleRows = 30;
+  await polling.refresh('visible-clamped');
+  assert.deepEqual(limits, [11, 24]);
+});
+
 test('Guide polling emits one honest terminal mark for runtime, cache, and cancellation', async (context) => {
   const marks: Array<{ name: string; detail: Record<string, unknown> }> = [];
   context.mock.method(globalThis.performance, 'mark',
@@ -271,6 +292,77 @@ test('auto warm failures remain cache misses without applying foreground failure
     assert.deepEqual(failures, [], `${failureMode} does not apply foreground failure state`);
     controller.stop();
   }
+});
+
+test('foreground visible-window work cancels an active idle warm before it runs', async () => {
+  const idle: Array<() => void> = [];
+  const warm = deferred<ReturnType<typeof result>>();
+  const offsets: number[] = [];
+  let cancellations = 0;
+  const controller = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async (input) => {
+        offsets.push(input.channelOffset ?? 0);
+        if (offsets.length === 2) return warm.promise;
+        const response = result(`foreground-${String(offsets.length)}`);
+        if (!response.ok) throw new Error('Expected successful Guide fixture.');
+        return { ...response, value: { ...response.value, channelWindow: { offset: input.channelOffset ?? 0, total: 500 } } };
+      },
+      cancelPresentation: async () => { cancellations += 1; },
+      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+    },
+    host: idleHost(idle), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
+    getGuideTimeRange: () => 'detailed', getGuidePerformanceProfile: () => 'auto',
+    setLoading: () => undefined, applyPresentation: () => undefined, handleFailure: () => undefined,
+  });
+  await controller.refresh('foreground');
+  idle.shift()?.();
+  await tick();
+  assert.equal(offsets.length, 2, 'idle warm is active');
+  await controller.refresh('guide-visible-window', { channelOffset: 250, channelLimit: 11 });
+  assert.equal(cancellations, 1);
+  assert.deepEqual(offsets, [0, 24, 250]);
+  controller.stop();
+});
+
+test('superseded foreground windows emit generation-aware settlement and permit bounded refetch', async () => {
+  const requests: Array<Deferred<ReturnType<typeof result>>> = [];
+  const states: Array<{
+    state: 'queued' | 'settled'; generation: number; offset: number; limit: number;
+  }> = [];
+  const controller = createGuidePresentationPolling({
+    ...createOptions({
+      getPresentation: async () => {
+        const request = deferred<ReturnType<typeof result>>();
+        requests.push(request);
+        return request.promise;
+      },
+      cancelPresentation: async () => undefined,
+      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+    }, () => 'detailed', () => undefined),
+    requestWindowState: (state, request) => states.push({
+      state, generation: request.generation, offset: request.channelOffset, limit: request.channelLimit,
+    }),
+  });
+  const first = controller.refresh('visible-a', { channelOffset: 100, channelLimit: 10 });
+  const replacement = controller.refresh('visible-b', { channelOffset: 200, channelLimit: 10 });
+  assert.deepEqual(states.slice(0, 2).map(({ state, offset }) => [state, offset]), [
+    ['queued', 100], ['queued', 200],
+  ]);
+  requests[0]?.resolve(result('stale-a'));
+  await tick();
+  assert.ok(states.some(({ state, offset }) => state === 'settled' && offset === 100));
+  assert.equal(requests.length, 2);
+  requests[1]?.resolve(result('current-b'));
+  await Promise.all([first, replacement]);
+
+  const refetch = controller.refresh('visible-a-again', { channelOffset: 100, channelLimit: 10 });
+  assert.equal(requests.length, 3);
+  assert.ok(states.filter(({ state, offset }) => state === 'queued' && offset === 100).length === 2);
+  assert.ok(states.every(({ limit }) => limit <= 24));
+  requests[2]?.resolve(result('refetch-a'));
+  await refetch;
+  controller.stop();
 });
 
 test('auto page and adjacent-time warm entries are consumed without another bridge request', async () => {

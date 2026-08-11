@@ -37,6 +37,20 @@ export function invalidateGuideLayoutMetrics(grid: HTMLElement | null): void {
   if (grid !== null) guideLayoutMetrics.delete(grid);
 }
 
+export function readGuideViewportRows(grid: HTMLElement | null): Readonly<{ start: number; completeCount: number }> {
+  if (grid === null) return { start: 0, completeCount: 6 };
+  const metrics = guideLayoutMetrics.get(grid);
+  const rowOuterSize = metrics?.rowOuterSize ?? GUIDE_FALLBACK_ROW_OUTER_SIZE;
+  const rowStartOffset = metrics?.rowStartOffset ?? 0;
+  const relativeScrollTop = Math.max(0, grid.scrollTop - rowStartOffset);
+  const viewportHeight = Math.max(rowOuterSize, grid.clientHeight || rowOuterSize * 6);
+  const rowViewportHeight = Math.max(rowOuterSize, viewportHeight - Math.max(0, rowStartOffset - grid.scrollTop));
+  return {
+    start: Math.max(0, Math.floor(relativeScrollTop / rowOuterSize)),
+    completeCount: Math.max(1, Math.min(24, Math.floor(rowViewportHeight / rowOuterSize))),
+  };
+}
+
 export function guideCellPosition(
   startsAtMs: number,
   endsAtMs: number,
@@ -456,7 +470,7 @@ function renderEpgGuideDomContent(
     });
     const focusedRowIndex = view.guide.selectedProgram === null
       ? -1
-      : view.guide.rows.findIndex((row) => row.id === view.guide.selectedProgram?.channelId);
+      : view.guide.rows.find((row) => row.id === view.guide.selectedProgram?.channelId)?.absoluteIndex ?? -1;
     const virtualRange = projectGuideVirtualRange({
       rows: view.guide.rows,
       scrollTop: dom.epgGridElement.scrollTop,
@@ -467,6 +481,8 @@ function renderEpgGuideDomContent(
       windowEndMs: view.guide.windowEndMs,
       focusedRowIndex,
       focusedProgramId: view.guide.selectedProgram?.id ?? null,
+      rowOffset: view.guide.channelWindow.offset,
+      totalRowCount: view.guide.channelWindow.total,
     });
     shell.append(...readyGuideGridDom(
       view,
@@ -654,11 +670,34 @@ function readyGuideGridDom(
       rows.push(guideRowSpacer(placement.gapBefore * rowOuterSize - rowGapSize));
     }
     const rowIndex = placement.rowIndex;
-    const row = view.guide.rows[rowIndex];
+    const row = view.guide.rows.find((candidate, localIndex) =>
+      (candidate.absoluteIndex ?? view.guide.channelWindow.offset + localIndex) === rowIndex);
     if (row === undefined) continue;
     const rowElement = document.createElement('section');
     rowElement.className = 'epg-grid__row';
     rowElement.dataset.guideRowIndex = String(rowIndex);
+    if (row.loadState !== undefined && row.loadState !== 'ready') {
+      rowElement.className += ' epg-grid__row--placeholder';
+      rowElement.dataset.guideRowState = row.loadState;
+      rowElement.setAttribute('aria-hidden', row.loadState === 'loading' ? 'true' : 'false');
+      if (row.loadState === 'loading') {
+        const loading = document.createElement('span');
+        loading.className = 'epg-grid__row-status';
+        loading.textContent = 'Loading channel…';
+        rowElement.append(loading);
+      } else {
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'epg-grid__row-status';
+        retry.dataset.guideAction = 'retry';
+        retry.dataset.guideRetryIndex = String(rowIndex);
+        retry.dataset.focusId = `guide-window-retry-${String(rowIndex)}`;
+        retry.textContent = 'Channel unavailable — Retry';
+        rowElement.append(retry);
+      }
+      rows.push(rowElement);
+      continue;
+    }
     rowElement.setAttribute('role', 'row');
     rowElement.dataset.selectedChannel = String(row.isSelected);
     const channel = document.createElement('div');

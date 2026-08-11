@@ -15,6 +15,7 @@ import {
   REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE,
   GuidePresentationLru,
   guideCacheKey,
+  projectGuideForegroundChannelLimit,
   type GuidePerformanceProfile,
   type GuidePerformanceProfileConfig,
 } from './guideVirtualization.js';
@@ -34,15 +35,24 @@ export interface GuidePresentationPollingOptions {
   getCacheIdentity?(): string | null;
   getCacheScopeToken?(): string | null;
   getChannelOffset?(): number;
+  getCompleteVisibleRowCount?(): number;
   getNowMs?(): number;
+  requestWindowState?(state: 'queued' | 'settled', request: Readonly<{
+    generation: number;
+    channelOffset: number;
+    channelLimit: number;
+    warmOnly: boolean;
+  }>): void;
   setLoading(generation: number): void;
   applyPresentation(
     presentation: ReturnType<typeof normalizeEpgPresentation>,
     generation: number,
     pagingTargetGlobalIndex: number | null | undefined,
     effectiveStartTimeMs?: number,
+    requestWindow?: Readonly<{ channelOffset: number; channelLimit: number }>,
   ): void;
-  handleFailure(source: string, message: string, generation: number, retainLastValid: boolean): void;
+  handleFailure(source: string, message: string, generation: number, retainLastValid: boolean,
+    requestWindow?: Readonly<{ channelOffset: number; channelLimit: number }>): void;
   setPagingBusy?(busy: boolean): void;
   applyPlayerPresentation?(
     presentation: ReturnType<typeof normalizeEpgPresentation>,
@@ -80,6 +90,7 @@ export interface GuidePresentationRefreshOptions {
   showLoading?: boolean;
   allowPlayerRoute?: boolean;
   channelOffset?: number;
+  channelLimit?: number;
   windowStartMs?: number;
   warmOnly?: boolean;
   invalidateCache?: true;
@@ -90,12 +101,13 @@ export interface GuidePageRefreshRequest {
   targetGlobalIndex: number;
   scopeToken: string | null;
   channelOffset: number;
+  channelLimit?: number;
 }
 
 export interface GuidePageNavigationRequest {
   state: EpgState;
   presentation: EpgPresentationSource;
-  offset: -5 | 5;
+  offset: number;
   scopeToken: string | null;
 }
 
@@ -114,7 +126,7 @@ interface GuidePresentationRefreshIntent {
   windowStartMs: number;
   requestedDurationMs: number;
   channelOffset: number;
-  channelLimit: 12 | 24;
+  channelLimit: number;
   timeBufferMs: number;
   warmOnly: boolean;
   cacheIdentity: string | null;
@@ -134,7 +146,7 @@ function createRefreshIntent(
   windowStartMs: number,
   requestedDurationMs: number,
   channelOffset: number,
-  channelLimit: 12 | 24,
+  channelLimit: number,
   timeBufferMs: number,
   warmOnly: boolean,
   cacheIdentity: string | null,
@@ -204,6 +216,16 @@ export function createGuidePresentationPolling(
     cachedScopeToken = null;
   };
 
+  const emitRequestWindowState = (
+    state: 'queued' | 'settled',
+    intent: GuidePresentationRefreshIntent,
+  ): void => options.requestWindowState?.(state, {
+    generation: intent.generation,
+    channelOffset: intent.channelOffset,
+    channelLimit: intent.channelLimit,
+    warmOnly: intent.warmOnly,
+  });
+
   const getRequestedDurationMs = (): number => getEpgWindowDurationMs(options.getGuideTimeRange());
 
   const refreshProfile = (): GuidePerformanceProfileConfig => {
@@ -227,6 +249,7 @@ export function createGuidePresentationPolling(
     if (trailingRefresh?.source === 'guide-page-change') {
       const cancelledTrailingPage = trailingRefresh;
       trailingRefresh = null;
+      emitRequestWindowState('settled', cancelledTrailingPage);
       cancelledTrailingPage.settle();
     }
     guidePresentationLifecycleGeneration += 1;
@@ -256,6 +279,7 @@ export function createGuidePresentationPolling(
       createGuideRefreshError('Guide refresh stopped.', 'AbortError'),
     );
     stoppedActive?.settle();
+    if (stoppedTrailing !== null) emitRequestWindowState('settled', stoppedTrailing);
     stoppedTrailing?.settle();
     invalidatePresentationCache();
     if (warmIdleHandle !== null && 'cancelIdleCallback' in options.host) options.host.cancelIdleCallback(warmIdleHandle);
@@ -278,6 +302,13 @@ export function createGuidePresentationPolling(
     const profile = refreshProfile();
     const latestIntent = trailingRefresh ?? activeRefresh;
     const channelOffset = refreshOptions.channelOffset ?? options.getChannelOffset?.() ?? 0;
+    const channelLimit = clampChannelLimit(refreshOptions.channelLimit ??
+      projectGuideForegroundChannelLimit(options.getCompleteVisibleRowCount?.() ?? 20, 2));
+    if (activeRefresh?.warmOnly === true && refreshOptions.warmOnly !== true) {
+      activeRefresh.abortController.abort(
+        createGuideRefreshError('Guide warm refresh superseded by foreground work.', 'AbortError'),
+      );
+    }
     const coalescedInterval = source === 'poll-interval'
       && latestIntent !== null
       && latestIntent.lifecycleGeneration === guidePresentationLifecycleGeneration
@@ -303,12 +334,13 @@ export function createGuidePresentationPolling(
         windowStartMs,
         requestedDurationMs,
         channelOffset,
-        profile.channelLimit,
+        channelLimit,
         profile.timeBufferMs,
         refreshOptions.warmOnly === true,
         getCacheIdentity(),
         pastItemsWindowGeneration,
       );
+      emitRequestWindowState('queued', intent);
       startRefresh(intent);
       return { promise: intent.promise, requestSequence };
     }
@@ -324,20 +356,22 @@ export function createGuidePresentationPolling(
         windowStartMs,
         requestedDurationMs,
         channelOffset,
-        profile.channelLimit,
+        channelLimit,
         profile.timeBufferMs,
         refreshOptions.warmOnly === true,
         getCacheIdentity(),
         pastItemsWindowGeneration,
       );
+      emitRequestWindowState('queued', trailingRefresh);
     } else {
+      emitRequestWindowState('settled', trailingRefresh);
       trailingRefresh.requestSequence = requestSequence;
       trailingRefresh.source = source;
       trailingRefresh.playerRefresh = playerRefresh;
       trailingRefresh.windowStartMs = windowStartMs;
       trailingRefresh.requestedDurationMs = requestedDurationMs;
       trailingRefresh.channelOffset = channelOffset;
-      trailingRefresh.channelLimit = profile.channelLimit;
+      trailingRefresh.channelLimit = channelLimit;
       trailingRefresh.timeBufferMs = profile.timeBufferMs;
       trailingRefresh.warmOnly = refreshOptions.warmOnly === true;
       trailingRefresh.cacheIdentity = getCacheIdentity();
@@ -347,6 +381,7 @@ export function createGuidePresentationPolling(
         trailingRefresh.lifecycleGeneration = guidePresentationLifecycleGeneration;
         trailingRefresh.advanceGenerationOnStart = false;
       }
+      emitRequestWindowState('queued', trailingRefresh);
     }
     return { promise: trailingRefresh.promise, requestSequence };
   };
@@ -369,6 +404,7 @@ export function createGuidePresentationPolling(
   const requestPage = (input: GuidePageRefreshRequest): Promise<void> => {
     const queued = queueRefresh('guide-page-change', {
       channelOffset: input.channelOffset,
+      channelLimit: input.channelLimit ?? projectGuideForegroundChannelLimit(options.getCompleteVisibleRowCount?.() ?? 20, 2),
       showLoading: false,
     });
     if (queued.requestSequence === 0) return queued.promise;
@@ -383,7 +419,7 @@ export function createGuidePresentationPolling(
       input.presentation,
       input.offset,
       pendingPage?.targetGlobalIndex ?? null,
-      refreshProfile().channelLimit,
+      projectGuideForegroundChannelLimit(options.getCompleteVisibleRowCount?.() ?? 20, 2),
     );
     if (decision === null) return { handled: false, targetLocalIndex: null };
     if (decision.boundaryClamped) return { handled: true, targetLocalIndex: null };
@@ -401,9 +437,11 @@ export function createGuidePresentationPolling(
 
   const startRefresh = (intent: GuidePresentationRefreshIntent): void => {
     if (intent.advanceGenerationOnStart) {
+      emitRequestWindowState('settled', intent);
       intent.generation = ++guidePresentationGeneration;
       intent.lifecycleGeneration = guidePresentationLifecycleGeneration;
       intent.advanceGenerationOnStart = false;
+      emitRequestWindowState('queued', intent);
     }
     activeRefresh = intent;
     void executeRefresh(intent).catch(() => undefined);
@@ -453,6 +491,7 @@ export function createGuidePresentationPolling(
           intent.generation,
           settlePagingSuccess(intent, cached),
           resolveEffectiveStartTimeMs(intent, cached),
+          { channelOffset: intent.channelOffset, channelLimit: intent.channelLimit },
         );
         queueIdleWarming(intent, cached);
         return;
@@ -479,7 +518,8 @@ export function createGuidePresentationPolling(
           if (intent.playerRefresh) {
             options.handlePlayerFailure?.(intent.source, message, intent.generation);
           } else {
-            options.handleFailure(intent.source, message, intent.generation, settlePagingFailure(intent));
+            options.handleFailure(intent.source, message, intent.generation, settlePagingFailure(intent),
+              { channelOffset: intent.channelOffset, channelLimit: intent.channelLimit });
           }
         }
         return;
@@ -495,14 +535,21 @@ export function createGuidePresentationPolling(
               result.error.message,
               intent.generation,
               settlePagingFailure(intent),
+              { channelOffset: intent.channelOffset, channelLimit: intent.channelLimit },
             );
           }
         } else {
           const normalized = normalizeEpgPresentation(result.value);
           const nextScopeToken = normalized.libraryFilter?.scopeToken ?? null;
+          const establishedScopeToken = options.getCacheScopeToken?.() ?? null;
+          if (establishedScopeToken !== null && nextScopeToken !== establishedScopeToken) {
+            settlePagingFailure(intent);
+            markSettled('rejected', false);
+            return;
+          }
           if (cachedScopeToken !== null && nextScopeToken !== cachedScopeToken) invalidatePresentationCache();
           cachedScopeToken = nextScopeToken;
-          const scopeMatches = nextScopeToken === (options.getCacheScopeToken?.() ?? null);
+          const scopeMatches = nextScopeToken === establishedScopeToken;
           if (key !== null && intent.cacheIdentity === getCacheIdentity() && scopeMatches) {
             presentationCache.set({
               key,
@@ -527,6 +574,7 @@ export function createGuidePresentationPolling(
             intent.generation,
             settlePagingSuccess(intent, lastValidPresentation),
             effectiveStartTimeMs,
+            { channelOffset: intent.channelOffset, channelLimit: intent.channelLimit },
           );
           queueIdleWarming(intent, lastValidPresentation);
         }
@@ -581,6 +629,7 @@ export function createGuidePresentationPolling(
   };
 
   const completeRefresh = (intent: GuidePresentationRefreshIntent): void => {
+    emitRequestWindowState('settled', intent);
     intent.settle();
     if (activeRefresh !== intent) return;
     activeRefresh = null;
@@ -683,6 +732,11 @@ export function createGuidePresentationPolling(
       }
     },
   };
+}
+
+function clampChannelLimit(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(24, Math.max(1, Math.trunc(value)));
 }
 
 function waitForGuidePresentation<T>(

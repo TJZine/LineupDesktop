@@ -23,6 +23,7 @@ import {
 } from '../../renderer/guideVirtualization.js';
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import type { RouteWorkflowViewModel } from '../../renderer/workflow.js';
+import { GuideChannelWindow } from '../../renderer/guideChannelWindow.js';
 
 const SLOT = 30 * 60_000;
 const ROW_OUTER_SIZE = 120;
@@ -69,6 +70,40 @@ test('300-by-48 projection preserves header-relative viewport geometry, internal
   ));
 });
 
+for (const total of [459, 500]) {
+  test(`sparse ${String(total)}-row projection preserves exact extent and reaches scrollbar maximum`, () => {
+    const rowOffset = total - 8;
+    const rows: EpgChannelRowViewModel[] = Array.from({ length: 8 }, (_, localIndex) => ({
+      id: `channel-${String(rowOffset + localIndex)}`,
+      number: String(rowOffset + localIndex + 1),
+      name: `Channel ${String(rowOffset + localIndex + 1)}`,
+      programs: [],
+      isSelected: false,
+      absoluteIndex: rowOffset + localIndex,
+      loadState: 'ready',
+    }));
+    const projection = projectGuideVirtualRange({
+      rows,
+      rowOffset,
+      totalRowCount: total,
+      scrollTop: (total - 6) * ROW_OUTER_SIZE,
+      viewportHeight: 6 * ROW_OUTER_SIZE,
+      rowOuterSize: ROW_OUTER_SIZE,
+      windowStartMs: 0,
+      windowEndMs: 6 * SLOT,
+      focusedRowIndex: -1,
+      focusedProgramId: null,
+    });
+    assert.equal(projection.rowIndexes.at(-1), total - 1, 'scrollbar maximum mounts the last eligible row');
+    const representedExtent = projection.rowPlacements.reduce(
+      (count, placement) => count + placement.gapBefore + 1,
+      0,
+    ) + projection.trailingRows;
+    assert.equal(representedExtent, total, 'rows plus spacers represent the exact eligible total');
+    assert.ok(projection.rowIndexes.length <= GUIDE_DOM_ROW_CAP);
+  });
+}
+
 test('actual Guide DOM reconciliation keeps buffer data inert, caches layout reads, and respects deterministic work caps', () => {
   const originalDocument = globalThis.document;
   const metrics = { reads: 0 };
@@ -109,8 +144,8 @@ test('actual Guide DOM reconciliation keeps buffer data inert, caches layout rea
     const spacerHeights = grid.descendants()
       .filter((node) => node.className === 'epg-grid__row-spacer')
       .map((node) => Number.parseInt(node.style.height, 10));
-    assert.ok(spacerHeights.includes(137 * ACTUAL_ROW_STRIDE - ACTUAL_SHELL_GAP));
-    assert.ok(spacerHeights.includes(51 * ACTUAL_ROW_STRIDE - ACTUAL_SHELL_GAP));
+    assert.ok(spacerHeights.includes(138 * ACTUAL_ROW_STRIDE - ACTUAL_SHELL_GAP));
+    assert.ok(spacerHeights.includes(52 * ACTUAL_ROW_STRIDE - ACTUAL_SHELL_GAP));
     const renderedProgramIds = grid.descendants()
       .map((node) => node.dataset.guideProgramId)
       .filter((id): id is string => id !== undefined);
@@ -263,6 +298,51 @@ test('Guide cache freshness is strict before the poll interval and removes entri
     { focused: false, current: false },
     { nowMs: 16_000, maxAgeMs: 15_000 },
   ), 'fresh');
+});
+
+test('sparse absolute DOM projection uses total geometry and keeps loading rows inert and errors retryable', () => {
+  const originalDocument = globalThis.document;
+  const metrics = { reads: 0 };
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: { createElement: (tagName: string) => new LayoutProbeElement(tagName, metrics) },
+  });
+  try {
+    const owner = new GuideChannelWindow();
+    owner.reset('scope');
+    const first = owner.createIntent(1, 0, 10);
+    owner.markLoading(first);
+    const initial = fixturePresentation();
+    assert.equal(owner.merge(first, { ...initial, nowMs: initial.nowMs ?? 0, channels: initial.channels.slice(0, 10), channelWindow: { offset: 0, total: 500 } }), true);
+    owner.setVisible(250, 6, 2);
+    const loadingIntent = owner.beginForeground(2);
+    assert.ok(loadingIntent !== null);
+    owner.markLoading(loadingIntent);
+    const loadingPresentation = owner.presentation();
+    const loadingState = { ...createEpgState(loadingPresentation, 2, 'wide'), presentationState: 'ready' as const };
+    const grid = new LayoutProbeElement('main', metrics);
+    grid.clientHeight = 6 * ROW_OUTER_SIZE;
+    grid.scrollTop = 250 * ROW_OUTER_SIZE;
+    renderEpgGuideDom(routeView(createEpgGuideView(loadingState, loadingPresentation)), guideDomBindings(grid));
+    const loadingRows = grid.descendants().filter((node) => node.dataset.guideRowState === 'loading');
+    assert.ok(loadingRows.length > 0 && loadingRows.length <= GUIDE_DOM_ROW_CAP);
+    assert.ok(loadingRows.every((row) => row.getAttribute('aria-hidden') === 'true'));
+    assert.ok(loadingRows.every((row) => row.descendants().every((node) =>
+      node.dataset.guideProgramId === undefined && node.dataset.focusId === undefined)));
+    assert.ok(grid.descendants().some((node) => node.dataset.guideProgramId?.startsWith('program-2-') === true),
+      'the previously focused real row remains connected while the jumped window loads');
+    assert.ok(grid.descendants().some((node) => node.className === 'epg-grid__row-spacer' && Number.parseInt(node.style.height, 10) > 200 * ROW_OUTER_SIZE));
+
+    owner.fail(loadingIntent);
+    const errorPresentation = owner.presentation();
+    renderEpgGuideDom(routeView(createEpgGuideView(loadingState, errorPresentation)), guideDomBindings(grid));
+    const retry = grid.descendants().find((node) => node.dataset.guideRetryIndex !== undefined);
+    assert.equal(retry?.dataset.guideAction, 'retry');
+    assert.equal(retry?.dataset.guideProgramId, undefined);
+  } finally {
+    if (originalDocument === undefined) delete (globalThis as { document?: Document }).document;
+    else Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
+  }
 });
 
 function fixtureRows(): readonly EpgChannelRowViewModel[] {

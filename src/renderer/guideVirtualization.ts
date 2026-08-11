@@ -2,13 +2,14 @@ import type { EpgChannelRowViewModel } from './epg.js';
 
 export const GUIDE_DOM_ROW_CAP = 24;
 export const GUIDE_DOM_CELL_CAP = 400;
-export const GUIDE_ROW_BUFFER = 3;
+export const GUIDE_ROW_BUFFER = 2;
 export const GUIDE_DOM_TIME_BUFFER_MS = 120 * 60_000;
 
 export type GuidePerformanceProfile = 'auto' | 'reduced-resource';
 
 export interface GuidePerformanceProfileConfig {
-  readonly channelLimit: 12 | 24;
+  /** Upper bound retained for cache/warm-page geometry; foreground sizing is viewport-derived. */
+  readonly channelLimit: 24;
   readonly timeBufferMs: number;
   readonly maximumEntries: 6 | 12;
   readonly maximumPrograms: 6_000 | 12_000;
@@ -38,6 +39,14 @@ export interface GuideVirtualRangeInput {
   readonly windowEndMs: number;
   readonly focusedRowIndex: number;
   readonly focusedProgramId: string | null;
+  readonly rowOffset?: number;
+  readonly totalRowCount?: number;
+}
+
+export function projectGuideForegroundChannelLimit(completeVisibleRows: number, overscanRows = GUIDE_ROW_BUFFER): number {
+  const visible = Number.isFinite(completeVisibleRows) ? Math.max(1, Math.trunc(completeVisibleRows)) : 1;
+  const overscan = Number.isFinite(overscanRows) ? Math.max(0, Math.trunc(overscanRows)) : 0;
+  return Math.min(GUIDE_DOM_ROW_CAP, visible + overscan * 2);
 }
 
 export interface GuideVirtualRange {
@@ -50,7 +59,8 @@ export interface GuideVirtualRange {
 
 /** Pure Desktop Guide row/cell projection. Layout values are sampled by the DOM lifecycle owner. */
 export function projectGuideVirtualRange(input: GuideVirtualRangeInput): GuideVirtualRange {
-  const rowCount = input.rows.length;
+  const rowOffset = Math.max(0, Math.trunc(input.rowOffset ?? 0));
+  const rowCount = Math.max(input.rows.length, Math.trunc(input.totalRowCount ?? input.rows.length));
   if (rowCount === 0) {
     return { rowIndexes: [], rowPlacements: [], programIds: new Set(), leadingRows: 0, trailingRows: 0 };
   }
@@ -81,7 +91,8 @@ export function projectGuideVirtualRange(input: GuideVirtualRangeInput): GuideVi
     candidates.add(input.focusedRowIndex);
     protectedRows.add(input.focusedRowIndex);
   }
-  const rowIndexes = [...candidates];
+  const availableIndexes = new Set(input.rows.map((row, localIndex) => row.absoluteIndex ?? rowOffset + localIndex));
+  const rowIndexes = [...candidates].filter((index) => availableIndexes.has(index));
   while (rowIndexes.length > GUIDE_DOM_ROW_CAP) {
     const evictable = rowIndexes.filter((index) => !protectedRows.has(index));
     const source = evictable;
@@ -92,7 +103,9 @@ export function projectGuideVirtualRange(input: GuideVirtualRangeInput): GuideVi
   }
   rowIndexes.sort((left, right) => left - right);
 
-  const cells = rowIndexes.flatMap((rowIndex) => (input.rows[rowIndex]?.programs ?? [])
+  const cells = rowIndexes.flatMap((rowIndex) => (input.rows.find(
+    (row, localIndex) => (row.absoluteIndex ?? rowOffset + localIndex) === rowIndex,
+  )?.programs ?? [])
     .filter((program) => program.startsAtMs < input.windowEndMs + GUIDE_DOM_TIME_BUFFER_MS
       && program.endsAtMs > input.windowStartMs - GUIDE_DOM_TIME_BUFFER_MS)
     .map((program) => ({

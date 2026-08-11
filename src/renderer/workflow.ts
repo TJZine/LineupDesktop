@@ -520,7 +520,7 @@ export function applyWorkflowEpgDirection(
 
 export function applyWorkflowEpgPage(
   state: WorkflowState,
-  offset: -5 | 5,
+  offset: number,
 ): { workflowState: WorkflowState; result: EpgDirectionResult } {
   const result = pageEpgSelection(state.epg, offset, state.guidePresentation);
   return {

@@ -272,6 +272,28 @@
   pointer-events: none;
 }
 
+.epg-grid__row--placeholder {
+  align-items: stretch;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.epg-grid__row--placeholder[data-guide-row-state='error'] {
+  pointer-events: auto;
+}
+
+.epg-grid__row-status {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-surface-raised) 82%, transparent);
+  border: 1px dashed var(--color-border);
+  color: inherit;
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: center;
+  min-height: 100%;
+  width: 100%;
+}
+
 .epg-grid__row::before {
   content: none;
 }

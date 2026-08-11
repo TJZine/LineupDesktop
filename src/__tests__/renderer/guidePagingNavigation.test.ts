@@ -74,6 +74,7 @@ test('Guide paging owner binds focus to its exact request and retains last valid
     } satisfies GuidePresentationPollingOptions['guide'],
     host: timerHost(), getActiveRoute: () => route, getWindowStartMs: () => 0, getGuideTimeRange: () => 'wide',
     getGuidePerformanceProfile: () => 'reduced-resource',
+    getCacheScopeToken: () => 'scope',
     setLoading: () => undefined,
     setPagingBusy: (value) => busy.push(value),
     applyPresentation: (value, generation, target) => {
@@ -106,7 +107,8 @@ test('Guide paging owner binds focus to its exact request and retains last valid
   const wrongScope = polling.requestPage({ targetGlobalIndex: 20, scopeToken: 'scope', channelOffset: 15 });
   requests[2]?.resolve(okPresentation(9, 15, 30, 'new-scope'));
   await wrongScope;
-  assert.deepEqual(applied.at(-1), { offset: 15, target: null });
+  assert.deepEqual(applied, [{ offset: 10, target: 12 }], 'wrong-scope rows cannot replace the current page');
+  assert.equal(focusedAfterPaging, 'channel-12');
 
   const canceled = polling.requestPage({ targetGlobalIndex: 25, scopeToken: 'new-scope', channelOffset: 20 });
   route = 'settings';
@@ -114,7 +116,7 @@ test('Guide paging owner binds focus to its exact request and retains last valid
   await canceled;
   requests[3]?.resolve(okPresentation(9, 20, 30, 'new-scope'));
   await settle();
-  assert.equal(applied.length, 2);
+  assert.equal(applied.length, 1);
   assert.equal(busy.at(-1), false);
 });
 
