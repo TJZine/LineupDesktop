@@ -67,7 +67,7 @@ test('support bundle export result applies to the latest workflow state', async 
   currentState = activateWorkflowRoute(
     applyWorkflowSettingsValues(currentState, {
       ...DEFAULT_DESKTOP_SETTINGS_VALUES,
-      guideDensity: 'compact',
+      guideTimeRange: 'wide',
     }),
     'guide',
   );
@@ -85,7 +85,7 @@ test('support bundle export result applies to the latest workflow state', async 
   const state = await pendingState;
 
   assert.equal(state.routeState.activeRoute, 'guide');
-  assert.equal(state.settingsDraft.guideDensity, 'compact');
+  assert.equal(state.settingsDraft.guideTimeRange, 'wide');
   assert.deepEqual(state.settingsDraft.supportBundleExport, {
     status: 'succeeded',
     bundleDirectoryName: 'lineup-desktop-support-bundle-2',

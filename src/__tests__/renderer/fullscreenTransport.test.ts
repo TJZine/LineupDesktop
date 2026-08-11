@@ -54,13 +54,13 @@ test('fullscreen coordinator serializes settings and stale shell intents while r
         outputs: [{ kind: 'system-default', id: 'system-default', label: 'System default' }],
       }),
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, createDesktopSettingsView({
-        schemaVersion: 2,
+        schemaVersion: 3,
         revision: 1,
         status: 'ready',
         values: DEFAULT_DESKTOP_SETTINGS_VALUES,
       })),
       replace: async ({ requestId, values }) => desktopSettingsSuccess(requestId, createDesktopSettingsView({
-        schemaVersion: 2,
+        schemaVersion: 3,
         revision: 2,
         status: 'ready',
         values: normalizeDesktopSettingsReplaceValues(values),

@@ -239,7 +239,7 @@ function hydratedPolicy(
 
 function snapshot(overrides: Partial<DesktopSettingsValues>) {
   return {
-    schemaVersion: 2 as const,
+    schemaVersion: 3 as const,
     revision: 1,
     status: 'ready' as const,
     values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, ...overrides },

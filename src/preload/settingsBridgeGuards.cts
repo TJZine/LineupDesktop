@@ -11,7 +11,6 @@ export const SETTINGS_ERROR_CODES = [
   'validation-failed',
   'revision-conflict',
   'storage-unavailable',
-  'unsupported-version',
   'operation-failed',
 ] as const;
 export const SETTINGS_ERROR_MESSAGES = {
@@ -19,7 +18,6 @@ export const SETTINGS_ERROR_MESSAGES = {
   'validation-failed': 'Desktop settings request or response was invalid.',
   'revision-conflict': 'Desktop settings changed; refresh and try again.',
   'storage-unavailable': 'Desktop settings storage is unavailable.',
-  'unsupported-version': 'Desktop settings require a newer compatible version.',
   'operation-failed': 'Desktop settings operation failed.',
 } as const;
 
@@ -54,8 +52,9 @@ export function isSettingsReplaceRequest(value: unknown): value is {
     transcodeCompatibilityModeEnabled: boolean;
     libraryTabsEnabled: boolean;
     nowWatchingBannerEnabled: boolean;
-    aggressiveGuidePreloadEnabled: boolean;
-    guideDensity: 'comfortable' | 'compact';
+    guideTimeRange: 'detailed' | 'wide';
+    guidePerformanceProfile: 'auto' | 'reduced-resource';
+    guideRowDensity: 'auto' | 'comfortable' | 'compact';
     guideLayout: 'overlay' | 'classic';
     pastItemsWindow: 'auto' | '0' | '15' | '30';
     infoBoxBackgroundMode: 'artwork-bleed' | 'artwork' | 'theme-default';
@@ -122,7 +121,7 @@ export function settingsBridgeFailure(
 function isSettingsSnapshot(value: unknown): boolean {
   return isPlainRecord(value) && hasOnlyKeys(value, ['schemaVersion', 'revision', 'status', 'values']) &&
     value.schemaVersion === SETTINGS_SCHEMA_VERSION && isSafeRevision(value.revision) &&
-    ['ready', 'missing', 'corrupt', 'unsupported-version'].includes(value.status as string) &&
+    ['ready', 'missing', 'corrupt'].includes(value.status as string) &&
     isSettingsValues(value.values, false);
 }
 
@@ -177,8 +176,9 @@ const SETTINGS_VALUE_KEYS = [
   'transcodeCompatibilityModeEnabled',
   'libraryTabsEnabled',
   'nowWatchingBannerEnabled',
-  'aggressiveGuidePreloadEnabled',
-  'guideDensity',
+  'guideTimeRange',
+  'guidePerformanceProfile',
+  'guideRowDensity',
   'guideLayout',
   'pastItemsWindow',
   'infoBoxBackgroundMode',
@@ -211,8 +211,9 @@ function isSettingsValues(value: unknown, allowSystemDefault: boolean): boolean 
     typeof value.transcodeCompatibilityModeEnabled === 'boolean' &&
     typeof value.libraryTabsEnabled === 'boolean' &&
     typeof value.nowWatchingBannerEnabled === 'boolean' &&
-    typeof value.aggressiveGuidePreloadEnabled === 'boolean' &&
-    (value.guideDensity === 'comfortable' || value.guideDensity === 'compact') &&
+    (value.guideTimeRange === 'detailed' || value.guideTimeRange === 'wide') &&
+    (value.guidePerformanceProfile === 'auto' || value.guidePerformanceProfile === 'reduced-resource') &&
+    (value.guideRowDensity === 'auto' || value.guideRowDensity === 'comfortable' || value.guideRowDensity === 'compact') &&
     (value.guideLayout === 'overlay' || value.guideLayout === 'classic') &&
     ['auto', '0', '15', '30'].includes(value.pastItemsWindow as string) &&
     ['artwork-bleed', 'artwork', 'theme-default'].includes(value.infoBoxBackgroundMode as string) &&

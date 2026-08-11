@@ -24,7 +24,6 @@ const DESKTOP_SETTINGS_ERROR_MESSAGES: Record<DesktopSettingsErrorCode, string> 
   'validation-failed': 'Desktop settings request or response was invalid.',
   'revision-conflict': 'Desktop settings changed; refresh and try again.',
   'storage-unavailable': 'Desktop settings storage is unavailable.',
-  'unsupported-version': 'Desktop settings require a newer compatible version.',
   'operation-failed': 'Desktop settings operation failed.',
 };
 

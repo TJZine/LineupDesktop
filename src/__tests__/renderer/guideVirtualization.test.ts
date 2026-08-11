@@ -13,8 +13,8 @@ import {
   renderEpgGuideDom,
 } from '../../renderer/epg/guideDom.js';
 import {
-  AGGRESSIVE_GUIDE_PRELOAD_PROFILE,
-  DEFAULT_GUIDE_PRELOAD_PROFILE,
+  AUTO_GUIDE_PRELOAD_PROFILE,
+  REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE,
   GUIDE_DOM_CELL_CAP,
   GUIDE_DOM_ROW_CAP,
   GuidePresentationLru,
@@ -78,7 +78,7 @@ test('actual Guide DOM reconciliation keeps buffer data inert, caches layout rea
   });
   try {
     const source = fixturePresentation();
-    const baseState = createEpgState(source, 1, 'compact');
+    const baseState = createEpgState(source, 1, 'wide');
     const state200 = {
       ...baseState,
       windowStartMs: 12 * SLOT,
@@ -179,21 +179,22 @@ test('actual Guide DOM reconciliation keeps buffer data inert, caches layout rea
 test('Desktop cache identities and LRU protect current/focused entries within both profile caps', () => {
   const identity = projectGuideCacheIdentity({
     scopeToken: 'scope-a', revision: 1, selectedLibraryId: null, pastItemsWindow: 'auto',
-    guideDensity: 'compact', aggressivePreload: false,
+    guideTimeRange: 'wide', guidePerformanceProfile: 'auto', guideRowDensity: 'auto',
   });
   for (const changed of [
     { scopeToken: 'scope-b' }, { revision: 2 }, { selectedLibraryId: 'library' },
-    { pastItemsWindow: '30' }, { guideDensity: 'comfortable' }, { aggressivePreload: true },
+    { pastItemsWindow: '30' }, { guideTimeRange: 'detailed' },
+    { guidePerformanceProfile: 'reduced-resource' }, { guideRowDensity: 'compact' },
   ]) {
     assert.notEqual(projectGuideCacheIdentity({
       scopeToken: 'scope-a', revision: 1, selectedLibraryId: null, pastItemsWindow: 'auto',
-      guideDensity: 'compact', aggressivePreload: false, ...changed,
+      guideTimeRange: 'wide', guidePerformanceProfile: 'auto', guideRowDensity: 'auto', ...changed,
     }), identity);
   }
 
   for (const [profile, expectedEntries] of [
-    [DEFAULT_GUIDE_PRELOAD_PROFILE, 6],
-    [AGGRESSIVE_GUIDE_PRELOAD_PROFILE, 12],
+    [REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE, 6],
+    [AUTO_GUIDE_PRELOAD_PROFILE, 12],
   ] as const) {
     const cache = new GuidePresentationLru<string>(profile);
     cache.set({ key: 'focused', value: 'focused', fetchedAtMs: 0, programCount: 500, focused: true, current: false });
@@ -215,11 +216,17 @@ test('Desktop cache identities and LRU protect current/focused entries within bo
     assert.equal(cache.get('focused'), null);
     assert.equal(cache.get('current'), null);
   }
+  assert.equal(REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.channelLimit, AUTO_GUIDE_PRELOAD_PROFILE.channelLimit);
+  assert.equal(REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs, AUTO_GUIDE_PRELOAD_PROFILE.timeBufferMs);
+  assert.equal(REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.maximumEntries, 6);
+  assert.equal(REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.maximumPrograms, 6_000);
+  assert.equal(AUTO_GUIDE_PRELOAD_PROFILE.maximumEntries, 12);
+  assert.equal(AUTO_GUIDE_PRELOAD_PROFILE.maximumPrograms, 12_000);
 });
 
 test('Guide cache freshness is strict before the poll interval and removes entries at the boundary', () => {
   const cache = new GuidePresentationLru<string>({
-    ...DEFAULT_GUIDE_PRELOAD_PROFILE,
+    ...REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE,
     maximumEntries: 12,
     maximumPrograms: 6_000,
   });

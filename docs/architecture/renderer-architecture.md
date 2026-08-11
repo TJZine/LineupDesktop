@@ -19,6 +19,16 @@ including `WS4-PROOF-01`–`WS4-PROOF-04` and the mandatory three-row Package 6
 operator-assisted fullscreen audit, remains pending. Historical completed units
 below describe their bounded implementation history only.
 
+Guide G1 supersedes the current Settings shape with the sole exact version-3
+contract. It separates Detailed/Wide time range, Auto/Reduced resource policy,
+and Auto/Comfortable/Compact row-density selection without adding preload/IPC
+methods or renderer persistence. Auto and Reduced resource share foreground
+Guide request reach; Reduced resource disables idle warming and keeps the
+conservative cache-retention bounds. Accepted Guide-setting changes coalesce
+through one focused settlement owner, cancel stale presentation work, retain
+eligible focus intent, and invalidate the affected Guide identity. G4 still
+owns responsive row geometry, and G6 still owns Windows DPI/live/native proof.
+
 This document owns the detailed renderer shell breakdown referenced by
 [`CURRENT_STATE.md`](./CURRENT_STATE.md). Keep the current-state table concise;
 record renderer module ownership and completed renderer architecture units here.

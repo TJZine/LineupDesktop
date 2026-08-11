@@ -98,7 +98,7 @@ test('forced-color player overlay CSS targets the semantic presentation surface'
   assert.equal(containsCssSelector(forcedColors ?? '', '.player-surface'), false);
 });
 
-test('Guide density no longer compresses row geometry', () => {
+test('Guide time range no longer compresses row geometry', () => {
   const processValue = Reflect.get(globalThis, 'process') as {
     getBuiltinModule(name: string): { readFileSync(path: URL, encoding: 'utf8'): string };
   };
@@ -106,8 +106,8 @@ test('Guide density no longer compresses row geometry', () => {
     new URL('../../renderer/styles/guide-epg.css', import.meta.url),
     'utf8',
   );
-  assert.equal(containsCssSelector(guide, '.epg-shell[data-guide-density="compact"]'), false);
-  assert.equal(containsCssSelector(guide, '.epg-shell[data-guide-density="comfortable"]'), false);
+  assert.equal(containsCssSelector(guide, '.epg-shell[data-guide-time-range="wide"]'), false);
+  assert.equal(containsCssSelector(guide, '.epg-shell[data-guide-time-range="detailed"]'), false);
   const shell = extractCssRule(guide, '.epg-shell');
   assert.equal(cssDeclaration(shell, '--guide-row-height'), '108px');
   const channel = extractCssRule(guide, '.epg-grid__channel');

@@ -21,7 +21,6 @@ export const DESKTOP_SETTINGS_LOAD_STATUSES = [
   'ready',
   'missing',
   'corrupt',
-  'unsupported-version',
 ] as const;
 
 export const DESKTOP_SETTINGS_ERROR_CODES = [
@@ -29,7 +28,6 @@ export const DESKTOP_SETTINGS_ERROR_CODES = [
   'validation-failed',
   'revision-conflict',
   'storage-unavailable',
-  'unsupported-version',
   'operation-failed',
 ] as const;
 
@@ -38,7 +36,6 @@ export const DESKTOP_SETTINGS_ERROR_MESSAGES = {
   'validation-failed': 'Desktop settings request or response was invalid.',
   'revision-conflict': 'Desktop settings changed; refresh and try again.',
   'storage-unavailable': 'Desktop settings storage is unavailable.',
-  'unsupported-version': 'Desktop settings require a newer compatible version.',
   'operation-failed': 'Desktop settings operation failed.',
 } as const satisfies Record<DesktopSettingsErrorCode, string>;
 
@@ -61,8 +58,9 @@ export const DESKTOP_SETTINGS_VALUE_KEYS = [
   'transcodeCompatibilityModeEnabled',
   'libraryTabsEnabled',
   'nowWatchingBannerEnabled',
-  'aggressiveGuidePreloadEnabled',
-  'guideDensity',
+  'guideTimeRange',
+  'guidePerformanceProfile',
+  'guideRowDensity',
   'guideLayout',
   'pastItemsWindow',
   'infoBoxBackgroundMode',
@@ -92,8 +90,9 @@ export interface DesktopSettingsValues {
   transcodeCompatibilityModeEnabled: boolean;
   libraryTabsEnabled: boolean;
   nowWatchingBannerEnabled: boolean;
-  aggressiveGuidePreloadEnabled: boolean;
-  guideDensity: 'comfortable' | 'compact';
+  guideTimeRange: 'detailed' | 'wide';
+  guidePerformanceProfile: 'auto' | 'reduced-resource';
+  guideRowDensity: 'auto' | 'comfortable' | 'compact';
   guideLayout: 'overlay' | 'classic';
   pastItemsWindow: 'auto' | '0' | '15' | '30';
   infoBoxBackgroundMode: 'artwork-bleed' | 'artwork' | 'theme-default';
@@ -226,8 +225,9 @@ export const DEFAULT_DESKTOP_SETTINGS_VALUES: Readonly<DesktopSettingsValues> = 
   transcodeCompatibilityModeEnabled: false,
   libraryTabsEnabled: true,
   nowWatchingBannerEnabled: true,
-  aggressiveGuidePreloadEnabled: false,
-  guideDensity: 'comfortable',
+  guideTimeRange: 'detailed',
+  guidePerformanceProfile: 'auto',
+  guideRowDensity: 'auto',
   guideLayout: 'classic',
   pastItemsWindow: 'auto',
   infoBoxBackgroundMode: 'theme-default',
@@ -463,8 +463,9 @@ function isSettingsValues(value: unknown, allowSystemDefault: boolean): boolean 
     typeof value.transcodeCompatibilityModeEnabled === 'boolean' &&
     typeof value.libraryTabsEnabled === 'boolean' &&
     typeof value.nowWatchingBannerEnabled === 'boolean' &&
-    typeof value.aggressiveGuidePreloadEnabled === 'boolean' &&
-    (value.guideDensity === 'comfortable' || value.guideDensity === 'compact') &&
+    (value.guideTimeRange === 'detailed' || value.guideTimeRange === 'wide') &&
+    (value.guidePerformanceProfile === 'auto' || value.guidePerformanceProfile === 'reduced-resource') &&
+    (value.guideRowDensity === 'auto' || value.guideRowDensity === 'comfortable' || value.guideRowDensity === 'compact') &&
     (value.guideLayout === 'overlay' || value.guideLayout === 'classic') &&
     ['auto', '0', '15', '30'].includes(value.pastItemsWindow as string) &&
     ['artwork-bleed', 'artwork', 'theme-default'].includes(value.infoBoxBackgroundMode as string) &&

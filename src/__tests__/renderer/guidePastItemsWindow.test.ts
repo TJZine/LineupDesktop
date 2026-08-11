@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  EPG_COMPACT_WINDOW_DURATION_MS,
+  EPG_WIDE_WINDOW_DURATION_MS,
   EPG_SLOT_DURATION_MS,
   computeProvisionalEpgMinimumStartTimeMs,
   createEpgGuideView,
@@ -14,7 +14,7 @@ import {
   type EpgPresentationSource,
 } from '../../renderer/epg.js';
 import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
-import { DEFAULT_GUIDE_PRELOAD_PROFILE } from '../../renderer/guideVirtualization.js';
+import { REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE } from '../../renderer/guideVirtualization.js';
 
 const BASE = Date.UTC(2026, 6, 8, 12, 0);
 
@@ -67,12 +67,12 @@ type GuideRequest = { startTimeMs: number; durationMs: number; channelOffset?: n
 
 test('renderer uses conservative Auto 15 provisionally and never moves left of the bound', () => {
   const source = presentation();
-  let state = createEpgState(source, 1, 'compact');
+  let state = createEpgState(source, 1, 'wide');
   const provisional = computeProvisionalEpgMinimumStartTimeMs(BASE, 'auto');
   state = setEpgPastItemsWindow(state, 'auto', BASE, source);
   assert.equal(state.minimumStartTimeMs, provisional);
   const accepted = presentation(BASE);
-  const settled = settleEpgPresentation(state, accepted, 2, null, false, 'compact', BASE);
+  const settled = settleEpgPresentation(state, accepted, 2, null, false, 'wide', BASE);
   assert.equal(settled.state.minimumStartTimeMs, BASE);
   assert.equal(settled.state.windowStartMs, BASE);
   const moved = moveEpgSelection(settled.state, 'left', accepted);
@@ -145,7 +145,7 @@ test('renderer clamps every left/window/focus path while retaining an overlappin
     channelWindow: { offset: 0, total: 2 },
     libraryFilter: { scopeToken: 'scope', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'ready' },
   };
-  const initial = createEpgState(source, 3, 'compact');
+  const initial = createEpgState(source, 3, 'wide');
   const movedLeft = moveEpgSelection({ ...initial, windowStartMs: bound + EPG_SLOT_DURATION_MS }, 'left', source);
   assert.equal(movedLeft.state.windowStartMs, bound);
   assert.equal(movedLeft.state.windowStartMs >= bound, true);
@@ -166,11 +166,13 @@ test('polling adopts the main-clamped effective start and full duration without 
         requests.push(request);
         return await pending.promise as never;
       },
+      cancelPresentation: async () => undefined,
     } as never,
     host: host(),
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => BASE - EPG_SLOT_DURATION_MS,
-    getGuideDensity: () => 'compact',
+    getGuideTimeRange: () => 'wide',
+    getGuidePerformanceProfile: () => 'reduced-resource',
     setLoading: () => undefined,
     applyPresentation: (_value, _generation, _target, effectiveStartTimeMs) => {
       applied.push({ effectiveStartTimeMs });
@@ -180,10 +182,10 @@ test('polling adopts the main-clamped effective start and full duration without 
   const refresh = polling.refresh('past-window');
   await Promise.resolve();
   assert.deepEqual(requests, [{
-    startTimeMs: BASE - EPG_SLOT_DURATION_MS - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
-    durationMs: EPG_COMPACT_WINDOW_DURATION_MS + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
+    startTimeMs: BASE - EPG_SLOT_DURATION_MS - REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+    durationMs: EPG_WIDE_WINDOW_DURATION_MS + REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
     channelOffset: 0,
-    channelLimit: DEFAULT_GUIDE_PRELOAD_PROFILE.channelLimit,
+    channelLimit: REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.channelLimit,
   }]);
   pending.resolve({
     ok: true,
@@ -204,21 +206,23 @@ test('sequential polling settlements advance the bound and retain a program cros
   ];
   const requests: number[] = [];
   const renderedProgramIds: string[] = [];
-  let state = createEpgState(presentation(), 1, 'compact');
+  let state = createEpgState(presentation(), 1, 'wide');
   const polling = createGuidePresentationPolling({
     guide: {
       getPresentation: async (request: GuideRequest) => {
         requests.push(request.startTimeMs);
         return { ok: true, requestId: `rollover-${requests.length}`, value: results.shift()! };
       },
+      cancelPresentation: async () => undefined,
     } as never,
     host: host(),
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => state.windowStartMs,
-    getGuideDensity: () => 'compact',
+    getGuideTimeRange: () => 'wide',
+    getGuidePerformanceProfile: () => 'reduced-resource',
     setLoading: () => undefined,
     applyPresentation: (value, generation, target, effectiveStartTimeMs) => {
-      state = settleEpgPresentation(state, value, generation, target, false, 'compact', effectiveStartTimeMs).state;
+      state = settleEpgPresentation(state, value, generation, target, false, 'wide', effectiveStartTimeMs).state;
       renderedProgramIds.push(createEpgGuideView(state, value).selectedProgram?.id ?? '');
     },
     handleFailure: () => undefined,
@@ -231,8 +235,8 @@ test('sequential polling settlements advance the bound and retain a program cros
   assert.equal(state.minimumStartTimeMs, secondBound);
   assert.equal(state.windowStartMs, secondBound);
   assert.deepEqual(requests, [
-    firstBound - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
-    firstBound - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+    firstBound - REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+    firstBound - REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs,
   ]);
   assert.deepEqual(renderedProgramIds, ['program-1', 'program-1']);
   await Promise.resolve();
@@ -243,11 +247,15 @@ test('polling rejects a stale pre-settlement result after optimistic policy inva
   const pending = deferred<unknown>();
   let applied = 0;
   const polling = createGuidePresentationPolling({
-    guide: { getPresentation: async () => await pending.promise as never } as never,
+    guide: {
+      getPresentation: async () => await pending.promise as never,
+      cancelPresentation: async () => undefined,
+    } as never,
     host: host(),
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => BASE,
-    getGuideDensity: () => 'compact',
+    getGuideTimeRange: () => 'wide',
+    getGuidePerformanceProfile: () => 'reduced-resource',
     setLoading: () => undefined,
     applyPresentation: () => { applied += 1; },
     handleFailure: () => undefined,

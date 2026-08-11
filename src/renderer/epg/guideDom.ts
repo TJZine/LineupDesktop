@@ -235,12 +235,14 @@ function renderEpgGuideDomContent(
   view: RouteWorkflowViewModel,
   dom: RendererDomBindings,
   settings: Pick<DesktopSettingsValues,
-    'guideDensity' |
+    'guideTimeRange' |
+    'guideRowDensity' |
     'previewBadgesEnabled' |
     'libraryTabsEnabled' |
     'nowWatchingBannerEnabled' |
     'guideLayout'> = {
-    guideDensity: 'comfortable',
+    guideTimeRange: 'detailed',
+    guideRowDensity: 'auto',
     previewBadgesEnabled: true,
     libraryTabsEnabled: true,
     nowWatchingBannerEnabled: true,
@@ -288,8 +290,10 @@ function renderEpgGuideDomContent(
   const shell = document.createElement('section');
   shell.className = 'epg-shell';
   shell.dataset.epgLayout = settings.guideLayout;
-  shell.dataset.guideDensity = settings.guideDensity;
-  dom.epgGridElement.dataset.guideDensity = settings.guideDensity;
+  shell.dataset.guideTimeRange = settings.guideTimeRange;
+  shell.dataset.guideRowDensity = settings.guideRowDensity;
+  dom.epgGridElement.dataset.guideTimeRange = settings.guideTimeRange;
+  dom.epgGridElement.dataset.guideRowDensity = settings.guideRowDensity;
 
   const classicHeader = document.createElement('header');
   classicHeader.className = 'epg-classic-header';

@@ -12,14 +12,14 @@ import {
   createGuidePresentationPolling,
   type GuidePresentationPollingOptions,
 } from '../../renderer/guidePresentationPolling.js';
-import { DEFAULT_GUIDE_PRELOAD_PROFILE } from '../../renderer/guideVirtualization.js';
+import { REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE } from '../../renderer/guideVirtualization.js';
 import type { GuideIpcResult, GuidePresentationSource } from '../../contracts/guide.js';
 
 test('Guide Page navigation keeps ±5 local, crosses pages, replaces one target, and clamps boundaries', () => {
   const pageOffset = 10;
   const total = pageOffset + EPG_CHANNEL_PAGE_SIZE * 3;
   const page = presentation(EPG_CHANNEL_PAGE_SIZE, pageOffset, total);
-  let state = { ...createEpgState(page, 0, 'compact'), selectedChannelId: `channel-${String(pageOffset + 2)}`, selectedProgramId: `program-${String(pageOffset + 2)}` };
+  let state = { ...createEpgState(page, 0, 'wide'), selectedChannelId: `channel-${String(pageOffset + 2)}`, selectedProgramId: `program-${String(pageOffset + 2)}` };
   const inside = resolveEpgPageNavigation(state, page, 5);
   assert.deepEqual(inside, {
     targetGlobalIndex: pageOffset + 7, channelOffset: pageOffset, targetLocalIndex: 7,
@@ -37,13 +37,13 @@ test('Guide Page navigation keeps ±5 local, crosses pages, replaces one target,
   assert.equal(trailing?.channelOffset, pageOffset + 10);
 
   const first = presentation(EPG_CHANNEL_PAGE_SIZE, 0, total);
-  const firstState = { ...createEpgState(first, 0, 'compact'), selectedChannelId: 'channel-0', selectedProgramId: 'program-0' };
+  const firstState = { ...createEpgState(first, 0, 'wide'), selectedChannelId: 'channel-0', selectedProgramId: 'program-0' };
   const clamped = resolveEpgPageNavigation(firstState, first, -5);
   assert.equal(clamped?.boundaryClamped, true);
   assert.equal(clamped?.fetchRequired, false);
 
   const last = presentation(3, total - 3, total);
-  const lastState = { ...createEpgState(last, 0, 'compact'), selectedChannelId: `channel-${String(total - 1)}`, selectedProgramId: `program-${String(total - 1)}` };
+  const lastState = { ...createEpgState(last, 0, 'wide'), selectedChannelId: `channel-${String(total - 1)}`, selectedProgramId: `program-${String(total - 1)}` };
   const lastClamped = resolveEpgPageNavigation(lastState, last, 5);
   assert.equal(lastClamped?.targetGlobalIndex, total - 1);
   assert.equal(lastClamped?.boundaryClamped, true);
@@ -56,7 +56,7 @@ test('Guide paging owner binds focus to its exact request and retains last valid
   const applied: Array<{ offset: number; target: number | null }> = [];
   const failures: Array<{ message: string; retain: boolean }> = [];
   const busy: boolean[] = [];
-  let epgState = { ...createEpgState(presentation(9, 0, 30), 0, 'compact'), selectedChannelId: 'channel-2', selectedProgramId: 'program-2' };
+  let epgState = { ...createEpgState(presentation(9, 0, 30), 0, 'wide'), selectedChannelId: 'channel-2', selectedProgramId: 'program-2' };
   let focusedAfterPaging: string | null = null;
   let route: 'guide' | 'settings' = 'guide';
   const polling = createGuidePresentationPolling({
@@ -72,7 +72,8 @@ test('Guide paging owner binds focus to its exact request and retains last valid
         throw new Error('Unexpected Guide library-filter request.');
       },
     } satisfies GuidePresentationPollingOptions['guide'],
-    host: timerHost(), getActiveRoute: () => route, getWindowStartMs: () => 0, getGuideDensity: () => 'compact',
+    host: timerHost(), getActiveRoute: () => route, getWindowStartMs: () => 0, getGuideTimeRange: () => 'wide',
+    getGuidePerformanceProfile: () => 'reduced-resource',
     setLoading: () => undefined,
     setPagingBusy: (value) => busy.push(value),
     applyPresentation: (value, generation, target) => {
@@ -87,7 +88,7 @@ test('Guide paging owner binds focus to its exact request and retains last valid
   });
   const success = polling.requestPage({ targetGlobalIndex: 12, scopeToken: 'scope', channelOffset: 10 });
   assert.deepEqual(busy, [true]);
-  assert.deepEqual(channelLimits, [DEFAULT_GUIDE_PRELOAD_PROFILE.channelLimit]);
+  assert.deepEqual(channelLimits, [REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.channelLimit]);
   requests[0]?.resolve(okPresentation(EPG_CHANNEL_PAGE_SIZE, 10, 30, 'scope'));
   await success;
   assert.deepEqual(applied, [{ offset: 10, target: 12 }]);
@@ -133,7 +134,7 @@ test('Guide paging owner keeps one active/one trailing target and rejects time-r
         throw new Error('Unexpected Guide library-filter request.');
       },
     } satisfies GuidePresentationPollingOptions['guide'],
-    host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0, getGuideDensity: () => 'compact',
+    host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0, getGuideTimeRange: () => 'wide',
     setLoading: () => undefined, setPagingBusy: (value) => busy.push(value),
     applyPresentation: (_value, _generation, target) => targets.push(target), handleFailure: () => undefined,
   });
@@ -178,7 +179,7 @@ test('Guide interval supersession clears a queued page through its existing sett
         throw new Error('Unexpected Guide library-filter request.');
       },
     } satisfies GuidePresentationPollingOptions['guide'],
-    host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0, getGuideDensity: () => 'compact',
+    host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0, getGuideTimeRange: () => 'wide',
     setLoading: () => undefined,
     setPagingBusy: (value) => busy.push(value),
     applyPresentation: (_value, _generation, target) => appliedTargets.push(target),
@@ -224,7 +225,7 @@ test('Guide page cancellation rejects late success and failure without replacing
         throw new Error('Unexpected Guide library-filter request.');
       },
     } satisfies GuidePresentationPollingOptions['guide'],
-    host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0, getGuideDensity: () => 'compact',
+    host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0, getGuideTimeRange: () => 'wide',
     setLoading: () => undefined, setPagingBusy: (value) => busy.push(value),
     applyPresentation: (value) => applied.push(value.channelWindow?.offset ?? -1),
     handleFailure: (_source, message) => failures.push(message),
@@ -272,7 +273,7 @@ test('Guide page cancellation releases the active request before starting the la
         throw new Error('Unexpected Guide library-filter request.');
       },
     } satisfies GuidePresentationPollingOptions['guide'],
-    host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0, getGuideDensity: () => 'compact',
+    host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0, getGuideTimeRange: () => 'wide',
     setLoading: () => undefined, setPagingBusy: (value) => busy.push(value),
     applyPresentation: (value) => applied.push(value.channelWindow?.offset ?? -1),
     handleFailure: () => undefined,
@@ -307,7 +308,7 @@ test('Guide +5,+5,-5,-5 reversal discards its queued page and focuses the loaded
   const applied: number[] = [];
   const busy: boolean[] = [];
   const current = presentation(9, 10, 30);
-  let state = { ...createEpgState(current, 0, 'compact'), selectedChannelId: 'channel-17', selectedProgramId: 'program-17' };
+  let state = { ...createEpgState(current, 0, 'wide'), selectedChannelId: 'channel-17', selectedProgramId: 'program-17' };
   const polling = createGuidePresentationPolling({
     guide: {
       getPresentation: async (_input) => {
@@ -320,7 +321,7 @@ test('Guide +5,+5,-5,-5 reversal discards its queued page and focuses the loaded
         throw new Error('Unexpected Guide library-filter request.');
       },
     } satisfies GuidePresentationPollingOptions['guide'],
-    host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0, getGuideDensity: () => 'compact',
+    host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0, getGuideTimeRange: () => 'wide',
     setLoading: () => undefined, setPagingBusy: (value) => busy.push(value),
     applyPresentation: (value) => applied.push(value.channelWindow?.offset ?? -1),
     handleFailure: () => undefined,

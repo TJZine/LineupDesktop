@@ -1,20 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  EPG_COMFORTABLE_WINDOW_DURATION_MS,
-  EPG_COMPACT_WINDOW_DURATION_MS,
+  EPG_DETAILED_WINDOW_DURATION_MS,
+  EPG_WIDE_WINDOW_DURATION_MS,
   EPG_SLOT_DURATION_MS,
-  type EpgGuideDensity,
+  type EpgGuideTimeRange,
 } from '../../renderer/epg.js';
 import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import {
-  AGGRESSIVE_GUIDE_PRELOAD_PROFILE,
-  DEFAULT_GUIDE_PRELOAD_PROFILE,
+  AUTO_GUIDE_PRELOAD_PROFILE,
+  REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE,
 } from '../../renderer/guideVirtualization.js';
 
 const bufferedDuration = (durationMs: number): number =>
-  durationMs + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2;
+  durationMs + REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2;
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -73,7 +73,7 @@ function result(requestId: string): Awaited<ReturnType<LineupDesktopPreloadApi['
 
 function createOptions(
   guide: LineupDesktopPreloadApi['guide'],
-  getGuideDensity: () => EpgGuideDensity,
+  getGuideTimeRange: () => EpgGuideTimeRange,
   applyPresentation: () => void,
 ) {
   return {
@@ -81,15 +81,16 @@ function createOptions(
     host: host(),
     getActiveRoute: () => 'guide' as const,
     getWindowStartMs: () => 0,
-    getGuideDensity,
+    getGuideTimeRange,
+    getGuidePerformanceProfile: () => 'reduced-resource' as const,
     setLoading: () => undefined,
     applyPresentation: () => applyPresentation(),
     handleFailure: () => undefined,
   };
 }
 
-test('Guide polling requests exactly the density duration', async () => {
-  let density: EpgGuideDensity = 'comfortable';
+test('Guide polling requests exactly the time-range duration', async () => {
+  let timeRange: EpgGuideTimeRange = 'detailed';
   const durations: number[] = [];
   const guide = {
     getPresentation: async (input: { durationMs: number; startTimeMs: number }) => {
@@ -101,14 +102,14 @@ test('Guide polling requests exactly the density duration', async () => {
   } satisfies LineupDesktopPreloadApi['guide'];
   const polling = createGuidePresentationPolling(createOptions(
     guide,
-    () => density,
+    () => timeRange,
     () => undefined,
   ));
 
-  await polling.refresh('density-comfortable');
-  density = 'compact';
-  await polling.refresh('density-compact');
-  assert.deepEqual(durations, [bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS), bufferedDuration(EPG_COMPACT_WINDOW_DURATION_MS)]);
+  await polling.refresh('time-range-detailed');
+  timeRange = 'wide';
+  await polling.refresh('time-range-wide');
+  assert.deepEqual(durations, [bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS), bufferedDuration(EPG_WIDE_WINDOW_DURATION_MS)]);
 });
 
 test('Guide polling emits one honest terminal mark for runtime, cache, and cancellation', async (context) => {
@@ -125,7 +126,7 @@ test('Guide polling emits one honest terminal mark for runtime, cache, and cance
     getPresentation: async () => ++requests === 1 ? result('runtime') : pending.promise,
     cancelPresentation: async () => undefined,
     setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
-  }, () => 'comfortable', () => undefined),
+  }, () => 'detailed', () => undefined),
     getCacheIdentity: () => 'identity',
     getCacheScopeToken: () => 'scope',
   });
@@ -149,18 +150,19 @@ test('Guide polling emits one honest terminal mark for runtime, cache, and cance
   assert.deepEqual(starts.map(({ detail }) => detail.sequence), settled.map(({ detail }) => detail.sequence));
 });
 
-test('Desktop preload profiles use exact row/time bounds and aggressive idle warming starts with the next channel page', async () => {
+test('Desktop preload profiles use exact row/time bounds and auto idle warming starts with the next channel page', async () => {
   const windowStartMs = 10 * 60 * 60_000;
-  for (const [aggressive, expected] of [
+  const foregroundRequests: Array<{ startTimeMs: number; durationMs: number; channelLimit?: number }> = [];
+  for (const [auto, expected] of [
     [false, {
-      startTimeMs: windowStartMs - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
-      durationMs: EPG_COMPACT_WINDOW_DURATION_MS + DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
-      channelLimit: DEFAULT_GUIDE_PRELOAD_PROFILE.channelLimit,
+      startTimeMs: windowStartMs - REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+      durationMs: EPG_WIDE_WINDOW_DURATION_MS + REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
+      channelLimit: REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.channelLimit,
     }],
     [true, {
-      startTimeMs: windowStartMs - AGGRESSIVE_GUIDE_PRELOAD_PROFILE.timeBufferMs,
-      durationMs: EPG_COMPACT_WINDOW_DURATION_MS + AGGRESSIVE_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
-      channelLimit: AGGRESSIVE_GUIDE_PRELOAD_PROFILE.channelLimit,
+      startTimeMs: windowStartMs - AUTO_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+      durationMs: EPG_WIDE_WINDOW_DURATION_MS + AUTO_GUIDE_PRELOAD_PROFILE.timeBufferMs * 2,
+      channelLimit: AUTO_GUIDE_PRELOAD_PROFILE.channelLimit,
     }],
   ] as const) {
     const requests: Array<{ startTimeMs: number; durationMs: number; channelOffset?: number; channelLimit?: number }> = [];
@@ -183,25 +185,31 @@ test('Desktop preload profiles use exact row/time bounds and aggressive idle war
         cancelIdleCallback: () => undefined,
       } as unknown as Window,
       getActiveRoute: () => 'guide', getWindowStartMs: () => windowStartMs,
-      getGuideDensity: () => 'compact', getAggressivePreloadEnabled: () => aggressive,
+      getGuideTimeRange: () => 'wide', getGuidePerformanceProfile: () => auto ? 'auto' : 'reduced-resource',
       setLoading: () => undefined, applyPresentation: () => undefined, handleFailure: () => undefined,
     });
     await controller.refresh('profile-proof');
     assert.deepEqual(requests[0], { ...expected, channelOffset: 0 });
-    if (aggressive) {
+    foregroundRequests.push({
+      startTimeMs: requests[0]?.startTimeMs ?? 0,
+      durationMs: requests[0]?.durationMs ?? 0,
+      channelLimit: requests[0]?.channelLimit,
+    });
+    if (auto) {
       assert.equal(idle.length, 1);
       idle.shift()?.();
       await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
-      assert.equal(requests[1]?.channelOffset, AGGRESSIVE_GUIDE_PRELOAD_PROFILE.channelLimit);
+      assert.equal(requests[1]?.channelOffset, AUTO_GUIDE_PRELOAD_PROFILE.channelLimit);
       assert.equal(requests.length, 2);
     } else {
       assert.equal(idle.length, 0);
     }
     controller.stop();
   }
+  assert.deepEqual(foregroundRequests[0], foregroundRequests[1]);
 });
 
-test('aggressive warm failures remain cache misses without applying foreground failure state', async () => {
+test('auto warm failures remain cache misses without applying foreground failure state', async () => {
   for (const failureMode of ['rejection', 'error-result'] as const) {
     const idle: Array<() => void> = [];
     const failures: string[] = [];
@@ -241,8 +249,8 @@ test('aggressive warm failures remain cache misses without applying foreground f
       host: idleHost(idle),
       getActiveRoute: () => 'guide',
       getWindowStartMs: () => 0,
-      getGuideDensity: () => 'compact',
-      getAggressivePreloadEnabled: () => true,
+      getGuideTimeRange: () => 'wide',
+      getGuidePerformanceProfile: () => 'auto',
       getCacheIdentity: () => 'identity',
       getCacheScopeToken: () => 'scope',
       setLoading: () => undefined,
@@ -253,7 +261,7 @@ test('aggressive warm failures remain cache misses without applying foreground f
 
     await controller.refresh('foreground');
     assert.equal(applied, 1, `${failureMode} applies the foreground result`);
-    assert.equal(idle.length, 1, `${failureMode} schedules an aggressive warm`);
+    assert.equal(idle.length, 1, `${failureMode} schedules an auto warm`);
 
     idle.shift()?.();
     await tick();
@@ -265,7 +273,7 @@ test('aggressive warm failures remain cache misses without applying foreground f
   }
 });
 
-test('aggressive page and adjacent-time warm entries are consumed without another bridge request', async () => {
+test('auto page and adjacent-time warm entries are consumed without another bridge request', async () => {
   let windowStartMs = 10 * 60 * 60_000;
   const idle: Array<() => void> = [];
   const requests: Array<{ startTimeMs: number; channelOffset?: number }> = [];
@@ -285,7 +293,7 @@ test('aggressive page and adjacent-time warm entries are consumed without anothe
     host: idleHost(idle),
     getActiveRoute: () => 'guide', getWindowStartMs: () => windowStartMs,
     getChannelOffset: () => channelOffset,
-    getGuideDensity: () => 'compact', getAggressivePreloadEnabled: () => true,
+    getGuideTimeRange: () => 'wide', getGuidePerformanceProfile: () => 'auto',
     getCacheIdentity: () => 'identity', getCacheScopeToken: () => 'scope',
     setLoading: () => undefined, applyPresentation: (presentation) => {
       applied += 1;
@@ -297,13 +305,13 @@ test('aggressive page and adjacent-time warm entries are consumed without anothe
   assert.equal(requests.length, 1);
   idle.shift()?.();
   await tick();
-  assert.equal(requests[1]?.channelOffset, AGGRESSIVE_GUIDE_PRELOAD_PROFILE.channelLimit);
+  assert.equal(requests[1]?.channelOffset, AUTO_GUIDE_PRELOAD_PROFILE.channelLimit);
 
   const beforePage = requests.length;
   await controller.requestPage({
-    targetGlobalIndex: AGGRESSIVE_GUIDE_PRELOAD_PROFILE.channelLimit,
+    targetGlobalIndex: AUTO_GUIDE_PRELOAD_PROFILE.channelLimit,
     scopeToken: 'scope',
-    channelOffset: AGGRESSIVE_GUIDE_PRELOAD_PROFILE.channelLimit,
+    channelOffset: AUTO_GUIDE_PRELOAD_PROFILE.channelLimit,
   });
   assert.equal(requests.length, beforePage, 'warmed page is applied from cache');
 
@@ -311,7 +319,7 @@ test('aggressive page and adjacent-time warm entries are consumed without anothe
   await tick();
   assert.equal(
     requests.at(-1)?.channelOffset,
-    AGGRESSIVE_GUIDE_PRELOAD_PROFILE.channelLimit * 2,
+    AUTO_GUIDE_PRELOAD_PROFILE.channelLimit * 2,
     'cache-hit page reprioritizes the next adjacent page',
   );
   idle.shift()?.();
@@ -319,10 +327,10 @@ test('aggressive page and adjacent-time warm entries are consumed without anothe
   assert.equal(requests.at(-1)?.channelOffset, 0, 'cache-hit page then warms the previous adjacent page');
   idle.shift()?.();
   await tick();
-  assert.equal(requests.at(-1)?.channelOffset, AGGRESSIVE_GUIDE_PRELOAD_PROFILE.channelLimit);
+  assert.equal(requests.at(-1)?.channelOffset, AUTO_GUIDE_PRELOAD_PROFILE.channelLimit);
   assert.equal(
     requests.at(-1)?.startTimeMs,
-    windowStartMs + EPG_SLOT_DURATION_MS - AGGRESSIVE_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+    windowStartMs + EPG_SLOT_DURATION_MS - AUTO_GUIDE_PRELOAD_PROFILE.timeBufferMs,
   );
   const beforeWindow = requests.length;
   windowStartMs += EPG_SLOT_DURATION_MS;
@@ -333,7 +341,7 @@ test('aggressive page and adjacent-time warm entries are consumed without anothe
 });
 
 test('past-window and trusted identity changes invalidate cached presentations before lookup', async () => {
-  let identity = 'scope:rev1:past-auto:compact:default';
+  let identity = 'scope:rev1:past-auto:wide:default';
   let requests = 0;
   const controller = createGuidePresentationPolling({
     guide: {
@@ -342,7 +350,7 @@ test('past-window and trusted identity changes invalidate cached presentations b
       setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
     },
     host: host(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
-    getGuideDensity: () => 'compact', getCacheIdentity: () => identity, getCacheScopeToken: () => 'scope',
+    getGuideTimeRange: () => 'wide', getCacheIdentity: () => identity, getCacheScopeToken: () => 'scope',
     setLoading: () => undefined, applyPresentation: () => undefined, handleFailure: () => undefined,
   });
 
@@ -352,7 +360,7 @@ test('past-window and trusted identity changes invalidate cached presentations b
   await controller.refresh('epg-window-change');
   assert.equal(requests, 2, 'past-window notification clears a same-window cached page immediately');
 
-  identity = 'scope:rev2:past-30:compact:default';
+  identity = 'scope:rev2:past-30:wide:default';
   await controller.refresh('epg-window-change');
   assert.equal(requests, 3, 'a changed trusted identity cannot read the previous identity key');
   controller.stop();
@@ -370,7 +378,7 @@ test('cache invalidation requires explicit intent instead of diagnostic source l
     host: host(),
     getActiveRoute: () => activeRoute,
     getWindowStartMs: () => 0,
-    getGuideDensity: () => 'compact',
+    getGuideTimeRange: () => 'wide',
     getCacheIdentity: () => 'identity',
     getCacheScopeToken: () => 'scope',
     setLoading: () => undefined,
@@ -382,7 +390,7 @@ test('cache invalidation requires explicit intent instead of diagnostic source l
   assert.equal(requests, 1);
 
   activeRoute = 'settings';
-  await controller.refresh('guide-density-change');
+  await controller.refresh('guide-settings-change');
   activeRoute = 'guide';
   await controller.refresh('epg-window-change');
   assert.equal(requests, 1, 'a diagnostic label does not clear the cache off-route');
@@ -412,7 +420,7 @@ test('page/window cache entries expire at the poll interval and refetch on a sta
     host: host(),
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => 0,
-    getGuideDensity: () => 'compact',
+    getGuideTimeRange: () => 'wide',
     getCacheIdentity: () => 'identity',
     getCacheScopeToken: () => 'scope',
     getNowMs: () => nowMs,
@@ -437,7 +445,7 @@ test('page/window cache entries expire at the poll interval and refetch on a sta
 });
 
 test('preload profile replacement swaps the cache and discards stale warm candidates', async () => {
-  let aggressive = true;
+  let auto = true;
   const idle: Array<() => void> = [];
   const requests: Array<{ channelLimit?: number }> = [];
   const controller = createGuidePresentationPolling({
@@ -452,8 +460,8 @@ test('preload profile replacement swaps the cache and discards stale warm candid
     host: idleHost(idle),
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => 0,
-    getGuideDensity: () => 'compact',
-    getAggressivePreloadEnabled: () => aggressive,
+    getGuideTimeRange: () => 'wide',
+    getGuidePerformanceProfile: () => auto ? 'auto' : 'reduced-resource',
     getCacheIdentity: () => 'identity',
     getCacheScopeToken: () => 'scope',
     setLoading: () => undefined,
@@ -465,10 +473,10 @@ test('preload profile replacement swaps the cache and discards stale warm candid
   assert.equal(requests.length, 1);
   assert.equal(idle.length, 1);
 
-  aggressive = false;
+  auto = false;
   await controller.refresh('epg-window-change');
   assert.equal(requests.length, 2, 'the new profile starts with an empty LRU');
-  assert.equal(requests[1]?.channelLimit, DEFAULT_GUIDE_PRELOAD_PROFILE.channelLimit);
+  assert.equal(requests[1]?.channelLimit, REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.channelLimit);
   idle.shift()?.();
   await tick();
   assert.equal(requests.length, 2, 'warm candidates from the discarded profile are not requested');
@@ -493,7 +501,7 @@ test('undefined cache identity matches null for lookup, insertion, and currentne
       host: host(),
       getActiveRoute: () => 'guide',
       getWindowStartMs: () => 0,
-      getGuideDensity: () => 'compact',
+      getGuideTimeRange: () => 'wide',
       getCacheIdentity: () => identity as string | null,
       getCacheScopeToken: () => 'scope',
       setLoading: () => undefined,
@@ -524,7 +532,7 @@ test('cache hits cross one async boundary before currentness is rechecked', asyn
     host: host(),
     getActiveRoute: () => activeRoute,
     getWindowStartMs: () => 0,
-    getGuideDensity: () => 'compact',
+    getGuideTimeRange: () => 'wide',
     getCacheIdentity: () => 'identity',
     getCacheScopeToken: () => 'scope',
     setLoading: () => undefined,
@@ -565,7 +573,7 @@ test('a scheduled idle warm cannot displace foreground active and trailing inten
       setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
     },
     host: idleHost(idle), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
-    getGuideDensity: () => 'compact', getAggressivePreloadEnabled: () => true,
+    getGuideTimeRange: () => 'wide', getGuidePerformanceProfile: () => 'auto',
     getCacheIdentity: () => 'identity', getCacheScopeToken: () => 'scope',
     setLoading: () => undefined, applyPresentation: () => undefined, handleFailure: () => undefined,
   });
@@ -587,8 +595,8 @@ test('a scheduled idle warm cannot displace foreground active and trailing inten
   controller.stop();
 });
 
-test('startup density change during loading latches one compact refetch after stale comfortable work', async () => {
-  let density: EpgGuideDensity = 'comfortable';
+test('startup time-range change during loading latches one wide refetch after stale detailed work', async () => {
+  let timeRange: EpgGuideTimeRange = 'detailed';
   const requests: Array<{ durationMs: number; deferred: Deferred<Awaited<ReturnType<LineupDesktopPreloadApi['guide']['getPresentation']>>> }> = [];
   let applied = 0;
   const guide = {
@@ -602,38 +610,38 @@ test('startup density change during loading latches one compact refetch after st
   } satisfies LineupDesktopPreloadApi['guide'];
   const polling = createGuidePresentationPolling(createOptions(
     guide,
-    () => density,
+    () => timeRange,
     () => { applied += 1; },
   ));
 
   const initial = polling.refresh('poll-start');
-  assert.deepEqual(requests.map(({ durationMs }) => durationMs), [bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS)]);
-  density = 'compact';
-  polling.noteGuideDensityChange();
-  await polling.settleGuideDensity(true);
-  assert.equal(polling.hasPendingGuideDensityChange(), true);
+  assert.deepEqual(requests.map(({ durationMs }) => durationMs), [bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS)]);
+  timeRange = 'wide';
+  polling.noteGuideSettingsChange();
+  await polling.settleGuideSettings(true);
+  assert.equal(polling.hasPendingGuideSettingsChange(), true);
 
-  const latest = polling.settleGuideDensity(false);
-  assert.equal(polling.hasPendingGuideDensityChange(), false);
-  assert.deepEqual(requests.map(({ durationMs }) => durationMs), [bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS)]);
+  const latest = polling.settleGuideSettings(false);
+  assert.equal(polling.hasPendingGuideSettingsChange(), false);
+  assert.deepEqual(requests.map(({ durationMs }) => durationMs), [bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS)]);
   requests[0]?.deferred.resolve(result('stale-detailed'));
   await initial;
   assert.equal(applied, 0);
   assert.deepEqual(requests.map(({ durationMs }) => durationMs), [
-    bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS),
-    bufferedDuration(EPG_COMPACT_WINDOW_DURATION_MS),
+    bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS),
+    bufferedDuration(EPG_WIDE_WINDOW_DURATION_MS),
   ]);
   requests[1]?.deferred.resolve(result('current-wide'));
   await latest;
   assert.deepEqual(requests.map(({ durationMs }) => durationMs), [
-    bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS),
-    bufferedDuration(EPG_COMPACT_WINDOW_DURATION_MS),
+    bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS),
+    bufferedDuration(EPG_WIDE_WINDOW_DURATION_MS),
   ]);
   assert.equal(applied, 1);
 });
 
-test('repeated loading density changes coalesce to one latest refetch', async () => {
-  let density: EpgGuideDensity = 'comfortable';
+test('repeated loading time-range changes coalesce to one latest refetch', async () => {
+  let timeRange: EpgGuideTimeRange = 'detailed';
   const requests: Array<{ durationMs: number; deferred: Deferred<Awaited<ReturnType<LineupDesktopPreloadApi['guide']['getPresentation']>>> }> = [];
   let applied = 0;
   const guide = {
@@ -647,34 +655,34 @@ test('repeated loading density changes coalesce to one latest refetch', async ()
   } satisfies LineupDesktopPreloadApi['guide'];
   const polling = createGuidePresentationPolling(createOptions(
     guide,
-    () => density,
+    () => timeRange,
     () => { applied += 1; },
   ));
 
   const initial = polling.refresh('poll-start');
-  for (const nextDensity of ['compact', 'comfortable', 'compact'] as const) {
-    density = nextDensity;
-    polling.noteGuideDensityChange();
-    await polling.settleGuideDensity(true);
+  for (const nextTimeRange of ['wide', 'detailed', 'wide'] as const) {
+    timeRange = nextTimeRange;
+    polling.noteGuideSettingsChange();
+    await polling.settleGuideSettings(true);
   }
-  assert.equal(polling.hasPendingGuideDensityChange(), true);
-  const latest = polling.settleGuideDensity(false);
-  assert.equal(polling.hasPendingGuideDensityChange(), false);
-  assert.deepEqual(requests.map(({ durationMs }) => durationMs), [bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS)]);
+  assert.equal(polling.hasPendingGuideSettingsChange(), true);
+  const latest = polling.settleGuideSettings(false);
+  assert.equal(polling.hasPendingGuideSettingsChange(), false);
+  assert.deepEqual(requests.map(({ durationMs }) => durationMs), [bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS)]);
 
   requests[0]?.deferred.resolve(result('stale-detailed'));
   await initial;
   assert.deepEqual(requests.map(({ durationMs }) => durationMs), [
-    bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS),
-    bufferedDuration(EPG_COMPACT_WINDOW_DURATION_MS),
+    bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS),
+    bufferedDuration(EPG_WIDE_WINDOW_DURATION_MS),
   ]);
   requests[1]?.deferred.resolve(result('current-wide'));
   await latest;
   assert.equal(applied, 1);
 });
 
-test('density churn keeps one active request and applies only the latest current duration', async () => {
-  let density: EpgGuideDensity = 'compact';
+test('time-range churn keeps one active request and applies only the latest current duration', async () => {
+  let timeRange: EpgGuideTimeRange = 'wide';
   const requests: Array<{ durationMs: number; deferred: Deferred<Awaited<ReturnType<LineupDesktopPreloadApi['guide']['getPresentation']>>> }> = [];
   let applied = 0;
   const guide = {
@@ -688,24 +696,24 @@ test('density churn keeps one active request and applies only the latest current
   } satisfies LineupDesktopPreloadApi['guide'];
   const polling = createGuidePresentationPolling(createOptions(
     guide,
-    () => density,
+    () => timeRange,
     () => { applied += 1; },
   ));
 
   const first = polling.refresh('initial');
   await Promise.resolve();
-  density = 'comfortable';
-  const second = polling.refresh('density-comfortable');
-  const latest = polling.refresh('density-comfortable-latest');
+  timeRange = 'detailed';
+  const second = polling.refresh('time-range-detailed');
+  const latest = polling.refresh('time-range-detailed-latest');
   assert.equal(requests.length, 1);
-  assert.equal(requests[0]?.durationMs, bufferedDuration(EPG_COMPACT_WINDOW_DURATION_MS));
+  assert.equal(requests[0]?.durationMs, bufferedDuration(EPG_WIDE_WINDOW_DURATION_MS));
 
   requests[0]?.deferred.resolve(result('stale'));
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(applied, 0);
   assert.equal(requests.length, 2);
-  assert.equal(requests[1]?.durationMs, bufferedDuration(EPG_COMFORTABLE_WINDOW_DURATION_MS));
+  assert.equal(requests[1]?.durationMs, bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS));
 
   requests[1]?.deferred.resolve(result('current'));
   await Promise.all([first, second, latest]);

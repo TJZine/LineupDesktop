@@ -50,7 +50,7 @@ test('settings runtime loads before presentation, applies launch intent, and per
   assert.deepEqual(states.at(-1)?.capabilities, CONSERVATIVE_DESKTOP_SETTINGS_CAPABILITIES);
 });
 
-test('settings runtime refuses capability-gated and pending Guide mutations', async () => {
+test('settings runtime refuses capability-gated mutations and persists Guide time range changes', async () => {
   let replacements = 0;
   const runtime = createSettingsRuntime({
     settings: {
@@ -58,7 +58,7 @@ test('settings runtime refuses capability-gated and pending Guide mutations', as
       getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
       replace: async (input) => {
         replacements += 1;
-        return desktopSettingsSuccess(input.requestId, snapshot(2));
+        return desktopSettingsSuccess(input.requestId, snapshot(2, normalizeDesktopSettingsReplaceValues(input.values)));
       },
     },
     windowBridge: windowBridge([]),
@@ -66,10 +66,10 @@ test('settings runtime refuses capability-gated and pending Guide mutations', as
   });
   await runtime.initialize();
   await runtime.applyAction('toggleDtsPassthrough');
-  await runtime.applyAction('cycleGuideDensity');
-  assert.equal(replacements, 0);
+  await runtime.applyAction('cycleGuideTimeRange');
+  assert.equal(replacements, 1);
   assert.equal(runtime.getState().values.dtsPassthroughEnabled, false);
-  assert.equal(runtime.getState().values.guideDensity, 'comfortable');
+  assert.equal(runtime.getState().values.guideTimeRange, 'wide');
 });
 
 test('settings runtime serializes a user launch change behind pending startup fullscreen', async () => {
@@ -212,7 +212,7 @@ test('settings runtime synchronizes a rebased launch mode before retrying persis
   });
 
   await runtime.initialize();
-  const density = runtime.applyAction('toggleKeepPlaybackRunning');
+  const firstMutation = runtime.applyAction('toggleKeepPlaybackRunning');
   const launch = runtime.applyAction('cycleLaunchMode');
   firstReplace.resolve(desktopSettingsFailure('settings-replace-1', 'revision-conflict'));
   await fullscreenRetryCalled.promise;
@@ -221,7 +221,7 @@ test('settings runtime synchronizes a rebased launch mode before retrying persis
   assert.equal(inputs.length, 1);
 
   fullscreenRetry.resolve({ ok: true, requestId: 'window-rebase', value: { enabled: true } });
-  await Promise.all([density, launch]);
+  await Promise.all([firstMutation, launch]);
 
   assert.equal(inputs.length, 2);
   assert.equal(inputs[1]?.expectedRevision, 8);
@@ -429,10 +429,10 @@ test('settings runtime preserves newer nonlaunch intent after an older replace f
     onStateChanged: () => undefined,
   });
   await runtime.initialize();
-  const density = runtime.applyAction('toggleKeepPlaybackRunning');
+  const firstMutation = runtime.applyAction('toggleKeepPlaybackRunning');
   const badges = runtime.applyAction('togglePreviewBadges');
   firstReplace.resolve(desktopSettingsFailure('settings-replace-1', 'operation-failed'));
-  await Promise.all([density, badges]);
+  await Promise.all([firstMutation, badges]);
   assert.equal(inputs.length, 2);
   assert.equal(inputs[1]?.values.keepPlaybackRunningInSettings, true);
   assert.equal(inputs[1]?.values.previewBadgesEnabled, false);
@@ -565,7 +565,7 @@ test('settings runtime coalesces rapid past-items-window changes into one latest
 
 function snapshot(revision: number, overrides: Partial<typeof DEFAULT_DESKTOP_SETTINGS_VALUES> = {}) {
   return createDesktopSettingsView({
-    schemaVersion: 2,
+    schemaVersion: 3,
     revision,
     status: 'ready',
     values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, ...overrides },

@@ -5,21 +5,23 @@ export const GUIDE_DOM_CELL_CAP = 400;
 export const GUIDE_ROW_BUFFER = 3;
 export const GUIDE_DOM_TIME_BUFFER_MS = 120 * 60_000;
 
-export interface GuidePreloadProfile {
+export type GuidePerformanceProfile = 'auto' | 'reduced-resource';
+
+export interface GuidePerformanceProfileConfig {
   readonly channelLimit: 12 | 24;
   readonly timeBufferMs: number;
   readonly maximumEntries: 6 | 12;
   readonly maximumPrograms: 6_000 | 12_000;
 }
 
-export const DEFAULT_GUIDE_PRELOAD_PROFILE: GuidePreloadProfile = Object.freeze({
-  channelLimit: 12,
-  timeBufferMs: 120 * 60_000,
+export const REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE: GuidePerformanceProfileConfig = Object.freeze({
+  channelLimit: 24,
+  timeBufferMs: 360 * 60_000,
   maximumEntries: 6,
   maximumPrograms: 6_000,
 });
 
-export const AGGRESSIVE_GUIDE_PRELOAD_PROFILE: GuidePreloadProfile = Object.freeze({
+export const AUTO_GUIDE_PRELOAD_PROFILE: GuidePerformanceProfileConfig = Object.freeze({
   channelLimit: 24,
   timeBufferMs: 360 * 60_000,
   maximumEntries: 12,
@@ -136,7 +138,7 @@ export class GuidePresentationLru<T> {
   readonly #entries = new Map<string, GuideCacheEntry<T>>();
   #programCount = 0;
 
-  constructor(private readonly profile: GuidePreloadProfile) {}
+  constructor(private readonly profile: GuidePerformanceProfileConfig) {}
 
   get(
     key: string,
@@ -213,16 +215,18 @@ export function projectGuideCacheIdentity(input: Readonly<{
   revision: number;
   selectedLibraryId: string | null;
   pastItemsWindow: string;
-  guideDensity: string;
-  aggressivePreload: boolean;
+  guideTimeRange: string;
+  guidePerformanceProfile: string;
+  guideRowDensity: string;
 }>): string {
   return JSON.stringify([
     input.scopeToken,
     input.revision,
     input.selectedLibraryId,
     input.pastItemsWindow,
-    input.guideDensity,
-    input.aggressivePreload,
+    input.guideTimeRange,
+    input.guidePerformanceProfile,
+    input.guideRowDensity,
   ]);
 }
 

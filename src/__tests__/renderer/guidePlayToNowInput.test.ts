@@ -135,7 +135,7 @@ test('Guide MediaPlay invokes the real command-time focus transition without pla
     }],
   };
   const commandNow = base + EPG_SLOT_DURATION_MS;
-  let state = createEpgState(presentation, 0, 'compact');
+  let state = createEpgState(presentation, 0, 'wide');
   let callbackCount = 0;
   const harness = createHarness('guide', () => {
     callbackCount += 1;
@@ -171,7 +171,7 @@ test('Guide MediaPlay restores deterministic focused-channel fallback during a s
     }],
   };
   const initialState: EpgState = {
-    ...createEpgState(presentation, 0, 'compact'),
+    ...createEpgState(presentation, 0, 'wide'),
     windowStartMs: base,
     selectedChannelId: 'channel-1',
     selectedProgramId: 'missing',
@@ -202,7 +202,7 @@ test('Guide MediaPlay keeps shifted-window fallback intent and refreshes without
     }],
   };
   const initialState: EpgState = {
-    ...createEpgState(presentation, 0, 'compact'),
+    ...createEpgState(presentation, 0, 'wide'),
     windowStartMs: base,
     selectedChannelId: 'channel-1',
     selectedProgramId: 'missing',
@@ -241,7 +241,7 @@ test('Guide MediaPlay falls back to the first channel with a visible program', a
     ],
   };
   const initialState: EpgState = {
-    ...createEpgState(presentation, 0, 'compact'),
+    ...createEpgState(presentation, 0, 'wide'),
     windowStartMs: base,
     selectedChannelId: 'channel-empty',
     selectedProgramId: 'outside',

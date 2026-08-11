@@ -2710,7 +2710,7 @@ test('preload settings bridge exposes three total guarded methods with exact req
       requestId,
       value: {
         snapshot: {
-          schemaVersion: 2,
+          schemaVersion: 3,
           revision: channel === LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL ? 2 : 3,
           status: 'ready',
           values: DEFAULT_DESKTOP_SETTINGS_VALUES,
@@ -2784,7 +2784,7 @@ test('preload settings guards reject persisted system-default, invalid capabilit
     requestId: 'settings-get-strict',
     value: {
       snapshot: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         revision: 1,
         status: 'ready',
         values: DEFAULT_DESKTOP_SETTINGS_VALUES,

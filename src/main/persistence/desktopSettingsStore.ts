@@ -34,31 +34,12 @@ export interface DesktopSettingsStoreOptions {
   settingsFilePath: string;
   fileSystem?: DesktopSettingsFileSystem;
   processId?: number;
-  migrationEventSink?: (event: DesktopSettingsMigrationEvent) => void;
 }
 
 interface StoredDesktopSettingsRecord {
   schemaVersion: typeof SETTINGS_SCHEMA_VERSION;
   revision: number;
   values: DesktopSettingsValues;
-}
-
-interface StoredDesktopSettingsVersionOneRecord {
-  schemaVersion: 1;
-  revision: number;
-  values: {
-    launchMode: 'windowed' | 'fullscreen';
-    guideDensity: 'comfortable' | 'compact';
-    previewBadgesEnabled: boolean;
-    setupReminderEnabled: boolean;
-  };
-}
-
-export interface DesktopSettingsMigrationEvent {
-  fromVersion: 1;
-  toVersion: 2;
-  status: 'succeeded' | 'failed';
-  revision: number;
 }
 
 const nodeFileSystem: DesktopSettingsFileSystem = {
@@ -74,7 +55,6 @@ export class DesktopSettingsStore {
   private readonly settingsFilePath: string;
   private readonly fileSystem: DesktopSettingsFileSystem;
   private readonly processId: number;
-  private readonly migrationEventSink: ((event: DesktopSettingsMigrationEvent) => void) | undefined;
   private operationChain: Promise<void> = Promise.resolve();
   private tempCounter = 0;
 
@@ -82,7 +62,6 @@ export class DesktopSettingsStore {
     this.settingsFilePath = options.settingsFilePath;
     this.fileSystem = options.fileSystem ?? nodeFileSystem;
     this.processId = options.processId ?? process.pid;
-    this.migrationEventSink = options.migrationEventSink;
   }
 
   loadSnapshot(): Promise<DesktopSettingsSnapshot> {
@@ -95,9 +74,6 @@ export class DesktopSettingsStore {
   ): Promise<DesktopSettingsSnapshot> {
     return this.enqueue(async () => {
       const current = await this.readSnapshot();
-      if (current.status === 'unsupported-version') {
-        throw new DesktopSettingsStoreError('unsupported-version');
-      }
       if (current.revision !== expectedRevision) {
         throw new DesktopSettingsStoreError('revision-conflict');
       }
@@ -140,13 +116,8 @@ export class DesktopSettingsStore {
     } catch {
       return defaultSnapshot('corrupt');
     }
-    if (isStoredDesktopSettingsVersionOneRecord(parsed)) {
-      return this.migrateVersionOneRecord(parsed);
-    }
-    if (isPlainRecord(parsed) &&
-      Number.isInteger(parsed.schemaVersion) &&
-      parsed.schemaVersion !== SETTINGS_SCHEMA_VERSION) {
-      return defaultSnapshot(parsed.schemaVersion === 1 ? 'corrupt' : 'unsupported-version');
+    if (isPlainRecord(parsed) && parsed.schemaVersion !== SETTINGS_SCHEMA_VERSION) {
+      return defaultSnapshot('corrupt');
     }
     if (!isStoredDesktopSettingsRecord(parsed)) {
       return defaultSnapshot('corrupt');
@@ -157,46 +128,6 @@ export class DesktopSettingsStore {
       status: 'ready',
       values: { ...parsed.values },
     };
-  }
-
-  private async migrateVersionOneRecord(
-    record: StoredDesktopSettingsVersionOneRecord,
-  ): Promise<DesktopSettingsSnapshot> {
-    if (record.revision === Number.MAX_SAFE_INTEGER) {
-      throw new DesktopSettingsStoreError('operation-failed');
-    }
-    const revision = record.revision + 1;
-    const values: DesktopSettingsValues = {
-      ...createDefaultDesktopSettingsValues(),
-      launchMode: record.values.launchMode,
-      guideDensity: record.values.guideDensity,
-      previewBadgesEnabled: record.values.previewBadgesEnabled,
-      setupReminderEnabled: record.values.setupReminderEnabled,
-    };
-    const migratedRecord: StoredDesktopSettingsRecord = {
-      schemaVersion: SETTINGS_SCHEMA_VERSION,
-      revision,
-      values,
-    };
-    try {
-      await this.writeRecord(migratedRecord);
-    } catch {
-      this.emitMigrationEvent({ fromVersion: 1, toVersion: 2, status: 'failed', revision });
-      throw new DesktopSettingsStoreError('operation-failed');
-    }
-    this.emitMigrationEvent({ fromVersion: 1, toVersion: 2, status: 'succeeded', revision });
-    return {
-      ...migratedRecord,
-      status: 'ready',
-    };
-  }
-
-  private emitMigrationEvent(event: DesktopSettingsMigrationEvent): void {
-    try {
-      this.migrationEventSink?.(event);
-    } catch {
-      // Fixed migration diagnostics are best-effort and cannot change storage outcomes.
-    }
   }
 
   private async writeRecord(record: StoredDesktopSettingsRecord): Promise<void> {
@@ -227,7 +158,7 @@ export class DesktopSettingsStore {
 }
 
 function defaultSnapshot(
-  status: 'missing' | 'corrupt' | 'unsupported-version',
+  status: 'missing' | 'corrupt',
 ): DesktopSettingsSnapshot {
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
@@ -246,27 +177,6 @@ function isStoredDesktopSettingsRecord(value: unknown): value is StoredDesktopSe
     value.schemaVersion === SETTINGS_SCHEMA_VERSION &&
     isSafeRevision(value.revision) &&
     isDesktopSettingsValues(value.values);
-}
-
-function isStoredDesktopSettingsVersionOneRecord(
-  value: unknown,
-): value is StoredDesktopSettingsVersionOneRecord {
-  if (!isPlainRecord(value) ||
-    Object.keys(value).length !== 3 ||
-    value.schemaVersion !== 1 ||
-    !isSafeRevision(value.revision) ||
-    !isPlainRecord(value.values) ||
-    Object.keys(value.values).length !== 4) {
-    return false;
-  }
-  return Object.hasOwn(value.values, 'launchMode') &&
-    Object.hasOwn(value.values, 'guideDensity') &&
-    Object.hasOwn(value.values, 'previewBadgesEnabled') &&
-    Object.hasOwn(value.values, 'setupReminderEnabled') &&
-    (value.values.launchMode === 'windowed' || value.values.launchMode === 'fullscreen') &&
-    (value.values.guideDensity === 'comfortable' || value.values.guideDensity === 'compact') &&
-    typeof value.values.previewBadgesEnabled === 'boolean' &&
-    typeof value.values.setupReminderEnabled === 'boolean';
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

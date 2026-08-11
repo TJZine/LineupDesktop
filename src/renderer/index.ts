@@ -57,7 +57,7 @@ import { handleStagedSetupBack } from './setup/stagedSetupController.js';
 import { renderStagedSetupDom } from './setup/stagedSetupDom.js';
 import { cleanupSetupRouteLifecycle, clearSetupSourceLifecycle, createSetupComposition } from './setup/setupComposition.js';
 import { createSettingsRuntime } from './settings/settingsRuntime.js';
-import { createSettingsGuideDensitySettlementOwner } from './settings/guideDensitySettlement.js';
+import { createSettingsGuideSettingsSettlementOwner } from './settings/guideSettingsSettlement.js';
 import { createAudioSetupRuntime } from './settings/audioSetupRuntime.js';
 import { canActivateRouteDuringAudioSetup } from './settings/audioSetupNavigation.js';
 import { renderAudioSetupDom } from './settings/audioSetupDom.js';
@@ -122,8 +122,12 @@ let pendingGuideFocusId: string | null = null, launchActive = true;
 let startupProfilePickerHandled = false;
 const focusRegistry = new FocusRegistry(); let focusState: FocusState;
 let guidePresentationPolling: ReturnType<typeof createGuidePresentationPolling> | undefined;
-const settingsGuideDensitySettlementOwner = createSettingsGuideDensitySettlementOwner({
-  getCurrentDensity: () => workflowState.settingsDraft.guideDensity,
+const settingsGuideSettingsSettlementOwner = createSettingsGuideSettingsSettlementOwner({
+  getCurrentSettings: () => ({
+    guideTimeRange: workflowState.settingsDraft.guideTimeRange,
+    guidePerformanceProfile: workflowState.settingsDraft.guidePerformanceProfile,
+    guideRowDensity: workflowState.settingsDraft.guideRowDensity,
+  }),
   getPolling: () => guidePresentationPolling,
   retainGuideProgramFocusIntent: () => { retainGuideProgramFocusIntent(); },
   restorePendingGuideFocus,
@@ -132,15 +136,19 @@ const settingsRuntime = createSettingsRuntime({
   settings: window.lineupDesktop.settings, windowBridge: fullscreenTransport,
   onStateChanged: (state) => {
     const layoutChanged = state.values.guideLayout !== workflowState.settingsDraft.guideLayout;
-    const aggressivePreloadChanged = state.values.aggressiveGuidePreloadEnabled !== workflowState.settingsDraft.aggressiveGuidePreloadEnabled;
+    const guideRowDensityChanged = state.values.guideRowDensity !== workflowState.settingsDraft.guideRowDensity;
     const pastItemsWindowChanged = state.values.pastItemsWindow !== workflowState.settingsDraft.pastItemsWindow;
-    const densitySettlement = settingsGuideDensitySettlementOwner.begin(
-      state.values.guideDensity,
+    const guideSettingsSettlement = settingsGuideSettingsSettlementOwner.begin(
+      {
+        guideTimeRange: state.values.guideTimeRange,
+        guidePerformanceProfile: state.values.guidePerformanceProfile,
+        guideRowDensity: state.values.guideRowDensity,
+      },
       () => {
         workflowState = applyWorkflowSettingsValues(workflowState, state.values, state.capabilities);
       },
     );
-    if (layoutChanged) invalidateGuideLayoutMetrics(dom.epgGridElement);
+    if (layoutChanged || guideRowDensityChanged) invalidateGuideLayoutMetrics(dom.epgGridElement);
     if (pastItemsWindowChanged) {
       guidePresentationPolling?.notePastItemsWindowChange();
       retainGuideProgramFocusIntent();
@@ -151,24 +159,15 @@ const settingsRuntime = createSettingsRuntime({
     const errorElement = document.querySelector<HTMLElement>('[data-settings-error]');
     if (errorElement) { errorElement.textContent = state.errorMessage ?? ''; errorElement.hidden = state.errorMessage === null; }
     if (!state.loading) {
-      const activeRoute = workflowState.routeState.activeRoute;
       renderApp();
-      void densitySettlement.finish(false);
-      const polling = guidePresentationPolling;
-      if (aggressivePreloadChanged && polling !== undefined && (activeRoute === 'guide' || activeRoute === 'player')) {
-        void polling.refresh('guide-aggressive-preload-change', {
-          showLoading: activeRoute === 'guide',
-          allowPlayerRoute: activeRoute === 'player',
-          invalidateCache: true,
-        });
-      }
+      void guideSettingsSettlement.finish(false);
       guidePresentationPolling?.settlePastItemsWindow({
         currentValue: state.values.pastItemsWindow,
         acceptedValue: state.snapshot?.values.pastItemsWindow ?? null,
         saving: state.saving,
       });
     } else {
-      void densitySettlement.finish(true);
+      void guideSettingsSettlement.finish(true);
     }
   },
 });
@@ -405,8 +404,8 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
   host: window,
   getActiveRoute: () => workflowState.routeState.activeRoute,
   getWindowStartMs: () => workflowState.epg.windowStartMs,
-  getGuideDensity: () => workflowState.settingsDraft.guideDensity,
-  getAggressivePreloadEnabled: () => workflowState.settingsDraft.aggressiveGuidePreloadEnabled,
+  getGuideTimeRange: () => workflowState.settingsDraft.guideTimeRange,
+  getGuidePerformanceProfile: () => workflowState.settingsDraft.guidePerformanceProfile,
   getCacheScopeToken: () => workflowState.guidePresentation.libraryFilter?.scopeToken ?? null,
   getCacheIdentity: () => {
     const filter = workflowState.guidePresentation.libraryFilter;
@@ -415,8 +414,9 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
       revision: filter.revision,
       selectedLibraryId: filter.selectedLibraryId,
       pastItemsWindow: workflowState.settingsDraft.pastItemsWindow,
-      guideDensity: workflowState.settingsDraft.guideDensity,
-      aggressivePreload: workflowState.settingsDraft.aggressiveGuidePreloadEnabled,
+      guideTimeRange: workflowState.settingsDraft.guideTimeRange,
+      guidePerformanceProfile: workflowState.settingsDraft.guidePerformanceProfile,
+      guideRowDensity: workflowState.settingsDraft.guideRowDensity,
     });
   },
   getChannelOffset: () => workflowState.guidePresentation.channelWindow?.offset ?? 0,
@@ -437,7 +437,7 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
       generation,
       pagingTargetGlobalIndex,
       capturedFocusId !== null,
-      workflowState.settingsDraft.guideDensity,
+      workflowState.settingsDraft.guideTimeRange,
       effectiveStartTimeMs,
     );
     workflowState = {
@@ -457,7 +457,7 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
       generation,
       null,
       false,
-      workflowState.settingsDraft.guideDensity,
+      workflowState.settingsDraft.guideTimeRange,
       effectiveStartTimeMs,
     );
     workflowState = {
