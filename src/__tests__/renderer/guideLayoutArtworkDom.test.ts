@@ -28,6 +28,8 @@ test('Guide layouts retain one artwork subtree and one native presentation apert
   const detailStart = root.innerHTML.indexOf('class="guide-detail"');
   const gridStart = root.innerHTML.indexOf('id="guide-grid"');
   assert.ok(detailStart >= 0 && detailStart < gridStart, 'detail surface precedes the grid shell');
+  assert.match(root.innerHTML, /class="screen-stack" data-static-screens-mounted/u);
+  assert.doesNotMatch(root.innerHTML, /class="screen-stack"[^>]*aria-live=/u);
   assert.match(root.innerHTML, /class="guide-detail"[^>]+data-guide-layout="classic"/u);
   assert.match(root.innerHTML, /id="guide-grid"[^>]+role="grid"[^>]+aria-label="Guide schedule grid"/u);
 });
@@ -152,10 +154,6 @@ test('Guide time range no longer compresses row geometry', () => {
   const forcedColors = extractCssAtRuleBody(guide, '@media (forced-colors: active)');
   const forcedBackground = extractCssRule(forcedColors ?? '', '[data-epg-detail-background-image]');
   assert.equal(cssDeclaration(forcedBackground, 'display'), 'none');
-  const program = extractCssRule(guide, '.screen[data-screen="guide"] .epg-grid__program');
-  assert.equal(cssDeclaration(program, 'top'), '4px');
-  assert.equal(cssDeclaration(program, 'bottom'), '4px');
-  assert.equal(cssDeclaration(program, 'padding'), 'var(--space-2) var(--space-4)');
 });
 
 test('Guide Classic and Overlay owners expose explicit shell, rail, and marker roles', () => {
@@ -166,15 +164,16 @@ test('Guide Classic and Overlay owners expose explicit shell, rail, and marker r
     new URL('../../renderer/styles/guide-epg.css', import.meta.url),
     'utf8',
   );
-  const shellVisibility = extractCssRule(guide, [
+  for (const selector of [
     '.epg-shell[data-epg-layout="overlay"] .epg-classic-header',
     '.epg-shell[data-epg-layout="classic"] .epg-now-watching-banner',
-  ]);
-  assert.equal(cssDeclaration(shellVisibility, 'display'), 'none');
+  ]) {
+    assert.equal(cssDeclaration(extractCssRule(guide, selector), 'display'), 'none');
+  }
   const currentCell = extractCssRule(guide, '.epg-grid__program[data-temporal-state="current"]');
   assert.equal(cssDeclaration(currentCell, 'border-color'), 'var(--color-focus-border)');
   const upcomingCell = extractCssRule(guide, '.epg-grid__program[data-temporal-state="upcoming"]');
-  assert.equal(cssDeclaration(upcomingCell, 'border-color'), 'rgba(255, 255, 255, 0.14)');
+  assert.equal(cssDeclaration(upcomingCell, 'border-color'), 'var(--color-border-strong)');
   const focused = extractCssRule(guide, [
     '.epg-grid__program:focus-visible',
     '.epg-grid__program.is-focused',

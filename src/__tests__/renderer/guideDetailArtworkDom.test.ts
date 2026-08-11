@@ -351,7 +351,9 @@ test('fixed Classic markup owns exactly one poster, placeholder, copy, and descr
   assert.equal(guide.match(/data-epg-detail-subtitle(?:\s|>)/gu)?.length, 1);
   assert.equal(guide.match(/data-epg-detail-badges(?:\s|>)/gu)?.length, 1);
   assert.equal(guide.match(/data-epg-detail-genres(?:\s|>)/gu)?.length, 1);
-  assert.match(guide, /data-guide-info-panel[^>]+aria-live="polite"/u);
+  assert.match(guide, /data-guide-info-panel(?![^>]*aria-live)/u);
+  assert.match(guide, /class="guide-detail__identity"[^>]+role="status"[^>]+aria-live="polite"[^>]+aria-atomic="true"/u);
+  assert.match(guide, /class="guide-detail__metadata"/u);
   assert.match(guide, /data-epg-detail-title[^>]+data-title-fallback="text"/u);
   assert.match(guide, /data-guide-layout="classic"/u);
   assert.match(guide, /data-epg-detail-artwork-placeholder aria-hidden="true"/u);

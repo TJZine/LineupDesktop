@@ -28,12 +28,13 @@ export function extractCssRule(
     typeof expectedSelectors === 'string' ? [expectedSelectors] : expectedSelectors,
   );
   if (expected.size === 0) return null;
+  let groupedSingleSelectorMatch: ReadonlyMap<string, string> | null = null;
   let cursor = 0;
   while (cursor < source.length) {
     cursor = skipWhitespace(source, cursor);
-    if (cursor >= source.length) return null;
+    if (cursor >= source.length) return groupedSingleSelectorMatch;
     const openBrace = source.indexOf('{', cursor);
-    if (openBrace < 0) return null;
+    if (openBrace < 0) return groupedSingleSelectorMatch;
     const prelude = source.slice(cursor, openBrace).trim();
     const selectors = normalizeSelectorSet(prelude.split(','));
     const closeBrace = findMatchingBrace(source, openBrace);
@@ -46,7 +47,9 @@ export function extractCssRule(
     cursor = closeBrace + 1;
     // At-rule bodies are scoped by extractCssAtRuleBody before rule scanning.
     if (prelude.startsWith('@')) continue;
-    if (selectors.size !== expected.size || [...expected].some((selector) => !selectors.has(selector))) continue;
+    const isSingleSelectorLookup = typeof expectedSelectors === 'string' && expected.size === 1;
+    const isExactMatch = selectors.size === expected.size && [...expected].every((selector) => selectors.has(selector));
+    if (!isExactMatch && (!isSingleSelectorLookup || ![...expected].every((selector) => selectors.has(selector)))) continue;
 
     const body = source.slice(openBrace + 1, closeBrace);
     const quoteCount = (body.match(/["']/gu) ?? []).length;
@@ -55,9 +58,11 @@ export function extractCssRule(
     if (/[{}]/u.test(body) || quoteCount % 2 !== 0 || stringHasStructure) {
       throw unsupported('unsupported nested or string syntax');
     }
-    return parseDeclarations(body);
+    const declarations = parseDeclarations(body);
+    if (isExactMatch) return declarations;
+    groupedSingleSelectorMatch ??= declarations;
   }
-  return null;
+  return groupedSingleSelectorMatch;
 }
 export function containsCssSelector(css: string, selector: string): boolean {
   const source = stripComments(css);

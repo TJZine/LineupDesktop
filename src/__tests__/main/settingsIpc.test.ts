@@ -8,6 +8,7 @@ import {
 } from '../../contracts/ipc.js';
 import {
   DEFAULT_DESKTOP_SETTINGS_VALUES,
+  SETTINGS_SCHEMA_VERSION,
   createDesktopSettingsView,
 } from '../../contracts/settings.js';
 import { DesktopSettingsStoreError } from '../../main/persistence/desktopSettingsStore.js';
@@ -277,7 +278,12 @@ test('settings IPC maps unexpected handler exceptions to a fixed operation failu
 });
 
 function snapshot(revision: number) {
-  return { schemaVersion: 3 as const, revision, status: 'ready' as const, values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES } };
+  return {
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
+    revision,
+    status: 'ready' as const,
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES },
+  };
 }
 
 function view(revision: number) {

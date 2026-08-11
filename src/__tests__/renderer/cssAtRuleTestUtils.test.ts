@@ -57,7 +57,7 @@ test('selector absence is null while unsupported matching declarations fail loud
 test('selector membership sees grouped selectors and fails on malformed top-level rules', () => {
   const grouped = '.allowed, .player-surface { background: Canvas; }';
   assert.equal(containsCssSelector(grouped, '.player-surface'), true);
-  assert.equal(extractCssRule(grouped, '.player-surface'), null);
+  assert.equal(cssDeclaration(extractCssRule(grouped, '.player-surface'), 'background'), 'Canvas');
   assert.equal(containsCssSelector(grouped, '.missing'), false);
   assert.throws(() => containsCssSelector('.allowed { color: red;', '.missing'), /unmatched/u);
 });

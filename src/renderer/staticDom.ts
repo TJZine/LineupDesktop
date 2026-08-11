@@ -3,7 +3,7 @@ import { createLineupBrandGlyph } from './onboarding/lineupBrandGlyph.js';
 import { PLAYER_OVERLAY_MARKUP } from './playerOverlayDom.js';
 
 const STATIC_SCREEN_MARKUP = `
-<section class="screen-stack" aria-live="polite" data-static-screens-mounted>
+<section class="screen-stack" data-static-screens-mounted>
   <div class="player-presentation" data-player-presentation-surface data-native-presentation-aperture="opaque" aria-hidden="true" inert></div>
   <section id="screen-player" class="screen screen--active screen--player" data-screen="player" data-style-surface="screen" aria-label="Player">
       ${PLAYER_OVERLAY_MARKUP}
@@ -27,21 +27,25 @@ const STATIC_SCREEN_MARKUP = `
           <img data-epg-detail-poster alt="" decoding="async" draggable="false" hidden>
           <span data-epg-detail-artwork-placeholder aria-hidden="true">Artwork unavailable</span>
         </figure>
-        <div class="guide-detail__copy" data-guide-info-panel aria-live="polite" aria-atomic="true">
-          <p class="guide-detail__channel" data-epg-detail-channel></p>
-          <p class="guide-detail__eyebrow" data-epg-detail-eyebrow></p>
-          <h3 data-epg-detail-title data-title-fallback="text"></h3>
-          <p class="guide-detail__subtitle" data-epg-detail-subtitle></p>
-          <p class="guide-detail__time" data-epg-detail-time></p>
-          <div class="guide-detail__badges" data-epg-detail-badges aria-label="Program details">
-            <span data-epg-detail-badge-slot="0" hidden></span>
-            <span data-epg-detail-badge-slot="1" hidden></span>
-            <span data-epg-detail-badge-slot="2" hidden></span>
-            <span data-epg-detail-badge-slot="3" hidden></span>
-            <span data-epg-detail-badge-slot="4" hidden></span>
+        <div class="guide-detail__copy" data-guide-info-panel>
+          <div class="guide-detail__identity" role="status" aria-live="polite" aria-atomic="true">
+            <p class="guide-detail__channel" data-epg-detail-channel></p>
+            <p class="guide-detail__eyebrow" data-epg-detail-eyebrow></p>
+            <h3 data-epg-detail-title data-title-fallback="text"></h3>
+            <p class="guide-detail__subtitle" data-epg-detail-subtitle></p>
+            <p class="guide-detail__time" data-epg-detail-time></p>
           </div>
-          <p class="guide-detail__genres" data-epg-detail-genres></p>
-          <p class="guide-detail__description" data-epg-detail-description></p>
+          <div class="guide-detail__metadata">
+            <div class="guide-detail__badges" data-epg-detail-badges aria-label="Program details">
+              <span data-epg-detail-badge-slot="0" hidden></span>
+              <span data-epg-detail-badge-slot="1" hidden></span>
+              <span data-epg-detail-badge-slot="2" hidden></span>
+              <span data-epg-detail-badge-slot="3" hidden></span>
+              <span data-epg-detail-badge-slot="4" hidden></span>
+            </div>
+            <p class="guide-detail__genres" data-epg-detail-genres></p>
+            <p class="guide-detail__description" data-epg-detail-description></p>
+          </div>
         </div>
       </section>
       <div id="guide-grid" class="epg-grid" data-epg-grid role="grid" aria-label="Guide schedule grid"></div>

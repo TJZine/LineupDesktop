@@ -305,6 +305,8 @@
 
 .epg-grid__row--placeholder {
   align-items: stretch;
+  height: var(--guide-row-height);
+  box-sizing: border-box;
   color: var(--color-text-muted);
   pointer-events: none;
 }
@@ -532,7 +534,7 @@
 }
 
 .epg-grid__program[data-temporal-state="upcoming"] {
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: var(--color-border-strong);
 }
 
 .epg-grid__program[data-temporal-state="past"] .epg-cell-progress {
@@ -718,6 +720,14 @@
 }
 
 .guide-detail__copy {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.guide-detail__identity,
+.guide-detail__metadata {
   display: grid;
   align-content: start;
   gap: var(--space-2);

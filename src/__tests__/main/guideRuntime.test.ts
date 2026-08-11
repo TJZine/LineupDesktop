@@ -248,13 +248,14 @@ test('GuideRuntime paged artwork output becomes an owned renderer-safe projectio
   const configured = createChannelConfig('chan-1', 1, 'Channel 1');
   repository.data.channels = [configured];
   repository.data.currentChannelId = configured.id;
+  const privateLocatorMarker = ['guide', 'private', 'token', 'marker'].join('-');
   const hostileTitle = 'Bearer secret https://private.invalid/<title>\u0000'.repeat(8);
   const plexAdapter = new MockPlexLibraryAdapter();
   plexAdapter.setLibraryItems('lib-1', [{
     ...createLibraryItem(0),
     title: hostileTitle,
-    thumb: '/library/metadata/1/thumb',
-    art: '/library/metadata/1/art',
+    thumb: `/library/metadata/1/thumb?private=${privateLocatorMarker}`,
+    art: `/library/metadata/1/art?private=${privateLocatorMarker}`,
     clearLogo: '/library/metadata/1/clearLogo',
   }]);
   const createdRefs: object[] = [];
@@ -293,9 +294,12 @@ test('GuideRuntime paged artwork output becomes an owned renderer-safe projectio
   assert.equal(projected.channels[0]!.programs[0]!.artwork.logo, null);
   assert.notEqual(projected.channels[0]!.programs[0]!.artwork.poster, createdRefs[0]);
   assert.notEqual(projected.channels[0]!.programs[0]!.artwork.background, createdRefs[1]);
+  const serializedProjection = JSON.stringify(projected);
+  assert.equal(serializedProjection.includes(privateLocatorMarker), false);
+  assert.equal(createdInputs.some(({ locator }) => locator === privateLocatorMarker), false);
   assert.deepEqual(createdInputs, [
-    { role: 'poster', locator: '/library/metadata/1/thumb' },
-    { role: 'background', locator: '/library/metadata/1/art' },
+    { role: 'poster', locator: `/library/metadata/1/thumb?private=${privateLocatorMarker}` },
+    { role: 'background', locator: `/library/metadata/1/art?private=${privateLocatorMarker}` },
   ]);
   assert.equal((createdRefs[0] as { altText: string }).altText, hostileTitle);
 });
