@@ -121,19 +121,24 @@ test('time-range transition preserves a selected program by recentering without 
   const source = presentation();
   const selected = {
     ...createEpgState(source, 12, 'wide'),
-    windowStartMs: BASE + 2 * EPG_SLOT_DURATION_MS,
-    selectedChannelId: 'channel/a',
-    selectedProgramId: 'a-future',
+    windowStartMs: BASE,
+    selectedChannelId: 'channel/b',
+    selectedProgramId: 'b-late',
     presentationState: 'ready' as const,
   };
   const recentered = setEpgGuideTimeRange(selected, source, 'detailed');
   const recenteredView = createEpgGuideView(recentered, source);
   assert.equal(recentered.guideTimeRange, 'detailed');
+  assert.notEqual(recentered.windowStartMs, selected.windowStartMs);
+  const selectedProgram = source.channels[1]?.programs.find((candidate) => candidate.id === 'b-late');
+  assert.ok(selectedProgram !== undefined);
+  assert.ok(selectedProgram.startsAtMs >= recenteredView.windowStartMs);
+  assert.ok(selectedProgram.startsAtMs < recenteredView.windowEndMs);
   assert.equal(recentered.presentationGeneration, 12);
-  assert.equal(recentered.selectedChannelId, 'channel/a');
-  assert.equal(recentered.selectedProgramId, 'a-future');
-  assert.equal(recenteredView.selectedProgram?.id, 'a-future');
-  assert.equal(recenteredView.selectedProgram?.focusId, createGuideProgramFocusId('channel/a', 'a-future'));
+  assert.equal(recentered.selectedChannelId, 'channel/b');
+  assert.equal(recentered.selectedProgramId, 'b-late');
+  assert.equal(recenteredView.selectedProgram?.id, 'b-late');
+  assert.equal(recenteredView.selectedProgram?.focusId, createGuideProgramFocusId('channel/b', 'b-late'));
 
   const currentBase = createEpgState(source, 13, 'wide');
   const current = setEpgGuideTimeRange(currentBase, source, 'detailed');

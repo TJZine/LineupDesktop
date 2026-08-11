@@ -104,9 +104,9 @@ export function resolveGuideRowDensity(
   const normalizedGap = nonNegativeFinite(rowGap);
   const minimumCompleteRows = guideCompleteRowFloor(viewport);
   const availableHeight = positiveFinite(viewport.availableHeight ?? viewport.height, 0);
-  const hasMeasuredHeight = viewport.availableHeight !== undefined
-    ? Number.isFinite(viewport.availableHeight)
-    : availableHeight > 0;
+  const hasMeasuredHeight = viewport.availableHeight === undefined
+    ? availableHeight > 0
+    : Number.isFinite(viewport.availableHeight) && viewport.availableHeight > 0;
   const comfortableRows = completeGuideRowCount(availableHeight, GUIDE_COMFORTABLE_ROW_HEIGHT, normalizedGap);
   const compactRows = completeGuideRowCount(availableHeight, GUIDE_COMPACT_ROW_HEIGHT, normalizedGap);
   const effective = requested === 'comfortable' || requested === 'compact'

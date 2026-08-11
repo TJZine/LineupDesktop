@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { GuideChannelWindow } from '../../renderer/guideChannelWindow.js';
 import { moveEpgSelectionAbsolute, createEpgState, type NormalizedEpgPresentationSource } from '../../renderer/epg.js';
+import { GUIDE_DOM_ROW_CAP } from '../../renderer/guideVirtualization.js';
 
 const SLOT = 30 * 60_000;
 
@@ -27,7 +28,7 @@ for (const total of [459, 500]) {
     const last = owner.project();
     assert.equal(last.rows.at(-1)?.absoluteIndex, total - 1);
     assert.ok(last.rows.every((row) => row.state === 'ready'));
-    assert.ok(last.rows.length <= 24);
+    assert.ok(last.rows.length <= GUIDE_DOM_ROW_CAP);
   });
 }
 
@@ -40,7 +41,7 @@ test('fast jumps expose inert loading/error projections and retry without fabric
   const loading = owner.project(2);
   const intent = loading.request;
   assert.ok(intent !== null);
-  assert.ok(intent.channelLimit <= 24);
+  assert.ok(intent.channelLimit <= GUIDE_DOM_ROW_CAP);
   owner.markLoading(intent);
   assert.ok(owner.project().rows.every((row) => row.state === 'loading'));
   owner.fail(intent);
@@ -86,6 +87,47 @@ test('identity epochs reject stale pages and sparse navigation preserves time-co
   assert.equal(moved?.loaded, true);
   assert.equal(moved?.targetAbsoluteIndex, 23);
   assert.equal(moved?.state.selectedProgramId.endsWith('-1'), true);
+});
+
+test('clear invalidates pending work without changing the stable window identity', () => {
+  const owner = new GuideChannelWindow();
+  owner.reset('scope:stable');
+  owner.setVisible(20, 6);
+  const stale = owner.beginForeground(1);
+  assert.ok(stale !== null);
+  const identity = owner.identity;
+  const epoch = owner.epoch;
+
+  owner.clear();
+  owner.clear();
+
+  assert.equal(owner.identity, identity);
+  assert.equal(owner.epoch, epoch + 2);
+  assert.equal(owner.merge(stale, page(20, stale.channelLimit, 100)), false);
+});
+
+test('invalid identity transitions leave the window epoch, rows, and focused projection unchanged', () => {
+  const owner = new GuideChannelWindow();
+  owner.reset('scope:stable');
+  const initial = owner.createIntent(1, 0, 10);
+  owner.markLoading(initial);
+  assert.equal(owner.merge(initial, page(0, 10, 100)), true);
+  owner.setVisible(0, 6, 9);
+  const identity = owner.identity;
+  const epoch = owner.epoch;
+  const presentation = owner.presentation();
+  assert.ok(presentation.sparseChannelRows.some((row) => row.absoluteIndex === 9), 'focused row is pinned');
+
+  const invalid = {
+    ...page(1, 10, 100),
+    channelWindow: { offset: 1, total: Number.NaN },
+  };
+  assert.equal(owner.mergePresentation('scope:new', 'auto', 2, 0, 10, invalid), false);
+
+  assert.equal(owner.identity, identity);
+  assert.equal(owner.epoch, epoch);
+  assert.equal(owner.visibleStart, 0);
+  assert.deepEqual(owner.presentation(), presentation);
 });
 
 test('finite LRU retains visible rows and eventually evicts old unpinned pages', () => {
@@ -138,12 +180,12 @@ test('absolute arrow and viewport-Page movement cross a loaded boundary and clam
   assert.equal(moveEpgSelectionAbsolute(state, 6, presentation)?.targetAbsoluteIndex, 499);
 });
 
-test('20 complete visible rows trade one overscan row for the offscreen focused row within the 24-row cap', () => {
+test('20 complete visible rows trade one overscan row for the offscreen focused row within the row cap', () => {
   const owner = new GuideChannelWindow();
   owner.reset('scope');
-  const first = owner.createIntent(1, 0, 24);
+  const first = owner.createIntent(1, 0, GUIDE_DOM_ROW_CAP);
   owner.markLoading(first);
-  owner.merge(first, page(0, 24, 500));
+  owner.merge(first, page(0, GUIDE_DOM_ROW_CAP, 500));
 
   owner.setVisible(200, 20, 0);
   const target = owner.beginForeground(2);
@@ -151,20 +193,23 @@ test('20 complete visible rows trade one overscan row for the offscreen focused 
   owner.markLoading(target);
   owner.merge(target, page(target.channelOffset, target.channelLimit, 500));
   const projected = owner.project().rows;
-  assert.equal(projected.length, 24);
+  assert.equal(projected.length, GUIDE_DOM_ROW_CAP);
   assert.ok(projected.some((row) => row.absoluteIndex === 0 && row.state === 'ready'));
   for (let index = 200; index < 220; index += 1) {
     assert.ok(projected.some((row) => row.absoluteIndex === index), `complete visible row ${String(index)} remains mounted`);
   }
 
-  owner.setVisible(300, 24, 0);
+  owner.setVisible(300, GUIDE_DOM_ROW_CAP, 0);
   const fullViewport = owner.beginForeground(3);
   assert.ok(fullViewport !== null);
   owner.markLoading(fullViewport);
   owner.merge(fullViewport, page(fullViewport.channelOffset, fullViewport.channelLimit, 500));
   const fullProjection = owner.project().rows;
-  assert.equal(fullProjection.length, 24);
-  assert.deepEqual(fullProjection.map((row) => row.absoluteIndex), Array.from({ length: 24 }, (_, index) => 300 + index));
+  assert.equal(fullProjection.length, GUIDE_DOM_ROW_CAP);
+  assert.deepEqual(
+    fullProjection.map((row) => row.absoluteIndex),
+    Array.from({ length: GUIDE_DOM_ROW_CAP }, (_, index) => 300 + index),
+  );
 });
 
 test('superseded pending foreground ranges release only their generation and become requestable again', () => {
@@ -186,7 +231,7 @@ test('superseded pending foreground ranges release only their generation and bec
   owner.setVisible(100, 6);
   const refetch = owner.beginForeground(4);
   assert.equal(refetch?.channelOffset, first.channelOffset);
-  assert.ok((refetch?.channelLimit ?? 25) <= 24);
+  assert.ok((refetch?.channelLimit ?? GUIDE_DOM_ROW_CAP + 1) <= GUIDE_DOM_ROW_CAP);
   assert.ok(refetch !== null);
   owner.markLoading(refetch);
   assert.equal(owner.release(first), false, 'late settlement cannot clear the replacement generation');
@@ -213,6 +258,23 @@ test('Arrow, viewport Page, and gamepad-equivalent movement skip loaded rows wit
     { channel: gamepadDown?.state.selectedChannelId, rowState: gamepadDown?.rowState },
     { channel: 'channel-4', rowState: 'ready' },
   );
+});
+
+test('absolute movement yields to fallback navigation after scanning rows with no visible programs', () => {
+  const owner = new GuideChannelWindow();
+  owner.reset('scope');
+  const intent = owner.createIntent(1, 0, 4);
+  owner.markLoading(intent);
+  owner.merge(intent, page(0, 4, 4, new Set([1, 2, 3])));
+  owner.setVisible(0, 4, 0);
+  const presentation = owner.presentation();
+  const state = {
+    ...createEpgState(presentation, 1, 'detailed'),
+    selectedChannelId: 'channel-0',
+    selectedProgramId: 'program-0-1',
+  };
+
+  assert.equal(moveEpgSelectionAbsolute(state, 1, presentation), null);
 });
 
 test('directional error targets produce one exact failed-range retry and recover', () => {

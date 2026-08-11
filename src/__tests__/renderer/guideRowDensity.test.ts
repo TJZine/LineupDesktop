@@ -106,6 +106,20 @@ test('Guide Auto chooses the largest readable treatment meeting its floor and re
   assert.equal(hdRowRegion.effective, 'comfortable');
   assert.equal(hdRowRegion.completeRows, 8);
   assert.equal(hdRowRegion.floorMet, true);
+
+  for (const availableHeight of [0, -1, Number.NaN]) {
+    const unmeasured = resolveGuideRowDensity(
+      'auto',
+      { width: 1_280, height: 500, availableHeight, devicePixelRatio: 1 },
+      12,
+    );
+    assert.equal(unmeasured.effective, 'comfortable', `${String(availableHeight)} is not a measured row region`);
+  }
+  assert.equal(resolveGuideRowDensity(
+    'auto',
+    { width: 1_280, height: 500, availableHeight: 300, devicePixelRatio: 1 },
+    12,
+  ).effective, 'compact', 'a positive finite row region participates in Auto density');
 });
 
 test('Guide density-only settings do not retain focus or notify Guide refresh settlement', async () => {
@@ -113,10 +127,13 @@ test('Guide density-only settings do not retain focus or notify Guide refresh se
     guideTimeRange: 'wide' as const,
     guidePerformanceProfile: 'auto' as const,
     guideRowDensity: 'auto' as const,
+    guideLayout: 'classic' as const,
   };
   let notes = 0;
   let retained = 0;
   let restored = 0;
+  const invalidations: string[] = [];
+  const reconciliations: boolean[] = [];
   const owner = createSettingsGuideSettingsSettlementOwner({
     getCurrentSettings: () => current,
     getPolling: () => ({
@@ -126,6 +143,8 @@ test('Guide density-only settings do not retain focus or notify Guide refresh se
     }),
     retainGuideProgramFocusIntent: () => { retained += 1; },
     restorePendingGuideFocus: () => { restored += 1; },
+    invalidateViewportLayout: () => { invalidations.push('invalidate'); },
+    reconcileViewport: (allowRefresh) => { reconciliations.push(allowRefresh); },
   });
   const pending = owner.begin(
     { ...current, guideRowDensity: 'compact' },
@@ -135,6 +154,16 @@ test('Guide density-only settings do not retain focus or notify Guide refresh se
   assert.equal(notes, 0);
   assert.equal(retained, 0);
   assert.equal(restored, 0);
+  assert.deepEqual(invalidations, ['invalidate']);
+  assert.deepEqual(reconciliations, [false]);
+
+  const layout = owner.begin(
+    { ...current, guideLayout: 'overlay' },
+    () => { current = { ...current, guideLayout: 'overlay' }; },
+  );
+  await layout.finish(false);
+  assert.deepEqual(invalidations, ['invalidate', 'invalidate']);
+  assert.deepEqual(reconciliations, [false, true]);
 });
 
 test('Guide presentation settlement retains and restores only the pending presentation focus intent', async () => {
@@ -142,6 +171,7 @@ test('Guide presentation settlement retains and restores only the pending presen
     guideTimeRange: 'wide' as const,
     guidePerformanceProfile: 'auto' as const,
     guideRowDensity: 'auto' as const,
+    guideLayout: 'classic' as const,
   };
   let pendingGuideChange = false;
   let notes = 0;
@@ -156,6 +186,8 @@ test('Guide presentation settlement retains and restores only the pending presen
     }),
     retainGuideProgramFocusIntent: () => { retained += 1; },
     restorePendingGuideFocus: () => { restored += 1; },
+    invalidateViewportLayout: () => undefined,
+    reconcileViewport: () => undefined,
   });
 
   const presentationChange = owner.begin(

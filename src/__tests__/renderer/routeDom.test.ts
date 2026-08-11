@@ -517,7 +517,8 @@ test('route DOM renders guide states and focused program details', () => {
       );
 
       const stateText = collectText(stateGrid);
-      assert.equal(stateGrid.getAttribute('role'), null);
+      assert.equal(stateGrid.getAttribute('role'), 'grid');
+      assert.equal(stateGrid.getAttribute('aria-rowcount'), null);
       assert.match(stateText, state === 'loading' ? /Loading guide/u : state === 'empty-channels' ? /No channels available/u : state === 'empty-programs' ? /No programs in this window/u : /Guide unavailable/u);
       assert.doesNotMatch(stateText, /Signal Warmup|After Hours Cinema|Pilot Block|Roundtable/u);
       assert.match(stateTitle.textContent, state === 'loading' ? /Loading guide/u : state === 'empty-channels' ? /No channels available/u : state === 'empty-programs' ? /No programs in this window/u : /Guide unavailable/u);
@@ -576,7 +577,8 @@ test('route DOM suppresses now-playing chrome and summary when ready data has no
       createRendererSafePlayerSnapshot(),
       dom,
     );
-    assert.equal(grid.getAttribute('role'), null);
+    assert.equal(grid.getAttribute('role'), 'grid');
+    assert.equal(grid.getAttribute('aria-rowcount'), null);
     assert.doesNotMatch(collectText(grid), /NOW PLAYING/u);
   } finally {
     restoreDocument(originalDocument);
@@ -734,7 +736,8 @@ test('Guide clears stale Now Watching surfaces for every non-ready presentation 
         assert.equal(findElementsByClassName(grid, activeClass).length, 1);
 
         render(layout, presentationState);
-        assert.equal(grid.getAttribute('role'), null);
+        assert.equal(grid.getAttribute('role'), 'grid');
+        assert.equal(grid.getAttribute('aria-rowcount'), null);
         assert.equal(findElementsByClassName(grid, 'epg-classic-now-playing').length, 0);
         assert.equal(findElementsByClassName(grid, 'epg-now-watching-banner').length, 0);
         assert.doesNotMatch(collectText(grid), /NOW PLAYING/u);

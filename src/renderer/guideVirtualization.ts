@@ -104,13 +104,12 @@ export function projectGuideVirtualRange(input: GuideVirtualRangeInput): GuideVi
     index <= Math.min(rowCount - 1, clampedVisibleEnd + GUIDE_ROW_BUFFER); index += 1) candidates.add(index);
 
   const protectedRows = new Set<number>();
-  const protectedStart = visibleRowsClamped
-    ? clampedVisibleStart
-    : intervalCount > 0 ? intervalStart : 1;
-  const protectedEnd = visibleRowsClamped
-    ? clampedVisibleEnd
-    : intervalCount > 0 ? intervalEnd : 0;
-  for (let index = protectedStart; index <= protectedEnd; index += 1) protectedRows.add(index);
+  const protectedRange = visibleRowsClamped
+    ? { start: clampedVisibleStart, end: clampedVisibleEnd }
+    : intervalCount > 0 ? { start: intervalStart, end: intervalEnd } : null;
+  if (protectedRange !== null) {
+    for (let index = protectedRange.start; index <= protectedRange.end; index += 1) protectedRows.add(index);
+  }
   if (!visibleRowsClamped && input.focusedRowIndex >= 0 && input.focusedRowIndex < rowCount && protectedRows.size < GUIDE_DOM_ROW_CAP) {
     candidates.add(input.focusedRowIndex);
     protectedRows.add(input.focusedRowIndex);
@@ -119,10 +118,10 @@ export function projectGuideVirtualRange(input: GuideVirtualRangeInput): GuideVi
   const rowIndexes = [...candidates].filter((index) => availableIndexes.has(index));
   while (rowIndexes.length > GUIDE_DOM_ROW_CAP) {
     const evictable = rowIndexes.filter((index) => !protectedRows.has(index));
-    const source = evictable;
-    if (source.length === 0) break;
-    const remove = source.sort((left, right) => rowDistance(right, projectionStart, projectionEnd) - rowDistance(left, projectionStart, projectionEnd))[0];
-    if (remove === undefined) throw new RangeError('Guide row eviction could not satisfy the mounted row cap.');
+    if (evictable.length === 0) break;
+    const remove = evictable.sort(
+      (left, right) => rowDistance(right, projectionStart, projectionEnd) - rowDistance(left, projectionStart, projectionEnd),
+    )[0];
     rowIndexes.splice(rowIndexes.indexOf(remove), 1);
   }
   rowIndexes.sort((left, right) => left - right);

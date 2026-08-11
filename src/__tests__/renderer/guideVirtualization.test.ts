@@ -12,6 +12,7 @@ import {
   invalidateGuideLayoutMetrics,
   readGuideViewportRows,
   renderEpgGuideDom,
+  setGuideViewportStart,
 } from '../../renderer/epg/guideDom.js';
 import {
   AUTO_GUIDE_PRELOAD_PROFILE,
@@ -333,8 +334,8 @@ test('Guide density transitions use the new pure row stride instead of stale mou
     autoGrid.clientHeight = 300;
     renderEpgGuideDom(view, autoDom, { ...settings, guideRowDensity: 'auto' });
     const autoShell = autoGrid.descendants().find((node) => node.className === 'epg-shell');
-    assert.equal(autoShell?.dataset.guideRowDensityEffective, 'compact',
-      'Auto falls back to Compact when a resize breakpoint no longer fits Comfortable');
+    assert.equal(autoShell?.dataset.guideRowDensityEffective, 'comfortable',
+      'Auto keeps Comfortable while the row region has no positive measurement');
     assert.deepEqual(readGuideViewportRows(autoGrid as unknown as HTMLElement), { start: 0, completeCount: 0 },
       'Auto breakpoint transition reports no complete rows when the detail/header consumes the viewport');
   } finally {
@@ -388,16 +389,50 @@ test('Guide layout transitions reconcile the new row-start offset without changi
   }
 });
 
-test('Guide settings wiring refreshes layout changes but keeps density-only reconciliation display-only', () => {
-  const processValue = Reflect.get(globalThis, 'process') as {
-    getBuiltinModule(name: string): { readFileSync(path: URL, encoding: 'utf8'): string };
-  };
-  const source = processValue.getBuiltinModule('node:fs').readFileSync(
-    new URL('../../renderer/index.ts', import.meta.url),
-    'utf8',
-  );
-  assert.match(source, /if \(\(guideRowDensityChanged \|\| layoutChanged\)[\s\S]*reconcileGuideViewport\(layoutChanged\);/u);
-  assert.doesNotMatch(source, /reconcileGuideViewport\(false\)/u);
+test('Guide DOM owner synchronizes an absolute target with measured physical scroll geometry', () => {
+  const originalDocument = globalThis.document;
+  const metrics = { reads: 0 };
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: { createElement: (tagName: string) => new LayoutProbeElement(tagName, metrics) },
+  });
+  try {
+    const source = fixturePresentation();
+    const view = routeView(createEpgGuideView(createEpgState(source, 1, 'wide'), source));
+    const grid = new LayoutProbeElement('main', metrics);
+    grid.clientHeight = 720;
+    renderEpgGuideDom(view, guideDomBindings(grid), {
+      guideTimeRange: 'wide',
+      guideRowDensity: 'comfortable',
+      previewBadgesEnabled: true,
+      libraryTabsEnabled: true,
+      nowWatchingBannerEnabled: true,
+      guideLayout: 'classic',
+    });
+    invalidateGuideLayoutMetrics(grid as unknown as HTMLElement);
+
+    const viewport = setGuideViewportStart(grid as unknown as HTMLElement, 120);
+
+    assert.ok(viewport !== null);
+    assert.equal(viewport.start, 120);
+    assert.equal(grid.scrollTop, 300 + 120 * ACTUAL_ROW_STRIDE);
+    const owner = new GuideChannelWindow();
+    owner.reset('scope');
+    const initial = owner.createIntent(1, 0, GUIDE_DOM_ROW_CAP);
+    owner.markLoading(initial);
+    assert.equal(owner.merge(initial, {
+      ...source,
+      nowMs: source.nowMs ?? 0,
+      channels: source.channels.slice(0, GUIDE_DOM_ROW_CAP),
+    }), true);
+    owner.setVisible(viewport.start, viewport.completeCount);
+    const request = owner.beginForeground(2);
+    assert.equal(owner.visibleStart, viewport.start);
+    assert.equal(request?.channelOffset, viewport.start - 2);
+  } finally {
+    if (originalDocument === undefined) delete (globalThis as { document?: Document }).document;
+    else Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
+  }
 });
 
 test('Desktop cache identities and LRU protect current/focused entries within both profile caps', () => {
@@ -522,8 +557,16 @@ test('sparse absolute DOM projection uses total geometry and keeps loading rows 
     };
     renderEpgGuideDom(routeView(createEpgGuideView(loadingState, loadingPresentation)), guideDomBindings(grid), settings);
     const loadingRows = grid.descendants().filter((node) => node.dataset.guideRowState === 'loading');
+    const header = grid.descendants().find((node) => node.className === 'epg-time-header');
+    assert.equal(grid.getAttribute('role'), 'grid');
+    assert.equal(grid.getAttribute('aria-rowcount'), '501');
+    assert.equal(header?.getAttribute('role'), 'row');
+    assert.equal(header?.getAttribute('aria-rowindex'), '1');
     assert.ok(loadingRows.length > 0 && loadingRows.length <= GUIDE_DOM_ROW_CAP);
     assert.ok(loadingRows.every((row) => row.getAttribute('aria-hidden') === 'true'));
+    assert.ok(loadingRows.every((row) => row.getAttribute('role') === 'row'
+      && row.getAttribute('aria-rowindex') === String(Number(row.dataset.guideRowIndex) + 2)
+      && row.children.some((child) => child.getAttribute('role') === 'gridcell')));
     assert.ok(loadingRows.every((row) => row.descendants().every((node) =>
       node.dataset.guideProgramId === undefined && node.dataset.focusId === undefined)));
     assert.ok(grid.descendants().some((node) => node.dataset.guideProgramId?.startsWith('program-2-') === true),
@@ -537,6 +580,7 @@ test('sparse absolute DOM projection uses total geometry and keeps loading rows 
     const retry = grid.descendants().find((node) => node.dataset.guideRetryIndex !== undefined);
     assert.equal(retry?.dataset.guideAction, 'retry');
     assert.equal(retry?.dataset.guideProgramId, undefined);
+    assert.equal(retry?.parent?.getAttribute('role'), 'gridcell');
   } finally {
     if (originalDocument === undefined) delete (globalThis as { document?: Document }).document;
     else Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
@@ -656,10 +700,12 @@ class LayoutProbeElement {
     for (const child of children) child.parent = this;
     this.children.splice(0, this.children.length, ...children);
   }
-  querySelector<T>(_selector: string): T | null {
+  querySelector<T>(selector: string): T | null {
+    if (selector !== '.epg-grid__row') return null;
     return (this.descendants().find((node) => node.className.split(' ').includes('epg-grid__row')) ?? null) as T | null;
   }
-  querySelectorAll<T>(_selector: string): T[] {
+  querySelectorAll<T>(selector: string): T[] {
+    if (selector !== '.epg-grid__row') return [];
     return this.descendants().filter((node) => node.className.split(' ').includes('epg-grid__row')) as T[];
   }
   getBoundingClientRect(): DOMRect {

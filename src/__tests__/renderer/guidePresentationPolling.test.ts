@@ -7,6 +7,7 @@ import {
   type EpgGuideTimeRange,
 } from '../../renderer/epg.js';
 import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
+import { GuideChannelWindow } from '../../renderer/guideChannelWindow.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import {
   AUTO_GUIDE_PRELOAD_PROFILE,
@@ -84,7 +85,7 @@ function createOptions(
     getGuideTimeRange,
     getGuidePerformanceProfile: () => 'reduced-resource' as const,
     setLoading: () => undefined,
-    applyPresentation: () => applyPresentation(),
+    applyPresentation: () => { applyPresentation(); return true; },
     handleFailure: () => undefined,
   };
 }
@@ -131,6 +132,188 @@ test('foreground channel limits follow complete viewport rows plus bounded overs
   completeVisibleRows = 30;
   await polling.refresh('visible-clamped');
   assert.deepEqual(limits, [11, 24]);
+});
+
+test('polling does not coalesce an active request when the visible-row channel limit changes', async () => {
+  let completeVisibleRows = 5;
+  const requests: Array<Deferred<ReturnType<typeof result>>> = [];
+  const appliedLimits: number[] = [];
+  const polling = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async () => {
+        const request = deferred<ReturnType<typeof result>>();
+        requests.push(request);
+        return request.promise;
+      },
+      cancelPresentation: async () => undefined,
+      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+    },
+    host: host(),
+    getActiveRoute: () => 'guide',
+    getWindowStartMs: () => 0,
+    getGuideTimeRange: () => 'detailed',
+    getGuidePerformanceProfile: () => 'auto',
+    getCompleteVisibleRowCount: () => completeVisibleRows,
+    setLoading: () => undefined,
+    applyPresentation: (_value, _generation, _target, _effectiveStart, requestWindow) => {
+      if (requestWindow !== undefined) appliedLimits.push(requestWindow.channelLimit);
+      return true;
+    },
+    handleFailure: () => undefined,
+  });
+
+  const first = polling.refresh('poll-interval');
+  completeVisibleRows = 8;
+  const latest = polling.refresh('poll-interval');
+  requests[0]?.resolve(result('obsolete-limit'));
+  await first;
+  assert.deepEqual(appliedLimits, []);
+  assert.equal(requests.length, 2);
+  requests[1]?.resolve(result('current-limit'));
+  await latest;
+  assert.deepEqual(appliedLimits, [12]);
+});
+
+test('merge-rejected pages are failed without cache promotion, replay, or idle warming', async (context) => {
+  const idle: Array<() => void> = [];
+  const busy: boolean[] = [];
+  const failures: Array<{ retain: boolean; offset: number | undefined }> = [];
+  const marks: Array<Record<string, unknown>> = [];
+  let requests = 0;
+  context.mock.method(globalThis.performance, 'mark',
+    (_name: string, options?: PerformanceMarkOptions) => {
+      if (options?.detail !== undefined) marks.push(options.detail as Record<string, unknown>);
+      return {} as PerformanceMark;
+    });
+  context.mock.method(globalThis.performance, 'clearMarks', () => undefined);
+  const pageResult = (): ReturnType<typeof result> => ({
+    ok: true,
+    requestId: `rejected-${String(++requests)}`,
+    value: {
+      channels: [{
+        id: 'channel-0',
+        number: '1',
+        name: 'Channel 1',
+        programs: [],
+      }],
+      nowWatching: null,
+      minimumStartTimeMs: 0,
+      channelWindow: { offset: 0, total: 1 },
+      libraryFilter: {
+        scopeToken: 'scope',
+        revision: 0,
+        libraries: [],
+        selectedLibraryId: null,
+        persistenceStatus: 'ready',
+      },
+    },
+  });
+  const polling = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async () => pageResult(),
+      cancelPresentation: async () => undefined,
+      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+    },
+    host: idleHost(idle),
+    getActiveRoute: () => 'guide',
+    getWindowStartMs: () => 0,
+    getGuideTimeRange: () => 'wide',
+    getGuidePerformanceProfile: () => 'auto',
+    getCacheIdentity: () => 'identity',
+    getCacheScopeToken: () => 'scope',
+    setLoading: () => undefined,
+    setPagingBusy: (value) => { busy.push(value); },
+    applyPresentation: () => false,
+    handleFailure: (_source, _message, _generation, retain, requestWindow) => {
+      failures.push({ retain, offset: requestWindow?.channelOffset });
+    },
+  });
+
+  await polling.requestPage({ targetGlobalIndex: 0, scopeToken: 'scope', channelOffset: 0, channelLimit: 1 });
+  assert.equal(polling.getLastValidPresentation(), null);
+  assert.equal(polling.getPendingPageTarget(), null);
+  assert.deepEqual(busy, [true, false]);
+  assert.deepEqual(failures, [{ retain: false, offset: 0 }]);
+  assert.equal(idle.length, 0);
+
+  await polling.requestPage({ targetGlobalIndex: 0, scopeToken: 'scope', channelOffset: 0, channelLimit: 1 });
+  assert.equal(requests, 2, 'the rejected response was not cached or replayed');
+  assert.deepEqual(busy, [true, false, true, false]);
+  assert.equal(idle.length, 0, 'rejected pages do not seed idle warming');
+  assert.deepEqual(
+    marks.filter((detail) => detail.requestClass === 'rejected').map((detail) => detail.accepted),
+    [false, false],
+  );
+});
+
+test('an invalid response for a new identity preserves the accepted owner and polling presentation', async () => {
+  const owner = new GuideChannelWindow();
+  let cacheIdentity = 'cache:stable';
+  let requests = 0;
+  const response = (requestId: string, scopeToken: string, offset: number) => ({
+    ok: true as const,
+    requestId,
+    value: {
+      channels: [{ id: `channel-${scopeToken}`, number: '1', name: scopeToken, programs: [] }],
+      nowWatching: null,
+      minimumStartTimeMs: 0,
+      channelWindow: { offset, total: 1 },
+      libraryFilter: {
+        scopeToken,
+        revision: 0,
+        libraries: [],
+        selectedLibraryId: null,
+        persistenceStatus: 'ready' as const,
+      },
+    },
+  });
+  const polling = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async () => {
+        requests += 1;
+        return requests === 1
+          ? response('accepted', 'scope:stable', 0)
+          : response(`rejected-${String(requests)}`, 'scope:new', 1);
+      },
+      cancelPresentation: async () => undefined,
+      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+    },
+    host: host(),
+    getActiveRoute: () => 'guide',
+    getWindowStartMs: () => 0,
+    getGuideTimeRange: () => 'wide',
+    getGuidePerformanceProfile: () => 'auto',
+    getCacheIdentity: () => cacheIdentity,
+    setLoading: () => undefined,
+    applyPresentation: (presentation, generation, _target, _effectiveStart, requestWindow) =>
+      owner.mergePresentation(
+        presentation.libraryFilter?.scopeToken ?? 'unscoped',
+        'auto',
+        generation,
+        requestWindow?.channelOffset ?? 0,
+        requestWindow?.channelLimit ?? 24,
+        presentation,
+      ),
+    handleFailure: () => undefined,
+  });
+
+  await polling.refresh('accepted');
+  const identity = owner.identity;
+  const epoch = owner.epoch;
+  const ownerPresentation = owner.presentation();
+  const lastValid = polling.getLastValidPresentation();
+  assert.ok(lastValid !== null);
+
+  cacheIdentity = 'cache:new';
+  await polling.refresh('invalid-transition');
+  assert.equal(owner.identity, identity);
+  assert.equal(owner.epoch, epoch);
+  assert.deepEqual(owner.presentation(), ownerPresentation);
+  assert.equal(polling.getLastValidPresentation(), lastValid);
+
+  await polling.refresh('invalid-transition-retry');
+  assert.equal(requests, 3, 'the rejected identity transition was neither cached nor replayed');
+  assert.equal(polling.getLastValidPresentation(), lastValid);
 });
 
 test('Guide polling emits one honest terminal mark for runtime, cache, and cancellation', async (context) => {
@@ -207,7 +390,7 @@ test('Desktop preload profiles use exact row/time bounds and auto idle warming s
       } as unknown as Window,
       getActiveRoute: () => 'guide', getWindowStartMs: () => windowStartMs,
       getGuideTimeRange: () => 'wide', getGuidePerformanceProfile: () => auto ? 'auto' : 'reduced-resource',
-      setLoading: () => undefined, applyPresentation: () => undefined, handleFailure: () => undefined,
+      setLoading: () => undefined, applyPresentation: () => true, handleFailure: () => undefined,
     });
     await controller.refresh('profile-proof');
     assert.deepEqual(requests[0], { ...expected, channelOffset: 0 });
@@ -275,7 +458,7 @@ test('auto warm failures remain cache misses without applying foreground failure
       getCacheIdentity: () => 'identity',
       getCacheScopeToken: () => 'scope',
       setLoading: () => undefined,
-      applyPresentation: () => { applied += 1; },
+      applyPresentation: () => { applied += 1; return true; },
       handleFailure: (source) => { failures.push(`guide:${source}`); },
       handlePlayerFailure: (source) => { failures.push(`player:${source}`); },
     });
@@ -313,7 +496,7 @@ test('foreground visible-window work cancels an active idle warm before it runs'
     },
     host: idleHost(idle), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
     getGuideTimeRange: () => 'detailed', getGuidePerformanceProfile: () => 'auto',
-    setLoading: () => undefined, applyPresentation: () => undefined, handleFailure: () => undefined,
+    setLoading: () => undefined, applyPresentation: () => true, handleFailure: () => undefined,
   });
   await controller.refresh('foreground');
   idle.shift()?.();
@@ -390,6 +573,7 @@ test('auto page and adjacent-time warm entries are consumed without another brid
     setLoading: () => undefined, applyPresentation: (presentation) => {
       applied += 1;
       channelOffset = presentation.channelWindow?.offset ?? channelOffset;
+      return true;
     }, handleFailure: () => undefined,
   });
 
@@ -443,7 +627,7 @@ test('past-window and trusted identity changes invalidate cached presentations b
     },
     host: host(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
     getGuideTimeRange: () => 'wide', getCacheIdentity: () => identity, getCacheScopeToken: () => 'scope',
-    setLoading: () => undefined, applyPresentation: () => undefined, handleFailure: () => undefined,
+    setLoading: () => undefined, applyPresentation: () => true, handleFailure: () => undefined,
   });
 
   await controller.refresh('foreground');
@@ -474,7 +658,7 @@ test('cache invalidation requires explicit intent instead of diagnostic source l
     getCacheIdentity: () => 'identity',
     getCacheScopeToken: () => 'scope',
     setLoading: () => undefined,
-    applyPresentation: () => undefined,
+    applyPresentation: () => true,
     handleFailure: () => undefined,
   });
 
@@ -517,7 +701,7 @@ test('page/window cache entries expire at the poll interval and refetch on a sta
     getCacheScopeToken: () => 'scope',
     getNowMs: () => nowMs,
     setLoading: () => undefined,
-    applyPresentation: () => { applied += 1; },
+    applyPresentation: () => { applied += 1; return true; },
     handleFailure: () => undefined,
   });
 
@@ -557,7 +741,7 @@ test('preload profile replacement swaps the cache and discards stale warm candid
     getCacheIdentity: () => 'identity',
     getCacheScopeToken: () => 'scope',
     setLoading: () => undefined,
-    applyPresentation: () => undefined,
+    applyPresentation: () => true,
     handleFailure: () => undefined,
   });
 
@@ -597,7 +781,7 @@ test('undefined cache identity matches null for lookup, insertion, and currentne
       getCacheIdentity: () => identity as string | null,
       getCacheScopeToken: () => 'scope',
       setLoading: () => undefined,
-      applyPresentation: () => { applied += 1; },
+      applyPresentation: () => { applied += 1; return true; },
       handleFailure: () => undefined,
     });
 
@@ -628,7 +812,7 @@ test('cache hits cross one async boundary before currentness is rechecked', asyn
     getCacheIdentity: () => 'identity',
     getCacheScopeToken: () => 'scope',
     setLoading: () => undefined,
-    applyPresentation: () => { applied += 1; },
+    applyPresentation: () => { applied += 1; return true; },
     handleFailure: () => undefined,
   });
 
@@ -667,7 +851,7 @@ test('a scheduled idle warm cannot displace foreground active and trailing inten
     host: idleHost(idle), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
     getGuideTimeRange: () => 'wide', getGuidePerformanceProfile: () => 'auto',
     getCacheIdentity: () => 'identity', getCacheScopeToken: () => 'scope',
-    setLoading: () => undefined, applyPresentation: () => undefined, handleFailure: () => undefined,
+    setLoading: () => undefined, applyPresentation: () => true, handleFailure: () => undefined,
   });
 
   await controller.refresh('initial');

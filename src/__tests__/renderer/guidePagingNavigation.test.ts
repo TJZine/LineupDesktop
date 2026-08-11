@@ -50,6 +50,76 @@ test('Guide Page navigation keeps ±5 local, crosses pages, replaces one target,
   assert.equal(lastClamped?.fetchRequired, false);
 });
 
+test('Guide Page navigation resolves leading and interior sparse gaps by absolute row position', () => {
+  const source = presentation(3, 10, 20);
+  const [channel11, channel12, channel14] = source.channels;
+  assert.ok(channel11 !== undefined && channel12 !== undefined && channel14 !== undefined);
+  const sparse = {
+    ...source,
+    channels: [channel11, channel12, channel14],
+    sparseChannelRows: [
+      { state: 'loading' as const, absoluteIndex: 10 },
+      { state: 'ready' as const, absoluteIndex: 11, channel: channel11 },
+      { state: 'ready' as const, absoluteIndex: 12, channel: channel12 },
+      { state: 'error' as const, absoluteIndex: 13 },
+      { state: 'ready' as const, absoluteIndex: 14, channel: channel14 },
+    ],
+  };
+  const state = {
+    ...createEpgState(sparse, 0, 'wide'),
+    selectedChannelId: channel12.id,
+    selectedProgramId: channel12.programs[0]?.id ?? '',
+  };
+
+  assert.deepEqual(resolveEpgPageNavigation(state, sparse, -1, null, 5), {
+    targetGlobalIndex: 11,
+    channelOffset: 10,
+    targetLocalIndex: 0,
+    fetchRequired: false,
+    boundaryClamped: false,
+  });
+  assert.deepEqual(resolveEpgPageNavigation(state, sparse, -2, null, 5), {
+    targetGlobalIndex: 10,
+    channelOffset: 8,
+    targetLocalIndex: null,
+    fetchRequired: true,
+    boundaryClamped: false,
+  });
+  assert.deepEqual(resolveEpgPageNavigation(state, sparse, 1, null, 5), {
+    targetGlobalIndex: 13,
+    channelOffset: 11,
+    targetLocalIndex: null,
+    fetchRequired: true,
+    boundaryClamped: false,
+  });
+  assert.deepEqual(resolveEpgPageNavigation(state, sparse, 2, null, 5), {
+    targetGlobalIndex: 14,
+    channelOffset: 10,
+    targetLocalIndex: 2,
+    fetchRequired: false,
+    boundaryClamped: false,
+  });
+
+  const pinnedChannel = presentation(1, 0, 20).channels[0];
+  assert.ok(pinnedChannel !== undefined);
+  const pinned = {
+    ...sparse,
+    channels: [pinnedChannel, channel11],
+    sparseChannelRows: [
+      { state: 'ready' as const, absoluteIndex: 0, channel: pinnedChannel },
+      { state: 'loading' as const, absoluteIndex: 10 },
+      { state: 'ready' as const, absoluteIndex: 11, channel: channel11 },
+    ],
+  };
+  const pinnedState = {
+    ...createEpgState(pinned, 0, 'wide'),
+    selectedChannelId: pinnedChannel.id,
+    selectedProgramId: pinnedChannel.programs[0]?.id ?? '',
+  };
+  assert.equal(resolveEpgPageNavigation(pinnedState, pinned, 5, null, 5)?.channelOffset, 5,
+    'an off-window pinned row cannot project a negative sparse source position');
+});
+
 test('Guide paging owner binds focus to its exact request and retains last valid state on failure', async () => {
   const requests: Array<Deferred<GuideIpcResult<GuidePresentationSource>>> = [];
   const channelLimits: Array<number | undefined> = [];
@@ -84,6 +154,7 @@ test('Guide paging owner binds focus to its exact request and retains last valid
         focusedAfterPaging = epgState.selectedChannelId;
       }
       applied.push({ offset: value.channelWindow?.offset ?? -1, target: target ?? null });
+      return true;
     },
     handleFailure: (_source, message, _generation, retain) => failures.push({ message, retain }),
   });
@@ -110,11 +181,11 @@ test('Guide paging owner binds focus to its exact request and retains last valid
   assert.deepEqual(applied, [{ offset: 10, target: 12 }], 'wrong-scope rows cannot replace the current page');
   assert.equal(focusedAfterPaging, 'channel-12');
 
-  const canceled = polling.requestPage({ targetGlobalIndex: 25, scopeToken: 'new-scope', channelOffset: 20 });
+  const canceled = polling.requestPage({ targetGlobalIndex: 25, scopeToken: 'scope', channelOffset: 20 });
   route = 'settings';
   polling.reconcile('guide', 'settings');
   await canceled;
-  requests[3]?.resolve(okPresentation(9, 20, 30, 'new-scope'));
+  requests[3]?.resolve(okPresentation(9, 20, 30, 'scope'));
   await settle();
   assert.equal(applied.length, 1);
   assert.equal(busy.at(-1), false);
@@ -138,7 +209,7 @@ test('Guide paging owner keeps one active/one trailing target and rejects time-r
     } satisfies GuidePresentationPollingOptions['guide'],
     host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0, getGuideTimeRange: () => 'wide',
     setLoading: () => undefined, setPagingBusy: (value) => busy.push(value),
-    applyPresentation: (_value, _generation, target) => targets.push(target), handleFailure: () => undefined,
+    applyPresentation: (_value, _generation, target) => { targets.push(target); return true; }, handleFailure: () => undefined,
   });
   const active = polling.requestPage({ targetGlobalIndex: 12, scopeToken: 'scope', channelOffset: 10 });
   const trailing = polling.requestPage({ targetGlobalIndex: 17, scopeToken: 'scope', channelOffset: 15 });
@@ -184,7 +255,7 @@ test('Guide interval supersession clears a queued page through its existing sett
     host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0, getGuideTimeRange: () => 'wide',
     setLoading: () => undefined,
     setPagingBusy: (value) => busy.push(value),
-    applyPresentation: (_value, _generation, target) => appliedTargets.push(target),
+    applyPresentation: (_value, _generation, target) => { appliedTargets.push(target); return true; },
     handleFailure: () => undefined,
   });
 
@@ -229,7 +300,7 @@ test('Guide page cancellation rejects late success and failure without replacing
     } satisfies GuidePresentationPollingOptions['guide'],
     host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0, getGuideTimeRange: () => 'wide',
     setLoading: () => undefined, setPagingBusy: (value) => busy.push(value),
-    applyPresentation: (value) => applied.push(value.channelWindow?.offset ?? -1),
+    applyPresentation: (value) => { applied.push(value.channelWindow?.offset ?? -1); return true; },
     handleFailure: (_source, message) => failures.push(message),
   });
 
@@ -277,7 +348,7 @@ test('Guide page cancellation releases the active request before starting the la
     } satisfies GuidePresentationPollingOptions['guide'],
     host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0, getGuideTimeRange: () => 'wide',
     setLoading: () => undefined, setPagingBusy: (value) => busy.push(value),
-    applyPresentation: (value) => applied.push(value.channelWindow?.offset ?? -1),
+    applyPresentation: (value) => { applied.push(value.channelWindow?.offset ?? -1); return true; },
     handleFailure: () => undefined,
   });
 
@@ -325,7 +396,7 @@ test('Guide +5,+5,-5,-5 reversal discards its queued page and focuses the loaded
     } satisfies GuidePresentationPollingOptions['guide'],
     host: timerHost(), getActiveRoute: () => 'guide', getWindowStartMs: () => 0, getGuideTimeRange: () => 'wide',
     setLoading: () => undefined, setPagingBusy: (value) => busy.push(value),
-    applyPresentation: (value) => applied.push(value.channelWindow?.offset ?? -1),
+    applyPresentation: (value) => { applied.push(value.channelWindow?.offset ?? -1); return true; },
     handleFailure: () => undefined,
   });
   assert.deepEqual(

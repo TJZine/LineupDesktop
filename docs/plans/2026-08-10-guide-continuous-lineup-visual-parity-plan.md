@@ -311,7 +311,7 @@ Acceptance:
 
 - a 459- and 500-channel fixture can traverse first, middle, and last rows through wheel/scrollbar, arrows, and Page keys;
 - every settled real row has channel and program content or an explicit no-program state; missing/failed windows are visibly loading/retryable and fetch automatically;
-- every foreground request satisfies `channelLimit <= min(completeVisibleRows + (2 * overscanRows), 24)`, with the existing two-row overscan on each side represented by `overscanRows = 2`; request concurrency remains one active request plus at most one latest trailing foreground intent;
+- every foreground request satisfies `completeVisibleRows <= channelLimit <= min(completeVisibleRows + (2 * overscanRows), 24)`, with the existing two-row overscan on each side represented by `overscanRows = 2`; request concurrency remains one active request plus at most one latest trailing foreground intent;
 - foreground work continues to preempt and cancel lower-priority idle warming independently of the request-size and concurrency constraints;
 - focused row/cell remains connected after boundary loads until explicit navigation or deterministic fallback, stale responses cannot settle, and route/filter/profile changes release the sparse store;
 - polling refreshes the current absolute window rather than offset zero;

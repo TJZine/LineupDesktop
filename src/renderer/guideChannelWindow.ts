@@ -4,7 +4,11 @@ import type {
   NormalizedEpgPresentationSource,
 } from './epg.js';
 import type { GuideLibraryFilterState } from '../contracts/guide.js';
-import { GUIDE_ROW_BUFFER, type GuidePerformanceProfile } from './guideVirtualization.js';
+import {
+  GUIDE_ROW_BUFFER,
+  projectGuideForegroundChannelLimit,
+  type GuidePerformanceProfile,
+} from './guideVirtualization.js';
 
 export const GUIDE_CHANNEL_WINDOW_OVERSCAN = GUIDE_ROW_BUFFER;
 
@@ -36,6 +40,10 @@ interface StoredPage {
   used: number;
 }
 
+type WindowedEpgPresentation = NormalizedEpgPresentationSource & {
+  readonly channelWindow: NonNullable<NormalizedEpgPresentationSource['channelWindow']>;
+};
+
 export class GuideChannelWindow {
   #identity = '';
   #epoch = 0;
@@ -64,6 +72,15 @@ export class GuideChannelWindow {
     this.#identity = identity;
     this.#profile = profile;
     this.#epoch += 1;
+    this.#clearState();
+  }
+
+  clear(): void {
+    this.#epoch += 1;
+    this.#clearState();
+  }
+
+  #clearState(): void {
     this.#total = 0;
     this.#generation = 0;
     this.#visibleStart = 0;
@@ -75,10 +92,6 @@ export class GuideChannelWindow {
     this.#requestGeneration.clear();
     this.#pages.clear();
     this.#metadata = { nowWatching: null, nowMs: 0 };
-  }
-
-  clear(): void {
-    this.reset(`${this.#identity}:${String(this.#epoch + 1)}`, this.#profile);
   }
 
   setProfile(profile: GuidePerformanceProfile): void {
@@ -134,10 +147,51 @@ export class GuideChannelWindow {
   }
 
   merge(intent: GuideChannelWindowIntent, presentation: NormalizedEpgPresentationSource): boolean {
+    if (!this.#isCurrent(intent) || !this.#isLatestRange(intent) || !this.#isValidMergeShape(intent, presentation)) {
+      return false;
+    }
+    this.#commitMerge(intent, presentation);
+    return true;
+  }
+
+  mergePresentation(
+    identity: string,
+    profile: GuidePerformanceProfile,
+    generation: number,
+    channelOffset: number,
+    channelLimit: number,
+    presentation: NormalizedEpgPresentationSource,
+  ): boolean {
+    const identityChanged = identity !== this.#identity || profile !== this.#profile;
+    const intent: GuideChannelWindowIntent = {
+      identity,
+      epoch: identityChanged ? this.#epoch + 1 : this.#epoch,
+      generation,
+      channelOffset,
+      channelLimit: clampInteger(channelLimit, 1, 24),
+    };
+    if (!this.#isValidMergeShape(intent, presentation) ||
+      !identityChanged && !this.#isLatestRange(intent)) return false;
+    if (identityChanged) this.reset(identity, profile);
+    this.#commitMerge(intent, presentation);
+    return true;
+  }
+
+  #isValidMergeShape(
+    intent: GuideChannelWindowIntent,
+    presentation: NormalizedEpgPresentationSource,
+  ): presentation is WindowedEpgPresentation {
     const window = presentation.channelWindow;
-    if (!this.#isCurrent(intent) || !this.#isLatestRange(intent) || window === undefined || window.offset !== intent.channelOffset ||
-      window.total < 0 || presentation.channels.length > intent.channelLimit ||
-      window.offset + presentation.channels.length > window.total) return false;
+    return Number.isSafeInteger(intent.channelOffset) && intent.channelOffset >= 0 &&
+      Number.isSafeInteger(intent.channelLimit) && intent.channelLimit > 0 &&
+      window !== undefined && Number.isSafeInteger(window.offset) && window.offset >= 0 &&
+      Number.isSafeInteger(window.total) && window.total >= window.offset &&
+      window.offset === intent.channelOffset && presentation.channels.length <= intent.channelLimit &&
+      presentation.channels.length <= window.total - window.offset;
+  }
+
+  #commitMerge(intent: GuideChannelWindowIntent, presentation: WindowedEpgPresentation): void {
+    const window = presentation.channelWindow;
     if (this.#total !== 0 && window.total !== this.#total) {
       this.#rows.clear();
       this.#errors.clear();
@@ -170,7 +224,6 @@ export class GuideChannelWindow {
     this.#pages.set(key, { key, start: window.offset, end: pageEnd, used: ++this.#clock });
     this.#visibleStart = clampInteger(this.#visibleStart, 0, Math.max(0, this.#total - this.#visibleCount));
     this.#evict();
-    return true;
   }
 
   fail(intent: GuideChannelWindowIntent): boolean {
@@ -310,7 +363,7 @@ export class GuideChannelWindow {
   }
 
   #foregroundLimit(): number {
-    return Math.min(24, this.#visibleCount + GUIDE_CHANNEL_WINDOW_OVERSCAN * 2);
+    return projectGuideForegroundChannelLimit(this.#visibleCount, GUIDE_CHANNEL_WINDOW_OVERSCAN);
   }
 
   #projectionBounds(): { start: number; end: number } {

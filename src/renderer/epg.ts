@@ -311,7 +311,7 @@ export function moveEpgSelectionAbsolute(
     if (next < 0 || next >= window.total) break;
     targetAbsoluteIndex = next;
   }
-  return { state, targetAbsoluteIndex, loaded: true, rowState: 'ready' };
+  return null;
 }
 
 export function focusEpgNow(
@@ -517,19 +517,37 @@ export function resolveEpgPageNavigation(
   pendingTargetGlobalIndex: number | null = null,
   channelLimit = EPG_CHANNEL_PAGE_SIZE,
 ): EpgPageNavigationIntent | null {
-  const sourceLocalIndex = presentation.channels.findIndex((channel) => channel.id === state.selectedChannelId);
   const window = presentation.channelWindow ?? { offset: 0, total: presentation.channels.length };
-  if (sourceLocalIndex < 0 || window.total === 0) return null;
-  const base = pendingTargetGlobalIndex ?? window.offset + sourceLocalIndex;
+  const sparseRows = presentation.sparseChannelRows;
+  const sourceRow = sparseRows?.find((row) => row.state === 'ready' && row.channel.id === state.selectedChannelId);
+  const sourceChannelIndex = presentation.channels.findIndex((channel) => channel.id === state.selectedChannelId);
+  const sourceAbsoluteIndex = sourceRow?.absoluteIndex ?? (
+    sourceChannelIndex < 0 ? null : window.offset + sourceChannelIndex
+  );
+  if (sourceAbsoluteIndex === null || window.total === 0) return null;
+  const base = pendingTargetGlobalIndex ?? sourceAbsoluteIndex;
   const targetGlobalIndex = clamp(base + offset, 0, window.total - 1);
   const boundaryClamped = targetGlobalIndex === base;
-  const pageEnd = window.offset + presentation.channels.length;
-  const inside = targetGlobalIndex >= window.offset && targetGlobalIndex < pageEnd;
+  const targetRow = sparseRows?.find((row) => row.absoluteIndex === targetGlobalIndex);
+  const targetLocalIndex = targetRow?.state === 'ready'
+    ? presentation.channels.findIndex((channel) => channel.id === targetRow.channel.id)
+    : sparseRows === undefined && targetGlobalIndex >= window.offset &&
+      targetGlobalIndex < window.offset + presentation.channels.length
+      ? targetGlobalIndex - window.offset
+      : -1;
+  const inside = targetLocalIndex >= 0;
   const maximumOffset = Math.max(0, window.total - channelLimit);
+  const sourceWindowPosition = clamp(
+    sourceAbsoluteIndex - window.offset,
+    0,
+    Math.max(0, channelLimit - 1),
+  );
   return {
     targetGlobalIndex,
-    channelOffset: inside || boundaryClamped ? window.offset : clamp(targetGlobalIndex - sourceLocalIndex, 0, maximumOffset),
-    targetLocalIndex: inside ? targetGlobalIndex - window.offset : null,
+    channelOffset: inside || boundaryClamped
+      ? window.offset
+      : clamp(targetGlobalIndex - sourceWindowPosition, 0, maximumOffset),
+    targetLocalIndex: inside ? targetLocalIndex : null,
     fetchRequired: !inside && !boundaryClamped,
     boundaryClamped,
   };

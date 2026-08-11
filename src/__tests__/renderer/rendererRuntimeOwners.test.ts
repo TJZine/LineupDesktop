@@ -165,6 +165,7 @@ test('guide presentation polling serializes refreshes and settles coalesced work
     },
     applyPresentation: (presentation) => {
       applied.push(presentation);
+      return true;
     },
     handleFailure: () => {
       failureCount += 1;
@@ -233,7 +234,7 @@ test('guide presentation polling applies sustained slow responses while bounding
     getGuideTimeRange: () => 'wide',
     getGuidePerformanceProfile: () => 'reduced-resource',
     setLoading: () => undefined,
-    applyPresentation: (_presentation, generation) => { appliedGenerations.push(generation); },
+    applyPresentation: (_presentation, generation) => { appliedGenerations.push(generation); return true; },
     handleFailure: () => assert.fail('failure callback was not expected'),
   });
 
@@ -308,7 +309,7 @@ test('guide presentation polling times out hung work, starts trailing work, and 
     getGuideTimeRange: () => 'wide',
     getGuidePerformanceProfile: () => 'reduced-resource',
     setLoading: () => undefined,
-    applyPresentation: () => { applied += 1; },
+    applyPresentation: () => { applied += 1; return true; },
     handleFailure: (_source, message) => { failureMessages.push(message); },
   });
 
@@ -363,7 +364,7 @@ test('guide presentation polling schedules Player and Guide with route-owned win
     getGuidePerformanceProfile: () => 'reduced-resource',
     getNowMs: () => nowMs,
     setLoading: () => { loadingCount += 1; },
-    applyPresentation: () => undefined,
+    applyPresentation: () => true,
     applyPlayerPresentation: () => { playerApplyCount += 1; },
     handleFailure: () => undefined,
   });
@@ -407,7 +408,7 @@ test('Settings-route past-items settlement makes no request; Guide entry recover
     getGuideTimeRange: () => 'wide',
     getGuidePerformanceProfile: () => 'reduced-resource',
     setLoading: () => undefined,
-    applyPresentation: () => undefined,
+    applyPresentation: () => true,
     handleFailure: () => undefined,
   });
 
@@ -502,6 +503,7 @@ test('Settings time-range settlement drives Guide and Player polling through opt
         restoredFocusIds.push(pendingFocusId);
         pendingFocusId = null;
       }
+      return true;
     },
     applyPlayerPresentation: (value, generation, effectiveStartTimeMs) => {
       epgState = settleEpgPresentation(
@@ -518,7 +520,12 @@ test('Settings time-range settlement drives Guide and Player polling through opt
     handlePlayerFailure: () => assert.fail('unexpected Player failure'),
   });
   const guideSettingsSettlementOwner = createSettingsGuideSettingsSettlementOwner({
-    getCurrentSettings: () => ({ guideTimeRange, guidePerformanceProfile: 'auto', guideRowDensity: 'auto' }),
+    getCurrentSettings: () => ({
+      guideTimeRange,
+      guidePerformanceProfile: 'auto',
+      guideRowDensity: 'auto',
+      guideLayout: 'classic',
+    }),
     getPolling: () => ({
       hasPendingGuideSettingsChange: () => polling.hasPendingGuideSettingsChange(),
       noteGuideSettingsChange: () => {
@@ -544,6 +551,8 @@ test('Settings time-range settlement drives Guide and Player polling through opt
       restoredFocusIds.push(focusState.activeId ?? 'missing-focus');
       pendingFocusId = null;
     },
+    invalidateViewportLayout: () => undefined,
+    reconcileViewport: () => undefined,
   });
 
   let replacementCount = 0;
@@ -583,6 +592,7 @@ test('Settings time-range settlement drives Guide and Player polling through opt
           guideTimeRange: state.values.guideTimeRange,
           guidePerformanceProfile: 'auto',
           guideRowDensity: 'auto',
+          guideLayout: 'classic',
         },
         () => {
           settlementTrace.push('apply-workflow-values');
@@ -704,6 +714,7 @@ test('Player first result clamps only to a newer bound and otherwise preserves t
       setLoading: (generation) => { state = { ...state, presentationState: 'loading', presentationGeneration: generation }; },
       applyPresentation: (presentation, generation, _target, effectiveStartTimeMs) => {
         state = settleEpgPresentation(state, presentation, generation, _target, false, 'wide', effectiveStartTimeMs).state;
+        return true;
       },
       applyPlayerPresentation: (presentation, generation, effectiveStartTimeMs) => {
         state = settleEpgPresentation(state, presentation, generation, null, false, 'wide', effectiveStartTimeMs).state;

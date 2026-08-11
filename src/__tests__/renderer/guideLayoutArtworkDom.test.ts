@@ -29,6 +29,7 @@ test('Guide layouts retain one artwork subtree and one native presentation apert
   const gridStart = root.innerHTML.indexOf('id="guide-grid"');
   assert.ok(detailStart >= 0 && detailStart < gridStart, 'detail surface precedes the grid shell');
   assert.match(root.innerHTML, /class="guide-detail"[^>]+data-guide-layout="classic"/u);
+  assert.match(root.innerHTML, /id="guide-grid"[^>]+role="grid"[^>]+aria-label="Guide schedule grid"/u);
 });
 
 test('Classic is playing-only PIP while Overlay and Player remain full modes', () => {

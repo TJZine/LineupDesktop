@@ -176,6 +176,7 @@ test('polling adopts the main-clamped effective start and full duration without 
     setLoading: () => undefined,
     applyPresentation: (_value, _generation, _target, effectiveStartTimeMs) => {
       applied.push({ effectiveStartTimeMs });
+      return true;
     },
     handleFailure: () => undefined,
   });
@@ -224,6 +225,7 @@ test('sequential polling settlements advance the bound and retain a program cros
     applyPresentation: (value, generation, target, effectiveStartTimeMs) => {
       state = settleEpgPresentation(state, value, generation, target, false, 'wide', effectiveStartTimeMs).state;
       renderedProgramIds.push(createEpgGuideView(state, value).selectedProgram?.id ?? '');
+      return true;
     },
     handleFailure: () => undefined,
   });
@@ -257,7 +259,7 @@ test('polling rejects a stale pre-settlement result after optimistic policy inva
     getGuideTimeRange: () => 'wide',
     getGuidePerformanceProfile: () => 'reduced-resource',
     setLoading: () => undefined,
-    applyPresentation: () => { applied += 1; },
+    applyPresentation: () => { applied += 1; return true; },
     handleFailure: () => undefined,
   });
   const refresh = polling.refresh('past-window');

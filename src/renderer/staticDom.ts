@@ -44,7 +44,7 @@ const STATIC_SCREEN_MARKUP = `
           <p class="guide-detail__description" data-epg-detail-description></p>
         </div>
       </section>
-      <div id="guide-grid" class="epg-grid" data-epg-grid aria-label="Guide schedule grid"></div>
+      <div id="guide-grid" class="epg-grid" data-epg-grid role="grid" aria-label="Guide schedule grid"></div>
     </div>
   </section>
   <section id="screen-settings" class="screen" data-screen="settings" data-style-surface="screen" aria-labelledby="screen-settings-title" hidden>

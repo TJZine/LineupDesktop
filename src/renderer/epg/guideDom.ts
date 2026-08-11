@@ -58,6 +58,28 @@ export function invalidateGuideLayoutMetrics(grid: HTMLElement | null): void {
 
 export function readGuideViewportRows(grid: HTMLElement | null): Readonly<{ start: number; completeCount: number }> {
   if (grid === null) return { start: 0, completeCount: 6 };
+  const geometry = readGuideViewportGeometry(grid);
+  const scrollTop = Number.isFinite(grid.scrollTop) ? Math.max(0, grid.scrollTop) : 0;
+  const viewportHeight = grid.clientHeight > 0 ? grid.clientHeight : geometry.rowOuterSize * 6;
+  const interval = projectGuideCompleteRowInterval(
+    viewportHeight,
+    geometry.rowStartOffset,
+    scrollTop,
+    geometry.rowHeight,
+    geometry.rowGap,
+  );
+  return {
+    start: interval.start,
+    completeCount: Math.min(24, interval.count),
+  };
+}
+
+function readGuideViewportGeometry(grid: HTMLElement): Readonly<{
+  rowOuterSize: number;
+  rowHeight: number;
+  rowGap: number;
+  rowStartOffset: number;
+}> {
   const metrics = guideLayoutMetrics.get(grid);
   const effectiveDensity = grid.dataset.guideRowDensityEffective === 'compact' ? 'compact' : 'comfortable';
   const fallbackDensity = metrics === undefined ? resolveGuideRowDensity(
@@ -65,25 +87,24 @@ export function readGuideViewportRows(grid: HTMLElement | null): Readonly<{ star
     readGuideViewportMetrics(grid),
     GUIDE_DEFAULT_ROW_GAP,
   ) : null;
-  const rowOuterSize = metrics?.rowOuterSize ?? fallbackDensity?.rowOuterSize ?? GUIDE_DEFAULT_ROW_GAP + GUIDE_COMFORTABLE_ROW_HEIGHT;
-  const rowHeight = metrics === undefined
-    ? fallbackDensity?.rowHeight ?? GUIDE_COMFORTABLE_ROW_HEIGHT
-    : Math.max(1, rowOuterSize - metrics.rowGapSize);
-  const rowGap = metrics?.rowGapSize ?? fallbackDensity?.rowGap ?? GUIDE_DEFAULT_ROW_GAP;
-  const rowStartOffset = metrics?.rowStartOffset ?? readGuideRowStartOffset(grid, rowOuterSize) ?? 0;
-  const scrollTop = Number.isFinite(grid.scrollTop) ? Math.max(0, grid.scrollTop) : 0;
-  const viewportHeight = grid.clientHeight > 0 ? grid.clientHeight : rowOuterSize * 6;
-  const interval = projectGuideCompleteRowInterval(
-    viewportHeight,
-    rowStartOffset,
-    scrollTop,
-    rowHeight,
-    rowGap,
-  );
-  return {
-    start: interval.start,
-    completeCount: Math.min(24, interval.count),
-  };
+  const fallbackRowOuterSize = fallbackDensity?.rowOuterSize ?? GUIDE_DEFAULT_ROW_GAP + GUIDE_COMFORTABLE_ROW_HEIGHT;
+  const measuredLayout = metrics === undefined ? readGuideRowLayout(grid, fallbackRowOuterSize) : null;
+  const rowOuterSize = metrics?.rowOuterSize ?? measuredLayout?.rowOuterSize ?? fallbackRowOuterSize;
+  const rowGap = metrics?.rowGapSize ?? measuredLayout?.rowGap ?? fallbackDensity?.rowGap ?? GUIDE_DEFAULT_ROW_GAP;
+  const rowHeight = Math.max(1, rowOuterSize - rowGap);
+  const rowStartOffset = metrics?.rowStartOffset ?? measuredLayout?.rowStartOffset ?? 0;
+  return { rowOuterSize, rowHeight, rowGap, rowStartOffset };
+}
+
+export function setGuideViewportStart(
+  grid: HTMLElement | null,
+  absoluteStart: number,
+): Readonly<{ start: number; completeCount: number }> | null {
+  if (grid === null) return null;
+  const geometry = readGuideViewportGeometry(grid);
+  const start = Number.isFinite(absoluteStart) ? Math.max(0, Math.trunc(absoluteStart)) : 0;
+  grid.scrollTop = geometry.rowStartOffset + start * geometry.rowOuterSize;
+  return readGuideViewportRows(grid);
 }
 
 export function guideCellPosition(
@@ -307,10 +328,11 @@ function renderEpgGuideDomContent(
     return;
   }
 
+  dom.epgGridElement.setAttribute('role', 'grid');
   if (view.guide.presentationState === 'ready') {
-    dom.epgGridElement.setAttribute('role', 'grid');
+    dom.epgGridElement.setAttribute('aria-rowcount', String(view.guide.channelWindow.total + 1));
   } else {
-    dom.epgGridElement.removeAttribute('role');
+    dom.epgGridElement.removeAttribute('aria-rowcount');
   }
 
   const trackWidth = GUIDE_TRACK_UNITS;
@@ -1003,6 +1025,7 @@ function readyGuideGridDom(
   const header = document.createElement('div');
   header.className = 'epg-time-header';
   header.setAttribute('role', 'row');
+  header.setAttribute('aria-rowindex', '1');
   const channelHeader = document.createElement('span');
   channelHeader.setAttribute('role', 'columnheader');
   channelHeader.setAttribute('aria-label', 'Channel');
@@ -1061,6 +1084,8 @@ function readyGuideGridDom(
     const rowElement = document.createElement('section');
     rowElement.className = 'epg-grid__row';
     rowElement.dataset.guideRowIndex = String(rowIndex);
+    rowElement.setAttribute('role', 'row');
+    rowElement.setAttribute('aria-rowindex', String(rowIndex + 2));
     const completeVisible = rowIndex >= completeRowInterval.start &&
       rowIndex < completeRowInterval.start + completeRowInterval.count;
     rowElement.dataset.guideRowBuffer = String(!completeVisible);
@@ -1070,11 +1095,13 @@ function readyGuideGridDom(
       rowElement.className += ' epg-grid__row--placeholder';
       rowElement.dataset.guideRowState = row.loadState;
       rowElement.setAttribute('aria-hidden', !completeVisible || row.loadState === 'loading' ? 'true' : 'false');
+      const statusCell = document.createElement('div');
+      statusCell.setAttribute('role', 'gridcell');
       if (row.loadState === 'loading') {
         const loading = document.createElement('span');
         loading.className = 'epg-grid__row-status';
         loading.textContent = 'Loading channel…';
-        rowElement.append(loading);
+        statusCell.append(loading);
       } else {
         const retry = document.createElement('button');
         retry.type = 'button';
@@ -1083,13 +1110,13 @@ function readyGuideGridDom(
         retry.dataset.guideRetryIndex = String(rowIndex);
         retry.dataset.focusId = `guide-window-retry-${String(rowIndex)}`;
         retry.textContent = 'Channel unavailable — Retry';
-        rowElement.append(retry);
+        statusCell.append(retry);
       }
+      rowElement.append(statusCell);
       rows.push(rowElement);
       continue;
     }
     if (!completeVisible) rowElement.setAttribute('aria-hidden', 'true');
-    rowElement.setAttribute('role', 'row');
     rowElement.setAttribute('aria-selected', String(row.isSelected));
     rowElement.dataset.selectedChannel = String(row.isSelected);
     rowElement.dataset.currentChannel = String(row.isNowWatching);
@@ -1164,14 +1191,10 @@ function parseGuideRowIndex(value: string | undefined): number | null {
   return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
-function readGuideRowStartOffset(grid: HTMLElement, fallbackRowOuterSize: number): number | null {
-  return readGuideRowLayout(grid, fallbackRowOuterSize)?.rowStartOffset ?? null;
-}
-
 function readGuideRowLayout(
   grid: HTMLElement,
   fallbackRowOuterSize: number,
-): Readonly<{ rowStartOffset: number; rowGap: number | null }> | null {
+): Readonly<{ rowStartOffset: number; rowGap: number | null; rowOuterSize: number }> | null {
   if (typeof grid.querySelectorAll !== 'function') return null;
   const rows = Array.from(grid.querySelectorAll<HTMLElement>('.epg-grid__row'));
   const row = rows[0];
@@ -1196,6 +1219,7 @@ function readGuideRowLayout(
   return {
     rowStartOffset: Math.max(0, rowRect.top - gridRect.top + scrollTop - rowIndex * rowOuterSize),
     rowGap,
+    rowOuterSize,
   };
 }
 
