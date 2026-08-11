@@ -5,7 +5,7 @@ import {
   formatEpgTimeWindow,
   type EpgProgramCellViewModel,
 } from '../epg.js';
-import { isSafeArtworkRefId } from '../../contracts/artwork.js';
+import { isSafeArtworkRefId, type ArtworkRef } from '../../contracts/artwork.js';
 import type { GuideLibraryFilterState } from '../../contracts/guide.js';
 import { projectGuideVirtualRange, type GuideVirtualRange } from '../guideVirtualization.js';
 import { guidePerformanceMarks } from '../guidePerformanceMarks.js';
@@ -25,6 +25,19 @@ const failedArtwork = new WeakMap<HTMLImageElement, Readonly<{
   refId: string;
 }>>();
 const pendingArtwork = new WeakMap<HTMLImageElement, object>();
+type GuideBackgroundState = 'missing' | 'loading' | 'available' | 'error' | 'poster-fallback';
+type GuideBackgroundCause = 'missing' | 'placeholder' | 'expired' | 'error';
+type GuideBackgroundRequest = Readonly<{
+  refId: string;
+  generationText: string;
+  artworkUrl: string;
+}>;
+type GuideBackgroundFailures = {
+  presentationGeneration: number;
+  refIds: Set<string>;
+};
+const failedBackground = new WeakMap<HTMLImageElement, GuideBackgroundFailures>();
+const pendingBackground = new WeakMap<HTMLImageElement, GuideBackgroundRequest>();
 const guideLayoutMetrics = new WeakMap<HTMLElement, {
   key: string;
   rowOuterSize: number;
@@ -499,6 +512,8 @@ function renderEpgGuideDomContent(
 export function renderGuideDetailArtwork(
   view: RouteWorkflowViewModel,
   dom: Pick<RendererDomBindings,
+    'epgDetailBackgroundElement' |
+    'epgDetailBackgroundImageElement' |
     'epgDetailArtworkElement' |
     'epgDetailPosterElement' |
     'epgDetailArtworkPlaceholderElement'>,
@@ -509,16 +524,26 @@ export function renderGuideDetailArtwork(
   if (figure === null || image === null || placeholder === null) return;
   placeholder.setAttribute('aria-hidden', 'true');
   const info = view.guide.infoPanel;
-  const artwork = info?.artwork.poster ?? null;
   const nowMs = view.guide.nowMs;
-  if (
-    info === null ||
-    artwork === null ||
-    artwork.status === 'placeholder' ||
-    artwork.expiresAtMs <= nowMs ||
-    artwork.kind !== 'poster' ||
-    !isSafeArtworkRefId(artwork.id)
-  ) {
+  renderGuideDetailPoster(info, nowMs, figure, image, placeholder);
+  renderGuideDetailBackground(
+    info,
+    nowMs,
+    view.guide.presentationGeneration,
+    dom.epgDetailBackgroundElement,
+    dom.epgDetailBackgroundImageElement,
+  );
+}
+
+function renderGuideDetailPoster(
+  info: RouteWorkflowViewModel['guide']['infoPanel'],
+  nowMs: number,
+  figure: HTMLElement,
+  image: HTMLImageElement,
+  placeholder: HTMLElement,
+): void {
+  const artwork = info?.artwork.poster ?? null;
+  if (!isValidGuideArtworkRef(artwork, 'poster', nowMs)) {
     placeholder.textContent = 'Artwork unavailable';
     clearGuideArtworkImage(image);
     failedArtwork.delete(image);
@@ -527,6 +552,7 @@ export function renderGuideDetailArtwork(
   }
   const failed = failedArtwork.get(image);
   if (
+    info !== null &&
     failed?.presentationGeneration === info.presentationGeneration &&
     failed.refId === artwork.id
   ) {
@@ -535,14 +561,15 @@ export function renderGuideDetailArtwork(
     setArtworkState(figure, image, placeholder, 'error');
     return;
   }
+  if (info === null) return;
   const generationText = String(info.presentationGeneration);
+  const artworkUrl = guideArtworkUrl(artwork.id);
   if (
     image.dataset.artworkRefId === artwork.id &&
     image.dataset.artworkGeneration === generationText &&
-    image.getAttribute('src') !== null
+    image.getAttribute('src') === artworkUrl
   ) return;
-  image.onload = null;
-  image.onerror = null;
+  clearGuideArtworkImage(image);
   image.dataset.artworkRefId = artwork.id;
   image.dataset.artworkGeneration = generationText;
   image.alt = clampArtworkAlt(
@@ -553,7 +580,6 @@ export function renderGuideDetailArtwork(
   placeholder.textContent = 'Loading artwork…';
   setArtworkState(figure, image, placeholder, 'loading');
   const request = Object.freeze({ refId: artwork.id, generationText });
-  const artworkUrl = `lineup://shell/artwork/${encodeURIComponent(artwork.id)}`;
   pendingArtwork.set(image, request);
   image.onload = () => {
     if (!isPendingArtwork(image, request, artwork.id, generationText, artworkUrl)) return;
@@ -573,6 +599,204 @@ export function renderGuideDetailArtwork(
     setArtworkState(figure, image, placeholder, 'error');
   };
   image.src = artworkUrl;
+}
+
+function renderGuideDetailBackground(
+  info: RouteWorkflowViewModel['guide']['infoPanel'],
+  nowMs: number,
+  presentationGeneration: number,
+  surface: HTMLElement | null,
+  image: HTMLImageElement | null,
+): void {
+  if (surface === null || image === null) return;
+  surface.setAttribute('aria-hidden', 'true');
+  image.setAttribute('aria-hidden', 'true');
+  image.alt = '';
+  image.decoding = 'async';
+  image.draggable = false;
+  const failedRefs = failedBackgroundForGeneration(image, presentationGeneration);
+  if (info === null) {
+    clearGuideBackgroundImage(image);
+    setGuideBackgroundState(surface, image, 'missing', 'theme');
+    delete surface.dataset.backgroundCause;
+    return;
+  }
+
+  const background = info.artwork.background;
+  const poster = isValidGuideArtworkRef(info.artwork.poster, 'poster', nowMs)
+    ? info.artwork.poster
+    : null;
+  if (isValidGuideArtworkRef(background, 'background', nowMs)) {
+    const generationText = String(presentationGeneration);
+    const artworkUrl = guideArtworkUrl(background.id);
+    if (failedRefs.has(background.id)) {
+      renderGuideBackgroundFallback(surface, image, poster, 'error');
+      return;
+    }
+    if (isCurrentGuideBackgroundSource(image, background.id, generationText, artworkUrl)) {
+      return;
+    }
+    startGuideBackgroundRequest({
+      surface,
+      image,
+      info,
+      artwork: background,
+      fallbackPoster: poster,
+      presentationGeneration,
+    });
+    return;
+  }
+
+  renderGuideBackgroundFallback(surface, image, poster, guideBackgroundCause(background, nowMs));
+}
+
+function renderGuideBackgroundFallback(
+  surface: HTMLElement,
+  image: HTMLImageElement,
+  poster: ArtworkRef | null,
+  cause: GuideBackgroundCause,
+): void {
+  clearGuideBackgroundImage(image);
+  setGuideBackgroundState(
+    surface,
+    image,
+    poster === null && cause === 'error' ? 'error' : poster === null ? 'missing' : 'poster-fallback',
+    poster === null ? 'theme' : 'poster',
+  );
+  surface.dataset.backgroundCause = cause;
+}
+
+function startGuideBackgroundRequest(input: {
+  surface: HTMLElement;
+  image: HTMLImageElement;
+  info: NonNullable<RouteWorkflowViewModel['guide']['infoPanel']>;
+  artwork: ArtworkRef;
+  fallbackPoster: ArtworkRef | null;
+  presentationGeneration: number;
+}): void {
+  const { surface, image, artwork, fallbackPoster, presentationGeneration } = input;
+  const generationText = String(presentationGeneration);
+  const artworkUrl = guideArtworkUrl(artwork.id);
+  clearGuideBackgroundImage(image);
+  image.dataset.artworkRefId = artwork.id;
+  image.dataset.artworkGeneration = generationText;
+  image.dataset.backgroundSource = 'background';
+  image.alt = '';
+  image.decoding = 'async';
+  image.draggable = false;
+  setGuideBackgroundState(surface, image, 'loading', 'background');
+  delete surface.dataset.backgroundCause;
+  const request: GuideBackgroundRequest = Object.freeze({
+    refId: artwork.id,
+    generationText,
+    artworkUrl,
+  });
+  pendingBackground.set(image, request);
+  image.onload = () => {
+    if (!isPendingGuideBackground(image, request)) return;
+    pendingBackground.delete(image);
+    image.onload = null;
+    image.onerror = null;
+    setGuideBackgroundState(surface, image, 'available', 'background');
+  };
+  image.onerror = () => {
+    if (!isPendingGuideBackground(image, request)) return;
+    pendingBackground.delete(image);
+    image.onload = null;
+    image.onerror = null;
+    failedBackgroundForGeneration(image, presentationGeneration).add(artwork.id);
+    renderGuideBackgroundFallback(surface, image, fallbackPoster, 'error');
+  };
+  image.src = artworkUrl;
+}
+
+function failedBackgroundForGeneration(
+  image: HTMLImageElement,
+  presentationGeneration: number,
+): Set<string> {
+  const current = failedBackground.get(image);
+  if (current?.presentationGeneration === presentationGeneration) return current.refIds;
+  const next = { presentationGeneration, refIds: new Set<string>() };
+  failedBackground.set(image, next);
+  return next.refIds;
+}
+
+function isCurrentGuideBackgroundSource(
+  image: HTMLImageElement,
+  refId: string,
+  generationText: string,
+  artworkUrl: string,
+): boolean {
+  return image.dataset.artworkRefId === refId &&
+    image.dataset.artworkGeneration === generationText &&
+    image.dataset.backgroundSource === 'background' &&
+    image.getAttribute('src') === artworkUrl;
+}
+
+function isPendingGuideBackground(
+  image: HTMLImageElement,
+  request: GuideBackgroundRequest,
+): boolean {
+  return pendingBackground.get(image) === request &&
+    isCurrentGuideBackgroundSource(
+      image,
+      request.refId,
+      request.generationText,
+      request.artworkUrl,
+    );
+}
+
+function clearGuideBackgroundImage(image: HTMLImageElement): void {
+  pendingBackground.delete(image);
+  image.onload = null;
+  image.onerror = null;
+  image.removeAttribute('src');
+  image.alt = '';
+  image.hidden = true;
+  delete image.dataset.artworkRefId;
+  delete image.dataset.artworkGeneration;
+  delete image.dataset.backgroundSource;
+}
+
+function setGuideBackgroundState(
+  surface: HTMLElement,
+  image: HTMLImageElement,
+  state: GuideBackgroundState,
+  source: 'background' | 'poster' | 'theme',
+): void {
+  surface.dataset.backgroundState = state;
+  surface.dataset.backgroundSource = source;
+  if (source === 'poster') surface.dataset.backgroundFallback = 'poster';
+  else if (source === 'theme') surface.dataset.backgroundFallback = 'theme';
+  else delete surface.dataset.backgroundFallback;
+  image.hidden = state !== 'available';
+}
+
+function guideBackgroundCause(
+  artwork: ArtworkRef | null,
+  nowMs: number,
+): GuideBackgroundCause {
+  if (artwork === null || !isSafeArtworkRefId(artwork.id)) return 'missing';
+  if (artwork.status === 'placeholder') return 'placeholder';
+  if (!Number.isFinite(artwork.expiresAtMs) || artwork.expiresAtMs <= nowMs) return 'expired';
+  return 'missing';
+}
+
+function isValidGuideArtworkRef(
+  artwork: ArtworkRef | null,
+  kind: ArtworkRef['kind'],
+  nowMs: number,
+): artwork is ArtworkRef {
+  return artwork !== null &&
+    artwork.status === 'available' &&
+    artwork.kind === kind &&
+    Number.isFinite(artwork.expiresAtMs) &&
+    artwork.expiresAtMs > nowMs &&
+    isSafeArtworkRefId(artwork.id);
+}
+
+function guideArtworkUrl(refId: string): string {
+  return `lineup://shell/artwork/${encodeURIComponent(refId)}`;
 }
 
 function isPendingArtwork(

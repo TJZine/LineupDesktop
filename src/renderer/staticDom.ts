@@ -20,6 +20,9 @@ const STATIC_SCREEN_MARKUP = `
       <p data-workflow-primary="guide">Tonight at a glance.</p>
       <p data-workflow-secondary="guide">Use directional controls to move through time windows, channels, and programs.</p>
       <section class="guide-detail" aria-label="Selected guide program">
+        <div class="guide-detail__background" data-epg-detail-background data-background-state="missing" data-background-source="theme" aria-hidden="true">
+          <img data-epg-detail-background-image alt="" aria-hidden="true" decoding="async" draggable="false" hidden>
+        </div>
         <figure data-epg-detail-artwork data-artwork-state="missing">
           <img data-epg-detail-poster alt="" decoding="async" draggable="false" hidden>
           <span data-epg-detail-artwork-placeholder aria-hidden="true">Artwork unavailable</span>

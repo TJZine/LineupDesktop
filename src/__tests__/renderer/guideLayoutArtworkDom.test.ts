@@ -22,6 +22,9 @@ test('Guide layouts retain one artwork subtree and one native presentation apert
   assert.equal((root.innerHTML.match(/data-player-presentation-surface/gu) ?? []).length, 1);
   assert.equal((root.innerHTML.match(/data-epg-detail-artwork(?:\s|>)/gu) ?? []).length, 1);
   assert.equal((root.innerHTML.match(/data-epg-detail-poster/gu) ?? []).length, 1);
+  assert.equal((root.innerHTML.match(/data-epg-detail-background(?:\s|>)/gu) ?? []).length, 1);
+  assert.equal((root.innerHTML.match(/data-epg-detail-background-image(?:\s|>)/gu) ?? []).length, 1);
+  assert.doesNotMatch(root.innerHTML, /data-epg-detail-logo/u);
 });
 
 test('Classic is playing-only PIP while Overlay and Player remain full modes', () => {

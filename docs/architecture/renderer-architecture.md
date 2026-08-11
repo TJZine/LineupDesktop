@@ -272,6 +272,26 @@ harness. It is not a production playback implementation and does not make
 renderer code responsible for Plex transport, native handles, secrets, or
 product playback setup.
 
+## G3B Selected Artwork Projection Disposition
+
+`src/renderer/epg/guideDom.ts` remains the cohesive Guide DOM/layout owner.
+Its new behavior is the selected detail's poster and decorative background
+projection, including independent request identity, currentness, load/error
+cleanup, source-cleared poster treatment fallback, and theme fallback.
+**Decision: cohesive growth.** Both surfaces consume the same selected
+`infoPanel` and presentation generation, and their lifecycle invariants remain
+DOM-local; poster fallback reuses the visible poster without a second
+background-image request, and no separate image manager or renderer privilege
+seam is justified. The owner is over 800 lines, so the existing fresh
+architecture-review gate remains required.
+
+`src/renderer/styles/guide-epg.css` remains the cohesive Guide visual owner.
+Its new behavior is the detail background surface treatment plus reduced-motion
+and forced-colors rules alongside the existing poster/detail composition.
+**Decision: cohesive growth.** The rules share the same Guide detail surface
+and accessibility policy; extraction would add no independent consumer or
+lifecycle owner.
+
 ## Verification
 
 Renderer shell changes generally require `npm run verify` before closeout

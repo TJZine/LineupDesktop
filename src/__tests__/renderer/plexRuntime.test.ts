@@ -1657,6 +1657,8 @@ function createPlexDomBindings(overrides: Partial<RendererDomBindings> = {}): Re
     epgDetailTitleElement: null,
     epgDetailTimeElement: null,
     epgDetailDescriptionElement: null,
+    epgDetailBackgroundElement: null,
+    epgDetailBackgroundImageElement: null,
     epgDetailArtworkElement: null,
     epgDetailPosterElement: null,
     epgDetailArtworkPlaceholderElement: null,

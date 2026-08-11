@@ -36,6 +36,8 @@ export interface RendererDomBindings {
   epgDetailTitleElement: HTMLElement | null;
   epgDetailTimeElement: HTMLElement | null;
   epgDetailDescriptionElement: HTMLElement | null;
+  epgDetailBackgroundElement: HTMLElement | null;
+  epgDetailBackgroundImageElement: HTMLImageElement | null;
   epgDetailArtworkElement: HTMLElement | null;
   epgDetailPosterElement: HTMLImageElement | null;
   epgDetailArtworkPlaceholderElement: HTMLElement | null;
@@ -159,6 +161,8 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     epgDetailTitleElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-title]'),
     epgDetailTimeElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-time]'),
     epgDetailDescriptionElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-description]'),
+    epgDetailBackgroundElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-background]'),
+    epgDetailBackgroundImageElement: documentRef.querySelector<HTMLImageElement>('[data-epg-detail-background-image]'),
     epgDetailArtworkElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-artwork]'),
     epgDetailPosterElement: documentRef.querySelector<HTMLImageElement>('[data-epg-detail-poster]'),
     epgDetailArtworkPlaceholderElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-artwork-placeholder]'),

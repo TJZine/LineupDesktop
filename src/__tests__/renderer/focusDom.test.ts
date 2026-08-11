@@ -686,6 +686,8 @@ function createFocusDomBindings(focusableElements: FocusElementDouble[]): Render
     epgDetailTitleElement: null,
     epgDetailTimeElement: null,
     epgDetailDescriptionElement: null,
+    epgDetailBackgroundElement: null,
+    epgDetailBackgroundImageElement: null,
     epgDetailArtworkElement: null,
     epgDetailPosterElement: null,
     epgDetailArtworkPlaceholderElement: null,
