@@ -8,6 +8,7 @@ import { createDesktopPlayerAdapterRuntimePort } from '../../../main/player/plex
 import {
   PlexPlaybackRuntime,
   PlexPlaybackRuntimeCandidateResolutionError,
+  type PlexPlaybackRuntimeCandidate,
 } from '../../../main/player/plexPlaybackRuntime.js';
 // This reviewed integration regression intentionally crosses the main/renderer test-owner boundary.
 // eslint-disable-next-line no-restricted-imports
@@ -28,6 +29,184 @@ import type { NativePlayerHostPort } from '../../../main/player/nativePlayerHost
 test('real runtime and adapter failure clears an active subscribed transition into recovery UI', async () => {
   const adapter = new DesktopPlayerAdapter(new InertNativePlayerHost());
   const playerPort = createDesktopPlayerAdapterRuntimePort(adapter);
+  const harness = createRendererHarness(adapter);
+  const runtime = new PlexPlaybackRuntime({
+    scheduler: {
+      getCurrentPlayback: async () => ({
+        channelId: 'channel-two',
+        programId: 'program-two',
+        startedAtMs: 1_000,
+        endsAtMs: 121_000,
+      }),
+    },
+    channel: {
+      resolvePlaybackCandidate: async () => {
+        throw new PlexPlaybackRuntimeCandidateResolutionError({
+          code: 'PLAYER_PLAYBACK_CANDIDATE_UNAVAILABLE',
+          category: 'source',
+          message: 'The scheduled media could not be resolved.',
+          recoverable: true,
+          retryable: true,
+          diagnostic: {
+            component: 'plex-playback-bridge',
+            operation: 'stream.resolve',
+            status: 'failed',
+            reason: 'media detail unavailable',
+          },
+        });
+      },
+    },
+    player: playerPort,
+    pms: { releaseSession: async () => undefined },
+    clock: { now: () => 2_000 },
+    onEvents: (events) => {
+      for (const event of events) harness.emitPlayerEvent(event);
+    },
+  });
+
+  void harness.controller.tune('two', 'miniGuide');
+  harness.timers.advance(175);
+  assert.equal(harness.getState().transitionChannelId, 'two');
+  assert.equal(harness.getState().transitionVisible, true);
+
+  const result = await runtime.startCurrentPlayback('manual-switch');
+
+  assert.equal(result.accepted, false);
+  assert.deepEqual(result.events.map((event) => event.event), ['error', 'state.changed']);
+  assert.equal(harness.getSnapshot().status, 'error');
+  assert.deepEqual(harness.getSnapshot(), adapter.getSnapshot());
+  assert.equal(harness.getState().transitionChannelId, null);
+  assert.equal(harness.getState().transitionVisible, false);
+  const view = createPlayerOverlayView(harness.getState(), createPresentation(harness.getSnapshot()));
+  assert.equal(view.visibleOverlays.transition, false);
+  assert.equal(view.visibleOverlays.playerError, true);
+  assert.equal(view.retryVisible, true);
+
+  harness.dispose();
+});
+
+test('candidate failure settles renderer state when failed cleanup retains the active adapter request', async () => {
+  const host = new FailingCleanupNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  const harness = createRendererHarness(adapter);
+  let resolutionCount = 0;
+  const runtime = new PlexPlaybackRuntime({
+    scheduler: {
+      getCurrentPlayback: async () => ({
+        channelId: 'channel-two',
+        programId: 'program-two',
+        startedAtMs: 1_000,
+        endsAtMs: 121_000,
+      }),
+    },
+    channel: {
+      resolvePlaybackCandidate: async () => {
+        resolutionCount += 1;
+        if (resolutionCount === 1) return createCandidate('active-request');
+        throw new PlexPlaybackRuntimeCandidateResolutionError({
+          code: 'PLAYER_PLAYBACK_CANDIDATE_UNAVAILABLE',
+          category: 'source',
+          message: 'The scheduled media could not be resolved.',
+          recoverable: true,
+          retryable: true,
+        });
+      },
+    },
+    player: createDesktopPlayerAdapterRuntimePort(adapter),
+    pms: { releaseSession: async () => undefined },
+    clock: { now: () => 2_000 },
+    onEvents: (events) => {
+      for (const event of events) harness.emitPlayerEvent(event);
+    },
+  });
+
+  const started = await runtime.startCurrentPlayback('startup');
+  assert.equal(started.accepted, true);
+  assert.equal(adapter.getSnapshot().requestId, 'active-request');
+  host.failCleanup = true;
+
+  void harness.controller.tune('two', 'miniGuide');
+  harness.timers.advance(175);
+  const failed = await runtime.startCurrentPlayback('manual-switch');
+
+  assert.equal(failed.accepted, false);
+  assert.deepEqual(failed.events.map((event) => event.event), [
+    'error',
+    'state.changed',
+    'error',
+    'state.changed',
+  ]);
+  assert.equal(harness.getSnapshot().requestId, 'active-request');
+  assert.equal(harness.getSnapshot().status, 'error');
+  assert.deepEqual(harness.getSnapshot(), adapter.getSnapshot());
+  assert.equal(harness.getState().transitionChannelId, null);
+  assert.equal(createPlayerOverlayView(
+    harness.getState(),
+    createPresentation(harness.getSnapshot()),
+  ).visibleOverlays.playerError, true);
+
+  harness.dispose();
+});
+
+class InertNativePlayerHost implements NativePlayerHostPort {
+  async execute() { return { ok: true as const }; }
+  async cleanup() {}
+  async queryAudioOutputs() { return { ok: true as const, outputs: [] }; }
+}
+
+class FailingCleanupNativePlayerHost extends InertNativePlayerHost {
+  failCleanup = false;
+
+  override async cleanup(): Promise<void> {
+    if (this.failCleanup) throw new Error('native cleanup failed');
+  }
+}
+
+function createCandidate(requestId: string): PlexPlaybackRuntimeCandidate {
+  const media = { id: 'media-one', title: 'Program one' };
+  return {
+    requestId,
+    load: {
+      media: { ...media, durationMs: 120_000, container: 'mp4' },
+      policy: {
+        autoplay: true,
+        startPositionMs: 1_000,
+        preferredAudioTrackId: null,
+        preferredSubtitleTrackId: null,
+      },
+      seekSupport: 'supported',
+      capabilityProfileId: 'desktop-safe',
+    },
+    privatePlayback: {
+      requestId,
+      decisionKind: 'direct-play',
+      playbackUrl: 'https://plex.example.invalid/library/parts/one/file.mp4',
+      credentialHeader: { name: 'X-Plex-Token', value: 'private-test-value' },
+      selectedConnection: {
+        protocol: 'https',
+        address: 'plex.example.invalid',
+        port: 443,
+        local: true,
+        relay: false,
+      },
+      media,
+      setup: {
+        playbackMode: 'direct-play',
+        mediaPath: '/library/metadata/one',
+        variantId: 'variant-one',
+        partPath: '/library/parts/one/file.mp4',
+        selectedTrackIds: { video: null, audio: null, subtitle: null },
+        selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+        trackMap: { video: [], audio: [], subtitle: [] },
+        audioOutputNativeKey: null,
+        dtsPassthroughEnabled: false,
+      },
+    },
+    pmsSession: { id: 'pms-one', requestId },
+  };
+}
+
+function createRendererHarness(adapter: DesktopPlayerAdapter) {
   let emitPlayerEvent = (_event: PlayerEvent): void => {
     throw new Error('player subscription was not registered');
   };
@@ -87,66 +266,17 @@ test('real runtime and adapter failure clears an active subscribed transition in
     onEvent: (event) => controller.handlePlayerEvent(event),
     render: () => undefined,
   });
-  const runtime = new PlexPlaybackRuntime({
-    scheduler: {
-      getCurrentPlayback: async () => ({
-        channelId: 'channel-two',
-        programId: 'program-two',
-        startedAtMs: 1_000,
-        endsAtMs: 121_000,
-      }),
+  return {
+    controller,
+    timers,
+    emitPlayerEvent: (event: PlayerEvent) => emitPlayerEvent(event),
+    getSnapshot: () => snapshot,
+    getState: () => state,
+    dispose: () => {
+      subscription.unsubscribe();
+      controller.dispose();
     },
-    channel: {
-      resolvePlaybackCandidate: async () => {
-        throw new PlexPlaybackRuntimeCandidateResolutionError({
-          code: 'PLAYER_PLAYBACK_CANDIDATE_UNAVAILABLE',
-          category: 'source',
-          message: 'The scheduled media could not be resolved.',
-          recoverable: true,
-          retryable: true,
-          diagnostic: {
-            component: 'plex-playback-bridge',
-            operation: 'stream.resolve',
-            status: 'failed',
-            reason: 'media detail unavailable',
-          },
-        });
-      },
-    },
-    player: playerPort,
-    pms: { releaseSession: async () => undefined },
-    clock: { now: () => 2_000 },
-    onEvents: (events) => {
-      for (const event of events) emitPlayerEvent(event);
-    },
-  });
-
-  void controller.tune('two', 'miniGuide');
-  timers.advance(175);
-  assert.equal(state.transitionChannelId, 'two');
-  assert.equal(state.transitionVisible, true);
-
-  const result = await runtime.startCurrentPlayback('manual-switch');
-
-  assert.equal(result.accepted, false);
-  assert.deepEqual(result.events.map((event) => event.event), ['error', 'state.changed']);
-  assert.equal(snapshot.status, 'error');
-  assert.deepEqual(snapshot, adapter.getSnapshot());
-  assert.equal(state.transitionChannelId, null);
-  assert.equal(state.transitionVisible, false);
-  const view = createPlayerOverlayView(state, createPresentation(snapshot));
-  assert.equal(view.visibleOverlays.transition, false);
-  assert.equal(view.visibleOverlays.playerError, true);
-  assert.equal(view.retryVisible, true);
-
-  subscription.unsubscribe();
-  controller.dispose();
-});
-
-class InertNativePlayerHost implements NativePlayerHostPort {
-  async execute() { return { ok: true as const }; }
-  async cleanup() {}
-  async queryAudioOutputs() { return { ok: true as const, outputs: [] }; }
+  };
 }
 
 class FakeTimers implements PlayerOverlayTimerHost {

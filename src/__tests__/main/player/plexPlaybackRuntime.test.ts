@@ -9,6 +9,7 @@ import {
   type PlexPlaybackRuntimeChannelPort,
   type PlexPlaybackRuntimeCleanupReason,
   type PlexPlaybackRuntimePlayerDispatchResult,
+  type PlexPlaybackRuntimePlayerCleanupResult,
   type PlexPlaybackRuntimePlayerPort,
   type PlexPlaybackRuntimeSchedulerPort,
   type PlexPlaybackRuntimeStartResult,
@@ -126,6 +127,7 @@ class FakePlayerPort implements PlexPlaybackRuntimePlayerPort {
   dispatchResult: PlexPlaybackRuntimePlayerDispatchResult = { ok: true };
   stopDispatchPromise: Promise<PlexPlaybackRuntimePlayerDispatchResult> | null = null;
   cleanupPromise: Promise<void> | null = null;
+  cleanupResult: PlexPlaybackRuntimePlayerCleanupResult = { ok: true, events: [] };
   dispatchFailure: Error | null = null;
   cleanupFailure: Error | null = null;
   terminalSettlement:
@@ -151,7 +153,7 @@ class FakePlayerPort implements PlexPlaybackRuntimePlayerPort {
     return this.terminalSettlement?.(event) ?? [event];
   }
 
-  async cleanup(requestId: string | null): Promise<void> {
+  async cleanup(requestId: string | null): Promise<PlexPlaybackRuntimePlayerCleanupResult> {
     this.cleanupRequestIds.push(requestId);
     if (this.cleanupPromise !== null) {
       await this.cleanupPromise;
@@ -159,6 +161,7 @@ class FakePlayerPort implements PlexPlaybackRuntimePlayerPort {
     if (this.cleanupFailure !== null) {
       throw this.cleanupFailure;
     }
+    return this.cleanupResult;
   }
 }
 
@@ -1000,6 +1003,29 @@ test('RD-12 plex playback runtime reports cleanup failures without privileged de
   assertTextAbsent(diagnostics.getRecords(), nativeDetail);
   assertTextAbsent(diagnostics.getRecords(), 'player-private-detail');
   assertNoForbiddenKeys(events);
+  assertRendererSafePlayerEvents(events);
+});
+
+test('playback runtime forwards a rejected player cleanup settlement without duplicating it', async () => {
+  const { runtime, player, diagnostics } = createRuntime();
+  await runtime.startCurrentPlayback();
+  const settlement: PlayerEvent = {
+    event: 'warning',
+    requestId: 'request-1',
+    warning: {
+      code: 'PLAYER_CLEANUP_WARNING',
+      category: 'cleanup-failure',
+      message: 'Playback cleanup did not complete.',
+      recoverable: true,
+      retryable: true,
+    },
+  };
+  player.cleanupResult = { ok: false, events: [settlement] };
+
+  const events = await runtime.cleanup({ reason: 'server-change' });
+
+  assert.deepEqual(events, [settlement]);
+  assert.equal(diagnostics.getCrashRecoverySummary().cleanupFailureCount, 1);
   assertRendererSafePlayerEvents(events);
 });
 

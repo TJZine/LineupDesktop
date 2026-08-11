@@ -64,7 +64,7 @@ function createRuntime(
       settleTerminalError(event) {
         return [event];
       },
-      async cleanup() {},
+      async cleanup() { return { ok: true, events: [] }; },
     },
     pms: {
       async releaseSession() {},

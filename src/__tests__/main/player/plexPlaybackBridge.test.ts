@@ -220,8 +220,8 @@ class FakePlayer implements PlexPlaybackRuntimePlayerPort {
     return [event];
   }
 
-  async cleanup(): Promise<void> {
-    return undefined;
+  async cleanup() {
+    return { ok: true as const, events: [] };
   }
 }
 

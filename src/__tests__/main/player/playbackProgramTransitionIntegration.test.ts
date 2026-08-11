@@ -199,6 +199,7 @@ test('completed helper cleanup can Retry only the canonical current program thro
       async cleanup() {
         playerCleanupStarted.resolve(undefined);
         await playerCleanupRelease.promise;
+        return { ok: true, events: [] };
       },
     },
     pms: {

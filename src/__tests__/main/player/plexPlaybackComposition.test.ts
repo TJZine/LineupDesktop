@@ -246,8 +246,9 @@ class FakePlayerPort {
     return [event];
   }
 
-  async cleanup(requestId: string | null): Promise<void> {
+  async cleanup(requestId: string | null) {
     this.cleanupRequestIds.push(requestId);
+    return { ok: true as const, events: [] };
   }
 }
 
@@ -332,6 +333,7 @@ async function waitFor(
 class FakeDesktopPlayerAdapter {
   readonly envelopes: PlayerRendererIntentEnvelope[] = [];
   cleanupAccepted = true;
+  cleanupEvents: readonly PlayerEvent[] = [];
   runtimeAccepted = true;
   runtimeEvents:
     | ((command: PlayerCommand) => readonly PlayerEvent[])
@@ -394,7 +396,7 @@ class FakeDesktopPlayerAdapter {
   }
 
   async cleanup(): Promise<{ accepted: boolean; events: readonly PlayerEvent[] }> {
-    return { accepted: this.cleanupAccepted, events: [] };
+    return { accepted: this.cleanupAccepted, events: this.cleanupEvents };
   }
 }
 
@@ -803,10 +805,22 @@ test('real desktop adapter host rejection consumes exactly three recovery attemp
 test('RD-12 desktop adapter runtime port reports cleanup rejection to runtime cleanup owner', async () => {
   const adapter = new FakeDesktopPlayerAdapter();
   adapter.cleanupAccepted = false;
+  adapter.cleanupEvents = [{
+    event: 'warning',
+    requestId: 'request-from-runtime',
+    warning: {
+      code: 'PLAYER_CLEANUP_WARNING',
+      category: 'cleanup-failure',
+      message: 'Cleanup did not complete.',
+      recoverable: true,
+      retryable: true,
+    },
+  }];
   const player = createDesktopPlayerAdapterRuntimePort(adapter);
 
-  await assert.rejects(() => player.cleanup('request-from-runtime'), {
-    message: 'Desktop player adapter cleanup failed.',
+  assert.deepEqual(await player.cleanup('request-from-runtime'), {
+    ok: false,
+    events: adapter.cleanupEvents,
   });
 });
 

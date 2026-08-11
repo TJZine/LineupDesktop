@@ -1,4 +1,9 @@
-import type { PlayerEvent, PlayerMediaSummary, PlayerRequestId } from '../../contracts/player.js';
+import {
+  isRendererSafePlayerEvent,
+  type PlayerEvent,
+  type PlayerMediaSummary,
+  type PlayerRequestId,
+} from '../../contracts/player.js';
 import type { DiagnosticEventStore } from '../diagnostics/diagnosticEventStore.js';
 import type {
   PlexPlaybackPmsSessionLease,
@@ -61,7 +66,35 @@ export class PlexPlaybackRuntimeCleanupCoordinator {
     }
 
     try {
-      await this.#player.cleanup(active.requestId);
+      const result = await this.#player.cleanup(active.requestId);
+      const cleanupEvents = result.events ?? [];
+      if (!cleanupEvents.every(isRendererSafePlayerEvent)) {
+        recordRuntimeCleanupDiagnostic(
+          this.#diagnosticEventStore,
+          active.requestId,
+          reason,
+          'PLAYER_PLAYBACK_PLAYER_CLEANUP_FAILED',
+        );
+        events.push(createRuntimeCleanupFailure(active.requestId, reason, 'player cleanup returned unsafe events'));
+      } else if (!result.ok && cleanupEvents.length === 0) {
+        recordRuntimeCleanupDiagnostic(
+          this.#diagnosticEventStore,
+          active.requestId,
+          reason,
+          'PLAYER_PLAYBACK_PLAYER_CLEANUP_FAILED',
+        );
+        events.push(createRuntimeCleanupFailure(active.requestId, reason, 'player cleanup failed without settlement'));
+      } else {
+        events.push(...cleanupEvents);
+        if (!result.ok) {
+          recordRuntimeCleanupDiagnostic(
+            this.#diagnosticEventStore,
+            active.requestId,
+            reason,
+            'PLAYER_PLAYBACK_PLAYER_CLEANUP_FAILED',
+          );
+        }
+      }
     } catch {
       recordRuntimeCleanupDiagnostic(
         this.#diagnosticEventStore,

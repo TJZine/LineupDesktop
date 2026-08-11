@@ -62,7 +62,7 @@ export function bootstrapPlaybackRuntime(
       : {
           dispatch: async () => ({ ok: true, events: [] }),
           settleTerminalError: (event: Extract<PlayerEvent, { event: 'error' }>) => [event],
-          cleanup: async () => {},
+          cleanup: async () => ({ ok: true, events: [] }),
         };
 
     const composition = createPlexPlaybackRuntimeComposition({
@@ -152,7 +152,7 @@ export function bootstrapPlaybackRuntime(
           };
         },
         settleTerminalError: (event: Extract<PlayerEvent, { event: 'error' }>) => [event],
-        cleanup: async () => {},
+        cleanup: async () => ({ ok: true, events: [] }),
       };
 
   const composition = createPlexPlaybackRuntimeComposition({
@@ -183,22 +183,22 @@ export function bootstrapPlaybackRuntime(
 function createFakeResolver() {
   return {
     async resolve(input: PlexStreamResolverInput): Promise<PlexStreamResolverResult> {
-      const fakeMediaId = `plex-media-${input.ratingKey}`;
-      const fakeMediaTitle = `Live Program ${input.ratingKey}`;
-      const fakeMediaDurationMs = 1_200_000;
       if (input.ratingKey.length === 0) {
         return {
           ok: false,
           error: {
             code: 'resource-missing',
             category: 'source',
-            message: 'Missing media id',
+            message: 'Missing Plex rating key',
             retryable: false,
             recoverable: false,
           },
           diagnostics: [],
         };
       }
+      const fakeMediaId = `plex-media-${input.ratingKey}`;
+      const fakeMediaTitle = `Live Program ${input.ratingKey}`;
+      const fakeMediaDurationMs = 1_200_000;
       const payload = {
         media: {
           id: fakeMediaId,

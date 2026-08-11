@@ -272,6 +272,15 @@ domain Plex credentials, URLs, Electron objects, Node objects, helper internals,
 or cleanup policy. `src/main/player/plexPlaybackComposition.ts` is only a thin
 injected factory and adapter port mapper.
 
+The runtime player cleanup port returns its renderer-safe settlement batch with
+an explicit success flag. The cleanup coordinator validates and forwards that
+batch, records failures without privileged detail, and preserves request
+custody while cleanup drains. If candidate resolution then fails, terminal
+settlement targets the prior runtime-owned request when the adapter still owns
+that snapshot, otherwise it settles only against the cleared null snapshot.
+This keeps snapshot mutation in the main-owned adapter and does not add a
+renderer, preload, IPC, or compatibility boundary.
+
 RD-12 proof is Mac/local automated proof sufficient: the runtime, resolver,
 bridge, and composition seams are injected and fakeable, and `npm run verify`
 passed on 2026-05-11. RD-12 does not add preload or renderer Plex APIs, live
@@ -306,8 +315,14 @@ Observed Package 2B proof included 46/46 cleanup/runtime/composition tests,
 contract passes plus one intentional skip, 179/179 harness/docs tests,
 typecheck, Electron build, static and live Electron smoke, architecture,
 maintainability, redaction, docs, full `npm run verify`, and
-`git diff --check`. The 794-line runtime and 799-line overlay controller remain
-cohesive and below the existing 800-line threshold with no growth headroom.
+`git diff --check`. The runtime has since grown to 814 lines to retain cohesive
+request/epoch, recovery, and terminal-settlement custody. This is an explicit
+file-shape exception: extracting the small prior-request settlement decision
+would split one lifecycle invariant across files without reducing ownership or
+complexity. Future unrelated growth must use the existing cleanup, recovery,
+diagnostics, or stale-custody collaborators rather than expanding the runtime.
+The 799-line overlay controller remains at the existing threshold with no
+growth headroom.
 
 Package 2D was independently reviewed as a conservative no-op: MP4/H.264/AAC
 Direct Play remains the only production profile, subtitle delivery remains

@@ -171,3 +171,19 @@ test('adapter-backed smoke bootstrap passes private playback only to privileged 
   assert.equal(JSON.stringify(emitted).includes('privatePlayback'), false);
   assert.equal(Object.hasOwn(adapter.getSnapshot(), 'privatePlayback'), false);
 });
+
+test('smoke bootstrap identifies an empty Plex rating key before deriving fake media fields', async () => {
+  const result = bootstrapPlaybackRuntime({
+    shellMode: 'smoke',
+    scheduler: createActiveScheduler(''),
+    adapter: null,
+    createRequestId: (prefix) => `${prefix}-missing-rating-key`,
+    onEvents: () => undefined,
+  });
+
+  const start = await result.runtime.startCurrentPlayback('startup');
+
+  assert.equal(start.accepted, false);
+  const error = start.events.find((event) => event.event === 'error');
+  assert.equal(error?.event === 'error' ? error.error.message : null, 'Missing Plex rating key');
+});
