@@ -217,6 +217,7 @@ test('guideCellDom builds valid DOM elements', () => {
   assert.equal(cell.getAttribute('role'), 'gridcell');
   assert.equal(cell.dataset.selectedProgram, 'true');
   assert.equal(cell.dataset.temporalState, 'current');
+  assert.equal(cell.dataset.guideCellState, 'current');
   assert.equal(cell.style.position, 'absolute');
   assert.equal(cell.style.left, '16.666667%');
   assert.equal(cell.style.width, 'max(0px, calc(33.333333% - 4px))');

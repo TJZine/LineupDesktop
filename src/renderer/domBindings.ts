@@ -33,8 +33,12 @@ export interface RendererDomBindings {
   channelListElement: HTMLElement | null;
   epgGridElement: HTMLElement | null;
   epgDetailChannelElement: HTMLElement | null;
+  epgDetailEyebrowElement?: HTMLElement | null;
   epgDetailTitleElement: HTMLElement | null;
+  epgDetailSubtitleElement?: HTMLElement | null;
   epgDetailTimeElement: HTMLElement | null;
+  epgDetailBadgesElement?: HTMLElement | null;
+  epgDetailGenresElement?: HTMLElement | null;
   epgDetailDescriptionElement: HTMLElement | null;
   epgDetailBackgroundElement: HTMLElement | null;
   epgDetailBackgroundImageElement: HTMLImageElement | null;
@@ -158,8 +162,12 @@ export function queryRendererDom(documentRef: Document = document): RendererDomB
     channelListElement: documentRef.querySelector<HTMLElement>('[data-channel-list]'),
     epgGridElement: documentRef.querySelector<HTMLElement>('[data-epg-grid]'),
     epgDetailChannelElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-channel]'),
+    epgDetailEyebrowElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-eyebrow]'),
     epgDetailTitleElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-title]'),
+    epgDetailSubtitleElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-subtitle]'),
     epgDetailTimeElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-time]'),
+    epgDetailBadgesElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-badges]'),
+    epgDetailGenresElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-genres]'),
     epgDetailDescriptionElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-description]'),
     epgDetailBackgroundElement: documentRef.querySelector<HTMLElement>('[data-epg-detail-background]'),
     epgDetailBackgroundImageElement: documentRef.querySelector<HTMLImageElement>('[data-epg-detail-background-image]'),

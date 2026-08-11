@@ -292,6 +292,27 @@ and forced-colors rules alongside the existing poster/detail composition.
 and accessibility policy; extraction would add no independent consumer or
 lifecycle owner.
 
+## G3C Guide Visual And Interaction Parity Disposition
+
+`src/renderer/epg/guideDom.ts` remains the cohesive Guide DOM/layout owner.
+Its G3C behavior re-expresses the selected-detail hierarchy, Classic/Overlay
+shell regions, tuned/current channel rail, 30-minute ruler marker, temporal
+cell states, library tabs, Now Watching surfaces, and explicit loading/empty/
+error/retry presentation in the same selection, generation, focus, and DOM
+reconciliation lifecycle. **Decision: cohesive growth.** The owner is 1,121
+lines, but these concerns share the Guide view-model projection and DOM
+currentness invariants; extraction would create forwarding seams without an
+independent lifecycle. The >800-line owner remains a fresh architecture-review
+surface before closeout.
+
+`src/renderer/styles/guide-epg.css` remains the cohesive Guide visual owner.
+Its G3C behavior adds hierarchy typography, spacing/color roles, Classic/Overlay
+visibility, channel/current/future treatment, marker and focus states, and
+forced-color/reduced-motion preservation alongside the existing artwork and
+grid rules. **Decision: cohesive growth.** At 934 lines it still serves one
+Guide surface and accessibility policy; G4 owns responsive row geometry and
+complete-row floors, while G6 owns Windows/native/device proof.
+
 ## Verification
 
 Renderer shell changes generally require `npm run verify` before closeout

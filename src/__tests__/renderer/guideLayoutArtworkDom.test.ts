@@ -25,6 +25,10 @@ test('Guide layouts retain one artwork subtree and one native presentation apert
   assert.equal((root.innerHTML.match(/data-epg-detail-background(?:\s|>)/gu) ?? []).length, 1);
   assert.equal((root.innerHTML.match(/data-epg-detail-background-image(?:\s|>)/gu) ?? []).length, 1);
   assert.doesNotMatch(root.innerHTML, /data-epg-detail-logo/u);
+  const detailStart = root.innerHTML.indexOf('class="guide-detail"');
+  const gridStart = root.innerHTML.indexOf('id="guide-grid"');
+  assert.ok(detailStart >= 0 && detailStart < gridStart, 'detail surface precedes the grid shell');
+  assert.match(root.innerHTML, /class="guide-detail"[^>]+data-guide-layout="classic"/u);
 });
 
 test('Classic is playing-only PIP while Overlay and Player remain full modes', () => {
@@ -75,6 +79,14 @@ test('native aperture CSS makes only acknowledged page compositions transparent 
     cssDeclaration(classicPip, 'padding-right'),
     'calc(var(--native-pip-width) + (var(--native-pip-inset) * 2))',
   );
+  const classicDetailPip = extractCssRule(
+    guide,
+    ':root[data-native-presentation-mode="guide-classic-pip"] .guide-detail[data-guide-layout="classic"]',
+  );
+  assert.equal(
+    cssDeclaration(classicDetailPip, 'margin-right'),
+    'calc(var(--native-pip-width) + (var(--native-pip-inset) * 2))',
+  );
   assert.equal(containsCssSelector(guide, '.epg-shell[data-epg-layout="classic"]'), false);
 
   const classicAperture = extractCssRule(
@@ -119,4 +131,45 @@ test('Guide time range no longer compresses row geometry', () => {
   assert.equal(cssDeclaration(program, 'top'), '4px');
   assert.equal(cssDeclaration(program, 'bottom'), '4px');
   assert.equal(cssDeclaration(program, 'padding'), 'var(--space-2) var(--space-4)');
+});
+
+test('Guide Classic and Overlay owners expose explicit shell, rail, and marker roles', () => {
+  const processValue = Reflect.get(globalThis, 'process') as {
+    getBuiltinModule(name: string): { readFileSync(path: URL, encoding: 'utf8'): string };
+  };
+  const guide = processValue.getBuiltinModule('node:fs').readFileSync(
+    new URL('../../renderer/styles/guide-epg.css', import.meta.url),
+    'utf8',
+  );
+  const shellVisibility = extractCssRule(guide, [
+    '.epg-shell[data-epg-layout="overlay"] .epg-classic-header',
+    '.epg-shell[data-epg-layout="classic"] .epg-now-watching-banner',
+  ]);
+  assert.equal(cssDeclaration(shellVisibility, 'display'), 'none');
+  const currentCell = extractCssRule(guide, '.epg-grid__program[data-temporal-state="current"]');
+  assert.equal(cssDeclaration(currentCell, 'border-color'), 'var(--color-focus-border)');
+  const upcomingCell = extractCssRule(guide, '.epg-grid__program[data-temporal-state="upcoming"]');
+  assert.equal(cssDeclaration(upcomingCell, 'border-color'), 'rgba(255, 255, 255, 0.14)');
+  const focused = extractCssRule(guide, [
+    '.epg-grid__program:focus-visible',
+    '.epg-grid__program.is-focused',
+    '.epg-library-tab:focus-visible',
+    '.epg-library-tab.is-focused',
+  ]);
+  assert.equal(cssDeclaration(focused, 'outline'), 'var(--focus-ring-width) solid var(--color-focus)');
+  const past = extractCssRule(guide, '.epg-grid__program[data-temporal-state="past"]');
+  assert.equal(cssDeclaration(past, 'opacity'), '0.62');
+  const pastFocused = extractCssRule(guide, [
+    '.epg-grid__program[data-temporal-state="past"][data-selected-program="true"]',
+    '.epg-grid__program[data-temporal-state="past"]:focus-visible',
+    '.epg-grid__program[data-temporal-state="past"].is-focused',
+  ]);
+  assert.equal(cssDeclaration(pastFocused, 'opacity'), '1');
+  const forcedColors = extractCssAtRuleBody(guide, '@media (forced-colors: active)');
+  const forcedPastFocused = extractCssRule(forcedColors ?? '', [
+    '.epg-grid__program[data-temporal-state="past"][data-selected-program="true"]',
+    '.epg-grid__program[data-temporal-state="past"]:focus-visible',
+    '.epg-grid__program[data-temporal-state="past"].is-focused',
+  ]);
+  assert.equal(cssDeclaration(forcedPastFocused, 'opacity'), '1');
 });

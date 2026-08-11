@@ -79,6 +79,7 @@ for (const total of [459, 500]) {
       name: `Channel ${String(rowOffset + localIndex + 1)}`,
       programs: [],
       isSelected: false,
+      isNowWatching: false,
       absoluteIndex: rowOffset + localIndex,
       loadState: 'ready',
     }));
@@ -349,6 +350,7 @@ function fixtureRows(): readonly EpgChannelRowViewModel[] {
   return Array.from({ length: 300 }, (_, rowIndex) => ({
     id: `channel-${String(rowIndex)}`, number: String(rowIndex + 1), name: `Channel ${String(rowIndex + 1)}`,
     isSelected: rowIndex === 200,
+    isNowWatching: false,
     programs: Array.from({ length: 48 }, (_, programIndex) => program(rowIndex, programIndex)),
   }));
 }

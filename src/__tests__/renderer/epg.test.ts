@@ -87,6 +87,26 @@ test('EPG projects scheduler rows, stable cell ids, slots, clipping, and details
   assert.match(formatEpgTimeWindow(BASE, BASE + EPG_SLOT_DURATION_MS), /^\d{1,2}:\d{2} [AP]M - \d{1,2}:\d{2} [AP]M$/u);
 });
 
+test('EPG keeps now-watching/tuned identity independent from focused selection', () => {
+  const source = presentation();
+  const focusedOnBeta = {
+    ...createEpgState(source, 8, 'wide'),
+    selectedChannelId: 'channel/b',
+    selectedProgramId: 'b-wide',
+  };
+  const view = createEpgGuideView(focusedOnBeta, source);
+  assert.equal(view.rows[0]?.id, 'channel/a');
+  assert.equal(view.rows[0]?.isNowWatching, true);
+  assert.equal(view.rows[0]?.isSelected, false);
+  assert.equal(view.rows[1]?.id, 'channel/b');
+  assert.equal(view.rows[1]?.isNowWatching, false);
+  assert.equal(view.rows[1]?.isSelected, true);
+
+  const withoutNowWatching = { ...source, nowWatching: null };
+  const missingView = createEpgGuideView(focusedOnBeta, withoutNowWatching);
+  assert.equal(missingView.rows.some((row) => row.isNowWatching), false);
+});
+
 test('Guide time range projects exact detailed and wide slot counts and durations', () => {
   const source = presentation();
   const detailed = createEpgGuideView(createEpgState(source, 4, 'detailed'), source);

@@ -89,6 +89,7 @@ export interface EpgChannelRowViewModel {
   name: string;
   programs: readonly EpgProgramCellViewModel[];
   isSelected: boolean;
+  isNowWatching: boolean;
   absoluteIndex?: number;
   loadState?: 'ready' | 'loading' | 'error';
 }
@@ -392,6 +393,7 @@ export function createEpgGuideView(
       number: sourceRow.channel.number,
       name: sourceRow.channel.name,
       isSelected: sourceRow.channel.id === normalizedState.selectedChannelId,
+      isNowWatching: sourceRow.channel.id === presentationForRender.nowWatching?.channelId,
       programs: renderProgramsForChannel(sourceRow.channel, normalizedState.windowStartMs, normalizedState.guideTimeRange).map((program) => createProgramCell(
         program,
         sourceRow.channel.id,
@@ -406,6 +408,7 @@ export function createEpgGuideView(
       number: '',
       name: '',
       isSelected: false,
+      isNowWatching: false,
       programs: [],
     }))
     : [];

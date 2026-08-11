@@ -150,6 +150,7 @@ export function guideCellDom(
   cell.dataset.guideGeneration = String(program.presentationGeneration);
   cell.dataset.selectedProgram = String(program.isSelected);
   cell.dataset.temporalState = program.temporalState;
+  cell.dataset.guideCellState = program.temporalState;
   cell.dataset.widthTier = pres.widthTier;
   cell.dataset.clippedStart = String(pos.isClippedStart);
   cell.dataset.clippedEnd = String(pos.isClippedEnd);
@@ -276,30 +277,7 @@ function renderEpgGuideDomContent(
     guideLayout: 'classic',
   },
 ): void {
-  const selectedRow = view.guide.selectedProgram === null
-    ? undefined
-    : view.guide.rows.find((row) => row.id === view.guide.selectedProgram?.channelId);
-  if (dom.epgDetailChannelElement) {
-    dom.epgDetailChannelElement.textContent =
-      selectedRow === undefined ? '' : `${selectedRow.number} - ${selectedRow.name}`;
-  }
-  if (dom.epgDetailTitleElement) {
-    dom.epgDetailTitleElement.textContent =
-      (view.guide.infoPanel?.title ?? view.guide.state.label).slice(0, 160);
-  }
-  if (dom.epgDetailTimeElement) {
-    dom.epgDetailTimeElement.textContent = view.guide.infoPanel === null ? view.guide.state.detail : [
-      view.guide.infoPanel.eyebrow,
-      view.guide.infoPanel.subtitle,
-      view.guide.infoPanel.timeLabel,
-      settings.previewBadgesEnabled ? view.guide.infoPanel.badges.join(' / ') : '',
-      view.guide.infoPanel.genres,
-    ].filter(Boolean).join(' - ');
-  }
-  if (dom.epgDetailDescriptionElement) {
-    dom.epgDetailDescriptionElement.textContent =
-      (view.guide.infoPanel?.description ?? '').slice(0, 600);
-  }
+  renderGuideDetailCopy(view, dom, settings.previewBadgesEnabled);
   renderGuideDetailArtwork(view, dom);
 
   if (!dom.epgGridElement) {
@@ -317,13 +295,19 @@ function renderEpgGuideDomContent(
   const shell = document.createElement('section');
   shell.className = 'epg-shell';
   shell.dataset.epgLayout = settings.guideLayout;
+  shell.dataset.guideComposition = settings.guideLayout;
   shell.dataset.guideTimeRange = settings.guideTimeRange;
   shell.dataset.guideRowDensity = settings.guideRowDensity;
   dom.epgGridElement.dataset.guideTimeRange = settings.guideTimeRange;
   dom.epgGridElement.dataset.guideRowDensity = settings.guideRowDensity;
+  dom.epgGridElement.dataset.guideLayout = settings.guideLayout;
+  projectGuideLayoutAttributes(dom.epgGridElement, dom.epgDetailArtworkElement, settings.guideLayout);
 
   const classicHeader = document.createElement('header');
   classicHeader.className = 'epg-classic-header';
+  classicHeader.dataset.guideShellRegion = 'classic-header';
+  classicHeader.hidden = settings.guideLayout !== 'classic';
+  classicHeader.setAttribute('aria-hidden', String(settings.guideLayout !== 'classic'));
   const headerBrand = document.createElement('div');
   headerBrand.className = 'epg-classic-header-brand';
   const brand = document.createElement('strong');
@@ -341,6 +325,7 @@ function renderEpgGuideDomContent(
     : document.createElement('div');
   if (nowPlaying !== null) {
     nowPlaying.className = 'epg-classic-now-playing';
+    nowPlaying.dataset.guideNowWatching = 'classic';
     nowPlaying.setAttribute('role', 'status');
     nowPlaying.setAttribute('aria-live', 'polite');
     nowPlaying.setAttribute('aria-atomic', 'true');
@@ -373,6 +358,7 @@ function renderEpgGuideDomContent(
     : document.createElement('div');
   if (nowWatching !== null && shellNowWatching !== null) {
     nowWatching.className = 'epg-now-watching-banner';
+    nowWatching.dataset.guideNowWatching = 'overlay';
     nowWatching.setAttribute('role', 'status');
     nowWatching.setAttribute('aria-live', 'polite');
     nowWatching.setAttribute('aria-atomic', 'true');
@@ -507,6 +493,92 @@ function renderEpgGuideDomContent(
     ));
   }
   dom.epgGridElement.replaceChildren(shell);
+}
+
+function renderGuideDetailCopy(
+  view: RouteWorkflowViewModel,
+  dom: RendererDomBindings,
+  previewBadgesEnabled: boolean,
+): void {
+  const selectedRow = view.guide.selectedProgram === null
+    ? undefined
+    : view.guide.rows.find((row) => row.id === view.guide.selectedProgram?.channelId);
+  const info = view.guide.infoPanel;
+  const fallbackTitle = view.guide.state.label;
+  const title = (info?.title ?? fallbackTitle).slice(0, 160);
+  const detailState = info === null ? view.guide.state.detail : info.timeLabel;
+  if (dom.epgDetailChannelElement) {
+    dom.epgDetailChannelElement.textContent =
+      selectedRow === undefined ? '' : `${selectedRow.number} - ${selectedRow.name}`;
+    dom.epgDetailChannelElement.dataset.channelState = selectedRow === undefined ? 'missing' : 'selected';
+  }
+  if (dom.epgDetailEyebrowElement) {
+    dom.epgDetailEyebrowElement.textContent = info?.eyebrow ?? '';
+    dom.epgDetailEyebrowElement.hidden = info === null || info.eyebrow.length === 0;
+  }
+  if (dom.epgDetailTitleElement) {
+    dom.epgDetailTitleElement.textContent = title;
+    dom.epgDetailTitleElement.dataset.titleFallback = info === null ? 'state' : 'text';
+  }
+  if (dom.epgDetailSubtitleElement) {
+    dom.epgDetailSubtitleElement.textContent = info?.subtitle ?? '';
+    dom.epgDetailSubtitleElement.hidden = info === null || info.subtitle.length === 0;
+  }
+  if (dom.epgDetailTimeElement) {
+    dom.epgDetailTimeElement.textContent = detailState;
+    dom.epgDetailTimeElement.dataset.detailState = info === null ? view.guide.presentationState : 'selected';
+  }
+  if (dom.epgDetailBadgesElement) {
+    renderGuideDetailBadges(dom.epgDetailBadgesElement, info === null || !previewBadgesEnabled ? [] : info.badges);
+  }
+  if (dom.epgDetailGenresElement) {
+    dom.epgDetailGenresElement.textContent = info?.genres ?? '';
+    dom.epgDetailGenresElement.hidden = info === null || info.genres.length === 0;
+  }
+  if (dom.epgDetailDescriptionElement) {
+    dom.epgDetailDescriptionElement.textContent = (info?.description ?? '').slice(0, 600);
+    dom.epgDetailDescriptionElement.hidden = info === null || info.description.length === 0;
+  }
+}
+
+function renderGuideDetailBadges(
+  container: HTMLElement,
+  badges: readonly string[],
+): void {
+  const slots = typeof container.querySelectorAll === 'function'
+    ? Array.from(container.querySelectorAll<HTMLElement>('[data-epg-detail-badge-slot]'))
+    : [];
+  if (slots.length === 0) {
+    container.textContent = badges.join(' / ');
+    container.hidden = badges.length === 0;
+    return;
+  }
+  for (const [index, slot] of slots.entries()) {
+    const value = badges[index] ?? '';
+    slot.textContent = value;
+    slot.hidden = value.length === 0;
+  }
+  container.hidden = badges.length === 0;
+}
+
+function projectGuideLayoutAttributes(
+  grid: HTMLElement,
+  figure: HTMLElement | null,
+  layout: 'classic' | 'overlay',
+): void {
+  grid.dataset.guideLayout = layout;
+  const guideScreen = typeof grid.closest === 'function'
+    ? grid.closest<HTMLElement>('[data-screen="guide"]')
+    : null;
+  if (guideScreen !== null) guideScreen.dataset.guideLayout = layout;
+  if (figure === null) return;
+  const detail = typeof figure.closest === 'function'
+    ? figure.closest<HTMLElement>('.guide-detail')
+    : null;
+  if (detail !== null) {
+    detail.dataset.guideLayout = layout;
+    detail.dataset.guideComposition = layout;
+  }
 }
 
 export function renderGuideDetailArtwork(
@@ -882,7 +954,13 @@ function readyGuideGridDom(
 
     const marker = document.createElement('div');
     marker.className = 'epg-current-time-marker';
+    marker.dataset.currentTimeMarker = 'true';
+    marker.setAttribute('aria-hidden', 'true');
     marker.style.left = `${toTrackPercent(markerLeft, trackWidth)}%`;
+    const markerLabel = document.createElement('span');
+    markerLabel.className = 'epg-current-time-marker-label';
+    markerLabel.textContent = 'NOW';
+    marker.append(markerLabel);
     slotTrack.append(marker);
   }
 
@@ -923,10 +1001,19 @@ function readyGuideGridDom(
       continue;
     }
     rowElement.setAttribute('role', 'row');
+    rowElement.setAttribute('aria-selected', String(row.isSelected));
     rowElement.dataset.selectedChannel = String(row.isSelected);
+    rowElement.dataset.currentChannel = String(row.isNowWatching);
+    rowElement.dataset.tunedChannel = String(row.isNowWatching);
     const channel = document.createElement('div');
     channel.className = 'epg-grid__channel';
+    channel.dataset.channelCurrent = String(row.isNowWatching);
+    channel.dataset.channelTuned = String(row.isNowWatching);
     channel.setAttribute('role', 'rowheader');
+    channel.setAttribute(
+      'aria-label',
+      `${row.number} - ${row.name}${row.isNowWatching ? ' — Live, tuned' : ''}`,
+    );
     const number = document.createElement('strong');
     number.textContent = row.number;
     const name = document.createElement('span');
@@ -955,6 +1042,8 @@ function readyGuideGridDom(
     if (hasMarker) {
       const line = document.createElement('div');
       line.className = 'epg-current-time-line';
+      line.dataset.currentTimeMarker = 'true';
+      line.setAttribute('aria-hidden', 'true');
       line.style.left = `${toTrackPercent(markerLeft, trackWidth)}%`;
       programs.append(line);
     }
