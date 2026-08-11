@@ -129,6 +129,42 @@ test('controlled navigation hides before advancing exactly one presentation docu
   await controller.dispose();
 });
 
+test('Windows null-host development, smoke, and missing-helper production load the shell', async (t) => {
+  for (const shellMode of ['development', 'smoke', 'production-missing-helper'] as const) {
+    await t.test(shellMode, async () => {
+      const owner = new NativePlayerPresentationOwner({
+        platform: 'win32',
+        host: null,
+        getSnapshot: () => null,
+        getParentIdentity: () => null,
+      });
+      const fakeView = new FakeView();
+      const controller = createShellWindowController({
+        createBaseWindow: () => new FakeBaseWindow().value,
+        createWebContentsView: () => fakeView.value,
+        screen: fakeScreen(),
+        preloadPath: '/preload',
+        smokeMode: shellMode === 'smoke',
+        publishShellStatus: () => undefined,
+        hidePresentation: () => owner.hide(),
+        invalidatePresentationDocument: () => owner.invalidateDocument(),
+      });
+
+      const shell = await controller.createWindow();
+      await shell.loadURL('lineup://shell/index.html');
+      assert.deepEqual(fakeView.loadedUrls, ['lineup://shell/index.html']);
+      assert.deepEqual(await owner.update(presentationRequest(null, 1)), {
+        ok: true,
+        status: 'deferred',
+        documentEpoch: 2,
+        revision: 1,
+      });
+      assert.equal((await owner.update(presentationRequest(2, 2))).status, 'unsupported');
+      await controller.dispose();
+    });
+  }
+});
+
 test('construction failures release every resource acquired before the failing stage', async (t) => {
   for (const stage of ['view', 'background', 'add', 'bounds'] as const) {
     await t.test(stage, async () => {

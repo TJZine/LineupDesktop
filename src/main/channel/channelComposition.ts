@@ -25,7 +25,7 @@ import { CustomChannelRuntime } from './customChannelRuntime.js';
 import type { DesktopPlexRuntime } from '../plex/desktopPlexRuntime.js';
 import { PlexLibraryMinimalAdapter } from './plexLibraryMinimalAdapter.js';
 import { ChannelScheduler } from '../../domain/scheduler/channelScheduler.js';
-import { GuideRuntime } from './guideRuntime.js';
+import { GuideRuntime, type GuidePastItemsWindowSnapshot } from './guideRuntime.js';
 import type { ChannelClock, ChannelLogger } from '../../domain/channel/interfaces.js';
 import { ChannelPublicReferenceOwner } from './channelPublicReferenceOwner.js';
 import { GuideArtworkOwner } from './guideArtworkOwner.js';
@@ -50,7 +50,7 @@ export interface CreateChannelCompositionOptions {
   guideArtworkSessionGenerationOwner: GuideArtworkSessionGenerationOwner;
   guideArtworkTransport: LivePlexGuideArtworkTransport;
   guidePreferencesFilePath?: string;
-  getLibraryTabsEnabled?: () => boolean | Promise<boolean>;
+  getPastItemsWindowSnapshot?: () => Promise<GuidePastItemsWindowSnapshot>;
 }
 
 export interface RegisterChannelCompositionIpcOptions {
@@ -158,12 +158,10 @@ export function createChannelComposition(
     onChannelTuned: typeof options.onChannelTuned === 'function' ? options.onChannelTuned : undefined,
     logger: guideLogger,
     guideArtworkOwner,
-    loadLineupRevision: async () =>
-      (await runtime.loadPublicReferenceGeneration()).lineupRevision,
     ...(guidePreferencesStore === null ? {} : {
       preferencesStore: guidePreferencesStore,
       guideContextSource: options.plexRuntime,
-      getLibraryTabsEnabled: options.getLibraryTabsEnabled,
+      getPastItemsWindowSnapshot: options.getPastItemsWindowSnapshot,
     }),
   });
   const unsubscribeGuidePreferenceScope = guidePreferencesStore === null

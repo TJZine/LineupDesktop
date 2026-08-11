@@ -8,9 +8,11 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const programPath = path.join(repoRoot, 'src/native-helper/Lineup.NativePlayerHost/Program.cs');
 
 function methodBody(source, signature) {
-  const signatureIndex = source.indexOf(signature);
+  const maskedSource = maskCSharpCommentOrLiteralContent(source);
+  const maskedSignature = maskCSharpCommentOrLiteralContent(signature);
+  const signatureIndex = maskedSource.indexOf(maskedSignature);
   assert.notEqual(signatureIndex, -1, `missing method: ${signature}`);
-  const bodyStart = source.indexOf('{', signatureIndex + signature.length);
+  const bodyStart = maskedSource.indexOf('{', signatureIndex + signature.length);
   assert.notEqual(bodyStart, -1, `missing method body: ${signature}`);
   let depth = 0;
   for (let index = bodyStart; index < source.length; index += 1) {
@@ -24,6 +26,178 @@ function methodBody(source, signature) {
     if (depth === 0) return source.slice(bodyStart + 1, index);
   }
   assert.fail(`unterminated method body: ${signature}`);
+}
+
+function maskCSharpCommentOrLiteralContent(source) {
+  const masked = source.split('');
+  for (let index = 0; index < source.length;) {
+    const skippedTo = maskCSharpCommentOrLiteral(source, index, masked);
+    if (skippedTo === null) {
+      index += 1;
+      continue;
+    }
+    index = skippedTo;
+  }
+  return masked.join('');
+}
+
+function maskCSharpCommentOrLiteral(source, index, masked) {
+  const current = source[index];
+  if (current === '"') {
+    const prefix = source.slice(Math.max(0, index - 2), index);
+    const interpolated = prefix.endsWith('$') || prefix === '$@';
+    if (interpolated) {
+      let quoteCount = 1;
+      while (source[index + quoteCount] === '"') quoteCount += 1;
+      const verbatim = prefix.endsWith('@') || prefix === '@$';
+      let dollarCount = 0;
+      for (let prefixIndex = index - 1; source[prefixIndex] === '$'; prefixIndex -= 1) {
+        dollarCount += 1;
+      }
+      const interpolationArity = quoteCount >= 3 && dollarCount > 0 ? dollarCount : 1;
+      return maskCSharpInterpolatedString(
+        source,
+        index,
+        verbatim,
+        quoteCount,
+        masked,
+        interpolationArity,
+      );
+    }
+  }
+  const skippedTo = skipCSharpCommentOrLiteral(source, index);
+  if (skippedTo === null) return null;
+  maskCSharpRange(masked, index, skippedTo);
+  return skippedTo;
+}
+
+function maskCSharpRange(masked, start, end) {
+  for (let index = start; index < end; index += 1) {
+    if (masked[index] !== '\n' && masked[index] !== '\r') masked[index] = ' ';
+  }
+}
+
+function cSharpBraceRunLength(source, start, brace) {
+  let length = 0;
+  while (source[start + length] === brace) length += 1;
+  return length;
+}
+
+function maskCSharpInterpolatedString(
+  source,
+  start,
+  verbatim,
+  quoteCount,
+  masked,
+  interpolationArity,
+) {
+  const raw = quoteCount >= 3;
+  const delimiter = '"'.repeat(quoteCount);
+  const closingBraceDelimiter = '}'.repeat(interpolationArity);
+  maskCSharpRange(masked, start, start + quoteCount);
+  for (let index = start + quoteCount; index < source.length;) {
+    if (!raw && verbatim && source[index] === '"' && source[index + 1] === '"') {
+      maskCSharpRange(masked, index, index + 2);
+      index += 2;
+      continue;
+    }
+    if ((raw && source.startsWith(delimiter, index)) || (!raw && source[index] === '"')) {
+      const skippedTo = index + quoteCount;
+      maskCSharpRange(masked, index, skippedTo);
+      return skippedTo;
+    }
+    if (!verbatim && !raw && source[index] === '\\') {
+      const skippedTo = Math.min(source.length, index + 2);
+      maskCSharpRange(masked, index, skippedTo);
+      index = skippedTo;
+      continue;
+    }
+    if (raw) {
+      if (source[index] === '{') {
+        const runLength = cSharpBraceRunLength(source, index, '{');
+        if (runLength >= interpolationArity) {
+          assert.ok(runLength < interpolationArity * 2, 'invalid C# raw interpolation brace run');
+          const literalLength = runLength - interpolationArity;
+          const expressionStart = index + literalLength + interpolationArity;
+          maskCSharpRange(masked, index, index + literalLength);
+          maskCSharpRange(masked, index + literalLength, expressionStart);
+          index = maskCSharpInterpolationExpression(
+            source,
+            expressionStart,
+            masked,
+            closingBraceDelimiter,
+            raw,
+          );
+        } else {
+          maskCSharpRange(masked, index, index + runLength);
+          index += runLength;
+        }
+        continue;
+      }
+      if (source[index] === '}') {
+        const runLength = cSharpBraceRunLength(source, index, '}');
+        assert.ok(runLength < interpolationArity * 2, 'invalid C# raw interpolation brace run');
+        maskCSharpRange(masked, index, index + runLength);
+        index += runLength;
+        continue;
+      }
+    } else {
+      if (source[index] === '{' && source[index + 1] === '{') {
+        maskCSharpRange(masked, index, index + 2);
+        index += 2;
+        continue;
+      }
+      if (source[index] === '}' && source[index + 1] === '}') {
+        maskCSharpRange(masked, index, index + 2);
+        index += 2;
+        continue;
+      }
+      if (source[index] === '{') {
+        maskCSharpRange(masked, index, index + 1);
+        index = maskCSharpInterpolationExpression(
+          source,
+          index + 1,
+          masked,
+          closingBraceDelimiter,
+          raw,
+        );
+        continue;
+      }
+    }
+    maskCSharpRange(masked, index, index + 1);
+    index += 1;
+  }
+  assert.fail('unterminated C# interpolated string literal');
+}
+
+function maskCSharpInterpolationExpression(source, start, masked, closingBraceDelimiter, raw) {
+  const closingBraceLength = closingBraceDelimiter.length;
+  let depth = 1;
+  for (let index = start; index < source.length;) {
+    const skippedTo = maskCSharpCommentOrLiteral(source, index, masked);
+    if (skippedTo !== null) {
+      index = skippedTo;
+      continue;
+    }
+    if (depth === 1 && source[index] === '}') {
+      if (!raw) {
+        maskCSharpRange(masked, index, index + 1);
+        return index + 1;
+      }
+      const runLength = cSharpBraceRunLength(source, index, '}');
+      if (runLength >= closingBraceLength) {
+        assert.ok(runLength < closingBraceLength * 2, 'invalid C# raw interpolation brace run');
+        maskCSharpRange(masked, index, index + closingBraceLength);
+        return index + closingBraceLength;
+      }
+    }
+    if (source[index] === '{') depth += 1;
+    if (source[index] === '}') {
+      if (depth > 1) depth -= 1;
+    }
+    index += 1;
+  }
+  assert.fail('unterminated C# interpolation expression');
 }
 
 function skipCSharpCommentOrLiteral(source, index) {
@@ -129,10 +303,14 @@ function assertUniqueOrdered(source, earlier, later) {
 }
 
 function findOccurrences(source, value) {
+  const maskedSource = maskCSharpCommentOrLiteralContent(source);
+  const maskedValue = maskCSharpCommentOrLiteralContent(value);
   const indexes = [];
   let index = source.indexOf(value);
   while (index !== -1) {
-    indexes.push(index);
+    if (maskedSource.slice(index, index + value.length) === maskedValue) {
+      indexes.push(index);
+    }
     index = source.indexOf(value, index + value.length);
   }
   return indexes;
@@ -146,27 +324,71 @@ private static void Example()
     string escaped = "\\\"}";
     string verbatim = @"}""{";
     string verbatimLeadingQuote = @"""{";
-    string interpolatedVerbatimDollarAt = $@"{Format(new[] { "}" })}";
-    string interpolatedVerbatimAtDollar = @$"{Format(new[] { "}" })}";
+    string interpolatedVerbatimDollarAt = $@"{Run()} literal Run() {Format(new[] { "}" })}";
+    string interpolatedVerbatimAtDollar = @$"{Run()} literal Run() {Format(new[] { "}" })}";
     if (true)
     {
         string raw = """ } """;
-        string interpolatedRaw = $""" {Format(new[] { "}" })} """;
-        Run();
+        string interpolatedRaw = $""" {Run()} literal Run() {Format(new[] { "}" })} """;
+        string interpolatedRawDoubleDollar = $$"""{The point {{{X}}, {{Run()}}} is here}""";
     }
-    string interpolated = $"{Format("}")}";
+    string interpolated = $"{Run()} literal Run() {Format("}")}";
     char brace = '}';
+    string callText = "Run(); Finish();";
     // }
+    // Run();
     /* { } */
+    /* Finish(); */
     Finish();
 }
 `;
-  const body = methodBody(source, 'private static void Example()');
+  const signature = 'private static void Example()';
+  assert.equal(maskCSharpCommentOrLiteralContent(source).length, source.length);
+  assert.equal(maskCSharpCommentOrLiteralContent(signature).length, signature.length);
+  const body = methodBody(source, signature);
   assert.match(body, /Finish\(\);/u);
-  assertUniqueOrdered(body, 'Run()', 'Finish()');
+  const runIndexes = findOccurrences(body, 'Run()');
+  const finishIndexes = findOccurrences(body, 'Finish()');
+  assert.equal(runIndexes.length, 5, 'expected executable interpolation calls only');
+  assert.equal(finishIndexes.length, 1, 'expected the executable finish call only');
+  assert.ok(runIndexes.every((index) => index < finishIndexes[0]));
+  assert.equal(findOccurrences(body, 'X').length, 1);
+  const shortBraceRawInterpolation = String.raw`$$""" {Run()} """`;
+  assert.equal(findOccurrences(shortBraceRawInterpolation, 'Run()').length, 0);
   assert.throws(
     () => assertUniqueOrdered(`${body}\nRun();`, 'Run()', 'Finish()'),
     /expected exactly one earlier statement/u,
+  );
+
+  const ignoredSignature = String.raw`
+// private static void Ignored()
+string literal = "private static void Ignored() { Run(); }";
+`;
+  assert.throws(
+    () => methodBody(ignoredSignature, 'private static void Ignored()'),
+    /missing method/u,
+  );
+
+  const ignoredCalls = String.raw`
+// Run()
+string literal = "Finish()";
+`;
+  assert.throws(
+    () => assertUniqueOrdered(ignoredCalls, 'Run()', 'Finish()'),
+    /expected exactly one earlier statement/u,
+  );
+
+  const wrongSameLengthLiteral = String.raw`
+JsonDocument.Parse(line);
+message.type == "presentation.updata" && line.Length > MAX_PRESENTATION_MESSAGE_SIZE
+`;
+  assert.throws(
+    () => assertUniqueOrdered(
+      wrongSameLengthLiteral,
+      'JsonDocument.Parse(line)',
+      'message.type == "presentation.update" && line.Length > MAX_PRESENTATION_MESSAGE_SIZE',
+    ),
+    /expected exactly one later statement/u,
   );
 });
 

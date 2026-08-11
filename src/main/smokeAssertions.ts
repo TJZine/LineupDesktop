@@ -177,7 +177,7 @@ export async function runSmokeAssertions(
         'listLibraryItems', 'searchLibrary', 'getMetadata',
       ]);
       ${CHANNEL_BUILDER_BRIDGE_ASSERTIONS_SOURCE}
-      assertBridgeMethods('guide', ['getPresentation']);
+      assertBridgeMethods('guide', ['getPresentation', 'cancelPresentation']);
       if (bridge && typeof bridge === 'object' && 'ipcRenderer' in bridge) failures.push('raw ipc bridge');
       if (bridge && typeof bridge === 'object' && 'invoke' in bridge) failures.push('raw invoke bridge');
       if (failures.length > 0) return { failures };

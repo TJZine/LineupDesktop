@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
 import { projectNativePlayerPresentationMode } from '../../renderer/guidePresentation.js';
-import { cssDeclaration, extractCssRule, normalizeCss } from './cssTestUtils.js';
+import {
+  cssDeclaration,
+  containsCssSelector,
+  extractCssAtRuleBody,
+  extractCssRule,
+} from './cssAtRuleTestUtils.js';
 
 test('Guide layouts retain one artwork subtree and one native presentation aperture', () => {
   const root = {
@@ -40,39 +45,43 @@ test('native aperture CSS makes only acknowledged page compositions transparent 
   const fs = processValue.getBuiltinModule('node:fs');
   const base = fs.readFileSync(new URL('../../renderer/styles/base.css', import.meta.url), 'utf8');
   const guide = fs.readFileSync(new URL('../../renderer/styles/guide-epg.css', import.meta.url), 'utf8');
-  const normalizedBase = normalizeCss(base);
-  const normalizedGuide = normalizeCss(guide);
-  const aperture = extractCssRule(normalizedBase, ':root[data-native-presentation-aperture="open"]');
-  assert.equal(cssDeclaration(aperture, 'background'), 'transparent');
-  for (const selector of [
+  const openBackground = extractCssRule(base, [
+    ':root[data-native-presentation-aperture="open"]',
+    ':root[data-native-presentation-aperture="open"] body',
+    ':root[data-native-presentation-aperture="open"] .app-shell',
+    ':root[data-native-presentation-aperture="open"] [data-static-screen-root]',
+    ':root[data-native-presentation-aperture="open"] .screen-stack',
+  ]);
+  assert.equal(cssDeclaration(openBackground, 'background'), 'transparent');
+
+  const openScreens = extractCssRule(base, [
     ':root[data-native-presentation-aperture="open"][data-native-presentation-mode="player-full"] .screen[data-screen="player"]',
     ':root[data-native-presentation-aperture="open"][data-native-presentation-mode="guide-overlay-full"] .screen[data-screen="guide"]',
     ':root[data-native-presentation-aperture="open"][data-native-presentation-mode="guide-classic-pip"] .screen[data-screen="guide"]',
-  ]) {
-    assert.equal(cssDeclaration(extractCssRule(normalizedBase, selector), 'background'), 'transparent');
-  }
-  assert.notEqual(cssDeclaration(extractCssRule(normalizedBase, ':root'), 'background'), 'transparent');
+  ]);
+  assert.equal(cssDeclaration(openScreens, 'background'), 'transparent');
+
+  const root = extractCssRule(base, ':root');
+  assert.equal(cssDeclaration(root, 'background'), 'var(--color-app-bg)');
 
   const classicPip = extractCssRule(
-    normalizedGuide,
+    guide,
     ':root[data-native-presentation-mode="guide-classic-pip"] .epg-shell[data-epg-layout="classic"]',
   );
   assert.equal(
     cssDeclaration(classicPip, 'padding-right'),
     'calc(var(--native-pip-width) + (var(--native-pip-inset) * 2))',
   );
-  assert.equal(
-    cssDeclaration(extractCssRule(normalizedGuide, '.epg-shell[data-epg-layout="classic"]'), 'padding-right'),
-    null,
-  );
+  assert.equal(containsCssSelector(guide, '.epg-shell[data-epg-layout="classic"]'), false);
+
   const classicAperture = extractCssRule(
-    normalizedGuide,
+    guide,
     ':root[data-native-presentation-aperture="open"][data-native-presentation-mode="guide-classic-pip"] .screen[data-screen="guide"] .screen__content',
   );
-  const background = cssDeclaration(classicAperture, 'background');
-  assert.ok(background?.includes('linear-gradient(var(--color-surface), var(--color-surface)) left'));
-  assert.ok(background?.includes('linear-gradient(var(--color-surface), var(--color-surface)) right top'));
-  assert.ok(background?.includes('linear-gradient(var(--color-surface), var(--color-surface)) right bottom'));
+  const classicBackground = cssDeclaration(classicAperture, 'background');
+  assert.ok(classicBackground?.includes('linear-gradient(var(--color-surface), var(--color-surface)) left'));
+  assert.ok(classicBackground?.includes('linear-gradient(var(--color-surface), var(--color-surface)) right top'));
+  assert.ok(classicBackground?.includes('linear-gradient(var(--color-surface), var(--color-surface)) right bottom'));
 });
 
 test('forced-color player overlay CSS targets the semantic presentation surface', () => {
@@ -83,18 +92,28 @@ test('forced-color player overlay CSS targets the semantic presentation surface'
     new URL('../../renderer/styles/player-overlays.css', import.meta.url),
     'utf8',
   );
-  const forcedPresentation = extractCssRule(
-    normalizeCss(overlays),
-    '[data-player-presentation-surface]',
-    { atRule: '@media (forced-colors: active)' },
+  const forcedColors = extractCssAtRuleBody(overlays, '@media (forced-colors: active)');
+  const presentationSurface = extractCssRule(forcedColors ?? '', '[data-player-presentation-surface]');
+  assert.equal(cssDeclaration(presentationSurface, 'background'), 'Canvas');
+  assert.equal(containsCssSelector(forcedColors ?? '', '.player-surface'), false);
+});
+
+test('Guide density no longer compresses row geometry', () => {
+  const processValue = Reflect.get(globalThis, 'process') as {
+    getBuiltinModule(name: string): { readFileSync(path: URL, encoding: 'utf8'): string };
+  };
+  const guide = processValue.getBuiltinModule('node:fs').readFileSync(
+    new URL('../../renderer/styles/guide-epg.css', import.meta.url),
+    'utf8',
   );
-  assert.equal(cssDeclaration(forcedPresentation, 'background'), 'Canvas');
-  assert.equal(
-    extractCssRule(
-      normalizeCss(overlays),
-      '.player-surface',
-      { atRule: '@media (forced-colors: active)' },
-    ),
-    null,
-  );
+  assert.equal(containsCssSelector(guide, '.epg-shell[data-guide-density="compact"]'), false);
+  assert.equal(containsCssSelector(guide, '.epg-shell[data-guide-density="comfortable"]'), false);
+  const shell = extractCssRule(guide, '.epg-shell');
+  assert.equal(cssDeclaration(shell, '--guide-row-height'), '108px');
+  const channel = extractCssRule(guide, '.epg-grid__channel');
+  assert.equal(cssDeclaration(channel, 'height'), 'var(--guide-row-height)');
+  const program = extractCssRule(guide, '.screen[data-screen="guide"] .epg-grid__program');
+  assert.equal(cssDeclaration(program, 'top'), '4px');
+  assert.equal(cssDeclaration(program, 'bottom'), '4px');
+  assert.equal(cssDeclaration(program, 'padding'), 'var(--space-2) var(--space-4)');
 });

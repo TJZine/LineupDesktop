@@ -12,8 +12,9 @@ missing-output presentation without a public contract or persistence change.
 Unit 3D is accepted and WS3's local renderer gate is closed. WS4's local input/
 overlay gate closes through final product checkpoint `3258511`, with final
 production-build proof 36/36 and controller visual inspection passed. WS5
-Units 5A–5D now land through native-presentation checkpoint `81cf42c`; Unit 5E
-is next. Windows operational proof,
+Units 5A–5D land through native-presentation checkpoint `81cf42c`; Unit 5E
+lands at `154fcfd`, Unit 5F at `3501fb8`, and Unit 5G at `4946fb5`; Unit 5H is
+next. Windows operational proof,
 including `WS4-PROOF-01`–`WS4-PROOF-04` and the mandatory three-row Package 6
 operator-assisted fullscreen audit, remains pending. Historical completed units
 below describe their bounded implementation history only.
@@ -99,6 +100,38 @@ Player and Overlay use the full client area; Classic exposes a playing-only PIP
 and reserves no empty PIP when hidden. The renderer still receives no HWND,
 native path, DPI/display record, helper protocol material, or privileged media
 descriptor. Windows composition proof remains deferred to 5H.
+
+WS5 Unit 5E makes Guide density semantic rather than cosmetic. Detailed owns
+exactly four 30-minute slots and a two-hour request window; Wide owns exactly
+six slots and a three-hour window. `epg.ts` owns density-aware visibility,
+clamping, navigation, and selection-preserving recentering. The polling owner
+captures request duration for stale-result rejection and retains one active and
+one latest request. It also coalesces loading-time density changes into one
+eligible refresh through the Settings settlement path, while both densities keep
+the same readable row geometry. No contract, preload, main, persistence, or
+native privilege is added.
+
+WS5 Unit 5F adds the required safe-integer `minimumStartTimeMs` Guide result.
+Main derives it from persisted Auto/0/15/30 policy and exact raw visible-source
+truth, clamps each full-duration query to a DST-safe local-midnight/slot bound,
+and rechecks Settings currentness. Preload validates the one strict field.
+Renderer adopts the first current bound for Guide and Player, prevents earlier
+fetch/focus/navigation, and lets the polling owner coalesce one accepted or
+rollback Settings settlement. No source kind, membership, identifier, Settings
+revision, or new operation crosses into renderer.
+
+WS5 Unit 5G adds Desktop Guide virtualization without importing the upstream
+LG/webOS performance profile. `guideVirtualization.ts` owns the pure
+viewport/focus range, exact default/aggressive request and cache budgets, cache
+identity, and bounded LRU. The Guide DOM samples real row stride outside its
+projection loop, preserves noncontiguous spacer geometry, mounts no more than
+24 rows and 400 cells, and keeps the two-hour off-window buffer inert and out of
+focus/accessibility registration. Polling retains one active and one trailing
+request, serves current warmed page/time entries only, and never lets idle warm
+work replace foreground intent. Guide focus reveal occurs only for semantic
+focus moves/restores, so ordinary wheel/scrollbar reconciliation does not snap
+back. No public contract, preload/main operation, dependency, worker thread,
+television detection, or renderer privilege is added.
 
 Renderer code must remain unprivileged. It must not import Electron, Node, main,
 preload, native-helper, Plex transport, persisted secrets, raw auth headers,

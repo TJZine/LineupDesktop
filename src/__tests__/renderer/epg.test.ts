@@ -3,8 +3,9 @@ import test from 'node:test';
 import { containsPlexForbiddenRendererField } from '../../contracts/plex.js';
 import {
   EPG_CHANNEL_PAGE_SIZE,
+  EPG_COMFORTABLE_WINDOW_DURATION_MS,
+  EPG_COMPACT_WINDOW_DURATION_MS,
   EPG_SLOT_DURATION_MS,
-  EPG_WINDOW_DURATION_MS,
   calculateProgramSpan,
   createEpgGuideView,
   createEpgState,
@@ -15,7 +16,9 @@ import {
   moveEpgSelection,
   pageEpgSelection,
   normalizeEpgPresentation,
+  setEpgGuideDensity,
   setEpgPresentationState,
+  settleEpgPresentation,
   updateEpgState,
   type EpgPresentationSource,
   type EpgProgramViewModel,
@@ -70,7 +73,7 @@ function presentation(): EpgPresentationSource {
 
 test('EPG projects scheduler rows, stable cell ids, slots, clipping, and details', () => {
   const source = presentation();
-  const state = createEpgState(source, 7);
+  const state = createEpgState(source, 7, 'compact');
   const view = createEpgGuideView(state, source);
   assert.equal(view.presentationState, 'ready');
   assert.equal(view.presentationGeneration, 7);
@@ -83,6 +86,41 @@ test('EPG projects scheduler rows, stable cell ids, slots, clipping, and details
   assert.equal(view.rows[0]?.programs[1]?.temporalState, 'upcoming');
   assert.equal(view.rows[0]?.programs[0]?.columnStart, 1);
   assert.match(formatEpgTimeWindow(BASE, BASE + EPG_SLOT_DURATION_MS), /^\d{1,2}:\d{2} [AP]M - \d{1,2}:\d{2} [AP]M$/u);
+});
+
+test('Guide density projects exact comfortable and compact slot counts and durations', () => {
+  const source = presentation();
+  const detailed = createEpgGuideView(createEpgState(source, 4, 'comfortable'), source);
+  const wide = createEpgGuideView(createEpgState(source, 6, 'compact'), source);
+  assert.equal(detailed.slots.length, 4);
+  assert.equal(detailed.windowEndMs - detailed.windowStartMs, EPG_COMFORTABLE_WINDOW_DURATION_MS);
+  assert.equal(wide.slots.length, 6);
+  assert.equal(wide.windowEndMs - wide.windowStartMs, EPG_COMPACT_WINDOW_DURATION_MS);
+});
+
+test('density transition preserves a selected program by recentering without changing generation or currentness', () => {
+  const source = presentation();
+  const selected = {
+    ...createEpgState(source, 12, 'compact'),
+    windowStartMs: BASE + 2 * EPG_SLOT_DURATION_MS,
+    selectedChannelId: 'channel/a',
+    selectedProgramId: 'a-future',
+    presentationState: 'ready' as const,
+  };
+  const recentered = setEpgGuideDensity(selected, source, 'comfortable');
+  const recenteredView = createEpgGuideView(recentered, source);
+  assert.equal(recentered.guideDensity, 'comfortable');
+  assert.equal(recentered.presentationGeneration, 12);
+  assert.equal(recentered.selectedChannelId, 'channel/a');
+  assert.equal(recentered.selectedProgramId, 'a-future');
+  assert.equal(recenteredView.selectedProgram?.id, 'a-future');
+  assert.equal(recenteredView.selectedProgram?.focusId, createGuideProgramFocusId('channel/a', 'a-future'));
+
+  const currentBase = createEpgState(source, 13, 'compact');
+  const current = setEpgGuideDensity(currentBase, source, 'comfortable');
+  assert.equal(current.windowStartMs, currentBase.windowStartMs);
+  assert.equal(current.presentationGeneration, 13);
+  assert.equal(createEpgGuideView(current, source).selectedProgram?.temporalState, 'current');
 });
 
 test('EPG time labels follow local time across a non-UTC DST transition', () => {
@@ -110,9 +148,59 @@ test('EPG normalization preserves an honest missing now-watching value', () => {
   assert.ok(normalized.nowMs >= before && normalized.nowMs <= after);
 });
 
+test('EPG settlement clamps an accepted start below the presentation minimum', () => {
+  const source = presentation();
+  const settled = settleEpgPresentation(
+    createEpgState(source, 1, 'compact'),
+    source,
+    2,
+    null,
+    false,
+    'compact',
+    BASE - 4 * EPG_SLOT_DURATION_MS,
+  );
+
+  assert.equal(settled.state.windowStartMs, BASE - EPG_SLOT_DURATION_MS);
+});
+
+test('EPG settlement preserves an accepted start inside the presentation bounds', () => {
+  const source = presentation();
+  const acceptedStartMs = BASE + EPG_SLOT_DURATION_MS;
+  const settled = settleEpgPresentation(
+    createEpgState(source, 1, 'compact'),
+    source,
+    2,
+    null,
+    false,
+    'compact',
+    acceptedStartMs,
+  );
+
+  assert.equal(settled.state.windowStartMs, acceptedStartMs);
+});
+
+test('EPG settlement clamps an accepted upper start and keeps the selected program visible in the view', () => {
+  const source = presentation();
+  const settled = settleEpgPresentation(
+    createEpgState(source, 1, 'compact'),
+    source,
+    2,
+    null,
+    false,
+    'compact',
+    BASE + 8 * EPG_SLOT_DURATION_MS,
+  );
+  const view = createEpgGuideView(settled.state, source);
+
+  assert.equal(settled.state.windowStartMs, BASE + 2 * EPG_SLOT_DURATION_MS);
+  assert.equal(view.windowStartMs, settled.state.windowStartMs);
+  assert.equal(view.selectedProgram?.id, 'a-current');
+  assert.equal(view.selectedProgram?.isSelected, true);
+});
+
 test('program span excludes programs outside the active window', () => {
-  assert.equal(calculateProgramSpan(program('outside', -3, -2), BASE, BASE + EPG_WINDOW_DURATION_MS), null);
-  assert.deepEqual(calculateProgramSpan(program('clipped', -1, 2), BASE, BASE + EPG_WINDOW_DURATION_MS), {
+  assert.equal(calculateProgramSpan(program('outside', -3, -2), BASE, BASE + EPG_COMPACT_WINDOW_DURATION_MS), null);
+  assert.deepEqual(calculateProgramSpan(program('clipped', -1, 2), BASE, BASE + EPG_COMPACT_WINDOW_DURATION_MS), {
     columnStart: 1,
     columnSpan: 2,
   });
@@ -120,7 +208,7 @@ test('program span excludes programs outside the active window', () => {
 
 test('directional navigation uses adjacent programs and nearest overlap on adjacent channels', () => {
   const source = presentation();
-  const initial = createEpgState(source);
+  const initial = createEpgState(source, 0, 'compact');
   const right = moveEpgSelection(initial, 'right', source);
   assert.equal(right.state.selectedProgramId, 'a-future');
   assert.equal(right.windowChanged, false);
@@ -143,7 +231,7 @@ test('Guide paging moves five eligible channel rows while preserving focused tim
     nowWatching: null,
   };
   const initial = {
-    ...createEpgState(source),
+    ...createEpgState(source, 0, 'compact'),
     selectedChannelId: 'channel-1',
     selectedProgramId: 'program-1',
   };
@@ -160,7 +248,7 @@ test('Guide paging moves five eligible channel rows while preserving focused tim
 
 test('left and right edge navigation requests exactly one adjacent slot beyond bounded response extrema', () => {
   const source = presentation();
-  const base = createEpgState(source);
+  const base = createEpgState(source, 0, 'compact');
   const priorBoundary = {
     ...base,
     windowStartMs: BASE - EPG_SLOT_DURATION_MS,
@@ -187,7 +275,7 @@ test('left and right edge navigation requests exactly one adjacent slot beyond b
 test('non-first Guide selection survives edge loading and resolves to its stable focus id', () => {
   const source = presentation();
   const selected = {
-    ...createEpgState(source, 3),
+    ...createEpgState(source, 3, 'compact'),
     windowStartMs: BASE + 2 * EPG_SLOT_DURATION_MS,
     selectedChannelId: 'channel/b',
     selectedProgramId: 'b-late',
@@ -214,7 +302,7 @@ test('playability uses the exact current-program half-open interval', () => {
 
 test('presentation variants distinguish channel and program emptiness', () => {
   const source = presentation();
-  const base = createEpgState(source);
+  const base = createEpgState(source, 0, 'compact');
   for (const state of ['loading', 'error'] as const) {
     const view = createEpgGuideView(setEpgPresentationState(base, state), source);
     assert.equal(view.presentationState, state);
@@ -232,7 +320,7 @@ test('presentation variants distinguish channel and program emptiness', () => {
 
 test('presentation refresh preserves a valid identity and clears stale tune feedback', () => {
   const source = presentation();
-  const state = { ...createEpgState(source), tuneError: 'Unable to tune.' };
+  const state = { ...createEpgState(source, 0, 'compact'), tuneError: 'Unable to tune.' };
   const updated = updateEpgState(state, source, 11);
   assert.equal(updated.selectedChannelId, state.selectedChannelId);
   assert.equal(updated.selectedProgramId, state.selectedProgramId);
@@ -244,7 +332,7 @@ test('presentation refresh preserves a valid identity and clears stale tune feed
 test('Guide state and projected cells stay renderer-safe', () => {
   const source = presentation();
   assert.equal(containsPlexForbiddenRendererField(source), false);
-  assert.equal(containsPlexForbiddenRendererField(createEpgGuideView(createEpgState(source), source)), false);
+  assert.equal(containsPlexForbiddenRendererField(createEpgGuideView(createEpgState(source, 0, 'compact'), source)), false);
 });
 
 function isTestProcess(value: unknown): value is { env: Record<string, string | undefined> } {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { setImmediate as waitForImmediate } from 'node:timers/promises';
 
 import {
   LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL,
@@ -8,6 +9,7 @@ import {
   LINEUP_CHANNEL_SETUP_START_APPLY_CHANNEL,
   LINEUP_CHANNEL_SETUP_START_REVIEW_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL,
 } from '../../contracts/ipc.js';
 import type {
   ChannelAggregate,
@@ -19,6 +21,7 @@ import {
   ChannelPublicReferenceConsistencyError,
   ChannelPublicReferenceOwner,
 } from '../../main/channel/channelPublicReferenceOwner.js';
+import { GuidePresentationCurrentnessError } from '../../main/channel/guideRuntime.js';
 import { ChannelRuntime } from '../../main/channel/channelRuntime.js';
 
 test('ChannelRuntime status uses public references and exact builder metadata', async () => {
@@ -133,6 +136,530 @@ test('Guide presentation retries consistency failures but maps projection failur
   }
 });
 
+test('Guide presentation caps active requests per sender before privileged setup', async () => {
+  const handlers = new Map<string, (event: never, payload: unknown) => Promise<unknown> | unknown>();
+  const sender = new FakeGuideSender();
+  const otherSender = new FakeGuideSender();
+  const presentationOperations: DeferredValue[] = [];
+  let generationLoads = 0;
+  let nextTimerId = 0;
+  let timerSchedules = 0;
+  const activeTimers = new Set<number>();
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = ((_callback: () => void) => {
+    timerSchedules += 1;
+    nextTimerId += 1;
+    activeTimers.add(nextTimerId);
+    return nextTimerId as never;
+  }) as unknown as typeof globalThis.setTimeout;
+  globalThis.clearTimeout = ((timerId: number) => {
+    activeTimers.delete(timerId);
+  }) as typeof globalThis.clearTimeout;
+
+  let teardown: (() => Promise<void>) | undefined;
+  try {
+    teardown = registerChannelIpcHandlers({
+      runtime: {
+        loadPublicReferenceGeneration: async () => {
+          generationLoads += 1;
+          return publicGeneration();
+        },
+      } as never,
+      guideRuntime: {
+        isPreferenceScopeCurrent: () => true,
+        getPagedPresentation: async ({ signal }: { signal: AbortSignal }) => {
+          const operation = deferredValue();
+          presentationOperations.push(operation);
+          signal.addEventListener('abort', () => operation.reject(new Error('private abort detail')), { once: true });
+          return await operation.promise;
+        },
+      } as never,
+      publicReferenceOwner: {} as never,
+      isAuthorizedEvent: () => true,
+      createRequestId: () => 'fallback',
+      ipcMain: {
+        handle: (channel, handler) => handlers.set(channel, handler as never),
+        removeHandler: () => undefined,
+      },
+    });
+
+    const get = (requestId: string, requestSender: FakeGuideSender) => handlers.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL)!(
+      { sender: requestSender } as never,
+      { requestId, payload: { startTimeMs: 0, durationMs: 60_000 } },
+    ) as Promise<GuideCancellationResult>;
+    const cancel = async (requestId: string, requestSender: FakeGuideSender) => await handlers.get(LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL)!(
+      { sender: requestSender } as never,
+      { requestId, payload: {} },
+    ) as GuideCancellationResult;
+
+    const first = get('guide-cap-first', sender);
+    const second = get('guide-cap-second', sender);
+    assert.equal(generationLoads, 2);
+    assert.equal(sender.destroyedListenerCount, 2);
+    assert.equal(activeTimers.size, 2);
+    await Promise.resolve();
+    assert.equal(presentationOperations.length, 2);
+
+    const rejected = await get('guide-cap-rejected', sender);
+    assert.equal(rejected.ok, false);
+    assert.equal(rejected.error?.code, 'GUIDE_VALIDATION_FAILED');
+    assert.equal(generationLoads, 2);
+    assert.equal(presentationOperations.length, 2);
+    assert.equal(sender.destroyedListenerCount, 2);
+    assert.equal(activeTimers.size, 2);
+
+    await Promise.resolve();
+    assert.equal(presentationOperations.length, 2);
+
+    const other = get('guide-cap-other-sender', otherSender);
+    assert.equal(generationLoads, 3);
+    assert.equal(otherSender.destroyedListenerCount, 1);
+    assert.equal(activeTimers.size, 3);
+    await Promise.resolve();
+    assert.equal(presentationOperations.length, 3);
+
+    assert.equal((await cancel('guide-cap-first', sender)).ok, true);
+    assert.equal((await first).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+    assert.equal(sender.destroyedListenerCount, 1);
+    assert.equal(activeTimers.size, 2);
+
+    const replacement = get('guide-cap-replacement', sender);
+    assert.equal(generationLoads, 4);
+    assert.equal(sender.destroyedListenerCount, 2);
+    assert.equal(activeTimers.size, 3);
+    await Promise.resolve();
+    assert.equal(presentationOperations.length, 4);
+
+    presentationOperations[1]?.resolve(publicPresentation());
+    assert.equal((await second).ok, true);
+    assert.equal(sender.destroyedListenerCount, 1);
+    assert.equal(activeTimers.size, 2);
+
+    const generationLoadsBeforeAdmission = generationLoads;
+    const afterCleanup = get('guide-cap-after-cleanup', sender);
+    assert.equal(generationLoads, generationLoadsBeforeAdmission + 1);
+    assert.equal(sender.destroyedListenerCount, 2);
+    assert.equal(activeTimers.size, 3);
+    await Promise.resolve();
+    assert.equal(presentationOperations.length, 5);
+
+    for (const [requestId, pending, requestSender] of [
+      ['guide-cap-replacement', replacement, sender],
+      ['guide-cap-after-cleanup', afterCleanup, sender],
+      ['guide-cap-other-sender', other, otherSender],
+    ] as const) {
+      assert.equal((await cancel(requestId, requestSender)).ok, true);
+      assert.equal((await pending).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+    }
+    assert.equal(sender.destroyedListenerCount, 0);
+    assert.equal(otherSender.destroyedListenerCount, 0);
+    assert.equal(activeTimers.size, 0);
+    assert.equal(timerSchedules, 5);
+  } finally {
+    await teardown?.();
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
+});
+
+test('Guide cancellation is sender-bound, aborts main-owned work, and settles safely', async () => {
+  const handlers = new Map<string, (event: never, payload: unknown) => Promise<unknown> | unknown>();
+  const sender = {};
+  const otherSender = {};
+  let signal: AbortSignal | undefined;
+  const teardown = registerChannelIpcHandlers({
+    runtime: {
+      loadPublicReferenceGeneration: async () => ({
+        lineupRevision: 1, channels: [], currentChannelId: null, fingerprint: 'same',
+      }),
+    } as never,
+    guideRuntime: {
+      isPreferenceScopeCurrent: () => true,
+      getPagedPresentation: async (input: { signal?: AbortSignal }) => {
+        signal = input.signal;
+        await new Promise<void>((_resolve, reject) => {
+          input.signal?.addEventListener('abort', () => reject(new Error('private abort detail')), { once: true });
+        });
+        throw new Error('unreachable');
+      },
+    } as never,
+    publicReferenceOwner: {} as never,
+    isAuthorizedEvent: () => true,
+    createRequestId: () => 'fallback',
+    ipcMain: {
+      handle: (channel, handler) => handlers.set(channel, handler as never),
+      removeHandler: () => undefined,
+    },
+  });
+  const request = { requestId: 'guide-cancel-owner', payload: { startTimeMs: 0, durationMs: 60_000 } };
+  const pending = handlers.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL)!({ sender } as never, request) as Promise<unknown>;
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(signal?.aborted, false);
+
+  const unauthorized = await handlers.get(LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL)!({ sender: otherSender } as never, {
+    requestId: request.requestId, payload: {},
+  }) as { ok: boolean; error: { code: string } };
+  assert.equal(unauthorized.ok, false);
+  assert.equal(unauthorized.error.code, 'GUIDE_UNAUTHORIZED');
+  assert.equal(signal?.aborted, false);
+
+  const cancelled = await handlers.get(LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL)!({ sender } as never, {
+    requestId: request.requestId, payload: {},
+  }) as { ok: boolean; value: object };
+  assert.deepEqual(cancelled, { ok: true, value: {}, requestId: request.requestId });
+  assert.equal(signal?.aborted, true);
+  const result = await pending as { ok: boolean; error: { code: string; message: string } };
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.error, {
+    code: 'GUIDE_PRESENTATION_CANCELLED', message: 'Guide refresh was cancelled.',
+    retryable: true, recoverable: true, operation: 'getPresentation',
+  });
+  await teardown();
+});
+
+test('Guide cancellation rejects malformed payloads and unauthorized events without aborting work', async () => {
+  const harness = createCancellationHarness();
+  const pending = harness.get('guide-validation', harness.sender);
+  await settlePendingHandlerWork();
+
+  const malformed = await harness.cancel('guide-validation', harness.sender, { extra: true });
+  assert.equal(malformed.ok, false);
+  assert.equal(malformed.error?.code, 'GUIDE_VALIDATION_FAILED');
+  assert.equal(harness.signals[0]?.aborted, false);
+
+  harness.authorized = false;
+  const unauthorized = await harness.cancel('guide-validation', harness.sender);
+  assert.equal(unauthorized.ok, false);
+  assert.equal(unauthorized.error?.code, 'GUIDE_UNAUTHORIZED');
+  assert.equal(harness.signals[0]?.aborted, false);
+
+  harness.authorized = true;
+  await harness.cancel('guide-validation', harness.sender);
+  await pending;
+  await harness.teardown();
+});
+
+test('Guide presentation aborts on sender destruction and channel IPC teardown', async () => {
+  const destroyedHarness = createCancellationHarness();
+  const destroyed = destroyedHarness.get('guide-destroyed', destroyedHarness.sender);
+  await settlePendingHandlerWork();
+  destroyedHarness.sender.emitDestroyed();
+  const destroyedResult = await destroyed;
+  assert.equal(destroyedHarness.signals[0]?.aborted, true);
+  assert.equal(destroyedResult.error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+  await destroyedHarness.teardown();
+
+  const teardownHarness = createCancellationHarness();
+  const tornDown = teardownHarness.get('guide-teardown', teardownHarness.sender);
+  await settlePendingHandlerWork();
+  await teardownHarness.teardown();
+  const teardownResult = await tornDown;
+  assert.equal(teardownHarness.signals[0]?.aborted, true);
+  assert.equal(teardownResult.error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+});
+
+test('Guide presentation main timeout aborts owned work and returns the fixed settlement', async (t) => {
+  let timeoutCallback: (() => void) | null = null;
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = ((callback: () => void) => {
+    timeoutCallback = callback;
+    return 1 as never;
+  }) as unknown as typeof globalThis.setTimeout;
+  globalThis.clearTimeout = (() => undefined) as typeof globalThis.clearTimeout;
+  t.after(() => {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  });
+  const harness = createCancellationHarness();
+  const pending = harness.get('guide-timeout', harness.sender);
+  await settlePendingHandlerWork();
+  assert.equal(harness.signals[0]?.aborted, false);
+  assert.ok(timeoutCallback);
+
+  (timeoutCallback as () => void)();
+
+  const result = await pending;
+  assert.equal(harness.signals[0]?.aborted, true);
+  assert.deepEqual(result.error, {
+    code: 'GUIDE_PRESENTATION_CANCELLED', message: 'Guide refresh was cancelled.',
+    retryable: true, recoverable: true, operation: 'getPresentation',
+  });
+  await harness.teardown();
+});
+
+test('Guide cancel-settle-new same-id race retains cancellation custody for the replacement', async () => {
+  const harness = createCancellationHarness();
+  const first = harness.get('guide-reused', harness.sender);
+  await settlePendingHandlerWork();
+  await harness.cancel('guide-reused', harness.sender);
+  const second = harness.get('guide-reused', harness.sender);
+  await settlePendingHandlerWork();
+  assert.equal(harness.signals.length, 2);
+  assert.equal(harness.signals[0]?.aborted, true);
+  assert.equal(harness.signals[1]?.aborted, false);
+  await first;
+
+  const replacementCancel = await harness.cancel('guide-reused', harness.sender);
+  assert.equal(replacementCancel.ok, true);
+  const secondResult = await second;
+  assert.equal(harness.signals[1]?.aborted, true);
+  assert.equal(secondResult.error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+  await harness.teardown();
+});
+
+test('Guide sustained cancellation keeps at most one non-aborted privileged request', async () => {
+  const harness = createCancellationHarness();
+  for (let index = 0; index < 20; index += 1) {
+    const requestId = `guide-bounded-${String(index)}`;
+    const pending = harness.get(requestId, harness.sender);
+    await settlePendingHandlerWork();
+    assert.ok(harness.signals.filter((signal) => !signal.aborted).length <= 1);
+    await harness.cancel(requestId, harness.sender);
+    const result = await pending;
+    assert.equal(result.error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+    assert.equal(harness.signals.filter((signal) => !signal.aborted).length, 0);
+  }
+  assert.equal(harness.signals.length, 20);
+  await harness.teardown();
+});
+
+test('Guide cancellation settles a noncooperative generation load and releases same-id custody', async () => {
+  const harness = createNonCooperativeGuideHarness('generation');
+  const first = harness.get('guide-stalled-generation');
+  await settlePendingHandlerWork();
+  assert.equal(harness.operations.length, 1);
+  assert.equal(harness.sender.destroyedListenerCount, 1);
+
+  await harness.cancel('guide-stalled-generation');
+  assert.equal((await first).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+  assert.equal(harness.sender.destroyedListenerCount, 0);
+
+  const replacement = harness.get('guide-stalled-generation');
+  await settlePendingHandlerWork();
+  assert.equal(harness.operations.length, 2);
+  assert.equal(harness.sender.destroyedListenerCount, 1);
+  harness.operations[0]?.reject(new Error('late private generation failure'));
+  await settlePendingHandlerWork();
+  assert.equal(harness.sender.destroyedListenerCount, 1);
+  harness.sender.emitDestroyed();
+  assert.equal((await replacement).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+  assert.equal(harness.sender.destroyedListenerCount, 0);
+
+  harness.operations[1]?.resolve(publicGeneration());
+  await settlePendingHandlerWork();
+  await harness.teardown();
+});
+
+test('Guide admission keeps canceled noncooperative work charged until underlying settlement', async () => {
+  const harness = createNonCooperativeGuideHarness('presentation');
+  const first = harness.get('guide-stalled-first');
+  const second = harness.get('guide-stalled-second');
+  await settlePendingHandlerWork();
+  assert.equal(harness.operations.length, 2);
+  assert.equal(harness.signals.length, 2);
+
+  await harness.cancel('guide-stalled-first');
+  await harness.cancel('guide-stalled-second');
+  assert.equal((await first).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+  assert.equal((await second).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+  assert.equal(harness.sender.destroyedListenerCount, 0);
+
+  const thirdAttempt = harness.get('guide-stalled-third');
+  await settlePendingHandlerWork();
+  const operationCountAfterThirdAttempt = harness.operations.length;
+  const signalCountAfterThirdAttempt = harness.signals.length;
+  if (operationCountAfterThirdAttempt > 2) {
+    harness.operations.at(-1)?.resolve(publicPresentation());
+  }
+  const rejected = await thirdAttempt;
+  assert.equal(rejected.error?.code, 'GUIDE_VALIDATION_FAILED');
+  assert.equal(operationCountAfterThirdAttempt, 2, 'rejection starts no privileged presentation work');
+  assert.equal(signalCountAfterThirdAttempt, 2, 'rejection creates no additional abort-controlled request');
+
+  harness.operations[0]?.resolve(publicPresentation());
+  await settlePendingHandlerWork();
+  const replacement = harness.get('guide-stalled-third');
+  await settlePendingHandlerWork();
+  assert.equal(harness.operations.length, 3);
+  assert.equal(harness.signals.length, 3);
+
+  await harness.cancel('guide-stalled-third');
+  assert.equal((await replacement).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+  harness.operations[1]?.resolve(publicPresentation());
+  harness.operations[2]?.resolve(publicPresentation());
+  await settlePendingHandlerWork();
+  await harness.teardown();
+});
+
+test('Guide timeout and sustained cancellation settle noncooperative presentations with bounded custody', async (t) => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const timers = new Map<number, () => void>();
+  let nextTimerId = 0;
+  globalThis.setTimeout = ((callback: () => void) => {
+    nextTimerId += 1;
+    timers.set(nextTimerId, callback);
+    return nextTimerId as never;
+  }) as unknown as typeof globalThis.setTimeout;
+  globalThis.clearTimeout = ((timerId: number) => {
+    timers.delete(timerId);
+  }) as unknown as typeof globalThis.clearTimeout;
+  t.after(() => {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  });
+
+  const harness = createNonCooperativeGuideHarness('presentation');
+  const timedOut = harness.get('guide-stalled-presentation');
+  await settlePendingHandlerWork();
+  assert.equal(harness.operations.length, 1);
+  assert.equal(harness.sender.destroyedListenerCount, 1);
+  assert.equal(timers.size, 1);
+  [...timers.values()][0]?.();
+  assert.equal((await timedOut).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+  assert.equal(harness.sender.destroyedListenerCount, 0);
+  assert.equal(timers.size, 0);
+  assert.equal(harness.signals[0]?.aborted, true);
+
+  const replacement = harness.get('guide-stalled-presentation');
+  await settlePendingHandlerWork();
+  assert.equal(harness.operations.length, 2);
+  assert.equal(harness.sender.destroyedListenerCount, 1);
+  assert.equal(timers.size, 1);
+  harness.operations[0]?.resolve(publicPresentation());
+  await settlePendingHandlerWork();
+  assert.equal(harness.sender.destroyedListenerCount, 1);
+  assert.equal(timers.size, 1);
+  await harness.cancel('guide-stalled-presentation');
+  assert.equal((await replacement).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+  harness.operations[1]?.reject(new Error('late private presentation failure'));
+  await settlePendingHandlerWork();
+
+  for (let index = 0; index < 19; index += 1) {
+    const pending = harness.get('guide-stalled-presentation');
+    await settlePendingHandlerWork();
+    assert.equal(harness.sender.destroyedListenerCount, 1);
+    assert.equal(timers.size, 1);
+    assert.ok(harness.signals.filter((signal) => !signal.aborted).length <= 1);
+    await harness.cancel('guide-stalled-presentation');
+    assert.equal((await pending).error?.code, 'GUIDE_PRESENTATION_CANCELLED');
+    assert.equal(harness.sender.destroyedListenerCount, 0);
+    assert.equal(timers.size, 0);
+    assert.equal(harness.signals.filter((signal) => !signal.aborted).length, 0);
+    harness.operations[index + 2]?.reject(new Error('late private presentation failure'));
+    await settlePendingHandlerWork();
+  }
+  await harness.teardown();
+});
+
+test('Guide presentation retries the Settings currentness sentinel independently', async () => {
+  const handlers = new Map<string, (event: never, payload: unknown) => Promise<unknown>>();
+  let presentationLoads = 0;
+  registerChannelIpcHandlers({
+    runtime: {
+      loadPublicReferenceGeneration: async () => ({ lineupRevision: 1, channels: [], currentChannelId: null, fingerprint: 'same' }),
+    } as never,
+    guideRuntime: {
+      isPreferenceScopeCurrent: () => true,
+      getPagedPresentation: async () => {
+        presentationLoads += 1;
+        if (presentationLoads < 3) throw new GuidePresentationCurrentnessError();
+        return {
+          channels: [],
+          nowWatching: null,
+          channelWindow: { offset: 0, total: 0 },
+          libraryFilter: { scopeToken: 'scope', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'ready' },
+          minimumStartTimeMs: 0,
+        };
+      },
+    } as never,
+    publicReferenceOwner: {} as never,
+    isAuthorizedEvent: () => true,
+    createRequestId: () => 'fallback',
+    ipcMain: {
+      handle: (channel, handler) => { handlers.set(channel, handler as never); },
+      removeHandler: () => undefined,
+    },
+  });
+  const result = await handlers.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL)!(
+    undefined as never,
+    { requestId: 'guide-settings-currentness', payload: { startTimeMs: 0, durationMs: 60_000 } },
+  ) as { ok: boolean };
+  assert.equal(result.ok, true);
+  assert.equal(presentationLoads, 3);
+});
+
+test('Guide presentation exhausts the Settings currentness retry budget as stale', async () => {
+  const handlers = new Map<string, (event: never, payload: unknown) => Promise<unknown>>();
+  let presentationLoads = 0;
+  registerChannelIpcHandlers({
+    runtime: {
+      loadPublicReferenceGeneration: async () => ({ lineupRevision: 1, channels: [], currentChannelId: null, fingerprint: 'same' }),
+    } as never,
+    guideRuntime: {
+      isPreferenceScopeCurrent: () => true,
+      getPagedPresentation: async () => {
+        presentationLoads += 1;
+        throw new GuidePresentationCurrentnessError();
+      },
+    } as never,
+    publicReferenceOwner: {} as never,
+    isAuthorizedEvent: () => true,
+    createRequestId: () => 'fallback',
+    ipcMain: {
+      handle: (channel, handler) => { handlers.set(channel, handler as never); },
+      removeHandler: () => undefined,
+    },
+  });
+  const result = await handlers.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL)!(
+    undefined as never,
+    { requestId: 'guide-settings-currentness-exhausted', payload: { startTimeMs: 0, durationMs: 60_000 } },
+  ) as { ok: boolean; error: { code: string } };
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'GUIDE_PRESENTATION_STALE');
+  assert.equal(presentationLoads, 3);
+});
+
+test('Guide presentation retries a public-reference consistency failure independently before success', async () => {
+  const handlers = new Map<string, (event: never, payload: unknown) => Promise<unknown>>();
+  let presentationLoads = 0;
+  registerChannelIpcHandlers({
+    runtime: {
+      loadPublicReferenceGeneration: async () => ({ lineupRevision: 1, channels: [], currentChannelId: null, fingerprint: 'same' }),
+    } as never,
+    guideRuntime: {
+      isPreferenceScopeCurrent: () => true,
+      getPagedPresentation: async () => {
+        presentationLoads += 1;
+        if (presentationLoads === 1) throw new ChannelPublicReferenceConsistencyError();
+        return {
+          channels: [],
+          nowWatching: null,
+          channelWindow: { offset: 0, total: 0 },
+          libraryFilter: { scopeToken: 'scope', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'ready' },
+          minimumStartTimeMs: 0,
+        };
+      },
+    } as never,
+    publicReferenceOwner: {} as never,
+    isAuthorizedEvent: () => true,
+    createRequestId: () => 'fallback',
+    ipcMain: {
+      handle: (channel, handler) => { handlers.set(channel, handler as never); },
+      removeHandler: () => undefined,
+    },
+  });
+  const result = await handlers.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL)!(
+    undefined as never,
+    { requestId: 'guide-reference-retry-success', payload: { startTimeMs: 0, durationMs: 60_000 } },
+  ) as { ok: boolean };
+  assert.equal(result.ok, true);
+  assert.equal(presentationLoads, 2);
+});
+
 test('channel IPC registers and removes exactly the five setup handlers', async () => {
   const handlers = new Map<string, (event: never, payload: unknown) => unknown>();
   const removed: string[] = [];
@@ -166,6 +693,201 @@ test('channel IPC registers and removes exactly the five setup handlers', async 
   await teardown();
   assert.deepEqual(removed, expected);
 });
+
+type GuideCancellationResult = {
+  ok: boolean;
+  error?: { code: string; message: string; retryable: boolean; recoverable: boolean; operation: string };
+};
+
+class FakeGuideSender {
+  private readonly destroyedListeners = new Set<() => void>();
+
+  once(event: string, listener: () => void): void {
+    if (event === 'destroyed') this.destroyedListeners.add(listener);
+  }
+
+  removeListener(event: string, listener: () => void): void {
+    if (event === 'destroyed') this.destroyedListeners.delete(listener);
+  }
+
+  emitDestroyed(): void {
+    const listeners = [...this.destroyedListeners];
+    this.destroyedListeners.clear();
+    listeners.forEach((listener) => listener());
+  }
+
+  get destroyedListenerCount(): number {
+    return this.destroyedListeners.size;
+  }
+}
+
+type GuideCancellationHarness = {
+  sender: FakeGuideSender;
+  signals: AbortSignal[];
+  authorized: boolean;
+  get(requestId: string, sender: FakeGuideSender): Promise<GuideCancellationResult>;
+  cancel(requestId: string, sender: FakeGuideSender, payload?: Record<string, unknown>): Promise<GuideCancellationResult>;
+  teardown(): Promise<void>;
+};
+
+function createCancellationHarness(): GuideCancellationHarness {
+  const handlers = new Map<string, (event: never, payload: unknown) => Promise<unknown> | unknown>();
+  const sender = new FakeGuideSender();
+  const signals: AbortSignal[] = [];
+  const harness: GuideCancellationHarness = {
+    sender,
+    signals,
+    authorized: true,
+    get(requestId: string, requestSender: FakeGuideSender) {
+      return handlers.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL)!({ sender: requestSender } as never, {
+        requestId, payload: { startTimeMs: 0, durationMs: 60_000 },
+      }) as Promise<GuideCancellationResult>;
+    },
+    async cancel(
+      requestId: string,
+      requestSender: FakeGuideSender,
+      payload: Record<string, unknown> = {},
+    ) {
+      return await handlers.get(LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL)!({ sender: requestSender } as never, {
+        requestId, payload,
+      }) as GuideCancellationResult;
+    },
+    teardown: async () => undefined,
+  };
+  const teardown = registerChannelIpcHandlers({
+    runtime: {
+      loadPublicReferenceGeneration: async () => ({
+        lineupRevision: 1, channels: [], currentChannelId: null, fingerprint: 'same',
+      }),
+    } as never,
+    guideRuntime: {
+      isPreferenceScopeCurrent: () => true,
+      getPagedPresentation: async ({ signal }: { signal: AbortSignal }) => {
+        signals.push(signal);
+        await new Promise<void>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new Error('private abort detail')), { once: true });
+        });
+        throw new Error('unreachable');
+      },
+    } as never,
+    publicReferenceOwner: {} as never,
+    isAuthorizedEvent: () => harness.authorized,
+    createRequestId: () => 'fallback',
+    ipcMain: {
+      handle: (channel, handler) => handlers.set(channel, handler as never),
+      removeHandler: () => undefined,
+    },
+  });
+  harness.teardown = teardown;
+  return harness;
+}
+
+type DeferredValue = {
+  promise: Promise<unknown>;
+  resolve(value: unknown): void;
+  reject(error: unknown): void;
+};
+
+type NonCooperativeGuideHarness = {
+  sender: FakeGuideSender;
+  signals: AbortSignal[];
+  operations: DeferredValue[];
+  get(requestId: string): Promise<GuideCancellationResult>;
+  cancel(requestId: string): Promise<GuideCancellationResult>;
+  teardown(): Promise<void>;
+};
+
+function createNonCooperativeGuideHarness(
+  stalledOwner: 'generation' | 'presentation',
+): NonCooperativeGuideHarness {
+  const handlers = new Map<string, (event: never, payload: unknown) => Promise<unknown> | unknown>();
+  const sender = new FakeGuideSender();
+  const signals: AbortSignal[] = [];
+  const operations: DeferredValue[] = [];
+  const createOperation = (): Promise<unknown> => {
+    const operation = deferredValue();
+    operations.push(operation);
+    return operation.promise;
+  };
+  const teardown = registerChannelIpcHandlers({
+    runtime: {
+      loadPublicReferenceGeneration: async () => stalledOwner === 'generation'
+        ? await createOperation()
+        : publicGeneration(),
+    } as never,
+    guideRuntime: {
+      isPreferenceScopeCurrent: () => true,
+      getPagedPresentation: async ({ signal }: { signal: AbortSignal }) => {
+        signals.push(signal);
+        return await createOperation();
+      },
+    } as never,
+    publicReferenceOwner: {} as never,
+    isAuthorizedEvent: () => true,
+    createRequestId: () => 'fallback',
+    ipcMain: {
+      handle: (channel, handler) => handlers.set(channel, handler as never),
+      removeHandler: () => undefined,
+    },
+  });
+  return {
+    sender,
+    signals,
+    operations,
+    get(requestId: string) {
+      return handlers.get(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL)!({ sender } as never, {
+        requestId,
+        payload: { startTimeMs: 0, durationMs: 60_000 },
+      }) as Promise<GuideCancellationResult>;
+    },
+    async cancel(requestId: string) {
+      return await handlers.get(LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL)!({ sender } as never, {
+        requestId,
+        payload: {},
+      }) as GuideCancellationResult;
+    },
+    teardown,
+  };
+}
+
+function deferredValue(): DeferredValue {
+  let resolve: (value: unknown) => void = () => undefined;
+  let reject: (error: unknown) => void = () => undefined;
+  const promise = new Promise<unknown>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function publicGeneration(): object {
+  return {
+    lineupRevision: 1,
+    channels: [],
+    currentChannelId: null,
+    fingerprint: 'same',
+  };
+}
+
+function publicPresentation(): object {
+  return {
+    channels: [],
+    nowWatching: null,
+    channelWindow: { offset: 0, total: 0 },
+    libraryFilter: {
+      scopeToken: 'scope',
+      revision: 0,
+      libraries: [],
+      selectedLibraryId: null,
+      persistenceStatus: 'ready',
+    },
+    minimumStartTimeMs: 0,
+  };
+}
+
+async function settlePendingHandlerWork(): Promise<void> {
+  await waitForImmediate();
+}
 
 function memoryStorage(initial: ChannelAggregate): ChannelPersistenceStoragePort {
   let aggregate = initial;

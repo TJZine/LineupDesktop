@@ -73,6 +73,7 @@ import { registerShellAppCommandController } from './window/shellAppCommandContr
 import { createShellWindowController, type ShellWindow } from './window/shellWindowController.js';
 import { resolveDesktopGuidePreferencesFilePath, resolveDesktopSettingsFilePath } from './persistence/appDataPaths.js';
 import { DesktopSettingsStore } from './persistence/desktopSettingsStore.js';
+import { DesktopSettingsSnapshotOwner } from './settings/desktopSettingsSnapshotOwner.js';
 import { registerSettingsIpcHandlers, type SettingsIpcTeardown } from './settings/settingsIpc.js';
 import { createSettingsNativeHostComposition } from './settings/settingsNativeHostComposition.js';
 import { SmokeBootstrapOwner } from './smokeBootstrapOwner.js';
@@ -268,6 +269,12 @@ async function startApplication(): Promise<void> {
       });
     },
   });
+  const initialSettingsSnapshot = await settingsStore.loadSnapshot();
+  if (quitLifecycleOwner.isQuitRequested()) return;
+  const settingsSnapshotOwner = new DesktopSettingsSnapshotOwner(
+    settingsStore,
+    initialSettingsSnapshot,
+  );
   const channelCreated = createChannelComposition({
     persistence,
     plexRuntime: plexCreated.runtime,
@@ -276,7 +283,14 @@ async function startApplication(): Promise<void> {
     channelBuilderContextSource: smokeFixture?.contextSource,
     diagnosticEventStore,
     guidePreferencesFilePath: resolveDesktopGuidePreferencesFilePath(app),
-    getLibraryTabsEnabled: async () => (await settingsStore.loadSnapshot()).values.libraryTabsEnabled,
+    getPastItemsWindowSnapshot: async () => {
+      const snapshot = settingsSnapshotOwner.observeSnapshot();
+      return {
+        revision: snapshot.revision,
+        pastItemsWindow: snapshot.values.pastItemsWindow,
+        libraryTabsEnabled: snapshot.values.libraryTabsEnabled,
+      };
+    },
   });
   channelComposition = channelCreated;
   plexComposition = registerPlexCompositionIpc(plexCreated, {
@@ -307,8 +321,6 @@ async function startApplication(): Promise<void> {
     });
     configurePermissionContainment();
     registerShellIpcHandlers();
-    const initialSettingsSnapshot = await settingsStore.loadSnapshot();
-    if (quitLifecycleOwner.isQuitRequested()) return;
     const productionNativeHostFactory = shellMode === 'production'
       ? createProductionNativeHostFactory({ diagnosticEventStore })
       : null;
@@ -332,7 +344,7 @@ async function startApplication(): Promise<void> {
       getParentIdentity: () => getShellWindowController().getNativeParentIdentity(),
     });
     teardownSettingsIpc = registerSettingsIpcHandlers({
-      store: settingsStore,
+      store: settingsSnapshotOwner,
       policy: settingsPolicy,
       audioOutputOwner: settingsAudioOutputOwner,
       isAuthorizedEvent,

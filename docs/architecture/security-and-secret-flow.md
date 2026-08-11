@@ -83,6 +83,18 @@ persisted `null` means System Default. Raw keys remain ephemeral in main/helper
 custody and are resolved immediately before private setup. Main shares the one
 production helper host with player IPC; private audio-query correlation,
 timeout, quarantine, crash, and cleanup use that same process owner.
+`DesktopSettingsSnapshotOwner` is a separate main-only, non-durable observation
+of the last successful Settings load or replacement. Startup hydrates it and
+native Settings policy from one durable load. Authorized Settings loads still
+delegate to `DesktopSettingsStore`, preserving fresh file observation,
+migration, and serialized compare-and-swap behavior; successful replacements
+publish a defensive snapshot copy before IPC success returns, while failed
+loads or replacements preserve the previous observation. Guide projects only
+revision, past-items-window policy, and library-tab enablement from defensive
+in-memory copies, so its two currentness observations perform no filesystem
+reads but still detect an accepted Settings replacement between them. The
+owner contains only the existing renderer-safe Settings snapshot: no secret,
+path, raw file content, Electron object, native value, or new renderer surface.
 Test-only checkpoint `f0e2817` strengthens smoke proof that main constructs one
 production host and injects the same binding into player IPC and the audio
 owner, while keeping the optional factory inside development/smoke custody. It

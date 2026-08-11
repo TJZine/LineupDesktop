@@ -5,7 +5,6 @@ import type {
 } from '../contracts/player.js';
 import type { LineupDesktopPreloadApi } from '../contracts/shell.js';
 import type { DesktopInputButton } from './navigation.js';
-import { toRendererSafeFailureMessage } from './rendererSafeFailureMessage.js';
 
 export interface PlayerInputCommandTimerHost {
   setTimeout(callback: () => void, delayMs: number): number;
@@ -39,6 +38,7 @@ interface PendingDirectCommand {
   requestId: string;
   command: PlayerCommandName;
   snapshotRequestId: string;
+  settled: boolean;
 }
 
 interface DeferredPause {
@@ -47,6 +47,7 @@ interface DeferredPause {
 }
 
 const COMMAND_TIMEOUT_MS = 30_000;
+const PLAYER_COMMAND_FAILURE_MESSAGE = 'Player command failed.';
 
 export function createPlayerInputCommandController(
   options: PlayerInputCommandControllerOptions,
@@ -73,32 +74,49 @@ export function createPlayerInputCommandController(
     deferred?.resolve(result);
   };
 
-  const fail = (requestId: string, message: string): void => {
+  const fail = (requestId: string): void => {
     if (disposed || pending?.requestId !== requestId) return;
     const failed = release();
     if (failed !== null) {
       options.recordDiagnostic(
         `player.${failed.command}`,
-        toRendererSafeFailureMessage(message, 'Player command failed.'),
+        PLAYER_COMMAND_FAILURE_MESSAGE,
       );
     }
     resolveDeferredPause('rejected');
   };
 
   const settle = (event: Extract<PlayerEvent, { event: 'command.settled' }>): void => {
-    if (pending?.requestId !== event.requestId || pending.command !== event.command) return;
+    if (
+      pending?.requestId !== event.requestId ||
+      pending.command !== event.command ||
+      pending.settled
+    ) return;
+    if (event.ok && pending.command === 'play' && deferredPause !== null) {
+      const snapshot = options.getSnapshot();
+      if (
+        snapshot.requestId !== pending.snapshotRequestId ||
+        isInconsistentPlaybackPair(snapshot)
+      ) {
+        release();
+        resolveDeferredPause('rejected');
+        return;
+      }
+      if (snapshot.status !== 'playing' || !snapshot.playing) {
+        pending.settled = true;
+        return;
+      }
+    }
     const settled = release();
     if (!event.ok && settled !== null) {
       options.recordDiagnostic(
         `player.${settled.command}`,
-        toRendererSafeFailureMessage(
-          event.error?.message ?? 'Player command failed.',
-          'Player command failed.',
-        ),
+        PLAYER_COMMAND_FAILURE_MESSAGE,
       );
     }
     if (
       settled !== null
+      && event.ok
       && (settled.command === 'play' || settled.command === 'seek.relative')
       && deferredPause !== null
     ) {
@@ -122,10 +140,10 @@ export function createPlayerInputCommandController(
     deltaMs?: number,
   ): void => {
     const requestId = `renderer-input-${command.replace('.', '-')}-${++sequence}`;
-    pending = { requestId, command, snapshotRequestId };
+    pending = { requestId, command, snapshotRequestId, settled: false };
     timer = options.host.setTimeout(() => {
       timer = null;
-      fail(requestId, 'Player command timed out.');
+      fail(requestId);
     }, COMMAND_TIMEOUT_MS);
     const payload = deltaMs === undefined
       ? { snapshotRequestId }
@@ -133,13 +151,13 @@ export function createPlayerInputCommandController(
     void options.player.dispatch({ intent, requestId, payload }).then((result) => {
       if (disposed || pending?.requestId !== requestId) return;
       if (!result.ok || !result.value.accepted) {
-        fail(requestId, result.ok ? 'Player command was not accepted.' : result.error.message);
+        fail(requestId);
         return;
       }
       for (const event of result.value.events) {
         if (event.event === 'command.settled') settle(event);
       }
-    }).catch(() => fail(requestId, 'Player command failed.'));
+    }).catch(() => fail(requestId));
   };
 
   const handleInput = (input: DesktopInputButton, blocked = false): boolean => {
@@ -191,6 +209,7 @@ export function createPlayerInputCommandController(
         deferredPause === null
         && onDeferredResolved !== undefined
         && (pending.command === 'play' || pending.command === 'seek.relative')
+        && pending.snapshotRequestId === snapshotRequestId
       ) {
         deferredPause = { snapshotRequestId, resolve: onDeferredResolved };
         return 'deferred';
@@ -218,7 +237,7 @@ export function createPlayerInputCommandController(
     handlePlayerEvent(event) {
       if (event.event === 'command.settled') settle(event);
       else if (event.event === 'error' && event.requestId !== null && pending?.requestId === event.requestId) {
-        fail(event.requestId, event.error.message);
+        fail(event.requestId);
       }
     },
     reconcileSnapshot(snapshot, authoritative) {
@@ -227,7 +246,20 @@ export function createPlayerInputCommandController(
         release();
         resolveDeferredPause('rejected');
       } else if (isInconsistentPlaybackPair(snapshot)) {
-        fail(pending.requestId, 'Inconsistent player state ignored.');
+        if (pending.settled) {
+          release();
+          resolveDeferredPause('rejected');
+        } else {
+          fail(pending.requestId);
+        }
+      } else if (pending.settled && snapshot.status === 'playing' && snapshot.playing) {
+        const deferred = deferredPause;
+        release();
+        deferredPause = null;
+        if (deferred !== null) {
+          const result = pauseCurrent(deferred.snapshotRequestId);
+          deferred.resolve(result === 'started' ? 'started' : 'rejected');
+        }
       }
     },
     routeLeave() {

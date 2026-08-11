@@ -11,6 +11,8 @@ import {
   moveEpgSelection,
   pageEpgSelection,
   selectEpgProgram,
+  setEpgGuideDensity,
+  setEpgPastItemsWindow,
   type EpgDirection,
   type EpgDirectionResult,
   type EpgActionId,
@@ -216,7 +218,15 @@ const ROUTE_COPY = {
 export function createWorkflowState(
   initialRoute: AppRouteId = 'player',
   guidePresentation: EpgPresentationSource = EMPTY_EPG_PRESENTATION_SOURCE,
+  nowMs = Date.now(),
 ): WorkflowState {
+  const settingsDraft = createSettingsDraftState();
+  const initialEpg = setEpgPastItemsWindow(
+    createEpgState(guidePresentation, 0, settingsDraft.guideDensity),
+    settingsDraft.pastItemsWindow,
+    guidePresentation.nowMs ?? nowMs,
+    guidePresentation,
+  );
   return {
     routeState: {
       activeRoute: initialRoute,
@@ -224,9 +234,9 @@ export function createWorkflowState(
     },
     lastActionId: null,
     lastActionRoute: null,
-    settingsDraft: createSettingsDraftState(),
+    settingsDraft,
     channelSetupDraft: createChannelSetupDraftState(),
-    epg: createEpgState(guidePresentation),
+    epg: initialEpg,
     guidePresentation,
   };
 }
@@ -428,10 +438,13 @@ function formatRecoveryDetail(
 export function applyWorkflowSettingsAction(
   state: WorkflowState,
   actionId: SettingsActionId,
+  nowMs = Date.now(),
 ): WorkflowState {
+  const settingsDraft = applySettingsAction(state.settingsDraft, actionId);
   return {
     ...state,
-    settingsDraft: applySettingsAction(state.settingsDraft, actionId),
+    settingsDraft,
+    epg: synchronizeEpgWithSettings(state, settingsDraft, nowMs),
   };
 }
 
@@ -439,15 +452,29 @@ export function applyWorkflowSettingsValues(
   state: WorkflowState,
   values: DesktopSettingsValues,
   capabilities?: DesktopSettingsCapabilityProjection | null,
+  nowMs = Date.now(),
 ): WorkflowState {
+  const settingsDraft = applyPersistedSettingsValues(
+    state.settingsDraft,
+    values,
+    capabilities ?? state.settingsDraft.capabilities,
+  );
   return {
     ...state,
-    settingsDraft: applyPersistedSettingsValues(
-      state.settingsDraft,
-      values,
-      capabilities ?? state.settingsDraft.capabilities,
-    ),
+    settingsDraft,
+    epg: synchronizeEpgWithSettings(state, settingsDraft, nowMs),
   };
+}
+
+function synchronizeEpgWithSettings(
+  state: WorkflowState,
+  settingsDraft: SettingsDraftState,
+  nowMs: number,
+): EpgState {
+  const epg = setEpgGuideDensity(state.epg, state.guidePresentation, settingsDraft.guideDensity);
+  return settingsDraft.pastItemsWindow === state.settingsDraft.pastItemsWindow
+    ? epg
+    : setEpgPastItemsWindow(epg, settingsDraft.pastItemsWindow, nowMs, state.guidePresentation);
 }
 
 export function applyWorkflowSupportBundleExportStatus(

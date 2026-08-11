@@ -95,6 +95,113 @@ test('Guide filtering uses raw membership, includes custom channels only in All,
   assert.deepEqual(removed.channels.map((row) => row.number), ['15', '20']);
 });
 
+test('Guide projects Now Watching from active scheduler state when paging and filtering hide its row', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-guide-paging-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const channels = [
+    channel('channel-active', 10, 'library-a'),
+    channel('channel-middle', 20, 'library-b'),
+    channel('channel-last', 30, 'library-b'),
+  ];
+  const adapter = {
+    getLibraryItems: async (libraryId: string) => [{
+      ratingKey: `${libraryId}-item`, type: 'movie', title: libraryId, durationMs: 60_000,
+    }],
+    getCollectionItems: async () => [], getShowEpisodes: async () => [],
+    getPlaylistItems: async () => [], getItem: async () => null,
+  };
+  const scheduler = new ChannelScheduler({ clock: { now: () => 0 } });
+  scheduler.loadChannel({
+    channelId: 'channel-active', anchorTime: 0, playbackMode: 'sequential', shuffleSeed: 0,
+    content: [{
+      ratingKey: 'active-item', type: 'movie', title: 'Active Movie', fullTitle: 'Active Movie',
+      durationMs: 60_000, thumb: null, year: null, scheduledIndex: 0,
+    }],
+  });
+  const store = new DesktopGuidePreferencesStore(path.join(directory, 'preferences.json'));
+  const runtime = createRuntime(channels, adapter, store, { activeChannelScheduler: scheduler });
+  const owner = new ChannelPublicReferenceOwner();
+  const generation = generationFor(channels, 'generation-now-watching', 'channel-active');
+  const activePublicId = owner.projectChannelReference(generation, 'channel-active');
+
+  const pagedAway = await page(runtime, generation, owner, 2, 1);
+  assert.deepEqual(pagedAway.channels.map((row) => row.number), ['30']);
+  assert.deepEqual(pagedAway.nowWatching, {
+    title: 'Active Movie', subtitle: '', channelId: activePublicId, startsAtMs: 0, endsAtMs: 60_000,
+  });
+
+  const all = await page(runtime, generation, owner, 0, 24);
+  const libraryB = all.libraryFilter.libraries.find((library) => library.name === 'Library 20')!;
+  await runtime.setLibraryFilter({
+    generation, publicReferenceOwner: owner, expectedScopeToken: all.libraryFilter.scopeToken,
+    expectedRevision: all.libraryFilter.revision, libraryId: libraryB.id,
+    loadCurrentGeneration: async () => generation,
+  });
+  const filteredAway = await page(runtime, generation, owner, 0, 24);
+  assert.deepEqual(filteredAway.channels.map((row) => row.number), ['20', '30']);
+  assert.equal(filteredAway.nowWatching?.channelId, activePublicId);
+  assert.equal(filteredAway.nowWatching?.title, 'Active Movie');
+});
+
+test('Guide recalculates Now Watching at its captured clock time without mutating preference state', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-guide-paging-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  let nowMs = 0;
+  const clock = { now: () => nowMs };
+  const channels = [channel('channel-active', 10, 'library-a')];
+  const scheduler = new ChannelScheduler({ clock });
+  scheduler.loadChannel({
+    channelId: 'channel-active', anchorTime: 0, playbackMode: 'sequential', shuffleSeed: 0,
+    content: [
+      { ratingKey: 'first', type: 'movie', title: 'First', fullTitle: 'First', durationMs: 60_000,
+        thumb: null, year: null, scheduledIndex: 0 },
+      { ratingKey: 'second', type: 'movie', title: 'Second', fullTitle: 'Second', durationMs: 60_000,
+        thumb: null, year: null, scheduledIndex: 1 },
+    ],
+  });
+  nowMs = 60_001;
+  const store = new DesktopGuidePreferencesStore(path.join(directory, 'preferences.json'));
+  const runtime = createRuntime(channels, emptyAdapter(), store, {
+    activeChannelScheduler: scheduler,
+    clock,
+  });
+  const generation = generationFor(channels, 'generation-rollover', 'channel-active');
+  const result = await page(runtime, generation, new ChannelPublicReferenceOwner(), 0, 1);
+
+  assert.equal(result.nowWatching?.title, 'Second');
+  assert.equal(result.nowWatching?.startsAtMs, 60_000);
+  assert.equal(result.libraryFilter.revision, 0);
+  assert.equal(result.libraryFilter.selectedLibraryId, null);
+});
+
+test('Guide omits Now Watching when committed generation and active scheduler channels disagree', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-guide-paging-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const channels = [channel('channel-old', 10), channel('channel-committed', 20)];
+  const scheduler = new ChannelScheduler({ clock: { now: () => 0 } });
+  scheduler.loadChannel({
+    channelId: 'channel-old', anchorTime: 0, playbackMode: 'sequential', shuffleSeed: 0,
+    content: [{ ratingKey: 'old', type: 'movie', title: 'Old', fullTitle: 'Old', durationMs: 60_000,
+      thumb: null, year: null, scheduledIndex: 0 }],
+  });
+  const runtime = createRuntime(
+    channels,
+    emptyAdapter(),
+    new DesktopGuidePreferencesStore(path.join(directory, 'preferences.json')),
+    { activeChannelScheduler: scheduler },
+  );
+  const result = await page(
+    runtime,
+    generationFor(channels, 'generation-mismatch', 'channel-committed'),
+    new ChannelPublicReferenceOwner(),
+    0,
+    24,
+  );
+
+  assert.equal(result.nowWatching, null);
+  assert.equal(result.libraryFilter.revision, 0);
+});
+
 test('Guide paging uses public-id tie breaks, empty bounds, and fair 200/1000 program truncation', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lineup-guide-paging-'));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
@@ -146,7 +253,7 @@ test('Guide disabled and single-library states act as All and persist one normal
     generation, publicReferenceOwner: owner, expectedScopeToken: initial.libraryFilter.scopeToken,
     expectedRevision: 0, libraryId: selectedId, loadCurrentGeneration: async () => generation,
   });
-  const disabled = createRuntime(channels, adapter, store, false);
+  const disabled = createRuntime(channels, adapter, store, { libraryTabsEnabled: false });
   const disabledResult = await page(disabled, generation, owner, 0, 24);
   assert.equal(disabledResult.libraryFilter.selectedLibraryId, null);
   assert.equal(disabledResult.libraryFilter.revision, 2);
@@ -226,25 +333,47 @@ function channel(id: string, number: number, libraryId = `library-${id}`): Chann
   };
 }
 
-function generationFor(channels: readonly ChannelConfig[], fingerprint: string): ChannelPublicReferenceGeneration {
-  return Object.freeze({ lineupRevision: 1, channels, currentChannelId: null, fingerprint });
+function generationFor(
+  channels: readonly ChannelConfig[],
+  fingerprint: string,
+  currentChannelId: string | null = null,
+): ChannelPublicReferenceGeneration {
+  return Object.freeze({ lineupRevision: 1, channels, currentChannelId, fingerprint });
 }
 
 function createRuntime(
   channels: readonly ChannelConfig[],
   adapter: object,
   preferencesStore: DesktopGuidePreferencesStore,
-  libraryTabsEnabled = true,
+  options: {
+    libraryTabsEnabled?: boolean;
+    activeChannelScheduler?: ChannelScheduler;
+    clock?: { now(): number };
+  } = {},
 ): GuideRuntime {
+  const libraryTabsEnabled = options.libraryTabsEnabled ?? true;
+  const activeChannelScheduler = options.activeChannelScheduler ?? new ChannelScheduler({ clock: { now: () => 0 } });
+  const clock = options.clock ?? { now: () => 0 };
   return new GuideRuntime({
     repository: { loadNormalized: async () => null } as never,
     plexLibraryAdapter: adapter as never,
-    activeChannelScheduler: new ChannelScheduler({ clock: { now: () => 0 } }),
-    clock: { now: () => 0 }, preferencesStore,
+    activeChannelScheduler,
+    clock, preferencesStore,
     guideContextSource: { getBuilderContextForMain: () => ({ ok: true, snapshot: { activeProfileId: 'profile', selectedServerId: 'server' } }) },
     createScopeToken: () => 'scope-token',
-    getLibraryTabsEnabled: () => libraryTabsEnabled,
+    getPastItemsWindowSnapshot: async () => ({
+      revision: 0,
+      pastItemsWindow: 'auto' as const,
+      libraryTabsEnabled,
+    }),
   });
+}
+
+function emptyAdapter() {
+  return {
+    getLibraryItems: async () => [], getCollectionItems: async () => [], getShowEpisodes: async () => [],
+    getPlaylistItems: async () => [], getItem: async () => null,
+  };
 }
 
 function page(

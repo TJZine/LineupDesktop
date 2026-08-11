@@ -19,16 +19,22 @@ import {
   LINEUP_CHANNEL_SETUP_START_APPLY_CHANNEL,
   LINEUP_CHANNEL_SETUP_START_REVIEW_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL,
   LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
 } from '../../contracts/ipc.js';
 import type { ChannelRuntime } from './channelRuntime.js';
 import type { GuideRuntime } from './guideRuntime.js';
+import { GuidePresentationCurrentnessError } from './guideRuntime.js';
 import {
   ChannelPublicReferenceConsistencyError,
   type ChannelPublicReferenceOwner,
 } from './channelPublicReferenceOwner.js';
-import type { GuideIpcResult, GuideRuntimeError } from '../../contracts/guide.js';
+import type {
+  GuideIpcResult,
+  GuidePresentationSource,
+  GuideRuntimeError,
+} from '../../contracts/guide.js';
 import {
   DesktopGuidePreferencesCommitCurrentnessError,
   DesktopGuidePreferencesStoreError,
@@ -57,11 +63,18 @@ export type ChannelIpcTeardown = () => Promise<void>;
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,120}$/u;
 const MAX_GUIDE_PRESENTATION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const GUIDE_PRESENTATION_TIMEOUT_MS = 30_000;
+const MAX_ACTIVE_GUIDE_PRESENTATIONS_PER_SENDER = 2;
 
 export function registerChannelIpcHandlers(
   options: RegisterChannelIpcHandlersOptions,
 ): ChannelIpcTeardown {
   const ipcMain = options.ipcMain ?? getElectronIpcMain();
+  const activePresentations = new Map<string, {
+    sender: unknown;
+    cancel: () => void;
+  }>();
+  const underlyingPresentationWorkBySender = new Map<unknown, number>();
 
   ipcMain.handle(LINEUP_CHANNEL_SETUP_GET_STATUS_CHANNEL, (event, payload: unknown) => {
     const request = readChannelSetupEmptyRequest(
@@ -136,7 +149,6 @@ export function registerChannelIpcHandlers(
   if (options.guideRuntime && options.publicReferenceOwner) {
     const guideRuntime = options.guideRuntime;
     const publicReferenceOwner = options.publicReferenceOwner;
-
     ipcMain.handle(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL, async (event, payload: unknown) => {
       const request = readPresentationRequest(payload, options);
       if (!isAuthorizedChannelEvent(options, event)) {
@@ -145,41 +157,76 @@ export function registerChannelIpcHandlers(
       if (!request.ok) {
         return validationGuideResult(request.requestId, 'getPresentation');
       }
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        try {
-          const generationA = await options.runtime.loadPublicReferenceGeneration();
-          const value = await guideRuntime.getPagedPresentation({
-            startTimeMs: request.payload.startTimeMs,
-            durationMs: request.payload.durationMs,
-            channelOffset: request.payload.channelOffset,
-            channelLimit: request.payload.channelLimit,
-            generation: generationA,
-            publicReferenceOwner,
-          });
-          const generationB = await options.runtime.loadPublicReferenceGeneration();
-          if (generationA.fingerprint !== generationB.fingerprint ||
-            !guideRuntime.isPreferenceScopeCurrent(value.libraryFilter.scopeToken)) continue;
-          return { ok: true, value, requestId: request.requestId };
-        } catch (error: unknown) {
-          if (error instanceof ChannelPublicReferenceConsistencyError) continue;
-          return {
-            ok: false,
-            requestId: request.requestId,
-            error: mapGuidePresentationError(error),
-          };
-        }
+      if (activePresentations.has(request.requestId)) {
+        return validationGuideResult(request.requestId, 'getPresentation');
       }
-      return {
-        ok: false,
-        requestId: request.requestId,
-        error: {
-          code: 'GUIDE_PRESENTATION_STALE',
-          message: 'Guide changed while loading. Try again.',
-          retryable: true,
-          recoverable: true,
-          operation: 'getPresentation',
+      const sender = readGuideSender(event) ?? event;
+      const activeSenderWork = underlyingPresentationWorkBySender.get(sender) ?? 0;
+      if (activeSenderWork >= MAX_ACTIVE_GUIDE_PRESENTATIONS_PER_SENDER) {
+        return validationGuideResult(request.requestId, 'getPresentation');
+      }
+      const controller = new AbortController();
+      let removeDestroyedListener: () => void = () => undefined;
+      let timeout: ReturnType<typeof globalThis.setTimeout> | undefined;
+      let cleanedUp = false;
+      let resolveCancellation: (result: GuideIpcResult<never>) => void = () => undefined;
+      const cancellation = new Promise<GuideIpcResult<never>>((resolve) => {
+        resolveCancellation = resolve;
+      });
+      const cleanup = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        if (timeout !== undefined) globalThis.clearTimeout(timeout);
+        removeDestroyedListener();
+        const current = activePresentations.get(request.requestId);
+        if (current === active) activePresentations.delete(request.requestId);
+      };
+      const active = {
+        sender,
+        cancel: () => {
+          controller.abort();
+          cleanup();
+          resolveCancellation(cancelledGuideResult(request.requestId));
         },
       };
+      activePresentations.set(request.requestId, active);
+      removeDestroyedListener = registerSenderDestroyedListener(event, active.cancel);
+      if (!controller.signal.aborted) {
+        timeout = globalThis.setTimeout(active.cancel, GUIDE_PRESENTATION_TIMEOUT_MS);
+      }
+      underlyingPresentationWorkBySender.set(sender, activeSenderWork + 1);
+      try {
+        const operation = loadGuidePresentation({
+          requestId: request.requestId,
+          payload: request.payload,
+          runtime: options.runtime,
+          guideRuntime,
+          publicReferenceOwner,
+          signal: controller.signal,
+        }).finally(() => {
+          const workCount = underlyingPresentationWorkBySender.get(sender);
+          if (workCount === undefined) return;
+          if (workCount === 1) underlyingPresentationWorkBySender.delete(sender);
+          else underlyingPresentationWorkBySender.set(sender, workCount - 1);
+        });
+        return await Promise.race([operation, cancellation]);
+      } finally {
+        cleanup();
+      }
+    });
+
+    ipcMain.handle(LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL, (event, payload: unknown) => {
+      const request = readCancelPresentationRequest(payload, options);
+      if (!isAuthorizedChannelEvent(options, event)) {
+        return unauthorizedGuideResult(request.requestId, 'cancelPresentation');
+      }
+      if (!request.ok) return validationGuideResult(request.requestId, 'cancelPresentation');
+      const active = activePresentations.get(request.requestId);
+      if (active !== undefined && active.sender !== (readGuideSender(event) ?? event)) {
+        return unauthorizedGuideResult(request.requestId, 'cancelPresentation');
+      }
+      active?.cancel();
+      return { ok: true, value: {}, requestId: request.requestId };
     });
 
     ipcMain.handle(LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL, async (event, payload: unknown) => {
@@ -249,10 +296,76 @@ export function registerChannelIpcHandlers(
     ipcMain.removeHandler(LINEUP_CHANNEL_SETUP_GET_OPERATION_CHANNEL);
     ipcMain.removeHandler(LINEUP_CHANNEL_SETUP_CANCEL_CHANNEL);
     if (options.guideRuntime) {
+      for (const active of [...activePresentations.values()]) {
+        active.cancel();
+      }
+      activePresentations.clear();
+      underlyingPresentationWorkBySender.clear();
       ipcMain.removeHandler(LINEUP_GUIDE_GET_PRESENTATION_CHANNEL);
+      ipcMain.removeHandler(LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL);
       ipcMain.removeHandler(LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL);
       ipcMain.removeHandler(LINEUP_PLAYER_TUNE_CHANNEL);
     }
+  };
+}
+
+async function loadGuidePresentation(input: {
+  requestId: string;
+  payload: {
+    startTimeMs: number;
+    durationMs: number;
+    channelOffset: number;
+    channelLimit: number;
+  };
+  runtime: Pick<ChannelRuntime, 'loadPublicReferenceGeneration'>;
+  guideRuntime: GuideRuntime;
+  publicReferenceOwner: ChannelPublicReferenceOwner;
+  signal: AbortSignal;
+}): Promise<GuideIpcResult<GuidePresentationSource>> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      if (input.signal.aborted) return cancelledGuideResult(input.requestId);
+      const generationA = await input.runtime.loadPublicReferenceGeneration();
+      if (input.signal.aborted) return cancelledGuideResult(input.requestId);
+      const value = await input.guideRuntime.getPagedPresentation({
+        startTimeMs: input.payload.startTimeMs,
+        durationMs: input.payload.durationMs,
+        channelOffset: input.payload.channelOffset,
+        channelLimit: input.payload.channelLimit,
+        generation: generationA,
+        publicReferenceOwner: input.publicReferenceOwner,
+        signal: input.signal,
+      });
+      if (input.signal.aborted) return cancelledGuideResult(input.requestId);
+      const generationB = await input.runtime.loadPublicReferenceGeneration();
+      if (
+        generationA.fingerprint !== generationB.fingerprint ||
+        !input.guideRuntime.isPreferenceScopeCurrent(value.libraryFilter.scopeToken)
+      ) {
+        continue;
+      }
+      return { ok: true, value, requestId: input.requestId };
+    } catch (error: unknown) {
+      if (input.signal.aborted) return cancelledGuideResult(input.requestId);
+      if (error instanceof ChannelPublicReferenceConsistencyError) continue;
+      if (error instanceof GuidePresentationCurrentnessError) continue;
+      return {
+        ok: false,
+        requestId: input.requestId,
+        error: mapGuidePresentationError(error),
+      };
+    }
+  }
+  return {
+    ok: false,
+    requestId: input.requestId,
+    error: {
+      code: 'GUIDE_PRESENTATION_STALE',
+      message: 'Guide changed while loading. Try again.',
+      retryable: true,
+      recoverable: true,
+      operation: 'getPresentation',
+    },
   };
 }
 
@@ -412,7 +525,7 @@ function readTuneRequest(
 
 function unauthorizedGuideResult(
   requestId: string,
-  operation: 'getPresentation' | 'setLibraryFilter' | 'tuneChannel',
+  operation: 'getPresentation' | 'cancelPresentation' | 'setLibraryFilter' | 'tuneChannel',
 ): GuideIpcResult<never> {
   return {
     ok: false,
@@ -429,7 +542,7 @@ function unauthorizedGuideResult(
 
 function validationGuideResult(
   requestId: string,
-  operation: 'getPresentation' | 'setLibraryFilter' | 'tuneChannel',
+  operation: 'getPresentation' | 'cancelPresentation' | 'setLibraryFilter' | 'tuneChannel',
 ): GuideIpcResult<never> {
   return {
     ok: false,
@@ -442,6 +555,55 @@ function validationGuideResult(
       operation,
     },
   };
+}
+
+function cancelledGuideResult(requestId: string): GuideIpcResult<never> {
+  return {
+    ok: false,
+    requestId,
+    error: {
+      code: 'GUIDE_PRESENTATION_CANCELLED',
+      message: 'Guide refresh was cancelled.',
+      retryable: true,
+      recoverable: true,
+      operation: 'getPresentation',
+    },
+  };
+}
+
+type ReadCancelPresentationRequestResult =
+  | { ok: true; requestId: string }
+  | { ok: false; requestId: string };
+
+function readCancelPresentationRequest(
+  value: unknown,
+  options: Pick<RegisterChannelIpcHandlersOptions, 'createRequestId'>,
+): ReadCancelPresentationRequestResult {
+  const fallbackRequestId = options.createRequestId('guide-presentation-cancel');
+  if (!isPlainRecord(value)) return { ok: false, requestId: fallbackRequestId };
+  const requestId = typeof value.requestId === 'string' && REQUEST_ID_PATTERN.test(value.requestId)
+    ? value.requestId : fallbackRequestId;
+  return typeof value.requestId === 'string' && REQUEST_ID_PATTERN.test(value.requestId) &&
+    isPlainRecord(value.payload) && hasOnlyKeys(value, ['requestId', 'payload']) &&
+    hasOnlyKeys(value.payload, [])
+    ? { ok: true, requestId }
+    : { ok: false, requestId };
+}
+
+function readGuideSender(event: IpcMainInvokeEvent): unknown | null {
+  return typeof event === 'object' && event !== null && 'sender' in event ? event.sender : null;
+}
+
+function registerSenderDestroyedListener(event: IpcMainInvokeEvent, listener: () => void): () => void {
+  const sender = readGuideSender(event);
+  if (typeof sender !== 'object' || sender === null) {
+    return () => undefined;
+  }
+  const once = Reflect.get(sender, 'once');
+  const removeListener = Reflect.get(sender, 'removeListener');
+  if (typeof once !== 'function' || typeof removeListener !== 'function') return () => undefined;
+  Reflect.apply(once, sender, ['destroyed', listener]);
+  return () => Reflect.apply(removeListener, sender, ['destroyed', listener]);
 }
 
 type ReadSetLibraryFilterResult =

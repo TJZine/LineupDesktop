@@ -20,6 +20,7 @@ import {
   LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_VALIDATE_DRAFT_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL,
   LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
   LINEUP_PLAYER_CLEANUP_CHANNEL,
@@ -483,8 +484,18 @@ function createPreloadHarness(
   api: Record<string, { [method: string]: (...args: unknown[]) => Promise<unknown> }>;
   calls: PreloadInvokeCall[];
   input: (value: unknown) => unknown;
+  emit(channel: string, payload: unknown): void;
+  removals: Array<{
+    channel: string;
+    listener: (event: unknown, payload: unknown) => void;
+  }>;
 } {
   const calls: PreloadInvokeCall[] = [];
+  const listeners = new Map<string, Set<(event: unknown, payload: unknown) => void>>();
+  const removals: Array<{
+    channel: string;
+    listener: (event: unknown, payload: unknown) => void;
+  }> = [];
   let exposedApi: unknown = null;
   const input = (value: unknown) => JSON.parse(JSON.stringify(value)) as unknown;
   const channelGuardExports = evaluateChannelGuardModule();
@@ -550,8 +561,15 @@ function createPreloadHarness(
           calls.push({ channel, request });
           return invoke(channel, request, input);
         },
-        on: () => undefined,
-        removeListener: () => undefined,
+        on: (channel: string, listener: (event: unknown, payload: unknown) => void) => {
+          const channelListeners = listeners.get(channel) ?? new Set();
+          channelListeners.add(listener);
+          listeners.set(channel, channelListeners);
+        },
+        removeListener: (channel: string, listener: (event: unknown, payload: unknown) => void) => {
+          removals.push({ channel, listener });
+          listeners.get(channel)?.delete(listener);
+        },
       },
     };
   };
@@ -563,6 +581,12 @@ function createPreloadHarness(
     api: exposedApi as Record<string, { [method: string]: (...args: unknown[]) => Promise<unknown> }>,
     calls,
     input,
+    emit(channel, payload) {
+      for (const listener of listeners.get(channel) ?? []) {
+        listener({}, payload);
+      }
+    },
+    removals,
   };
 }
 
@@ -707,6 +731,7 @@ const APPROVED_PRELOAD_CHANNEL_CONSTANTS = {
   LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL,
   LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL,
   LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+  LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL,
   LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
   LINEUP_PLAYER_TUNE_CHANNEL,
   LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL,
@@ -754,6 +779,7 @@ const APPROVED_IPC_CHANNELS_BY_METHOD = {
     'LINEUP_CUSTOM_CHANNEL_REORDER_CHANNEL',
     'LINEUP_CUSTOM_CHANNEL_SET_VISIBILITY_CHANNEL',
     'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
+    'LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL',
     'LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL',
     'LINEUP_PLAYER_TUNE_CHANNEL',
   ]),
@@ -1468,6 +1494,38 @@ test('preload guard vocabulary matches contract vocabulary', () => {
   assert.equal(preloadPlexForbiddenKeys.length, new Set(preloadPlexForbiddenKeys).size);
 });
 
+test('preload media-input subscription validates delivery and removes its exact wrapper', () => {
+  const harness = createPreloadHarness(() => assert.fail('media input must not invoke IPC'));
+  const onMediaInput = harness.api.shell?.onMediaInput as unknown as (
+    listener: unknown,
+  ) => () => void;
+  assert.throws(
+    () => onMediaInput(null),
+    { name: 'TypeError', message: 'Media input listener must be a function.' },
+  );
+
+  const delivered: unknown[] = [];
+  const unsubscribe = onMediaInput((input: unknown) => delivered.push(input));
+  const validInputs = [
+    'mediaPlay',
+    'mediaPause',
+    'mediaRewind',
+    'mediaFastForward',
+  ] as const;
+  for (const input of validInputs) {
+    harness.emit(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, input);
+  }
+  harness.emit(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, 'mediaStop');
+  harness.emit(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, { input: 'mediaPause' });
+  assert.deepEqual(delivered, validInputs);
+
+  unsubscribe();
+  assert.equal(harness.removals.length, 1);
+  assert.equal(harness.removals[0]?.channel, LINEUP_SHELL_MEDIA_INPUT_CHANNEL);
+  harness.emit(LINEUP_SHELL_MEDIA_INPUT_CHANNEL, 'mediaPause');
+  assert.deepEqual(delivered, validInputs);
+});
+
 test('preload Plex bridge validates invoke results before returning them', async () => {
   const snapshot = createSafePlexSnapshot();
   const harness = createPreloadHarness((_channel, request, input) => {
@@ -1869,7 +1927,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
   const guideBridgeExports = evaluateGuideBridgeModule();
   const createGuideBridge = guideBridgeExports.createGuideBridge as (
     invoke: (channel: string, request: { requestId: string; payload: unknown }) => Promise<unknown>,
-    channels: { getPresentation: string; setLibraryFilter: string; tuneChannel: string },
+    channels: { getPresentation: string; cancelPresentation: string; setLibraryFilter: string; tuneChannel: string },
     createRequestId: (prefix: string) => string,
   ) => { getPresentation: (input: { startTimeMs: number; durationMs: number }) => Promise<unknown> };
   const validPresentation = {
@@ -1903,6 +1961,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
       startsAtMs: 1,
       endsAtMs: 2,
     },
+    minimumStartTimeMs: 0,
     channelWindow: { offset: 0, total: 1 },
     libraryFilter: { scopeToken: 'scope-1', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'missing' },
   };
@@ -1919,6 +1978,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
     },
     {
       getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      cancelPresentation: LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL,
       setLibraryFilter: LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
       tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
     },
@@ -1940,6 +2000,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
     }),
     {
       getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      cancelPresentation: LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL,
       setLibraryFilter: LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
       tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
     },
@@ -1959,6 +2020,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
     }),
     {
       getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      cancelPresentation: LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL,
       setLibraryFilter: LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
       tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
     },
@@ -3216,6 +3278,7 @@ test('preload bridge uses ipcRenderer only through approved methods and channels
   }
 
   assert.deepEqual(collectCreateGuideBridgeChannelArguments().sort(), [
+    'LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL',
     'LINEUP_GUIDE_GET_PRESENTATION_CHANNEL',
     'LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL',
     'LINEUP_PLAYER_TUNE_CHANNEL',

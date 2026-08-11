@@ -276,6 +276,7 @@ export interface LineupDesktopPreloadApi {
       channelOffset?: number;
       channelLimit?: number;
     }) => Promise<GuideIpcResult<GuidePresentationSource>>;
+    cancelPresentation: () => Promise<void>;
     setLibraryFilter: (input: {
       expectedScopeToken: string;
       expectedRevision: number;

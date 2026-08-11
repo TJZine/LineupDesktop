@@ -463,6 +463,106 @@ test('settings runtime stops after one failed conflict rebase and restores accep
   assert.equal(runtime.getState().errorCode, 'revision-conflict');
 });
 
+test('settings runtime persists past-items-window success and publishes the optimistic value', async () => {
+  const states: SettingsRuntimeState[] = [];
+  const replacements: Array<Parameters<LineupDesktopPreloadApi['settings']['replace']>[0]> = [];
+  const runtime = createSettingsRuntime({
+    settings: {
+      getAudioOutputs,
+      getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
+      replace: async (input) => {
+        replacements.push(input);
+        return desktopSettingsSuccess(input.requestId, snapshot(2, normalizeDesktopSettingsReplaceValues(input.values)));
+      },
+    },
+    windowBridge: windowBridge([]),
+    onStateChanged: (state) => states.push(state),
+  });
+  await runtime.initialize();
+  const change = runtime.replaceValues((values) => ({ ...values, pastItemsWindow: '0' }));
+  assert.equal(runtime.getState().values.pastItemsWindow, '0');
+  await change;
+  assert.equal(replacements[0]?.values.pastItemsWindow, '0');
+  assert.equal(runtime.getState().snapshot?.values.pastItemsWindow, '0');
+  assert.ok(states.some((state) => state.values.pastItemsWindow === '0'));
+});
+
+test('settings runtime restores accepted past-items-window after storage failure', async () => {
+  const states: SettingsRuntimeState[] = [];
+  const runtime = createSettingsRuntime({
+    settings: {
+      getAudioOutputs,
+      getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
+      replace: async (input) => desktopSettingsFailure(input.requestId, 'storage-unavailable'),
+    },
+    windowBridge: windowBridge([]),
+    onStateChanged: (state) => states.push(state),
+  });
+  await runtime.initialize();
+  await runtime.replaceValues((values) => ({ ...values, pastItemsWindow: '0' }));
+  assert.ok(states.some((state) => state.values.pastItemsWindow === '0'));
+  assert.equal(runtime.getState().values.pastItemsWindow, 'auto');
+  assert.equal(runtime.getState().snapshot?.values.pastItemsWindow, 'auto');
+  assert.equal(runtime.getState().errorCode, 'storage-unavailable');
+});
+
+test('settings runtime rebases then restores the accepted past-items-window after a retry failure', async () => {
+  let gets = 0;
+  let replacements = 0;
+  const runtime = createSettingsRuntime({
+    settings: {
+      getAudioOutputs,
+      getSnapshot: async ({ requestId }) => desktopSettingsSuccess(
+        requestId,
+        gets++ === 0 ? snapshot(1) : snapshot(8, { pastItemsWindow: '30' }),
+      ),
+      replace: async (input) => {
+        replacements += 1;
+        return desktopSettingsFailure(input.requestId, replacements === 1 ? 'revision-conflict' : 'storage-unavailable');
+      },
+    },
+    windowBridge: windowBridge([]),
+    onStateChanged: () => undefined,
+  });
+  await runtime.initialize();
+  await runtime.replaceValues((values) => ({ ...values, pastItemsWindow: '0' }));
+  assert.equal(gets, 2);
+  assert.equal(replacements, 2);
+  assert.equal(runtime.getState().values.pastItemsWindow, '30');
+  assert.equal(runtime.getState().snapshot?.revision, 8);
+  assert.equal(runtime.getState().errorCode, 'storage-unavailable');
+});
+
+test('settings runtime coalesces rapid past-items-window changes into one latest settlement', async () => {
+  const firstReplace = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['settings']['replace']>>>();
+  const replacements: Array<Parameters<LineupDesktopPreloadApi['settings']['replace']>[0]> = [];
+  const runtime = createSettingsRuntime({
+    settings: {
+      getAudioOutputs,
+      getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, snapshot(1)),
+      replace: async (input) => {
+        replacements.push(input);
+        if (replacements.length === 1) return firstReplace.promise;
+        return desktopSettingsSuccess(input.requestId, snapshot(3, normalizeDesktopSettingsReplaceValues(input.values)));
+      },
+    },
+    windowBridge: windowBridge([]),
+    onStateChanged: () => undefined,
+  });
+  await runtime.initialize();
+  const first = runtime.replaceValues((values) => ({ ...values, pastItemsWindow: '0' }));
+  const second = runtime.replaceValues((values) => ({ ...values, pastItemsWindow: '15' }));
+  assert.equal(runtime.getState().values.pastItemsWindow, '15');
+  assert.equal(replacements.length, 1);
+  const firstRequest = replacements[0];
+  assert.ok(firstRequest);
+  firstReplace.resolve(desktopSettingsSuccess(firstRequest.requestId, snapshot(2, { pastItemsWindow: '0' })));
+  await Promise.all([first, second]);
+  assert.equal(replacements.length, 2);
+  assert.equal(replacements[1]?.values.pastItemsWindow, '15');
+  assert.equal(runtime.getState().values.pastItemsWindow, '15');
+});
+
 function snapshot(revision: number, overrides: Partial<typeof DEFAULT_DESKTOP_SETTINGS_VALUES> = {}) {
   return createDesktopSettingsView({
     schemaVersion: 2,

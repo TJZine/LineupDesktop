@@ -23,7 +23,6 @@ import {
 } from './playerOverlayPresentation.js';
 import type { PlayerErrorRecoveryController } from './playerErrorRecoveryController.js';
 import { createPlayerOverlayView } from './overlayViewModels.js';
-import { toRendererSafeFailureMessage } from './rendererSafeFailureMessage.js';
 
 export interface PlayerOverlayTimerHost {
   setTimeout(callback: () => void, delayMs: number): number;
@@ -68,7 +67,6 @@ export interface PlayerOverlayController {
 interface PendingCommand {
   requestId: string;
   command: PlayerCommandName;
-  kind: 'track';
   snapshotRequestId: string | null;
   focusId: string | null;
   trackId: string | null;
@@ -82,6 +80,10 @@ const NUMBER_RESULT_MS = 2_000;
 const NUMBER_COMPLETE_MS = 650;
 const TRANSITION_DELAY_MS = 175;
 const PLAYER_BRIDGE_REQUEST_TIMEOUT_MS = 30_000;
+const CHANNEL_TUNE_FAILURE_MESSAGE = 'Channel tune failed.';
+const TRACK_SELECTION_FAILURE_MESSAGE = 'Track selection failed.';
+const PLAYER_WARNING_MESSAGE = 'Player warning.';
+const PLAYER_ERROR_MESSAGE = 'Player error.';
 class PlayerBridgeRequestTimeoutError extends Error {
   constructor() {
     super('Player bridge request timed out.');
@@ -206,10 +208,7 @@ export function createPlayerOverlayController(
       pendingCommandTimer = null;
       const pending = pendingCommand;
       if (pending?.requestId !== requestId) return;
-      failPendingCommand(
-        requestId,
-        'Track selection timed out.',
-      );
+      failPendingCommand(requestId);
     }, PLAYER_BRIDGE_REQUEST_TIMEOUT_MS);
   };
 
@@ -379,7 +378,7 @@ export function createPlayerOverlayController(
     }
     const requestId = `renderer-select-${family}-${++sequence}`;
     const command = family === 'audio' ? 'track.audio.select' : 'track.subtitle.select';
-    pendingCommand = { requestId, command, kind: 'track', snapshotRequestId: snapshot.requestId, focusId, trackId, family };
+    pendingCommand = { requestId, command, snapshotRequestId: snapshot.requestId, focusId, trackId, family };
     armPendingCommandTimer(requestId);
     update((state) => ({ ...state, pendingTrackFocusId: focusId, playbackOptionsError: null }));
     try {
@@ -393,17 +392,12 @@ export function createPlayerOverlayController(
       );
       if (disposed || pendingCommand?.requestId !== requestId) return;
       if (!result.ok || !result.value.accepted) {
-        failPendingCommand(requestId, result.ok ? 'Track selection was not accepted.' : result.error.message);
+        failPendingCommand(requestId);
       } else {
         for (const event of result.value.events) if (event.event === 'command.settled') settleCommand(event);
       }
-    } catch (error) {
-      failPendingCommand(
-        requestId,
-        error instanceof PlayerBridgeRequestTimeoutError
-          ? 'Track selection timed out.'
-          : 'Track selection failed.',
-      );
+    } catch {
+      failPendingCommand(requestId);
     }
   };
 
@@ -440,7 +434,7 @@ export function createPlayerOverlayController(
       );
       if (disposed || generation !== tuneGeneration) return;
       if (!result.ok) {
-        failTune(generation, invoker, result.error.message);
+        failTune(generation, invoker);
         return;
       }
       if (generation !== tuneGeneration || disposed) return;
@@ -468,15 +462,9 @@ export function createPlayerOverlayController(
       if (generation !== tuneGeneration || disposed) return;
       await options.refreshGuidePresentation().catch(() => undefined);
       if (generation !== tuneGeneration || disposed) return;
-    } catch (error) {
+    } catch {
       if (generation === tuneGeneration && !disposed) {
-        failTune(
-          generation,
-          invoker,
-          error instanceof PlayerBridgeRequestTimeoutError
-            ? 'Channel tune timed out.'
-            : 'Channel tune failed.',
-        );
+        failTune(generation, invoker);
       }
     }
   };
@@ -484,11 +472,9 @@ export function createPlayerOverlayController(
   const failTune = (
     generation: number,
     invoker: 'miniGuide' | 'number' | 'page',
-    message: string,
   ): void => {
     if (generation !== tuneGeneration || disposed) return;
     transitionTimer = clearTimer(transitionTimer);
-    const safe = toRendererSafeFailureMessage(message, 'Channel tune failed.');
     let invokerOwnedAtSettlement = false;
     update((state) => {
       const invokerOverlay = invoker === 'miniGuide' ? 'miniGuide' : invoker === 'number' ? 'channelNumber' : null;
@@ -498,14 +484,20 @@ export function createPlayerOverlayController(
         pendingTuneChannelId: null,
         transitionChannelId: null,
         transitionVisible: false,
-        miniGuideError: invoker === 'miniGuide' && invokerOwnedAtSettlement ? safe : state.miniGuideError,
+        miniGuideError: invoker === 'miniGuide' && invokerOwnedAtSettlement
+          ? CHANNEL_TUNE_FAILURE_MESSAGE
+          : state.miniGuideError,
         channelNumberStatus: invoker === 'number' && invokerOwnedAtSettlement ? 'error' : state.channelNumberStatus,
-        channelNumberMessage: invoker === 'number' && invokerOwnedAtSettlement ? safe : state.channelNumberMessage,
+        channelNumberMessage: invoker === 'number' && invokerOwnedAtSettlement
+          ? CHANNEL_TUNE_FAILURE_MESSAGE
+          : state.channelNumberMessage,
       };
     });
     if (invoker === 'miniGuide' && invokerOwnedAtSettlement) focusActive();
     if (invoker === 'number' && invokerOwnedAtSettlement) numberTimer = options.host.setTimeout(closeNumber, NUMBER_RESULT_MS);
-    if (invoker === 'page') options.recordDiagnostic('player.page-tune', safe);
+    if (invoker === 'page') {
+      options.recordDiagnostic('player.page-tune', CHANNEL_TUNE_FAILURE_MESSAGE);
+    }
   };
 
   const tuneAdjacentChannel = (offset: -1 | 1): boolean => {
@@ -528,22 +520,19 @@ export function createPlayerOverlayController(
   const settleCommand = (event: Extract<PlayerEvent, { event: 'command.settled' }>): void => {
     if (pendingCommand?.requestId !== event.requestId || pendingCommand.command !== event.command) return;
     if (!event.ok) {
-      failPendingCommand(event.requestId, event.error?.message ?? 'Player command failed.');
+      failPendingCommand(event.requestId);
       return;
     }
     const completed = releasePendingCommand();
     if (completed === null) return;
-    if (completed.kind === 'track') closeOptionsWithFallback(completed);
+    closeOptionsWithFallback(completed);
   };
 
-  const failPendingCommand = (requestId: string, message: string): void => {
+  const failPendingCommand = (requestId: string): void => {
     if (disposed || pendingCommand?.requestId !== requestId) return;
     const pending = releasePendingCommand();
     if (pending === null) return;
-    setOptionsFailure(
-      pending.focusId,
-      toRendererSafeFailureMessage(message, 'Track selection failed.'),
-    );
+    setOptionsFailure(pending.focusId, TRACK_SELECTION_FAILURE_MESSAGE);
   };
 
   const setOptionsFailure = (focusId: string | null, message: string): void => {
@@ -592,11 +581,11 @@ export function createPlayerOverlayController(
     lastSnapshotRequestId = snapshot.requestId;
     if (pendingCommand !== null && previousRequest !== snapshot.requestId) {
       const invalidated = releasePendingCommand();
-      if (invalidated?.kind === 'track') closeOptionsWithFallback(invalidated, false);
+      if (invalidated !== null) closeOptionsWithFallback(invalidated, false);
     }
     const ambiguousAuthoritativeLoad = authoritative && !explicitTrackList &&
       ['loading', 'buffering', 'stalled', 'seeking'].includes(snapshot.status);
-    if (pendingCommand?.kind === 'track' && !ambiguousAuthoritativeLoad &&
+    if (pendingCommand !== null && !ambiguousAuthoritativeLoad &&
       !trackMembership(snapshot, pendingCommand.family, pendingCommand.trackId)) {
       const invalidated = releasePendingCommand();
       if (invalidated !== null) {
@@ -643,7 +632,7 @@ export function createPlayerOverlayController(
     const state = options.getState();
     if (state.activeOverlayId === null) return false;
     const wasOptions = state.activeOverlayId === 'playbackOptions';
-    if (pendingCommand?.kind === 'track') releasePendingCommand();
+    if (pendingCommand !== null) releasePendingCommand();
     if (state.activeOverlayId === 'miniGuide') miniGuideTimer = clearTimer(miniGuideTimer);
     if (state.activeOverlayId === 'playerOsd') osdTimer = clearTimer(osdTimer);
     if (state.activeOverlayId === 'nowPlaying') nowPlayingTimer = clearTimer(nowPlayingTimer);
@@ -723,14 +712,11 @@ export function createPlayerOverlayController(
     handlePlayerEvent(event) {
       if (event.event === 'command.settled') settleCommand(event);
       else if (event.event === 'error' && event.requestId !== null && pendingCommand?.requestId === event.requestId) {
-        failPendingCommand(event.requestId, event.error.message);
+        failPendingCommand(event.requestId);
       } else if (event.event === 'warning' || event.event === 'error') {
         options.recordDiagnostic(
           `player.${event.event}`,
-          toRendererSafeFailureMessage(
-            event.event === 'warning' ? event.warning.message : event.error.message,
-            event.event === 'warning' ? 'Player warning.' : 'Player error.',
-          ),
+          event.event === 'warning' ? PLAYER_WARNING_MESSAGE : PLAYER_ERROR_MESSAGE,
         );
       }
     },

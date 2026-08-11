@@ -163,6 +163,16 @@ export function captureGuideProgramFocusIntent(
   return activeFocusId?.startsWith('guide-program-') === true ? activeFocusId : null;
 }
 
+export function advanceGuideProgramFocusIntent(
+  state: FocusState,
+  selectedFocusId: string | undefined,
+): FocusState {
+  if (state.activeRoute !== 'guide' || selectedFocusId?.startsWith('guide-program-') !== true) {
+    return state;
+  }
+  return { ...state, activeId: selectedFocusId };
+}
+
 function getGuideFocusNeighbors(
   elements: readonly HTMLElement[],
 ): ReadonlyMap<string, Partial<Record<FocusDirection, string>>> {
@@ -303,7 +313,7 @@ export function moveRendererFocus(
 ): FocusState {
   const result = focusRegistry.move(focusState, direction);
   if (result.changed) {
-    renderRendererFocus(result.state, dom);
+    renderRendererFocus(result.state, dom, { revealGuideProgram: true });
   }
   return result.state;
 }
@@ -316,12 +326,16 @@ export function focusRendererTarget(
 ): FocusState {
   const result = focusRegistry.focusTarget(focusState, focusId);
   if (result.changed) {
-    renderRendererFocus(result.state, dom);
+    renderRendererFocus(result.state, dom, { revealGuideProgram: true });
   }
   return result.state;
 }
 
-export function renderRendererFocus(focusState: FocusState, dom: RendererDomBindings): void {
+export function renderRendererFocus(
+  focusState: FocusState,
+  dom: RendererDomBindings,
+  options: Readonly<{ revealGuideProgram?: boolean }> = {},
+): void {
   for (const element of dom.focusableElements) {
     const isActive = element.dataset.focusId === focusState.activeId;
     const isHiddenFromRoute = isElementHiddenFromFocus(element);
@@ -331,7 +345,12 @@ export function renderRendererFocus(focusState: FocusState, dom: RendererDomBind
       if (document.activeElement !== element) {
         element.focus({ preventScroll: true });
       }
-      if (readClosestRouteId(element) === 'settings') {
+      const route = readClosestRouteId(element);
+      if (route === 'settings' || (
+        options.revealGuideProgram === true &&
+        route === 'guide' &&
+        element.dataset.focusId?.startsWith('guide-program-') === true
+      )) {
         element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       }
     }

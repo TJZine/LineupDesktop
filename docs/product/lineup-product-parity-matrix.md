@@ -270,9 +270,9 @@ Evidence: upstream `src/modules/scheduler/**`, `src/modules/ui/epg/**`, and
 | EPG-08 | Library filter tabs with persisted selection | `missing` | `missing` | Upstream has a focused tab owner and persistence; Desktop guide has no equivalent control. | P1 |
 | EPG-09 | Now Watching banner preference | `partial` | `local-match` | Banner renders, but upstream enable/disable preference is missing. | P1 |
 | EPG-10 | Overlay and Classic/PIP guide layouts | `partial` | `partial` | Desktop presentation is fixed to `classic`; upstream layout choice is missing. | P1 |
-| EPG-11 | Detailed 2h versus Wide 3h density | `partial` | `partial` | Desktop comfortable/compact row density is not the same capability. | P1 |
+| EPG-11 | Detailed 2h versus Wide 3h density | `live-local` | `partial` | Desktop implements and locally verifies exact Detailed/comfortable 2h (four 30-minute slots) and Wide/compact 3h (six 30-minute slots) windows. Visual proof remains partial, and Windows/manual/current-upstream proof remains open in the WS5 5H campaign and `WS5-PROOF-06`. | P1 |
 | EPG-12 | Past-items window policy | `missing` | `missing` | Add Auto/explicit policy and schedule-window consumption. | P2 |
-| EPG-13 | Large-guide row/cell virtualization and aggressive preload option | `missing` | `missing` | Desktop renders a simpler bounded guide; upstream virtualization/preload owners are absent. | P1 |
+| EPG-13 | Large-guide row/cell virtualization and aggressive preload option | `live-local` | `partial` | Desktop locally implements bounded 12/24-row request profiles, viewport/focus-aware DOM virtualization, finite LRU warming, and focus reveal. Windows large-live-lineup/resource proof remains `WS5-PROOF-03`, and current-upstream visual proof remains `WS5-PROOF-06`; the row stays open. | P1 |
 | EPG-14 | Loading, empty channels, empty programs, retryable error | `live-local` | `local-match` | Local variants exist; prove live recovery on Windows. | P1 |
 | EPG-15 | Automatic refresh/polling and currentness cancellation | `live-local` | `not-a-visual-row` | Local tests exist; soak with server/profile/channel changes. | P2 |
 
@@ -336,8 +336,8 @@ Evidence: upstream `src/modules/ui/settings/SettingsScreenStateController.ts`,
 | ST-10 | Transcode Compatibility Mode | `partial` | `partial` | Persisted capability-disabled control and resolver projection landed; live transcode and safe diagnostic proof remain `WS3-PROOF-02`. | P2 |
 | ST-11 | Library Tabs | `partial` | `partial` | Contract, migration, persistence, and control landed; real Guide consumption remains `WS3-CONTRIBUTION-WS5`. | P1 |
 | ST-12 | Now Watching Banner | `partial` | `partial` | Contract, migration, persistence, and control landed; real Guide consumption remains `WS3-CONTRIBUTION-WS5`. | P1 |
-| ST-13 | Aggressive Guide Preload | `partial` | `partial` | Contract, migration, persistence, and control landed; virtualization/preload consumption remains `WS3-CONTRIBUTION-WS5`. | P2 |
-| ST-14 | Guide Density: Detailed 2h/Wide 3h | `partial` | `partial` | Persisted Detailed/Wide control landed; actual Guide time-window consumption remains `WS3-CONTRIBUTION-WS5`. | P1 |
+| ST-13 | Aggressive Guide Preload | `live-local` | `partial` | The persisted setting drives the locally verified default/aggressive request, cache, and warming profiles. Windows large-live-lineup/resource and current-upstream visual proof remain `WS5-PROOF-03`/`WS5-PROOF-06`; the row stays open. | P2 |
+| ST-14 | Guide Density: Detailed 2h/Wide 3h | `live-local` | `partial` | Persisted Detailed/Wide control drives locally verified exact windows: Detailed/comfortable is 2h (four 30-minute slots) and Wide/compact is 3h (six 30-minute slots) through Settings-to-Guide/Player settlement. This consumes ST-14's Guide contribution; visual proof remains partial, Windows/manual/current-upstream proof remains open in the WS5 5H campaign and `WS5-PROOF-06`, and the aggregate `WS3-CONTRIBUTION-WS5` remains open for other Settings contributions. | P1 |
 | ST-15 | Guide Layout: Overlay/Classic PIP | `partial` | `partial` | Contract, migration, persistence, and control landed; Guide layout consumption remains `WS3-CONTRIBUTION-WS5`. | P1 |
 | ST-16 | Past Items window | `partial` | `partial` | Contract, migration, persistence, and control landed; Guide past-window consumption remains `WS3-CONTRIBUTION-WS5`. | P2 |
 | ST-17 | Info Box Background | `partial` | `partial` | Control and persistence landed with artwork choices honestly disabled; safe artwork enablement/live proof remains `WS3-PROOF-03`. | P2 |

@@ -4,7 +4,6 @@ import type {
   PlayerRecoveryAction,
 } from '../contracts/shell.js';
 import type { PlayerOverlayState } from './overlays.js';
-import { toRendererSafeFailureMessage } from './rendererSafeFailureMessage.js';
 
 export interface PlayerErrorRecoveryTimerHost {
   setTimeout(callback: () => void, delayMs: number): number;
@@ -30,6 +29,7 @@ export interface PlayerErrorRecoveryController {
 }
 
 const RECOVERY_TIMEOUT_MS = 5_000;
+const PLAYER_RECOVERY_FAILURE_MESSAGE = 'Player recovery failed.';
 
 export function createPlayerErrorRecoveryController(
   options: PlayerErrorRecoveryControllerOptions,
@@ -76,7 +76,6 @@ export function createPlayerErrorRecoveryController(
   const fail = (
     action: PlayerRecoveryAction,
     actionGeneration: number,
-    message: string,
   ): void => {
     if (!closeActionGeneration(actionGeneration)) {
       return;
@@ -86,7 +85,7 @@ export function createPlayerErrorRecoveryController(
       retryPending: false,
       recoveryPendingAction: null,
       retryTransitionActive: false,
-      retryError: toRendererSafeFailureMessage(message, 'Player recovery failed.'),
+      retryError: PLAYER_RECOVERY_FAILURE_MESSAGE,
     }));
     options.focus(
       action === 'retry-current'
@@ -113,12 +112,12 @@ export function createPlayerErrorRecoveryController(
     }));
     timeoutHandle = options.host.setTimeout(() => {
       timeoutHandle = null;
-      fail(action, actionGeneration, 'Player recovery timed out.');
+      fail(action, actionGeneration);
     }, RECOVERY_TIMEOUT_MS);
     void options.bridge.recover({ action })
       .then((result) => {
         if (!result.ok) {
-          fail(action, actionGeneration, result.error.message);
+          fail(action, actionGeneration);
           return;
         }
         if (!closeActionGeneration(actionGeneration)) {
@@ -136,7 +135,7 @@ export function createPlayerErrorRecoveryController(
         options.focus(null);
       })
       .catch(() => {
-        fail(action, actionGeneration, 'Player recovery failed.');
+        fail(action, actionGeneration);
       });
     return true;
   };

@@ -41,7 +41,7 @@ const source: EpgPresentationSource = {
 };
 
 test('updateEpgState retains a valid selection and adopts the request generation', () => {
-  const initial = createEpgState(source, 2);
+  const initial = createEpgState(source, 2, 'compact');
   const updated = updateEpgState(initial, source, 3);
   assert.equal(updated.selectedChannelId, 'one');
   assert.equal(updated.selectedProgramId, 'program');
@@ -51,7 +51,7 @@ test('updateEpgState retains a valid selection and adopts the request generation
 
 test('updateEpgState replaces missing identities with the current visible schedule', () => {
   const initial = {
-    ...createEpgState(source),
+    ...createEpgState(source, 0, 'compact'),
     selectedChannelId: 'missing',
     selectedProgramId: 'missing',
   };
@@ -62,7 +62,7 @@ test('updateEpgState replaces missing identities with the current visible schedu
 
 test('non-ready refresh classification uses the returned initial window', () => {
   const stale = {
-    ...createEpgState(source),
+    ...createEpgState(source, 0, 'compact'),
     windowStartMs: BASE + 24 * 60 * 60 * 1_000,
     presentationState: 'loading' as const,
   };
@@ -76,7 +76,7 @@ test('non-ready refresh classification uses the returned initial window', () => 
 
 test('periodic replacement keeps the selected channel and focuses its deterministic surviving program', () => {
   const selected = {
-    ...createEpgState(source),
+    ...createEpgState(source, 0, 'compact'),
     selectedChannelId: 'two',
     selectedProgramId: 'removed',
   };
@@ -100,7 +100,7 @@ test('periodic replacement keeps the selected channel and focuses its determinis
 });
 
 test('updateEpgState distinguishes no channels from channels without visible programs', () => {
-  const initial = createEpgState(source);
+  const initial = createEpgState(source, 0, 'compact');
   const noChannels = updateEpgState(initial, { channels: [], nowWatching: null, nowMs: BASE });
   assert.equal(noChannels.presentationState, 'empty-channels');
   assert.equal(noChannels.selectedChannelId, '');

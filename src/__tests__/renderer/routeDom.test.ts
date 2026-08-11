@@ -19,7 +19,11 @@ import {
 } from '../../renderer/workflow.js';
 import { renderShellDom, type ShellDomBindings } from '../../renderer/shell/shellDom.js';
 import { beginFullscreenRequest, rejectFullscreenRequest } from '../../renderer/shell/shellState.js';
-import { cssDeclaration, extractCssRule, normalizeCss } from './cssTestUtils.js';
+import {
+  cssDeclaration,
+  extractCssAtRuleBody,
+  extractCssRule,
+} from './cssAtRuleTestUtils.js';
 
 const GUIDE_BASE = Date.UTC(2026, 4, 12, 20, 0, 0);
 function createRendererSafePlayerSnapshot() {
@@ -683,42 +687,43 @@ test('Guide Now Watching surfaces explicitly honor reduced motion and forced col
     new URL('../../renderer/styles/guide-epg.css', import.meta.url),
     'utf8',
   );
-  const normalized = normalizeCss(css);
-  const banner = extractCssRule(normalized, '.epg-now-watching-banner');
+  const reducedMotion = extractCssAtRuleBody(css, '@media (prefers-reduced-motion: reduce)');
+  const forcedColors = extractCssAtRuleBody(css, '@media (forced-colors: active)');
+  const banner = extractCssRule(css, '.epg-now-watching-banner');
   assert.equal(
     cssDeclaration(banner, 'grid-template-columns'),
     'minmax(0, max-content) minmax(0, 1fr) minmax(0, 2fr) minmax(0, max-content)',
   );
   assert.equal(cssDeclaration(banner, 'overflow'), 'hidden');
-  const bannerChildren = extractCssRule(normalized, '.epg-now-watching-banner > *');
+
+  const bannerChildren = extractCssRule(css, '.epg-now-watching-banner > *');
   assert.equal(cssDeclaration(bannerChildren, 'min-width'), '0');
-  for (const selector of [
+
+  const textSelectors = [
     '.epg-now-watching-live',
     '.epg-now-watching-channel',
     '.epg-now-watching-program',
     '.epg-now-watching-time',
-  ]) {
-    const declaration = extractCssRule(normalized, selector, { declaration: 'overflow' });
-    assert.equal(cssDeclaration(declaration, 'overflow'), 'hidden');
-    assert.equal(cssDeclaration(declaration, 'text-overflow'), 'ellipsis');
-    assert.equal(cssDeclaration(declaration, 'white-space'), 'nowrap');
-  }
+  ];
+  const textRule = extractCssRule(css, textSelectors);
+  assert.equal(cssDeclaration(textRule, 'overflow'), 'hidden');
+  assert.equal(cssDeclaration(textRule, 'text-overflow'), 'ellipsis');
+  assert.equal(cssDeclaration(textRule, 'white-space'), 'nowrap');
 
-  for (const selector of ['.epg-classic-now-playing', '.epg-now-watching-banner']) {
-    const reduced = extractCssRule(normalized, selector, {
-      atRule: '@media (prefers-reduced-motion: reduce)',
-    });
-    assert.equal(cssDeclaration(reduced, 'animation'), 'none !important');
-    assert.equal(cssDeclaration(reduced, 'transition'), 'none !important');
-    const forced = extractCssRule(normalized, selector, {
-      atRule: '@media (forced-colors: active)',
-      declaration: 'color',
-    });
-    assert.equal(cssDeclaration(forced, 'color'), 'CanvasText');
-  }
-  const forcedBanner = extractCssRule(normalized, '.epg-now-watching-banner', {
-    atRule: '@media (forced-colors: active)',
-  });
+  const reduced = extractCssRule(reducedMotion ?? '', [
+    '.epg-classic-now-playing',
+    '.epg-now-watching-banner',
+  ]);
+  assert.equal(cssDeclaration(reduced, 'animation'), 'none !important');
+  assert.equal(cssDeclaration(reduced, 'transition'), 'none !important');
+
+  const forced = extractCssRule(forcedColors ?? '', [
+    '.epg-classic-now-playing',
+    '.epg-now-watching-banner',
+  ]);
+  assert.equal(cssDeclaration(forced, 'color'), 'CanvasText');
+
+  const forcedBanner = extractCssRule(forcedColors ?? '', '.epg-now-watching-banner');
   assert.equal(cssDeclaration(forcedBanner, 'border-color'), 'CanvasText');
 });
 

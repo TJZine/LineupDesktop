@@ -76,6 +76,29 @@ test('presentation owner keeps non-Windows opaque and unsupported', async () => 
   assert.equal((await owner.update(request(1, 2))).status, 'unsupported');
 });
 
+test('presentation owner keeps a missing Windows host unsupported before parent validation', async () => {
+  let parentReads = 0;
+  const owner = new NativePlayerPresentationOwner({
+    platform: 'win32',
+    host: null,
+    getSnapshot: () => null,
+    getParentIdentity: () => {
+      parentReads += 1;
+      return null;
+    },
+  });
+
+  assert.equal((await owner.hide()).status, 'unsupported');
+  assert.deepEqual(await owner.update(request(null, 1)), {
+    ok: true,
+    status: 'deferred',
+    documentEpoch: 1,
+    revision: 1,
+  });
+  assert.equal((await owner.update(request(1, 2))).status, 'unsupported');
+  assert.equal(parentReads, 0);
+});
+
 test('internal hidden barriers preserve first-null epoch negotiation across navigation', async () => {
   const updates: NativePlayerPresentationUpdate[] = [];
   const host = {
@@ -167,6 +190,7 @@ test('presentation owner distinguishes pre-send rejection from shared-host failu
   });
   await shared.update(request(null, 1));
   assert.equal((await shared.update(request(1, 2))).status, 'lifecycle-failure');
+  assert.equal((await shared.hide()).status, 'lifecycle-failure');
 });
 
 test('presentation owner maps corrective-hide settlement exactly before reporting staleness', async (t) => {

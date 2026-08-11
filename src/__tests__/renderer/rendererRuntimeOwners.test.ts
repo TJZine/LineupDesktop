@@ -1,20 +1,38 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import {
+  DEFAULT_DESKTOP_SETTINGS_VALUES,
+  createDesktopSettingsView,
+  desktopSettingsFailure,
+  desktopSettingsSuccess,
+  normalizeDesktopSettingsReplaceValues,
+} from '../../contracts/settings.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
+import type { GuidePresentationSource } from '../../contracts/guide.js';
 import type { PlayerEvent, PlayerSnapshot } from '../../contracts/player.js';
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
-import { DEFAULT_EPG_PRESENTATION_SOURCE, type EpgPresentationSource } from '../../renderer/epg.js';
-import { renderRendererFocus, syncRendererFocusTargets } from '../../renderer/focusDom.js';
+import {
+  DEFAULT_EPG_PRESENTATION_SOURCE,
+  EPG_SLOT_DURATION_MS,
+  createGuideProgramFocusId,
+  createEpgState,
+  settleEpgPresentation,
+  type EpgPresentationSource,
+} from '../../renderer/epg.js';
+import { captureGuideProgramFocusIntent, renderRendererFocus, syncRendererFocusTargets } from '../../renderer/focusDom.js';
 import { createFullscreenTransportCoordinator } from '../../renderer/fullscreenTransport.js';
 import { createEmptyPlayerSnapshot } from '../../renderer/playerOverlayPresentation.js';
 import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
+import { DEFAULT_GUIDE_PRELOAD_PROFILE } from '../../renderer/guideVirtualization.js';
 import { FocusRegistry, type FocusState } from '../../renderer/navigation.js';
 import { dispatchPlexRuntimeAction } from '../../renderer/plexRuntimeActionDispatch.js';
 import { subscribePlayerBridge } from '../../renderer/playerBridgeSubscription.js';
 import type { PlexRuntimeController } from '../../renderer/plexRuntimeActions.js';
 import { createShellController } from '../../renderer/shell/shellController.js';
 import { createRendererShellState, type RendererShellState } from '../../renderer/shell/shellState.js';
+import { createSettingsRuntime } from '../../renderer/settings/settingsRuntime.js';
+import { createSettingsGuideDensitySettlementOwner } from '../../renderer/settings/guideDensitySettlement.js';
 
 test('player bridge subscription owns event projection and unsubscribe cleanup', async () => {
   const initialSnapshot = { ...createEmptyPlayerSnapshot(), requestId: 'playback-1', status: 'playing' as const, playing: true };
@@ -123,7 +141,8 @@ test('guide presentation polling serializes refreshes and settles coalesced work
   let loadingCount = 0;
   let failureCount = 0;
   let activeRoute: 'player' | 'guide' = 'guide';
-  let windowStartMs = 1_778_619_600_000;
+  const initialWindowStartMs = 1_778_619_600_000;
+  let windowStartMs = initialWindowStartMs;
 
   const polling = createGuidePresentationPolling({
     guide: {
@@ -134,10 +153,12 @@ test('guide presentation polling serializes refreshes and settles coalesced work
         const result = await pendingRequest.promise;
         return { ...result, requestId: `guide-${requests.length}` };
       },
+      cancelPresentation: async () => undefined,
     } as unknown as LineupDesktopPreloadApi['guide'],
     host: createNoopIntervalHost(),
     getActiveRoute: () => activeRoute,
     getWindowStartMs: () => windowStartMs,
+    getGuideDensity: () => 'compact',
     setLoading: () => {
       loadingCount += 1;
     },
@@ -161,7 +182,10 @@ test('guide presentation polling serializes refreshes and settles coalesced work
   requests[0]?.resolve({ ok: true, value: { channels: [], nowWatching: null } });
   await first;
   assert.equal(requests.length, 2);
-  assert.deepEqual(requestedWindows, [1_778_619_600_000, 1_778_623_200_000]);
+  assert.deepEqual(requestedWindows, [
+    initialWindowStartMs - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+    initialWindowStartMs + EPG_SLOT_DURATION_MS * 2 - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+  ]);
   assert.equal(applied.length, 0);
 
   requests[1]?.resolve({ ok: true, value: DEFAULT_EPG_PRESENTATION_SOURCE });
@@ -195,6 +219,7 @@ test('guide presentation polling applies sustained slow responses while bounding
         const result = await request.promise;
         return { ...result, requestId: `slow-guide-${requests.length}` };
       },
+      cancelPresentation: async () => undefined,
     } as unknown as LineupDesktopPreloadApi['guide'],
     host: {
       setInterval: (callback: TimerHandler) => { intervalCallbacks.push(callback as () => void); return 11; },
@@ -204,6 +229,7 @@ test('guide presentation polling applies sustained slow responses while bounding
     } as unknown as Window,
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => 1_778_619_600_000,
+    getGuideDensity: () => 'compact',
     setLoading: () => undefined,
     applyPresentation: (_presentation, generation) => { appliedGenerations.push(generation); },
     handleFailure: () => assert.fail('failure callback was not expected'),
@@ -255,6 +281,7 @@ test('guide presentation polling times out hung work, starts trailing work, and 
   const clearedTimeouts: number[] = [];
   const failureMessages: string[] = [];
   let applied = 0;
+  let cancellations = 0;
   const polling = createGuidePresentationPolling({
     guide: {
       getPresentation: async () => {
@@ -263,6 +290,7 @@ test('guide presentation polling times out hung work, starts trailing work, and 
         const result = await request.promise;
         return { ...result, requestId: `timed-guide-${requests.length}` };
       },
+      cancelPresentation: async () => { cancellations += 1; },
     } as unknown as LineupDesktopPreloadApi['guide'],
     host: {
       setInterval: () => 1,
@@ -275,6 +303,7 @@ test('guide presentation polling times out hung work, starts trailing work, and 
     } as unknown as Window,
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => 1_778_619_600_000,
+    getGuideDensity: () => 'compact',
     setLoading: () => undefined,
     applyPresentation: () => { applied += 1; },
     handleFailure: (_source, message) => { failureMessages.push(message); },
@@ -287,6 +316,7 @@ test('guide presentation polling times out hung work, starts trailing work, and 
 
   timeoutCallbacks[0]?.();
   await first;
+  assert.equal(cancellations, 1);
   assert.deepEqual(failureMessages, ['Guide refresh timed out. Try again.']);
   assert.deepEqual(clearedTimeouts, [1]);
   assert.equal(requests.length, 2);
@@ -316,6 +346,7 @@ test('guide presentation polling schedules Player and Guide with route-owned win
         windows.push(request.startTimeMs);
         return { ok: true, requestId: `guide-${windows.length}`, value: DEFAULT_EPG_PRESENTATION_SOURCE };
       },
+      cancelPresentation: async () => undefined,
     } as unknown as LineupDesktopPreloadApi['guide'],
     host: {
       setInterval: (callback: TimerHandler) => { intervalCallbacks.push(callback as () => void); return 7; },
@@ -325,6 +356,7 @@ test('guide presentation polling schedules Player and Guide with route-owned win
     } as unknown as Window,
     getActiveRoute: () => activeRoute,
     getWindowStartMs: () => 1_700_000_000_000,
+    getGuideDensity: () => 'compact',
     getNowMs: () => nowMs,
     setLoading: () => { loadingCount += 1; },
     applyPresentation: () => undefined,
@@ -334,7 +366,10 @@ test('guide presentation polling schedules Player and Guide with route-owned win
 
   polling.start();
   await settleAsyncWork();
-  assert.equal(windows[0], Math.floor(nowMs / 1_800_000) * 1_800_000);
+  assert.equal(
+    windows[0],
+    Math.floor(nowMs / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+  );
   assert.equal(loadingCount, 0);
   assert.equal(playerApplyCount, 1);
   intervalCallbacks[0]?.();
@@ -344,11 +379,343 @@ test('guide presentation polling schedules Player and Guide with route-owned win
   activeRoute = 'guide';
   polling.reconcile('player', 'guide');
   await settleAsyncWork();
-  assert.equal(windows.at(-1), 1_700_000_000_000);
+  assert.equal(windows.at(-1), 1_700_000_000_000 - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs);
   assert.equal(loadingCount, 1);
   activeRoute = 'settings';
   polling.reconcile('guide', 'settings');
   assert.equal(clearCount, 2);
+});
+
+test('Settings-route past-items settlement makes no request; Guide entry recovers once', async () => {
+  let activeRoute: 'guide' | 'settings' = 'guide';
+  let requests = 0;
+  const polling = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async () => {
+        requests += 1;
+        return { ok: true, requestId: `settlement-${requests}`, value: DEFAULT_EPG_PRESENTATION_SOURCE };
+      },
+      cancelPresentation: async () => undefined,
+    } as unknown as LineupDesktopPreloadApi['guide'],
+    host: createNoopIntervalHost(),
+    getActiveRoute: () => activeRoute,
+    getWindowStartMs: () => 1_778_619_600_000,
+    getGuideDensity: () => 'compact',
+    setLoading: () => undefined,
+    applyPresentation: () => undefined,
+    handleFailure: () => undefined,
+  });
+
+  polling.notePastItemsWindowChange();
+  polling.notePastItemsWindowChange();
+  polling.settlePastItemsWindow({ currentValue: '15', acceptedValue: '15', saving: true });
+  await settleAsyncWork();
+  assert.equal(requests, 0);
+  polling.settlePastItemsWindow({ currentValue: '15', acceptedValue: '15', saving: false });
+  await settleAsyncWork();
+  assert.equal(requests, 1);
+  polling.settlePastItemsWindow({ currentValue: '15', acceptedValue: '15', saving: false });
+  await settleAsyncWork();
+  assert.equal(requests, 1);
+
+  activeRoute = 'settings';
+  polling.notePastItemsWindowChange();
+  // Off-route settlement is consumed without a request; ordinary Guide entry owns recovery.
+  polling.settlePastItemsWindow({ currentValue: '30', acceptedValue: '30', saving: false });
+  await settleAsyncWork();
+  assert.equal(requests, 1);
+  activeRoute = 'guide';
+  polling.reconcile('settings', 'guide');
+  await settleAsyncWork();
+  assert.equal(requests, 2);
+});
+
+test('Settings density settlement drives Guide and Player polling through optimistic save and rollback', async () => {
+  type Route = 'guide' | 'player' | 'settings';
+  const base = 1_783_512_000_000;
+  const presentation: EpgPresentationSource = {
+    channels: [{
+      id: 'channel-1', number: '1', name: 'One', programs: [{
+        id: 'program-1', title: 'Program', subtitle: '', description: '', showTitle: '', episodeLabel: '',
+        rating: '', quality: [], genres: [], startsAtMs: base, endsAtMs: base + EPG_SLOT_DURATION_MS, artwork: null,
+      }],
+    }],
+    nowWatching: null,
+    nowMs: base,
+    minimumStartTimeMs: base,
+  };
+  let activeRoute: Route = 'guide';
+  let guideDensity: 'comfortable' | 'compact' = 'comfortable';
+  const programFocusId = createGuideProgramFocusId('channel-1', 'program-1');
+  const focusRegistry = new FocusRegistry();
+  focusRegistry.register({ id: programFocusId, route: 'guide', order: 1 });
+  let focusState: FocusState = { activeRoute: 'guide', activeId: programFocusId };
+  let pendingFocusId: string | null = null;
+  let epgState = createEpgState(presentation, 0, guideDensity);
+  const restoredFocusIds: string[] = [];
+  const requests: Array<{ route: Route; durationMs: number; startTimeMs: number }> = [];
+  const settlementQueue: Promise<void>[] = [];
+  const settlementTrace: string[] = [];
+  const states: Array<{
+    loading: boolean;
+    saving: boolean;
+    density: 'comfortable' | 'compact';
+    errorCode: string | null;
+  }> = [];
+
+  const polling = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async (request: { startTimeMs: number; durationMs: number }) => {
+        requests.push({ route: activeRoute, startTimeMs: request.startTimeMs, durationMs: request.durationMs });
+        return { ok: true, requestId: `density-guide-${String(requests.length)}`, value: presentation };
+      },
+      cancelPresentation: async () => undefined,
+    } as unknown as LineupDesktopPreloadApi['guide'],
+    host: createNoopIntervalHost(),
+    getActiveRoute: () => activeRoute,
+    getWindowStartMs: () => epgState.windowStartMs,
+    getGuideDensity: () => guideDensity,
+    getNowMs: () => base,
+    setLoading: (generation) => {
+      epgState = { ...epgState, presentationState: 'loading', presentationGeneration: generation };
+    },
+    applyPresentation: (value, generation, target, effectiveStartTimeMs) => {
+      const capturedFocusId = captureGuideProgramFocusIntent(pendingFocusId, focusState.activeId);
+      const settlement = settleEpgPresentation(
+        epgState,
+        value,
+        generation,
+        target,
+        capturedFocusId !== null,
+        guideDensity,
+        effectiveStartTimeMs,
+      );
+      epgState = settlement.state;
+      if (settlement.pendingFocusId !== undefined) pendingFocusId = settlement.pendingFocusId;
+      if (pendingFocusId !== null) {
+        restoredFocusIds.push(pendingFocusId);
+        pendingFocusId = null;
+      }
+    },
+    applyPlayerPresentation: (value, generation, effectiveStartTimeMs) => {
+      epgState = settleEpgPresentation(
+        epgState,
+        value,
+        generation,
+        null,
+        false,
+        guideDensity,
+        effectiveStartTimeMs,
+      ).state;
+    },
+    handleFailure: () => assert.fail('unexpected Guide failure'),
+    handlePlayerFailure: () => assert.fail('unexpected Player failure'),
+  });
+  const densitySettlementOwner = createSettingsGuideDensitySettlementOwner({
+    getCurrentDensity: () => guideDensity,
+    getPolling: () => ({
+      hasPendingGuideDensityChange: () => polling.hasPendingGuideDensityChange(),
+      noteGuideDensityChange: () => {
+        settlementTrace.push('note');
+        polling.noteGuideDensityChange();
+      },
+      settleGuideDensity: (loading) => {
+        settlementTrace.push(`settle:${String(loading)}`);
+        return polling.settleGuideDensity(loading);
+      },
+    }),
+    retainGuideProgramFocusIntent: () => {
+      settlementTrace.push('retain-focus');
+      pendingFocusId = captureGuideProgramFocusIntent(pendingFocusId, focusState.activeId);
+    },
+    restorePendingGuideFocus: () => {
+      settlementTrace.push('restore-focus');
+      if (pendingFocusId === null || activeRoute !== 'guide') return;
+      focusState = focusRegistry.focusTarget(
+        { ...focusState, activeRoute: 'guide' },
+        pendingFocusId,
+      ).state;
+      restoredFocusIds.push(focusState.activeId ?? 'missing-focus');
+      pendingFocusId = null;
+    },
+  });
+
+  let replacementCount = 0;
+  const settings = createSettingsRuntime({
+    settings: {
+      getAudioOutputs: async ({ requestId }) => desktopSettingsSuccess(requestId, {
+        status: 'unavailable',
+        reason: 'platform-unsupported',
+        outputs: [{ kind: 'system-default', id: 'system-default', label: 'System default' }],
+      }),
+      getSnapshot: async ({ requestId }) => desktopSettingsSuccess(requestId, settingsSnapshot(1)),
+      replace: async (input) => {
+        replacementCount += 1;
+        if (replacementCount === 2) return desktopSettingsFailure(input.requestId, 'storage-unavailable');
+        return desktopSettingsSuccess(input.requestId, settingsSnapshot(
+          replacementCount + 1,
+          normalizeDesktopSettingsReplaceValues(input.values),
+        ));
+      },
+    },
+    windowBridge: {
+      setFullscreen: async (enabled) => ({
+        ok: true,
+        requestId: `density-window-${String(enabled)}`,
+        value: { enabled },
+      }),
+    },
+    onStateChanged: (state) => {
+      states.push({
+        loading: state.loading,
+        saving: state.saving,
+        density: state.values.guideDensity,
+        errorCode: state.errorCode,
+      });
+      const densitySettlement = densitySettlementOwner.begin(
+        state.values.guideDensity,
+        () => {
+          settlementTrace.push('apply-workflow-values');
+          guideDensity = state.values.guideDensity;
+        },
+      );
+      if (!state.loading) settlementTrace.push('render');
+      settlementQueue.push(densitySettlement.finish(state.loading));
+    },
+  });
+  const settleSettingsCallbacks = async (): Promise<void> => {
+    while (settlementQueue.length > 0) {
+      const pending = settlementQueue.splice(0);
+      await Promise.all(pending);
+    }
+  };
+
+  await settings.initialize();
+  await settleSettingsCallbacks();
+  assert.deepEqual(requests, []);
+  assert.equal(states[0]?.loading, true);
+  assert.equal(states.at(-1)?.loading, false);
+
+  settlementTrace.length = 0;
+  await settings.replaceValues((values) => ({ ...values, guideDensity: 'compact' }));
+  await settleSettingsCallbacks();
+  assert.deepEqual(settlementTrace.slice(0, 6), [
+    'note',
+    'retain-focus',
+    'apply-workflow-values',
+    'render',
+    'restore-focus',
+    'settle:false',
+  ]);
+  await settings.replaceValues((values) => ({ ...values, guideDensity: 'comfortable' }));
+  await settleSettingsCallbacks();
+  assert.equal(settings.getState().values.guideDensity, 'compact');
+  assert.equal(settings.getState().errorCode, 'storage-unavailable');
+
+  activeRoute = 'player';
+  focusState = { activeRoute: 'player', activeId: null };
+  await settings.replaceValues((values) => ({ ...values, guideDensity: 'comfortable' }));
+  await settleSettingsCallbacks();
+  activeRoute = 'settings';
+  focusState = { activeRoute: 'settings', activeId: null };
+  await settings.replaceValues((values) => ({ ...values, guideDensity: 'compact' }));
+  await settleSettingsCallbacks();
+  assert.equal(requests.length, 4);
+
+  activeRoute = 'guide';
+  focusState = { activeRoute: 'guide', activeId: programFocusId };
+  polling.reconcile('settings', 'guide');
+  await settleAsyncWork();
+  polling.stop();
+
+  assert.deepEqual(requests.map(({ route }) => route), ['guide', 'guide', 'guide', 'player', 'guide']);
+  const detailedPresentationDurationMs = 2 * 60 * 60_000;
+  const widePresentationDurationMs = 3 * 60 * 60_000;
+  const preloadBufferEachSideMs = 2 * 60 * 60_000;
+  assert.deepEqual(requests.map(({ durationMs }) => durationMs), [
+    widePresentationDurationMs + preloadBufferEachSideMs * 2,
+    detailedPresentationDurationMs + preloadBufferEachSideMs * 2,
+    widePresentationDurationMs + preloadBufferEachSideMs * 2,
+    detailedPresentationDurationMs + preloadBufferEachSideMs * 2,
+    widePresentationDurationMs + preloadBufferEachSideMs * 2,
+  ]);
+  assert.deepEqual(
+    requests.map(({ startTimeMs }) => startTimeMs),
+    requests.map(() => base - preloadBufferEachSideMs),
+  );
+  assert.ok(restoredFocusIds.length > 0, 'Guide density settlement restores a retained program focus');
+  assert.equal(restoredFocusIds.every((focusId) => focusId === programFocusId), true);
+  assert.ok(states.some((state) => state.saving && state.density === 'compact'));
+  assert.ok(states.some((state) => state.saving && state.density === 'comfortable'));
+  assert.ok(states.some((state) => state.errorCode === 'storage-unavailable' && !state.saving));
+});
+
+test('Player first result clamps only to a newer bound and otherwise preserves the Guide window before route refresh', async () => {
+  const base = 1_778_619_600_000;
+  const scenarios = [
+    { label: 'clamp', initialWindowStartMs: base - EPG_SLOT_DURATION_MS, programDurationSlots: 1, expectedWindowStartMs: base },
+    { label: 'preserve', initialWindowStartMs: base + EPG_SLOT_DURATION_MS, programDurationSlots: 8, expectedWindowStartMs: base + EPG_SLOT_DURATION_MS },
+  ] as const;
+
+  for (const scenario of scenarios) {
+    const authoritative: EpgPresentationSource & GuidePresentationSource = {
+      channels: [{
+        id: 'channel-1', number: '1', name: 'One', programs: [{
+          id: 'program-1', title: 'Program', subtitle: '', description: '', showTitle: '', episodeLabel: '',
+          rating: '', quality: [], genres: [], startsAtMs: base,
+          endsAtMs: base + scenario.programDurationSlots * EPG_SLOT_DURATION_MS, artwork: null,
+        }],
+      }],
+      nowWatching: null,
+      nowMs: base,
+      minimumStartTimeMs: base,
+      channelWindow: { offset: 0, total: 1 },
+      libraryFilter: { scopeToken: 'scope', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'ready' },
+    };
+    let activeRoute: 'player' | 'guide' = 'player';
+    let state = createEpgState({ channels: [], nowWatching: null, nowMs: scenario.initialWindowStartMs }, 0, 'compact');
+    const requestStarts: number[] = [];
+    const guide = {
+      getPresentation: async (request: { startTimeMs: number }) => {
+        requestStarts.push(request.startTimeMs);
+        return { ok: true, requestId: `player-guide-${scenario.label}-${requestStarts.length}`, value: authoritative };
+      },
+      cancelPresentation: async () => undefined,
+      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+    } satisfies LineupDesktopPreloadApi['guide'];
+    const polling = createGuidePresentationPolling({
+      guide,
+      host: createNoopIntervalHost(),
+      getActiveRoute: () => activeRoute,
+      getWindowStartMs: () => state.windowStartMs,
+      getGuideDensity: () => state.guideDensity,
+      getNowMs: () => base - EPG_SLOT_DURATION_MS,
+      setLoading: (generation) => { state = { ...state, presentationState: 'loading', presentationGeneration: generation }; },
+      applyPresentation: (presentation, generation, _target, effectiveStartTimeMs) => {
+        state = settleEpgPresentation(state, presentation, generation, _target, false, 'compact', effectiveStartTimeMs).state;
+      },
+      applyPlayerPresentation: (presentation, generation, effectiveStartTimeMs) => {
+        state = settleEpgPresentation(state, presentation, generation, null, false, 'compact', effectiveStartTimeMs).state;
+      },
+      handleFailure: () => undefined,
+    });
+
+    await polling.refresh('player-first-result', { allowPlayerRoute: true });
+    assert.deepEqual(requestStarts, [base - EPG_SLOT_DURATION_MS - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs], scenario.label);
+    assert.equal(state.minimumStartTimeMs, base, scenario.label);
+    assert.equal(state.windowStartMs, scenario.expectedWindowStartMs, scenario.label);
+
+    activeRoute = 'guide';
+    polling.reconcile('player', 'guide');
+    await settleAsyncWork();
+    assert.deepEqual(requestStarts, [
+      base - EPG_SLOT_DURATION_MS - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+      scenario.expectedWindowStartMs - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+    ], scenario.label);
+    assert.equal(state.minimumStartTimeMs, base, scenario.label);
+    assert.equal(state.windowStartMs, scenario.expectedWindowStartMs, scenario.label);
+    polling.stop();
+  }
 });
 
 test('shell controller rejects stale capabilities and exposes recoverable safe startup failure', async () => {
@@ -671,6 +1038,18 @@ function createNoopIntervalHost(): Window {
     setTimeout: () => 2,
     clearTimeout: () => undefined,
   } as unknown as Window;
+}
+
+function settingsSnapshot(
+  revision: number,
+  values: typeof DEFAULT_DESKTOP_SETTINGS_VALUES = DEFAULT_DESKTOP_SETTINGS_VALUES,
+) {
+  return createDesktopSettingsView({
+    schemaVersion: 2,
+    revision,
+    status: 'ready',
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, ...values },
+  });
 }
 
 class FullscreenOverlayFocusElement {

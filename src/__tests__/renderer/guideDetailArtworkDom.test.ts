@@ -7,7 +7,11 @@ import { renderEpgGuideDom, renderGuideDetailArtwork } from '../../renderer/epg/
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import { mountStaticRendererDom } from '../../renderer/staticDom.js';
 import type { RouteWorkflowViewModel } from '../../renderer/workflow.js';
-import { cssDeclaration, extractCssRule, normalizeCss } from './cssTestUtils.js';
+import {
+  cssDeclaration,
+  extractCssAtRuleBody,
+  extractCssRule,
+} from './cssAtRuleTestUtils.js';
 
 class FakeElement {
   readonly dataset: Record<string, string> = {};
@@ -42,7 +46,7 @@ function render(artwork: ArtworkRef | null, generation = 1) {
     }],
     nowWatching: null,
   };
-  const guide = createEpgGuideView(createEpgState(presentation, generation), presentation);
+  const guide = createEpgGuideView(createEpgState(presentation, generation, 'compact'), presentation);
   const figure = new FakeElement();
   const image = new FakeImage();
   const placeholder = new FakeElement();
@@ -187,26 +191,29 @@ test('artwork accessibility styles disable motion and preserve forced-color boun
     new URL('../../renderer/styles/guide-epg.css', import.meta.url),
     'utf8',
   );
-  const normalized = normalizeCss(css);
-  const reducedArtwork = extractCssRule(normalized, '[data-epg-detail-artwork]', {
-    atRule: '@media (prefers-reduced-motion: reduce)',
-  });
-  const reducedPoster = extractCssRule(normalized, '[data-epg-detail-poster]', {
-    atRule: '@media (prefers-reduced-motion: reduce)',
-  });
+  const reducedMotion = extractCssAtRuleBody(css, '@media (prefers-reduced-motion: reduce)');
+  const forcedColors = extractCssAtRuleBody(css, '@media (forced-colors: active)');
+  const reducedArtwork = extractCssRule(reducedMotion ?? '', [
+    '[data-epg-detail-artwork]',
+    '[data-epg-detail-poster]',
+  ]);
   assert.equal(cssDeclaration(reducedArtwork, 'animation'), 'none !important');
   assert.equal(cssDeclaration(reducedArtwork, 'transition'), 'none !important');
-  assert.equal(cssDeclaration(reducedPoster, 'animation'), 'none !important');
-  assert.equal(cssDeclaration(reducedPoster, 'transition'), 'none !important');
 
-  const forcedArtwork = extractCssRule(normalized, '[data-epg-detail-artwork]', {
-    atRule: '@media (forced-colors: active)',
-  });
-  const forcedPlaceholder = extractCssRule(normalized, '[data-epg-detail-artwork-placeholder]', {
-    atRule: '@media (forced-colors: active)',
-  });
+  const forcedArtwork = extractCssRule(forcedColors ?? '', '[data-epg-detail-artwork]');
   assert.equal(cssDeclaration(forcedArtwork, 'border-color'), 'CanvasText');
   assert.equal(cssDeclaration(forcedArtwork, 'outline'), '1px solid CanvasText');
   assert.equal(cssDeclaration(forcedArtwork, 'background'), 'Canvas');
+
+  const forcedPlaceholder = extractCssRule(forcedColors ?? '', '[data-epg-detail-artwork-placeholder]');
   assert.equal(cssDeclaration(forcedPlaceholder, 'color'), 'CanvasText');
+});
+
+test('CSS media assertions stay contained within the matched at-rule body', () => {
+  const body = extractCssAtRuleBody(
+    '@media (forced-colors: active) {} [data-epg-detail-artwork] { background: Canvas; }',
+    '@media (forced-colors: active)',
+  );
+  assert.equal(body, '');
+  assert.doesNotMatch(body ?? '', /\[data-epg-detail-artwork\]/u);
 });
