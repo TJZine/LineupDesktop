@@ -79,7 +79,7 @@ test('native aperture CSS makes only acknowledged page compositions transparent 
     ':root[data-native-presentation-mode="guide-classic-pip"] .epg-shell[data-epg-layout="classic"]',
   );
   assert.equal(
-    cssDeclaration(classicPip, 'padding-right'),
+    cssDeclaration(classicPip, 'padding-inline-end'),
     'calc(var(--native-pip-width) + (var(--native-pip-inset) * 2))',
   );
   const classicDetailPip = extractCssRule(
@@ -87,7 +87,7 @@ test('native aperture CSS makes only acknowledged page compositions transparent 
     ':root[data-native-presentation-mode="guide-classic-pip"] .guide-detail[data-guide-layout="classic"]',
   );
   assert.equal(
-    cssDeclaration(classicDetailPip, 'margin-right'),
+    cssDeclaration(classicDetailPip, 'margin-inline-end'),
     'calc(var(--native-pip-width) + (var(--native-pip-inset) * 2))',
   );
   assert.equal(containsCssSelector(guide, '.epg-shell[data-epg-layout="classic"]'), false);
@@ -124,6 +124,9 @@ test('Guide time range no longer compresses row geometry', () => {
     new URL('../../renderer/styles/guide-epg.css', import.meta.url),
     'utf8',
   );
+  assert.equal(containsCssSelector(guide, '.epg-grid__channel[data-channel-current="true"]::before'), false);
+  assert.equal(containsCssSelector(guide, '.epg-grid__channel[data-channel-tuned="true"]::after'), false);
+  assert.equal(cssDeclaration(extractCssRule(guide, '.epg-grid__channel-status'), 'content'), null);
   assert.equal(containsCssSelector(guide, '.epg-shell[data-guide-time-range="wide"]'), false);
   assert.equal(containsCssSelector(guide, '.epg-shell[data-guide-time-range="detailed"]'), false);
   const shell = extractCssRule(guide, '.epg-shell');

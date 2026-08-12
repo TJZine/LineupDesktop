@@ -143,20 +143,25 @@ test('background failure falls back once to the selected poster treatment, then 
     { id: 'artwork-QRSTUVWXYZabcdef', kind: 'background', expiresAtMs: 2_000, altText: 'Background', status: 'available' },
   );
   withPoster.backgroundImage.onerror?.();
+  assert.equal(withPoster.backgroundSurface.dataset.backgroundState, 'loading');
+  assert.equal(withPoster.backgroundSurface.dataset.backgroundSource, 'poster');
+  assert.equal(withPoster.backgroundImage.src, 'lineup://shell/artwork/artwork-ABCDEFGHIJKLMNOP');
+  withPoster.backgroundImage.onload?.();
   assert.equal(withPoster.backgroundSurface.dataset.backgroundState, 'poster-fallback');
   assert.equal(withPoster.backgroundSurface.dataset.backgroundSource, 'poster');
   assert.equal(withPoster.backgroundSurface.dataset.backgroundFallback, 'poster');
   assert.equal(withPoster.backgroundSurface.dataset.backgroundCause, 'error');
-  assert.equal(withPoster.backgroundImage.getAttribute('src'), null);
+  assert.equal(withPoster.backgroundImage.src, 'lineup://shell/artwork/artwork-ABCDEFGHIJKLMNOP');
   assert.equal(withPoster.backgroundImage.onload, null);
   assert.equal(withPoster.backgroundImage.onerror, null);
   assert.equal(withPoster.backgroundImage.alt, '');
-  assert.equal(withPoster.backgroundImage.dataset.artworkRefId, undefined);
-  assert.equal(withPoster.backgroundImage.dataset.artworkGeneration, undefined);
+  assert.equal(withPoster.backgroundImage.dataset.artworkRefId, 'artwork-ABCDEFGHIJKLMNOP');
+  assert.equal(withPoster.backgroundImage.dataset.artworkGeneration, '1');
+  assert.equal(withPoster.backgroundImage.hidden, false);
   renderGuideDetailArtwork(withPoster.view, withPoster.dom);
   assert.equal(withPoster.backgroundSurface.dataset.backgroundState, 'poster-fallback');
   assert.equal(withPoster.backgroundSurface.dataset.backgroundSource, 'poster');
-  assert.equal(withPoster.backgroundImage.getAttribute('src'), null);
+  assert.equal(withPoster.backgroundImage.src, 'lineup://shell/artwork/artwork-ABCDEFGHIJKLMNOP');
 
   const themeOnly = render(
     null,
@@ -167,6 +172,17 @@ test('background failure falls back once to the selected poster treatment, then 
   assert.equal(themeOnly.backgroundSurface.dataset.backgroundState, 'error');
   assert.equal(themeOnly.backgroundSurface.dataset.backgroundSource, 'theme');
   assert.equal(themeOnly.backgroundImage.getAttribute('src'), null);
+
+  const failedPoster = render(
+    { id: 'artwork-ABCDEFGHIJKLMNOP', kind: 'poster', expiresAtMs: 2_000, altText: 'Poster', status: 'available' },
+    1,
+    { id: 'artwork-QRSTUVWXYZabcdef', kind: 'background', expiresAtMs: 2_000, altText: 'Background', status: 'available' },
+  );
+  failedPoster.backgroundImage.onerror?.();
+  failedPoster.backgroundImage.onerror?.();
+  assert.equal(failedPoster.backgroundSurface.dataset.backgroundState, 'error');
+  assert.equal(failedPoster.backgroundSurface.dataset.backgroundSource, 'theme');
+  assert.equal(failedPoster.backgroundImage.getAttribute('src'), null);
 });
 
 test('background failures stay suppressed across same-generation selection churn but retry in a new generation', () => {
@@ -180,17 +196,18 @@ test('background failures stay suppressed across same-generation selection churn
   renderGuideDetailArtwork(render(poster, 1, backgroundB).view, missingChurn.dom);
   missingChurn.backgroundImage.onerror?.();
   renderGuideDetailArtwork(render(poster, 1, backgroundA).view, missingChurn.dom);
-  assert.equal(missingChurn.backgroundSurface.dataset.backgroundState, 'poster-fallback');
-  assert.equal(missingChurn.backgroundImage.getAttribute('src'), null);
-  assert.equal(missingChurn.backgroundImage.onload, null);
+  assert.equal(missingChurn.backgroundSurface.dataset.backgroundState, 'loading');
+  assert.equal(missingChurn.backgroundSurface.dataset.backgroundSource, 'poster');
+  assert.equal(missingChurn.backgroundImage.src, 'lineup://shell/artwork/artwork-ABCDEFGHIJKLMNOP');
+  assert.notEqual(missingChurn.backgroundImage.onload, null);
 
   const repeatedFailure = render(poster, 1, backgroundA);
   repeatedFailure.backgroundImage.onerror?.();
   renderGuideDetailArtwork(render(poster, 1, backgroundB).view, repeatedFailure.dom);
   repeatedFailure.backgroundImage.onerror?.();
   renderGuideDetailArtwork(render(poster, 1, backgroundA).view, repeatedFailure.dom);
-  assert.equal(repeatedFailure.backgroundImage.getAttribute('src'), null);
-  assert.equal(repeatedFailure.backgroundImage.onload, null);
+  assert.equal(repeatedFailure.backgroundImage.src, 'lineup://shell/artwork/artwork-ABCDEFGHIJKLMNOP');
+  assert.notEqual(repeatedFailure.backgroundImage.onload, null);
 
   const newGeneration = render(poster, 1, backgroundA);
   newGeneration.backgroundImage.onerror?.();
@@ -209,9 +226,12 @@ test('missing, placeholder, and expired backgrounds use poster or theme fallback
     { id: 'artwork-QRSTUVWXYZabcdef', kind: 'background' as const, expiresAtMs: 999, altText: 'Background', status: 'available' as const },
   ]) {
     const harness = render(poster, 1, background);
-    assert.equal(harness.backgroundSurface.dataset.backgroundState, 'poster-fallback');
+    assert.equal(harness.backgroundSurface.dataset.backgroundState, 'loading');
     assert.equal(harness.backgroundSurface.dataset.backgroundSource, 'poster');
-    assert.equal(harness.backgroundImage.getAttribute('src'), null);
+    assert.equal(harness.backgroundImage.src, 'lineup://shell/artwork/artwork-ABCDEFGHIJKLMNOP');
+    harness.backgroundImage.onload?.();
+    assert.equal(harness.backgroundSurface.dataset.backgroundState, 'poster-fallback');
+    assert.equal(harness.backgroundImage.hidden, false);
     assert.equal(harness.image.src, 'lineup://shell/artwork/artwork-ABCDEFGHIJKLMNOP');
   }
 
@@ -266,6 +286,27 @@ test('stale background callbacks cannot mutate a replacement generation or refer
   assert.equal(first.backgroundImage.src, 'lineup://shell/artwork/artwork-zyxwvutsrqponmlk');
   first.backgroundImage.onload?.();
   assert.equal(first.backgroundSurface.dataset.backgroundState, 'available');
+});
+
+test('stale poster fallback callbacks cannot mutate a replacement background request', () => {
+  const first = render(
+    { id: 'artwork-ABCDEFGHIJKLMNOP', kind: 'poster', expiresAtMs: 2_000, altText: 'Poster', status: 'available' },
+    1,
+    { id: 'artwork-QRSTUVWXYZabcdef', kind: 'background', expiresAtMs: 2_000, altText: 'First', status: 'available' },
+  );
+  first.backgroundImage.onerror?.();
+  const staleLoad = first.backgroundImage.onload;
+  const staleError = first.backgroundImage.onerror;
+  renderGuideDetailArtwork(render(
+    { id: 'artwork-ABCDEFGHIJKLMNOP', kind: 'poster', expiresAtMs: 2_000, altText: 'Poster', status: 'available' },
+    2,
+    { id: 'artwork-zyxwvutsrqponmlk', kind: 'background', expiresAtMs: 2_000, altText: 'Second', status: 'available' },
+  ).view, first.dom);
+  staleLoad?.();
+  staleError?.();
+  assert.equal(first.backgroundSurface.dataset.backgroundState, 'loading');
+  assert.equal(first.backgroundSurface.dataset.backgroundSource, 'background');
+  assert.equal(first.backgroundImage.src, 'lineup://shell/artwork/artwork-zyxwvutsrqponmlk');
 });
 
 test('error cleanup removes request identity, handlers, source, and alt text', () => {
@@ -358,6 +399,7 @@ test('fixed Classic markup owns exactly one poster, placeholder, copy, and descr
   assert.match(guide, /data-epg-detail-artwork-placeholder aria-hidden="true"/u);
   assert.match(guide, /data-epg-detail-background[^>]+aria-hidden="true"/u);
   assert.match(guide, /data-epg-detail-background-image[^>]+aria-hidden="true"/u);
+  assert.match(guide, /data-epg-detail-badges[^>]+role="group"[^>]+aria-label="Program details"/u);
   assert.match(guide, /class="guide-detail__copy"/u);
 });
 

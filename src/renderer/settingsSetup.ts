@@ -286,6 +286,7 @@ export function createSettingsSections(
     disabledReason,
   });
   const guidePending = 'Guide preferences apply to the current Guide.';
+  const guideUnavailable = 'This Guide preference is not yet available.';
   return [
     {
       id: 'audio-subtitles',
@@ -336,13 +337,13 @@ export function createSettingsSections(
       title: 'Guide',
       detail: guidePending,
       items: [
-        control('library-tabs', 'Library Tabs', onOff(state.libraryTabsEnabled), 'Filter the Guide by source library.', 'toggleLibraryTabs', guidePending),
-        control('now-watching-banner', 'Now Watching Banner', onOff(state.nowWatchingBannerEnabled), 'Show the current channel and program above the Guide.', 'toggleNowWatchingBanner', guidePending),
+        control('library-tabs', 'Library Tabs', onOff(state.libraryTabsEnabled), 'Filter the Guide by source library.', 'toggleLibraryTabs'),
+        control('now-watching-banner', 'Now Watching Banner', onOff(state.nowWatchingBannerEnabled), 'Show the current channel and program above the Guide.', 'toggleNowWatchingBanner'),
         control('guide-performance-profile', 'Performance Profile', state.guidePerformanceProfile === 'auto' ? 'Auto' : 'Reduced resource', 'Auto retains more nearby Guide work and may warm adjacent windows; Reduced resource limits retention and disables idle warming.', 'cycleGuidePerformanceProfile'),
         control('guide-time-range', 'Time Range', state.guideTimeRange === 'detailed' ? 'Detailed (2h)' : 'Wide (3h)', 'Detailed shows 2 hours; Wide shows 3 hours.', 'cycleGuideTimeRange'),
         control('guide-row-density', 'Row Density', valueLabel(state.guideRowDensity, { auto: 'Auto', comfortable: 'Comfortable', compact: 'Compact' }), 'Auto chooses a readable row size for the current viewport; Comfortable and Compact are explicit treatments.', 'cycleGuideRowDensity'),
-        control('guide-layout', 'Guide Layout', state.guideLayout === 'overlay' ? 'Overlay' : 'Classic (PIP)', 'Overlay keeps full-screen video; Classic uses PIP.', 'cycleGuideLayout', guidePending),
-        control('past-items-window', 'Past Items', valueLabel(state.pastItemsWindow, { auto: 'Auto (Recommended)', '0': 'Now (0m)', '15': '15m', '30': '30m' }), 'Controls how long past Guide items remain.', 'cyclePastItemsWindow', guidePending),
+        control('guide-layout', 'Guide Layout', state.guideLayout === 'overlay' ? 'Overlay' : 'Classic (PIP)', 'Overlay keeps full-screen video; Classic uses PIP.', 'cycleGuideLayout', guideUnavailable),
+        control('past-items-window', 'Past Items', valueLabel(state.pastItemsWindow, { auto: 'Auto (Recommended)', '0': 'Now (0m)', '15': '15m', '30': '30m' }), 'Controls how long past Guide items remain.', 'cyclePastItemsWindow', guideUnavailable),
       ],
     },
     {

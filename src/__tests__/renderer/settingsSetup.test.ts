@@ -219,13 +219,13 @@ test('settings sections preserve exact category order, closed options, and disab
   assert.equal(items.find((item) => item.id === 'guide-time-range')?.valueLabel, 'Detailed (2h)');
   assert.equal(items.find((item) => item.id === 'info-box-background')?.disabledReason, 'Disabled until safe artwork is available.');
   const guideItems = new Map(sections[3]?.items.map((item) => [item.id, item]) ?? []);
-  for (const id of ['guide-performance-profile', 'guide-time-range', 'guide-row-density']) {
+  for (const id of ['library-tabs', 'now-watching-banner', 'guide-performance-profile', 'guide-time-range', 'guide-row-density']) {
     assert.equal(guideItems.get(id)?.disabled, false);
     assert.equal(guideItems.get(id)?.disabledReason, undefined);
   }
-  for (const id of ['library-tabs', 'now-watching-banner', 'guide-layout', 'past-items-window']) {
+  for (const id of ['guide-layout', 'past-items-window']) {
     assert.equal(guideItems.get(id)?.disabled, true);
-    assert.equal(guideItems.get(id)?.disabledReason, 'Guide preferences apply to the current Guide.');
+    assert.equal(guideItems.get(id)?.disabledReason, 'This Guide preference is not yet available.');
   }
 
   let values = { ...DEFAULT_DESKTOP_SETTINGS_VALUES };

@@ -460,8 +460,16 @@ test('route DOM renders guide states and focused program details', () => {
     assert.equal(findElementsByClassName(grid, 'epg-classic-header').length, 1);
     assert.equal(findElementsByClassName(grid, 'epg-classic-header')[0]?.hidden, false);
     assert.equal(readyRow?.dataset.currentChannel, 'true');
-    assert.equal(readyRow?.dataset.tunedChannel, 'true');
-    assert.match(findElementsByRole(readyRow, 'rowheader')[0]?.getAttribute('aria-label') ?? '', /Live, tuned/u);
+    assert.equal(readyRow?.dataset.tunedChannel, undefined);
+    const channelHeader = findElementsByRole(readyRow, 'rowheader')[0];
+    assert.match(channelHeader?.getAttribute('aria-label') ?? '', /Live/u);
+    assert.doesNotMatch(channelHeader?.getAttribute('aria-label') ?? '', /tuned/ui);
+    assert.equal(channelHeader?.dataset.channelCurrent, undefined);
+    assert.equal(channelHeader?.dataset.channelTuned, undefined);
+    const liveStatuses = findElementsByClassName(readyRow, 'epg-grid__channel-status');
+    assert.equal(liveStatuses.length, 1);
+    assert.equal(liveStatuses[0]?.textContent, 'LIVE');
+    assert.equal(liveStatuses[0]?.getAttribute('aria-hidden'), 'true');
     const marker = findElementsByDataset(grid, 'currentTimeMarker', 'true');
     assert.ok(marker.length >= 1);
 

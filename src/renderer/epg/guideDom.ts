@@ -41,6 +41,7 @@ type GuideBackgroundRequest = Readonly<{
   refId: string;
   generationText: string;
   artworkUrl: string;
+  source: 'background' | 'poster';
 }>;
 type GuideBackgroundFailures = {
   presentationGeneration: number;
@@ -814,24 +815,30 @@ function renderGuideDetailBackground(
     const generationText = String(presentationGeneration);
     const artworkUrl = guideArtworkUrl(background.id);
     if (failedRefs.has(background.id)) {
-      renderGuideBackgroundFallback(surface, image, poster, 'error');
+      renderGuideBackgroundFallback(surface, image, poster, 'error', presentationGeneration);
       return;
     }
-    if (isCurrentGuideBackgroundSource(image, background.id, generationText, artworkUrl)) {
+    if (isCurrentGuideBackgroundSource(image, background.id, generationText, artworkUrl, 'background')) {
       return;
     }
     startGuideBackgroundRequest({
       surface,
       image,
-      info,
       artwork: background,
+      source: 'background',
       fallbackPoster: poster,
       presentationGeneration,
     });
     return;
   }
 
-  renderGuideBackgroundFallback(surface, image, poster, guideBackgroundCause(background, nowMs));
+  renderGuideBackgroundFallback(
+    surface,
+    image,
+    poster,
+    guideBackgroundCause(background, nowMs),
+    presentationGeneration,
+  );
 }
 
 function renderGuideBackgroundFallback(
@@ -839,13 +846,27 @@ function renderGuideBackgroundFallback(
   image: HTMLImageElement,
   poster: ArtworkRef | null,
   cause: GuideBackgroundCause,
+  presentationGeneration: number,
 ): void {
+  const failedRefs = failedBackgroundForGeneration(image, presentationGeneration);
+  if (poster !== null && !failedRefs.has(poster.id)) {
+    startGuideBackgroundRequest({
+      surface,
+      image,
+      artwork: poster,
+      source: 'poster',
+      fallbackPoster: null,
+      presentationGeneration,
+      cause,
+    });
+    return;
+  }
   clearGuideBackgroundImage(image);
   setGuideBackgroundState(
     surface,
     image,
-    poster === null && cause === 'error' ? 'error' : poster === null ? 'missing' : 'poster-fallback',
-    poster === null ? 'theme' : 'poster',
+    cause === 'error' ? 'error' : 'missing',
+    'theme',
   );
   surface.dataset.backgroundCause = cause;
 }
@@ -853,27 +874,31 @@ function renderGuideBackgroundFallback(
 function startGuideBackgroundRequest(input: {
   surface: HTMLElement;
   image: HTMLImageElement;
-  info: NonNullable<RouteWorkflowViewModel['guide']['infoPanel']>;
   artwork: ArtworkRef;
+  source: 'background' | 'poster';
   fallbackPoster: ArtworkRef | null;
   presentationGeneration: number;
+  cause?: GuideBackgroundCause;
 }): void {
-  const { surface, image, artwork, fallbackPoster, presentationGeneration } = input;
+  const { surface, image, artwork, source, fallbackPoster, presentationGeneration, cause } = input;
   const generationText = String(presentationGeneration);
   const artworkUrl = guideArtworkUrl(artwork.id);
+  if (cause === undefined) delete surface.dataset.backgroundCause;
+  else surface.dataset.backgroundCause = cause;
+  if (isCurrentGuideBackgroundSource(image, artwork.id, generationText, artworkUrl, source)) return;
   clearGuideBackgroundImage(image);
   image.dataset.artworkRefId = artwork.id;
   image.dataset.artworkGeneration = generationText;
-  image.dataset.backgroundSource = 'background';
+  image.dataset.backgroundSource = source;
   image.alt = '';
   image.decoding = 'async';
   image.draggable = false;
-  setGuideBackgroundState(surface, image, 'loading', 'background');
-  delete surface.dataset.backgroundCause;
+  setGuideBackgroundState(surface, image, 'loading', source);
   const request: GuideBackgroundRequest = Object.freeze({
     refId: artwork.id,
     generationText,
     artworkUrl,
+    source,
   });
   pendingBackground.set(image, request);
   image.onload = () => {
@@ -881,7 +906,12 @@ function startGuideBackgroundRequest(input: {
     pendingBackground.delete(image);
     image.onload = null;
     image.onerror = null;
-    setGuideBackgroundState(surface, image, 'available', 'background');
+    setGuideBackgroundState(
+      surface,
+      image,
+      source === 'poster' ? 'poster-fallback' : 'available',
+      source,
+    );
   };
   image.onerror = () => {
     if (!isPendingGuideBackground(image, request)) return;
@@ -889,7 +919,7 @@ function startGuideBackgroundRequest(input: {
     image.onload = null;
     image.onerror = null;
     failedBackgroundForGeneration(image, presentationGeneration).add(artwork.id);
-    renderGuideBackgroundFallback(surface, image, fallbackPoster, 'error');
+    renderGuideBackgroundFallback(surface, image, fallbackPoster, 'error', presentationGeneration);
   };
   image.src = artworkUrl;
 }
@@ -910,10 +940,11 @@ function isCurrentGuideBackgroundSource(
   refId: string,
   generationText: string,
   artworkUrl: string,
+  source: 'background' | 'poster',
 ): boolean {
   return image.dataset.artworkRefId === refId &&
     image.dataset.artworkGeneration === generationText &&
-    image.dataset.backgroundSource === 'background' &&
+    image.dataset.backgroundSource === source &&
     image.getAttribute('src') === artworkUrl;
 }
 
@@ -927,6 +958,7 @@ function isPendingGuideBackground(
       request.refId,
       request.generationText,
       request.artworkUrl,
+      request.source,
     );
 }
 
@@ -953,7 +985,7 @@ function setGuideBackgroundState(
   if (source === 'poster') surface.dataset.backgroundFallback = 'poster';
   else if (source === 'theme') surface.dataset.backgroundFallback = 'theme';
   else delete surface.dataset.backgroundFallback;
-  image.hidden = state !== 'available';
+  image.hidden = state !== 'available' && state !== 'poster-fallback';
 }
 
 function guideBackgroundCause(
@@ -1128,21 +1160,25 @@ function readyGuideGridDom(
     rowElement.setAttribute('aria-selected', String(row.isSelected));
     rowElement.dataset.selectedChannel = String(row.isSelected);
     rowElement.dataset.currentChannel = String(row.isNowWatching);
-    rowElement.dataset.tunedChannel = String(row.isNowWatching);
     const channel = document.createElement('div');
     channel.className = 'epg-grid__channel';
-    channel.dataset.channelCurrent = String(row.isNowWatching);
-    channel.dataset.channelTuned = String(row.isNowWatching);
     channel.setAttribute('role', 'rowheader');
     channel.setAttribute(
       'aria-label',
-      `${row.number} - ${row.name}${row.isNowWatching ? ' — Live, tuned' : ''}`,
+      `${row.number} - ${row.name}${row.isNowWatching ? ' — Live' : ''}`,
     );
     const number = document.createElement('strong');
     number.textContent = row.number;
     const name = document.createElement('span');
     name.textContent = row.name;
     channel.append(number, name);
+    if (row.isNowWatching) {
+      const status = document.createElement('span');
+      status.className = 'epg-grid__channel-status';
+      status.setAttribute('aria-hidden', 'true');
+      status.textContent = 'LIVE';
+      channel.append(status);
+    }
     rowElement.append(channel);
 
     const programs = document.createElement('div');

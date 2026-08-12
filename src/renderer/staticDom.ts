@@ -36,7 +36,7 @@ const STATIC_SCREEN_MARKUP = `
             <p class="guide-detail__time" data-epg-detail-time></p>
           </div>
           <div class="guide-detail__metadata">
-            <div class="guide-detail__badges" data-epg-detail-badges aria-label="Program details">
+            <div class="guide-detail__badges" data-epg-detail-badges role="group" aria-label="Program details">
               <span data-epg-detail-badge-slot="0" hidden></span>
               <span data-epg-detail-badge-slot="1" hidden></span>
               <span data-epg-detail-badge-slot="2" hidden></span>

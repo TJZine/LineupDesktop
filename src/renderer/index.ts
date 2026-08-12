@@ -44,6 +44,7 @@ import {
   invalidateGuideLayoutMetrics,
   projectGuideLibraryTabsPending,
   readGuideViewportRows,
+  renderEpgGuideDom,
   setGuideViewportStart,
 } from './epg/guideDom.js';
 import { dispatchPlexRuntimeAction } from './plexRuntimeActionDispatch.js';
@@ -1250,6 +1251,22 @@ function renderApp(): void {
   scrollFocusedSetupControlIntoView();
 }
 
+function renderGuideViewportDom(): void {
+  renderEpgGuideDom(
+    getRouteWorkflowView(workflowState, channelController.getState()),
+    dom,
+    workflowState.settingsDraft,
+  );
+  projectGuideLibraryTabsPending(dom.epgGridElement, guideFilterController?.isPending() === true);
+  syncRendererFocusTargets(focusRegistry, dom);
+  restorePendingGuideFocus();
+  if (focusState.activeId !== null) {
+    focusState = focusRegistry.focusTarget(focusState, focusState.activeId).state;
+  }
+  renderRendererFocus(focusState, dom);
+  updateGuideTunePendingDom(guideTuneController.getPendingTarget());
+}
+
 function guideWindowIdentity(presentation: typeof workflowState.guidePresentation): string | null {
   const filter = presentation.libraryFilter;
   return filter === undefined ? null : projectGuideCacheIdentity({
@@ -1271,7 +1288,7 @@ function reconcileGuideViewport(allowRefresh = true): void {
   if (guideChannelWindow.total > 0) {
     workflowState = { ...workflowState, guidePresentation: guideChannelWindow.presentation() };
   }
-  renderApp();
+  renderGuideViewportDom();
   if (!allowRefresh) return;
   const request = guideChannelWindow.beginForeground(initializedGuidePresentationPolling.getGeneration() + 1);
   if (request === null) return;

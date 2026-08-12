@@ -382,20 +382,10 @@
   border-inline-start: 3px solid var(--color-primary);
 }
 
-.epg-grid__channel[data-channel-current="true"]::before {
-  content: "LIVE";
+.epg-grid__channel-status {
   color: var(--color-primary);
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.08em;
-  line-height: 1;
-}
-
-.epg-grid__channel[data-channel-tuned="true"]::after {
-  content: "TUNED";
-  color: var(--color-text-subtle);
-  font-size: 10px;
-  font-weight: 700;
   letter-spacing: 0.08em;
   line-height: 1;
 }
@@ -960,11 +950,11 @@
 }
 
 :root[data-native-presentation-mode="guide-classic-pip"] .epg-shell[data-epg-layout="classic"] {
-  padding-right: calc(var(--native-pip-width) + (var(--native-pip-inset) * 2));
+  padding-inline-end: calc(var(--native-pip-width) + (var(--native-pip-inset) * 2));
 }
 
 :root[data-native-presentation-mode="guide-classic-pip"] .guide-detail[data-guide-layout="classic"] {
-  margin-right: calc(var(--native-pip-width) + (var(--native-pip-inset) * 2));
+  margin-inline-end: calc(var(--native-pip-width) + (var(--native-pip-inset) * 2));
 }
 
 :root[data-native-presentation-aperture="open"][data-native-presentation-mode="guide-classic-pip"]
