@@ -149,9 +149,11 @@ function assertNoSubtitleDiagnosticForbiddenField(value: unknown, path = 'event'
 
 test('plex stream resolver projects direct play to safe load payload and private setup separately', async () => {
   const pmsStarts: PlexStreamResolverPmsSessionStartInput[] = [];
+  const mediaDetailLookups: Array<{ ratingKey: string }> = [];
   const result = await createResolver({
     mediaDetail: createMediaDetail(),
     pmsStarts,
+    mediaDetailLookups,
   }).resolve({
     requestId: 'request-direct-play',
     mediaId: OPAQUE_MEDIA_ID,
@@ -162,6 +164,7 @@ test('plex stream resolver projects direct play to safe load payload and private
 
   assertResolved(result, 'direct-play');
   assert.equal(result.load.media.id, OPAQUE_MEDIA_ID);
+  assert.deepEqual(mediaDetailLookups, [{ ratingKey: 'media-input-direct-play' }]);
   assert.equal(result.load.media.title, 'Resolver Safe Episode');
   assert.equal(result.load.media.container, 'mkv');
   assert.equal(result.load.policy.autoplay, true);
@@ -745,6 +748,7 @@ function createResolver(options: {
   activeHeaderError?: Error;
   mediaDetail: PlexMediaItem | null;
   mediaDetailError?: Error;
+  mediaDetailLookups?: Array<{ ratingKey: string }>;
   pmsStarts?: PlexStreamResolverPmsSessionStartInput[];
   subtitleDiagnostics?: PlexStreamResolverSubtitleDiagnosticPort;
 }): PlexStreamResolver {
@@ -767,7 +771,8 @@ function createResolver(options: {
       },
     },
     mediaDetail: {
-      async getMediaDetail() {
+      async getMediaDetail(input) {
+        options.mediaDetailLookups?.push({ ...input });
         if (options.mediaDetailError !== undefined) {
           throw options.mediaDetailError;
         }

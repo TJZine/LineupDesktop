@@ -7,7 +7,8 @@ import { LivePlexTransportError } from '../../main/plex/livePlexTransportError.j
 import type { DesktopStreamCapabilityProfile } from '../../main/player/streamPolicy/types.js';
 
 test('createLivePlexStreamResolverComposition injects the existing diagnostic store into the resolver', async () => {
-  const mockRuntime = createPlayableRuntime();
+  const metadataInputs: Array<{ ratingKey: string }> = [];
+  const mockRuntime = createPlayableRuntime(metadataInputs);
   const diagnostics = new DiagnosticEventStore();
   diagnostics.setSettingsAdmission({
     debugLoggingEnabled: true,
@@ -25,6 +26,7 @@ test('createLivePlexStreamResolverComposition injects the existing diagnostic st
   });
 
   assert.equal(result.ok, true);
+  assert.deepEqual(metadataInputs, [{ ratingKey: '123' }]);
   assert.equal(result.ok ? result.load.seekSupport : null, 'supported');
   assert.equal(result.ok ? Object.hasOwn(result.load, 'capabilityProfile') : true, false);
   assert.deepEqual(result.ok ? result.privatePlayback.credentialHeader : null, {
@@ -152,7 +154,7 @@ const directPlayProfile: DesktopStreamCapabilityProfile = {
   },
 };
 
-function createPlayableRuntime(): DesktopPlexRuntime {
+function createPlayableRuntime(metadataInputs: Array<{ ratingKey: string }> = []): DesktopPlexRuntime {
   const connection = {
     uri: 'https://plex.local',
     protocol: 'https' as const,
@@ -163,7 +165,8 @@ function createPlayableRuntime(): DesktopPlexRuntime {
     latencyMs: null,
   };
   const transport = {
-    async getMetadata() {
+    async getMetadata(input: { ratingKey: string }) {
+      metadataInputs.push({ ratingKey: input.ratingKey });
       return {
         kind: 'json' as const,
         data: {

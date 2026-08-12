@@ -15,6 +15,38 @@ test('PlaybackMediaDetailPort rejects an empty raw rating key before transport',
   assert.equal(result, null);
 });
 
+test('PlaybackMediaDetailPort trims a rating key before transport lookup', async () => {
+  const requestedRatingKeys: string[] = [];
+  const mockTransport = {
+    async getMetadata(input: { ratingKey: string }) {
+      requestedRatingKeys.push(input.ratingKey);
+      return null;
+    },
+  };
+  const mockRuntime = {
+    async withActiveLibraryContext(
+      _operation: 'getMetadata',
+      run: (context: {
+        connection: { uri: string };
+        token: string;
+        transport: typeof mockTransport;
+      }) => Promise<unknown>,
+    ) {
+      return run({
+        connection: { uri: 'http://localhost' },
+        token: 'token',
+        transport: mockTransport,
+      });
+    },
+  } as unknown as DesktopPlexRuntime;
+
+  const port = new PlaybackMediaDetailPort(mockRuntime);
+  const result = await port.getMediaDetail({ ratingKey: '  123  ' });
+
+  assert.equal(result, null);
+  assert.deepEqual(requestedRatingKeys, ['123']);
+});
+
 test('PlaybackMediaDetailPort returns null if connection/token is missing', async () => {
   const mockRuntime = {
     async withActiveLibraryContext() {

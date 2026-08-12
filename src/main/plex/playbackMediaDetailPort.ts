@@ -19,8 +19,8 @@ export class PlaybackMediaDetailPort implements PlexStreamResolverMediaDetailPor
   }
 
   async getMediaDetail(input: { ratingKey: string }): Promise<PlexMediaItem | null> {
-    const { ratingKey } = input;
-    if (ratingKey.trim() === '') {
+    const normalizedRatingKey = input.ratingKey.trim();
+    if (normalizedRatingKey === '') {
       return null;
     }
 
@@ -29,7 +29,7 @@ export class PlaybackMediaDetailPort implements PlexStreamResolverMediaDetailPor
         const payload = await transport.getMetadata({
           connection,
           token,
-          ratingKey,
+          ratingKey: normalizedRatingKey,
         });
 
         if (!payload) {
