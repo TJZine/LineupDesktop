@@ -158,7 +158,7 @@ test('settings persistence synchronizes and closes its private temp handle befor
   });
   await store.replace(0, { ...DEFAULT_DESKTOP_SETTINGS_VALUES });
 
-  assert.deepEqual(operations, ['mkdir', 'open', 'write', 'chmod', 'sync', 'close', 'rename']);
+  assert.deepEqual(operations, ['mkdir', 'open', 'chmod', 'write', 'sync', 'close', 'rename']);
   assert.notEqual(openedFilePath, settingsFilePath);
   assert.equal(path.dirname(openedFilePath ?? ''), path.dirname(settingsFilePath));
   assert.equal(openFlags, 'wx');

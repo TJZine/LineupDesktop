@@ -178,8 +178,8 @@ export class DesktopSettingsStore {
       let handleStageFailed = false;
       let handleStageError: unknown;
       try {
-        await handle.writeFile(`${JSON.stringify(record)}\n`, 'utf8');
         await handle.chmod(0o600);
+        await handle.writeFile(`${JSON.stringify(record)}\n`, 'utf8');
         await handle.sync();
       } catch (error: unknown) {
         handleStageFailed = true;
