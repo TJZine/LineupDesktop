@@ -183,8 +183,34 @@ test('adapter-backed smoke bootstrap passes private playback only to privileged 
 
   assert.equal(start.accepted, true);
   assert.equal(host.contexts.length, 1);
-  assert.ok(host.contexts[0]?.privatePlayback);
+  const privatePlayback = host.contexts[0]?.privatePlayback;
+  assert.ok(privatePlayback);
   assert.equal(Object.hasOwn(host.contexts[0] ?? {}, 'privatePlayback'), true);
+  assert.equal(privatePlayback.requestId, 'plex-playback-private-context');
+  assert.equal(privatePlayback.decisionKind, 'direct-play');
+  assert.equal(privatePlayback.playbackUrl, 'https://mock.plex.invalid/file.mp4');
+  assert.deepEqual(privatePlayback.credentialHeader, {
+    name: 'X-Plex-Token',
+    value: 'mock-token',
+  });
+  assert.deepEqual(privatePlayback.selectedConnection, {
+    protocol: 'https',
+    address: 'mock.plex.invalid',
+    port: 443,
+    local: true,
+    relay: false,
+  });
+  assert.deepEqual(privatePlayback.setup, {
+    playbackMode: 'direct-play',
+    mediaPath: '/library/metadata/mock',
+    variantId: 'mock-variant',
+    partPath: '/library/parts/mock/file.mp4',
+    selectedTrackIds: { video: null, audio: null, subtitle: null },
+    selectedPrivateTrackIds: { video: null, audio: null, subtitle: null },
+    trackMap: { video: [], audio: [], subtitle: [] },
+    audioOutputNativeKey: null,
+    dtsPassthroughEnabled: false,
+  });
   assertSmokePrivateValuesAbsent(start.events);
   assertSmokePrivateValuesAbsent(emitted);
   assertSmokePrivateValuesAbsent(adapter.getSnapshot());

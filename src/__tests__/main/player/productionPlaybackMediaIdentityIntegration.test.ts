@@ -201,6 +201,8 @@ test('media-detail diagnostics retain only fixed categorical failure context', a
   assert.equal(records[0]?.operation, 'playbackMediaDetailPort.getMetadata');
   assert.equal(records[0]?.status, 'failed');
   assert.equal(serialized.includes(ratingKey), false);
+  assert.equal(serialized.includes('dummy-private-credential'), false);
+  assert.equal(serialized.includes(connection.uri), false);
   assert.equal(serialized.includes(exceptionName), false);
   assert.equal(serialized.includes(exceptionMessage), false);
   assert.equal(serialized.includes('metadata lookup failed'), true);

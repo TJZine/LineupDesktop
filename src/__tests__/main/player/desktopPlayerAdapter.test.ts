@@ -245,8 +245,27 @@ test('desktop player adapter settles a current failure against a retained previo
   );
 
   assert.deepEqual(events.map((event) => event.event), ['error', 'state.changed']);
-  assert.equal(adapter.getSnapshot().requestId, 'previous-request');
-  assert.equal(adapter.getSnapshot().status, 'error');
+  const errorEvent = events[0];
+  const stateChangedEvent = events[1];
+  const snapshot = adapter.getSnapshot();
+  assert.equal(errorEvent?.event, 'error');
+  assert.equal(errorEvent?.requestId, 'previous-request');
+  assert.equal(errorEvent?.event === 'error' ? errorEvent.error.requestId : null, 'previous-request');
+  assert.equal(stateChangedEvent?.event, 'state.changed');
+  assert.equal(stateChangedEvent?.requestId, 'previous-request');
+  assert.equal(
+    stateChangedEvent?.event === 'state.changed' ? stateChangedEvent.snapshot.requestId : null,
+    'previous-request',
+  );
+  assert.equal(
+    stateChangedEvent?.event === 'state.changed'
+      ? stateChangedEvent.snapshot.lastError?.requestId
+      : null,
+    'previous-request',
+  );
+  assert.equal(snapshot.requestId, 'previous-request');
+  assert.equal(snapshot.lastError?.requestId, 'previous-request');
+  assert.equal(snapshot.status, 'error');
 });
 
 test('desktop player adapter quarantines a prior candidate failure when a load supersedes scoped cleanup', async () => {

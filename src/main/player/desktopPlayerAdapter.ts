@@ -80,7 +80,10 @@ export class DesktopPlayerAdapter {
     if (currentRequestId !== previousRequestId && currentRequestId !== null) {
       return [];
     }
-    return this.#recordError(event.error);
+    const settledError = currentRequestId !== null && currentRequestId === previousRequestId
+      ? { ...event.error, requestId: currentRequestId }
+      : event.error;
+    return this.#recordError(settledError);
   }
   async dispatchRendererIntent(envelope: unknown): Promise<DesktopPlayerAdapterDispatchResult> {
     const commandResult = mapRendererIntentToCommand(envelope);
