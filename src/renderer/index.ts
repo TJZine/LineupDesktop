@@ -913,6 +913,7 @@ function requestGuideAbsoluteTarget(targetAbsoluteIndex: number): void {
     targetGlobalIndex: targetAbsoluteIndex,
     scopeToken: workflowState.guidePresentation.libraryFilter?.scopeToken ?? null,
     channelOffset: request.channelOffset,
+    channelLimit: request.channelLimit,
   });
 }
 

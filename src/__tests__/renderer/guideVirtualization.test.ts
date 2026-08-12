@@ -272,6 +272,78 @@ test('Guide complete interval keeps trailing overscan mounted but inert at a non
   }
 });
 
+test('Guide DOM derives focused absolute row identity from the sparse window offset', () => {
+  const originalDocument = globalThis.document;
+  const metrics = { reads: 0 };
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: { createElement: (tagName: string) => new LayoutProbeElement(tagName, metrics) },
+  });
+  try {
+    const source = fixturePresentation();
+    const state = {
+      ...createEpgState(source, 1, 'wide'),
+      windowStartMs: 12 * SLOT,
+      selectedChannelId: 'channel-200',
+      selectedProgramId: 'program-200-15',
+    };
+    const guide = createEpgGuideView(state, source);
+    const rowsWithoutAbsoluteIndexes = guide.rows.map(({ absoluteIndex: _absoluteIndex, ...row }) => row);
+    const grid = new LayoutProbeElement('main', metrics);
+    grid.clientHeight = 6 * ROW_OUTER_SIZE;
+    grid.scrollTop = 300 + 140 * ACTUAL_ROW_STRIDE;
+
+    renderEpgGuideDom(routeView({
+      ...guide,
+      rows: rowsWithoutAbsoluteIndexes,
+      channelWindow: { offset: 100, total: 400 },
+    }), guideDomBindings(grid), {
+      guideTimeRange: 'wide',
+      guideRowDensity: 'comfortable',
+      previewBadgesEnabled: true,
+      libraryTabsEnabled: true,
+      nowWatchingBannerEnabled: true,
+      guideLayout: 'classic',
+    });
+
+    assertFocusedProgramIsVisible(grid, '300', 'program-200-15');
+  } finally {
+    if (originalDocument === undefined) delete (globalThis as { document?: Document }).document;
+    else Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
+  }
+});
+
+test('Guide DOM uses the selected density gap when mounted rows cannot be measured', () => {
+  const originalDocument = globalThis.document;
+  const metrics = { reads: 0 };
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: { createElement: (tagName: string) => new LayoutProbeElement(tagName, metrics) },
+  });
+  try {
+    const source = fixturePresentation();
+    const view = routeView(createEpgGuideView(createEpgState(source, 1, 'wide'), source));
+    const grid = new NoMeasurementGrid('main', metrics);
+    grid.clientHeight = 228;
+    renderEpgGuideDom(view, guideDomBindings(grid), {
+      guideTimeRange: 'wide',
+      guideRowDensity: 'comfortable',
+      previewBadgesEnabled: true,
+      libraryTabsEnabled: true,
+      nowWatchingBannerEnabled: true,
+      guideLayout: 'classic',
+    });
+
+    assert.deepEqual(readGuideViewportRows(grid as unknown as HTMLElement), {
+      start: 0,
+      completeCount: 2,
+    });
+  } finally {
+    if (originalDocument === undefined) delete (globalThis as { document?: Document }).document;
+    else Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
+  }
+});
+
 test('Guide density transitions use the new pure row stride instead of stale mounted-row geometry', () => {
   const originalDocument = globalThis.document;
   const metrics = { reads: 0 };
@@ -729,4 +801,9 @@ class LayoutProbeElement {
     return this.children.flatMap((child) => [child, ...child.descendants()]);
   }
   private root(): LayoutProbeElement { return this.parent === null ? this : this.parent.root(); }
+}
+
+class NoMeasurementGrid extends LayoutProbeElement {
+  override querySelector<T>(_selector: string): T | null { return null; }
+  override querySelectorAll<T>(_selector: string): T[] { return []; }
 }

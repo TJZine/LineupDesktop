@@ -7,7 +7,11 @@ import {
 } from '../epg.js';
 import { isSafeArtworkRefId, type ArtworkRef } from '../../contracts/artwork.js';
 import type { GuideLibraryFilterState } from '../../contracts/guide.js';
-import { projectGuideVirtualRange, type GuideVirtualRange } from '../guideVirtualization.js';
+import {
+  GUIDE_DOM_ROW_CAP,
+  projectGuideVirtualRange,
+  type GuideVirtualRange,
+} from '../guideVirtualization.js';
 import { guidePerformanceMarks } from '../guidePerformanceMarks.js';
 import {
   GUIDE_COMFORTABLE_ROW_HEIGHT,
@@ -70,7 +74,7 @@ export function readGuideViewportRows(grid: HTMLElement | null): Readonly<{ star
   );
   return {
     start: interval.start,
-    completeCount: Math.min(24, interval.count),
+    completeCount: Math.min(GUIDE_DOM_ROW_CAP, interval.count),
   };
 }
 
@@ -539,7 +543,7 @@ function renderEpgGuideDomContent(
       ? density.rowGap
       : canReuse
       ? cachedMetrics.rowGapSize
-      : hasMeasurement ? Math.max(0, rowOuterSize - (measuredRow ?? rowOuterSize)) : 0;
+      : hasMeasurement ? Math.max(0, rowOuterSize - (measuredRow ?? rowOuterSize)) : density.rowGap;
     const gridTop = rowElement === null ? 0 : dom.epgGridElement.getBoundingClientRect().top;
     const rowStartOffset = densityChanged || layoutChanged
       ? rowStartOffsetForDensity
@@ -561,9 +565,13 @@ function renderEpgGuideDomContent(
       layoutChanged ||
       (!canReuse && !hasMeasurement)
     );
-    const focusedRowIndex = view.guide.selectedProgram === null
+    const focusedLocalIndex = view.guide.selectedProgram === null
       ? -1
-      : view.guide.rows.find((row) => row.id === view.guide.selectedProgram?.channelId)?.absoluteIndex ?? -1;
+      : view.guide.rows.findIndex((row) => row.id === view.guide.selectedProgram?.channelId);
+    const focusedRowIndex = focusedLocalIndex < 0
+      ? -1
+      : view.guide.rows[focusedLocalIndex]?.absoluteIndex ??
+        view.guide.channelWindow.offset + focusedLocalIndex;
     const completeRowInterval = projectGuideCompleteRowInterval(
       dom.epgGridElement.clientHeight || rowOuterSize * 6,
       rowStartOffset,

@@ -5,6 +5,7 @@ import type {
 } from './epg.js';
 import type { GuideLibraryFilterState } from '../contracts/guide.js';
 import {
+  GUIDE_DOM_ROW_CAP,
   GUIDE_ROW_BUFFER,
   projectGuideForegroundChannelLimit,
   type GuidePerformanceProfile,
@@ -101,7 +102,7 @@ export class GuideChannelWindow {
   }
 
   setVisible(start: number, completeVisibleRowCount: number, focusedIndex: number | null = this.#focusedIndex): void {
-    this.#visibleCount = clampInteger(completeVisibleRowCount, 1, 24);
+    this.#visibleCount = clampInteger(completeVisibleRowCount, 1, GUIDE_DOM_ROW_CAP);
     const maximumStart = Math.max(0, this.#total - this.#visibleCount);
     this.#visibleStart = clampInteger(start, 0, maximumStart);
     this.#focusedIndex = focusedIndex === null || this.#total === 0
@@ -168,7 +169,7 @@ export class GuideChannelWindow {
       epoch: identityChanged ? this.#epoch + 1 : this.#epoch,
       generation,
       channelOffset,
-      channelLimit: clampInteger(channelLimit, 1, 24),
+      channelLimit: clampInteger(channelLimit, 1, GUIDE_DOM_ROW_CAP),
     };
     if (!this.#isValidMergeShape(intent, presentation) ||
       !identityChanged && !this.#isLatestRange(intent)) return false;
@@ -285,14 +286,14 @@ export class GuideChannelWindow {
     const indexes = Array.from({ length: end - start }, (_, offset) => start + offset);
     const focusedIndex = this.#focusedIndex;
     if (focusedIndex !== null && this.#rows.has(focusedIndex) && !indexes.includes(focusedIndex)) {
-      if (indexes.length >= 24) {
+      if (indexes.length >= GUIDE_DOM_ROW_CAP) {
         const visibleEnd = this.#visibleStart + this.#visibleCount;
         const overscanVictim = indexes
           .filter((index) => index < this.#visibleStart || index >= visibleEnd)
           .sort((left, right) => Math.abs(right - focusedIndex) - Math.abs(left - focusedIndex))[0];
         if (overscanVictim !== undefined) indexes.splice(indexes.indexOf(overscanVictim), 1);
       }
-      if (indexes.length < 24) {
+      if (indexes.length < GUIDE_DOM_ROW_CAP) {
         indexes.push(focusedIndex);
         indexes.sort((left, right) => left - right);
       }
@@ -343,7 +344,7 @@ export class GuideChannelWindow {
       epoch: this.#epoch,
       generation,
       channelOffset,
-      channelLimit: clampInteger(channelLimit, 1, 24),
+      channelLimit: clampInteger(channelLimit, 1, GUIDE_DOM_ROW_CAP),
     };
   }
 
@@ -369,7 +370,7 @@ export class GuideChannelWindow {
   #projectionBounds(): { start: number; end: number } {
     if (this.#total === 0) return { start: 0, end: 0 };
     const visibleEnd = Math.min(this.#total, this.#visibleStart + this.#visibleCount);
-    const availableOverscan = Math.max(0, 24 - (visibleEnd - this.#visibleStart));
+    const availableOverscan = Math.max(0, GUIDE_DOM_ROW_CAP - (visibleEnd - this.#visibleStart));
     const leading = Math.min(GUIDE_CHANNEL_WINDOW_OVERSCAN, this.#visibleStart, Math.floor(availableOverscan / 2));
     const trailing = Math.min(
       GUIDE_CHANNEL_WINDOW_OVERSCAN,

@@ -114,8 +114,11 @@ export function projectGuideVirtualRange(input: GuideVirtualRangeInput): GuideVi
     candidates.add(input.focusedRowIndex);
     protectedRows.add(input.focusedRowIndex);
   }
-  const availableIndexes = new Set(input.rows.map((row, localIndex) => row.absoluteIndex ?? rowOffset + localIndex));
-  const rowIndexes = [...candidates].filter((index) => availableIndexes.has(index));
+  const rowsByAbsoluteIndex = new Map(input.rows.map((row, localIndex) => [
+    row.absoluteIndex ?? rowOffset + localIndex,
+    row,
+  ]));
+  const rowIndexes = [...candidates].filter((index) => rowsByAbsoluteIndex.has(index));
   while (rowIndexes.length > GUIDE_DOM_ROW_CAP) {
     const evictable = rowIndexes.filter((index) => !protectedRows.has(index));
     if (evictable.length === 0) break;
@@ -126,9 +129,7 @@ export function projectGuideVirtualRange(input: GuideVirtualRangeInput): GuideVi
   }
   rowIndexes.sort((left, right) => left - right);
 
-  const cells = rowIndexes.flatMap((rowIndex) => (input.rows.find(
-    (row, localIndex) => (row.absoluteIndex ?? rowOffset + localIndex) === rowIndex,
-  )?.programs ?? [])
+  const cells = rowIndexes.flatMap((rowIndex) => (rowsByAbsoluteIndex.get(rowIndex)?.programs ?? [])
     .filter((program) => program.startsAtMs < input.windowEndMs + GUIDE_DOM_TIME_BUFFER_MS
       && program.endsAtMs > input.windowStartMs - GUIDE_DOM_TIME_BUFFER_MS)
     .map((program) => ({
