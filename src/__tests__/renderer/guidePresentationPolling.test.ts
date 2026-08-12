@@ -250,6 +250,68 @@ test('merge-rejected pages are failed without cache promotion, replay, or idle w
   );
 });
 
+test('foreground scope mismatch settles a loading Guide through the rejection path', async () => {
+  let presentationState: 'ready' | 'loading' | 'error' = 'ready';
+  let applied = 0;
+  const failures: Array<{
+    source: string;
+    retainLastValid: boolean;
+    channelOffset: number | undefined;
+    channelLimit: number | undefined;
+  }> = [];
+  const mismatched = result('scope-mismatch');
+  if (!mismatched.ok) throw new Error('Expected successful Guide fixture.');
+  const controller = createGuidePresentationPolling({
+    guide: {
+      getPresentation: async () => ({
+        ...mismatched,
+        value: {
+          ...mismatched.value,
+          libraryFilter: {
+            ...mismatched.value.libraryFilter,
+            scopeToken: 'scope:stale',
+          },
+        },
+      }),
+      cancelPresentation: async () => undefined,
+      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+    },
+    host: host(),
+    getActiveRoute: () => 'guide',
+    getWindowStartMs: () => 0,
+    getGuideTimeRange: () => 'wide',
+    getGuidePerformanceProfile: () => 'reduced-resource',
+    getCacheIdentity: () => 'identity',
+    getCacheScopeToken: () => 'scope:current',
+    setLoading: () => { presentationState = 'loading'; },
+    applyPresentation: () => { applied += 1; return true; },
+    handleFailure: (source, _message, _generation, retainLastValid, requestWindow) => {
+      presentationState = 'error';
+      failures.push({
+        source,
+        retainLastValid,
+        channelOffset: requestWindow?.channelOffset,
+        channelLimit: requestWindow?.channelLimit,
+      });
+    },
+  });
+
+  await controller.refresh('scope-mismatch', {
+    showLoading: true,
+    channelOffset: 24,
+    channelLimit: 12,
+  });
+
+  assert.equal(presentationState, 'error');
+  assert.equal(applied, 0);
+  assert.deepEqual(failures, [{
+    source: 'scope-mismatch',
+    retainLastValid: false,
+    channelOffset: 24,
+    channelLimit: 12,
+  }]);
+});
+
 test('an invalid response for a new identity preserves the accepted owner and polling presentation', async () => {
   const owner = new GuideChannelWindow();
   let cacheIdentity = 'cache:stable';
@@ -418,7 +480,7 @@ test('Desktop preload profiles use exact row/time bounds and auto idle warming s
 });
 
 test('auto warm failures remain cache misses without applying foreground failure state', async () => {
-  for (const failureMode of ['rejection', 'error-result'] as const) {
+  for (const failureMode of ['rejection', 'error-result', 'scope-mismatch'] as const) {
     const idle: Array<() => void> = [];
     const failures: string[] = [];
     let requestCount = 0;
@@ -439,6 +501,20 @@ test('auto warm failures remain cache misses without applying foreground failure
             };
           }
           if (failureMode === 'rejection') throw new Error('private warm failure');
+          if (failureMode === 'scope-mismatch') {
+            const response = result(`${failureMode}-warm`);
+            if (!response.ok) throw new Error('Expected warm scope-mismatch fixture success.');
+            return {
+              ...response,
+              value: {
+                ...response.value,
+                libraryFilter: {
+                  ...response.value.libraryFilter,
+                  scopeToken: 'scope:stale',
+                },
+              },
+            };
+          }
           return {
             ok: false as const,
             requestId: `${failureMode}-warm`,

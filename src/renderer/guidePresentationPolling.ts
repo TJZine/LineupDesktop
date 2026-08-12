@@ -561,8 +561,12 @@ export function createGuidePresentationPolling(
           const nextScopeToken = normalized.libraryFilter?.scopeToken ?? null;
           const establishedScopeToken = options.getCacheScopeToken?.() ?? null;
           if (establishedScopeToken !== null && nextScopeToken !== establishedScopeToken) {
-            settlePagingFailure(intent);
-            markSettled('rejected', false);
+            if (!intent.warmOnly && !intent.playerRefresh) {
+              rejectPresentation(intent, markSettled);
+            } else {
+              settlePagingFailure(intent);
+              markSettled('rejected', false);
+            }
             return;
           }
           if (cachedScopeToken !== null && nextScopeToken !== cachedScopeToken) invalidatePresentationCache();
