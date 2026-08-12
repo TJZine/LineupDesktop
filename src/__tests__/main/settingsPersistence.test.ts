@@ -12,6 +12,7 @@ import {
 import {
   DesktopSettingsStore,
   DesktopSettingsStoreError,
+  type DesktopSettingsFileHandle,
   type DesktopSettingsFileSystem,
 } from '../../main/persistence/desktopSettingsStore.js';
 
@@ -105,29 +106,42 @@ test('settings persistence maps non-missing read failures to storage unavailable
   await assert.rejects(() => store.loadSnapshot(), hasCode('storage-unavailable'));
 });
 
-test('settings persistence requests private temp-file permissions before atomic publication', async () => {
+test('settings persistence synchronizes and closes its private temp handle before atomic publication', async () => {
   const settingsFilePath = path.join('app-data', 'settings.json');
   const operations: string[] = [];
-  let writtenFilePath: string | null = null;
-  let chmodFilePath: string | null = null;
+  let openedFilePath: string | null = null;
   let publishedSourcePath: string | null = null;
   let publishedDestinationPath: string | null = null;
-  let writeMode: number | null = null;
+  let openFlags: string | null = null;
+  let openMode: number | null = null;
   let chmodMode: number | null = null;
   const fileSystem: DesktopSettingsFileSystem = {
     readFile: async () => {
       throw Object.assign(new Error('missing'), { code: 'ENOENT' });
     },
-    mkdir: async () => undefined,
-    writeFile: async (filePath, _content, options) => {
-      operations.push('write');
-      writtenFilePath = filePath;
-      writeMode = options.mode;
+    mkdir: async () => {
+      operations.push('mkdir');
     },
-    chmod: async (filePath, mode) => {
-      operations.push('chmod');
-      chmodFilePath = filePath;
-      chmodMode = mode;
+    open: async (filePath, flags, mode) => {
+      operations.push('open');
+      openedFilePath = filePath;
+      openFlags = flags;
+      openMode = mode;
+      return {
+        writeFile: async () => {
+          operations.push('write');
+        },
+        chmod: async (nextMode) => {
+          operations.push('chmod');
+          chmodMode = nextMode;
+        },
+        sync: async () => {
+          operations.push('sync');
+        },
+        close: async () => {
+          operations.push('close');
+        },
+      };
     },
     rename: async (sourcePath, destinationPath) => {
       operations.push('rename');
@@ -140,13 +154,13 @@ test('settings persistence requests private temp-file permissions before atomic 
   const store = new DesktopSettingsStore({ settingsFilePath, fileSystem, processId: 7 });
   await store.replace(0, { ...DEFAULT_DESKTOP_SETTINGS_VALUES });
 
-  assert.deepEqual(operations, ['write', 'chmod', 'rename']);
-  assert.notEqual(writtenFilePath, settingsFilePath);
-  assert.equal(path.dirname(writtenFilePath ?? ''), path.dirname(settingsFilePath));
-  assert.equal(writeMode, 0o600);
-  assert.equal(chmodFilePath, writtenFilePath);
+  assert.deepEqual(operations, ['mkdir', 'open', 'write', 'chmod', 'sync', 'close', 'rename']);
+  assert.notEqual(openedFilePath, settingsFilePath);
+  assert.equal(path.dirname(openedFilePath ?? ''), path.dirname(settingsFilePath));
+  assert.equal(openFlags, 'wx');
+  assert.equal(openMode, 0o600);
   assert.equal(chmodMode, 0o600);
-  assert.equal(publishedSourcePath, writtenFilePath);
+  assert.equal(publishedSourcePath, openedFilePath);
   assert.equal(publishedDestinationPath, settingsFilePath);
 });
 
@@ -217,7 +231,7 @@ test('settings persistence serializes replacements and preserves authoritative b
   assert.equal((await second).revision, 3);
 });
 
-test('settings persistence cleans a partially created temp file when write rejects', async (context) => {
+test('settings persistence cleans its owned temp file when handle write rejects', async (context) => {
   const directory = await createSettingsWorkspace(context);
   const file = path.join(directory, 'settings.json');
   const baseStore = new DesktopSettingsStore({ settingsFilePath: file });
@@ -228,15 +242,15 @@ test('settings persistence cleans a partially created temp file when write rejec
     settingsFilePath: file,
     processId: 91,
     fileSystem: nodeFileSystem({
-      writeFile: async (tempFile, _content, options) => {
-        await fs.writeFile(tempFile, 'partial private bytes', options);
-        throw new Error('private partial write detail');
-      },
       unlink: async (tempFile) => {
         unlinked.push(tempFile);
         await fs.unlink(tempFile);
       },
-    }),
+    }, () => ({
+      writeFile: async () => {
+        throw new Error('private partial write detail');
+      },
+    })),
   });
   await assert.rejects(
     () => store.replace(1, { ...DEFAULT_DESKTOP_SETTINGS_VALUES, previewBadgesEnabled: false }),
@@ -256,12 +270,12 @@ test('settings persistence keeps cleanup failure secondary to a partial-write fa
   const store = new DesktopSettingsStore({
     settingsFilePath: file,
     fileSystem: nodeFileSystem({
-      writeFile: async (tempFile, _content, options) => {
-        await fs.writeFile(tempFile, 'partial private bytes', options);
+      unlink: async () => { throw new Error('private cleanup failure'); },
+    }, () => ({
+      writeFile: async () => {
         throw new Error('private primary failure');
       },
-      unlink: async () => { throw new Error('private cleanup failure'); },
-    }),
+    })),
   });
   await assert.rejects(
     () => store.replace(1, { ...DEFAULT_DESKTOP_SETTINGS_VALUES, setupReminderEnabled: false }),
@@ -270,24 +284,55 @@ test('settings persistence keeps cleanup failure secondary to a partial-write fa
   assert.equal(await fs.readFile(file, 'utf8'), oldBytes);
 });
 
-test('settings persistence preserves authoritative bytes across mkdir, write, and chmod failures', async (context) => {
-  for (const stage of ['mkdir', 'writeFile', 'chmod'] as const) {
+test('settings persistence preserves authoritative bytes across every pre-publication failure', async (context) => {
+  for (const stage of ['mkdir', 'open', 'writeFile', 'chmod', 'sync', 'close', 'rename'] as const) {
     const directory = await createSettingsWorkspace(context, `lineup-settings-${stage}-`);
     const file = path.join(directory, 'settings.json');
     const baseStore = new DesktopSettingsStore({ settingsFilePath: file });
     await baseStore.replace(0, { ...DEFAULT_DESKTOP_SETTINGS_VALUES });
     const oldBytes = await fs.readFile(file, 'utf8');
-    const overrides: Partial<DesktopSettingsFileSystem> = stage === 'mkdir'
+    const cleanupAttempts: string[] = [];
+    let closeAttempts = 0;
+    const fileSystemOverrides: Partial<DesktopSettingsFileSystem> = stage === 'mkdir'
       ? { mkdir: async () => { throw new Error('private mkdir detail'); } }
-      : stage === 'writeFile'
+      : stage === 'open'
+        ? { open: async () => { throw new Error('private open detail'); } }
+        : stage === 'rename'
+          ? { rename: async () => { throw new Error('private rename detail'); } }
+          : {};
+    const createHandleOverrides = (handle: DesktopSettingsFileHandle): Partial<DesktopSettingsFileHandle> => ({
+      ...(stage === 'writeFile'
         ? { writeFile: async () => { throw new Error('private write detail'); } }
-        : { chmod: async () => { throw new Error('private chmod detail'); } };
-    const store = new DesktopSettingsStore({ settingsFilePath: file, fileSystem: nodeFileSystem(overrides) });
+        : stage === 'chmod'
+          ? { chmod: async () => { throw new Error('private chmod detail'); } }
+          : stage === 'sync'
+            ? { sync: async () => { throw new Error('private sync detail'); } }
+            : {}),
+      close: async () => {
+        closeAttempts += 1;
+        await handle.close();
+        if (stage === 'close') throw new Error('private close detail');
+      },
+    });
+    const fileSystem = nodeFileSystem({
+      ...fileSystemOverrides,
+      unlink: async (tempFile) => {
+        cleanupAttempts.push(tempFile);
+        try {
+          await fs.unlink(tempFile);
+        } catch (error: unknown) {
+          if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+        }
+      },
+    }, createHandleOverrides);
+    const store = new DesktopSettingsStore({ settingsFilePath: file, fileSystem });
     await assert.rejects(
       () => store.replace(1, { ...DEFAULT_DESKTOP_SETTINGS_VALUES, guideTimeRange: 'wide' }),
       hasCode('operation-failed'),
     );
     assert.equal(await fs.readFile(file, 'utf8'), oldBytes);
+    assert.equal(closeAttempts, stage === 'mkdir' || stage === 'open' ? 0 : 1);
+    assert.equal(cleanupAttempts.length, stage === 'mkdir' || stage === 'open' ? 0 : 1);
   }
 });
 
@@ -307,12 +352,30 @@ function hasCode(code: DesktopSettingsStoreError['code']) {
     !error.message.includes('private');
 }
 
-function nodeFileSystem(overrides: Partial<DesktopSettingsFileSystem>): DesktopSettingsFileSystem {
+function nodeFileSystem(
+  overrides: Partial<DesktopSettingsFileSystem>,
+  createHandleOverrides: (
+    handle: DesktopSettingsFileHandle,
+  ) => Partial<DesktopSettingsFileHandle> = () => ({}),
+): DesktopSettingsFileSystem {
   return {
     readFile: (file, encoding) => fs.readFile(file, encoding),
     mkdir: (directory, options) => fs.mkdir(directory, options),
-    writeFile: (file, content, options) => fs.writeFile(file, content, options),
-    chmod: (file, mode) => fs.chmod(file, mode),
+    open: async (file, flags, mode) => {
+      const handle = await fs.open(file, flags, mode);
+      const settingsHandle: DesktopSettingsFileHandle = {
+        writeFile: async (content, encoding) => {
+          await handle.writeFile(content, { encoding });
+        },
+        chmod: (nextMode) => handle.chmod(nextMode),
+        sync: () => handle.sync(),
+        close: () => handle.close(),
+      };
+      return {
+        ...settingsHandle,
+        ...createHandleOverrides(settingsHandle),
+      };
+    },
     rename: (source, destination) => fs.rename(source, destination),
     unlink: (file) => fs.unlink(file),
     ...overrides,

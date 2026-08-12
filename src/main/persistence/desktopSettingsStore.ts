@@ -14,10 +14,16 @@ import {
 export interface DesktopSettingsFileSystem {
   readFile(filePath: string, encoding: 'utf8'): Promise<string>;
   mkdir(directoryPath: string, options: { recursive: true }): Promise<unknown>;
-  writeFile(filePath: string, content: string, options: { encoding: 'utf8'; mode: number }): Promise<void>;
-  chmod(filePath: string, mode: number): Promise<void>;
+  open(filePath: string, flags: 'wx', mode: number): Promise<DesktopSettingsFileHandle>;
   rename(sourcePath: string, destinationPath: string): Promise<void>;
   unlink(filePath: string): Promise<void>;
+}
+
+export interface DesktopSettingsFileHandle {
+  writeFile(content: string, encoding: 'utf8'): Promise<void>;
+  chmod(mode: number): Promise<void>;
+  sync(): Promise<void>;
+  close(): Promise<void>;
 }
 
 export class DesktopSettingsStoreError extends Error {
@@ -45,8 +51,17 @@ interface StoredDesktopSettingsRecord {
 const nodeFileSystem: DesktopSettingsFileSystem = {
   readFile: (filePath, encoding) => fs.readFile(filePath, encoding),
   mkdir: (directoryPath, options) => fs.mkdir(directoryPath, options),
-  writeFile: (filePath, content, options) => fs.writeFile(filePath, content, options),
-  chmod: (filePath, mode) => fs.chmod(filePath, mode),
+  open: async (filePath, flags, mode) => {
+    const handle = await fs.open(filePath, flags, mode);
+    return {
+      writeFile: async (content, encoding) => {
+        await handle.writeFile(content, { encoding });
+      },
+      chmod: (nextMode) => handle.chmod(nextMode),
+      sync: () => handle.sync(),
+      close: () => handle.close(),
+    };
+  },
   rename: (sourcePath, destinationPath) => fs.rename(sourcePath, destinationPath),
   unlink: (filePath) => fs.unlink(filePath),
 };
@@ -133,19 +148,38 @@ export class DesktopSettingsStore {
   private async writeRecord(record: StoredDesktopSettingsRecord): Promise<void> {
     const parentDirectory = path.dirname(this.settingsFilePath);
     const tempFilePath = `${this.settingsFilePath}.${String(this.processId)}.${String(++this.tempCounter)}.tmp`;
-    let tempWriteStarted = false;
+    let ownsTempFile = false;
     try {
       await this.fileSystem.mkdir(parentDirectory, { recursive: true });
-      tempWriteStarted = true;
-      await this.fileSystem.writeFile(
-        tempFilePath,
-        `${JSON.stringify(record)}\n`,
-        { encoding: 'utf8', mode: 0o600 },
-      );
-      await this.fileSystem.chmod(tempFilePath, 0o600);
+      const handle = await this.fileSystem.open(tempFilePath, 'wx', 0o600);
+      ownsTempFile = true;
+
+      let handleStageFailed = false;
+      let handleStageError: unknown;
+      try {
+        await handle.writeFile(`${JSON.stringify(record)}\n`, 'utf8');
+        await handle.chmod(0o600);
+        await handle.sync();
+      } catch (error: unknown) {
+        handleStageFailed = true;
+        handleStageError = error;
+      }
+      try {
+        await handle.close();
+      } catch (error: unknown) {
+        if (!handleStageFailed) {
+          handleStageFailed = true;
+          handleStageError = error;
+        }
+      }
+      if (handleStageFailed) {
+        throw handleStageError;
+      }
+
       await this.fileSystem.rename(tempFilePath, this.settingsFilePath);
+      ownsTempFile = false;
     } catch {
-      if (tempWriteStarted) {
+      if (ownsTempFile) {
         try {
           await this.fileSystem.unlink(tempFilePath);
         } catch {

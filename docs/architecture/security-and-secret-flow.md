@@ -64,10 +64,17 @@ version-specific migration, legacy reader, alias, or compatibility writer.
 Missing records receive current defaults; every malformed or non-version-3
 record is exposed as the same revision-zero corrupt snapshot without rewriting
 its bytes until an exact revision-zero replacement publishes one valid version-3
-record. Writes use a same-directory mode-0600 temporary file and atomic rename.
-The renderer holds only ephemeral renderer-safe Settings values, capability
-projection, revision, and fixed status/error state and has no filesystem,
-browser-storage, migration, or fallback-store access.
+record. Writes create an exclusive same-directory mode-0600 temporary file
+through one owned handle, write and synchronize the complete record, require a
+successful close, and then publish through atomic rename. Failures before rename
+preserve the authoritative destination and attempt best-effort owned-temp
+cleanup without replacing the fixed safe operation error. This is the strongest
+current portable Node-level publication policy in this owner; it does not make
+Windows rename power-loss durable because the seam has neither a portable
+directory-sync guarantee nor Win32 write-through behavior. The renderer holds
+only ephemeral renderer-safe Settings values, capability projection, revision,
+and fixed status/error state and has no filesystem, browser-storage, migration,
+or fallback-store access.
 
 Preload exposes exactly `settings.getSnapshot`, `settings.replace`, and
 `settings.getAudioOutputs` on the existing `window.lineupDesktop` namespace.
