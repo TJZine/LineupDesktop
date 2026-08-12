@@ -71,11 +71,18 @@ export function createNativePlayerPresentationController(
     active = request;
     void options.updatePresentation(request).then((result) => {
       if (active !== request) return;
-      if (result.ok && result.documentEpoch > 0) documentEpoch = result.documentEpoch;
+      const negotiatedEpoch = result.ok && request.documentEpoch === null &&
+        isPositiveSafeInteger(result.documentEpoch)
+        ? result.documentEpoch
+        : null;
+      const resultEpochMatches = result.ok && (request.documentEpoch === null
+        ? negotiatedEpoch !== null
+        : result.documentEpoch === request.documentEpoch);
+      if (negotiatedEpoch !== null) documentEpoch = negotiatedEpoch;
       if (!disposed) {
         const current = describeIntent(options.getIntent());
         const stillCurrent = samePresentation(current, request) &&
-          result.revision === request.revision && result.documentEpoch === request.documentEpoch &&
+          result.revision === request.revision && resultEpochMatches &&
           latest === null && revision === request.revision;
         if (result.ok && result.status === 'applied' && stillCurrent) {
           applied = request;
@@ -85,7 +92,7 @@ export function createNativePlayerPresentationController(
           closeAperture();
           if (result.ok && result.status === 'hidden' && stillCurrent) applied = request;
         }
-        if (latest === null && result.ok && result.status === 'deferred' &&
+        if (latest === null && result.ok && result.status === 'deferred' && resultEpochMatches &&
           samePresentation(current, request) && revision === request.revision) {
           latest = createRequest(current);
         }
@@ -186,6 +193,10 @@ function measureRect(
 }
 
 function clamp(value: number): number { return Math.min(1, Math.max(0, value)); }
+
+function isPositiveSafeInteger(value: number): boolean {
+  return Number.isSafeInteger(value) && value > 0;
+}
 
 function samePresentation(
   left: Pick<PlayerPresentationRequest, 'requestId' | 'mode' | 'rect'>,

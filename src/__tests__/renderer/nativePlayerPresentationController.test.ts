@@ -4,6 +4,96 @@ import { createNativePlayerPresentationController } from '../../renderer/player/
 import type { PlayerPresentationRequest, PlayerPresentationResult } from '../../contracts/player.js';
 import type { NativePlayerPresentationIntent } from '../../renderer/player/nativePlayerPresentationController.js';
 
+test('renderer presentation controller accepts an initial applied acknowledgement with a positive epoch', async () => {
+  const root = fakeElement();
+  const element = fakeElement();
+  const requests: PlayerPresentationRequest[] = [];
+  let intent: NativePlayerPresentationIntent = { mode: 'player-full', requestId: 'media-1' };
+  const controller = createNativePlayerPresentationController({
+    element,
+    compositionElement: root,
+    updatePresentation: async (request) => {
+      requests.push(request);
+      return { ok: true, status: 'applied', documentEpoch: 3, revision: request.revision };
+    },
+    getIntent: () => intent,
+    viewport: () => ({ width: 1000, height: 700 }),
+  });
+
+  controller.reconcile();
+  await flushPromises();
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.documentEpoch, null);
+  assert.equal(root.dataset.nativePresentationAperture, 'open');
+
+  intent = { mode: 'player-full', requestId: 'media-2' };
+  controller.reconcile();
+  assert.equal(requests[1]?.documentEpoch, 3);
+});
+
+test('renderer presentation controller accepts an initial hidden acknowledgement with a positive epoch', async () => {
+  const root = fakeElement();
+  const element = fakeElement();
+  const requests: PlayerPresentationRequest[] = [];
+  let intent: NativePlayerPresentationIntent = { mode: 'hidden', requestId: null };
+  const controller = createNativePlayerPresentationController({
+    element,
+    compositionElement: root,
+    updatePresentation: async (request) => {
+      requests.push(request);
+      return {
+        ok: true,
+        status: request.mode === 'hidden' ? 'hidden' : 'applied',
+        documentEpoch: 4,
+        revision: request.revision,
+      };
+    },
+    getIntent: () => intent,
+    viewport: () => ({ width: 1000, height: 700 }),
+  });
+
+  controller.reconcile();
+  await flushPromises();
+
+  assert.equal(requests.length, 1);
+  assert.equal(root.dataset.nativePresentationAperture, 'opaque');
+
+  controller.reconcile();
+  assert.equal(requests.length, 1);
+
+  intent = { mode: 'player-full', requestId: 'media-1' };
+  controller.reconcile();
+  assert.equal(requests[1]?.documentEpoch, 4);
+});
+
+test('renderer presentation controller rejects invalid initial epochs', async () => {
+  for (const invalidEpoch of [0, -1, 1.5, Number.NaN]) {
+    const root = fakeElement();
+    const element = fakeElement();
+    const requests: PlayerPresentationRequest[] = [];
+    let intent: NativePlayerPresentationIntent = { mode: 'player-full', requestId: 'media-1' };
+    const controller = createNativePlayerPresentationController({
+      element,
+      compositionElement: root,
+      updatePresentation: async (request) => {
+        requests.push(request);
+        return { ok: true, status: 'applied', documentEpoch: invalidEpoch, revision: request.revision };
+      },
+      getIntent: () => intent,
+      viewport: () => ({ width: 1000, height: 700 }),
+    });
+
+    controller.reconcile();
+    await flushPromises();
+    assert.equal(root.dataset.nativePresentationAperture, 'opaque');
+
+    intent = { mode: 'player-full', requestId: 'media-2' };
+    controller.reconcile();
+    assert.equal(requests[1]?.documentEpoch, null);
+  }
+});
+
 test('renderer presentation controller opens only after the exact current applied acknowledgement', async () => {
   const element = fakeElement();
   const calls: PlayerPresentationRequest[] = [];
@@ -45,6 +135,36 @@ test('renderer presentation controller retains one active and one latest request
   resolvers[0]?.({ ok: true, status: 'deferred', documentEpoch: 2, revision: firstRequest.revision });
   await Promise.resolve();
   assert.equal(requests.length, 2);
+  assert.equal(requests[1]?.documentEpoch, 2);
+});
+
+test('renderer presentation controller rejects a later mismatched epoch without replacing the established epoch', async () => {
+  const root = fakeElement();
+  const element = fakeElement();
+  const requests: PlayerPresentationRequest[] = [];
+  let intent: NativePlayerPresentationIntent = { mode: 'player-full', requestId: 'media-1' };
+  const controller = createNativePlayerPresentationController({
+    element,
+    compositionElement: root,
+    updatePresentation: async (request) => {
+      requests.push(request);
+      if (request.documentEpoch === null) {
+        return { ok: true, status: 'deferred', documentEpoch: 5, revision: request.revision };
+      }
+      return { ok: true, status: 'applied', documentEpoch: 6, revision: request.revision };
+    },
+    getIntent: () => intent,
+    viewport: () => ({ width: 1000, height: 700 }),
+  });
+
+  controller.reconcile();
+  await flushPromises();
+  assert.equal(requests.length, 2);
+  assert.equal(root.dataset.nativePresentationAperture, 'opaque');
+
+  intent = { mode: 'player-full', requestId: 'media-2' };
+  controller.reconcile();
+  assert.equal(requests[2]?.documentEpoch, 5);
 });
 
 test('renderer presentation controller keeps an applied aperture open across unchanged reconciliations', async () => {
