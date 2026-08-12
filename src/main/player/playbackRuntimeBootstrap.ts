@@ -300,17 +300,17 @@ function getDevelopmentCapabilityProfile(): DesktopStreamCapabilityProfile {
 
 export function getProductionCapabilityProfile(): DesktopStreamCapabilityProfile {
   return {
-    id: 'windows-native-production-conservative',
-    directPlayContainers: ['mp4'],
-    directPlayVideoCodecs: ['h264'],
-    directPlayAudioCodecs: ['aac'],
-    subtitleDeliveryModes: ['none'],
+    id: 'windows-native-production-libmpv',
+    directPlayContainers: ['*'],
+    directPlayVideoCodecs: ['*'],
+    directPlayAudioCodecs: ['*'],
+    subtitleDeliveryModes: ['embedded', 'none'],
     headerAuthSetup: 'supported',
     seek: 'supported',
-    audioTrackSwitching: 'unsupported',
-    subtitleTrackSwitching: 'unsupported',
-    hdr: 'unsupported',
-    dolbyVision: 'unsupported',
+    audioTrackSwitching: 'supported',
+    subtitleTrackSwitching: 'supported',
+    hdr: 'supported',
+    dolbyVision: 'supported',
     directStream: {
       containerRemux: 'unsupported',
       audioTranscode: 'unsupported',

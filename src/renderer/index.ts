@@ -426,8 +426,12 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
   getWindowStartMs: () => workflowState.epg.windowStartMs,
   getGuideTimeRange: () => workflowState.settingsDraft.guideTimeRange,
   getGuidePerformanceProfile: () => workflowState.settingsDraft.guidePerformanceProfile,
-  getCacheScopeToken: () => workflowState.guidePresentation.libraryFilter?.scopeToken ?? null,
-  getCacheIdentity: () => guideWindowIdentity(workflowState.guidePresentation),
+  getCacheScopeToken: () => guideChannelWindow.total === 0
+    ? null
+    : workflowState.guidePresentation.libraryFilter?.scopeToken ?? null,
+  getCacheIdentity: () => guideChannelWindow.total === 0
+    ? null
+    : guideWindowIdentity(workflowState.guidePresentation),
   getChannelOffset: () => guideChannelWindow.visibleStart,
   getCompleteVisibleRowCount: () => guideChannelWindow.completeVisibleRowCount,
   requestWindowState: (state, request) => {
@@ -461,6 +465,7 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
     requestWindow,
     source,
   ) => {
+    const firstReadySettlement = workflowState.epg.presentationState !== 'ready';
     const identity = guideWindowIdentity(normalizedGuidePresentation) ?? 'guide-unscoped';
     const viewport = readGuideViewportRows(dom.epgGridElement);
     const requestedWindow = requestWindow ?? {
@@ -498,7 +503,17 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
     if (settlement.pendingFocusId !== undefined) pendingGuideFocusId = settlement.pendingFocusId;
     guidePerformanceMarks.stateAccepted(generation, 'ready', pagingTargetGlobalIndex ?? -1);
     const guideScoped = renderGuidePresentationUpdate(source);
-    if (!guideScoped) restorePendingGuideFocus();
+    const selectedFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId;
+    if (
+      firstReadySettlement &&
+      focusState.activeId?.startsWith('guide-program-') !== true &&
+      selectedFocusId !== undefined
+    ) {
+      restoreFocusTarget(selectedFocusId);
+    } else if (!guideScoped) {
+      restorePendingGuideFocus();
+    }
+    if (firstReadySettlement) scheduleGuideVirtualReconcile();
     return true;
   },
   applyPlayerPresentation: (normalizedGuidePresentation, generation, effectiveStartTimeMs) => {
@@ -732,7 +747,7 @@ function activateRoute(route: AppRouteId, enterChannelSetup = true): boolean {
   if (previousRoute === 'guide' && workflowState.routeState.activeRoute !== 'guide') {
     guideTuneController.stop();
     guideFilterController?.cancel();
-    pendingGuideFocusId = null;
+    retainGuideProgramFocusIntent();
     guideChannelWindow.clear();
   }
   initializedGuidePresentationPolling.reconcile(previousRoute, workflowState.routeState.activeRoute);
@@ -774,7 +789,7 @@ async function applyRouteAction(action: RouteWorkflowActionId): Promise<void> {
     if (previousRoute === 'guide' && nextRoute !== 'guide') {
       guideTuneController.stop();
       guideFilterController?.cancel();
-      pendingGuideFocusId = null;
+      retainGuideProgramFocusIntent();
     }
     initializedGuidePresentationPolling.reconcile(previousRoute, nextRoute);
     focusState = focusRegistry.focusRoute(focusState, nextRoute).state;

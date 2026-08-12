@@ -1,9 +1,10 @@
 # Playback Architecture
 
 Lineup Desktop runtime playback is code complete and reviewed, with
-Windows/manual product proof still pending. WS2 now closes the current
-platform-neutral playback implementation gate without promoting the
-conservative production profile. WS3 now adds locally verified Settings
+Windows/manual product proof still pending. The current production profile
+admits nonempty container/video/audio facts to direct-play-first libmpv attempts,
+supports embedded subtitle and audio-track selection, and enables automatic
+hardware decoding with libmpv's inherent software fallback. WS3 adds locally verified Settings
 preference/control contributions and request-bound Settings pause/resume
 without promoting that profile. WS4 adds locally verified guarded stop/
 relative-seek input, foreground media-command contribution, and guarded sleep-
@@ -378,11 +379,12 @@ context, and helper command vocabulary are unchanged.
 
 `PB-22`–`PB-24` remain WS2-owned/open. WS3 has supplied their preference and
 control contribution, but `WS3-PROOF-02` and the separate
-`WS2-POST-VALIDATION-01` native/live obligations remain open. MP4/H.264/AAC
-Direct Play remains the only supported production media path; DTS, subtitle
-delivery/switching, HDR/Dolby Vision, Direct Stream, and transcode remain
-unsupported or unproven until later reviewed evidence changes the capability
-provider.
+`WS2-POST-VALIDATION-01` native/live obligations remain open. Production now
+admits direct-play-first libmpv attempts across nonempty container and codec
+facts, embedded subtitles, and audio/subtitle track switching. Automatic
+hardware decoding retains libmpv's software fallback. This is not proof of HDR
+or Dolby Vision monitor output or receiver passthrough; Direct Stream/remux and
+all transcode paths remain disabled pending implementation.
 
 ## WS4 Guarded Input And Sleep Contributions To Playback
 
@@ -411,10 +413,10 @@ failure is diagnostic-only, and no outcome retries the pause. The timer remains
 session-only and adds no main timing, persistence, power, or lifecycle owner.
 
 Final local proof and full verification pass only the platform-neutral input/
-overlay implementation gate. MP4/H.264/AAC Direct Play remains the sole
-supported production media path; Direct Stream, transcode, subtitles, DTS,
-track switching, HDR/Dolby Vision, and wider seek/native claims remain
-unsupported or unproven. `PB-22`–`PB-24` remain WS2-owned/open,
+overlay implementation gate. Production uses direct-play-first libmpv admission
+with embedded track switching and automatic hardware decoding plus software
+fallback. Direct Stream and transcode remain disabled, and no HDR/Dolby Vision
+monitor-output or receiver-passthrough proof is claimed. `PB-22`–`PB-24` remain WS2-owned/open,
 `WS2-POST-VALIDATION-01` and WS3 proof remain separate, `UI-47` remains partial,
 and real physical Windows command plus production-native sleep/overlay proof is
 `WS4-PROOF-01`/`WS4-PROOF-03`. No upstream source was copied or adapted.

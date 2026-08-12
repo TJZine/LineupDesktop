@@ -22,6 +22,19 @@ function getElectronApp(): { getAppPath(): string } | null {
   }
 }
 
+export function resolveLocalProductionHelperPath(appPath: string): string {
+  return path.join(
+    path.resolve(appPath, '..', '..'),
+    'src',
+    'native-helper',
+    'Lineup.NativePlayerHost',
+    'bin',
+    'Release',
+    'net8.0',
+    'Lineup.NativePlayerHost.exe',
+  );
+}
+
 export function getProductionHelperPath(): string | null {
   if (process.platform !== 'win32') {
     return null;
@@ -36,39 +49,15 @@ export function getProductionHelperPath(): string | null {
     }
   }
 
-  // 2. Local dev location
+  // 2. Local production-build location
   try {
     const electronApp = getElectronApp();
-    if (!electronApp) {
+    if (electronApp === null) {
       return null;
     }
-    const appPath = electronApp.getAppPath();
-    const devPath = path.join(
-      appPath,
-      'src',
-      'native-helper',
-      'Lineup.NativePlayerHost',
-      'bin',
-      'Release',
-      'net8.0',
-      'Lineup.NativePlayerHost.exe',
-    );
-    if (fs.existsSync(devPath)) {
-      return devPath;
-    }
-
-    const devDebugPath = path.join(
-      appPath,
-      'src',
-      'native-helper',
-      'Lineup.NativePlayerHost',
-      'bin',
-      'Debug',
-      'net8.0',
-      'Lineup.NativePlayerHost.exe',
-    );
-    if (fs.existsSync(devDebugPath)) {
-      return devDebugPath;
+    const localReleasePath = resolveLocalProductionHelperPath(electronApp.getAppPath());
+    if (fs.existsSync(localReleasePath)) {
+      return localReleasePath;
     }
   } catch {
     // app.getAppPath() might throw in test environments before app is ready

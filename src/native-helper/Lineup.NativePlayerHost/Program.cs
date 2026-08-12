@@ -59,6 +59,7 @@ namespace Lineup.NativePlayerHost
         private static RenderSurface? renderSurface;
         private static Thread? eventThread;
         private static IntPtr renderContext = IntPtr.Zero;
+        private static readonly MpvOpenGlGetProcAddressDelegate OpenGlGetProcAddress = GetOpenGlProcAddress;
         private static readonly BlockingCollection<PresentationWork> PresentationQueue = new BlockingCollection<PresentationWork>(16);
         private static Thread? presentationThread;
         private static long latestPresentationEpoch;
@@ -735,6 +736,7 @@ namespace Lineup.NativePlayerHost
                 EnsureOptionSet(mpvContext, "msg-level", "all=no");
                 EnsureOptionSet(mpvContext, "vo", "libmpv");
                 EnsureOptionSet(mpvContext, "osc", "no");
+                EnsureOptionSet(mpvContext, "hwdec", "auto");
                 if (!string.IsNullOrEmpty(msg.setup?.audioOutputNativeKey))
                 {
                     EnsureOptionSet(mpvContext, "audio-device", msg.setup.audioOutputNativeKey);
@@ -1111,7 +1113,7 @@ namespace Lineup.NativePlayerHost
             IntPtr apiType = Marshal.StringToHGlobalAnsi("opengl");
             MpvOpenGlInitParams initParams = new MpvOpenGlInitParams
             {
-                get_proc_address = Marshal.GetFunctionPointerForDelegate((MpvOpenGlGetProcAddressDelegate)GetOpenGlProcAddress),
+                get_proc_address = Marshal.GetFunctionPointerForDelegate(OpenGlGetProcAddress),
                 get_proc_address_ctx = IntPtr.Zero
             };
             IntPtr initParamsPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MpvOpenGlInitParams>());

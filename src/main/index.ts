@@ -437,6 +437,20 @@ async function startApplication(): Promise<void> {
       isAuthorizedEvent,
       createRequestId,
     });
+    if (shellMode === 'production') {
+      try {
+        const restored = await plexComposition.runtime.restoreSelectedServer(
+          createRequestId('plex-startup-restore-selected-server'),
+        );
+        if (restored.ok && restored.value.selection.kind === 'selected') {
+          await plexComposition.runtime.listLibrarySections(
+            createRequestId('plex-startup-list-library-sections'),
+          );
+        }
+      } catch (error: unknown) {
+        reportMainProcessDiagnostic('Plex startup restoration failed', error);
+      }
+    }
     void channelComposition.guideRuntime.initializeActiveChannel()
       .catch((error) => {
         reportMainProcessDiagnostic('Guide runtime active channel initialization failed', error);

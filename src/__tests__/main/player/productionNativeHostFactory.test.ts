@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import process from 'node:process';
 import {
   createProductionNativeHostFactory,
   getProductionHelperPath,
+  resolveLocalProductionHelperPath,
 } from '../../../main/player/productionNativeHostFactory.js';
 import { NativePlayerHostProcess } from '../../../main/player/nativePlayerHostProcess.js';
 
@@ -29,4 +31,22 @@ test('productionNativeHostFactory creates NativePlayerHostProcess when helper is
       assert.ok(host instanceof NativePlayerHostProcess);
     }
   }
+});
+
+test('production helper path resolves a local dist main app path to the repo Release helper only', () => {
+  const appPath = path.resolve('repo', 'dist', 'main');
+  const expected = path.join(
+    path.resolve(appPath, '..', '..'),
+    'src',
+    'native-helper',
+    'Lineup.NativePlayerHost',
+    'bin',
+    'Release',
+    'net8.0',
+    'Lineup.NativePlayerHost.exe',
+  );
+  const resolved = resolveLocalProductionHelperPath(appPath);
+
+  assert.equal(resolved, expected);
+  assert.equal(resolved.includes(`${path.sep}Debug${path.sep}`), false);
 });

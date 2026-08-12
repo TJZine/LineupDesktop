@@ -627,7 +627,7 @@ function mapSubtitleDelivery(stream: PlexStream): PlayerSubtitleDeliveryMode {
 
 function mapDynamicRange(stream: PlexStream | undefined): DesktopStreamDynamicRange {
   if (stream === undefined) {
-    return 'unknown';
+    return 'sdr';
   }
   if (stream.doviPresent === true || stream.doviProfile !== undefined) {
     return 'dolby-vision';
@@ -644,8 +644,11 @@ function mapDynamicRange(stream: PlexStream | undefined): DesktopStreamDynamicRa
   if (facts.some((value) => value.includes('hdr') || value.includes('bt2020') || value.includes('smpte'))) {
     return 'hdr10';
   }
-  if (facts.length === 0) {
+  if (facts.includes('unknown')) {
     return 'unknown';
+  }
+  if (facts.length === 0) {
+    return 'sdr';
   }
   return 'sdr';
 }

@@ -45,6 +45,9 @@ test('main startup repairs channels before readiness and tears Plex down on late
   const ready = source.indexOf('app.whenReady()');
   const window = source.indexOf('createShellWindowController(');
   const channelRegistration = source.indexOf('registerChannelCompositionIpc(');
+  const restore = source.indexOf("createRequestId('plex-startup-restore-selected-server')");
+  const guideInitialization = source.indexOf('guideRuntime.initializeActiveChannel()');
+  const rendererLoad = source.indexOf('shellWindow.loadURL(LINEUP_SHELL_URL)');
   assert.equal(
     lock < lifecycle &&
       lifecycle < bootstrap &&
@@ -52,8 +55,15 @@ test('main startup repairs channels before readiness and tears Plex down on late
       plex < repair &&
       repair < ready &&
       ready < window &&
-      window < channelRegistration,
+      window < channelRegistration &&
+      channelRegistration < restore &&
+      restore < guideInitialization &&
+      guideInitialization < rendererLoad,
     true,
+  );
+  assert.match(
+    source,
+    /if \(shellMode === 'production'\)[\s\S]*?restoreSelectedServer\([\s\S]*?if \(restored\.ok && restored\.value\.selection\.kind === 'selected'\) \{[\s\S]*?listLibrarySections\(/u,
   );
   assert.equal(source.slice(0, lifecycle).includes("app.on('window-all-closed'"), false);
   assert.equal(source.slice(0, lifecycle).includes("app.on('before-quit'"), false);

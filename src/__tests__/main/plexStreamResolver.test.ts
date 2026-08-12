@@ -712,6 +712,32 @@ test('plex media detail candidate mapping recognizes HLG transfer metadata', () 
   assert.equal(candidate?.video.dynamicRange, 'hlg');
 });
 
+test('plex media detail candidate mapping treats absent dynamic-range facts as SDR', () => {
+  const mediaDetail = createMediaDetail();
+  const videoStream = mediaDetail.media[0]?.parts[0]?.streams.find((stream) => stream.streamType === 1);
+  assert.ok(videoStream);
+  delete videoStream.dynamicRange;
+  delete videoStream.hdr;
+  delete videoStream.colorTrc;
+  delete videoStream.colorSpace;
+  delete videoStream.colorPrimaries;
+
+  const [candidate] = mapPlexMediaDetailsToDesktopStreamCandidates(mediaDetail, OPAQUE_MEDIA_ID);
+
+  assert.equal(candidate?.video.dynamicRange, 'sdr');
+});
+
+test('plex media detail candidate mapping preserves an explicit unknown dynamic range', () => {
+  const mediaDetail = createMediaDetail();
+  const videoStream = mediaDetail.media[0]?.parts[0]?.streams.find((stream) => stream.streamType === 1);
+  assert.ok(videoStream);
+  videoStream.dynamicRange = 'unknown';
+
+  const [candidate] = mapPlexMediaDetailsToDesktopStreamCandidates(mediaDetail, OPAQUE_MEDIA_ID);
+
+  assert.equal(candidate?.video.dynamicRange, 'unknown');
+});
+
 test('plex media detail candidate mapping projects rich track facts without private ids', () => {
   const [candidate] = mapPlexMediaDetailsToDesktopStreamCandidates(createRichMediaDetail(), OPAQUE_MEDIA_ID);
 

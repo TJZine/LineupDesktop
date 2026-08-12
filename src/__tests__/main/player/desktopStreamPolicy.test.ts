@@ -129,6 +129,72 @@ test('desktop stream policy chooses direct play for fully supported facts', () =
   assert.equal(decision.summary.videoCodec, 'h264');
 });
 
+test('desktop stream policy wildcard capabilities admit nonempty direct-play facts', () => {
+  const decision = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.directPlay,
+    capabilityProfile: {
+      ...desktopStreamPolicyInputs.directPlay.capabilityProfile,
+      directPlayContainers: ['*'],
+      directPlayVideoCodecs: ['*'],
+      directPlayAudioCodecs: ['*'],
+    },
+  });
+
+  assert.equal(decision.kind, 'direct-play');
+  assert.deepEqual(decision.reasonCodes, ['direct-play-supported']);
+
+  const candidate = desktopStreamPolicyInputs.directPlay.candidates[0]!;
+  const blankCodec = decideDesktopStreamPolicy({
+    ...desktopStreamPolicyInputs.directPlay,
+    capabilityProfile: {
+      ...desktopStreamPolicyInputs.directPlay.capabilityProfile,
+      directPlayContainers: ['*'],
+      directPlayVideoCodecs: ['*'],
+      directPlayAudioCodecs: ['*'],
+    },
+    candidates: [{
+      ...candidate,
+      video: { ...candidate.video, codec: '   ' },
+    }],
+  });
+  assert.notEqual(blankCodec.kind, 'direct-play');
+});
+
+test('desktop stream policy disables incompatible subtitles when conversion is unavailable', () => {
+  const candidate = desktopStreamPolicyInputs.directPlay.candidates[0]!;
+  const incompatibleSubtitle = {
+    ...candidate.subtitleTracks[0]!,
+    id: 'subtitle-sidecar-incompatible',
+    delivery: 'sidecar' as const,
+    selected: true,
+  };
+  const capabilityProfile = {
+    ...desktopStreamPolicyInputs.directPlay.capabilityProfile,
+    subtitleDeliveryModes: ['embedded', 'none'] as const,
+    directStream: {
+      ...desktopStreamPolicyInputs.directPlay.capabilityProfile.directStream,
+      subtitleConversion: 'unsupported' as const,
+    },
+    transcode: {
+      ...desktopStreamPolicyInputs.directPlay.capabilityProfile.transcode,
+      subtitles: 'unsupported' as const,
+    },
+  };
+
+  for (const preferredSubtitleTrackId of [undefined, incompatibleSubtitle.id]) {
+    const decision = decideDesktopStreamPolicy({
+      ...desktopStreamPolicyInputs.directPlay,
+      capabilityProfile,
+      candidates: [{ ...candidate, subtitleTracks: [incompatibleSubtitle] }],
+      preferredSubtitleTrackId,
+    });
+    assert.equal(decision.kind, 'direct-play');
+    assert.equal(decision.selectedTrackIds.subtitle, null);
+    assert.equal(decision.reasonCodes.includes('no-subtitle-compatible'), true);
+    assert.equal(decision.reasonCodes.includes('no-subtitle-selected'), true);
+  }
+});
+
 test('desktop stream policy keeps direct play when unrelated remediation facts are unknown', () => {
   const decision = decideDesktopStreamPolicy({
     ...desktopStreamPolicyInputs.directPlay,
@@ -621,9 +687,10 @@ test('desktop stream policy returns unsupported with stable reasons when no mode
     'unsupported-container',
     'unsupported-video-codec',
     'unsupported-audio-codec',
-    'unsupported-subtitle-delivery',
     'unsupported-hdr',
     'unsupported-dolby-vision',
+    'no-subtitle-compatible',
+    'no-subtitle-selected',
   ]);
 });
 

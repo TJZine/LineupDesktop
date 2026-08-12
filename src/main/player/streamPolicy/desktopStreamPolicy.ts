@@ -264,6 +264,13 @@ function selectSubtitle(
     : undefined;
   const hasPreferredSubtitleTrack = input.preferredSubtitleTrackId !== undefined;
   if (requested) {
+    if (
+      !isSubtitleSupported(input.capabilityProfile, requested) &&
+      hasNoSubtitleConversionPath(input.capabilityProfile)
+    ) {
+      reasons.push('no-subtitle-compatible', 'no-subtitle-selected');
+      return { track: null, fallback: false };
+    }
     return { track: requested, fallback: false };
   }
   if (input.preferredSubtitleTrackId && !requested) {
@@ -350,7 +357,16 @@ function selectSubtitle(
   }
 
   reasons.push('no-subtitle-compatible');
+  if (hasNoSubtitleConversionPath(input.capabilityProfile)) {
+    reasons.push('no-subtitle-selected');
+    return { track: null, fallback: false };
+  }
   return { track: automaticSubtitleTracks[0] ?? null, fallback: false };
+}
+
+function hasNoSubtitleConversionPath(profile: DesktopStreamCapabilityProfile): boolean {
+  return profile.directStream.subtitleConversion === 'unsupported' &&
+    profile.transcode.subtitles === 'unsupported';
 }
 
 function getAutomaticSubtitleTracks(
@@ -639,7 +655,8 @@ function unsupportedDecision(
 }
 
 function isKnownSupported(value: string | null | undefined, supported: readonly string[]): boolean {
-  return Boolean(value && supported.includes(value));
+  const normalized = value?.trim();
+  return Boolean(normalized && (supported.includes('*') || supported.includes(normalized)));
 }
 
 function isAudioSupported(

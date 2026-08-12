@@ -95,12 +95,12 @@ are:
    result/recovery. Current paired visual manifests, broader live facet/filter
    and append/replace proof, named Windows/manual states, packaged ACL proof,
    and `WS1-PERF-01` remain open, so no stable ID advances to complete.
-2. **P0 — Production playback enables far less than the UI/contracts suggest.**
-   The production capability profile permits MP4/H.264/AAC direct play with no
-   subtitles and declares track switching, HDR, direct stream, and transcode
-   unsupported, even though policy/tests and parts of the native helper model
-   richer behavior. Windows observation is necessary, but it cannot close this
-   code-level capability gap by itself.
+2. **P0 — Production playback still has material implementation and proof gaps.**
+   The production profile now admits direct-play-first libmpv attempts for
+   nonempty container and codec facts, embedded subtitles, track switching, and
+   automatic hardware decoding with software fallback. Direct Stream/remux and
+   transcode remain disabled. HDR/Dolby Vision monitor output and receiver
+   passthrough are not proven support claims.
 3. **P1 — Settings implementation has landed but WS3 remains open.** Desktop
    now persists the version-2 Settings vocabulary and renders seven categories,
    first-run audio setup, and persistent Switch Profile. WS5 Guide consumers,
@@ -289,7 +289,7 @@ player contracts/tests, and Windows spike evidence.
 | PB-01 | Tune current Guide program into player | `live-local` | `local-match` | Local tune/runtime gate is complete; production Windows media observation remains `WS2-POST-VALIDATION-01`. | P0 |
 | PB-02 | Channel up/down and mini-guide tune | `live-local` | `local-match` | Local transition/focus gate is complete; Windows native-video/focus observation remains `WS2-POST-VALIDATION-01`. | P1 |
 | PB-03 | Numeric channel entry, timeout, invalid result, tune | `live-local` | `local-match` | Local numeric input/runtime gate is complete; Windows keyboard/numpad observation remains `WS2-POST-VALIDATION-01`. | P1 |
-| PB-04 | Direct Play | `partial` | `not-a-visual-row` | The conservative MP4/H.264/AAC Direct Play profile is unchanged; broader proof or promotion remains `WS2-POST-VALIDATION-01`. | P0 |
+| PB-04 | Direct Play | `partial` | `not-a-visual-row` | Production admits direct-play-first libmpv attempts for nonempty container/video/audio facts; representative Windows output proof remains `WS2-POST-VALIDATION-01`. | P0 |
 | PB-05 | Direct Stream/remux | `partial` | `not-a-visual-row` | Remux and audio conversion remain unsupported; observation or promotion remains `WS2-POST-VALIDATION-01`. | P0 |
 | PB-06 | Plex transcode session start/stop | `partial` | `not-a-visual-row` | PMS lifecycle exists, but transcode families remain unsupported; observation or promotion remains `WS2-POST-VALIDATION-01`. | P0 |
 | PB-07 | Native libmpv helper discovery, spawn, load, render, cleanup | `partial` | `proof-only` | WS2 source/non-packaged-helper contribution is locally complete; native build/live proof remains `WS2-POST-VALIDATION-01`, while packaged helper/libmpv proof remains WS9/RD-28. | P0 |
@@ -304,12 +304,12 @@ player contracts/tests, and Windows spike evidence.
 | PB-16 | Now Playing information, progress, up-next | `live-local` | `local-match` | WS4 local regression proof passed; metadata/art richness plus paired and Windows native-video observation remains `WS4-PROOF-03`. | P2 |
 | PB-17 | Mini Guide | `live-local` | `local-match` | WS4 local paging/focus regression proof passed; physical-input and Windows production-native-video proof remains `WS4-PROOF-02`/`WS4-PROOF-03`. | P1 |
 | PB-18 | Channel badge and transition overlay | `live-local` | `local-match` | WS4 local timing/presentation regression proof passed; paired and Windows production-native-video proof remains `WS4-PROOF-03`. | P2 |
-| PB-19 | Audio track list and selection | `partial` | `local-match` | UI/helper paths remain, but switching is unsupported; observation or promotion remains `WS2-POST-VALIDATION-01`. | P0 |
-| PB-20 | Subtitle off/list/selection | `partial` | `local-match` | Delivery remains `none` and switching unsupported; observation or promotion remains `WS2-POST-VALIDATION-01`. | P0 |
+| PB-19 | Audio track list and selection | `partial` | `local-match` | Production admits embedded audio-track switching; representative native observation remains `WS2-POST-VALIDATION-01`. | P0 |
+| PB-20 | Subtitle off/list/selection | `partial` | `local-match` | Production admits embedded subtitle switching and None; sidecar/external conversion remains unsupported and representative native observation remains `WS2-POST-VALIDATION-01`. | P0 |
 | PB-21 | Subtitle direct/extract/burn-in fallback pipeline | `partial` | `partial` | Policy paths remain, but conversion/transcode are unsupported; representative native samples remain `WS2-POST-VALIDATION-01`. | P0 |
 | PB-22 | Forced/default/preferred-language subtitle auto-selection | `partial` | `partial` | WS2 remains the owner; WS3's preference/control contribution landed, while native/live proof remains `WS2-POST-VALIDATION-01` plus `WS3-PROOF-02`. | P1 |
 | PB-23 | Audio fallback and DTS passthrough | `partial` | `partial` | WS2 remains the owner; WS3's fallback/DTS preference-control contribution landed, while native/live proof remains `WS2-POST-VALIDATION-01` plus `WS3-PROOF-02`. | P1 |
-| PB-24 | HDR10/HLG/Dolby Vision detection and fallback | `partial` | `partial` | WS2 remains the owner; WS3's HDR preference/control contribution landed without capability promotion, while native/live proof remains `WS2-POST-VALIDATION-01` plus `WS3-PROOF-02`. | P0 |
+| PB-24 | HDR10/HLG/Dolby Vision detection and fallback | `partial` | `partial` | Direct-play-first libmpv attempts are admitted, but HDR/Dolby Vision monitor output is not proven; native/live proof remains `WS2-POST-VALIDATION-01` plus `WS3-PROOF-02`. | P0 |
 | PB-25 | Sleep timer cycles, countdown, expiry and pause | `live-local` | `local-match` | WS4 session-only 15/30/60/120/Off cycling, deadline countdown, one-minute warning, cleanup, expiry and guarded current-request pause-on-expiry are locally verified; paired/Windows production-native expiry remains `WS4-PROOF-03`. | P1 |
 | PB-26 | Keepalive and long-playback continuity | `proof-only` | `not-a-visual-row` | Real long-playback soak remains missing. | P1 |
 | PB-27 | Sleep/wake recovery | `missing` | `not-a-visual-row` | Add Windows power lifecycle design and proof. | P1 |
@@ -506,7 +506,7 @@ product opportunities.
 
 | ID | Native gain | Current state | Required next proof/design |
 | --- | --- | --- | --- |
-| WIN-01 | libmpv codec/container breadth and hardware decoding | `partial` | Conservative profile unchanged; capability observation or promotion remains `WS2-POST-VALIDATION-01`. |
+| WIN-01 | libmpv codec/container breadth and hardware decoding | `partial` | Production admits nonempty direct-play facts and requests automatic hardware decoding with software fallback; representative Windows observation remains `WS2-POST-VALIDATION-01`. |
 | WIN-02 | Native audio-device selection | `partial` | Main/helper-owned query/application, opaque renderer rows, and injected missing-row fallback presentation landed; real Windows enumeration, disappearance/relaunch, fallback observation, and playback application remain `WS3-PROOF-01`. |
 | WIN-03 | Windows media keys / System Media Transport Controls | `partial` | WS4 focused BrowserWindow app-command and guarded input mapping is locally implemented without `globalShortcut`; real Windows physical media-key/SMTC and production-playback observation remains `WS4-PROOF-01`. |
 | WIN-04 | Power request while playing plus sleep/resume recovery | `missing` | Add explicit main-owned lifecycle, cleanup, diagnostics, and soak proof. |

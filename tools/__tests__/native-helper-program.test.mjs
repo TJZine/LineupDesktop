@@ -493,6 +493,15 @@ test('native helper keeps credential headers in checked pre-initialize options',
   );
 });
 
+test('native helper enables automatic hardware decoding before mpv initialization', async () => {
+  const source = await readFile(programPath, 'utf8');
+
+  assert.match(
+    source,
+    /EnsureOptionSet\(mpvContext,\s*"hwdec",\s*"auto"\)[\s\S]*?NativeMethods\.mpv_initialize\(mpvContext\)/u,
+  );
+});
+
 test('native helper queries audio devices in-process and applies requested output options before initialize', async () => {
   const source = await readFile(programPath, 'utf8');
 
@@ -693,6 +702,23 @@ test('native presentation resources are destroyed by their owner before mpv tear
   assert.doesNotMatch(teardown, /renderContext|renderSurface|DestroyPresentationResources/u);
   assertUniqueOrdered(cleanup, 'DestroyPresentationOnOwnerThread()', 'TeardownMpvContext()');
   assertUniqueOrdered(command, 'DestroyPresentationOnOwnerThread()', 'InitializeMpv(msg)');
+});
+
+test('native presentation roots the OpenGL address callback for the render-context lifetime', async () => {
+  const source = await readFile(programPath, 'utf8');
+
+  assert.match(
+    source,
+    /private static readonly MpvOpenGlGetProcAddressDelegate OpenGlGetProcAddress = GetOpenGlProcAddress;/u,
+  );
+  assert.match(
+    source,
+    /get_proc_address = Marshal\.GetFunctionPointerForDelegate\(OpenGlGetProcAddress\)/u,
+  );
+  assert.doesNotMatch(
+    source,
+    /GetFunctionPointerForDelegate\(\(MpvOpenGlGetProcAddressDelegate\)GetOpenGlProcAddress\)/u,
+  );
 });
 
 test('native presentation operation ids reject every replay and nonincreasing sequence', async () => {
