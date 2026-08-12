@@ -15,6 +15,7 @@ import {
   REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE,
   GuidePresentationLru,
   GUIDE_DOM_ROW_CAP,
+  GUIDE_ROW_BUFFER,
   guideCacheKey,
   projectGuideForegroundChannelLimit,
   type GuidePerformanceProfile,
@@ -25,6 +26,7 @@ import { guidePerformanceMarks, type GuideRequestOrigin } from './guidePerforman
 const GUIDE_POLL_INTERVAL_MS = 15_000;
 const GUIDE_REQUEST_TIMEOUT_MS = 30_000;
 const GUIDE_REQUEST_TIMEOUT_MESSAGE = 'Guide refresh timed out. Try again.';
+const GUIDE_FALLBACK_COMPLETE_VISIBLE_ROWS = 20;
 export const GUIDE_VIEWPORT_REFRESH_SOURCE = 'guide-visible-window';
 
 export interface GuidePresentationPollingOptions {
@@ -197,6 +199,10 @@ export function createGuidePresentationPolling(
 
   const getCacheIdentity = (): string | null => options.getCacheIdentity?.() ?? null;
   const getNowMs = (): number => options.getNowMs?.() ?? Date.now();
+  const getForegroundChannelLimit = (): number => projectGuideForegroundChannelLimit(
+    options.getCompleteVisibleRowCount?.() ?? GUIDE_FALLBACK_COMPLETE_VISIBLE_ROWS,
+    GUIDE_ROW_BUFFER,
+  );
   let guidePollTimer: number | null = null;
   let guidePresentationGeneration = 0;
   let guidePresentationLifecycleGeneration = 0;
@@ -307,8 +313,7 @@ export function createGuidePresentationPolling(
     const profile = refreshProfile();
     const latestIntent = trailingRefresh ?? activeRefresh;
     const channelOffset = refreshOptions.channelOffset ?? options.getChannelOffset?.() ?? 0;
-    const channelLimit = clampChannelLimit(refreshOptions.channelLimit ??
-      projectGuideForegroundChannelLimit(options.getCompleteVisibleRowCount?.() ?? 20, 2));
+    const channelLimit = clampChannelLimit(refreshOptions.channelLimit ?? getForegroundChannelLimit());
     if (activeRefresh?.warmOnly === true && refreshOptions.warmOnly !== true) {
       activeRefresh.abortController.abort(
         createGuideRefreshError('Guide warm refresh superseded by foreground work.', 'AbortError'),
@@ -410,7 +415,7 @@ export function createGuidePresentationPolling(
   const requestPage = (input: GuidePageRefreshRequest): Promise<void> => {
     const queued = queueRefresh('guide-page-change', {
       channelOffset: input.channelOffset,
-      channelLimit: input.channelLimit ?? projectGuideForegroundChannelLimit(options.getCompleteVisibleRowCount?.() ?? 20, 2),
+      channelLimit: input.channelLimit ?? getForegroundChannelLimit(),
       showLoading: false,
     });
     if (queued.requestSequence === 0) return queued.promise;
@@ -425,7 +430,7 @@ export function createGuidePresentationPolling(
       input.presentation,
       input.offset,
       pendingPage?.targetGlobalIndex ?? null,
-      projectGuideForegroundChannelLimit(options.getCompleteVisibleRowCount?.() ?? 20, 2),
+      getForegroundChannelLimit(),
     );
     if (decision === null) return { handled: false, targetLocalIndex: null };
     if (decision.boundaryClamped) return { handled: true, targetLocalIndex: null };

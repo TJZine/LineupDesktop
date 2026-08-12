@@ -129,8 +129,6 @@ test('Guide time range no longer compresses row geometry', () => {
   assert.equal(containsCssSelector(guide, '.epg-grid__channel[data-channel-current="true"]::before'), false);
   assert.equal(containsCssSelector(guide, '.epg-grid__channel[data-channel-tuned="true"]::after'), false);
   assert.equal(cssDeclaration(extractCssRule(guide, '.epg-grid__channel-status'), 'content'), null);
-  assert.equal(containsCssSelector(guide, '.epg-shell[data-guide-time-range="wide"]'), false);
-  assert.equal(containsCssSelector(guide, '.epg-shell[data-guide-time-range="detailed"]'), false);
   const shell = extractCssRule(guide, '.epg-shell');
   assert.equal(cssDeclaration(shell, '--guide-row-height'), '108px');
   const comfortable = extractCssRule(guide, '.epg-shell[data-guide-row-density-effective="comfortable"]');

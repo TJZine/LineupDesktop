@@ -37,9 +37,12 @@ export function extractCssRule(
     if (openBrace < 0) return groupedSingleSelectorMatch;
     const prelude = source.slice(cursor, openBrace).trim();
     const selectors = normalizeSelectorSet(prelude.split(','));
+    const containsExpectedSelectors = [...expected].every((selector) => selectors.has(selector));
+    const isSingleSelectorLookup = typeof expectedSelectors === 'string' && expected.size === 1;
+    const isExactMatch = selectors.size === expected.size && containsExpectedSelectors;
     const closeBrace = findMatchingBrace(source, openBrace);
     if (closeBrace < 0) {
-      if (selectors.size === expected.size && [...expected].every((selector) => selectors.has(selector))) {
+      if (isExactMatch || (isSingleSelectorLookup && containsExpectedSelectors)) {
         throw unsupported('unmatched rule brace');
       }
       return null;
@@ -47,9 +50,7 @@ export function extractCssRule(
     cursor = closeBrace + 1;
     // At-rule bodies are scoped by extractCssAtRuleBody before rule scanning.
     if (prelude.startsWith('@')) continue;
-    const isSingleSelectorLookup = typeof expectedSelectors === 'string' && expected.size === 1;
-    const isExactMatch = selectors.size === expected.size && [...expected].every((selector) => selectors.has(selector));
-    if (!isExactMatch && (!isSingleSelectorLookup || ![...expected].every((selector) => selectors.has(selector)))) continue;
+    if (!isExactMatch && (!isSingleSelectorLookup || !containsExpectedSelectors)) continue;
 
     const body = source.slice(openBrace + 1, closeBrace);
     const quoteCount = (body.match(/["']/gu) ?? []).length;

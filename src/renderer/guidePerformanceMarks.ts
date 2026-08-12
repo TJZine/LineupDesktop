@@ -34,12 +34,13 @@ export class GuidePerformanceMarkOwner {
   }
   public requestStarted(generation: number, channelOffset: number, channelLimit: number,
     windowStartMs: number, windowDurationMs: number, requestOrigin: GuideRequestOrigin): number {
-    const pendingSequence = this.pendingLoading?.generation === generation
-      ? this.pendingLoading.sequence : requestOrigin === 'foreground' ? this.input?.sequence : null;
+    const matchingPendingLoading = this.pendingLoading?.generation === generation ? this.pendingLoading : null;
+    const pendingSequence = matchingPendingLoading?.sequence
+      ?? (requestOrigin === 'foreground' ? this.input?.sequence : null);
     const sequence = pendingSequence ?? ++this.sequence;
     this.request = { sequence, generation, channelOffset, channelLimit, windowStartMs, windowDurationMs };
     if (this.input?.sequence === sequence) this.input = null;
-    this.pendingLoading = null;
+    if (matchingPendingLoading !== null) this.pendingLoading = null;
     this.emit('request-start', { ...this.request, requestOrigin });
     return sequence;
   }

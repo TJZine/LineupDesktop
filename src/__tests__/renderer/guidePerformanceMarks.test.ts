@@ -68,6 +68,22 @@ test('Guide chains polling work to the matching queued loading generation', () =
   assert.equal(details[1]?.requestOrigin, 'poll');
 });
 
+test('Guide preserves queued loading correlation across an unrelated request generation', () => {
+  const details: Record<string, unknown>[] = [];
+  const owner = new GuidePerformanceMarkOwner({
+    mark: (_name, { detail }) => details.push(detail),
+    clearMarks: () => undefined,
+  });
+  owner.stateAccepted(7, 'loading', -1);
+  const loadingSequence = details[0]?.sequence;
+
+  const unrelatedSequence = owner.requestStarted(8, 0, 12, 0, 1_000, 'poll');
+  const matchingSequence = owner.requestStarted(7, 24, 12, 0, 1_000, 'poll');
+
+  assert.notEqual(unrelatedSequence, loadingSequence);
+  assert.equal(matchingSequence, loadingSequence);
+});
+
 test('Guide polling reuse does not consume a newer semantic input', () => {
   const details: Record<string, unknown>[] = [];
   const owner = new GuidePerformanceMarkOwner({

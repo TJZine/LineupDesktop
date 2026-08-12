@@ -216,7 +216,15 @@ test('settings sections preserve exact category order, closed options, and disab
   ]);
   const items = sections.flatMap((section) => section.items);
   assert.equal(items.find((item) => item.id === 'subtitle-mode')?.valueLabel, 'Full (Burn-in, default)');
-  assert.equal(items.find((item) => item.id === 'guide-time-range')?.valueLabel, 'Detailed (2h)');
+  const detailedTimeRange = items.find((item) => item.id === 'guide-time-range');
+  assert.equal(detailedTimeRange?.valueLabel, 'Detailed (2h)');
+  assert.equal(detailedTimeRange?.description, 'Detailed shows 2 hours; Wide shows 3 hours.');
+  const wideTimeRange = createSettingsSections({
+    ...createSettingsDraftState(),
+    guideTimeRange: 'wide',
+  }).flatMap((section) => section.items).find((item) => item.id === 'guide-time-range');
+  assert.equal(wideTimeRange?.valueLabel, 'Wide (3h)');
+  assert.equal(wideTimeRange?.description, detailedTimeRange?.description);
   assert.equal(items.find((item) => item.id === 'info-box-background')?.disabledReason, 'Disabled until safe artwork is available.');
   const guideItems = new Map(sections[3]?.items.map((item) => [item.id, item]) ?? []);
   for (const id of ['library-tabs', 'now-watching-banner', 'guide-performance-profile', 'guide-time-range', 'guide-row-density']) {

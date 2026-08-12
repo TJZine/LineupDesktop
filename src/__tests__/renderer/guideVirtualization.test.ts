@@ -26,11 +26,16 @@ import {
 import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import type { RouteWorkflowViewModel } from '../../renderer/workflow.js';
 import { GuideChannelWindow } from '../../renderer/guideChannelWindow.js';
+import {
+  GUIDE_COMFORTABLE_ROW_HEIGHT,
+  GUIDE_COMPACT_ROW_HEIGHT,
+  GUIDE_DEFAULT_ROW_GAP,
+} from '../../renderer/guideRowDensity.js';
 
 const SLOT = 30 * 60_000;
-const ROW_OUTER_SIZE = 120;
-const ACTUAL_ROW_STRIDE = 124;
 const ACTUAL_SHELL_GAP = 16;
+const ROW_OUTER_SIZE = GUIDE_COMFORTABLE_ROW_HEIGHT + GUIDE_DEFAULT_ROW_GAP;
+const ACTUAL_ROW_STRIDE = GUIDE_COMFORTABLE_ROW_HEIGHT + ACTUAL_SHELL_GAP;
 
 test('300-by-48 projection preserves header-relative viewport geometry, internal gaps, focus, and graceful caps', () => {
   const rows = fixtureRows();
@@ -324,7 +329,7 @@ test('Guide DOM uses the selected density gap when mounted rows cannot be measur
     const source = fixturePresentation();
     const view = routeView(createEpgGuideView(createEpgState(source, 1, 'wide'), source));
     const grid = new NoMeasurementGrid('main', metrics);
-    grid.clientHeight = 228;
+    grid.clientHeight = 2 * ROW_OUTER_SIZE - GUIDE_DEFAULT_ROW_GAP;
     renderEpgGuideDom(view, guideDomBindings(grid), {
       guideTimeRange: 'wide',
       guideRowDensity: 'comfortable',
@@ -410,6 +415,53 @@ test('Guide density transitions use the new pure row stride instead of stale mou
       'Auto keeps Comfortable while the row region has no positive measurement');
     assert.deepEqual(readGuideViewportRows(autoGrid as unknown as HTMLElement), { start: 0, completeCount: 0 },
       'Auto breakpoint transition reports no complete rows when the detail/header consumes the viewport');
+  } finally {
+    if (originalDocument === undefined) delete (globalThis as { document?: Document }).document;
+    else Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
+  }
+});
+
+test('Detailed and Wide Guide states preserve equivalent effective row geometry', () => {
+  const originalDocument = globalThis.document;
+  const metrics = { reads: 0 };
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: { createElement: (tagName: string) => new LayoutProbeElement(tagName, metrics) },
+  });
+  try {
+    const source = fixturePresentation();
+    const grid = new LayoutProbeElement('main', metrics);
+    grid.clientHeight = 6 * ROW_OUTER_SIZE;
+    const dom = guideDomBindings(grid);
+    const settings = {
+      guideRowDensity: 'comfortable' as const,
+      previewBadgesEnabled: true,
+      libraryTabsEnabled: true,
+      nowWatchingBannerEnabled: true,
+      guideLayout: 'classic' as const,
+    };
+
+    renderEpgGuideDom(
+      routeView(createEpgGuideView(createEpgState(source, 1, 'wide'), source)),
+      dom,
+      { ...settings, guideTimeRange: 'wide' },
+    );
+    const wideGeometry = readRenderedGuideRowGeometry(grid);
+
+    renderEpgGuideDom(
+      routeView(createEpgGuideView(createEpgState(source, 1, 'detailed'), source)),
+      dom,
+      { ...settings, guideTimeRange: 'detailed' },
+    );
+    const detailedGeometry = readRenderedGuideRowGeometry(grid);
+
+    assert.deepEqual(detailedGeometry, wideGeometry);
+    assert.deepEqual(detailedGeometry, {
+      configuredRowHeight: `${String(GUIDE_COMFORTABLE_ROW_HEIGHT)}px`,
+      effectiveDensity: 'comfortable',
+      rowHeight: GUIDE_COMFORTABLE_ROW_HEIGHT,
+      rowStride: ACTUAL_ROW_STRIDE,
+    });
   } finally {
     if (originalDocument === undefined) delete (globalThis as { document?: Document }).document;
     else Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
@@ -740,6 +792,30 @@ function assertBufferedCellsAreInert(grid: LayoutProbeElement): void {
     && node.style.width === '0px'), 'off-window buffer cells are inert and absent from focus registration');
 }
 
+function readRenderedGuideRowGeometry(grid: LayoutProbeElement): Readonly<{
+  configuredRowHeight: string | undefined;
+  effectiveDensity: string | undefined;
+  rowHeight: number;
+  rowStride: number;
+}> {
+  const shell = grid.descendants().find((node) => node.className === 'epg-shell');
+  const rows = grid.descendants()
+    .filter((node) => node.className.split(' ').includes('epg-grid__row'))
+    .sort((left, right) => Number(left.dataset.guideRowIndex) - Number(right.dataset.guideRowIndex));
+  const [firstRow, secondRow] = rows;
+  assert.ok(shell, 'Guide shell is rendered');
+  assert.ok(firstRow, 'first Guide row is rendered');
+  assert.ok(secondRow, 'second Guide row is rendered');
+  const firstRect = firstRow.getBoundingClientRect();
+  const secondRect = secondRow.getBoundingClientRect();
+  return {
+    configuredRowHeight: shell.styleProperties.get('--guide-row-height'),
+    effectiveDensity: shell.dataset.guideRowDensityEffective,
+    rowHeight: firstRect.height,
+    rowStride: secondRect.top - firstRect.top,
+  };
+}
+
 class LayoutProbeElement {
   className = '';
   dataset: Record<string, string> = {};
@@ -755,9 +831,10 @@ class LayoutProbeElement {
   parent: LayoutProbeElement | null = null;
   readonly children: LayoutProbeElement[] = [];
   readonly attributes = new Map<string, string>();
+  readonly styleProperties = new Map<string, string>();
   readonly style = {
     position: '', left: '', width: '', height: '',
-    setProperty: (_name: string, _value: string) => undefined,
+    setProperty: (name: string, value: string) => { this.styleProperties.set(name, value); },
   };
   constructor(readonly tagName: string, private readonly metrics: { reads: number }) {}
   get childElementCount(): number { return this.children.length; }
@@ -773,11 +850,15 @@ class LayoutProbeElement {
     this.children.splice(0, this.children.length, ...children);
   }
   querySelector<T>(selector: string): T | null {
-    if (selector !== '.epg-grid__row') return null;
+    if (selector !== '.epg-grid__row') {
+      throw new Error(`Unsupported LayoutProbeElement selector: ${selector}`);
+    }
     return (this.descendants().find((node) => node.className.split(' ').includes('epg-grid__row')) ?? null) as T | null;
   }
   querySelectorAll<T>(selector: string): T[] {
-    if (selector !== '.epg-grid__row') return [];
+    if (selector !== '.epg-grid__row') {
+      throw new Error(`Unsupported LayoutProbeElement selector: ${selector}`);
+    }
     return this.descendants().filter((node) => node.className.split(' ').includes('epg-grid__row')) as T[];
   }
   getBoundingClientRect(): DOMRect {
@@ -788,8 +869,8 @@ class LayoutProbeElement {
     const layout = shell?.dataset.epgLayout ?? 'classic';
     const density = shell?.dataset.guideRowDensityEffective ?? 'comfortable';
     const headerOffset = layout === 'overlay' ? 200 : 300;
-    const rowHeight = density === 'compact' ? 72 : 108;
-    const rowStride = density === 'compact' ? rowHeight + 16 : ACTUAL_ROW_STRIDE;
+    const rowHeight = density === 'compact' ? GUIDE_COMPACT_ROW_HEIGHT : GUIDE_COMFORTABLE_ROW_HEIGHT;
+    const rowStride = rowHeight + ACTUAL_SHELL_GAP;
     const isGridRow = this.className.split(' ').includes('epg-grid__row');
     const top = isGridRow
       ? grid.screenTop + headerOffset + rowIndex * rowStride - grid.scrollTop

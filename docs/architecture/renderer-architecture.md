@@ -22,9 +22,14 @@ below describe their bounded implementation history only.
 Guide G1 supersedes the current Settings shape with the sole exact version-3
 contract. It separates Detailed/Wide time range, Auto/Reduced resource policy,
 and Auto/Comfortable/Compact row-density selection without adding preload/IPC
-methods or renderer persistence. Auto and Reduced resource share foreground
-Guide request reach; Reduced resource disables idle warming and keeps the
-conservative cache-retention bounds. Accepted Guide presentation-setting
+methods or renderer persistence. Auto maps to
+`AUTO_GUIDE_PRELOAD_PROFILE`; Reduced resource maps to
+`REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE`. Both profiles size foreground Guide
+requests from complete visible rows plus the shared two-row buffer on each side,
+cap requests at 24 rows, and retain a 360-minute time buffer on each side. Auto
+retains up to 12 entries or 12,000 programs and may warm adjacent channel/time
+windows while idle. Reduced resource retains up to 6 entries or 6,000 programs
+and performs no idle warming. Accepted Guide presentation-setting
 changes coalesce through one focused settlement owner, cancel stale
 presentation work, retain eligible focus intent, and invalidate the affected
 Guide identity; density-only changes remain display-only. G4 now owns
@@ -147,8 +152,8 @@ revision, or new operation crosses into renderer.
 
 WS5 Unit 5G adds Desktop Guide virtualization without importing the upstream
 LG/webOS performance profile. `guideVirtualization.ts` owns the pure
-viewport/focus range, exact default/aggressive request and cache budgets, cache
-identity, and bounded LRU. The Guide DOM samples real row stride outside its
+viewport/focus range, exact Auto/Reduced resource request and cache budgets,
+cache identity, and bounded LRU. The Guide DOM samples real row stride outside its
 projection loop, preserves noncontiguous spacer geometry, mounts no more than
 24 rows and 400 cells, and keeps the two-hour off-window buffer inert and out of
 focus/accessibility registration. Polling retains one active and one trailing

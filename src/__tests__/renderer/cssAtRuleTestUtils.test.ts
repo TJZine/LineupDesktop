@@ -60,4 +60,8 @@ test('selector membership sees grouped selectors and fails on malformed top-leve
   assert.equal(cssDeclaration(extractCssRule(grouped, '.player-surface'), 'background'), 'Canvas');
   assert.equal(containsCssSelector(grouped, '.missing'), false);
   assert.throws(() => containsCssSelector('.allowed { color: red;', '.missing'), /unmatched/u);
+  assert.throws(
+    () => extractCssRule('.allowed, .player-surface { background: Canvas;', '.player-surface'),
+    /unmatched rule brace/u,
+  );
 });

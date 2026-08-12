@@ -463,7 +463,7 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
   ) => {
     const identity = guideWindowIdentity(normalizedGuidePresentation) ?? 'guide-unscoped';
     const viewport = readGuideViewportRows(dom.epgGridElement);
-    const window = requestWindow ?? {
+    const requestedWindow = requestWindow ?? {
       channelOffset: normalizedGuidePresentation.channelWindow?.offset ?? 0,
       channelLimit: normalizedGuidePresentation.channels.length || guideChannelWindow.completeVisibleRowCount,
     };
@@ -471,8 +471,8 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
       identity,
       workflowState.settingsDraft.guidePerformanceProfile,
       generation,
-      window.channelOffset,
-      window.channelLimit,
+      requestedWindow.channelOffset,
+      requestedWindow.channelLimit,
       normalizedGuidePresentation,
     )) {
       return false;
