@@ -112,16 +112,24 @@ test('player presentation bridge validates exact status-bound failure vocabulary
 
 test('player presentation bridge enforces epoch-negotiation status semantics', async () => {
   const negotiating = { ...full, documentEpoch: null };
-  for (const status of ['applied', 'unsupported'] as const) {
+  for (const status of ['applied', 'deferred', 'hidden'] as const) {
     const bridge = createPlayerPresentationBridge(async () => ({
       ok: true, status, documentEpoch: 5, revision: 7,
     }), 'channel');
+    assert.deepEqual(await bridge(negotiating), {
+      ok: true, status, documentEpoch: 5, revision: 7,
+    });
+  }
+
+  for (const result of [
+    { ok: true, status: 'unsupported', documentEpoch: 5, revision: 7 },
+    { ok: true, status: 'applied', documentEpoch: 0, revision: 7 },
+    { ok: true, status: 'applied', documentEpoch: 5, revision: 8 },
+  ] as const) {
+    const bridge = createPlayerPresentationBridge(async () => result, 'channel');
     assert.equal((await bridge(negotiating)).status, 'rejected');
   }
-  const hidden = createPlayerPresentationBridge(async () => ({
-    ok: true, status: 'hidden', documentEpoch: 5, revision: 7,
-  }), 'channel');
-  assert.equal((await hidden(negotiating)).status, 'hidden');
+
   const deferredAfterNegotiation = createPlayerPresentationBridge(async () => ({
     ok: true, status: 'deferred', documentEpoch: 4, revision: 7,
   }), 'channel');

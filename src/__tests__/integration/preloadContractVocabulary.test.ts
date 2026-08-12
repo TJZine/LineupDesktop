@@ -1577,6 +1577,36 @@ test('preload player bridge validates snapshot invoke results before returning t
   assert.equal((result as { ok: boolean }).ok, true);
 });
 
+test('preload player presentation bridge accepts an initial applied epoch', async () => {
+  const request = {
+    documentEpoch: null,
+    revision: 1,
+    requestId: 'player-load-1',
+    mode: 'player-full',
+    rect: { x: 0, y: 0, width: 1, height: 1 },
+  } as const;
+  const harness = createPreloadHarness((channel, invokedRequest, input) => {
+    assert.equal(channel, LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL);
+    assert.deepEqual(invokedRequest, request);
+    return input({
+      ok: true,
+      status: 'applied',
+      documentEpoch: 3,
+      revision: request.revision,
+    });
+  });
+
+  const result = await harness.api.player.updatePresentation(harness.input(request));
+
+  assert.deepEqual(result, {
+    ok: true,
+    status: 'applied',
+    documentEpoch: 3,
+    revision: request.revision,
+  });
+  assert.equal(harness.calls.length, 1);
+});
+
 test('preload player recovery bridge exposes only the closed action vocabulary and validates settlement', async () => {
   const snapshot = createSafePlayerSnapshot();
   const accepted = createPreloadHarness((_channel, request, input) => {
