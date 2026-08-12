@@ -332,6 +332,7 @@ async function waitFor(
 
 class FakeDesktopPlayerAdapter {
   readonly envelopes: PlayerRendererIntentEnvelope[] = [];
+  readonly cleanupRequestIds: Array<string | null> = [];
   cleanupAccepted = true;
   cleanupEvents: readonly PlayerEvent[] = [];
   runtimeAccepted = true;
@@ -395,7 +396,8 @@ class FakeDesktopPlayerAdapter {
     return this.terminalEvents ?? [event];
   }
 
-  async cleanup(): Promise<{ accepted: boolean; events: readonly PlayerEvent[] }> {
+  async cleanup(requestId?: string | null): Promise<{ accepted: boolean; events: readonly PlayerEvent[] }> {
+    this.cleanupRequestIds.push(requestId ?? null);
     return { accepted: this.cleanupAccepted, events: this.cleanupEvents };
   }
 }
@@ -822,6 +824,7 @@ test('RD-12 desktop adapter runtime port reports cleanup rejection to runtime cl
     ok: false,
     events: adapter.cleanupEvents,
   });
+  assert.deepEqual(adapter.cleanupRequestIds, ['request-from-runtime']);
 });
 
 test('desktop adapter runtime port starts a fresh replacement only after prior stop cleanup settles', async () => {

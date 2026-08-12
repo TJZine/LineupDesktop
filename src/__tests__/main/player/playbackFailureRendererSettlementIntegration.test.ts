@@ -26,6 +26,9 @@ import {
 } from '../../../renderer/playerOverlayPresentation.js';
 import type { NativePlayerHostPort } from '../../../main/player/nativePlayerHostPort.js';
 
+const PRIVATE_FIXTURE_PLAYBACK_URL = 'https://plex.example.invalid/library/parts/one/file.mp4';
+const PRIVATE_FIXTURE_CREDENTIAL_VALUE = 'private-test-value';
+
 test('real runtime and adapter failure clears an active subscribed transition into recovery UI', async () => {
   const adapter = new DesktopPlayerAdapter(new InertNativePlayerHost());
   const playerPort = createDesktopPlayerAdapterRuntimePort(adapter);
@@ -155,6 +158,8 @@ test('candidate failure settles renderer state when failed cleanup retains the a
     harness.getState(),
     createPresentation(harness.getSnapshot()),
   ).visibleOverlays.playerError, true);
+  assertNoPrivateFixtureValues(failed.events, 'failed.events');
+  assertNoPrivateFixtureValues(emittedBatches, 'emitted batches');
 
   harness.dispose();
 });
@@ -215,6 +220,72 @@ test('candidate failure settles a cleared adapter snapshot after successful scop
   assert.deepEqual(finalState?.event === 'state.changed' ? finalState.snapshot : null, adapter.getSnapshot());
   assert.equal(adapter.getSnapshot().requestId, null);
   assert.equal(adapter.getSnapshot().status, 'error');
+  assertNoPrivateFixtureValues(failed.events, 'failed.events');
+  assertNoPrivateFixtureValues(emittedBatches, 'emitted batches');
+});
+
+test('candidate failure emits a safe renderer error without overwriting an unrelated adapter request', async () => {
+  const adapter = new DesktopPlayerAdapter(new InertNativePlayerHost());
+  const playerPort = createDesktopPlayerAdapterRuntimePort(adapter);
+  let resolutionCount = 0;
+  const emittedBatches: Array<readonly PlayerEvent[]> = [];
+  const runtime = new PlexPlaybackRuntime({
+    scheduler: {
+      getCurrentPlayback: async () => ({
+        channelId: 'channel-two',
+        programId: 'program-two',
+        startedAtMs: 1_000,
+        endsAtMs: 121_000,
+      }),
+    },
+    channel: {
+      invalidatePlaybackMediaIdentity() {},
+      resolvePlaybackCandidate: async () => {
+        resolutionCount += 1;
+        if (resolutionCount === 1) return createCandidate('active-request');
+        const unrelatedResult = await adapter.dispatchRendererIntent({
+          intent: 'player.load',
+          requestId: 'unrelated-request',
+          payload: createCandidate('unrelated-request').load,
+        });
+        assert.equal(unrelatedResult.accepted, true);
+        throw new PlexPlaybackRuntimeCandidateResolutionError({
+          code: 'PLAYER_PLAYBACK_CANDIDATE_UNAVAILABLE',
+          category: 'source',
+          message: 'The scheduled media could not be resolved.',
+          recoverable: true,
+          retryable: true,
+        });
+      },
+    },
+    player: playerPort,
+    pms: { releaseSession: async () => undefined },
+    clock: { now: () => 2_000 },
+    onEvents: (events) => emittedBatches.push(events),
+  });
+
+  const started = await runtime.startCurrentPlayback('startup');
+  assert.equal(started.accepted, true);
+  emittedBatches.length = 0;
+
+  const failed = await runtime.startCurrentPlayback('manual-switch');
+
+  assert.equal(failed.accepted, false);
+  assert.deepEqual(failed.events.map((event) => event.event), ['state.changed', 'error']);
+  const terminalEvent = failed.events.at(-1);
+  assert.equal(terminalEvent?.event, 'error');
+  assert.equal(
+    terminalEvent?.event === 'error'
+      ? terminalEvent.error.code
+      : null,
+    'PLAYER_PLAYBACK_CANDIDATE_UNAVAILABLE',
+  );
+  assert.deepEqual(emittedBatches, [failed.events]);
+  assertNoPrivateFixtureValues(failed.events, 'failed.events');
+  assertNoPrivateFixtureValues(emittedBatches, 'emitted batches');
+  assert.equal(adapter.getSnapshot().requestId, 'unrelated-request');
+  assert.equal(adapter.getSnapshot().status, 'loading');
+  assert.equal(adapter.getSnapshot().media?.id, 'media-one');
 });
 
 class InertNativePlayerHost implements NativePlayerHostPort {
@@ -249,8 +320,8 @@ function createCandidate(requestId: string): PlexPlaybackRuntimeCandidate {
     privatePlayback: {
       requestId,
       decisionKind: 'direct-play',
-      playbackUrl: 'https://plex.example.invalid/library/parts/one/file.mp4',
-      credentialHeader: { name: 'X-Plex-Token', value: 'private-test-value' },
+      playbackUrl: PRIVATE_FIXTURE_PLAYBACK_URL,
+      credentialHeader: { name: 'X-Plex-Token', value: PRIVATE_FIXTURE_CREDENTIAL_VALUE },
       selectedConnection: {
         protocol: 'https',
         address: 'plex.example.invalid',
@@ -273,6 +344,12 @@ function createCandidate(requestId: string): PlexPlaybackRuntimeCandidate {
     },
     pmsSession: { id: 'pms-one', requestId },
   };
+}
+
+function assertNoPrivateFixtureValues(value: unknown, path: string): void {
+  const serialized = JSON.stringify(value);
+  assert.equal(serialized.includes(PRIVATE_FIXTURE_PLAYBACK_URL), false, `${path} leaked private fixture URL`);
+  assert.equal(serialized.includes(PRIVATE_FIXTURE_CREDENTIAL_VALUE), false, `${path} leaked private fixture credential`);
 }
 
 function createRendererHarness(adapter: DesktopPlayerAdapter) {

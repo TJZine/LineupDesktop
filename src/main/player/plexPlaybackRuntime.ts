@@ -609,7 +609,8 @@ export class PlexPlaybackRuntime {
     event: Extract<PlayerEvent, { event: 'error' }>,
     previousRequestId: PlayerRequestId | null,
   ): readonly PlayerEvent[] {
-    return this.#player.settleTerminalError(event, previousRequestId);
+    const settledEvents = this.#player.settleTerminalError(event, previousRequestId);
+    return settledEvents.length > 0 ? settledEvents : [event];
   }
   #observeAcceptedEvents(events: readonly PlayerEvent[]): void {
     const identity = this.#activeSelection;
