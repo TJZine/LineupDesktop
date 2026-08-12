@@ -270,6 +270,43 @@ test('Guide paging moves five eligible channel rows while preserving focused tim
   assert.equal(pageEpgSelection(next.state, -5, source).state.selectedChannelId, 'channel-1');
 });
 
+test('Guide paging normalizes fractional and non-finite offsets at the semantic EPG seam', () => {
+  const source: EpgPresentationSource = {
+    ...presentation(),
+    channels: Array.from({ length: 8 }, (_, index) => ({
+      id: `channel-${String(index)}`,
+      number: String(100 + index),
+      name: `Channel ${String(index)}`,
+      programs: [program(`program-${String(index)}`, 1, 3)],
+    })),
+    nowWatching: null,
+  };
+  const initial = {
+    ...createEpgState(source, 0, 'wide'),
+    selectedChannelId: 'channel-3',
+    selectedProgramId: 'program-3',
+    tuneError: 'Preserve zero-movement state.',
+  };
+
+  assert.equal(pageEpgSelection(initial, 2.9, source).state.selectedChannelId, 'channel-5');
+  assert.equal(pageEpgSelection(initial, -2.9, source).state.selectedChannelId, 'channel-1');
+
+  for (const offset of [0, 0.9, -0.9, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+    const result = pageEpgSelection(initial, offset, source);
+    assert.equal(result.handled, true);
+    assert.equal(result.windowChanged, false);
+    assert.strictEqual(result.state, initial, `${String(offset)} normalizes to an identity-preserving zero movement`);
+  }
+
+  assert.equal(pageEpgSelection(initial, 20, source).state.selectedChannelId, 'channel-7');
+  assert.equal(pageEpgSelection(initial, -20, source).state.selectedChannelId, 'channel-0');
+
+  const loading = setEpgPresentationState(initial, 'loading');
+  const ignored = pageEpgSelection(loading, 2.9, source);
+  assert.equal(ignored.handled, false);
+  assert.strictEqual(ignored.state, loading);
+});
+
 test('left and right edge navigation requests exactly one adjacent slot beyond bounded response extrema', () => {
   const source = presentation();
   const base = createEpgState(source, 0, 'wide');

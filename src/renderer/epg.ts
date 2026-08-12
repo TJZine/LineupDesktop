@@ -270,8 +270,12 @@ export function pageEpgSelection(
   if (state.presentationState !== 'ready') {
     return { state, handled: false, windowChanged: false };
   }
+  const normalizedOffset = Number.isFinite(offset) ? Math.trunc(offset) : 0;
+  if (normalizedOffset === 0) {
+    return { state, handled: true, windowChanged: false };
+  }
   return {
-    state: selectNearestProgramOnAdjacentChannel(state, offset, presentation),
+    state: selectNearestProgramOnAdjacentChannel(state, normalizedOffset, presentation),
     handled: true,
     windowChanged: false,
   };
