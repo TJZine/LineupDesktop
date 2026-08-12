@@ -64,7 +64,7 @@ test('settings persistence repairs an invalid record through the revision-zero v
     values: { launchMode: 'fullscreen' },
   });
   await fs.writeFile(file, invalidBytes);
-  const store = new DesktopSettingsStore({ settingsFilePath: file, processId: 17 });
+  const store = new DesktopSettingsStore({ settingsFilePath: file });
   assert.deepEqual(await store.loadSnapshot(), {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     revision: 0,
@@ -151,7 +151,11 @@ test('settings persistence synchronizes and closes its private temp handle befor
     unlink: async () => undefined,
   };
 
-  const store = new DesktopSettingsStore({ settingsFilePath, fileSystem, processId: 7 });
+  const store = new DesktopSettingsStore({
+    settingsFilePath,
+    fileSystem,
+    randomHex128: () => 'a'.repeat(32),
+  });
   await store.replace(0, { ...DEFAULT_DESKTOP_SETTINGS_VALUES });
 
   assert.deepEqual(operations, ['mkdir', 'open', 'write', 'chmod', 'sync', 'close', 'rename']);
@@ -164,11 +168,85 @@ test('settings persistence synchronizes and closes its private temp handle befor
   assert.equal(publishedDestinationPath, settingsFilePath);
 });
 
+test('settings persistence leaves a collided stale temp file untouched and publishes through a later candidate', async (context) => {
+  const directory = await createSettingsWorkspace(context);
+  const file = path.join(directory, 'settings.json');
+  const baseStore = new DesktopSettingsStore({ settingsFilePath: file });
+  await baseStore.replace(0, { ...DEFAULT_DESKTOP_SETTINGS_VALUES });
+  const staleSuffix = 'a'.repeat(32);
+  const nextSuffix = 'b'.repeat(32);
+  const staleTempFile = `${file}.${staleSuffix}.tmp`;
+  const staleBytes = 'stale temp bytes';
+  await fs.writeFile(staleTempFile, staleBytes, { mode: 0o600 });
+  const candidates = [staleSuffix, nextSuffix];
+  const store = new DesktopSettingsStore({
+    settingsFilePath: file,
+    randomHex128: () => candidates.shift() ?? assert.fail('unexpected temp candidate request'),
+  });
+
+  const nextValues = {
+    ...DEFAULT_DESKTOP_SETTINGS_VALUES,
+    setupReminderEnabled: false,
+  };
+  const snapshot = await store.replace(1, nextValues);
+
+  assert.equal(snapshot.revision, 2);
+  assert.equal(await fs.readFile(staleTempFile, 'utf8'), staleBytes);
+  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), {
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
+    revision: 2,
+    values: nextValues,
+  });
+  assert.deepEqual((await fs.readdir(directory)).sort(), [
+    path.basename(staleTempFile),
+    path.basename(file),
+  ].sort());
+});
+
+test('settings persistence fails safely after bounded temp collisions without deleting stale files', async (context) => {
+  const directory = await createSettingsWorkspace(context);
+  const file = path.join(directory, 'settings.json');
+  const baseStore = new DesktopSettingsStore({ settingsFilePath: file });
+  await baseStore.replace(0, { ...DEFAULT_DESKTOP_SETTINGS_VALUES });
+  const oldBytes = await fs.readFile(file, 'utf8');
+  const staleSuffix = 'c'.repeat(32);
+  const staleTempFile = `${file}.${staleSuffix}.tmp`;
+  const staleBytes = 'stale temp bytes';
+  await fs.writeFile(staleTempFile, staleBytes, { mode: 0o600 });
+  let candidateRequests = 0;
+  const cleanupAttempts: string[] = [];
+  const store = new DesktopSettingsStore({
+    settingsFilePath: file,
+    fileSystem: nodeFileSystem({
+      unlink: async (tempFile) => {
+        cleanupAttempts.push(tempFile);
+      },
+    }),
+    randomHex128: () => {
+      candidateRequests += 1;
+      return staleSuffix;
+    },
+  });
+
+  await assert.rejects(
+    () => store.replace(1, {
+      ...DEFAULT_DESKTOP_SETTINGS_VALUES,
+      previewBadgesEnabled: false,
+    }),
+    hasCode('operation-failed'),
+  );
+
+  assert.equal(candidateRequests, 8);
+  assert.deepEqual(cleanupAttempts, []);
+  assert.equal(await fs.readFile(file, 'utf8'), oldBytes);
+  assert.equal(await fs.readFile(staleTempFile, 'utf8'), staleBytes);
+});
+
 test('settings persistence repairs corrupt revision zero with an exact atomic record', async (context) => {
   const directory = await createSettingsWorkspace(context);
   const file = path.join(directory, 'settings.json');
   await fs.writeFile(file, '{bad');
-  const store = new DesktopSettingsStore({ settingsFilePath: file, processId: 7 });
+  const store = new DesktopSettingsStore({ settingsFilePath: file });
   const nextValues = {
     ...DEFAULT_DESKTOP_SETTINGS_VALUES,
     guideTimeRange: 'wide' as const,
@@ -240,7 +318,7 @@ test('settings persistence cleans its owned temp file when handle write rejects'
   const unlinked: string[] = [];
   const store = new DesktopSettingsStore({
     settingsFilePath: file,
-    processId: 91,
+    randomHex128: () => 'd'.repeat(32),
     fileSystem: nodeFileSystem({
       unlink: async (tempFile) => {
         unlinked.push(tempFile);
@@ -257,7 +335,7 @@ test('settings persistence cleans its owned temp file when handle write rejects'
     hasCode('operation-failed'),
   );
   assert.equal(await fs.readFile(file, 'utf8'), oldBytes);
-  assert.deepEqual(unlinked, [`${file}.91.1.tmp`]);
+  assert.deepEqual(unlinked, [`${file}.${'d'.repeat(32)}.tmp`]);
   assert.deepEqual(await fs.readdir(directory), ['settings.json']);
 });
 

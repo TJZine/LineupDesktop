@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -39,7 +40,7 @@ export class DesktopSettingsStoreError extends Error {
 export interface DesktopSettingsStoreOptions {
   settingsFilePath: string;
   fileSystem?: DesktopSettingsFileSystem;
-  processId?: number;
+  randomHex128?: () => string;
 }
 
 interface StoredDesktopSettingsRecord {
@@ -66,17 +67,19 @@ const nodeFileSystem: DesktopSettingsFileSystem = {
   unlink: (filePath) => fs.unlink(filePath),
 };
 
+const TEMP_FILE_OPEN_ATTEMPTS = 8;
+const randomHex128Pattern = /^[0-9a-f]{32}$/u;
+
 export class DesktopSettingsStore {
   private readonly settingsFilePath: string;
   private readonly fileSystem: DesktopSettingsFileSystem;
-  private readonly processId: number;
+  private readonly randomHex128: () => string;
   private operationChain: Promise<void> = Promise.resolve();
-  private tempCounter = 0;
 
   constructor(options: DesktopSettingsStoreOptions) {
     this.settingsFilePath = options.settingsFilePath;
     this.fileSystem = options.fileSystem ?? nodeFileSystem;
-    this.processId = options.processId ?? process.pid;
+    this.randomHex128 = options.randomHex128 ?? (() => randomBytes(16).toString('hex'));
   }
 
   loadSnapshot(): Promise<DesktopSettingsSnapshot> {
@@ -147,11 +150,29 @@ export class DesktopSettingsStore {
 
   private async writeRecord(record: StoredDesktopSettingsRecord): Promise<void> {
     const parentDirectory = path.dirname(this.settingsFilePath);
-    const tempFilePath = `${this.settingsFilePath}.${String(this.processId)}.${String(++this.tempCounter)}.tmp`;
+    let tempFilePath: string | null = null;
     let ownsTempFile = false;
     try {
       await this.fileSystem.mkdir(parentDirectory, { recursive: true });
-      const handle = await this.fileSystem.open(tempFilePath, 'wx', 0o600);
+      let handle: DesktopSettingsFileHandle | null = null;
+      for (let attempt = 0; attempt < TEMP_FILE_OPEN_ATTEMPTS; attempt += 1) {
+        const suffix = this.randomHex128();
+        if (!randomHex128Pattern.test(suffix)) {
+          throw new DesktopSettingsStoreError('operation-failed');
+        }
+        const candidatePath = `${this.settingsFilePath}.${suffix}.tmp`;
+        try {
+          handle = await this.fileSystem.open(candidatePath, 'wx', 0o600);
+          tempFilePath = candidatePath;
+          break;
+        } catch (error: unknown) {
+          if (isNodeErrorCode(error, 'EEXIST')) continue;
+          throw error;
+        }
+      }
+      if (handle === null || tempFilePath === null) {
+        throw new DesktopSettingsStoreError('operation-failed');
+      }
       ownsTempFile = true;
 
       let handleStageFailed = false;
@@ -179,7 +200,7 @@ export class DesktopSettingsStore {
       await this.fileSystem.rename(tempFilePath, this.settingsFilePath);
       ownsTempFile = false;
     } catch {
-      if (ownsTempFile) {
+      if (ownsTempFile && tempFilePath !== null) {
         try {
           await this.fileSystem.unlink(tempFilePath);
         } catch {
